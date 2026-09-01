@@ -147,9 +147,122 @@ export function writeSortedJsonRuns(dir, facts, options = {}) {
   return writer.finish();
 }
 
+/**
+ * Yield strings from one named array in a legacy JSON object without reading
+ * the object into memory.  The terrain writer currently emits
+ * `{ ..., "addresses": ["z/x/y", ...] }`; accepting that form here keeps old
+ * cuts verifiable while bounding both the file and any individual string.
+ */
+export async function* iterateJsonStringArrayProperty(file, property, {
+  maxFileBytes = 512 * 1024 * 1024,
+  maxStringBytes = 256,
+} = {}) {
+  assert.equal(typeof property, "string", "JSON array property must be a string");
+  assert.ok(Number.isSafeInteger(maxFileBytes) && maxFileBytes > 0, "maxFileBytes must be positive");
+  assert.ok(Number.isSafeInteger(maxStringBytes) && maxStringBytes > 0, "maxStringBytes must be positive");
+  const stream = fs.createReadStream(file, { highWaterMark: 64 * 1024 });
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let totalBytes = 0;
+  let phase = "seek-key";
+  let inString = false;
+  let escaped = false;
+  let raw = "";
+  let found = false;
+  const whitespace = (char) => char === " " || char === "\t" || char === "\r" || char === "\n";
+  const beginString = () => {
+    inString = true;
+    escaped = false;
+    raw = "";
+  };
+  const finishString = () => {
+    let value;
+    try { value = JSON.parse(`"${raw}"`); } catch (error) {
+      throw new Error(`invalid JSON string in ${file}: ${error.message}`);
+    }
+    inString = false;
+    raw = "";
+    return value;
+  };
+  const consume = async function* (text) {
+    for (const char of text) {
+      if (inString) {
+        if (escaped) {
+          raw += char;
+          escaped = false;
+        } else if (char === "\\") {
+          raw += char;
+          escaped = true;
+        } else if (char === '"') {
+          const value = finishString();
+          if (phase === "seek-key") {
+            if (value === property) phase = "expect-colon";
+          } else if (phase === "array-value") {
+            phase = "after-value";
+            yield value;
+          } else {
+            throw new Error(`unexpected JSON string in ${file} while reading ${property}`);
+          }
+        } else {
+          raw += char;
+        }
+        assert.ok(Buffer.byteLength(raw) <= maxStringBytes, `JSON string exceeds ${maxStringBytes} bytes in ${file}`);
+        continue;
+      }
+      if (whitespace(char)) continue;
+      if (phase === "seek-key") {
+        if (char === '"') beginString();
+        continue;
+      }
+      if (phase === "expect-colon") {
+        assert.equal(char, ":", `expected ':' after ${property} in ${file}`);
+        phase = "expect-array";
+        continue;
+      }
+      if (phase === "expect-array") {
+        assert.equal(char, "[", `expected array for ${property} in ${file}`);
+        phase = "array-value-or-end";
+        found = true;
+        continue;
+      }
+      if (phase === "array-value-or-end") {
+        if (char === "]") {
+          phase = "done";
+          continue;
+        }
+        assert.equal(char, '"', `expected string array value for ${property} in ${file}`);
+        phase = "array-value";
+        beginString();
+        continue;
+      }
+      if (phase === "after-value") {
+        if (char === ",") {
+          phase = "array-value-or-end";
+          continue;
+        }
+        assert.equal(char, "]", `expected ',' or ']' in ${property} array in ${file}`);
+        phase = "done";
+        continue;
+      }
+      // `done` deliberately ignores the object fields after `addresses`.
+    }
+  };
+  try {
+    for await (const chunk of stream) {
+      totalBytes += chunk.length;
+      assert.ok(totalBytes <= maxFileBytes, `JSON file exceeds ${maxFileBytes} bytes: ${file}`);
+      yield* consume(decoder.decode(chunk, { stream: true }));
+    }
+    yield* consume(decoder.decode());
+    assert.ok(found && phase === "done", `JSON property ${property} is missing or incomplete in ${file}`);
+  } finally {
+    stream.destroy();
+  }
+}
+
 // A line cursor intentionally never calls readFile()/split().  Its carry is
 // capped before a long, newline-free input can become an unbounded allocation.
-async function* iterateJsonLines(file, maxRowBytes) {
+export async function* iterateBoundedLines(file, { maxRowBytes = 64 * 1024 } = {}) {
+  assert.ok(Number.isSafeInteger(maxRowBytes) && maxRowBytes > 0, "maxRowBytes must be positive");
   const highWaterMark = Math.max(1, Math.min(64 * 1024, maxRowBytes + 1));
   const stream = fs.createReadStream(file, { highWaterMark });
   let carry = Buffer.alloc(0);
@@ -168,9 +281,10 @@ async function* iterateJsonLines(file, maxRowBytes) {
         assert.ok(carry.length + piece.length <= maxRowBytes, `fact row exceeds ${maxRowBytes} bytes in ${file}`);
         const line = carry.length ? Buffer.concat([carry, piece]) : piece;
         carry = Buffer.alloc(0);
-        // A trailing newline writes an empty final record; accept it, but not
-        // an empty line in the middle of a run.
-        if (line.length) yield emit(line);
+        // A trailing newline has no following line here.  An empty line is
+        // therefore a malformed row, rather than a harmless final record.
+        assert.ok(line.length, `empty fact row in ${file}`);
+        yield emit(line);
         start = newline + 1;
       }
       const tail = chunk.subarray(start);
@@ -183,17 +297,25 @@ async function* iterateJsonLines(file, maxRowBytes) {
   }
 }
 
+/** Read an NDJSON run one bounded row at a time; no whole-file buffer exists. */
+export async function* iterateJsonFactRows(file, { maxRowBytes = 64 * 1024 } = {}) {
+  for await (const line of iterateBoundedLines(file, { maxRowBytes })) {
+    try {
+      yield JSON.parse(line.toString("utf8"));
+    } catch (error) {
+      throw new Error(`invalid JSON fact row in ${file}: ${error.message}`);
+    }
+  }
+}
+
 function createJsonRunCursor(file, { compare, maxRowBytes }) {
-  const iterator = iterateJsonLines(file, maxRowBytes)[Symbol.asyncIterator]();
+  const iterator = iterateJsonFactRows(file, { maxRowBytes })[Symbol.asyncIterator]();
   let previous = null;
   return {
     async next() {
       const next = await iterator.next();
       if (next.done) return null;
-      let row;
-      try { row = JSON.parse(next.value.toString("utf8")); } catch (error) {
-        throw new Error(`invalid JSON fact row in ${file}: ${error.message}`);
-      }
+      const row = next.value;
       if (previous !== null && compare(previous, row) > 0) {
         throw new Error(`fact run is not sorted: ${file}`);
       }

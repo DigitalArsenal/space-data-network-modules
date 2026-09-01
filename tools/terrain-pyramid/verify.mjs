@@ -18,6 +18,9 @@ import zlib from "node:zlib";
 import {
   createSortedJsonRunWriter,
   evaluateTerrainEdgeFacts,
+  iterateBoundedLines,
+  iterateJsonStringArrayProperty,
+  mergeSortedJsonRuns,
 } from "./build-support.mjs";
 import { iterateStreamFile, readDtt, readDttProvenance } from "./dtt-reader.mjs";
 
@@ -172,34 +175,98 @@ function spoolTileEdges(writer, { kind, level, x, y, ownerOrdinal, grid, step, e
   }
 }
 
-// Collapse a level's addresses into the rectangles layer.json declares. The
-// availability index is a PROMISE the endpoint must keep, so it is derived
-// from the records that exist — never widened to a convenient bounding box,
-// which would promise tiles nobody built.
-function availabilityFor(addresses) {
-  const rows = new Map();
-  for (const { x, y } of addresses) {
-    if (!rows.has(y)) rows.set(y, []);
-    rows.get(y).push(x);
-  }
-  const rects = [];
-  for (const [y, xs] of [...rows.entries()].sort((a, b) => a[0] - b[0])) {
-    xs.sort((a, b) => a - b);
-    let startX = xs[0];
-    let prev = xs[0];
-    for (let i = 1; i <= xs.length; i += 1) {
-      if (i < xs.length && xs[i] === prev + 1) {
-        prev = xs[i];
-        continue;
-      }
-      rects.push({ startX, startY: y, endX: prev, endY: y });
-      if (i < xs.length) {
-        startX = xs[i];
-        prev = xs[i];
-      }
+const ADDRESS_FIELD_WIDTH = 12;
+
+function addressFactKey(level, x, y) {
+  assert.ok(Number.isSafeInteger(level) && level >= 0, "terrain address level must be a non-negative integer");
+  assert.ok(Number.isSafeInteger(x) && x >= 0, "terrain address x must be a non-negative integer");
+  assert.ok(Number.isSafeInteger(y) && y >= 0, "terrain address y must be a non-negative integer");
+  return `${String(level).padStart(ADDRESS_FIELD_WIDTH, "0")}|${String(y).padStart(ADDRESS_FIELD_WIDTH, "0")}|${String(x).padStart(ADDRESS_FIELD_WIDTH, "0")}`;
+}
+
+function terrainAddress(level, x, y) {
+  return `${level}/${x}/${y}`;
+}
+
+function parseTerrainAddress(value, source) {
+  const match = /^(\d+)\/(\d+)\/(\d+)$/.exec(value);
+  assert.ok(match, `invalid terrain address in ${source}: ${JSON.stringify(value)}`);
+  const [level, x, y] = match.slice(1).map(Number);
+  assert.ok(Number.isSafeInteger(level) && Number.isSafeInteger(x) && Number.isSafeInteger(y), `unsafe terrain address in ${source}: ${JSON.stringify(value)}`);
+  return { level, x, y };
+}
+
+const OCEAN_SKIP_MAX_RECEIPT_BYTES = 64 * 1024;
+const OCEAN_SKIP_MAX_LINES_BYTES = 512 * 1024 * 1024;
+const OCEAN_SKIP_MAX_ROW_BYTES = 256;
+
+async function fileSha256(file, maxBytes) {
+  const hash = createHash("sha256");
+  let bytes = 0;
+  const stream = fs.createReadStream(file, { highWaterMark: 64 * 1024 });
+  try {
+    for await (const chunk of stream) {
+      bytes += chunk.length;
+      assert.ok(bytes <= maxBytes, `ocean skip address list exceeds ${maxBytes} bytes: ${file}`);
+      hash.update(chunk);
     }
+  } finally {
+    stream.destroy();
   }
-  return rects;
+  return { bytes, digest: hash.digest("hex") };
+}
+
+// New global cuts write a compact receipt beside a separately streamed raw
+// ASCII address list (one `level/x/y` line each).  Regional evidence retains
+// the older JSON array.  Both paths are bounded and return the same async
+// address stream to the verifier.
+async function* iterateOceanSkippedAddresses(outDir, legacyPath) {
+  if (!fs.existsSync(legacyPath)) return;
+  const receiptStat = fs.statSync(legacyPath);
+  assert.ok(receiptStat.isFile(), `ocean skip receipt is not a regular file: ${legacyPath}`);
+  assert.ok(receiptStat.size <= OCEAN_SKIP_MAX_LINES_BYTES,
+    `ocean skip input exceeds ${OCEAN_SKIP_MAX_LINES_BYTES} bytes: ${legacyPath}`);
+  let receipt = null;
+  if (receiptStat.size <= OCEAN_SKIP_MAX_RECEIPT_BYTES) {
+    try { receipt = JSON.parse(fs.readFileSync(legacyPath, "utf8")); } catch { receipt = null; }
+  }
+  if (!Object.hasOwn(receipt ?? {}, "format")) {
+    for await (const address of iterateJsonStringArrayProperty(legacyPath, "addresses", {
+      maxFileBytes: OCEAN_SKIP_MAX_LINES_BYTES,
+      maxStringBytes: OCEAN_SKIP_MAX_ROW_BYTES,
+    })) {
+      yield address;
+    }
+    return;
+  }
+  assert.equal(receipt.format, "terrain-ocean-skips-lines-v1", `unsupported ocean skip receipt format ${receipt.format}`);
+  assert.equal(typeof receipt.addressesPath, "string", "ocean skip receipt addressesPath must be a string");
+  assert.ok(Number.isSafeInteger(receipt.count) && receipt.count >= 0, "ocean skip receipt count must be a non-negative integer");
+  assert.match(receipt.digest, /^[a-f0-9]{64}$/, "ocean skip receipt digest must be a SHA-256 hex digest");
+  const receiptDir = fs.realpathSync(outDir);
+  const candidate = path.resolve(path.dirname(legacyPath), receipt.addressesPath);
+  const resolved = fs.realpathSync(candidate);
+  const relative = path.relative(receiptDir, resolved);
+  assert.ok(relative && !relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative),
+    `ocean skip receipt target escapes output directory: ${receipt.addressesPath}`);
+  const stat = fs.statSync(resolved);
+  assert.ok(stat.isFile(), `ocean skip receipt target is not a regular file: ${resolved}`);
+  assert.ok(stat.size <= OCEAN_SKIP_MAX_LINES_BYTES, `ocean skip address list exceeds ${OCEAN_SKIP_MAX_LINES_BYTES} bytes: ${resolved}`);
+  const hashed = await fileSha256(resolved, OCEAN_SKIP_MAX_LINES_BYTES);
+  assert.equal(hashed.digest, receipt.digest, `ocean skip receipt digest mismatch for ${resolved}`);
+  let count = 0;
+  let previous = null;
+  for await (const line of iterateBoundedLines(resolved, { maxRowBytes: OCEAN_SKIP_MAX_ROW_BYTES })) {
+    const address = line.toString("utf8");
+    assert.ok(Buffer.byteLength(address) === line.length, `ocean skip line ${count + 1} is not valid UTF-8`);
+    const parsed = parseTerrainAddress(address, resolved);
+    assert.equal(address, terrainAddress(parsed.level, parsed.x, parsed.y), `ocean skip line ${count + 1} is not canonical`);
+    assert.ok(previous === null || previous < address, `ocean skip lines must be sorted and unique at ${address}`);
+    previous = address;
+    count += 1;
+    yield address;
+  }
+  assert.equal(count, receipt.count, `ocean skip receipt count mismatch for ${resolved}`);
 }
 
 const args = parseArgs(process.argv.slice(2));
@@ -242,10 +309,6 @@ const encoderCounters = runReport?.encoderCounters ?? null;
 // UNIFORM_WATER path, which is what that path exists for. Optional, like the
 // run report: an older store has no such file and behaves as it always did.
 const oceanSkippedPath = path.join(outDir, "ocean-skipped.json");
-const oceanSkippedFile = fs.existsSync(oceanSkippedPath)
-  ? JSON.parse(fs.readFileSync(oceanSkippedPath, "utf8"))
-  : null;
-const oceanSkipped = new Set(oceanSkippedFile?.addresses ?? []);
 
 const recordsPath = path.join(outDir, "tiles.dttstream");
 // These directories are disposable, attempt-scoped external-sort state.  The
@@ -257,12 +320,21 @@ const edgeFactWriter = createSortedJsonRunWriter(edgeFactRunDir, {
   maxRows: 4096,
   maxRowBytes: 64 * 1024,
 });
+const addressFactRunDir = path.join(outDir, ".verify-address-facts");
+const addressFactScratchDir = path.join(outDir, ".verify-address-merge");
+const addressFactWriter = createSortedJsonRunWriter(addressFactRunDir, {
+  maxRows: 4096,
+  maxRowBytes: 4096,
+});
+const sizeFactRunDir = path.join(outDir, ".verify-size-facts");
+const sizeFactScratchDir = path.join(outDir, ".verify-size-merge");
+const sizeFactWriter = createSortedJsonRunWriter(sizeFactRunDir, {
+  maxRows: 4096,
+  maxRowBytes: 256,
+});
 let recordCount = 0;
 let firstRecord = null;
 
-const byLevel = new Map();
-const seen = new Set();
-const sizes = [];
 let uniform = 0;
 let raster = 0;
 let oceanStored = 0;
@@ -294,39 +366,56 @@ const accuracyByLevel = new Map();
 // reads is not the number the encoder chose to write.
 const atCeilingByLevel = new Map();
 const atCeilingExamples = [];
-const childBits = new Map();
 const problems = [];
+const PROBLEM_EXAMPLE_LIMIT = 64;
+let problemCount = 0;
+const appendProblemExample = (problem) => {
+  if (problems.length < PROBLEM_EXAMPLE_LIMIT) problems.push(problem);
+};
+const recordProblem = (problem) => {
+  problemCount += 1;
+  appendProblemExample(problem);
+};
 
 for await (const record of iterateStreamFile(recordsPath)) {
   recordCount += 1;
   if (!firstRecord) firstRecord = Buffer.from(record);
   const dtt = readDtt(record);
-  const key = `${dtt.level}/${dtt.x}/${dtt.y}`;
-  if (seen.has(key)) problems.push(`duplicate address ${key}`);
-  seen.add(key);
+  const key = terrainAddress(dtt.level, dtt.x, dtt.y);
   maxLevel = Math.max(maxLevel, dtt.level);
   minLevel = Math.min(minLevel, dtt.level);
-  if (!byLevel.has(dtt.level)) byLevel.set(dtt.level, []);
-  byLevel.get(dtt.level).push({ x: dtt.x, y: dtt.y });
 
   const bytes = Buffer.from(dtt.payload.bytes);
-  sizes.push(bytes.length);
+  addressFactWriter.push({
+    key: addressFactKey(dtt.level, dtt.x, dtt.y),
+    kind: "stored",
+    level: dtt.level,
+    x: dtt.x,
+    y: dtt.y,
+    address: key,
+    ordinal: recordCount - 1,
+    childAvailability: dtt.childAvailability,
+  });
+  sizeFactWriter.push({
+    key: `${String(bytes.length).padStart(12, "0")}|${String(recordCount - 1).padStart(16, "0")}`,
+    bytes: bytes.length,
+  });
   if (bytes.length > BOUNDS.hard) overCeiling += 1;
 
   // DIGEST is stated over the GZIPPED bytes; re-derive it.
   const expected = `1220${createHash("sha256").update(bytes).digest("hex")}`;
   if (dtt.payload.digest !== expected) digestMismatch += 1;
-  if (dtt.etag !== `"${expected}"`) problems.push(`ETAG does not match DIGEST at ${key}`);
+  if (dtt.etag !== `"${expected}"`) recordProblem(`ETAG does not match DIGEST at ${key}`);
 
   if (dtt.waterMaskKind === 3) {
     raster += 1;
     maskBytes += dtt.waterMask?.bytes?.length ?? 0;
     if (dtt.waterMaskWidth !== 256 || dtt.waterMaskHeight !== 256) {
-      problems.push(`raster mask at ${key} is ${dtt.waterMaskWidth}x${dtt.waterMaskHeight}`);
+      recordProblem(`raster mask at ${key} is ${dtt.waterMaskWidth}x${dtt.waterMaskHeight}`);
     }
     // Stored gzipped, and it must really decompress to the stated geometry.
     const raw = zlib.gunzipSync(Buffer.from(dtt.waterMask.bytes));
-    if (raw.length !== 256 * 256) problems.push(`mask at ${key} decompresses to ${raw.length} B`);
+    if (raw.length !== 256 * 256) recordProblem(`mask at ${key} decompresses to ${raw.length} B`);
   } else {
     uniform += 1;
   }
@@ -376,7 +465,7 @@ for await (const record of iterateStreamFile(recordsPath)) {
     // ocean whatever its accuracy figure says, and the serving flow synthesizes
     // those. Storing them inflates the pyramid with identical flat records.
     oceanStored += 1;
-    problems.push(`all-ocean tile stored at ${key}`);
+    recordProblem(`all-ocean tile stored at ${key}`);
   }
   if (dtt.waterMaskKind === 2 && !(dtt.minHeightM === 0 && dtt.maxHeightM === 0)) {
     uniformWaterNotFlat += 1;
@@ -401,14 +490,16 @@ for await (const record of iterateStreamFile(recordsPath)) {
       // below.
       flatWithLandMask += 1;
       const detail = dtt.waterMaskKind === 1 ? "UNIFORM_LAND" : `${landSamples} land samples`;
-      flatWithLandMaskExamples.push(`${key}: ${detail}, states ${dtt.verticalAccuracyM.toFixed(3)} m`);
+      if (flatWithLandMaskExamples.length < 16) {
+        flatWithLandMaskExamples.push(`${key}: ${detail}, states ${dtt.verticalAccuracyM.toFixed(3)} m`);
+      }
       if (dtt.verticalAccuracyM > 0) {
         // The MESH flattened relief the encoder measured. Not the source
         // disagreeing with itself: the tile saying, in its own record, that it
         // renders real ground as sea level.
         flatOverMeasuredRelief += 1;
         if (dtt.verticalAccuracyM > errorTargetM(dtt.level)) {
-          problems.push(
+          recordProblem(
             `${key} renders land as flat sea level: mesh min == max == 0 m over a mask with ` +
               `${detail}, while the record states ${dtt.verticalAccuracyM.toFixed(3)} m of ` +
               `departure against a ${errorTargetM(dtt.level).toFixed(2)} m target ` +
@@ -440,15 +531,13 @@ for await (const record of iterateStreamFile(recordsPath)) {
     }
     atCeilingByLevel.set(dtt.level, seenAtLevel);
   }
-  childBits.set(key, dtt.childAvailability);
-
   // The payload really is a gzipped quantized-mesh whose header agrees with
   // the record's stated height range.
   const mesh = zlib.gunzipSync(bytes);
   const minHeight = mesh.readFloatLE(24);
   const maxHeight = mesh.readFloatLE(28);
   if (Math.abs(minHeight - dtt.minHeightM) > 1e-3 || Math.abs(maxHeight - dtt.maxHeightM) > 1e-3) {
-    problems.push(`mesh header height range disagrees with the record at ${key}`);
+    recordProblem(`mesh header height range disagrees with the record at ${key}`);
   }
 
   // ── COVERAGE, which the run itself wrote and this verifier used to ignore ──
@@ -466,19 +555,21 @@ for await (const record of iterateStreamFile(recordsPath)) {
     // "ragged coastline, honest" on a run where all four were the rectangular
     // footprint of a granule the source does not publish — the same four tiles
     // that carried the fabricated mask. The geometry is the difference.
-    partialCoverageDetail.push({
-      address: key,
-      missingPosts: missing,
-      fraction: +(missing / posts).toFixed(4),
-      extentDeg: [dtt.westDeg, dtt.southDeg, dtt.eastDeg, dtt.northDeg].map((v) => +v.toFixed(4)),
-      waterMaskKind: dtt.waterMaskKind,
-      flatAtZero: dtt.minHeightM === 0 && dtt.maxHeightM === 0,
-    });
+    if (partialCoverageDetail.length < 32) {
+      partialCoverageDetail.push({
+        address: key,
+        missingPosts: missing,
+        fraction: +(missing / posts).toFixed(4),
+        extentDeg: [dtt.westDeg, dtt.southDeg, dtt.eastDeg, dtt.northDeg].map((v) => +v.toFixed(4)),
+        waterMaskKind: dtt.waterMaskKind,
+        flatAtZero: dtt.minHeightM === 0 && dtt.maxHeightM === 0,
+      });
+    }
     partialCoverage += 1;
     const width = grid;
     if (missing % width === 0 && missing / width <= 4) {
       wholeRowsMissing += 1;
-      problems.push(
+      recordProblem(
         `${key} is missing ${missing / width} whole post row(s)/column(s) ` +
           `(coverage ${dtt.dataCoverageFraction.toFixed(6)}): a granule the plan did not fetch`,
       );
@@ -533,6 +624,18 @@ for await (const record of iterateStreamFile(recordsPath)) {
   }
 }
 
+for await (const address of iterateOceanSkippedAddresses(outDir, oceanSkippedPath)) {
+  const { level, x, y } = parseTerrainAddress(address, oceanSkippedPath);
+  addressFactWriter.push({
+    key: addressFactKey(level, x, y),
+    kind: "ocean",
+    level,
+    x,
+    y,
+    address: terrainAddress(level, x, y),
+  });
+}
+
 // ── EDGE CONTINUITY, which no per-tile check can see ───────────────────────
 //
 // The old verifier held four mesh edges and four mask edges for every address.
@@ -558,7 +661,7 @@ try {
 // Edge diagnostics are deliberately capped inside the external-sort consumer:
 // a global seam regression can produce millions of bad shared posts, and this
 // report needs the count plus deterministic evidence, not another O(N) array.
-for (const problem of edgeChecks.problemExamples) problems.push(problem);
+for (const problem of edgeChecks.problemExamples) appendProblemExample(problem);
 const {
   adjacencies,
   worstSeam,
@@ -575,8 +678,41 @@ const {
 // Reported, not gated; see above.
 const maskEdgeBytesCompared = maskAdjacencies * 256;
 
-sizes.sort((a, b) => a - b);
-const pct = (p) => (sizes.length ? sizes[Math.min(sizes.length - 1, Math.floor((sizes.length - 1) * p))] : 0);
+// Payload quantiles used to retain one number per record and sort it in RAM.
+// The fact key is byte length followed by original ordinal, so this one
+// bounded merge has the same order statistic (including equal lengths).
+const sizeFactRuns = sizeFactWriter.finish();
+const payloadQuantileIndexes = {
+  p50: recordCount ? Math.floor((recordCount - 1) * 0.5) : -1,
+  p99: recordCount ? Math.floor((recordCount - 1) * 0.99) : -1,
+  max: recordCount - 1,
+};
+const payloadQuantiles = { p50: 0, p99: 0, max: 0 };
+let sizeOrdinal = 0;
+try {
+  await mergeSortedJsonRuns(sizeFactRuns, {
+    dedupe: false,
+    maxOpenRuns: 32,
+    maxRowBytes: 256,
+    scratchDir: sizeFactScratchDir,
+    onRow: async (fact) => {
+      if (sizeOrdinal === payloadQuantileIndexes.p50) payloadQuantiles.p50 = fact.bytes;
+      if (sizeOrdinal === payloadQuantileIndexes.p99) payloadQuantiles.p99 = fact.bytes;
+      if (sizeOrdinal === payloadQuantileIndexes.max) payloadQuantiles.max = fact.bytes;
+      sizeOrdinal += 1;
+    },
+  });
+} finally {
+  fs.rmSync(sizeFactRunDir, { recursive: true, force: true });
+  fs.rmSync(sizeFactScratchDir, { recursive: true, force: true });
+}
+assert.equal(sizeOrdinal, recordCount, "payload fact count must match tile records");
+const pct = (p) => {
+  if (p === 0.5) return payloadQuantiles.p50;
+  if (p === 0.99) return payloadQuantiles.p99;
+  if (p === 1) return payloadQuantiles.max;
+  throw new Error(`unsupported payload percentile ${p}`);
+};
 
 // ── layer.json availability, WITH ITS ANCESTOR CLOSURE ─────────────────────
 //
@@ -595,51 +731,176 @@ const pct = (p) => (sizes.length ? sizes[Math.min(sizes.length - 1, Math.floor((
 // assumption on its face, and the client duly computed shallow addresses as
 // available and asked for them. Declaring the closure makes the published index
 // say what the client is going to conclude from it anyway.
-const available = [];
-{
-  const byLevelClosed = new Map();
-  for (const [level, addresses] of byLevel) {
-    byLevelClosed.set(level, new Set(addresses.map(({ x, y }) => `${x}/${y}`)));
-  }
-  // The skipped-ocean addresses join the STORED ones as declared: they are
-  // measurements, not gaps. Each one becomes an availableButUnstored address
-  // below, which the serving module answers by synthesizing — and because
-  // every one of them is at or above the shallowest BUILT level, the module's
-  // authority test reads it as water rather than as flat land.
-  for (const address of oceanSkipped) {
-    const [level, x, y] = address.split("/").map(Number);
-    if (!byLevelClosed.has(level)) byLevelClosed.set(level, new Set());
-    byLevelClosed.get(level).add(`${x}/${y}`);
-    if (seen.has(address)) {
-      problems.push(
-        `${address} is both stored and reported as an ocean skip — the encoder cannot have ` +
-          "done both, and a client would be served bytes the index says are synthesized",
-      );
+const addressFactRuns = addressFactWriter.finish();
+const closureFactRunDir = path.join(outDir, ".verify-closure-facts");
+const closureFactScratchDir = path.join(outDir, ".verify-closure-merge");
+const closureFactWriter = createSortedJsonRunWriter(closureFactRunDir, {
+  maxRows: 4096,
+  maxRowBytes: 256,
+});
+const membershipFactRunDir = path.join(outDir, ".verify-membership-facts");
+const membershipFactScratchDir = path.join(outDir, ".verify-membership-merge");
+const membershipFactWriter = createSortedJsonRunWriter(membershipFactRunDir, {
+  maxRows: 4096,
+  maxRowBytes: 512,
+});
+const tilesPerLevel = new Map();
+let distinctAddresses = 0;
+let oceanSkipsDeclared = 0;
+let oceanSkipsBelowFloorCount = 0;
+const oceanSkipsBelowFloorExamples = [];
+let extentWest = Infinity;
+let extentSouth = Infinity;
+let extentEast = -Infinity;
+let extentNorth = -Infinity;
+const foldTilesetExtent = (level, x, y) => {
+  const cols = 2 ** (level + 1);
+  const rows = 2 ** level;
+  extentWest = Math.min(extentWest, -180 + (x * 360) / cols);
+  extentEast = Math.max(extentEast, -180 + ((x + 1) * 360) / cols);
+  extentSouth = Math.min(extentSouth, -90 + (y * 180) / rows);
+  extentNorth = Math.max(extentNorth, -90 + ((y + 1) * 180) / rows);
+};
+
+// The address catalogue replaces every former per-address map, set and array.
+// A group contains one logical address and keeps only its counters plus the
+// last record ordinal, so even a pathological duplicate storm cannot become
+// an in-memory index.
+let groupedAddress = null;
+const finishAddressGroup = () => {
+  if (!groupedAddress) return;
+  const group = groupedAddress;
+  if (group.storedCount) {
+    distinctAddresses += 1;
+    tilesPerLevel.set(group.level, (tilesPerLevel.get(group.level) ?? 0) + group.storedCount);
+    for (let duplicate = 1; duplicate < group.storedCount; duplicate += 1) {
+      recordProblem(`duplicate address ${group.address}`);
     }
   }
-  for (let level = maxLevel; level >= 1; level -= 1) {
-    const here = byLevelClosed.get(level);
-    if (!here) continue;
-    const parents = byLevelClosed.get(level - 1) ?? new Set();
-    for (const key of here) {
-      const [x, y] = key.split("/").map(Number);
-      parents.add(`${x >> 1}/${y >> 1}`);
+  if (group.ocean) {
+    oceanSkipsDeclared += 1;
+    if (group.level < minLevel) {
+      oceanSkipsBelowFloorCount += 1;
+      if (oceanSkipsBelowFloorExamples.length < 4) oceanSkipsBelowFloorExamples.push(group.address);
     }
-    byLevelClosed.set(level - 1, parents);
   }
-  for (let level = 0; level <= maxLevel; level += 1) {
-    if (level === 0) {
-      available.push([{ startX: 0, startY: 0, endX: 1, endY: 0 }]);
-      continue;
-    }
-    const set = byLevelClosed.get(level) ?? new Set();
-    available.push(
-      availabilityFor([...set].map((key) => {
-        const [x, y] = key.split("/").map(Number);
-        return { x, y };
-      })),
+  if (group.storedCount && group.ocean) {
+    recordProblem(
+      `${group.address} is both stored and reported as an ocean skip — the encoder cannot have ` +
+        "done both, and a client would be served bytes the index says are synthesized",
     );
   }
+  if (group.storedCount || group.ocean) {
+    if (group.level >= minLevel) foldTilesetExtent(group.level, group.x, group.y);
+    membershipFactWriter.push({
+      key: group.key,
+      kind: "membership",
+      level: group.level,
+      x: group.x,
+      y: group.y,
+      address: group.address,
+      stored: group.storedCount > 0,
+      ocean: group.ocean,
+      childAvailability: group.lastChildAvailability,
+    });
+    // A declared address makes every ancestor available.  Those facts are
+    // deduplicated by the next bounded merge before rectangles are emitted.
+    for (let ancestorLevel = group.level; ancestorLevel >= 0; ancestorLevel -= 1) {
+      const shift = group.level - ancestorLevel;
+      closureFactWriter.push({
+        key: addressFactKey(ancestorLevel, group.x >> shift, group.y >> shift),
+        level: ancestorLevel,
+        x: group.x >> shift,
+        y: group.y >> shift,
+      });
+    }
+  }
+  groupedAddress = null;
+};
+try {
+  await mergeSortedJsonRuns(addressFactRuns, {
+    dedupe: false,
+    maxOpenRuns: 32,
+    maxRowBytes: 4096,
+    scratchDir: addressFactScratchDir,
+    onRow: async (fact) => {
+      assert.equal(typeof fact.key, "string", "address fact must have a key");
+      if (!groupedAddress || groupedAddress.key !== fact.key) {
+        finishAddressGroup();
+        groupedAddress = {
+          key: fact.key,
+          level: fact.level,
+          x: fact.x,
+          y: fact.y,
+          address: fact.address,
+          storedCount: 0,
+          ocean: false,
+          lastOrdinal: -1,
+          lastChildAvailability: 0,
+        };
+      }
+      assert.equal(fact.level, groupedAddress.level, `address fact level mismatch at ${fact.key}`);
+      assert.equal(fact.x, groupedAddress.x, `address fact x mismatch at ${fact.key}`);
+      assert.equal(fact.y, groupedAddress.y, `address fact y mismatch at ${fact.key}`);
+      if (fact.kind === "stored") {
+        groupedAddress.storedCount += 1;
+        if (fact.ordinal >= groupedAddress.lastOrdinal) {
+          groupedAddress.lastOrdinal = fact.ordinal;
+          groupedAddress.lastChildAvailability = fact.childAvailability;
+        }
+      } else {
+        assert.equal(fact.kind, "ocean", `unknown address fact kind at ${fact.key}`);
+        groupedAddress.ocean = true;
+      }
+    },
+  });
+  finishAddressGroup();
+} finally {
+  fs.rmSync(addressFactRunDir, { recursive: true, force: true });
+  fs.rmSync(addressFactScratchDir, { recursive: true, force: true });
+}
+
+const membershipFactRuns = membershipFactWriter.finish();
+const closureFactRuns = closureFactWriter.finish();
+const available = Array.from({ length: maxLevel + 1 }, () => []);
+available[0] = [{ startX: 0, startY: 0, endX: 1, endY: 0 }];
+let rectangleLevel = null;
+let rectangleY = null;
+let rectangleStartX = null;
+let rectangleEndX = null;
+const flushAvailabilityRectangle = () => {
+  if (rectangleLevel === null || rectangleLevel === 0) return;
+  available[rectangleLevel].push({
+    startX: rectangleStartX,
+    startY: rectangleY,
+    endX: rectangleEndX,
+    endY: rectangleY,
+  });
+};
+try {
+  await mergeSortedJsonRuns(closureFactRuns, {
+    maxOpenRuns: 32,
+    maxRowBytes: 256,
+    scratchDir: closureFactScratchDir,
+    onRow: async (fact) => {
+      // The legacy verifier's maxLevel is based only on stored records, so an
+      // out-of-range skip is reported but cannot widen the published index.
+      if (fact.level > maxLevel || fact.level === 0) return;
+      if (rectangleLevel === fact.level && rectangleY === fact.y && fact.x === rectangleEndX + 1) {
+        rectangleEndX = fact.x;
+        return;
+      }
+      flushAvailabilityRectangle();
+      rectangleLevel = fact.level;
+      rectangleY = fact.y;
+      rectangleStartX = fact.x;
+      rectangleEndX = fact.x;
+    },
+  });
+  flushAvailabilityRectangle();
+} finally {
+  fs.rmSync(closureFactRunDir, { recursive: true, force: true });
+  fs.rmSync(closureFactScratchDir, { recursive: true, force: true });
 }
 
 // ── THE INDEX IS ANCESTOR-CLOSED, AND THAT IS ASSERTED, NOT ASSUMED ────────
@@ -670,7 +931,7 @@ for (let level = available.length - 1; level >= 1; level -= 1) {
   }
 }
 if (closureBreaks.length) {
-  problems.push(
+  recordProblem(
     `the availability index is NOT ancestor-closed (${closureBreaks.length} breaks): ` +
       `${closureBreaks.slice(0, 4).join("; ")} — a client computes availability by the max ` +
       "level at a position, so an unclosed index promises tiles at levels nothing covers",
@@ -684,13 +945,10 @@ if (closureBreaks.length) {
 // shallowest level this run BUILT — and flat LAND below it. A skip reported
 // below that floor would be declared and then answered as land, which is the
 // defect this whole path exists to close, so it is a gate rather than a note.
-const oceanSkipsBelowFloor = [...oceanSkipped].filter(
-  (address) => Number(address.split("/")[0]) < minLevel,
-);
-if (oceanSkipsBelowFloor.length) {
-  problems.push(
-    `${oceanSkipsBelowFloor.length} ocean skips sit below the authoritative floor z${minLevel} ` +
-      `(${oceanSkipsBelowFloor.slice(0, 4).join(", ")}) — the serving module synthesizes flat ` +
+if (oceanSkipsBelowFloorCount) {
+  recordProblem(
+    `${oceanSkipsBelowFloorCount} ocean skips sit below the authoritative floor z${minLevel} ` +
+      `(${oceanSkipsBelowFloorExamples.join(", ")}) — the serving module synthesizes flat ` +
       "LAND there, so declaring them would publish ocean as land",
   );
 }
@@ -704,31 +962,9 @@ if (oceanSkipsBelowFloor.length) {
 // no address to derive an extent from: the record used to claim the whole
 // globe under an address that covers half of it, and now it states this
 // instead, or states nothing when nobody computed it.
-const tilesetExtent = (() => {
-  let west = Infinity;
-  let south = Infinity;
-  let east = -Infinity;
-  let north = -Infinity;
-  const fold = (level, x, y) => {
-    const cols = 2 ** (level + 1);
-    const rows = 2 ** level;
-    west = Math.min(west, -180 + (x * 360) / cols);
-    east = Math.max(east, -180 + ((x + 1) * 360) / cols);
-    south = Math.min(south, -90 + (y * 180) / rows);
-    north = Math.max(north, -90 + ((y + 1) * 180) / rows);
-  };
-  for (const key of seen) {
-    const [level, x, y] = key.split("/").map(Number);
-    if (level >= minLevel) fold(level, x, y);
-  }
-  for (const key of oceanSkipped) {
-    const [level, x, y] = key.split("/").map(Number);
-    if (level >= minLevel) fold(level, x, y);
-  }
-  return Number.isFinite(west)
-    ? { west, south, east, north }
-    : null;
-})();
+const tilesetExtent = Number.isFinite(extentWest)
+  ? { west: extentWest, south: extentSouth, east: extentEast, north: extentNorth }
+  : null;
 
 // ── WHAT THE CLIENT WILL ACTUALLY ASK FOR ──────────────────────────────────
 //
@@ -749,62 +985,99 @@ const tilesetExtent = (() => {
 // the module's availability test was changed to this rule, those addresses were
 // 404s — 14 of them on the regional pyramid, 2 at z6 and 12 at z7 — reaching
 // the browser against the zero-4xx bound.
-const tileCentre = (level, x, y) => [
-  -180 + ((x + 0.5) * 360) / 2 ** (level + 1),
-  -90 + ((y + 0.5) * 180) / 2 ** level,
-];
-function maxLevelAtPosition(lon, lat) {
-  for (let level = available.length - 1; level >= 0; level -= 1) {
-    const cols = 2 ** (level + 1);
-    const rows = 2 ** level;
-    const x = Math.min(cols - 1, Math.max(0, Math.floor(((lon + 180) * cols) / 360)));
-    const y = Math.min(rows - 1, Math.max(0, Math.floor(((lat + 90) * rows) / 180)));
-    for (const r of available[level]) {
-      if (x >= r.startX && x <= r.endX && y >= r.startY && y <= r.endY) return level;
-    }
-  }
-  return -1;
-}
-const clientSeesAvailable = (level, x, y) => maxLevelAtPosition(...tileCentre(level, x, y)) >= level;
-
 // The global all-water set can be millions of addresses.  Keep the complete
 // publication worklist on disk; reports retain counts and a bounded sample.
 const availableButUnstoredPath = path.join(outDir, "available-but-unstored.ndjson");
-const availableButUnstoredHandle = fs.openSync(availableButUnstoredPath, "w");
-let availableButUnstored = 0;
-const availableButUnstoredSample = [];
-let ancestorPlaceholders = 0;
-const unstoredByLevel = {};
+const candidateFactRunDir = path.join(outDir, ".verify-available-candidates");
+const candidateFactScratchDir = path.join(outDir, ".verify-available-candidate-merge");
+const candidateFactWriter = createSortedJsonRunWriter(candidateFactRunDir, {
+  maxRows: 4096,
+  maxRowBytes: 256,
+});
+const availableChildFactRunDir = path.join(outDir, ".verify-available-children");
+const availableChildFactWriter = createSortedJsonRunWriter(availableChildFactRunDir, {
+  maxRows: 4096,
+  maxRowBytes: 256,
+});
+// The closure check above proves a directly declared address is exactly what
+// the serving module sees at its centre.  Enumerating each rectangle therefore
+// avoids the former bounding-box scan and repeated all-level rectangle search.
 for (let level = 0; level <= maxLevel; level += 1) {
-  let x0 = Infinity;
-  let x1 = -Infinity;
-  let y0 = Infinity;
-  let y1 = -Infinity;
-  for (let deeper = level; deeper < available.length; deeper += 1) {
-    const shift = deeper - level;
-    for (const r of available[deeper]) {
-      x0 = Math.min(x0, r.startX >> shift);
-      x1 = Math.max(x1, r.endX >> shift);
-      y0 = Math.min(y0, r.startY >> shift);
-      y1 = Math.max(y1, r.endY >> shift);
-    }
-  }
-  if (!Number.isFinite(x0)) continue;
-  for (let y = y0; y <= y1; y += 1) {
-    for (let x = x0; x <= x1; x += 1) {
-      if (!clientSeesAvailable(level, x, y)) continue;
-      const key = `${level}/${x}/${y}`;
-      if (!seen.has(key)) {
-        fs.writeSync(availableButUnstoredHandle, `${key}\n`);
-        availableButUnstored += 1;
-        unstoredByLevel[level] = (unstoredByLevel[level] ?? 0) + 1;
-        if (!oceanSkipped.has(key)) ancestorPlaceholders += 1;
-        if (availableButUnstoredSample.length < 32) availableButUnstoredSample.push(key);
+  for (const rect of available[level]) {
+    for (let y = rect.startY; y <= rect.endY; y += 1) {
+      for (let x = rect.startX; x <= rect.endX; x += 1) {
+        candidateFactWriter.push({
+          key: addressFactKey(level, x, y),
+          kind: "candidate",
+          level,
+          x,
+          y,
+          address: terrainAddress(level, x, y),
+        });
+        if (level > 0) {
+          const bit = (x & 1 ? 2 : 1) | (y & 1 ? 4 : 0);
+          availableChildFactWriter.push({
+            key: addressFactKey(level - 1, x >> 1, y >> 1),
+            kind: "available-child",
+            childBit: bit,
+          });
+        }
       }
     }
   }
 }
-fs.closeSync(availableButUnstoredHandle);
+const candidateFactRuns = candidateFactWriter.finish();
+const availableChildFactRuns = availableChildFactWriter.finish();
+const availableButUnstoredSample = [];
+let ancestorPlaceholders = 0;
+const unstoredByLevel = {};
+let availableButUnstored = 0;
+let joinedCandidate = null;
+const availableButUnstoredHandle = fs.openSync(availableButUnstoredPath, "w");
+const finishCandidateGroup = () => {
+  if (!joinedCandidate) return;
+  const group = joinedCandidate;
+  if (group.candidate && !group.stored) {
+    fs.writeSync(availableButUnstoredHandle, `${group.address}\n`);
+    availableButUnstored += 1;
+    unstoredByLevel[group.level] = (unstoredByLevel[group.level] ?? 0) + 1;
+    if (!group.ocean) ancestorPlaceholders += 1;
+    if (availableButUnstoredSample.length < 32) availableButUnstoredSample.push(group.address);
+  }
+  joinedCandidate = null;
+};
+try {
+  await mergeSortedJsonRuns([...candidateFactRuns, ...membershipFactRuns], {
+    dedupe: false,
+    maxOpenRuns: 32,
+    maxRowBytes: 512,
+    scratchDir: candidateFactScratchDir,
+    onRow: async (fact) => {
+      if (!joinedCandidate || joinedCandidate.key !== fact.key) {
+        finishCandidateGroup();
+        joinedCandidate = {
+          key: fact.key,
+          level: fact.level,
+          address: fact.address,
+          candidate: false,
+          stored: false,
+          ocean: false,
+        };
+      }
+      if (fact.kind === "candidate") joinedCandidate.candidate = true;
+      else {
+        assert.equal(fact.kind, "membership", `unknown membership join fact at ${fact.key}`);
+        joinedCandidate.stored ||= fact.stored;
+        joinedCandidate.ocean ||= fact.ocean;
+      }
+    },
+  });
+  finishCandidateGroup();
+} finally {
+  fs.closeSync(availableButUnstoredHandle);
+  fs.rmSync(candidateFactRunDir, { recursive: true, force: true });
+  fs.rmSync(candidateFactScratchDir, { recursive: true, force: true });
+}
 
 // ── CHILD_AVAILABILITY: A SET BIT IS A CLAIM, AND EVERY CLAIM IS CHECKED ───
 //
@@ -819,26 +1092,57 @@ fs.closeSync(availableButUnstoredHandle);
 let childBitsWrong = 0;
 let childBitsClaimed = 0;
 const childBitExamples = [];
-for (const [key, bits] of childBits) {
-  const claimed = bits & 0x0f;
-  if (claimed === 0) continue;
+let childAvailabilityGroup = null;
+const finishChildAvailabilityGroup = () => {
+  if (!childAvailabilityGroup?.stored) return;
+  const group = childAvailabilityGroup;
+  const claimed = group.childAvailability & 0x0f;
+  if (claimed === 0) return;
   childBitsClaimed += 1;
-  const [level, x, y] = key.split("/").map(Number);
-  let actual = 0;
-  if (clientSeesAvailable(level + 1, x * 2, y * 2)) actual |= 1;
-  if (clientSeesAvailable(level + 1, x * 2 + 1, y * 2)) actual |= 2;
-  if (clientSeesAvailable(level + 1, x * 2, y * 2 + 1)) actual |= 4;
-  if (clientSeesAvailable(level + 1, x * 2 + 1, y * 2 + 1)) actual |= 8;
   // Every bit the record SETS must be a child the tileset really serves.
-  if ((claimed & ~actual) !== 0) {
+  if ((claimed & ~group.actual) !== 0) {
     childBitsWrong += 1;
     if (childBitExamples.length < 8) {
-      childBitExamples.push(`${key} claims children ${claimed}, availability serves ${actual}`);
+      childBitExamples.push(`${group.address} claims children ${claimed}, availability serves ${group.actual}`);
     }
   }
+};
+try {
+  await mergeSortedJsonRuns([...membershipFactRuns, ...availableChildFactRuns], {
+    dedupe: false,
+    maxOpenRuns: 32,
+    maxRowBytes: 512,
+    scratchDir: membershipFactScratchDir,
+    onRow: async (fact) => {
+      if (!childAvailabilityGroup || childAvailabilityGroup.key !== fact.key) {
+        finishChildAvailabilityGroup();
+        childAvailabilityGroup = {
+          key: fact.key,
+          stored: false,
+          address: null,
+          childAvailability: 0,
+          actual: 0,
+        };
+      }
+      if (fact.kind === "available-child") childAvailabilityGroup.actual |= fact.childBit;
+      else {
+        assert.equal(fact.kind, "membership", `unknown child-availability fact at ${fact.key}`);
+        childAvailabilityGroup.stored ||= fact.stored;
+        if (fact.stored) {
+          childAvailabilityGroup.address = fact.address;
+          childAvailabilityGroup.childAvailability = fact.childAvailability;
+        }
+      }
+    },
+  });
+  finishChildAvailabilityGroup();
+} finally {
+  fs.rmSync(membershipFactRunDir, { recursive: true, force: true });
+  fs.rmSync(membershipFactScratchDir, { recursive: true, force: true });
+  fs.rmSync(availableChildFactRunDir, { recursive: true, force: true });
 }
 if (childBitsWrong) {
-  problems.push(
+  recordProblem(
     `${childBitsWrong} records CLAIM a CHILD_AVAILABILITY bit for a child the published ` +
       `availability does not serve (e.g. ${childBitExamples[0]})`,
   );
@@ -910,15 +1214,16 @@ const densityStepCrack = [...crackByLevel.entries()]
 const crackOverSkirt = densityStepCrack.filter((c) => !c.hiddenBySkirt);
 
 const availableBytes = Buffer.byteLength(JSON.stringify(available));
+const verifierProblemCount = problemCount + edgeFactProblemCount;
 
 const summary = {
   outDir,
   tiles: recordCount,
-  distinctAddresses: seen.size,
+  distinctAddresses,
   storeBytes: fs.statSync(path.join(outDir, "tiles.dttstream")).size,
-  levels: [...byLevel.keys()].sort((a, b) => a - b),
-  tilesPerLevel: Object.fromEntries([...byLevel.entries()].sort((a, b) => a[0] - b[0]).map(([l, v]) => [l, v.length])),
-  payloadBytes: { p50: pct(0.5), p99: pct(0.99), max: sizes[sizes.length - 1] ?? 0, bounds: BOUNDS },
+  levels: [...tilesPerLevel.keys()].sort((a, b) => a - b),
+  tilesPerLevel: Object.fromEntries([...tilesPerLevel.entries()].sort((a, b) => a[0] - b[0])),
+  payloadBytes: { p50: pct(0.5), p99: pct(0.99), max: pct(1), bounds: BOUNDS },
   uniformMasks: uniform,
   rasterMasks: raster,
   uniformMaskRatio: recordCount ? +(uniform / recordCount).toFixed(4) : 0,
@@ -963,8 +1268,8 @@ const summary = {
   // skipped, as against the ancestor placeholders the closure adds. The two
   // are answered differently by the serving module — water and flat land —
   // and conflating them is what published an ocean as a continent.
-  oceanSkipsDeclared: oceanSkipped.size,
-  oceanSkipsBelowAuthoritativeFloor: oceanSkipsBelowFloor.length,
+  oceanSkipsDeclared,
+  oceanSkipsBelowAuthoritativeFloor: oceanSkipsBelowFloorCount,
   ancestorPlaceholders,
   tilesetExtent,
   childAvailabilityClaims: childBitsClaimed,
@@ -995,6 +1300,7 @@ const summary = {
   // A global bad cut can fail at every shared post.  Keep the total visible,
   // while `problems` carries only the deterministic bounded examples emitted by
   // the streamed edge consumer.
+  problemCount: verifierProblemCount,
   edgeContinuityProblemCount: edgeFactProblemCount,
   edgeSeamProblemCount: seamProblemCount,
   edgeFactGroupOverflowCount: edgeGroupOverflowCount,
@@ -1163,7 +1469,7 @@ fs.writeFileSync(
 
 const overCeilingShare = accuracy.filter((a) => !a.withinCeilingShare);
 const failures = [
-  problems.length ? `${problems.length} problems` : null,
+  verifierProblemCount ? `${verifierProblemCount} problems` : null,
   wholeRowsMissing ? `${wholeRowsMissing} tiles missing a whole post row` : null,
   digestMismatch ? `${digestMismatch} digest mismatches` : null,
   overCeiling ? `${overCeiling} tiles over the ${BOUNDS.hard}-byte ceiling` : null,

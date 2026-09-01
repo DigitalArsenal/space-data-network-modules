@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { execFile } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
+import zlib from "node:zlib";
 
 import {
   BoundedGranuleCache,
@@ -13,6 +15,7 @@ import {
   evaluateTerrainEdgeFacts,
   fetchWithRetry,
   initializeGlobalState,
+  iterateBoundedLines,
   makeShardConfigs,
   markShard,
   recordSetDigest,
@@ -22,7 +25,8 @@ import {
   mergeSortedJsonRuns,
   writeSortedJsonRuns,
 } from "../build-support.mjs";
-import { iterateStreamFile } from "../dtt-reader.mjs";
+import { iterateStreamFile, readDtt } from "../dtt-reader.mjs";
+import { writeDttRecord } from "../dtt-projection.mjs";
 
 const execFileAsync = promisify(execFile);
 const HERE = path.dirname(new URL(import.meta.url).pathname);
@@ -30,6 +34,9 @@ const SUPPORT_URL = new URL("../build-support.mjs", import.meta.url).href;
 const COORDINATOR = path.join(HERE, "..", "global-build.mjs");
 const REHEARSAL_RUNNER = path.join(HERE, "fixtures", "rehearsal-runner.mjs");
 const REAL_REHEARSAL = path.join(HERE, "..", "rehearse.mjs");
+const VERIFY = path.join(HERE, "..", "verify.mjs");
+const SOURCE_SDS = path.join(HERE, "..", "..", "..", "data-source", "terrain-source", "node_modules", "spacedatastandards.org", "index.js");
+const sds = await import(SOURCE_SDS);
 
 function temporary(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "terrain-global-build-"));
@@ -201,6 +208,24 @@ test("bounded fact merge caps fan-in, cleans stale scratch, and finds duplicates
   );
 });
 
+test("bounded line reader rejects empty and oversized address-list rows", async (t) => {
+  const file = path.join(temporary(t), "ocean-skipped.lines");
+  fs.writeFileSync(file, "2/1/0\n12/10/10\n");
+  const rows = [];
+  for await (const row of iterateBoundedLines(file, { maxRowBytes: 32 })) rows.push(row.toString("utf8"));
+  assert.deepEqual(rows, ["2/1/0", "12/10/10"]);
+
+  fs.writeFileSync(file, "2/1/0\n\n");
+  await assert.rejects(async () => {
+    for await (const unused of iterateBoundedLines(file, { maxRowBytes: 32 })) void unused;
+  }, /empty fact row/);
+
+  fs.writeFileSync(file, `${"7".repeat(33)}\n`);
+  await assert.rejects(async () => {
+    for await (const unused of iterateBoundedLines(file, { maxRowBytes: 32 })) void unused;
+  }, /fact row exceeds 32 bytes/);
+});
+
 function edgeBytes(values) {
   const bytes = Buffer.alloc(values.length * 8);
   for (let index = 0; index < values.length; index += 1) bytes.writeDoubleLE(values[index], index * 8);
@@ -332,6 +357,209 @@ test("constrained heap streams more than one hundred thousand verifier edge fact
   assert.equal(result.problems, 300_004);
   assert.ok(result.examples <= 64);
   assert.ok(result.heap < 64 * 1024 * 1024, `child heap ${result.heap} exceeded its 64 MiB budget`);
+});
+
+function syntheticMeshPayload(serial) {
+  // A 2x2 regular quantized mesh at a constant 1 m.  The verifier only needs
+  // the header and the zigzag u/v/h arrays; a non-compressible tail varies the
+  // otherwise identical payload lengths for independent quantile checks.
+  const tail = 17 + (serial % 67);
+  const mesh = Buffer.alloc(116 + tail);
+  mesh.writeFloatLE(1, 24);
+  mesh.writeFloatLE(1, 28);
+  mesh.writeUInt32LE(4, 88);
+  const writeDeltas = (offset, values) => {
+    let previous = 0;
+    for (let index = 0; index < values.length; index += 1) {
+      const delta = values[index] - previous;
+      mesh.writeUInt16LE(((delta << 1) ^ (delta >> 15)) & 0xffff, offset + index * 2);
+      previous = values[index];
+    }
+  };
+  writeDeltas(92, [0, 32767, 0, 32767]);
+  writeDeltas(100, [0, 0, 32767, 32767]);
+  writeDeltas(108, [0, 0, 0, 0]);
+  for (let index = 0; index < tail; index += 1) mesh[116 + index] = (serial * 37 + index * 19) & 0xff;
+  return zlib.gzipSync(mesh);
+}
+
+function syntheticTerrainRecord({ level, x, y, childAvailability = 0, serial }) {
+  const payload = syntheticMeshPayload(serial);
+  const digest = `1220${createHash("sha256").update(payload).digest("hex")}`;
+  // writeFB produces a size-prefixed FlatBuffer for standalone transport;
+  // tiles.dttstream supplies its own frame, so its record is the raw suffix.
+  return Buffer.from(writeDttRecord(sds, {
+    TILESET_ID: "streaming-verifier-fixture",
+    TILING_SCHEME: "GEOGRAPHIC_WGS84",
+    LEVEL: level,
+    X: x,
+    Y: y,
+    MIN_HEIGHT_M: 1,
+    MAX_HEIGHT_M: 1,
+    PAYLOAD_FORMAT: "QUANTIZED_MESH",
+    PAYLOAD_FORMAT_VERSION: "1.0",
+    PAYLOAD: {
+      BYTES: payload,
+      SIZE_BYTES: payload.length,
+      DIGEST: digest,
+      CONTENT_ENCODING: "gzip",
+    },
+    VERTICAL_DATUM: "GEOID",
+    VERTICAL_DATUM_NAME: "EGM2008",
+    VERTICAL_ACCURACY_M: 0,
+    ACCURACY_CONFIDENCE: 1,
+    DATA_COVERAGE_FRACTION: 1,
+    WATER_MASK_KIND: "UNIFORM_LAND",
+    CHILD_AVAILABILITY: childAvailability,
+    MAX_LEVEL: 12,
+    PROVENANCE: {
+      DATASET_ID: "streaming-fixture",
+      DATASET_EPOCH: "2026-09-01T00:00:00.000Z",
+      RETRIEVED_AT: "2026-09-01T00:00:00.000Z",
+      LICENSE: "test licence",
+    },
+    ETAG: `"${digest}"`,
+  })).subarray(4);
+}
+
+function appendTerrainFrame(handle, record) {
+  const length = Buffer.alloc(4);
+  length.writeUInt32LE(record.length);
+  fs.writeSync(handle, length);
+  fs.writeSync(handle, record);
+}
+
+function writeSyntheticTerrainStream(outDir, addresses = [{ level: 3, x: 0, y: 0 }]) {
+  const handle = fs.openSync(path.join(outDir, "tiles.dttstream"), "w");
+  try {
+    addresses.forEach((address, serial) => appendTerrainFrame(handle, syntheticTerrainRecord({ ...address, serial })));
+  } finally {
+    fs.closeSync(handle);
+  }
+}
+
+test("constrained verifier streams address catalogues, receipt lines, and exact payload quantiles", async (t) => {
+  const outDir = temporary(t);
+  const stream = path.join(outDir, "tiles.dttstream");
+  const handle = fs.openSync(stream, "w");
+  const payloadSizes = [];
+  let serial = 0;
+  const append = (address) => {
+    const record = syntheticTerrainRecord({ ...address, serial: serial++ });
+    payloadSizes.push(readDtt(record).payload.bytes.length);
+    appendTerrainFrame(handle, record);
+  };
+  try {
+    // Missing stored ancestors must become disk-backed placeholders, while the
+    // set bit on 11/100/100 deliberately claims a child no availability row
+    // can serve.  Levels 3..12 exercise a deep closure without an address map.
+    for (let level = 3; level <= 10; level += 1) append({ level, x: 0, y: 0 });
+    append({ level: 11, x: 100, y: 100, childAvailability: 1 });
+    // A multi-row level-12 block forces thousands of streamed candidate and
+    // parent/child facts; the duplicate is in a different record position.
+    for (let y = 0; y < 64; y += 1) for (let x = 0; x < 80; x += 1) append({ level: 12, x, y });
+    append({ level: 12, x: 0, y: 0 });
+  } finally {
+    fs.closeSync(handle);
+  }
+  const linesPath = path.join(outDir, "ocean-skipped.lines");
+  fs.writeFileSync(linesPath, "2/1/0\n");
+  const lineDigest = createHash("sha256").update(fs.readFileSync(linesPath)).digest("hex");
+  fs.writeFileSync(path.join(outDir, "ocean-skipped.json"), JSON.stringify({
+    format: "terrain-ocean-skips-lines-v1",
+    addressesPath: "ocean-skipped.lines",
+    count: 1,
+    digest: lineDigest,
+  }));
+
+  let failure;
+  try {
+    await execFileAsync(process.execPath, ["--max-old-space-size=64", VERIFY, "--out", outDir, "--json"], {
+      timeout: 120_000,
+      maxBuffer: 4 * 1024 * 1024,
+    });
+  } catch (error) {
+    failure = error;
+  }
+  assert.equal(failure?.code, 1, "the deliberately bad duplicate/claim/floor fixture must fail verification");
+  const printed = JSON.parse(failure.stdout);
+  const report = JSON.parse(fs.readFileSync(path.join(outDir, "verify-report.json"), "utf8"));
+  const sortedSizes = [...payloadSizes].sort((left, right) => left - right);
+  const exact = (p) => sortedSizes[Math.floor((sortedSizes.length - 1) * p)];
+  assert.equal(printed.tiles, payloadSizes.length, "the constrained child printed its verifier metrics");
+  assert.equal(report.distinctAddresses, payloadSizes.length - 1);
+  assert.deepEqual(report.payloadBytes, { p50: exact(0.5), p99: exact(0.99), max: exact(1), bounds: report.payloadBytes.bounds });
+  assert.equal(report.oceanSkipsDeclared, 1);
+  assert.equal(report.oceanSkipsBelowAuthoritativeFloor, 1);
+  assert.equal(report.childAvailabilityUnservedClaims, 1);
+  // The duplicate produces one address diagnostic and four physical-edge
+  // overflow groups; the floor and child claims add the remaining two.
+  assert.equal(report.problemCount, 7);
+  assert.ok(report.availableButUnstored > 0, "missing ancestors are materialized as placeholders on disk");
+  assert.match(failure.stderr, /NOT PUBLISHABLE: 7 problems/);
+  for (const temporaryName of [
+    ".verify-address-facts", ".verify-address-merge", ".verify-size-facts", ".verify-size-merge",
+    ".verify-closure-facts", ".verify-closure-merge", ".verify-membership-facts", ".verify-membership-merge",
+    ".verify-available-candidates", ".verify-available-candidate-merge", ".verify-available-children",
+  ]) assert.equal(fs.existsSync(path.join(outDir, temporaryName)), false, `${temporaryName} must be reclaimed`);
+});
+
+test("verifier accepts legacy ocean arrays and rejects malformed streamed ocean receipts", async (t) => {
+  const legacy = temporary(t);
+  writeSyntheticTerrainStream(legacy);
+  fs.writeFileSync(path.join(legacy, "ocean-skipped.json"), JSON.stringify({ addresses: ["3/1/0"] }));
+  const legacyResult = await execFileAsync(process.execPath, ["--max-old-space-size=64", VERIFY, "--out", legacy, "--json"], {
+    timeout: 30_000,
+    maxBuffer: 1024 * 1024,
+  });
+  assert.match(legacyResult.stdout, /PUBLISHABLE/);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(legacy, "verify-report.json"), "utf8")).oceanSkipsDeclared, 1);
+
+  const rejectReceipt = async ({ name, lines, receipt, expected }) => {
+    const root = temporary(t);
+    const outDir = path.join(root, "out");
+    fs.mkdirSync(outDir);
+    writeSyntheticTerrainStream(outDir);
+    const target = path.join(outDir, "ocean-skipped.lines");
+    if (lines !== null) fs.writeFileSync(target, lines);
+    const digest = lines === null ? "0".repeat(64) : createHash("sha256").update(Buffer.from(lines)).digest("hex");
+    const escaped = path.join(root, "escaped-ocean-skipped.lines");
+    if (receipt.escaped) fs.writeFileSync(escaped, "3/1/0\n");
+    fs.writeFileSync(path.join(outDir, "ocean-skipped.json"), JSON.stringify({
+      format: "terrain-ocean-skips-lines-v1",
+      addressesPath: receipt.escaped ? "../escaped-ocean-skipped.lines" : "ocean-skipped.lines",
+      count: lines?.split("\n").filter(Boolean).length ?? 0,
+      digest,
+      ...receipt,
+    }));
+    let failure;
+    try {
+      await execFileAsync(process.execPath, [VERIFY, "--out", outDir], { timeout: 30_000, maxBuffer: 1024 * 1024 });
+    } catch (error) {
+      failure = error;
+    }
+    assert.notEqual(failure, undefined, `${name} must refuse the receipt`);
+    assert.match(failure.stderr, expected);
+  };
+
+  await rejectReceipt({
+    name: "escaped pointer",
+    lines: "3/1/0\n",
+    receipt: { escaped: true },
+    expected: /target escapes output directory/,
+  });
+  await rejectReceipt({
+    name: "unsorted lines",
+    lines: "3/2/0\n3/1/0\n",
+    receipt: {},
+    expected: /lines must be sorted and unique/,
+  });
+  await rejectReceipt({
+    name: "digest mismatch",
+    lines: "3/1/0\n",
+    receipt: { digest: "f".repeat(64) },
+    expected: /receipt digest mismatch/,
+  });
 });
 
 function cacheChild({ dir, maxBytes, url, status, body, delayMs = 0, holdMs = 0, release = false }) {
