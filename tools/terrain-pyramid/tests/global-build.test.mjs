@@ -318,7 +318,7 @@ test("constrained heap streams more than one hundred thousand verifier edge fact
     assert.equal(result.edgeGroupOverflowCount, 1);
     assert.equal(result.problemCount, 300_004);
     assert.ok(result.problemExamples.length <= 64);
-    assert.match(result.problemExamples[0], /^seam at 12\/0\/0 east vs 12\/1\/0 west shared post 0 of 2:/);
+    assert.ok(result.problemExamples[0].startsWith('seam at 12/0/0 east vs 12/1/0 west shared post 0 of 2:'));
     assert.ok(result.problemExamples.some((problem) => problem.includes('has 3 rows; expected at most two')));
     process.stdout.write(JSON.stringify({ heap: process.memoryUsage().heapUsed, adjacencies: result.adjacencies, problems: result.problemCount, examples: result.problemExamples.length }));
   `;
