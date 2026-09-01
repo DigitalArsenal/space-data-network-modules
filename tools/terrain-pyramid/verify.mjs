@@ -16,11 +16,13 @@ import process from "node:process";
 import zlib from "node:zlib";
 
 import {
+  canonicalJson,
   createSortedJsonRunWriter,
   evaluateTerrainEdgeFacts,
-  iterateBoundedLines,
   iterateJsonStringArrayProperty,
+  mergeSortedJsonRunSources,
   mergeSortedJsonRuns,
+  sha256,
 } from "./build-support.mjs";
 import { iterateStreamFd, readDtt, readDttProvenance } from "./dtt-reader.mjs";
 
@@ -52,6 +54,10 @@ import { iterateStreamFd, readDtt, readDttProvenance } from "./dtt-reader.mjs";
 // and kept AS A NUMBER: both figures are reported per level below, so the
 // change of gate is visible rather than a quiet loosening.
 const BOUNDS = { p50: 10240, p99: 28672, hard: 32768 };
+const PUBLICATION_LIMITS = {
+  maxVerifiedStoreBytes: 12 * 1024 ** 3,
+  maxStaticDirectoryBytes: 128 * 1024 ** 3,
+};
 // The published terrain scheme is geographic and its current approved global
 // cut stops at z10.  Permit a little headroom for the regional proof while
 // retaining arithmetic that is exact in JavaScript and cannot make an input
@@ -174,14 +180,39 @@ function gunzipBounded(bytes, maxOutputLength, label) {
 
 function validateMeshStructure(mesh, label) {
   assert.ok(mesh.length >= 92, `${label} is shorter than a quantized-mesh header`);
+  for (const offset of [0, 8, 16, 32, 40, 48, 56, 64, 72, 80]) {
+    assert.ok(Number.isFinite(mesh.readDoubleLE(offset)), `${label} has a non-finite header coordinate`);
+  }
+  const headerMinimum = mesh.readFloatLE(24);
+  const headerMaximum = mesh.readFloatLE(28);
+  assert.ok(Number.isFinite(headerMinimum) && Number.isFinite(headerMaximum) && headerMinimum <= headerMaximum,
+    `${label} has an invalid header height range`);
+  assert.ok(mesh.readDoubleLE(56) >= 0, `${label} has a negative bounding-sphere radius`);
   const count = mesh.readUInt32LE(88);
   const grid = Math.round(Math.sqrt(count));
   assert.ok(grid >= 2 && grid <= MAX_MESH_GRID && grid * grid === count,
     `${label} has unsupported regular-lattice vertex count ${count}`);
-  // Walk every variable-length section without allocating from untrusted
-  // counts.  A header-only check used to let a malformed triangle/edge tail
-  // reach publication even though the static tile consumer must parse it.
-  let at = 92 + count * 6;
+  // Decode every delta rather than wrapping an out-of-range coordinate into a
+  // Uint16Array.  The shipping encoder writes one exact regular lattice; a
+  // wrapped coordinate makes an invisible or partial mesh look well-framed.
+  let at = 92;
+  const zigzag = (name) => {
+    const out = new Uint16Array(count);
+    let previous = 0;
+    for (let index = 0; index < count; index += 1) {
+      const raw = mesh.readUInt16LE(at);
+      at += 2;
+      const value = previous + ((raw >>> 1) ^ -(raw & 1));
+      assert.ok(value >= 0 && value <= 32767, `${label} ${name} coordinate is outside [0, 32767]`);
+      out[index] = value;
+      previous = value;
+    }
+    return out;
+  };
+  assert.ok(92 + count * 6 <= mesh.length, `${label} truncates its u/v/h vertex sections`);
+  const u = zigzag("u");
+  const v = zigzag("v");
+  const h = zigzag("height");
   assert.ok(at <= mesh.length, `${label} truncates its u/v/h vertex sections`);
   const wide = count > 65536;
   const indexWidth = wide ? 4 : 2;
@@ -194,6 +225,9 @@ function validateMeshStructure(mesh, label) {
   requireBytes(4, "triangle count");
   const triangleCount = mesh.readUInt32LE(at);
   at += 4;
+  const expectedTriangleCount = 2 * (grid - 1) ** 2;
+  assert.equal(triangleCount, expectedTriangleCount,
+    `${label} must contain the shipping regular-grid triangle count ${expectedTriangleCount}`);
   assert.ok(triangleCount <= Math.floor((mesh.length - at) / (3 * indexWidth)),
     `${label} triangle count exceeds remaining mesh bytes`);
   const readIndex = () => {
@@ -201,6 +235,31 @@ function validateMeshStructure(mesh, label) {
     const value = wide ? mesh.readUInt32LE(at) : mesh.readUInt16LE(at);
     at += indexWidth;
     return value;
+  };
+  const latticeAxis = new Map();
+  for (let index = 0; index < grid; index += 1) latticeAxis.set(Math.floor((32767 * index) / (grid - 1)), index);
+  const vertexLattice = new Uint32Array(count);
+  const seenLattice = new Uint8Array(count);
+  for (let index = 0; index < count; index += 1) {
+    const latticeX = latticeAxis.get(u[index]);
+    const latticeY = latticeAxis.get(v[index]);
+    assert.notEqual(latticeX, undefined, `${label} u coordinate is not on the shipping lattice`);
+    assert.notEqual(latticeY, undefined, `${label} v coordinate is not on the shipping lattice`);
+    const latticeVertex = latticeY * grid + latticeX;
+    assert.equal(seenLattice[latticeVertex], 0, `${label} repeats a regular-lattice vertex`);
+    seenLattice[latticeVertex] = 1;
+    vertexLattice[index] = latticeVertex;
+  }
+  const expectedTriangleVertex = (triangle, corner) => {
+    const cell = Math.floor(triangle / 2);
+    const x = cell % (grid - 1);
+    const y = Math.floor(cell / (grid - 1));
+    const bottomLeft = y * grid + x;
+    const bottomRight = bottomLeft + 1;
+    const topLeft = bottomLeft + grid;
+    const topRight = topLeft + 1;
+    if (triangle % 2 === 0) return corner === 0 ? bottomLeft : corner === 1 ? bottomRight : topRight;
+    return corner === 0 ? bottomLeft : corner === 1 ? topRight : topLeft;
   };
   let highWater = 0;
   for (let index = 0; index < triangleCount * 3; index += 1) {
@@ -210,55 +269,54 @@ function validateMeshStructure(mesh, label) {
     assert.ok(decoded < count, `${label} triangle index exceeds vertex count`);
     if (code === 0) highWater += 1;
     assert.ok(highWater <= count, `${label} triangle high-water mark exceeds vertex count`);
+    assert.equal(vertexLattice[decoded], expectedTriangleVertex(Math.floor(index / 3), index % 3),
+      `${label} triangle topology is not the shipping regular grid`);
+  }
+  assert.equal(highWater, count, `${label} regular-grid triangles must reference every vertex`);
+  const shippingEdges = {
+    west: [], south: [], east: [], north: [],
+  };
+  for (let candidate = 0; candidate < count; candidate += 1) {
+    if (u[candidate] === 0) shippingEdges.west.push(candidate);
+    if (v[candidate] === 0) shippingEdges.south.push(candidate);
+    if (u[candidate] === 32767) shippingEdges.east.push(candidate);
+    if (v[candidate] === 32767) shippingEdges.north.push(candidate);
   }
   for (const edge of ["west", "south", "east", "north"]) {
     requireBytes(4, `${edge} edge count`);
     const edgeCount = mesh.readUInt32LE(at);
     at += 4;
-    assert.ok(edgeCount <= count, `${label} ${edge} edge count exceeds vertex count`);
+    assert.equal(edgeCount, grid, `${label} ${edge} edge must contain exactly ${grid} vertices`);
     requireBytes(edgeCount * indexWidth, `${edge} edge indices`);
     for (let index = 0; index < edgeCount; index += 1) {
       const vertex = wide ? mesh.readUInt32LE(at) : mesh.readUInt16LE(at);
       at += indexWidth;
       assert.ok(vertex < count, `${label} ${edge} edge index exceeds vertex count`);
+      assert.equal(vertex, shippingEdges[edge][index], `${label} ${edge} edge is not the shipping edge list`);
     }
   }
-  while (at < mesh.length) {
-    requireBytes(5, "extension header");
-    const extensionId = mesh.readUInt8(at);
-    const extensionBytes = mesh.readUInt32LE(at + 1);
-    at += 5;
-    assert.ok(extensionId !== 0, `${label} has invalid extension id 0`);
-    requireBytes(extensionBytes, `extension ${extensionId} body`);
-    at += extensionBytes;
-  }
+  requireBytes(5, "watermask extension header");
+  const extensionId = mesh.readUInt8(at);
+  const extensionBytes = mesh.readUInt32LE(at + 1);
+  at += 5;
+  assert.equal(extensionId, 2, `${label} must contain the shipping watermask extension id 2`);
+  assert.ok(extensionBytes === 1 || extensionBytes === MAX_MASK_BYTES,
+    `${label} watermask extension must be one uniform byte or a ${MAX_MASK_BYTES}-byte raster`);
+  requireBytes(extensionBytes, "watermask extension body");
+  const waterMask = mesh.subarray(at, at + extensionBytes);
+  at += extensionBytes;
   assert.equal(at, mesh.length, `${label} has trailing mesh bytes`);
-  return { count, grid };
+  return { count, grid, u, v, h, waterMask };
 }
 
-function meshEdges(mesh, dtt) {
+function meshEdges(mesh, dtt, structure = validateMeshStructure(mesh, "quantized mesh")) {
   // GRID_WIDTH/GRID_HEIGHT are unset on a mesh payload — the schema says so
   // ("Unset for mesh formats, whose vertex count varies") — so the lattice is
   // read from the MESH, which is where it actually lives. Reading a record
   // field that is legitimately absent and defaulting it to 65 would have
   // silently mis-parsed every pyramid built at another grid size.
   void dtt;
-  const { count, grid } = validateMeshStructure(mesh, "quantized mesh");
-  let at = 92;
-  const zigzag = () => {
-    const out = new Uint16Array(count);
-    let prev = 0;
-    for (let i = 0; i < count; i += 1) {
-      const raw = mesh.readUInt16LE(at);
-      at += 2;
-      prev += (raw >> 1) ^ -(raw & 1);
-      out[i] = prev & 0xffff;
-    }
-    return out;
-  };
-  const u = zigzag();
-  const v = zigzag();
-  const h = zigzag();
+  const { count, grid, u, v, h } = structure;
   const range = dtt.maxHeightM - dtt.minHeightM;
   const edges = {
     north: new Float64Array(grid).fill(NaN),
@@ -277,6 +335,20 @@ function meshEdges(mesh, dtt) {
     if (u[i] === 32767) edges.east[index(v[i])] = metres;
   }
   return edges;
+}
+
+function validateMeshWaterMask(meshWaterMask, dtt, key) {
+  if (dtt.waterMaskKind === 1 || dtt.waterMaskKind === 2) {
+    assert.equal(meshWaterMask.length, 1, `mesh watermask at ${key} must be uniform`);
+    assert.equal(meshWaterMask[0], dtt.waterMaskKind === 2 ? 0xff : 0x00,
+      `mesh watermask at ${key} disagrees with DTT uniform WATER_MASK_KIND`);
+    return;
+  }
+  assert.equal(meshWaterMask.length, MAX_MASK_BYTES,
+    `mesh watermask at ${key} must contain the full DTT raster`);
+  const raw = gunzipBounded(Buffer.from(dtt.waterMask.bytes), MAX_MASK_BYTES, `mask at ${key}`);
+  assert.equal(raw.length, MAX_MASK_BYTES, `mask at ${key} decompresses to ${raw.length} B`);
+  assert.ok(raw.equals(meshWaterMask), `mesh watermask at ${key} disagrees with DTT WATER_MASK bytes`);
 }
 
 function encodeMeshEdge(edge) {
@@ -366,104 +438,240 @@ function validateDtt(dtt, record) {
   assert.ok(dtt.verticalAccuracyM >= 0, "tile vertical accuracy is negative");
   assert.ok(dtt.maxHeightM >= dtt.minHeightM, "tile height range is inverted");
   assert.equal(dtt.payload.sizeBytes, dtt.payload.bytes.length, "tile payload size does not match inline bytes");
+  assert.equal(dtt.payload.contentEncoding, "gzip", "shipping quantized-mesh payload must state gzip encoding");
   assert.ok(dtt.payload.bytes.length <= MAX_COMPRESSED_PAYLOAD_BYTES, "tile compressed payload exceeds verifier safety bound");
-  if (dtt.waterMaskKind === 3) assert.ok(dtt.waterMask?.bytes, "raster water mask has no inline bytes");
+  if (dtt.waterMaskKind === 3) {
+    assert.ok(dtt.waterMask?.bytes, "raster water mask has no inline bytes");
+    assert.equal(dtt.waterMaskWidth, 256, "raster water mask must state width 256");
+    assert.equal(dtt.waterMaskHeight, 256, "raster water mask must state height 256");
+    assert.equal(dtt.waterMask.sizeBytes, dtt.waterMask.bytes.length, "raster water-mask size does not match inline bytes");
+    assert.equal(dtt.waterMask.contentEncoding, "gzip", "shipping raster water mask must state gzip encoding");
+    assert.equal(dtt.waterMask.digest, `1220${createHash("sha256").update(dtt.waterMask.bytes).digest("hex")}`,
+      "raster water-mask digest does not match inline bytes");
+  } else {
+    assert.equal(dtt.waterMask?.bytes ?? null, null, "uniform DTT water mask must not carry raster bytes");
+    assert.equal(dtt.waterMaskWidth, 0, "uniform DTT water mask must not state a width");
+    assert.equal(dtt.waterMaskHeight, 0, "uniform DTT water mask must not state a height");
+  }
   void record;
 }
 
 const OCEAN_SKIP_MAX_RECEIPT_BYTES = 64 * 1024;
-const OCEAN_SKIP_MAX_LINES_BYTES = 512 * 1024 * 1024;
+// Global all-water membership can be output-sized.  The bounded line reader
+// retains only one row, while this ceiling matches the independently approved
+// static-directory absolute maximum rather than inventing a smaller heap-era
+// file cap.
+const OCEAN_SKIP_MAX_LINES_BYTES = PUBLICATION_LIMITS.maxStaticDirectoryBytes;
 const OCEAN_SKIP_MAX_ROW_BYTES = 256;
 
-async function fileSha256(file, maxBytes) {
-  const hash = createHash("sha256");
-  let bytes = 0;
-  const stream = fs.createReadStream(file, { highWaterMark: 64 * 1024 });
-  try {
-    for await (const chunk of stream) {
-      bytes += chunk.length;
-      assert.ok(bytes <= maxBytes, `ocean skip address list exceeds ${maxBytes} bytes: ${file}`);
-      hash.update(chunk);
-    }
-  } finally {
-    stream.destroy();
-  }
-  return { bytes, digest: hash.digest("hex") };
+const NO_FOLLOW = fs.constants.O_NOFOLLOW;
+assert.ok(Number.isInteger(NO_FOLLOW) && NO_FOLLOW !== 0,
+  "this verifier requires O_NOFOLLOW for publication receipts");
+
+function fileMutationSnapshot(stat) {
+  return {
+    device: String(stat.dev),
+    inode: String(stat.ino),
+    bytes: Number(stat.size),
+    mtimeNs: String(stat.mtimeNs),
+    ctimeNs: String(stat.ctimeNs),
+  };
 }
 
-async function publicationInputReceipt(outDir, relativePath, extra = {}) {
+function sameFileMutation(left, right) {
+  return left.device === right.device
+    && left.inode === right.inode
+    && left.bytes === right.bytes
+    && left.mtimeNs === right.mtimeNs
+    && left.ctimeNs === right.ctimeNs;
+}
+
+function stablePublicationInput(outDir, relativePath, {
+  maxBytes,
+  extra = {},
+  retainBytes = false,
+} = {}) {
   assert.equal(relativePath, path.basename(relativePath), "publication receipt path must be a fixed relative filename");
   const file = path.join(outDir, relativePath);
-  const before = fs.statSync(file);
-  assert.ok(before.isFile(), `publication input is not a regular file: ${relativePath}`);
-  const hashed = await fileSha256(file, before.size);
-  const after = fs.statSync(file);
-  assert.equal(after.size, before.size, `publication input changed while hashing: ${relativePath}`);
-  return { path: relativePath, bytes: before.size, sha256: hashed.digest, ...extra };
+  const pathBeforeStat = fs.lstatSync(file, { bigint: true });
+  assert.ok(pathBeforeStat.isFile(), `publication input is not a regular file: ${relativePath}`);
+  const pathBefore = fileMutationSnapshot(pathBeforeStat);
+  const fd = fs.openSync(file, fs.constants.O_RDONLY | NO_FOLLOW);
+  const chunks = retainBytes ? [] : null;
+  const hash = createHash("sha256");
+  const buffer = Buffer.allocUnsafe(64 * 1024);
+  try {
+    const opened = fileMutationSnapshot(fs.fstatSync(fd, { bigint: true }));
+    assert.ok(Number.isSafeInteger(opened.bytes) && opened.bytes >= 0 && opened.bytes <= maxBytes,
+      `publication input exceeds ${maxBytes} byte verifier bound: ${relativePath}`);
+    assert.ok(sameFileMutation(pathBefore, opened), `publication input changed before opening: ${relativePath}`);
+    let position = 0;
+    for (;;) {
+      const read = fs.readSync(fd, buffer, 0, buffer.length, position);
+      if (!read) break;
+      position += read;
+      assert.ok(position <= opened.bytes, `publication input grew while hashing: ${relativePath}`);
+      hash.update(buffer.subarray(0, read));
+      if (chunks) chunks.push(Buffer.from(buffer.subarray(0, read)));
+    }
+    assert.equal(position, opened.bytes, `publication input changed size while hashing: ${relativePath}`);
+    const closed = fileMutationSnapshot(fs.fstatSync(fd, { bigint: true }));
+    const pathAfter = fileMutationSnapshot(fs.lstatSync(file, { bigint: true }));
+    assert.ok(sameFileMutation(opened, closed), `publication input changed while hashing: ${relativePath}`);
+    assert.ok(sameFileMutation(opened, pathAfter), `publication input pathname changed while hashing: ${relativePath}`);
+    const receipt = {
+      path: relativePath,
+      bytes: opened.bytes,
+      sha256: hash.digest("hex"),
+      ...extra,
+    };
+    return { receipt, mutation: opened, bytes: chunks ? Buffer.concat(chunks) : null };
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function publicationInputReceipt(outDir, relativePath, extra = {}, maxBytes = OCEAN_SKIP_MAX_LINES_BYTES) {
+  return stablePublicationInput(outDir, relativePath, { maxBytes, extra }).receipt;
+}
+
+function stableJsonInput(outDir, relativePath, maxBytes) {
+  const stable = stablePublicationInput(outDir, relativePath, { maxBytes, retainBytes: true });
+  let value;
+  try {
+    value = JSON.parse(stable.bytes.toString("utf8"));
+  } catch (error) {
+    throw new Error(`${relativePath} is not valid JSON: ${error.message}`);
+  }
+  return { value, receipt: stable.receipt, mutation: stable.mutation };
 }
 
 // New global cuts write a compact receipt beside a separately streamed raw
-// ASCII address list (one `level/x/y` line each).  Regional evidence retains
-// the older JSON array.  Both paths are bounded and return the same async
-// address stream to the verifier.
-async function* iterateOceanSkippedAddresses(outDir, legacyPath) {
-  if (!fs.existsSync(legacyPath)) return;
-  const receiptStat = fs.statSync(legacyPath);
-  assert.ok(receiptStat.isFile(), `ocean skip receipt is not a regular file: ${legacyPath}`);
-  assert.ok(receiptStat.size <= OCEAN_SKIP_MAX_LINES_BYTES,
-    `ocean skip input exceeds ${OCEAN_SKIP_MAX_LINES_BYTES} bytes: ${legacyPath}`);
-  let receipt = null;
-  if (receiptStat.size <= OCEAN_SKIP_MAX_RECEIPT_BYTES) {
-    try { receipt = JSON.parse(fs.readFileSync(legacyPath, "utf8")); } catch { receipt = null; }
+// ASCII address list (one `level/x/y` line each).  It is read once through a
+// no-follow descriptor: the digest, the address facts, and the later receipt
+// all name the same bytes rather than a pathname that a concurrent producer
+// can exchange between those steps.
+async function* iterateStableOceanLines(outDir, receipt, evidence) {
+  const relativePath = "ocean-skipped.lines";
+  const file = path.join(outDir, relativePath);
+  const pathBeforeStat = fs.lstatSync(file, { bigint: true });
+  assert.ok(pathBeforeStat.isFile(), "ocean skip address list is not a regular file");
+  const pathBefore = fileMutationSnapshot(pathBeforeStat);
+  assert.ok(pathBefore.bytes <= OCEAN_SKIP_MAX_LINES_BYTES, "ocean skip address list exceeds verifier bound");
+  const fd = fs.openSync(file, fs.constants.O_RDONLY | NO_FOLLOW);
+  const hash = createHash("sha256");
+  const buffer = Buffer.allocUnsafe(64 * 1024);
+  let carry = Buffer.alloc(0);
+  let position = 0;
+  let count = 0;
+  try {
+    const opened = fileMutationSnapshot(fs.fstatSync(fd, { bigint: true }));
+    assert.ok(sameFileMutation(pathBefore, opened), "ocean skip address list changed before opening");
+    const emit = async function* (line) {
+      const withoutCr = line.length && line[line.length - 1] === 0x0d ? line.subarray(0, -1) : line;
+      assert.ok(withoutCr.length > 0 && withoutCr.length <= OCEAN_SKIP_MAX_ROW_BYTES,
+        "ocean skip line exceeds bounded row size");
+      const address = withoutCr.toString("utf8");
+      assert.equal(Buffer.byteLength(address), withoutCr.length, `ocean skip line ${count + 1} is not valid UTF-8`);
+      count += 1;
+      yield address;
+    };
+    for (;;) {
+      const read = fs.readSync(fd, buffer, 0, buffer.length, position);
+      if (!read) break;
+      position += read;
+      assert.ok(position <= opened.bytes, "ocean skip address list grew while being read");
+      const chunk = buffer.subarray(0, read);
+      hash.update(chunk);
+      let start = 0;
+      for (;;) {
+        const newline = chunk.indexOf(0x0a, start);
+        if (newline < 0) break;
+        const piece = chunk.subarray(start, newline);
+        assert.ok(carry.length + piece.length <= OCEAN_SKIP_MAX_ROW_BYTES, "ocean skip line exceeds bounded row size");
+        const line = carry.length ? Buffer.concat([carry, piece]) : Buffer.from(piece);
+        carry = Buffer.alloc(0);
+        yield* emit(line);
+        start = newline + 1;
+      }
+      const tail = chunk.subarray(start);
+      assert.ok(carry.length + tail.length <= OCEAN_SKIP_MAX_ROW_BYTES, "ocean skip line exceeds bounded row size");
+      carry = carry.length ? Buffer.concat([carry, tail]) : Buffer.from(tail);
+    }
+    if (carry.length) yield* emit(carry);
+    assert.equal(position, opened.bytes, "ocean skip address list changed size while being read");
+    assert.equal(hash.digest("hex"), receipt.digest, "ocean skip receipt digest mismatch for ocean-skipped.lines");
+    assert.equal(count, receipt.count, "ocean skip receipt count mismatch for ocean-skipped.lines");
+    const closed = fileMutationSnapshot(fs.fstatSync(fd, { bigint: true }));
+    const pathAfter = fileMutationSnapshot(fs.lstatSync(file, { bigint: true }));
+    assert.ok(sameFileMutation(opened, closed), "ocean skip address list changed while being read");
+    assert.ok(sameFileMutation(opened, pathAfter), "ocean skip address list pathname changed while being read");
+    evidence.oceanAddresses = { path: relativePath, bytes: opened.bytes, sha256: receipt.digest, addresses: count };
+    evidence.oceanAddressesMutation = opened;
+  } finally {
+    fs.closeSync(fd);
   }
-  if (!Object.hasOwn(receipt ?? {}, "format")) {
+}
+
+async function* iterateOceanSkippedAddresses(outDir, legacyPath, evidence) {
+  if (!fs.existsSync(legacyPath)) return;
+  const beforeStat = fs.lstatSync(legacyPath, { bigint: true });
+  assert.ok(beforeStat.isFile(), `ocean skip receipt is not a regular file: ${legacyPath}`);
+  const before = fileMutationSnapshot(beforeStat);
+  assert.ok(before.bytes <= OCEAN_SKIP_MAX_LINES_BYTES,
+    `ocean skip input exceeds ${OCEAN_SKIP_MAX_LINES_BYTES} bytes: ${legacyPath}`);
+  let small = null;
+  if (before.bytes <= OCEAN_SKIP_MAX_RECEIPT_BYTES) small = stablePublicationInput(outDir, "ocean-skipped.json", {
+    maxBytes: OCEAN_SKIP_MAX_RECEIPT_BYTES, retainBytes: true,
+  });
+  let receipt = null;
+  try { receipt = small ? JSON.parse(small.bytes.toString("utf8")) : null; } catch { receipt = null; }
+  if (Object.hasOwn(receipt ?? {}, "format")) {
+    assert.equal(receipt.format, "terrain-ocean-skips-lines-v1", `unsupported ocean skip receipt format ${receipt.format}`);
+    const target = path.resolve(outDir, String(receipt.addressesPath));
+    const targetRelative = path.relative(outDir, target);
+    assert.ok(targetRelative && !targetRelative.startsWith(`..${path.sep}`) && targetRelative !== ".." && !path.isAbsolute(targetRelative),
+      `ocean skip receipt target escapes output directory: ${receipt.addressesPath}`);
+    assert.equal(receipt.addressesPath, "ocean-skipped.lines", "global ocean receipt must name the fixed address artifact");
+    assert.ok(Number.isSafeInteger(receipt.count) && receipt.count >= 0, "ocean skip receipt count must be a non-negative integer");
+    assert.match(receipt.digest, /^[a-f0-9]{64}$/, "ocean skip receipt digest must be a SHA-256 hex digest");
+    evidence.oceanReceipt = small.receipt;
+    evidence.oceanReceiptMutation = small.mutation;
     let previousKey = null;
-    for await (const address of iterateJsonStringArrayProperty(legacyPath, "addresses", {
-      maxFileBytes: OCEAN_SKIP_MAX_LINES_BYTES,
-      maxStringBytes: OCEAN_SKIP_MAX_ROW_BYTES,
-    })) {
-      const parsed = parseTerrainAddress(address, legacyPath);
-      validateTerrainAddress(parsed.level, parsed.x, parsed.y, legacyPath);
-      assert.equal(address, terrainAddress(parsed.level, parsed.x, parsed.y), `legacy ocean address is not canonical: ${address}`);
+    for await (const address of iterateStableOceanLines(outDir, receipt, evidence)) {
+      const parsed = parseTerrainAddress(address, "ocean-skipped.lines");
+      validateTerrainAddress(parsed.level, parsed.x, parsed.y, "ocean-skipped.lines");
+      assert.equal(address, terrainAddress(parsed.level, parsed.x, parsed.y), `ocean skip line is not canonical`);
       const key = addressFactKey(parsed.level, parsed.x, parsed.y);
       assert.ok(previousKey === null || previousKey < key,
-        `legacy ocean addresses must be sorted and unique by level/y/x at ${address}`);
+        `ocean skip lines must be sorted and unique by level/y/x at ${address}`);
       previousKey = key;
       yield address;
     }
     return;
   }
-  assert.equal(receipt.format, "terrain-ocean-skips-lines-v1", `unsupported ocean skip receipt format ${receipt.format}`);
-  assert.equal(typeof receipt.addressesPath, "string", "ocean skip receipt addressesPath must be a string");
-  assert.ok(Number.isSafeInteger(receipt.count) && receipt.count >= 0, "ocean skip receipt count must be a non-negative integer");
-  assert.match(receipt.digest, /^[a-f0-9]{64}$/, "ocean skip receipt digest must be a SHA-256 hex digest");
-  const receiptDir = fs.realpathSync(outDir);
-  const candidate = path.resolve(path.dirname(legacyPath), receipt.addressesPath);
-  const resolved = fs.realpathSync(candidate);
-  const relative = path.relative(receiptDir, resolved);
-  assert.ok(relative && !relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative),
-    `ocean skip receipt target escapes output directory: ${receipt.addressesPath}`);
-  const stat = fs.statSync(resolved);
-  assert.ok(stat.isFile(), `ocean skip receipt target is not a regular file: ${resolved}`);
-  assert.ok(stat.size <= OCEAN_SKIP_MAX_LINES_BYTES, `ocean skip address list exceeds ${OCEAN_SKIP_MAX_LINES_BYTES} bytes: ${resolved}`);
-  const hashed = await fileSha256(resolved, OCEAN_SKIP_MAX_LINES_BYTES);
-  assert.equal(hashed.digest, receipt.digest, `ocean skip receipt digest mismatch for ${resolved}`);
-  let count = 0;
+  // Legacy regional JSON retains its parser, but its path is guarded before
+  // and after the stream so a symlink/swap cannot silently become an input.
+  const guard = fs.openSync(legacyPath, fs.constants.O_RDONLY | NO_FOLLOW);
+  const opened = fileMutationSnapshot(fs.fstatSync(guard, { bigint: true }));
+  fs.closeSync(guard);
+  assert.ok(sameFileMutation(before, opened), "legacy ocean skip input changed before opening");
   let previousKey = null;
-  for await (const line of iterateBoundedLines(resolved, { maxRowBytes: OCEAN_SKIP_MAX_ROW_BYTES })) {
-    const address = line.toString("utf8");
-    assert.ok(Buffer.byteLength(address) === line.length, `ocean skip line ${count + 1} is not valid UTF-8`);
-    const parsed = parseTerrainAddress(address, resolved);
-    validateTerrainAddress(parsed.level, parsed.x, parsed.y, resolved);
-    assert.equal(address, terrainAddress(parsed.level, parsed.x, parsed.y), `ocean skip line ${count + 1} is not canonical`);
+  for await (const address of iterateJsonStringArrayProperty(legacyPath, "addresses", {
+    maxFileBytes: OCEAN_SKIP_MAX_LINES_BYTES,
+    maxStringBytes: OCEAN_SKIP_MAX_ROW_BYTES,
+  })) {
+    const parsed = parseTerrainAddress(address, legacyPath);
+    validateTerrainAddress(parsed.level, parsed.x, parsed.y, legacyPath);
+    assert.equal(address, terrainAddress(parsed.level, parsed.x, parsed.y), `legacy ocean address is not canonical: ${address}`);
     const key = addressFactKey(parsed.level, parsed.x, parsed.y);
     assert.ok(previousKey === null || previousKey < key,
-      `ocean skip lines must be sorted and unique by level/y/x at ${address}`);
+      `legacy ocean addresses must be sorted and unique by level/y/x at ${address}`);
     previousKey = key;
-    count += 1;
     yield address;
   }
-  assert.equal(count, receipt.count, `ocean skip receipt count mismatch for ${resolved}`);
+  const after = fileMutationSnapshot(fs.lstatSync(legacyPath, { bigint: true }));
+  assert.ok(sameFileMutation(before, after), "legacy ocean skip input changed while being read");
 }
 
 const args = parseArgs(process.argv.slice(2));
@@ -471,6 +679,10 @@ const outDir = path.resolve(args.out);
 const verifyReportPath = path.join(outDir, "verify-report.json");
 // A previous successful receipt must never survive a later failed invocation.
 fs.rmSync(verifyReportPath, { force: true });
+// The unlink is itself a publication-state transition.  A malformed input can
+// fail before any later output is renamed, so acknowledge the parent directory
+// now rather than relying on an incidental fsync on a success-only path.
+fsyncDirectory(outDir);
 
 // ── THE ENCODER'S OWN COUNTERS, IF THE RUN LEFT THEM ───────────────────────
 //
@@ -494,6 +706,12 @@ function validatePublicationPolicy(value) {
   for (const key of ["maxVerifiedStoreBytes", "maxStaticDirectoryBytes"]) {
     assert.ok(Number.isSafeInteger(value[key]) && value[key] > 0, `publicationPolicy.${key} must be a positive safe integer`);
   }
+  assert.ok(value.maxVerifiedStoreBytes <= PUBLICATION_LIMITS.maxVerifiedStoreBytes,
+    `publicationPolicy.maxVerifiedStoreBytes exceeds ${PUBLICATION_LIMITS.maxVerifiedStoreBytes}`);
+  assert.ok(value.maxStaticDirectoryBytes <= PUBLICATION_LIMITS.maxStaticDirectoryBytes,
+    `publicationPolicy.maxStaticDirectoryBytes exceeds ${PUBLICATION_LIMITS.maxStaticDirectoryBytes}`);
+  assert.ok(value.maxStaticDirectoryBytes >= value.maxVerifiedStoreBytes,
+    "publicationPolicy.maxStaticDirectoryBytes must cover maxVerifiedStoreBytes");
   assert.ok(Number.isSafeInteger(value.synthGridSize) && value.synthGridSize >= 2 && value.synthGridSize <= 255,
     "publicationPolicy.synthGridSize must be an integer in [2, 255]");
   return {
@@ -503,6 +721,39 @@ function validatePublicationPolicy(value) {
     maxStaticDirectoryBytes: value.maxStaticDirectoryBytes,
     synthGridSize: value.synthGridSize,
   };
+}
+function normalizeApprovedPublicationPolicy(value, globalConfigDigest, source) {
+  assert.ok(value && typeof value === "object" && !Array.isArray(value), `${source} must be a JSON object`);
+  assert.deepEqual(Object.keys(value).sort(), [
+    "max_static_directory_bytes",
+    "max_verified_store_bytes",
+    "static_directory_basis",
+    "synthesized_tile_grid_size",
+    "version",
+  ], `${source} must have exactly the approved snake_case policy keys`);
+  assert.equal(value.version, 1, `${source}.version must be 1`);
+  assert.ok(typeof value.static_directory_basis === "string" && value.static_directory_basis.length > 0,
+    `${source}.static_directory_basis must be a non-empty string`);
+  return validatePublicationPolicy({
+    format: "terrain-publication-policy-v1",
+    globalConfigDigest,
+    maxVerifiedStoreBytes: value.max_verified_store_bytes,
+    maxStaticDirectoryBytes: value.max_static_directory_bytes,
+    synthGridSize: value.synthesized_tile_grid_size,
+  });
+}
+function validateAuthoritativePolicyWrapper(value, approvedPolicy, approvedConfigDigest, source) {
+  assert.ok(value && typeof value === "object" && !Array.isArray(value), `${source} publicationPolicy must be a JSON object`);
+  assert.deepEqual(Object.keys(value).sort(), ["digest", "globalConfigDigest", "policy"],
+    `${source} publicationPolicy must have exactly policy, digest, and globalConfigDigest`);
+  assert.deepEqual(value.policy, approvedPolicy, `${source} publicationPolicy does not match approvedConfig.publication_policy`);
+  assert.match(value.digest, /^[a-f0-9]{64}$/, `${source} publicationPolicy.digest must be SHA-256 hex`);
+  assert.equal(value.digest, sha256(canonicalJson(approvedPolicy)),
+    `${source} publicationPolicy.digest does not bind approvedConfig.publication_policy`);
+  assert.match(value.globalConfigDigest, /^[a-f0-9]{64}$/, `${source} publicationPolicy.globalConfigDigest must be SHA-256 hex`);
+  assert.equal(value.globalConfigDigest, approvedConfigDigest,
+    `${source} publicationPolicy.globalConfigDigest does not bind approved-run-config.json`);
+  return normalizeApprovedPublicationPolicy(value.policy, value.globalConfigDigest, `${source} publicationPolicy.policy`);
 }
 function boundedCounterObject(value, name, { maxEntries = 64, integer = false } = {}) {
   if (value === null || value === undefined) return null;
@@ -519,10 +770,7 @@ function boundedCounterObject(value, name, { maxEntries = 64, integer = false } 
 }
 let runReport = null;
 if (fs.existsSync(runReportPath)) {
-  const stat = fs.statSync(runReportPath);
-  assert.ok(stat.isFile() && stat.size <= MAX_RUN_REPORT_BYTES,
-    `run report exceeds ${MAX_RUN_REPORT_BYTES} byte verifier bound`);
-  const parsed = JSON.parse(fs.readFileSync(runReportPath, "utf8"));
+  const { value: parsed } = stableJsonInput(outDir, "run-report.json", MAX_RUN_REPORT_BYTES);
   // Never retain runner detail (notably cellsDetail): verifier decisions use
   // only these compact counters and provenance geometry summaries.  The file
   // cap plus these fixed-size projections prevents a malicious report from
@@ -531,7 +779,7 @@ if (fs.existsSync(runReportPath)) {
     encoderCounters: boundedCounterObject(parsed?.encoderCounters, "encoderCounters", { integer: true }),
     sourcePostsPerTileEdgeByLevel: boundedCounterObject(parsed?.sourcePostsPerTileEdgeByLevel, "sourcePostsPerTileEdgeByLevel"),
     latticeMaxGridSize: parsed?.latticeMaxGridSize ?? null,
-    publicationPolicy: validatePublicationPolicy(parsed?.publicationPolicy),
+    publicationPolicy: parsed?.publicationPolicy ?? null,
     globalConfigDigest: parsed?.globalConfigDigest ?? null,
   };
   if (runReport.latticeMaxGridSize !== null) {
@@ -540,36 +788,78 @@ if (fs.existsSync(runReportPath)) {
   }
 }
 const encoderCounters = runReport?.encoderCounters ?? null;
-let publicationPolicy = runReport?.publicationPolicy ?? null;
-if (publicationPolicy) {
-  assert.match(runReport.globalConfigDigest, /^[a-f0-9]{64}$/,
-    "run report with publicationPolicy must carry an authoritative globalConfigDigest");
-  assert.equal(runReport.globalConfigDigest, publicationPolicy.globalConfigDigest,
-    "publicationPolicy.globalConfigDigest does not match the run receipt");
-}
 const globalMergePath = path.join(outDir, "global-merge-report.json");
-let policyFromGlobalMerge = false;
-if (!publicationPolicy && fs.existsSync(globalMergePath)) {
-  const stat = fs.statSync(globalMergePath);
-  assert.ok(stat.isFile() && stat.size <= OCEAN_SKIP_MAX_RECEIPT_BYTES,
-    "global merge receipt exceeds verifier policy bound");
-  publicationPolicy = validatePublicationPolicy(JSON.parse(fs.readFileSync(globalMergePath, "utf8"))?.publicationPolicy);
-  assert.ok(publicationPolicy, "global merge receipt lacks required publicationPolicy");
-  policyFromGlobalMerge = true;
-}
-if (publicationPolicy) {
-  const globalStatePath = path.join(outDir, "global-build-state.json");
-  assert.ok(!policyFromGlobalMerge || fs.existsSync(globalStatePath),
-    "global merge publicationPolicy requires global-build-state.json for digest comparison");
-  if (fs.existsSync(globalStatePath)) {
-    const stat = fs.statSync(globalStatePath);
-    assert.ok(stat.isFile() && stat.size <= OCEAN_SKIP_MAX_RECEIPT_BYTES,
-      "global build state exceeds verifier policy bound");
-    const stateDigest = JSON.parse(fs.readFileSync(globalStatePath, "utf8"))?.configDigest;
-    assert.match(stateDigest, /^[a-f0-9]{64}$/, "global build state lacks configDigest");
-    assert.equal(stateDigest, publicationPolicy.globalConfigDigest,
-      "publicationPolicy.globalConfigDigest does not match global build state");
+const globalStatePath = path.join(outDir, "global-build-state.json");
+const approvedConfigPath = path.join(outDir, "approved-run-config.json");
+const globalVerification = fs.existsSync(globalMergePath)
+  || fs.existsSync(globalStatePath)
+  || fs.existsSync(approvedConfigPath)
+  || runReport?.publicationPolicy != null;
+let publicationPolicy = null;
+let globalStateInput = null;
+let approvedConfigInput = null;
+let globalStateMutation = null;
+let approvedConfigMutation = null;
+let globalMergedRecords = null;
+if (globalVerification) {
+  assert.ok(fs.existsSync(globalStatePath), "global verification requires global-build-state.json");
+  assert.ok(fs.existsSync(approvedConfigPath), "global verification requires approved-run-config.json");
+  const stateStable = stableJsonInput(outDir, "global-build-state.json", MAX_RUN_REPORT_BYTES);
+  const configStable = stableJsonInput(outDir, "approved-run-config.json", MAX_RUN_REPORT_BYTES);
+  globalStateInput = stateStable.receipt;
+  approvedConfigInput = configStable.receipt;
+  globalStateMutation = stateStable.mutation;
+  approvedConfigMutation = configStable.mutation;
+  const state = stateStable.value;
+  const approvedConfig = configStable.value;
+  assert.ok(state && typeof state === "object" && !Array.isArray(state), "global build state must be a JSON object");
+  assert.ok(approvedConfig && typeof approvedConfig === "object" && !Array.isArray(approvedConfig),
+    "approved run config must be a JSON object");
+  assert.equal(state.version, 1, "global build state must be version 1");
+  assert.equal(state.completed, true, "global build state must be completed before verification");
+  assert.ok(state.merged && typeof state.merged === "object" && !Array.isArray(state.merged),
+    "global build state must include merged completion evidence");
+  assert.equal(state.merged.completion, "complete", "global merged completion must be complete");
+  assert.equal(state.merged.approvedConfigPath, "approved-run-config.json",
+    "global merged approvedConfigPath must name approved-run-config.json");
+  assert.ok(Number.isSafeInteger(state.merged.records) && state.merged.records >= 0,
+    "global merged records must be a non-negative safe integer");
+  globalMergedRecords = state.merged.records;
+  const canonicalDigest = sha256(canonicalJson(approvedConfig));
+  for (const [name, digest] of [["state", state.configDigest], ["merged", state.merged.configDigest]]) {
+    assert.match(digest, /^[a-f0-9]{64}$/, `${name} global configDigest must be SHA-256 hex`);
+    assert.equal(digest, canonicalDigest, `${name} global configDigest does not bind approved-run-config.json`);
   }
+  const approvedPolicy = approvedConfig.publication_policy;
+  const normalizedApprovedPolicy = normalizeApprovedPublicationPolicy(approvedPolicy, canonicalDigest, "approvedConfig.publication_policy");
+  const statePolicy = validatePublicationPolicy(state.publicationPolicy);
+  const mergedPolicy = validatePublicationPolicy(state.merged.publicationPolicy);
+  assert.deepEqual(state.publicationPolicy, normalizedApprovedPolicy,
+    "global state publicationPolicy must be the exact normalized approved policy");
+  assert.deepEqual(state.merged.publicationPolicy, normalizedApprovedPolicy,
+    "global merged publicationPolicy must be the exact normalized approved policy");
+  assert.deepEqual(statePolicy, normalizedApprovedPolicy,
+    "global state publicationPolicy does not match normalized approved policy");
+  assert.deepEqual(mergedPolicy, normalizedApprovedPolicy,
+    "global merged publicationPolicy does not match normalized approved policy");
+  publicationPolicy = normalizedApprovedPolicy;
+  assert.equal(publicationPolicy.globalConfigDigest, canonicalDigest,
+    "publicationPolicy.globalConfigDigest does not bind approved-run-config.json");
+  if (runReport?.publicationPolicy != null) {
+    const reportPolicy = validateAuthoritativePolicyWrapper(
+      runReport.publicationPolicy, approvedPolicy, canonicalDigest, "run report",
+    );
+    assert.deepEqual(reportPolicy, normalizedApprovedPolicy,
+      "run report publicationPolicy does not match normalized approved policy");
+  }
+  if (runReport?.globalConfigDigest != null) {
+    assert.equal(runReport.globalConfigDigest, canonicalDigest,
+      "run report globalConfigDigest does not match approved-run-config.json");
+  }
+} else if (runReport?.publicationPolicy != null) {
+  // Regional runs retain the direct report form because they have no approved
+  // global-state/config pair to bind a shard wrapper against.
+  publicationPolicy = validatePublicationPolicy(runReport.publicationPolicy);
 }
 
 // ── THE ADDRESSES THE OCEAN TEST SKIPPED ───────────────────────────────────
@@ -592,11 +882,13 @@ if (publicationPolicy) {
 const oceanSkippedPath = path.join(outDir, "ocean-skipped.json");
 
 const recordsPath = path.join(outDir, "tiles.dttstream");
-const noFollow = fs.constants.O_NOFOLLOW ?? 0;
-const tilesFd = fs.openSync(recordsPath, fs.constants.O_RDONLY | noFollow);
-const tilesIdentityBefore = fs.fstatSync(tilesFd);
-assert.ok(tilesIdentityBefore.isFile(), "tiles.dttstream must be a regular file");
-const sameFileIdentity = (left, right) => left.dev === right.dev && left.ino === right.ino && left.size === right.size;
+const tilesPathBeforeStat = fs.lstatSync(recordsPath, { bigint: true });
+assert.ok(tilesPathBeforeStat.isFile(), "tiles.dttstream must be a regular file");
+const tilesPathBefore = fileMutationSnapshot(tilesPathBeforeStat);
+const tilesFd = fs.openSync(recordsPath, fs.constants.O_RDONLY | NO_FOLLOW);
+const tilesIdentityBefore = fileMutationSnapshot(fs.fstatSync(tilesFd, { bigint: true }));
+assert.ok(sameFileMutation(tilesPathBefore, tilesIdentityBefore),
+  "tiles.dttstream changed before descriptor verification began");
 const digestOpenFile = (fd, expectedBytes) => {
   const hash = createHash("sha256");
   const buffer = Buffer.allocUnsafe(64 * 1024);
@@ -618,20 +910,26 @@ let verifiedTilesSha256 = null;
 const edgeFactRunDir = path.join(outDir, ".verify-edge-facts");
 const edgeFactScratchDir = path.join(outDir, ".verify-edge-merge");
 const edgeFactWriter = createSortedJsonRunWriter(edgeFactRunDir, {
-  maxRows: 4096,
+  maxRows: 128,
   maxRowBytes: 64 * 1024,
+  maxBufferedBytes: 1024 * 1024,
+  returnManifest: true,
 });
 const addressFactRunDir = path.join(outDir, ".verify-address-facts");
 const addressFactScratchDir = path.join(outDir, ".verify-address-merge");
 const addressFactWriter = createSortedJsonRunWriter(addressFactRunDir, {
-  maxRows: 4096,
+  maxRows: 512,
   maxRowBytes: 4096,
+  maxBufferedBytes: 1024 * 1024,
+  returnManifest: true,
 });
 const sizeFactRunDir = path.join(outDir, ".verify-size-facts");
 const sizeFactScratchDir = path.join(outDir, ".verify-size-merge");
 const sizeFactWriter = createSortedJsonRunWriter(sizeFactRunDir, {
-  maxRows: 4096,
+  maxRows: 1024,
   maxRowBytes: 256,
+  maxBufferedBytes: 256 * 1024,
+  returnManifest: true,
 });
 let recordCount = 0;
 let firstRecord = null;
@@ -838,7 +1136,7 @@ for await (const record of iterateStreamFd(tilesFd, { onChunk: (chunk) => proces
   // The payload really is a gzipped quantized-mesh whose header agrees with
   // the record's stated height range.
   const mesh = gunzipBounded(bytes, MAX_MESH_BYTES, `mesh at ${key}`);
-  validateMeshStructure(mesh, `mesh at ${key}`);
+  const meshStructure = validateMeshStructure(mesh, `mesh at ${key}`);
   const minHeight = mesh.readFloatLE(24);
   const maxHeight = mesh.readFloatLE(28);
   assert.ok(Number.isFinite(minHeight) && Number.isFinite(maxHeight) && minHeight <= maxHeight,
@@ -883,7 +1181,8 @@ for await (const record of iterateStreamFd(tilesFd, { onChunk: (chunk) => proces
     }
   }
 
-  const tileMeshEdges = meshEdges(mesh, dtt);
+  validateMeshWaterMask(meshStructure.waterMask, dtt, key);
+  const tileMeshEdges = meshEdges(mesh, dtt, meshStructure);
   spoolTileEdges(edgeFactWriter, {
     kind: "mesh",
     level: dtt.level,
@@ -931,21 +1230,26 @@ for await (const record of iterateStreamFd(tilesFd, { onChunk: (chunk) => proces
   }
 }
   const streamedDigest = processedTilesHash.digest("hex");
-  const afterRead = fs.fstatSync(tilesFd);
-  assert.ok(sameFileIdentity(tilesIdentityBefore, afterRead), "tiles.dttstream identity or size changed during verification");
-  const postDigest = digestOpenFile(tilesFd, tilesIdentityBefore.size);
+  const afterRead = fileMutationSnapshot(fs.fstatSync(tilesFd, { bigint: true }));
+  assert.ok(sameFileMutation(tilesIdentityBefore, afterRead), "tiles.dttstream changed during verification");
+  const postDigest = digestOpenFile(tilesFd, tilesIdentityBefore.bytes);
   assert.equal(streamedDigest, postDigest, "tiles.dttstream bytes changed during verification");
   verifiedTilesSha256 = streamedDigest;
 } finally {
-  const beforeClose = fs.fstatSync(tilesFd);
+  const beforeClose = fileMutationSnapshot(fs.fstatSync(tilesFd, { bigint: true }));
   fs.closeSync(tilesFd);
-  assert.ok(sameFileIdentity(tilesIdentityBefore, beforeClose), "tiles.dttstream identity changed before close");
+  assert.ok(sameFileMutation(tilesIdentityBefore, beforeClose), "tiles.dttstream changed before close");
 }
-const tilesPathAfter = fs.lstatSync(recordsPath);
-assert.ok(tilesPathAfter.isFile() && sameFileIdentity(tilesIdentityBefore, tilesPathAfter),
+const tilesPathAfter = fs.lstatSync(recordsPath, { bigint: true });
+assert.ok(tilesPathAfter.isFile() && sameFileMutation(tilesIdentityBefore, fileMutationSnapshot(tilesPathAfter)),
   "tiles.dttstream pathname changed after verification");
+if (globalVerification) {
+  assert.equal(globalMergedRecords, recordCount,
+    "global merged records does not match the verified tiles.dttstream record count");
+}
 
-for await (const address of iterateOceanSkippedAddresses(outDir, oceanSkippedPath)) {
+const oceanInputEvidence = {};
+for await (const address of iterateOceanSkippedAddresses(outDir, oceanSkippedPath, oceanInputEvidence)) {
   const { level, x, y } = parseTerrainAddress(address, oceanSkippedPath);
   validateTerrainAddress(level, x, y, oceanSkippedPath);
   addressFactWriter.push({
@@ -1057,14 +1361,18 @@ const addressFactRuns = addressFactWriter.finish();
 const closureFactRunDir = path.join(outDir, ".verify-closure-facts");
 const closureFactScratchDir = path.join(outDir, ".verify-closure-merge");
 const closureFactWriter = createSortedJsonRunWriter(closureFactRunDir, {
-  maxRows: 4096,
+  maxRows: 512,
   maxRowBytes: 256,
+  maxBufferedBytes: 256 * 1024,
+  returnManifest: true,
 });
 const membershipFactRunDir = path.join(outDir, ".verify-membership-facts");
 const membershipFactScratchDir = path.join(outDir, ".verify-membership-merge");
 const membershipFactWriter = createSortedJsonRunWriter(membershipFactRunDir, {
-  maxRows: 4096,
+  maxRows: 512,
   maxRowBytes: 512,
+  maxBufferedBytes: 512 * 1024,
+  returnManifest: true,
 });
 const tilesPerLevel = new Map();
 let distinctAddresses = 0;
@@ -1188,9 +1496,13 @@ const availabilityPath = path.join(outDir, "terrain-available.json");
 const availabilityStagedPath = `${availabilityPath}.${process.pid}.${Date.now()}.tmp`;
 const candidateFactRunDir = path.join(outDir, ".verify-available-candidates");
 const candidateFactScratchDir = path.join(outDir, ".verify-available-candidate-merge");
-const candidateFactWriter = createSortedJsonRunWriter(candidateFactRunDir, { maxRows: 4096, maxRowBytes: 256 });
+const candidateFactWriter = createSortedJsonRunWriter(candidateFactRunDir, {
+  maxRows: 512, maxRowBytes: 256, maxBufferedBytes: 256 * 1024, returnManifest: true,
+});
 const availableChildFactRunDir = path.join(outDir, ".verify-available-children");
-const availableChildFactWriter = createSortedJsonRunWriter(availableChildFactRunDir, { maxRows: 4096, maxRowBytes: 256 });
+const availableChildFactWriter = createSortedJsonRunWriter(availableChildFactRunDir, {
+  maxRows: 512, maxRowBytes: 256, maxBufferedBytes: 256 * 1024, returnManifest: true,
+});
 // Level zero is forced into layer availability even for a one-hemisphere
 // regional cut.  It is therefore a serving promise too: seed both roots into
 // the disk-backed candidate join so neither can disappear from the static
@@ -1376,7 +1688,7 @@ const finishCandidateGroup = () => {
   joinedCandidate = null;
 };
 try {
-  await mergeSortedJsonRuns([...candidateFactRuns, ...membershipFactRuns], {
+  await mergeSortedJsonRunSources([candidateFactRuns, membershipFactRuns], {
     dedupe: false,
     maxOpenRuns: 32,
     maxRowBytes: 512,
@@ -1438,7 +1750,7 @@ const finishChildAvailabilityGroup = () => {
   }
 };
 try {
-  await mergeSortedJsonRuns([...membershipFactRuns, ...availableChildFactRuns], {
+  await mergeSortedJsonRunSources([membershipFactRuns, availableChildFactRuns], {
     dedupe: false,
     maxOpenRuns: 32,
     maxRowBytes: 512,
@@ -1778,37 +2090,64 @@ atomicWriteWithRawTopLevelProperty(
 let oceanReceiptInput = null;
 let oceanAddressesInput = null;
 let oceanLegacyUnbound = true;
-if (fs.existsSync(path.join(outDir, "ocean-skipped.json"))) {
-  const receiptStat = fs.statSync(path.join(outDir, "ocean-skipped.json"));
-  if (receiptStat.size <= OCEAN_SKIP_MAX_RECEIPT_BYTES) {
-    try {
-      const receipt = JSON.parse(fs.readFileSync(path.join(outDir, "ocean-skipped.json"), "utf8"));
-      if (receipt?.format === "terrain-ocean-skips-lines-v1") {
-        // iterateOceanSkippedAddresses already validated this receipt and its
-        // line stream.  Requiring the fixed names here makes the publication
-        // binding unambiguous for a static directory publisher.
-        assert.equal(receipt.addressesPath, "ocean-skipped.lines", "global ocean receipt must name the fixed address artifact");
-        oceanReceiptInput = await publicationInputReceipt(outDir, "ocean-skipped.json");
-        oceanAddressesInput = await publicationInputReceipt(outDir, "ocean-skipped.lines", { addresses: oceanSkipsDeclared });
-        oceanLegacyUnbound = false;
-      }
-    } catch (error) {
-      // The earlier verifier pass owns malformed-input diagnostics.  A legacy
-      // report is intentionally identifiable as unbound rather than guessed.
-      if (!/Unexpected token|Unexpected non-whitespace/.test(error.message)) throw error;
-    }
-  }
+if (oceanInputEvidence.oceanReceipt) {
+  assert.equal(oceanInputEvidence.oceanAddresses.addresses, oceanSkipsDeclared,
+    "streamed ocean receipt address count disagrees with address facts");
+  const receiptNow = stablePublicationInput(outDir, "ocean-skipped.json", { maxBytes: OCEAN_SKIP_MAX_RECEIPT_BYTES });
+  const addressesNow = stablePublicationInput(outDir, "ocean-skipped.lines", { maxBytes: OCEAN_SKIP_MAX_LINES_BYTES });
+  assert.deepEqual(receiptNow.receipt, oceanInputEvidence.oceanReceipt,
+    "ocean skip receipt changed after streamed validation");
+  assert.ok(sameFileMutation(receiptNow.mutation, oceanInputEvidence.oceanReceiptMutation),
+    "ocean skip receipt was modified after streamed validation");
+  assert.deepEqual(addressesNow.receipt, {
+    path: oceanInputEvidence.oceanAddresses.path,
+    bytes: oceanInputEvidence.oceanAddresses.bytes,
+    sha256: oceanInputEvidence.oceanAddresses.sha256,
+  }, "ocean skip address artifact changed after streamed validation");
+  assert.ok(sameFileMutation(addressesNow.mutation, oceanInputEvidence.oceanAddressesMutation),
+    "ocean skip address artifact was modified after streamed validation");
+  oceanReceiptInput = oceanInputEvidence.oceanReceipt;
+  oceanAddressesInput = oceanInputEvidence.oceanAddresses;
+  oceanLegacyUnbound = false;
+}
+if (globalVerification) {
+  assert.ok(oceanReceiptInput && oceanAddressesInput && oceanLegacyUnbound === false,
+    "global verification requires bound ocean receipt and address artifacts");
+  const stateNow = stablePublicationInput(outDir, "global-build-state.json", { maxBytes: MAX_RUN_REPORT_BYTES });
+  const configNow = stablePublicationInput(outDir, "approved-run-config.json", { maxBytes: MAX_RUN_REPORT_BYTES });
+  assert.deepEqual(stateNow.receipt, globalStateInput, "global build state changed after authoritative policy validation");
+  assert.ok(sameFileMutation(stateNow.mutation, globalStateMutation),
+    "global build state was modified after authoritative policy validation");
+  assert.deepEqual(configNow.receipt, approvedConfigInput, "approved run config changed after authoritative policy validation");
+  assert.ok(sameFileMutation(configNow.mutation, approvedConfigMutation),
+    "approved run config was modified after authoritative policy validation");
+  globalStateInput = stateNow.receipt;
+  approvedConfigInput = configNow.receipt;
+  globalStateMutation = stateNow.mutation;
+  approvedConfigMutation = configNow.mutation;
 }
 summary.publicationInputs = {
-  format: "terrain-publication-inputs-v1",
+  format: "terrain-publication-inputs-v2",
   tiles: (() => {
     assert.match(verifiedTilesSha256, /^[a-f0-9]{64}$/, "tiles receipt requires the verified stream digest");
-    return { path: "tiles.dttstream", bytes: tilesIdentityBefore.size, sha256: verifiedTilesSha256, records: recordCount };
+    return {
+      path: "tiles.dttstream",
+      bytes: tilesIdentityBefore.bytes,
+      sha256: verifiedTilesSha256,
+      records: recordCount,
+    };
   })(),
-  availableButUnstored: await publicationInputReceipt(outDir, "available-but-unstored.ndjson", { addresses: availableButUnstored }),
-  layerConfig: await publicationInputReceipt(outDir, "layer-json-config.json"),
+  availableButUnstored: publicationInputReceipt(
+    outDir, "available-but-unstored.ndjson", { addresses: availableButUnstored },
+    publicationPolicy?.maxStaticDirectoryBytes ?? OCEAN_SKIP_MAX_LINES_BYTES,
+  ),
+  layerConfig: publicationInputReceipt(
+    outDir, "layer-json-config.json", {}, publicationPolicy?.maxStaticDirectoryBytes ?? OCEAN_SKIP_MAX_LINES_BYTES,
+  ),
   oceanReceipt: oceanReceiptInput,
   oceanAddresses: oceanAddressesInput,
+  globalState: globalStateInput,
+  approvedConfig: approvedConfigInput,
   oceanLegacyUnbound,
 };
 // ── memory_pages BELONGS ONE LEVEL UP, ON THE MOUNT ENTRY ───────────────────

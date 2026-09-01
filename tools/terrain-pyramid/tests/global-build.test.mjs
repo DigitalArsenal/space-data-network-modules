@@ -10,6 +10,7 @@ import zlib from "node:zlib";
 
 import {
   BoundedGranuleCache,
+  canonicalJson,
   compareCodeUnits,
   createSortedJsonRunWriter,
   evaluateTerrainEdgeFacts,
@@ -44,7 +45,7 @@ const sds = tightHeapSuite ? null : await import(SOURCE_SDS);
 const schemaTest = (name, options, fn) => test(name, { ...options, skip: tightHeapSuite || options?.skip }, fn);
 // A schema-generated, one-frame fixture committed as bytes so this production
 // verifier proof does not load the SDK that itself exceeds a 32 MiB Node heap.
-const TIGHT_HEAP_DTTSTREAM = "hAIAAGAAAAAkRFRUAABWAHwAeAAAAHcAcAAAAAAAAABkAFwAVABMAEQAPAA7ADQAMAAAAAAAAAAAAC8AKAAAAAAAHAAAABQAAAATAAAAAAAAAAAAAAAAAAAADAAAAAgAAAAEAFYAAAB4AAAA2AAAAAMAAAAAAAABAAAAAAAA8D8AAAAAAADwPwAAAAAkAQAAAAAAAjgBAADcAQAAAAAAAQAAAAAAAPA/AAAAAAAA8D8AAAAAAOBQwAAAAAAAsGPAAAAAAACAVsAAAAAAAIBmwAAAAAADAAAAAAAAAaABAABGAAAAIjEyMjBiY2RmZTUyNjM5MjRkYTI3OTFlZjJiNTZiMjEwMTMwNmI3ZDUzMmIzZjBhNmE4ZDU5YWJmNTkwNTc3YjU4ZGNjIgAAAAAWABQAEAAAAAAADAAAAAAAAAAIAAQAFgAAABAAAAAYAAAANAAAAFAAAAAEAAAAdGVzdAAAAAAYAAAAMjAyNi0wOS0wMVQwMDowMDowMC4wMDBaAAAAABgAAAAyMDI2LTA5LTAxVDAwOjAwOjAwLjAwMFoAAAAABQAAAHRpZ2h0AAAABwAAAEVHTTIwMDgAAAAOABwAAAAYAAwACAAEAA4AAAAYAAAAIAAAAC0AAAAAAAAAAAAAAFwAAAAEAAAAZ3ppcAAAAABEAAAAMTIyMGJjZGZlNTI2MzkyNGRhMjc5MWVmMmI1NmIyMTAxMzA2YjdkNTMyYjNmMGE2YThkNTlhYmY1OTA1NzdiNThkY2MAAAAALQAAAB+LCAAAAAAAABNjYMAFGuwhmDzAAib//f/7/99/CAu/+noQAQDMOSK3jQAAAAAAAAMAAAAxLjAABQAAAHRpZ2h0AAAA";
+const TIGHT_HEAP_DTTSTREAM = "tAIAAGAAAAAkRFRUAABWAHgAdAAAAHMAbAAAAAAAAABkAFwAVABMAEQAPAA7ADQAMAAAAAAAAAAAAC8AKAAAAAAAHAAAABQAAAATAAAAAAAAAAAAAAAAAAAADAAAAAgAAAAEAFYAAAB0AAAA1AAAAAwAAAAAAAABAAAAAAAA8D8AAAAAAADwPwAAAAA0AQAAAAAAAkgBAAD4AQAAAAAAAQAAAAAAAPA/AAAAAAAA8D8AAAAAAOBQwAAAAAAAsGPAAAAAAACAVsAAAAAAAIBmwAMAAAAAAAABwAEAAEYAAAAiMTIyMDA3NjgwOWJmYmRiOWMyOGRiZDlhMjBhYTM3NTkyODYxZDZmMDliYWU4YzBlYjNlM2Q2NGE3OGFjY2IyZGEyMjIiAAAAABYAFAAQAAAAAAAMAAAAAAAAAAgABAAWAAAAEAAAACAAAAA8AAAAWAAAAAwAAAB0ZXN0IGxpY2VuY2UAAAAAGAAAADIwMjYtMDktMDFUMDA6MDA6MDAuMDAwWgAAAAAYAAAAMjAyNi0wOS0wMVQwMDowMDowMC4wMDBaAAAAABEAAABzdHJlYW1pbmctZml4dHVyZQAAAAcAAABFR00yMDA4AAAADgAYAAAAFAAMAAgABAAOAAAAFAAAABwAAAA/AAAAAAAAAFwAAAAEAAAAZ3ppcAAAAABEAAAAMTIyMDA3NjgwOWJmYmRiOWMyOGRiZDlhMjBhYTM3NTkyODYxZDZmMDliYWU4YzBlYjNlM2Q2NGE3OGFjY2IyZGEyMjIAAAAAPwAAAB+LCAAAAAAAABNjYMAFGuwhmDzAAib//Wdg+PsfxoIBJjiLmYERzmeG0oxgGkQygeWA4iBFDADgWE+9qgAAAAADAAAAMS4wABoAAABzdHJlYW1pbmctdmVyaWZpZXItZml4dHVyZQAA";
 
 function temporary(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "terrain-global-build-"));
@@ -69,6 +70,35 @@ test("production verifier accepts a schema fixture in a 32 MiB child heap", asyn
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(outDir, "terrain-available.json"), "utf8"))[0], [{ startX: 0, startY: 0, endX: 1, endY: 0 }]);
   assert.match(fs.readFileSync(path.join(outDir, "available-but-unstored.ndjson"), "utf8"), /^0\/1\/0$/m,
     "the forced opposite level-zero root is a promised static tile");
+});
+
+schemaTest("production verifier completes a high-record global-style stream in a 32 MiB child heap", { timeout: 180_000 }, async (t) => {
+  const outDir = temporary(t);
+  const records = 20_000;
+  const handle = fs.openSync(path.join(outDir, "tiles.dttstream"), "w");
+  try {
+    // 20 distinct z9 rows force hundreds of fact runs and multi-pass bounded
+    // joins; unlike a duplicate-failure probe, this reaches all PASS outputs.
+    for (let index = 0; index < records; index += 1) {
+      appendTerrainFrame(handle, syntheticTerrainRecord({
+        level: 9,
+        x: index % 1024,
+        y: Math.floor(index / 1024),
+        serial: index,
+      }));
+    }
+  } finally {
+    fs.closeSync(handle);
+  }
+  await execFileAsync(process.execPath, ["--max-old-space-size=32", VERIFY, "--out", outDir, "--json"], {
+    timeout: 180_000,
+    maxBuffer: 1024 * 1024,
+  });
+  const report = JSON.parse(fs.readFileSync(path.join(outDir, "verify-report.json"), "utf8"));
+  assert.equal(report.tiles, records);
+  assert.equal(report.distinctAddresses, records);
+  assert.equal(report.problemCount, 0);
+  assert.ok(report.edgeAdjacenciesChecked > 10_000, "high-record child must reach bounded edge validation");
 });
 
 test("bounded cache evicts completed cells but never a leased granule", async (t) => {
@@ -382,14 +412,12 @@ test("constrained heap streams more than one hundred thousand verifier edge fact
   assert.ok(result.heap < 64 * 1024 * 1024, `child heap ${result.heap} exceeded its 64 MiB budget`);
 });
 
-function syntheticMeshPayload(serial) {
-  // A 2x2 regular quantized mesh at a constant 1 m.  The verifier only needs
-  // the header and the zigzag u/v/h arrays; a non-compressible tail varies the
-  // otherwise identical payload lengths for independent quantile checks.
-  const tail = 17 + (serial % 67);
-  // Header + three 2x2 vertex arrays + zero triangles + four zero edge lists
-  // + one opaque extension.  The verifier now walks this entire structure.
-  const mesh = Buffer.alloc(141 + tail);
+function syntheticMeshPayload(serial, { waterMask = Buffer.from([0x00]) } = {}) {
+  // The exact 2x2 shape the production encoder writes: remapped regular-grid
+  // triangles, four ordered edge lists, and one id=2 watermask extension.
+  void serial;
+  assert.ok(waterMask.length === 1 || waterMask.length === 256 * 256);
+  const mesh = Buffer.alloc(169 + waterMask.length);
   mesh.writeFloatLE(1, 24);
   mesh.writeFloatLE(1, 28);
   mesh.writeUInt32LE(4, 88);
@@ -401,14 +429,22 @@ function syntheticMeshPayload(serial) {
       previous = values[index];
     }
   };
-  writeDeltas(92, [0, 32767, 0, 32767]);
+  writeDeltas(92, [0, 32767, 32767, 0]);
   writeDeltas(100, [0, 0, 32767, 32767]);
   writeDeltas(108, [0, 0, 0, 0]);
-  mesh.writeUInt32LE(0, 116); // triangle count
-  // Four uint32 edge-list counts at offsets 120..132 are zero by allocation.
-  mesh.writeUInt8(127, 136);
-  mesh.writeUInt32LE(tail, 137);
-  for (let index = 0; index < tail; index += 1) mesh[141 + index] = (serial * 37 + index * 19) & 0xff;
+  mesh.writeUInt32LE(2, 116); // 2 * (grid - 1)^2 triangles
+  for (const [index, code] of [0, 0, 0, 3, 1, 0].entries()) mesh.writeUInt16LE(code, 120 + index * 2);
+  // Encoder remaps [BL, BR, TR, TL] by first appearance, then emits each edge
+  // by scanning that remapped vertex order.
+  const edges = [[0, 3], [0, 1], [1, 2], [2, 3]];
+  let at = 132;
+  for (const edge of edges) {
+    mesh.writeUInt32LE(edge.length, at); at += 4;
+    for (const vertex of edge) { mesh.writeUInt16LE(vertex, at); at += 2; }
+  }
+  mesh.writeUInt8(2, at);
+  mesh.writeUInt32LE(waterMask.length, at + 1);
+  Buffer.from(waterMask).copy(mesh, at + 5);
   return zlib.gzipSync(mesh);
 }
 
@@ -417,9 +453,10 @@ function syntheticTerrainRecord({
   x,
   y,
   childAvailability = 0,
-  serial,
-  payload = syntheticMeshPayload(serial),
+  serial = 0,
+  payload = null,
   waterMaskKind = "UNIFORM_LAND",
+  meshWaterMask = null,
   minHeightM = 1,
   maxHeightM = 1,
   verticalAccuracyM = 0,
@@ -428,7 +465,13 @@ function syntheticTerrainRecord({
   digestOverride = null,
   etagOverride = null,
 } = {}) {
-  const digest = `1220${createHash("sha256").update(payload).digest("hex")}`;
+  const raster = waterMaskKind === "RASTER" || waterMaskKind === 3;
+  const uniformWater = waterMaskKind === "UNIFORM_WATER" || waterMaskKind === 2;
+  const rawMask = raster ? Buffer.from(meshWaterMask ?? Buffer.alloc(256 * 256, 0x00)) : null;
+  const meshMask = raster ? rawMask : Buffer.from([uniformWater ? 0xff : 0x00]);
+  const resolvedPayload = payload ?? syntheticMeshPayload(serial, { waterMask: meshMask });
+  const compressedMask = raster ? zlib.gzipSync(rawMask) : null;
+  const digest = `1220${createHash("sha256").update(resolvedPayload).digest("hex")}`;
   const statedDigest = digestOverride ?? digest;
   const columns = 2 ** (level + 1);
   const rows = 2 ** level;
@@ -449,8 +492,8 @@ function syntheticTerrainRecord({
     PAYLOAD_FORMAT: "QUANTIZED_MESH",
     PAYLOAD_FORMAT_VERSION: "1.0",
     PAYLOAD: {
-      BYTES: payload,
-      SIZE_BYTES: payload.length,
+      BYTES: resolvedPayload,
+      SIZE_BYTES: resolvedPayload.length,
       DIGEST: statedDigest,
       CONTENT_ENCODING: "gzip",
     },
@@ -460,6 +503,17 @@ function syntheticTerrainRecord({
     ACCURACY_CONFIDENCE: accuracyConfidence,
     DATA_COVERAGE_FRACTION: dataCoverageFraction,
     WATER_MASK_KIND: waterMaskKind,
+    ...(raster ? {
+      WATER_MASK: {
+        BYTES: compressedMask,
+        SIZE_BYTES: compressedMask.length,
+        DIGEST: `1220${createHash("sha256").update(compressedMask).digest("hex")}`,
+        CONTENT_ENCODING: "gzip",
+        MEDIA_TYPE: "application/octet-stream",
+      },
+      WATER_MASK_WIDTH: 256,
+      WATER_MASK_HEIGHT: 256,
+    } : {}),
     CHILD_AVAILABILITY: childAvailability,
     MAX_LEVEL: 12,
     PROVENANCE: {
@@ -486,6 +540,62 @@ function writeSyntheticTerrainStream(outDir, addresses = [{ level: 3, x: 0, y: 0
   } finally {
     fs.closeSync(handle);
   }
+}
+
+function writeGlobalVerificationInputs(outDir, records, {
+  oceanLines = "4/15/0\n",
+  mutateState = null,
+  policyOverride = {},
+} = {}) {
+  const approvedConfig = {
+    ...JSON.parse(fs.readFileSync(path.join(HERE, "..", "regions", "global-z10.json"), "utf8")),
+    publication_policy: {
+      version: 1,
+      max_verified_store_bytes: 1024 * 1024,
+      max_static_directory_bytes: 2 * 1024 * 1024,
+      static_directory_basis: "verified-static-ipfs-directory",
+      synthesized_tile_grid_size: 65,
+      ...policyOverride,
+    },
+  };
+  const rawPolicy = approvedConfig.publication_policy;
+  const configDigestFinal = sha256(canonicalJson(approvedConfig));
+  const wrapper = {
+    policy: rawPolicy,
+    digest: sha256(canonicalJson(rawPolicy)),
+    globalConfigDigest: configDigestFinal,
+  };
+  const normalizedPolicy = {
+    format: "terrain-publication-policy-v1",
+    globalConfigDigest: configDigestFinal,
+    maxVerifiedStoreBytes: rawPolicy.max_verified_store_bytes,
+    maxStaticDirectoryBytes: rawPolicy.max_static_directory_bytes,
+    synthGridSize: rawPolicy.synthesized_tile_grid_size,
+  };
+  const state = {
+    version: 1,
+    completed: true,
+    configDigest: configDigestFinal,
+    publicationPolicy: normalizedPolicy,
+    merged: {
+      completion: "complete",
+      approvedConfigPath: "approved-run-config.json",
+      records,
+      configDigest: configDigestFinal,
+      publicationPolicy: normalizedPolicy,
+    },
+  };
+  mutateState?.(state, approvedConfig, wrapper);
+  fs.writeFileSync(path.join(outDir, "approved-run-config.json"), JSON.stringify(approvedConfig));
+  fs.writeFileSync(path.join(outDir, "global-build-state.json"), JSON.stringify(state));
+  fs.writeFileSync(path.join(outDir, "ocean-skipped.lines"), oceanLines);
+  fs.writeFileSync(path.join(outDir, "ocean-skipped.json"), JSON.stringify({
+    format: "terrain-ocean-skips-lines-v1",
+    addressesPath: "ocean-skipped.lines",
+    count: oceanLines.trim() ? oceanLines.trim().split("\n").length : 0,
+    digest: createHash("sha256").update(oceanLines).digest("hex"),
+  }));
+  return { normalizedPolicy, runReportPolicy: wrapper };
 }
 
 schemaTest("constrained verifier streams address catalogues, receipt lines, and exact payload quantiles", {}, async (t) => {
@@ -657,35 +767,74 @@ schemaTest("verifier rejects bounded-decode bombs, truncated mesh sections, and 
   await rejectOne(
     "impossible triangle count",
     syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 9, payload: malformedMesh((raw) => { raw.writeUInt32LE(0xffffffff, 116); return raw; }) }),
-    /triangle count exceeds remaining mesh bytes/,
+    /shipping regular-grid triangle count/,
   );
   await rejectOne(
     "invalid high-water triangle index",
     syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 10, payload: zlib.gzipSync(Buffer.concat([
       zlib.gunzipSync(syntheticMeshPayload(10)).subarray(0, 116),
-      Buffer.from([1, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
-      Buffer.alloc(16),
+      Buffer.from([2, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
+      zlib.gunzipSync(syntheticMeshPayload(10)).subarray(126),
     ])) }),
     /invalid high-water triangle index/,
   );
   await rejectOne(
     "invalid edge index",
     syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 11, payload: zlib.gzipSync(Buffer.concat([
-      zlib.gunzipSync(syntheticMeshPayload(11)).subarray(0, 120),
-      Buffer.from([1, 0, 0, 0, 4, 0]),
-      Buffer.alloc(12),
+      zlib.gunzipSync(syntheticMeshPayload(11)).subarray(0, 132),
+      Buffer.from([2, 0, 0, 0, 4, 0, 0, 0]),
+      zlib.gunzipSync(syntheticMeshPayload(11)).subarray(140),
     ])) }),
     /west edge index exceeds vertex count/,
   );
   await rejectOne(
     "truncated extension body",
-    syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 12, payload: malformedMesh((raw) => { raw.writeUInt32LE(0xffffffff, 137); return raw; }) }),
-    /truncates extension 127 body/,
+    syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 12, payload: malformedMesh((raw) => { raw.writeUInt32LE(0xffffffff, 165); return raw; }) }),
+    /watermask extension must be one uniform byte/,
   );
   await rejectOne(
     "trailing partial extension",
     syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 13, payload: malformedMesh((raw) => Buffer.concat([raw, Buffer.from([1])])) }),
-    /truncates extension header/,
+    /trailing mesh bytes/,
+  );
+  await rejectOne(
+    "zero shipping triangles",
+    syntheticTerrainRecord({ level: 3, x: 0, y: 0, payload: malformedMesh((raw) => { raw.writeUInt32LE(0, 116); return raw; }) }),
+    /shipping regular-grid triangle count/,
+  );
+  await rejectOne(
+    "wrapped zigzag coordinate",
+    syntheticTerrainRecord({ level: 3, x: 0, y: 0, payload: malformedMesh((raw) => { raw.writeUInt16LE(0xffff, 92); return raw; }) }),
+    /u coordinate is outside/,
+  );
+  await rejectOne(
+    "non-finite quantized-mesh header coordinate",
+    syntheticTerrainRecord({ level: 3, x: 0, y: 0, payload: malformedMesh((raw) => { raw.writeDoubleLE(Number.NaN, 32); return raw; }) }),
+    /non-finite header coordinate/,
+  );
+  await rejectOne(
+    "negative quantized-mesh bounding sphere radius",
+    syntheticTerrainRecord({ level: 3, x: 0, y: 0, payload: malformedMesh((raw) => { raw.writeDoubleLE(-1, 56); return raw; }) }),
+    /negative bounding-sphere radius/,
+  );
+  await rejectOne(
+    "missing shipping edge",
+    syntheticTerrainRecord({ level: 3, x: 0, y: 0, payload: malformedMesh((raw) => { raw.writeUInt32LE(0, 132); return raw; }) }),
+    /west edge must contain exactly 2 vertices/,
+  );
+  await rejectOne(
+    "opaque extension replaces watermask",
+    syntheticTerrainRecord({ level: 3, x: 0, y: 0, payload: malformedMesh((raw) => { raw.writeUInt8(127, 164); return raw; }) }),
+    /shipping watermask extension id 2/,
+  );
+  const meshRaster = Buffer.alloc(256 * 256, 0x00); meshRaster[17] = 0xff;
+  await rejectOne(
+    "DTT raster disagrees with embedded watermask",
+    syntheticTerrainRecord({
+      level: 3, x: 0, y: 0, waterMaskKind: "RASTER", meshWaterMask: Buffer.alloc(256 * 256, 0x00),
+      payload: syntheticMeshPayload(1, { waterMask: meshRaster }),
+    }),
+    /disagrees with DTT WATER_MASK bytes/,
   );
   await rejectOne(
     "out of range coordinate",
@@ -735,13 +884,14 @@ schemaTest("every terminal non-problem gate removes a stale publication receipt"
   writeOne(noAccuracy, syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 32, accuracyConfidence: 0 }));
   await runVerifierExpectFailure(noAccuracy, /no tile states a measured vertical accuracy/);
 
-  const largeRaw = Buffer.alloc(141 + 11_000);
-  zlib.gunzipSync(syntheticMeshPayload(33)).copy(largeRaw, 0, 0, 136);
-  largeRaw.writeUInt8(127, 136);
-  largeRaw.writeUInt32LE(11_000, 137);
-  for (let index = 0; index < 11_000; index += 1) largeRaw[141 + index] = (index * 73) & 0xff;
+  const largeMask = Buffer.alloc(256 * 256);
+  for (let index = 0; index < largeMask.length; index += 1) largeMask[index] = (index * 73) & 0xff;
+  const largeRaw = zlib.gunzipSync(syntheticMeshPayload(33, { waterMask: largeMask }));
   const overQuantile = temporary(t);
-  writeOne(overQuantile, syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 33, payload: zlib.gzipSync(largeRaw, { level: 0 }) }));
+  writeOne(overQuantile, syntheticTerrainRecord({
+    level: 3, x: 0, y: 0, serial: 33, waterMaskKind: "RASTER", meshWaterMask: largeMask,
+    payload: zlib.gzipSync(largeRaw, { level: 0 }),
+  }));
   await runVerifierExpectFailure(overQuantile, /p50 .* over/);
 });
 
@@ -761,19 +911,33 @@ schemaTest("legacy ocean JSON consumes its complete object and availability stay
   fs.writeFileSync(path.join(legacyOrdering, "ocean-skipped.json"), '{"addresses":["10/0/0","8/0/0","9/0/0"]}');
   await runVerifierExpectFailure(legacyOrdering, /legacy ocean addresses must be sorted and unique by level\/y\/x/);
 
+  const linked = temporary(t);
+  writeSyntheticTerrainStream(linked);
+  const legacyTarget = path.join(linked, "legacy-ocean.json");
+  fs.writeFileSync(legacyTarget, '{"addresses":["3/1/0"]}');
+  fs.symlinkSync(legacyTarget, path.join(linked, "ocean-skipped.json"));
+  await runVerifierExpectFailure(linked, /ocean skip receipt is not a regular file/);
+
   const policyMismatch = temporary(t);
   writeSyntheticTerrainStream(policyMismatch);
+  const authoritativePolicy = writeGlobalVerificationInputs(policyMismatch, 1);
   fs.writeFileSync(path.join(policyMismatch, "run-report.json"), JSON.stringify({
     globalConfigDigest: "b".repeat(64),
-    publicationPolicy: {
-      format: "terrain-publication-policy-v1",
-      globalConfigDigest: "a".repeat(64),
-      maxVerifiedStoreBytes: 1024 * 1024,
-      maxStaticDirectoryBytes: 2 * 1024 * 1024,
-      synthGridSize: 65,
-    },
+    publicationPolicy: authoritativePolicy.runReportPolicy,
   }));
-  await runVerifierExpectFailure(policyMismatch, /does not match the run receipt/);
+  await runVerifierExpectFailure(policyMismatch, /does not match approved-run-config.json/);
+
+  const overApprovedBound = temporary(t);
+  writeSyntheticTerrainStream(overApprovedBound);
+  writeGlobalVerificationInputs(overApprovedBound, 1, { policyOverride: { max_verified_store_bytes: 13 * 1024 ** 3 } });
+  await runVerifierExpectFailure(overApprovedBound, /maxVerifiedStoreBytes exceeds/);
+
+  const undersizedStatic = temporary(t);
+  writeSyntheticTerrainStream(undersizedStatic);
+  writeGlobalVerificationInputs(undersizedStatic, 1, {
+    policyOverride: { max_verified_store_bytes: 2 * 1024 * 1024, max_static_directory_bytes: 1024 * 1024 },
+  });
+  await runVerifierExpectFailure(undersizedStatic, /maxStaticDirectoryBytes must cover/);
 
   const outDir = temporary(t);
   const addresses = [];
@@ -781,14 +945,12 @@ schemaTest("legacy ocean JSON consumes its complete object and availability stay
     if ((x + y) % 2) addresses.push({ level: 4, x, y });
   }
   writeSyntheticTerrainStream(outDir, addresses);
-  const publicationPolicy = {
-    format: "terrain-publication-policy-v1",
-    globalConfigDigest: "a".repeat(64),
-    maxVerifiedStoreBytes: 1024 * 1024,
-    maxStaticDirectoryBytes: 2 * 1024 * 1024,
-    synthGridSize: 65,
-  };
-  fs.writeFileSync(path.join(outDir, "run-report.json"), JSON.stringify({ publicationPolicy, globalConfigDigest: publicationPolicy.globalConfigDigest }));
+  const policyInputs = writeGlobalVerificationInputs(outDir, addresses.length);
+  const publicationPolicy = policyInputs.normalizedPolicy;
+  fs.writeFileSync(path.join(outDir, "run-report.json"), JSON.stringify({
+    publicationPolicy: policyInputs.runReportPolicy,
+    globalConfigDigest: publicationPolicy.globalConfigDigest,
+  }));
   await execFileAsync(process.execPath, ["--max-old-space-size=64", VERIFY, "--out", outDir], {
     timeout: 30_000,
     maxBuffer: 1024 * 1024,
@@ -800,9 +962,9 @@ schemaTest("legacy ocean JSON consumes its complete object and availability stay
   assert.equal(report.publicationPolicyLegacyUnbound, false);
   assert.equal(config.terrain_synth_grid_size, publicationPolicy.synthGridSize);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(outDir, report.layerJson.availabilityPath), "utf8")), config.terrain_available, "availability artifact and deployment config must share byte-equivalent availability");
-  assert.equal(report.publicationInputs.format, "terrain-publication-inputs-v1");
-  assert.deepEqual(Object.keys(report.publicationInputs).sort(), ["availableButUnstored", "format", "layerConfig", "oceanAddresses", "oceanLegacyUnbound", "oceanReceipt", "tiles"]);
-  for (const [name, relativePath] of [["tiles", "tiles.dttstream"], ["availableButUnstored", "available-but-unstored.ndjson"], ["layerConfig", "layer-json-config.json"]]) {
+  assert.equal(report.publicationInputs.format, "terrain-publication-inputs-v2");
+  assert.deepEqual(Object.keys(report.publicationInputs).sort(), ["approvedConfig", "availableButUnstored", "format", "globalState", "layerConfig", "oceanAddresses", "oceanLegacyUnbound", "oceanReceipt", "tiles"]);
+  for (const [name, relativePath] of [["tiles", "tiles.dttstream"], ["availableButUnstored", "available-but-unstored.ndjson"], ["layerConfig", "layer-json-config.json"], ["globalState", "global-build-state.json"], ["approvedConfig", "approved-run-config.json"], ["oceanReceipt", "ocean-skipped.json"], ["oceanAddresses", "ocean-skipped.lines"]]) {
     const receipt = report.publicationInputs[name];
     const bytes = fs.readFileSync(path.join(outDir, relativePath));
     assert.equal(receipt.path, relativePath);
@@ -810,9 +972,8 @@ schemaTest("legacy ocean JSON consumes its complete object and availability stay
     assert.equal(receipt.sha256, createHash("sha256").update(bytes).digest("hex"));
   }
   assert.equal(report.publicationInputs.tiles.records, addresses.length);
-  assert.equal(report.publicationInputs.oceanLegacyUnbound, true);
-  assert.equal(report.publicationInputs.oceanReceipt, null);
-  assert.equal(report.publicationInputs.oceanAddresses, null);
+  assert.equal(report.publicationInputs.oceanLegacyUnbound, false);
+  assert.equal(report.publicationInputs.oceanAddresses.addresses, 1);
   const actual = new Set();
   config.terrain_available.forEach((rectangles, level) => rectangles.forEach((rect) => {
     for (let y = rect.startY; y <= rect.endY; y += 1) for (let x = rect.startX; x <= rect.endX; x += 1) actual.add(`${level}/${x}/${y}`);
@@ -822,6 +983,9 @@ schemaTest("legacy ocean JSON consumes its complete object and availability stay
     for (let level = address.level, x = address.x, y = address.y; level > 0; level -= 1, x = Math.floor(x / 2), y = Math.floor(y / 2)) {
       expected.add(`${level}/${x}/${y}`);
     }
+  }
+  for (let level = 4, x = 15, y = 0; level > 0; level -= 1, x = Math.floor(x / 2), y = Math.floor(y / 2)) {
+    expected.add(`${level}/${x}/${y}`);
   }
   assert.deepEqual([...actual].sort(), [...expected].sort(), "streamed rectangle output must preserve the old ancestor-closure semantics");
 });

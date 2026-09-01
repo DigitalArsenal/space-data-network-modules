@@ -104,6 +104,9 @@ export function createSortedJsonRunWriter(dir, {
   maxRowBytes = 64 * 1024,
   maxBufferedBytes = 8 * 1024 * 1024,
   compare = compareJsonFactKeys,
+  // Global callers must not retain one pathname per flushed run.  A manifest
+  // is itself a bounded line stream, so the merge can batch it on disk.
+  returnManifest = false,
 } = {}) {
   assert.ok(Number.isSafeInteger(maxRows) && maxRows > 0, "maxRows must be positive");
   assert.ok(Number.isSafeInteger(maxRowBytes) && maxRowBytes > 0, "maxRowBytes must be positive");
@@ -115,15 +118,20 @@ export function createSortedJsonRunWriter(dir, {
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
   const runs = [];
+  const manifestPath = path.join(dir, "runs.manifest.ndjson");
+  const manifestHandle = returnManifest ? fs.openSync(manifestPath, "wx") : null;
+  let runCount = 0;
   let rows = [];
   let bufferedBytes = 0;
   let finished = false;
   const flush = () => {
     if (!rows.length) return;
     rows.sort((a, b) => compare(a.row, b.row));
-    const file = path.join(dir, `run-${String(runs.length).padStart(6, "0")}.ndjson`);
+    const file = path.join(dir, `run-${String(runCount).padStart(returnManifest ? 12 : 6, "0")}.ndjson`);
     writeLines(file, rows);
-    runs.push(file);
+    if (returnManifest) fs.writeSync(manifestHandle, `${JSON.stringify(file)}\n`);
+    else runs.push(file);
+    runCount += 1;
     rows = [];
     bufferedBytes = 0;
   };
@@ -142,7 +150,14 @@ export function createSortedJsonRunWriter(dir, {
       assert.ok(!finished, "fact spool was already finished");
       flush();
       finished = true;
-      return runs;
+      if (!returnManifest) return runs;
+      fs.fsyncSync(manifestHandle);
+      fs.closeSync(manifestHandle);
+      return {
+        format: "terrain-json-run-manifest-v1",
+        path: manifestPath,
+        runCount,
+      };
     },
   };
 }
@@ -421,6 +436,114 @@ async function writeMergedRun(files, output, options) {
   }
 }
 
+function isRunManifest(value) {
+  return value && typeof value === "object" && value.format === "terrain-json-run-manifest-v1";
+}
+
+async function* iterateRunManifest(source) {
+  assert.ok(isRunManifest(source), "fact source must be a terrain JSON run manifest");
+  assert.equal(typeof source.path, "string", "fact run manifest path must be a string");
+  assert.ok(Number.isSafeInteger(source.runCount) && source.runCount >= 0,
+    "fact run manifest count must be a non-negative safe integer");
+  let count = 0;
+  for await (const line of iterateBoundedLines(source.path, { maxRowBytes: 16 * 1024 })) {
+    let file;
+    try { file = JSON.parse(line.toString("utf8")); } catch (error) {
+      throw new Error(`invalid fact run manifest row in ${source.path}: ${error.message}`);
+    }
+    assert.equal(typeof file, "string", `fact run manifest row is not a path in ${source.path}`);
+    assert.ok(path.isAbsolute(file), `fact run manifest row is not an absolute path in ${source.path}`);
+    count += 1;
+    yield file;
+  }
+  assert.equal(count, source.runCount, `fact run manifest count mismatch in ${source.path}`);
+}
+
+async function* iterateRunSources(sources) {
+  assert.ok(Array.isArray(sources) && sources.length > 0, "fact manifest sources are required");
+  for (const source of sources) yield* iterateRunManifest(source);
+}
+
+/**
+ * Merge manifest-backed sorted runs without retaining a pathname per run.  The
+ * source writer spills one path per line; each pass consumes that stream in
+ * fan-in-sized batches and writes the next manifest beside the merge scratch.
+ */
+export async function mergeSortedJsonRunSources(sources, {
+  compare = compareJsonFactKeys,
+  onRow = async () => {},
+  onDuplicate = async () => {},
+  dedupe = true,
+  maxOpenRuns = 32,
+  maxRowBytes = 64 * 1024,
+  scratchDir,
+} = {}) {
+  assert.ok(Array.isArray(sources) && sources.length > 0, "fact manifest sources are required");
+  assert.equal(typeof compare, "function", "compare must be a function");
+  assert.equal(typeof onRow, "function", "onRow must be a function");
+  assert.equal(typeof onDuplicate, "function", "onDuplicate must be a function");
+  assert.ok(Number.isSafeInteger(maxOpenRuns) && maxOpenRuns >= 2, "maxOpenRuns must be at least two");
+  assert.ok(Number.isSafeInteger(maxRowBytes) && maxRowBytes > 0, "maxRowBytes must be positive");
+  assert.ok(scratchDir, "scratchDir is required for a bounded fact merge");
+  for (const source of sources) {
+    assert.ok(isRunManifest(source), "fact source must be a terrain JSON run manifest");
+  }
+  const options = { compare, maxRowBytes };
+  const totalSourceRuns = sources.reduce((total, source) => total + source.runCount, 0);
+  fs.rmSync(scratchDir, { recursive: true, force: true });
+  fs.mkdirSync(scratchDir, { recursive: true });
+  try {
+    let currentSources = sources;
+    let currentRunCount = totalSourceRuns;
+    let pass = 0;
+    while (currentRunCount > maxOpenRuns) {
+      const nextManifestPath = path.join(scratchDir, `pass-${String(pass).padStart(4, "0")}.manifest.ndjson`);
+      const nextManifest = fs.openSync(nextManifestPath, "wx");
+      let nextRunCount = 0;
+      let batch = [];
+      try {
+        for await (const file of iterateRunSources(currentSources)) {
+          batch.push(file);
+          if (batch.length < maxOpenRuns) continue;
+          const output = path.join(scratchDir, `pass-${String(pass).padStart(4, "0")}-run-${String(nextRunCount).padStart(12, "0")}.ndjson`);
+          await writeMergedRun(batch, output, options);
+          fs.writeSync(nextManifest, `${JSON.stringify(output)}\n`);
+          nextRunCount += 1;
+          batch = [];
+        }
+        if (batch.length) {
+          const output = path.join(scratchDir, `pass-${String(pass).padStart(4, "0")}-run-${String(nextRunCount).padStart(12, "0")}.ndjson`);
+          await writeMergedRun(batch, output, options);
+          fs.writeSync(nextManifest, `${JSON.stringify(output)}\n`);
+          nextRunCount += 1;
+        }
+        fs.fsyncSync(nextManifest);
+      } finally {
+        fs.closeSync(nextManifest);
+      }
+      assert.equal(nextRunCount, Math.ceil(currentRunCount / maxOpenRuns), "fact manifest pass lost a run");
+      currentSources = [{ format: "terrain-json-run-manifest-v1", path: nextManifestPath, runCount: nextRunCount }];
+      currentRunCount = nextRunCount;
+      pass += 1;
+    }
+    const files = [];
+    for await (const file of iterateRunSources(currentSources)) files.push(file);
+    assert.equal(files.length, currentRunCount, "fact manifest final count mismatch");
+    if (!files.length) return;
+    let previous = null;
+    await mergeRunGroup(files, options, async (row) => {
+      if (dedupe && previous !== null && compare(previous, row) === 0) {
+        await onDuplicate(previous, row);
+        return;
+      }
+      await onRow(row);
+      previous = row;
+    });
+  } finally {
+    fs.rmSync(scratchDir, { recursive: true, force: true });
+  }
+}
+
 /**
  * Stream a globally sorted collection of JSON fact runs to `onRow`.
  *
@@ -439,6 +562,11 @@ export async function mergeSortedJsonRuns(runs, {
   maxRowBytes = 64 * 1024,
   scratchDir,
 } = {}) {
+  if (!Array.isArray(runs)) {
+    return mergeSortedJsonRunSources([runs], {
+      compare, onRow, onDuplicate, dedupe, maxOpenRuns, maxRowBytes, scratchDir,
+    });
+  }
   assert.ok(Array.isArray(runs), "runs must be an array");
   assert.equal(typeof compare, "function", "compare must be a function");
   assert.equal(typeof onRow, "function", "onRow must be a function");
