@@ -96,6 +96,17 @@ const MAX_APPROVED_CONFIG_BYTES = 8 * 1024 * 1024;
 const MAX_LAYER_JSON_BYTES = STATIC_TRANSPORT_BOUNDS.hard;
 const PUBLICATION_INPUTS_FORMAT = "terrain-publication-inputs-v2";
 const PUBLICATION_POLICY_FORMAT = "terrain-publication-policy-v1";
+const ATTEMPT_JOURNAL_FORMAT = "terrain-ipfs-publication-attempt-v2";
+const ATTEMPT_TOKEN_RE = /^\d+-[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
+const INITIAL_JOURNAL_CANDIDATE_LIMIT = 8;
+const LIVE_PUBLICATION_NAMES = Object.freeze([
+  "ipfs",
+  "tileset-catalogue.json",
+  "tileset-catalogue.dttstream",
+  "ipfs-publication.json",
+  "serving-config-ipfs.json",
+  "pending-ipfs-pin.json",
+]);
 // A global directory is tens of GiB, not a control-plane request.  Keep the
 // deadline finite but derive it from a deliberately conservative reviewed
 // floor rather than applying the 30-second RPC timeout to the data stream.
@@ -127,6 +138,11 @@ function parseArgs(argv) {
     pinTimeoutMs: null,
     reserveFreeBytes: 0n,
     testCrashAt: null,
+    testReplaceOutputRootWith: null,
+    testHoldAfterJournalMs: null,
+    testHoldAfterInitialJournalTempMs: null,
+    testHoldAfterRecoveryReadMs: null,
+    testForgeSelfOwnedJournal: false,
     testMutateLayerConfigAfterPreflight: false,
     testGzipBomb: false,
   };
@@ -147,6 +163,11 @@ function parseArgs(argv) {
     else if (flag === "--reserve-free-bytes") args.reserveFreeBytes = parseByteCount(argv[++i], "--reserve-free-bytes");
     // Test-only abrupt termination hook for the durable artifact transaction.
     else if (flag === "--test-crash-at") args.testCrashAt = argv[++i];
+    else if (flag === "--test-replace-output-root-with") args.testReplaceOutputRootWith = path.resolve(argv[++i]);
+    else if (flag === "--test-hold-after-journal-ms") args.testHoldAfterJournalMs = parsePositiveInteger(argv[++i], "--test-hold-after-journal-ms");
+    else if (flag === "--test-hold-after-initial-journal-temp-ms") args.testHoldAfterInitialJournalTempMs = parsePositiveInteger(argv[++i], "--test-hold-after-initial-journal-temp-ms");
+    else if (flag === "--test-hold-after-recovery-read-ms") args.testHoldAfterRecoveryReadMs = parsePositiveInteger(argv[++i], "--test-hold-after-recovery-read-ms");
+    else if (flag === "--test-forge-self-owned-journal") args.testForgeSelfOwnedJournal = true;
     // These hooks exercise the same production safety boundaries without
     // requiring a racing external writer or a giant fixture in CI.
     else if (flag === "--test-mutate-layer-config-after-preflight") args.testMutateLayerConfigAfterPreflight = true;
@@ -164,9 +185,23 @@ const outDir = path.resolve(args.out);
 const ipfsDir = path.join(outDir, "ipfs");
 const pendingPinPath = path.join(outDir, "pending-ipfs-pin.json");
 const transactionPath = path.join(outDir, ".ipfs-publication-transaction.json");
+let journalLeaseIdentity = null;
 
 const outStat = fs.lstatSync(outDir, { bigint: true });
 assert.ok(outStat.isDirectory() && !outStat.isSymbolicLink(), `builder output is not a real directory: ${outDir}`);
+const outputRootIdentity = Object.freeze({ dev: outStat.dev.toString(), ino: outStat.ino.toString() });
+
+// Node has no portable `openat(2)`.  Treat the output root as an immutable
+// capability instead: every mutating phase verifies that the pathname still
+// resolves to this original non-symlink directory.  This deliberately fails
+// closed if a caller swaps the output directory while an attempt is live.
+function assertOutputRootStable(label) {
+  const current = fs.lstatSync(outDir, { bigint: true });
+  assert.ok(current.isDirectory() && !current.isSymbolicLink(), `${label}: builder output is no longer a real directory`);
+  assert.equal(current.dev.toString(), outputRootIdentity.dev, `${label}: builder output device changed`);
+  assert.equal(current.ino.toString(), outputRootIdentity.ino, `${label}: builder output inode changed`);
+  return current;
+}
 
 function immutableIdentityFromStat(stat, file, label) {
   assert.ok(stat.isFile() && !stat.isSymbolicLink(), `${label} is not a regular file: ${file}`);
@@ -186,13 +221,14 @@ function sameImmutableIdentity(left, right) {
 }
 
 function assertWithinRealOutput(file, label) {
+  assertOutputRootStable(label);
   assert.ok(file === outDir || file.startsWith(`${outDir}${path.sep}`), `${label} escapes the builder output`);
   const relative = path.relative(outDir, file);
   let current = outDir;
   for (const part of relative ? relative.split(path.sep) : []) {
     current = path.join(current, part);
-    if (!fs.existsSync(current)) break;
-    const stat = fs.lstatSync(current, { bigint: true });
+    const stat = lstatIfExists(current, label);
+    if (stat === null) break;
     assert.ok(!stat.isSymbolicLink(), `${label} has a symlinked parent: ${current}`);
   }
   return file;
@@ -217,7 +253,7 @@ function openRegularRead(file, label) {
   return { descriptor, identity: before };
 }
 
-function readBoundedRegularFile(file, maxBytes, label, expectedIdentity = null) {
+function readBoundedRegularFileWithIdentity(file, maxBytes, label, expectedIdentity = null) {
   const { descriptor, identity } = openRegularRead(file, label);
   if (expectedIdentity) assert.ok(sameImmutableIdentity(identity, expectedIdentity), `${label} changed since publication preflight: ${file}`);
   try {
@@ -236,10 +272,14 @@ function readBoundedRegularFile(file, maxBytes, label, expectedIdentity = null) 
     const after = immutableIdentity(file, label);
     assert.ok(sameImmutableIdentity(identity, after), `${label} changed while being read: ${file}`);
     if (expectedIdentity) assert.ok(sameImmutableIdentity(after, expectedIdentity), `${label} changed since publication preflight: ${file}`);
-    return bytes;
+    return { bytes, identity: after };
   } finally {
     fs.closeSync(descriptor);
   }
+}
+
+function readBoundedRegularFile(file, maxBytes, label, expectedIdentity = null) {
+  return readBoundedRegularFileWithIdentity(file, maxBytes, label, expectedIdentity).bytes;
 }
 
 function readBoundedJson(file, maxBytes, label, expectedIdentity = null) {
@@ -249,6 +289,32 @@ function readBoundedJson(file, maxBytes, label, expectedIdentity = null) {
     if (error instanceof SyntaxError) throw new Error(`${label} is invalid JSON: ${file}`, { cause: error });
     throw error;
   }
+}
+
+function readBoundedJsonWithIdentity(file, maxBytes, label, expectedIdentity = null) {
+  try {
+    const result = readBoundedRegularFileWithIdentity(file, maxBytes, label, expectedIdentity);
+    return { value: JSON.parse(result.bytes.toString("utf8")), identity: result.identity };
+  } catch (error) {
+    if (error instanceof SyntaxError) throw new Error(`${label} is invalid JSON: ${file}`, { cause: error });
+    throw error;
+  }
+}
+
+if (args.testForgeSelfOwnedJournal) {
+  const attempt = `${process.pid}-00000000-0000-4000-8000-000000000000`;
+  const forged = {
+    format: ATTEMPT_JOURNAL_FORMAT,
+    attempt,
+    root: outputRootIdentity,
+    phase: "allocated",
+    owned: attemptOwnedRelativePaths(attempt),
+    stagingIdentity: null,
+    controlIdentity: null,
+    transients: emptyAttemptTransients(),
+    transaction: null,
+  };
+  fs.writeFileSync(transactionPath, `${JSON.stringify(forged)}\n`, { flag: "wx", mode: 0o600 });
 }
 
 // Recover a previously interrupted artifact transaction before trusting any
@@ -1074,48 +1140,239 @@ const materializationPlan = await precomputeMaterializationPlan();
 const stagingReservation = reserveStagingSpace(materializationPlan);
 const attemptToken = `${process.pid}-${randomUUID()}`;
 const stagingDir = path.join(outDir, `.ipfs-staging-${attemptToken}`);
-fs.mkdirSync(stagingDir, { recursive: false });
-const stagedArtifactPaths = new Set();
-const attemptScratchPaths = new Set();
+const stagedArtifactPaths = new Map();
+const attemptScratchPaths = new Map();
+
+function attemptOwnedRelativePaths(attempt) {
+  assert.match(attempt, ATTEMPT_TOKEN_RE, "publication attempt token is invalid");
+  return {
+    staging: `.ipfs-staging-${attempt}`,
+    control: `.ipfs-attempt-${attempt}`,
+    scratch: [`.ipfs-upload-manifest-${attempt}.ndjson`, `.ipfs-upload-directories-${attempt}.ndjson`],
+    staged: LIVE_PUBLICATION_NAMES.map((name) => `.${name}-staging-${attempt}`),
+    backups: LIVE_PUBLICATION_NAMES.map((name) => `.${name}-previous-${attempt}`),
+    pendingTemporary: `.pending-ipfs-pin-${attempt}.tmp`,
+    journalTemporary: `.ipfs-publication-transaction-${attempt}.tmp`,
+  };
+}
+
+function attemptPathsFor(attempt) {
+  const owned = attemptOwnedRelativePaths(attempt);
+  const resolve = (name) => path.join(outDir, name);
+  return {
+    owned,
+    staging: resolve(owned.staging),
+    control: resolve(owned.control),
+    scratch: owned.scratch.map((name) => path.join(resolve(owned.control), name)),
+    staged: new Map(LIVE_PUBLICATION_NAMES.map((name, index) => [name, path.join(resolve(owned.control), owned.staged[index])])),
+    backups: new Map(LIVE_PUBLICATION_NAMES.map((name, index) => [name, resolve(owned.backups[index])])),
+    pendingTemporary: path.join(resolve(owned.control), owned.pendingTemporary),
+    journalTemporary: resolve(owned.journalTemporary),
+  };
+}
+
+function emptyAttemptTransients() {
+  return {
+    scratch: [null, null],
+    staged: LIVE_PUBLICATION_NAMES.map(() => null),
+    pendingTemporary: null,
+  };
+}
+
+function pathIdentityFromStat(stat, target, label) {
+  assert.ok(!stat.isSymbolicLink() && (stat.isFile() || stat.isDirectory()), `${label} is not a regular file or directory: ${target}`);
+  if (stat.isDirectory()) return { type: "directory", dev: stat.dev.toString(), ino: stat.ino.toString() };
+  return {
+    type: "file",
+    dev: stat.dev.toString(), ino: stat.ino.toString(), size: stat.size.toString(),
+    mtimeNs: stat.mtimeNs.toString(), ctimeNs: stat.ctimeNs.toString(),
+  };
+}
+
+function lstatIfExists(target, label) {
+  try {
+    return fs.lstatSync(target, { bigint: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw new Error(`${label}: could not lstat ${target}`, { cause: error });
+  }
+}
+
+function pathIdentity(target, label) {
+  assertOutputRootStable(label);
+  return pathIdentityFromStat(fs.lstatSync(target, { bigint: true }), target, label);
+}
+
+function samePathIdentity(left, right) {
+  if (!left || !right || left.type !== right.type || left.dev !== right.dev || left.ino !== right.ino) return false;
+  return left.type === "directory" ||
+    (left.size === right.size && left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs);
+}
+
+function samePathObject(left, right) {
+  return left && right && left.type === right.type && left.dev === right.dev && left.ino === right.ino;
+}
+
+function assertPathIdentity(target, expected, label) {
+  assert.ok(expected && typeof expected === "object", `${label} has no recorded identity`);
+  const current = pathIdentity(target, label);
+  assert.ok(samePathIdentity(current, expected), `${label} identity changed: ${target}`);
+  return current;
+}
+
+function assertAttemptDirectory(label) {
+  assert.ok(attemptJournal.stagingIdentity, `${label}: staging identity was never persisted`);
+  const identity = assertPathIdentity(stagingDir, attemptJournal.stagingIdentity, label);
+  assert.equal(identity.type, "directory", `${label}: staging is not a directory`);
+  return identity;
+}
+
+function createExclusiveRegularFile(target, label) {
+  assertOutputRootStable(`${label} before create`);
+  const descriptor = fs.openSync(
+    target,
+    fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0),
+    0o600,
+  );
+  try {
+    const opened = pathIdentityFromStat(fs.fstatSync(descriptor, { bigint: true }), target, label);
+    assert.equal(opened.type, "file", `${label} is not a regular file`);
+    const named = pathIdentity(target, label);
+    assert.ok(samePathIdentity(opened, named), `${label} changed while being created`);
+    return { descriptor, identity: opened };
+  } catch (error) {
+    fs.closeSync(descriptor);
+    throw error;
+  }
+}
+
+function writeExclusiveRegularFile(target, bytes, label, { durable = true } = {}) {
+  const { descriptor, identity } = createExclusiveRegularFile(target, label);
+  try {
+    let offset = 0;
+    const journalMidwritePhase = label === "publication attempt journal temporary"
+      ? (journalLeaseIdentity === null ? "journal-temp-midwrite-prelink" : "journal-temp-midwrite-update")
+      : null;
+    if (journalMidwritePhase !== null && args.testCrashAt === journalMidwritePhase) {
+      // Force a physical partial write before the abrupt test exit; normal
+      // journal writes retain the usual single bounded loop.
+      const partial = Math.max(1, Math.floor(bytes.length / 2));
+      const written = fs.writeSync(descriptor, bytes, 0, partial);
+      assert.equal(written, partial, `${label} could not write its test partial prefix`);
+      maybeCrashTransaction(journalMidwritePhase);
+      offset = partial;
+    }
+    while (offset < bytes.length) {
+      const written = fs.writeSync(descriptor, bytes, offset, bytes.length - offset);
+      assert.ok(written > 0, `${label} could not be written`);
+      offset += written;
+    }
+    if (durable) fs.fsyncSync(descriptor);
+    assert.ok(samePathObject(pathIdentityFromStat(fs.fstatSync(descriptor, { bigint: true }), target, label), identity),
+      `${label} changed while being written`);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  const finalIdentity = pathIdentity(target, label);
+  assert.ok(samePathObject(finalIdentity, identity), `${label} changed after write`);
+  if (durable) fsyncDirectory(path.dirname(target));
+  assertOutputRootStable(`${label} after create`);
+  return finalIdentity;
+}
+
+function assertSafeAttemptTree(target, label) {
+  const identity = pathIdentity(target, label);
+  if (identity.type === "file") return;
+  for (const entry of fs.readdirSync(target)) {
+    const child = path.join(target, entry);
+    assert.ok(child.startsWith(`${target}${path.sep}`), `${label} child escapes attempt directory`);
+    assertSafeAttemptTree(child, `${label}/${entry}`);
+  }
+}
+
+function removeExactOwnedPath(target, label, expectedIdentity = null) {
+  assertOutputRootStable(`${label} before cleanup`);
+  if (lstatIfExists(target, label) === null) return;
+  if (expectedIdentity) assertPathIdentity(target, expectedIdentity, label);
+  else pathIdentity(target, label);
+  assertSafeAttemptTree(target, label);
+  removeSafeAttemptTree(target, label);
+  assertOutputRootStable(`${label} after cleanup`);
+}
+
+function removeSafeAttemptTree(target, label) {
+  const stat = fs.lstatSync(target, { bigint: true });
+  assert.ok(!stat.isSymbolicLink(), `${label} was replaced by a symlink during cleanup: ${target}`);
+  if (stat.isFile()) {
+    fs.unlinkSync(target);
+    return;
+  }
+  assert.ok(stat.isDirectory(), `${label} was replaced by a non-file, non-directory during cleanup: ${target}`);
+  for (const entry of fs.readdirSync(target)) {
+    const child = path.join(target, entry);
+    assert.ok(child.startsWith(`${target}${path.sep}`), `${label} cleanup child escapes attempt directory`);
+    removeSafeAttemptTree(child, `${label}/${entry}`);
+  }
+  // All children have durably disappeared from this exact directory before it
+  // is removed from its parent.  This matters for control-dir cleanup, where
+  // a journal removal must never make an interrupted unlink ambiguous.
+  fsyncDirectory(target);
+  fs.rmdirSync(target);
+  fsyncDirectory(path.dirname(target));
+}
 
 function discardStagingDirectory() {
-  if (fs.existsSync(stagingDir)) fs.rmSync(stagingDir, { recursive: true, force: true });
+  // The allocation journal predeclares this exact name before mkdir.  A kill
+  // between mkdir and the identity update may leave it unrecorded; it is still
+  // safe to reclaim only when it remains a real non-symlink attempt directory.
+  const stat = lstatIfExists(stagingDir, "attempt staging directory");
+  if (stat !== null && attemptJournal.stagingIdentity === null) {
+    assert.ok(stat.isDirectory() && !stat.isSymbolicLink(), "unrecorded attempt staging path is ambiguous");
+  }
+  removeExactOwnedPath(stagingDir, "attempt staging directory", attemptJournal.stagingIdentity);
 }
 
 function discardAttemptScratch() {
-  for (const scratchPath of attemptScratchPaths) {
-    if (fs.existsSync(scratchPath)) fs.rmSync(scratchPath, { force: true });
-  }
+  discardAttemptControlDirectory();
   attemptScratchPaths.clear();
 }
 
 function stageArtifact(livePath, bytes) {
-  const stagedPath = path.join(outDir, `.${path.basename(livePath)}-staging-${attemptToken}`);
-  fs.writeFileSync(stagedPath, bytes);
-  const descriptor = fs.openSync(stagedPath, "r");
-  try {
-    fs.fsyncSync(descriptor);
-  } finally {
-    fs.closeSync(descriptor);
-  }
-  fsyncDirectory(outDir);
-  stagedArtifactPaths.add(stagedPath);
+  const liveName = path.basename(livePath);
+  assert.ok(LIVE_PUBLICATION_NAMES.includes(liveName), `unknown publication artifact ${liveName}`);
+  assert.equal(path.dirname(livePath), outDir, `publication artifact ${liveName} leaves output root`);
+  const stagedPath = attemptPaths.staged.get(liveName);
+  const identity = writeExclusiveRegularFile(stagedPath, Buffer.from(bytes), `staged ${liveName}`);
+  stagedArtifactPaths.set(stagedPath, identity);
+  // This is deliberately before the journal record: recovery owns the whole
+  // control directory, so an abrupt death cannot strand this newly-created
+  // staged file merely because its individual identity was not yet recorded.
+  maybeCrashTransaction(`artifact-written-${stagedArtifactPaths.size}`);
+  recordAttemptTransient("staged", LIVE_PUBLICATION_NAMES.indexOf(liveName), identity);
+  fsyncDirectory(path.dirname(stagedPath));
+  maybeCrashTransaction(`artifact-${stagedArtifactPaths.size}`);
   return stagedPath;
 }
 
 function discardStagedArtifacts() {
-  for (const stagedPath of stagedArtifactPaths) {
-    if (fs.existsSync(stagedPath)) fs.rmSync(stagedPath, { force: true });
-  }
+  discardAttemptControlDirectory();
   stagedArtifactPaths.clear();
+}
+
+function discardAttemptControlDirectory() {
+  const stat = lstatIfExists(attemptPaths.control, "attempt control directory");
+  if (stat === null) return;
+  if (attemptJournal.controlIdentity === null) {
+    assert.ok(stat.isDirectory() && !stat.isSymbolicLink(), "unrecorded attempt control path is ambiguous");
+  }
+  removeExactOwnedPath(attemptPaths.control, "attempt control directory", attemptJournal.controlIdentity);
 }
 
 function assertTransactionPath(value, label, nullable = false) {
   if (nullable && value === null) return null;
   assert.equal(typeof value, "string", `${label} must be a path`);
   assert.equal(path.dirname(value), outDir, `${label} leaves the builder output`);
-  assert.ok(path.basename(value).startsWith("." ) || ["ipfs", "tileset-catalogue.json", "tileset-catalogue.dttstream", "ipfs-publication.json", "serving-config-ipfs.json", "pending-ipfs-pin.json"].includes(path.basename(value)),
-    `${label} is not a publication transaction target`);
+  assert.ok(LIVE_PUBLICATION_NAMES.includes(path.basename(value)), `${label} is not a known live publication target`);
   return assertWithinRealOutput(value, label);
 }
 
@@ -1132,87 +1389,436 @@ function fsyncTree(target) {
   fsyncDirectory(target);
 }
 
-function writeTransactionJournal(journal) {
-  const bytes = Buffer.from(`${JSON.stringify(journal, null, 2)}\n`);
-  assert.ok(bytes.length <= MAX_CONTROL_RESPONSE_BYTES, "publication transaction journal exceeds safety cap");
-  const temporary = path.join(outDir, `.ipfs-publication-transaction-${journal.attempt}.tmp`);
-  const descriptor = fs.openSync(temporary, "wx", 0o600);
-  try {
-    fs.writeFileSync(descriptor, bytes);
-    fs.fsyncSync(descriptor);
-  } finally {
-    fs.closeSync(descriptor);
+function assertJournalIdentity(identity, label, nullable = false) {
+  if (nullable && identity === null) return null;
+  assert.ok(identity && typeof identity === "object" && !Array.isArray(identity), `${label} must be an identity object`);
+  assert.ok(["file", "directory"].includes(identity.type), `${label}.type is invalid`);
+  assertExactKeys(identity, identity.type === "file" ? ["ctimeNs", "dev", "ino", "mtimeNs", "size", "type"] : ["dev", "ino", "type"], label);
+  assert.match(identity.dev, /^\d+$/, `${label}.dev is invalid`);
+  assert.match(identity.ino, /^\d+$/, `${label}.ino is invalid`);
+  if (identity.type === "file") {
+    for (const field of ["size", "mtimeNs", "ctimeNs"]) assert.match(identity[field], /^\d+$/, `${label}.${field} is invalid`);
   }
-  fs.renameSync(temporary, transactionPath);
-  fsyncDirectory(outDir);
+  return identity;
 }
 
-function readTransactionJournal() {
-  if (!fs.existsSync(transactionPath)) return null;
-  const journal = readBoundedJson(transactionPath, MAX_CONTROL_RESPONSE_BYTES, "publication transaction journal");
-  assertExactKeys(journal, ["format", "attempt", "backupProgress", "installProgress", "installingIndex", "replacements"], "publication transaction journal");
-  assert.equal(journal.format, "terrain-ipfs-publication-transaction-v1", "unsupported publication transaction journal format");
-  assert.equal(typeof journal.attempt, "string", "publication transaction attempt must be a string");
-  assert.ok(Array.isArray(journal.replacements) && journal.replacements.length > 0 && journal.replacements.length <= 8,
-    "publication transaction replacements are invalid");
-  for (const replacement of journal.replacements) {
-    assertExactKeys(replacement, ["backup", "hadLive", "live", "staged"], "publication transaction replacement");
-    assertTransactionPath(replacement.live, "publication transaction live path");
-    assertTransactionPath(replacement.staged, "publication transaction staged path", true);
-    assertTransactionPath(replacement.backup, "publication transaction backup path");
-    assert.equal(typeof replacement.hadLive, "boolean", "publication transaction hadLive must be boolean");
+function assertExactReplacement(replacement, paths, priorLiveIndex) {
+  assertExactKeys(replacement, ["backup", "backupIdentity", "hadLive", "installedIdentity", "live", "liveIdentity", "staged", "stagedIdentity"],
+    "publication transaction replacement");
+  assertTransactionPath(replacement.live, "publication transaction live path");
+  const liveName = path.basename(replacement.live);
+  const liveIndex = LIVE_PUBLICATION_NAMES.indexOf(liveName);
+  assert.ok(liveIndex >= 0 && liveIndex > priorLiveIndex, "publication transaction replacements are not ordered unique live targets");
+  assert.equal(replacement.backup, paths.backups.get(liveName), "publication transaction backup is not the attempt-owned path");
+  const expectedStaged = liveName === "ipfs" ? paths.staging : paths.staged.get(liveName);
+  if (replacement.staged === null) {
+    assert.ok(["serving-config-ipfs.json", "pending-ipfs-pin.json"].includes(liveName),
+      "only stale serving config or pending pin receipts may be removed without a staged replacement");
+    assert.equal(replacement.stagedIdentity, null, "a removed artifact cannot have a staged identity");
+  } else {
+    assert.equal(replacement.staged, expectedStaged, "publication transaction staged path is not the attempt-owned path");
+    assertJournalIdentity(replacement.stagedIdentity, "publication transaction staged identity");
   }
+  assertJournalIdentity(replacement.installedIdentity, "publication transaction installed identity", true);
+  if (replacement.staged === null) assert.equal(replacement.installedIdentity, null, "a removed artifact cannot have an installed identity");
+  assert.equal(typeof replacement.hadLive, "boolean", "publication transaction hadLive must be boolean");
+  assertJournalIdentity(replacement.liveIdentity, "publication transaction live identity", !replacement.hadLive);
+  assertJournalIdentity(replacement.backupIdentity, "publication transaction backup identity", true);
+  if (!replacement.hadLive) assert.equal(replacement.liveIdentity, null, "missing live target cannot have an identity");
+  if (!replacement.hadLive) assert.equal(replacement.backupIdentity, null, "missing live target cannot have a backup identity");
+  return liveIndex;
+}
+
+function assertAttemptJournal(journal) {
+  assertExactKeys(journal, ["attempt", "controlIdentity", "format", "owned", "phase", "root", "stagingIdentity", "transaction", "transients"],
+    "publication attempt journal");
+  assert.equal(journal.format, ATTEMPT_JOURNAL_FORMAT, "unsupported publication attempt journal format");
+  assert.match(journal.attempt, ATTEMPT_TOKEN_RE, "publication attempt token is invalid");
+  assertExactKeys(journal.root, ["dev", "ino"], "publication attempt root identity");
+  assert.match(journal.root.dev, /^\d+$/, "publication attempt root device is invalid");
+  assert.match(journal.root.ino, /^\d+$/, "publication attempt root inode is invalid");
+  assert.deepEqual(journal.owned, attemptOwnedRelativePaths(journal.attempt), "publication attempt owns unexpected paths");
+  assert.ok(["allocated", "staging", "materializing", "uploading", "pinning", "artifacts", "committing"].includes(journal.phase),
+    "publication attempt phase is invalid");
+  assertJournalIdentity(journal.stagingIdentity, "publication attempt staging identity", true);
+  if (journal.stagingIdentity !== null) assert.equal(journal.stagingIdentity.type, "directory", "publication staging identity is not a directory");
+  assertJournalIdentity(journal.controlIdentity, "publication attempt control identity", true);
+  if (journal.controlIdentity !== null) assert.equal(journal.controlIdentity.type, "directory", "publication control identity is not a directory");
+  assertExactKeys(journal.transients, ["pendingTemporary", "scratch", "staged"], "publication attempt transients");
+  assert.ok(Array.isArray(journal.transients.scratch) && journal.transients.scratch.length === 2, "publication scratch transient identities are invalid");
+  assert.ok(Array.isArray(journal.transients.staged) && journal.transients.staged.length === LIVE_PUBLICATION_NAMES.length,
+    "publication staged transient identities are invalid");
+  for (const identity of [...journal.transients.scratch, ...journal.transients.staged, journal.transients.pendingTemporary]) {
+    assertJournalIdentity(identity, "publication transient identity", true);
+    if (identity !== null) assert.equal(identity.type, "file", "publication transient must be a regular file");
+  }
+  if (journal.transaction === null) return journal;
+  const transaction = journal.transaction;
+  assertExactKeys(transaction, ["backingUpIndex", "backupProgress", "installProgress", "installingIndex", "replacements"], "publication transaction");
+  assert.ok(Array.isArray(transaction.replacements) && transaction.replacements.length > 0 && transaction.replacements.length <= LIVE_PUBLICATION_NAMES.length,
+    "publication transaction replacements are invalid");
+  assert.equal(path.basename(transaction.replacements[0].live), "ipfs", "publication transaction must replace IPFS first");
+  let previous = -1;
+  for (const replacement of transaction.replacements) previous = assertExactReplacement(replacement, attemptPathsFor(journal.attempt), previous);
   for (const field of ["backupProgress", "installProgress"]) {
-    assert.ok(Number.isSafeInteger(journal[field]) && journal[field] >= 0 && journal[field] <= journal.replacements.length,
+    assert.ok(Number.isSafeInteger(transaction[field]) && transaction[field] >= 0 && transaction[field] <= transaction.replacements.length,
       `publication transaction ${field} is invalid`);
   }
   assert.ok(
-    journal.installingIndex === null ||
-      (Number.isSafeInteger(journal.installingIndex) && journal.installingIndex >= journal.installProgress && journal.installingIndex < journal.replacements.length),
+    transaction.backingUpIndex === null ||
+      (Number.isSafeInteger(transaction.backingUpIndex) && transaction.backingUpIndex >= transaction.backupProgress && transaction.backingUpIndex < transaction.replacements.length),
+    "publication transaction backingUpIndex is invalid",
+  );
+  assert.ok(
+    transaction.installingIndex === null ||
+      (Number.isSafeInteger(transaction.installingIndex) && transaction.installingIndex >= transaction.installProgress && transaction.installingIndex < transaction.replacements.length),
     "publication transaction installingIndex is invalid",
   );
   return journal;
 }
 
-function removePublicationPath(target) {
-  if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
+function writeAttemptJournal(journal) {
+  assertAttemptJournal(journal);
+  assertOutputRootStable("publication attempt journal before write");
+  const paths = attemptPathsFor(journal.attempt);
+  assert.equal(lstatIfExists(paths.journalTemporary, "publication attempt journal temporary"), null,
+    "publication attempt journal temporary already exists");
+  const bytes = Buffer.from(`${JSON.stringify(journal, null, 2)}\n`);
+  assert.ok(bytes.length <= MAX_CONTROL_RESPONSE_BYTES, "publication attempt journal exceeds safety cap");
+  const identity = writeExclusiveRegularFile(paths.journalTemporary, bytes, "publication attempt journal temporary");
+  assertPathIdentity(paths.journalTemporary, identity, "publication attempt journal temporary");
+  assertOutputRootStable("publication attempt journal before replace");
+  if (journalLeaseIdentity === null) {
+    // Before link(2), no fixed lease exists.  Recovery may discard this exact
+    // bounded candidate (including a torn write) only when its PID is dead
+    // and there is no token-owned payload; see recoverInitialJournalCandidates().
+    maybeCrashTransaction("journal-temp-written-prelink");
+    if (args.testHoldAfterInitialJournalTempMs !== null) {
+      process.stderr.write("test initial journal temporary written\n");
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)), 0, 0, args.testHoldAfterInitialJournalTempMs);
+    }
+    // link(2) gives the fixed journal pathname an O_EXCL-like reservation
+    // without ever replacing another publisher's lease.  The fsynced private
+    // temporary remains bounded and is removed after the directory entry is
+    // durable.
+    try {
+      fs.linkSync(paths.journalTemporary, transactionPath);
+    } catch (error) {
+      if (error?.code === "EEXIST") {
+        removeExactOwnedPath(paths.journalTemporary, "losing publication attempt journal temporary", identity);
+        throw new Error("another publication attempt acquired the journal lease");
+      }
+      throw error;
+    }
+    fsyncDirectory(outDir);
+    // Test-only crash point for the single legitimate two-link state.  It is
+    // intentionally before unlink so recovery has to refresh ctime after
+    // dropping the temporary hard link.
+    maybeCrashTransaction("journal-linked");
+  } else {
+    // The fixed journal's exact attempt token authenticates this one bounded
+    // temporary.  Recovery verifies its complete journal before unlinking it.
+    maybeCrashTransaction("journal-temp-written-before-update-rename");
+    assertPathIdentity(transactionPath, journalLeaseIdentity, "publication attempt journal lease before update");
+    const existing = readBoundedJsonWithIdentity(transactionPath, MAX_CONTROL_RESPONSE_BYTES, "publication attempt journal lease");
+    assert.ok(sameImmutableIdentity(existing.identity, journalLeaseIdentity), "publication attempt journal lease changed while being read");
+    assert.equal(existing.value?.attempt, journal.attempt, "publication attempt journal lease belongs to another attempt");
+    fs.renameSync(paths.journalTemporary, transactionPath);
+  }
+  assertOutputRootStable("publication attempt journal after replace");
+  if (lstatIfExists(paths.journalTemporary, "publication attempt journal temporary") !== null) {
+    assertRenameCompatibleIdentity(paths.journalTemporary, identity, "publication attempt journal temporary");
+    assertOutputRootStable("publication attempt journal temporary before unlink");
+    fs.unlinkSync(paths.journalTemporary);
+    assertOutputRootStable("publication attempt journal temporary after unlink");
+  }
+  fsyncDirectory(outDir);
+  journalLeaseIdentity = pathIdentity(transactionPath, "publication attempt journal lease after write");
+}
+
+function attemptOwnerIsLive(attempt) {
+  const ownerPid = Number(attempt.slice(0, attempt.indexOf("-")));
+  if (!Number.isSafeInteger(ownerPid) || ownerPid <= 0) return true;
+  try {
+    process.kill(ownerPid, 0);
+    return true;
+  } catch (error) {
+    // EPERM still demonstrates that a process owns this PID.  Treat any
+    // unexpected probe failure as live too: concurrent recovery must fail
+    // closed rather than reclaim a possibly active writer.
+    return error?.code !== "ESRCH";
+  }
+}
+
+function readAttemptJournal(ownedAttempt = null) {
+  if (lstatIfExists(transactionPath, "publication attempt journal") === null) return null;
+  assertOutputRootStable("publication attempt journal read");
+  const read = readBoundedJsonWithIdentity(transactionPath, MAX_CONTROL_RESPONSE_BYTES, "publication attempt journal");
+  const journal = read.value;
+  assertAttemptJournal(journal);
+  assert.deepEqual(journal.root, outputRootIdentity, "publication attempt journal belongs to a replaced output root");
+  // Startup never grants special meaning to its own PID: a stale journal can
+  // carry a recycled PID equal to this publisher.  Only a caller with the
+  // exact in-memory attempt token may recover its own in-process rollback.
+  const isExplicitlyOwned = ownedAttempt !== null && ownedAttempt === journal.attempt;
+  assert.ok(isExplicitlyOwned || !attemptOwnerIsLive(journal.attempt),
+    `publication attempt ${journal.attempt} is still owned by a live process`);
+  journalLeaseIdentity = { type: "file", dev: read.identity.dev, ino: read.identity.ino, size: read.identity.size, mtimeNs: read.identity.mtimeNs, ctimeNs: read.identity.ctimeNs };
+  if (args.testHoldAfterRecoveryReadMs !== null) {
+    process.stderr.write("test recovery journal read\n");
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)), 0, 0, args.testHoldAfterRecoveryReadMs);
+  }
+  return journal;
+}
+
+function isAttemptOrphanName(name) {
+  return /^\.ipfs-staging-\d+-[0-9a-f-]+$/.test(name) ||
+    /^\.ipfs-attempt-\d+-[0-9a-f-]+$/.test(name) ||
+    /^\.ipfs-upload-(?:manifest|directories)-\d+-[0-9a-f-]+\.ndjson$/.test(name) ||
+    /^\.(?:ipfs|tileset-catalogue\.json|tileset-catalogue\.dttstream|ipfs-publication\.json|serving-config-ipfs\.json|pending-ipfs-pin\.json)-(?:staging|previous)-\d+-[0-9a-f-]+$/.test(name) ||
+    /^\.pending-ipfs-pin-\d+-[0-9a-f-]+\.tmp$/.test(name) ||
+    /^\.ipfs-publication-transaction-\d+-[0-9a-f-]+\.tmp$/.test(name);
+}
+
+function refuseAmbiguousAttemptOrphans() {
+  assertOutputRootStable("publication attempt orphan scan");
+  const orphans = fs.readdirSync(outDir).filter(isAttemptOrphanName);
+  assert.equal(orphans.length, 0, `refusing ambiguous publication attempt orphans without a journal: ${orphans.join(", ")}`);
+}
+
+function removeAttemptJournal() {
+  assert.ok(journalLeaseIdentity, "publication attempt journal lease was never acquired");
+  assertPathIdentity(transactionPath, journalLeaseIdentity, "publication attempt journal lease before removal");
+  assertOutputRootStable("publication attempt journal before removal");
+  fs.unlinkSync(transactionPath);
+  assertOutputRootStable("publication attempt journal after removal");
+  fsyncDirectory(outDir);
+  journalLeaseIdentity = null;
+}
+
+function removeJournalTemporary(journal, paths) {
+  if (lstatIfExists(paths.journalTemporary, "publication attempt journal temporary") === null) return;
+  const temporary = pathIdentity(paths.journalTemporary, "publication attempt journal temporary");
+  if (samePathObject(temporary, journalLeaseIdentity)) {
+    // The only legitimate same-inode case is a SIGKILL after link(temp,
+    // fixedJournal) and before unlink(temp).  Dropping that extra link changes
+    // ctime, so re-read and bind the fixed lease before any removal.
+    assertRenameCompatibleIdentity(paths.journalTemporary, journalLeaseIdentity, "linked publication journal temporary");
+    fs.unlinkSync(paths.journalTemporary);
+    fsyncDirectory(outDir);
+    const reread = readBoundedJsonWithIdentity(transactionPath, MAX_CONTROL_RESPONSE_BYTES, "publication attempt journal after linked-temp cleanup");
+    assert.equal(reread.value?.attempt, journal.attempt, "linked publication journal temporary replaced the lease");
+    journalLeaseIdentity = { type: "file", dev: reread.identity.dev, ino: reread.identity.ino, size: reread.identity.size, mtimeNs: reread.identity.mtimeNs, ctimeNs: reread.identity.ctimeNs };
+    return;
+  }
+  // The fixed, already-validated journal authenticates exactly this attempt
+  // temporary pathname.  It can have been SIGKILLed mid-write, so do not
+  // require parseable bytes; bind the stable regular-file identity and remove
+  // only this one bounded token path.
+  assert.equal(temporary.type, "file", "publication attempt journal update temporary is not a regular file");
+  assert.ok(BigInt(temporary.size) <= BigInt(MAX_CONTROL_RESPONSE_BYTES), "publication attempt journal update temporary exceeds safety cap");
+  removeExactOwnedPath(paths.journalTemporary, "publication attempt journal update temporary", {
+    type: "file",
+    dev: temporary.dev,
+    ino: temporary.ino,
+    size: temporary.size,
+    mtimeNs: temporary.mtimeNs,
+    ctimeNs: temporary.ctimeNs,
+  });
+}
+
+function recoverInitialJournalCandidates() {
+  assertOutputRootStable("initial publication journal candidate scan");
+  const candidates = fs.readdirSync(outDir).filter((name) => /^\.ipfs-publication-transaction-\d+-[0-9a-f-]+\.tmp$/.test(name));
+  assert.ok(candidates.length <= INITIAL_JOURNAL_CANDIDATE_LIMIT,
+    `refusing too many unlinked publication journal candidates: ${candidates.length}`);
+  for (const name of candidates) {
+    const match = /^\.ipfs-publication-transaction-(\d+-[0-9a-f-]+)\.tmp$/.exec(name);
+    assert.ok(match, "publication journal candidate name is invalid");
+    const attempt = match[1];
+    assert.match(attempt, ATTEMPT_TOKEN_RE, "publication journal candidate attempt token is invalid");
+    const paths = attemptPathsFor(attempt);
+    const candidatePath = path.join(outDir, name);
+    assert.equal(candidatePath, paths.journalTemporary, "publication journal candidate is not its exact attempt temporary");
+    const candidateIdentity = pathIdentity(candidatePath, "unlinked publication journal candidate");
+    assert.equal(candidateIdentity.type, "file", "unlinked publication journal candidate is not a regular file");
+    assert.ok(BigInt(candidateIdentity.size) <= BigInt(MAX_CONTROL_RESPONSE_BYTES), "unlinked publication journal candidate exceeds safety cap");
+    assert.ok(!attemptOwnerIsLive(attempt), `unlinked publication journal candidate ${attempt} is still owned by a live process`);
+    for (const owned of [paths.staging, paths.control, ...paths.backups.values()]) {
+      assert.equal(lstatIfExists(owned, "unlinked publication journal candidate owned path"), null,
+        `unlinked publication journal candidate has ambiguous payload: ${owned}`);
+    }
+    removeExactOwnedPath(candidatePath, "unlinked publication journal candidate", {
+      type: "file",
+      dev: candidateIdentity.dev,
+      ino: candidateIdentity.ino,
+      size: candidateIdentity.size,
+      mtimeNs: candidateIdentity.mtimeNs,
+      ctimeNs: candidateIdentity.ctimeNs,
+    });
+  }
+}
+
+function cleanupUncommittedAttempt(journal) {
+  const paths = attemptPathsFor(journal.attempt);
+  for (const backup of paths.backups.values()) {
+    assert.equal(lstatIfExists(backup, "uncommitted backup"), null, `refusing ambiguous backup outside a committed transaction: ${backup}`);
+  }
+  if (lstatIfExists(paths.control, "uncommitted attempt control directory") !== null) {
+    if (journal.controlIdentity === null) {
+      const stat = lstatIfExists(paths.control, "uncommitted attempt control directory");
+      assert.ok(stat.isDirectory() && !stat.isSymbolicLink(), "unrecorded attempt control path is ambiguous");
+    }
+    removeExactOwnedPath(paths.control, "uncommitted attempt control directory", journal.controlIdentity);
+  }
+  if (lstatIfExists(paths.staging, "uncommitted staging directory") !== null) {
+    if (journal.stagingIdentity === null) {
+      const stat = lstatIfExists(paths.staging, "uncommitted staging directory");
+      assert.ok(stat.isDirectory() && !stat.isSymbolicLink(), "unrecorded attempt staging path is ambiguous");
+    }
+    removeExactOwnedPath(paths.staging, "uncommitted staging directory", journal.stagingIdentity);
+  }
+  removeJournalTemporary(journal, paths);
+  removeAttemptJournal();
+}
+
+function assertPathMissing(target, label) {
+  assertOutputRootStable(`${label} before absence check`);
+  assert.equal(lstatIfExists(target, label), null, `${label} unexpectedly exists: ${target}`);
+}
+
+function fsyncRenameParents(source, destination, label) {
+  const sourceParent = path.dirname(source);
+  const destinationParent = path.dirname(destination);
+  fsyncDirectory(sourceParent);
+  if (destinationParent !== sourceParent) fsyncDirectory(destinationParent);
+  assertOutputRootStable(`${label} after parent fsync`);
+}
+
+function assertRenameCompatibleIdentity(target, expected, label) {
+  const actual = pathIdentity(target, label);
+  assert.ok(samePathObject(actual, expected), `${label} is not the expected renamed object`);
+  if (actual.type === "file") {
+    assert.equal(actual.size, expected.size, `${label} size changed across rename`);
+    assert.equal(actual.mtimeNs, expected.mtimeNs, `${label} mtime changed across rename`);
+  }
+  return actual;
+}
+
+function removeAmbiguousInstalledPath(target, stagedIdentity, label) {
+  const actual = assertRenameCompatibleIdentity(target, stagedIdentity, label);
+  // macOS updates ctime on rename.  The install boundary is persisted before
+  // rename, so a kill in that one interval cannot know the post-rename ctime;
+  // retain the object, size and mtime proof and remove only the exact named
+  // attempt-owned target under the stable output root.
+  removeExactOwnedPath(target, label);
 }
 
 function finishPublicationTransaction(journal) {
-  for (const replacement of journal.replacements) {
-    removePublicationPath(replacement.backup);
-    if (replacement.staged !== null) removePublicationPath(replacement.staged);
+  const { replacements } = journal.transaction;
+  for (const replacement of replacements) {
+    if (lstatIfExists(replacement.backup, "committed publication backup") !== null) {
+      if (replacement.backupIdentity) removeExactOwnedPath(replacement.backup, "committed publication backup", replacement.backupIdentity);
+      else removeAmbiguousInstalledPath(replacement.backup, replacement.liveIdentity, "committed publication backup");
+    }
+    if (replacement.staged !== null && lstatIfExists(replacement.staged, "committed staged publication artifact") !== null) {
+      removeExactOwnedPath(replacement.staged, "committed staged publication artifact", replacement.stagedIdentity);
+    }
   }
-  fsyncDirectory(outDir);
-  if (fs.existsSync(transactionPath)) fs.rmSync(transactionPath, { force: true });
-  fsyncDirectory(outDir);
+  const paths = attemptPathsFor(journal.attempt);
+  // Manifests and any not-yet-installed artifacts are children of the
+  // private, journal-bound control directory.  A single exact-tree cleanup
+  // closes their create-before-record crash windows without inspecting or
+  // deleting arbitrary dot siblings.
+  if (lstatIfExists(paths.control, "committed attempt control directory") !== null) {
+    removeExactOwnedPath(paths.control, "committed attempt control directory", journal.controlIdentity);
+  }
+  removeJournalTemporary(journal, paths);
+  removeAttemptJournal();
 }
 
-function recoverPublicationTransaction() {
-  const journal = readTransactionJournal();
-  if (!journal) return;
-  if (journal.installProgress === journal.replacements.length && journal.installingIndex === null) {
+function recoverCommittedPublication(journal) {
+  const { replacements, installProgress, installingIndex } = journal.transaction;
+  if (installProgress === replacements.length && installingIndex === null) {
     finishPublicationTransaction(journal);
     return;
   }
-  // `installingIndex` is written and fsynced *before* its staged->live rename.
-  // Therefore a crash after that rename but before installProgress is durable
-  // has an unambiguous recovery state: treat that one replacement as installed
-  // long enough to remove its new live object before restoring its backup.
-  const effectiveInstallProgress = Math.max(
-    journal.installProgress,
-    journal.installingIndex === null ? 0 : journal.installingIndex + 1,
-  );
-  for (let index = journal.replacements.length - 1; index >= 0; index -= 1) {
-    const replacement = journal.replacements[index];
-    if (index < effectiveInstallProgress && replacement.staged !== null) removePublicationPath(replacement.live);
-    if (replacement.hadLive && fs.existsSync(replacement.backup)) fs.renameSync(replacement.backup, replacement.live);
-    else if (!replacement.hadLive) removePublicationPath(replacement.live);
-    if (replacement.staged !== null) removePublicationPath(replacement.staged);
-    fsyncDirectory(outDir);
+  // `installingIndex` is durable before staged->live.  Whether the rename
+  // happened or not, only the journal-declared staged identity may be removed.
+  const effectiveInstallProgress = Math.max(installProgress, installingIndex === null ? 0 : installingIndex + 1);
+  for (let index = replacements.length - 1; index >= 0; index -= 1) {
+    const replacement = replacements[index];
+    if (index < effectiveInstallProgress && replacement.staged !== null && lstatIfExists(replacement.live, "partially installed publication artifact") !== null) {
+      if (replacement.installedIdentity) {
+        removeExactOwnedPath(replacement.live, "partially installed publication artifact", replacement.installedIdentity);
+      } else {
+        removeAmbiguousInstalledPath(replacement.live, replacement.stagedIdentity, "partially installed publication artifact");
+      }
+    }
+    if (replacement.hadLive && lstatIfExists(replacement.backup, "publication backup before recovery") !== null) {
+      if (replacement.backupIdentity) assertPathIdentity(replacement.backup, replacement.backupIdentity, "publication backup before recovery");
+      else assertRenameCompatibleIdentity(replacement.backup, replacement.liveIdentity, "publication backup before recovery");
+      assertPathMissing(replacement.live, "publication live target before recovery");
+      assertOutputRootStable("publication backup restore before rename");
+      fs.renameSync(replacement.backup, replacement.live);
+      assertRenameCompatibleIdentity(replacement.live, replacement.liveIdentity, "publication live target after recovery");
+      fsyncRenameParents(replacement.backup, replacement.live, "publication backup recovery rename");
+    } else if (!replacement.hadLive && lstatIfExists(replacement.live, "unexpected absent publication target") !== null) {
+      // Only a staged install can occupy a previously absent target.
+      assert.ok(replacement.staged !== null, "a removed-only absent publication target unexpectedly exists");
+      if (replacement.installedIdentity) removeExactOwnedPath(replacement.live, "unexpected absent publication target", replacement.installedIdentity);
+      else removeAmbiguousInstalledPath(replacement.live, replacement.stagedIdentity, "unexpected absent publication target");
+    }
+    if (replacement.staged !== null && lstatIfExists(replacement.staged, "recovery staged publication artifact") !== null) {
+      removeExactOwnedPath(replacement.staged, "recovery staged publication artifact", replacement.stagedIdentity);
+    }
   }
-  if (fs.existsSync(transactionPath)) fs.rmSync(transactionPath, { force: true });
-  fsyncDirectory(outDir);
+  const paths = attemptPathsFor(journal.attempt);
+  if (lstatIfExists(paths.control, "recovered attempt control directory") !== null) {
+    removeExactOwnedPath(paths.control, "recovered attempt control directory", journal.controlIdentity);
+  }
+  removeJournalTemporary(journal, paths);
+  removeAttemptJournal();
+}
+
+function recoverPublicationTransaction(ownedAttempt = null) {
+  const journal = readAttemptJournal(ownedAttempt);
+  if (!journal) {
+    recoverInitialJournalCandidates();
+    refuseAmbiguousAttemptOrphans();
+    return;
+  }
+  if (journal.transaction === null) cleanupUncommittedAttempt(journal);
+  else recoverCommittedPublication(journal);
+}
+
+const attemptPaths = attemptPathsFor(attemptToken);
+let attemptJournal = {
+  format: ATTEMPT_JOURNAL_FORMAT,
+  attempt: attemptToken,
+  root: outputRootIdentity,
+  phase: "allocated",
+  owned: attemptPaths.owned,
+  stagingIdentity: null,
+  controlIdentity: null,
+  transients: emptyAttemptTransients(),
+  transaction: null,
+};
+// This durable allocation is intentionally before *any* attempt-owned
+// directory, manifest or artifact exists.  A restart can therefore reclaim
+// only this exact attempt's names, never a broad dot-file pattern.
+writeAttemptJournal(attemptJournal);
+
+if (args.testHoldAfterJournalMs !== null) await new Promise((resolve) => setTimeout(resolve, args.testHoldAfterJournalMs));
+
+if (args.testReplaceOutputRootWith !== null) {
+  const held = `${outDir}.attempt-root-held`;
+  assertOutputRootStable("test output-root replacement before move");
+  assert.equal(lstatIfExists(held, "test output-root hold path"), null, "test output-root hold path already exists");
+  const replacement = fs.lstatSync(args.testReplaceOutputRootWith, { bigint: true });
+  assert.ok(replacement.isDirectory() && !replacement.isSymbolicLink(), "test output-root replacement must be a real directory");
+  fs.renameSync(outDir, held);
+  fs.symlinkSync(args.testReplaceOutputRootWith, outDir);
 }
 
 function maybeCrashTransaction(phase) {
@@ -1221,34 +1827,116 @@ function maybeCrashTransaction(phase) {
   process.exit(86);
 }
 
+maybeCrashTransaction("attempt-journal");
+assertOutputRootStable("attempt staging before create");
+fs.mkdirSync(stagingDir, { recursive: false, mode: 0o700 });
+maybeCrashTransaction("staging-directory-created-unrecorded");
+const createdStagingIdentity = pathIdentity(stagingDir, "attempt staging after create");
+assert.equal(createdStagingIdentity.type, "directory", "attempt staging is not a directory");
+attemptJournal = { ...attemptJournal, phase: "staging", stagingIdentity: createdStagingIdentity };
+writeAttemptJournal(attemptJournal);
+maybeCrashTransaction("staging-created");
+assertOutputRootStable("attempt control before create");
+fs.mkdirSync(attemptPaths.control, { recursive: false, mode: 0o700 });
+maybeCrashTransaction("control-directory-created-unrecorded");
+const createdControlIdentity = pathIdentity(attemptPaths.control, "attempt control after create");
+assert.equal(createdControlIdentity.type, "directory", "attempt control is not a directory");
+attemptJournal = { ...attemptJournal, controlIdentity: createdControlIdentity };
+writeAttemptJournal(attemptJournal);
+attemptJournal = { ...attemptJournal, phase: "materializing" };
+writeAttemptJournal(attemptJournal);
+
+function recordAttemptTransient(kind, index, identity) {
+  assertJournalIdentity(identity, "publication transient identity");
+  assert.equal(identity.type, "file", "publication transient is not a file");
+  const transients = {
+    scratch: [...attemptJournal.transients.scratch],
+    staged: [...attemptJournal.transients.staged],
+    pendingTemporary: attemptJournal.transients.pendingTemporary,
+  };
+  if (kind === "scratch") {
+    assert.ok(Number.isSafeInteger(index) && index >= 0 && index < transients.scratch.length, "publication scratch transient index is invalid");
+    transients.scratch[index] = identity;
+  } else if (kind === "staged") {
+    assert.ok(Number.isSafeInteger(index) && index >= 0 && index < transients.staged.length, "publication staged transient index is invalid");
+    transients.staged[index] = identity;
+  } else {
+    assert.equal(kind, "pending", "publication transient kind is invalid");
+    transients.pendingTemporary = identity;
+  }
+  attemptJournal = { ...attemptJournal, transients };
+  writeAttemptJournal(attemptJournal);
+}
+
+function ensureStagingParent(full) {
+  assertAttemptDirectory("staging parent before create");
+  assert.ok(full.startsWith(`${stagingDir}${path.sep}`), `staged path escapes attempt directory: ${full}`);
+  const relativeParent = path.relative(stagingDir, path.dirname(full));
+  assert.ok(relativeParent === "" || (!path.isAbsolute(relativeParent) && !relativeParent.split(path.sep).includes("..")),
+    `staged parent escapes attempt directory: ${full}`);
+  let current = stagingDir;
+  for (const part of relativeParent ? relativeParent.split(path.sep) : []) {
+    current = path.join(current, part);
+    if (lstatIfExists(current, "staging parent") === null) {
+      assertOutputRootStable("staging parent before mkdir");
+      fs.mkdirSync(current, { recursive: false, mode: 0o700 });
+      fsyncDirectory(path.dirname(current));
+    }
+    const identity = pathIdentity(current, "staging parent");
+    assert.equal(identity.type, "directory", `staging parent is not a directory: ${current}`);
+  }
+  assertAttemptDirectory("staging parent after create");
+}
+
 // Each transition is persisted before the next rename. A later invocation
 // rolls an interrupted partial install back, or rolls a fully installed one
 // forward by deleting only its journal-declared backups.
 function commitStagedPublication(artifacts) {
-  const replacements = [{ live: ipfsDir, staged: stagingDir }, ...artifacts].map((replacement) => ({
-    live: assertTransactionPath(replacement.live, "publication live path"),
-    staged: replacement.staged === null ? null : assertTransactionPath(replacement.staged, "publication staged path"),
-    backup: path.join(outDir, `.${path.basename(replacement.live)}-previous-${attemptToken}`),
-    hadLive: fs.existsSync(replacement.live),
-  }));
+  assertAttemptDirectory("publication transaction staging");
   fsyncTree(stagingDir);
-  for (const replacement of replacements) if (replacement.staged !== null && replacement.staged !== stagingDir) fsyncTree(replacement.staged);
+  for (const artifact of artifacts) if (artifact.staged !== null) fsyncTree(artifact.staged);
   fsyncDirectory(outDir);
-  const journal = {
-    format: "terrain-ipfs-publication-transaction-v1",
-    attempt: attemptToken,
-    backupProgress: 0,
-    installProgress: 0,
-    installingIndex: null,
-    replacements,
+  const replacements = [{ live: ipfsDir, staged: stagingDir }, ...artifacts].map((replacement) => {
+    const live = assertTransactionPath(replacement.live, "publication live path");
+    const liveName = path.basename(live);
+    const staged = replacement.staged === null ? null : (liveName === "ipfs" ? stagingDir : attemptPaths.staged.get(liveName));
+    assert.equal(replacement.staged, staged, "publication staged artifact is not the exact attempt-owned path");
+    const existing = lstatIfExists(live, `existing ${liveName}`) === null ? null : pathIdentity(live, `existing ${liveName}`);
+    const stagedIdentity = staged === null ? null : pathIdentity(staged, `staged ${liveName}`);
+    return {
+      live,
+      staged,
+      backup: attemptPaths.backups.get(liveName),
+      hadLive: existing !== null,
+      liveIdentity: existing,
+      backupIdentity: null,
+      stagedIdentity,
+      installedIdentity: null,
+    };
+  });
+  attemptJournal = {
+    ...attemptJournal,
+    phase: "committing",
+    transaction: { backingUpIndex: null, backupProgress: 0, installProgress: 0, installingIndex: null, replacements },
   };
-  writeTransactionJournal(journal);
+  writeAttemptJournal(attemptJournal);
   try {
     for (let index = 0; index < replacements.length; index += 1) {
       const replacement = replacements[index];
-      if (replacement.hadLive) fs.renameSync(replacement.live, replacement.backup);
-      journal.backupProgress = index + 1;
-      writeTransactionJournal(journal);
+      attemptJournal.transaction.backingUpIndex = index;
+      writeAttemptJournal(attemptJournal);
+      if (replacement.hadLive) {
+        assertPathIdentity(replacement.live, replacement.liveIdentity, "publication live target before backup");
+        assertPathMissing(replacement.backup, "publication backup target");
+        assertOutputRootStable("publication backup before rename");
+        fs.renameSync(replacement.live, replacement.backup);
+        replacement.backupIdentity = assertRenameCompatibleIdentity(replacement.backup, replacement.liveIdentity, "publication backup after rename");
+        fsyncRenameParents(replacement.live, replacement.backup, "publication backup rename");
+      }
+      maybeCrashTransaction(`backup-renamed-${index + 1}`);
+      attemptJournal.transaction.backupProgress = index + 1;
+      attemptJournal.transaction.backingUpIndex = null;
+      writeAttemptJournal(attemptJournal);
       maybeCrashTransaction(`backup-${index + 1}`);
     }
     for (let index = 0; index < replacements.length; index += 1) {
@@ -1256,35 +1944,50 @@ function commitStagedPublication(artifacts) {
       // Persist the exact ambiguous boundary first.  Recovery can distinguish
       // a rename that happened before installProgress was advanced from one
       // that did not, and can restore a nonempty prior directory idempotently.
-      journal.installingIndex = index;
-      writeTransactionJournal(journal);
+      attemptJournal.transaction.installingIndex = index;
+      writeAttemptJournal(attemptJournal);
       if (replacement.staged !== null) {
+        assertPathIdentity(replacement.staged, replacement.stagedIdentity, "publication staged target before install");
+        assertPathMissing(replacement.live, "publication live target before install");
+        assertOutputRootStable("publication install before rename");
         fs.renameSync(replacement.staged, replacement.live);
+        const installed = pathIdentity(replacement.live, "publication live target after install");
+        assert.ok(samePathObject(installed, replacement.stagedIdentity), "publication live target object changed after install");
+        if (installed.type === "file") {
+          assert.equal(installed.size, replacement.stagedIdentity.size, "publication live target size changed after install");
+          assert.equal(installed.mtimeNs, replacement.stagedIdentity.mtimeNs, "publication live target mtime changed after install");
+        }
+        replacement.installedIdentity = installed;
         stagedArtifactPaths.delete(replacement.staged);
+        fsyncRenameParents(replacement.staged, replacement.live, "publication install rename");
       }
       maybeCrashTransaction(`install-renamed-${index + 1}`);
-      journal.installProgress = index + 1;
-      journal.installingIndex = null;
-      writeTransactionJournal(journal);
+      attemptJournal.transaction.installProgress = index + 1;
+      attemptJournal.transaction.installingIndex = null;
+      writeAttemptJournal(attemptJournal);
       maybeCrashTransaction(`install-${index + 1}`);
     }
   } catch (error) {
-    recoverPublicationTransaction();
+    recoverPublicationTransaction(attemptToken);
     throw error;
   }
-  finishPublicationTransaction(journal);
+  finishPublicationTransaction(attemptJournal);
 }
 
 let fileCount = 0;
 let totalBytes = 0;
 const write = (rel, bytes) => {
   const full = path.join(stagingDir, rel);
-  fs.mkdirSync(path.dirname(full), { recursive: true });
+  ensureStagingParent(full);
   assert.ok(BigInt(totalBytes) + BigInt(bytes.length) <= BigInt(publicationPolicy.maxStaticDirectoryBytes),
     `static directory would exceed approved ${publicationPolicy.maxStaticDirectoryBytes} bytes`);
-  fs.writeFileSync(full, bytes);
+  // The attempt journal makes an interrupted materialization reclaimable.
+  // Durability happens once in fsyncTree immediately before the atomic swap;
+  // fsyncing every one of millions of tile leaves here would be prohibitive.
+  writeExclusiveRegularFile(full, bytes, `staged static ${rel}`, { durable: false });
   fileCount += 1;
   totalBytes += bytes.length;
+  maybeCrashTransaction(`materialize-${fileCount}`);
 };
 
 function boundedDistribution(limit, bucketBytes = 1024) {
@@ -1491,11 +2194,16 @@ function multipartHeader(boundary, name) {
 }
 
 function multipartPlan(directory, boundary) {
-  const manifestPath = path.join(outDir, `.ipfs-upload-manifest-${attemptToken}.ndjson`);
-  const directoryManifestPath = path.join(outDir, `.ipfs-upload-directories-${attemptToken}.ndjson`);
-  const descriptor = fs.openSync(manifestPath, "wx", 0o600);
-  attemptScratchPaths.add(manifestPath);
-  attemptScratchPaths.add(directoryManifestPath);
+  assertAttemptDirectory("multipart plan staging");
+  if (attemptJournal.phase !== "uploading") {
+    attemptJournal = { ...attemptJournal, phase: "uploading" };
+    writeAttemptJournal(attemptJournal);
+  }
+  const manifestPath = attemptPaths.scratch[0];
+  const directoryManifestPath = attemptPaths.scratch[1];
+  const manifestOpened = createExclusiveRegularFile(manifestPath, "upload manifest");
+  const descriptor = manifestOpened.descriptor;
+  attemptScratchPaths.set(manifestPath, manifestOpened.identity);
   let expectedFiles = 0;
   let contentLength = 0n;
   try {
@@ -1510,8 +2218,18 @@ function multipartPlan(directory, boundary) {
       expectedFiles += 1;
     }
   } finally {
+    fs.fsyncSync(descriptor);
+    assert.ok(samePathObject(pathIdentityFromStat(fs.fstatSync(descriptor, { bigint: true }), manifestPath, "upload manifest"), manifestOpened.identity),
+      "upload manifest changed while being written");
     fs.closeSync(descriptor);
   }
+  fsyncDirectory(path.dirname(manifestPath));
+  const manifestIdentity = pathIdentity(manifestPath, "upload manifest");
+  attemptScratchPaths.set(manifestPath, manifestIdentity);
+  // The private control directory is already journal-owned.  Exercise the
+  // create/complete-before-individual-record boundary explicitly.
+  maybeCrashTransaction("upload-manifest-written");
+  recordAttemptTransient("scratch", 0, manifestIdentity);
   const closing = Buffer.from(`--${boundary}--\r\n`);
   contentLength += BigInt(closing.length);
   assert.equal(expectedFiles, fileCount, "materialized file count changed before multipart planning");
@@ -1519,7 +2237,9 @@ function multipartPlan(directory, boundary) {
   // Kubo emits UnixFS intermediate-directory receipts as it closes branches.
   // A second deterministic walk writes their post-order sequence to disk;
   // only the active directory ancestry is retained (bounded by path depth).
-  const directoryDescriptor = fs.openSync(directoryManifestPath, "wx", 0o600);
+  const directoryOpened = createExclusiveRegularFile(directoryManifestPath, "directory receipt manifest");
+  const directoryDescriptor = directoryOpened.descriptor;
+  attemptScratchPaths.set(directoryManifestPath, directoryOpened.identity);
   let expectedDirectories = 0;
   let openDirectories = [];
   try {
@@ -1544,8 +2264,16 @@ function multipartPlan(directory, boundary) {
       expectedDirectories += 1;
     }
   } finally {
+    fs.fsyncSync(directoryDescriptor);
+    assert.ok(samePathObject(pathIdentityFromStat(fs.fstatSync(directoryDescriptor, { bigint: true }), directoryManifestPath, "directory receipt manifest"), directoryOpened.identity),
+      "directory receipt manifest changed while being written");
     fs.closeSync(directoryDescriptor);
   }
+  fsyncDirectory(path.dirname(directoryManifestPath));
+  const directoryManifestIdentity = pathIdentity(directoryManifestPath, "directory receipt manifest");
+  attemptScratchPaths.set(directoryManifestPath, directoryManifestIdentity);
+  maybeCrashTransaction("directory-manifest-written");
+  recordAttemptTransient("scratch", 1, directoryManifestIdentity);
   assert.ok(Number.isSafeInteger(expectedDirectories) && expectedDirectories <= MAX_MATERIALIZED_FILES * 3,
     "materialization directory receipt count exceeds its bounded tree shape");
   return { manifestPath, directoryManifestPath, expectedFiles, expectedDirectories, boundary, closing, contentLength };
@@ -1618,6 +2346,28 @@ async function* multipartParts(plan) {
   assert.ok(expected.done, "staged file was removed after multipart planning");
   assert.equal(files, plan.expectedFiles, "multipart upload file count changed after planning");
   yield plan.closing;
+}
+
+// Kubo has accepted the byte stream by this point, but publication has not
+// atomically exposed the directory.  Reuse the disk manifest rather than an
+// in-memory file list to prove no one changed a staged file between upload and
+// commit.  This remains one pathname/identity at a time.
+async function assertMultipartPlanStillMatches(plan) {
+  assertAttemptDirectory("multipart final identity check");
+  const manifest = uploadManifestEntries(plan);
+  let expected = await manifest.next();
+  let files = 0;
+  for (const current of sortedRegularFiles(stagingDir)) {
+    assert.ok(!expected.done, `staged file ${current.rel} was added after Kubo upload`);
+    const planned = expected.value;
+    assert.equal(current.rel, planned.rel, "staged file order changed after Kubo upload");
+    assert.ok(sameIdentity(current.identity, planned), `staged file ${current.rel} changed after Kubo upload`);
+    files += 1;
+    expected = await manifest.next();
+  }
+  assert.ok(expected.done, "staged file was removed after Kubo upload");
+  assert.equal(files, plan.expectedFiles, "staged file count changed after Kubo upload");
+  assertAttemptDirectory("multipart final identity check complete");
 }
 
 async function withRequest(url, options, label, consume, timeoutMs = args.timeoutMs) {
@@ -1767,8 +2517,7 @@ async function addAndPin(apiURL, onRoot) {
   const url =
     `${apiURL.replace(/\/$/, "")}/api/v0/add` +
     "?pin=false&cid-version=1&raw-leaves=true&wrap-with-directory=false";
-  try {
-    return await withRequest(
+  const receipt = await withRequest(
       url,
       {
         method: "POST",
@@ -1785,9 +2534,7 @@ async function addAndPin(apiURL, onRoot) {
       (response, controller) => readAddReceipt(response, plan, onRoot, controller),
       bulkUploadTimeoutFor(plan),
     );
-  } finally {
-    discardAttemptScratch();
-  }
+  return { ...receipt, multipartPlan: plan };
 }
 
 async function pinCreatedRoot(apiURL, cid, timeoutMs) {
@@ -1901,7 +2648,7 @@ function assertPendingPinReceipt(receipt) {
 }
 
 function readPendingPinReceipt() {
-  if (!fs.existsSync(pendingPinPath)) return null;
+  if (lstatIfExists(pendingPinPath, "pending IPFS pin receipt") === null) return null;
   let receipt;
   try {
     receipt = JSON.parse(readBoundedRegularFile(pendingPinPath, MAX_CONTROL_RESPONSE_BYTES, "pending IPFS pin receipt").toString("utf8"));
@@ -1912,7 +2659,10 @@ function readPendingPinReceipt() {
 }
 
 function fsyncDirectory(directory) {
-  const descriptor = fs.openSync(directory, "r");
+  assertOutputRootStable(`fsync directory ${directory}`);
+  const stat = fs.lstatSync(directory, { bigint: true });
+  assert.ok(stat.isDirectory() && !stat.isSymbolicLink(), `refusing to fsync non-directory ${directory}`);
+  const descriptor = fs.openSync(directory, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
   try {
     fs.fsyncSync(descriptor);
   } finally {
@@ -1941,19 +2691,27 @@ function writePendingPinReceipt(cid, state, proof = null) {
   assertPendingPinReceipt(receipt);
   const bytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);
   assert.ok(bytes.length <= MAX_CONTROL_RESPONSE_BYTES, `pending IPFS pin receipt exceeds ${MAX_CONTROL_RESPONSE_BYTES} bytes`);
-  const temporary = path.join(outDir, `.pending-ipfs-pin-${attemptToken}.tmp`);
-  const descriptor = fs.openSync(temporary, "wx", 0o600);
-  try {
-    fs.writeFileSync(descriptor, bytes);
-    fs.fsyncSync(descriptor);
-  } finally {
-    fs.closeSync(descriptor);
+  if (attemptJournal.phase !== "pinning") {
+    attemptJournal = { ...attemptJournal, phase: "pinning" };
+    writeAttemptJournal(attemptJournal);
   }
+  const temporary = attemptPaths.pendingTemporary;
+  const prior = lstatIfExists(pendingPinPath, "existing pending IPFS pin receipt") === null ? null : pathIdentity(pendingPinPath, "existing pending IPFS pin receipt");
+  const temporaryIdentity = writeExclusiveRegularFile(temporary, bytes, "pending IPFS pin receipt temporary");
+  recordAttemptTransient("pending", null, temporaryIdentity);
   try {
+    if (prior) assertPathIdentity(pendingPinPath, prior, "existing pending IPFS pin receipt before replace");
+    assertPathIdentity(temporary, temporaryIdentity, "pending IPFS pin receipt temporary before replace");
+    assertOutputRootStable("pending IPFS pin receipt before replace");
     fs.renameSync(temporary, pendingPinPath);
-    fsyncDirectory(outDir);
+    const installed = pathIdentity(pendingPinPath, "pending IPFS pin receipt after replace");
+    assert.ok(samePathObject(installed, temporaryIdentity), "pending IPFS pin receipt object changed after replace");
+    assert.equal(installed.size, temporaryIdentity.size, "pending IPFS pin receipt size changed after replace");
+    assert.equal(installed.mtimeNs, temporaryIdentity.mtimeNs, "pending IPFS pin receipt mtime changed after replace");
+    fsyncRenameParents(temporary, pendingPinPath, "pending IPFS pin receipt rename");
+    maybeCrashTransaction(`pending-${state}`);
   } finally {
-    if (fs.existsSync(temporary)) fs.rmSync(temporary, { force: true });
+    if (lstatIfExists(temporary, "pending IPFS pin receipt temporary") !== null) removeExactOwnedPath(temporary, "pending IPFS pin receipt temporary", temporaryIdentity);
   }
   return receipt;
 }
@@ -1967,6 +2725,11 @@ async function abortPublication(error) {
   discardStagingDirectory();
   discardStagedArtifacts();
   discardAttemptScratch();
+  if (lstatIfExists(transactionPath, "publication attempt journal") !== null) {
+    const journal = readAttemptJournal(attemptToken);
+    if (journal?.transaction) recoverPublicationTransaction(attemptToken);
+    else cleanupUncommittedAttempt(journal);
+  }
   throw error;
 }
 
@@ -2110,6 +2873,8 @@ try {
 } catch (error) {
   await abortPublication(error);
 }
+attemptJournal = { ...attemptJournal, phase: "artifacts" };
+writeAttemptJournal(attemptJournal);
 const stagedPublicationArtifacts = [];
 
 // The same record as SDS wire bytes, size-prefixed exactly like tiles.dttstream,
@@ -2333,15 +3098,16 @@ try {
     // A transaction that exposed the directory, catalogue, report and serving
     // pointer has consumed the recovery receipt.  Until this exact point it
     // stays live so a crash or a gateway failure leaves retry evidence.
-    if (fs.existsSync(pendingPinPath)) {
+    if (lstatIfExists(pendingPinPath, "pending IPFS pin receipt") !== null) {
       stagedPublicationArtifacts.push({ live: pendingPinPath, staged: null });
     }
-  } else if (fs.existsSync(path.join(outDir, "serving-config-ipfs.json"))) {
+  } else if (lstatIfExists(path.join(outDir, "serving-config-ipfs.json"), "serving IPFS config") !== null) {
     // A rehearsal has no verified CID.  Remove a prior serving pointer in the
     // same rollback-capable transaction rather than leaving it to name an old
     // directory beside a newly materialized rehearsal report.
     stagedPublicationArtifacts.push({ live: path.join(outDir, "serving-config-ipfs.json"), staged: null });
   }
+  if (publication?.multipartPlan) await assertMultipartPlanStillMatches(publication.multipartPlan);
   commitStagedPublication(stagedPublicationArtifacts);
 } catch (error) {
   await abortPublication(error);

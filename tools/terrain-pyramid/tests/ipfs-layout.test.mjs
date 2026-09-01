@@ -853,7 +853,7 @@ test("publisher materialization completes in its lowest measured isolated 128 Mi
 
 test("journal recovery restores every persisted backup/install boundary, including rename-before-progress", async () => {
   const phases = [];
-  for (let index = 1; index <= 4; index += 1) phases.push(`backup-${index}`, `install-renamed-${index}`, `install-${index}`);
+  for (let index = 1; index <= 4; index += 1) phases.push(`backup-renamed-${index}`, `backup-${index}`, `install-renamed-${index}`, `install-${index}`);
   for (const phase of phases) {
     const outDir = copyFixtureOutput();
     const priorLayer = fs.readFileSync(path.join(outDir, "ipfs", "layer.json"));
@@ -866,6 +866,186 @@ test("journal recovery restores every persisted backup/install boundary, includi
     assert.equal(fs.existsSync(path.join(outDir, ".ipfs-publication-transaction.json")), false, `${phase} journal was not consumed`);
     assert.equal(fs.readdirSync(outDir).some((name) => name.includes("-previous-")), false, `${phase} left a prior artifact backup`);
   }
+});
+
+function attemptResidue(outDir) {
+  return fs.readdirSync(outDir).filter((name) =>
+    name === ".ipfs-publication-transaction.json" ||
+    /^\.ipfs-(?:staging|attempt|upload-manifest|upload-directories|publication-transaction)-/.test(name) ||
+    /^\.(?:tileset-catalogue\.(?:json|dttstream)|ipfs-publication\.json|serving-config-ipfs\.json|pending-ipfs-pin\.json)-(?:staging|previous)-/.test(name),
+  );
+}
+
+test("attempt journal reclaims abrupt precommit crashes without accumulating staging", async () => {
+  for (const phase of [
+    "journal-temp-written-prelink",
+    "journal-temp-midwrite-prelink",
+    "journal-linked",
+    "attempt-journal",
+    "staging-directory-created-unrecorded",
+    "staging-created",
+    "journal-temp-written-before-update-rename",
+    "journal-temp-midwrite-update",
+    "control-directory-created-unrecorded",
+    "materialize-1",
+    "artifact-written-1",
+    "artifact-1",
+  ]) {
+    const outDir = copyFixtureOutput();
+    const interrupted = await runPublisher(outDir, ["--no-add", "--test-crash-at", phase]);
+    assert.equal(interrupted.code, 86, `${phase} must be an abrupt child crash`);
+    const recovered = await runPublisher(outDir, ["--no-add"]);
+    assert.equal(recovered.code, 0, `${phase} recovery failed: ${recovered.stderr}`);
+    if (phase.includes("midwrite")) {
+      const repeated = await runPublisher(outDir, ["--no-add"]);
+      assert.equal(repeated.code, 0, `${phase} repeat recovery failed: ${repeated.stderr}`);
+    }
+    assert.deepEqual(attemptResidue(outDir), [], `${phase} leaked an attempt-owned path after recovery`);
+  }
+});
+
+test("attempt journal refuses active/PID-reused leases and preserves forged/unrelated paths", async () => {
+  const outDir = copyFixtureOutput();
+  const first = spawn(process.execPath, [PUBLISHER, "--out", outDir, "--no-add", "--test-hold-after-journal-ms", "700"], {
+    cwd: REPO,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  for (let tries = 0; tries < 30 && !fs.existsSync(path.join(outDir, ".ipfs-publication-transaction.json")); tries += 1) await delay(25);
+  assert.ok(fs.existsSync(path.join(outDir, ".ipfs-publication-transaction.json")), "first publisher did not establish its journal lease");
+  const second = await runPublisher(outDir, ["--no-add"]);
+  assert.notEqual(second.code, 0);
+  assert.match(second.stderr, /still owned by a live process/);
+  const [firstCode] = await once(first, "exit");
+  assert.equal(firstCode, 0);
+
+  const preLink = spawn(process.execPath, [PUBLISHER, "--out", outDir, "--no-add", "--test-hold-after-initial-journal-temp-ms", "700"], {
+    cwd: REPO,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const preLinkExit = once(preLink, "exit");
+  const preLinkReady = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("initial journal temporary writer did not reach its barrier")), 5_000);
+    preLink.stderr.on("data", (chunk) => {
+      if (Buffer.from(chunk).toString("utf8").includes("test initial journal temporary written")) {
+        clearTimeout(timeout);
+        resolve();
+      }
+    });
+  });
+  await preLinkReady;
+  const competingInitial = await runPublisher(outDir, ["--no-add"]);
+  assert.notEqual(competingInitial.code, 0);
+  assert.match(competingInitial.stderr, /still owned by a live process/);
+  const [preLinkCode] = await preLinkExit;
+  assert.equal(preLinkCode, 0);
+
+  const pidReuse = copyFixtureOutput();
+  const stat = fs.lstatSync(pidReuse, { bigint: true });
+  const attempt = `${process.pid}-00000000-0000-4000-8000-000000000000`;
+  const names = ["ipfs", "tileset-catalogue.json", "tileset-catalogue.dttstream", "ipfs-publication.json", "serving-config-ipfs.json", "pending-ipfs-pin.json"];
+  const forged = {
+    format: "terrain-ipfs-publication-attempt-v2",
+    attempt,
+    root: { dev: stat.dev.toString(), ino: stat.ino.toString() },
+    phase: "allocated",
+    owned: {
+      staging: `.ipfs-staging-${attempt}`,
+      control: `.ipfs-attempt-${attempt}`,
+      scratch: [`.ipfs-upload-manifest-${attempt}.ndjson`, `.ipfs-upload-directories-${attempt}.ndjson`],
+      staged: names.map((name) => `.${name}-staging-${attempt}`),
+      backups: names.map((name) => `.${name}-previous-${attempt}`),
+      pendingTemporary: `.pending-ipfs-pin-${attempt}.tmp`,
+      journalTemporary: `.ipfs-publication-transaction-${attempt}.tmp`,
+    },
+    stagingIdentity: null,
+    controlIdentity: null,
+    transients: { scratch: [null, null], staged: names.map(() => null), pendingTemporary: null },
+    transaction: null,
+  };
+  const journal = path.join(pidReuse, ".ipfs-publication-transaction.json");
+  fs.writeFileSync(journal, JSON.stringify(forged));
+  const reused = await runPublisher(pidReuse, ["--no-add"]);
+  assert.notEqual(reused.code, 0);
+  assert.match(reused.stderr, /still owned by a live process/);
+  fs.unlinkSync(journal);
+
+  const selfOwned = copyFixtureOutput();
+  const selfResult = await runPublisher(selfOwned, ["--no-add", "--test-forge-self-owned-journal"]);
+  assert.notEqual(selfResult.code, 0);
+  assert.match(selfResult.stderr, /still owned by a live process/);
+  fs.unlinkSync(path.join(selfOwned, ".ipfs-publication-transaction.json"));
+
+  const unrelated = path.join(pidReuse, ".unrelated-dot-sentinel");
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "terrain-ipfs-outside-"));
+  const sentinel = path.join(outside, "sentinel");
+  fs.writeFileSync(unrelated, "keep");
+  fs.writeFileSync(sentinel, "keep");
+  fs.writeFileSync(journal, JSON.stringify({ forged: true }));
+  const bad = await runPublisher(pidReuse, ["--no-add"]);
+  assert.notEqual(bad.code, 0);
+  assert.equal(fs.readFileSync(unrelated, "utf8"), "keep");
+  assert.equal(fs.readFileSync(sentinel, "utf8"), "keep");
+  fs.unlinkSync(journal);
+  const candidateName = ".ipfs-publication-transaction-999999-00000000-0000-4000-8000-000000000000.tmp";
+  fs.symlinkSync(sentinel, path.join(pidReuse, candidateName));
+  const candidateSymlink = await runPublisher(pidReuse, ["--no-add"]);
+  assert.notEqual(candidateSymlink.code, 0);
+  assert.equal(fs.readFileSync(sentinel, "utf8"), "keep");
+  fs.unlinkSync(path.join(pidReuse, candidateName));
+  fs.rmSync(outside, { recursive: true, force: true });
+});
+
+test("a stale-recovery loser cannot remove a winner's newly-acquired journal lease", async () => {
+  const outDir = copyFixtureOutput();
+  const crashed = await runPublisher(outDir, ["--no-add", "--test-crash-at", "attempt-journal"]);
+  assert.equal(crashed.code, 86);
+
+  const reader = spawn(process.execPath, [PUBLISHER, "--out", outDir, "--no-add", "--test-hold-after-recovery-read-ms", "900"], {
+    cwd: REPO,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const readerExit = once(reader, "exit");
+  const readerReady = new Promise((resolve, reject) => {
+    let stderr = "";
+    const timeout = setTimeout(() => reject(new Error("stale recovery reader did not bind the old journal")), 5_000);
+    reader.stderr.on("data", (chunk) => {
+      stderr += Buffer.from(chunk).toString("utf8");
+      if (stderr.includes("test recovery journal read")) {
+        clearTimeout(timeout);
+        resolve();
+      }
+    });
+    reader.once("exit", (code) => {
+      clearTimeout(timeout);
+      reject(new Error(`stale recovery reader exited before the barrier: ${code}`));
+    });
+  });
+  await readerReady;
+  const winner = await runPublisher(outDir, ["--no-add"]);
+  assert.equal(winner.code, 0, winner.stderr);
+  const [readerCode] = await readerExit;
+  assert.notEqual(readerCode, 0, "the stale reader must fail closed once its bound lease is replaced");
+  const next = await runPublisher(outDir, ["--no-add"]);
+  assert.equal(next.code, 0, next.stderr);
+  assert.deepEqual(attemptResidue(outDir), []);
+});
+
+test("output-root replacement fails closed without touching the outside target", async () => {
+  const outDir = copyFixtureOutput();
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "terrain-ipfs-root-swap-"));
+  const sentinel = path.join(outside, "sentinel");
+  fs.writeFileSync(sentinel, "outside remains untouched");
+  const replaced = await runPublisher(outDir, ["--no-add", "--test-replace-output-root-with", outside]);
+  assert.notEqual(replaced.code, 0);
+  assert.match(replaced.stderr, /builder output is no longer a real directory/);
+  assert.equal(fs.readFileSync(sentinel, "utf8"), "outside remains untouched");
+  const held = `${outDir}.attempt-root-held`;
+  assert.ok(fs.lstatSync(outDir).isSymbolicLink());
+  fs.unlinkSync(outDir);
+  fs.renameSync(held, outDir);
+  const recovered = await runPublisher(outDir, ["--no-add"]);
+  assert.equal(recovered.code, 0, recovered.stderr);
+  fs.rmSync(outside, { recursive: true, force: true });
 });
 
 test("Kubo upload is sorted, exact-length, backpressured, and accepts fragmented NDJSON", async () => {
@@ -887,6 +1067,40 @@ test("Kubo upload is sorted, exact-length, backpressured, and accepts fragmented
     assert.equal(fs.existsSync(path.join(outDir, "pending-ipfs-pin.json")), false, "a completed artifact transaction consumes its pin recovery receipt");
   } finally {
     await fake.close();
+  }
+});
+
+test("journal-owned control storage reclaims manifests killed before their individual records", async () => {
+  for (const phase of ["upload-manifest-written", "directory-manifest-written"]) {
+    const outDir = copyFixtureOutput();
+    const fake = await fakeKubo(outDir);
+    try {
+      const interrupted = await runPublisher(outDir, ["--api", fake.base, "--gateway", fake.base, "--test-crash-at", phase]);
+      assert.equal(interrupted.code, 86, `${phase} must kill after the manifest is durable but before its journal identity`);
+    } finally {
+      await fake.close();
+    }
+    const recovered = await runPublisher(outDir, ["--no-add"]);
+    assert.equal(recovered.code, 0, `${phase} recovery failed: ${recovered.stderr}`);
+    assert.deepEqual(attemptResidue(outDir), [], `${phase} left an attempt control residue`);
+  }
+});
+
+test("add-mode transaction recovery covers the fifth serving artifact and sixth pending-pin removal", async () => {
+  const phases = [];
+  for (const index of [5, 6]) phases.push(`backup-renamed-${index}`, `backup-${index}`, `install-renamed-${index}`, `install-${index}`);
+  for (const phase of phases) {
+    const outDir = copyFixtureOutput();
+    const fake = await fakeKubo(outDir);
+    try {
+      const interrupted = await runPublisher(outDir, ["--api", fake.base, "--gateway", fake.base, "--test-crash-at", phase]);
+      assert.equal(interrupted.code, 86, `${phase} must interrupt the add-mode artifact transaction`);
+    } finally {
+      await fake.close();
+    }
+    const recovered = await runPublisher(outDir, ["--no-add"]);
+    assert.equal(recovered.code, 0, `${phase} recovery failed: ${recovered.stderr}`);
+    assert.deepEqual(attemptResidue(outDir), [], `${phase} left add-mode transaction residue`);
   }
 });
 
