@@ -50,7 +50,6 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { Readable } from "node:stream";
-import { createInterface } from "node:readline";
 import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
@@ -76,11 +75,14 @@ const STATIC_TRANSPORT_BOUNDS = Object.freeze({ p50: 96 * 1024, p99: 384 * 1024,
 const MAX_MATERIALIZED_FILES = 5_000_000;
 const MAX_MATERIALIZED_BYTES = 1024 * 1024 * 1024 * 1024;
 const STAGING_HEADROOM_BYTES = 64 * 1024 * 1024;
-const MAX_RECEIPT_BYTES = 16 * 1024 * 1024;
 const MAX_RECEIPT_LINE_BYTES = 64 * 1024;
 const MAX_RECEIPT_NAME_BYTES = 4 * 1024;
 const MAX_RECEIPT_HASH_BYTES = 256;
 const MAX_CONTROL_RESPONSE_BYTES = 64 * 1024;
+const MAX_WORKLIST_LINE_BYTES = 1024;
+const MAX_LEGACY_WORKLIST_BYTES = 8 * 1024 * 1024;
+const MAX_LEGACY_WORKLIST_ADDRESSES = 100_000;
+const MAX_OCEAN_DIAGNOSTICS = 8;
 
 function parsePositiveInteger(value, flag) {
   assert.match(value ?? "", /^\d+$/, `${flag} must be a positive integer`);
@@ -136,6 +138,10 @@ assert.ok(
     "unverified pyramid published under one cannot be withdrawn from anyone " +
     "who has it.",
 );
+assert.ok(
+  fs.statSync(verifyPath).size <= MAX_LEGACY_WORKLIST_BYTES,
+  `verify report exceeds legacy safety cap ${MAX_LEGACY_WORKLIST_BYTES} bytes; use its streamed worklist path`,
+);
 const verifyReport = JSON.parse(fs.readFileSync(verifyPath, "utf8"));
 assert.deepEqual(
   verifyReport.problems,
@@ -147,16 +153,129 @@ assert.ok(
   "the verify report predates the streamed available-but-unstored worklist; re-run verify.mjs",
 );
 
+function outputFile(relative, label) {
+  assert.equal(typeof relative, "string", `${label} path must be a string`);
+  const resolved = path.resolve(outDir, relative);
+  assert.ok(resolved.startsWith(`${outDir}${path.sep}`), `${label} path escapes the builder output`);
+  return resolved;
+}
+
+async function* boundedLines(file, maxLineBytes, label) {
+  const decoder = new StringDecoder("utf8");
+  let pending = "";
+  for await (const chunk of fs.createReadStream(file, { highWaterMark: 64 * 1024 })) {
+    pending += decoder.write(Buffer.from(chunk));
+    let newline;
+    while ((newline = pending.indexOf("\n")) >= 0) {
+      const raw = pending.slice(0, newline);
+      pending = pending.slice(newline + 1);
+      const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+      if (!line) continue;
+      if (Buffer.byteLength(line) > maxLineBytes) throw new Error(`${label} line exceeds ${maxLineBytes} bytes`);
+      yield line;
+    }
+    if (Buffer.byteLength(pending) > maxLineBytes) throw new Error(`${label} line exceeds ${maxLineBytes} bytes`);
+  }
+  pending += decoder.end();
+  if (pending) {
+    if (Buffer.byteLength(pending) > maxLineBytes) throw new Error(`${label} line exceeds ${maxLineBytes} bytes`);
+    yield pending;
+  }
+}
+
 async function* availableButUnstored() {
   if (Array.isArray(verifyReport.availableButUnstoredAddresses)) {
-    yield* verifyReport.availableButUnstoredAddresses;
+    assert.ok(
+      verifyReport.availableButUnstoredAddresses.length <= MAX_LEGACY_WORKLIST_ADDRESSES,
+      `legacy available-but-unstored array exceeds ${MAX_LEGACY_WORKLIST_ADDRESSES} addresses; use NDJSON`,
+    );
+    for (const address of verifyReport.availableButUnstoredAddresses) yield address;
     return;
   }
-  const file = path.join(outDir, verifyReport.availableButUnstoredPath);
+  const file = outputFile(verifyReport.availableButUnstoredPath, "verify worklist");
   assert.ok(fs.existsSync(file), `verify worklist missing: ${file}`);
-  for await (const line of createInterface({ input: fs.createReadStream(file), crlfDelay: Infinity })) {
-    if (line) yield line;
+  yield* boundedLines(file, MAX_WORKLIST_LINE_BYTES, "available-but-unstored worklist");
+}
+
+function compareTerrainAddress(a, b) {
+  const left = parseTerrainAddress(a);
+  const right = parseTerrainAddress(b);
+  // verify.mjs writes level, then row (y), then column (x).
+  return left.level - right.level || left.y - right.y || left.x - right.x;
+}
+
+async function* arrayEntries(entries) {
+  yield* entries;
+}
+
+async function oceanSkipJoiner() {
+  const ndjsonPath = path.join(outDir, "ocean-skipped.ndjson");
+  const receiptPath = path.join(outDir, "ocean-skipped-receipt.json");
+  const legacyPath = path.join(outDir, "ocean-skipped.json");
+  let declaredByReceipt = null;
+  let source;
+  if (fs.existsSync(ndjsonPath)) {
+    if (fs.existsSync(receiptPath)) {
+      assert.ok(fs.statSync(receiptPath).size <= MAX_LEGACY_WORKLIST_BYTES, "ocean skip receipt exceeds safety cap");
+      const receipt = JSON.parse(fs.readFileSync(receiptPath, "utf8"));
+      assert.ok(Number.isSafeInteger(receipt.count) && receipt.count >= 0, "ocean skip receipt has no safe count");
+      declaredByReceipt = receipt.count;
+      if (receipt.path !== undefined) assert.equal(outputFile(receipt.path, "ocean skip receipt"), ndjsonPath, "ocean skip receipt names another worklist");
+    }
+    source = boundedLines(ndjsonPath, MAX_WORKLIST_LINE_BYTES, "ocean-skipped worklist");
+  } else if (fs.existsSync(legacyPath)) {
+    assert.ok(fs.statSync(legacyPath).size <= MAX_LEGACY_WORKLIST_BYTES, `legacy ocean skip list exceeds ${MAX_LEGACY_WORKLIST_BYTES} bytes; use NDJSON`);
+    const legacy = JSON.parse(fs.readFileSync(legacyPath, "utf8"));
+    const addresses = legacy.addresses ?? [];
+    assert.ok(Array.isArray(addresses), "legacy ocean skip list addresses must be an array");
+    assert.ok(addresses.length <= MAX_LEGACY_WORKLIST_ADDRESSES, `legacy ocean skip list exceeds ${MAX_LEGACY_WORKLIST_ADDRESSES} addresses; use NDJSON`);
+    if (legacy.count !== undefined) assert.equal(legacy.count, addresses.length, "legacy ocean skip receipt count disagrees with addresses");
+    addresses.sort(compareTerrainAddress);
+    source = arrayEntries(addresses);
+    declaredByReceipt = addresses.length;
+  } else {
+    source = arrayEntries([]);
+    declaredByReceipt = 0;
   }
+
+  const iterator = source[Symbol.asyncIterator]();
+  let next = await iterator.next();
+  let sourceCount = 0;
+  let matchedCount = 0;
+  let lastOcean = null;
+  let lastAvailable = null;
+
+  const advance = async () => {
+    if (next.done) return;
+    const address = next.value;
+    parseTerrainAddress(address);
+    if (lastOcean !== null) assert.ok(compareTerrainAddress(lastOcean, address) < 0, "ocean-skipped worklist is not strictly sorted");
+    lastOcean = address;
+    sourceCount += 1;
+  };
+  await advance();
+
+  return {
+    async matches(address) {
+      parseTerrainAddress(address);
+      if (lastAvailable !== null) assert.ok(compareTerrainAddress(lastAvailable, address) < 0, "available-but-unstored worklist is not strictly sorted");
+      lastAvailable = address;
+      if (next.done) return false;
+      const order = compareTerrainAddress(next.value, address);
+      assert.ok(order >= 0, `ocean-skipped address ${next.value} is absent from available-but-unstored worklist`);
+      if (order !== 0) return false;
+      matchedCount += 1;
+      next = await iterator.next();
+      await advance();
+      return true;
+    },
+    finish() {
+      assert.ok(next.done, `ocean-skipped address ${next.value} is absent from available-but-unstored worklist`);
+      assert.equal(sourceCount, matchedCount, "not every ocean-skipped address joined the publication worklist");
+      assert.equal(sourceCount, declaredByReceipt, "ocean skip receipt count disagrees with streamed worklist");
+      return sourceCount;
+    },
+  };
 }
 
 const layerConfig = JSON.parse(fs.readFileSync(path.join(outDir, "layer-json-config.json"), "utf8"));
@@ -412,9 +531,17 @@ const attemptToken = `${process.pid}-${randomUUID()}`;
 const stagingDir = path.join(outDir, `.ipfs-staging-${attemptToken}`);
 fs.mkdirSync(stagingDir, { recursive: false });
 const stagedArtifactPaths = new Set();
+const attemptScratchPaths = new Set();
 
 function discardStagingDirectory() {
   if (fs.existsSync(stagingDir)) fs.rmSync(stagingDir, { recursive: true, force: true });
+}
+
+function discardAttemptScratch() {
+  for (const scratchPath of attemptScratchPaths) {
+    if (fs.existsSync(scratchPath)) fs.rmSync(scratchPath, { force: true });
+  }
+  attemptScratchPaths.clear();
 }
 
 function stageArtifact(livePath, bytes) {
@@ -453,6 +580,7 @@ function commitStagedPublication(artifacts) {
       }
     }
     for (const replacement of replacements) {
+      if (replacement.staged === null) continue;
       fs.renameSync(replacement.staged, replacement.live);
       installed.push(replacement);
       stagedArtifactPaths.delete(replacement.staged);
@@ -521,8 +649,9 @@ let shallowStored = null;
 let deepStored = null;
 let harnessDestroyed = false;
 let staticIdentity;
-let oceanSkipsDeclared;
-const oceanSkipsServedAsLand = [];
+let oceanSkipsDeclared = 0;
+let oceanSkipsServedAsLand = 0;
+const oceanSkipLandDiagnostics = [];
 
 async function failMaterialization(error) {
   if (!harnessDestroyed) {
@@ -534,6 +663,7 @@ async function failMaterialization(error) {
   }
   discardStagingDirectory();
   discardStagedArtifacts();
+  discardAttemptScratch();
   throw error;
 }
 
@@ -578,13 +708,7 @@ let lastSynthesized = null;
 let synthesizedWater = 0;
 let synthesizedLand = 0;
 try {
-oceanSkipsDeclared = new Set(
-  JSON.parse(
-    fs.existsSync(path.join(outDir, "ocean-skipped.json"))
-      ? fs.readFileSync(path.join(outDir, "ocean-skipped.json"), "utf8")
-      : '{"addresses":[]}',
-  ).addresses ?? [],
-);
+const oceanSkips = await oceanSkipJoiner();
 for await (const address of availableButUnstored()) {
   const { level, x, y } = parseTerrainAddress(address);
   const body = await synthesizeTile(level, x, y);
@@ -595,8 +719,9 @@ for await (const address of availableButUnstored()) {
   // water that comes out of the module as land is the exact defect — open
   // ocean rendered as flat ground with no mask — and it must stop the
   // publication rather than be counted.
-  if (oceanSkipsDeclared.has(address) && mask.kind !== "UNIFORM_WATER") {
-    oceanSkipsServedAsLand.push(`${address} -> ${mask.kind}`);
+  if (await oceanSkips.matches(address) && mask.kind !== "UNIFORM_WATER") {
+    oceanSkipsServedAsLand += 1;
+    if (oceanSkipLandDiagnostics.length < MAX_OCEAN_DIAGNOSTICS) oceanSkipLandDiagnostics.push(`${address} -> ${mask.kind}`);
   }
   write(`${level}/${x}/${y}.terrain`, body);
   synthesizedTiles += 1;
@@ -604,11 +729,12 @@ for await (const address of availableButUnstored()) {
   identitySizes.add(body.length);
 }
 assert.deepEqual(
-  oceanSkipsServedAsLand.slice(0, 8),
+  oceanSkipLandDiagnostics,
   [],
-  `${oceanSkipsServedAsLand.length} addresses the encoder measured as all water are being ` +
+  `${oceanSkipsServedAsLand} addresses the encoder measured as all water are being ` +
     "published as land — check terrain_ocean_synth_min_level against the levels this run built",
 );
+oceanSkipsDeclared = oceanSkips.finish();
 await harness.destroy();
 harnessDestroyed = true;
 
@@ -640,47 +766,118 @@ function compareBytewise(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-function multipartPlan(directory, boundary) {
-  const files = [];
-  const walk = (dir, prefix = "") => {
-    const entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => compareBytewise(a.name, b.name));
-    for (const entry of entries) {
-      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(full, rel);
-      else if (entry.isFile()) {
-        const stat = fs.statSync(full);
-        assert.ok(stat.isFile(), `${full} changed while planning multipart upload`);
-        const name = `${tilesetId}/${rel}`;
-        const header = Buffer.from(
-          `--${boundary}\r\nContent-Disposition: form-data; name="file"; ` +
-            `filename="${encodeURIComponent(name)}"\r\n` +
-            "Content-Type: application/octet-stream\r\n\r\n",
-        );
-        files.push({ full, rel, name, header, size: BigInt(stat.size) });
-      }
-    }
-  };
-  walk(directory);
-  const closing = Buffer.from(`--${boundary}--\r\n`);
-  const contentLength = files.reduce(
-    (total, file) => total + BigInt(file.header.length) + file.size + 2n,
-    BigInt(closing.length),
-  );
-  assert.equal(files.length, fileCount, "materialized file count changed before multipart planning");
-  assert.ok(contentLength <= BigInt(Number.MAX_SAFE_INTEGER), "multipart Content-Length exceeds fetch's safe range");
-  return { files, closing, contentLength };
+function assertSafeRelativePath(rel, label) {
+  assert.equal(typeof rel, "string", `${label} must be a string`);
+  assert.ok(rel.length > 0 && !path.isAbsolute(rel), `${label} is not a relative path`);
+  assert.ok(!rel.split("/").includes(".."), `${label} escapes the staging directory`);
 }
 
-// This generator opens one file only after the preceding file's stream has
-// ended.  Readable.from pulls it on demand, so a slow Kubo consumer applies
-// backpressure all the way to the one open file descriptor.
-async function* multipartParts(plan) {
-  for (const file of plan.files) {
-    yield file.header;
-    for await (const chunk of fs.createReadStream(file.full, { highWaterMark: 64 * 1024 })) yield chunk;
-    yield Buffer.from("\r\n");
+function fileIdentity(full) {
+  const stat = fs.lstatSync(full, { bigint: true });
+  assert.ok(stat.isFile(), `${full} is not a regular file`);
+  return {
+    dev: stat.dev.toString(),
+    ino: stat.ino.toString(),
+    size: stat.size.toString(),
+    mtimeNs: stat.mtimeNs.toString(),
+  };
+}
+
+function sameIdentity(actual, expected) {
+  return actual.dev === expected.dev && actual.ino === expected.ino &&
+    actual.size === expected.size && actual.mtimeNs === expected.mtimeNs;
+}
+
+function* sortedRegularFiles(directory, prefix = "") {
+  const entries = fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => compareBytewise(a.name, b.name));
+  for (const entry of entries) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    assertSafeRelativePath(rel, "staged file path");
+    const full = path.resolve(directory, entry.name);
+    assert.ok(full.startsWith(`${directory}${path.sep}`), `staged file path escapes ${directory}`);
+    const stat = fs.lstatSync(full, { bigint: true });
+    assert.ok(!stat.isSymbolicLink(), `refusing staged symlink ${rel}`);
+    if (stat.isDirectory()) yield* sortedRegularFiles(full, rel);
+    else {
+      assert.ok(stat.isFile(), `refusing non-regular staged entry ${rel}`);
+      yield { full, rel, identity: fileIdentity(full) };
+    }
   }
+}
+
+function multipartHeader(boundary, name) {
+  return Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; ` +
+      `filename="${encodeURIComponent(name)}"\r\n` +
+      "Content-Type: application/octet-stream\r\n\r\n",
+  );
+}
+
+function multipartPlan(directory, boundary) {
+  const manifestPath = path.join(outDir, `.ipfs-upload-manifest-${attemptToken}.ndjson`);
+  const descriptor = fs.openSync(manifestPath, "wx", 0o600);
+  attemptScratchPaths.add(manifestPath);
+  let expectedFiles = 0;
+  let contentLength = 0n;
+  try {
+    for (const file of sortedRegularFiles(directory)) {
+      const name = `${tilesetId}/${file.rel}`;
+      const header = multipartHeader(boundary, name);
+      const manifestEntry = { rel: file.rel, name, ...file.identity };
+      const line = `${JSON.stringify(manifestEntry)}\n`;
+      assert.ok(Buffer.byteLength(line) <= MAX_WORKLIST_LINE_BYTES, `upload manifest entry for ${file.rel} exceeds ${MAX_WORKLIST_LINE_BYTES} bytes`);
+      fs.writeSync(descriptor, line);
+      contentLength += BigInt(header.length) + BigInt(file.identity.size) + 2n;
+      expectedFiles += 1;
+    }
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  const closing = Buffer.from(`--${boundary}--\r\n`);
+  contentLength += BigInt(closing.length);
+  assert.equal(expectedFiles, fileCount, "materialized file count changed before multipart planning");
+  assert.ok(contentLength <= BigInt(Number.MAX_SAFE_INTEGER), "multipart Content-Length exceeds fetch's safe range");
+  return { manifestPath, expectedFiles, boundary, closing, contentLength };
+}
+
+async function* uploadManifestEntries(plan) {
+  for await (const line of boundedLines(plan.manifestPath, MAX_WORKLIST_LINE_BYTES, "upload manifest")) {
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch (error) {
+      throw new Error("upload manifest contains invalid JSON", { cause: error });
+    }
+    assert.ok(entry && typeof entry === "object" && !Array.isArray(entry), "upload manifest entry is not an object");
+    assertSafeRelativePath(entry.rel, "upload manifest path");
+    assert.equal(entry.name, `${tilesetId}/${entry.rel}`, "upload manifest name disagrees with path");
+    for (const field of ["dev", "ino", "size", "mtimeNs"]) assert.match(entry[field] ?? "", /^\d+$/, `upload manifest ${field} is invalid`);
+    yield entry;
+  }
+}
+
+// The second deterministic walk and disk manifest make the upload bounded by
+// one pathname and one file stream.  They reject additions, removals,
+// symlinks, reordering, and metadata changes after Content-Length is planned.
+async function* multipartParts(plan) {
+  const manifest = uploadManifestEntries(plan);
+  let expected = await manifest.next();
+  let files = 0;
+  for (const current of sortedRegularFiles(stagingDir)) {
+    assert.ok(!expected.done, `staged file ${current.rel} was added after multipart planning`);
+    const planned = expected.value;
+    assert.equal(current.rel, planned.rel, "staged file order changed after multipart planning");
+    assert.ok(sameIdentity(current.identity, planned), `staged file ${current.rel} changed after multipart planning`);
+    yield multipartHeader(plan.boundary, planned.name);
+    const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
+    for await (const chunk of fs.createReadStream(current.full, { flags, highWaterMark: 64 * 1024 })) yield chunk;
+    assert.ok(sameIdentity(fileIdentity(current.full), planned), `staged file ${current.rel} changed during multipart upload`);
+    yield Buffer.from("\r\n");
+    files += 1;
+    expected = await manifest.next();
+  }
+  assert.ok(expected.done, "staged file was removed after multipart planning");
+  assert.equal(files, plan.expectedFiles, "multipart upload file count changed after planning");
   yield plan.closing;
 }
 
@@ -749,19 +946,22 @@ function validateReceiptEntry(entry, index) {
   assert.match(entry.Hash, /^[A-Za-z0-9]+$/, `kubo add receipt entry ${index} Hash is not a CID-shaped token`);
 }
 
-async function readAddReceipt(response, expectedFiles, onRoot, controller) {
+async function readAddReceipt(response, plan, onRoot, controller) {
   assert.equal(response.status, 200, `kubo add: HTTP ${response.status}`);
   assert.ok(response.body, "kubo add returned an empty response body");
-  declaredResponseLength(response, MAX_RECEIPT_BYTES, "kubo add receipt", controller);
+  const expectedEntries = plan.expectedFiles + 1;
+  const maxReceiptBytes = BigInt(expectedEntries) * BigInt(MAX_RECEIPT_LINE_BYTES + 1);
+  declaredResponseLength(response, maxReceiptBytes, "kubo add receipt", controller);
   const decoder = new StringDecoder("utf8");
   let pending = "";
-  let totalBytes = 0;
+  let totalBytes = 0n;
   let entries = 0;
   let root = null;
   let layerEntry = null;
-  const expectedEntries = expectedFiles + 1;
+  const manifest = uploadManifestEntries(plan);
+  let expected = await manifest.next();
 
-  const consumeLine = (raw) => {
+  const consumeLine = async (raw) => {
     const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
     assert.ok(line.length > 0, "kubo add receipt contains an empty NDJSON entry");
     assert.ok(Buffer.byteLength(line) <= MAX_RECEIPT_LINE_BYTES, `kubo add receipt line exceeds ${MAX_RECEIPT_LINE_BYTES} bytes`);
@@ -774,36 +974,40 @@ async function readAddReceipt(response, expectedFiles, onRoot, controller) {
       throw new Error(`kubo add receipt entry ${entries} is invalid JSON`, { cause: error });
     }
     validateReceiptEntry(entry, entries);
-    if (entry.Name === tilesetId) {
+    if (entries <= plan.expectedFiles) {
+      assert.ok(!expected.done, "kubo add returned a file receipt after the manifest ended");
+      assert.equal(entry.Name, expected.value.name, `kubo add receipt ${entries} is not the planned file`);
+      if (entry.Name === `${tilesetId}/layer.json`) layerEntry = entry;
+      expected = await manifest.next();
+    } else {
+      assert.ok(expected.done, "kubo add returned its root before every planned file receipt");
+      assert.equal(entry.Name, tilesetId, `kubo add root receipt must be exactly ${tilesetId}`);
       assert.equal(root, null, `kubo add returned more than one root receipt for ${tilesetId}`);
       root = entry;
       onRoot(entry.Hash);
-    }
-    if (entry.Name === `${tilesetId}/layer.json`) {
-      assert.equal(layerEntry, null, "kubo add returned more than one layer.json receipt");
-      layerEntry = entry;
     }
   };
 
   for await (const chunk of response.body) {
     const bytes = Buffer.from(chunk);
-    totalBytes += bytes.length;
-    if (totalBytes > MAX_RECEIPT_BYTES) {
+    totalBytes += BigInt(bytes.length);
+    if (totalBytes > maxReceiptBytes) {
       controller.abort();
-      throw new Error(`kubo add receipt exceeds ${MAX_RECEIPT_BYTES} bytes`);
+      throw new Error(`kubo add receipt exceeds derived bound ${maxReceiptBytes} bytes`);
     }
     pending += decoder.write(bytes);
-    assert.ok(Buffer.byteLength(pending) <= MAX_RECEIPT_LINE_BYTES, `kubo add receipt line exceeds ${MAX_RECEIPT_LINE_BYTES} bytes`);
     let newline;
     while ((newline = pending.indexOf("\n")) >= 0) {
       const line = pending.slice(0, newline);
       pending = pending.slice(newline + 1);
-      consumeLine(line);
+      await consumeLine(line);
     }
+    assert.ok(Buffer.byteLength(pending) <= MAX_RECEIPT_LINE_BYTES, `kubo add receipt line exceeds ${MAX_RECEIPT_LINE_BYTES} bytes`);
   }
   pending += decoder.end();
-  if (pending.length > 0) consumeLine(pending);
+  if (pending.length > 0) await consumeLine(pending);
   assert.equal(entries, expectedEntries, `kubo add returned ${entries} receipt entries; expected ${expectedEntries}`);
+  assert.ok(expected.done, "kubo add omitted a planned file receipt");
   assert.ok(root, `kubo add returned no entry for the root directory ${tilesetId}`);
   assert.ok(layerEntry, `kubo add returned no entry for ${tilesetId}/layer.json`);
   return { cid: root.Hash, layerJsonCid: layerEntry.Hash, entries };
@@ -815,22 +1019,26 @@ async function addAndPin(apiURL, onRoot) {
   const url =
     `${apiURL.replace(/\/$/, "")}/api/v0/add` +
     "?pin=false&cid-version=1&raw-leaves=true&wrap-with-directory=false";
-  return withRequest(
-    url,
-    {
-      method: "POST",
-      // kubo rejects a browser-shaped User-Agent on the RPC API.
-      headers: {
-        "content-type": `multipart/form-data; boundary=${boundary}`,
-        "content-length": String(plan.contentLength),
-        "user-agent": "",
+  try {
+    return await withRequest(
+      url,
+      {
+        method: "POST",
+        // kubo rejects a browser-shaped User-Agent on the RPC API.
+        headers: {
+          "content-type": `multipart/form-data; boundary=${boundary}`,
+          "content-length": String(plan.contentLength),
+          "user-agent": "",
+        },
+        body: Readable.from(multipartParts(plan), { objectMode: false, highWaterMark: 64 * 1024 }),
+        duplex: "half",
       },
-      body: Readable.from(multipartParts(plan), { objectMode: false, highWaterMark: 64 * 1024 }),
-      duplex: "half",
-    },
-    "kubo add",
-    (response, controller) => readAddReceipt(response, plan.files.length, onRoot, controller),
-  );
+      "kubo add",
+      (response, controller) => readAddReceipt(response, plan, onRoot, controller),
+    );
+  } finally {
+    discardAttemptScratch();
+  }
 }
 
 async function pinCreatedRoot(apiURL, cid, onPinned) {
@@ -870,13 +1078,14 @@ async function preflightKubo(apiURL) {
   );
 }
 
-async function assertRecursivePin(apiURL, cid) {
+async function lookupRecursivePin(apiURL, cid) {
   return withRequest(
     `${apiURL.replace(/\/$/, "")}/api/v0/pin/ls?arg=${encodeURIComponent(cid)}&type=recursive`,
     { method: "POST", headers: { "user-agent": "" } },
     "kubo pin/ls",
     async (response, controller) => {
       const text = await readResponseText(response, MAX_CONTROL_RESPONSE_BYTES, "kubo pin/ls", controller);
+      if (response.status === 404) return { present: false, type: null, response: text };
       assert.equal(response.status, 200, `pin/ls: HTTP ${response.status}: ${text.slice(0, 200)}`);
       let decoded;
       try {
@@ -886,8 +1095,10 @@ async function assertRecursivePin(apiURL, cid) {
       }
       assert.ok(decoded && typeof decoded === "object" && !Array.isArray(decoded), "pin/ls returned no object");
       assert.ok(decoded.Keys && typeof decoded.Keys === "object" && !Array.isArray(decoded.Keys), "pin/ls returned no Keys object");
-      assert.equal(decoded.Keys[cid]?.Type, "recursive", `the root ${cid} is not recursively pinned`);
-      return { type: decoded.Keys[cid].Type, response: JSON.stringify(decoded) };
+      const entry = decoded.Keys[cid];
+      if (entry === undefined) return { present: false, type: null, response: JSON.stringify(decoded) };
+      assert.equal(entry.Type, "recursive", `the root ${cid} is not recursively pinned`);
+      return { present: true, type: entry.Type, response: JSON.stringify(decoded) };
     },
   );
 }
@@ -921,6 +1132,7 @@ async function abortPublication(error) {
   }
   discardStagingDirectory();
   discardStagedArtifacts();
+  discardAttemptScratch();
   if (cleanupError) throw new AggregateError([error, cleanupError], "publication failed and its new root pin could not be removed");
   throw error;
 }
@@ -938,21 +1150,32 @@ if (args.add) {
       assert.equal(publication, null, "kubo add emitted a root after a completed receipt");
       assert.ok(cid, "kubo add emitted an empty root CID");
     });
-    // `add?pin=false` cannot leak a pin on a malformed pre-root receipt.  The
-    // explicit pin/add below gives this invocation one exact, cleanable root.
-    await pinCreatedRoot(args.api, publication.cid, () => {
-      assert.equal(createdRootCid, null, "kubo pin/add acknowledged more than one root");
-      createdRootCid = publication.cid;
-    });
-    // pin/add acknowledgement is still an instruction, not proof.  Require
-    // Kubo's typed recursive pin record before a CID becomes serving config.
-    const pinned = await assertRecursivePin(args.api, publication.cid);
+    // CIDs are deterministic: a root can already be pinned by somebody else.
+    // Record that state before pin/add and never remove a pre-existing pin on
+    // a later failure.  `add?pin=false` also leaves malformed receipts clean.
+    let priorPin = await lookupRecursivePin(args.api, publication.cid);
+    // Recheck immediately before the mutating call.  This catches a pin that
+    // appeared between receipt validation and the first lookup; such a root
+    // is recorded as pre-existing and is never a cleanup target.
+    if (!priorPin.present) priorPin = await lookupRecursivePin(args.api, publication.cid);
+    let pinned = priorPin;
+    let pinPreexisted = priorPin.present;
+    if (!priorPin.present) {
+      await pinCreatedRoot(args.api, publication.cid, () => {
+        assert.equal(createdRootCid, null, "kubo pin/add acknowledged more than one root");
+        createdRootCid = publication.cid;
+      });
+      pinned = await lookupRecursivePin(args.api, publication.cid);
+      assert.ok(pinned.present, `pin/add did not create a recursive pin for ${publication.cid}`);
+      pinPreexisted = false;
+    }
     pinProof = {
       api: args.api,
       checkedAt: new Date().toISOString(),
       endpoint: `/api/v0/pin/ls?arg=${publication.cid}&type=recursive`,
       type: pinned.type,
       response: pinned.response,
+      preexisting: pinPreexisted,
     };
     process.stdout.write(`CID ${publication.cid} pinned ${pinned.type}\n`);
   } catch (error) {
@@ -1205,7 +1428,7 @@ const report = {
   // declared this read 0 water / 36 land on a coastal region.
   synthesizedUniformWater: synthesizedWater,
   synthesizedUniformLand: synthesizedLand,
-  oceanSkipsDeclared: oceanSkipsDeclared.size,
+  oceanSkipsDeclared,
   lastSynthesizedAddress: lastSynthesized,
   layerJsonBytes: layerJson.length,
   directoryBytes: totalBytes,
@@ -1256,6 +1479,11 @@ try {
         `${JSON.stringify({ ...layerConfig, ...report.mountConfig }, null, 2)}\n`,
       ),
     });
+  } else if (fs.existsSync(path.join(outDir, "serving-config-ipfs.json"))) {
+    // A rehearsal has no verified CID.  Remove a prior serving pointer in the
+    // same rollback-capable transaction rather than leaving it to name an old
+    // directory beside a newly materialized rehearsal report.
+    stagedPublicationArtifacts.push({ live: path.join(outDir, "serving-config-ipfs.json"), staged: null });
   }
   commitStagedPublication(stagedPublicationArtifacts);
 } catch (error) {

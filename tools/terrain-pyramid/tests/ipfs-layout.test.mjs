@@ -93,7 +93,7 @@ function receiptFromUpload(upload) {
 }
 
 async function fakeKubo(outDir, mode = "valid") {
-  const state = { uploadBytes: 0, contentLength: null, uploadNames: [], addPin: null, pinRm: [], requests: [] };
+  const state = { uploadBytes: 0, contentLength: null, uploadNames: [], addPin: null, pinRm: [], pinLsCalls: 0, requests: [], pinned: mode.startsWith("preexisting-") };
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://127.0.0.1");
     state.requests.push(url.pathname);
@@ -124,6 +124,10 @@ async function fakeKubo(outDir, mode = "valid") {
       } else if (mode === "extra-root") {
         const entries = receipt.text.trim().split("\n");
         res.end([entries.at(-1), ...entries].join("\n") + "\n");
+      } else if (mode === "wrong-file-order") {
+        const entries = receipt.text.trim().split("\n");
+        const root = entries.pop();
+        res.end([entries[1], entries[0], ...entries.slice(2), root].join("\n") + "\n");
       } else if (mode === "slow-fragmented") {
         await writeFragments(res, receipt.text, 5);
       } else {
@@ -132,22 +136,26 @@ async function fakeKubo(outDir, mode = "valid") {
       return;
     }
     if (url.pathname === "/api/v0/pin/ls") {
-      if (mode === "pin-failure") {
+      state.pinLsCalls += 1;
+      if (mode === "raced-preexisting-gateway-404" && state.pinLsCalls === 2) state.pinned = true;
+      if (mode === "pin-failure" && state.pinLsCalls > 2) {
         res.statusCode = 500;
         res.end("pin proof failed");
       } else {
         res.setHeader("content-type", "application/json");
-        res.end(JSON.stringify({ Keys: { [ROOT_CID]: { Type: "recursive" } } }));
+        res.end(JSON.stringify({ Keys: state.pinned ? { [ROOT_CID]: { Type: "recursive" } } : {} }));
       }
       return;
     }
     if (url.pathname === "/api/v0/pin/add") {
+      state.pinned = true;
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify({ Pins: [url.searchParams.get("arg")] }));
       return;
     }
     if (url.pathname === "/api/v0/pin/rm") {
       state.pinRm.push(url.searchParams.get("arg"));
+      state.pinned = false;
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify({ Pins: [url.searchParams.get("arg")] }));
       return;
@@ -155,7 +163,7 @@ async function fakeKubo(outDir, mode = "valid") {
     if (url.pathname.startsWith(`/ipfs/${ROOT_CID}/`)) {
       const rel = decodeURIComponent(url.pathname.slice(`/ipfs/${ROOT_CID}/`.length));
       const source = path.join(outDir, "ipfs", rel);
-      if (mode === "gateway-404") {
+      if (mode === "gateway-404" || mode === "preexisting-gateway-404" || mode === "raced-preexisting-gateway-404") {
         res.statusCode = 404;
         res.end("not found");
         return;
@@ -475,8 +483,8 @@ test("Kubo upload is sorted, exact-length, backpressured, and accepts fragmented
   }
 });
 
-test("Kubo receipt parser rejects oversized, malformed, missing, and duplicate root receipts", async () => {
-  for (const mode of ["oversized-line", "malformed", "missing-root", "extra-root"]) {
+test("Kubo receipt parser rejects oversized, malformed, missing, reordered, and duplicate root receipts", async () => {
+  for (const mode of ["oversized-line", "malformed", "missing-root", "wrong-file-order", "extra-root"]) {
     const outDir = copyFixtureOutput();
     const fake = await fakeKubo(outDir, mode);
     try {
@@ -518,6 +526,21 @@ test("a pin-proof failure removes exactly the new root and preserves the previou
   }
 });
 
+test("a pre-existing recursive pin survives a downstream gateway failure", async () => {
+  for (const mode of ["preexisting-gateway-404", "raced-preexisting-gateway-404"]) {
+    const outDir = copyFixtureOutput();
+    const fake = await fakeKubo(outDir, mode);
+    try {
+      const result = await runPublisher(outDir, ["--api", fake.base, "--gateway", fake.base]);
+      assert.notEqual(result.code, 0);
+      assert.deepEqual(fake.state.pinRm, [], "a pin proven pre-existing is never removed by this invocation");
+      assert.equal(fake.state.pinned, true);
+    } finally {
+      await fake.close();
+    }
+  }
+});
+
 test("gateway validation rejects status, bytes, bounded bodies, required headers, and missing conditional 304", async () => {
   for (const mode of ["gateway-404", "gateway-byte", "gateway-oversized-content-length", "gateway-chunked-oversize", "gateway-header", "gateway-conditional"]) {
     const outDir = copyFixtureOutput();
@@ -547,4 +570,56 @@ test("insufficient statfs reservation and unproved --cid preserve the completed 
   const noVerify = await runPublisher(outDir, ["--no-verify"]);
   assert.notEqual(noVerify.code, 0);
   assert.match(noVerify.stderr, /--no-verify is refused with --add/);
+});
+
+test("successful --no-add transaction removes a stale serving CID configuration", async () => {
+  const outDir = copyFixtureOutput();
+  fs.writeFileSync(path.join(outDir, "serving-config-ipfs.json"), JSON.stringify({ terrain_tileset_cid: ROOT_CID }));
+  const result = await runPublisher(outDir, ["--no-add"]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(fs.existsSync(path.join(outDir, "serving-config-ipfs.json")), false);
+  const report = JSON.parse(fs.readFileSync(path.join(outDir, "ipfs-publication.json"), "utf8"));
+  const catalogue = JSON.parse(fs.readFileSync(path.join(outDir, "tileset-catalogue.json"), "utf8"));
+  assert.equal(report.cid, null);
+  assert.deepEqual(report.mountConfig, null);
+  assert.equal(catalogue.PAYLOAD.CID, undefined);
+});
+
+test("streamed worklists reject an oversized unterminated line before staging", async () => {
+  const outDir = copyFixtureOutput();
+  const before = fs.readFileSync(path.join(outDir, "ipfs", "layer.json"));
+  fs.writeFileSync(path.join(outDir, "available-but-unstored.ndjson"), "9/1/" + "9".repeat(2048));
+  fs.writeFileSync(
+    path.join(outDir, "verify-report.json"),
+    JSON.stringify({ problems: [], availableButUnstoredPath: "available-but-unstored.ndjson" }),
+  );
+  const result = await runPublisher(outDir, ["--no-add"]);
+  assert.notEqual(result.code, 0);
+  assert.match(result.stderr, /available-but-unstored worklist line exceeds/);
+  assert.deepEqual(fs.readFileSync(path.join(outDir, "ipfs", "layer.json")), before);
+  assert.equal(fs.readdirSync(outDir).some((name) => name.startsWith(".ipfs-staging-")), false);
+});
+
+test("compact ocean receipt joins a large sorted NDJSON worklist without a retained set", async () => {
+  const outDir = copyFixtureOutput();
+  const ocean = [];
+  for (let y = 380; y < 396; y += 1) for (let x = 500; x < 516; x += 1) ocean.push(`9/${x}/${y}`);
+  const layerConfig = JSON.parse(fs.readFileSync(path.join(outDir, "layer-json-config.json"), "utf8"));
+  layerConfig.terrain_ocean_synth_min_level = 0;
+  layerConfig.terrain_available[9] = [{ startX: 500, startY: 380, endX: 515, endY: 395 }];
+  fs.writeFileSync(path.join(outDir, "layer-json-config.json"), JSON.stringify(layerConfig));
+  fs.writeFileSync(
+    path.join(outDir, "verify-report.json"),
+    JSON.stringify({ problems: [], availableButUnstoredAddresses: ocean }),
+  );
+  fs.writeFileSync(path.join(outDir, "ocean-skipped.ndjson"), `${ocean.join("\n")}\n`);
+  fs.writeFileSync(
+    path.join(outDir, "ocean-skipped-receipt.json"),
+    JSON.stringify({ count: ocean.length, path: "ocean-skipped.ndjson" }),
+  );
+  const result = await runPublisher(outDir, ["--no-add"]);
+  assert.equal(result.code, 0, result.stderr);
+  const report = JSON.parse(fs.readFileSync(path.join(outDir, "ipfs-publication.json"), "utf8"));
+  assert.equal(report.oceanSkipsDeclared, ocean.length);
+  assert.equal(report.synthesizedUniformWater, ocean.length);
 });
