@@ -953,7 +953,10 @@ async function main() {
     granuleCache: {
       dir: granuleCache.dir,
       maxBytes: granuleCache.maxBytes,
-      usedBytes: granuleCache.usageBytes(),
+      // Take the final accounting snapshot under the inter-process cache
+      // lock: interrupted publications with no valid current generation are
+      // reclaimed before reporting capacity, not silently omitted.
+      usedBytes: await granuleCache.usageBytesLocked(),
       evictions: granuleCache.evictions,
     },
     fetchMiB: +(stats.fetchBytes / 1048576).toFixed(2),

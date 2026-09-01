@@ -1,26 +1,29 @@
-// Offline representative parity rehearsal for the bounded global-build lane.
+// Offline end-to-end rehearsal for the global pyramid coordinator.
 //
-// It cuts a two-region, four-tile block through the shipped terrain-source
-// artifact. The single lane and two concurrent shard lanes see the exact same
-// DEM/WBM fixture; their order-independent $DTT record-set digests must match.
-// No network, flow mount, IPFS API, or node is involved.
+// This deliberately drives the shipped `run.mjs` once over a multi-region
+// fixture and `global-build.mjs` with two OS child workers, then compares the
+// non-empty $DTT address -> record-byte digests. A direct module harness would
+// not test the runner's prefetch/cache/resume host boundary or worker merge.
 
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
-import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
-
 import { recordSetDigest } from "./build-support.mjs";
-import { readDtt, splitStream } from "./dtt-reader.mjs";
+import { iterateStreamFile, readDtt } from "./dtt-reader.mjs";
 
+const execFileAsync = promisify(execFile);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..");
-const SOURCE = path.join(REPO, "data-source", "terrain-source");
-const { buildGeoTiff } = await import(path.join(SOURCE, "tests", "helpers.mjs"));
+const RUNNER = path.join(HERE, "run.mjs");
+const COORDINATOR = path.join(HERE, "global-build.mjs");
 
 let out;
 for (let i = 2; i < process.argv.length; i += 1) {
@@ -29,55 +32,111 @@ for (let i = 2; i < process.argv.length; i += 1) {
 }
 assert.ok(out, "--out <report.json> is required");
 
-const encoder = new TextEncoder();
-const granule = { width: 256, height: 256, originLon: 7.9, originLat: 45.5, scaleLon: 1 / 256, scaleLat: 1 / 256, layout: "tile", tileWidth: 64, tileHeight: 64, predictor: 1 };
-const dem = buildGeoTiff({ ...granule, heightFn: (px, py) => (px < 96 ? 0 : 40 + 30 * Math.sin(px / 9) + 20 * Math.cos(py / 7)) });
-const wbm = buildGeoTiff({ ...granule, classFn: (px) => (px < 96 ? 1 : 0) });
-const planBase = {
-  tilesetId: "global-rehearsal", gridSize: 33, maxGridSize: 33, maxLevel: 9, skipOceanTiles: true,
-  waterMask: { kind: "RASTER", width: 256, height: 256 }, scheme: "GEOGRAPHIC_WGS84", rowOriginNorth: false,
-  provenance: { datasetId: "test-dataset", datasetName: "test", datasetEpoch: "2023-04-01T00:00:00.000Z", retrievedAt: "2026-09-01T00:00:00.000Z", license: "test licence", attribution: "test attribution" },
-};
-const frame = (portId, bytes) => ({ portId, typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: bytes.length }, payload: bytes });
-const jsonFrame = (portId, value) => frame(portId, encoder.encode(JSON.stringify(value)));
-const rawBody = (portId, body) => {
-  const bytes = Buffer.alloc(8 + body.length);
-  bytes.write("$HRB", 0, "latin1"); bytes.writeUInt32LE(200, 4); Buffer.from(body).copy(bytes, 8);
-  return frame(portId, bytes);
-};
-
-async function cut(tiles) {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: fs.readFileSync(path.join(SOURCE, "dist", "isomorphic", "module.wasm")),
-    manifest: JSON.parse(fs.readFileSync(path.join(SOURCE, "plugin-manifest.json"), "utf8")),
-    surface: "direct",
-    hostcallDispatch: (operation) => { if (operation === "plugin.getConfig") return {}; throw new Error(`unexpected ${operation}`); },
+function granuleFromRequest(url) {
+  const match = url.match(/Copernicus_DSM_COG_10_([NS])(\d\d)_00_([EW])(\d\d\d)_00_(DEM|WBM)\.tif$/);
+  assert.ok(match, `unexpected fixture granule URL ${url}`);
+  const lat = (match[1] === "S" ? -1 : 1) * Number(match[2]);
+  const lon = (match[3] === "W" ? -1 : 1) * Number(match[4]);
+  const water = match[5] === "WBM";
+  // Keep this byte layout identical to the compiled flow's own fixture. The
+  // generic source-test TIFF writer is broader (tiled/DEFLATE/predictors),
+  // while this rehearsal needs a small, known-good uncompressed strip input.
+  const posts = 121;
+  const scale = 1 / (posts - 1);
+  const sampleBytes = water ? 1 : 4;
+  const raw = Buffer.alloc(posts * posts * sampleBytes);
+  for (let y = 0; y < posts; y += 1) for (let x = 0; x < posts; x += 1) {
+    const at = (y * posts + x) * sampleBytes;
+    if (water) raw[at] = x < posts / 2 ? 0 : 1;
+    else raw.writeFloatLE(Math.fround(200 + 900 * Math.sin(x / 7) * Math.cos(y / 5)), at);
+  }
+  const entries = [
+    [256, 3, 1, posts], [257, 3, 1, posts], [258, 3, 1, water ? 8 : 32], [259, 3, 1, 1],
+    [273, 4, 1, 0], [277, 3, 1, 1], [278, 3, 1, posts], [279, 4, 1, raw.length],
+    [317, 3, 1, 1], [339, 3, 1, water ? 1 : 3], [33550, 12, 3, 0], [33922, 12, 6, 0],
+  ];
+  const ifdBytes = 2 + entries.length * 12 + 4;
+  const scaleOffset = 8 + ifdBytes;
+  const tiepointOffset = scaleOffset + 24;
+  const dataOffset = tiepointOffset + 48;
+  entries[4][3] = dataOffset; entries[10][3] = scaleOffset; entries[11][3] = tiepointOffset;
+  const file = Buffer.alloc(dataOffset + raw.length);
+  file.write("II", 0, "latin1"); file.writeUInt16LE(42, 2); file.writeUInt32LE(8, 4); file.writeUInt16LE(entries.length, 8);
+  entries.forEach(([id, type, count, value], n) => {
+    const at = 10 + n * 12;
+    file.writeUInt16LE(id, at); file.writeUInt16LE(type, at + 2); file.writeUInt32LE(count, at + 4);
+    if (type === 3) file.writeUInt16LE(value, at + 8); else file.writeUInt32LE(value, at + 8);
   });
-  try {
-    const response = await harness.invoke({ methodId: "tile", inputs: [jsonFrame("plan", { ...planBase, tiles }), rawBody("dem", dem), rawBody("water", wbm)] });
-    assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
-    return splitStream(Buffer.from(response.outputs.find((item) => item.portId === "records").payload));
-  } finally { await harness.destroy(); }
+  file.writeDoubleLE(scale, scaleOffset); file.writeDoubleLE(scale, scaleOffset + 8);
+  file.writeDoubleLE(lon, tiepointOffset + 24); file.writeDoubleLE(lat + 1, tiepointOffset + 32);
+  raw.copy(file, dataOffset);
+  return file;
 }
 
-const regions = [
-  { name: "west", tiles: [{ level: 9, x: 535, y: 383 }, { level: 9, x: 535, y: 384 }] },
-  { name: "east", tiles: [{ level: 9, x: 536, y: 383 }, { level: 9, x: 536, y: 384 }] },
-];
-const startedSingle = performance.now();
-const single = await cut(regions.flatMap((region) => region.tiles));
-const singleMs = performance.now() - startedSingle;
-const startedShards = performance.now();
-const sharded = (await Promise.all(regions.map((region) => cut(region.tiles)))).flat();
-const shardMs = performance.now() - startedShards;
-const digest = (records) => recordSetDigest(records.map((record) => {
-  const dtt = readDtt(record);
-  return [`${dtt.level}/${dtt.x}/${dtt.y}`, createHash("sha256").update(record).digest("hex")];
-}));
-const singleDigest = digest(single);
-const shardDigest = digest(sharded);
-assert.equal(shardDigest, singleDigest, "two concurrent region shards must produce the single-lane $DTT record set");
-const report = { regions: regions.map(({ name, tiles }) => ({ name, tiles: tiles.length })), records: single.length, singleLaneMs: +singleMs.toFixed(3), concurrentShardMs: +shardMs.toFixed(3), recordSetDigest: singleDigest, parity: "PASS" };
-fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
-fs.writeFileSync(path.resolve(out), `${JSON.stringify(report, null, 2)}\n`);
-console.log(JSON.stringify(report));
+const bodies = new Map();
+const server = http.createServer((request, response) => {
+  try {
+    const key = request.url ?? "";
+    const body = bodies.get(key) ?? granuleFromRequest(key);
+    bodies.set(key, body);
+    response.writeHead(200, { "content-type": "image/tiff", "content-length": body.length });
+    response.end(body);
+  } catch (error) {
+    response.writeHead(500, { "content-type": "text/plain" });
+    response.end(String(error.message ?? error));
+  }
+});
+await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+const address = server.address();
+assert.ok(address && typeof address === "object");
+
+const root = fs.mkdtempSync(path.join(os.tmpdir(), "terrain-global-rehearsal-"));
+const config = path.join(root, "run.json");
+// Two adjacent one-degree regions force independent deterministic longitude
+// shards. Every requested granule is generated by the local-only server.
+fs.writeFileSync(config, `${JSON.stringify({
+  cache_max_bytes: 32 * 1024 * 1024,
+  flow_config: {
+    dataset_id: "offline-rehearsal", tileset_id: "offline-rehearsal",
+    dataset_epoch: "2026-09-01T00:00:00.000Z", retrieved_at: "2026-09-01T00:00:00.000Z",
+    provider_id: "offline", source_name: "offline-fixture",
+    granule_base_url: `http://127.0.0.1:${address.port}/`, grid_size: 9, max_grid_size: 25,
+    min_level: 8, max_level: 8, timeout_ms: 10_000,
+    regions: [{ name: "fixture-west-east", west: 8, south: 44, east: 10, north: 45, max_level: 8, priority: 1 }],
+  },
+}, null, 2)}\n`);
+
+async function digestStore(dir) {
+  const rows = [];
+  for await (const record of iterateStreamFile(path.join(dir, "tiles.dttstream"))) {
+    const dtt = readDtt(record);
+    rows.push([`${dtt.level}/${dtt.x}/${dtt.y}`, createHash("sha256").update(record).digest("hex")]);
+  }
+  assert.ok(rows.length > 0, "offline rehearsal must emit non-empty $DTT records");
+  return { records: rows.length, digest: recordSetDigest(rows) };
+}
+
+try {
+  const single = path.join(root, "single");
+  const sharded = path.join(root, "sharded");
+  const startedSingle = performance.now();
+  await execFileAsync(process.execPath, [RUNNER, "--config", config, "--out", single, "--no-wasmedge-verify"], { cwd: REPO });
+  const singleLaneMs = performance.now() - startedSingle;
+  const startedShards = performance.now();
+  await execFileAsync(process.execPath, [COORDINATOR, "--config", config, "--out", sharded, "--shards", "2", "--workers", "2", "--no-wasmedge-verify", "--skip-verify"], { cwd: REPO });
+  const concurrentShardMs = performance.now() - startedShards;
+  const one = await digestStore(single);
+  const many = await digestStore(sharded);
+  assert.equal(many.digest, one.digest, "single runner and OS-worker global coordinator must emit the same $DTT address/byte set");
+  const report = {
+    regions: [{ name: "fixture-west-east", west: 8, south: 44, east: 10, north: 45 }],
+    records: one.records, singleLaneMs: +singleLaneMs.toFixed(3), concurrentShardMs: +concurrentShardMs.toFixed(3),
+    recordSetDigest: one.digest, parity: "PASS", execution: "run.mjs single lane vs global-build.mjs (2 OS workers + merge)",
+  };
+  fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
+  fs.writeFileSync(path.resolve(out), `${JSON.stringify(report, null, 2)}\n`);
+  console.log(JSON.stringify(report));
+} finally {
+  await new Promise((resolve) => server.close(resolve));
+  fs.rmSync(root, { recursive: true, force: true });
+}

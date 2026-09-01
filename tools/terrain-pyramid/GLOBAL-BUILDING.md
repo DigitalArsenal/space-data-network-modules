@@ -19,9 +19,12 @@ or deploy a flow.
   eviction and generation publication are serialized by an inter-process lock;
   each URL has a second producer lock, so competing 200/404 observations can
   only publish one immutable body/status generation. Each active cell holds
-  leases for its planned granules; LRU eviction skips live leases, and a resume
-  reclaims a lease only after its recorded PID is no longer alive (or a malformed
-  owner has exceeded the bounded expiry).
+  leases for its planned granules; LRU eviction skips live leases. Owners carry
+  both PID and a process-start identity where the OS exposes one, so a live
+  reused PID is reclaimed rather than pinning capacity. Identity-less or
+  malformed ownership gets only the bounded expiry. Interrupted publication
+  directories and corrupt generation pointers are reclaimed under that same
+  global lock before usage/capacity accounting.
 - Network retries are deterministic exponential backoff: four retries after
   the first attempt, starting at 250 ms. HTTP 404 remains a source result and
   is not retried; 408, 425, 429 and 5xx responses are retried.
@@ -64,11 +67,11 @@ Run this before an authorised source-backed global rehearsal:
 node tools/terrain-pyramid/rehearse.mjs --out /tmp/terrain-global-rehearsal.json
 ```
 
-It runs the shipped terrain-source artifact over two adjacent representative
-regions using the same local DEM/WBM fixture, then compares a single-lane cut
-with two concurrent cuts by complete `$DTT` address/byte digest. The JSON
-report records both timings and is intentionally outside the repository: it is
-performance evidence for the current box, not evidence that a global pyramid
-exists. The checked representative result is
+It starts a local-only deterministic DEM/WBM fixture and drives the existing
+`run.mjs` single lane, then `global-build.mjs --shards 2 --workers 2` and its
+real OS child workers/merge. It compares the non-empty complete `$DTT`
+address/byte digest. The JSON report records both timings and is intentionally
+outside the repository: it is performance evidence for the current box, not
+evidence that a global pyramid exists. The checked representative result is
 [`evidence/global-rehearsal.json`](./evidence/global-rehearsal.json); reproduce
 it before relying on its timings.

@@ -177,6 +177,25 @@ test("same URL producers publish one coherent generation across processes", asyn
   assert.deepEqual(a, { status: published.status, body: published.body.toString() });
 });
 
+test("cache reclaims interrupted and corrupt publication windows before capacity admission", async (t) => {
+  const dir = temporary(t);
+  const entries = path.join(dir, "entries");
+  // These model death before current.json, a torn pointer, and death after a
+  // pointer but before its whole immutable generation was published.
+  fs.mkdirSync(path.join(entries, "empty"), { recursive: true });
+  fs.writeFileSync(path.join(entries, "empty", "orphan.bin"), "x".repeat(700));
+  fs.mkdirSync(path.join(entries, "torn"), { recursive: true });
+  fs.writeFileSync(path.join(entries, "torn", "current.json"), "{not json");
+  fs.writeFileSync(path.join(entries, "torn", "generation.bin"), "x".repeat(700));
+  fs.mkdirSync(path.join(entries, "partial"), { recursive: true });
+  fs.writeFileSync(path.join(entries, "partial", "current.json"), JSON.stringify({ generation: "g", lastUsed: 0 }));
+  fs.writeFileSync(path.join(entries, "partial", "g.bin"), "x".repeat(700));
+  const cache = new BoundedGranuleCache({ dir, maxBytes: 1000, owner: "resume" });
+  await cache.fetch("https://example.test/live", { fetchImpl: async () => response(200, "v".repeat(600)) });
+  assert.equal(fs.readdirSync(entries).length, 1, "all unpublished/corrupt generations must be reclaimed");
+  assert.ok(await cache.usageBytesLocked() <= 1000);
+});
+
 test("resume reclaims a lease owned by a killed process", async (t) => {
   const dir = temporary(t);
   const maxBytes = 1000;
@@ -186,6 +205,41 @@ test("resume reclaims a lease owned by a killed process", async (t) => {
   await resumed.fetch("https://example.test/b", { fetchImpl: async () => response(200, "b".repeat(600)) });
   assert.equal(await resumed.get("https://example.test/a"), null);
   assert.equal((await resumed.get("https://example.test/b")).body.length, 600);
+});
+
+test("resume reclaims a live reused PID whose process identity changed", async (t) => {
+  const dir = temporary(t);
+  const maxBytes = 1000;
+  const old = new BoundedGranuleCache({
+    dir, maxBytes, owner: "old", pid: 77,
+    isPidAlive: (pid) => pid === 77,
+    processIdentity: (pid) => ({ pid, startToken: "boot:old" }),
+  });
+  await old.fetch("https://example.test/a", { fetchImpl: async () => response(200, "a".repeat(600)) });
+  const resumed = new BoundedGranuleCache({
+    dir, maxBytes, owner: "resumed",
+    isPidAlive: (pid) => pid === 77,
+    processIdentity: (pid) => ({ pid, startToken: "boot:new" }),
+  });
+  await resumed.fetch("https://example.test/b", { fetchImpl: async () => response(200, "b".repeat(600)) });
+  assert.equal(await resumed.get("https://example.test/a"), null);
+  assert.equal((await resumed.get("https://example.test/b")).body.length, 600);
+});
+
+test("malformed lock and lease metadata fail closed after their bounded TTL", async (t) => {
+  const dir = temporary(t);
+  const now = () => 10_000;
+  const cache = new BoundedGranuleCache({ dir, maxBytes: 1000, owner: "resume", now, leaseTtlMs: 100, lockWaitMs: 100 });
+  const lock = path.join(dir, "locks", "cache.lock");
+  fs.mkdirSync(lock, { recursive: true });
+  fs.writeFileSync(path.join(lock, "owner.json"), "{broken");
+  fs.utimesSync(lock, 0, 0);
+  const key = cache.key("https://example.test/stale");
+  const lease = path.join(dir, "leases", `${key}.dead.json`);
+  fs.writeFileSync(lease, "{broken");
+  fs.utimesSync(lease, 0, 0);
+  await cache.fetch("https://example.test/stale", { fetchImpl: async () => response(200, "ok") });
+  assert.equal(fs.existsSync(lease), false);
 });
 
 test("coordinator fault after a checkpoint resumes without recutting it", async (t) => {
@@ -209,7 +263,8 @@ test("real two-region terrain artifact rehearsal matches single and concurrent s
   const result = await execFileAsync(process.execPath, [REAL_REHEARSAL, "--out", report]);
   const parsed = JSON.parse(fs.readFileSync(report, "utf8"));
   assert.equal(parsed.parity, "PASS");
-  assert.equal(parsed.regions.length, 2);
+  assert.equal(parsed.regions.length, 1);
   assert.ok(parsed.records > 0);
+  assert.match(parsed.execution, /run\.mjs single lane.*2 OS workers/);
   assert.match(result.stdout, /"parity":"PASS"/);
 });

@@ -81,7 +81,14 @@ function atomicWrite(file, bytes) {
 }
 
 function readJson(file, fallback = null) {
-  return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : fallback;
+  try {
+    return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : fallback;
+  } catch {
+    // Lock/lease metadata is advisory only when it can be authenticated below.
+    // A torn or corrupt JSON file must never make every future process throw
+    // forever; callers treat this as unknown ownership and reclaim after TTL.
+    return fallback;
+  }
 }
 
 function safeUnlink(file) {
@@ -91,6 +98,19 @@ function safeUnlink(file) {
 function defaultPidAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try { process.kill(pid, 0); return true; } catch (error) { return error.code === "EPERM"; }
+}
+
+function defaultProcessIdentity(pid) {
+  try {
+    const boot = fs.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+    const afterCommand = stat.slice(stat.lastIndexOf(")") + 2).trim().split(/\s+/);
+    // /proc/pid/stat field 22 is starttime; afterCommand starts at field 3.
+    const start = afterCommand[19];
+    return start ? { pid, startToken: `${boot}:${start}` } : { pid, startToken: null };
+  } catch {
+    return { pid, startToken: null };
+  }
 }
 
 /**
@@ -108,6 +128,7 @@ export class BoundedGranuleCache {
     pid = process.pid,
     now = () => Date.now(),
     isPidAlive = defaultPidAlive,
+    processIdentity = defaultProcessIdentity,
     leaseTtlMs = 30 * 60_000,
     lockWaitMs = 60_000,
   }) {
@@ -119,6 +140,8 @@ export class BoundedGranuleCache {
     this.pid = pid;
     this.now = now;
     this.isPidAlive = isPidAlive;
+    this.processIdentity = processIdentity;
+    this.identity = processIdentity(pid);
     this.leaseTtlMs = leaseTtlMs;
     this.lockWaitMs = lockWaitMs;
     this.retries = 0;
@@ -156,17 +179,23 @@ export class BoundedGranuleCache {
     while (true) {
       try {
         fs.mkdirSync(lockDir);
-        atomicWrite(ownerFile, `${JSON.stringify({ token, pid: this.pid, acquiredAt: this.now() })}\n`);
+        atomicWrite(ownerFile, `${JSON.stringify({ token, pid: this.pid, identity: this.identity, acquiredAt: this.now() })}\n`);
         break;
       } catch (error) {
         if (error.code !== "EEXIST") throw error;
         const owner = readJson(ownerFile);
         const age = (() => { try { return this.now() - fs.statSync(lockDir).mtimeMs; } catch { return 0; } })();
-        const dead = owner && !this.isPidAlive(Number(owner.pid));
+        const ownerValid = owner && Number.isInteger(Number(owner.pid));
+        const dead = ownerValid && !this.isPidAlive(Number(owner.pid));
+        const reusedPid = ownerValid && this.isPidAlive(Number(owner.pid)) && !this.ownerStillMatches(owner, age);
         // A lock with no owner file can only be reclaimed after its bounded
         // grace period; otherwise another process between mkdir and write
         // could have its live lock stolen.
-        if (dead || (!owner && age > this.leaseTtlMs)) {
+        // A matching process identity is the only unbounded lock owner.  A
+        // dead owner or a live but reused PID is conclusively stale; missing,
+        // corrupt, or identity-less metadata receives only the bounded grace
+        // period so a crash between mkdir and owner publication is safe.
+        if (dead || reusedPid || ((!ownerValid || !owner.identity?.startToken) && age > this.leaseTtlMs)) {
           try { fs.rmSync(lockDir, { recursive: true, force: true }); } catch {}
           continue;
         }
@@ -185,14 +214,30 @@ export class BoundedGranuleCache {
   withGlobalLock(action) { return this.withDirectoryLock(path.join(this.dir, "locks", "cache.lock"), action); }
   withProducerLock(key, action) { return this.withDirectoryLock(path.join(this.dir, "producer-locks", `${key}.lock`), action); }
 
+  ownerStillMatches(owner, age) {
+    if (!owner || !this.isPidAlive(Number(owner.pid))) return false;
+    const recorded = owner.identity?.startToken;
+    const observed = this.processIdentity(Number(owner.pid))?.startToken;
+    if (recorded && observed) return recorded === observed;
+    // Platforms without a durable start identity may retain a live PID only
+    // for a bounded interval; PID reuse can therefore never pin a cache lock
+    // or lease forever.
+    return age <= this.leaseTtlMs;
+  }
+
   reclaimStaleLeasesUnlocked() {
     const leaseDir = path.join(this.dir, "leases");
     for (const name of fs.readdirSync(leaseDir)) {
       const file = path.join(leaseDir, name);
       const lease = readJson(file);
       const age = (() => { try { return this.now() - fs.statSync(file).mtimeMs; } catch { return 0; } })();
-      const dead = lease && !this.isPidAlive(Number(lease.pid));
-      if (dead || (!lease && age > this.leaseTtlMs)) safeUnlink(file);
+      const valid = lease && Number.isInteger(Number(lease.pid));
+      const dead = valid && !this.isPidAlive(Number(lease.pid));
+      const reusedPid = valid && this.isPidAlive(Number(lease.pid)) && !this.ownerStillMatches(lease, age);
+      // A dead/reused identity is evidence the reservation cannot be owned by
+      // the recorded producer. Corrupt and identity-less metadata instead
+      // waits through a bounded TTL to protect the mkdir/write crash window.
+      if (dead || reusedPid || ((!valid || !lease.identity?.startToken) && age > this.leaseTtlMs)) safeUnlink(file);
     }
   }
 
@@ -212,18 +257,27 @@ export class BoundedGranuleCache {
   cleanupEntryUnlocked(key) {
     const dir = this.entryDir(key);
     const pointer = readJson(this.pointerPath(key));
-    if (!pointer?.generation || !fs.existsSync(dir)) return;
+    if (!fs.existsSync(dir)) return false;
+    if (!pointer?.generation) {
+      fs.rmSync(dir, { recursive: true, force: true });
+      return false;
+    }
     const keep = new Set(["current.json", `${pointer.generation}.bin`, `${pointer.generation}.status`, `${pointer.generation}.meta.json`]);
+    if (![...keep].every((name) => fs.existsSync(path.join(dir, name)))) {
+      fs.rmSync(dir, { recursive: true, force: true });
+      return false;
+    }
     for (const name of fs.readdirSync(dir)) {
       if (!keep.has(name)) safeUnlink(path.join(dir, name));
     }
+    return true;
   }
 
-  entriesUnlocked() {
+  entriesUnlocked({ reclaimOrphans = false } = {}) {
     const root = path.join(this.dir, "entries");
     const rows = [];
     for (const key of fs.readdirSync(root)) {
-      this.cleanupEntryUnlocked(key);
+      if (reclaimOrphans && !this.cleanupEntryUnlocked(key)) continue;
       const pointer = readJson(this.pointerPath(key));
       if (!pointer?.generation) continue;
       const dir = this.entryDir(key);
@@ -241,11 +295,18 @@ export class BoundedGranuleCache {
 
   usageBytes() { return this.entriesUnlocked().reduce((total, entry) => total + entry.bytes, 0); }
 
+  async usageBytesLocked() {
+    return this.withGlobalLock(async () => {
+      this.reclaimStaleLeasesUnlocked();
+      return this.entriesUnlocked({ reclaimOrphans: true }).reduce((total, entry) => total + entry.bytes, 0);
+    });
+  }
+
   evictForUnlocked(requiredBytes) {
     assert.ok(requiredBytes <= this.maxBytes, `one granule (${requiredBytes} B) exceeds cache cap ${this.maxBytes} B`);
-    let used = this.usageBytes();
+    let used = this.entriesUnlocked({ reclaimOrphans: true }).reduce((total, entry) => total + entry.bytes, 0);
     if (used + requiredBytes <= this.maxBytes) return used;
-    const candidates = this.entriesUnlocked()
+    const candidates = this.entriesUnlocked({ reclaimOrphans: true })
       .filter((entry) => !this.hasLeaseUnlocked(entry.key))
       .sort((a, b) => a.lastUsed - b.lastUsed || a.key.localeCompare(b.key));
     for (const entry of candidates) {
@@ -260,14 +321,14 @@ export class BoundedGranuleCache {
 
   publishUnlocked(url, status, body) {
     const key = this.key(url);
-    const dir = this.entryDir(key);
-    fs.mkdirSync(dir, { recursive: true });
     const generation = randomUUID();
     const bytes = Buffer.from(body);
     const metadata = `${JSON.stringify({ url, status, bytes: bytes.length, generation })}\n`;
     const pointer = `${JSON.stringify({ generation, lastUsed: this.now() })}\n`;
     const requiredBytes = bytes.length + Buffer.byteLength(`${status}\n`) + Buffer.byteLength(metadata) + Buffer.byteLength(pointer);
     this.evictForUnlocked(requiredBytes);
+    const dir = this.entryDir(key);
+    fs.mkdirSync(dir, { recursive: true });
     atomicWrite(path.join(dir, `${generation}.bin`), bytes);
     atomicWrite(path.join(dir, `${generation}.status`), `${status}\n`);
     atomicWrite(path.join(dir, `${generation}.meta.json`), metadata);
@@ -279,7 +340,8 @@ export class BoundedGranuleCache {
     const key = this.key(url);
     await this.withGlobalLock(async () => {
       this.reclaimStaleLeasesUnlocked();
-      atomicWrite(this.leasePath(key), `${JSON.stringify({ owner: this.owner, pid: this.pid, acquiredAt: this.now() })}\n`);
+      this.entriesUnlocked({ reclaimOrphans: true });
+      atomicWrite(this.leasePath(key), `${JSON.stringify({ owner: this.owner, pid: this.pid, identity: this.identity, acquiredAt: this.now() })}\n`);
     });
     return this.paths(url);
   }
@@ -305,6 +367,7 @@ export class BoundedGranuleCache {
   async get(url) {
     return this.withGlobalLock(async () => {
       this.reclaimStaleLeasesUnlocked();
+      this.entriesUnlocked({ reclaimOrphans: true });
       const cached = this.readEntryUnlocked(url);
       if (!cached) return null;
       const pointer = readJson(cached.entry.pointer);
@@ -316,6 +379,7 @@ export class BoundedGranuleCache {
   async put(url, status, body) {
     return this.withGlobalLock(async () => {
       this.reclaimStaleLeasesUnlocked();
+      this.entriesUnlocked({ reclaimOrphans: true });
       return { ...this.publishUnlocked(url, status, body), hit: false };
     });
   }

@@ -1,18 +1,17 @@
 {
-  "generatedAt": "2026-09-01T17:08:00.000Z",
-  "command": "node tools/terrain-pyramid/rehearse.mjs --out /private/tmp/terrain-global-rehearsal-final.json",
-  "runtime": {
-    "node": "v25.4.0",
-    "artifact": "locally rebuilt data-source/terrain-source/dist/isomorphic/module.wasm"
-  },
   "regions": [
-    { "name": "west", "tiles": 2 },
-    { "name": "east", "tiles": 2 }
+    {
+      "name": "fixture-west-east",
+      "west": 8,
+      "south": 44,
+      "east": 10,
+      "north": 45
+    }
   ],
-  "records": 4,
-  "singleLaneMs": 22.714,
-  "concurrentShardMs": 13.114,
-  "recordSetDigest": "247bf2c22e72ea08c9fa99ba586dcd0598a0111a055b990e16ae3debf875f945",
+  "records": 8,
+  "singleLaneMs": 1337.999,
+  "concurrentShardMs": 1666.038,
+  "recordSetDigest": "4b6152a08cd5b43102859e53ef57c70720a0793497028a9c8faa015879a3f837",
   "parity": "PASS",
-  "scope": "offline two-region representative fixture; this is not a global pyramid cut or publication"
+  "execution": "run.mjs single lane vs global-build.mjs (2 OS workers + merge)"
 }
