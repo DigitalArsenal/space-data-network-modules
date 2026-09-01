@@ -39,6 +39,8 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 
+import { BoundedGranuleCache } from "./build-support.mjs";
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..");
 const RUNTIME_WASM = path.join(REPO, "flows", "terrain-ingest", "dist", "runtime.wasm");
@@ -55,11 +57,20 @@ function parseArgs(argv) {
     if (flag === "--config") args.config = argv[++i];
     else if (flag === "--out") args.out = argv[++i];
     else if (flag === "--max-cells") args.maxCells = Number(argv[++i]);
+    else if (flag === "--cache-dir") args.cacheDir = argv[++i];
+    else if (flag === "--cache-max-bytes") args.cacheMaxBytes = Number(argv[++i]);
+    else if (flag === "--fetch-retries") args.fetchRetries = Number(argv[++i]);
+    else if (flag === "--retry-base-ms") args.retryBaseMs = Number(argv[++i]);
     else if (flag === "--docker") args.docker = true;
     else if (flag === "--no-wasmedge-verify") args.wasmedgeVerify = false;
     else throw new Error(`unknown argument ${flag}`);
   }
   if (!args.config) throw new Error("--config <run.json> is required");
+  for (const [name, value] of [["--cache-max-bytes", args.cacheMaxBytes], ["--fetch-retries", args.fetchRetries], ["--retry-base-ms", args.retryBaseMs]]) {
+    if (value !== undefined && (!Number.isFinite(value) || value < 0 || !Number.isInteger(value))) {
+      throw new Error(`${name} must be a non-negative integer`);
+    }
+  }
   return args;
 }
 
@@ -393,6 +404,7 @@ async function main() {
     cells: 0,
     fetches: 0,
     fetch404: 0,
+    fetchRetries: 0,
     fetchBytes: 0,
     tiles: 0,
     marksWritten: 0,
@@ -503,22 +515,32 @@ async function main() {
   // cache either exhausts the machine or re-downloads the dataset once per
   // level. On disk, each granule is fetched ONCE for the whole run and only
   // the granule being decoded is resident.
-  const granuleDir = path.join(outDir, "granules");
-  fs.mkdirSync(granuleDir, { recursive: true });
-  const cachePath = (url) => path.join(granuleDir, `${createHash("sha256").update(url).digest("hex").slice(0, 32)}.bin`);
-  const statusPath = (url) => `${cachePath(url)}.status`;
+  // Global source coverage is 529 GiB if every granule is retained.  The
+  // default is deliberately below the measured 382 GiB host free space; a
+  // global config may choose a lower cap, but it may not opt back into an
+  // unbounded cache.  Leases preserve the eight files needed by an active cell
+  // across concurrent shard workers while LRU evicts completed cells.
+  const cacheMaxBytes = args.cacheMaxBytes ?? runConfig.cache_max_bytes ?? 128 * 1024 ** 3;
+  const granuleCache = new BoundedGranuleCache({
+    dir: args.cacheDir ?? runConfig.cache_dir ?? path.join(outDir, "granules"),
+    maxBytes: cacheMaxBytes,
+  });
+  const cachePath = (url) => granuleCache.paths(url).body;
+  const statusPath = (url) => granuleCache.paths(url).status;
 
   async function prefetch(urls) {
     await Promise.all(
       urls.map(async (url) => {
-        if (fs.existsSync(statusPath(url))) return;
-        const res = await fetch(url, { redirect: "follow" });
-        const body = res.ok ? Buffer.from(await res.arrayBuffer()) : Buffer.alloc(0);
-        fs.writeFileSync(cachePath(url), body);
-        fs.writeFileSync(statusPath(url), String(res.status));
-        stats.fetches += 1;
-        stats.fetchBytes += body.length;
-        if (res.status === 404) stats.fetch404 += 1;
+        const fetched = await granuleCache.fetch(url, {
+          retries: args.fetchRetries ?? runConfig.fetch_retries ?? 4,
+          retryBaseMs: args.retryBaseMs ?? runConfig.retry_base_ms ?? 250,
+          onRetry: () => { stats.fetchRetries += 1; },
+        });
+        if (!fetched.hit) {
+          stats.fetches += 1;
+          stats.fetchBytes += fetched.body.length;
+          if (fetched.status === 404) stats.fetch404 += 1;
+        }
       }),
     );
   }
@@ -850,7 +872,8 @@ async function main() {
   while (stats.cells < args.maxCells && backlog > 0) {
     const planned = await planCell();
     if (!planned) break;
-    await prefetch(planned.urls);
+    try {
+      await prefetch(planned.urls);
     const marksBefore = stats.marksWritten;
     const built = await buildCell();
     // THE DURABLE MARK IS THE TEST, not the egress frame. Without a mark IN THE
@@ -902,6 +925,12 @@ async function main() {
         `(${planned.job.cell_lon},${planned.job.cell_lat}) tiles ${planned.job.cell_tiles} ` +
         `stored ${built.stored} backlog ${backlog}\n`,
     );
+    } finally {
+      // The cell's flow and parity pass have consumed these exact bytes, or
+      // have failed. Either way this worker must not leave a permanent lease
+      // that makes a resumed global build falsely report the cache exhausted.
+      for (const url of planned.urls) granuleCache.release(url);
+    }
   }
 
   const elapsed = Date.now() - started;
@@ -914,6 +943,13 @@ async function main() {
     cells: stats.cells,
     fetches: stats.fetches,
     fetch404: stats.fetch404,
+    fetchRetries: stats.fetchRetries,
+    granuleCache: {
+      dir: granuleCache.dir,
+      maxBytes: granuleCache.maxBytes,
+      usedBytes: granuleCache.usageBytes(),
+      evictions: granuleCache.evictions,
+    },
     fetchMiB: +(stats.fetchBytes / 1048576).toFixed(2),
     tiles: stats.tiles,
     // Durable $IRM marks actually written through storage.write. One per cell

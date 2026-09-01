@@ -14,6 +14,7 @@
 
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
+import { createReadStream } from "node:fs";
 
 // ── size-prefixed record framing: [u32 LE length][record] ───────────────────
 //
@@ -33,6 +34,30 @@ export function splitStream(bytes) {
   }
   assert.equal(offset, buf.length, "the stream ends exactly on a record boundary");
   return records;
+}
+
+// The global store is measured at 5.55–8.51 GiB, above Node's single-Buffer
+// limit.  Yield one framed record at a time so callers keep only the indexes
+// their validation needs, not the entire byte stream.  The carry buffer is at
+// most one record plus a read chunk.
+export async function* iterateStreamFile(file, { highWaterMark = 1024 * 1024 } = {}) {
+  let pending = Buffer.alloc(0);
+  for await (const chunk of createReadStream(file, { highWaterMark })) {
+    pending = pending.length ? Buffer.concat([pending, chunk]) : Buffer.from(chunk);
+    let offset = 0;
+    while (offset + 4 <= pending.length) {
+      const length = pending.readUInt32LE(offset);
+      if (length === 0) {
+        offset += 4;
+        continue;
+      }
+      if (offset + 4 + length > pending.length) break;
+      yield pending.subarray(offset + 4, offset + 4 + length);
+      offset += 4 + length;
+    }
+    pending = pending.subarray(offset);
+  }
+  assert.equal(pending.length, 0, "the stream ends exactly on a record boundary");
 }
 
 // ── a hand-written $DTT reader (field ids follow schema/DTT/main.fbs) ───────

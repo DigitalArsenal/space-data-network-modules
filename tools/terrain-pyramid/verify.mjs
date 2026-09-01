@@ -15,7 +15,7 @@ import path from "node:path";
 import process from "node:process";
 import zlib from "node:zlib";
 
-import { readDtt, readDttProvenance, splitStream } from "./dtt-reader.mjs";
+import { iterateStreamFile, readDtt, readDttProvenance } from "./dtt-reader.mjs";
 
 // ── THE BOUNDS THIS PYRAMID HAS TO SATISFY TO BE PUBLISHABLE ───────────────
 //
@@ -206,7 +206,9 @@ const oceanSkippedFile = fs.existsSync(oceanSkippedPath)
   : null;
 const oceanSkipped = new Set(oceanSkippedFile?.addresses ?? []);
 
-const records = splitStream(fs.readFileSync(path.join(outDir, "tiles.dttstream")));
+const recordsPath = path.join(outDir, "tiles.dttstream");
+let recordCount = 0;
+let firstRecord = null;
 
 const byLevel = new Map();
 const seen = new Set();
@@ -247,7 +249,9 @@ const edgesByAddress = new Map();
 const maskEdgesByAddress = new Map();
 const problems = [];
 
-for (const record of records) {
+for await (const record of iterateStreamFile(recordsPath)) {
+  recordCount += 1;
+  if (!firstRecord) firstRecord = Buffer.from(record);
   const dtt = readDtt(record);
   const key = `${dtt.level}/${dtt.x}/${dtt.y}`;
   if (seen.has(key)) problems.push(`duplicate address ${key}`);
@@ -949,7 +953,7 @@ const availableBytes = Buffer.byteLength(JSON.stringify(available));
 
 const summary = {
   outDir,
-  tiles: records.length,
+  tiles: recordCount,
   distinctAddresses: seen.size,
   storeBytes: fs.statSync(path.join(outDir, "tiles.dttstream")).size,
   levels: [...byLevel.keys()].sort((a, b) => a - b),
@@ -957,7 +961,7 @@ const summary = {
   payloadBytes: { p50: pct(0.5), p99: pct(0.99), max: sizes[sizes.length - 1] ?? 0, bounds: BOUNDS },
   uniformMasks: uniform,
   rasterMasks: raster,
-  uniformMaskRatio: records.length ? +(uniform / records.length).toFixed(4) : 0,
+  uniformMaskRatio: recordCount ? +(uniform / recordCount).toFixed(4) : 0,
   maskBytesStored: maskBytes,
   oceanTilesStored: oceanStored,
   uniformWaterTilesNotFlat: uniformWaterNotFlat,
@@ -1089,8 +1093,9 @@ fs.writeFileSync(path.join(outDir, "verify-report.json"), `${JSON.stringify(summ
 // not exist until ipfs-publish.mjs has added it. Everything else the mount
 // needs to answer a $DTT catalogue is here, so the publish step adds exactly
 // those two and nothing has to be invented at deploy time.
-const datum = readDtt(records[0]);
-const lineage = readDttProvenance(records[0]).raw;
+assert.ok(firstRecord, "the pyramid has no $DTT records");
+const datum = readDtt(firstRecord);
+const lineage = readDttProvenance(firstRecord).raw;
 const deployLineage = {
   terrain_tileset_id: datum.tilesetId,
   terrain_dataset_id: lineage.DATASET_ID,
