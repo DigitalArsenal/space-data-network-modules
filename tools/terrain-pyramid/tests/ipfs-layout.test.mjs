@@ -47,9 +47,31 @@ const encoder = new TextEncoder();
 const PUBLISHER = path.join(HERE, "..", "ipfs-publish.mjs");
 const ROOT_CID = "bafybeigdyrzt5n52ca7m5qz7cdqzsvdbi7lrtqhdq6k4k3v4bnva4y5m4e";
 const RECEIPT_CID = "bafybeihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku";
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+const TEST_RAW_PUBLICATION_POLICY = Object.freeze({
+  version: 1,
+  max_verified_store_bytes: 8 * 1024 * 1024,
+  max_static_directory_bytes: 32 * 1024 * 1024,
+  static_directory_basis: "bounded fixture static identity directory",
+  synthesized_tile_grid_size: 2,
+});
+const TEST_APPROVED_CONFIG = Object.freeze({
+  flow_config: {
+    terrain_synth_grid_size: 2,
+    regions: [{ name: "ipfs-layout-fixture", west: 7.9, east: 8.9, south: 44.5, north: 45.5 }],
+  },
+  publication_policy: TEST_RAW_PUBLICATION_POLICY,
+});
+const TEST_GLOBAL_CONFIG_DIGEST = createHash("sha256").update(canonicalJson(TEST_APPROVED_CONFIG)).digest("hex");
 const TEST_PUBLICATION_POLICY = Object.freeze({
   format: "terrain-publication-policy-v1",
-  globalConfigDigest: createHash("sha256").update("ipfs-layout-test-policy").digest("hex"),
+  globalConfigDigest: TEST_GLOBAL_CONFIG_DIGEST,
   maxVerifiedStoreBytes: 8 * 1024 * 1024,
   maxStaticDirectoryBytes: 32 * 1024 * 1024,
   synthGridSize: 2,
@@ -87,6 +109,25 @@ function lfCount(file) {
 }
 
 function refreshPublicationReceipt(outDir, policy = TEST_PUBLICATION_POLICY) {
+  const rawPolicy = {
+    ...TEST_RAW_PUBLICATION_POLICY,
+    max_verified_store_bytes: policy.maxVerifiedStoreBytes,
+    max_static_directory_bytes: policy.maxStaticDirectoryBytes,
+    synthesized_tile_grid_size: policy.synthGridSize,
+  };
+  const approvedConfig = {
+    ...TEST_APPROVED_CONFIG,
+    flow_config: { ...TEST_APPROVED_CONFIG.flow_config, terrain_synth_grid_size: policy.synthGridSize },
+    publication_policy: rawPolicy,
+  };
+  const globalConfigDigest = createHash("sha256").update(canonicalJson(approvedConfig)).digest("hex");
+  const boundPolicy = { ...policy, globalConfigDigest };
+  const policyReceipt = {
+    policy: rawPolicy,
+    digest: createHash("sha256").update(canonicalJson(rawPolicy)).digest("hex"),
+    globalConfigDigest,
+  };
+  fs.writeFileSync(path.join(outDir, "approved-run-config.json"), `${JSON.stringify(approvedConfig)}\n`);
   const input = (name, countField = null) => {
     const file = path.join(outDir, name);
     const entry = { path: name, bytes: fs.statSync(file).size, sha256: sha256File(file) };
@@ -95,6 +136,22 @@ function refreshPublicationReceipt(outDir, policy = TEST_PUBLICATION_POLICY) {
   };
   const tiles = input("tiles.dttstream");
   tiles.records = splitStream(fs.readFileSync(path.join(outDir, "tiles.dttstream"))).length;
+  fs.writeFileSync(
+    path.join(outDir, "global-build-state.json"),
+    JSON.stringify({
+      version: 1,
+      completed: true,
+      configDigest: globalConfigDigest,
+      publicationPolicy: policyReceipt,
+      merged: {
+        completion: "complete",
+        configDigest: globalConfigDigest,
+        approvedConfigPath: "approved-run-config.json",
+        records: tiles.records,
+        publicationPolicy: policyReceipt,
+      },
+    }),
+  );
   const verifyPath = path.join(outDir, "verify-report.json");
   const prior = fs.existsSync(verifyPath) ? JSON.parse(fs.readFileSync(verifyPath, "utf8")) : {};
   fs.writeFileSync(
@@ -105,18 +162,30 @@ function refreshPublicationReceipt(outDir, policy = TEST_PUBLICATION_POLICY) {
       publishable: true,
       problems: prior.problems ?? [],
       tiles: tiles.records,
-      publicationPolicy: policy,
+      publicationPolicy: boundPolicy,
       publicationInputs: {
-        format: "terrain-publication-inputs-v1",
+        format: "terrain-publication-inputs-v2",
         tiles,
         availableButUnstored: input("available-but-unstored.ndjson", "addresses"),
         layerConfig: input("layer-json-config.json"),
         oceanReceipt: input("ocean-skipped.json"),
         oceanAddresses: input("ocean-skipped.lines", "addresses"),
+        globalState: input("global-build-state.json"),
+        approvedConfig: input("approved-run-config.json"),
         oceanLegacyUnbound: false,
       },
     }),
   );
+}
+
+function rebindPublicationInput(outDir, field, name, countField = null) {
+  const reportPath = path.join(outDir, "verify-report.json");
+  const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+  const file = path.join(outDir, name);
+  const entry = { path: name, bytes: fs.statSync(file).size, sha256: sha256File(file) };
+  if (countField) entry[countField] = lfCount(file);
+  report.publicationInputs[field] = entry;
+  fs.writeFileSync(reportPath, JSON.stringify(report));
 }
 
 async function readRequest(req, slow = false) {
@@ -600,6 +669,8 @@ test("the publication report and the directory agree on what was published", () 
   assert.ok(BigInt(report.materializationPlan.reservedStaticPhysicalBytes) >= BigInt(report.materializationPlan.approvedStaticLogicalBytes));
   assert.ok(BigInt(report.materializationPlan.reservedStaticPhysicalBytes) >= BigInt(report.materializationPlan.actualStaticPhysicalUpperBytes));
   assert.ok(BigInt(report.materializationPlan.reservedUploadManifestPhysicalBytes) > 0n);
+  assert.ok(report.materializationPlan.plannedDirectoryRows >= report.materializationPlan.files);
+  assert.ok(BigInt(report.materializationPlan.reservedUploadManifestRows) >= BigInt(report.materializationPlan.files));
   assert.ok(BigInt(report.materializationPlan.stagingRequiredBytes) > BigInt(report.materializationPlan.approvedStaticLogicalBytes));
 });
 
@@ -659,6 +730,7 @@ test("a forged non-terminal verification report with problems=[] is refused", as
 
 test("publicationInputs accepts only the exact bound compact-ocean receipt schema", async () => {
   const mutations = {
+    legacyV1: (receipt) => { receipt.format = "terrain-publication-inputs-v1"; },
     missing: (receipt) => { delete receipt.oceanLegacyUnbound; },
     extra: (receipt) => { receipt.unexpected = true; },
     nullOcean: (receipt) => { receipt.oceanReceipt = null; },
@@ -676,7 +748,7 @@ test("publicationInputs accepts only the exact bound compact-ocean receipt schem
 });
 
 test("bound inputs reject symlinks and same-count mutation after preflight", async () => {
-  for (const name of ["verify-report.json", "tiles.dttstream", "layer-json-config.json", "available-but-unstored.ndjson"]) {
+  for (const name of ["verify-report.json", "tiles.dttstream", "layer-json-config.json", "available-but-unstored.ndjson", "global-build-state.json", "approved-run-config.json"]) {
     const outDir = copyFixtureOutput();
     const file = path.join(outDir, name);
     const target = path.join(outDir, `${name}.regular-target`);
@@ -695,6 +767,34 @@ test("bound inputs reject symlinks and same-count mutation after preflight", asy
   fs.symlinkSync(realOut, symlinkOut);
   const parent = await runPublisher(symlinkOut, ["--no-add"]);
   assert.notEqual(parent.code, 0, "a symlinked output parent must be refused");
+});
+
+test("global completion state and canonical approved config must authorize the verify policy", async () => {
+  for (const mutate of [
+    (state) => { state.completed = false; },
+    (state) => { state.merged.completion = "incomplete"; },
+    (state) => { state.configDigest = "0".repeat(64); },
+    (state) => { state.merged.records += 1; },
+    (state) => { state.merged.approvedConfigPath = "other.json"; },
+    (state) => { state.publicationPolicy.policy.max_static_directory_bytes += 1; },
+  ]) {
+    const outDir = copyFixtureOutput();
+    const statePath = path.join(outDir, "global-build-state.json");
+    const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
+    mutate(state);
+    fs.writeFileSync(statePath, JSON.stringify(state));
+    rebindPublicationInput(outDir, "globalState", "global-build-state.json");
+    const result = await runPublisher(outDir, ["--no-add"]);
+    assert.notEqual(result.code, 0, "authoritative global-state fault must be refused");
+  }
+  const outDir = copyFixtureOutput();
+  const configPath = path.join(outDir, "approved-run-config.json");
+  const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+  config.flow_config.regions[0].name = "forged";
+  fs.writeFileSync(configPath, JSON.stringify(config));
+  rebindPublicationInput(outDir, "approvedConfig", "approved-run-config.json");
+  const result = await runPublisher(outDir, ["--no-add"]);
+  assert.notEqual(result.code, 0, "canonical approved config digest mismatch must be refused");
 });
 
 test("publication policy independently caps store and static-directory materialization", async () => {

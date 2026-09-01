@@ -79,6 +79,8 @@ const MAX_RECEIPT_NAME_BYTES = 4 * 1024;
 const MAX_RECEIPT_HASH_BYTES = 256;
 const MAX_CONTROL_RESPONSE_BYTES = 64 * 1024;
 const MAX_WORKLIST_LINE_BYTES = 1024;
+const MAX_UPLOAD_MANIFEST_LINE_BYTES = 512;
+const MAX_TILESET_ID_BYTES = 256;
 const MAX_OCEAN_DIAGNOSTICS = 8;
 const OCEAN_SKIP_MAX_RECEIPT_BYTES = 64 * 1024;
 const OCEAN_SKIP_MAX_LINES_BYTES = 512 * 1024 * 1024;
@@ -86,8 +88,10 @@ const OCEAN_SKIP_MAX_LINE_BYTES = 256;
 const TERRAIN_ADDRESS_FIELD_WIDTH = 12;
 const MAX_VERIFY_REPORT_BYTES = 512 * 1024;
 const MAX_LAYER_CONFIG_BYTES = 8 * 1024 * 1024;
+const MAX_GLOBAL_STATE_BYTES = 8 * 1024 * 1024;
+const MAX_APPROVED_CONFIG_BYTES = 8 * 1024 * 1024;
 const MAX_LAYER_JSON_BYTES = STATIC_TRANSPORT_BOUNDS.hard;
-const PUBLICATION_INPUTS_FORMAT = "terrain-publication-inputs-v1";
+const PUBLICATION_INPUTS_FORMAT = "terrain-publication-inputs-v2";
 const PUBLICATION_POLICY_FORMAT = "terrain-publication-policy-v1";
 // A global directory is tens of GiB, not a control-plane request.  Keep the
 // deadline finite but derive it from a deliberately conservative reviewed
@@ -161,16 +165,21 @@ const transactionPath = path.join(outDir, ".ipfs-publication-transaction.json");
 const outStat = fs.lstatSync(outDir, { bigint: true });
 assert.ok(outStat.isDirectory() && !outStat.isSymbolicLink(), `builder output is not a real directory: ${outDir}`);
 
-function immutableIdentity(file, label) {
-  const stat = fs.lstatSync(file, { bigint: true });
+function immutableIdentityFromStat(stat, file, label) {
   assert.ok(stat.isFile() && !stat.isSymbolicLink(), `${label} is not a regular file: ${file}`);
   return {
-    dev: stat.dev.toString(), ino: stat.ino.toString(), size: stat.size.toString(), mtimeNs: stat.mtimeNs.toString(),
+    dev: stat.dev.toString(), ino: stat.ino.toString(), size: stat.size.toString(),
+    mtimeNs: stat.mtimeNs.toString(), ctimeNs: stat.ctimeNs.toString(),
   };
 }
 
+function immutableIdentity(file, label) {
+  return immutableIdentityFromStat(fs.lstatSync(file, { bigint: true }), file, label);
+}
+
 function sameImmutableIdentity(left, right) {
-  return left.dev === right.dev && left.ino === right.ino && left.size === right.size && left.mtimeNs === right.mtimeNs;
+  return left.dev === right.dev && left.ino === right.ino && left.size === right.size &&
+    left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs;
 }
 
 function assertWithinRealOutput(file, label) {
@@ -198,7 +207,7 @@ function openRegularRead(file, label) {
   const before = immutableIdentity(file, label);
   const descriptor = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
   const opened = fs.fstatSync(descriptor, { bigint: true });
-  if (!opened.isFile() || opened.dev.toString() !== before.dev || opened.ino.toString() !== before.ino) {
+  if (!opened.isFile() || !sameImmutableIdentity(before, immutableIdentityFromStat(opened, file, label))) {
     fs.closeSync(descriptor);
     throw new Error(`${label} changed while opening: ${file}`);
   }
@@ -210,6 +219,7 @@ function readBoundedRegularFile(file, maxBytes, label, expectedIdentity = null) 
   if (expectedIdentity) assert.ok(sameImmutableIdentity(identity, expectedIdentity), `${label} changed since publication preflight: ${file}`);
   try {
     const stat = fs.fstatSync(descriptor, { bigint: true });
+    assert.ok(sameImmutableIdentity(identity, immutableIdentityFromStat(stat, file, label)), `${label} changed while opening: ${file}`);
     assert.ok(stat.size <= BigInt(maxBytes), `${label} exceeds ${maxBytes} bytes: ${file}`);
     const bytes = Buffer.alloc(Number(stat.size));
     let offset = 0;
@@ -218,6 +228,8 @@ function readBoundedRegularFile(file, maxBytes, label, expectedIdentity = null) 
       assert.ok(read > 0, `${label} ended while being read: ${file}`);
       offset += read;
     }
+    const fdAfter = immutableIdentityFromStat(fs.fstatSync(descriptor, { bigint: true }), file, label);
+    assert.ok(sameImmutableIdentity(identity, fdAfter), `${label} changed while being read: ${file}`);
     const after = immutableIdentity(file, label);
     assert.ok(sameImmutableIdentity(identity, after), `${label} changed while being read: ${file}`);
     if (expectedIdentity) assert.ok(sameImmutableIdentity(after, expectedIdentity), `${label} changed since publication preflight: ${file}`);
@@ -244,11 +256,19 @@ recoverPublicationTransaction();
 async function* regularFileChunks(file, label, expectedIdentity = null) {
   const { descriptor, identity } = openRegularRead(file, label);
   if (expectedIdentity) assert.ok(sameImmutableIdentity(identity, expectedIdentity), `${label} changed since publication preflight: ${file}`);
-  const stream = fs.createReadStream(null, { fd: descriptor, autoClose: true, highWaterMark: 64 * 1024 });
+  const buffer = Buffer.allocUnsafe(64 * 1024);
   try {
-    for await (const chunk of stream) yield Buffer.from(chunk);
+    for (;;) {
+      const read = fs.readSync(descriptor, buffer, 0, buffer.length, null);
+      if (read === 0) break;
+      // Copy this bounded window before the next synchronous read overwrites
+      // it. The caller therefore sees one held-fd chunk at a time.
+      yield Buffer.from(buffer.subarray(0, read));
+    }
   } finally {
-    stream.destroy();
+    const fdAfter = immutableIdentityFromStat(fs.fstatSync(descriptor, { bigint: true }), file, label);
+    fs.closeSync(descriptor);
+    assert.ok(sameImmutableIdentity(identity, fdAfter), `${label} changed while being streamed: ${file}`);
   }
   const after = immutableIdentity(file, label);
   assert.ok(sameImmutableIdentity(identity, after), `${label} changed while being streamed: ${file}`);
@@ -320,9 +340,11 @@ function assertPublicationInputEntry(entry, pathName, countField = null) {
   if (countField) fields.push(countField);
   assertExactKeys(entry, fields, `publicationInputs.${pathName}`);
   assert.equal(entry.path, pathName === "tiles" ? "tiles.dttstream" :
-    pathName === "availableButUnstored" ? "available-but-unstored.ndjson" :
+      pathName === "availableButUnstored" ? "available-but-unstored.ndjson" :
       pathName === "layerConfig" ? "layer-json-config.json" :
-        pathName === "oceanReceipt" ? "ocean-skipped.json" : "ocean-skipped.lines",
+        pathName === "oceanReceipt" ? "ocean-skipped.json" :
+          pathName === "oceanAddresses" ? "ocean-skipped.lines" :
+            pathName === "globalState" ? "global-build-state.json" : "approved-run-config.json",
   `publicationInputs.${pathName}.path is not the approved output name`);
   assert.ok(Number.isSafeInteger(entry.bytes) && entry.bytes >= 0, `publicationInputs.${pathName}.bytes must be a non-negative safe integer`);
   assert.match(entry.sha256 ?? "", /^[a-f0-9]{64}$/, `publicationInputs.${pathName}.sha256 must be SHA-256 hex`);
@@ -331,7 +353,7 @@ function assertPublicationInputEntry(entry, pathName, countField = null) {
 }
 
 function assertPublicationInputs(receipt) {
-  assertExactKeys(receipt, ["format", "tiles", "availableButUnstored", "layerConfig", "oceanReceipt", "oceanAddresses", "oceanLegacyUnbound"], "publicationInputs");
+  assertExactKeys(receipt, ["format", "tiles", "availableButUnstored", "layerConfig", "oceanReceipt", "oceanAddresses", "globalState", "approvedConfig", "oceanLegacyUnbound"], "publicationInputs");
   assert.equal(receipt.format, PUBLICATION_INPUTS_FORMAT, "unsupported publicationInputs format");
   assert.equal(receipt.oceanLegacyUnbound, false, "unbound legacy ocean input is refused; re-run the global verifier");
   assert.ok(receipt.oceanReceipt !== null && receipt.oceanAddresses !== null,
@@ -342,6 +364,8 @@ function assertPublicationInputs(receipt) {
     layerConfig: assertPublicationInputEntry(receipt.layerConfig, "layerConfig"),
     oceanReceipt: assertPublicationInputEntry(receipt.oceanReceipt, "oceanReceipt"),
     oceanAddresses: assertPublicationInputEntry(receipt.oceanAddresses, "oceanAddresses", "addresses"),
+    globalState: assertPublicationInputEntry(receipt.globalState, "globalState"),
+    approvedConfig: assertPublicationInputEntry(receipt.approvedConfig, "approvedConfig"),
   };
 }
 
@@ -355,6 +379,18 @@ function assertPublicationPolicy(policy) {
   assert.ok(Number.isSafeInteger(policy.synthGridSize) && policy.synthGridSize >= 2 && policy.synthGridSize <= 255,
     "publicationPolicy.synthGridSize must be an integer in [2, 255]");
   return policy;
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function policyDigest(policy) {
+  return createHash("sha256").update(canonicalJson(policy)).digest("hex");
 }
 
 async function hashPublicationInput(entry, label, countField = null, expectedIdentity = null) {
@@ -389,6 +425,8 @@ async function verifyPublicationInputs(receipt) {
     layerConfig: await hashPublicationInput(inputs.layerConfig, "layer JSON config"),
     oceanReceipt: await hashPublicationInput(inputs.oceanReceipt, "ocean skip receipt"),
     oceanAddresses: await hashPublicationInput(inputs.oceanAddresses, "ocean skip addresses", "addresses"),
+    globalState: await hashPublicationInput(inputs.globalState, "global build state"),
+    approvedConfig: await hashPublicationInput(inputs.approvedConfig, "approved run config"),
   };
   assert.ok(inputs.tiles.bytes <= publicationPolicy.maxVerifiedStoreBytes,
     `verified tile store ${inputs.tiles.bytes} exceeds approved ${publicationPolicy.maxVerifiedStoreBytes} bytes`);
@@ -397,6 +435,90 @@ async function verifyPublicationInputs(receipt) {
 
 const publicationPolicy = assertPublicationPolicy(verifyReport.publicationPolicy);
 const publicationInputs = await verifyPublicationInputs(verifyReport.publicationInputs);
+
+function normalizeApprovedPublicationPolicy(policy, globalConfigDigest, label) {
+  assertExactKeys(policy, [
+    "version",
+    "max_verified_store_bytes",
+    "max_static_directory_bytes",
+    "static_directory_basis",
+    "synthesized_tile_grid_size",
+  ], label);
+  assert.equal(policy.version, 1, `${label}.version must be 1`);
+  assert.ok(Number.isSafeInteger(policy.max_verified_store_bytes) && policy.max_verified_store_bytes > 0,
+    `${label}.max_verified_store_bytes must be positive`);
+  assert.ok(Number.isSafeInteger(policy.max_static_directory_bytes) && policy.max_static_directory_bytes > 0,
+    `${label}.max_static_directory_bytes must be positive`);
+  assert.ok(typeof policy.static_directory_basis === "string" && policy.static_directory_basis.length > 0,
+    `${label}.static_directory_basis must be a non-empty string`);
+  assert.ok(Number.isSafeInteger(policy.synthesized_tile_grid_size) && policy.synthesized_tile_grid_size >= 2 && policy.synthesized_tile_grid_size <= 255,
+    `${label}.synthesized_tile_grid_size must be in [2, 255]`);
+  return {
+    format: PUBLICATION_POLICY_FORMAT,
+    globalConfigDigest,
+    maxVerifiedStoreBytes: policy.max_verified_store_bytes,
+    maxStaticDirectoryBytes: policy.max_static_directory_bytes,
+    synthGridSize: policy.synthesized_tile_grid_size,
+  };
+}
+
+function assertGlobalPolicyReceipt(receipt, approvedPolicy, label) {
+  assertExactKeys(receipt, ["policy", "digest", "globalConfigDigest"], label);
+  assert.equal(canonicalJson(receipt.policy), canonicalJson(approvedPolicy), `${label}.policy disagrees with approved run config publication_policy`);
+  assert.equal(receipt.digest, policyDigest(approvedPolicy), `${label}.digest disagrees with approved run config publication_policy`);
+  assert.equal(receipt.globalConfigDigest, publicationPolicy.globalConfigDigest, `${label}.globalConfigDigest disagrees with verify publicationPolicy`);
+  assert.deepEqual(
+    normalizeApprovedPublicationPolicy(receipt.policy, receipt.globalConfigDigest, `${label}.policy`),
+    publicationPolicy,
+    `${label}.policy normalized form disagrees with verify publicationPolicy`,
+  );
+}
+
+function assertAuthoritativeGlobalInputs() {
+  const approvedConfig = readBoundedJson(
+    publicationInputs.approvedConfig.file,
+    MAX_APPROVED_CONFIG_BYTES,
+    "approved run config",
+    publicationInputs.approvedConfig.identity,
+  );
+  assert.equal(
+    createHash("sha256").update(canonicalJson(approvedConfig)).digest("hex"),
+    publicationPolicy.globalConfigDigest,
+    "canonical approved run config does not match publicationPolicy.globalConfigDigest",
+  );
+  const approvedPolicy = approvedConfig?.publication_policy;
+  assert.ok(approvedPolicy && typeof approvedPolicy === "object" && !Array.isArray(approvedPolicy),
+    "approved run config lacks publication_policy");
+  assert.deepEqual(
+    normalizeApprovedPublicationPolicy(approvedPolicy, publicationPolicy.globalConfigDigest, "approved run config publication_policy"),
+    publicationPolicy,
+    "approved run config publication_policy normalized form disagrees with verify publicationPolicy",
+  );
+  const state = readBoundedJson(
+    publicationInputs.globalState.file,
+    MAX_GLOBAL_STATE_BYTES,
+    "global build state",
+    publicationInputs.globalState.identity,
+  );
+  assert.ok(state && typeof state === "object" && !Array.isArray(state), "global build state must be an object");
+  assert.equal(state.version, 1, "global build state version must be 1");
+  assert.equal(state.completed, true, "global build state is not terminally completed");
+  assert.equal(state.configDigest, publicationPolicy.globalConfigDigest,
+    "global build state configDigest disagrees with verify publicationPolicy");
+  assertGlobalPolicyReceipt(state.publicationPolicy, approvedPolicy, "global build state publicationPolicy");
+  const merged = state.merged;
+  assert.ok(merged && typeof merged === "object" && !Array.isArray(merged), "global build state lacks merged completion receipt");
+  assert.equal(merged.completion, "complete", "global merged receipt is not complete");
+  assert.equal(merged.configDigest, publicationPolicy.globalConfigDigest,
+    "global merged receipt configDigest disagrees with verify publicationPolicy");
+  assert.equal(merged.approvedConfigPath, "approved-run-config.json", "global merged receipt names an unexpected approved config");
+  assert.equal(merged.records, publicationInputs.tiles.entry.records,
+    "global merged receipt record count disagrees with publicationInputs tiles");
+  assertGlobalPolicyReceipt(merged.publicationPolicy, approvedPolicy, "global merged receipt publicationPolicy");
+  return { state, approvedConfig };
+}
+
+const authoritativeGlobalInputs = assertAuthoritativeGlobalInputs();
 
 if (args.testMutateLayerConfigAfterPreflight) {
   const descriptor = fs.openSync(publicationInputs.layerConfig.file, fs.constants.O_RDWR | (fs.constants.O_NOFOLLOW ?? 0));
@@ -566,24 +688,15 @@ assert.equal(layerConfig.terrain_synth_grid_size, publicationPolicy.synthGridSiz
   "layer JSON config terrain_synth_grid_size disagrees with approved publicationPolicy");
 const recordsPath = publicationInputs.tiles.file;
 async function* iterateBoundRecords() {
-  // Do not reopen recordsPath by name after preflight.  The descriptor is the
-  // object we hash and parse: an atomic rename between lstat() and a pathname
-  // read must never let this invocation materialize bytes other than the
-  // publicationInputs-bound store.
-  const { descriptor, identity } = openRegularRead(recordsPath, "tile store");
-  assert.ok(sameImmutableIdentity(identity, publicationInputs.tiles.identity), "tile store changed since publication preflight");
-  const stream = fs.createReadStream(null, {
-    fd: descriptor,
-    autoClose: true,
-    highWaterMark: 64 * 1024,
-  });
+  // The iterator below holds one O_NOFOLLOW descriptor from preflight through
+  // framing, hashing, and the post-read fstat. A pathname replacement cannot
+  // change which bytes are materialized.
   const hash = createHash("sha256");
   let bytes = 0;
   let records = 0;
   let pending = Buffer.alloc(0);
   try {
-    for await (const chunk of stream) {
-      const input = Buffer.from(chunk);
+    for await (const input of regularFileChunks(recordsPath, "tile store", publicationInputs.tiles.identity)) {
       bytes += input.length;
       assert.ok(bytes <= publicationInputs.tiles.entry.bytes, "tile store exceeds its verified byte count");
       hash.update(input);
@@ -609,9 +722,7 @@ async function* iterateBoundRecords() {
     assert.equal(hash.digest("hex"), publicationInputs.tiles.entry.sha256, "tile store digest disagrees with publicationInputs");
     assert.equal(records, publicationInputs.tiles.entry.records, "tile record count disagrees with publicationInputs");
   } finally {
-    stream.destroy();
     const after = immutableIdentity(recordsPath, "tile store");
-    assert.ok(sameImmutableIdentity(identity, after), "tile store changed while records were read");
     assert.ok(sameImmutableIdentity(after, publicationInputs.tiles.identity), "tile store changed since publication preflight");
   }
 }
@@ -641,6 +752,9 @@ const decoder = new TextDecoder();
 const first = readDtt(firstRecord);
 const provenance = readDttProvenance(firstRecord);
 const tilesetId = first.tilesetId;
+assert.equal(typeof tilesetId, "string", "first tile has no tileset ID");
+assert.ok(Buffer.byteLength(tilesetId) > 0 && Buffer.byteLength(tilesetId) <= MAX_TILESET_ID_BYTES,
+  `tileset ID exceeds ${MAX_TILESET_ID_BYTES}-byte upload-manifest bound`);
 const maxzoom = layerConfig.terrain_maxzoom;
 
 // The serving config the SHIPPED mount would run under, plus the two keys this
@@ -873,7 +987,12 @@ async function precomputeMaterializationPlan() {
   }
   const files = 1 + storedFiles + synthesizedFiles;
   assert.ok(files <= MAX_MATERIALIZED_FILES, `materialization plans ${files} files; hard limit is ${MAX_MATERIALIZED_FILES}`);
-  return { files, storedFiles, synthesizedFiles, decodedStoredBytes: storedBytes };
+  // Static terrain paths have at most two parent directory rows (`z/x`) per
+  // file.  This deliberately over-reserves repeated rows while avoiding an
+  // in-memory set just to count them before materialization.
+  const directoryRows = 1 + files * 2;
+  assert.ok(Number.isSafeInteger(directoryRows), "materialization directory-row bound exceeds safe range");
+  return { files, directoryRows, storedFiles, synthesizedFiles, decodedStoredBytes: storedBytes };
 }
 
 function reserveStagingSpace(plan) {
@@ -882,6 +1001,7 @@ function reserveStagingSpace(plan) {
   assert.ok(stats.bsize > 0n, "statfs returned an invalid allocation block size");
   const blockSize = stats.bsize;
   const fileCountBound = BigInt(plan.files);
+  const directoryRowBound = BigInt(plan.directoryRows);
   // `maxStaticDirectoryBytes` is a logical-byte policy.  On a 4 KiB volume a
   // few million small files need one allocation block each in addition to the
   // logical total, while the bounded, on-disk multipart manifest is live at
@@ -891,9 +1011,13 @@ function reserveStagingSpace(plan) {
   // One further block per output is reserved for inode/directory metadata.
   // Filesystems vary, so this is a conservative admission reservation, not a
   // claim that logical directoryBytes is allocated byte-for-byte on disk.
-  const inodeAndDirectoryBytes = fileCountBound * blockSize;
+  const inodeAndDirectoryBytes = (fileCountBound + directoryRowBound) * blockSize;
   const physicalStaticBytes = approvedLogicalBytes + payloadRoundingBytes + inodeAndDirectoryBytes;
-  const manifestLogicalBytes = fileCountBound * BigInt(MAX_WORKLIST_LINE_BYTES);
+  // The file and post-order directory receipt manifests coexist during add.
+  // Their row count is bounded by every file plus its at-most-two directory
+  // ancestors; each row has a distinct, tighter fixed manifest cap.
+  const manifestRows = fileCountBound + (directoryRowBound - 1n);
+  const manifestLogicalBytes = manifestRows * BigInt(MAX_UPLOAD_MANIFEST_LINE_BYTES);
   const manifestPhysicalBytes = manifestLogicalBytes + (blockSize - 1n);
   const journalAndArtifactBytes = BigInt(MAX_CONTROL_RESPONSE_BYTES) * 8n + blockSize * 8n;
   const headroomBytes = BigInt(STAGING_HEADROOM_BYTES) + journalAndArtifactBytes;
@@ -909,6 +1033,8 @@ function reserveStagingSpace(plan) {
     physicalStaticBytes,
     payloadRoundingBytes,
     inodeAndDirectoryBytes,
+    directoryRowBound,
+    manifestRows,
     manifestPhysicalBytes,
     headroomBytes,
     blockSize,
@@ -922,6 +1048,8 @@ async function rehashPublicationInputsForMaterialization() {
     ["layerConfig", "layer JSON config", null],
     ["oceanReceipt", "ocean skip receipt", null],
     ["oceanAddresses", "ocean skip addresses", "addresses"],
+    ["globalState", "global build state", null],
+    ["approvedConfig", "approved run config", null],
   ];
   for (const [key, label, countField] of checks) {
     const verified = await hashPublicationInput(publicationInputs[key].entry, label, countField, publicationInputs[key].identity);
@@ -1283,7 +1411,8 @@ assert.ok(staticIdentity.max <= STATIC_TRANSPORT_BOUNDS.hard, `static identity m
 assert.equal(fileCount, materializationPlan.files, "materialized file count disagrees with the preflight plan");
 assert.ok(BigInt(totalBytes) <= BigInt(publicationPolicy.maxStaticDirectoryBytes), "materialized bytes exceed approved static directory bound");
 actualStaticPhysicalUpperBytes = BigInt(totalBytes) + BigInt(fileCount) *
-  ((stagingReservation.blockSize - 1n) + stagingReservation.blockSize);
+  (stagingReservation.blockSize - 1n) +
+  (BigInt(fileCount) + BigInt(materializationPlan.directoryRows)) * stagingReservation.blockSize;
 assert.ok(actualStaticPhysicalUpperBytes <= stagingReservation.physicalStaticBytes,
   "materialized staging tree exceeds its approved physical allocation reservation");
 } catch (error) {
@@ -1363,7 +1492,7 @@ function multipartPlan(directory, boundary) {
       const header = multipartHeader(boundary, name);
       const manifestEntry = { rel: file.rel, name, ...file.identity };
       const line = `${JSON.stringify(manifestEntry)}\n`;
-      assert.ok(Buffer.byteLength(line) <= MAX_WORKLIST_LINE_BYTES, `upload manifest entry for ${file.rel} exceeds ${MAX_WORKLIST_LINE_BYTES} bytes`);
+      assert.ok(Buffer.byteLength(line) <= MAX_UPLOAD_MANIFEST_LINE_BYTES, `upload manifest entry for ${file.rel} exceeds ${MAX_UPLOAD_MANIFEST_LINE_BYTES} bytes`);
       fs.writeSync(descriptor, line);
       contentLength += BigInt(header.length) + BigInt(file.identity.size) + 2n;
       expectedFiles += 1;
@@ -1389,7 +1518,7 @@ function multipartPlan(directory, boundary) {
       for (let index = openDirectories.length - 1; index >= common; index -= 1) {
         const name = `${tilesetId}/${openDirectories.slice(0, index + 1).join("/")}`;
         const line = `${name}\n`;
-        assert.ok(Buffer.byteLength(line) <= MAX_WORKLIST_LINE_BYTES, `directory receipt manifest entry for ${name} exceeds ${MAX_WORKLIST_LINE_BYTES} bytes`);
+        assert.ok(Buffer.byteLength(line) <= MAX_UPLOAD_MANIFEST_LINE_BYTES, `directory receipt manifest entry for ${name} exceeds ${MAX_UPLOAD_MANIFEST_LINE_BYTES} bytes`);
         fs.writeSync(directoryDescriptor, line);
         expectedDirectories += 1;
       }
@@ -1398,7 +1527,7 @@ function multipartPlan(directory, boundary) {
     for (let index = openDirectories.length - 1; index >= 0; index -= 1) {
       const name = `${tilesetId}/${openDirectories.slice(0, index + 1).join("/")}`;
       const line = `${name}\n`;
-      assert.ok(Buffer.byteLength(line) <= MAX_WORKLIST_LINE_BYTES, `directory receipt manifest entry for ${name} exceeds ${MAX_WORKLIST_LINE_BYTES} bytes`);
+      assert.ok(Buffer.byteLength(line) <= MAX_UPLOAD_MANIFEST_LINE_BYTES, `directory receipt manifest entry for ${name} exceeds ${MAX_UPLOAD_MANIFEST_LINE_BYTES} bytes`);
       fs.writeSync(directoryDescriptor, line);
       expectedDirectories += 1;
     }
@@ -1431,7 +1560,7 @@ function pinTraversalTimeoutFor(files) {
 }
 
 async function* uploadManifestEntries(plan) {
-  for await (const line of boundedLines(plan.manifestPath, MAX_WORKLIST_LINE_BYTES, "upload manifest")) {
+  for await (const line of boundedLines(plan.manifestPath, MAX_UPLOAD_MANIFEST_LINE_BYTES, "upload manifest")) {
     let entry;
     try {
       entry = JSON.parse(line);
@@ -1447,7 +1576,7 @@ async function* uploadManifestEntries(plan) {
 }
 
 async function* directoryReceiptManifestEntries(plan) {
-  for await (const name of boundedLines(plan.directoryManifestPath, MAX_WORKLIST_LINE_BYTES, "directory receipt manifest")) {
+  for await (const name of boundedLines(plan.directoryManifestPath, MAX_UPLOAD_MANIFEST_LINE_BYTES, "directory receipt manifest")) {
     assert.equal(typeof name, "string", "directory receipt manifest entry is invalid");
     assert.ok(name.startsWith(`${tilesetId}/`), "directory receipt manifest escapes its root");
     assertSafeRelativePath(name.slice(tilesetId.length + 1), "directory receipt manifest path");
@@ -2114,11 +2243,13 @@ const report = {
   files: fileCount,
   materializationPlan: {
     files: materializationPlan.files,
+    plannedDirectoryRows: materializationPlan.directoryRows,
     storedFiles: materializationPlan.storedFiles,
     synthesizedFiles: materializationPlan.synthesizedFiles,
     decodedStoredBytes: materializationPlan.decodedStoredBytes,
     approvedStaticDirectoryBytes: publicationPolicy.maxStaticDirectoryBytes,
     approvedVerifiedStoreBytes: publicationPolicy.maxVerifiedStoreBytes,
+    globalConfigDigest: authoritativeGlobalInputs.state.configDigest,
     stagingFreeBytes: stagingReservation.freeBytes.toString(),
     stagingRequiredBytes: stagingReservation.requiredBytes.toString(),
     stagingAllocationBlockBytes: stagingReservation.blockSize.toString(),
@@ -2126,6 +2257,7 @@ const report = {
     reservedStaticPhysicalBytes: stagingReservation.physicalStaticBytes.toString(),
     reservedPayloadRoundingBytes: stagingReservation.payloadRoundingBytes.toString(),
     reservedInodeAndDirectoryBytes: stagingReservation.inodeAndDirectoryBytes.toString(),
+    reservedUploadManifestRows: stagingReservation.manifestRows.toString(),
     actualStaticPhysicalUpperBytes: actualStaticPhysicalUpperBytes?.toString() ?? null,
     reservedUploadManifestPhysicalBytes: stagingReservation.manifestPhysicalBytes.toString(),
     reservedStagingHeadroomBytes: stagingReservation.headroomBytes.toString(),
