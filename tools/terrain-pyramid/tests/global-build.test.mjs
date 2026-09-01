@@ -58,6 +58,34 @@ function response(status, body = "") {
   return { status, ok: status >= 200 && status < 300, arrayBuffer: async () => Buffer.from(body) };
 }
 
+// Mirrors terrain-ingest's region_block() and priority ownership rule. This
+// lets the coordinator test prove shard configs preserve the exact address set
+// without loading the planner WASM for a simple arithmetic invariant.
+function ownedTerrainAddresses(flow) {
+  const minLevel = Number(flow.min_level ?? 8);
+  const maxLevel = Number(flow.max_level ?? minLevel);
+  const ordered = flow.regions
+    .map((region, order) => ({ region, order }))
+    .sort((left, right) => Number(right.region.priority ?? 0) - Number(left.region.priority ?? 0) || left.order - right.order);
+  const addresses = new Set();
+  for (const { region } of ordered) {
+    const regionMaxLevel = Math.min(maxLevel, Number(region.max_level ?? maxLevel));
+    for (let level = minLevel; level <= regionMaxLevel; level += 1) {
+      const width = 180 / 2 ** level;
+      const maxX = 2 ** (level + 1) - 1;
+      const maxY = 2 ** level - 1;
+      const x0 = Math.max(0, Math.min(maxX, Math.floor((Number(region.west) + 180) / width)));
+      const x1 = Math.max(0, Math.min(maxX, Math.floor((Number(region.east) + 180) / width - 1e-9)));
+      const y0 = Math.max(0, Math.min(maxY, Math.floor((Number(region.south) + 90) / width)));
+      const y1 = Math.max(0, Math.min(maxY, Math.floor((Number(region.north) + 90) / width - 1e-9)));
+      for (let x = x0; x <= Math.max(x0, x1); x += 1) {
+        for (let y = y0; y <= Math.max(y0, y1); y += 1) addresses.add(`${level}/${x}/${y}`);
+      }
+    }
+  }
+  return addresses;
+}
+
 test("production verifier accepts a schema fixture in a 32 MiB child heap", async (t) => {
   const outDir = temporary(t);
   fs.writeFileSync(path.join(outDir, "tiles.dttstream"), Buffer.from(TIGHT_HEAP_DTTSTREAM, "base64"));
@@ -156,8 +184,37 @@ test("deterministic shard configs cover each regional longitude slice once", () 
   const second = makeShardConfigs(config, 2, { outDir: "/out", cacheDir: "/cache", cacheMaxBytes: 100 });
   assert.deepEqual(first, second);
   const slices = first.flatMap((shard) => shard.flow_config.regions.map((r) => [r.west, r.east]));
-  assert.deepEqual(slices, [[0, 1], [1, 2], [2, 3], [3, 4]]);
+  assert.deepEqual(slices, [[0, 2.109375], [2.109375, 4]]);
   assert.equal(first[0].global_shard.config_digest, sha256('{"flow_config":{"regions":[{"east":4,"max_level":8,"name":"proof","north":42,"priority":1,"south":40,"west":0}]}}'));
+});
+
+test("tile-column shard ownership preserves non-aligned coverage without cross-shard duplicates", () => {
+  const config = {
+    flow_config: {
+      min_level: 8,
+      max_level: 10,
+      regions: [
+        { name: "outer", west: 8.1, south: 44.2, east: 10.3, north: 45.8, max_level: 10, priority: 1 },
+        { name: "priority-inset", west: 8.8, south: 44.6, east: 9.2, north: 45.4, max_level: 10, priority: 2 },
+      ],
+    },
+  };
+  const shards = makeShardConfigs(config, 2, { outDir: "/out", cacheDir: "/cache", cacheMaxBytes: 100 });
+  const expected = ownedTerrainAddresses(config.flow_config);
+  const observed = new Set();
+  for (const shard of shards) {
+    for (const address of ownedTerrainAddresses(shard.flow_config)) {
+      assert.ok(!observed.has(address), `tile ${address} belongs to more than one shard`);
+      observed.add(address);
+    }
+  }
+  assert.deepEqual([...observed].sort(compareCodeUnits), [...expected].sort(compareCodeUnits));
+  assert.ok(shards.flatMap((shard) => shard.flow_config.regions)
+    .some((region) => region.west !== 8.1 && region.east !== 10.3),
+  "non-aligned outer bounds must retain their exact edges while internal cuts align to tile columns");
+  assert.throws(() => makeShardConfigs({
+    flow_config: { min_level: 8, regions: [{ name: "one-column", west: 8.1, south: 44.2, east: 8.2, north: 44.3 }] },
+  }, 2), /exceeds the 1 source-covered minimum-level tile columns/);
 });
 
 test("coordinator shard/region bounds reject unbounded allocations before slicing or state creation", async (t) => {

@@ -1563,11 +1563,17 @@ test("external terrain and ocean sorts retain only bounded fan-in state across m
 test("ocean-skip merge streams legacy JSON and JSONL into a compact receipt", async (t) => {
   const root = temporary(t);
   const legacy = path.join(root, "legacy.json");
+  const emptyCurrent = path.join(root, "empty-current.json");
   const jsonl = path.join(root, "current.lines");
   const output = path.join(root, "ocean-skipped.lines");
   fs.writeFileSync(legacy, JSON.stringify({ generatedAt: "old", addresses: ["8/2/1", "8/1/1"] }));
+  // A current runner creates no .lines file when it skipped no ocean tiles;
+  // its zero-count receipt is still a valid shard input and must add nothing.
+  fs.writeFileSync(emptyCurrent, JSON.stringify({
+    format: "terrain-ocean-skips-lines-v1", addressesPath: "ocean-skipped.lines", count: 0, digest: "0".repeat(64),
+  }));
   fs.writeFileSync(jsonl, "8/3/1\n");
-  const receipt = await mergeOceanSkips({ inputFiles: [legacy, jsonl], outputFile: output, maxRunBytes: 1, fanIn: 2 });
+  const receipt = await mergeOceanSkips({ inputFiles: [legacy, emptyCurrent, jsonl], outputFile: output, maxRunBytes: 1, fanIn: 2 });
   assert.equal(receipt.count, 3);
   assert.equal(receipt.duplicates, 0);
   assert.deepEqual(fs.readFileSync(output, "utf8").trim().split("\n"), ["8/1/1", "8/2/1", "8/3/1"]);

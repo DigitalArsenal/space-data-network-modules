@@ -1443,39 +1443,103 @@ export class BoundedGranuleCache {
   }
 }
 
-function splitRegion(region, shardCount) {
+function sourceMinLevel(flow) {
+  // terrain-ingest refuses levels below 8 because a tile is wider than one
+  // source granule there. Use that same floor here: a shard boundary aligned
+  // to a tile column at this level remains a boundary for every deeper level.
+  const minLevel = Number(flow.min_level ?? 8);
+  assert.ok(Number.isInteger(minLevel) && minLevel >= 8,
+    "flow_config.min_level must be an integer at or above the source granule floor (8)");
+  const columns = 2 ** (minLevel + 1);
+  assert.ok(Number.isSafeInteger(columns), "flow_config.min_level exceeds the coordinator's exact tile-column range");
+  return { minLevel, columns, width: 360 / columns };
+}
+
+function sourceRegionColumns(region, { columns, width }) {
   const west = Number(region.west);
   const east = Number(region.east);
   const south = Number(region.south);
   const north = Number(region.north);
-  // The coordinator accepts one non-wrapping canonical WGS84 interval per
-  // region. Apart from rejecting malformed geographic policy, this bounds
-  // the degree-cut loop before it can allocate from an arbitrary config span.
+  // Match terrain-ingest's region_block() calculation exactly. In particular,
+  // its east edge is half-open, but a tile that straddles an inner degree cut
+  // belongs to both degree slices; only a tile-column cut is safe to shard.
   assert.ok(Number.isFinite(west) && Number.isFinite(east) &&
     west >= -180 && west < east && east <= 180,
   `region ${region.name ?? "(unnamed)"} needs canonical longitude bounds -180 <= west < east <= 180`);
   assert.ok(Number.isFinite(south) && Number.isFinite(north) &&
     south >= -90 && south < north && north <= 90,
   `region ${region.name ?? "(unnamed)"} needs canonical latitude bounds -90 <= south < north <= 90`);
-  assert.ok(Math.ceil(east) - Math.floor(west) <= 361,
-    `region ${region.name ?? "(unnamed)"} exceeds the 361-slice geographic policy`);
-  const cuts = [west];
-  // Start strictly east of the existing west edge: an integral west bound is
-  // already in `cuts`, and repeating it would create an empty shard region.
-  for (let degree = Math.floor(west) + 1; degree < east; degree += 1) cuts.push(degree);
-  cuts.push(east);
-  const output = Array.from({ length: shardCount }, () => []);
-  for (let index = 0; index < cuts.length - 1; index += 1) {
-    // Contiguous assignment minimises cross-shard boundary work while keeping
-    // the partition deterministic from config bytes alone.
-    const shard = Math.min(shardCount - 1, Math.floor((index * shardCount) / (cuts.length - 1)));
-    output[shard].push({
-      ...region,
-      name: `${region.name ?? "region"}--shard-${String(shard).padStart(3, "0")}-slice-${String(index).padStart(4, "0")}`,
-      west: cuts[index],
-      east: cuts[index + 1],
-    });
+  const clampColumn = (column) => Math.max(0, Math.min(columns - 1, column));
+  const x0 = clampColumn(Math.floor((west + 180) / width));
+  const x1 = clampColumn(Math.floor((east + 180) / width - 1e-9));
+  return { west, east, x0, x1: Math.max(x0, x1) };
+}
+
+function mergeColumnCoverage(ranges) {
+  const merged = [];
+  for (const range of [...ranges].sort((left, right) => left.x0 - right.x0 || left.x1 - right.x1)) {
+    const previous = merged[merged.length - 1];
+    if (previous && range.x0 <= previous.x1 + 1) previous.x1 = Math.max(previous.x1, range.x1);
+    else merged.push({ x0: range.x0, x1: range.x1 });
   }
+  return merged;
+}
+
+// Spread the union of source-owned minimum-level columns across workers
+// without materialising a column-sized array. Every shard receives at least
+// one column, and all regions touching a column are sent to the same worker so
+// terrain-ingest's priority ownership rule still applies before global merge.
+function partitionColumnCoverage(coverage, shardCount) {
+  const total = coverage.reduce((sum, range) => sum + range.x1 - range.x0 + 1, 0);
+  assert.ok(total >= shardCount,
+    `--shards ${shardCount} exceeds the ${total} source-covered minimum-level tile columns`);
+  const output = Array.from({ length: shardCount }, () => []);
+  let shard = 0;
+  let remaining = Math.floor((shard + 1) * total / shardCount) - Math.floor(shard * total / shardCount);
+  for (const range of coverage) {
+    let next = range.x0;
+    while (next <= range.x1) {
+      const take = Math.min(remaining, range.x1 - next + 1);
+      output[shard].push({ x0: next, x1: next + take - 1 });
+      next += take;
+      remaining -= take;
+      if (remaining === 0 && shard + 1 < shardCount) {
+        shard += 1;
+        remaining = Math.floor((shard + 1) * total / shardCount) - Math.floor(shard * total / shardCount);
+      }
+    }
+  }
+  assert.ok(output.every((ranges) => ranges.length > 0), "every global shard must own at least one tile-column range");
+  return output;
+}
+
+function splitRegionsAtTileColumns(flow, shardCount) {
+  const grid = sourceMinLevel(flow);
+  const indexed = flow.regions.map((region) => ({ region, columns: sourceRegionColumns(region, grid) }));
+  const assignments = partitionColumnCoverage(
+    mergeColumnCoverage(indexed.map(({ columns }) => columns)),
+    shardCount,
+  );
+  const output = Array.from({ length: shardCount }, () => []);
+  for (const { region, columns } of indexed) {
+    for (let shard = 0; shard < assignments.length; shard += 1) {
+      for (const assignment of assignments[shard]) {
+        const x0 = Math.max(columns.x0, assignment.x0);
+        const x1 = Math.min(columns.x1, assignment.x1);
+        if (x1 < x0) continue;
+        const west = Math.max(columns.west, -180 + x0 * grid.width);
+        const east = Math.min(columns.east, -180 + (x1 + 1) * grid.width);
+        assert.ok(east > west, `tile-column shard split is empty for region ${region.name ?? "(unnamed)"}`);
+        output[shard].push({
+          ...region,
+          name: `${region.name ?? "region"}--shard-${String(shard).padStart(3, "0")}-columns-${x0}-${x1}`,
+          west,
+          east,
+        });
+      }
+    }
+  }
+  assert.ok(output.every((regions) => regions.length > 0), "every global shard must receive at least one source region");
   return output;
 }
 
@@ -1486,11 +1550,7 @@ export function makeShardConfigs(runConfig, shardCount, { outDir, cacheDir, cach
   const flow = runConfig.flow_config ?? {};
   assert.ok(Array.isArray(flow.regions) && flow.regions.length > 0 && flow.regions.length <= MAX_GLOBAL_REGIONS,
     `flow_config.regions must contain [1, ${MAX_GLOBAL_REGIONS}] regions`);
-  const regions = Array.from({ length: shardCount }, () => []);
-  for (const region of flow.regions) {
-    const pieces = splitRegion(region, shardCount);
-    for (let shard = 0; shard < shardCount; shard += 1) regions[shard].push(...pieces[shard]);
-  }
+  const regions = splitRegionsAtTileColumns(flow, shardCount);
   return regions.map((shardRegions, shard) => ({
     ...runConfig,
     out: undefined,

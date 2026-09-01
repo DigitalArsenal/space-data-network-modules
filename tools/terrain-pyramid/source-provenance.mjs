@@ -2025,12 +2025,31 @@ function compareOceanAddress(a, b) {
 
 async function* legacyOceanAddresses(file) {
   // Parse just the address array instead of JSON.parse()ing a global array.
-  // These are simple ASCII x/y/z strings written by prior runners; reject
-  // escapes and any changed shape rather than guessing at a broader JSON API.
-  let state = "key";
+  // These are simple ASCII x/y/z strings written by prior runners. Current
+  // runners write a compact lines receipt instead; a zero-count receipt has
+  // no .lines file to snapshot, and is the one safe no-address exception.
+  // Reject escapes and nested/broader JSON rather than guessing at an API.
+  let state = "start";
   let inString = false;
   let escaped = false;
   let token = "";
+  let stringRole = null;
+  let currentKey = null;
+  let sawAddresses = false;
+  let format = null;
+  let count = null;
+  const whitespace = (char) => char === " " || char === "\t" || char === "\r" || char === "\n";
+  const finishScalar = () => {
+    assert.ok(token.length > 0 && token.length <= 128, `invalid legacy ocean scalar: ${file}`);
+    let value;
+    try { value = JSON.parse(token); } catch { throw new Error(`invalid legacy ocean scalar: ${file}`); }
+    if (currentKey === "count") {
+      assert.ok(Number.isSafeInteger(value) && value >= 0, `legacy ocean count is invalid: ${file}`);
+      count = value;
+    }
+    token = "";
+    state = "after-value";
+  };
   const handle = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
   const before = fs.fstatSync(handle, { bigint: true });
   try {
@@ -2049,23 +2068,87 @@ async function* legacyOceanAddresses(file) {
           if (char === "\\") { escaped = true; continue; }
           if (char === "\"") {
             inString = false;
-            if (state === "key") state = token === "addresses" ? "colon" : "key";
-            else if (state === "array") yield assertOceanAddress(token, file);
+            if (stringRole === "key") {
+              currentKey = token;
+              state = "colon";
+            } else if (stringRole === "array") {
+              yield assertOceanAddress(token, file);
+              state = "array-after-value";
+            } else {
+              if (currentKey === "format") format = token;
+              state = "after-value";
+            }
             token = "";
+            stringRole = null;
           } else {
             assert.ok(token.length < 128, `legacy ocean token is too long: ${file}`);
             token += char;
           }
           continue;
         }
-        if (char === "\"") { inString = true; token = ""; continue; }
-        if (state === "colon" && char === ":") state = "array-start";
-        else if (state === "array-start" && char === "[") state = "array";
-        else if (state === "array" && char === "]") state = "done";
+        if (state === "scalar") {
+          if (char === "," || char === "}") {
+            finishScalar();
+            if (char === "}") state = "done";
+            else state = "key-or-end";
+          } else {
+            assert.ok(token.length < 128, `legacy ocean scalar is too long: ${file}`);
+            token += char;
+          }
+          continue;
+        }
+        if (whitespace(char)) continue;
+        if (state === "start") {
+          assert.equal(char, "{", `legacy ocean input must be an object: ${file}`);
+          state = "key-or-end";
+        } else if (state === "key-or-end") {
+          if (char === "}") state = "done";
+          else {
+            assert.equal(char, "\"", `legacy ocean input needs an object key: ${file}`);
+            inString = true; token = ""; stringRole = "key";
+          }
+        } else if (state === "colon") {
+          assert.equal(char, ":", `legacy ocean key is missing ':': ${file}`);
+          state = "value";
+        } else if (state === "value") {
+          if (char === "\"") {
+            inString = true; token = ""; stringRole = "scalar";
+          } else if (char === "[") {
+            assert.equal(currentKey, "addresses", `legacy ocean array key must be addresses: ${file}`);
+            sawAddresses = true;
+            state = "array-value-or-end";
+          } else {
+            token = char;
+            state = "scalar";
+          }
+        } else if (state === "array-value-or-end") {
+          if (char === "]") state = "after-value";
+          else {
+            assert.equal(char, "\"", `legacy ocean addresses must contain strings: ${file}`);
+            inString = true; token = ""; stringRole = "array";
+          }
+        } else if (state === "array-after-value") {
+          if (char === ",") state = "array-value-or-end";
+          else {
+            assert.equal(char, "]", `legacy ocean addresses are missing ']': ${file}`);
+            state = "after-value";
+          }
+        } else if (state === "after-value") {
+          if (char === ",") state = "key-or-end";
+          else {
+            assert.equal(char, "}", `legacy ocean object is malformed: ${file}`);
+            state = "done";
+          }
+        } else {
+          throw new Error(`trailing data after legacy ocean object: ${file}`);
+        }
       }
     }
     assert.equal(inString, false, `unterminated legacy ocean string: ${file}`);
-    assert.equal(state, "done", `legacy ocean file has no complete addresses array: ${file}`);
+    assert.notEqual(state, "scalar", `unterminated legacy ocean scalar: ${file}`);
+    assert.equal(state, "done", `legacy ocean file has no complete object: ${file}`);
+    assert.ok(sawAddresses || (format === "terrain-ocean-skips-lines-v1" && count === 0),
+      `legacy ocean file has no complete addresses array: ${file}`);
     assertStableFileStat(before, fs.fstatSync(handle, { bigint: true }), "legacy ocean input", file);
   } finally {
     try { fs.closeSync(handle); } catch (error) { if (error.code !== "EBADF") throw error; }
