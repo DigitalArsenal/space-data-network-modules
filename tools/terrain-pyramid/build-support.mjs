@@ -509,33 +509,41 @@ export class BoundedGranuleCache {
   // immutable generation while the flow consumes it.
   read(url) { return this.readEntryUnlocked(url); }
 
-  async get(url) {
+  async get(url, { beforeUse = undefined } = {}) {
     return this.withGlobalLock(async () => {
       this.reclaimStaleLeasesUnlocked();
       this.entriesUnlocked({ reclaimOrphans: true });
       const cached = this.readEntryUnlocked(url);
       if (!cached) return null;
+      // A source-backed caller may make cache visibility contingent on a
+      // receipt.  Run this while the current pointer is still protected by
+      // the cache lock so an unattributed generation is never returned.
+      await beforeUse?.({ url, status: cached.status, body: cached.body });
       const pointer = readJson(cached.entry.pointer);
       atomicWrite(cached.entry.pointer, `${JSON.stringify({ ...pointer, lastUsed: this.now() })}\n`);
       return { status: cached.status, body: cached.body, hit: true };
     });
   }
 
-  async put(url, status, body) {
+  async put(url, status, body, { beforePublish = undefined } = {}) {
     return this.withGlobalLock(async () => {
       this.reclaimStaleLeasesUnlocked();
       this.entriesUnlocked({ reclaimOrphans: true });
+      // The immutable body is complete, but current.json has not been made
+      // visible yet.  Provenance receipts belong in this exact window: a
+      // callback failure leaves no cache generation for another worker to use.
+      await beforePublish?.({ url, status, body: Buffer.from(body) });
       return { ...this.publishUnlocked(url, status, body), hit: false };
     });
   }
 
   async fetch(url, options = {}) {
     await this.acquire(url);
-    const cached = await this.get(url);
+    const cached = await this.get(url, { beforeUse: options.beforeUse });
     if (cached) return cached;
     const key = this.key(url);
     return this.withProducerLock(key, async () => {
-      const appeared = await this.get(url);
+      const appeared = await this.get(url, { beforeUse: options.beforeUse });
       if (appeared) return appeared;
       let retries = 0;
       const response = await fetchWithRetry(url, {
@@ -544,7 +552,7 @@ export class BoundedGranuleCache {
       });
       this.retries += retries;
       const body = response.ok ? Buffer.from(await response.arrayBuffer()) : Buffer.alloc(0);
-      return this.put(url, response.status, body);
+      return this.put(url, response.status, body, { beforePublish: options.beforePublish });
     });
   }
 }
