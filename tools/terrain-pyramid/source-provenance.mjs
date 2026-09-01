@@ -2023,12 +2023,29 @@ function compareOceanAddress(a, b) {
   return codeUnitCompare(oceanAddressKey(a, "ocean merge"), oceanAddressKey(b, "ocean merge"));
 }
 
+const CURRENT_EMPTY_OCEAN_RECEIPT_FORMAT = "terrain-ocean-skips-lines-v1";
+const CURRENT_EMPTY_OCEAN_RECEIPT_KEYS = Object.freeze([
+  "addressesPath", "count", "digest", "format", "generatedAt", "minLevel",
+]);
+const LEGACY_OCEAN_RECEIPT_KEYS = Object.freeze([
+  "addresses", "count", "generatedAt", "minLevel",
+]);
+const OCEAN_RECEIPT_KEY_SET = new Set([
+  ...CURRENT_EMPTY_OCEAN_RECEIPT_KEYS,
+  ...LEGACY_OCEAN_RECEIPT_KEYS,
+]);
+const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
 async function* legacyOceanAddresses(file) {
   // Parse just the address array instead of JSON.parse()ing a global array.
   // These are simple ASCII x/y/z strings written by prior runners. Current
   // runners write a compact lines receipt instead; a zero-count receipt has
   // no .lines file to snapshot, and is the one safe no-address exception.
-  // Reject escapes and nested/broader JSON rather than guessing at an API.
+  // Both accepted shapes are exact: the old runner's complete address receipt
+  // and the newer runner's complete empty compact receipt.  In particular,
+  // duplicate JSON members cannot use last-key-wins behavior to turn a
+  // nonzero receipt into empty. The fixed whitelist bounds member tracking as
+  // well as parser buffering.
   let state = "start";
   let inString = false;
   let escaped = false;
@@ -2036,17 +2053,16 @@ async function* legacyOceanAddresses(file) {
   let stringRole = null;
   let currentKey = null;
   let sawAddresses = false;
-  let format = null;
-  let count = null;
+  let legacyAddressCount = 0;
+  let legacyMinLevel = Infinity;
+  const seenKeys = new Set();
+  const values = Object.create(null);
   const whitespace = (char) => char === " " || char === "\t" || char === "\r" || char === "\n";
   const finishScalar = () => {
     assert.ok(token.length > 0 && token.length <= 128, `invalid legacy ocean scalar: ${file}`);
     let value;
     try { value = JSON.parse(token); } catch { throw new Error(`invalid legacy ocean scalar: ${file}`); }
-    if (currentKey === "count") {
-      assert.ok(Number.isSafeInteger(value) && value >= 0, `legacy ocean count is invalid: ${file}`);
-      count = value;
-    }
+    values[currentKey] = value;
     token = "";
     state = "after-value";
   };
@@ -2070,12 +2086,21 @@ async function* legacyOceanAddresses(file) {
             inString = false;
             if (stringRole === "key") {
               currentKey = token;
+              assert.ok(OCEAN_RECEIPT_KEY_SET.has(currentKey),
+                `legacy ocean input has an unsupported key ${currentKey}: ${file}`);
+              assert.ok(!seenKeys.has(currentKey), `legacy ocean input has a duplicate key ${currentKey}: ${file}`);
+              // A key is admitted only from the fixed union of the two
+              // receipts, so this set can never grow beyond seven entries.
+              seenKeys.add(currentKey);
               state = "colon";
             } else if (stringRole === "array") {
-              yield assertOceanAddress(token, file);
+              const address = assertOceanAddress(token, file);
+              legacyAddressCount += 1;
+              legacyMinLevel = Math.min(legacyMinLevel, Number(token.slice(0, token.indexOf("/"))));
+              yield address;
               state = "array-after-value";
             } else {
-              if (currentKey === "format") format = token;
+              values[currentKey] = token;
               state = "after-value";
             }
             token = "";
@@ -2147,8 +2172,42 @@ async function* legacyOceanAddresses(file) {
     assert.equal(inString, false, `unterminated legacy ocean string: ${file}`);
     assert.notEqual(state, "scalar", `unterminated legacy ocean scalar: ${file}`);
     assert.equal(state, "done", `legacy ocean file has no complete object: ${file}`);
-    assert.ok(sawAddresses || (format === "terrain-ocean-skips-lines-v1" && count === 0),
-      `legacy ocean file has no complete addresses array: ${file}`);
+    if (sawAddresses) {
+      assert.deepEqual([...seenKeys].sort(), LEGACY_OCEAN_RECEIPT_KEYS,
+        `legacy ocean address receipt has an unexpected shape: ${file}`);
+      assert.equal(typeof values.generatedAt, "string",
+        `legacy ocean address receipt generatedAt must be text: ${file}`);
+      assertCanonicalRfc3339(values.generatedAt, "legacy ocean address receipt generatedAt");
+      assert.ok(Number.isSafeInteger(values.count) && values.count >= 0,
+        `legacy ocean address receipt count must be a non-negative integer: ${file}`);
+      assert.equal(values.count, legacyAddressCount,
+        `legacy ocean address receipt count does not match streamed addresses: ${file}`);
+      if (legacyAddressCount === 0) {
+        assert.equal(values.minLevel, null,
+          `empty legacy ocean address receipt minLevel must be null: ${file}`);
+      } else {
+        assert.ok(Number.isSafeInteger(values.minLevel) && values.minLevel >= 0 && values.minLevel <= 30,
+          `legacy ocean address receipt minLevel is invalid: ${file}`);
+        assert.equal(values.minLevel, legacyMinLevel,
+          `legacy ocean address receipt minLevel does not match streamed addresses: ${file}`);
+      }
+    } else {
+      assert.deepEqual([...seenKeys].sort(), CURRENT_EMPTY_OCEAN_RECEIPT_KEYS,
+        `empty current ocean receipt has an unexpected shape: ${file}`);
+      assert.equal(values.format, CURRENT_EMPTY_OCEAN_RECEIPT_FORMAT,
+        `empty current ocean receipt has an unsupported format: ${file}`);
+      assert.equal(typeof values.generatedAt, "string",
+        `empty current ocean receipt generatedAt must be text: ${file}`);
+      assertCanonicalRfc3339(values.generatedAt, "empty current ocean receipt generatedAt");
+      assert.equal(values.addressesPath, "ocean-skipped.lines",
+        `empty current ocean receipt must name ocean-skipped.lines: ${file}`);
+      assert.equal(values.minLevel, null,
+        `empty current ocean receipt minLevel must be null: ${file}`);
+      assert.equal(values.count, 0,
+        `empty current ocean receipt count must be zero: ${file}`);
+      assert.equal(values.digest, EMPTY_SHA256,
+        `empty current ocean receipt digest must be the empty SHA-256: ${file}`);
+    }
     assertStableFileStat(before, fs.fstatSync(handle, { bigint: true }), "legacy ocean input", file);
   } finally {
     try { fs.closeSync(handle); } catch (error) { if (error.code !== "EBADF") throw error; }

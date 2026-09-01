@@ -37,6 +37,7 @@ const HERE = path.dirname(new URL(import.meta.url).pathname);
 const COORDINATOR = path.join(HERE, "..", "global-build.mjs");
 const CROSS_CHECK = path.join(HERE, "..", "cross-check-accuracy.mjs");
 const PROVENANCE_URL = new URL("../source-provenance.mjs", import.meta.url).href;
+const LIGURIA_OCEAN_RECEIPT = path.join(HERE, "..", "evidence", "liguria-z11", "ocean-skipped.json");
 
 function temporary(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "terrain-provenance-"));
@@ -1167,7 +1168,7 @@ test("coordinator carries the exact publication policy and config digest through
     const value = JSON.parse(fs.readFileSync(process.argv[process.argv.indexOf("--config") + 1], "utf8"));
     const out = process.argv[process.argv.indexOf("--out") + 1]; fs.mkdirSync(out, { recursive: true });
     fs.writeFileSync(path.join(out, "tiles.dttstream"), "");
-    fs.writeFileSync(path.join(out, "ocean-skipped.json"), JSON.stringify({ addresses: [] }));
+    fs.writeFileSync(path.join(out, "ocean-skipped.json"), JSON.stringify({ generatedAt: "2026-09-01T00:00:00.000Z", minLevel: null, count: 0, addresses: [] }));
     fs.writeFileSync(path.join(out, "run-report.json"), JSON.stringify({ drained: true, errors: [], publicationPolicy: {
       policy: value.publication_policy, digest: sha256(canonicalJson(value.publication_policy)), globalConfigDigest: value.global_config_digest,
     } }));
@@ -1288,7 +1289,7 @@ test("global artifact-set rollback leaves no mixed files at every rename boundar
       const out = process.argv[process.argv.indexOf("--out") + 1];
       fs.mkdirSync(out, { recursive: true });
       fs.writeFileSync(path.join(out, "tiles.dttstream"), "");
-      fs.writeFileSync(path.join(out, "ocean-skipped.json"), JSON.stringify({ addresses: [] }));
+      fs.writeFileSync(path.join(out, "ocean-skipped.json"), JSON.stringify({ generatedAt: "2026-09-01T00:00:00.000Z", minLevel: null, count: 0, addresses: [] }));
       fs.writeFileSync(path.join(out, "run-report.json"), JSON.stringify({ drained: true, errors: [] }));
     `);
     const out = path.join(root, "out");
@@ -1316,7 +1317,7 @@ test("global artifact transaction recovers an actual process exit between artifa
     import fs from "node:fs"; import path from "node:path";
     const out = process.argv[process.argv.indexOf("--out") + 1]; fs.mkdirSync(out, { recursive: true });
     fs.writeFileSync(path.join(out, "tiles.dttstream"), "");
-    fs.writeFileSync(path.join(out, "ocean-skipped.json"), JSON.stringify({ addresses: [] }));
+    fs.writeFileSync(path.join(out, "ocean-skipped.json"), JSON.stringify({ generatedAt: "2026-09-01T00:00:00.000Z", minLevel: null, count: 0, addresses: [] }));
     fs.writeFileSync(path.join(out, "run-report.json"), JSON.stringify({ drained: true, errors: [] }));
   `);
   for (const boundary of [1, 2, 3]) {
@@ -1427,7 +1428,7 @@ test("terminal-state crash windows preserve artifacts until a resumed coordinato
       import fs from "node:fs"; import path from "node:path";
       const out = process.argv[process.argv.indexOf("--out") + 1]; fs.mkdirSync(out, { recursive: true });
       fs.writeFileSync(path.join(out, "tiles.dttstream"), "");
-      fs.writeFileSync(path.join(out, "ocean-skipped.json"), JSON.stringify({ addresses: [] }));
+      fs.writeFileSync(path.join(out, "ocean-skipped.json"), JSON.stringify({ generatedAt: "2026-09-01T00:00:00.000Z", minLevel: null, count: 0, addresses: [] }));
       fs.writeFileSync(path.join(out, "run-report.json"), JSON.stringify({ drained: true, errors: [] }));
     `);
     await assert.rejects(execFileAsync(process.execPath, [
@@ -1478,7 +1479,7 @@ test("resumption rejects a changed coordinator-owned shard snapshot", async (t) 
       import fs from "node:fs"; import path from "node:path";
       const out = process.argv[process.argv.indexOf("--out") + 1]; fs.mkdirSync(out, { recursive: true });
       fs.writeFileSync(path.join(out, "tiles.dttstream"), "");
-      fs.writeFileSync(path.join(out, "ocean-skipped.json"), JSON.stringify({ addresses: [] }));
+      fs.writeFileSync(path.join(out, "ocean-skipped.json"), JSON.stringify({ generatedAt: "2026-09-01T00:00:00.000Z", minLevel: null, count: 0, addresses: [] }));
       fs.writeFileSync(path.join(out, "run-report.json"), JSON.stringify({ drained: true, errors: [] }));
     `);
     await execFileAsync(process.execPath, [COORDINATOR, "--config", config, "--out", out, "--runner", runner, "--skip-verify"]);
@@ -1566,11 +1567,22 @@ test("ocean-skip merge streams legacy JSON and JSONL into a compact receipt", as
   const emptyCurrent = path.join(root, "empty-current.json");
   const jsonl = path.join(root, "current.lines");
   const output = path.join(root, "ocean-skipped.lines");
-  fs.writeFileSync(legacy, JSON.stringify({ generatedAt: "old", addresses: ["8/2/1", "8/1/1"] }));
+  fs.writeFileSync(legacy, JSON.stringify({
+    generatedAt: "2026-09-01T00:00:00.000Z",
+    minLevel: 8,
+    count: 2,
+    addresses: ["8/2/1", "8/1/1"],
+  }));
   // A current runner creates no .lines file when it skipped no ocean tiles;
-  // its zero-count receipt is still a valid shard input and must add nothing.
+  // its complete zero-count receipt is still a valid shard input and must add
+  // nothing.  Keep this byte shape aligned with run.mjs.
   fs.writeFileSync(emptyCurrent, JSON.stringify({
-    format: "terrain-ocean-skips-lines-v1", addressesPath: "ocean-skipped.lines", count: 0, digest: "0".repeat(64),
+    generatedAt: "2026-09-01T00:00:00.000Z",
+    format: "terrain-ocean-skips-lines-v1",
+    addressesPath: "ocean-skipped.lines",
+    minLevel: null,
+    count: 0,
+    digest: sha256(""),
   }));
   fs.writeFileSync(jsonl, "8/3/1\n");
   const receipt = await mergeOceanSkips({ inputFiles: [legacy, emptyCurrent, jsonl], outputFile: output, maxRunBytes: 1, fanIn: 2 });
@@ -1578,6 +1590,141 @@ test("ocean-skip merge streams legacy JSON and JSONL into a compact receipt", as
   assert.equal(receipt.duplicates, 0);
   assert.deepEqual(fs.readFileSync(output, "utf8").trim().split("\n"), ["8/1/1", "8/2/1", "8/3/1"]);
   assert.match(receipt.digest, /^[0-9a-f]{64}$/);
+});
+
+test("ocean-skip merge accepts committed old-run address evidence", async (t) => {
+  const root = temporary(t);
+  const output = path.join(root, "ocean-skipped.lines");
+  const evidence = JSON.parse(fs.readFileSync(LIGURIA_OCEAN_RECEIPT, "utf8"));
+  assert.deepEqual(Object.keys(evidence).sort(), ["addresses", "count", "generatedAt", "minLevel"]);
+  const receipt = await mergeOceanSkips({ inputFiles: [LIGURIA_OCEAN_RECEIPT], outputFile: output, maxRunBytes: 1024, fanIn: 2 });
+  assert.equal(receipt.count, evidence.count);
+  assert.equal(receipt.duplicateLinesWithinShards, 0);
+  assert.equal(fs.readFileSync(output, "utf8").trim().split("\n").length, evidence.count);
+});
+
+test("ocean-skip legacy receipts retain duplicate recovery accounting", async (t) => {
+  const root = temporary(t);
+  const input = path.join(root, "legacy.json");
+  const output = path.join(root, "ocean-skipped.lines");
+  fs.writeFileSync(input, JSON.stringify({
+    generatedAt: "2026-09-01T00:00:00.000Z",
+    minLevel: 8,
+    count: 3,
+    addresses: ["8/1/1", "8/1/1", "8/2/1"],
+  }));
+  const receipt = await mergeOceanSkips({ inputFiles: [input], outputFile: output, maxRunBytes: 1, fanIn: 2 });
+  assert.equal(receipt.count, 2);
+  assert.equal(receipt.duplicateLinesWithinShards, 1);
+  assert.deepEqual(fs.readFileSync(output, "utf8").trim().split("\n"), ["8/1/1", "8/2/1"]);
+});
+
+test("ocean-skip merge rejects duplicate object keys and malformed receipt metadata", async (t) => {
+  const root = temporary(t);
+  const output = path.join(root, "ocean-skipped.lines");
+  const emptyDigest = sha256("");
+  const exactEmpty = {
+    generatedAt: "2026-09-01T00:00:00.000Z",
+    format: "terrain-ocean-skips-lines-v1",
+    addressesPath: "ocean-skipped.lines",
+    minLevel: null,
+    count: 0,
+    digest: emptyDigest,
+  };
+  const exactLegacy = {
+    generatedAt: "2026-09-01T00:00:00.000Z",
+    minLevel: 8,
+    count: 1,
+    addresses: ["8/1/1"],
+  };
+  const compact = (members) => `{${members}}`;
+  const exactMembers = JSON.stringify(exactEmpty).slice(1, -1);
+  const { count: exactCount, ...withoutCount } = exactEmpty;
+  const { addressesPath: exactAddressesPath, ...withoutAddressesPath } = exactEmpty;
+  void exactCount;
+  void exactAddressesPath;
+  const membersWithoutCount = JSON.stringify(withoutCount).slice(1, -1);
+  const cases = [
+    [
+      "reverse-order count bypass",
+      compact(`${membersWithoutCount},"count":1,"count":0`),
+      /duplicate key count/,
+    ],
+    [
+      "duplicate address arrays",
+      '{"addresses":[],"addresses":[]}',
+      /duplicate key addresses/,
+    ],
+    [
+      "duplicate format",
+      compact(`${exactMembers},"format":"terrain-ocean-skips-lines-v1"`),
+      /duplicate key format/,
+    ],
+    [
+      "duplicate formerly ignored timestamp",
+      compact(`${exactMembers},"generatedAt":"2026-09-01T00:00:01.000Z"`),
+      /duplicate key generatedAt/,
+    ],
+    [
+      "extra modern member on legacy receipt",
+      JSON.stringify({ ...exactLegacy, format: "terrain-ocean-skips-lines-v1" }),
+      /address receipt has an unexpected shape/,
+    ],
+    [
+      "unknown receipt key",
+      JSON.stringify({ ...exactLegacy, ignored: true }),
+      /unsupported key ignored/,
+    ],
+    [
+      "legacy count mismatch",
+      JSON.stringify({ ...exactLegacy, count: 2 }),
+      /count does not match streamed addresses/,
+    ],
+    [
+      "legacy minimum mismatch",
+      JSON.stringify({ ...exactLegacy, minLevel: 9 }),
+      /minLevel does not match streamed addresses/,
+    ],
+    [
+      "wrong compact address path",
+      JSON.stringify({ ...exactEmpty, addressesPath: "elsewhere.lines" }),
+      /must name ocean-skipped\.lines/,
+    ],
+    [
+      "missing compact address path",
+      JSON.stringify(withoutAddressesPath),
+      /unexpected shape/,
+    ],
+    [
+      "nonempty compact receipt",
+      JSON.stringify({ ...exactEmpty, count: 1 }),
+      /count must be zero/,
+    ],
+    [
+      "nonempty minimum level",
+      JSON.stringify({ ...exactEmpty, minLevel: 8 }),
+      /minLevel must be null/,
+    ],
+    [
+      "wrong empty digest",
+      JSON.stringify({ ...exactEmpty, digest: "0".repeat(64) }),
+      /empty SHA-256/,
+    ],
+    [
+      "noncanonical runner timestamp",
+      JSON.stringify({ ...exactEmpty, generatedAt: "old" }),
+      /canonical RFC3339 UTC milliseconds/,
+    ],
+  ];
+  for (const [name, bytes, expected] of cases) {
+    const input = path.join(root, `${name.replaceAll(" ", "-")}.json`);
+    fs.writeFileSync(input, bytes);
+    await assert.rejects(
+      mergeOceanSkips({ inputFiles: [input], outputFile: output, maxRunBytes: 1, fanIn: 2 }),
+      expected,
+      name,
+    );
+  }
 });
 
 test("ocean-skip merge orders canonical addresses by numeric level, then y, then x", async (t) => {
