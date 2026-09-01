@@ -816,7 +816,14 @@ function maxLevelAtPosition(lon, lat) {
 }
 const clientSeesAvailable = (level, x, y) => maxLevelAtPosition(...tileCentre(level, x, y)) >= level;
 
-const availableButUnstored = [];
+// The global all-water set can be millions of addresses.  Keep the complete
+// publication worklist on disk; reports retain counts and a bounded sample.
+const availableButUnstoredPath = path.join(outDir, "available-but-unstored.ndjson");
+const availableButUnstoredHandle = fs.openSync(availableButUnstoredPath, "w");
+let availableButUnstored = 0;
+const availableButUnstoredSample = [];
+let ancestorPlaceholders = 0;
+const unstoredByLevel = {};
 for (let level = 0; level <= maxLevel; level += 1) {
   let x0 = Infinity;
   let x1 = -Infinity;
@@ -836,15 +843,17 @@ for (let level = 0; level <= maxLevel; level += 1) {
     for (let x = x0; x <= x1; x += 1) {
       if (!clientSeesAvailable(level, x, y)) continue;
       const key = `${level}/${x}/${y}`;
-      if (!seen.has(key)) availableButUnstored.push(key);
+      if (!seen.has(key)) {
+        fs.writeSync(availableButUnstoredHandle, `${key}\n`);
+        availableButUnstored += 1;
+        unstoredByLevel[level] = (unstoredByLevel[level] ?? 0) + 1;
+        if (!oceanSkipped.has(key)) ancestorPlaceholders += 1;
+        if (availableButUnstoredSample.length < 32) availableButUnstoredSample.push(key);
+      }
     }
   }
 }
-const unstoredByLevel = {};
-for (const key of availableButUnstored) {
-  const level = Number(key.split("/")[0]);
-  unstoredByLevel[level] = (unstoredByLevel[level] ?? 0) + 1;
-}
+fs.closeSync(availableButUnstoredHandle);
 
 // ── CHILD_AVAILABILITY: A SET BIT IS A CLAIM, AND EVERY CLAIM IS CHECKED ───
 //
@@ -989,7 +998,7 @@ const summary = {
   // Every address the CLIENT computes as available (max level at the tile
   // centre) that the store does not hold. Each is served by synthesis, never a
   // 404 — that is the contract; the count is here so nobody has to assume it.
-  availableButUnstored: availableButUnstored.length,
+  availableButUnstored,
   availableButUnstoredByLevel: unstoredByLevel,
   // THE ADDRESSES, not just the count. Under IPFS delivery these are the tiles
   // the publisher has to MATERIALIZE into the directory: a static gateway has
@@ -997,14 +1006,15 @@ const summary = {
   // and the directory does not hold is a 404 in the browser — the exact bound
   // Atlas set at zero. The count told a reviewer the promise was kept; the
   // list is what keeps it.
-  availableButUnstoredAddresses: availableButUnstored,
+  availableButUnstoredPath: path.basename(availableButUnstoredPath),
+  availableButUnstoredSample,
   // How many of those are addresses the ENCODER measured as all water and
   // skipped, as against the ancestor placeholders the closure adds. The two
   // are answered differently by the serving module — water and flat land —
   // and conflating them is what published an ocean as a continent.
   oceanSkipsDeclared: oceanSkipped.size,
   oceanSkipsBelowAuthoritativeFloor: oceanSkipsBelowFloor.length,
-  ancestorPlaceholders: availableButUnstored.filter((a) => !oceanSkipped.has(a)).length,
+  ancestorPlaceholders,
   tilesetExtent,
   childAvailabilityClaims: childBitsClaimed,
   childAvailabilityUnservedClaims: childBitsWrong,

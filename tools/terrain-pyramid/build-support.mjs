@@ -33,6 +33,27 @@ export function urlCacheKey(url) {
   return sha256(url).slice(0, 32);
 }
 
+// Read-only consumers (the accuracy lane) must use the same immutable
+// generation selected by the bounded cache, rather than the pre-generation
+// `<key>.bin` layout used by old regional runs.  This deliberately does not
+// update LRU state or acquire a lease: a completed build owns the cache during
+// its post-build verification and generation files are immutable.
+export function readGenerationCacheEntry(cacheDir, url) {
+  const key = urlCacheKey(url);
+  const dir = path.join(cacheDir, "entries", key);
+  let pointer;
+  try { pointer = JSON.parse(fs.readFileSync(path.join(dir, "current.json"), "utf8")); } catch { return null; }
+  if (!pointer?.generation || typeof pointer.generation !== "string") return null;
+  const base = path.join(dir, pointer.generation);
+  try {
+    const status = Number(fs.readFileSync(`${base}.status`, "utf8").trim());
+    if (!Number.isInteger(status)) return null;
+    return { status, body: fs.readFileSync(`${base}.bin`) };
+  } catch {
+    return null;
+  }
+}
+
 export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

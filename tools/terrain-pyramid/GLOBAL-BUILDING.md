@@ -5,13 +5,17 @@ orchestrator is the only supported way to scale that host to a global run:
 
 ```sh
 node tools/terrain-pyramid/global-build.mjs \
-  --config <approved-global-run.json> --out <scratch>/global-z10 \
+  --config tools/terrain-pyramid/regions/global-z10.json --out <scratch>/global-z10 \
   --shards 24 --workers 6 --cache-max-bytes $((128 * 1024 * 1024 * 1024))
 ```
 
-This is an off-fleet build command. It must run only after the global source
-config has been approved. It does not publish an IPFS CID, tunnel to a host,
-or deploy a flow.
+This is an off-fleet build command. The checked approved source policy is
+`regions/global-z10.json`: it records the public GLO-30 endpoint, epoch,
+retrieval date, licence, global extent, and the distinction between an
+immutable 404 no-coverage observation, all-water synthesis, and a failing
+non-water/no-data gap. It stores source-backed z8--z10 records; z0--z7 are
+declared global ancestors synthesized by the serving flow. It does not publish
+an IPFS CID, tunnel to a host, or deploy a flow.
 
 ## Boundaries and resume contract
 
@@ -45,8 +49,9 @@ or deploy a flow.
   by a worker. The merge report's sorted address/digest set is the
   order-independent parity identity used to compare a multi-worker rehearsal
   with the existing single-process lane.
-- `verify.mjs` now reads `tiles.dttstream` record-by-record. It retains only
-  its indexes and edge data, rather than attempting one >2 GiB Buffer.
+- `measure-accuracy.mjs` and `cross-check-accuracy.mjs` stream
+  `tiles.dttstream`; accuracy retains only its fixed per-level sample and reads
+  the selected immutable `granule-cache/entries/<key>/current.json` generation.
 
 ## Rehearsal before any global cut
 

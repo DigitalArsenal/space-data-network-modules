@@ -51,6 +51,9 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 
+import { readGenerationCacheEntry } from "./build-support.mjs";
+import { iterateStreamFile, readDtt as readStreamDtt } from "./dtt-reader.mjs";
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..");
 const SDK_DIR = path.join(REPO, "flows", "terrain-ingest", "node_modules", "space-data-module-sdk");
@@ -117,7 +120,11 @@ for (let i = 2; i < process.argv.length; i += 1) {
 }
 assert.ok(args.out, "--out <store dir> is required");
 const outDir = path.resolve(args.out);
-const granuleDir = path.join(outDir, "granules");
+// Global workers share the generation cache.  Regional legacy stores still
+// have `<out>/granules/<key>.bin`, so retain that read-only compatibility.
+const granuleDir = fs.existsSync(path.join(outDir, "granule-cache"))
+  ? path.join(outDir, "granule-cache")
+  : path.join(outDir, "granules");
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -265,6 +272,16 @@ const stem = (lat, lon) =>
 const demUrl = (lat, lon) => `${GRANULE_BASE}${stem(lat, lon)}_DEM/${stem(lat, lon)}_DEM.tif`;
 const cachePath = (url) => path.join(granuleDir, `${createHash("sha256").update(url).digest("hex").slice(0, 32)}.bin`);
 
+function cachedGranule(url) {
+  const generation = readGenerationCacheEntry(granuleDir, url);
+  if (generation) return generation;
+  const file = cachePath(url);
+  const statusFile = `${file}.status`;
+  if (!fs.existsSync(file) || !fs.existsSync(statusFile)) return null;
+  const status = Number(fs.readFileSync(statusFile, "utf8").trim());
+  return Number.isInteger(status) ? { status, body: fs.readFileSync(file) } : null;
+}
+
 function granulesFor(tile) {
   const frames = [];
   // The granule that HOLDS a post: latitudes (lat, lat+1], longitudes [lon, lon+1).
@@ -274,11 +291,9 @@ function granulesFor(tile) {
   const lon1 = Math.floor(tile.east);
   for (let lat = lat0; lat <= lat1; lat += 1) {
     for (let lon = lon0; lon <= lon1; lon += 1) {
-      const file = cachePath(demUrl(lat, lon));
-      const statusFile = `${file}.status`;
-      if (!fs.existsSync(file) || !fs.existsSync(statusFile)) continue;
-      if (fs.readFileSync(statusFile, "utf8").trim() !== "200") continue;
-      const body = fs.readFileSync(file);
+      const cached = cachedGranule(demUrl(lat, lon));
+      if (!cached || cached.status !== 200) continue;
+      const body = cached.body;
       const hrb = Buffer.alloc(8 + body.length);
       hrb.write("$HRB", 0, "latin1");
       hrb.writeUInt32LE(200, 4);
@@ -355,12 +370,22 @@ async function encodeReferenceAt(tile, harness, grid) {
   });
 }
 
-const records = splitStream(fs.readFileSync(path.join(outDir, "tiles.dttstream")));
+// Keep only the selected samples: global stores can hold almost a million
+// records, while this lane needs at most perLevel high-relief tiles and one
+// low-relief control per level.  The record reader itself is framed/streaming.
 const byLevel = new Map();
-for (const record of records) {
-  const dtt = readDtt(record);
-  if (!byLevel.has(dtt.level)) byLevel.set(dtt.level, []);
-  byLevel.get(dtt.level).push(dtt);
+for await (const record of iterateStreamFile(path.join(outDir, "tiles.dttstream"))) {
+  const dtt = readStreamDtt(record);
+  const state = byLevel.get(dtt.level) ?? { count: 0, highest: [], flat: null };
+  state.count += 1;
+  const relief = dtt.maxHeightM - dtt.minHeightM;
+  if (!state.flat || relief < state.flat.relief || (relief === state.flat.relief && `${dtt.x}/${dtt.y}` < `${state.flat.dtt.x}/${state.flat.dtt.y}`)) {
+    state.flat = { dtt, relief };
+  }
+  state.highest.push({ dtt, relief });
+  state.highest.sort((a, b) => b.relief - a.relief || a.dtt.x - b.dtt.x || a.dtt.y - b.dtt.y);
+  if (state.highest.length > args.perLevel) state.highest.length = args.perLevel;
+  byLevel.set(dtt.level, state);
 }
 
 const harness = await createBrowserModuleHarness({
@@ -372,11 +397,9 @@ const levels = [];
 for (const level of [...byLevel.keys()].sort((a, b) => a - b)) {
   // The highest-relief tiles: a max-error bound is a claim about the worst
   // tile, and picking at random measures the median instead.
-  const candidates = [...byLevel.get(level)].sort(
-    (a, b) => b.maxHeightM - b.minHeightM - (a.maxHeightM - a.minHeightM),
-  );
-  const chosen = candidates.slice(0, args.perLevel);
-  const flat = candidates[candidates.length - 1];
+  const selected = byLevel.get(level);
+  const chosen = selected.highest.map((entry) => entry.dtt);
+  const flat = selected.flat.dtt;
   const tiles = [];
   let levelMax = 0;
   let levelSq = 0;
@@ -479,7 +502,7 @@ for (const level of [...byLevel.keys()].sort((a, b) => a - b)) {
     sourcePostsPerTileEdge: +((180 / 2 ** level) * SOURCE_POSTS_PER_DEGREE).toFixed(1),
     referenceSpacingDeg: +referenceSpacingDeg.toExponential(3),
     sourceSpacingDeg: +sourceSpacingDeg.toExponential(3),
-    tilesInStore: byLevel.get(level).length,
+    tilesInStore: selected.count,
     tilesMeasured: tiles.length,
     errorTargetM: +target.toFixed(2),
     legacyBoundM: +legacyBound.toFixed(2),

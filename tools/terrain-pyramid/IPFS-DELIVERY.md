@@ -468,6 +468,19 @@ A local kubo works identically and is what a development run should use; the
 only thing host-01's API gives you is a pin on the box that serves the public
 gateway.
 
+### Global publication safety
+
+The publisher frames `$DTT` records one at a time, materializes the directory
+incrementally, walks it into a backpressured multipart stream, and consumes
+Kubo's NDJSON add receipt incrementally. It must not allocate a full store or
+full directory multipart buffer. It preflights `/api/v0/version`, requires a
+recursive pin proof plus public gateway readback, and removes only the new
+root's pin if that proof fails.
+
+IPFS serves terrain identity bytes. The enforced delivery budget is p50 <= 96
+KiB, p99 <= 384 KiB, hard <= 512 KiB per `.terrain` file. This is deliberately
+separate from the gzipped record-store budget; publication may not bypass it.
+
 ### THE DEPLOY CONFIG IS COMPLETE BEFORE THE PUBLISH RUNS
 
 `verify.mjs` writes `<out>/layer-json-config.json`, and `mount-entry.json`

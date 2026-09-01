@@ -1,0 +1,25 @@
+{
+  "//": "APPROVED OFF-FLEET GLOBAL EPOCH. The source is Copernicus DEM GLO-30 public COGs at the immutable naming scheme below; this config intentionally stores z8-z10 only. z0-z7 are global ancestor coverage synthesized by the serving module, not guessed source terrain. A 404 for a planned DEM or WBM is the provider's no-coverage/ocean result (never retried); the encoder may synthesize only an all-water tile, and any non-water no-data/partial-coverage result remains visible to verify.mjs and fails its missing-row/coverage gates.",
+  "out": "tools/terrain-pyramid/out/global-z10",
+  "cache_max_bytes": 137438953472,
+  "flow_config": {
+    "dataset_id": "copernicus-glo30-quantized-mesh",
+    "tileset_id": "spaceaware-terrain",
+    "dataset_epoch": "2023-04-01T00:00:00.000Z",
+    "retrieved_at": "2026-09-01T00:00:00.000Z",
+    "provider_id": "copernicus",
+    "source_name": "Copernicus DEM GLO-30",
+    "source_url": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/",
+    "source_license": "Licence for Copernicus DEM instance COP-DEM-GLO-30-F",
+    "source_coverage_policy": "HTTP 200 is sampled source. HTTP 404 is an immutable no-coverage observation, recorded in the shared generation cache and interpreted as ocean only where the paired water classification is all-water. Other HTTP failures are retried by the bounded runner and then fail the cut; partial/non-water no-data is never filled as land or water.",
+    "ocean_policy": "all-water addresses are omitted from tiles.dttstream, declared by verify.mjs, and materialized as UNIFORM_WATER for static IPFS delivery; z0-z7 global ancestors are synthesized only to complete global client availability.",
+    "grid_size": 65,
+    "max_grid_size": 361,
+    "min_level": 8,
+    "max_level": 10,
+    "timeout_ms": 120000,
+    "regions": [
+      { "name": "worldwide-z0-z10", "west": -180, "south": -90, "east": 180, "north": 90, "max_level": 10, "priority": 0 }
+    ]
+  }
+}

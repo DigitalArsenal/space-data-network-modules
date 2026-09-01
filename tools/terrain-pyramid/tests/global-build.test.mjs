@@ -13,6 +13,7 @@ import {
   makeShardConfigs,
   markShard,
   recordSetDigest,
+  readGenerationCacheEntry,
   saveGlobalState,
   sha256,
 } from "../build-support.mjs";
@@ -127,6 +128,17 @@ test("stream reader rejects a corrupt oversized prefix before buffering it", asy
   await assert.rejects(async () => {
     for await (const unused of iterateStreamFile(file, { highWaterMark: 2 })) void unused;
   }, /terrain safety limit/);
+});
+
+test("read-only accuracy consumers resolve the cache current generation, not the retired flat layout", async (t) => {
+  const dir = temporary(t);
+  const cache = new BoundedGranuleCache({ dir, maxBytes: 4096, owner: "generation-reader" });
+  const url = "https://example.test/current";
+  await cache.fetch(url, { fetchImpl: async () => response(200, "immutable-body") });
+  const entry = readGenerationCacheEntry(dir, url);
+  assert.equal(entry?.status, 200);
+  assert.equal(entry?.body.toString(), "immutable-body");
+  await cache.release(url);
 });
 
 test("multi-worker parity identity is independent of merge order", () => {

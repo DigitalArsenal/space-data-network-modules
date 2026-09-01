@@ -46,6 +46,8 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
+import { iterateStreamFile, readDtt } from "./dtt-reader.mjs";
+
 const args = {};
 for (let i = 2; i < process.argv.length; i += 1) {
   if (process.argv[i] === "--out") args.out = process.argv[++i];
@@ -56,37 +58,28 @@ if (!args.out) throw new Error("--out <store dir> is required");
 const outDir = path.resolve(args.out);
 
 // The record's own figure, read straight off the FlatBuffer.
-function statedAccuracyByAddress(streamPath) {
-  const buf = fs.readFileSync(streamPath);
+async function statedAccuracyByAddress(streamPath) {
   const out = new Map();
-  let offset = 0;
-  while (offset + 4 <= buf.length) {
-    const length = buf.readUInt32LE(offset);
-    if (!length || offset + 4 + length > buf.length) break;
-    const b = buf.subarray(offset + 4, offset + 4 + length);
-    offset += 4 + length;
-    assert.equal(b.subarray(4, 8).toString("latin1"), "$DTT", "every record is a $DTT");
-    const pos = b.readUInt32LE(0);
-    const vtable = pos - b.readInt32LE(pos);
-    const at = (id) => {
-      const vo = 4 + 2 * id;
-      if (vo >= b.readUInt16LE(vtable)) return 0;
-      const o = b.readUInt16LE(vtable + vo);
-      return o === 0 ? 0 : pos + o;
-    };
-    const u32 = (id) => { const p = at(id); return p ? b.readUInt32LE(p) : 0; };
-    const f64 = (id) => { const p = at(id); return p ? b.readDoubleLE(p) : 0; };
-    out.set(`${u32(3)}/${u32(4)}/${u32(5)}`, f64(23));
+  // The accuracy report names only a bounded sample.  Index only those
+  // addresses while streaming the global record file; storing every global
+  // address-to-accuracy pair would merely move the old full-buffer failure.
+  const wanted = new Set();
+  const report = JSON.parse(fs.readFileSync(path.join(outDir, "accuracy-report.json"), "utf8"));
+  for (const level of report.levels) for (const tile of level.tiles) wanted.add(tile.address);
+  for await (const record of iterateStreamFile(streamPath)) {
+    const dtt = readDtt(record);
+    const key = `${dtt.level}/${dtt.x}/${dtt.y}`;
+    if (wanted.has(key)) out.set(key, dtt.verticalAccuracyM);
   }
   return out;
 }
 
-const stated = statedAccuracyByAddress(path.join(outDir, "tiles.dttstream"));
 const accuracyPath = path.join(outDir, "accuracy-report.json");
 if (!fs.existsSync(accuracyPath)) {
   throw new Error(`no accuracy-report.json in ${outDir}: run measure-accuracy.mjs against it first`);
 }
 const report = JSON.parse(fs.readFileSync(accuracyPath, "utf8"));
+const stated = await statedAccuracyByAddress(path.join(outDir, "tiles.dttstream"));
 
 const rows = [];
 for (const level of report.levels) {
