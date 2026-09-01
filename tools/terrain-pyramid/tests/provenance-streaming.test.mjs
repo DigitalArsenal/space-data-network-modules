@@ -253,6 +253,28 @@ test("source policy permits only its immutable base URL and naming templates", (
   }), /flow_config\.dataset_epoch must equal/);
 });
 
+test("global Copernicus WBM policy admits only the planner's DEM AUXFILES form", () => {
+  const config = JSON.parse(fs.readFileSync(path.join(HERE, "..", "regions", "global-z10.json"), "utf8"));
+  const policy = sourcePolicyContract(config);
+  const base = "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/";
+  const plannerWater = "Copernicus_DSM_COG_10_N89_00_E179_00_DEM/AUXFILES/" +
+    "Copernicus_DSM_COG_10_N89_00_E179_00_WBM.tif";
+  assert.equal(policy.policy.url_policy.water_template,
+    "Copernicus_DSM_COG_10_{NS}{LAT2}_00_{EW}{LON3}_00_DEM/AUXFILES/" +
+    "Copernicus_DSM_COG_10_{NS}{LAT2}_00_{EW}{LON3}_00_WBM.tif");
+  assert.equal(sourcePolicyAllowsUrl(policy, `${base}${plannerWater}`), true,
+    "the checked policy accepts the exact planner-produced WBM URL");
+  assert.equal(sourcePolicyAllowsUrl(policy,
+    `${base}Copernicus_DSM_COG_10_N89_00_E179_00_WBM/Copernicus_DSM_COG_10_N89_00_E179_00_WBM.tif`), false,
+  "the obsolete nonexistent WBM directory form is not admissible");
+  assert.equal(sourcePolicyAllowsUrl(policy,
+    `${base}Copernicus_DSM_COG_10_N89_00_E179_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N88_00_E179_00_WBM.tif`), false,
+  "the WBM filename must repeat the planned latitude exactly");
+  assert.equal(sourcePolicyAllowsUrl(policy,
+    `${base}Copernicus_DSM_COG_10_N89_00_E179_00_DEM/AUXFILES/Copernicus_DSM_COG_10_N89_00_E178_00_WBM.tif`), false,
+  "the WBM filename must repeat the planned longitude exactly");
+});
+
 test("global Copernicus DTT retrieved_at is derived from non-empty observed source evidence", () => {
   const config = JSON.parse(fs.readFileSync(path.join(HERE, "..", "regions", "global-z10.json"), "utf8"));
   assert.equal(Object.hasOwn(config.flow_config, "retrieved_at"), false,

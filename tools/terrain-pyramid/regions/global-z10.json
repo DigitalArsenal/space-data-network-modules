@@ -16,7 +16,7 @@
     "url_policy": {
       "base_url": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/",
       "dem_template": "Copernicus_DSM_COG_10_{NS}{LAT2}_00_{EW}{LON3}_00_DEM/Copernicus_DSM_COG_10_{NS}{LAT2}_00_{EW}{LON3}_00_DEM.tif",
-      "water_template": "Copernicus_DSM_COG_10_{NS}{LAT2}_00_{EW}{LON3}_00_WBM/Copernicus_DSM_COG_10_{NS}{LAT2}_00_{EW}{LON3}_00_WBM.tif",
+      "water_template": "Copernicus_DSM_COG_10_{NS}{LAT2}_00_{EW}{LON3}_00_DEM/AUXFILES/Copernicus_DSM_COG_10_{NS}{LAT2}_00_{EW}{LON3}_00_WBM.tif",
       "object_identity": "the exact HTTPS URL and response SHA-256 in source-manifest.ndjson are immutable source identity; URL templates alone are never treated as content identity"
     },
     "request": {
