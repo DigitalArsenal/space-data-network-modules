@@ -21,8 +21,12 @@ or deploy a flow.
   only publish one immutable body/status generation. Each active cell holds
   leases for its planned granules; LRU eviction skips live leases. Owners carry
   both PID and a process-start identity where the OS exposes one, so a live
-  reused PID is reclaimed rather than pinning capacity. Identity-less or
-  malformed ownership gets only the bounded expiry. Interrupted publication
+  reused PID is reclaimed rather than pinning capacity. On platforms without
+  that identity, the actual lock/lease holder refreshes a 20-second ownership
+  heartbeat; a live identity-less owner is protected past the ordinary cache
+  TTL and is reclaimed only after a separate five-minute no-heartbeat crash
+  bound. Timer cleanup and token checks prevent an old holder overwriting a
+  successor. Malformed ownership gets only the bounded expiry. Interrupted publication
   directories and corrupt generation pointers are reclaimed under that same
   global lock before usage/capacity accounting.
 - Network retries are deterministic exponential backoff: four retries after

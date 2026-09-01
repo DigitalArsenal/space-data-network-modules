@@ -130,6 +130,12 @@ export class BoundedGranuleCache {
     isPidAlive = defaultPidAlive,
     processIdentity = defaultProcessIdentity,
     leaseTtlMs = 30 * 60_000,
+    // On platforms without a process start token (notably macOS), a live PID
+    // alone cannot prove ownership because PIDs can be reused. Holders write a
+    // heartbeat every 20 s; five minutes without one is a bounded crash/stall
+    // recovery window, deliberately separate from the 30-minute cache lease.
+    identitylessHeartbeatTtlMs = 5 * 60_000,
+    heartbeatIntervalMs = 20_000,
     lockWaitMs = 60_000,
   }) {
     assert.ok(dir, "cache dir is required");
@@ -143,10 +149,15 @@ export class BoundedGranuleCache {
     this.processIdentity = processIdentity;
     this.identity = processIdentity(pid);
     this.leaseTtlMs = leaseTtlMs;
+    assert.ok(Number.isSafeInteger(identitylessHeartbeatTtlMs) && identitylessHeartbeatTtlMs > 0, "identitylessHeartbeatTtlMs must be a positive safe integer");
+    assert.ok(Number.isSafeInteger(heartbeatIntervalMs) && heartbeatIntervalMs > 0 && heartbeatIntervalMs < identitylessHeartbeatTtlMs, "heartbeatIntervalMs must be positive and shorter than identitylessHeartbeatTtlMs");
+    this.identitylessHeartbeatTtlMs = identitylessHeartbeatTtlMs;
+    this.heartbeatIntervalMs = heartbeatIntervalMs;
     this.lockWaitMs = lockWaitMs;
     this.retries = 0;
     this.evictions = 0;
-    for (const name of ["entries", "leases", "locks", "producer-locks"]) {
+    this.leaseHeartbeats = new Map();
+    for (const name of ["entries", "leases", "lease-heartbeats", "locks", "producer-locks"]) {
       fs.mkdirSync(path.join(this.dir, name), { recursive: true });
     }
   }
@@ -155,6 +166,76 @@ export class BoundedGranuleCache {
   entryDir(key) { return path.join(this.dir, "entries", key); }
   pointerPath(key) { return path.join(this.entryDir(key), "current.json"); }
   leasePath(key) { return path.join(this.dir, "leases", `${key}.${this.owner}.json`); }
+  heartbeatPath(ownerFile, token) {
+    if (ownerFile.startsWith(path.join(this.dir, "leases") + path.sep)) {
+      return path.join(this.dir, "lease-heartbeats", `${path.basename(ownerFile)}.${token}.heartbeat`);
+    }
+    return path.join(path.dirname(ownerFile), `.heartbeat-${token}`);
+  }
+
+  ownerRecord(token = undefined) {
+    return { ...(token ? { token } : {}), owner: this.owner, pid: this.pid, identity: this.identity, acquiredAt: this.now() };
+  }
+
+  heartbeatAge(ownerFile, owner, fallbackAge) {
+    if (!owner?.token) return fallbackAge;
+    try {
+      const heartbeat = Number(fs.readFileSync(this.heartbeatPath(ownerFile, owner.token), "utf8"));
+      return Number.isFinite(heartbeat) ? Math.max(0, this.now() - heartbeat) : fallbackAge;
+    } catch {
+      return fallbackAge;
+    }
+  }
+
+  // Returns true only for a live owner that either has a matching durable
+  // process identity or, where that cannot be observed, a recent heartbeat.
+  // A reused PID with no start token is conservatively protected for the short
+  // heartbeat crash bound, never for the ordinary (30-minute) lease TTL.
+  ownerStillMatches(owner, ownerFile, age) {
+    if (!owner || !this.isPidAlive(Number(owner.pid))) return false;
+    const recorded = owner.identity?.startToken;
+    const observed = this.processIdentity(Number(owner.pid))?.startToken;
+    if (recorded && observed) return recorded === observed;
+    return this.heartbeatAge(ownerFile, owner, age) <= this.identitylessHeartbeatTtlMs;
+  }
+
+  refreshHeartbeat(file, token) {
+    const owner = readJson(file);
+    // Never write a successor's metadata. Heartbeats are token-named sidecars:
+    // an old owner that resumes after its directory was reclaimed can at worst
+    // leave an ignored old-token pulse, never replace the new owner's record.
+    if (!owner || owner.token !== token) return false;
+    atomicWrite(this.heartbeatPath(file, token), `${this.now()}\n`);
+    return true;
+  }
+
+  startHeartbeat(file, token) {
+    this.refreshHeartbeat(file, token);
+    const timer = setInterval(() => {
+      try { this.refreshHeartbeat(file, token); } catch {}
+    }, this.heartbeatIntervalMs);
+    timer.unref?.();
+    return timer;
+  }
+
+  stopLeaseHeartbeat(file) {
+    const heartbeat = this.leaseHeartbeats.get(file);
+    if (heartbeat) {
+      clearInterval(heartbeat.timer);
+      safeUnlink(this.heartbeatPath(file, heartbeat.token));
+    }
+    this.leaseHeartbeats.delete(file);
+  }
+
+  removeLeaseHeartbeats(file, token = null) {
+    const root = path.join(this.dir, "lease-heartbeats");
+    const prefix = `${path.basename(file)}.`;
+    for (const name of fs.readdirSync(root)) {
+      if (name.startsWith(prefix) && (!token || name === `${path.basename(file)}.${token}.heartbeat`)) {
+        safeUnlink(path.join(root, name));
+      }
+    }
+  }
 
   paths(url) {
     const key = this.key(url);
@@ -179,7 +260,7 @@ export class BoundedGranuleCache {
     while (true) {
       try {
         fs.mkdirSync(lockDir);
-        atomicWrite(ownerFile, `${JSON.stringify({ token, pid: this.pid, identity: this.identity, acquiredAt: this.now() })}\n`);
+        atomicWrite(ownerFile, `${JSON.stringify(this.ownerRecord(token))}\n`);
         break;
       } catch (error) {
         if (error.code !== "EEXIST") throw error;
@@ -187,15 +268,14 @@ export class BoundedGranuleCache {
         const age = (() => { try { return this.now() - fs.statSync(lockDir).mtimeMs; } catch { return 0; } })();
         const ownerValid = owner && Number.isInteger(Number(owner.pid));
         const dead = ownerValid && !this.isPidAlive(Number(owner.pid));
-        const reusedPid = ownerValid && this.isPidAlive(Number(owner.pid)) && !this.ownerStillMatches(owner, age);
+        const staleOwner = ownerValid && !this.ownerStillMatches(owner, ownerFile, age);
         // A lock with no owner file can only be reclaimed after its bounded
         // grace period; otherwise another process between mkdir and write
         // could have its live lock stolen.
-        // A matching process identity is the only unbounded lock owner.  A
-        // dead owner or a live but reused PID is conclusively stale; missing,
-        // corrupt, or identity-less metadata receives only the bounded grace
-        // period so a crash between mkdir and owner publication is safe.
-        if (dead || reusedPid || ((!ownerValid || !owner.identity?.startToken) && age > this.leaseTtlMs)) {
+        // A matching process identity is the only unbounded lock owner. An
+        // identity-less live owner remains safe while its holder heartbeat is
+        // fresh; a missing/corrupt owner receives the longer mkdir/write grace.
+        if (dead || staleOwner || (!ownerValid && age > this.leaseTtlMs)) {
           try { fs.rmSync(lockDir, { recursive: true, force: true }); } catch {}
           continue;
         }
@@ -203,9 +283,12 @@ export class BoundedGranuleCache {
         await sleep(10);
       }
     }
+    const heartbeat = this.startHeartbeat(ownerFile, token);
     try {
       return await action();
     } finally {
+      clearInterval(heartbeat);
+      safeUnlink(this.heartbeatPath(ownerFile, token));
       const owner = readJson(ownerFile);
       if (owner?.token === token) fs.rmSync(lockDir, { recursive: true, force: true });
     }
@@ -213,17 +296,6 @@ export class BoundedGranuleCache {
 
   withGlobalLock(action) { return this.withDirectoryLock(path.join(this.dir, "locks", "cache.lock"), action); }
   withProducerLock(key, action) { return this.withDirectoryLock(path.join(this.dir, "producer-locks", `${key}.lock`), action); }
-
-  ownerStillMatches(owner, age) {
-    if (!owner || !this.isPidAlive(Number(owner.pid))) return false;
-    const recorded = owner.identity?.startToken;
-    const observed = this.processIdentity(Number(owner.pid))?.startToken;
-    if (recorded && observed) return recorded === observed;
-    // Platforms without a durable start identity may retain a live PID only
-    // for a bounded interval; PID reuse can therefore never pin a cache lock
-    // or lease forever.
-    return age <= this.leaseTtlMs;
-  }
 
   reclaimStaleLeasesUnlocked() {
     const leaseDir = path.join(this.dir, "leases");
@@ -233,11 +305,13 @@ export class BoundedGranuleCache {
       const age = (() => { try { return this.now() - fs.statSync(file).mtimeMs; } catch { return 0; } })();
       const valid = lease && Number.isInteger(Number(lease.pid));
       const dead = valid && !this.isPidAlive(Number(lease.pid));
-      const reusedPid = valid && this.isPidAlive(Number(lease.pid)) && !this.ownerStillMatches(lease, age);
-      // A dead/reused identity is evidence the reservation cannot be owned by
-      // the recorded producer. Corrupt and identity-less metadata instead
-      // waits through a bounded TTL to protect the mkdir/write crash window.
-      if (dead || reusedPid || ((!valid || !lease.identity?.startToken) && age > this.leaseTtlMs)) safeUnlink(file);
+      const staleOwner = valid && !this.ownerStillMatches(lease, file, age);
+      // A dead/reused identity or an identity-less owner with no fresh holder
+      // heartbeat is stale. Corrupt metadata gets the longer mkdir/write grace.
+      if (dead || staleOwner || (!valid && age > this.leaseTtlMs)) {
+        safeUnlink(file);
+        this.removeLeaseHeartbeats(file, lease?.token);
+      }
     }
   }
 
@@ -341,20 +415,34 @@ export class BoundedGranuleCache {
     await this.withGlobalLock(async () => {
       this.reclaimStaleLeasesUnlocked();
       this.entriesUnlocked({ reclaimOrphans: true });
-      atomicWrite(this.leasePath(key), `${JSON.stringify({ owner: this.owner, pid: this.pid, identity: this.identity, acquiredAt: this.now() })}\n`);
+      const lease = this.leasePath(key);
+      const token = randomUUID();
+      atomicWrite(lease, `${JSON.stringify(this.ownerRecord(token))}\n`);
+      this.stopLeaseHeartbeat(lease);
+      this.leaseHeartbeats.set(lease, { timer: this.startHeartbeat(lease, token), token });
     });
     return this.paths(url);
   }
 
   async release(url) {
-    await this.withGlobalLock(async () => safeUnlink(this.leasePath(this.key(url))));
+    const lease = this.leasePath(this.key(url));
+    this.stopLeaseHeartbeat(lease);
+    await this.withGlobalLock(async () => {
+      safeUnlink(lease);
+      this.removeLeaseHeartbeats(lease);
+    });
   }
 
   async releaseAll() {
     await this.withGlobalLock(async () => {
       const suffix = `.${this.owner}.json`;
       for (const name of fs.readdirSync(path.join(this.dir, "leases"))) {
-        if (name.endsWith(suffix)) safeUnlink(path.join(this.dir, "leases", name));
+        if (name.endsWith(suffix)) {
+          const lease = path.join(this.dir, "leases", name);
+          this.stopLeaseHeartbeat(lease);
+          safeUnlink(lease);
+          this.removeLeaseHeartbeats(lease);
+        }
       }
     });
   }

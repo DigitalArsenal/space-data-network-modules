@@ -9,9 +9,9 @@
     }
   ],
   "records": 8,
-  "singleLaneMs": 1337.999,
-  "concurrentShardMs": 1666.038,
-  "recordSetDigest": "4b6152a08cd5b43102859e53ef57c70720a0793497028a9c8faa015879a3f837",
+  "singleLaneMs": 1296.739,
+  "concurrentShardMs": 1625.26,
+  "recordSetDigest": "ff1104a296994b6c5bb8e5a1c3cd84e5286c7fb596cc1c2135def4223f21c05c",
   "parity": "PASS",
   "execution": "run.mjs single lane vs global-build.mjs (2 OS workers + merge)"
 }

@@ -226,6 +226,55 @@ test("resume reclaims a live reused PID whose process identity changed", async (
   assert.equal((await resumed.get("https://example.test/b")).body.length, 600);
 });
 
+test("identity-less live leases survive the ordinary TTL while their holder heartbeat is fresh", async (t) => {
+  const dir = temporary(t);
+  const maxBytes = 1000;
+  const started = Date.now();
+  let now = started;
+  const ownerOptions = {
+    dir, maxBytes, pid: 77, isPidAlive: (pid) => pid === 77,
+    processIdentity: (pid) => ({ pid, startToken: null }), now: () => now,
+    leaseTtlMs: 100, identitylessHeartbeatTtlMs: 1_000, heartbeatIntervalMs: 10,
+  };
+  const held = new BoundedGranuleCache({ ...ownerOptions, owner: "held" });
+  const urlA = "https://example.test/a";
+  await held.fetch(urlA, { fetchImpl: async () => response(200, "a".repeat(600)) });
+  now = started + 500; // Beyond ordinary lease TTL, inside the identity-less crash bound.
+  await held.refreshHeartbeat(held.leasePath(held.key(urlA)), JSON.parse(fs.readFileSync(held.leasePath(held.key(urlA)), "utf8")).token);
+  now = started + 1_050; // Still > ordinary TTL, but heartbeat is only 550 ms old.
+  const resumed = new BoundedGranuleCache({ ...ownerOptions, owner: "resumed" });
+  await assert.rejects(
+    resumed.fetch("https://example.test/b", { fetchImpl: async () => response(200, "b".repeat(600)) }),
+    /leased granules/,
+  );
+  held.stopLeaseHeartbeat(held.leasePath(held.key(urlA))); // Model a killed/stalled holder.
+  now = started + 3_000; // No holder heartbeat for > crash bound: recover the reservation.
+  await resumed.fetch("https://example.test/b", { fetchImpl: async () => response(200, "b".repeat(600)) });
+  assert.equal(await resumed.get(urlA), null);
+  await held.releaseAll();
+  await resumed.releaseAll();
+});
+
+test("identity-less live directory locks heartbeat through long work and stop on cleanup", async (t) => {
+  const dir = temporary(t);
+  const options = {
+    dir, maxBytes: 4096, pid: 77, isPidAlive: (pid) => pid === 77,
+    processIdentity: (pid) => ({ pid, startToken: null }),
+    leaseTtlMs: 10, identitylessHeartbeatTtlMs: 40, heartbeatIntervalMs: 5, lockWaitMs: 20,
+  };
+  const held = new BoundedGranuleCache({ ...options, owner: "held" });
+  const contender = new BoundedGranuleCache({ ...options, owner: "contender" });
+  const lock = path.join(dir, "producer-locks", "live.lock");
+  let release;
+  const complete = new Promise((resolve) => { release = resolve; });
+  const holding = held.withDirectoryLock(lock, async () => complete);
+  await new Promise((resolve) => setTimeout(resolve, 55));
+  await assert.rejects(contender.withDirectoryLock(lock, async () => {}), /timed out waiting for cache lock/);
+  release();
+  await holding;
+  await contender.withDirectoryLock(lock, async () => {});
+});
+
 test("malformed lock and lease metadata fail closed after their bounded TTL", async (t) => {
   const dir = temporary(t);
   const now = () => 10_000;
