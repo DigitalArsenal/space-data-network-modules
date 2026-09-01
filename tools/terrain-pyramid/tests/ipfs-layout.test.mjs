@@ -900,7 +900,16 @@ test("attempt journal reclaims abrupt precommit crashes without accumulating sta
       const repeated = await runPublisher(outDir, ["--no-add"]);
       assert.equal(repeated.code, 0, `${phase} repeat recovery failed: ${repeated.stderr}`);
     }
-    assert.deepEqual(attemptResidue(outDir), [], `${phase} leaked an attempt-owned path after recovery`);
+    if (phase === "journal-temp-midwrite-prelink") {
+      // Before its hard-link establishes the fixed lease, a torn temporary is
+      // indistinguishable from a foreign dead-PID-shaped regular file. It is
+      // intentionally retained, bounded, and ignored rather than deleted.
+      const retained = attemptResidue(outDir);
+      assert.equal(retained.length, 1, `${phase} must retain only its unauthenticated temporary`);
+      assert.match(retained[0], /^\.ipfs-publication-transaction-\d+-[0-9a-f-]+\.tmp$/);
+    } else {
+      assert.deepEqual(attemptResidue(outDir), [], `${phase} leaked an attempt-owned path after recovery`);
+    }
   }
 });
 
@@ -910,7 +919,10 @@ test("attempt journal refuses active/PID-reused leases and preserves forged/unre
     cwd: REPO,
     stdio: ["ignore", "pipe", "pipe"],
   });
-  for (let tries = 0; tries < 30 && !fs.existsSync(path.join(outDir, ".ipfs-publication-transaction.json")); tries += 1) await delay(25);
+  // Root-confined preflight now performs bounded helper RPC before the journal
+  // lease exists; allow the same five-second process-start budget as the
+  // initial-temp barrier below rather than assuming path-based startup speed.
+  for (let tries = 0; tries < 200 && !fs.existsSync(path.join(outDir, ".ipfs-publication-transaction.json")); tries += 1) await delay(25);
   assert.ok(fs.existsSync(path.join(outDir, ".ipfs-publication-transaction.json")), "first publisher did not establish its journal lease");
   const second = await runPublisher(outDir, ["--no-add"]);
   assert.notEqual(second.code, 0);
@@ -995,6 +1007,17 @@ test("attempt journal refuses active/PID-reused leases and preserves forged/unre
   fs.rmSync(outside, { recursive: true, force: true });
 });
 
+test("dead-PID-shaped foreign regular journal candidates are retained byte-identically", async () => {
+  const outDir = copyFixtureOutput();
+  const candidate = path.join(outDir, ".ipfs-publication-transaction-999999-00000000-0000-4000-8000-000000000000.tmp");
+  const foreign = Buffer.from("foreign journal-looking regular file\n\u0000unaltered", "utf8");
+  fs.writeFileSync(candidate, foreign, { flag: "wx" });
+  const result = await runPublisher(outDir, ["--no-add"]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.deepEqual(fs.readFileSync(candidate), foreign, "foreign regular candidate must not be reclaimed or rewritten");
+  fs.unlinkSync(candidate);
+});
+
 test("a stale-recovery loser cannot remove a winner's newly-acquired journal lease", async () => {
   const outDir = copyFixtureOutput();
   const crashed = await runPublisher(outDir, ["--no-add", "--test-crash-at", "attempt-journal"]);
@@ -1046,6 +1069,67 @@ test("output-root replacement fails closed without touching the outside target",
   const recovered = await runPublisher(outDir, ["--no-add"]);
   assert.equal(recovered.code, 0, recovered.stderr);
   fs.rmSync(outside, { recursive: true, force: true });
+});
+
+test("descriptor-rooted control and staging exchanges cannot write, read, upload, or delete outside trees", async () => {
+  for (const boundary of ["control", "staging"]) {
+    const outDir = copyFixtureOutput();
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), `terrain-ipfs-${boundary}-exchange-`));
+    const foreignTree = path.join(outside, "foreign-tree");
+    fs.mkdirSync(foreignTree);
+    const sentinel = path.join(foreignTree, "sentinel");
+    const decoy = path.join(outside, "layer.json");
+    fs.writeFileSync(sentinel, `foreign ${boundary} sentinel`);
+    fs.writeFileSync(decoy, `foreign ${boundary} layer`);
+    const beforeSentinel = fs.readFileSync(sentinel);
+    const beforeDecoy = fs.readFileSync(decoy);
+    const fake = boundary === "staging" ? await fakeKubo(outDir) : null;
+    try {
+      const args = boundary === "control"
+        ? ["--no-add", "--test-exchange-control-with", outside]
+        : ["--api", fake.base, "--gateway", fake.base, "--test-exchange-staging-with", outside];
+      const result = await runPublisher(outDir, args);
+      assert.notEqual(result.code, 0, `${boundary} parent exchange must fail closed`);
+      assert.deepEqual(fs.readFileSync(sentinel), beforeSentinel, `${boundary} exchange deleted or rewrote foreign sentinel`);
+      assert.deepEqual(fs.readFileSync(decoy), beforeDecoy, `${boundary} exchange read/upload source was not confined`);
+      if (fake) assert.equal(fake.state.requests.includes("/api/v0/add"), false, "swapped staging must never reach Kubo upload");
+
+      const swapped = fs.readdirSync(outDir).find((name) =>
+        name.startsWith(`.ipfs-${boundary === "control" ? "attempt" : "staging"}-`) && fs.lstatSync(path.join(outDir, name)).isSymbolicLink(),
+      );
+      assert.ok(swapped, `${boundary} exchange did not leave its test symlink`);
+      const held = `${swapped}.test-held`;
+      fs.unlinkSync(path.join(outDir, swapped));
+      fs.renameSync(path.join(outDir, held), path.join(outDir, swapped));
+      const recovered = await runPublisher(outDir, ["--no-add"]);
+      assert.equal(recovered.code, 0, `${boundary} exchange recovery failed: ${recovered.stderr}`);
+      assert.deepEqual(fs.readFileSync(sentinel), beforeSentinel, `${boundary} recovery touched foreign sentinel`);
+      assert.deepEqual(fs.readFileSync(decoy), beforeDecoy, `${boundary} recovery touched foreign tree`);
+    } finally {
+      if (fake) await fake.close();
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  }
+});
+
+test("no-clobber activation preserves a foreign live-leaf exchange", async () => {
+  const outDir = copyFixtureOutput();
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "terrain-ipfs-live-leaf-"));
+  const sentinel = path.join(outside, "sentinel");
+  fs.writeFileSync(sentinel, "foreign live leaf remains untouched");
+  const before = fs.readFileSync(sentinel);
+  try {
+    const result = await runPublisher(outDir, ["--no-add", "--test-exchange-install-leaf-with", sentinel]);
+    assert.notEqual(result.code, 0, "foreign live-leaf exchange must stop no-clobber activation");
+    assert.ok(fs.lstatSync(path.join(outDir, "ipfs")).isSymbolicLink(), "test must leave the exchanged live leaf in place");
+    assert.deepEqual(fs.readFileSync(sentinel), before, "activation overwrote or deleted the foreign live leaf");
+    fs.unlinkSync(path.join(outDir, "ipfs"));
+    const recovered = await runPublisher(outDir, ["--no-add"]);
+    assert.equal(recovered.code, 0, recovered.stderr);
+    assert.deepEqual(fs.readFileSync(sentinel), before, "recovery touched the foreign live leaf");
+  } finally {
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
 });
 
 test("Kubo upload is sorted, exact-length, backpressured, and accepts fragmented NDJSON", async () => {

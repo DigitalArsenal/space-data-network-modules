@@ -45,8 +45,9 @@
 
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
+import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import fs from "node:fs";
+import nativeFs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { Readable } from "node:stream";
@@ -139,6 +140,9 @@ function parseArgs(argv) {
     reserveFreeBytes: 0n,
     testCrashAt: null,
     testReplaceOutputRootWith: null,
+    testExchangeControlWith: null,
+    testExchangeStagingWith: null,
+    testExchangeInstallLeafWith: null,
     testHoldAfterJournalMs: null,
     testHoldAfterInitialJournalTempMs: null,
     testHoldAfterRecoveryReadMs: null,
@@ -164,6 +168,9 @@ function parseArgs(argv) {
     // Test-only abrupt termination hook for the durable artifact transaction.
     else if (flag === "--test-crash-at") args.testCrashAt = argv[++i];
     else if (flag === "--test-replace-output-root-with") args.testReplaceOutputRootWith = path.resolve(argv[++i]);
+    else if (flag === "--test-exchange-control-with") args.testExchangeControlWith = path.resolve(argv[++i]);
+    else if (flag === "--test-exchange-staging-with") args.testExchangeStagingWith = path.resolve(argv[++i]);
+    else if (flag === "--test-exchange-install-leaf-with") args.testExchangeInstallLeafWith = path.resolve(argv[++i]);
     else if (flag === "--test-hold-after-journal-ms") args.testHoldAfterJournalMs = parsePositiveInteger(argv[++i], "--test-hold-after-journal-ms");
     else if (flag === "--test-hold-after-initial-journal-temp-ms") args.testHoldAfterInitialJournalTempMs = parsePositiveInteger(argv[++i], "--test-hold-after-initial-journal-temp-ms");
     else if (flag === "--test-hold-after-recovery-read-ms") args.testHoldAfterRecoveryReadMs = parsePositiveInteger(argv[++i], "--test-hold-after-recovery-read-ms");
@@ -187,16 +194,366 @@ const pendingPinPath = path.join(outDir, "pending-ipfs-pin.json");
 const transactionPath = path.join(outDir, ".ipfs-publication-transaction.json");
 let journalLeaseIdentity = null;
 
-const outStat = fs.lstatSync(outDir, { bigint: true });
+const outStat = nativeFs.lstatSync(outDir, { bigint: true });
 assert.ok(outStat.isDirectory() && !outStat.isSymbolicLink(), `builder output is not a real directory: ${outDir}`);
 const outputRootIdentity = Object.freeze({ dev: outStat.dev.toString(), ino: outStat.ino.toString() });
+
+const ROOTFS_HELPER = path.join(HERE, "ipfs-publication-rootfs.py");
+const ROOTFS_RPC_TIMEOUT_MS = 30_000;
+const ROOTFS_MESSAGE_BYTES = 1024 * 1024;
+const ROOTFS_CHUNK_BYTES = 64 * 1024;
+
+function rootfsError(response) {
+  const error = new Error(`rootfs ${response.code ?? "EIO"}: ${response.message ?? "helper request failed"}`);
+  error.code = response.code ?? "EIO";
+  return error;
+}
+
+function sleepBriefly() {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)), 0, 0, 1);
+}
+
+function createRootFsCapability() {
+  // The helper receives the original output directory's exact dev/inode and
+  // keeps its own directory FD.  Every later output operation is relative to
+  // that held FD, so exchanging a named parent cannot redirect it.
+  const child = spawn("python3", [
+    ROOTFS_HELPER,
+    "--root", outDir,
+    "--dev", outputRootIdentity.dev,
+    "--ino", outputRootIdentity.ino,
+    "--parent-pid", String(process.pid),
+  ], { stdio: ["pipe", "pipe", "inherit"] });
+  const inputFd = child.stdin?._handle?.fd;
+  const outputFd = child.stdout?._handle?.fd;
+  assert.ok(Number.isInteger(inputFd) && Number.isInteger(outputFd), "rootfs helper pipes are unavailable");
+  let nextId = 1;
+  let pending = Buffer.alloc(0);
+  let closed = false;
+
+  function writeAll(bytes, deadline) {
+    let offset = 0;
+    while (offset < bytes.length) {
+      assert.ok(Date.now() <= deadline, "rootfs helper write timed out");
+      try {
+        const written = nativeFs.writeSync(inputFd, bytes, offset, bytes.length - offset);
+        assert.ok(written > 0, "rootfs helper pipe made no write progress");
+        offset += written;
+      } catch (error) {
+        if (error?.code !== "EAGAIN" && error?.code !== "EWOULDBLOCK") throw error;
+        sleepBriefly();
+      }
+    }
+  }
+
+  function readLine(deadline) {
+    for (;;) {
+      const newline = pending.indexOf(0x0a);
+      if (newline >= 0) {
+        const line = pending.subarray(0, newline);
+        pending = pending.subarray(newline + 1);
+        assert.ok(line.length <= ROOTFS_MESSAGE_BYTES, "rootfs helper response exceeds limit");
+        return line;
+      }
+      assert.ok(Date.now() <= deadline, "rootfs helper read timed out");
+      const scratch = Buffer.allocUnsafe(64 * 1024);
+      try {
+        const read = nativeFs.readSync(outputFd, scratch, 0, scratch.length, null);
+        assert.ok(read > 0, "rootfs helper exited before responding");
+        pending = Buffer.concat([pending, scratch.subarray(0, read)]);
+        assert.ok(pending.length <= ROOTFS_MESSAGE_BYTES, "rootfs helper response exceeds limit");
+      } catch (error) {
+        if (error?.code !== "EAGAIN" && error?.code !== "EWOULDBLOCK") throw error;
+        sleepBriefly();
+      }
+    }
+  }
+
+  function request(payload, expectedId = null) {
+    assert.ok(!closed, "rootfs helper has already closed");
+    const id = expectedId ?? nextId++;
+    const bytes = Buffer.from(`${JSON.stringify({ id, ...payload })}\n`);
+    assert.ok(bytes.length <= ROOTFS_MESSAGE_BYTES, "rootfs helper request exceeds limit");
+    const deadline = Date.now() + ROOTFS_RPC_TIMEOUT_MS;
+    writeAll(bytes, deadline);
+    let response;
+    try {
+      response = JSON.parse(readLine(deadline).toString("utf8"));
+    } catch (error) {
+      throw new Error("rootfs helper returned invalid JSON", { cause: error });
+    }
+    assert.equal(response.id, id, "rootfs helper response sequence mismatch");
+    if (!response.ok) throw rootfsError(response);
+    return response.result;
+  }
+
+  const bootstrapDeadline = Date.now() + ROOTFS_RPC_TIMEOUT_MS;
+  let bootstrap;
+  try {
+    bootstrap = JSON.parse(readLine(bootstrapDeadline).toString("utf8"));
+  } catch (error) {
+    throw new Error("rootfs helper did not return a valid startup handshake", { cause: error });
+  }
+  if (!bootstrap.ok) throw rootfsError(bootstrap);
+  assert.equal(bootstrap.id, null, "rootfs helper startup handshake is invalid");
+  const ready = bootstrap.result;
+  assert.ok(ready?.ready === true, "rootfs helper did not establish a root capability");
+  assert.equal(ready.root?.type, "directory", "rootfs helper did not open a directory root");
+  assert.equal(ready.root?.dev, outputRootIdentity.dev, "rootfs helper opened a different output device");
+  assert.equal(ready.root?.ino, outputRootIdentity.ino, "rootfs helper opened a different output inode");
+
+  return {
+    request,
+    close() {
+      if (closed) return;
+      try { request({ op: "shutdown" }); } catch { /* exit handling still terminates the helper. */ }
+      closed = true;
+      child.kill();
+    },
+    kill() {
+      if (!closed) child.kill();
+      closed = true;
+    },
+  };
+}
+
+function rootfsStat(stat) {
+  const type = stat?.type;
+  assert.ok(["file", "directory", "symlink", "other"].includes(type), "rootfs returned an invalid stat type");
+  const numeric = (name) => BigInt(stat[name]);
+  return Object.freeze({
+    dev: numeric("dev"), ino: numeric("ino"), size: numeric("size"), mtimeNs: numeric("mtimeNs"), ctimeNs: numeric("ctimeNs"),
+    isFile: () => type === "file",
+    isDirectory: () => type === "directory",
+    isSymbolicLink: () => type === "symlink",
+  });
+}
+
+function isOutputPath(value) {
+  return typeof value === "string" && (value === outDir || value.startsWith(`${outDir}${path.sep}`));
+}
+
+function outputRelative(value) {
+  assert.ok(isOutputPath(value), `rootfs path leaves output root: ${value}`);
+  return path.relative(outDir, value).split(path.sep).join("/");
+}
+
+function decodeOpenFlags(flags) {
+  if (typeof flags === "string") {
+    if (["r", "rs"].includes(flags)) return { access: "read", create: false, exclusive: false };
+    if (["r+", "rs+"].includes(flags)) return { access: "readwrite", create: false, exclusive: false };
+    if (["w", "wx"].includes(flags)) return { access: "write", create: true, exclusive: flags === "wx" };
+    throw new Error(`unsupported rootfs open flag: ${flags}`);
+  }
+  assert.equal(typeof flags, "number", "rootfs open flags must be numeric or a supported string");
+  const accessFlag = flags & 3;
+  const access = accessFlag === nativeFs.constants.O_RDONLY ? "read" :
+    accessFlag === nativeFs.constants.O_WRONLY ? "write" :
+      accessFlag === nativeFs.constants.O_RDWR ? "readwrite" : null;
+  assert.ok(access !== null, `unsupported rootfs access flags: ${flags}`);
+  return {
+    access,
+    create: Boolean(flags & nativeFs.constants.O_CREAT),
+    exclusive: Boolean(flags & nativeFs.constants.O_EXCL),
+  };
+}
+
+const rootFs = createRootFsCapability();
+process.once("exit", () => rootFs.kill());
+const virtualDescriptors = new Map();
+let nextVirtualDescriptor = -1;
+
+function rootfsDescriptor(handle) {
+  const descriptor = nextVirtualDescriptor;
+  nextVirtualDescriptor -= 1;
+  virtualDescriptors.set(descriptor, { handle: handle.handle, type: handle.stat.type });
+  return descriptor;
+}
+
+function rootfsHandle(descriptor) {
+  assert.ok(virtualDescriptors.has(descriptor), `unknown rootfs descriptor: ${descriptor}`);
+  return virtualDescriptors.get(descriptor).handle;
+}
+
+function assertRootfsRegularDescriptor(descriptor, operation) {
+  assert.equal(virtualDescriptors.get(descriptor)?.type, "file", `rootfs refuses ${operation} on a non-regular file`);
+}
+
+const rootfsMethods = {
+  lstatSync(target, options) {
+    if (!isOutputPath(target)) return nativeFs.lstatSync(target, options);
+    return rootfsStat(rootFs.request({ op: "lstat", path: outputRelative(target) }));
+  },
+  existsSync(target) {
+    if (!isOutputPath(target)) return nativeFs.existsSync(target);
+    try {
+      rootFs.request({ op: "lstat", path: outputRelative(target) });
+      return true;
+    } catch (error) {
+      if (error?.code === "ENOENT") return false;
+      throw error;
+    }
+  },
+  statfsSync(target, options) {
+    if (!isOutputPath(target)) return nativeFs.statfsSync(target, options);
+    const stat = rootFs.request({ op: "statfs" });
+    return Object.freeze({ bsize: BigInt(stat.bsize), frsize: BigInt(stat.frsize), blocks: BigInt(stat.blocks), bavail: BigInt(stat.bavail) });
+  },
+  readdirSync(target, options) {
+    if (!isOutputPath(target)) return nativeFs.readdirSync(target, options);
+    const names = rootFs.request({ op: "readdir", path: outputRelative(target) });
+    if (options?.withFileTypes) return names.map((name) => Object.freeze({ name }));
+    return names;
+  },
+  mkdirSync(target, options = {}) {
+    if (!isOutputPath(target)) return nativeFs.mkdirSync(target, options);
+    assert.ok(options.recursive !== true, "rootfs refuses recursive mkdir");
+    rootFs.request({ op: "mkdir", path: outputRelative(target), mode: options.mode ?? 0o777 });
+    return undefined;
+  },
+  openSync(target, flags, mode = 0o666) {
+    if (!isOutputPath(target)) return nativeFs.openSync(target, flags, mode);
+    const decoded = decodeOpenFlags(flags);
+    const opened = rootFs.request({ op: "open", path: outputRelative(target), ...decoded, mode });
+    return rootfsDescriptor(opened);
+  },
+  fstatSync(descriptor, options) {
+    if (!virtualDescriptors.has(descriptor)) return nativeFs.fstatSync(descriptor, options);
+    return rootfsStat(rootFs.request({ op: "fstat", handle: rootfsHandle(descriptor) }));
+  },
+  readSync(descriptor, buffer, offset = 0, length = buffer.length - offset, position = null) {
+    if (!virtualDescriptors.has(descriptor)) return nativeFs.readSync(descriptor, buffer, offset, length, position);
+    assertRootfsRegularDescriptor(descriptor, "read");
+    let total = 0;
+    while (total < length) {
+      const requested = Math.min(ROOTFS_CHUNK_BYTES, length - total);
+      const part = rootFs.request({
+        op: "read", handle: rootfsHandle(descriptor), maximum: requested,
+        position: position === null ? null : position + total,
+      });
+      const bytes = Buffer.from(part.data, "base64");
+      assert.ok(bytes.length <= requested, "rootfs helper returned too many read bytes");
+      bytes.copy(buffer, offset + total);
+      total += bytes.length;
+      if (bytes.length === 0 || bytes.length < requested) break;
+    }
+    return total;
+  },
+  writeSync(descriptor, data, ...rest) {
+    if (!virtualDescriptors.has(descriptor)) return nativeFs.writeSync(descriptor, data, ...rest);
+    assertRootfsRegularDescriptor(descriptor, "write");
+    let bytes;
+    let start;
+    let count;
+    let writePosition;
+    if (typeof data === "string") {
+      bytes = Buffer.from(data);
+      start = 0;
+      count = bytes.length;
+      writePosition = typeof rest[0] === "number" ? rest[0] : null;
+    } else {
+      bytes = Buffer.from(data);
+      start = rest[0] ?? 0;
+      count = rest[1] ?? (bytes.length - start);
+      writePosition = rest[2] ?? null;
+    }
+    let total = 0;
+    while (total < count) {
+      const chunk = bytes.subarray(start + total, start + Math.min(count, total + ROOTFS_CHUNK_BYTES));
+      const result = rootFs.request({
+        op: "write", handle: rootfsHandle(descriptor), data: chunk.toString("base64"),
+        position: writePosition === null ? null : writePosition + total,
+      });
+      assert.equal(result.written, chunk.length, "rootfs helper made a partial write");
+      total += chunk.length;
+    }
+    return total;
+  },
+  fsyncSync(descriptor) {
+    if (!virtualDescriptors.has(descriptor)) return nativeFs.fsyncSync(descriptor);
+    rootFs.request({ op: "fsync", handle: rootfsHandle(descriptor) });
+  },
+  closeSync(descriptor) {
+    if (!virtualDescriptors.has(descriptor)) return nativeFs.closeSync(descriptor);
+    rootFs.request({ op: "close", handle: rootfsHandle(descriptor) });
+    virtualDescriptors.delete(descriptor);
+  },
+  linkSync(source, destination) {
+    if (!isOutputPath(source) && !isOutputPath(destination)) return nativeFs.linkSync(source, destination);
+    assert.ok(isOutputPath(source) && isOutputPath(destination), "rootfs refuses a cross-root hard link");
+    rootFs.request({ op: "link", source: outputRelative(source), destination: outputRelative(destination) });
+  },
+  renameSync(source, destination) {
+    if (!isOutputPath(source) && !isOutputPath(destination)) return nativeFs.renameSync(source, destination);
+    throw new Error("rootfs raw rename is refused; use no-clobber or exact-identity rename");
+  },
+  unlinkSync(target) {
+    if (!isOutputPath(target)) return nativeFs.unlinkSync(target);
+    throw new Error("rootfs raw unlink is refused; use exact-identity cleanup");
+  },
+  unlinkExact(target, expected) {
+    assert.ok(isOutputPath(target), "rootfs exact unlink leaves output root");
+    rootFs.request({ op: "unlink_exact", path: outputRelative(target), expected });
+  },
+  rmdirSync(target) {
+    if (!isOutputPath(target)) return nativeFs.rmdirSync(target);
+    throw new Error("rootfs raw rmdir is refused; use exact-identity cleanup");
+  },
+  rmdirExact(target, expected) {
+    assert.ok(isOutputPath(target), "rootfs exact directory removal leaves output root");
+    rootFs.request({ op: "rmdir_exact", path: outputRelative(target), expected });
+  },
+  renameNoReplace(source, destination) {
+    assert.ok(isOutputPath(source) && isOutputPath(destination), "rootfs no-clobber rename leaves output root");
+    rootFs.request({ op: "rename_noreplace", source: outputRelative(source), destination: outputRelative(destination) });
+  },
+  renameReplaceExact(source, destination, sourceExpected, destinationExpected) {
+    assert.ok(isOutputPath(source) && isOutputPath(destination), "rootfs exact replacement rename leaves output root");
+    rootFs.request({
+      op: "rename_replace_exact", source: outputRelative(source), destination: outputRelative(destination),
+      sourceExpected, destinationExpected,
+    });
+  },
+  readFileSync(target, options) {
+    if (!isOutputPath(target)) return nativeFs.readFileSync(target, options);
+    const descriptor = rootfsMethods.openSync(target, "r");
+    const chunks = [];
+    try {
+      for (;;) {
+        const buffer = Buffer.allocUnsafe(ROOTFS_CHUNK_BYTES);
+        const read = rootfsMethods.readSync(descriptor, buffer, 0, buffer.length, null);
+        if (read === 0) break;
+        chunks.push(Buffer.from(buffer.subarray(0, read)));
+      }
+    } finally {
+      rootfsMethods.closeSync(descriptor);
+    }
+    const bytes = Buffer.concat(chunks);
+    const encoding = typeof options === "string" ? options : options?.encoding;
+    return encoding ? bytes.toString(encoding) : bytes;
+  },
+  writeFileSync(target, data, options = {}) {
+    if (!isOutputPath(target)) return nativeFs.writeFileSync(target, data, options);
+    const flag = typeof options === "string" ? "w" : options.flag ?? "w";
+    const mode = typeof options === "object" && options !== null ? options.mode ?? 0o666 : 0o666;
+    const descriptor = rootfsMethods.openSync(target, flag, mode);
+    try { rootfsMethods.writeSync(descriptor, Buffer.from(data)); } finally { rootfsMethods.closeSync(descriptor); }
+  },
+};
+
+let fs = new Proxy(nativeFs, {
+  get(target, property, receiver) {
+    if (Object.prototype.hasOwnProperty.call(rootfsMethods, property)) return rootfsMethods[property];
+    return Reflect.get(target, property, receiver);
+  },
+});
 
 // Node has no portable `openat(2)`.  Treat the output root as an immutable
 // capability instead: every mutating phase verifies that the pathname still
 // resolves to this original non-symlink directory.  This deliberately fails
 // closed if a caller swaps the output directory while an attempt is live.
 function assertOutputRootStable(label) {
-  const current = fs.lstatSync(outDir, { bigint: true });
+  const current = nativeFs.lstatSync(outDir, { bigint: true });
   assert.ok(current.isDirectory() && !current.isSymbolicLink(), `${label}: builder output is no longer a real directory`);
   assert.equal(current.dev.toString(), outputRootIdentity.dev, `${label}: builder output device changed`);
   assert.equal(current.ino.toString(), outputRootIdentity.ino, `${label}: builder output inode changed`);
@@ -1300,11 +1657,17 @@ function removeExactOwnedPath(target, label, expectedIdentity = null) {
   assertOutputRootStable(`${label} after cleanup`);
 }
 
+function removeExactRegularFile(target, label, expectedIdentity = null) {
+  const identity = expectedIdentity ? assertPathIdentity(target, expectedIdentity, label) : pathIdentity(target, label);
+  assert.equal(identity.type, "file", `${label} is not a regular file`);
+  rootfsMethods.unlinkExact(target, identity);
+}
+
 function removeSafeAttemptTree(target, label) {
   const stat = fs.lstatSync(target, { bigint: true });
   assert.ok(!stat.isSymbolicLink(), `${label} was replaced by a symlink during cleanup: ${target}`);
   if (stat.isFile()) {
-    fs.unlinkSync(target);
+    removeExactRegularFile(target, label, pathIdentityFromStat(stat, target, label));
     return;
   }
   assert.ok(stat.isDirectory(), `${label} was replaced by a non-file, non-directory during cleanup: ${target}`);
@@ -1317,7 +1680,9 @@ function removeSafeAttemptTree(target, label) {
   // is removed from its parent.  This matters for control-dir cleanup, where
   // a journal removal must never make an interrupted unlink ambiguous.
   fsyncDirectory(target);
-  fs.rmdirSync(target);
+  const current = pathIdentity(target, label);
+  assert.equal(current.type, "directory", `${label} was replaced before directory cleanup`);
+  rootfsMethods.rmdirExact(target, current);
   fsyncDirectory(path.dirname(target));
 }
 
@@ -1341,6 +1706,10 @@ function stageArtifact(livePath, bytes) {
   const liveName = path.basename(livePath);
   assert.ok(LIVE_PUBLICATION_NAMES.includes(liveName), `unknown publication artifact ${liveName}`);
   assert.equal(path.dirname(livePath), outDir, `publication artifact ${liveName} leaves output root`);
+  if (args.testExchangeControlWith !== null) {
+    exchangeAttemptDirectoryForTest(attemptPaths.control, args.testExchangeControlWith, "attempt control");
+    args.testExchangeControlWith = null;
+  }
   const stagedPath = attemptPaths.staged.get(liveName);
   const identity = writeExclusiveRegularFile(stagedPath, Buffer.from(bytes), `staged ${liveName}`);
   stagedArtifactPaths.set(stagedPath, identity);
@@ -1523,13 +1892,13 @@ function writeAttemptJournal(journal) {
     const existing = readBoundedJsonWithIdentity(transactionPath, MAX_CONTROL_RESPONSE_BYTES, "publication attempt journal lease");
     assert.ok(sameImmutableIdentity(existing.identity, journalLeaseIdentity), "publication attempt journal lease changed while being read");
     assert.equal(existing.value?.attempt, journal.attempt, "publication attempt journal lease belongs to another attempt");
-    fs.renameSync(paths.journalTemporary, transactionPath);
+    rootfsMethods.renameReplaceExact(paths.journalTemporary, transactionPath, identity, journalLeaseIdentity);
   }
   assertOutputRootStable("publication attempt journal after replace");
   if (lstatIfExists(paths.journalTemporary, "publication attempt journal temporary") !== null) {
-    assertRenameCompatibleIdentity(paths.journalTemporary, identity, "publication attempt journal temporary");
+    const temporary = assertRenameCompatibleIdentity(paths.journalTemporary, identity, "publication attempt journal temporary");
     assertOutputRootStable("publication attempt journal temporary before unlink");
-    fs.unlinkSync(paths.journalTemporary);
+    removeExactRegularFile(paths.journalTemporary, "publication attempt journal temporary", temporary);
     assertOutputRootStable("publication attempt journal temporary after unlink");
   }
   fsyncDirectory(outDir);
@@ -1576,8 +1945,7 @@ function isAttemptOrphanName(name) {
     /^\.ipfs-attempt-\d+-[0-9a-f-]+$/.test(name) ||
     /^\.ipfs-upload-(?:manifest|directories)-\d+-[0-9a-f-]+\.ndjson$/.test(name) ||
     /^\.(?:ipfs|tileset-catalogue\.json|tileset-catalogue\.dttstream|ipfs-publication\.json|serving-config-ipfs\.json|pending-ipfs-pin\.json)-(?:staging|previous)-\d+-[0-9a-f-]+$/.test(name) ||
-    /^\.pending-ipfs-pin-\d+-[0-9a-f-]+\.tmp$/.test(name) ||
-    /^\.ipfs-publication-transaction-\d+-[0-9a-f-]+\.tmp$/.test(name);
+    /^\.pending-ipfs-pin-\d+-[0-9a-f-]+\.tmp$/.test(name);
 }
 
 function refuseAmbiguousAttemptOrphans() {
@@ -1590,7 +1958,7 @@ function removeAttemptJournal() {
   assert.ok(journalLeaseIdentity, "publication attempt journal lease was never acquired");
   assertPathIdentity(transactionPath, journalLeaseIdentity, "publication attempt journal lease before removal");
   assertOutputRootStable("publication attempt journal before removal");
-  fs.unlinkSync(transactionPath);
+  removeExactRegularFile(transactionPath, "publication attempt journal lease", journalLeaseIdentity);
   assertOutputRootStable("publication attempt journal after removal");
   fsyncDirectory(outDir);
   journalLeaseIdentity = null;
@@ -1603,8 +1971,8 @@ function removeJournalTemporary(journal, paths) {
     // The only legitimate same-inode case is a SIGKILL after link(temp,
     // fixedJournal) and before unlink(temp).  Dropping that extra link changes
     // ctime, so re-read and bind the fixed lease before any removal.
-    assertRenameCompatibleIdentity(paths.journalTemporary, journalLeaseIdentity, "linked publication journal temporary");
-    fs.unlinkSync(paths.journalTemporary);
+    const linked = assertRenameCompatibleIdentity(paths.journalTemporary, journalLeaseIdentity, "linked publication journal temporary");
+    removeExactRegularFile(paths.journalTemporary, "linked publication journal temporary", linked);
     fsyncDirectory(outDir);
     const reread = readBoundedJsonWithIdentity(transactionPath, MAX_CONTROL_RESPONSE_BYTES, "publication attempt journal after linked-temp cleanup");
     assert.equal(reread.value?.attempt, journal.attempt, "linked publication journal temporary replaced the lease");
@@ -1643,6 +2011,26 @@ function recoverInitialJournalCandidates() {
     const candidateIdentity = pathIdentity(candidatePath, "unlinked publication journal candidate");
     assert.equal(candidateIdentity.type, "file", "unlinked publication journal candidate is not a regular file");
     assert.ok(BigInt(candidateIdentity.size) <= BigInt(MAX_CONTROL_RESPONSE_BYTES), "unlinked publication journal candidate exceeds safety cap");
+    // A dead-PID-shaped leaf is not ownership. A clean or torn first journal
+    // can be indistinguishable from a foreign file by name alone, so only a
+    // complete, exact allocated journal authorizes reclamation. Invalid and
+    // torn candidates stay byte-for-byte untouched and are non-authoritative;
+    // the bounded candidate cap prevents unbounded future scan work.
+    let authenticated;
+    try {
+      authenticated = readBoundedJsonWithIdentity(candidatePath, MAX_CONTROL_RESPONSE_BYTES, "unlinked publication journal candidate", candidateIdentity);
+      assert.ok(sameImmutableIdentity(authenticated.identity, candidateIdentity), "unlinked publication journal candidate changed while authenticating");
+      assertAttemptJournal(authenticated.value);
+      assert.equal(authenticated.value.attempt, attempt, "unlinked publication journal candidate attempt does not match its pathname");
+      assert.deepEqual(authenticated.value.root, outputRootIdentity, "unlinked publication journal candidate belongs to another output root");
+      assert.equal(authenticated.value.phase, "allocated", "unlinked publication journal candidate is not an allocation journal");
+      assert.equal(authenticated.value.stagingIdentity, null, "unlinked publication journal candidate names staging state");
+      assert.equal(authenticated.value.controlIdentity, null, "unlinked publication journal candidate names control state");
+      assert.deepEqual(authenticated.value.transients, emptyAttemptTransients(), "unlinked publication journal candidate names transient state");
+      assert.equal(authenticated.value.transaction, null, "unlinked publication journal candidate names a transaction");
+    } catch {
+      continue;
+    }
     assert.ok(!attemptOwnerIsLive(attempt), `unlinked publication journal candidate ${attempt} is still owned by a live process`);
     for (const owned of [paths.staging, paths.control, ...paths.backups.values()]) {
       assert.equal(lstatIfExists(owned, "unlinked publication journal candidate owned path"), null,
@@ -1760,7 +2148,7 @@ function recoverCommittedPublication(journal) {
       else assertRenameCompatibleIdentity(replacement.backup, replacement.liveIdentity, "publication backup before recovery");
       assertPathMissing(replacement.live, "publication live target before recovery");
       assertOutputRootStable("publication backup restore before rename");
-      fs.renameSync(replacement.backup, replacement.live);
+      rootfsMethods.renameNoReplace(replacement.backup, replacement.live);
       assertRenameCompatibleIdentity(replacement.live, replacement.liveIdentity, "publication live target after recovery");
       fsyncRenameParents(replacement.backup, replacement.live, "publication backup recovery rename");
     } else if (!replacement.hadLive && lstatIfExists(replacement.live, "unexpected absent publication target") !== null) {
@@ -1815,10 +2203,28 @@ if (args.testReplaceOutputRootWith !== null) {
   const held = `${outDir}.attempt-root-held`;
   assertOutputRootStable("test output-root replacement before move");
   assert.equal(lstatIfExists(held, "test output-root hold path"), null, "test output-root hold path already exists");
-  const replacement = fs.lstatSync(args.testReplaceOutputRootWith, { bigint: true });
+  const replacement = nativeFs.lstatSync(args.testReplaceOutputRootWith, { bigint: true });
   assert.ok(replacement.isDirectory() && !replacement.isSymbolicLink(), "test output-root replacement must be a real directory");
-  fs.renameSync(outDir, held);
-  fs.symlinkSync(args.testReplaceOutputRootWith, outDir);
+  nativeFs.renameSync(outDir, held);
+  nativeFs.symlinkSync(args.testReplaceOutputRootWith, outDir);
+}
+
+function exchangeAttemptDirectoryForTest(target, outside, label) {
+  assert.ok(!isOutputPath(outside), `${label} test target must be outside the output root`);
+  const replacement = nativeFs.lstatSync(outside, { bigint: true });
+  assert.ok(replacement.isDirectory() && !replacement.isSymbolicLink(), `${label} test target must be a real directory`);
+  const held = `${target}.test-held`;
+  assert.equal(lstatIfExists(held, `${label} test held path`), null, `${label} test held path already exists`);
+  nativeFs.renameSync(target, held);
+  nativeFs.symlinkSync(outside, target);
+}
+
+function exchangeInstallLeafForTest(target, outside) {
+  assert.ok(!isOutputPath(outside), "install leaf test target must be outside the output root");
+  const replacement = nativeFs.lstatSync(outside, { bigint: true });
+  assert.ok(replacement.isFile() && !replacement.isSymbolicLink(), "install leaf test target must be a regular file");
+  assert.equal(lstatIfExists(target, "install leaf test target"), null, "install leaf test destination already exists");
+  nativeFs.symlinkSync(outside, target);
 }
 
 function maybeCrashTransaction(phase) {
@@ -1929,7 +2335,7 @@ function commitStagedPublication(artifacts) {
         assertPathIdentity(replacement.live, replacement.liveIdentity, "publication live target before backup");
         assertPathMissing(replacement.backup, "publication backup target");
         assertOutputRootStable("publication backup before rename");
-        fs.renameSync(replacement.live, replacement.backup);
+        rootfsMethods.renameNoReplace(replacement.live, replacement.backup);
         replacement.backupIdentity = assertRenameCompatibleIdentity(replacement.backup, replacement.liveIdentity, "publication backup after rename");
         fsyncRenameParents(replacement.live, replacement.backup, "publication backup rename");
       }
@@ -1950,7 +2356,11 @@ function commitStagedPublication(artifacts) {
         assertPathIdentity(replacement.staged, replacement.stagedIdentity, "publication staged target before install");
         assertPathMissing(replacement.live, "publication live target before install");
         assertOutputRootStable("publication install before rename");
-        fs.renameSync(replacement.staged, replacement.live);
+        if (args.testExchangeInstallLeafWith !== null) {
+          exchangeInstallLeafForTest(replacement.live, args.testExchangeInstallLeafWith);
+          args.testExchangeInstallLeafWith = null;
+        }
+        rootfsMethods.renameNoReplace(replacement.staged, replacement.live);
         const installed = pathIdentity(replacement.live, "publication live target after install");
         assert.ok(samePathObject(installed, replacement.stagedIdentity), "publication live target object changed after install");
         if (installed.type === "file") {
@@ -2195,6 +2605,10 @@ function multipartHeader(boundary, name) {
 
 function multipartPlan(directory, boundary) {
   assertAttemptDirectory("multipart plan staging");
+  if (args.testExchangeStagingWith !== null) {
+    exchangeAttemptDirectoryForTest(stagingDir, args.testExchangeStagingWith, "attempt staging");
+    args.testExchangeStagingWith = null;
+  }
   if (attemptJournal.phase !== "uploading") {
     attemptJournal = { ...attemptJournal, phase: "uploading" };
     writeAttemptJournal(attemptJournal);
@@ -2703,7 +3117,8 @@ function writePendingPinReceipt(cid, state, proof = null) {
     if (prior) assertPathIdentity(pendingPinPath, prior, "existing pending IPFS pin receipt before replace");
     assertPathIdentity(temporary, temporaryIdentity, "pending IPFS pin receipt temporary before replace");
     assertOutputRootStable("pending IPFS pin receipt before replace");
-    fs.renameSync(temporary, pendingPinPath);
+    if (prior) rootfsMethods.renameReplaceExact(temporary, pendingPinPath, temporaryIdentity, prior);
+    else rootfsMethods.renameNoReplace(temporary, pendingPinPath);
     const installed = pathIdentity(pendingPinPath, "pending IPFS pin receipt after replace");
     assert.ok(samePathObject(installed, temporaryIdentity), "pending IPFS pin receipt object changed after replace");
     assert.equal(installed.size, temporaryIdentity.size, "pending IPFS pin receipt size changed after replace");
@@ -3126,3 +3541,4 @@ for (const probe of gatewayProof) {
   );
 }
 if (report.cid) process.stdout.write(`\nCID ${report.cid}\n`);
+rootFs.close();
