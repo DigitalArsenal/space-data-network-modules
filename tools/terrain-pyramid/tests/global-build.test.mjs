@@ -8,6 +8,9 @@ import { promisify } from "node:util";
 
 import {
   BoundedGranuleCache,
+  compareCodeUnits,
+  createSortedJsonRunWriter,
+  evaluateTerrainEdgeFacts,
   fetchWithRetry,
   initializeGlobalState,
   makeShardConfigs,
@@ -16,6 +19,7 @@ import {
   readGenerationCacheEntry,
   saveGlobalState,
   sha256,
+  mergeSortedJsonRuns,
   writeSortedJsonRuns,
 } from "../build-support.mjs";
 import { iterateStreamFile } from "../dtt-reader.mjs";
@@ -153,6 +157,181 @@ test("bounded fact spool emits sorted fixed-size runs", (t) => {
   assert.equal(runs.length, 2);
   assert.deepEqual(fs.readFileSync(runs[0], "utf8").trim().split("\n").map(JSON.parse).map((r) => r.key), ["a", "c"]);
   assert.deepEqual(fs.readFileSync(runs[1], "utf8").trim().split("\n").map(JSON.parse).map((r) => r.key), ["b", "d"]);
+  const retry = writeSortedJsonRuns(dir, [{ key: "z" }], { maxRows: 2 });
+  assert.deepEqual(retry.map((file) => path.basename(file)), ["run-000000.ndjson"]);
+  assert.throws(() => writeSortedJsonRuns(dir, [{ key: "x", value: "x".repeat(32) }], { maxRowBytes: 16 }), /fact row exceeds/);
+  assert.equal(compareCodeUnits("Z", "a"), -1, "fact ordering is code-unit order, never host locale order");
+});
+
+test("bounded fact merge caps fan-in, cleans stale scratch, and finds duplicates across passes", async (t) => {
+  const root = temporary(t);
+  const runDir = path.join(root, "facts");
+  const scratch = path.join(root, "scratch");
+  fs.mkdirSync(scratch, { recursive: true });
+  fs.writeFileSync(path.join(scratch, "stale.ndjson"), '{"key":"must-not-survive"}\n');
+  // One row per source run forces a seven-pass merge at fan-in two.  The three
+  // copies of "a" deliberately begin in different batches.
+  const runs = writeSortedJsonRuns(runDir, [
+    { key: "q" }, { key: "a", source: 1 }, { key: "p" }, { key: "d" },
+    { key: "a", source: 2 }, { key: "c" }, { key: "b" }, { key: "a", source: 3 },
+    { key: "z" }, { key: "e" }, { key: "f" }, { key: "g" }, { key: "h" },
+  ], { maxRows: 1 });
+  const rows = [];
+  const duplicates = [];
+  await mergeSortedJsonRuns(runs, {
+    scratchDir: scratch,
+    maxOpenRuns: 2,
+    onRow: async (row) => rows.push(row),
+    onDuplicate: async (first, duplicate) => duplicates.push([first.source, duplicate.source]),
+  });
+  assert.deepEqual(rows.map((row) => row.key), ["a", "b", "c", "d", "e", "f", "g", "h", "p", "q", "z"]);
+  assert.deepEqual(duplicates, [[1, 2], [1, 3]]);
+  assert.equal(fs.existsSync(scratch), false, "all stale and intermediate scratch must be reclaimed");
+
+  fs.mkdirSync(scratch, { recursive: true });
+  fs.writeFileSync(path.join(scratch, "stale-empty-merge.ndjson"), "discard\n");
+  await mergeSortedJsonRuns([], { scratchDir: scratch });
+  assert.equal(fs.existsSync(scratch), false, "an empty merge also reclaims stale scratch");
+
+  const oversized = path.join(root, "oversized.ndjson");
+  fs.writeFileSync(oversized, `${JSON.stringify({ key: "x", bytes: "x".repeat(128) })}\n`);
+  await assert.rejects(
+    mergeSortedJsonRuns([oversized], { scratchDir: path.join(root, "oversized-scratch"), maxRowBytes: 32 }),
+    /fact row exceeds 32 bytes/,
+  );
+});
+
+function edgeBytes(values) {
+  const bytes = Buffer.alloc(values.length * 8);
+  for (let index = 0; index < values.length; index += 1) bytes.writeDoubleLE(values[index], index * 8);
+  return bytes.toString("base64");
+}
+
+function edgeFact({ kind = "mesh", level = 8, orientation = "V", boundaryX = 0, boundaryY = 0, ownerAddress, ownerOrdinal, side, grid = 3, step = 0, values }) {
+  const edge = kind === "mesh" ? edgeBytes(values) : Buffer.from(values).toString("base64");
+  return {
+    key: `${kind}|${level}|${orientation}|${boundaryX}|${boundaryY}`,
+    kind,
+    level,
+    orientation,
+    boundaryX,
+    boundaryY,
+    ownerAddress,
+    ownerOrdinal,
+    side,
+    grid,
+    step,
+    edgeBytes: edge,
+  };
+}
+
+test("streamed physical edge facts retain seam and mask metrics across run boundaries", async (t) => {
+  const root = temporary(t);
+  const writer = createSortedJsonRunWriter(path.join(root, "facts"), { maxRows: 1 });
+  const zeroMask = Buffer.alloc(256);
+  const changedMask = Buffer.alloc(256); changedMask[7] = 0xff;
+  const facts = [
+    // V pair has 5 versus 3 posts: its three common posts agree, while the
+    // intermediate 5-post samples make a 2 m density-step crack.
+    edgeFact({ boundaryX: 1, ownerAddress: "8/1/0", ownerOrdinal: 9, side: "west", grid: 3, values: [0, 0, 0] }),
+    edgeFact({ orientation: "H", boundaryY: 1, ownerAddress: "8/0/1", ownerOrdinal: 8, side: "south", values: [1, 1, 1] }),
+    edgeFact({ kind: "mask", boundaryX: 1, ownerAddress: "8/1/0", ownerOrdinal: 9, side: "west", values: zeroMask }),
+    edgeFact({ boundaryX: 0, ownerAddress: "8/0/0", ownerOrdinal: 0, side: "west", values: [0, 0, 0] }), // singleton
+    edgeFact({ boundaryX: 1, ownerAddress: "8/0/0", ownerOrdinal: 0, side: "east", grid: 5, values: [0, 2, 0, 2, 0] }),
+    edgeFact({ kind: "mask", boundaryX: 1, ownerAddress: "8/0/0", ownerOrdinal: 0, side: "east", values: changedMask }),
+    edgeFact({ orientation: "H", boundaryY: 1, ownerAddress: "8/0/0", ownerOrdinal: 0, side: "north", values: [1, 1, 1] }),
+    // An impossible third owner is retained through the sort, then rejected
+    // without being mistaken for a normal adjacency.
+    edgeFact({ boundaryX: 2, ownerAddress: "8/1/0", ownerOrdinal: 9, side: "east", values: [0, 0, 0] }),
+    edgeFact({ boundaryX: 2, ownerAddress: "8/2/0", ownerOrdinal: 10, side: "west", values: [0, 0, 0] }),
+    edgeFact({ boundaryX: 2, ownerAddress: "8/1/0", ownerOrdinal: 11, side: "east", values: [0, 0, 0] }),
+  ];
+  for (const fact of facts) writer.push(fact);
+  const result = await evaluateTerrainEdgeFacts(writer.finish(), {
+    maxOpenRuns: 2,
+    scratchDir: path.join(root, "scratch"),
+  });
+  const normalized = {
+    adjacencies: result.adjacencies,
+    mixedDensityAdjacencies: result.mixedDensityAdjacencies,
+    worstDensityStepCrackM: result.crackByLevel.get(8)?.m,
+    maskAdjacencies: result.maskAdjacencies,
+    maskByteDisagreements: result.maskByteDisagreements,
+    maskSeamExamples: result.maskSeamExamples,
+    seamProblemCount: result.seamProblemCount,
+    edgeGroupOverflowCount: result.edgeGroupOverflowCount,
+    problemCount: result.problemCount,
+    problemExamples: result.problemExamples,
+  };
+  assert.deepEqual(normalized, {
+    adjacencies: 2,
+    mixedDensityAdjacencies: 1,
+    worstDensityStepCrackM: 2,
+    maskAdjacencies: 1,
+    maskByteDisagreements: 1,
+    maskSeamExamples: ["8/0/0 east[7] = 0xff but 8/1/0 west[7] = 0x00"],
+    seamProblemCount: 0,
+    edgeGroupOverflowCount: 1,
+    problemCount: 1,
+    problemExamples: ["edge fact group mesh|8|V|2|0 has 3 rows; expected at most two"],
+  });
+});
+
+test("constrained heap streams more than one hundred thousand verifier edge facts", async (t) => {
+  const root = temporary(t);
+  const script = `
+    import assert from 'node:assert/strict';
+    import path from 'node:path';
+    const { createSortedJsonRunWriter, evaluateTerrainEdgeFacts } = await import(process.env.SUPPORT_URL);
+    const edgeBytes = (values) => {
+      const bytes = Buffer.alloc(values.length * 8);
+      values.forEach((value, index) => bytes.writeDoubleLE(value, index * 8));
+      return bytes.toString('base64');
+    };
+    const fact = ({ kind = 'mesh', level = 8, orientation = 'V', boundaryX = 0, boundaryY = 0, ownerAddress, ownerOrdinal, side, grid = 3, step = 0, values }) => ({
+      key: kind + '|' + level + '|' + orientation + '|' + boundaryX + '|' + boundaryY,
+      kind, level, orientation, boundaryX, boundaryY, ownerAddress, ownerOrdinal, side, grid, step,
+      edgeBytes: kind === 'mesh' ? edgeBytes(values) : Buffer.from(values).toString('base64'),
+    });
+    const root = process.env.EDGE_ROOT;
+    const writer = createSortedJsonRunWriter(path.join(root, 'facts'), { maxRows: 37 });
+    for (let index = 0; index < 100_001; index += 1) {
+      writer.push(fact({ level: 12, boundaryX: index + 10, ownerAddress: '12/' + index + '/0', ownerOrdinal: index * 2, side: 'east', values: [0, 0, 0] }));
+      writer.push(fact({ level: 12, boundaryX: index + 10, ownerAddress: '12/' + (index + 1) + '/0', ownerOrdinal: index * 2 + 1, side: 'west', values: [100, 100, 100] }));
+    }
+    const zero = Buffer.alloc(256); const changed = Buffer.alloc(256); changed[9] = 0xff;
+    writer.push(fact({ boundaryX: 1, ownerAddress: '8/1/0', ownerOrdinal: 9, side: 'west', grid: 3, values: [0, 0, 0] }));
+    writer.push(fact({ orientation: 'H', boundaryY: 1, ownerAddress: '8/0/1', ownerOrdinal: 8, side: 'south', values: [1, 1, 1] }));
+    writer.push(fact({ kind: 'mask', boundaryX: 1, ownerAddress: '8/1/0', ownerOrdinal: 9, side: 'west', values: zero }));
+    writer.push(fact({ boundaryX: 1, ownerAddress: '8/0/0', ownerOrdinal: 0, side: 'east', grid: 5, values: [0, 2, 0, 2, 0] }));
+    writer.push(fact({ kind: 'mask', boundaryX: 1, ownerAddress: '8/0/0', ownerOrdinal: 0, side: 'east', values: changed }));
+    writer.push(fact({ orientation: 'H', boundaryY: 1, ownerAddress: '8/0/0', ownerOrdinal: 0, side: 'north', values: [1, 1, 1] }));
+    writer.push(fact({ boundaryX: 2, ownerAddress: '8/1/0', ownerOrdinal: 9, side: 'east', values: [0, 0, 0] }));
+    writer.push(fact({ boundaryX: 2, ownerAddress: '8/2/0', ownerOrdinal: 10, side: 'west', values: [0, 0, 0] }));
+    writer.push(fact({ boundaryX: 2, ownerAddress: '8/1/0', ownerOrdinal: 11, side: 'east', values: [0, 0, 0] }));
+    const result = await evaluateTerrainEdgeFacts(writer.finish(), { maxOpenRuns: 5, scratchDir: path.join(root, 'scratch') });
+    assert.equal(result.adjacencies, 100_003);
+    assert.equal(result.mixedDensityAdjacencies, 1);
+    assert.equal(result.crackByLevel.get(8).m, 2);
+    assert.equal(result.maskByteDisagreements, 1);
+    assert.equal(result.seamProblemCount, 300_003);
+    assert.equal(result.edgeGroupOverflowCount, 1);
+    assert.equal(result.problemCount, 300_004);
+    assert.ok(result.problemExamples.length <= 64);
+    assert.match(result.problemExamples[0], /^seam at 12\/0\/0 east vs 12\/1\/0 west shared post 0 of 2:/);
+    assert.ok(result.problemExamples.some((problem) => problem.includes('has 3 rows; expected at most two')));
+    process.stdout.write(JSON.stringify({ heap: process.memoryUsage().heapUsed, adjacencies: result.adjacencies, problems: result.problemCount, examples: result.problemExamples.length }));
+  `;
+  const { stdout } = await execFileAsync(process.execPath, ["--max-old-space-size=64", "--input-type=module", "--eval", script], {
+    env: { ...process.env, SUPPORT_URL, EDGE_ROOT: root },
+    timeout: 120_000,
+    maxBuffer: 1024 * 1024,
+  });
+  const result = JSON.parse(stdout);
+  assert.equal(result.adjacencies, 100_003);
+  assert.equal(result.problems, 300_004);
+  assert.ok(result.examples <= 64);
+  assert.ok(result.heap < 64 * 1024 * 1024, `child heap ${result.heap} exceeded its 64 MiB budget`);
 });
 
 function cacheChild({ dir, maxBytes, url, status, body, delayMs = 0, holdMs = 0, release = false }) {

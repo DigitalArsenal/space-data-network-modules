@@ -58,22 +58,468 @@ export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Bounded external-sort primitive for global verifier facts.  Callers choose
-// an intentionally small run size; no complete address set is retained.
-export function writeSortedJsonRuns(dir, facts, { maxRows = 4096, compare = (a, b) => String(a.key).localeCompare(String(b.key)) } = {}) {
+// Bounded external-sort primitive for global verifier facts.  The ordering is
+// deliberately UTF-16 code-unit order, rather than locale order: a verifier
+// report must not change when the host's locale changes.
+export function compareCodeUnits(left, right) {
+  const a = String(left);
+  const b = String(right);
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+export function compareJsonFactKeys(left, right) {
+  return compareCodeUnits(left.key, right.key);
+}
+
+function serializedFact(row, maxRowBytes) {
+  const line = JSON.stringify(row);
+  assert.equal(typeof line, "string", "fact row must serialize to JSON");
+  assert.ok(Buffer.byteLength(line) <= maxRowBytes, `fact row exceeds ${maxRowBytes} bytes`);
+  return line;
+}
+
+function writeLines(file, rows) {
+  const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  let handle;
+  try {
+    handle = fs.openSync(temporary, "wx");
+    for (const row of rows) fs.writeSync(handle, `${row.line}\n`);
+    fs.closeSync(handle);
+    handle = null;
+    fs.renameSync(temporary, file);
+  } catch (error) {
+    if (handle !== undefined && handle !== null) fs.closeSync(handle);
+    try { fs.unlinkSync(temporary); } catch (unlinkError) { if (unlinkError.code !== "ENOENT") throw unlinkError; }
+    throw error;
+  }
+}
+
+/**
+ * Open an attempt-scoped external-sort writer.  It retains at most `maxRows`
+ * serialized rows, deletes abandoned runs from an earlier attempt, and writes
+ * each completed run without building a whole-run string.
+ */
+export function createSortedJsonRunWriter(dir, {
+  maxRows = 4096,
+  maxRowBytes = 64 * 1024,
+  compare = compareJsonFactKeys,
+} = {}) {
   assert.ok(Number.isSafeInteger(maxRows) && maxRows > 0, "maxRows must be positive");
+  assert.ok(Number.isSafeInteger(maxRowBytes) && maxRowBytes > 0, "maxRowBytes must be positive");
+  assert.equal(typeof compare, "function", "compare must be a function");
+  // A fact-run directory is attempt-scoped.  Remove stale runs before writing
+  // so a shorter retry cannot accidentally merge prior-attempt facts.
+  fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
-  const runs = []; let rows = [];
+  const runs = [];
+  let rows = [];
+  let finished = false;
   const flush = () => {
     if (!rows.length) return;
-    rows.sort(compare);
+    rows.sort((a, b) => compare(a.row, b.row));
     const file = path.join(dir, `run-${String(runs.length).padStart(6, "0")}.ndjson`);
-    fs.writeFileSync(file, `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
-    runs.push(file); rows = [];
+    writeLines(file, rows);
+    runs.push(file);
+    rows = [];
   };
-  for (const fact of facts) { rows.push(fact); if (rows.length >= maxRows) flush(); }
-  flush();
-  return runs;
+  return {
+    push(row) {
+      assert.ok(!finished, "cannot write a finished fact spool");
+      // Validate the actual serialized bytes before retaining the row.  This
+      // keeps adversarial JSON from bypassing the per-run memory bound.
+      rows.push({ row, line: serializedFact(row, maxRowBytes) });
+      if (rows.length >= maxRows) flush();
+    },
+    finish() {
+      assert.ok(!finished, "fact spool was already finished");
+      flush();
+      finished = true;
+      return runs;
+    },
+  };
+}
+
+// Convenience form for small callers.  The streaming writer above is the
+// form global consumers use; this never needs an input array.
+export function writeSortedJsonRuns(dir, facts, options = {}) {
+  const writer = createSortedJsonRunWriter(dir, options);
+  for (const fact of facts) writer.push(fact);
+  return writer.finish();
+}
+
+// A line cursor intentionally never calls readFile()/split().  Its carry is
+// capped before a long, newline-free input can become an unbounded allocation.
+async function* iterateJsonLines(file, maxRowBytes) {
+  const highWaterMark = Math.max(1, Math.min(64 * 1024, maxRowBytes + 1));
+  const stream = fs.createReadStream(file, { highWaterMark });
+  let carry = Buffer.alloc(0);
+  const emit = (line) => {
+    const withoutCr = line.length && line[line.length - 1] === 0x0d ? line.subarray(0, -1) : line;
+    assert.ok(withoutCr.length <= maxRowBytes, `fact row exceeds ${maxRowBytes} bytes in ${file}`);
+    return withoutCr;
+  };
+  try {
+    for await (const chunk of stream) {
+      let start = 0;
+      for (;;) {
+        const newline = chunk.indexOf(0x0a, start);
+        if (newline < 0) break;
+        const piece = chunk.subarray(start, newline);
+        assert.ok(carry.length + piece.length <= maxRowBytes, `fact row exceeds ${maxRowBytes} bytes in ${file}`);
+        const line = carry.length ? Buffer.concat([carry, piece]) : piece;
+        carry = Buffer.alloc(0);
+        // A trailing newline writes an empty final record; accept it, but not
+        // an empty line in the middle of a run.
+        if (line.length) yield emit(line);
+        start = newline + 1;
+      }
+      const tail = chunk.subarray(start);
+      assert.ok(carry.length + tail.length <= maxRowBytes, `fact row exceeds ${maxRowBytes} bytes in ${file}`);
+      carry = carry.length ? Buffer.concat([carry, tail]) : Buffer.from(tail);
+    }
+    if (carry.length) yield emit(carry);
+  } finally {
+    stream.destroy();
+  }
+}
+
+function createJsonRunCursor(file, { compare, maxRowBytes }) {
+  const iterator = iterateJsonLines(file, maxRowBytes)[Symbol.asyncIterator]();
+  let previous = null;
+  return {
+    async next() {
+      const next = await iterator.next();
+      if (next.done) return null;
+      let row;
+      try { row = JSON.parse(next.value.toString("utf8")); } catch (error) {
+        throw new Error(`invalid JSON fact row in ${file}: ${error.message}`);
+      }
+      if (previous !== null && compare(previous, row) > 0) {
+        throw new Error(`fact run is not sorted: ${file}`);
+      }
+      previous = row;
+      return row;
+    },
+    async close() {
+      await iterator.return?.();
+    },
+  };
+}
+
+async function mergeRunGroup(files, options, onRow) {
+  const cursors = files.map((file) => createJsonRunCursor(file, options));
+  const current = Array(cursors.length).fill(null);
+  try {
+    for (let index = 0; index < cursors.length; index += 1) current[index] = await cursors[index].next();
+    for (;;) {
+      let best = -1;
+      for (let index = 0; index < current.length; index += 1) {
+        if (current[index] === null) continue;
+        // Input-run order breaks compare-equal ties deterministically.
+        if (best < 0 || options.compare(current[index], current[best]) < 0) best = index;
+      }
+      if (best < 0) return;
+      const row = current[best];
+      current[best] = await cursors[best].next();
+      await onRow(row);
+    }
+  } finally {
+    await Promise.all(cursors.map((cursor) => cursor.close()));
+  }
+}
+
+async function writeMergedRun(files, output, options) {
+  const temporary = `${output}.${process.pid}.${randomUUID()}.tmp`;
+  let handle;
+  try {
+    handle = fs.openSync(temporary, "wx");
+    await mergeRunGroup(files, options, async (row) => {
+      fs.writeSync(handle, `${serializedFact(row, options.maxRowBytes)}\n`);
+    });
+    fs.closeSync(handle);
+    handle = null;
+    fs.renameSync(temporary, output);
+  } catch (error) {
+    if (handle !== undefined && handle !== null) fs.closeSync(handle);
+    try { fs.unlinkSync(temporary); } catch (unlinkError) { if (unlinkError.code !== "ENOENT") throw unlinkError; }
+    throw error;
+  }
+}
+
+/**
+ * Stream a globally sorted collection of JSON fact runs to `onRow`.
+ *
+ * No output array is returned.  At most `maxOpenRuns` cursors are open at a
+ * time; additional runs are merged in deterministic capped passes into an
+ * attempt-scoped scratch directory.  Intermediate passes preserve equal rows,
+ * so the final pass sees duplicates even when their original runs were in
+ * different batches.
+ */
+export async function mergeSortedJsonRuns(runs, {
+  compare = compareJsonFactKeys,
+  onRow = async () => {},
+  onDuplicate = async () => {},
+  dedupe = true,
+  maxOpenRuns = 32,
+  maxRowBytes = 64 * 1024,
+  scratchDir,
+} = {}) {
+  assert.ok(Array.isArray(runs), "runs must be an array");
+  assert.equal(typeof compare, "function", "compare must be a function");
+  assert.equal(typeof onRow, "function", "onRow must be a function");
+  assert.equal(typeof onDuplicate, "function", "onDuplicate must be a function");
+  assert.ok(Number.isSafeInteger(maxOpenRuns) && maxOpenRuns >= 2, "maxOpenRuns must be at least two");
+  assert.ok(Number.isSafeInteger(maxRowBytes) && maxRowBytes > 0, "maxRowBytes must be positive");
+  assert.ok(scratchDir, "scratchDir is required for a bounded fact merge");
+  const resolvedScratch = path.resolve(scratchDir);
+  for (const run of runs) {
+    assert.notEqual(path.resolve(path.dirname(run)), resolvedScratch, "scratchDir must not be a source run directory");
+  }
+  // The scratch directory is attempt-scoped too.  A killed merge leaves only
+  // disposable intermediate runs, which the next attempt removes here.
+  fs.rmSync(resolvedScratch, { recursive: true, force: true });
+  fs.mkdirSync(resolvedScratch, { recursive: true });
+  const options = { compare, maxRowBytes };
+  try {
+    if (!runs.length) return;
+    let working = [...runs];
+    let pass = 0;
+    while (working.length > maxOpenRuns) {
+      const next = [];
+      for (let start = 0; start < working.length; start += maxOpenRuns) {
+        const batch = working.slice(start, start + maxOpenRuns);
+        const output = path.join(
+          resolvedScratch,
+          `pass-${String(pass).padStart(4, "0")}-run-${String(next.length).padStart(6, "0")}.ndjson`,
+        );
+        await writeMergedRun(batch, output, options);
+        next.push(output);
+        // These are disposable prior-pass outputs, not caller-owned source
+        // runs.  Reclaim each completed batch so multi-pass fan-in remains
+        // bounded in disk as well as descriptors and heap.
+        if (pass > 0) for (const input of batch) fs.unlinkSync(input);
+      }
+      working = next;
+      pass += 1;
+    }
+    let previous = null;
+    await mergeRunGroup(working, options, async (row) => {
+      if (dedupe && previous !== null && compare(previous, row) === 0) {
+        await onDuplicate(previous, row);
+        return;
+      }
+      await onRow(row);
+      previous = row;
+    });
+  } finally {
+    fs.rmSync(resolvedScratch, { recursive: true, force: true });
+  }
+}
+
+const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
+const EDGE_PROBLEM_EXAMPLE_LIMIT = 64;
+
+function factOrder(fact) {
+  const ordinal = Number(fact.ownerOrdinal);
+  const side = fact.side === "east" ? 0 : fact.side === "north" ? 1 : 2;
+  return Number.isSafeInteger(ordinal) && ordinal >= 0 ? ordinal * 3 + side : Number.MAX_SAFE_INTEGER;
+}
+
+function ownerOrder(left, right) {
+  const address = compareCodeUnits(left.ownerAddress, right.ownerAddress);
+  if (address) return address;
+  const ordinal = Number(left.ownerOrdinal) - Number(right.ownerOrdinal);
+  if (Number.isFinite(ordinal) && ordinal) return ordinal;
+  return compareCodeUnits(left.side, right.side);
+}
+
+function primaryFact(facts) {
+  const preferredSide = facts[0].orientation === "V" ? "east" : "north";
+  const preferred = facts.filter((fact) => fact.side === preferredSide);
+  if (preferred.length === 1) return [preferred[0], facts.find((fact) => fact !== preferred[0])];
+  const ordered = [...facts].sort(ownerOrder);
+  return [ordered[0], ordered[1]];
+}
+
+function decodeMeshEdge(fact) {
+  assert.ok(Number.isSafeInteger(fact.grid) && fact.grid >= 2, `invalid mesh edge grid for ${fact.key}`);
+  const bytes = Buffer.from(fact.edgeBytes, "base64");
+  assert.equal(bytes.length, fact.grid * 8, `invalid mesh edge byte length for ${fact.key}`);
+  const edge = new Float64Array(fact.grid);
+  for (let index = 0; index < edge.length; index += 1) edge[index] = bytes.readDoubleLE(index * 8);
+  return edge;
+}
+
+function decodeMaskEdge(fact) {
+  const bytes = Buffer.from(fact.edgeBytes, "base64");
+  assert.equal(bytes.length, 256, `invalid mask edge byte length for ${fact.key}`);
+  return bytes;
+}
+
+function keepFirstOrdered(items, candidate, limit) {
+  items.push(candidate);
+  items.sort(
+    (left, right) => left.order - right.order || left.suborder - right.suborder || compareCodeUnits(left.text, right.text),
+  );
+  if (items.length > limit) items.length = limit;
+}
+
+/**
+ * Consume globally sorted physical-edge facts without retaining an address
+ * index.  A group is at most the two tiles meeting on one physical boundary;
+ * an excess is rejected while retaining only three rows to diagnose it.
+ *
+ * The returned metrics and wording mirror the former in-memory edge maps.
+ */
+export async function evaluateTerrainEdgeFacts(runs, {
+  maxOpenRuns = 32,
+  maxRowBytes = 64 * 1024,
+  scratchDir,
+} = {}) {
+  let adjacencies = 0;
+  let worstSeam = 0;
+  let worstSeamAt = null;
+  let worstSeamOrder = Number.MAX_SAFE_INTEGER;
+  let mixedDensityAdjacencies = 0;
+  const crackByLevel = new Map();
+  let maskAdjacencies = 0;
+  let maskByteDisagreements = 0;
+  const maskSeamExamples = [];
+  let seamProblemCount = 0;
+  let edgeGroupOverflowCount = 0;
+  const problemExamples = [];
+
+  const consumePair = (facts) => {
+    const [here, other] = primaryFact(facts);
+    const order = factOrder(here);
+    if (here.kind === "mesh") {
+      const first = decodeMeshEdge(here);
+      const second = decodeMeshEdge(other);
+      const level = Number(here.level);
+      assert.ok(Number.isSafeInteger(level) && level >= 0, `invalid mesh edge level for ${here.key}`);
+      adjacencies += 1;
+      const tolerance = Math.max(Number(here.step), Number(other.step)) + 1e-6;
+      const spansA = here.grid - 1;
+      const spansB = other.grid - 1;
+      const common = gcd(spansA, spansB);
+      if (here.grid !== other.grid) mixedDensityAdjacencies += 1;
+      for (let j = 0; j <= common; j += 1) {
+        const a = first[(j * spansA) / common];
+        const b = second[(j * spansB) / common];
+        if (Number.isNaN(a) || Number.isNaN(b)) continue;
+        const delta = Math.abs(a - b);
+        if (delta > worstSeam || (delta === worstSeam && order < worstSeamOrder)) {
+          worstSeam = delta;
+          worstSeamOrder = order;
+          worstSeamAt = `${here.ownerAddress} ${here.side} vs ${other.ownerAddress} ${other.side} shared post ${j}/${common}`;
+        }
+        if (delta > tolerance) {
+          seamProblemCount += 1;
+          keepFirstOrdered(problemExamples, {
+            order,
+            suborder: j,
+            text: `seam at ${here.ownerAddress} ${here.side} vs ${other.ownerAddress} ${other.side} shared post ${j} of ${common}: ` +
+              `${a.toFixed(3)} m vs ${b.toFixed(3)} m (tolerance ${tolerance.toFixed(3)} m)`,
+          }, EDGE_PROBLEM_EXAMPLE_LIMIT);
+        }
+      }
+      if (here.grid === other.grid) return;
+      const at = (edge, grid, u) => {
+        const t = u * (grid - 1);
+        const index = Math.min(grid - 2, Math.floor(t));
+        const fraction = t - index;
+        const v0 = edge[index];
+        const v1 = edge[index + 1];
+        return Number.isNaN(v0) || Number.isNaN(v1) ? NaN : v0 + (v1 - v0) * fraction;
+      };
+      const previous = crackByLevel.get(level) ?? { m: 0, at: null, order: Number.MAX_SAFE_INTEGER };
+      let worstCrack = previous.m;
+      let worstAt = previous.at;
+      let worstOrder = previous.order;
+      const fineGrid = Math.max(here.grid, other.grid);
+      for (let index = 0; index < fineGrid; index += 1) {
+        const u = index / (fineGrid - 1);
+        const a = at(first, here.grid, u);
+        const b = at(second, other.grid, u);
+        const delta = Math.abs(a - b);
+        if (Number.isNaN(a) || Number.isNaN(b)) continue;
+        if (delta > worstCrack || (delta === worstCrack && order < worstOrder)) {
+          worstCrack = delta;
+          worstOrder = order;
+          worstAt = `${here.ownerAddress} ${here.side} (grid ${here.grid}) vs ${other.ownerAddress} ${other.side} (grid ${other.grid})`;
+        }
+      }
+      crackByLevel.set(level, { m: worstCrack, at: worstAt, order: worstOrder });
+      return;
+    }
+    assert.equal(here.kind, "mask", `unknown edge fact kind for ${here.key}`);
+    const first = decodeMaskEdge(here);
+    const second = decodeMaskEdge(other);
+    maskAdjacencies += 1;
+    for (let index = 0; index < 256; index += 1) {
+      if (first[index] === second[index]) continue;
+      maskByteDisagreements += 1;
+      keepFirstOrdered(maskSeamExamples, {
+        order,
+        suborder: index,
+        text: `${here.ownerAddress} ${here.side}[${index}] = 0x${first[index].toString(16).padStart(2, "0")} but ` +
+          `${other.ownerAddress} ${other.side}[${index}] = 0x${second[index].toString(16).padStart(2, "0")}`,
+      }, 8);
+    }
+  };
+
+  let groupKey = null;
+  let group = [];
+  let groupCount = 0;
+  let groupMinOrder = Number.MAX_SAFE_INTEGER;
+  const finishGroup = () => {
+    if (groupKey === null) return;
+    if (groupCount > 2) {
+      edgeGroupOverflowCount += 1;
+      keepFirstOrdered(problemExamples, {
+        order: groupMinOrder,
+        suborder: 2,
+        text: `edge fact group ${groupKey} has ${groupCount} rows; expected at most two`,
+      }, EDGE_PROBLEM_EXAMPLE_LIMIT);
+    } else if (groupCount === 2) {
+      consumePair(group);
+    }
+    groupKey = null;
+    group = [];
+    groupCount = 0;
+    groupMinOrder = Number.MAX_SAFE_INTEGER;
+  };
+
+  await mergeSortedJsonRuns(runs, {
+    compare: compareJsonFactKeys,
+    dedupe: false,
+    maxOpenRuns,
+    maxRowBytes,
+    scratchDir,
+    onRow: async (fact) => {
+      assert.equal(typeof fact?.key, "string", "edge fact needs a string key");
+      if (groupKey !== null && fact.key !== groupKey) finishGroup();
+      if (groupKey === null) groupKey = fact.key;
+      groupCount += 1;
+      groupMinOrder = Math.min(groupMinOrder, factOrder(fact));
+      if (group.length < 3) group.push(fact);
+    },
+  });
+  finishGroup();
+  return {
+    adjacencies,
+    worstSeam,
+    worstSeamAt,
+    mixedDensityAdjacencies,
+    crackByLevel,
+    maskAdjacencies,
+    maskByteDisagreements,
+    maskSeamExamples: maskSeamExamples.map((entry) => entry.text),
+    seamProblemCount,
+    edgeGroupOverflowCount,
+    problemCount: seamProblemCount + edgeGroupOverflowCount,
+    problemExamples: problemExamples.map((entry) => entry.text),
+  };
 }
 
 export function retryableStatus(status) {

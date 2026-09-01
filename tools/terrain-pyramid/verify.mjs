@@ -15,6 +15,10 @@ import path from "node:path";
 import process from "node:process";
 import zlib from "node:zlib";
 
+import {
+  createSortedJsonRunWriter,
+  evaluateTerrainEdgeFacts,
+} from "./build-support.mjs";
 import { iterateStreamFile, readDtt, readDttProvenance } from "./dtt-reader.mjs";
 
 // ── THE BOUNDS THIS PYRAMID HAS TO SATISFY TO BE PUBLISHABLE ───────────────
@@ -131,6 +135,43 @@ function meshEdges(mesh, dtt) {
   return edges;
 }
 
+function encodeMeshEdge(edge) {
+  const bytes = Buffer.allocUnsafe(edge.length * 8);
+  for (let index = 0; index < edge.length; index += 1) bytes.writeDoubleLE(edge[index], index * 8);
+  return bytes.toString("base64");
+}
+
+function physicalEdgeKey(kind, level, x, y, side) {
+  if (side === "west") return `${kind}|${level}|V|${x}|${y}`;
+  if (side === "east") return `${kind}|${level}|V|${x + 1}|${y}`;
+  if (side === "south") return `${kind}|${level}|H|${x}|${y}`;
+  assert.equal(side, "north", "terrain edge side must be cardinal");
+  return `${kind}|${level}|H|${x}|${y + 1}`;
+}
+
+// A fact names the PHYSICAL edge, rather than the tile that happened to emit
+// it.  Thus an interior edge has exactly two facts even when its two payloads
+// land in different sort runs; an exterior edge is a harmless singleton.
+function spoolTileEdges(writer, { kind, level, x, y, ownerOrdinal, grid, step, edges }) {
+  const ownerAddress = `${level}/${x}/${y}`;
+  for (const side of ["west", "east", "south", "north"]) {
+    writer.push({
+      key: physicalEdgeKey(kind, level, x, y, side),
+      kind,
+      level,
+      orientation: side === "west" || side === "east" ? "V" : "H",
+      boundaryX: side === "west" ? x : side === "east" ? x + 1 : x,
+      boundaryY: side === "south" ? y : side === "north" ? y + 1 : y,
+      ownerAddress,
+      ownerOrdinal,
+      side,
+      grid,
+      step,
+      edgeBytes: kind === "mesh" ? encodeMeshEdge(edges[side]) : Buffer.from(edges[side]).toString("base64"),
+    });
+  }
+}
+
 // Collapse a level's addresses into the rectangles layer.json declares. The
 // availability index is a PROMISE the endpoint must keep, so it is derived
 // from the records that exist — never widened to a convenient bounding box,
@@ -207,6 +248,15 @@ const oceanSkippedFile = fs.existsSync(oceanSkippedPath)
 const oceanSkipped = new Set(oceanSkippedFile?.addresses ?? []);
 
 const recordsPath = path.join(outDir, "tiles.dttstream");
+// These directories are disposable, attempt-scoped external-sort state.  The
+// writer and merger each reclaim stale material before use; the successful
+// path below removes it too, so a global run never leaves a second tile index.
+const edgeFactRunDir = path.join(outDir, ".verify-edge-facts");
+const edgeFactScratchDir = path.join(outDir, ".verify-edge-merge");
+const edgeFactWriter = createSortedJsonRunWriter(edgeFactRunDir, {
+  maxRows: 4096,
+  maxRowBytes: 64 * 1024,
+});
 let recordCount = 0;
 let firstRecord = null;
 
@@ -245,8 +295,6 @@ const accuracyByLevel = new Map();
 const atCeilingByLevel = new Map();
 const atCeilingExamples = [];
 const childBits = new Map();
-const edgesByAddress = new Map();
-const maskEdgesByAddress = new Map();
 const problems = [];
 
 for await (const record of iterateStreamFile(recordsPath)) {
@@ -437,7 +485,17 @@ for await (const record of iterateStreamFile(recordsPath)) {
     }
   }
 
-  edgesByAddress.set(key, meshEdges(mesh, dtt));
+  const tileMeshEdges = meshEdges(mesh, dtt);
+  spoolTileEdges(edgeFactWriter, {
+    kind: "mesh",
+    level: dtt.level,
+    x: dtt.x,
+    y: dtt.y,
+    ownerOrdinal: recordCount - 1,
+    grid: tileMeshEdges.grid,
+    step: tileMeshEdges.step,
+    edges: tileMeshEdges,
+  });
 
   // ── THE WATER MASK'S OWN SHARED EDGES ──────────────────────────────────
   //
@@ -452,175 +510,68 @@ for await (const record of iterateStreamFile(recordsPath)) {
     let raw;
     if (dtt.waterMaskKind === 3) raw = zlib.gunzipSync(Buffer.from(dtt.waterMask.bytes));
     else raw = Buffer.alloc(256 * 256, dtt.waterMaskKind === 2 ? 0xff : 0x00);
-    const column = (c) => Buffer.from(Array.from({ length: 256 }, (_, r) => raw[r * 256 + c]));
-    maskEdgesByAddress.set(key, {
+    const column = (c) => {
+      const edge = Buffer.allocUnsafe(256);
+      for (let row = 0; row < 256; row += 1) edge[row] = raw[row * 256 + c];
+      return edge;
+    };
+    spoolTileEdges(edgeFactWriter, {
+      kind: "mask",
+      level: dtt.level,
+      x: dtt.x,
+      y: dtt.y,
+      ownerOrdinal: recordCount - 1,
+      grid: 256,
+      step: 0,
+      edges: {
       west: column(0),
       east: column(255),
       north: Buffer.from(raw.subarray(0, 256)),
       south: Buffer.from(raw.subarray(255 * 256, 256 * 256)),
+      },
     });
   }
 }
 
 // ── EDGE CONTINUITY, which no per-tile check can see ───────────────────────
 //
-// Two adjacent tiles share a post row, and they sample it from the same global
-// lattice — so at the posts they BOTH carry, the only thing that may separate
-// their answers is their own quantisation step. Anything larger is a seam a
-// person will see: the zeroed south row showed up here as a 340-metre
-// disagreement.
-//
-// WHICH POSTS THEY BOTH CARRY IS NOW A QUESTION. Density adapts per tile
-// (coordinator 2026-08-27 (a)), so a 5-post tile can sit beside a 65-post one.
-// Their posts still come from ONE global lattice — post j of an M-post tile is
-// post j*(N-1)/(M-1) of an N-post tile at the same address, exactly, because
-// the two expressions differ only by a factor that cancels — so the coarser
-// tile's posts are a SUBSET of the finer one's and the comparison is over that
-// subset. Comparing by INDEX, which is what this used to do, compares post 3 of
-// a 5-post edge against post 3 of a 65-post edge: different ground, and on the
-// first adaptive-density run it reported 48,000 "seams" that were nothing but
-// the index mismatch.
-//
-// BETWEEN those shared posts the two edges genuinely differ: the coarser tile
-// interpolates linearly where the finer one follows the terrain. That gap is
-// not a defect to be gated to zero — it is the LOD crack quantized-mesh skirts
-// exist for, and it is bounded by the coarser tile's own stated
-// VERTICAL_ACCURACY_M, which every record carries. It is REPORTED per level
-// (`worstDensityStepCrackM`) rather than asserted away, so the ruling's cost is
-// a number a reviewer can read.
+// The old verifier held four mesh edges and four mask edges for every address.
+// A global cut cannot afford that index.  The writer above emits one compact
+// fact per physical edge, and the external merge below holds only the two facts
+// that meet at one boundary.  The evaluator preserves the former shared-post,
+// mixed-density crack and mask-statistic rules verbatim.
 const LEVEL_ZERO_GEOMETRIC_ERROR_M = (6378137 * 2 * Math.PI * 0.25) / (65 * 2);
 const skirtHeightM = (level) => (LEVEL_ZERO_GEOMETRIC_ERROR_M / 2 ** level) * 5;
 
-const gcd = (a, b) => (b === 0 ? a : gcd(b, a % b));
-let adjacencies = 0;
-let worstSeam = 0;
-let worstSeamAt = null;
-let mixedDensityAdjacencies = 0;
-const crackByLevel = new Map();
-for (const [key, here] of edgesByAddress) {
-  const [level, x, y] = key.split("/").map(Number);
-  const pairs = [
-    [`${level}/${x + 1}/${y}`, "east", "west"],
-    [`${level}/${x}/${y + 1}`, "north", "south"],
-  ];
-  for (const [otherKey, mine, theirs] of pairs) {
-    const other = edgesByAddress.get(otherKey);
-    if (!other) continue;
-    adjacencies += 1;
-    const tolerance = Math.max(here.step, other.step) + 1e-6;
-    // ── THE POSTS THE TWO TILES GENUINELY SHARE ─────────────────────────
-    //
-    // Tile A carries posts at k/(a-1) along the shared edge and tile B at
-    // m/(b-1); a position belongs to both exactly when k/(a-1) = m/(b-1), so
-    // they share gcd(a-1, b-1) + 1 posts, always at least the two CORNERS.
-    // When one density's intervals divide the other's, that is every post of
-    // the coarser tile — the nested case, and the common one. When they do
-    // not (the ladder offers 25 and 65 at the same level, and 24 does not
-    // divide 64) it is fewer, but it is never zero and it is exactly
-    // computable, which is what makes this a check rather than a hope.
-    const spansA = here.grid - 1;
-    const spansB = other.grid - 1;
-    const g = gcd(spansA, spansB);
-    if (here.grid !== other.grid) mixedDensityAdjacencies += 1;
-    for (let j = 0; j <= g; j += 1) {
-      const a = here[mine][(j * spansA) / g];
-      const b = other[theirs][(j * spansB) / g];
-      if (Number.isNaN(a) || Number.isNaN(b)) continue;
-      const delta = Math.abs(a - b);
-      if (delta > worstSeam) {
-        worstSeam = delta;
-        worstSeamAt = `${key} ${mine} vs ${otherKey} ${theirs} shared post ${j}/${g}`;
-      }
-      if (delta > tolerance) {
-        problems.push(
-          `seam at ${key} ${mine} vs ${otherKey} ${theirs} shared post ${j} of ${g}: ` +
-            `${a.toFixed(3)} m vs ${b.toFixed(3)} m (tolerance ${tolerance.toFixed(3)} m)`,
-        );
-      }
-    }
-    // ── THE CRACK THE DENSITY STEP LEAVES BETWEEN THOSE POSTS ────────────
-    //
-    // Between two shared posts the coarser edge is a straight line and the
-    // finer one follows the terrain, so the two edges diverge. That is NOT a
-    // defect to be gated to zero — it is the LOD crack quantized-mesh skirts
-    // exist for, and it is bounded by the coarser tile's own stated
-    // VERTICAL_ACCURACY_M, which every record carries. It is measured and
-    // reported per level so the ruling's cost is a number rather than a
-    // shrug: each tile's edge is evaluated against the OTHER tile's edge,
-    // linearly interpolated at the same position.
-    if (here.grid !== other.grid) {
-      const at = (edge, grid, u) => {
-        const t = u * (grid - 1);
-        const i = Math.min(grid - 2, Math.floor(t));
-        const f = t - i;
-        const v0 = edge[i];
-        const v1 = edge[i + 1];
-        return Number.isNaN(v0) || Number.isNaN(v1) ? NaN : v0 + (v1 - v0) * f;
-      };
-      const prev = crackByLevel.get(level) ?? { m: 0, at: null };
-      let worstCrack = prev.m;
-      let worstAt = prev.at;
-      const fineGrid = Math.max(here.grid, other.grid);
-      for (let i = 0; i < fineGrid; i += 1) {
-        const u = i / (fineGrid - 1);
-        const a = at(here[mine], here.grid, u);
-        const b = at(other[theirs], other.grid, u);
-        if (Number.isNaN(a) || Number.isNaN(b)) continue;
-        if (Math.abs(a - b) > worstCrack) {
-          worstCrack = Math.abs(a - b);
-          worstAt = `${key} ${mine} (grid ${here.grid}) vs ${otherKey} ${theirs} (grid ${other.grid})`;
-        }
-      }
-      crackByLevel.set(level, { m: worstCrack, at: worstAt });
-    }
-  }
+const edgeFactRuns = edgeFactWriter.finish();
+let edgeChecks;
+try {
+  edgeChecks = await evaluateTerrainEdgeFacts(edgeFactRuns, {
+    maxOpenRuns: 32,
+    maxRowBytes: 64 * 1024,
+    scratchDir: edgeFactScratchDir,
+  });
+} finally {
+  fs.rmSync(edgeFactRunDir, { recursive: true, force: true });
+  fs.rmSync(edgeFactScratchDir, { recursive: true, force: true });
 }
-
-// ── THE MASK'S EDGE TEXELS, WHICH ARE NO LONGER THE SAME GROUND ────────────
-//
-// This used to assert that tile x's east column and tile x+1's west column are
-// EQUAL, because the mask was cut on a 256-POST lattice where they were the
-// same global post. The mask is registered as an IMAGE now (area registration,
-// cell i covering [i/N,(i+1)/N] — which is how Cesium samples it), so cell 255
-// of tile x and cell 0 of tile x+1 cover ADJACENT, DIFFERENT ground and are
-// equal only when the coastline says so. On the regional run they differ on
-// 4,815 of 2,274,304 compared bytes, every one of them a coastline crossing.
-//
-// So this is a STATISTIC now, not a gate — and the property it used to stand
-// for did not go away, it moved somewhere that can actually decide it. Byte
-// identity was only ever a PROXY for "both tiles were cut from one global
-// grid", and from records alone that proxy is all this file can compute: it
-// does not have the source granule and cannot say whether a differing pair is
-// a coastline or a lattice bug. The module's own test can, and does —
-// data-source/terrain-source/tests/watermask-seams.test.mjs compares 7,915,776
-// texels across a 121-tile block against a global grid computed independently
-// in the test from the WBM fixture, which is a strictly stronger statement than
-// edge equality ever was and fails under the old registration.
-let maskAdjacencies = 0;
-let maskByteDisagreements = 0;
-const maskSeamExamples = [];
-for (const [key, here] of maskEdgesByAddress) {
-  const [level, x, y] = key.split("/").map(Number);
-  const pairs = [
-    [`${level}/${x + 1}/${y}`, "east", "west"],
-    [`${level}/${x}/${y + 1}`, "north", "south"],
-  ];
-  for (const [otherKey, mine, theirs] of pairs) {
-    const other = maskEdgesByAddress.get(otherKey);
-    if (!other) continue;
-    maskAdjacencies += 1;
-    for (let i = 0; i < 256; i += 1) {
-      if (here[mine][i] === other[theirs][i]) continue;
-      maskByteDisagreements += 1;
-      if (maskSeamExamples.length < 8) {
-        maskSeamExamples.push(
-          `${key} ${mine}[${i}] = 0x${here[mine][i].toString(16).padStart(2, "0")} but ` +
-            `${otherKey} ${theirs}[${i}] = 0x${other[theirs][i].toString(16).padStart(2, "0")}`,
-        );
-      }
-    }
-  }
-}
+// Edge diagnostics are deliberately capped inside the external-sort consumer:
+// a global seam regression can produce millions of bad shared posts, and this
+// report needs the count plus deterministic evidence, not another O(N) array.
+for (const problem of edgeChecks.problemExamples) problems.push(problem);
+const {
+  adjacencies,
+  worstSeam,
+  worstSeamAt,
+  mixedDensityAdjacencies,
+  crackByLevel,
+  maskAdjacencies,
+  maskByteDisagreements,
+  maskSeamExamples,
+  seamProblemCount,
+  edgeGroupOverflowCount,
+  problemCount: edgeFactProblemCount,
+} = edgeChecks;
 // Reported, not gated; see above.
 const maskEdgeBytesCompared = maskAdjacencies * 256;
 
@@ -1041,6 +992,13 @@ const summary = {
   atCeilingExamples,
   ceilingShareBound: CEILING_SHARE,
   edgeAdjacenciesChecked: adjacencies,
+  // A global bad cut can fail at every shared post.  Keep the total visible,
+  // while `problems` carries only the deterministic bounded examples emitted by
+  // the streamed edge consumer.
+  edgeContinuityProblemCount: edgeFactProblemCount,
+  edgeSeamProblemCount: seamProblemCount,
+  edgeFactGroupOverflowCount: edgeGroupOverflowCount,
+  edgeContinuityProblemExamples: edgeChecks.problemExamples,
   maskAdjacenciesChecked: maskAdjacencies,
   // NOT a defect count. Under area registration two neighbouring edge texels
   // cover different ground, so a difference is a coastline crossing the seam.

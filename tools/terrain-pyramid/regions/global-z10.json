@@ -1,7 +1,7 @@
 {
   "//": "APPROVED OFF-FLEET GLOBAL EPOCH. The source is Copernicus DEM GLO-30 public COGs at the immutable naming scheme below; this config intentionally stores z8-z10 only. z0-z7 are global ancestor coverage synthesized by the serving module, not guessed source terrain. A 404 for a planned DEM or WBM is the provider's no-coverage/ocean result (never retried); the encoder may synthesize only an all-water tile, and any non-water no-data/partial-coverage result remains visible to verify.mjs and fails its missing-row/coverage gates.",
   "out": "tools/terrain-pyramid/out/global-z10",
-  "cache_max_bytes": 137438953472,
+  "cache_max_bytes": 103079215104,
   "flow_config": {
     "dataset_id": "copernicus-glo30-quantized-mesh",
     "tileset_id": "spaceaware-terrain",
