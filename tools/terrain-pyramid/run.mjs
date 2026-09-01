@@ -871,7 +871,10 @@ async function main() {
 
   while (stats.cells < args.maxCells && backlog > 0) {
     const planned = await planCell();
-    if (!planned) break;
+    if (!planned) {
+      backlog = 0;
+      break;
+    }
     try {
       await prefetch(planned.urls);
     const marksBefore = stats.marksWritten;
@@ -941,6 +944,10 @@ async function main() {
     outDir,
     elapsedMs: elapsed,
     cells: stats.cells,
+    // A bounded rehearsal can intentionally stop at --max-cells.  It is a
+    // valid resume point, but never a completed shard: global-build.mjs only
+    // accepts a report as terminal when this is true.
+    drained: backlog <= 0,
     fetches: stats.fetches,
     fetch404: stats.fetch404,
     fetchRetries: stats.fetchRetries,

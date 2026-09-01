@@ -25,7 +25,9 @@ or deploy a flow.
   worker owns one shard output and a durable `global-build-state.json` records
   its config digest, attempts and output digest. A resumed command refuses a
   changed config or shard count and skips only shards whose clean report and
-  stream digest still match.
+  stream digest still match. A `--max-cells` run report is explicitly
+  `drained: false`, so it remains resumable work rather than being mistaken for
+  a completed shard.
 - Shard merging accepts a boundary duplicate only when the complete `$DTT`
   record bytes agree. It otherwise stops; a coordinate is never silently won
   by a worker. The merge report's sorted address/digest set is the

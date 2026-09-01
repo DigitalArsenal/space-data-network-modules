@@ -73,7 +73,7 @@ function reportIsComplete(outDir) {
   const stream = path.join(outDir, "tiles.dttstream");
   if (!fs.existsSync(report) || !fs.existsSync(stream)) return false;
   const parsed = JSON.parse(fs.readFileSync(report, "utf8"));
-  return Array.isArray(parsed.errors) && parsed.errors.length === 0;
+  return parsed.drained === true && Array.isArray(parsed.errors) && parsed.errors.length === 0;
 }
 
 async function mergeShardStores(shards, outDir) {
