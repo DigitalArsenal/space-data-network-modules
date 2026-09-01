@@ -45,16 +45,18 @@
 
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
-import fs from "node:fs";
+import { spawn } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
+import nativeFs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { Readable } from "node:stream";
-import { createInterface } from "node:readline";
+import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 
 import { buildDttRecord, writeDttRecord } from "./dtt-projection.mjs";
-import { iterateStreamFile, readDtt, readDttProvenance } from "./dtt-reader.mjs";
+import { MAX_TERRAIN_RECORD_BYTES, readDtt, readDttProvenance } from "./dtt-reader.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..");
@@ -71,6 +73,64 @@ const IPFS_TILES_TEMPLATE = "{z}/{x}/{y}.terrain";
 // and p99 327,267 B with a bounded review margin, while still rejecting a
 // runaway mask/payload before a permanent CID is created.
 const STATIC_TRANSPORT_BOUNDS = Object.freeze({ p50: 96 * 1024, p99: 384 * 1024, hard: 512 * 1024 });
+const MAX_MATERIALIZED_FILES = 5_000_000;
+const MAX_VERIFIED_STORE_BYTES = 12 * 1024 ** 3;
+const MAX_STATIC_DIRECTORY_BYTES = 128 * 1024 ** 3;
+const MAX_STATIC_DIRECTORY_LEVEL = 30;
+const STAGING_HEADROOM_BYTES = 64 * 1024 * 1024;
+const MAX_RECEIPT_LINE_BYTES = 64 * 1024;
+const MAX_RECEIPT_NAME_BYTES = 4 * 1024;
+const MAX_RECEIPT_HASH_BYTES = 256;
+const MAX_CONTROL_RESPONSE_BYTES = 64 * 1024;
+// The held-FD journal is append-only: each individual frame stays control-
+// plane sized, while the complete bounded history is retained for an
+// operator rather than rewritten through a raced pathname.
+const MAX_JOURNAL_LOG_BYTES = 1024 * 1024;
+const MAX_WORKLIST_LINE_BYTES = 1024;
+const MAX_UPLOAD_MANIFEST_LINE_BYTES = 512;
+const MAX_TILESET_ID_BYTES = 256;
+const MAX_OCEAN_DIAGNOSTICS = 8;
+const OCEAN_SKIP_MAX_RECEIPT_BYTES = 64 * 1024;
+const OCEAN_SKIP_MAX_LINES_BYTES = 512 * 1024 * 1024;
+const OCEAN_SKIP_MAX_LINE_BYTES = 256;
+const TERRAIN_ADDRESS_FIELD_WIDTH = 12;
+const MAX_VERIFY_REPORT_BYTES = 512 * 1024;
+const MAX_LAYER_CONFIG_BYTES = 8 * 1024 * 1024;
+const MAX_GLOBAL_STATE_BYTES = 8 * 1024 * 1024;
+const MAX_APPROVED_CONFIG_BYTES = 8 * 1024 * 1024;
+const MAX_LAYER_JSON_BYTES = STATIC_TRANSPORT_BOUNDS.hard;
+const PUBLICATION_INPUTS_FORMAT = "terrain-publication-inputs-v2";
+const PUBLICATION_POLICY_FORMAT = "terrain-publication-policy-v1";
+const ATTEMPT_JOURNAL_FORMAT = "terrain-ipfs-publication-attempt-v2";
+const ATTEMPT_TOKEN_RE = /^\d+-[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
+const INITIAL_JOURNAL_CANDIDATE_LIMIT = 8;
+const LIVE_PUBLICATION_NAMES = Object.freeze([
+  "ipfs",
+  "tileset-catalogue.json",
+  "tileset-catalogue.dttstream",
+  "ipfs-publication.json",
+  "serving-config-ipfs.json",
+  "pending-ipfs-pin.json",
+]);
+// A global directory is tens of GiB, not a control-plane request.  Keep the
+// deadline finite but derive it from a deliberately conservative reviewed
+// floor rather than applying the 30-second RPC timeout to the data stream.
+const MIN_BULK_UPLOAD_BYTES_PER_SECOND = 1024 * 1024;
+const BULK_UPLOAD_OVERHEAD_MS = 10n * 60n * 1000n;
+const MIN_PIN_TRAVERSAL_FILES_PER_SECOND = 100;
+const PIN_TRAVERSAL_OVERHEAD_MS = 5n * 60n * 1000n;
+
+function parsePositiveInteger(value, flag) {
+  assert.match(value ?? "", /^\d+$/, `${flag} must be a positive integer`);
+  const parsed = Number(value);
+  assert.ok(Number.isSafeInteger(parsed) && parsed > 0, `${flag} is outside the safe integer range`);
+  return parsed;
+}
+
+function parseByteCount(value, flag) {
+  assert.match(value ?? "", /^\d+$/, `${flag} must be a non-negative integer`);
+  return BigInt(value);
+}
 
 function parseArgs(argv) {
   const args = {
@@ -78,6 +138,22 @@ function parseArgs(argv) {
     gateway: "https://sdn.spaceaware.io",
     add: true,
     verify: true,
+    timeoutMs: 30_000,
+    bulkUploadTimeoutMs: null,
+    pinTimeoutMs: null,
+    reserveFreeBytes: 0n,
+    testCrashAt: null,
+    testReplaceOutputRootWith: null,
+    testExchangeControlWith: null,
+    testExchangeStagingWith: null,
+    testExchangeInstallLeafWith: null,
+    testExchangeJournalLeaseWith: null,
+    testHoldAfterJournalMs: null,
+    testHoldAfterInitialJournalTempMs: null,
+    testHoldAfterRecoveryReadMs: null,
+    testForgeSelfOwnedJournal: false,
+    testMutateLayerConfigAfterPreflight: false,
+    testGzipBomb: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
@@ -85,15 +161,34 @@ function parseArgs(argv) {
     else if (flag === "--api") args.api = argv[++i];
     else if (flag === "--gateway") args.gateway = argv[++i];
     else if (flag === "--no-add") args.add = false;
-    // Re-emit the catalogue and the operator config for a directory that is
-    // ALREADY published, without pushing 358 MiB through the tunnel again.
-    // The materialized bytes are deterministic, so the CID is a fact about
-    // them and re-asserting it costs nothing; --add would have proven it.
-    else if (flag === "--cid") { args.cid = argv[++i]; args.add = false; }
+    // A bare CID says nothing about its recursive pin.  Do not emit a serving
+    // config from an unverified assertion: a trusted import path can be added
+    // only when it carries an independently verified pin receipt.
+    else if (flag === "--cid") throw new Error("--cid is refused: use --add so this invocation verifies the recursive pin");
     else if (flag === "--no-verify") args.verify = false;
+    else if (flag === "--timeout-ms") args.timeoutMs = parsePositiveInteger(argv[++i], "--timeout-ms");
+    else if (flag === "--bulk-upload-timeout-ms") args.bulkUploadTimeoutMs = parsePositiveInteger(argv[++i], "--bulk-upload-timeout-ms");
+    else if (flag === "--pin-timeout-ms") args.pinTimeoutMs = parsePositiveInteger(argv[++i], "--pin-timeout-ms");
+    else if (flag === "--reserve-free-bytes") args.reserveFreeBytes = parseByteCount(argv[++i], "--reserve-free-bytes");
+    // Test-only abrupt termination hook for the durable artifact transaction.
+    else if (flag === "--test-crash-at") args.testCrashAt = argv[++i];
+    else if (flag === "--test-replace-output-root-with") args.testReplaceOutputRootWith = path.resolve(argv[++i]);
+    else if (flag === "--test-exchange-control-with") args.testExchangeControlWith = path.resolve(argv[++i]);
+    else if (flag === "--test-exchange-staging-with") args.testExchangeStagingWith = path.resolve(argv[++i]);
+    else if (flag === "--test-exchange-install-leaf-with") args.testExchangeInstallLeafWith = path.resolve(argv[++i]);
+    else if (flag === "--test-exchange-journal-lease-with") args.testExchangeJournalLeaseWith = path.resolve(argv[++i]);
+    else if (flag === "--test-hold-after-journal-ms") args.testHoldAfterJournalMs = parsePositiveInteger(argv[++i], "--test-hold-after-journal-ms");
+    else if (flag === "--test-hold-after-initial-journal-temp-ms") args.testHoldAfterInitialJournalTempMs = parsePositiveInteger(argv[++i], "--test-hold-after-initial-journal-temp-ms");
+    else if (flag === "--test-hold-after-recovery-read-ms") args.testHoldAfterRecoveryReadMs = parsePositiveInteger(argv[++i], "--test-hold-after-recovery-read-ms");
+    else if (flag === "--test-forge-self-owned-journal") args.testForgeSelfOwnedJournal = true;
+    // These hooks exercise the same production safety boundaries without
+    // requiring a racing external writer or a giant fixture in CI.
+    else if (flag === "--test-mutate-layer-config-after-preflight") args.testMutateLayerConfigAfterPreflight = true;
+    else if (flag === "--test-gzip-bomb") args.testGzipBomb = true;
     else throw new Error(`unknown argument ${flag}`);
   }
   if (!args.out) throw new Error("--out <builder output dir> is required");
+  assert.ok(!args.add || args.verify, "--no-verify is refused with --add: a serving CID requires gateway proof");
   while (args.gateway.endsWith("/")) args.gateway = args.gateway.slice(0, -1);
   return args;
 }
@@ -101,44 +196,957 @@ function parseArgs(argv) {
 const args = parseArgs(process.argv.slice(2));
 const outDir = path.resolve(args.out);
 const ipfsDir = path.join(outDir, "ipfs");
+const pendingPinPath = path.join(outDir, "pending-ipfs-pin.json");
+const transactionPath = path.join(outDir, ".ipfs-publication-transaction.json");
+let journalLeaseIdentity = null;
+let journalLeaseDescriptor = null;
+let pendingPinLeaseIdentity = null;
+let pendingPinLeaseDescriptor = null;
+
+const outStat = nativeFs.lstatSync(outDir, { bigint: true });
+assert.ok(outStat.isDirectory() && !outStat.isSymbolicLink(), `builder output is not a real directory: ${outDir}`);
+const outputRootIdentity = Object.freeze({ dev: outStat.dev.toString(), ino: outStat.ino.toString() });
+
+const ROOTFS_HELPER = path.join(HERE, "ipfs-publication-rootfs.py");
+const ROOTFS_RPC_TIMEOUT_MS = 30_000;
+const ROOTFS_MESSAGE_BYTES = 1024 * 1024;
+const ROOTFS_CHUNK_BYTES = 64 * 1024;
+
+function rootfsError(response) {
+  const error = new Error(`rootfs ${response.code ?? "EIO"}: ${response.message ?? "helper request failed"}`);
+  error.code = response.code ?? "EIO";
+  return error;
+}
+
+function sleepBriefly() {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)), 0, 0, 1);
+}
+
+function createRootFsCapability() {
+  // The helper receives the original output directory's exact dev/inode and
+  // keeps its own directory FD.  Every later output operation is relative to
+  // that held FD, so exchanging a named parent cannot redirect it.
+  const child = spawn("python3", [
+    ROOTFS_HELPER,
+    "--root", outDir,
+    "--dev", outputRootIdentity.dev,
+    "--ino", outputRootIdentity.ino,
+    "--parent-pid", String(process.pid),
+  ], { stdio: ["pipe", "pipe", "inherit"] });
+  const inputFd = child.stdin?._handle?.fd;
+  const outputFd = child.stdout?._handle?.fd;
+  assert.ok(Number.isInteger(inputFd) && Number.isInteger(outputFd), "rootfs helper pipes are unavailable");
+  let nextId = 1;
+  let pending = Buffer.alloc(0);
+  let closed = false;
+
+  function writeAll(bytes, deadline) {
+    let offset = 0;
+    while (offset < bytes.length) {
+      assert.ok(Date.now() <= deadline, "rootfs helper write timed out");
+      try {
+        const written = nativeFs.writeSync(inputFd, bytes, offset, bytes.length - offset);
+        assert.ok(written > 0, "rootfs helper pipe made no write progress");
+        offset += written;
+      } catch (error) {
+        if (error?.code !== "EAGAIN" && error?.code !== "EWOULDBLOCK") throw error;
+        sleepBriefly();
+      }
+    }
+  }
+
+  function readLine(deadline) {
+    for (;;) {
+      const newline = pending.indexOf(0x0a);
+      if (newline >= 0) {
+        const line = pending.subarray(0, newline);
+        pending = pending.subarray(newline + 1);
+        assert.ok(line.length <= ROOTFS_MESSAGE_BYTES, "rootfs helper response exceeds limit");
+        return line;
+      }
+      assert.ok(Date.now() <= deadline, "rootfs helper read timed out");
+      const scratch = Buffer.allocUnsafe(64 * 1024);
+      try {
+        const read = nativeFs.readSync(outputFd, scratch, 0, scratch.length, null);
+        assert.ok(read > 0, "rootfs helper exited before responding");
+        pending = Buffer.concat([pending, scratch.subarray(0, read)]);
+        assert.ok(pending.length <= ROOTFS_MESSAGE_BYTES, "rootfs helper response exceeds limit");
+      } catch (error) {
+        if (error?.code !== "EAGAIN" && error?.code !== "EWOULDBLOCK") throw error;
+        sleepBriefly();
+      }
+    }
+  }
+
+  function request(payload, expectedId = null) {
+    assert.ok(!closed, "rootfs helper has already closed");
+    const id = expectedId ?? nextId++;
+    const bytes = Buffer.from(`${JSON.stringify({ id, ...payload })}\n`);
+    assert.ok(bytes.length <= ROOTFS_MESSAGE_BYTES, "rootfs helper request exceeds limit");
+    const deadline = Date.now() + ROOTFS_RPC_TIMEOUT_MS;
+    writeAll(bytes, deadline);
+    let response;
+    try {
+      response = JSON.parse(readLine(deadline).toString("utf8"));
+    } catch (error) {
+      throw new Error("rootfs helper returned invalid JSON", { cause: error });
+    }
+    assert.equal(response.id, id, "rootfs helper response sequence mismatch");
+    if (!response.ok) throw rootfsError(response);
+    return response.result;
+  }
+
+  const bootstrapDeadline = Date.now() + ROOTFS_RPC_TIMEOUT_MS;
+  let bootstrap;
+  try {
+    bootstrap = JSON.parse(readLine(bootstrapDeadline).toString("utf8"));
+  } catch (error) {
+    throw new Error("rootfs helper did not return a valid startup handshake", { cause: error });
+  }
+  if (!bootstrap.ok) throw rootfsError(bootstrap);
+  assert.equal(bootstrap.id, null, "rootfs helper startup handshake is invalid");
+  const ready = bootstrap.result;
+  assert.ok(ready?.ready === true, "rootfs helper did not establish a root capability");
+  assert.equal(ready.root?.type, "directory", "rootfs helper did not open a directory root");
+  assert.equal(ready.root?.dev, outputRootIdentity.dev, "rootfs helper opened a different output device");
+  assert.equal(ready.root?.ino, outputRootIdentity.ino, "rootfs helper opened a different output inode");
+
+  return {
+    request,
+    close() {
+      if (closed) return;
+      try { request({ op: "shutdown" }); } catch { /* exit handling still terminates the helper. */ }
+      closed = true;
+      child.kill();
+    },
+    kill() {
+      if (!closed) child.kill();
+      closed = true;
+    },
+  };
+}
+
+function rootfsStat(stat) {
+  const type = stat?.type;
+  assert.ok(["file", "directory", "symlink", "other"].includes(type), "rootfs returned an invalid stat type");
+  const numeric = (name) => BigInt(stat[name]);
+  return Object.freeze({
+    dev: numeric("dev"), ino: numeric("ino"), size: numeric("size"), mtimeNs: numeric("mtimeNs"), ctimeNs: numeric("ctimeNs"),
+    isFile: () => type === "file",
+    isDirectory: () => type === "directory",
+    isSymbolicLink: () => type === "symlink",
+  });
+}
+
+function isOutputPath(value) {
+  return typeof value === "string" && (value === outDir || value.startsWith(`${outDir}${path.sep}`));
+}
+
+function outputRelative(value) {
+  assert.ok(isOutputPath(value), `rootfs path leaves output root: ${value}`);
+  return path.relative(outDir, value).split(path.sep).join("/");
+}
+
+function decodeOpenFlags(flags) {
+  if (typeof flags === "string") {
+    if (["r", "rs"].includes(flags)) return { access: "read", create: false, exclusive: false };
+    if (["r+", "rs+"].includes(flags)) return { access: "readwrite", create: false, exclusive: false };
+    if (["w", "wx"].includes(flags)) return { access: "write", create: true, exclusive: flags === "wx" };
+    throw new Error(`unsupported rootfs open flag: ${flags}`);
+  }
+  assert.equal(typeof flags, "number", "rootfs open flags must be numeric or a supported string");
+  const accessFlag = flags & 3;
+  const access = accessFlag === nativeFs.constants.O_RDONLY ? "read" :
+    accessFlag === nativeFs.constants.O_WRONLY ? "write" :
+      accessFlag === nativeFs.constants.O_RDWR ? "readwrite" : null;
+  assert.ok(access !== null, `unsupported rootfs access flags: ${flags}`);
+  return {
+    access,
+    create: Boolean(flags & nativeFs.constants.O_CREAT),
+    exclusive: Boolean(flags & nativeFs.constants.O_EXCL),
+  };
+}
+
+const rootFs = createRootFsCapability();
+process.once("exit", () => rootFs.kill());
+const virtualDescriptors = new Map();
+let nextVirtualDescriptor = -1;
+
+function rootfsDescriptor(handle) {
+  const descriptor = nextVirtualDescriptor;
+  nextVirtualDescriptor -= 1;
+  virtualDescriptors.set(descriptor, { handle: handle.handle, type: handle.stat.type });
+  return descriptor;
+}
+
+function rootfsHandle(descriptor) {
+  assert.ok(virtualDescriptors.has(descriptor), `unknown rootfs descriptor: ${descriptor}`);
+  return virtualDescriptors.get(descriptor).handle;
+}
+
+function assertRootfsRegularDescriptor(descriptor, operation) {
+  assert.equal(virtualDescriptors.get(descriptor)?.type, "file", `rootfs refuses ${operation} on a non-regular file`);
+}
+
+const rootfsMethods = {
+  lstatSync(target, options) {
+    if (!isOutputPath(target)) return nativeFs.lstatSync(target, options);
+    return rootfsStat(rootFs.request({ op: "lstat", path: outputRelative(target) }));
+  },
+  existsSync(target) {
+    if (!isOutputPath(target)) return nativeFs.existsSync(target);
+    try {
+      rootFs.request({ op: "lstat", path: outputRelative(target) });
+      return true;
+    } catch (error) {
+      if (error?.code === "ENOENT") return false;
+      throw error;
+    }
+  },
+  statfsSync(target, options) {
+    if (!isOutputPath(target)) return nativeFs.statfsSync(target, options);
+    const stat = rootFs.request({ op: "statfs" });
+    return Object.freeze({ bsize: BigInt(stat.bsize), frsize: BigInt(stat.frsize), blocks: BigInt(stat.blocks), bavail: BigInt(stat.bavail) });
+  },
+  readdirSync(target, options) {
+    if (!isOutputPath(target)) return nativeFs.readdirSync(target, options);
+    const names = rootFs.request({ op: "readdir", path: outputRelative(target) });
+    if (options?.withFileTypes) return names.map((name) => Object.freeze({ name }));
+    return names;
+  },
+  mkdirSync(target, options = {}) {
+    if (!isOutputPath(target)) return nativeFs.mkdirSync(target, options);
+    assert.ok(options.recursive !== true, "rootfs refuses recursive mkdir");
+    rootFs.request({ op: "mkdir", path: outputRelative(target), mode: options.mode ?? 0o777 });
+    return undefined;
+  },
+  openSync(target, flags, mode = 0o666) {
+    if (!isOutputPath(target)) return nativeFs.openSync(target, flags, mode);
+    const decoded = decodeOpenFlags(flags);
+    const opened = rootFs.request({ op: "open", path: outputRelative(target), ...decoded, mode });
+    return rootfsDescriptor(opened);
+  },
+  fstatSync(descriptor, options) {
+    if (!virtualDescriptors.has(descriptor)) return nativeFs.fstatSync(descriptor, options);
+    return rootfsStat(rootFs.request({ op: "fstat", handle: rootfsHandle(descriptor) }));
+  },
+  readSync(descriptor, buffer, offset = 0, length = buffer.length - offset, position = null) {
+    if (!virtualDescriptors.has(descriptor)) return nativeFs.readSync(descriptor, buffer, offset, length, position);
+    assertRootfsRegularDescriptor(descriptor, "read");
+    let total = 0;
+    while (total < length) {
+      const requested = Math.min(ROOTFS_CHUNK_BYTES, length - total);
+      const part = rootFs.request({
+        op: "read", handle: rootfsHandle(descriptor), maximum: requested,
+        position: position === null ? null : position + total,
+      });
+      const bytes = Buffer.from(part.data, "base64");
+      assert.ok(bytes.length <= requested, "rootfs helper returned too many read bytes");
+      bytes.copy(buffer, offset + total);
+      total += bytes.length;
+      if (bytes.length === 0 || bytes.length < requested) break;
+    }
+    return total;
+  },
+  writeSync(descriptor, data, ...rest) {
+    if (!virtualDescriptors.has(descriptor)) return nativeFs.writeSync(descriptor, data, ...rest);
+    assertRootfsRegularDescriptor(descriptor, "write");
+    let bytes;
+    let start;
+    let count;
+    let writePosition;
+    if (typeof data === "string") {
+      bytes = Buffer.from(data);
+      start = 0;
+      count = bytes.length;
+      writePosition = typeof rest[0] === "number" ? rest[0] : null;
+    } else {
+      bytes = Buffer.from(data);
+      start = rest[0] ?? 0;
+      count = rest[1] ?? (bytes.length - start);
+      writePosition = rest[2] ?? null;
+    }
+    let total = 0;
+    while (total < count) {
+      const chunk = bytes.subarray(start + total, start + Math.min(count, total + ROOTFS_CHUNK_BYTES));
+      const result = rootFs.request({
+        op: "write", handle: rootfsHandle(descriptor), data: chunk.toString("base64"),
+        position: writePosition === null ? null : writePosition + total,
+      });
+      assert.equal(result.written, chunk.length, "rootfs helper made a partial write");
+      total += chunk.length;
+    }
+    return total;
+  },
+  fsyncSync(descriptor) {
+    if (!virtualDescriptors.has(descriptor)) return nativeFs.fsyncSync(descriptor);
+    rootFs.request({ op: "fsync", handle: rootfsHandle(descriptor) });
+  },
+  closeSync(descriptor) {
+    if (!virtualDescriptors.has(descriptor)) return nativeFs.closeSync(descriptor);
+    rootFs.request({ op: "close", handle: rootfsHandle(descriptor) });
+    virtualDescriptors.delete(descriptor);
+  },
+  renameSync(source, destination) {
+    if (!isOutputPath(source) && !isOutputPath(destination)) return nativeFs.renameSync(source, destination);
+    throw new Error("rootfs raw rename is refused; use no-clobber or exact-identity rename");
+  },
+  unlinkSync(target) {
+    if (!isOutputPath(target)) return nativeFs.unlinkSync(target);
+    throw new Error("rootfs raw unlink is refused; use exact-identity cleanup");
+  },
+  rmdirSync(target) {
+    if (!isOutputPath(target)) return nativeFs.rmdirSync(target);
+    throw new Error("rootfs raw rmdir is refused; use exact-identity cleanup");
+  },
+  renameNoReplace(source, destination) {
+    assert.ok(isOutputPath(source) && isOutputPath(destination), "rootfs no-clobber rename leaves output root");
+    rootFs.request({ op: "rename_noreplace", source: outputRelative(source), destination: outputRelative(destination) });
+  },
+  readFileSync(target, options) {
+    if (!isOutputPath(target)) return nativeFs.readFileSync(target, options);
+    const descriptor = rootfsMethods.openSync(target, "r");
+    const chunks = [];
+    try {
+      for (;;) {
+        const buffer = Buffer.allocUnsafe(ROOTFS_CHUNK_BYTES);
+        const read = rootfsMethods.readSync(descriptor, buffer, 0, buffer.length, null);
+        if (read === 0) break;
+        chunks.push(Buffer.from(buffer.subarray(0, read)));
+      }
+    } finally {
+      rootfsMethods.closeSync(descriptor);
+    }
+    const bytes = Buffer.concat(chunks);
+    const encoding = typeof options === "string" ? options : options?.encoding;
+    return encoding ? bytes.toString(encoding) : bytes;
+  },
+  writeFileSync(target, data, options = {}) {
+    if (!isOutputPath(target)) return nativeFs.writeFileSync(target, data, options);
+    const flag = typeof options === "string" ? "w" : options.flag ?? "w";
+    const mode = typeof options === "object" && options !== null ? options.mode ?? 0o666 : 0o666;
+    const descriptor = rootfsMethods.openSync(target, flag, mode);
+    try { rootfsMethods.writeSync(descriptor, Buffer.from(data)); } finally { rootfsMethods.closeSync(descriptor); }
+  },
+};
+
+let fs = new Proxy(nativeFs, {
+  get(target, property, receiver) {
+    if (Object.prototype.hasOwnProperty.call(rootfsMethods, property)) return rootfsMethods[property];
+    return Reflect.get(target, property, receiver);
+  },
+});
+
+// Node has no portable `openat(2)`.  Treat the output root as an immutable
+// capability instead: every mutating phase verifies that the pathname still
+// resolves to this original non-symlink directory.  This deliberately fails
+// closed if a caller swaps the output directory while an attempt is live.
+function assertOutputRootStable(label) {
+  const current = nativeFs.lstatSync(outDir, { bigint: true });
+  assert.ok(current.isDirectory() && !current.isSymbolicLink(), `${label}: builder output is no longer a real directory`);
+  assert.equal(current.dev.toString(), outputRootIdentity.dev, `${label}: builder output device changed`);
+  assert.equal(current.ino.toString(), outputRootIdentity.ino, `${label}: builder output inode changed`);
+  return current;
+}
+
+function immutableIdentityFromStat(stat, file, label) {
+  assert.ok(stat.isFile() && !stat.isSymbolicLink(), `${label} is not a regular file: ${file}`);
+  return {
+    dev: stat.dev.toString(), ino: stat.ino.toString(), size: stat.size.toString(),
+    mtimeNs: stat.mtimeNs.toString(), ctimeNs: stat.ctimeNs.toString(),
+  };
+}
+
+function immutableIdentity(file, label) {
+  return immutableIdentityFromStat(fs.lstatSync(file, { bigint: true }), file, label);
+}
+
+function sameImmutableIdentity(left, right) {
+  return left.dev === right.dev && left.ino === right.ino && left.size === right.size &&
+    left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs;
+}
+
+function assertWithinRealOutput(file, label) {
+  assertOutputRootStable(label);
+  assert.ok(file === outDir || file.startsWith(`${outDir}${path.sep}`), `${label} escapes the builder output`);
+  const relative = path.relative(outDir, file);
+  let current = outDir;
+  for (const part of relative ? relative.split(path.sep) : []) {
+    current = path.join(current, part);
+    const stat = lstatIfExists(current, label);
+    if (stat === null) break;
+    assert.ok(!stat.isSymbolicLink(), `${label} has a symlinked parent: ${current}`);
+  }
+  return file;
+}
+
+function outputFile(relative, label) {
+  assert.equal(typeof relative, "string", `${label} path must be a string`);
+  assert.ok(relative.length > 0 && !path.isAbsolute(relative), `${label} path must be relative`);
+  const resolved = path.resolve(outDir, relative);
+  assert.ok(resolved.startsWith(`${outDir}${path.sep}`), `${label} path escapes the builder output`);
+  return assertWithinRealOutput(resolved, label);
+}
+
+function openRegularRead(file, label) {
+  const before = immutableIdentity(file, label);
+  const descriptor = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+  const opened = fs.fstatSync(descriptor, { bigint: true });
+  if (!opened.isFile() || !sameImmutableIdentity(before, immutableIdentityFromStat(opened, file, label))) {
+    fs.closeSync(descriptor);
+    throw new Error(`${label} changed while opening: ${file}`);
+  }
+  return { descriptor, identity: before };
+}
+
+function readBoundedRegularFileWithIdentity(file, maxBytes, label, expectedIdentity = null) {
+  const { descriptor, identity } = openRegularRead(file, label);
+  if (expectedIdentity) assert.ok(sameImmutableIdentity(identity, expectedIdentity), `${label} changed since publication preflight: ${file}`);
+  try {
+    const stat = fs.fstatSync(descriptor, { bigint: true });
+    assert.ok(sameImmutableIdentity(identity, immutableIdentityFromStat(stat, file, label)), `${label} changed while opening: ${file}`);
+    assert.ok(stat.size <= BigInt(maxBytes), `${label} exceeds ${maxBytes} bytes: ${file}`);
+    const bytes = Buffer.alloc(Number(stat.size));
+    let offset = 0;
+    while (offset < bytes.length) {
+      const read = fs.readSync(descriptor, bytes, offset, bytes.length - offset, offset);
+      assert.ok(read > 0, `${label} ended while being read: ${file}`);
+      offset += read;
+    }
+    const fdAfter = immutableIdentityFromStat(fs.fstatSync(descriptor, { bigint: true }), file, label);
+    assert.ok(sameImmutableIdentity(identity, fdAfter), `${label} changed while being read: ${file}`);
+    const after = immutableIdentity(file, label);
+    assert.ok(sameImmutableIdentity(identity, after), `${label} changed while being read: ${file}`);
+    if (expectedIdentity) assert.ok(sameImmutableIdentity(after, expectedIdentity), `${label} changed since publication preflight: ${file}`);
+    return { bytes, identity: after };
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function readBoundedRegularFile(file, maxBytes, label, expectedIdentity = null) {
+  return readBoundedRegularFileWithIdentity(file, maxBytes, label, expectedIdentity).bytes;
+}
+
+function readBoundedJson(file, maxBytes, label, expectedIdentity = null) {
+  try {
+    return JSON.parse(readBoundedRegularFile(file, maxBytes, label, expectedIdentity).toString("utf8"));
+  } catch (error) {
+    if (error instanceof SyntaxError) throw new Error(`${label} is invalid JSON: ${file}`, { cause: error });
+    throw error;
+  }
+}
+
+function readBoundedJsonWithIdentity(file, maxBytes, label, expectedIdentity = null) {
+  try {
+    const result = readBoundedRegularFileWithIdentity(file, maxBytes, label, expectedIdentity);
+    return { value: JSON.parse(result.bytes.toString("utf8")), identity: result.identity };
+  } catch (error) {
+    if (error instanceof SyntaxError) throw new Error(`${label} is invalid JSON: ${file}`, { cause: error });
+    throw error;
+  }
+}
+
+if (args.testForgeSelfOwnedJournal) {
+  const attempt = `${process.pid}-00000000-0000-4000-8000-000000000000`;
+  const forged = {
+    format: ATTEMPT_JOURNAL_FORMAT,
+    attempt,
+    root: outputRootIdentity,
+    phase: "allocated",
+    owned: attemptOwnedRelativePaths(attempt),
+    stagingIdentity: null,
+    controlIdentity: null,
+    transients: emptyAttemptTransients(),
+    transaction: null,
+  };
+  fs.writeFileSync(transactionPath, `${JSON.stringify(forged)}\n`, { flag: "wx", mode: 0o600 });
+}
+
+// Recover a previously interrupted artifact transaction before trusting any
+// report or input in this output directory. Its journal names only siblings
+// inside outDir and never touches a pin recovery receipt except transactionally.
+recoverPublicationTransaction();
+
+async function* regularFileChunks(file, label, expectedIdentity = null) {
+  const { descriptor, identity } = openRegularRead(file, label);
+  if (expectedIdentity) assert.ok(sameImmutableIdentity(identity, expectedIdentity), `${label} changed since publication preflight: ${file}`);
+  const buffer = Buffer.allocUnsafe(64 * 1024);
+  try {
+    for (;;) {
+      const read = fs.readSync(descriptor, buffer, 0, buffer.length, null);
+      if (read === 0) break;
+      // Copy this bounded window before the next synchronous read overwrites
+      // it. The caller therefore sees one held-fd chunk at a time.
+      yield Buffer.from(buffer.subarray(0, read));
+    }
+  } finally {
+    const fdAfter = immutableIdentityFromStat(fs.fstatSync(descriptor, { bigint: true }), file, label);
+    fs.closeSync(descriptor);
+    assert.ok(sameImmutableIdentity(identity, fdAfter), `${label} changed while being streamed: ${file}`);
+  }
+  const after = immutableIdentity(file, label);
+  assert.ok(sameImmutableIdentity(identity, after), `${label} changed while being streamed: ${file}`);
+  if (expectedIdentity) assert.ok(sameImmutableIdentity(after, expectedIdentity), `${label} changed since publication preflight: ${file}`);
+}
 
 // ── THE RUN HAS TO HAVE PASSED ─────────────────────────────────────────────
-const verifyPath = path.join(outDir, "verify-report.json");
+const verifyPath = outputFile("verify-report.json", "verify report");
 assert.ok(
   fs.existsSync(verifyPath),
   `run verify.mjs first: ${verifyPath} does not exist. A CID is permanent; an ` +
     "unverified pyramid published under one cannot be withdrawn from anyone " +
     "who has it.",
 );
-const verifyReport = JSON.parse(fs.readFileSync(verifyPath, "utf8"));
+assert.ok(
+  BigInt(immutableIdentity(verifyPath, "verify report").size) <= BigInt(MAX_VERIFY_REPORT_BYTES),
+  `verify report exceeds safety cap ${MAX_VERIFY_REPORT_BYTES} bytes`,
+);
+const verifyReport = readBoundedJson(verifyPath, MAX_VERIFY_REPORT_BYTES, "verify report");
+assert.equal(
+  verifyReport.format,
+  "terrain-verification-report-v1",
+  "verify report is not a terminal terrain verification receipt; re-run verify.mjs",
+);
+assert.equal(
+  verifyReport.publishable,
+  true,
+  "verify report is not marked publishable; re-run verify.mjs after every terminal verification succeeds",
+);
 assert.deepEqual(
   verifyReport.problems,
   [],
   `verify.mjs reported ${verifyReport.problems?.length ?? "?"} unmet bounds; fix them before publishing`,
 );
-assert.ok(
-  Array.isArray(verifyReport.availableButUnstoredAddresses) || typeof verifyReport.availableButUnstoredPath === "string",
-  "the verify report predates the streamed available-but-unstored worklist; re-run verify.mjs",
-);
+assert.ok(verifyReport.publicationInputs, "the verify report lacks its bound publicationInputs receipt; re-run verify.mjs");
+assert.ok(verifyReport.publicationPolicy, "the verify report lacks its approved publicationPolicy; re-run verify.mjs");
 
-async function* availableButUnstored() {
-  if (Array.isArray(verifyReport.availableButUnstoredAddresses)) {
-    yield* verifyReport.availableButUnstoredAddresses;
-    return;
+async function* boundedLines(file, maxLineBytes, label, expectedIdentity = null) {
+  const decoder = new StringDecoder("utf8");
+  let pending = "";
+  for await (const chunk of regularFileChunks(file, label, expectedIdentity)) {
+    pending += decoder.write(chunk);
+    let newline;
+    while ((newline = pending.indexOf("\n")) >= 0) {
+      const raw = pending.slice(0, newline);
+      pending = pending.slice(newline + 1);
+      const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+      if (!line) continue;
+      if (Buffer.byteLength(line) > maxLineBytes) throw new Error(`${label} line exceeds ${maxLineBytes} bytes`);
+      yield line;
+    }
+    if (Buffer.byteLength(pending) > maxLineBytes) throw new Error(`${label} line exceeds ${maxLineBytes} bytes`);
   }
-  const file = path.join(outDir, verifyReport.availableButUnstoredPath);
-  assert.ok(fs.existsSync(file), `verify worklist missing: ${file}`);
-  for await (const line of createInterface({ input: fs.createReadStream(file), crlfDelay: Infinity })) {
-    if (line) yield line;
+  pending += decoder.end();
+  if (pending) {
+    if (Buffer.byteLength(pending) > maxLineBytes) throw new Error(`${label} line exceeds ${maxLineBytes} bytes`);
+    yield pending;
   }
 }
 
-const layerConfig = JSON.parse(fs.readFileSync(path.join(outDir, "layer-json-config.json"), "utf8"));
-const runReport = JSON.parse(fs.readFileSync(path.join(outDir, "run-report.json"), "utf8"));
-const recordsPath = path.join(outDir, "tiles.dttstream");
+function assertExactKeys(value, keys, label) {
+  assert.ok(value && typeof value === "object" && !Array.isArray(value), `${label} must be an object`);
+  const expected = [...keys].sort();
+  assert.deepEqual(Object.keys(value).sort(), expected, `${label} has unexpected or missing fields`);
+}
+
+function assertPublicationInputEntry(entry, pathName, countField = null) {
+  const fields = ["path", "bytes", "sha256"];
+  if (countField) fields.push(countField);
+  assertExactKeys(entry, fields, `publicationInputs.${pathName}`);
+  assert.equal(entry.path, pathName === "tiles" ? "tiles.dttstream" :
+      pathName === "availableButUnstored" ? "available-but-unstored.ndjson" :
+      pathName === "layerConfig" ? "layer-json-config.json" :
+        pathName === "oceanReceipt" ? "ocean-skipped.json" :
+          pathName === "oceanAddresses" ? "ocean-skipped.lines" :
+            pathName === "globalState" ? "global-build-state.json" : "approved-run-config.json",
+  `publicationInputs.${pathName}.path is not the approved output name`);
+  assert.ok(Number.isSafeInteger(entry.bytes) && entry.bytes >= 0, `publicationInputs.${pathName}.bytes must be a non-negative safe integer`);
+  assert.match(entry.sha256 ?? "", /^[a-f0-9]{64}$/, `publicationInputs.${pathName}.sha256 must be SHA-256 hex`);
+  if (countField) assert.ok(Number.isSafeInteger(entry[countField]) && entry[countField] >= 0, `publicationInputs.${pathName}.${countField} must be a non-negative safe integer`);
+  return entry;
+}
+
+function assertPublicationInputs(receipt) {
+  assertExactKeys(receipt, ["format", "tiles", "availableButUnstored", "layerConfig", "oceanReceipt", "oceanAddresses", "globalState", "approvedConfig", "oceanLegacyUnbound"], "publicationInputs");
+  assert.equal(receipt.format, PUBLICATION_INPUTS_FORMAT, "unsupported publicationInputs format");
+  assert.equal(receipt.oceanLegacyUnbound, false, "unbound legacy ocean input is refused; re-run the global verifier");
+  assert.ok(receipt.oceanReceipt !== null && receipt.oceanAddresses !== null,
+    "global publication requires bound compact ocean receipt and address inputs");
+  return {
+    tiles: assertPublicationInputEntry(receipt.tiles, "tiles", "records"),
+    availableButUnstored: assertPublicationInputEntry(receipt.availableButUnstored, "availableButUnstored", "addresses"),
+    layerConfig: assertPublicationInputEntry(receipt.layerConfig, "layerConfig"),
+    oceanReceipt: assertPublicationInputEntry(receipt.oceanReceipt, "oceanReceipt"),
+    oceanAddresses: assertPublicationInputEntry(receipt.oceanAddresses, "oceanAddresses", "addresses"),
+    globalState: assertPublicationInputEntry(receipt.globalState, "globalState"),
+    approvedConfig: assertPublicationInputEntry(receipt.approvedConfig, "approvedConfig"),
+  };
+}
+
+function assertPublicationPolicy(policy) {
+  assertExactKeys(policy, ["format", "globalConfigDigest", "maxVerifiedStoreBytes", "maxStaticDirectoryBytes", "synthGridSize"], "publicationPolicy");
+  assert.equal(policy.format, PUBLICATION_POLICY_FORMAT, "unsupported publicationPolicy format");
+  assert.match(policy.globalConfigDigest ?? "", /^[a-f0-9]{64}$/, "publicationPolicy globalConfigDigest must be SHA-256 hex");
+  for (const field of ["maxVerifiedStoreBytes", "maxStaticDirectoryBytes"]) {
+    assert.ok(Number.isSafeInteger(policy[field]) && policy[field] > 0, `publicationPolicy.${field} must be a positive safe integer`);
+  }
+  assert.ok(policy.maxVerifiedStoreBytes <= MAX_VERIFIED_STORE_BYTES,
+    `publicationPolicy.maxVerifiedStoreBytes may not exceed ${MAX_VERIFIED_STORE_BYTES}`);
+  assert.ok(policy.maxStaticDirectoryBytes <= MAX_STATIC_DIRECTORY_BYTES,
+    `publicationPolicy.maxStaticDirectoryBytes may not exceed ${MAX_STATIC_DIRECTORY_BYTES}`);
+  assert.ok(policy.maxStaticDirectoryBytes >= policy.maxVerifiedStoreBytes,
+    "publicationPolicy.maxStaticDirectoryBytes must cover publicationPolicy.maxVerifiedStoreBytes");
+  assert.ok(Number.isSafeInteger(policy.synthGridSize) && policy.synthGridSize >= 2 && policy.synthGridSize <= 255,
+    "publicationPolicy.synthGridSize must be an integer in [2, 255]");
+  return policy;
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+async function hashPublicationInput(entry, label, countField = null, expectedIdentity = null) {
+  const file = outputFile(entry.path, label);
+  const hash = createHash("sha256");
+  let bytes = 0;
+  let count = 0;
+  let lastByte = null;
+  for await (const chunk of regularFileChunks(file, label, expectedIdentity)) {
+    bytes += chunk.length;
+    assert.ok(bytes <= entry.bytes, `${label} exceeds its verified byte count`);
+    hash.update(chunk);
+    if (countField) {
+      for (const byte of chunk) if (byte === 0x0a) count += 1;
+      if (chunk.length) lastByte = chunk[chunk.length - 1];
+    }
+  }
+  assert.equal(bytes, entry.bytes, `${label} byte count disagrees with publicationInputs`);
+  assert.equal(hash.digest("hex"), entry.sha256, `${label} digest disagrees with publicationInputs`);
+  if (countField) {
+    assert.ok(bytes === 0 || lastByte === 0x0a, `${label} must be LF-terminated`);
+    assert.equal(count, entry[countField], `${label} count disagrees with publicationInputs`);
+  }
+  return { file, identity: immutableIdentity(file, label), entry };
+}
+
+async function verifyPublicationInputs(receipt) {
+  const inputs = assertPublicationInputs(receipt);
+  const verified = {
+    tiles: await hashPublicationInput(inputs.tiles, "tile store"),
+    availableButUnstored: await hashPublicationInput(inputs.availableButUnstored, "available-but-unstored worklist", "addresses"),
+    layerConfig: await hashPublicationInput(inputs.layerConfig, "layer JSON config"),
+    oceanReceipt: await hashPublicationInput(inputs.oceanReceipt, "ocean skip receipt"),
+    oceanAddresses: await hashPublicationInput(inputs.oceanAddresses, "ocean skip addresses", "addresses"),
+    globalState: await hashPublicationInput(inputs.globalState, "global build state"),
+    approvedConfig: await hashPublicationInput(inputs.approvedConfig, "approved run config"),
+  };
+  assert.ok(inputs.tiles.bytes <= publicationPolicy.maxVerifiedStoreBytes,
+    `verified tile store ${inputs.tiles.bytes} exceeds approved ${publicationPolicy.maxVerifiedStoreBytes} bytes`);
+  return verified;
+}
+
+const publicationPolicy = assertPublicationPolicy(verifyReport.publicationPolicy);
+const publicationInputs = await verifyPublicationInputs(verifyReport.publicationInputs);
+
+function normalizeApprovedPublicationPolicy(policy, globalConfigDigest, label) {
+  assertExactKeys(policy, [
+    "version",
+    "max_verified_store_bytes",
+    "max_static_directory_bytes",
+    "static_directory_basis",
+    "synthesized_tile_grid_size",
+  ], label);
+  assert.equal(policy.version, 1, `${label}.version must be 1`);
+  assert.ok(Number.isSafeInteger(policy.max_verified_store_bytes) && policy.max_verified_store_bytes > 0,
+    `${label}.max_verified_store_bytes must be positive`);
+  assert.ok(Number.isSafeInteger(policy.max_static_directory_bytes) && policy.max_static_directory_bytes > 0,
+    `${label}.max_static_directory_bytes must be positive`);
+  assert.ok(typeof policy.static_directory_basis === "string" && policy.static_directory_basis.length > 0,
+    `${label}.static_directory_basis must be a non-empty string`);
+  assert.ok(Number.isSafeInteger(policy.synthesized_tile_grid_size) && policy.synthesized_tile_grid_size >= 2 && policy.synthesized_tile_grid_size <= 255,
+    `${label}.synthesized_tile_grid_size must be in [2, 255]`);
+  return {
+    format: PUBLICATION_POLICY_FORMAT,
+    globalConfigDigest,
+    maxVerifiedStoreBytes: policy.max_verified_store_bytes,
+    maxStaticDirectoryBytes: policy.max_static_directory_bytes,
+    synthGridSize: policy.synthesized_tile_grid_size,
+  };
+}
+
+function assertAuthoritativeGlobalInputs() {
+  const approvedConfig = readBoundedJson(
+    publicationInputs.approvedConfig.file,
+    MAX_APPROVED_CONFIG_BYTES,
+    "approved run config",
+    publicationInputs.approvedConfig.identity,
+  );
+  assert.equal(
+    createHash("sha256").update(canonicalJson(approvedConfig)).digest("hex"),
+    publicationPolicy.globalConfigDigest,
+    "canonical approved run config does not match publicationPolicy.globalConfigDigest",
+  );
+  const approvedPolicy = approvedConfig?.publication_policy;
+  assert.ok(approvedPolicy && typeof approvedPolicy === "object" && !Array.isArray(approvedPolicy),
+    "approved run config lacks publication_policy");
+  assert.deepEqual(
+    normalizeApprovedPublicationPolicy(approvedPolicy, publicationPolicy.globalConfigDigest, "approved run config publication_policy"),
+    publicationPolicy,
+    "approved run config publication_policy normalized form disagrees with verify publicationPolicy",
+  );
+  const state = readBoundedJson(
+    publicationInputs.globalState.file,
+    MAX_GLOBAL_STATE_BYTES,
+    "global build state",
+    publicationInputs.globalState.identity,
+  );
+  assert.ok(state && typeof state === "object" && !Array.isArray(state), "global build state must be an object");
+  assert.equal(state.version, 1, "global build state version must be 1");
+  assert.equal(state.completed, true, "global build state is not terminally completed");
+  assert.equal(state.configDigest, publicationPolicy.globalConfigDigest,
+    "global build state configDigest disagrees with verify publicationPolicy");
+  assert.deepEqual(
+    assertPublicationPolicy(state.publicationPolicy),
+    publicationPolicy,
+    "global build state publicationPolicy must exactly equal verify publicationPolicy",
+  );
+  const merged = state.merged;
+  assert.ok(merged && typeof merged === "object" && !Array.isArray(merged), "global build state lacks merged completion receipt");
+  assert.equal(merged.completion, "complete", "global merged receipt is not complete");
+  assert.equal(merged.configDigest, publicationPolicy.globalConfigDigest,
+    "global merged receipt configDigest disagrees with verify publicationPolicy");
+  assert.equal(merged.approvedConfigPath, "approved-run-config.json", "global merged receipt names an unexpected approved config");
+  assert.equal(merged.records, publicationInputs.tiles.entry.records,
+    "global merged receipt record count disagrees with publicationInputs tiles");
+  assert.deepEqual(
+    assertPublicationPolicy(merged.publicationPolicy),
+    publicationPolicy,
+    "global merged receipt publicationPolicy must exactly equal verify publicationPolicy",
+  );
+  return { state, approvedConfig };
+}
+
+const authoritativeGlobalInputs = assertAuthoritativeGlobalInputs();
+
+if (args.testMutateLayerConfigAfterPreflight) {
+  const descriptor = fs.openSync(publicationInputs.layerConfig.file, fs.constants.O_RDWR | (fs.constants.O_NOFOLLOW ?? 0));
+  try {
+    // A same-size mutation proves the materialization identity/hash checks do
+    // not merely trust the preflight pathname or count.
+    fs.writeSync(descriptor, Buffer.from(" "), 0, 1, 0);
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+async function* availableButUnstored() {
+  yield* boundedLines(
+    publicationInputs.availableButUnstored.file,
+    MAX_WORKLIST_LINE_BYTES,
+    "available-but-unstored worklist",
+    publicationInputs.availableButUnstored.identity,
+  );
+}
+
+function compareTerrainAddress(a, b) {
+  const left = terrainAddressOrderKey(a);
+  const right = terrainAddressOrderKey(b);
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function oceanReceiptPath() {
+  return publicationInputs.oceanReceipt.file;
+}
+
+function assertOceanReceipt(receipt) {
+  assert.ok(receipt && typeof receipt === "object" && !Array.isArray(receipt), "ocean skip receipt must be an object");
+  const allowed = new Set(["generatedAt", "format", "addressesPath", "count", "digest"]);
+  for (const key of Object.keys(receipt)) assert.ok(allowed.has(key), `ocean skip receipt has unexpected field ${key}`);
+  assert.equal(receipt.format, "terrain-ocean-skips-lines-v1", `unsupported ocean skip receipt format ${receipt.format}`);
+  assert.equal(receipt.addressesPath, "ocean-skipped.lines", "ocean skip receipt must name ocean-skipped.lines");
+  assert.ok(Number.isSafeInteger(receipt.count) && receipt.count >= 0, "ocean skip receipt count must be a non-negative safe integer");
+  assert.ok(receipt.count <= MAX_MATERIALIZED_FILES, `ocean skip receipt count exceeds ${MAX_MATERIALIZED_FILES} files`);
+  assert.match(receipt.digest ?? "", /^[a-f0-9]{64}$/, "ocean skip receipt digest must be a SHA-256 hex digest");
+  if (receipt.generatedAt !== undefined) {
+    assert.equal(typeof receipt.generatedAt, "string", "ocean skip receipt generatedAt must be a string");
+    assert.ok(Number.isFinite(Date.parse(receipt.generatedAt)), "ocean skip receipt generatedAt must be an ISO time");
+  }
+  return receipt;
+}
+
+function readOceanReceipt() {
+  const receiptPath = oceanReceiptPath();
+  assert.ok(sameImmutableIdentity(immutableIdentity(receiptPath, "ocean skip receipt"), publicationInputs.oceanReceipt.identity),
+    "ocean skip receipt changed since publication preflight");
+  assert.ok(publicationInputs.oceanReceipt.entry.bytes <= OCEAN_SKIP_MAX_RECEIPT_BYTES,
+    `ocean skip receipt exceeds ${OCEAN_SKIP_MAX_RECEIPT_BYTES} bytes`);
+  let document;
+  try {
+    document = JSON.parse(readBoundedRegularFile(
+      receiptPath,
+      OCEAN_SKIP_MAX_RECEIPT_BYTES,
+      "ocean skip receipt",
+      publicationInputs.oceanReceipt.identity,
+    ).toString("utf8"));
+  } catch (error) {
+    throw new Error(`ocean skip receipt is invalid JSON: ${receiptPath}`, { cause: error });
+  }
+  return assertOceanReceipt(document);
+}
+
+async function* exactOceanReceiptLines(receipt) {
+  const linesPath = outputFile(receipt.addressesPath, "ocean skip receipt");
+  assert.equal(linesPath, path.join(outDir, "ocean-skipped.lines"), "ocean skip receipt path is not contained in this output");
+  assert.equal(linesPath, publicationInputs.oceanAddresses.file, "ocean skip receipt target disagrees with publicationInputs");
+  const stat = immutableIdentity(linesPath, "ocean skip receipt target");
+  assert.ok(sameImmutableIdentity(stat, publicationInputs.oceanAddresses.identity), "ocean skip receipt target changed since publication preflight");
+  const countBound = BigInt(receipt.count) * BigInt(OCEAN_SKIP_MAX_LINE_BYTES + 1);
+  const statBound = countBound < BigInt(OCEAN_SKIP_MAX_LINES_BYTES) ? countBound : BigInt(OCEAN_SKIP_MAX_LINES_BYTES);
+  assert.ok(BigInt(stat.size) <= statBound, `ocean skip address list exceeds its declared byte bound: ${linesPath}`);
+
+  const hash = createHash("sha256");
+  let carried = Buffer.alloc(0);
+  let count = 0;
+  let previous = null;
+  const consume = (line) => {
+    assert.ok(line.length > 0, "ocean skip list contains an empty line");
+    assert.ok(line.length <= OCEAN_SKIP_MAX_LINE_BYTES, `ocean skip line exceeds ${OCEAN_SKIP_MAX_LINE_BYTES} bytes`);
+    for (const byte of line) assert.ok(byte >= 0x20 && byte <= 0x7e, `ocean skip line ${count + 1} is not raw ASCII`);
+    const address = line.toString("ascii");
+    const key = terrainAddressOrderKey(address);
+    assert.ok(previous === null || previous < key, `ocean skip lines are not strictly padded level/y/x sorted at ${address}`);
+    previous = key;
+    count += 1;
+    assert.ok(count <= receipt.count, "ocean skip receipt contains more lines than its count");
+    return address;
+  };
+  for await (const bytes of regularFileChunks(linesPath, "ocean skip receipt target", publicationInputs.oceanAddresses.identity)) {
+    hash.update(bytes);
+    const input = carried.length ? Buffer.concat([carried, bytes], carried.length + bytes.length) : bytes;
+    let start = 0;
+    for (let newline = input.indexOf(0x0a, start); newline >= 0; newline = input.indexOf(0x0a, start)) {
+      const line = input.subarray(start, newline);
+      // The producer writes raw LF-delimited ASCII; accepting CRLF would
+      // make this publisher validate a different byte contract.
+      assert.ok(!line.includes(0x0d), "ocean skip lines must use LF, not CRLF");
+      yield consume(line);
+      start = newline + 1;
+    }
+    carried = Buffer.from(input.subarray(start));
+    assert.ok(carried.length <= OCEAN_SKIP_MAX_LINE_BYTES, `ocean skip line exceeds ${OCEAN_SKIP_MAX_LINE_BYTES} bytes`);
+  }
+  assert.equal(carried.length, 0, "ocean skip list must end with LF");
+  assert.equal(count, receipt.count, "ocean skip receipt count disagrees with streamed worklist");
+  assert.equal(hash.digest("hex"), receipt.digest, "ocean skip receipt digest disagrees with streamed worklist");
+}
+
+async function oceanSkipJoiner() {
+  const receipt = readOceanReceipt();
+  const declaredByReceipt = receipt.count;
+  const source = exactOceanReceiptLines(receipt);
+
+  const iterator = source[Symbol.asyncIterator]();
+  let next = await iterator.next();
+  let sourceCount = 0;
+  let matchedCount = 0;
+  let lastOcean = null;
+  let lastAvailable = null;
+
+  const advance = async () => {
+    if (next.done) return;
+    const address = next.value;
+    parseTerrainAddress(address);
+    if (lastOcean !== null) assert.ok(compareTerrainAddress(lastOcean, address) < 0, "ocean-skipped worklist is not strictly sorted");
+    lastOcean = address;
+    sourceCount += 1;
+  };
+  await advance();
+
+  return {
+    async matches(address) {
+      parseTerrainAddress(address);
+      if (lastAvailable !== null) assert.ok(compareTerrainAddress(lastAvailable, address) < 0, "available-but-unstored worklist is not strictly sorted");
+      lastAvailable = address;
+      if (next.done) return false;
+      const order = compareTerrainAddress(next.value, address);
+      assert.ok(order >= 0, `ocean-skipped address ${next.value} is absent from available-but-unstored worklist`);
+      if (order !== 0) return false;
+      matchedCount += 1;
+      next = await iterator.next();
+      await advance();
+      return true;
+    },
+    finish() {
+      assert.ok(next.done, `ocean-skipped address ${next.value} is absent from available-but-unstored worklist`);
+      assert.equal(sourceCount, matchedCount, "not every ocean-skipped address joined the publication worklist");
+      assert.equal(sourceCount, declaredByReceipt, "ocean skip receipt count disagrees with streamed worklist");
+      return sourceCount;
+    },
+  };
+}
+
+const layerConfig = readBoundedJson(
+  publicationInputs.layerConfig.file,
+  MAX_LAYER_CONFIG_BYTES,
+  "layer JSON config",
+  publicationInputs.layerConfig.identity,
+);
+assert.equal(layerConfig.terrain_synth_grid_size, publicationPolicy.synthGridSize,
+  "layer JSON config terrain_synth_grid_size disagrees with approved publicationPolicy");
+const recordsPath = publicationInputs.tiles.file;
+async function* iterateBoundRecords() {
+  // The iterator below holds one O_NOFOLLOW descriptor from preflight through
+  // framing, hashing, and the post-read fstat. A pathname replacement cannot
+  // change which bytes are materialized.
+  const hash = createHash("sha256");
+  let bytes = 0;
+  let records = 0;
+  let pending = Buffer.alloc(0);
+  try {
+    for await (const input of regularFileChunks(recordsPath, "tile store", publicationInputs.tiles.identity)) {
+      bytes += input.length;
+      assert.ok(bytes <= publicationInputs.tiles.entry.bytes, "tile store exceeds its verified byte count");
+      hash.update(input);
+      pending = pending.length ? Buffer.concat([pending, input]) : input;
+      let offset = 0;
+      while (offset + 4 <= pending.length) {
+        const length = pending.readUInt32LE(offset);
+        if (length === 0) {
+          offset += 4;
+          continue;
+        }
+        assert.ok(length <= MAX_TERRAIN_RECORD_BYTES,
+          `record length ${length} exceeds ${MAX_TERRAIN_RECORD_BYTES}-byte terrain safety limit`);
+        if (offset + 4 + length > pending.length) break;
+        records += 1;
+        yield pending.subarray(offset + 4, offset + 4 + length);
+        offset += 4 + length;
+      }
+      pending = pending.subarray(offset);
+    }
+    assert.equal(pending.length, 0, "the tile store ends exactly on a record boundary");
+    assert.equal(bytes, publicationInputs.tiles.entry.bytes, "tile store byte count disagrees with publicationInputs");
+    assert.equal(hash.digest("hex"), publicationInputs.tiles.entry.sha256, "tile store digest disagrees with publicationInputs");
+    assert.equal(records, publicationInputs.tiles.entry.records, "tile record count disagrees with publicationInputs");
+  } finally {
+    const after = immutableIdentity(recordsPath, "tile store");
+    assert.ok(sameImmutableIdentity(after, publicationInputs.tiles.identity), "tile store changed since publication preflight");
+  }
+}
 let firstRecord = null;
-for await (const record of iterateStreamFile(recordsPath)) { firstRecord = Buffer.from(record); break; }
+let verifiedRecordCount = 0;
+for await (const record of iterateBoundRecords()) {
+  if (!firstRecord) firstRecord = Buffer.from(record);
+  verifiedRecordCount += 1;
+}
 assert.ok(firstRecord, "the store holds no records");
+assert.equal(verifiedRecordCount, publicationInputs.tiles.entry.records, "tile record count disagrees with publicationInputs");
 
 // ── THE MODULE, DRIVEN THE WAY THE FLOW DRIVES IT ──────────────────────────
 //
@@ -157,7 +1165,12 @@ const decoder = new TextDecoder();
 const first = readDtt(firstRecord);
 const provenance = readDttProvenance(firstRecord);
 const tilesetId = first.tilesetId;
+assert.equal(typeof tilesetId, "string", "first tile has no tileset ID");
+assert.ok(Buffer.byteLength(tilesetId) > 0 && Buffer.byteLength(tilesetId) <= MAX_TILESET_ID_BYTES,
+  `tileset ID exceeds ${MAX_TILESET_ID_BYTES}-byte upload-manifest bound`);
 const maxzoom = layerConfig.terrain_maxzoom;
+assert.ok(Number.isSafeInteger(maxzoom) && maxzoom >= 0 && maxzoom <= MAX_STATIC_DIRECTORY_LEVEL,
+  `terrain_maxzoom must be an integer in [0, ${MAX_STATIC_DIRECTORY_LEVEL}] for bounded static directory planning`);
 
 // The serving config the SHIPPED mount would run under, plus the two keys this
 // lane adds. The harness gets exactly this, so a tile synthesized here is the
@@ -239,10 +1252,29 @@ async function routed(urlPath) {
 const headerOf = (http, name) =>
   (http.headers ?? []).find((h) => h.name?.toLowerCase() === name)?.value ?? "";
 
-const identityBody = (http) =>
-  headerOf(http, "content-encoding").toLowerCase() === "gzip"
-    ? zlib.gunzipSync(Buffer.from(http.body))
-    : Buffer.from(http.body);
+function inflateGzipBounded(bytes, label) {
+  try {
+    const output = zlib.gunzipSync(Buffer.from(bytes), { maxOutputLength: STATIC_TRANSPORT_BOUNDS.hard + 1 });
+    assert.ok(output.length <= STATIC_TRANSPORT_BOUNDS.hard, `${label} exceeds static transport hard cap`);
+    return output;
+  } catch (error) {
+    throw new Error(`${label} cannot be safely inflated within ${STATIC_TRANSPORT_BOUNDS.hard} bytes`, { cause: error });
+  }
+}
+
+if (args.testGzipBomb) {
+  inflateGzipBounded(
+    zlib.gzipSync(Buffer.alloc(STATIC_TRANSPORT_BOUNDS.hard + 1)),
+    "test gzip bomb",
+  );
+}
+
+const identityBody = (http, label) => {
+  const body = Buffer.from(http.body);
+  if (headerOf(http, "content-encoding").toLowerCase() === "gzip") return inflateGzipBounded(body, label);
+  assert.ok(body.length <= STATIC_TRANSPORT_BOUNDS.hard, `${label} exceeds static transport hard cap`);
+  return body;
+};
 
 // layer.json: route it, then render the plan route produced. Going through
 // route() rather than calling layer_json with a hand-built plan is the point —
@@ -258,7 +1290,7 @@ async function renderLayerJson() {
   assert.equal(rendered.statusCode, 0, `${rendered.errorCode}: ${rendered.errorMessage}`);
   const http = decodeHttpResponse(new Uint8Array(rendered.outputs[0].payload));
   assert.equal(http.status, 200, "layer.json did not render 200");
-  return identityBody(http);
+  return identityBody(http, "layer.json response");
 }
 
 // A tile the tileset promises and the store does not hold: ask the module for
@@ -279,7 +1311,7 @@ async function synthesizeTile(level, x, y) {
     200,
     `the mount answers ${level}/${x}/${y} with ${http.status}; a gateway would answer 404`,
   );
-  return identityBody(http);
+  return identityBody(http, `synthesized ${level}/${x}/${y}`);
 }
 
 // ── EVERY FILE IS CHECKED FOR THE MASK BEFORE IT IS WRITTEN ────────────────
@@ -326,22 +1358,924 @@ function assertWaterMaskExtension(bytes, name) {
   return { kind: "RASTER", bytes: extensionLength, side };
 }
 
+const layerJson = await renderLayerJson();
+assert.ok(layerJson.length <= MAX_LAYER_JSON_BYTES, `layer.json exceeds ${MAX_LAYER_JSON_BYTES} bytes`);
+
+function parseTerrainAddress(address) {
+  assert.equal(typeof address, "string", "terrain address must be a string");
+  assert.match(address, /^\d+\/\d+\/\d+$/, `invalid available-but-unstored address ${JSON.stringify(address)}`);
+  const [level, x, y] = address.split("/").map(Number);
+  assert.ok(Number.isSafeInteger(level) && level >= 0 && Number.isSafeInteger(x) && x >= 0 && Number.isSafeInteger(y) && y >= 0, `unsafe terrain address ${address}`);
+  assert.equal(address, `${level}/${x}/${y}`, `terrain address is not canonical ${address}`);
+  return { level, x, y };
+}
+
+function terrainAddressOrderKey(address) {
+  const { level, x, y } = parseTerrainAddress(address);
+  return `${String(level).padStart(TERRAIN_ADDRESS_FIELD_WIDTH, "0")}|${String(y).padStart(TERRAIN_ADDRESS_FIELD_WIDTH, "0")}|${String(x).padStart(TERRAIN_ADDRESS_FIELD_WIDTH, "0")}`;
+}
+
+// Count file entries before staging. The approved global publication policy
+// names a distinct static-directory ceiling, so this cannot falsely equate a
+// compressed $DTT store estimate with identity files at a gateway.
+async function precomputeMaterializationPlan() {
+  let storedFiles = 0;
+  let storedBytes = 0;
+  for await (const record of iterateBoundRecords()) {
+    const dtt = readDtt(record);
+    assert.ok(dtt.payload?.bytes, `${dtt.level}/${dtt.x}/${dtt.y}: record carries no payload bytes`);
+    const stored = Buffer.from(dtt.payload.bytes);
+    const body =
+      (dtt.payload.contentEncoding ?? "").toLowerCase() === "gzip" ? inflateGzipBounded(stored, `static tile ${dtt.level}/${dtt.x}/${dtt.y}`) : stored;
+    assert.ok(body.length <= STATIC_TRANSPORT_BOUNDS.hard, `static tile ${body.length} exceeds hard transport cap`);
+    storedFiles += 1;
+    storedBytes += body.length;
+  }
+  let synthesizedFiles = 0;
+  let previousSynthesizedKey = null;
+  for await (const address of availableButUnstored()) {
+    const key = terrainAddressOrderKey(address);
+    assert.ok(previousSynthesizedKey === null || previousSynthesizedKey < key,
+      "available-but-unstored worklist is not strictly padded level/y/x sorted");
+    previousSynthesizedKey = key;
+    synthesizedFiles += 1;
+  }
+  const files = 1 + storedFiles + synthesizedFiles;
+  assert.ok(files <= MAX_MATERIALIZED_FILES, `materialization plans ${files} files; hard limit is ${MAX_MATERIALIZED_FILES}`);
+  // `{z}/{x}/{y}.terrain` has one root, at most one level directory per z,
+  // and at most 2^(z+1) x directories at geographic level z. This is tight
+  // for the fixed layout, bounded by the tile count, and avoids a per-tile
+  // fictional directory reservation or an in-memory directory set.
+  const tileFiles = BigInt(storedFiles + synthesizedFiles);
+  let possibleXRows = 0n;
+  for (let level = 0; level <= maxzoom; level += 1) possibleXRows += 1n << BigInt(level + 1);
+  const levelRows = BigInt(Math.min(maxzoom + 1, Number(tileFiles)));
+  const xRows = possibleXRows < tileFiles ? possibleXRows : tileFiles;
+  const directoryRows = 1n + levelRows + xRows;
+  assert.ok(directoryRows <= BigInt(MAX_MATERIALIZED_FILES) + BigInt(maxzoom) + 2n,
+    "materialization directory-row bound exceeds the fixed static tree limit");
+  return { files, directoryRows, storedFiles, synthesizedFiles, decodedStoredBytes: storedBytes };
+}
+
+function reserveStagingSpace(plan) {
+  const stats = fs.statfsSync(outDir, { bigint: true });
+  const freeBytes = stats.bavail * stats.bsize;
+  assert.ok(stats.bsize > 0n, "statfs returned an invalid allocation block size");
+  const blockSize = stats.bsize;
+  const fileCountBound = BigInt(plan.files);
+  const directoryRowBound = plan.directoryRows;
+  // `maxStaticDirectoryBytes` is a logical-byte policy.  On a 4 KiB volume a
+  // few million small files need one allocation block each in addition to the
+  // logical total, while the bounded, on-disk multipart manifest is live at
+  // the same time as the directory.
+  const approvedLogicalBytes = BigInt(publicationPolicy.maxStaticDirectoryBytes);
+  const payloadRoundingBytes = fileCountBound * (blockSize - 1n);
+  // One further block per output is reserved for inode/directory metadata.
+  // Filesystems vary, so this is a conservative admission reservation, not a
+  // claim that logical directoryBytes is allocated byte-for-byte on disk.
+  const inodeAndDirectoryBytes = (fileCountBound + directoryRowBound) * blockSize;
+  const physicalStaticBytes = approvedLogicalBytes + payloadRoundingBytes + inodeAndDirectoryBytes;
+  // The file and post-order directory receipt manifests coexist during add.
+  // Their row count is bounded by every file plus its at-most-two directory
+  // ancestors; each row has a distinct, tighter fixed manifest cap.
+  const manifestRows = fileCountBound + (directoryRowBound - 1n);
+  const manifestLogicalBytes = manifestRows * BigInt(MAX_UPLOAD_MANIFEST_LINE_BYTES);
+  const manifestPhysicalBytes = manifestLogicalBytes + (blockSize - 1n);
+  const journalAndArtifactBytes = BigInt(MAX_JOURNAL_LOG_BYTES) + blockSize * 8n;
+  const headroomBytes = BigInt(STAGING_HEADROOM_BYTES) + journalAndArtifactBytes;
+  const requiredBytes = physicalStaticBytes + manifestPhysicalBytes + headroomBytes + args.reserveFreeBytes;
+  assert.ok(
+    freeBytes >= requiredBytes,
+    `insufficient free space for staged IPFS directory: need ${requiredBytes} bytes, have ${freeBytes}`,
+  );
+  return {
+    freeBytes,
+    requiredBytes,
+    approvedLogicalBytes,
+    physicalStaticBytes,
+    payloadRoundingBytes,
+    inodeAndDirectoryBytes,
+    directoryRowBound,
+    manifestRows,
+    manifestPhysicalBytes,
+    headroomBytes,
+    blockSize,
+  };
+}
+
+async function rehashPublicationInputsForMaterialization() {
+  const checks = [
+    ["tiles", "tile store", null],
+    ["availableButUnstored", "available-but-unstored worklist", "addresses"],
+    ["layerConfig", "layer JSON config", null],
+    ["oceanReceipt", "ocean skip receipt", null],
+    ["oceanAddresses", "ocean skip addresses", "addresses"],
+    ["globalState", "global build state", null],
+    ["approvedConfig", "approved run config", null],
+  ];
+  for (const [key, label, countField] of checks) {
+    const verified = await hashPublicationInput(publicationInputs[key].entry, label, countField, publicationInputs[key].identity);
+    assert.ok(sameImmutableIdentity(verified.identity, publicationInputs[key].identity),
+      `${label} changed between publication preflight and materialization`);
+  }
+}
+
 // ── MATERIALIZE ────────────────────────────────────────────────────────────
-fs.rmSync(ipfsDir, { recursive: true, force: true });
-fs.mkdirSync(ipfsDir, { recursive: true });
+await rehashPublicationInputsForMaterialization();
+const materializationPlan = await precomputeMaterializationPlan();
+const stagingReservation = reserveStagingSpace(materializationPlan);
+const attemptToken = `${process.pid}-${randomUUID()}`;
+const stagingDir = path.join(outDir, `.ipfs-staging-${attemptToken}`);
+const stagedArtifactPaths = new Map();
+const attemptScratchPaths = new Map();
+
+function attemptOwnedRelativePaths(attempt) {
+  assert.match(attempt, ATTEMPT_TOKEN_RE, "publication attempt token is invalid");
+  return {
+    staging: `.ipfs-staging-${attempt}`,
+    control: `.ipfs-attempt-${attempt}`,
+    scratch: [`.ipfs-upload-manifest-${attempt}.ndjson`, `.ipfs-upload-directories-${attempt}.ndjson`],
+    staged: LIVE_PUBLICATION_NAMES.map((name) => `.${name}-staging-${attempt}`),
+    backups: LIVE_PUBLICATION_NAMES.map((name) => `.${name}-previous-${attempt}`),
+    pendingTemporary: `.pending-ipfs-pin-${attempt}.tmp`,
+    journalTemporary: `.ipfs-publication-transaction-${attempt}.tmp`,
+  };
+}
+
+function attemptPathsFor(attempt) {
+  const owned = attemptOwnedRelativePaths(attempt);
+  const resolve = (name) => path.join(outDir, name);
+  return {
+    owned,
+    staging: resolve(owned.staging),
+    control: resolve(owned.control),
+    scratch: owned.scratch.map((name) => path.join(resolve(owned.control), name)),
+    staged: new Map(LIVE_PUBLICATION_NAMES.map((name, index) => [name, path.join(resolve(owned.control), owned.staged[index])])),
+    backups: new Map(LIVE_PUBLICATION_NAMES.map((name, index) => [name, resolve(owned.backups[index])])),
+    pendingTemporary: path.join(resolve(owned.control), owned.pendingTemporary),
+    journalTemporary: resolve(owned.journalTemporary),
+  };
+}
+
+function emptyAttemptTransients() {
+  return {
+    scratch: [null, null],
+    staged: LIVE_PUBLICATION_NAMES.map(() => null),
+    pendingTemporary: null,
+  };
+}
+
+function pathIdentityFromStat(stat, target, label) {
+  assert.ok(!stat.isSymbolicLink() && (stat.isFile() || stat.isDirectory()), `${label} is not a regular file or directory: ${target}`);
+  if (stat.isDirectory()) return { type: "directory", dev: stat.dev.toString(), ino: stat.ino.toString() };
+  return {
+    type: "file",
+    dev: stat.dev.toString(), ino: stat.ino.toString(), size: stat.size.toString(),
+    mtimeNs: stat.mtimeNs.toString(), ctimeNs: stat.ctimeNs.toString(),
+  };
+}
+
+function lstatIfExists(target, label) {
+  try {
+    return fs.lstatSync(target, { bigint: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw new Error(`${label}: could not lstat ${target}`, { cause: error });
+  }
+}
+
+function pathIdentity(target, label) {
+  assertOutputRootStable(label);
+  return pathIdentityFromStat(fs.lstatSync(target, { bigint: true }), target, label);
+}
+
+function samePathIdentity(left, right) {
+  if (!left || !right || left.type !== right.type || left.dev !== right.dev || left.ino !== right.ino) return false;
+  return left.type === "directory" ||
+    (left.size === right.size && left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs);
+}
+
+function samePathObject(left, right) {
+  return left && right && left.type === right.type && left.dev === right.dev && left.ino === right.ino;
+}
+
+function assertPathIdentity(target, expected, label) {
+  assert.ok(expected && typeof expected === "object", `${label} has no recorded identity`);
+  const current = pathIdentity(target, label);
+  assert.ok(samePathIdentity(current, expected), `${label} identity changed: ${target}`);
+  return current;
+}
+
+function assertAttemptDirectory(label) {
+  assert.ok(attemptJournal.stagingIdentity, `${label}: staging identity was never persisted`);
+  const identity = assertPathIdentity(stagingDir, attemptJournal.stagingIdentity, label);
+  assert.equal(identity.type, "directory", `${label}: staging is not a directory`);
+  return identity;
+}
+
+function createExclusiveRegularFile(target, label) {
+  assertOutputRootStable(`${label} before create`);
+  const descriptor = fs.openSync(
+    target,
+    fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0),
+    0o600,
+  );
+  try {
+    const opened = pathIdentityFromStat(fs.fstatSync(descriptor, { bigint: true }), target, label);
+    assert.equal(opened.type, "file", `${label} is not a regular file`);
+    const named = pathIdentity(target, label);
+    assert.ok(samePathIdentity(opened, named), `${label} changed while being created`);
+    return { descriptor, identity: opened };
+  } catch (error) {
+    fs.closeSync(descriptor);
+    throw error;
+  }
+}
+
+function writeExclusiveRegularFile(target, bytes, label, { durable = true } = {}) {
+  const { descriptor, identity } = createExclusiveRegularFile(target, label);
+  try {
+    let offset = 0;
+    const journalMidwritePhase = label === "publication attempt journal temporary"
+      ? (journalLeaseIdentity === null ? "journal-temp-midwrite-prelink" : "journal-temp-midwrite-update")
+      : null;
+    if (journalMidwritePhase !== null && args.testCrashAt === journalMidwritePhase) {
+      // Force a physical partial write before the abrupt test exit; normal
+      // journal writes retain the usual single bounded loop.
+      const partial = Math.max(1, Math.floor(bytes.length / 2));
+      const written = fs.writeSync(descriptor, bytes, 0, partial);
+      assert.equal(written, partial, `${label} could not write its test partial prefix`);
+      maybeCrashTransaction(journalMidwritePhase);
+      offset = partial;
+    }
+    while (offset < bytes.length) {
+      const written = fs.writeSync(descriptor, bytes, offset, bytes.length - offset);
+      assert.ok(written > 0, `${label} could not be written`);
+      offset += written;
+    }
+    if (durable) fs.fsyncSync(descriptor);
+    assert.ok(samePathObject(pathIdentityFromStat(fs.fstatSync(descriptor, { bigint: true }), target, label), identity),
+      `${label} changed while being written`);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  const finalIdentity = pathIdentity(target, label);
+  assert.ok(samePathObject(finalIdentity, identity), `${label} changed after write`);
+  if (durable) fsyncDirectory(path.dirname(target));
+  assertOutputRootStable(`${label} after create`);
+  return finalIdentity;
+}
+
+function assertSafeAttemptTree(target, label) {
+  const identity = pathIdentity(target, label);
+  if (identity.type === "file") return;
+  for (const entry of fs.readdirSync(target)) {
+    const child = path.join(target, entry);
+    assert.ok(child.startsWith(`${target}${path.sep}`), `${label} child escapes attempt directory`);
+    assertSafeAttemptTree(child, `${label}/${entry}`);
+  }
+}
+
+function removeExactOwnedPath(target, label, expectedIdentity = null) {
+  void target; void expectedIdentity;
+  throw new Error(`${label}: automatic attempt cleanup is disabled; retain the path for operator-confirmed removal`);
+}
+
+function removeExactRegularFile(target, label, expectedIdentity = null) {
+  void target; void expectedIdentity;
+  throw new Error(`${label}: automatic leaf cleanup is disabled; POSIX cannot unlink an expected inode atomically`);
+}
+
+function removeSafeAttemptTree(target, label) {
+  void target;
+  throw new Error(`${label}: recursive automatic cleanup is disabled; retain-on-ambiguity is required`);
+}
+
+function discardStagingDirectory() {
+  // The allocation journal predeclares this exact name before mkdir.  A kill
+  // between mkdir and the identity update may leave it unrecorded; it is still
+  // safe to reclaim only when it remains a real non-symlink attempt directory.
+  const stat = lstatIfExists(stagingDir, "attempt staging directory");
+  if (stat !== null && attemptJournal.stagingIdentity === null) {
+    assert.ok(stat.isDirectory() && !stat.isSymbolicLink(), "unrecorded attempt staging path is ambiguous");
+  }
+  removeExactOwnedPath(stagingDir, "attempt staging directory", attemptJournal.stagingIdentity);
+}
+
+function discardAttemptScratch() {
+  discardAttemptControlDirectory();
+  attemptScratchPaths.clear();
+}
+
+function stageArtifact(livePath, bytes) {
+  const liveName = path.basename(livePath);
+  assert.ok(LIVE_PUBLICATION_NAMES.includes(liveName), `unknown publication artifact ${liveName}`);
+  assert.equal(path.dirname(livePath), outDir, `publication artifact ${liveName} leaves output root`);
+  if (args.testExchangeControlWith !== null) {
+    exchangeAttemptDirectoryForTest(attemptPaths.control, args.testExchangeControlWith, "attempt control");
+    args.testExchangeControlWith = null;
+  }
+  const stagedPath = attemptPaths.staged.get(liveName);
+  const identity = writeExclusiveRegularFile(stagedPath, Buffer.from(bytes), `staged ${liveName}`);
+  stagedArtifactPaths.set(stagedPath, identity);
+  // This is deliberately before the journal record: recovery owns the whole
+  // control directory, so an abrupt death cannot strand this newly-created
+  // staged file merely because its individual identity was not yet recorded.
+  maybeCrashTransaction(`artifact-written-${stagedArtifactPaths.size}`);
+  recordAttemptTransient("staged", LIVE_PUBLICATION_NAMES.indexOf(liveName), identity);
+  fsyncDirectory(path.dirname(stagedPath));
+  maybeCrashTransaction(`artifact-${stagedArtifactPaths.size}`);
+  return stagedPath;
+}
+
+function discardStagedArtifacts() {
+  discardAttemptControlDirectory();
+  stagedArtifactPaths.clear();
+}
+
+function discardAttemptControlDirectory() {
+  const stat = lstatIfExists(attemptPaths.control, "attempt control directory");
+  if (stat === null) return;
+  if (attemptJournal.controlIdentity === null) {
+    assert.ok(stat.isDirectory() && !stat.isSymbolicLink(), "unrecorded attempt control path is ambiguous");
+  }
+  removeExactOwnedPath(attemptPaths.control, "attempt control directory", attemptJournal.controlIdentity);
+}
+
+function assertTransactionPath(value, label, nullable = false) {
+  if (nullable && value === null) return null;
+  assert.equal(typeof value, "string", `${label} must be a path`);
+  assert.equal(path.dirname(value), outDir, `${label} leaves the builder output`);
+  assert.ok(LIVE_PUBLICATION_NAMES.includes(path.basename(value)), `${label} is not a known live publication target`);
+  return assertWithinRealOutput(value, label);
+}
+
+function fsyncTree(target) {
+  const stat = fs.lstatSync(target, { bigint: true });
+  assert.ok(!stat.isSymbolicLink(), `refusing to commit symlinked staged path ${target}`);
+  if (stat.isFile()) {
+    const descriptor = fs.openSync(target, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+    return;
+  }
+  assert.ok(stat.isDirectory(), `staged target is neither file nor directory: ${target}`);
+  for (const entry of fs.readdirSync(target)) fsyncTree(path.join(target, entry));
+  fsyncDirectory(target);
+}
+
+function assertJournalIdentity(identity, label, nullable = false) {
+  if (nullable && identity === null) return null;
+  assert.ok(identity && typeof identity === "object" && !Array.isArray(identity), `${label} must be an identity object`);
+  assert.ok(["file", "directory"].includes(identity.type), `${label}.type is invalid`);
+  assertExactKeys(identity, identity.type === "file" ? ["ctimeNs", "dev", "ino", "mtimeNs", "size", "type"] : ["dev", "ino", "type"], label);
+  assert.match(identity.dev, /^\d+$/, `${label}.dev is invalid`);
+  assert.match(identity.ino, /^\d+$/, `${label}.ino is invalid`);
+  if (identity.type === "file") {
+    for (const field of ["size", "mtimeNs", "ctimeNs"]) assert.match(identity[field], /^\d+$/, `${label}.${field} is invalid`);
+  }
+  return identity;
+}
+
+function assertExactReplacement(replacement, paths, priorLiveIndex) {
+  assertExactKeys(replacement, ["backup", "backupIdentity", "hadLive", "installedIdentity", "live", "liveIdentity", "staged", "stagedIdentity"],
+    "publication transaction replacement");
+  assertTransactionPath(replacement.live, "publication transaction live path");
+  const liveName = path.basename(replacement.live);
+  const liveIndex = LIVE_PUBLICATION_NAMES.indexOf(liveName);
+  assert.ok(liveIndex >= 0 && liveIndex > priorLiveIndex, "publication transaction replacements are not ordered unique live targets");
+  assert.equal(replacement.backup, paths.backups.get(liveName), "publication transaction backup is not the attempt-owned path");
+  const expectedStaged = liveName === "ipfs" ? paths.staging : paths.staged.get(liveName);
+  if (replacement.staged === null) {
+    assert.ok(["serving-config-ipfs.json", "pending-ipfs-pin.json"].includes(liveName),
+      "only stale serving config or pending pin receipts may be removed without a staged replacement");
+    assert.equal(replacement.stagedIdentity, null, "a removed artifact cannot have a staged identity");
+  } else {
+    assert.equal(replacement.staged, expectedStaged, "publication transaction staged path is not the attempt-owned path");
+    assertJournalIdentity(replacement.stagedIdentity, "publication transaction staged identity");
+  }
+  assertJournalIdentity(replacement.installedIdentity, "publication transaction installed identity", true);
+  if (replacement.staged === null) assert.equal(replacement.installedIdentity, null, "a removed artifact cannot have an installed identity");
+  assert.equal(typeof replacement.hadLive, "boolean", "publication transaction hadLive must be boolean");
+  assertJournalIdentity(replacement.liveIdentity, "publication transaction live identity", !replacement.hadLive);
+  assertJournalIdentity(replacement.backupIdentity, "publication transaction backup identity", true);
+  if (!replacement.hadLive) assert.equal(replacement.liveIdentity, null, "missing live target cannot have an identity");
+  if (!replacement.hadLive) assert.equal(replacement.backupIdentity, null, "missing live target cannot have a backup identity");
+  return liveIndex;
+}
+
+function assertAttemptJournal(journal) {
+  assertExactKeys(journal, ["attempt", "controlIdentity", "format", "owned", "phase", "root", "stagingIdentity", "transaction", "transients"],
+    "publication attempt journal");
+  assert.equal(journal.format, ATTEMPT_JOURNAL_FORMAT, "unsupported publication attempt journal format");
+  assert.match(journal.attempt, ATTEMPT_TOKEN_RE, "publication attempt token is invalid");
+  assertExactKeys(journal.root, ["dev", "ino"], "publication attempt root identity");
+  assert.match(journal.root.dev, /^\d+$/, "publication attempt root device is invalid");
+  assert.match(journal.root.ino, /^\d+$/, "publication attempt root inode is invalid");
+  assert.deepEqual(journal.owned, attemptOwnedRelativePaths(journal.attempt), "publication attempt owns unexpected paths");
+  assert.ok(["allocated", "staging", "materializing", "uploading", "pinning", "artifacts", "committing", "completed"].includes(journal.phase),
+    "publication attempt phase is invalid");
+  assertJournalIdentity(journal.stagingIdentity, "publication attempt staging identity", true);
+  if (journal.stagingIdentity !== null) assert.equal(journal.stagingIdentity.type, "directory", "publication staging identity is not a directory");
+  assertJournalIdentity(journal.controlIdentity, "publication attempt control identity", true);
+  if (journal.controlIdentity !== null) assert.equal(journal.controlIdentity.type, "directory", "publication control identity is not a directory");
+  assertExactKeys(journal.transients, ["pendingTemporary", "scratch", "staged"], "publication attempt transients");
+  assert.ok(Array.isArray(journal.transients.scratch) && journal.transients.scratch.length === 2, "publication scratch transient identities are invalid");
+  assert.ok(Array.isArray(journal.transients.staged) && journal.transients.staged.length === LIVE_PUBLICATION_NAMES.length,
+    "publication staged transient identities are invalid");
+  for (const identity of [...journal.transients.scratch, ...journal.transients.staged, journal.transients.pendingTemporary]) {
+    assertJournalIdentity(identity, "publication transient identity", true);
+    if (identity !== null) assert.equal(identity.type, "file", "publication transient must be a regular file");
+  }
+  if (journal.transaction === null) return journal;
+  const transaction = journal.transaction;
+  assertExactKeys(transaction, ["backingUpIndex", "backupProgress", "installProgress", "installingIndex", "replacements"], "publication transaction");
+  assert.ok(Array.isArray(transaction.replacements) && transaction.replacements.length > 0 && transaction.replacements.length <= LIVE_PUBLICATION_NAMES.length,
+    "publication transaction replacements are invalid");
+  assert.equal(path.basename(transaction.replacements[0].live), "ipfs", "publication transaction must replace IPFS first");
+  let previous = -1;
+  for (const replacement of transaction.replacements) previous = assertExactReplacement(replacement, attemptPathsFor(journal.attempt), previous);
+  for (const field of ["backupProgress", "installProgress"]) {
+    assert.ok(Number.isSafeInteger(transaction[field]) && transaction[field] >= 0 && transaction[field] <= transaction.replacements.length,
+      `publication transaction ${field} is invalid`);
+  }
+  assert.ok(
+    transaction.backingUpIndex === null ||
+      (Number.isSafeInteger(transaction.backingUpIndex) && transaction.backingUpIndex >= transaction.backupProgress && transaction.backingUpIndex < transaction.replacements.length),
+    "publication transaction backingUpIndex is invalid",
+  );
+  assert.ok(
+    transaction.installingIndex === null ||
+      (Number.isSafeInteger(transaction.installingIndex) && transaction.installingIndex >= transaction.installProgress && transaction.installingIndex < transaction.replacements.length),
+    "publication transaction installingIndex is invalid",
+  );
+  return journal;
+}
+
+function writeAttemptJournal(journal) {
+  assertAttemptJournal(journal);
+  assertOutputRootStable("publication attempt journal before write");
+  const bytes = Buffer.from(`${JSON.stringify(journal)}\n`);
+  assert.ok(bytes.length <= MAX_CONTROL_RESPONSE_BYTES, "publication attempt journal exceeds safety cap");
+  if (journalLeaseDescriptor === null) {
+    // The lease itself is created O_EXCL and remains open for this process.
+    // Unlike link(temp, fixed), all bytes below are written through the exact
+    // descriptor returned by O_EXCL; replacing the pathname cannot cause a
+    // foreign leaf to become this publisher's fixed lease or receive writes.
+    const opened = createExclusiveRegularFile(transactionPath, "publication attempt journal lease");
+    journalLeaseDescriptor = opened.descriptor;
+    journalLeaseIdentity = opened.identity;
+    maybeCrashTransaction("journal-temp-written-prelink");
+    if (args.testExchangeJournalLeaseWith !== null) {
+      exchangeJournalLeaseForTest(args.testExchangeJournalLeaseWith);
+      args.testExchangeJournalLeaseWith = null;
+    }
+  } else {
+    assert.ok(journalLeaseIdentity, "publication attempt journal lease was never bound");
+    assertPathIdentity(transactionPath, journalLeaseIdentity, "publication attempt journal lease before append");
+    maybeCrashTransaction("journal-temp-written-before-update-rename");
+  }
+  const journalDescriptorBeforeWrite = fs.fstatSync(journalLeaseDescriptor, { bigint: true });
+  assert.ok(journalDescriptorBeforeWrite.size + BigInt(bytes.length) <= BigInt(MAX_JOURNAL_LOG_BYTES),
+    "publication attempt journal history exceeds its bounded retention cap");
+  let offset = 0;
+  const midwritePhase = journalLeaseIdentity?.size === "0" ? "journal-temp-midwrite-prelink" : "journal-temp-midwrite-update";
+  if (args.testCrashAt === midwritePhase) {
+    const partial = Math.max(1, Math.floor(bytes.length / 2));
+    const written = fs.writeSync(journalLeaseDescriptor, bytes, 0, partial);
+    assert.equal(written, partial, "publication attempt journal lease could not write its test partial prefix");
+    maybeCrashTransaction(midwritePhase);
+    offset = partial;
+  }
+  while (offset < bytes.length) {
+    const written = fs.writeSync(journalLeaseDescriptor, bytes, offset, bytes.length - offset);
+    assert.ok(written > 0, "publication attempt journal lease could not be written");
+    offset += written;
+  }
+  fs.fsyncSync(journalLeaseDescriptor);
+  journalLeaseIdentity = pathIdentityFromStat(
+    fs.fstatSync(journalLeaseDescriptor, { bigint: true }), transactionPath, "publication attempt journal lease",
+  );
+  assert.equal(journalLeaseIdentity.type, "file", "publication attempt journal lease is not a regular file");
+  assertPathIdentity(transactionPath, journalLeaseIdentity, "publication attempt journal lease after append");
+  fsyncDirectory(outDir);
+  if (journal.phase === "allocated") {
+    if (args.testHoldAfterInitialJournalTempMs !== null) {
+      process.stderr.write("test initial journal temporary written\n");
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)), 0, 0, args.testHoldAfterInitialJournalTempMs);
+    }
+    maybeCrashTransaction("journal-linked");
+  }
+}
+
+function attemptOwnerIsLive(attempt) {
+  const ownerPid = Number(attempt.slice(0, attempt.indexOf("-")));
+  if (!Number.isSafeInteger(ownerPid) || ownerPid <= 0) return true;
+  try {
+    process.kill(ownerPid, 0);
+    return true;
+  } catch (error) {
+    // EPERM still demonstrates that a process owns this PID.  Treat any
+    // unexpected probe failure as live too: concurrent recovery must fail
+    // closed rather than reclaim a possibly active writer.
+    return error?.code !== "ESRCH";
+  }
+}
+
+function readAttemptJournal(ownedAttempt = null) {
+  if (lstatIfExists(transactionPath, "publication attempt journal") === null) return null;
+  assertOutputRootStable("publication attempt journal read");
+  const read = readBoundedRegularFileWithIdentity(transactionPath, MAX_JOURNAL_LOG_BYTES, "publication attempt journal");
+  // Every completed line is an immutable journal frame.  A SIGKILL may leave
+  // only the final frame truncated; retain it and recover from the last fully
+  // authenticated frame rather than rewriting the lease.
+  const text = read.bytes.toString("utf8");
+  const lines = text.split("\n");
+  if (lines.at(-1) === "") lines.pop();
+  assert.ok(lines.length > 0, "publication attempt journal has no complete frame");
+  let journal = null;
+  for (const line of lines) {
+    try {
+      journal = JSON.parse(line);
+    } catch (error) {
+      if (line === lines.at(-1) && !text.endsWith("\n")) break;
+      throw new Error("publication attempt journal has an invalid complete frame", { cause: error });
+    }
+    assertAttemptJournal(journal);
+  }
+  assert.ok(journal, "publication attempt journal has no authenticated frame");
+  assertAttemptJournal(journal);
+  assert.deepEqual(journal.root, outputRootIdentity, "publication attempt journal belongs to a replaced output root");
+  // Startup never grants special meaning to its own PID: a stale journal can
+  // carry a recycled PID equal to this publisher.  Only a caller with the
+  // exact in-memory attempt token may recover its own in-process rollback.
+  const isExplicitlyOwned = ownedAttempt !== null && ownedAttempt === journal.attempt;
+  assert.ok(isExplicitlyOwned || !attemptOwnerIsLive(journal.attempt),
+    `publication attempt ${journal.attempt} is still owned by a live process`);
+  journalLeaseIdentity = { type: "file", dev: read.identity.dev, ino: read.identity.ino, size: read.identity.size, mtimeNs: read.identity.mtimeNs, ctimeNs: read.identity.ctimeNs };
+  if (args.testHoldAfterRecoveryReadMs !== null) {
+    process.stderr.write("test recovery journal read\n");
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)), 0, 0, args.testHoldAfterRecoveryReadMs);
+  }
+  return journal;
+}
+
+function isAttemptOrphanName(name) {
+  return /^\.ipfs-staging-\d+-[0-9a-f-]+$/.test(name) ||
+    /^\.ipfs-attempt-\d+-[0-9a-f-]+$/.test(name) ||
+    /^\.ipfs-upload-(?:manifest|directories)-\d+-[0-9a-f-]+\.ndjson$/.test(name) ||
+    /^\.(?:ipfs|tileset-catalogue\.json|tileset-catalogue\.dttstream|ipfs-publication\.json|serving-config-ipfs\.json|pending-ipfs-pin\.json)-(?:staging|previous)-\d+-[0-9a-f-]+$/.test(name) ||
+    /^\.pending-ipfs-pin-\d+-[0-9a-f-]+\.tmp$/.test(name);
+}
+
+function refuseAmbiguousAttemptOrphans() {
+  assertOutputRootStable("publication attempt orphan scan");
+  const orphans = fs.readdirSync(outDir).filter(isAttemptOrphanName);
+  assert.equal(orphans.length, 0, `refusing ambiguous publication attempt orphans without a journal: ${orphans.join(", ")}`);
+}
+
+function removeAttemptJournal() {
+  throw new Error("automatic journal deletion is disabled; retain the completed lease for operator-confirmed cleanup");
+}
+
+function removeJournalTemporary(journal, paths) {
+  void journal; void paths;
+  throw new Error("automatic journal-temporary cleanup is disabled; retain-on-ambiguity is required");
+}
+
+function recoverInitialJournalCandidates() {
+  assertOutputRootStable("initial publication journal candidate scan");
+  const candidates = fs.readdirSync(outDir).filter((name) => /^\.ipfs-publication-transaction-\d+-[0-9a-f-]+\.tmp$/.test(name));
+  assert.ok(candidates.length <= INITIAL_JOURNAL_CANDIDATE_LIMIT,
+    `refusing too many unlinked publication journal candidates: ${candidates.length}`);
+  for (const name of candidates) {
+    const match = /^\.ipfs-publication-transaction-(\d+-[0-9a-f-]+)\.tmp$/.exec(name);
+    assert.ok(match, "publication journal candidate name is invalid");
+    const attempt = match[1];
+    assert.match(attempt, ATTEMPT_TOKEN_RE, "publication journal candidate attempt token is invalid");
+    const paths = attemptPathsFor(attempt);
+    const candidatePath = path.join(outDir, name);
+    assert.equal(candidatePath, paths.journalTemporary, "publication journal candidate is not its exact attempt temporary");
+    const candidateIdentity = pathIdentity(candidatePath, "unlinked publication journal candidate");
+    assert.equal(candidateIdentity.type, "file", "unlinked publication journal candidate is not a regular file");
+    assert.ok(BigInt(candidateIdentity.size) <= BigInt(MAX_CONTROL_RESPONSE_BYTES), "unlinked publication journal candidate exceeds safety cap");
+    // A dead-PID-shaped leaf is not ownership. A clean or torn first journal
+    // can be indistinguishable from a foreign file by name alone, so only a
+    // complete, exact allocated journal authorizes reclamation. Invalid and
+    // torn candidates stay byte-for-byte untouched and are non-authoritative;
+    // the bounded candidate cap prevents unbounded future scan work.
+    let authenticated;
+    try {
+      authenticated = readBoundedJsonWithIdentity(candidatePath, MAX_CONTROL_RESPONSE_BYTES, "unlinked publication journal candidate", candidateIdentity);
+      assert.ok(sameImmutableIdentity(authenticated.identity, candidateIdentity), "unlinked publication journal candidate changed while authenticating");
+      assertAttemptJournal(authenticated.value);
+      assert.equal(authenticated.value.attempt, attempt, "unlinked publication journal candidate attempt does not match its pathname");
+      assert.deepEqual(authenticated.value.root, outputRootIdentity, "unlinked publication journal candidate belongs to another output root");
+      assert.equal(authenticated.value.phase, "allocated", "unlinked publication journal candidate is not an allocation journal");
+      assert.equal(authenticated.value.stagingIdentity, null, "unlinked publication journal candidate names staging state");
+      assert.equal(authenticated.value.controlIdentity, null, "unlinked publication journal candidate names control state");
+      assert.deepEqual(authenticated.value.transients, emptyAttemptTransients(), "unlinked publication journal candidate names transient state");
+      assert.equal(authenticated.value.transaction, null, "unlinked publication journal candidate names a transaction");
+    } catch {
+      continue;
+    }
+    assert.ok(!attemptOwnerIsLive(attempt), `unlinked publication journal candidate ${attempt} is still owned by a live process`);
+    for (const owned of [paths.staging, paths.control, ...paths.backups.values()]) {
+      assert.equal(lstatIfExists(owned, "unlinked publication journal candidate owned path"), null,
+        `unlinked publication journal candidate has ambiguous payload: ${owned}`);
+    }
+    // POSIX cannot atomically bind a pathname's expected inode to unlink.
+    // Retain even a fully authenticated candidate: a same-UID actor could
+    // exchange it after authentication, and bounded startup refuses more
+    // than INITIAL_JOURNAL_CANDIDATE_LIMIT candidates rather than reclaiming
+    // a possibly foreign leaf.
+  }
+}
+
+function cleanupUncommittedAttempt(journal) {
+  void journal;
+  throw new Error("automatic incomplete-attempt recovery is disabled; retain-on-ambiguity is required");
+}
+
+function assertPathMissing(target, label) {
+  assertOutputRootStable(`${label} before absence check`);
+  assert.equal(lstatIfExists(target, label), null, `${label} unexpectedly exists: ${target}`);
+}
+
+function fsyncRenameParents(source, destination, label) {
+  const sourceParent = path.dirname(source);
+  const destinationParent = path.dirname(destination);
+  fsyncDirectory(sourceParent);
+  if (destinationParent !== sourceParent) fsyncDirectory(destinationParent);
+  assertOutputRootStable(`${label} after parent fsync`);
+}
+
+function assertRenameCompatibleIdentity(target, expected, label) {
+  const actual = pathIdentity(target, label);
+  assert.ok(samePathObject(actual, expected), `${label} is not the expected renamed object`);
+  if (actual.type === "file") {
+    assert.equal(actual.size, expected.size, `${label} size changed across rename`);
+    assert.equal(actual.mtimeNs, expected.mtimeNs, `${label} mtime changed across rename`);
+  }
+  return actual;
+}
+
+function removeAmbiguousInstalledPath(target, stagedIdentity, label) {
+  void target; void stagedIdentity;
+  throw new Error(`${label}: automatic installed-path cleanup is disabled; retain-on-ambiguity is required`);
+}
+
+function finishPublicationTransaction(journal) {
+  // A completed attempt is deliberately durable and blocks a later attempt.
+  // Darwin lacks an unlink-by-FD or expected-inode rename primitive, so a
+  // cleanup pass would have to choose between deleting a raced foreign leaf
+  // and retaining this bounded, explicitly named control residue.
+  attemptJournal = { ...journal, phase: "completed" };
+  writeAttemptJournal(attemptJournal);
+}
+
+function recoverCommittedPublication(journal) {
+  void journal;
+  throw new Error("automatic committed-attempt recovery is disabled; retain-on-ambiguity is required");
+}
+
+function recoverPublicationTransaction(ownedAttempt = null) {
+  const journal = readAttemptJournal(ownedAttempt);
+  if (!journal) {
+    recoverInitialJournalCandidates();
+    refuseAmbiguousAttemptOrphans();
+    return;
+  }
+  throw new Error(
+    `publication attempt ${journal.attempt} is retained in phase ${journal.phase}; ` +
+    "automatic cleanup is disabled because POSIX cannot unlink an exact inode under a same-UID leaf race. Confirm and remove this attempt manually before another publication.",
+  );
+}
+
+const attemptPaths = attemptPathsFor(attemptToken);
+let attemptJournal = {
+  format: ATTEMPT_JOURNAL_FORMAT,
+  attempt: attemptToken,
+  root: outputRootIdentity,
+  phase: "allocated",
+  owned: attemptPaths.owned,
+  stagingIdentity: null,
+  controlIdentity: null,
+  transients: emptyAttemptTransients(),
+  transaction: null,
+};
+// This durable allocation is intentionally before *any* attempt-owned
+// directory, manifest or artifact exists.  A restart can therefore reclaim
+// only this exact attempt's names, never a broad dot-file pattern.
+writeAttemptJournal(attemptJournal);
+
+if (args.testHoldAfterJournalMs !== null) await new Promise((resolve) => setTimeout(resolve, args.testHoldAfterJournalMs));
+
+if (args.testReplaceOutputRootWith !== null) {
+  const held = `${outDir}.attempt-root-held`;
+  assertOutputRootStable("test output-root replacement before move");
+  assert.equal(lstatIfExists(held, "test output-root hold path"), null, "test output-root hold path already exists");
+  const replacement = nativeFs.lstatSync(args.testReplaceOutputRootWith, { bigint: true });
+  assert.ok(replacement.isDirectory() && !replacement.isSymbolicLink(), "test output-root replacement must be a real directory");
+  nativeFs.renameSync(outDir, held);
+  nativeFs.symlinkSync(args.testReplaceOutputRootWith, outDir);
+}
+
+function exchangeAttemptDirectoryForTest(target, outside, label) {
+  assert.ok(!isOutputPath(outside), `${label} test target must be outside the output root`);
+  const replacement = nativeFs.lstatSync(outside, { bigint: true });
+  assert.ok(replacement.isDirectory() && !replacement.isSymbolicLink(), `${label} test target must be a real directory`);
+  const held = `${target}.test-held`;
+  assert.equal(lstatIfExists(held, `${label} test held path`), null, `${label} test held path already exists`);
+  nativeFs.renameSync(target, held);
+  nativeFs.symlinkSync(outside, target);
+}
+
+function exchangeInstallLeafForTest(target, outside) {
+  assert.ok(!isOutputPath(outside), "install leaf test target must be outside the output root");
+  const replacement = nativeFs.lstatSync(outside, { bigint: true });
+  assert.ok(replacement.isFile() && !replacement.isSymbolicLink(), "install leaf test target must be a regular file");
+  assert.equal(lstatIfExists(target, "install leaf test target"), null, "install leaf test destination already exists");
+  nativeFs.symlinkSync(outside, target);
+}
+
+function exchangeJournalLeaseForTest(outside) {
+  assert.ok(!isOutputPath(outside), "journal lease test target must be outside the output root");
+  const replacement = nativeFs.lstatSync(outside, { bigint: true });
+  assert.ok(replacement.isFile() && !replacement.isSymbolicLink(), "journal lease test target must be a regular file");
+  const held = `${transactionPath}.test-held`;
+  assert.equal(lstatIfExists(held, "journal lease test held path"), null, "journal lease test held path already exists");
+  nativeFs.renameSync(transactionPath, held);
+  nativeFs.symlinkSync(outside, transactionPath);
+}
+
+function maybeCrashTransaction(phase) {
+  if (args.testCrashAt !== phase) return;
+  process.stderr.write(`test crash injected at ${phase}\n`);
+  process.exit(86);
+}
+
+maybeCrashTransaction("attempt-journal");
+assertOutputRootStable("attempt staging before create");
+fs.mkdirSync(stagingDir, { recursive: false, mode: 0o700 });
+maybeCrashTransaction("staging-directory-created-unrecorded");
+const createdStagingIdentity = pathIdentity(stagingDir, "attempt staging after create");
+assert.equal(createdStagingIdentity.type, "directory", "attempt staging is not a directory");
+attemptJournal = { ...attemptJournal, phase: "staging", stagingIdentity: createdStagingIdentity };
+writeAttemptJournal(attemptJournal);
+maybeCrashTransaction("staging-created");
+assertOutputRootStable("attempt control before create");
+fs.mkdirSync(attemptPaths.control, { recursive: false, mode: 0o700 });
+maybeCrashTransaction("control-directory-created-unrecorded");
+const createdControlIdentity = pathIdentity(attemptPaths.control, "attempt control after create");
+assert.equal(createdControlIdentity.type, "directory", "attempt control is not a directory");
+attemptJournal = { ...attemptJournal, controlIdentity: createdControlIdentity };
+writeAttemptJournal(attemptJournal);
+attemptJournal = { ...attemptJournal, phase: "materializing" };
+writeAttemptJournal(attemptJournal);
+
+function recordAttemptTransient(kind, index, identity) {
+  assertJournalIdentity(identity, "publication transient identity");
+  assert.equal(identity.type, "file", "publication transient is not a file");
+  const transients = {
+    scratch: [...attemptJournal.transients.scratch],
+    staged: [...attemptJournal.transients.staged],
+    pendingTemporary: attemptJournal.transients.pendingTemporary,
+  };
+  if (kind === "scratch") {
+    assert.ok(Number.isSafeInteger(index) && index >= 0 && index < transients.scratch.length, "publication scratch transient index is invalid");
+    transients.scratch[index] = identity;
+  } else if (kind === "staged") {
+    assert.ok(Number.isSafeInteger(index) && index >= 0 && index < transients.staged.length, "publication staged transient index is invalid");
+    transients.staged[index] = identity;
+  } else {
+    assert.equal(kind, "pending", "publication transient kind is invalid");
+    transients.pendingTemporary = identity;
+  }
+  attemptJournal = { ...attemptJournal, transients };
+  writeAttemptJournal(attemptJournal);
+}
+
+function ensureStagingParent(full) {
+  assertAttemptDirectory("staging parent before create");
+  assert.ok(full.startsWith(`${stagingDir}${path.sep}`), `staged path escapes attempt directory: ${full}`);
+  const relativeParent = path.relative(stagingDir, path.dirname(full));
+  assert.ok(relativeParent === "" || (!path.isAbsolute(relativeParent) && !relativeParent.split(path.sep).includes("..")),
+    `staged parent escapes attempt directory: ${full}`);
+  let current = stagingDir;
+  for (const part of relativeParent ? relativeParent.split(path.sep) : []) {
+    current = path.join(current, part);
+    if (lstatIfExists(current, "staging parent") === null) {
+      assertOutputRootStable("staging parent before mkdir");
+      fs.mkdirSync(current, { recursive: false, mode: 0o700 });
+      fsyncDirectory(path.dirname(current));
+    }
+    const identity = pathIdentity(current, "staging parent");
+    assert.equal(identity.type, "directory", `staging parent is not a directory: ${current}`);
+  }
+  assertAttemptDirectory("staging parent after create");
+}
+
+// Each transition is persisted before the next rename. A later invocation
+// rolls an interrupted partial install back, or rolls a fully installed one
+// forward by deleting only its journal-declared backups.
+function commitStagedPublication(artifacts) {
+  assertAttemptDirectory("publication transaction staging");
+  fsyncTree(stagingDir);
+  for (const artifact of artifacts) if (artifact.staged !== null) fsyncTree(artifact.staged);
+  fsyncDirectory(outDir);
+  const replacements = [{ live: ipfsDir, staged: stagingDir }, ...artifacts].map((replacement) => {
+    const live = assertTransactionPath(replacement.live, "publication live path");
+    const liveName = path.basename(live);
+    const staged = replacement.staged === null ? null : (liveName === "ipfs" ? stagingDir : attemptPaths.staged.get(liveName));
+    assert.equal(replacement.staged, staged, "publication staged artifact is not the exact attempt-owned path");
+    const existing = lstatIfExists(live, `existing ${liveName}`) === null ? null : pathIdentity(live, `existing ${liveName}`);
+    const stagedIdentity = staged === null ? null : pathIdentity(staged, `staged ${liveName}`);
+    return {
+      live,
+      staged,
+      backup: attemptPaths.backups.get(liveName),
+      hadLive: existing !== null,
+      liveIdentity: existing,
+      backupIdentity: null,
+      stagedIdentity,
+      installedIdentity: null,
+    };
+  });
+  attemptJournal = {
+    ...attemptJournal,
+    phase: "committing",
+    transaction: { backingUpIndex: null, backupProgress: 0, installProgress: 0, installingIndex: null, replacements },
+  };
+  writeAttemptJournal(attemptJournal);
+  try {
+    for (let index = 0; index < replacements.length; index += 1) {
+      const replacement = replacements[index];
+      attemptJournal.transaction.backingUpIndex = index;
+      writeAttemptJournal(attemptJournal);
+      if (replacement.hadLive) {
+        throw new Error(
+          `publication live target ${replacement.live} already exists; automatic replacement is disabled because POSIX cannot atomically bind an expected source inode to rename`,
+        );
+      }
+      maybeCrashTransaction(`backup-renamed-${index + 1}`);
+      attemptJournal.transaction.backupProgress = index + 1;
+      attemptJournal.transaction.backingUpIndex = null;
+      writeAttemptJournal(attemptJournal);
+      maybeCrashTransaction(`backup-${index + 1}`);
+    }
+    for (let index = 0; index < replacements.length; index += 1) {
+      const replacement = replacements[index];
+      // Persist the exact ambiguous boundary first.  Recovery can distinguish
+      // a rename that happened before installProgress was advanced from one
+      // that did not, and can restore a nonempty prior directory idempotently.
+      attemptJournal.transaction.installingIndex = index;
+      writeAttemptJournal(attemptJournal);
+      if (replacement.staged !== null) {
+        assertPathIdentity(replacement.staged, replacement.stagedIdentity, "publication staged target before install");
+        assertPathMissing(replacement.live, "publication live target before install");
+        assertOutputRootStable("publication install before rename");
+        if (args.testExchangeInstallLeafWith !== null) {
+          exchangeInstallLeafForTest(replacement.live, args.testExchangeInstallLeafWith);
+          args.testExchangeInstallLeafWith = null;
+        }
+        rootfsMethods.renameNoReplace(replacement.staged, replacement.live);
+        const installed = pathIdentity(replacement.live, "publication live target after install");
+        assert.ok(samePathObject(installed, replacement.stagedIdentity), "publication live target object changed after install");
+        if (installed.type === "file") {
+          assert.equal(installed.size, replacement.stagedIdentity.size, "publication live target size changed after install");
+          assert.equal(installed.mtimeNs, replacement.stagedIdentity.mtimeNs, "publication live target mtime changed after install");
+        }
+        replacement.installedIdentity = installed;
+        stagedArtifactPaths.delete(replacement.staged);
+        fsyncRenameParents(replacement.staged, replacement.live, "publication install rename");
+      }
+      maybeCrashTransaction(`install-renamed-${index + 1}`);
+      attemptJournal.transaction.installProgress = index + 1;
+      attemptJournal.transaction.installingIndex = null;
+      writeAttemptJournal(attemptJournal);
+      maybeCrashTransaction(`install-${index + 1}`);
+    }
+  } catch (error) {
+    throw error;
+  }
+  finishPublicationTransaction(attemptJournal);
+}
 
 let fileCount = 0;
 let totalBytes = 0;
 const write = (rel, bytes) => {
-  const full = path.join(ipfsDir, rel);
-  fs.mkdirSync(path.dirname(full), { recursive: true });
-  fs.writeFileSync(full, bytes);
+  const full = path.join(stagingDir, rel);
+  ensureStagingParent(full);
+  assert.ok(BigInt(totalBytes) + BigInt(bytes.length) <= BigInt(publicationPolicy.maxStaticDirectoryBytes),
+    `static directory would exceed approved ${publicationPolicy.maxStaticDirectoryBytes} bytes`);
+  // The attempt journal makes an interrupted materialization reclaimable.
+  // Durability happens once in fsyncTree immediately before the atomic swap;
+  // fsyncing every one of millions of tile leaves here would be prohibitive.
+  writeExclusiveRegularFile(full, bytes, `staged static ${rel}`, { durable: false });
   fileCount += 1;
   totalBytes += bytes.length;
+  maybeCrashTransaction(`materialize-${fileCount}`);
 };
-
-const layerJson = await renderLayerJson();
-write("layer.json", layerJson);
 
 function boundedDistribution(limit, bucketBytes = 1024) {
   const buckets = new Uint32Array(Math.ceil(limit / bucketBytes) + 1);
@@ -372,7 +2306,29 @@ let rasterMasks = 0;
 let storedTiles = 0;
 let shallowStored = null;
 let deepStored = null;
-for await (const record of iterateStreamFile(recordsPath)) {
+let harnessDestroyed = false;
+let staticIdentity;
+let oceanSkipsDeclared = 0;
+let oceanSkipsServedAsLand = 0;
+let actualStaticPhysicalUpperBytes = null;
+const oceanSkipLandDiagnostics = [];
+
+async function failMaterialization(error) {
+  if (!harnessDestroyed) {
+    try {
+      await harness.destroy();
+    } catch {
+      // Preserve the original materialization error.
+    }
+  }
+  // Retain the durable attempt state.  A stat-then-unlink cleanup would be
+  // able to remove a same-UID racer's leaf replacement.
+  throw error;
+}
+
+try {
+write("layer.json", layerJson);
+for await (const record of iterateBoundRecords()) {
   const dtt = readDtt(record);
   const key = `${dtt.level}/${dtt.x}/${dtt.y}`;
   // verify.mjs owns global duplicate detection. Keeping every address here
@@ -383,13 +2339,16 @@ for await (const record of iterateStreamFile(recordsPath)) {
   assert.ok(dtt.payload?.bytes, `${key}: record carries no payload bytes`);
   const stored = Buffer.from(dtt.payload.bytes);
   const body =
-    (dtt.payload.contentEncoding ?? "").toLowerCase() === "gzip" ? zlib.gunzipSync(stored) : stored;
+    (dtt.payload.contentEncoding ?? "").toLowerCase() === "gzip" ? inflateGzipBounded(stored, `static tile ${key}`) : stored;
   const mask = assertWaterMaskExtension(body, key);
   if (mask.kind === "RASTER") rasterMasks += 1;
   else uniformMasks += 1;
   identitySizes.add(body.length);
   gzipSizes.add(stored.length);
   write(`${dtt.level}/${dtt.x}/${dtt.y}.terrain`, body);
+}
+} catch (error) {
+  await failMaterialization(error);
 }
 
 // The promise layer.json makes, kept by files rather than by respond().
@@ -407,16 +2366,10 @@ let synthesizedTiles = 0;
 let lastSynthesized = null;
 let synthesizedWater = 0;
 let synthesizedLand = 0;
-const oceanSkipsDeclared = new Set(
-  JSON.parse(
-    fs.existsSync(path.join(outDir, "ocean-skipped.json"))
-      ? fs.readFileSync(path.join(outDir, "ocean-skipped.json"), "utf8")
-      : '{"addresses":[]}',
-  ).addresses ?? [],
-);
-const oceanSkipsServedAsLand = [];
+try {
+const oceanSkips = await oceanSkipJoiner();
 for await (const address of availableButUnstored()) {
-  const [level, x, y] = address.split("/").map(Number);
+  const { level, x, y } = parseTerrainAddress(address);
   const body = await synthesizeTile(level, x, y);
   const mask = assertWaterMaskExtension(body, `${address} (synthesized)`);
   if (mask.kind === "UNIFORM_WATER") synthesizedWater += 1;
@@ -425,8 +2378,9 @@ for await (const address of availableButUnstored()) {
   // water that comes out of the module as land is the exact defect — open
   // ocean rendered as flat ground with no mask — and it must stop the
   // publication rather than be counted.
-  if (oceanSkipsDeclared.has(address) && mask.kind !== "UNIFORM_WATER") {
-    oceanSkipsServedAsLand.push(`${address} -> ${mask.kind}`);
+  if (await oceanSkips.matches(address) && mask.kind !== "UNIFORM_WATER") {
+    oceanSkipsServedAsLand += 1;
+    if (oceanSkipLandDiagnostics.length < MAX_OCEAN_DIAGNOSTICS) oceanSkipLandDiagnostics.push(`${address} -> ${mask.kind}`);
   }
   write(`${level}/${x}/${y}.terrain`, body);
   synthesizedTiles += 1;
@@ -434,23 +2388,35 @@ for await (const address of availableButUnstored()) {
   identitySizes.add(body.length);
 }
 assert.deepEqual(
-  oceanSkipsServedAsLand.slice(0, 8),
+  oceanSkipLandDiagnostics,
   [],
-  `${oceanSkipsServedAsLand.length} addresses the encoder measured as all water are being ` +
+  `${oceanSkipsServedAsLand} addresses the encoder measured as all water are being ` +
     "published as land — check terrain_ocean_synth_min_level against the levels this run built",
 );
+oceanSkipsDeclared = oceanSkips.finish();
 await harness.destroy();
+harnessDestroyed = true;
 
 // Every promised unstored address is written in the single streaming loop
 // above. Re-reading the complete worklist solely to build an in-memory check
 // would defeat the bounded publication contract.
 
-const staticIdentity = {
+staticIdentity = {
   p50: identitySizes.percentile(0.5), p99: identitySizes.percentile(0.99), max: identitySizes.max(),
 };
 assert.ok(staticIdentity.p50 <= STATIC_TRANSPORT_BOUNDS.p50, `static identity p50 ${staticIdentity.p50} exceeds ${STATIC_TRANSPORT_BOUNDS.p50}`);
 assert.ok(staticIdentity.p99 <= STATIC_TRANSPORT_BOUNDS.p99, `static identity p99 ${staticIdentity.p99} exceeds ${STATIC_TRANSPORT_BOUNDS.p99}`);
 assert.ok(staticIdentity.max <= STATIC_TRANSPORT_BOUNDS.hard, `static identity max ${staticIdentity.max} exceeds ${STATIC_TRANSPORT_BOUNDS.hard}`);
+assert.equal(fileCount, materializationPlan.files, "materialized file count disagrees with the preflight plan");
+assert.ok(BigInt(totalBytes) <= BigInt(publicationPolicy.maxStaticDirectoryBytes), "materialized bytes exceed approved static directory bound");
+actualStaticPhysicalUpperBytes = BigInt(totalBytes) + BigInt(fileCount) *
+  (stagingReservation.blockSize - 1n) +
+  (BigInt(fileCount) + materializationPlan.directoryRows) * stagingReservation.blockSize;
+assert.ok(actualStaticPhysicalUpperBytes <= stagingReservation.physicalStaticBytes,
+  "materialized staging tree exceeds its approved physical allocation reservation");
+} catch (error) {
+  await failMaterialization(error);
+}
 
 // ── ADD AND PIN THROUGH THE NODE'S IPFS API ────────────────────────────────
 //
@@ -460,131 +2426,657 @@ assert.ok(staticIdentity.max <= STATIC_TRANSPORT_BOUNDS.hard, `static identity m
 // cellular snapshot used them: base32 CIDv1 is what a subdomain gateway needs
 // and raw leaves keep a small file's CID equal to its own hash, which is what
 // the gateway then serves as the ETag.
-async function addAndPin(apiURL) {
-  const boundary = "----terrain-pyramid-" + Date.now().toString(16);
-  async function* parts() {
-    const walk = function* (dir, prefix = "") {
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        const rel = path.join(prefix, entry.name);
-        if (entry.isDirectory()) yield* walk(path.join(dir, entry.name), rel);
-        else if (entry.isFile()) yield rel;
-      }
-    };
-    for (const rel of walk(ipfsDir)) {
-      const name = `${tilesetId}/${rel}`;
-      yield Buffer.from(
-        `--${boundary}\r\nContent-Disposition: form-data; name="file"; ` +
-          `filename="${encodeURIComponent(name)}"\r\n` +
-          "Content-Type: application/octet-stream\r\n\r\n",
-      );
-      for await (const chunk of fs.createReadStream(path.join(ipfsDir, rel), { highWaterMark: 64 * 1024 })) yield chunk;
-      yield Buffer.from("\r\n");
+function compareBytewise(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function assertSafeRelativePath(rel, label) {
+  assert.equal(typeof rel, "string", `${label} must be a string`);
+  assert.ok(rel.length > 0 && !path.isAbsolute(rel), `${label} is not a relative path`);
+  assert.ok(!rel.split("/").includes(".."), `${label} escapes the staging directory`);
+}
+
+function fileIdentity(full) {
+  const stat = fs.lstatSync(full, { bigint: true });
+  assert.ok(stat.isFile() && !stat.isSymbolicLink(), `${full} is not a regular file`);
+  return {
+    dev: stat.dev.toString(),
+    ino: stat.ino.toString(),
+    size: stat.size.toString(),
+    mtimeNs: stat.mtimeNs.toString(),
+    ctimeNs: stat.ctimeNs.toString(),
+  };
+}
+
+function sameIdentity(actual, expected) {
+  return actual.dev === expected.dev && actual.ino === expected.ino &&
+    actual.size === expected.size && actual.mtimeNs === expected.mtimeNs &&
+    actual.ctimeNs === expected.ctimeNs;
+}
+
+function* sortedRegularFiles(directory, prefix = "") {
+  const entries = fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => compareBytewise(a.name, b.name));
+  for (const entry of entries) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    assertSafeRelativePath(rel, "staged file path");
+    const full = path.resolve(directory, entry.name);
+    assert.ok(full.startsWith(`${directory}${path.sep}`), `staged file path escapes ${directory}`);
+    const stat = fs.lstatSync(full, { bigint: true });
+    assert.ok(!stat.isSymbolicLink(), `refusing staged symlink ${rel}`);
+    if (stat.isDirectory()) yield* sortedRegularFiles(full, rel);
+    else {
+      assert.ok(stat.isFile(), `refusing non-regular staged entry ${rel}`);
+      yield { full, rel, identity: fileIdentity(full) };
     }
-    yield Buffer.from(`--${boundary}--\r\n`);
   }
-  const url =
-    `${apiURL.replace(/\/$/, "")}/api/v0/add` +
-    "?pin=true&cid-version=1&raw-leaves=true&wrap-with-directory=false";
-  const response = await fetch(url, {
-    method: "POST",
-    // kubo rejects a browser-shaped User-Agent on the RPC API.
-    headers: { "content-type": `multipart/form-data; boundary=${boundary}`, "user-agent": "" },
-    body: Readable.from(parts()),
-    duplex: "half",
-  });
+}
+
+function multipartHeader(boundary, name) {
+  return Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; ` +
+      `filename="${encodeURIComponent(name)}"\r\n` +
+      "Content-Type: application/octet-stream\r\n\r\n",
+  );
+}
+
+function multipartPlan(directory, boundary) {
+  assertAttemptDirectory("multipart plan staging");
+  if (args.testExchangeStagingWith !== null) {
+    exchangeAttemptDirectoryForTest(stagingDir, args.testExchangeStagingWith, "attempt staging");
+    args.testExchangeStagingWith = null;
+  }
+  if (attemptJournal.phase !== "uploading") {
+    attemptJournal = { ...attemptJournal, phase: "uploading" };
+    writeAttemptJournal(attemptJournal);
+  }
+  const manifestPath = attemptPaths.scratch[0];
+  const directoryManifestPath = attemptPaths.scratch[1];
+  const manifestOpened = createExclusiveRegularFile(manifestPath, "upload manifest");
+  const descriptor = manifestOpened.descriptor;
+  attemptScratchPaths.set(manifestPath, manifestOpened.identity);
+  let expectedFiles = 0;
+  let contentLength = 0n;
+  try {
+    for (const file of sortedRegularFiles(directory)) {
+      const name = `${tilesetId}/${file.rel}`;
+      const header = multipartHeader(boundary, name);
+      const manifestEntry = { rel: file.rel, name, ...file.identity };
+      const line = `${JSON.stringify(manifestEntry)}\n`;
+      assert.ok(Buffer.byteLength(line) <= MAX_UPLOAD_MANIFEST_LINE_BYTES, `upload manifest entry for ${file.rel} exceeds ${MAX_UPLOAD_MANIFEST_LINE_BYTES} bytes`);
+      fs.writeSync(descriptor, line);
+      contentLength += BigInt(header.length) + BigInt(file.identity.size) + 2n;
+      expectedFiles += 1;
+    }
+  } finally {
+    fs.fsyncSync(descriptor);
+    assert.ok(samePathObject(pathIdentityFromStat(fs.fstatSync(descriptor, { bigint: true }), manifestPath, "upload manifest"), manifestOpened.identity),
+      "upload manifest changed while being written");
+    fs.closeSync(descriptor);
+  }
+  fsyncDirectory(path.dirname(manifestPath));
+  const manifestIdentity = pathIdentity(manifestPath, "upload manifest");
+  attemptScratchPaths.set(manifestPath, manifestIdentity);
+  // The private control directory is already journal-owned.  Exercise the
+  // create/complete-before-individual-record boundary explicitly.
+  maybeCrashTransaction("upload-manifest-written");
+  recordAttemptTransient("scratch", 0, manifestIdentity);
+  const closing = Buffer.from(`--${boundary}--\r\n`);
+  contentLength += BigInt(closing.length);
+  assert.equal(expectedFiles, fileCount, "materialized file count changed before multipart planning");
+  assert.ok(contentLength <= BigInt(Number.MAX_SAFE_INTEGER), "multipart Content-Length exceeds fetch's safe range");
+  // Kubo emits UnixFS intermediate-directory receipts as it closes branches.
+  // A second deterministic walk writes their post-order sequence to disk;
+  // only the active directory ancestry is retained (bounded by path depth).
+  const directoryOpened = createExclusiveRegularFile(directoryManifestPath, "directory receipt manifest");
+  const directoryDescriptor = directoryOpened.descriptor;
+  attemptScratchPaths.set(directoryManifestPath, directoryOpened.identity);
+  let expectedDirectories = 0;
+  let openDirectories = [];
+  try {
+    for (const file of sortedRegularFiles(directory)) {
+      const parents = file.rel.split("/").slice(0, -1);
+      let common = 0;
+      while (common < openDirectories.length && common < parents.length && openDirectories[common] === parents[common]) common += 1;
+      for (let index = openDirectories.length - 1; index >= common; index -= 1) {
+        const name = `${tilesetId}/${openDirectories.slice(0, index + 1).join("/")}`;
+        const line = `${name}\n`;
+        assert.ok(Buffer.byteLength(line) <= MAX_UPLOAD_MANIFEST_LINE_BYTES, `directory receipt manifest entry for ${name} exceeds ${MAX_UPLOAD_MANIFEST_LINE_BYTES} bytes`);
+        fs.writeSync(directoryDescriptor, line);
+        expectedDirectories += 1;
+      }
+      openDirectories = parents;
+    }
+    for (let index = openDirectories.length - 1; index >= 0; index -= 1) {
+      const name = `${tilesetId}/${openDirectories.slice(0, index + 1).join("/")}`;
+      const line = `${name}\n`;
+      assert.ok(Buffer.byteLength(line) <= MAX_UPLOAD_MANIFEST_LINE_BYTES, `directory receipt manifest entry for ${name} exceeds ${MAX_UPLOAD_MANIFEST_LINE_BYTES} bytes`);
+      fs.writeSync(directoryDescriptor, line);
+      expectedDirectories += 1;
+    }
+  } finally {
+    fs.fsyncSync(directoryDescriptor);
+    assert.ok(samePathObject(pathIdentityFromStat(fs.fstatSync(directoryDescriptor, { bigint: true }), directoryManifestPath, "directory receipt manifest"), directoryOpened.identity),
+      "directory receipt manifest changed while being written");
+    fs.closeSync(directoryDescriptor);
+  }
+  fsyncDirectory(path.dirname(directoryManifestPath));
+  const directoryManifestIdentity = pathIdentity(directoryManifestPath, "directory receipt manifest");
+  attemptScratchPaths.set(directoryManifestPath, directoryManifestIdentity);
+  maybeCrashTransaction("directory-manifest-written");
+  recordAttemptTransient("scratch", 1, directoryManifestIdentity);
+  assert.ok(Number.isSafeInteger(expectedDirectories) && expectedDirectories <= MAX_MATERIALIZED_FILES * 3,
+    "materialization directory receipt count exceeds its bounded tree shape");
+  return { manifestPath, directoryManifestPath, expectedFiles, expectedDirectories, boundary, closing, contentLength };
+}
+
+function boundedMilliseconds(value, label) {
+  assert.ok(value > 0n && value <= BigInt(Number.MAX_SAFE_INTEGER), `${label} is outside the supported timer range`);
+  return Number(value);
+}
+
+function bulkUploadTimeoutFor(plan) {
+  if (args.bulkUploadTimeoutMs !== null) return args.bulkUploadTimeoutMs;
+  const bytes = plan.contentLength;
+  const milliseconds = ((bytes + BigInt(MIN_BULK_UPLOAD_BYTES_PER_SECOND) - 1n) /
+    BigInt(MIN_BULK_UPLOAD_BYTES_PER_SECOND)) * 1000n + BULK_UPLOAD_OVERHEAD_MS;
+  return boundedMilliseconds(milliseconds, "derived bulk upload timeout");
+}
+
+function pinTraversalTimeoutFor(files) {
+  if (args.pinTimeoutMs !== null) return args.pinTimeoutMs;
+  const milliseconds = ((BigInt(files) + BigInt(MIN_PIN_TRAVERSAL_FILES_PER_SECOND) - 1n) /
+    BigInt(MIN_PIN_TRAVERSAL_FILES_PER_SECOND)) * 1000n + PIN_TRAVERSAL_OVERHEAD_MS;
+  return boundedMilliseconds(milliseconds, "derived pin traversal timeout");
+}
+
+async function* uploadManifestEntries(plan) {
+  for await (const line of boundedLines(plan.manifestPath, MAX_UPLOAD_MANIFEST_LINE_BYTES, "upload manifest")) {
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch (error) {
+      throw new Error("upload manifest contains invalid JSON", { cause: error });
+    }
+    assert.ok(entry && typeof entry === "object" && !Array.isArray(entry), "upload manifest entry is not an object");
+    assertSafeRelativePath(entry.rel, "upload manifest path");
+    assert.equal(entry.name, `${tilesetId}/${entry.rel}`, "upload manifest name disagrees with path");
+    for (const field of ["dev", "ino", "size", "mtimeNs", "ctimeNs"]) assert.match(entry[field] ?? "", /^\d+$/, `upload manifest ${field} is invalid`);
+    yield entry;
+  }
+}
+
+async function* directoryReceiptManifestEntries(plan) {
+  for await (const name of boundedLines(plan.directoryManifestPath, MAX_UPLOAD_MANIFEST_LINE_BYTES, "directory receipt manifest")) {
+    assert.equal(typeof name, "string", "directory receipt manifest entry is invalid");
+    assert.ok(name.startsWith(`${tilesetId}/`), "directory receipt manifest escapes its root");
+    assertSafeRelativePath(name.slice(tilesetId.length + 1), "directory receipt manifest path");
+    yield name;
+  }
+}
+
+// The second deterministic walk and disk manifest make the upload bounded by
+// one pathname and one file stream.  They reject additions, removals,
+// symlinks, reordering, and metadata changes after Content-Length is planned.
+async function* multipartParts(plan) {
+  const manifest = uploadManifestEntries(plan);
+  let expected = await manifest.next();
+  let files = 0;
+  for (const current of sortedRegularFiles(stagingDir)) {
+    assert.ok(!expected.done, `staged file ${current.rel} was added after multipart planning`);
+    const planned = expected.value;
+    assert.equal(current.rel, planned.rel, "staged file order changed after multipart planning");
+    assert.ok(sameIdentity(current.identity, planned), `staged file ${current.rel} changed after multipart planning`);
+    yield multipartHeader(plan.boundary, planned.name);
+    for await (const chunk of regularFileChunks(current.full, `staged upload ${current.rel}`, planned)) yield chunk;
+    assert.ok(sameIdentity(fileIdentity(current.full), planned), `staged file ${current.rel} changed during multipart upload`);
+    yield Buffer.from("\r\n");
+    files += 1;
+    expected = await manifest.next();
+  }
+  assert.ok(expected.done, "staged file was removed after multipart planning");
+  assert.equal(files, plan.expectedFiles, "multipart upload file count changed after planning");
+  yield plan.closing;
+}
+
+// Kubo has accepted the byte stream by this point, but publication has not
+// atomically exposed the directory.  Reuse the disk manifest rather than an
+// in-memory file list to prove no one changed a staged file between upload and
+// commit.  This remains one pathname/identity at a time.
+async function assertMultipartPlanStillMatches(plan) {
+  assertAttemptDirectory("multipart final identity check");
+  const manifest = uploadManifestEntries(plan);
+  let expected = await manifest.next();
+  let files = 0;
+  for (const current of sortedRegularFiles(stagingDir)) {
+    assert.ok(!expected.done, `staged file ${current.rel} was added after Kubo upload`);
+    const planned = expected.value;
+    assert.equal(current.rel, planned.rel, "staged file order changed after Kubo upload");
+    assert.ok(sameIdentity(current.identity, planned), `staged file ${current.rel} changed after Kubo upload`);
+    files += 1;
+    expected = await manifest.next();
+  }
+  assert.ok(expected.done, "staged file was removed after Kubo upload");
+  assert.equal(files, plan.expectedFiles, "staged file count changed after Kubo upload");
+  assertAttemptDirectory("multipart final identity check complete");
+}
+
+async function withRequest(url, options, label, consume, timeoutMs = args.timeoutMs) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal, redirect: "error" });
+    return await consume(response, controller);
+  } catch (error) {
+    if (timedOut) throw new Error(`${label} timed out after ${timeoutMs} ms`, { cause: error });
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function declaredResponseLength(response, maxBytes, label, controller, exactBytes = null) {
+  const value = response.headers.get("content-length");
+  if (value === null) return;
+  if (!/^\d+$/.test(value)) {
+    controller.abort();
+    throw new Error(`${label}: invalid Content-Length`);
+  }
+  const bytes = BigInt(value);
+  if (bytes > BigInt(maxBytes) || (exactBytes !== null && bytes !== BigInt(exactBytes))) {
+    controller.abort();
+    throw new Error(`${label}: Content-Length ${bytes} violates the response bound`);
+  }
+}
+
+async function readResponseBytes(response, maxBytes, label, controller, exactBytes = null) {
+  declaredResponseLength(response, maxBytes, label, controller, exactBytes);
+  if (!response.body) return Buffer.alloc(0);
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of response.body) {
+    const bytes = Buffer.from(chunk);
+    total += bytes.length;
+    if (total > maxBytes) {
+      controller.abort();
+      throw new Error(`${label}: response body exceeds ${maxBytes} bytes`);
+    }
+    chunks.push(bytes);
+  }
+  if (exactBytes !== null && total !== exactBytes) {
+    throw new Error(`${label}: response body is ${total} bytes; expected ${exactBytes}`);
+  }
+  return Buffer.concat(chunks, total);
+}
+
+async function readResponseText(response, maxBytes, label, controller) {
+  return (await readResponseBytes(response, maxBytes, label, controller)).toString("utf8");
+}
+
+function validateReceiptEntry(entry, index) {
+  assert.ok(entry && typeof entry === "object" && !Array.isArray(entry), `kubo add receipt entry ${index} is not an object`);
+  assert.equal(typeof entry.Name, "string", `kubo add receipt entry ${index} has no string Name`);
+  assert.equal(typeof entry.Hash, "string", `kubo add receipt entry ${index} has no string Hash`);
+  assert.ok(Buffer.byteLength(entry.Name) <= MAX_RECEIPT_NAME_BYTES, `kubo add receipt entry ${index} Name exceeds ${MAX_RECEIPT_NAME_BYTES} bytes`);
+  assert.ok(Buffer.byteLength(entry.Hash) <= MAX_RECEIPT_HASH_BYTES, `kubo add receipt entry ${index} Hash exceeds ${MAX_RECEIPT_HASH_BYTES} bytes`);
+  assert.match(entry.Hash, /^[A-Za-z0-9]+$/, `kubo add receipt entry ${index} Hash is not a CID-shaped token`);
+}
+
+async function readAddReceipt(response, plan, onRoot, controller) {
   assert.equal(response.status, 200, `kubo add: HTTP ${response.status}`);
+  assert.ok(response.body, "kubo add returned an empty response body");
+  const expectedEntries = plan.expectedFiles + plan.expectedDirectories + 1;
+  const maxReceiptBytes = BigInt(expectedEntries) * BigInt(MAX_RECEIPT_LINE_BYTES + 1);
+  declaredResponseLength(response, maxReceiptBytes, "kubo add receipt", controller);
+  const decoder = new StringDecoder("utf8");
+  let pending = "";
+  let totalBytes = 0n;
+  let entries = 0;
   let root = null;
   let layerEntry = null;
-  let entries = 0;
-  let pending = "";
+  let files = 0;
+  let directories = 0;
+  const fileManifest = uploadManifestEntries(plan);
+  const directoryManifest = directoryReceiptManifestEntries(plan);
+  let expectedFile = await fileManifest.next();
+  let expectedDirectory = await directoryManifest.next();
+
+  const consumeLine = async (raw) => {
+    const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+    assert.ok(line.length > 0, "kubo add receipt contains an empty NDJSON entry");
+    assert.ok(Buffer.byteLength(line) <= MAX_RECEIPT_LINE_BYTES, `kubo add receipt line exceeds ${MAX_RECEIPT_LINE_BYTES} bytes`);
+    entries += 1;
+    assert.ok(entries <= expectedEntries, `kubo add returned more than ${expectedEntries} receipt entries`);
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch (error) {
+      throw new Error(`kubo add receipt entry ${entries} is invalid JSON`, { cause: error });
+    }
+    validateReceiptEntry(entry, entries);
+    if (!expectedFile.done && entry.Name === expectedFile.value.name) {
+      files += 1;
+      if (entry.Name === `${tilesetId}/layer.json`) layerEntry = entry;
+      expectedFile = await fileManifest.next();
+    } else if (!expectedDirectory.done && entry.Name === expectedDirectory.value) {
+      directories += 1;
+      expectedDirectory = await directoryManifest.next();
+    } else {
+      assert.ok(expectedFile.done && expectedDirectory.done, "kubo add returned an unplanned file or directory receipt");
+      assert.equal(entry.Name, tilesetId, `kubo add root receipt must be exactly ${tilesetId}`);
+      assert.equal(root, null, `kubo add returned more than one root receipt for ${tilesetId}`);
+      root = entry;
+      onRoot(entry.Hash);
+    }
+  };
+
   for await (const chunk of response.body) {
-    pending += Buffer.from(chunk).toString("utf8");
+    const bytes = Buffer.from(chunk);
+    totalBytes += BigInt(bytes.length);
+    if (totalBytes > maxReceiptBytes) {
+      controller.abort();
+      throw new Error(`kubo add receipt exceeds derived bound ${maxReceiptBytes} bytes`);
+    }
+    pending += decoder.write(bytes);
     let newline;
     while ((newline = pending.indexOf("\n")) >= 0) {
-      const line = pending.slice(0, newline); pending = pending.slice(newline + 1);
-      if (!line) continue;
-      const entry = JSON.parse(line); entries += 1;
-      if (entry.Name === tilesetId) root = entry;
-      if (entry.Name === `${tilesetId}/layer.json`) layerEntry = entry;
+      const line = pending.slice(0, newline);
+      pending = pending.slice(newline + 1);
+      await consumeLine(line);
     }
+    assert.ok(Buffer.byteLength(pending) <= MAX_RECEIPT_LINE_BYTES, `kubo add receipt line exceeds ${MAX_RECEIPT_LINE_BYTES} bytes`);
   }
-  if (pending.trim()) {
-    const entry = JSON.parse(pending); entries += 1;
-    if (entry.Name === tilesetId) root = entry;
-    if (entry.Name === `${tilesetId}/layer.json`) layerEntry = entry;
-  }
+  pending += decoder.end();
+  if (pending.length > 0) await consumeLine(pending);
+  assert.equal(entries, expectedEntries, `kubo add returned ${entries} receipt entries; expected ${expectedEntries}`);
+  assert.equal(files, plan.expectedFiles, "kubo add omitted a planned file receipt");
+  assert.equal(directories, plan.expectedDirectories, "kubo add omitted a planned directory receipt");
+  assert.ok(expectedFile.done, "kubo add omitted a planned file receipt");
+  assert.ok(expectedDirectory.done, "kubo add omitted a planned directory receipt");
   assert.ok(root, `kubo add returned no entry for the root directory ${tilesetId}`);
-  return { cid: root.Hash, layerJsonCid: layerEntry?.Hash, entries };
+  assert.ok(layerEntry, `kubo add returned no entry for ${tilesetId}/layer.json`);
+  return { cid: root.Hash, layerJsonCid: layerEntry.Hash, entries, directories };
+}
+
+async function addAndPin(apiURL, onRoot) {
+  const boundary = `----terrain-pyramid-${randomUUID()}`;
+  const plan = multipartPlan(stagingDir, boundary);
+  const url =
+    `${apiURL.replace(/\/$/, "")}/api/v0/add` +
+    "?pin=false&cid-version=1&raw-leaves=true&wrap-with-directory=false";
+  const receipt = await withRequest(
+      url,
+      {
+        method: "POST",
+        // kubo rejects a browser-shaped User-Agent on the RPC API.
+        headers: {
+          "content-type": `multipart/form-data; boundary=${boundary}`,
+          "content-length": String(plan.contentLength),
+          "user-agent": "",
+        },
+        body: Readable.from(multipartParts(plan), { objectMode: false, highWaterMark: 64 * 1024 }),
+        duplex: "half",
+      },
+      "kubo add",
+      (response, controller) => readAddReceipt(response, plan, onRoot, controller),
+      bulkUploadTimeoutFor(plan),
+    );
+  return { ...receipt, multipartPlan: plan };
+}
+
+async function pinCreatedRoot(apiURL, cid, timeoutMs) {
+  return withRequest(
+    `${apiURL.replace(/\/$/, "")}/api/v0/pin/add?arg=${encodeURIComponent(cid)}&recursive=true`,
+    { method: "POST", headers: { "user-agent": "" } },
+    "kubo pin/add",
+    async (response, controller) => {
+      assert.equal(response.status, 200, `pin/add: HTTP ${response.status}`);
+      const text = await readResponseText(response, MAX_CONTROL_RESPONSE_BYTES, "kubo pin/add", controller);
+      let decoded;
+      try {
+        decoded = JSON.parse(text);
+      } catch (error) {
+        throw new Error("pin/add returned malformed JSON", { cause: error });
+      }
+      assert.ok(Array.isArray(decoded.Pins) && decoded.Pins.includes(cid), `pin/add did not acknowledge ${cid}`);
+    },
+    timeoutMs,
+  );
 }
 
 async function preflightKubo(apiURL) {
-  const response = await fetch(`${apiURL.replace(/\/$/, "")}/api/v0/version`, {
-    method: "POST", headers: { "user-agent": "" }, signal: AbortSignal.timeout(10_000),
-  });
-  const text = await response.text();
-  assert.equal(response.status, 200, `kubo preflight /version: HTTP ${response.status}: ${text.slice(0, 200)}`);
-  const version = JSON.parse(text);
-  assert.ok(version.Version, "kubo preflight returned no Version");
-  return version.Version;
+  return withRequest(
+    `${apiURL.replace(/\/$/, "")}/api/v0/version`,
+    { method: "POST", headers: { "user-agent": "" } },
+    "kubo preflight /version",
+    async (response, controller) => {
+      const text = await readResponseText(response, MAX_CONTROL_RESPONSE_BYTES, "kubo preflight /version", controller);
+      assert.equal(response.status, 200, `kubo preflight /version: HTTP ${response.status}: ${text.slice(0, 200)}`);
+      const version = JSON.parse(text);
+      assert.ok(version.Version, "kubo preflight returned no Version");
+      return version.Version;
+    },
+  );
 }
 
-async function unpinCreatedRoot(apiURL, cid) {
-  const response = await fetch(`${apiURL.replace(/\/$/, "")}/api/v0/pin/rm?arg=${encodeURIComponent(cid)}&recursive=true`, {
-    method: "POST", headers: { "user-agent": "" }, signal: AbortSignal.timeout(30_000),
-  });
-  assert.equal(response.status, 200, `could not remove failed publication pin ${cid}: HTTP ${response.status}`);
+function isKuboUnpinnedResponse(text, cid) {
+  let error;
+  try {
+    error = JSON.parse(text);
+  } catch {
+    return false;
+  }
+  return error && typeof error === "object" && !Array.isArray(error) &&
+    Object.keys(error).length === 3 && error.Message === `path '${cid}' is not pinned` &&
+    error.Code === 0 && error.Type === "error";
 }
 
-let publication = args.cid ? { cid: args.cid, layerJsonCid: undefined, entries: 0 } : null;
-// The pin assertion's OWN EVIDENCE. `--cid` re-emits the catalogue for a
-// directory that is already published and never touches the API, so the
-// committed publication record said `"api": null` while the run report claimed
-// "added+pinned through host-01's kubo RPC" — the pin was real, and nothing in
-// the repo established it. The proof now rides with the claim, and its absence
-// is stated rather than implied.
+async function lookupRecursivePin(apiURL, cid, timeoutMs) {
+  return withRequest(
+    `${apiURL.replace(/\/$/, "")}/api/v0/pin/ls?arg=${encodeURIComponent(cid)}&type=recursive`,
+    { method: "POST", headers: { "user-agent": "" } },
+    "kubo pin/ls",
+    async (response, controller) => {
+      const text = await readResponseText(response, MAX_CONTROL_RESPONSE_BYTES, "kubo pin/ls", controller);
+      // Kubo 0.39 reports this exact ordinary absence as HTTP 500.  Do not
+      // weaken 500 handling: malformed or different errors remain fatal.
+      if (response.status === 404 || (response.status === 500 && isKuboUnpinnedResponse(text, cid))) {
+        return { present: false, type: null, response: text };
+      }
+      assert.equal(response.status, 200, `pin/ls: HTTP ${response.status}: ${text.slice(0, 200)}`);
+      let decoded;
+      try {
+        decoded = JSON.parse(text);
+      } catch (error) {
+        throw new Error("pin/ls returned malformed JSON", { cause: error });
+      }
+      assert.ok(decoded && typeof decoded === "object" && !Array.isArray(decoded), "pin/ls returned no object");
+      assert.ok(decoded.Keys && typeof decoded.Keys === "object" && !Array.isArray(decoded.Keys), "pin/ls returned no Keys object");
+      const entry = decoded.Keys[cid];
+      if (entry === undefined) return { present: false, type: null, response: JSON.stringify(decoded) };
+      assert.equal(entry.Type, "recursive", `the root ${cid} is not recursively pinned`);
+      return { present: true, type: entry.Type, response: JSON.stringify(decoded) };
+    },
+    timeoutMs,
+  );
+}
+
+function assertBoundedString(value, label) {
+  assert.equal(typeof value, "string", `${label} must be a string`);
+  assert.ok(Buffer.byteLength(value) <= MAX_CONTROL_RESPONSE_BYTES, `${label} exceeds ${MAX_CONTROL_RESPONSE_BYTES} bytes`);
+  return value;
+}
+
+function assertPendingPinReceipt(receipt) {
+  assert.ok(receipt && typeof receipt === "object" && !Array.isArray(receipt), "pending IPFS pin receipt must be an object");
+  assert.equal(receipt.format, "terrain-ipfs-pin-intent-v1", "pending IPFS pin receipt format is unsupported");
+  assert.ok(["intent", "proven-pending"].includes(receipt.state), "pending IPFS pin receipt state is unsupported");
+  const allowed = receipt.state === "intent"
+    ? ["format", "state", "cid", "attempt", "recordedAt"]
+    : ["format", "state", "cid", "pinProof", "preexisting", "attempt", "recordedAt"];
+  assert.deepEqual(Object.keys(receipt).sort(), [...allowed].sort(), "pending IPFS pin receipt has unexpected or missing fields");
+  assert.match(assertBoundedString(receipt.cid, "pending IPFS pin CID"), /^[A-Za-z0-9]+$/, "pending IPFS pin CID is not CID-shaped");
+  assertBoundedString(receipt.attempt, "pending IPFS pin attempt");
+  assertBoundedString(receipt.recordedAt, "pending IPFS pin time");
+  assert.ok(Number.isFinite(Date.parse(receipt.recordedAt)), "pending IPFS pin time is invalid");
+  if (receipt.state === "intent") return receipt;
+  assert.equal(typeof receipt.preexisting, "boolean", "pending IPFS pin preexisting must be boolean");
+  const proof = receipt.pinProof;
+  assert.ok(proof && typeof proof === "object" && !Array.isArray(proof), "pending IPFS pin proof must be an object");
+  for (const key of Object.keys(proof)) assert.ok(["api", "checkedAt", "endpoint", "type", "response", "preexisting"].includes(key), `pending IPFS pin proof has unexpected field ${key}`);
+  assertBoundedString(proof.api, "pending IPFS pin proof api");
+  assertBoundedString(proof.checkedAt, "pending IPFS pin proof checkedAt");
+  assert.ok(Number.isFinite(Date.parse(proof.checkedAt)), "pending IPFS pin proof checkedAt is invalid");
+  assertBoundedString(proof.endpoint, "pending IPFS pin proof endpoint");
+  assert.equal(proof.type, "recursive", "pending IPFS pin proof must be recursive");
+  assertBoundedString(proof.response, "pending IPFS pin proof response");
+  assert.equal(proof.preexisting, receipt.preexisting, "pending IPFS pin proof preexisting disagrees with receipt");
+  return receipt;
+}
+
+function readPendingPinReceipt() {
+  if (lstatIfExists(pendingPinPath, "pending IPFS pin receipt") === null) return null;
+  let receipt;
+  try {
+    receipt = JSON.parse(readBoundedRegularFile(pendingPinPath, MAX_CONTROL_RESPONSE_BYTES, "pending IPFS pin receipt").toString("utf8"));
+  } catch (error) {
+    throw new Error(`pending IPFS pin receipt is invalid JSON: ${pendingPinPath}`, { cause: error });
+  }
+  return assertPendingPinReceipt(receipt);
+}
+
+function fsyncDirectory(directory) {
+  assertOutputRootStable(`fsync directory ${directory}`);
+  const stat = fs.lstatSync(directory, { bigint: true });
+  assert.ok(stat.isDirectory() && !stat.isSymbolicLink(), `refusing to fsync non-directory ${directory}`);
+  const descriptor = fs.openSync(directory, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+  try {
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function writePendingPinReceipt(cid, state, proof = null) {
+  const receipt = state === "intent"
+    ? {
+        format: "terrain-ipfs-pin-intent-v1",
+        state,
+        cid,
+        attempt: attemptToken,
+        recordedAt: new Date().toISOString(),
+      }
+    : {
+        format: "terrain-ipfs-pin-intent-v1",
+        state,
+        cid,
+        pinProof: proof,
+        preexisting: proof.preexisting,
+        attempt: attemptToken,
+        recordedAt: new Date().toISOString(),
+      };
+  assertPendingPinReceipt(receipt);
+  const bytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);
+  assert.ok(bytes.length <= MAX_CONTROL_RESPONSE_BYTES, `pending IPFS pin receipt exceeds ${MAX_CONTROL_RESPONSE_BYTES} bytes`);
+  if (attemptJournal.phase !== "pinning") {
+    attemptJournal = { ...attemptJournal, phase: "pinning" };
+    writeAttemptJournal(attemptJournal);
+  }
+  if (pendingPinLeaseDescriptor === null) {
+    // As with the journal, create the fixed public receipt once O_EXCL and
+    // retain its descriptor.  A pathname exchange after this point can only
+    // make us fail; it cannot receive receipt bytes.
+    const opened = createExclusiveRegularFile(pendingPinPath, "pending IPFS pin receipt");
+    pendingPinLeaseDescriptor = opened.descriptor;
+    pendingPinLeaseIdentity = opened.identity;
+  } else {
+    assert.ok(pendingPinLeaseIdentity, "pending IPFS pin receipt was never bound");
+    assertPathIdentity(pendingPinPath, pendingPinLeaseIdentity, "pending IPFS pin receipt before in-place proof update");
+  }
+  const before = fs.fstatSync(pendingPinLeaseDescriptor, { bigint: true });
+  assert.ok(BigInt(bytes.length) >= before.size,
+    "pending IPFS pin proof is unexpectedly shorter than its immutable intent; retain for operator confirmation");
+  let offset = 0;
+  while (offset < bytes.length) {
+    const written = fs.writeSync(pendingPinLeaseDescriptor, bytes, offset, bytes.length - offset, offset);
+    assert.ok(written > 0, "pending IPFS pin receipt could not be written");
+    offset += written;
+  }
+  fs.fsyncSync(pendingPinLeaseDescriptor);
+  pendingPinLeaseIdentity = pathIdentityFromStat(
+    fs.fstatSync(pendingPinLeaseDescriptor, { bigint: true }), pendingPinPath, "pending IPFS pin receipt",
+  );
+  assert.equal(pendingPinLeaseIdentity.type, "file", "pending IPFS pin receipt is not a regular file");
+  assert.equal(pendingPinLeaseIdentity.size, String(bytes.length), "pending IPFS pin receipt did not retain the exact proof bytes");
+  assertPathIdentity(pendingPinPath, pendingPinLeaseIdentity, "pending IPFS pin receipt after in-place proof update");
+  fsyncDirectory(outDir);
+  maybeCrashTransaction(`pending-${state}`);
+  return receipt;
+}
+
+let publication = null;
+
+async function abortPublication(error) {
+  // Kubo's local recursive pins are not reference counted.  A successful
+  // pin/add therefore cannot prove exclusive ownership, even after pin/ls.
+  // Keep a durable recovery receipt and never pin/rm another actor's CID.
+  // Do not stat-then-unlink attempt leaves.  A later publisher will see the
+  // durable journal and stop for operator-confirmed cleanup instead of
+  // reclaiming a same-UID racer's replacement.
+  throw error;
+}
+
+// The pin assertion's OWN EVIDENCE.  A CID is never accepted as a substitute
+// for this proof, because it cannot establish that the complete directory is
+// recursively retained.
 let pinProof = null;
 if (args.add) {
-  process.stdout.write(`adding ${fileCount} files (${(totalBytes / 1e6).toFixed(1)} MB) to ${args.api}\n`);
-  const kuboVersion = await preflightKubo(args.api);
-  process.stdout.write(`kubo preflight ${kuboVersion}\n`);
-  publication = await addAndPin(args.api);
-  // pin=true on add already pins the root recursively; assert it rather than
-  // assume it, because an unpinned root is garbage-collected out from under
-  // every client that ever resolved it.
-  const pinned = await fetch(
-    `${args.api.replace(/\/$/, "")}/api/v0/pin/ls?arg=${publication.cid}&type=recursive`,
-    { method: "POST", headers: { "user-agent": "" } },
-  );
-  const pinText = await pinned.text();
-  let pinType = null;
   try {
-    assert.equal(pinned.status, 200, `pin/ls: HTTP ${pinned.status}: ${pinText.slice(0, 200)}`);
-    assert.ok(pinText.includes(publication.cid), `the root ${publication.cid} is not pinned`);
-    try {
-      pinType = JSON.parse(pinText)?.Keys?.[publication.cid]?.Type ?? null;
-    } catch {
-      pinType = null;
+    const pending = readPendingPinReceipt();
+    process.stdout.write(`adding ${fileCount} files (${(totalBytes / 1e6).toFixed(1)} MB) to ${args.api}\n`);
+    const kuboVersion = await preflightKubo(args.api);
+    process.stdout.write(`kubo preflight ${kuboVersion}\n`);
+    publication = await addAndPin(args.api, (cid) => {
+      assert.equal(publication, null, "kubo add emitted a root after a completed receipt");
+      assert.ok(cid, "kubo add emitted an empty root CID");
+    });
+    if (pending) assert.equal(pending.cid, publication.cid, `pending IPFS pin is for ${pending.cid}, not this publication ${publication.cid}; refusing to replace recovery evidence`);
+    // The CID is known before any pin mutation. Persist that fact first: an
+    // interrupted/failed pin proof can be resumed for this CID but never
+    // silently redirected to another deterministic directory.
+    writePendingPinReceipt(publication.cid, "intent");
+    // CIDs are deterministic, so inspect the recursive pin before calling
+    // pin/add.  A later actor may race this point; we make no ownership claim
+    // in either case and never issue pin/rm on an error path.
+    const pinTimeoutMs = pinTraversalTimeoutFor(fileCount);
+    const priorPin = await lookupRecursivePin(args.api, publication.cid, pinTimeoutMs);
+    let pinned = priorPin;
+    let pinPreexisted = priorPin.present;
+    if (!priorPin.present) {
+      await pinCreatedRoot(args.api, publication.cid, pinTimeoutMs);
+      pinned = await lookupRecursivePin(args.api, publication.cid, pinTimeoutMs);
+      assert.ok(pinned.present, `pin/add did not create a recursive pin for ${publication.cid}`);
+      pinPreexisted = false;
     }
-    assert.equal(
-    pinType,
-    "recursive",
-    `the root ${publication.cid} is pinned as ${pinType ?? "an unreadable type"}, not recursive — ` +
-      "only a recursive pin holds the tiles under it",
-    );
+    pinProof = {
+      api: args.api,
+      checkedAt: new Date().toISOString(),
+      endpoint: `/api/v0/pin/ls?arg=${publication.cid}&type=recursive`,
+      type: pinned.type,
+      response: pinned.response,
+      preexisting: pinPreexisted,
+    };
+    // This is written before a gateway request.  If a later proof or artifact
+    // transaction fails, the recursive pin remains deliberately and this
+    // exact receipt lets the next invocation retry the same CID safely.
+    writePendingPinReceipt(publication.cid, "proven-pending", pinProof);
+    process.stdout.write(`CID ${publication.cid} pinned ${pinned.type}\n`);
   } catch (error) {
-    // This invocation created the root, so removing only its pin is safe. Do
-    // not leave a malformed or unverifiable directory pinned after a fault.
-    await unpinCreatedRoot(args.api, publication.cid);
-    throw error;
+    await abortPublication(error);
   }
-  pinProof = {
-    api: args.api,
-    checkedAt: new Date().toISOString(),
-    endpoint: `/api/v0/pin/ls?arg=${publication.cid}&type=recursive`,
-    type: pinType,
-    response: pinText.trim().slice(0, 400),
-  };
-  process.stdout.write(`CID ${publication.cid} pinned ${pinType}\n`);
 }
 
 // ── THE $DTT CATALOGUE RECORD ──────────────────────────────────────────────
@@ -671,11 +3163,15 @@ function buildCatalogue(cid) {
   };
 }
 
-const catalogue = buildCatalogue(publication?.cid ?? null);
-fs.writeFileSync(
-  path.join(outDir, "tileset-catalogue.json"),
-  `${JSON.stringify(catalogue, null, 2)}\n`,
-);
+let catalogue;
+try {
+  catalogue = buildCatalogue(publication?.cid ?? null);
+} catch (error) {
+  await abortPublication(error);
+}
+attemptJournal = { ...attemptJournal, phase: "artifacts" };
+writeAttemptJournal(attemptJournal);
+const stagedPublicationArtifacts = [];
 
 // The same record as SDS wire bytes, size-prefixed exactly like tiles.dttstream,
 // so the dataset-publication lane ingests it with the tiles and nothing has to
@@ -690,18 +3186,29 @@ fs.writeFileSync(
 // enforces `required` — so the JSON beside these bytes cannot be a document
 // that is not also a record.
 {
-  const sds = await import(path.join(SOURCE_DIR, "node_modules", "spacedatastandards.org", "index.js"));
-  const bytes = writeDttRecord(sds, catalogue);
-  fs.writeFileSync(path.join(outDir, "tileset-catalogue.dttstream"), bytes);
-  // And it reads back as the record the JSON says it is.
-  const [read] = sds.readFB(bytes);
-  assert.equal(read.TILESET_ID, catalogue.TILESET_ID);
-  assert.equal(read.PROVENANCE.RETRIEVED_AT, catalogue.PROVENANCE.RETRIEVED_AT);
-  assert.equal(read.PAYLOAD.CID ?? null, catalogue.PAYLOAD.CID ?? null);
-  // Not just "buildDttRecord accepted it": the projection is what the SERVING
-  // MODULE has to be able to answer too, so the shape is exercised here rather
-  // than only where a wasm is loaded.
-  assert.ok(buildDttRecord(sds, catalogue));
+  try {
+    stagedPublicationArtifacts.push({
+      live: path.join(outDir, "tileset-catalogue.json"),
+      staged: stageArtifact(path.join(outDir, "tileset-catalogue.json"), `${JSON.stringify(catalogue, null, 2)}\n`),
+    });
+    const sds = await import(path.join(SOURCE_DIR, "node_modules", "spacedatastandards.org", "index.js"));
+    const bytes = writeDttRecord(sds, catalogue);
+    stagedPublicationArtifacts.push({
+      live: path.join(outDir, "tileset-catalogue.dttstream"),
+      staged: stageArtifact(path.join(outDir, "tileset-catalogue.dttstream"), bytes),
+    });
+    // And it reads back as the record the JSON says it is.
+    const [read] = sds.readFB(bytes);
+    assert.equal(read.TILESET_ID, catalogue.TILESET_ID);
+    assert.equal(read.PROVENANCE.RETRIEVED_AT, catalogue.PROVENANCE.RETRIEVED_AT);
+    assert.equal(read.PAYLOAD.CID ?? null, catalogue.PAYLOAD.CID ?? null);
+    // Not just "buildDttRecord accepted it": the projection is what the SERVING
+    // MODULE has to be able to answer too, so the shape is exercised here rather
+    // than only where a wasm is loaded.
+    assert.ok(buildDttRecord(sds, catalogue));
+  } catch (error) {
+    await abortPublication(error);
+  }
 }
 
 // ── READ THE PUBLICATION BACK THROUGH THE GATEWAY ──────────────────────────
@@ -714,27 +3221,69 @@ fs.writeFileSync(
 async function fetchThroughGateway(cid, rel) {
   const url = `${args.gateway}/ipfs/${cid}/${rel}`;
   const started = Date.now();
-  const response = await fetch(url);
-  const bytes = Buffer.from(await response.arrayBuffer());
-  const etag = response.headers.get("etag");
-  let conditional = null;
-  if (etag) {
-    const again = await fetch(url, { headers: { "if-none-match": etag } });
-    conditional = again.status;
-    await again.arrayBuffer();
-  }
+  assertSafeRelativePath(rel, "gateway staged path");
+  const localPath = path.resolve(stagingDir, rel);
+  assert.ok(localPath.startsWith(`${stagingDir}${path.sep}`), `gateway staged path escapes ${stagingDir}`);
+  const local = readBoundedRegularFile(
+    localPath,
+    rel === "layer.json" ? MAX_LAYER_JSON_BYTES : STATIC_TRANSPORT_BOUNDS.hard,
+    `gateway local ${rel}`,
+  );
+  const expectedContentType = rel === "layer.json" ? "application/json" : "application/octet-stream";
+  const initial = await withRequest(
+    url,
+    { method: "GET", headers: { "accept-encoding": "identity" } },
+    `gateway GET ${rel}`,
+    async (response, controller) => {
+    assert.ok(response.status >= 200 && response.status < 300, `gateway ${rel}: expected 2xx, got HTTP ${response.status}`);
+    const bytes = await readResponseBytes(response, local.length, `gateway ${rel}`, controller, local.length);
+    const etag = response.headers.get("etag");
+    const cacheControl = response.headers.get("cache-control");
+    const contentType = response.headers.get("content-type");
+    const contentEncoding = response.headers.get("content-encoding");
+    const accessControlAllowOrigin = response.headers.get("access-control-allow-origin");
+    assert.ok(etag, `gateway ${rel}: missing ETag`);
+    assert.match(cacheControl ?? "", /(?:^|,)\s*public(?:,|$)/i, `gateway ${rel}: Cache-Control must be public`);
+    assert.match(cacheControl ?? "", /(?:^|,)\s*immutable(?:,|$)/i, `gateway ${rel}: Cache-Control must be immutable`);
+    assert.match(cacheControl ?? "", /max-age=\d+/i, `gateway ${rel}: Cache-Control must state max-age`);
+    assert.equal(contentType?.split(";", 1)[0].trim().toLowerCase(), expectedContentType, `gateway ${rel}: unexpected Content-Type`);
+    assert.ok(!contentEncoding || contentEncoding.toLowerCase() === "identity", `gateway ${rel}: content must be identity`);
+    assert.equal(accessControlAllowOrigin, "*", `gateway ${rel}: Access-Control-Allow-Origin must be *`);
+    assert.ok(bytes.equals(local), `gateway ${rel}: body differs from the staged file`);
+    return {
+      status: response.status,
+      bytes,
+      etag,
+      cacheControl,
+      contentType,
+      contentEncoding,
+      accessControlAllowOrigin,
+    };
+    },
+  );
+  const conditional = await withRequest(
+    url,
+    { method: "GET", headers: { "if-none-match": initial.etag, "accept-encoding": "identity" } },
+    `gateway conditional GET ${rel}`,
+    async (response, controller) => {
+      assert.equal(response.status, 304, `gateway ${rel}: conditional request must return 304`);
+      const body = await readResponseBytes(response, 0, `gateway conditional GET ${rel}`, controller, 0);
+      assert.equal(body.length, 0, `gateway ${rel}: 304 response must not include a body`);
+      return response.status;
+    },
+  );
   return {
     url,
-    status: response.status,
-    bytes: bytes.length,
+    status: initial.status,
+    bytes: initial.bytes.length,
     ms: Date.now() - started,
-    contentType: response.headers.get("content-type"),
-    cacheControl: response.headers.get("cache-control"),
-    etag,
-    contentEncoding: response.headers.get("content-encoding"),
-    accessControlAllowOrigin: response.headers.get("access-control-allow-origin"),
+    contentType: initial.contentType,
+    cacheControl: initial.cacheControl,
+    etag: initial.etag,
+    contentEncoding: initial.contentEncoding,
+    accessControlAllowOrigin: initial.accessControlAllowOrigin,
     conditionalStatus: conditional,
-    matchesLocal: bytes.equals(fs.readFileSync(path.join(ipfsDir, rel))),
+    matchesLocal: true,
   };
 }
 
@@ -742,7 +3291,11 @@ const gatewayProof = [];
 if (publication?.cid && args.verify) {
   const probes = ["layer.json", `${shallowStored}.terrain`, `${deepStored}.terrain`];
   if (lastSynthesized) probes.push(`${lastSynthesized}.terrain`);
-  for (const rel of probes) gatewayProof.push(await fetchThroughGateway(publication.cid, rel));
+  try {
+    for (const rel of probes) gatewayProof.push(await fetchThroughGateway(publication.cid, rel));
+  } catch (error) {
+    await abortPublication(error);
+  }
 }
 
 const report = {
@@ -760,13 +3313,34 @@ const report = {
   cid: publication?.cid ?? null,
   layerJsonCid: publication?.layerJsonCid ?? null,
   files: fileCount,
+  materializationPlan: {
+    files: materializationPlan.files,
+    plannedDirectoryRows: materializationPlan.directoryRows.toString(),
+    storedFiles: materializationPlan.storedFiles,
+    synthesizedFiles: materializationPlan.synthesizedFiles,
+    decodedStoredBytes: materializationPlan.decodedStoredBytes,
+    approvedStaticDirectoryBytes: publicationPolicy.maxStaticDirectoryBytes,
+    approvedVerifiedStoreBytes: publicationPolicy.maxVerifiedStoreBytes,
+    globalConfigDigest: authoritativeGlobalInputs.state.configDigest,
+    stagingFreeBytes: stagingReservation.freeBytes.toString(),
+    stagingRequiredBytes: stagingReservation.requiredBytes.toString(),
+    stagingAllocationBlockBytes: stagingReservation.blockSize.toString(),
+    approvedStaticLogicalBytes: stagingReservation.approvedLogicalBytes.toString(),
+    reservedStaticPhysicalBytes: stagingReservation.physicalStaticBytes.toString(),
+    reservedPayloadRoundingBytes: stagingReservation.payloadRoundingBytes.toString(),
+    reservedInodeAndDirectoryBytes: stagingReservation.inodeAndDirectoryBytes.toString(),
+    reservedUploadManifestRows: stagingReservation.manifestRows.toString(),
+    actualStaticPhysicalUpperBytes: actualStaticPhysicalUpperBytes?.toString() ?? null,
+    reservedUploadManifestPhysicalBytes: stagingReservation.manifestPhysicalBytes.toString(),
+    reservedStagingHeadroomBytes: stagingReservation.headroomBytes.toString(),
+  },
   storedTiles,
   synthesizedTiles,
   // What the synthesized half STATES about water. Before the ocean skips were
   // declared this read 0 water / 36 land on a coastal region.
   synthesizedUniformWater: synthesizedWater,
   synthesizedUniformLand: synthesizedLand,
-  oceanSkipsDeclared: oceanSkipsDeclared.size,
+  oceanSkipsDeclared,
   lastSynthesizedAddress: lastSynthesized,
   layerJsonBytes: layerJson.length,
   directoryBytes: totalBytes,
@@ -779,7 +3353,7 @@ const report = {
   uniformMasks,
   rasterMasks,
   uniformMaskRatio: Number((uniformMasks / (uniformMasks + rasterMasks)).toFixed(4)),
-  encoderTiles: runReport.tiles,
+  encoderTiles: publicationInputs.tiles.entry.records,
   gatewayProof,
   catalogue,
   // What an operator installs on the serving mount so clients resolve this CID.
@@ -804,25 +3378,33 @@ const report = {
       }
     : null,
 };
-fs.writeFileSync(path.join(outDir, "ipfs-publication.json"), `${JSON.stringify(report, null, 2)}\n`);
-
-// ── THE COMPLETE `config:` BLOCK FOR THE SERVING MOUNT ─────────────────────
-//
-// One file an operator installs, rather than two the operator has to merge.
-// It is layer-json-config.json — which the mount still needs, because the
-// mount still answers layer.json and tiles for a node with no CID and for
-// every same-origin fallback — plus the three keys that make this node point
-// its clients at the published directory.
-//
-// terrain_tiles_template is deliberately NOT among them: the mount's own
-// layer.json keeps its `?v=` cache-key query, because the mount's tiles are
-// not content-addressed and that query is what keys them. Only the layer.json
-// INSIDE the CID drops it, and that one is rendered here.
-if (publication?.cid) {
-  fs.writeFileSync(
-    path.join(outDir, "serving-config-ipfs.json"),
-    `${JSON.stringify({ ...layerConfig, ...report.mountConfig }, null, 2)}\n`,
-  );
+try {
+  stagedPublicationArtifacts.push({
+    live: path.join(outDir, "ipfs-publication.json"),
+    staged: stageArtifact(path.join(outDir, "ipfs-publication.json"), `${JSON.stringify(report, null, 2)}\n`),
+  });
+  if (publication?.cid) {
+    stagedPublicationArtifacts.push({
+      live: path.join(outDir, "serving-config-ipfs.json"),
+      staged: stageArtifact(
+        path.join(outDir, "serving-config-ipfs.json"),
+        `${JSON.stringify({ ...layerConfig, ...report.mountConfig }, null, 2)}\n`,
+      ),
+    });
+    // The durable pin receipt is retained with the completed attempt.  A
+    // same-UID leaf exchange makes automatic receipt deletion unsafe; an
+    // operator can remove this bounded evidence together with the completed
+    // journal when explicitly preparing the next publication.
+  } else if (lstatIfExists(path.join(outDir, "serving-config-ipfs.json"), "serving IPFS config") !== null) {
+    // A rehearsal has no verified CID.  Remove a prior serving pointer in the
+    // same rollback-capable transaction rather than leaving it to name an old
+    // directory beside a newly materialized rehearsal report.
+    stagedPublicationArtifacts.push({ live: path.join(outDir, "serving-config-ipfs.json"), staged: null });
+  }
+  if (publication?.multipartPlan) await assertMultipartPlanStillMatches(publication.multipartPlan);
+  commitStagedPublication(stagedPublicationArtifacts);
+} catch (error) {
+  await abortPublication(error);
 }
 
 process.stdout.write(
@@ -838,3 +3420,4 @@ for (const probe of gatewayProof) {
   );
 }
 if (report.cid) process.stdout.write(`\nCID ${report.cid}\n`);
+rootFs.close();
