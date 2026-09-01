@@ -92,6 +92,7 @@ export async function fetchWithRetry(url, {
   retryBaseMs = 250,
   sleepImpl = sleep,
   onRetry = () => {},
+  onDiscardResponse = () => {},
 } = {}) {
   assert.ok(Number.isInteger(retries) && retries >= 0, "retries must be a non-negative integer");
   assert.ok(Number.isFinite(retryBaseMs) && retryBaseMs >= 0, "retryBaseMs must be non-negative");
@@ -101,6 +102,20 @@ export async function fetchWithRetry(url, {
       const response = await fetchImpl(url, { redirect: "follow" });
       if (!retryableStatus(response.status) || attempt === retries) return response;
       lastError = new Error(`transient HTTP ${response.status}`);
+      // A source observer owns a live timer/metadata slot for every response.
+      // Dispose the rejected attempt before retrying the same URL, otherwise
+      // its next fetch is (correctly) seen as a duplicate in-flight request.
+      try {
+        if (response.body?.cancel) await response.body.cancel();
+        else if (response.body?.getReader) {
+          const reader = response.body.getReader();
+          try { await reader.cancel(); } finally { reader.releaseLock?.(); }
+        } else if (typeof response.arrayBuffer === "function") {
+          await response.arrayBuffer();
+        }
+      } finally {
+        await onDiscardResponse({ url, response, attempt });
+      }
     } catch (error) {
       lastError = error;
       if (attempt === retries) throw error;
@@ -110,6 +125,81 @@ export async function fetchWithRetry(url, {
     await sleepImpl(delayMs);
   }
   throw lastError ?? new Error(`fetch retry loop ended unexpectedly for ${url}`);
+}
+
+function responseHeader(response, name) {
+  try {
+    if (typeof response.headers?.get === "function") return response.headers.get(name) ?? undefined;
+    if (response.headers && typeof response.headers === "object") return response.headers[name] ?? response.headers[name.toLowerCase()];
+  } catch {}
+  return undefined;
+}
+
+async function readResponseBodyBounded(response, {
+  maxBytes = Infinity,
+  requireStreaming = false,
+  onLimit = undefined,
+} = {}) {
+  assert.ok(maxBytes === Infinity || (Number.isSafeInteger(maxBytes) && maxBytes >= 0),
+    "response maxBytes must be a non-negative safe integer");
+  const contentLength = responseHeader(response, "content-length");
+  if (contentLength !== undefined) {
+    assert.match(String(contentLength).trim(), /^\d+$/, "response Content-Length must be a decimal byte count");
+    const announced = Number(contentLength);
+    assert.ok(Number.isSafeInteger(announced), "response Content-Length exceeds safe integer range");
+    if (announced > maxBytes) {
+      await onLimit?.({ announced, maxBytes });
+      try { await response.body?.cancel?.(); } catch {}
+      throw new Error(`source response Content-Length ${announced} exceeds approved ${maxBytes}-byte object cap`);
+    }
+  }
+  const chunks = [];
+  let total = 0;
+  const append = async (chunk) => {
+    const bytes = Buffer.from(chunk);
+    if (bytes.length > maxBytes - total) {
+      await onLimit?.({ announced: total + bytes.length, maxBytes });
+      throw new Error(`source response body exceeds approved ${maxBytes}-byte object cap`);
+    }
+    chunks.push(bytes);
+    total += bytes.length;
+  };
+  const stream = response.body;
+  if (stream?.getReader) {
+    const reader = stream.getReader();
+    try {
+      while (true) {
+        const next = await reader.read();
+        if (next.done) break;
+        await append(next.value);
+      }
+    } catch (error) {
+      try { await reader.cancel(error); } catch {}
+      throw error;
+    } finally {
+      reader.releaseLock?.();
+    }
+    return Buffer.concat(chunks, total);
+  }
+  if (stream && typeof stream[Symbol.asyncIterator] === "function") {
+    try {
+      for await (const chunk of stream) await append(chunk);
+    } catch (error) {
+      stream.destroy?.(error);
+      throw error;
+    }
+    return Buffer.concat(chunks, total);
+  }
+  // A no-content response is a valid streamed zero-byte object. Any body we
+  // need to consume for a source-policy cut must expose a stream; arrayBuffer
+  // would allocate it before the cap could be enforced.
+  if (requireStreaming) {
+    if (stream == null && (String(contentLength).trim() === "0" || response.status === 204)) return Buffer.alloc(0);
+    throw new Error("source response has no readable streaming body");
+  }
+  const fallback = Buffer.from(await response.arrayBuffer());
+  await append(fallback);
+  return Buffer.concat(chunks, total);
 }
 
 function atomicWrite(file, bytes) {
@@ -555,7 +645,13 @@ export class BoundedGranuleCache {
       // publish it. A 404 is evidence too: leaving its body unread would let
       // the request timeout stop at headers and would record a fabricated
       // zero-length response digest rather than what the provider returned.
-      const body = Buffer.from(await response.arrayBuffer());
+      // Source-policy callers require a stream so the cap is checked before
+      // a hostile response can allocate an arbitrary arrayBuffer.
+      const body = await readResponseBodyBounded(response, {
+        maxBytes: options.maxResponseBytes,
+        requireStreaming: options.requireStreamingBody,
+        onLimit: options.onBodyLimit,
+      });
       return this.put(url, response.status, body, { beforePublish: options.beforePublish });
     });
   }
