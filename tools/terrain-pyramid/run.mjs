@@ -40,6 +40,15 @@ import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 
 import { BoundedGranuleCache } from "./build-support.mjs";
+import {
+  SourceRequestObserver,
+  appendRequestObservation,
+  canonicalJson,
+  ensureSourceEpoch,
+  observationForRequest,
+  sha256,
+  sourcePolicyContract,
+} from "./source-provenance.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..");
@@ -399,7 +408,26 @@ async function main() {
   const { createFlowRuntimeHost } = await import(path.join(SDK_DIR, "src/flow/index.js"));
 
   const store = new TileStore(outDir);
-  const flowConfig = runConfig.flow_config ?? {};
+  const configuredFlowConfig = runConfig.flow_config ?? {};
+  const sourceContract = sourcePolicyContract(runConfig);
+  // A region config is policy, not evidence.  In particular it must not claim
+  // an observation date before a request has happened.  The terrain module
+  // requires a retrieved_at lineage field, so the runner supplies one fresh
+  // coordinator receipt shared by all shards; exact response times belong in
+  // source-observations.ndjson, not in the checked config.
+  if (sourceContract) {
+    assert.equal(Object.hasOwn(configuredFlowConfig, "retrieved_at"), false,
+      "a source_policy run must not prefill flow_config.retrieved_at; run.mjs records observations at request time");
+    if (args.fetchRetries !== undefined) assert.equal(args.fetchRetries, sourceContract.policy.request.retries,
+      "a source-policy run may not override its approved retry count");
+    if (args.retryBaseMs !== undefined) assert.equal(args.retryBaseMs, sourceContract.policy.request.retry_base_ms,
+      "a source-policy run may not override its approved retry base delay");
+  }
+  const sourceRunStartedAt = runConfig.source_run_started_at ?? new Date().toISOString();
+  const flowConfig = sourceContract
+    ? { ...configuredFlowConfig, retrieved_at: sourceRunStartedAt }
+    : configuredFlowConfig;
+  const configDigest = sha256(canonicalJson(runConfig));
   const stats = {
     cells: 0,
     fetches: 0,
@@ -425,10 +453,11 @@ async function main() {
     // something next to "a 361-post lattice".
     sourcePostsPerTileEdgeByLevel: {},
     latticeMaxGridSize: 0,
-    // Every address the ocean test skipped, not just how many. See the note at
-    // the collection site: the count alone cannot be declared, and an address
-    // that is not declared is one a client falls off the bottom of.
-    oceanSkippedAddresses: [],
+    // Ocean skips are appended to an on-disk JSONL stream as they are emitted.
+    // A global cut can name millions of addresses; keeping them in this stats
+    // object would turn a source run into an O(N) heap allocation.
+    oceanSkippedLogged: 0,
+    oceanSkippedMinLevel: Infinity,
     // ── THE ENCODER'S OWN COUNTERS, CARRIED OUT OF THE RUN ──────────────────
     //
     // The `tile` node emits these per block and the flow lands them on egress,
@@ -468,6 +497,7 @@ async function main() {
     // was block-wide, and a non-zero count now means the plan did not fetch a
     // WBM auxfile for ground it did fetch elevation for. verify.mjs refuses it.
     maskUnclassifiedSamples: 0,
+    sourceObservationRequests: 0,
     errors: [],
   };
 
@@ -521,22 +551,68 @@ async function main() {
   // unbounded cache.  Leases preserve the eight files needed by an active cell
   // across concurrent shard workers while LRU evicts completed cells.
   const cacheMaxBytes = args.cacheMaxBytes ?? runConfig.cache_max_bytes ?? 128 * 1024 ** 3;
+  if (sourceContract) {
+    assert.equal(cacheMaxBytes, sourceContract.cacheMaxBytes,
+      "a source-policy run may not override its approved cache bound");
+  }
   const granuleCache = new BoundedGranuleCache({
     dir: args.cacheDir ?? runConfig.cache_dir ?? path.join(outDir, "granules"),
     maxBytes: cacheMaxBytes,
   });
+  const oceanSkipLog = path.join(outDir, "ocean-skipped.lines");
+  const sourceEpoch = ensureSourceEpoch(granuleCache.dir, sourceContract);
+  const sourceObservationLog = sourceContract
+    ? path.resolve(outDir, sourceContract.policy.manifest.shard_log)
+    : null;
+  if (sourceObservationLog) {
+    assert.ok(sourceObservationLog.startsWith(`${outDir}${path.sep}`),
+      "source_policy.manifest.shard_log must stay inside the run output");
+    fs.mkdirSync(path.dirname(sourceObservationLog), { recursive: true });
+  }
+  const sourceRequestObserver = sourceContract
+    ? new SourceRequestObserver({
+        timeoutMs: sourceContract.policy.request.timeout_ms,
+        maxOutstanding: sourceContract.policy.request.max_outstanding,
+        allowUrl: (url) => sourceContract.urlPattern.test(url),
+      })
+    : null;
+  function recordSourceObservation(url, fetched, requestedAt) {
+    if (!sourceObservationLog) return;
+    const observation = observationForRequest({
+      cacheDir: granuleCache.dir,
+      url,
+      fetched,
+      networkObservation: sourceRequestObserver?.take(url),
+    });
+    // This is a request log, not a global map.  It deliberately retains cache
+    // hits as requests while preserving the immutable response observation
+    // which populated that cache generation.  global-build.mjs external-sorts
+    // and deduplicates it after every shard has completed.
+    appendRequestObservation(sourceObservationLog, observation, { requestedAt, cacheHit: fetched.hit });
+    stats.sourceObservationRequests += 1;
+  }
   async function prefetch(urls) {
     await Promise.all(
       urls.map(async (url) => {
-        const fetched = await granuleCache.fetch(url, {
-          retries: args.fetchRetries ?? runConfig.fetch_retries ?? 4,
-          retryBaseMs: args.retryBaseMs ?? runConfig.retry_base_ms ?? 250,
-          onRetry: () => { stats.fetchRetries += 1; },
-        });
-        if (!fetched.hit) {
-          stats.fetches += 1;
-          stats.fetchBytes += fetched.body.length;
-          if (fetched.status === 404) stats.fetch404 += 1;
+        const requestedAt = new Date().toISOString();
+        try {
+          const fetched = await granuleCache.fetch(url, {
+            retries: args.fetchRetries ?? sourceContract?.policy.request.retries ?? runConfig.fetch_retries ?? 4,
+            retryBaseMs: args.retryBaseMs ?? sourceContract?.policy.request.retry_base_ms ?? runConfig.retry_base_ms ?? 250,
+            ...(sourceRequestObserver ? { fetchImpl: sourceRequestObserver.fetch.bind(sourceRequestObserver) } : {}),
+            onRetry: () => { stats.fetchRetries += 1; },
+          });
+          recordSourceObservation(url, fetched, requestedAt);
+          if (!fetched.hit) {
+            stats.fetches += 1;
+            stats.fetchBytes += fetched.body.length;
+            if (fetched.status === 404) stats.fetch404 += 1;
+          }
+        } finally {
+          // fetchWithRetry can fail while reading a successful response body,
+          // after the observer retained headers.  Do not let that failed
+          // request consume one of the bounded observer slots forever.
+          sourceRequestObserver?.discard(url);
         }
       }),
     );
@@ -803,7 +879,10 @@ async function main() {
           // synthesized UNIFORM_WATER path, which is exactly what that path
           // was built for.
           if (tile.skippedOcean) {
-            stats.oceanSkippedAddresses.push(`${tile.level}/${tile.x}/${tile.y}`);
+            const address = `${tile.level}/${tile.x}/${tile.y}`;
+            fs.appendFileSync(oceanSkipLog, `${address}\n`);
+            stats.oceanSkippedLogged += 1;
+            stats.oceanSkippedMinLevel = Math.min(stats.oceanSkippedMinLevel, tile.level);
           }
         }
       }
@@ -941,6 +1020,7 @@ async function main() {
   const summary = {
     generatedAt: new Date().toISOString(),
     outDir,
+    configDigest,
     elapsedMs: elapsed,
     cells: stats.cells,
     // A bounded rehearsal can intentionally stop at --max-cells.  It is a
@@ -950,6 +1030,17 @@ async function main() {
     fetches: stats.fetches,
     fetch404: stats.fetch404,
     fetchRetries: stats.fetchRetries,
+    sourceProvenance: sourceContract
+      ? {
+          sourcePolicyDigest: sourceContract.digest,
+          datasetEpoch: sourceContract.datasetEpoch,
+          sourceRunStartedAt,
+          sourceEpochReceipt: path.relative(outDir, sourceEpoch.file),
+          observationLog: path.relative(outDir, sourceObservationLog),
+          observationRequests: stats.sourceObservationRequests,
+          manifestContract: sourceContract.policy.manifest,
+        }
+      : null,
     granuleCache: {
       dir: granuleCache.dir,
       maxBytes: granuleCache.maxBytes,
@@ -1012,19 +1103,25 @@ async function main() {
     // The level at and below which "declared but not stored" means "the
     // encoder measured it all-ocean and skipped it". Below it no level is
     // authoritative and a synthesized tile must fail safe to LAND.
-    minLevel: Math.min(...stats.oceanSkippedAddresses.map((a) => Number(a.split("/")[0])), Infinity),
-    count: stats.oceanSkippedAddresses.length,
-    addresses: [...stats.oceanSkippedAddresses].sort(),
+    // This is raw ASCII address-lines, not JSONL: each line is one canonical
+    // `level/x/y` value so the global external sorter can consume it directly.
+    format: "terrain-ocean-skips-lines-v1",
+    addressesPath: path.basename(oceanSkipLog),
+    minLevel: stats.oceanSkippedMinLevel,
+    // This is an invocation-local consistency count. The append-only JSONL
+    // file can include retained prior cells after resume; global-build.mjs
+    // externally sorts/deduplicates that file for the terminal count.
+    observedThisInvocation: stats.oceanSkippedLogged,
   };
   if (!Number.isFinite(oceanSkipped.minLevel)) oceanSkipped.minLevel = null;
   fs.writeFileSync(
     path.join(outDir, "ocean-skipped.json"),
     `${JSON.stringify(oceanSkipped, null, 2)}\n`,
   );
-  if (oceanSkipped.count !== stats.tilesSkippedOcean) {
+  if (oceanSkipped.observedThisInvocation !== stats.tilesSkippedOcean) {
     stats.errors.push(
       `the encoder counted ${stats.tilesSkippedOcean} ocean skips and named ` +
-        `${oceanSkipped.count} addresses; a skip that is not named cannot be declared, and an ` +
+          `${oceanSkipped.observedThisInvocation} addresses; a skip that is not named cannot be declared, and an ` +
         "address that is not declared is one a client falls off the bottom of into a land tile",
     );
     summary.errors = stats.errors;

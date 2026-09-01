@@ -53,6 +53,7 @@ import zlib from "node:zlib";
 
 import { readGenerationCacheEntry } from "./build-support.mjs";
 import { iterateStreamFile } from "./dtt-reader.mjs";
+import { BoundedTopK } from "./source-provenance.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..");
@@ -110,6 +111,12 @@ function referenceGridFor(level) {
 // are computed from. A level that had to fall back is reported and not judged,
 // which is the honest outcome rather than a crash or a silent coarsening.
 const REFERENCE_GRID_LADDER = Object.freeze([193, 161, 129, 97, 65, 49, 33]);
+// The global store may have millions of records.  This tool is deliberately a
+// bounded sample instrument, not a second full-store index: no caller can turn
+// --per-level into a proportional allocation by accident.
+const MAX_SAMPLES_PER_LEVEL = 32;
+const MAX_LEVEL_SUMMARIES = 64;
+const MAX_REFERENCE_RESPONSE_BYTES = 4 * 1024 * 1024;
 
 const args = { perLevel: 6, json: false };
 for (let i = 2; i < process.argv.length; i += 1) {
@@ -119,6 +126,8 @@ for (let i = 2; i < process.argv.length; i += 1) {
   else throw new Error(`unknown argument ${process.argv[i]}`);
 }
 assert.ok(args.out, "--out <store dir> is required");
+assert.ok(Number.isSafeInteger(args.perLevel) && args.perLevel >= 1 && args.perLevel <= MAX_SAMPLES_PER_LEVEL,
+  `--per-level must be an integer in [1, ${MAX_SAMPLES_PER_LEVEL}]`);
 const outDir = path.resolve(args.out);
 // Global workers share the generation cache.  Regional legacy stores still
 // have `<out>/granules/<key>.bin`, so retain that read-only compatibility.
@@ -181,18 +190,22 @@ function readDtt(record) {
   };
 }
 
-function splitStream(bytes) {
-  const buf = Buffer.from(bytes);
-  const records = [];
+function* iterateStreamFrames(bytes) {
+  const buf = Buffer.isBuffer(bytes)
+    ? bytes
+    : ArrayBuffer.isView(bytes)
+      ? Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+      : Buffer.from(bytes);
   let offset = 0;
   while (offset + 4 <= buf.length) {
     const length = buf.readUInt32LE(offset);
     offset += 4;
     if (length === 0) continue;
-    records.push(buf.subarray(offset, offset + length));
+    assert.ok(offset + length <= buf.length, "reference frame stream ends inside a DTT frame");
+    yield buf.subarray(offset, offset + length);
     offset += length;
   }
-  return records;
+  assert.equal(offset, buf.length, "reference frame stream has a trailing partial length");
 }
 
 // ── quantized-mesh -> a height lattice in metres ────────────────────────────
@@ -306,17 +319,17 @@ function granulesFor(tile) {
 
 const { createBrowserModuleHarness } = await import(path.join(SDK_DIR, "src/testing/index.js"));
 
-async function encodeReference(tile, harness) {
+async function visitReference(tile, harness, visit) {
   const wanted = referenceGridFor(tile.level);
   const ladder = [wanted, ...REFERENCE_GRID_LADDER.filter((g) => g < wanted)];
   for (const grid of ladder) {
-    const attempt = await encodeReferenceAt(tile, harness, grid);
-    if (attempt) return { grid, children: attempt };
+    const encoded = await visitReferenceAt(tile, harness, grid, visit);
+    if (encoded) return grid;
   }
   throw new Error(`no reference lattice encodes under the ceiling for ${tile.level}/${tile.x}/${tile.y}`);
 }
 
-async function encodeReferenceAt(tile, harness, grid) {
+async function visitReferenceAt(tile, harness, grid, visit) {
   const depth = referenceDepthFor(tile.level);
   const step = 2 ** depth;
   const tiles = [];
@@ -363,11 +376,32 @@ async function encodeReferenceAt(tile, harness, grid) {
     if (response.errorCode === "tile-size-ceiling-exceeded") return null;
     assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
   }
-  const records = splitStream(response.outputs.find((o) => o.portId === "records").payload);
-  return records.map((r) => {
+  const payload = response.outputs.find((o) => o.portId === "records").payload;
+  assert.ok(payload.length <= MAX_REFERENCE_RESPONSE_BYTES,
+    `reference DTT frame batch exceeds ${MAX_REFERENCE_RESPONSE_BYTES} bytes`);
+  // The SDK response port is one bounded frame.  Do not turn that frame into
+  // an array of decoded meshes: each DTT is decoded, measured and released
+  // before the next one, keeping reference work independent of child count.
+  for (const r of iterateStreamFrames(payload)) {
     const child = readDtt(r);
-    return { child, ...meshLattice(zlib.gunzipSync(child.payload)) };
-  });
+    await visit({ child, ...meshLattice(zlib.gunzipSync(child.payload)) });
+  }
+  return true;
+}
+
+// Best means higher relief; ties are deliberately address-stable.  The heap
+// root is the worst retained item, so selection is O(log cap) per streamed
+// record rather than repeatedly sorting a growing store-level array.
+function compareBest(a, b) {
+  return a.relief - b.relief || b.dtt.x - a.dtt.x || b.dtt.y - a.dtt.y;
+}
+
+// Manifest/report bytes must not depend on the host locale.  This explicit
+// code-unit comparison gives the flat-control tie break the same definition
+// everywhere Node runs (rather than relying on an implicit string ordering).
+function compareAddressCodeUnits(a, b) {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
 }
 
 // Keep only the selected samples: global stores can hold almost a million
@@ -376,16 +410,19 @@ async function encodeReferenceAt(tile, harness, grid) {
 const byLevel = new Map();
 for await (const record of iterateStreamFile(path.join(outDir, "tiles.dttstream"))) {
   const dtt = readDtt(record);
-  const state = byLevel.get(dtt.level) ?? { count: 0, highest: [], flat: null };
+  let state = byLevel.get(dtt.level);
+  if (!state) {
+    assert.ok(byLevel.size < MAX_LEVEL_SUMMARIES, `more than ${MAX_LEVEL_SUMMARIES} terrain levels in one store`);
+    state = { count: 0, highest: new BoundedTopK(args.perLevel, compareBest), flat: null };
+    byLevel.set(dtt.level, state);
+  }
   state.count += 1;
   const relief = dtt.maxHeightM - dtt.minHeightM;
-  if (!state.flat || relief < state.flat.relief || (relief === state.flat.relief && `${dtt.x}/${dtt.y}` < `${state.flat.dtt.x}/${state.flat.dtt.y}`)) {
+  if (!state.flat || relief < state.flat.relief ||
+      (relief === state.flat.relief && compareAddressCodeUnits(`${dtt.x}/${dtt.y}`, `${state.flat.dtt.x}/${state.flat.dtt.y}`) < 0)) {
     state.flat = { dtt, relief };
   }
-  state.highest.push({ dtt, relief });
-  state.highest.sort((a, b) => b.relief - a.relief || a.dtt.x - b.dtt.x || a.dtt.y - b.dtt.y);
-  if (state.highest.length > args.perLevel) state.highest.length = args.perLevel;
-  byLevel.set(dtt.level, state);
+  state.highest.add({ dtt, relief });
 }
 
 const harness = await createBrowserModuleHarness({
@@ -398,21 +435,21 @@ for (const level of [...byLevel.keys()].sort((a, b) => a - b)) {
   // The highest-relief tiles: a max-error bound is a claim about the worst
   // tile, and picking at random measures the median instead.
   const selected = byLevel.get(level);
-  const chosen = selected.highest.map((entry) => entry.dtt);
+  const chosen = selected.highest.ordered().map((entry) => entry.dtt);
   const flat = selected.flat.dtt;
+  const selectedTiles = chosen.some((tile) => tile === flat) ? chosen : [...chosen, flat];
   const tiles = [];
   let levelMax = 0;
   let levelSq = 0;
   let levelN = 0;
-  const referenceGridsUsed = [];
-  for (const tile of [...chosen, flat]) {
+  let minimumReferenceGrid = Infinity;
+  for (const tile of selectedTiles) {
     const { grid: tileGrid, lattice } = meshLattice(zlib.gunzipSync(tile.payload));
-    const { grid: usedGrid, children: reference } = await encodeReference(tile, harness);
-    referenceGridsUsed.push(usedGrid);
     let max = 0;
     let sq = 0;
     let n = 0;
-    for (const { child, grid: refGrid, lattice: refLattice } of reference) {
+    await visitReference(tile, harness, async ({ child, grid: refGrid, lattice: refLattice }) => {
+      minimumReferenceGrid = Math.min(minimumReferenceGrid, refGrid);
       for (let j = 0; j < refGrid; j += 1) {
         const lat = child.south + ((child.north - child.south) * j) / (refGrid - 1);
         const fv = (lat - tile.south) / (tile.north - tile.south);
@@ -427,7 +464,7 @@ for (const level of [...byLevel.keys()].sort((a, b) => a - b)) {
           n += 1;
         }
       }
-    }
+    });
     const isFlat = tile === flat;
     tiles.push({
       address: `${tile.level}/${tile.x}/${tile.y}`,
@@ -466,7 +503,7 @@ for (const level of [...byLevel.keys()].sort((a, b) => a - b)) {
   // The grid the reference ACTUALLY reached on every tile of this level, not
   // the one it wanted — taken as the minimum so the level's flags describe the
   // weakest reference any of its rows was measured against.
-  const referenceGrid = referenceGridsUsed.length ? Math.min(...referenceGridsUsed) : referenceGridFor(level);
+  const referenceGrid = Number.isFinite(minimumReferenceGrid) ? minimumReferenceGrid : referenceGridFor(level);
   const referenceGridWanted = referenceGridFor(level);
   const referenceDepth = referenceDepthFor(level);
   const referenceSpacingDeg = 180 / 2 ** (level + referenceDepth) / (referenceGrid - 1);
