@@ -46,6 +46,7 @@ const GLOBAL_ARTIFACT_NAMES = Object.freeze([
   "ocean-skipped.json",
 ]);
 const GLOBAL_SOURCE_MANIFEST_NAME = "source-manifest.ndjson";
+const SOURCE_MANIFEST_SORT_WORK_DIR = ".source-manifest-sort-work";
 
 function parseArgs(argv) {
   const args = { workers: 1, shards: 1, verify: true };
@@ -69,6 +70,11 @@ function parseArgs(argv) {
     else if (flag === "--fault-merge-crash-after") args.faultMergeCrashAfter = Number(argv[++i]);
     else if (flag === "--fault-after-terminal-state") args.faultAfterTerminalState = true;
     else if (flag === "--fault-after-verify") args.faultAfterVerify = true;
+    else if (flag === "--fault-source-manifest-crash-before-stage-link") args.faultSourceManifestCrashBeforeStageLink = true;
+    else if (flag === "--fault-source-manifest-crash-after-stage-link") args.faultSourceManifestCrashAfterStageLink = true;
+    else if (flag === "--fault-source-manifest-crash-before-reserve") args.faultSourceManifestCrashBeforeReserve = true;
+    else if (flag === "--fault-source-manifest-crash-after-reserve") args.faultSourceManifestCrashAfterReserve = true;
+    else if (flag === "--fault-after-source-manifest-reserve") args.faultAfterSourceManifestReserve = true;
     else throw new Error(`unknown argument ${flag}`);
   }
   assert.ok(args.config, "--config <run.json> is required");
@@ -514,6 +520,16 @@ function recoverArtifactSet(outDir, { completed, preserve = false }) {
     }
   }
   for (const entry of transaction.entries) unlinkArtifact(outDir, entry.staged, "global artifact transaction stage");
+  // A source completion stage is materialized and fsynced before appending
+  // the fourth transaction intent. A SIGKILL in that narrow interval leaves
+  // this one exact coordinator-owned file beside the three already-installed
+  // entries. It is not a source sorter workspace (those live independently
+  // below); discard it during incomplete rollback rather than treating it as
+  // arbitrary staging authority.
+  if (!completed && transaction.entries.length === GLOBAL_ARTIFACT_NAMES.length) {
+    unlinkArtifact(outDir, path.join(transaction.stagingDir, GLOBAL_SOURCE_MANIFEST_NAME),
+      "unreserved global source manifest stage");
+  }
   assertNoSymlinkTraversal(outDir, transaction.stagingDir, "global artifact transaction staging directory", { final: "directory" });
   assert.deepEqual(fs.readdirSync(transaction.stagingDir), [], "global artifact transaction staging directory has unexpected entries");
   fs.rmdirSync(transaction.stagingDir);
@@ -593,6 +609,17 @@ function installReservedArtifact(transaction, entry) {
 
 function finalizeArtifactSet(outDir) {
   recoverArtifactSet(outDir, { completed: true });
+}
+
+function sourceManifestSortWorkDirectory(outDir) {
+  const directory = path.join(outDir, SOURCE_MANIFEST_SORT_WORK_DIR);
+  const existing = assertNoSymlinkTraversal(outDir, directory, "source manifest sort workspace", { final: "directory" });
+  if (!existing) {
+    fs.mkdirSync(directory, 0o700);
+    fsyncDirectory(outDir);
+    fsyncDirectory(directory);
+  }
+  return directory;
 }
 
 async function mergeShardStores(shards, outDir, { faultMergeRenameAfter = undefined, faultMergeCrashAfter = undefined } = {}) {
@@ -854,17 +881,42 @@ async function main() {
     ? await (async () => {
         const destination = path.resolve(outDir, sourceContract.policy.manifest.completion_manifest);
         const staged = path.join(transaction.stagingDir, path.basename(destination));
+        // Sort ownership must not live in transaction.stagingDir: the source
+        // sort has a lease/stage recovery protocol of its own, while the
+        // artifact transaction accepts only its fixed artifact filenames.
+        // This workspace is fixed, bounded, and re-entered on resume.
+        const workDir = sourceManifestSortWorkDirectory(outDir);
+        const workOutput = path.join(workDir, path.basename(destination));
         const receipt = await emitCompletionSourceManifest({
-          outDir, outputFile: staged, reportedPath: path.relative(outDir, destination),
+          outDir, outputFile: workOutput, reportedPath: path.relative(outDir, destination),
           logFiles: state.shards.map((shard) => shardSourceLog(shard, sourceContract)),
           contract: sourceContract, configDigest: state.configDigest,
         });
+        if (args.faultSourceManifestCrashBeforeStageLink) process.kill(process.pid, "SIGKILL");
+        assert.equal(assertArtifactFile(outDir, staged, "global source manifest transaction stage"), null,
+          "global source manifest transaction stage already exists");
+        assertNoSymlinkTraversal(outDir, workOutput, "source manifest sort output", { final: "regular" });
+        fs.linkSync(workOutput, staged);
+        fsyncArtifact(staged);
+        fsyncDirectory(transaction.stagingDir);
+        if (args.faultSourceManifestCrashAfterStageLink) process.kill(process.pid, "SIGKILL");
+        // The hard link made the transaction stage durable. Do not retain a
+        // second manifest-sized work artifact after the sort itself cleaned
+        // its lease/stage; a crash before this unlink simply resumes from an
+        // immutable work output and remains bounded to one file.
+        fs.unlinkSync(workOutput);
+        fsyncDirectory(workDir);
+        if (args.faultSourceManifestCrashBeforeReserve) process.kill(process.pid, "SIGKILL");
         // A crash before this durable staged file exists leaves the original
         // three-artifact journal untouched. Only then record the fourth
         // intent, so recovery never has to infer whether an old manifest was
         // backed up before an absent stage could be installed.
         const entry = reserveArtifact(transaction, destination, staged);
         installReservedArtifact(transaction, entry);
+        if (args.faultSourceManifestCrashAfterReserve) process.kill(process.pid, "SIGKILL");
+        if (args.faultAfterSourceManifestReserve) {
+          throw new Error("fault injection after source manifest reserve");
+        }
         return receipt;
       })()
     : null;

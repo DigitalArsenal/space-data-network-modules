@@ -39,7 +39,6 @@ const MAX_OCEAN_SORT_RUNS = 256;
 const MAX_SORT_INPUT_FILES = 256;
 const MAX_SORT_FAN_IN = 64;
 const MAX_SORT_OWNER_BYTES = 1024;
-const MAX_SORT_LEASE_CANDIDATES = 8;
 const MAX_SOURCE_EPOCH_BYTES = 4 * 1024;
 const MAX_SOURCE_RECEIPT_BYTES = 16 * 1024;
 const MAX_SOURCE_URL_BYTES = 4 * 1024;
@@ -1346,12 +1345,6 @@ function sortLeasePath(parent, basename, kind) {
   return lease;
 }
 
-function sortLeaseCandidateDirectory(parent, basename, kind) {
-  const directory = path.join(parent, `.${basename}.${kind}-sort-lease-candidates`);
-  assert.equal(path.dirname(directory), parent, "sort lease candidate directory escapes its output parent");
-  return directory;
-}
-
 function sortStagePath(parent, basename, kind, token) {
   assert.match(token, /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     "sort lease token is not a UUID");
@@ -1379,88 +1372,27 @@ function sameSortLease(left, right) {
 }
 
 function readSortLease(parent, lease, expected) {
-  const owner = readNamedSmallJson(parent, lease, MAX_SORT_OWNER_BYTES, "sort stage lease");
-  assertSortLeaseOwner(owner, expected);
-  return owner;
-}
-
-function ensureSortLeaseCandidateDirectory(parent, basename, kind) {
-  const directory = sortLeaseCandidateDirectory(parent, basename, kind);
-  const existing = assertNoSymlinkTraversal(parent, directory, "sort lease candidate directory", { final: "directory" });
-  if (!existing) {
-    fs.mkdirSync(directory, 0o700);
-    fsyncDirectory(parent);
-    fsyncDirectory(directory);
-  }
-  return directory;
-}
-
-function candidateNameForToken(token) {
-  return `candidate-${token}.json`;
-}
-
-function candidateTokenFromName(name) {
-  const match = /^candidate-([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.json$/i.exec(name);
-  return match?.[1] ?? null;
-}
-
-function removeSortLeaseCandidate(candidateDir, candidate, expected) {
-  const file = path.join(candidateDir, candidate);
-  assert.equal(path.dirname(file), candidateDir, "sort lease candidate escapes its owned directory");
-  const owner = readNamedSmallJson(candidateDir, file, MAX_SORT_OWNER_BYTES, "sort lease candidate");
-  assert.ok(sameSortLease(owner, expected), "sort lease candidate changed before cleanup");
-  const before = fs.lstatSync(file, { bigint: true });
-  const after = fs.lstatSync(file, { bigint: true });
-  sameNamedFileStat(before, after, "sort lease candidate", file);
-  fs.unlinkSync(file);
-  fsyncDirectory(candidateDir);
-}
-
-function reapSortLeaseCandidates(parent, basename, kind, expected) {
-  const candidateDir = ensureSortLeaseCandidateDirectory(parent, basename, kind);
-  const handle = fs.opendirSync(candidateDir);
-  const candidates = [];
+  assert.equal(path.dirname(lease), parent, "sort lease escapes its output parent");
+  const named = fs.lstatSync(lease, { bigint: true });
+  // The link target is the complete canonical owner record. Unlike a file
+  // written after O_EXCL, symlink creation publishes all metadata in one
+  // operation: a SIGKILL cannot leave a half-JSON lease for a reaper to guess
+  // about, and readlink never traverses a foreign target.
+  assert.ok(named.isSymbolicLink(), "sort stage lease is not atomic symlink metadata");
+  assert.ok(named.size <= BigInt(MAX_SORT_OWNER_BYTES), "sort stage lease metadata exceeds its byte bound");
+  const target = fs.readlinkSync(lease, "utf8");
+  assert.ok(Buffer.byteLength(target) <= MAX_SORT_OWNER_BYTES, "sort stage lease target exceeds its byte bound");
+  const after = fs.lstatSync(lease, { bigint: true });
+  sameNamedFileStat(named, after, "sort stage lease", lease);
+  let owner;
   try {
-    for (let entry = handle.readSync(); entry; entry = handle.readSync()) {
-      assert.ok(candidates.length < MAX_SORT_LEASE_CANDIDATES,
-        `sort lease candidate directory exceeds its ${MAX_SORT_LEASE_CANDIDATES}-file policy`);
-      const token = candidateTokenFromName(entry.name);
-      assert.ok(token, `sort lease candidate directory has an unexpected entry: ${entry.name}`);
-      candidates.push({ name: entry.name, token });
-    }
-  } finally {
-    handle.closeSync();
+    owner = JSON.parse(target);
+  } catch {
+    throw new Error("sort stage lease has malformed atomic metadata");
   }
-  // A candidate has not linked the fixed lease and therefore cannot name a
-  // live stage. Reaping it may force a paused pre-link creator to retry, but
-  // cannot reclaim or delete a live writer's staging directory.
-  for (const candidate of candidates) {
-    const file = path.join(candidateDir, candidate.name);
-    const owner = readNamedSmallJson(candidateDir, file, MAX_SORT_OWNER_BYTES, "sort lease candidate");
-    assertSortLeaseOwner(owner, expected);
-    assert.equal(owner.token, candidate.token, "sort lease candidate token does not match its exact filename");
-    removeSortLeaseCandidate(candidateDir, candidate.name, owner);
-  }
-  return candidateDir;
-}
-
-function removeEmptySortLeaseCandidateDirectory(parent, basename, kind) {
-  const directory = sortLeaseCandidateDirectory(parent, basename, kind);
-  const stat = assertNoSymlinkTraversal(parent, directory, "sort lease candidate directory", { final: "directory" });
-  if (!stat) return;
-  const handle = fs.opendirSync(directory);
-  let first;
-  try { first = handle.readSync(); } finally { handle.closeSync(); }
-  // A simultaneous pre-link creator may own no fixed lease yet. It can safely
-  // retry if this empty directory disappears, but we never remove one that
-  // contains even a single candidate file.
-  if (!first) {
-    try { fs.rmdirSync(directory); } catch (error) {
-      if (error.code !== "ENOTEMPTY") throw error;
-      return;
-    }
-    fsyncDirectory(parent);
-  }
+  assertSortLeaseOwner(owner, expected);
+  assert.equal(canonicalJson(owner), target, "sort stage lease atomic metadata is not canonical");
+  return owner;
 }
 
 function recoverDeadSortLease(parent, lease, owner, { basename, kind, extension, maxRuns, output, faultPhase }) {
@@ -1490,62 +1422,30 @@ function recoverDeadSortLease(parent, lease, owner, { basename, kind, extension,
 function acquireSortLease(parent, basename, kind, extension, maxRuns, faultPhase) {
   const lease = sortLeasePath(parent, basename, kind);
   const expected = { kind, output: basename };
-  const existing = lstatIfExists(lease);
-  if (existing) {
-    const owner = readSortLease(parent, lease, expected);
-    if (sortOwnerIsLive(owner)) {
-      throw new Error(`sort stage lease is held by live process ${owner.pid}; refusing concurrent ${kind} writer`);
-    }
-    recoverDeadSortLease(parent, lease, owner, { basename, kind, extension, maxRuns, output: basename, faultPhase });
-  }
-
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const candidateDir = reapSortLeaseCandidates(parent, basename, kind, expected);
+    const existing = lstatIfExists(lease);
+    if (existing) {
+      const owner = readSortLease(parent, lease, expected);
+      if (sortOwnerIsLive(owner)) {
+        throw new Error(`sort stage lease is held by live process ${owner.pid}; refusing concurrent ${kind} writer`);
+      }
+      recoverDeadSortLease(parent, lease, owner, { basename, kind, extension, maxRuns, output: basename, faultPhase });
+    }
     const token = randomUUID();
     const owner = {
       version: 1, kind, output: basename, pid: process.pid,
       identity: sortProcessIdentity(process.pid), token,
     };
-    const candidate = candidateNameForToken(token);
-    const candidateFile = path.join(candidateDir, candidate);
-    let handle;
     try {
-      handle = fs.openSync(candidateFile, "wx", 0o600);
-    } catch (error) {
-      if (error.code === "ENOENT") continue;
-      throw error;
-    }
-    try {
-      fs.writeFileSync(handle, `${canonicalJson(owner)}\n`);
-      fs.fsyncSync(handle);
-    } finally {
-      fs.closeSync(handle);
-    }
-    fsyncDirectory(candidateDir);
-    if (faultPhase === "crash-after-sort-lease-candidate") process.kill(process.pid, "SIGKILL");
-    try {
-      fs.linkSync(candidateFile, lease);
+      fs.symlinkSync(canonicalJson(owner), lease);
       fsyncDirectory(parent);
     } catch (error) {
-      if (error.code !== "EEXIST" && error.code !== "ENOENT") throw error;
-      try { removeSortLeaseCandidate(candidateDir, candidate, owner); } catch (cleanupError) {
-        if (cleanupError.code !== "ENOENT") throw cleanupError;
-      }
-      const winnerStat = lstatIfExists(lease);
-      if (winnerStat) {
-        const winner = readSortLease(parent, lease, expected);
-        if (sortOwnerIsLive(winner)) {
-          throw new Error(`sort stage lease is held by live process ${winner.pid}; refusing concurrent ${kind} writer`);
-        }
-      }
-      continue;
-    }
-    try { removeSortLeaseCandidate(candidateDir, candidate, owner); } catch (error) {
-      if (error.code !== "ENOENT") throw error;
+      if (error.code === "EEXIST") continue;
+      throw error;
     }
     const confirmed = readSortLease(parent, lease, expected);
     assert.ok(sameSortLease(confirmed, owner), "sort lease changed after atomic acquisition");
-    if (faultPhase === "crash-after-sort-lease-link") process.kill(process.pid, "SIGKILL");
+    if (faultPhase === "crash-after-sort-lease-create") process.kill(process.pid, "SIGKILL");
     return { lease, owner, stage: sortStagePath(parent, basename, kind, token) };
   }
   throw new Error(`sort lease acquisition raced repeatedly for ${kind}; refusing to guess ownership`);
@@ -1556,7 +1456,6 @@ function releaseSortLease(parent, lease, owner, { kind, output }) {
   assert.ok(sameSortLease(confirmed, owner), "sort lease changed before release");
   fs.unlinkSync(lease);
   fsyncDirectory(parent);
-  removeEmptySortLeaseCandidateDirectory(parent, output, kind);
 }
 
 function removeOwnedSortStage(parent, stage, extension, maxRuns, {

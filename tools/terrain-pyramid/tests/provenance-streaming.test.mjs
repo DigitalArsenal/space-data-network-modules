@@ -14,6 +14,7 @@ import {
   recoverCellAttempt,
   SourceRequestObserver,
   appendRequestObservation,
+  canonicalJson,
   emitCompletionSourceManifest,
   ensureSourceEpoch,
   mergeBoundedFramedStores,
@@ -97,17 +98,12 @@ function sortLeasePath(outputFile, kind) {
   return path.join(path.dirname(outputFile), `.${path.basename(outputFile)}.${kind}-sort-lease.json`);
 }
 
-function assertSortResidue(root, { stages, leases, candidates, candidateFiles = 0 }) {
+function assertSortResidue(root, { stages, leases }) {
   const entries = fs.readdirSync(root).filter((name) => name.includes("-sort-stage-") || name.includes("-sort-lease"));
   const stageEntries = entries.filter((name) => name.includes("-sort-stage-"));
   const leaseEntries = entries.filter((name) => name.endsWith("-sort-lease.json"));
-  const candidateEntries = entries.filter((name) => name.endsWith("-sort-lease-candidates"));
   assert.equal(stageEntries.length, stages, "exact tokenized stage residue count");
   assert.equal(leaseEntries.length, leases, "exact fixed lease residue count");
-  assert.equal(candidateEntries.length, candidates, "exact candidate-directory residue count");
-  const files = candidateEntries.flatMap((candidate) => fs.readdirSync(path.join(root, candidate)));
-  assert.equal(files.length, candidateFiles, "exact bounded candidate-file residue count");
-  for (const file of files) assert.match(file, /^candidate-[0-9a-f-]{36}\.json$/i);
 }
 
 function prepareSortCase(root, kind) {
@@ -845,49 +841,32 @@ test("owned external-sort stages recover exact creator/recovery crash windows wi
         (error) => error.signal === "SIGKILL");
       assert.equal(sortStageEntries(caseRoot).length, 1,
         `${kind} has exactly one tokenized owned stage after ${phase}`);
-      assertSortResidue(caseRoot, { stages: 1, leases: 1, candidates: 1 });
+      assertSortResidue(caseRoot, { stages: 1, leases: 1 });
       assert.deepEqual(fs.readFileSync(sortCase.output), prior,
         `${kind} preserves the pre-existing output until the staged result is installed`);
       await runSortCase(sortCase);
       assert.deepEqual(sortStageEntries(caseRoot), [], `${kind} reclaims its dead creator stage exactly once`);
-      assertSortResidue(caseRoot, { stages: 0, leases: 0, candidates: 0 });
+      assertSortResidue(caseRoot, { stages: 0, leases: 0 });
       assert.ok(fs.statSync(sortCase.output).isFile());
     }
   }
 
-  // A kill before the atomic candidate->fixed-lease link leaves no stage at
-  // all. The next acquisition reaps only that tiny exact candidate; repeated
-  // failures cannot accumulate sort-sized scratch outputs for any sort kind.
+  // Fixed lease creation is atomic self-contained symlink metadata. A kill
+  // immediately afterward leaves no stage and one recoverable lease; there
+  // is no candidate file whose JSON could be torn or mis-reaped.
   for (const [kind] of kinds) {
-    const caseRoot = path.join(root, `${kind}-prelink-kill`);
+    const caseRoot = path.join(root, `${kind}-post-lease-create-kill`);
     fs.mkdirSync(caseRoot);
     const sortCase = prepareSortCase(caseRoot, kind);
     if (kind !== "source") fs.writeFileSync(sortCase.output, `prior-${kind}-output`);
     const prior = fs.existsSync(sortCase.output) ? fs.readFileSync(sortCase.output) : null;
-    await assert.rejects(execFileAsync(process.execPath, [child, kind, caseRoot, "crash-after-sort-lease-candidate"]),
+    await assert.rejects(execFileAsync(process.execPath, [child, kind, caseRoot, "crash-after-sort-lease-create"]),
       (error) => error.signal === "SIGKILL");
-    assert.deepEqual(sortStageEntries(caseRoot), [], `${kind} pre-link kill cannot create a stage`);
-    assertSortResidue(caseRoot, { stages: 0, leases: 0, candidates: 1, candidateFiles: 1 });
+    assert.deepEqual(sortStageEntries(caseRoot), [], `${kind} post-lease kill cannot create a stage`);
+    assertSortResidue(caseRoot, { stages: 0, leases: 1 });
     if (prior) assert.deepEqual(fs.readFileSync(sortCase.output), prior);
     await runSortCase(sortCase);
-    assertSortResidue(caseRoot, { stages: 0, leases: 0, candidates: 0 });
-  }
-
-  // The fixed lease itself is also recoverable when a process dies after the
-  // atomic hard-link but before mkdir. It names no stage, so recovery unlinks
-  // only that exact dead lease and retains the prior output.
-  for (const [kind] of kinds) {
-    const caseRoot = path.join(root, `${kind}-postlink-kill`);
-    fs.mkdirSync(caseRoot);
-    const sortCase = prepareSortCase(caseRoot, kind);
-    if (kind !== "source") fs.writeFileSync(sortCase.output, `prior-${kind}-output`);
-    const prior = fs.existsSync(sortCase.output) ? fs.readFileSync(sortCase.output) : null;
-    await assert.rejects(execFileAsync(process.execPath, [child, kind, caseRoot, "crash-after-sort-lease-link"]),
-      (error) => error.signal === "SIGKILL");
-    assertSortResidue(caseRoot, { stages: 0, leases: 1, candidates: 1 });
-    if (prior) assert.deepEqual(fs.readFileSync(sortCase.output), prior);
-    await runSortCase(sortCase);
-    assertSortResidue(caseRoot, { stages: 0, leases: 0, candidates: 0 });
+    assertSortResidue(caseRoot, { stages: 0, leases: 0 });
   }
 
   // A recovery can itself die before, or while, removing a known-dead stage.
@@ -901,10 +880,10 @@ test("owned external-sort stages recover exact creator/recovery crash windows wi
     await assert.rejects(execFileAsync(process.execPath, [child, "terrain", caseRoot, phase]),
       (error) => error.signal === "SIGKILL");
     assert.equal(sortStageEntries(caseRoot).length, 1, `${phase} leaves at most the exact fixed stage`);
-    assertSortResidue(caseRoot, { stages: 1, leases: 1, candidates: 1 });
+    assertSortResidue(caseRoot, { stages: 1, leases: 1 });
     await runSortCase(sortCase);
     assert.deepEqual(sortStageEntries(caseRoot), [], `${phase} restart removes the partial recovery stage`);
-    assertSortResidue(caseRoot, { stages: 0, leases: 0, candidates: 0 });
+    assertSortResidue(caseRoot, { stages: 0, leases: 0 });
   }
 
   // After the durable output rename, a kill may leave the owned stage behind.
@@ -916,12 +895,12 @@ test("owned external-sort stages recover exact creator/recovery crash windows wi
     (error) => error.signal === "SIGKILL");
   const installedBytes = fs.readFileSync(installed.output);
   assert.equal(sortStageEntries(installedRoot).length, 1);
-  assertSortResidue(installedRoot, { stages: 1, leases: 1, candidates: 1 });
+  assertSortResidue(installedRoot, { stages: 1, leases: 1 });
   await runSortCase(installed);
   assert.deepEqual(fs.readFileSync(installed.output), installedBytes,
     "restart keeps the atomically installed terrain bytes after stage cleanup");
   assert.deepEqual(sortStageEntries(installedRoot), []);
-  assertSortResidue(installedRoot, { stages: 0, leases: 0, candidates: 0 });
+  assertSortResidue(installedRoot, { stages: 0, leases: 0 });
 
   // A simultaneous owner is never treated as stale merely because the caller
   // wants the same fixed stage. The child deliberately holds its lease.
@@ -933,14 +912,14 @@ test("owned external-sort stages recover exact creator/recovery crash windows wi
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   assert.equal(sortStageEntries(concurrentRoot).length, 1, "live writer acquired its tokenized stage");
-  assertSortResidue(concurrentRoot, { stages: 1, leases: 1, candidates: 1 });
+  assertSortResidue(concurrentRoot, { stages: 1, leases: 1 });
   try {
     await assert.rejects(runSortCase(concurrent), /live process/);
   } finally {
     await live;
   }
   assert.deepEqual(sortStageEntries(concurrentRoot), [], "live owner cleans its own stage");
-  assertSortResidue(concurrentRoot, { stages: 0, leases: 0, candidates: 0 });
+  assertSortResidue(concurrentRoot, { stages: 0, leases: 0 });
 
   // Never convert a malicious owner entry or copied owner token into cleanup
   // authority. In particular, no path under the stage may redirect an unlink.
@@ -951,9 +930,31 @@ test("owned external-sort stages recover exact creator/recovery crash windows wi
   const adversarial = prepareSortCase(adversarialRoot, "terrain");
   const adversarialLease = sortLeasePath(adversarial.output, "terrain-merge");
   fs.symlinkSync(sentinel, adversarialLease);
-  await assert.rejects(runSortCase(adversarial), /symlink|symbolic/i);
+  await assert.rejects(runSortCase(adversarial), /malformed atomic metadata/);
   assert.equal(fs.readFileSync(sentinel, "utf8"), "must survive sort-stage rejection");
   assert.equal(fs.existsSync(adversarialLease), true);
+  fs.unlinkSync(adversarialLease);
+  // A malformed atomic link and a regular half-written legacy candidate are
+  // both foreign state: neither is reaped, parsed as authority, or replaced.
+  fs.symlinkSync("{", adversarialLease);
+  await assert.rejects(runSortCase(adversarial), /malformed atomic metadata/);
+  assert.equal(fs.readlinkSync(adversarialLease), "{");
+  fs.unlinkSync(adversarialLease);
+  fs.writeFileSync(adversarialLease, "{\"version\":");
+  await assert.rejects(runSortCase(adversarial), /not atomic symlink metadata/);
+  assert.equal(fs.readFileSync(adversarialLease, "utf8"), "{\"version\":");
+  fs.unlinkSync(adversarialLease);
+  // A schema-valid but foreign fixed lease is not a stale candidate. It must
+  // remain exactly as found rather than being deleted or replaced by a new
+  // writer.
+  const foreignLease = canonicalJson({
+    version: 1, kind: "foreign-sort", output: path.basename(adversarial.output), pid: 999999,
+    identity: null, token: "00000000-0000-4000-8000-000000000001",
+  });
+  fs.symlinkSync(foreignLease, adversarialLease);
+  await assert.rejects(runSortCase(adversarial), /sort lease kind does not match/);
+  assert.equal(fs.readlinkSync(adversarialLease), foreignLease,
+    "foreign schema-valid lease is preserved without recovery authority");
   fs.unlinkSync(adversarialLease);
   const token = "00000000-0000-4000-8000-000000000000";
   const adversarialStage = path.join(adversarialRoot,
@@ -965,10 +966,10 @@ test("owned external-sort stages recover exact creator/recovery crash windows wi
     identity: null, stageDev: String(stat.dev), stageIno: "0",
     token,
   }));
-  fs.writeFileSync(adversarialLease, JSON.stringify({
+  fs.symlinkSync(canonicalJson({
     version: 1, kind: "terrain-merge", output: path.basename(adversarial.output), pid: 999999,
     identity: null, token,
-  }));
+  }), adversarialLease);
   await assert.rejects(runSortCase(adversarial), /foreign or replaced ownership/);
   assert.equal(fs.existsSync(adversarialStage), true, "copied/replaced owner cannot authorize stage deletion");
   assert.equal(fs.readFileSync(sentinel, "utf8"), "must survive sort-stage rejection");
@@ -1167,6 +1168,89 @@ test("coordinator carries the exact publication policy and config digest through
   assert.equal(shard.publicationPolicy.globalConfigDigest, merged.configDigest);
   assert.deepEqual(state.publicationPolicy, verifierPolicy);
   assert.deepEqual(merged.publicationPolicy, verifierPolicy);
+});
+
+test("source manifest sort workspace survives SIGKILL boundaries without contaminating the artifact transaction", async (t) => {
+  const root = temporary(t);
+  const policy = contract();
+  const config = path.join(root, "run.json");
+  const runner = path.join(root, "source-runner.mjs");
+  fs.writeFileSync(config, JSON.stringify({
+    cache_max_bytes: policy.cacheMaxBytes,
+    source_policy: policy.policy,
+    flow_config: { dataset_epoch: policy.datasetEpoch, regions: [{ name: "test", west: 0, south: 0, east: 1, north: 1 }] },
+  }));
+  fs.writeFileSync(runner, `
+    import fs from "node:fs";
+    import path from "node:path";
+    import { appendRequestObservation, observationForRequest, sourcePolicyContract } from ${JSON.stringify(PROVENANCE_URL)};
+    const value = JSON.parse(fs.readFileSync(process.argv[process.argv.indexOf("--config") + 1], "utf8"));
+    const out = process.argv[process.argv.indexOf("--out") + 1];
+    const contract = sourcePolicyContract(value);
+    fs.mkdirSync(out, { recursive: true });
+    fs.writeFileSync(path.join(out, "tiles.dttstream"), "");
+    const url = "https://example.test/dem/N45/E006";
+    const observation = observationForRequest({ cacheDir: value.cache_dir, url,
+      fetched: { status: 200, hit: false, body: Buffer.alloc(0) },
+      networkObservation: { observed_at: "2026-09-01T00:00:00.000Z" },
+    });
+    appendRequestObservation(path.join(out, contract.policy.manifest.shard_log), observation,
+      { requestedAt: "2026-09-01T00:00:00.000Z", cacheHit: false });
+    fs.writeFileSync(path.join(out, "run-report.json"), JSON.stringify({ drained: true, errors: [], sourceProvenance: {
+      sourcePolicyDigest: contract.digest, datasetEpoch: contract.datasetEpoch,
+      globalConfigDigest: value.global_config_digest,
+    } }));
+  `);
+  const cases = [
+    {
+      fault: "--fault-source-manifest-crash-before-stage-link",
+      workEntries: ["source-manifest.ndjson"], stagedEntries: [],
+      label: "sort workspace before transaction reservation",
+    },
+    {
+      fault: "--fault-source-manifest-crash-after-stage-link",
+      workEntries: ["source-manifest.ndjson"], stagedEntries: ["source-manifest.ndjson"],
+      label: "hard-linked stage before work-output unlink",
+    },
+    {
+      fault: "--fault-source-manifest-crash-before-reserve",
+      workEntries: [], stagedEntries: ["source-manifest.ndjson"],
+      label: "durable unreserved stage after work-output cleanup",
+    },
+    {
+      fault: "--fault-source-manifest-crash-after-reserve",
+      workEntries: [], stagedEntries: [],
+      label: "reserved and installed source manifest",
+    },
+  ];
+  for (const scenario of cases) {
+    const out = path.join(root, scenario.fault.slice(2));
+    const baseArgs = [COORDINATOR, "--config", config, "--out", out, "--runner", runner];
+    await assert.rejects(execFileAsync(process.execPath, [...baseArgs, scenario.fault]),
+      (error) => error.signal === "SIGKILL", `${scenario.label} actually SIGKILLs`);
+    const transaction = JSON.parse(fs.readFileSync(path.join(out, "global-artifact-transaction.json"), "utf8"));
+    const stagedEntries = fs.readdirSync(transaction.stagingDir).sort();
+    assert.deepEqual(stagedEntries, scenario.stagedEntries, `${scenario.label} leaves only its exact stage`);
+    const work = path.join(out, ".source-manifest-sort-work");
+    const workEntries = fs.readdirSync(work).sort();
+    assert.deepEqual(workEntries, scenario.workEntries,
+      `${scenario.label} leaves only fixed workspace protocol artifacts`);
+    for (const name of workEntries) assert.equal(name, "source-manifest.ndjson");
+
+    // This ordinary injected stop is reached only after startup recovered the
+    // SIGKILL residue, rebuilt the exact source-manifest path, and installed
+    // its fourth transaction member. It prevents the test from needing a
+    // verifier runtime while proving the resume path itself.
+    await assert.rejects(execFileAsync(process.execPath, [
+      ...baseArgs, "--fault-after-source-manifest-reserve",
+    ]), /fault injection after source manifest reserve/);
+    assert.deepEqual(fs.readdirSync(work).sort(), [], `${scenario.label} resume consumes all workspace residue`);
+    const resumed = JSON.parse(fs.readFileSync(path.join(out, "global-artifact-transaction.json"), "utf8"));
+    assert.equal(resumed.entries.length, 4, `${scenario.label} resume has the exact four-member transaction`);
+    assert.deepEqual(fs.readdirSync(resumed.stagingDir), [], `${scenario.label} resume finishes transaction staging empty`);
+    assert.equal(fs.existsSync(path.join(out, "source-manifest.ndjson")), true,
+      `${scenario.label} resume installs the immutable completion manifest`);
+  }
 });
 
 test("global artifact-set rollback leaves no mixed files at every rename boundary", async (t) => {
