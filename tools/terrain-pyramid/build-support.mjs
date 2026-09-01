@@ -102,10 +102,13 @@ function writeLines(file, rows) {
 export function createSortedJsonRunWriter(dir, {
   maxRows = 4096,
   maxRowBytes = 64 * 1024,
+  maxBufferedBytes = 8 * 1024 * 1024,
   compare = compareJsonFactKeys,
 } = {}) {
   assert.ok(Number.isSafeInteger(maxRows) && maxRows > 0, "maxRows must be positive");
   assert.ok(Number.isSafeInteger(maxRowBytes) && maxRowBytes > 0, "maxRowBytes must be positive");
+  assert.ok(Number.isSafeInteger(maxBufferedBytes) && maxBufferedBytes >= maxRowBytes,
+    "maxBufferedBytes must be at least maxRowBytes");
   assert.equal(typeof compare, "function", "compare must be a function");
   // A fact-run directory is attempt-scoped.  Remove stale runs before writing
   // so a shorter retry cannot accidentally merge prior-attempt facts.
@@ -113,6 +116,7 @@ export function createSortedJsonRunWriter(dir, {
   fs.mkdirSync(dir, { recursive: true });
   const runs = [];
   let rows = [];
+  let bufferedBytes = 0;
   let finished = false;
   const flush = () => {
     if (!rows.length) return;
@@ -121,14 +125,18 @@ export function createSortedJsonRunWriter(dir, {
     writeLines(file, rows);
     runs.push(file);
     rows = [];
+    bufferedBytes = 0;
   };
   return {
     push(row) {
       assert.ok(!finished, "cannot write a finished fact spool");
       // Validate the actual serialized bytes before retaining the row.  This
       // keeps adversarial JSON from bypassing the per-run memory bound.
-      rows.push({ row, line: serializedFact(row, maxRowBytes) });
-      if (rows.length >= maxRows) flush();
+      const line = serializedFact(row, maxRowBytes);
+      if (rows.length && (rows.length >= maxRows || bufferedBytes + Buffer.byteLength(line) + 1 > maxBufferedBytes)) flush();
+      rows.push({ row, line });
+      bufferedBytes += Buffer.byteLength(line) + 1;
+      if (rows.length >= maxRows || bufferedBytes >= maxBufferedBytes) flush();
     },
     finish() {
       assert.ok(!finished, "fact spool was already finished");
@@ -164,10 +172,12 @@ export async function* iterateJsonStringArrayProperty(file, property, {
   const decoder = new TextDecoder("utf-8", { fatal: true });
   let totalBytes = 0;
   let phase = "seek-key";
+  let objectStarted = false;
   let inString = false;
   let escaped = false;
   let raw = "";
   let found = false;
+  let currentKey = null;
   const whitespace = (char) => char === " " || char === "\t" || char === "\r" || char === "\n";
   const beginString = () => {
     inString = true;
@@ -195,7 +205,10 @@ export async function* iterateJsonStringArrayProperty(file, property, {
         } else if (char === '"') {
           const value = finishString();
           if (phase === "seek-key") {
-            if (value === property) phase = "expect-colon";
+            currentKey = value;
+            phase = "expect-colon";
+          } else if (phase === "prefix-string") {
+            phase = "after-prefix-value";
           } else if (phase === "array-value") {
             phase = "after-value";
             yield value;
@@ -209,13 +222,20 @@ export async function* iterateJsonStringArrayProperty(file, property, {
         continue;
       }
       if (whitespace(char)) continue;
+      if (phase === "complete") throw new Error(`trailing data after JSON object in ${file}`);
       if (phase === "seek-key") {
-        if (char === '"') beginString();
+        if (!objectStarted) {
+          assert.equal(char, "{", `legacy JSON must begin with an object in ${file}`);
+          objectStarted = true;
+          continue;
+        }
+        assert.equal(char, '"', `expected JSON object key in ${file}`);
+        beginString();
         continue;
       }
       if (phase === "expect-colon") {
-        assert.equal(char, ":", `expected ':' after ${property} in ${file}`);
-        phase = "expect-array";
+        assert.equal(char, ":", `expected ':' after object key in ${file}`);
+        phase = currentKey === property ? "expect-array" : "prefix-value";
         continue;
       }
       if (phase === "expect-array") {
@@ -224,9 +244,39 @@ export async function* iterateJsonStringArrayProperty(file, property, {
         found = true;
         continue;
       }
+      // Old run reports contain only scalar metadata before `addresses`
+      // (generatedAt/minLevel/count).  Validate those scalars rather than
+      // silently skipping arbitrary malformed JSON; `addresses` itself must
+      // remain final so the streamed array can be consumed without retention.
+      if (phase === "prefix-value") {
+        if (char === '"') {
+          phase = "prefix-string";
+          beginString();
+          continue;
+        }
+        assert.ok(/[-0-9tfn]/.test(char), `expected scalar JSON metadata before ${property} in ${file}`);
+        raw = char;
+        phase = "prefix-scalar";
+        continue;
+      }
+      if (phase === "prefix-scalar") {
+        if (char === "," || char === "}") {
+          try { JSON.parse(raw); } catch (error) { throw new Error(`invalid JSON metadata in ${file}: ${error.message}`); }
+          phase = char === "," ? "seek-key" : "complete";
+          continue;
+        }
+        raw += char;
+        assert.ok(Buffer.byteLength(raw) <= maxStringBytes, `JSON metadata exceeds ${maxStringBytes} bytes in ${file}`);
+        continue;
+      }
+      if (phase === "after-prefix-value") {
+        assert.ok(char === "," || char === "}", `expected ',' or '}' after JSON metadata in ${file}`);
+        phase = char === "," ? "seek-key" : "complete";
+        continue;
+      }
       if (phase === "array-value-or-end") {
         if (char === "]") {
-          phase = "done";
+          phase = "expect-object-end";
           continue;
         }
         assert.equal(char, '"', `expected string array value for ${property} in ${file}`);
@@ -240,10 +290,13 @@ export async function* iterateJsonStringArrayProperty(file, property, {
           continue;
         }
         assert.equal(char, "]", `expected ',' or ']' in ${property} array in ${file}`);
-        phase = "done";
+        phase = "expect-object-end";
         continue;
       }
-      // `done` deliberately ignores the object fields after `addresses`.
+      if (phase === "expect-object-end") {
+        assert.equal(char, "}", `legacy addresses must be the final JSON property in ${file}`);
+        phase = "complete";
+      }
     }
   };
   try {
@@ -253,7 +306,7 @@ export async function* iterateJsonStringArrayProperty(file, property, {
       yield* consume(decoder.decode(chunk, { stream: true }));
     }
     yield* consume(decoder.decode());
-    assert.ok(found && phase === "done", `JSON property ${property} is missing or incomplete in ${file}`);
+    assert.ok(found && phase === "complete", `JSON property ${property} is missing or incomplete in ${file}`);
   } finally {
     stream.destroy();
   }

@@ -46,12 +46,13 @@ export function splitStream(bytes) {
 // limit.  Yield one framed record at a time so callers keep only the indexes
 // their validation needs, not the entire byte stream.  The carry buffer is at
 // most one record plus a read chunk.
-export async function* iterateStreamFile(file, {
-  highWaterMark = 1024 * 1024,
+async function* iterateFramedStream(stream, {
+  onChunk = null,
   maxRecordBytes = MAX_TERRAIN_RECORD_BYTES,
 } = {}) {
   let pending = Buffer.alloc(0);
-  for await (const chunk of createReadStream(file, { highWaterMark })) {
+  for await (const chunk of stream) {
+    onChunk?.(chunk);
     pending = pending.length ? Buffer.concat([pending, chunk]) : Buffer.from(chunk);
     let offset = 0;
     while (offset + 4 <= pending.length) {
@@ -68,6 +69,24 @@ export async function* iterateStreamFile(file, {
     pending = pending.subarray(offset);
   }
   assert.equal(pending.length, 0, "the stream ends exactly on a record boundary");
+}
+
+export async function* iterateStreamFile(file, {
+  highWaterMark = 1024 * 1024,
+  maxRecordBytes = MAX_TERRAIN_RECORD_BYTES,
+} = {}) {
+  yield* iterateFramedStream(createReadStream(file, { highWaterMark }), { maxRecordBytes });
+}
+
+// The verifier uses a no-follow descriptor and a stable identity check so the
+// digest it publishes is for the bytes it actually parsed, not a pathname a
+// concurrent writer can replace between validation and receipt generation.
+export async function* iterateStreamFd(fd, {
+  highWaterMark = 1024 * 1024,
+  maxRecordBytes = MAX_TERRAIN_RECORD_BYTES,
+  onChunk = null,
+} = {}) {
+  yield* iterateFramedStream(createReadStream(null, { fd, autoClose: false, highWaterMark }), { maxRecordBytes, onChunk });
 }
 
 // ── a hand-written $DTT reader (field ids follow schema/DTT/main.fbs) ───────

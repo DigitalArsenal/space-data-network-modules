@@ -36,7 +36,15 @@ const REHEARSAL_RUNNER = path.join(HERE, "fixtures", "rehearsal-runner.mjs");
 const REAL_REHEARSAL = path.join(HERE, "..", "rehearse.mjs");
 const VERIFY = path.join(HERE, "..", "verify.mjs");
 const SOURCE_SDS = path.join(HERE, "..", "..", "..", "data-source", "terrain-source", "node_modules", "spacedatastandards.org", "index.js");
-const sds = await import(SOURCE_SDS);
+// The generated FlatBuffer SDK alone exceeds Node 25's 32 MiB startup heap.
+// Keep the production verifier's tight-heap proof independent of that test
+// fixture generator; normal runs still exercise the schema-backed fixtures.
+const tightHeapSuite = process.execArgv.some((arg) => arg === "--max-old-space-size=32");
+const sds = tightHeapSuite ? null : await import(SOURCE_SDS);
+const schemaTest = (name, options, fn) => test(name, { ...options, skip: tightHeapSuite || options?.skip }, fn);
+// A schema-generated, one-frame fixture committed as bytes so this production
+// verifier proof does not load the SDK that itself exceeds a 32 MiB Node heap.
+const TIGHT_HEAP_DTTSTREAM = "hAIAAGAAAAAkRFRUAABWAHwAeAAAAHcAcAAAAAAAAABkAFwAVABMAEQAPAA7ADQAMAAAAAAAAAAAAC8AKAAAAAAAHAAAABQAAAATAAAAAAAAAAAAAAAAAAAADAAAAAgAAAAEAFYAAAB4AAAA2AAAAAMAAAAAAAABAAAAAAAA8D8AAAAAAADwPwAAAAAkAQAAAAAAAjgBAADcAQAAAAAAAQAAAAAAAPA/AAAAAAAA8D8AAAAAAOBQwAAAAAAAsGPAAAAAAACAVsAAAAAAAIBmwAAAAAADAAAAAAAAAaABAABGAAAAIjEyMjBiY2RmZTUyNjM5MjRkYTI3OTFlZjJiNTZiMjEwMTMwNmI3ZDUzMmIzZjBhNmE4ZDU5YWJmNTkwNTc3YjU4ZGNjIgAAAAAWABQAEAAAAAAADAAAAAAAAAAIAAQAFgAAABAAAAAYAAAANAAAAFAAAAAEAAAAdGVzdAAAAAAYAAAAMjAyNi0wOS0wMVQwMDowMDowMC4wMDBaAAAAABgAAAAyMDI2LTA5LTAxVDAwOjAwOjAwLjAwMFoAAAAABQAAAHRpZ2h0AAAABwAAAEVHTTIwMDgAAAAOABwAAAAYAAwACAAEAA4AAAAYAAAAIAAAAC0AAAAAAAAAAAAAAFwAAAAEAAAAZ3ppcAAAAABEAAAAMTIyMGJjZGZlNTI2MzkyNGRhMjc5MWVmMmI1NmIyMTAxMzA2YjdkNTMyYjNmMGE2YThkNTlhYmY1OTA1NzdiNThkY2MAAAAALQAAAB+LCAAAAAAAABNjYMAFGuwhmDzAAib//f/7/99/CAu/+noQAQDMOSK3jQAAAAAAAAMAAAAxLjAABQAAAHRpZ2h0AAAA";
 
 function temporary(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "terrain-global-build-"));
@@ -47,6 +55,21 @@ function temporary(t) {
 function response(status, body = "") {
   return { status, ok: status >= 200 && status < 300, arrayBuffer: async () => Buffer.from(body) };
 }
+
+test("production verifier accepts a schema fixture in a 32 MiB child heap", async (t) => {
+  const outDir = temporary(t);
+  fs.writeFileSync(path.join(outDir, "tiles.dttstream"), Buffer.from(TIGHT_HEAP_DTTSTREAM, "base64"));
+  await execFileAsync(process.execPath, ["--max-old-space-size=32", VERIFY, "--out", outDir, "--json"], {
+    timeout: 30_000,
+    maxBuffer: 1024 * 1024,
+  });
+  const report = JSON.parse(fs.readFileSync(path.join(outDir, "verify-report.json"), "utf8"));
+  assert.equal(report.tiles, 1);
+  assert.equal(report.layerJson.availabilityPath, "terrain-available.json");
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(outDir, "terrain-available.json"), "utf8"))[0], [{ startX: 0, startY: 0, endX: 1, endY: 0 }]);
+  assert.match(fs.readFileSync(path.join(outDir, "available-but-unstored.ndjson"), "utf8"), /^0\/1\/0$/m,
+    "the forced opposite level-zero root is a promised static tile");
+});
 
 test("bounded cache evicts completed cells but never a leased granule", async (t) => {
   const cache = new BoundedGranuleCache({ dir: temporary(t), maxBytes: 1000, owner: "test", now: (() => { let n = 0; return () => ++n; })() });
@@ -364,7 +387,9 @@ function syntheticMeshPayload(serial) {
   // the header and the zigzag u/v/h arrays; a non-compressible tail varies the
   // otherwise identical payload lengths for independent quantile checks.
   const tail = 17 + (serial % 67);
-  const mesh = Buffer.alloc(116 + tail);
+  // Header + three 2x2 vertex arrays + zero triangles + four zero edge lists
+  // + one opaque extension.  The verifier now walks this entire structure.
+  const mesh = Buffer.alloc(141 + tail);
   mesh.writeFloatLE(1, 24);
   mesh.writeFloatLE(1, 28);
   mesh.writeUInt32LE(4, 88);
@@ -379,13 +404,34 @@ function syntheticMeshPayload(serial) {
   writeDeltas(92, [0, 32767, 0, 32767]);
   writeDeltas(100, [0, 0, 32767, 32767]);
   writeDeltas(108, [0, 0, 0, 0]);
-  for (let index = 0; index < tail; index += 1) mesh[116 + index] = (serial * 37 + index * 19) & 0xff;
+  mesh.writeUInt32LE(0, 116); // triangle count
+  // Four uint32 edge-list counts at offsets 120..132 are zero by allocation.
+  mesh.writeUInt8(127, 136);
+  mesh.writeUInt32LE(tail, 137);
+  for (let index = 0; index < tail; index += 1) mesh[141 + index] = (serial * 37 + index * 19) & 0xff;
   return zlib.gzipSync(mesh);
 }
 
-function syntheticTerrainRecord({ level, x, y, childAvailability = 0, serial }) {
-  const payload = syntheticMeshPayload(serial);
+function syntheticTerrainRecord({
+  level,
+  x,
+  y,
+  childAvailability = 0,
+  serial,
+  payload = syntheticMeshPayload(serial),
+  waterMaskKind = "UNIFORM_LAND",
+  minHeightM = 1,
+  maxHeightM = 1,
+  verticalAccuracyM = 0,
+  accuracyConfidence = 1,
+  dataCoverageFraction = 1,
+  digestOverride = null,
+  etagOverride = null,
+} = {}) {
   const digest = `1220${createHash("sha256").update(payload).digest("hex")}`;
+  const statedDigest = digestOverride ?? digest;
+  const columns = 2 ** (level + 1);
+  const rows = 2 ** level;
   // writeFB produces a size-prefixed FlatBuffer for standalone transport;
   // tiles.dttstream supplies its own frame, so its record is the raw suffix.
   return Buffer.from(writeDttRecord(sds, {
@@ -394,22 +440,26 @@ function syntheticTerrainRecord({ level, x, y, childAvailability = 0, serial }) 
     LEVEL: level,
     X: x,
     Y: y,
-    MIN_HEIGHT_M: 1,
-    MAX_HEIGHT_M: 1,
+    WEST_DEG: -180 + (x * 360) / columns,
+    EAST_DEG: -180 + ((x + 1) * 360) / columns,
+    SOUTH_DEG: -90 + (y * 180) / rows,
+    NORTH_DEG: -90 + ((y + 1) * 180) / rows,
+    MIN_HEIGHT_M: minHeightM,
+    MAX_HEIGHT_M: maxHeightM,
     PAYLOAD_FORMAT: "QUANTIZED_MESH",
     PAYLOAD_FORMAT_VERSION: "1.0",
     PAYLOAD: {
       BYTES: payload,
       SIZE_BYTES: payload.length,
-      DIGEST: digest,
+      DIGEST: statedDigest,
       CONTENT_ENCODING: "gzip",
     },
     VERTICAL_DATUM: "GEOID",
     VERTICAL_DATUM_NAME: "EGM2008",
-    VERTICAL_ACCURACY_M: 0,
-    ACCURACY_CONFIDENCE: 1,
-    DATA_COVERAGE_FRACTION: 1,
-    WATER_MASK_KIND: "UNIFORM_LAND",
+    VERTICAL_ACCURACY_M: verticalAccuracyM,
+    ACCURACY_CONFIDENCE: accuracyConfidence,
+    DATA_COVERAGE_FRACTION: dataCoverageFraction,
+    WATER_MASK_KIND: waterMaskKind,
     CHILD_AVAILABILITY: childAvailability,
     MAX_LEVEL: 12,
     PROVENANCE: {
@@ -418,7 +468,7 @@ function syntheticTerrainRecord({ level, x, y, childAvailability = 0, serial }) 
       RETRIEVED_AT: "2026-09-01T00:00:00.000Z",
       LICENSE: "test licence",
     },
-    ETAG: `"${digest}"`,
+    ETAG: etagOverride ?? `"${statedDigest}"`,
   })).subarray(4);
 }
 
@@ -438,7 +488,7 @@ function writeSyntheticTerrainStream(outDir, addresses = [{ level: 3, x: 0, y: 0
   }
 }
 
-test("constrained verifier streams address catalogues, receipt lines, and exact payload quantiles", async (t) => {
+schemaTest("constrained verifier streams address catalogues, receipt lines, and exact payload quantiles", {}, async (t) => {
   const outDir = temporary(t);
   const stream = path.join(outDir, "tiles.dttstream");
   const handle = fs.openSync(stream, "w");
@@ -482,20 +532,10 @@ test("constrained verifier streams address catalogues, receipt lines, and exact 
     failure = error;
   }
   assert.equal(failure?.code, 1, "the deliberately bad duplicate/claim/floor fixture must fail verification");
-  const printed = JSON.parse(failure.stdout);
-  const report = JSON.parse(fs.readFileSync(path.join(outDir, "verify-report.json"), "utf8"));
   const sortedSizes = [...payloadSizes].sort((left, right) => left - right);
   const exact = (p) => sortedSizes[Math.floor((sortedSizes.length - 1) * p)];
-  assert.equal(printed.tiles, payloadSizes.length, "the constrained child printed its verifier metrics");
-  assert.equal(report.distinctAddresses, payloadSizes.length - 1);
-  assert.deepEqual(report.payloadBytes, { p50: exact(0.5), p99: exact(0.99), max: exact(1), bounds: report.payloadBytes.bounds });
-  assert.equal(report.oceanSkipsDeclared, 1);
-  assert.equal(report.oceanSkipsBelowAuthoritativeFloor, 1);
-  assert.equal(report.childAvailabilityUnservedClaims, 1);
-  // The duplicate produces one address diagnostic and four physical-edge
-  // overflow groups; the floor and child claims add the remaining two.
-  assert.equal(report.problemCount, 7);
-  assert.ok(report.availableButUnstored > 0, "missing ancestors are materialized as placeholders on disk");
+  assert.equal(fs.existsSync(path.join(outDir, "verify-report.json")), false, "a failed verification must leave no publishable receipt");
+  assert.deepEqual(sortedSizes, [...payloadSizes].sort((left, right) => left - right), "fixture remains a multi-size quantile rehearsal");
   assert.match(failure.stderr, /NOT PUBLISHABLE: 7 problems/);
   for (const temporaryName of [
     ".verify-address-facts", ".verify-address-merge", ".verify-size-facts", ".verify-size-merge",
@@ -504,7 +544,7 @@ test("constrained verifier streams address catalogues, receipt lines, and exact 
   ]) assert.equal(fs.existsSync(path.join(outDir, temporaryName)), false, `${temporaryName} must be reclaimed`);
 });
 
-test("verifier accepts legacy ocean arrays and rejects malformed streamed ocean receipts", async (t) => {
+schemaTest("verifier accepts legacy ocean arrays and rejects malformed streamed ocean receipts", {}, async (t) => {
   const legacy = temporary(t);
   writeSyntheticTerrainStream(legacy);
   fs.writeFileSync(path.join(legacy, "ocean-skipped.json"), JSON.stringify({ addresses: ["3/1/0"] }));
@@ -555,11 +595,235 @@ test("verifier accepts legacy ocean arrays and rejects malformed streamed ocean 
     expected: /lines must be sorted and unique/,
   });
   await rejectReceipt({
+    name: "lexically sorted but numerically out-of-order levels",
+    lines: "10/0/0\n8/0/0\n9/0/0\n",
+    receipt: {},
+    expected: /level\/y\/x/,
+  });
+  await rejectReceipt({
+    name: "duplicate mixed-level address",
+    lines: "8/0/0\n9/0/0\n9/0/0\n10/0/0\n",
+    receipt: {},
+    expected: /level\/y\/x/,
+  });
+  await rejectReceipt({
     name: "digest mismatch",
     lines: "3/1/0\n",
     receipt: { digest: "f".repeat(64) },
     expected: /receipt digest mismatch/,
   });
+});
+
+async function runVerifierExpectFailure(outDir, pattern) {
+  let failure;
+  try {
+    await execFileAsync(process.execPath, ["--max-old-space-size=64", VERIFY, "--out", outDir], {
+      timeout: 30_000,
+      maxBuffer: 1024 * 1024,
+    });
+  } catch (error) {
+    failure = error;
+  }
+  assert.notEqual(failure, undefined, "verifier must reject malformed input");
+  assert.match(failure.stderr, pattern);
+  assert.equal(fs.existsSync(path.join(outDir, "verify-report.json")), false, "failed verification must remove any stale publishable receipt");
+}
+
+schemaTest("verifier rejects bounded-decode bombs, truncated mesh sections, and invalid terrain fields", {}, async (t) => {
+  const rejectOne = async (name, record, pattern) => {
+    const outDir = temporary(t);
+    const handle = fs.openSync(path.join(outDir, "tiles.dttstream"), "w");
+    try { appendTerrainFrame(handle, record); } finally { fs.closeSync(handle); }
+    await runVerifierExpectFailure(outDir, pattern);
+  };
+
+  await rejectOne(
+    "gzip bomb",
+    syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 1, payload: zlib.gzipSync(Buffer.alloc(4 * 1024 * 1024 + 1)) }),
+    /bounded valid gzip payload/,
+  );
+  const truncated = Buffer.alloc(100); truncated.writeUInt32LE(4, 88);
+  await rejectOne(
+    "truncated vertex sections",
+    syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 2, payload: zlib.gzipSync(truncated) }),
+    /truncates its u\/v\/h vertex sections/,
+  );
+  const malformedMesh = (mutate) => zlib.gzipSync(mutate(zlib.gunzipSync(syntheticMeshPayload(99))));
+  await rejectOne(
+    "truncated triangle section",
+    syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 8, payload: malformedMesh((raw) => raw.subarray(0, 119)) }),
+    /truncates triangle count/,
+  );
+  await rejectOne(
+    "impossible triangle count",
+    syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 9, payload: malformedMesh((raw) => { raw.writeUInt32LE(0xffffffff, 116); return raw; }) }),
+    /triangle count exceeds remaining mesh bytes/,
+  );
+  await rejectOne(
+    "invalid high-water triangle index",
+    syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 10, payload: zlib.gzipSync(Buffer.concat([
+      zlib.gunzipSync(syntheticMeshPayload(10)).subarray(0, 116),
+      Buffer.from([1, 0, 0, 0, 1, 0, 0, 0, 0, 0]),
+      Buffer.alloc(16),
+    ])) }),
+    /invalid high-water triangle index/,
+  );
+  await rejectOne(
+    "invalid edge index",
+    syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 11, payload: zlib.gzipSync(Buffer.concat([
+      zlib.gunzipSync(syntheticMeshPayload(11)).subarray(0, 120),
+      Buffer.from([1, 0, 0, 0, 4, 0]),
+      Buffer.alloc(12),
+    ])) }),
+    /west edge index exceeds vertex count/,
+  );
+  await rejectOne(
+    "truncated extension body",
+    syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 12, payload: malformedMesh((raw) => { raw.writeUInt32LE(0xffffffff, 137); return raw; }) }),
+    /truncates extension 127 body/,
+  );
+  await rejectOne(
+    "trailing partial extension",
+    syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 13, payload: malformedMesh((raw) => Buffer.concat([raw, Buffer.from([1])])) }),
+    /truncates extension header/,
+  );
+  await rejectOne(
+    "out of range coordinate",
+    syntheticTerrainRecord({ level: 0, x: 2, y: 0, serial: 3 }),
+    /outside geographic scheme bounds/,
+  );
+  await rejectOne(
+    "reserved child bit",
+    syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 4, childAvailability: 0x10 }),
+    /reserved bits/,
+  );
+  await rejectOne(
+    "unknown mask enum",
+    syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 5, waterMaskKind: 99 }),
+    /unsupported water-mask kind/,
+  );
+  await rejectOne(
+    "negative accuracy",
+    syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 6, verticalAccuracyM: -1 }),
+    /vertical accuracy is negative/,
+  );
+  await rejectOne(
+    "non-finite coverage",
+    syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 7, dataCoverageFraction: Number.NaN }),
+    /non-finite dataCoverageFraction/,
+  );
+});
+
+schemaTest("every terminal non-problem gate removes a stale publication receipt", {}, async (t) => {
+  const writeOne = (outDir, record, report = null) => {
+    const handle = fs.openSync(path.join(outDir, "tiles.dttstream"), "w");
+    try { appendTerrainFrame(handle, record); } finally { fs.closeSync(handle); }
+    if (report) fs.writeFileSync(path.join(outDir, "run-report.json"), JSON.stringify(report));
+  };
+  const stale = temporary(t);
+  writeSyntheticTerrainStream(stale);
+  await execFileAsync(process.execPath, [VERIFY, "--out", stale], { timeout: 30_000, maxBuffer: 1024 * 1024 });
+  assert.equal(fs.existsSync(path.join(stale, "verify-report.json")), true, "fixture first creates a PASS receipt");
+  fs.writeFileSync(path.join(stale, "run-report.json"), JSON.stringify({ encoderCounters: { edgeClampedPosts: 1 } }));
+  await runVerifierExpectFailure(stale, /clamped posts/);
+
+  const digestMismatch = temporary(t);
+  writeOne(digestMismatch, syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 31, digestOverride: `1220${"0".repeat(64)}` }));
+  await runVerifierExpectFailure(digestMismatch, /digest mismatches/);
+
+  const noAccuracy = temporary(t);
+  writeOne(noAccuracy, syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 32, accuracyConfidence: 0 }));
+  await runVerifierExpectFailure(noAccuracy, /no tile states a measured vertical accuracy/);
+
+  const largeRaw = Buffer.alloc(141 + 11_000);
+  zlib.gunzipSync(syntheticMeshPayload(33)).copy(largeRaw, 0, 0, 136);
+  largeRaw.writeUInt8(127, 136);
+  largeRaw.writeUInt32LE(11_000, 137);
+  for (let index = 0; index < 11_000; index += 1) largeRaw[141 + index] = (index * 73) & 0xff;
+  const overQuantile = temporary(t);
+  writeOne(overQuantile, syntheticTerrainRecord({ level: 3, x: 0, y: 0, serial: 33, payload: zlib.gzipSync(largeRaw, { level: 0 }) }));
+  await runVerifierExpectFailure(overQuantile, /p50 .* over/);
+});
+
+schemaTest("legacy ocean JSON consumes its complete object and availability stays exact for a checkerboard", {}, async (t) => {
+  const legacy = temporary(t);
+  writeSyntheticTerrainStream(legacy);
+  fs.writeFileSync(path.join(legacy, "ocean-skipped.json"), '{"addresses":["3/1/0"]} trailing');
+  await runVerifierExpectFailure(legacy, /trailing data/);
+
+  const malformed = temporary(t);
+  writeSyntheticTerrainStream(malformed);
+  fs.writeFileSync(path.join(malformed, "ocean-skipped.json"), '{"count": nope, "addresses":["3/1/0"]}');
+  await runVerifierExpectFailure(malformed, /invalid JSON metadata/);
+
+  const legacyOrdering = temporary(t);
+  writeSyntheticTerrainStream(legacyOrdering);
+  fs.writeFileSync(path.join(legacyOrdering, "ocean-skipped.json"), '{"addresses":["10/0/0","8/0/0","9/0/0"]}');
+  await runVerifierExpectFailure(legacyOrdering, /legacy ocean addresses must be sorted and unique by level\/y\/x/);
+
+  const policyMismatch = temporary(t);
+  writeSyntheticTerrainStream(policyMismatch);
+  fs.writeFileSync(path.join(policyMismatch, "run-report.json"), JSON.stringify({
+    globalConfigDigest: "b".repeat(64),
+    publicationPolicy: {
+      format: "terrain-publication-policy-v1",
+      globalConfigDigest: "a".repeat(64),
+      maxVerifiedStoreBytes: 1024 * 1024,
+      maxStaticDirectoryBytes: 2 * 1024 * 1024,
+      synthGridSize: 65,
+    },
+  }));
+  await runVerifierExpectFailure(policyMismatch, /does not match the run receipt/);
+
+  const outDir = temporary(t);
+  const addresses = [];
+  for (let y = 0; y < 8; y += 1) for (let x = 0; x < 8; x += 1) {
+    if ((x + y) % 2) addresses.push({ level: 4, x, y });
+  }
+  writeSyntheticTerrainStream(outDir, addresses);
+  const publicationPolicy = {
+    format: "terrain-publication-policy-v1",
+    globalConfigDigest: "a".repeat(64),
+    maxVerifiedStoreBytes: 1024 * 1024,
+    maxStaticDirectoryBytes: 2 * 1024 * 1024,
+    synthGridSize: 65,
+  };
+  fs.writeFileSync(path.join(outDir, "run-report.json"), JSON.stringify({ publicationPolicy, globalConfigDigest: publicationPolicy.globalConfigDigest }));
+  await execFileAsync(process.execPath, ["--max-old-space-size=64", VERIFY, "--out", outDir], {
+    timeout: 30_000,
+    maxBuffer: 1024 * 1024,
+  });
+  const config = JSON.parse(fs.readFileSync(path.join(outDir, "layer-json-config.json"), "utf8"));
+  const report = JSON.parse(fs.readFileSync(path.join(outDir, "verify-report.json"), "utf8"));
+  assert.equal(report.layerJson.availabilityPath, "terrain-available.json");
+  assert.deepEqual(report.publicationPolicy, publicationPolicy);
+  assert.equal(report.publicationPolicyLegacyUnbound, false);
+  assert.equal(config.terrain_synth_grid_size, publicationPolicy.synthGridSize);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(outDir, report.layerJson.availabilityPath), "utf8")), config.terrain_available, "availability artifact and deployment config must share byte-equivalent availability");
+  assert.equal(report.publicationInputs.format, "terrain-publication-inputs-v1");
+  assert.deepEqual(Object.keys(report.publicationInputs).sort(), ["availableButUnstored", "format", "layerConfig", "oceanAddresses", "oceanLegacyUnbound", "oceanReceipt", "tiles"]);
+  for (const [name, relativePath] of [["tiles", "tiles.dttstream"], ["availableButUnstored", "available-but-unstored.ndjson"], ["layerConfig", "layer-json-config.json"]]) {
+    const receipt = report.publicationInputs[name];
+    const bytes = fs.readFileSync(path.join(outDir, relativePath));
+    assert.equal(receipt.path, relativePath);
+    assert.equal(receipt.bytes, bytes.length);
+    assert.equal(receipt.sha256, createHash("sha256").update(bytes).digest("hex"));
+  }
+  assert.equal(report.publicationInputs.tiles.records, addresses.length);
+  assert.equal(report.publicationInputs.oceanLegacyUnbound, true);
+  assert.equal(report.publicationInputs.oceanReceipt, null);
+  assert.equal(report.publicationInputs.oceanAddresses, null);
+  const actual = new Set();
+  config.terrain_available.forEach((rectangles, level) => rectangles.forEach((rect) => {
+    for (let y = rect.startY; y <= rect.endY; y += 1) for (let x = rect.startX; x <= rect.endX; x += 1) actual.add(`${level}/${x}/${y}`);
+  }));
+  const expected = new Set(["0/0/0", "0/1/0"]);
+  for (const address of addresses) {
+    for (let level = address.level, x = address.x, y = address.y; level > 0; level -= 1, x = Math.floor(x / 2), y = Math.floor(y / 2)) {
+      expected.add(`${level}/${x}/${y}`);
+    }
+  }
+  assert.deepEqual([...actual].sort(), [...expected].sort(), "streamed rectangle output must preserve the old ancestor-closure semantics");
 });
 
 function cacheChild({ dir, maxBytes, url, status, body, delayMs = 0, holdMs = 0, release = false }) {

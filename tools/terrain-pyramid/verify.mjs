@@ -22,7 +22,7 @@ import {
   iterateJsonStringArrayProperty,
   mergeSortedJsonRuns,
 } from "./build-support.mjs";
-import { iterateStreamFile, readDtt, readDttProvenance } from "./dtt-reader.mjs";
+import { iterateStreamFd, readDtt, readDttProvenance } from "./dtt-reader.mjs";
 
 // ── THE BOUNDS THIS PYRAMID HAS TO SATISFY TO BE PUBLISHABLE ───────────────
 //
@@ -52,6 +52,16 @@ import { iterateStreamFile, readDtt, readDttProvenance } from "./dtt-reader.mjs"
 // and kept AS A NUMBER: both figures are reported per level below, so the
 // change of gate is visible rather than a quiet loosening.
 const BOUNDS = { p50: 10240, p99: 28672, hard: 32768 };
+// The published terrain scheme is geographic and its current approved global
+// cut stops at z10.  Permit a little headroom for the regional proof while
+// retaining arithmetic that is exact in JavaScript and cannot make an input
+// header allocate an array indexed by an arbitrary u32.
+const MAX_TERRAIN_LEVEL = 30;
+const MAX_MESH_GRID = 512;
+const MAX_MESH_BYTES = 4 * 1024 * 1024;
+const MAX_COMPRESSED_PAYLOAD_BYTES = 1024 * 1024;
+const MAX_MASK_BYTES = 256 * 256;
+const MAX_RUN_REPORT_BYTES = 1024 * 1024;
 // The share of tiles per level that may ship at the cap without meeting the
 // error target, and the level from which that share is gated at all.
 import { memoryPagesAdvice, memoryPagesFor } from "./memory-pages.mjs";
@@ -87,12 +97,145 @@ function parseArgs(argv) {
   return args;
 }
 
+function fsyncDirectory(directory) {
+  const fd = fs.openSync(directory, fs.constants.O_RDONLY);
+  try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+}
+
+// Do not turn an output-sized availability index back into a heap allocation
+// merely to nest it in one of the three delivery documents.  These writers
+// stage beside the final document and rename only a complete JSON value.
+function copyFileToHandle(from, handle) {
+  const input = fs.openSync(from, "r");
+  const buffer = Buffer.allocUnsafe(64 * 1024);
+  try {
+    let at = 0;
+    for (;;) {
+      const read = fs.readSync(input, buffer, 0, buffer.length, at);
+      if (!read) break;
+      fs.writeSync(handle, buffer, 0, read);
+      at += read;
+    }
+  } finally {
+    fs.closeSync(input);
+  }
+}
+
+function atomicWriteWithRawTopLevelProperty(file, object, property, rawFile) {
+  const staged = `${file}.${process.pid}.${Date.now()}.tmp`;
+  const encoded = JSON.stringify(object, null, 2);
+  assert.ok(encoded.endsWith("}"), "top-level JSON object must end with a brace");
+  const handle = fs.openSync(staged, "wx");
+  try {
+    fs.writeSync(handle, `${encoded.slice(0, -1)},\n  ${JSON.stringify(property)}: `);
+    copyFileToHandle(rawFile, handle);
+    fs.writeSync(handle, "\n}\n");
+  } catch (error) {
+    fs.closeSync(handle);
+    fs.rmSync(staged, { force: true });
+    throw error;
+  }
+  fs.fsyncSync(handle);
+  fs.closeSync(handle);
+  fs.renameSync(staged, file);
+  fsyncDirectory(path.dirname(file));
+}
+
+function atomicWriteJson(file, value) {
+  const staged = `${file}.${process.pid}.${Date.now()}.tmp`;
+  const encoded = `${JSON.stringify(value, null, 2)}\n`;
+  const handle = fs.openSync(staged, "wx");
+  try {
+    fs.writeSync(handle, encoded);
+  } catch (error) {
+    fs.closeSync(handle);
+    fs.rmSync(staged, { force: true });
+    throw error;
+  }
+  fs.fsyncSync(handle);
+  fs.closeSync(handle);
+  fs.renameSync(staged, file);
+  fsyncDirectory(path.dirname(file));
+}
+
 // ── the four EDGE post rows of a quantized mesh, in metres ─────────────────
 //
 // Only the edges are kept: 4,621 tiles x 4,225 vertices x three arrays is half
 // a gigabyte, and the property under test is entirely about shared posts.
 // Vertices are identified by their QUANTISED u/v, so the encoder's index
 // reordering cannot move them.
+function gunzipBounded(bytes, maxOutputLength, label) {
+  try {
+    return zlib.gunzipSync(bytes, { maxOutputLength });
+  } catch (error) {
+    throw new Error(`${label} is not a bounded valid gzip payload: ${error.message}`);
+  }
+}
+
+function validateMeshStructure(mesh, label) {
+  assert.ok(mesh.length >= 92, `${label} is shorter than a quantized-mesh header`);
+  const count = mesh.readUInt32LE(88);
+  const grid = Math.round(Math.sqrt(count));
+  assert.ok(grid >= 2 && grid <= MAX_MESH_GRID && grid * grid === count,
+    `${label} has unsupported regular-lattice vertex count ${count}`);
+  // Walk every variable-length section without allocating from untrusted
+  // counts.  A header-only check used to let a malformed triangle/edge tail
+  // reach publication even though the static tile consumer must parse it.
+  let at = 92 + count * 6;
+  assert.ok(at <= mesh.length, `${label} truncates its u/v/h vertex sections`);
+  const wide = count > 65536;
+  const indexWidth = wide ? 4 : 2;
+  const align = wide ? 4 : 2;
+  while (at % align) at += 1;
+  const requireBytes = (bytes, section) => {
+    assert.ok(Number.isSafeInteger(bytes) && bytes >= 0 && at + bytes <= mesh.length,
+      `${label} truncates ${section}`);
+  };
+  requireBytes(4, "triangle count");
+  const triangleCount = mesh.readUInt32LE(at);
+  at += 4;
+  assert.ok(triangleCount <= Math.floor((mesh.length - at) / (3 * indexWidth)),
+    `${label} triangle count exceeds remaining mesh bytes`);
+  const readIndex = () => {
+    requireBytes(indexWidth, "triangle indices");
+    const value = wide ? mesh.readUInt32LE(at) : mesh.readUInt16LE(at);
+    at += indexWidth;
+    return value;
+  };
+  let highWater = 0;
+  for (let index = 0; index < triangleCount * 3; index += 1) {
+    const code = readIndex();
+    assert.ok(code <= highWater, `${label} has invalid high-water triangle index`);
+    const decoded = highWater - code;
+    assert.ok(decoded < count, `${label} triangle index exceeds vertex count`);
+    if (code === 0) highWater += 1;
+    assert.ok(highWater <= count, `${label} triangle high-water mark exceeds vertex count`);
+  }
+  for (const edge of ["west", "south", "east", "north"]) {
+    requireBytes(4, `${edge} edge count`);
+    const edgeCount = mesh.readUInt32LE(at);
+    at += 4;
+    assert.ok(edgeCount <= count, `${label} ${edge} edge count exceeds vertex count`);
+    requireBytes(edgeCount * indexWidth, `${edge} edge indices`);
+    for (let index = 0; index < edgeCount; index += 1) {
+      const vertex = wide ? mesh.readUInt32LE(at) : mesh.readUInt16LE(at);
+      at += indexWidth;
+      assert.ok(vertex < count, `${label} ${edge} edge index exceeds vertex count`);
+    }
+  }
+  while (at < mesh.length) {
+    requireBytes(5, "extension header");
+    const extensionId = mesh.readUInt8(at);
+    const extensionBytes = mesh.readUInt32LE(at + 1);
+    at += 5;
+    assert.ok(extensionId !== 0, `${label} has invalid extension id 0`);
+    requireBytes(extensionBytes, `extension ${extensionId} body`);
+    at += extensionBytes;
+  }
+  assert.equal(at, mesh.length, `${label} has trailing mesh bytes`);
+  return { count, grid };
+}
+
 function meshEdges(mesh, dtt) {
   // GRID_WIDTH/GRID_HEIGHT are unset on a mesh payload — the schema says so
   // ("Unset for mesh formats, whose vertex count varies") — so the lattice is
@@ -100,9 +243,7 @@ function meshEdges(mesh, dtt) {
   // field that is legitimately absent and defaulting it to 65 would have
   // silently mis-parsed every pyramid built at another grid size.
   void dtt;
-  const count = mesh.readUInt32LE(88);
-  const grid = Math.round(Math.sqrt(count));
-  assert.equal(grid * grid, count, "a regular-lattice mesh has a square vertex count");
+  const { count, grid } = validateMeshStructure(mesh, "quantized mesh");
   let at = 92;
   const zigzag = () => {
     const out = new Uint16Array(count);
@@ -196,6 +337,40 @@ function parseTerrainAddress(value, source) {
   return { level, x, y };
 }
 
+function validateTerrainAddress(level, x, y, source) {
+  assert.ok(Number.isSafeInteger(level) && level >= 0 && level <= MAX_TERRAIN_LEVEL,
+    `terrain level outside approved [0, ${MAX_TERRAIN_LEVEL}] range in ${source}`);
+  assert.ok(Number.isSafeInteger(x) && Number.isSafeInteger(y) && x >= 0 && y >= 0,
+    `terrain coordinate is not a non-negative safe integer in ${source}`);
+  const columns = 2 ** (level + 1);
+  const rows = 2 ** level;
+  assert.ok(x < columns && y < rows, `terrain coordinate ${level}/${x}/${y} is outside geographic scheme bounds`);
+}
+
+function validateDtt(dtt, record) {
+  validateTerrainAddress(dtt.level, dtt.x, dtt.y, "tile record");
+  assert.ok(dtt.payload?.bytes, "tile record has no inline quantized-mesh payload");
+  assert.ok([1, 2, 3].includes(dtt.waterMaskKind), `unsupported water-mask kind ${dtt.waterMaskKind}`);
+  assert.ok((dtt.childAvailability & ~0x0f) === 0, `child availability has reserved bits set at ${terrainAddress(dtt.level, dtt.x, dtt.y)}`);
+  for (const [name, value] of Object.entries({
+    westDeg: dtt.westDeg, southDeg: dtt.southDeg, eastDeg: dtt.eastDeg, northDeg: dtt.northDeg,
+    minHeightM: dtt.minHeightM, maxHeightM: dtt.maxHeightM,
+    verticalAccuracyM: dtt.verticalAccuracyM, accuracyConfidence: dtt.accuracyConfidence,
+    dataCoverageFraction: dtt.dataCoverageFraction,
+  })) assert.ok(Number.isFinite(value), `tile ${terrainAddress(dtt.level, dtt.x, dtt.y)} has non-finite ${name}`);
+  assert.ok(dtt.westDeg < dtt.eastDeg && dtt.southDeg < dtt.northDeg, "tile extent is inverted");
+  assert.ok(dtt.westDeg >= -180 && dtt.eastDeg <= 180 && dtt.southDeg >= -90 && dtt.northDeg <= 90,
+    "tile extent is outside geographic WGS84 bounds");
+  assert.ok(dtt.dataCoverageFraction >= 0 && dtt.dataCoverageFraction <= 1, "tile coverage is outside [0, 1]");
+  assert.ok(dtt.accuracyConfidence >= 0 && dtt.accuracyConfidence <= 1, "tile accuracy confidence is outside [0, 1]");
+  assert.ok(dtt.verticalAccuracyM >= 0, "tile vertical accuracy is negative");
+  assert.ok(dtt.maxHeightM >= dtt.minHeightM, "tile height range is inverted");
+  assert.equal(dtt.payload.sizeBytes, dtt.payload.bytes.length, "tile payload size does not match inline bytes");
+  assert.ok(dtt.payload.bytes.length <= MAX_COMPRESSED_PAYLOAD_BYTES, "tile compressed payload exceeds verifier safety bound");
+  if (dtt.waterMaskKind === 3) assert.ok(dtt.waterMask?.bytes, "raster water mask has no inline bytes");
+  void record;
+}
+
 const OCEAN_SKIP_MAX_RECEIPT_BYTES = 64 * 1024;
 const OCEAN_SKIP_MAX_LINES_BYTES = 512 * 1024 * 1024;
 const OCEAN_SKIP_MAX_ROW_BYTES = 256;
@@ -216,6 +391,17 @@ async function fileSha256(file, maxBytes) {
   return { bytes, digest: hash.digest("hex") };
 }
 
+async function publicationInputReceipt(outDir, relativePath, extra = {}) {
+  assert.equal(relativePath, path.basename(relativePath), "publication receipt path must be a fixed relative filename");
+  const file = path.join(outDir, relativePath);
+  const before = fs.statSync(file);
+  assert.ok(before.isFile(), `publication input is not a regular file: ${relativePath}`);
+  const hashed = await fileSha256(file, before.size);
+  const after = fs.statSync(file);
+  assert.equal(after.size, before.size, `publication input changed while hashing: ${relativePath}`);
+  return { path: relativePath, bytes: before.size, sha256: hashed.digest, ...extra };
+}
+
 // New global cuts write a compact receipt beside a separately streamed raw
 // ASCII address list (one `level/x/y` line each).  Regional evidence retains
 // the older JSON array.  Both paths are bounded and return the same async
@@ -231,10 +417,18 @@ async function* iterateOceanSkippedAddresses(outDir, legacyPath) {
     try { receipt = JSON.parse(fs.readFileSync(legacyPath, "utf8")); } catch { receipt = null; }
   }
   if (!Object.hasOwn(receipt ?? {}, "format")) {
+    let previousKey = null;
     for await (const address of iterateJsonStringArrayProperty(legacyPath, "addresses", {
       maxFileBytes: OCEAN_SKIP_MAX_LINES_BYTES,
       maxStringBytes: OCEAN_SKIP_MAX_ROW_BYTES,
     })) {
+      const parsed = parseTerrainAddress(address, legacyPath);
+      validateTerrainAddress(parsed.level, parsed.x, parsed.y, legacyPath);
+      assert.equal(address, terrainAddress(parsed.level, parsed.x, parsed.y), `legacy ocean address is not canonical: ${address}`);
+      const key = addressFactKey(parsed.level, parsed.x, parsed.y);
+      assert.ok(previousKey === null || previousKey < key,
+        `legacy ocean addresses must be sorted and unique by level/y/x at ${address}`);
+      previousKey = key;
       yield address;
     }
     return;
@@ -255,14 +449,17 @@ async function* iterateOceanSkippedAddresses(outDir, legacyPath) {
   const hashed = await fileSha256(resolved, OCEAN_SKIP_MAX_LINES_BYTES);
   assert.equal(hashed.digest, receipt.digest, `ocean skip receipt digest mismatch for ${resolved}`);
   let count = 0;
-  let previous = null;
+  let previousKey = null;
   for await (const line of iterateBoundedLines(resolved, { maxRowBytes: OCEAN_SKIP_MAX_ROW_BYTES })) {
     const address = line.toString("utf8");
     assert.ok(Buffer.byteLength(address) === line.length, `ocean skip line ${count + 1} is not valid UTF-8`);
     const parsed = parseTerrainAddress(address, resolved);
+    validateTerrainAddress(parsed.level, parsed.x, parsed.y, resolved);
     assert.equal(address, terrainAddress(parsed.level, parsed.x, parsed.y), `ocean skip line ${count + 1} is not canonical`);
-    assert.ok(previous === null || previous < address, `ocean skip lines must be sorted and unique at ${address}`);
-    previous = address;
+    const key = addressFactKey(parsed.level, parsed.x, parsed.y);
+    assert.ok(previousKey === null || previousKey < key,
+      `ocean skip lines must be sorted and unique by level/y/x at ${address}`);
+    previousKey = key;
     count += 1;
     yield address;
   }
@@ -271,6 +468,9 @@ async function* iterateOceanSkippedAddresses(outDir, legacyPath) {
 
 const args = parseArgs(process.argv.slice(2));
 const outDir = path.resolve(args.out);
+const verifyReportPath = path.join(outDir, "verify-report.json");
+// A previous successful receipt must never survive a later failed invocation.
+fs.rmSync(verifyReportPath, { force: true });
 
 // ── THE ENCODER'S OWN COUNTERS, IF THE RUN LEFT THEM ───────────────────────
 //
@@ -286,10 +486,91 @@ const outDir = path.resolve(args.out);
 // When the report is absent the counters are reported as null rather than as
 // zero, because "nobody counted" and "the count was zero" are different claims.
 const runReportPath = path.join(outDir, "run-report.json");
-const runReport = fs.existsSync(runReportPath)
-  ? JSON.parse(fs.readFileSync(runReportPath, "utf8"))
-  : null;
+function validatePublicationPolicy(value) {
+  if (value === null || value === undefined) return null;
+  assert.ok(value && typeof value === "object" && !Array.isArray(value), "publicationPolicy must be a JSON object");
+  assert.equal(value.format, "terrain-publication-policy-v1", "unsupported publicationPolicy format");
+  assert.match(value.globalConfigDigest, /^[a-f0-9]{64}$/, "publicationPolicy.globalConfigDigest must be SHA-256 hex");
+  for (const key of ["maxVerifiedStoreBytes", "maxStaticDirectoryBytes"]) {
+    assert.ok(Number.isSafeInteger(value[key]) && value[key] > 0, `publicationPolicy.${key} must be a positive safe integer`);
+  }
+  assert.ok(Number.isSafeInteger(value.synthGridSize) && value.synthGridSize >= 2 && value.synthGridSize <= 255,
+    "publicationPolicy.synthGridSize must be an integer in [2, 255]");
+  return {
+    format: value.format,
+    globalConfigDigest: value.globalConfigDigest,
+    maxVerifiedStoreBytes: value.maxVerifiedStoreBytes,
+    maxStaticDirectoryBytes: value.maxStaticDirectoryBytes,
+    synthGridSize: value.synthGridSize,
+  };
+}
+function boundedCounterObject(value, name, { maxEntries = 64, integer = false } = {}) {
+  if (value === null || value === undefined) return null;
+  assert.ok(value && typeof value === "object" && !Array.isArray(value), `${name} must be a JSON object`);
+  const entries = Object.entries(value);
+  assert.ok(entries.length <= maxEntries, `${name} has more than ${maxEntries} bounded entries`);
+  const compact = {};
+  for (const [key, count] of entries) {
+    assert.ok(/^[A-Za-z0-9_-]{1,64}$/.test(key), `${name} has an unsafe counter key`);
+    assert.ok(Number.isFinite(count) && count >= 0 && (!integer || Number.isSafeInteger(count)), `${name}.${key} is not a valid non-negative counter`);
+    compact[key] = count;
+  }
+  return compact;
+}
+let runReport = null;
+if (fs.existsSync(runReportPath)) {
+  const stat = fs.statSync(runReportPath);
+  assert.ok(stat.isFile() && stat.size <= MAX_RUN_REPORT_BYTES,
+    `run report exceeds ${MAX_RUN_REPORT_BYTES} byte verifier bound`);
+  const parsed = JSON.parse(fs.readFileSync(runReportPath, "utf8"));
+  // Never retain runner detail (notably cellsDetail): verifier decisions use
+  // only these compact counters and provenance geometry summaries.  The file
+  // cap plus these fixed-size projections prevents a malicious report from
+  // becoming a second input-cardinality index in this process.
+  runReport = {
+    encoderCounters: boundedCounterObject(parsed?.encoderCounters, "encoderCounters", { integer: true }),
+    sourcePostsPerTileEdgeByLevel: boundedCounterObject(parsed?.sourcePostsPerTileEdgeByLevel, "sourcePostsPerTileEdgeByLevel"),
+    latticeMaxGridSize: parsed?.latticeMaxGridSize ?? null,
+    publicationPolicy: validatePublicationPolicy(parsed?.publicationPolicy),
+    globalConfigDigest: parsed?.globalConfigDigest ?? null,
+  };
+  if (runReport.latticeMaxGridSize !== null) {
+    assert.ok(Number.isSafeInteger(runReport.latticeMaxGridSize) && runReport.latticeMaxGridSize >= 2 && runReport.latticeMaxGridSize <= MAX_MESH_GRID,
+      "latticeMaxGridSize is outside the verifier's bounded mesh range");
+  }
+}
 const encoderCounters = runReport?.encoderCounters ?? null;
+let publicationPolicy = runReport?.publicationPolicy ?? null;
+if (publicationPolicy) {
+  assert.match(runReport.globalConfigDigest, /^[a-f0-9]{64}$/,
+    "run report with publicationPolicy must carry an authoritative globalConfigDigest");
+  assert.equal(runReport.globalConfigDigest, publicationPolicy.globalConfigDigest,
+    "publicationPolicy.globalConfigDigest does not match the run receipt");
+}
+const globalMergePath = path.join(outDir, "global-merge-report.json");
+let policyFromGlobalMerge = false;
+if (!publicationPolicy && fs.existsSync(globalMergePath)) {
+  const stat = fs.statSync(globalMergePath);
+  assert.ok(stat.isFile() && stat.size <= OCEAN_SKIP_MAX_RECEIPT_BYTES,
+    "global merge receipt exceeds verifier policy bound");
+  publicationPolicy = validatePublicationPolicy(JSON.parse(fs.readFileSync(globalMergePath, "utf8"))?.publicationPolicy);
+  assert.ok(publicationPolicy, "global merge receipt lacks required publicationPolicy");
+  policyFromGlobalMerge = true;
+}
+if (publicationPolicy) {
+  const globalStatePath = path.join(outDir, "global-build-state.json");
+  assert.ok(!policyFromGlobalMerge || fs.existsSync(globalStatePath),
+    "global merge publicationPolicy requires global-build-state.json for digest comparison");
+  if (fs.existsSync(globalStatePath)) {
+    const stat = fs.statSync(globalStatePath);
+    assert.ok(stat.isFile() && stat.size <= OCEAN_SKIP_MAX_RECEIPT_BYTES,
+      "global build state exceeds verifier policy bound");
+    const stateDigest = JSON.parse(fs.readFileSync(globalStatePath, "utf8"))?.configDigest;
+    assert.match(stateDigest, /^[a-f0-9]{64}$/, "global build state lacks configDigest");
+    assert.equal(stateDigest, publicationPolicy.globalConfigDigest,
+      "publicationPolicy.globalConfigDigest does not match global build state");
+  }
+}
 
 // ── THE ADDRESSES THE OCEAN TEST SKIPPED ───────────────────────────────────
 //
@@ -311,6 +592,26 @@ const encoderCounters = runReport?.encoderCounters ?? null;
 const oceanSkippedPath = path.join(outDir, "ocean-skipped.json");
 
 const recordsPath = path.join(outDir, "tiles.dttstream");
+const noFollow = fs.constants.O_NOFOLLOW ?? 0;
+const tilesFd = fs.openSync(recordsPath, fs.constants.O_RDONLY | noFollow);
+const tilesIdentityBefore = fs.fstatSync(tilesFd);
+assert.ok(tilesIdentityBefore.isFile(), "tiles.dttstream must be a regular file");
+const sameFileIdentity = (left, right) => left.dev === right.dev && left.ino === right.ino && left.size === right.size;
+const digestOpenFile = (fd, expectedBytes) => {
+  const hash = createHash("sha256");
+  const buffer = Buffer.allocUnsafe(64 * 1024);
+  let position = 0;
+  for (;;) {
+    const read = fs.readSync(fd, buffer, 0, buffer.length, position);
+    if (!read) break;
+    position += read;
+    assert.ok(position <= expectedBytes, "tiles.dttstream grew while being verified");
+    hash.update(buffer.subarray(0, read));
+  }
+  assert.equal(position, expectedBytes, "tiles.dttstream changed size while being verified");
+  return hash.digest("hex");
+};
+let verifiedTilesSha256 = null;
 // These directories are disposable, attempt-scoped external-sort state.  The
 // writer and merger each reclaim stale material before use; the successful
 // path below removes it too, so a global run never leaves a second tile index.
@@ -377,10 +678,13 @@ const recordProblem = (problem) => {
   appendProblemExample(problem);
 };
 
-for await (const record of iterateStreamFile(recordsPath)) {
+const processedTilesHash = createHash("sha256");
+try {
+for await (const record of iterateStreamFd(tilesFd, { onChunk: (chunk) => processedTilesHash.update(chunk) })) {
   recordCount += 1;
   if (!firstRecord) firstRecord = Buffer.from(record);
   const dtt = readDtt(record);
+  validateDtt(dtt, record);
   const key = terrainAddress(dtt.level, dtt.x, dtt.y);
   maxLevel = Math.max(maxLevel, dtt.level);
   minLevel = Math.min(minLevel, dtt.level);
@@ -414,7 +718,7 @@ for await (const record of iterateStreamFile(recordsPath)) {
       recordProblem(`raster mask at ${key} is ${dtt.waterMaskWidth}x${dtt.waterMaskHeight}`);
     }
     // Stored gzipped, and it must really decompress to the stated geometry.
-    const raw = zlib.gunzipSync(Buffer.from(dtt.waterMask.bytes));
+    const raw = gunzipBounded(Buffer.from(dtt.waterMask.bytes), MAX_MASK_BYTES, `mask at ${key}`);
     if (raw.length !== 256 * 256) recordProblem(`mask at ${key} decompresses to ${raw.length} B`);
   } else {
     uniform += 1;
@@ -476,7 +780,7 @@ for await (const record of iterateStreamFile(recordsPath)) {
   if (dtt.minHeightM === 0 && dtt.maxHeightM === 0) {
     let landSamples = 0;
     if (dtt.waterMaskKind === 3) {
-      const raw = zlib.gunzipSync(Buffer.from(dtt.waterMask.bytes));
+      const raw = gunzipBounded(Buffer.from(dtt.waterMask.bytes), MAX_MASK_BYTES, `mask at ${key}`);
       for (const b of raw) if (b === 0x00) landSamples += 1;
     } else if (dtt.waterMaskKind === 1) {
       landSamples = 256 * 256; // UNIFORM_LAND: the whole tile
@@ -533,9 +837,12 @@ for await (const record of iterateStreamFile(recordsPath)) {
   }
   // The payload really is a gzipped quantized-mesh whose header agrees with
   // the record's stated height range.
-  const mesh = zlib.gunzipSync(bytes);
+  const mesh = gunzipBounded(bytes, MAX_MESH_BYTES, `mesh at ${key}`);
+  validateMeshStructure(mesh, `mesh at ${key}`);
   const minHeight = mesh.readFloatLE(24);
   const maxHeight = mesh.readFloatLE(28);
+  assert.ok(Number.isFinite(minHeight) && Number.isFinite(maxHeight) && minHeight <= maxHeight,
+    `mesh header has an invalid height range at ${key}`);
   if (Math.abs(minHeight - dtt.minHeightM) > 1e-3 || Math.abs(maxHeight - dtt.maxHeightM) > 1e-3) {
     recordProblem(`mesh header height range disagrees with the record at ${key}`);
   }
@@ -599,7 +906,7 @@ for await (const record of iterateStreamFile(recordsPath)) {
   // "By construction" is only worth saying if it is measured, so it is.
   {
     let raw;
-    if (dtt.waterMaskKind === 3) raw = zlib.gunzipSync(Buffer.from(dtt.waterMask.bytes));
+    if (dtt.waterMaskKind === 3) raw = gunzipBounded(Buffer.from(dtt.waterMask.bytes), MAX_MASK_BYTES, `mask at ${key}`);
     else raw = Buffer.alloc(256 * 256, dtt.waterMaskKind === 2 ? 0xff : 0x00);
     const column = (c) => {
       const edge = Buffer.allocUnsafe(256);
@@ -623,9 +930,24 @@ for await (const record of iterateStreamFile(recordsPath)) {
     });
   }
 }
+  const streamedDigest = processedTilesHash.digest("hex");
+  const afterRead = fs.fstatSync(tilesFd);
+  assert.ok(sameFileIdentity(tilesIdentityBefore, afterRead), "tiles.dttstream identity or size changed during verification");
+  const postDigest = digestOpenFile(tilesFd, tilesIdentityBefore.size);
+  assert.equal(streamedDigest, postDigest, "tiles.dttstream bytes changed during verification");
+  verifiedTilesSha256 = streamedDigest;
+} finally {
+  const beforeClose = fs.fstatSync(tilesFd);
+  fs.closeSync(tilesFd);
+  assert.ok(sameFileIdentity(tilesIdentityBefore, beforeClose), "tiles.dttstream identity changed before close");
+}
+const tilesPathAfter = fs.lstatSync(recordsPath);
+assert.ok(tilesPathAfter.isFile() && sameFileIdentity(tilesIdentityBefore, tilesPathAfter),
+  "tiles.dttstream pathname changed after verification");
 
 for await (const address of iterateOceanSkippedAddresses(outDir, oceanSkippedPath)) {
   const { level, x, y } = parseTerrainAddress(address, oceanSkippedPath);
+  validateTerrainAddress(level, x, y, oceanSkippedPath);
   addressFactWriter.push({
     key: addressFactKey(level, x, y),
     kind: "ocean",
@@ -808,10 +1130,10 @@ const finishAddressGroup = () => {
     for (let ancestorLevel = group.level; ancestorLevel >= 0; ancestorLevel -= 1) {
       const shift = group.level - ancestorLevel;
       closureFactWriter.push({
-        key: addressFactKey(ancestorLevel, group.x >> shift, group.y >> shift),
+        key: addressFactKey(ancestorLevel, Math.floor(group.x / 2 ** shift), Math.floor(group.y / 2 ** shift)),
         level: ancestorLevel,
-        x: group.x >> shift,
-        y: group.y >> shift,
+        x: Math.floor(group.x / 2 ** shift),
+        y: Math.floor(group.y / 2 ** shift),
       });
     }
   }
@@ -862,20 +1184,64 @@ try {
 
 const membershipFactRuns = membershipFactWriter.finish();
 const closureFactRuns = closureFactWriter.finish();
-const available = Array.from({ length: maxLevel + 1 }, () => []);
-available[0] = [{ startX: 0, startY: 0, endX: 1, endY: 0 }];
+const availabilityPath = path.join(outDir, "terrain-available.json");
+const availabilityStagedPath = `${availabilityPath}.${process.pid}.${Date.now()}.tmp`;
+const candidateFactRunDir = path.join(outDir, ".verify-available-candidates");
+const candidateFactScratchDir = path.join(outDir, ".verify-available-candidate-merge");
+const candidateFactWriter = createSortedJsonRunWriter(candidateFactRunDir, { maxRows: 4096, maxRowBytes: 256 });
+const availableChildFactRunDir = path.join(outDir, ".verify-available-children");
+const availableChildFactWriter = createSortedJsonRunWriter(availableChildFactRunDir, { maxRows: 4096, maxRowBytes: 256 });
+// Level zero is forced into layer availability even for a one-hemisphere
+// regional cut.  It is therefore a serving promise too: seed both roots into
+// the disk-backed candidate join so neither can disappear from the static
+// materialization worklist merely because no input tile happened to close it.
+for (const x of [0, 1]) {
+  candidateFactWriter.push({ key: addressFactKey(0, x, 0), kind: "candidate", level: 0, x, y: 0, address: terrainAddress(0, x, 0) });
+}
+// Availability is an output-sized JSON value.  Keep it on disk while closure
+// facts stream through; no verifier decision needs a resident rectangle index.
+const availabilityHandle = fs.openSync(availabilityStagedPath, "wx");
+fs.writeSync(availabilityHandle, "[");
+let availabilityLevel = -1;
+let availabilityLevelOpen = false;
+let availabilityLevelRectangles = 0;
+let availabilityClosed = false;
+let availabilityComplete = false;
+const openAvailabilityLevel = (level) => {
+  while (availabilityLevel < level) {
+    if (availabilityLevelOpen) fs.writeSync(availabilityHandle, "]");
+    if (availabilityLevel >= 0) fs.writeSync(availabilityHandle, ",");
+    availabilityLevel += 1;
+    fs.writeSync(availabilityHandle, "[");
+    availabilityLevelOpen = true;
+    availabilityLevelRectangles = 0;
+  }
+};
+// Cesium requires a level-zero promise even for an otherwise empty regional
+// cut.  Preserve the historical full geographic level-zero rectangle without
+// retaining the rest of the availability tree in memory.
+openAvailabilityLevel(0);
+fs.writeSync(availabilityHandle, JSON.stringify({ startX: 0, startY: 0, endX: 1, endY: 0 }));
+availabilityLevelRectangles = 1;
 let rectangleLevel = null;
 let rectangleY = null;
 let rectangleStartX = null;
 let rectangleEndX = null;
 const flushAvailabilityRectangle = () => {
   if (rectangleLevel === null || rectangleLevel === 0) return;
-  available[rectangleLevel].push({
+  openAvailabilityLevel(rectangleLevel);
+  if (availabilityLevelRectangles) fs.writeSync(availabilityHandle, ",");
+  fs.writeSync(availabilityHandle, JSON.stringify({
     startX: rectangleStartX,
     startY: rectangleY,
     endX: rectangleEndX,
     endY: rectangleY,
-  });
+  }));
+  availabilityLevelRectangles += 1;
+  rectangleLevel = null;
+  rectangleY = null;
+  rectangleStartX = null;
+  rectangleEndX = null;
 };
 try {
   await mergeSortedJsonRuns(closureFactRuns, {
@@ -885,7 +1251,13 @@ try {
     onRow: async (fact) => {
       // The legacy verifier's maxLevel is based only on stored records, so an
       // out-of-range skip is reported but cannot widen the published index.
-      if (fact.level > maxLevel || fact.level === 0) return;
+      if (fact.level > maxLevel) return;
+      candidateFactWriter.push({ key: fact.key, kind: "candidate", level: fact.level, x: fact.x, y: fact.y, address: terrainAddress(fact.level, fact.x, fact.y) });
+      if (fact.level > 0) {
+        const bit = (fact.x % 2 ? 2 : 1) | (fact.y % 2 ? 4 : 0);
+        availableChildFactWriter.push({ key: addressFactKey(fact.level - 1, Math.floor(fact.x / 2), Math.floor(fact.y / 2)), kind: "available-child", childBit: bit });
+      }
+      if (fact.level === 0) return;
       if (rectangleLevel === fact.level && rectangleY === fact.y && fact.x === rectangleEndX + 1) {
         rectangleEndX = fact.x;
         return;
@@ -898,10 +1270,21 @@ try {
     },
   });
   flushAvailabilityRectangle();
+  while (availabilityLevel < maxLevel) openAvailabilityLevel(availabilityLevel + 1);
+  if (availabilityLevelOpen) fs.writeSync(availabilityHandle, "]");
+  fs.writeSync(availabilityHandle, "]");
+  fs.fsyncSync(availabilityHandle);
+  fs.closeSync(availabilityHandle);
+  availabilityClosed = true;
+  availabilityComplete = true;
 } finally {
+  if (!availabilityClosed) fs.closeSync(availabilityHandle);
+  if (!availabilityComplete) fs.rmSync(availabilityStagedPath, { force: true });
   fs.rmSync(closureFactRunDir, { recursive: true, force: true });
   fs.rmSync(closureFactScratchDir, { recursive: true, force: true });
 }
+fs.renameSync(availabilityStagedPath, availabilityPath);
+fsyncDirectory(path.dirname(availabilityPath));
 
 // ── THE INDEX IS ANCESTOR-CLOSED, AND THAT IS ASSERTED, NOT ASSUMED ────────
 //
@@ -914,29 +1297,10 @@ try {
 // serving module reads `terrain_available` from config rather than from
 // anything that re-derives it. This is the one place the property is stated
 // where a hand-edited index would be checked against it.
-const closureBreaks = [];
-for (let level = available.length - 1; level >= 1; level -= 1) {
-  const parents = available[level - 1];
-  for (const r of available[level]) {
-    for (const [x, y] of [
-      [r.startX, r.startY],
-      [r.endX, r.endY],
-    ]) {
-      const px = x >> 1;
-      const py = y >> 1;
-      if (!parents.some((q) => px >= q.startX && px <= q.endX && py >= q.startY && py <= q.endY)) {
-        if (closureBreaks.length < 16) closureBreaks.push(`z${level} ${x}/${y} has no parent at z${level - 1}`);
-      }
-    }
-  }
-}
-if (closureBreaks.length) {
-  recordProblem(
-    `the availability index is NOT ancestor-closed (${closureBreaks.length} breaks): ` +
-      `${closureBreaks.slice(0, 4).join("; ")} — a client computes availability by the max ` +
-      "level at a position, so an unclosed index promises tiles at levels nothing covers",
-  );
-}
+// Every closure fact is emitted directly from each declared member for every
+// ancestor, then de-duplicated before the streamed rectangles/candidate joins.
+// That construction is the parent proof and avoids the former O(rectangles^2)
+// in-memory search.
 
 // ── A SKIPPED ADDRESS MUST LAND WHERE THE MODULE CALLS IT WATER ────────────
 //
@@ -988,44 +1352,9 @@ const tilesetExtent = Number.isFinite(extentWest)
 // The global all-water set can be millions of addresses.  Keep the complete
 // publication worklist on disk; reports retain counts and a bounded sample.
 const availableButUnstoredPath = path.join(outDir, "available-but-unstored.ndjson");
-const candidateFactRunDir = path.join(outDir, ".verify-available-candidates");
-const candidateFactScratchDir = path.join(outDir, ".verify-available-candidate-merge");
-const candidateFactWriter = createSortedJsonRunWriter(candidateFactRunDir, {
-  maxRows: 4096,
-  maxRowBytes: 256,
-});
-const availableChildFactRunDir = path.join(outDir, ".verify-available-children");
-const availableChildFactWriter = createSortedJsonRunWriter(availableChildFactRunDir, {
-  maxRows: 4096,
-  maxRowBytes: 256,
-});
 // The closure check above proves a directly declared address is exactly what
 // the serving module sees at its centre.  Enumerating each rectangle therefore
 // avoids the former bounding-box scan and repeated all-level rectangle search.
-for (let level = 0; level <= maxLevel; level += 1) {
-  for (const rect of available[level]) {
-    for (let y = rect.startY; y <= rect.endY; y += 1) {
-      for (let x = rect.startX; x <= rect.endX; x += 1) {
-        candidateFactWriter.push({
-          key: addressFactKey(level, x, y),
-          kind: "candidate",
-          level,
-          x,
-          y,
-          address: terrainAddress(level, x, y),
-        });
-        if (level > 0) {
-          const bit = (x & 1 ? 2 : 1) | (y & 1 ? 4 : 0);
-          availableChildFactWriter.push({
-            key: addressFactKey(level - 1, x >> 1, y >> 1),
-            kind: "available-child",
-            childBit: bit,
-          });
-        }
-      }
-    }
-  }
-}
 const candidateFactRuns = candidateFactWriter.finish();
 const availableChildFactRuns = availableChildFactWriter.finish();
 const availableButUnstoredSample = [];
@@ -1074,6 +1403,7 @@ try {
   });
   finishCandidateGroup();
 } finally {
+  fs.fsyncSync(availableButUnstoredHandle);
   fs.closeSync(availableButUnstoredHandle);
   fs.rmSync(candidateFactRunDir, { recursive: true, force: true });
   fs.rmSync(candidateFactScratchDir, { recursive: true, force: true });
@@ -1213,14 +1543,19 @@ const densityStepCrack = [...crackByLevel.entries()]
   }));
 const crackOverSkirt = densityStepCrack.filter((c) => !c.hiddenBySkirt);
 
-const availableBytes = Buffer.byteLength(JSON.stringify(available));
+const availableBytes = fs.statSync(availabilityPath).size;
+const storeBytes = fs.statSync(path.join(outDir, "tiles.dttstream")).size;
+if (publicationPolicy) {
+  assert.ok(storeBytes <= publicationPolicy.maxVerifiedStoreBytes,
+    `tiles.dttstream ${storeBytes} B exceeds approved maxVerifiedStoreBytes ${publicationPolicy.maxVerifiedStoreBytes} B`);
+}
 const verifierProblemCount = problemCount + edgeFactProblemCount;
 
 const summary = {
   outDir,
   tiles: recordCount,
   distinctAddresses,
-  storeBytes: fs.statSync(path.join(outDir, "tiles.dttstream")).size,
+  storeBytes,
   levels: [...tilesPerLevel.keys()].sort((a, b) => a - b),
   tilesPerLevel: Object.fromEntries([...tilesPerLevel.entries()].sort((a, b) => a[0] - b[0])),
   payloadBytes: { p50: pct(0.5), p99: pct(0.99), max: pct(1), bounds: BOUNDS },
@@ -1330,20 +1665,19 @@ const summary = {
   // the host's 1024-page default is enough. See tools/terrain-pyramid/
   // memory-pages.mjs for the measured curve this comes from.
   servingMemory: memoryPagesAdvice(availableBytes),
-  layerJson: { maxzoom: maxLevel, extensions: ["watermask"], available },
+  // Availability is deliberately a separate output-sized artifact.  Keeping
+  // it out of verify-report.json lets this operator-facing report remain
+  // bounded for a global cut while layer-json-config.json receives the exact
+  // streamed bytes the serving module needs.
+  layerJson: { maxzoom: maxLevel, extensions: ["watermask"], availabilityPath: path.basename(availabilityPath) },
+  publicationPolicy,
+  publicationPolicyLegacyUnbound: publicationPolicy === null,
   // null, not 0, when no run report was left beside the store: "nobody counted"
   // and "the count was zero" are different claims.
   encoderCounters,
   problems,
 };
 
-if (args.json) {
-  console.log(JSON.stringify(summary, null, 2));
-} else {
-  console.log(JSON.stringify({ ...summary, layerJson: { ...summary.layerJson, available: `<${available.length} levels>` } }, null, 2));
-}
-
-fs.writeFileSync(path.join(outDir, "verify-report.json"), `${JSON.stringify(summary, null, 2)}\n`);
 // ── THE DEPLOY CONFIG IS COMPLETE, OR THE SHIP STEP TURNS 401 INTO 503 ─────
 //
 // This file used to carry eight keys — maxzoom, the ocean floor, the mount
@@ -1399,10 +1733,7 @@ for (const key of [
   );
 }
 
-fs.writeFileSync(
-  path.join(outDir, "layer-json-config.json"),
-  `${JSON.stringify(
-    {
+const layerConfig = {
       ...deployLineage,
       terrain_maxzoom: maxLevel,
       // The shallowest level this run actually BUILT. Below it the store is not
@@ -1417,7 +1748,7 @@ fs.writeFileSync(
       // somewhere else MUST state it, and a config file that omits the key
       // would silently 404 every tile.
       terrain_mount_path: "/api/v1/terrain/",
-      terrain_available: available,
+      ...(publicationPolicy ? { terrain_synth_grid_size: publicationPolicy.synthGridSize } : {}),
       // The tileset's own bounding extent, for the $DTT catalogue record. The
       // record is the DIRECTORY, not a tile: it has no address in any tiling
       // scheme, so its extent cannot be derived and has to be carried.
@@ -1429,12 +1760,57 @@ fs.writeFileSync(
             terrain_north_deg: tilesetExtent.north,
           }
         : {}),
-    },
-    null,
-    2,
-  )}\n`,
+};
+if (publicationPolicy) {
+  assert.equal(layerConfig.terrain_synth_grid_size, publicationPolicy.synthGridSize,
+    "layer config terrain_synth_grid_size must match publication policy");
+}
+atomicWriteWithRawTopLevelProperty(
+  path.join(outDir, "layer-json-config.json"),
+  layerConfig,
+  "terrain_available",
+  availabilityPath,
 );
 
+// Bind the publication lane to the exact bytes this verifier accepted.  The
+// report itself stays bounded: it names and hashes output files rather than
+// embedding availability or a global address list a second time.
+let oceanReceiptInput = null;
+let oceanAddressesInput = null;
+let oceanLegacyUnbound = true;
+if (fs.existsSync(path.join(outDir, "ocean-skipped.json"))) {
+  const receiptStat = fs.statSync(path.join(outDir, "ocean-skipped.json"));
+  if (receiptStat.size <= OCEAN_SKIP_MAX_RECEIPT_BYTES) {
+    try {
+      const receipt = JSON.parse(fs.readFileSync(path.join(outDir, "ocean-skipped.json"), "utf8"));
+      if (receipt?.format === "terrain-ocean-skips-lines-v1") {
+        // iterateOceanSkippedAddresses already validated this receipt and its
+        // line stream.  Requiring the fixed names here makes the publication
+        // binding unambiguous for a static directory publisher.
+        assert.equal(receipt.addressesPath, "ocean-skipped.lines", "global ocean receipt must name the fixed address artifact");
+        oceanReceiptInput = await publicationInputReceipt(outDir, "ocean-skipped.json");
+        oceanAddressesInput = await publicationInputReceipt(outDir, "ocean-skipped.lines", { addresses: oceanSkipsDeclared });
+        oceanLegacyUnbound = false;
+      }
+    } catch (error) {
+      // The earlier verifier pass owns malformed-input diagnostics.  A legacy
+      // report is intentionally identifiable as unbound rather than guessed.
+      if (!/Unexpected token|Unexpected non-whitespace/.test(error.message)) throw error;
+    }
+  }
+}
+summary.publicationInputs = {
+  format: "terrain-publication-inputs-v1",
+  tiles: (() => {
+    assert.match(verifiedTilesSha256, /^[a-f0-9]{64}$/, "tiles receipt requires the verified stream digest");
+    return { path: "tiles.dttstream", bytes: tilesIdentityBefore.size, sha256: verifiedTilesSha256, records: recordCount };
+  })(),
+  availableButUnstored: await publicationInputReceipt(outDir, "available-but-unstored.ndjson", { addresses: availableButUnstored }),
+  layerConfig: await publicationInputReceipt(outDir, "layer-json-config.json"),
+  oceanReceipt: oceanReceiptInput,
+  oceanAddresses: oceanAddressesInput,
+  oceanLegacyUnbound,
+};
 // ── memory_pages BELONGS ONE LEVEL UP, ON THE MOUNT ENTRY ───────────────────
 //
 // It was written into layer-json-config.json beside terrain_maxzoom /
@@ -1452,19 +1828,15 @@ fs.writeFileSync(
 // the pool hundreds of pages under its measured need with no error anywhere. So
 // the two levels are now two FILES and cannot be conflated by a copy.
 // Coordinator resolution 2026-08-27 (4).
-fs.writeFileSync(
+atomicWriteJson(
   path.join(outDir, "mount-entry.json"),
-  `${JSON.stringify(
-    {
+  {
       "//": "flows.mounts[] entry keys for config.module-delivery-sidecar.yaml. `memory_pages` is a SIBLING of `config:`, never a member of it; the module config keys live in layer-json-config.json and go INSIDE `config:`.",
       path: "/api/v1/terrain/",
       flow: "com.digitalarsenal.flows.terrain-serving",
       memory_pages: memoryPagesFor(availableBytes),
       "// pool": memoryPagesAdvice(availableBytes),
-    },
-    null,
-    2,
-  )}\n`,
+  },
 );
 
 const overCeilingShare = accuracy.filter((a) => !a.withinCeilingShare);
@@ -1521,4 +1893,9 @@ if (failures.length) {
   for (const problem of problems.slice(0, 20)) console.error(`  - ${problem}`);
   process.exit(1);
 }
+summary.format = "terrain-verification-report-v1";
+summary.publishable = true;
+atomicWriteJson(verifyReportPath, summary);
+if (args.json) console.log(JSON.stringify(summary, null, 2));
+else console.log(JSON.stringify(summary, null, 2));
 console.log("\nPUBLISHABLE: every bound met.");
