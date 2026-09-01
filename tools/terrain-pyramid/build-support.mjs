@@ -205,8 +205,14 @@ async function readResponseBodyBounded(response, {
 function atomicWrite(file, bytes) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
-  fs.writeFileSync(temporary, bytes);
+  const handle = fs.openSync(temporary, "wx", 0o600);
+  try {
+    fs.writeFileSync(handle, bytes);
+    fs.fsyncSync(handle);
+  } finally { fs.closeSync(handle); }
   fs.renameSync(temporary, file);
+  const directory = fs.openSync(path.dirname(file), "r");
+  try { fs.fsyncSync(directory); } finally { fs.closeSync(directory); }
 }
 
 function readJson(file, fallback = null) {

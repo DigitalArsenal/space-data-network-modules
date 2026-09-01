@@ -21,9 +21,12 @@ import {
 import { readDtt } from "./dtt-reader.mjs";
 import {
   MAX_GLOBAL_SOURCE_CACHE_BYTES,
+  MAX_GLOBAL_STATIC_DIRECTORY_BYTES,
+  MAX_GLOBAL_VERIFIED_STORE_BYTES,
   canonicalJson,
   emitCompletionSourceManifest,
   ensureSourceEpoch,
+  fsyncFile,
   mergeBoundedFramedStores,
   mergeOceanSkips,
   publicationPolicyContract,
@@ -34,6 +37,8 @@ import {
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CACHE_MAX_BYTES = MAX_GLOBAL_SOURCE_CACHE_BYTES;
+const MAX_SHARD_REPORT_BYTES = 4 * 1024 * 1024;
+const MAX_GLOBAL_STATE_BYTES = 4 * 1024 * 1024;
 
 function parseArgs(argv) {
   const args = { workers: 1, shards: 1, verify: true };
@@ -55,6 +60,8 @@ function parseArgs(argv) {
     else if (flag === "--fault-after-shards") args.faultAfterShards = Number(argv[++i]);
     else if (flag === "--fault-merge-rename-after") args.faultMergeRenameAfter = Number(argv[++i]);
     else if (flag === "--fault-merge-crash-after") args.faultMergeCrashAfter = Number(argv[++i]);
+    else if (flag === "--fault-after-terminal-state") args.faultAfterTerminalState = true;
+    else if (flag === "--fault-after-verify") args.faultAfterVerify = true;
     else throw new Error(`unknown argument ${flag}`);
   }
   assert.ok(args.config, "--config <run.json> is required");
@@ -64,6 +71,17 @@ function parseArgs(argv) {
   }
   assert.ok(args.workers <= args.shards, "--workers may not exceed --shards");
   return args;
+}
+
+function verifierPublicationPolicy(contract, globalConfigDigest) {
+  if (!contract) return null;
+  return {
+    format: "terrain-publication-policy-v1",
+    globalConfigDigest,
+    maxVerifiedStoreBytes: contract.policy.max_verified_store_bytes,
+    maxStaticDirectoryBytes: contract.policy.max_static_directory_bytes,
+    synthGridSize: contract.policy.synthesized_tile_grid_size,
+  };
 }
 
 function runNode(args) {
@@ -77,10 +95,107 @@ function runNode(args) {
   });
 }
 
-async function fileDigest(file) {
+function assertStableFileStat(before, after, label) {
+  assert.equal(after.dev, before.dev, `${label} inode changed while reading`);
+  assert.equal(after.ino, before.ino, `${label} inode changed while reading`);
+  assert.equal(after.size, before.size, `${label} changed while reading`);
+  // Inode/size alone do not catch a writer that replaces bytes in place with
+  // the same length. ctime is kernel-maintained and cannot be restored with
+  // utimes(2), so require it (and mtime) to remain stable through the read.
+  assert.equal(after.mtimeNs, before.mtimeNs, `${label} changed while reading`);
+  assert.equal(after.ctimeNs, before.ctimeNs, `${label} changed while reading`);
+}
+
+function stableDigestFile(file, { maxBytes = Infinity, label = path.basename(file) } = {}) {
+  const handle = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
   const hash = createHash("sha256");
-  for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
-  return hash.digest("hex");
+  try {
+    const before = fs.fstatSync(handle, { bigint: true });
+    assert.ok(before.isFile(), `${label} is not a regular file`);
+    assert.ok(maxBytes === Infinity || before.size <= BigInt(maxBytes), `${label} exceeds ${maxBytes} byte bound`);
+    const size = Number(before.size);
+    assert.ok(Number.isSafeInteger(size), `${label} exceeds JavaScript's safe byte range`);
+    const chunk = Buffer.alloc(64 * 1024);
+    let position = 0;
+    while (position < size) {
+      const read = fs.readSync(handle, chunk, 0, Math.min(chunk.length, size - position), position);
+      assert.ok(read > 0, `${label} ended while reading`);
+      hash.update(chunk.subarray(0, read));
+      position += read;
+    }
+    assertStableFileStat(before, fs.fstatSync(handle, { bigint: true }), label);
+    return { digest: hash.digest("hex"), bytes: size };
+  } finally { fs.closeSync(handle); }
+}
+
+async function fileDigest(file, options = {}) {
+  return stableDigestFile(file, options).digest;
+}
+
+function stableReadSmallFile(file, maxBytes, label) {
+  const handle = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try {
+    const before = fs.fstatSync(handle, { bigint: true });
+    assert.ok(before.isFile(), `${label} is not a regular file`);
+    assert.ok(before.size <= BigInt(maxBytes), `${label} exceeds ${maxBytes} byte bound`);
+    const bytes = fs.readFileSync(handle);
+    const after = fs.fstatSync(handle, { bigint: true });
+    assertStableFileStat(before, after, label);
+    return bytes;
+  } finally { fs.closeSync(handle); }
+}
+
+function readShardReport(file) {
+  const bytes = stableReadSmallFile(file, MAX_SHARD_REPORT_BYTES, "shard run report");
+  return { report: JSON.parse(bytes.toString("utf8")), digest: sha256(bytes) };
+}
+
+// Copy every coordinator input through an already-open, non-symlink source fd.
+// Later validation and merge consume this immutable local snapshot rather than
+// reopening a shard-owned pathname that could be replaced at equal length.
+function snapshotShardInput(outDir, shard, name, source, { maxBytes = Infinity } = {}) {
+  const snapshotDir = path.join(outDir, ".coordinator-shard-snapshots", `shard-${String(shard).padStart(3, "0")}`);
+  fs.mkdirSync(snapshotDir, { recursive: true });
+  // The child directory name is itself part of the state checkpoint. Persist
+  // both that entry and the containing snapshot root before publishing paths
+  // into global-build-state.json.
+  fsyncDirectory(snapshotDir);
+  fsyncDirectory(path.dirname(snapshotDir));
+  fsyncDirectory(path.dirname(path.dirname(snapshotDir)));
+  const destination = path.join(snapshotDir, name);
+  const temporary = `${destination}.${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.tmp`;
+  const input = fs.openSync(source, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try {
+    const before = fs.fstatSync(input, { bigint: true });
+    assert.ok(before.isFile(), `shard ${shard} ${name} is not a regular file`);
+    assert.ok(maxBytes === Infinity || before.size <= BigInt(maxBytes), `shard ${shard} ${name} exceeds ${maxBytes} byte bound`);
+    const size = Number(before.size);
+    assert.ok(Number.isSafeInteger(size), `shard ${shard} ${name} exceeds JavaScript's safe byte range`);
+    const output = fs.openSync(temporary, "wx", 0o600);
+    const hash = createHash("sha256");
+    const chunk = Buffer.alloc(64 * 1024);
+    try {
+      let position = 0;
+      while (position < size) {
+        const read = fs.readSync(input, chunk, 0, Math.min(chunk.length, size - position), position);
+        assert.ok(read > 0, `shard ${shard} ${name} ended while snapshotting`);
+        fs.writeSync(output, chunk, 0, read);
+        hash.update(chunk.subarray(0, read));
+        position += read;
+      }
+      fs.fsyncSync(output);
+    } finally { fs.closeSync(output); }
+    const after = fs.fstatSync(input, { bigint: true });
+    assertStableFileStat(before, after, `shard ${shard} ${name}`);
+    fs.renameSync(temporary, destination);
+    fsyncDirectory(snapshotDir);
+    fsyncDirectory(path.dirname(snapshotDir));
+    fsyncDirectory(path.dirname(path.dirname(snapshotDir)));
+    return { path: destination, digest: hash.digest("hex"), bytes: size };
+  } finally {
+    fs.closeSync(input);
+    try { fs.unlinkSync(temporary); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  }
 }
 
 function fsyncDirectory(directory) {
@@ -88,10 +203,15 @@ function fsyncDirectory(directory) {
   try { fs.fsyncSync(handle); } finally { fs.closeSync(handle); }
 }
 
+function fsyncArtifact(file) {
+  fsyncFile(file);
+  fsyncDirectory(path.dirname(file));
+}
+
 function writeJsonAtomic(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const temporary = `${file}.${process.pid}.tmp`;
-  const handle = fs.openSync(temporary, "w", 0o600);
+  const temporary = `${file}.${process.pid}-${Date.now()}.tmp`;
+  const handle = fs.openSync(temporary, "wx", 0o600);
   try {
     fs.writeFileSync(handle, `${JSON.stringify(value, null, 2)}\n`);
     fs.fsyncSync(handle);
@@ -112,12 +232,16 @@ function ensureApprovedRunConfig(outDir, runConfig, configDigest) {
   return path.basename(file);
 }
 
+function reportIsCompleteFile(report) {
+  if (!fs.existsSync(report)) return false;
+  const { report: parsed } = readShardReport(report);
+  return parsed.drained === true && Array.isArray(parsed.errors) && parsed.errors.length === 0;
+}
+
 function reportIsComplete(outDir) {
   const report = path.join(outDir, "run-report.json");
   const stream = path.join(outDir, "tiles.dttstream");
-  if (!fs.existsSync(report) || !fs.existsSync(stream)) return false;
-  const parsed = JSON.parse(fs.readFileSync(report, "utf8"));
-  return parsed.drained === true && Array.isArray(parsed.errors) && parsed.errors.length === 0;
+  return fs.existsSync(stream) && reportIsCompleteFile(report);
 }
 
 function bindSourceEpochToState(state, contract) {
@@ -148,11 +272,57 @@ function bindSourceEpochToState(state, contract) {
 }
 
 function shardSourceLog(shard, contract) {
-  return path.join(shard.outDir, contract.policy.manifest.shard_log);
+  return shard.snapshots?.sourceLog?.path ?? path.join(shard.outDir, contract.policy.manifest.shard_log);
+}
+
+function snapshotLimit(name, publicationContract) {
+  if (name === "report") return MAX_SHARD_REPORT_BYTES;
+  if (name === "tiles") return publicationContract?.policy.max_verified_store_bytes ?? MAX_GLOBAL_VERIFIED_STORE_BYTES;
+  return MAX_GLOBAL_STATIC_DIRECTORY_BYTES;
+}
+
+function assertSnapshotBudget(state, snapshots, publicationContract) {
+  const ceiling = publicationContract?.policy.max_static_directory_bytes ?? MAX_GLOBAL_STATIC_DIRECTORY_BYTES;
+  let committed = 0;
+  for (const shard of state.shards) {
+    if (shard.status !== "complete") continue;
+    for (const snapshot of Object.values(shard.snapshots ?? {})) {
+      assert.ok(Number.isSafeInteger(snapshot?.bytes) && snapshot.bytes >= 0,
+        `shard ${shard.index} has an invalid persisted snapshot byte count`);
+      committed += snapshot.bytes;
+    }
+  }
+  const candidate = Object.values(snapshots).reduce((total, snapshot) => total + snapshot.bytes, 0);
+  assert.ok(Number.isSafeInteger(committed + candidate) && committed + candidate <= ceiling,
+    `coordinator shard snapshots ${committed + candidate} exceed approved ${ceiling}-byte static ceiling`);
+}
+
+function assertSnapshot(outDir, shard, name, publicationContract) {
+  const snapshot = shard.snapshots?.[name];
+  assert.ok(snapshot && typeof snapshot.path === "string", `shard ${shard.index} is missing ${name} snapshot metadata`);
+  const root = `${path.resolve(outDir, ".coordinator-shard-snapshots")}${path.sep}`;
+  assert.ok(path.resolve(snapshot.path).startsWith(root), `shard ${shard.index} ${name} snapshot escapes coordinator storage`);
+  assert.ok(Number.isSafeInteger(snapshot.bytes) && snapshot.bytes >= 0,
+    `shard ${shard.index} ${name} snapshot byte count is invalid`);
+  assert.match(snapshot.digest ?? "", /^[0-9a-f]{64}$/, `shard ${shard.index} ${name} snapshot digest is invalid`);
+  const actual = stableDigestFile(snapshot.path, {
+    maxBytes: snapshotLimit(name, publicationContract), label: `shard ${shard.index} ${name} snapshot`,
+  });
+  assert.equal(actual.bytes, snapshot.bytes, `shard ${shard.index} ${name} snapshot byte count changed`);
+  assert.equal(actual.digest, snapshot.digest, `shard ${shard.index} ${name} snapshot digest changed`);
+}
+
+function assertCompletedShardSnapshots(outDir, shard, sourceContract, publicationContract) {
+  for (const name of ["report", "tiles"]) assertSnapshot(outDir, shard, name, publicationContract);
+  if (sourceContract) assertSnapshot(outDir, shard, "sourceLog", publicationContract);
+  if (shard.snapshots?.oceanLines) assertSnapshot(outDir, shard, "oceanLines", publicationContract);
+  if (shard.snapshots?.oceanJson) assertSnapshot(outDir, shard, "oceanJson", publicationContract);
+  assert.ok(!(shard.snapshots?.oceanLines && shard.snapshots?.oceanJson),
+    `shard ${shard.index} must not mix ocean-skip formats`);
 }
 
 async function assertCompletedShardSource(shard, contract, globalConfigDigest, cacheDir) {
-  const report = JSON.parse(fs.readFileSync(path.join(shard.outDir, "run-report.json"), "utf8"));
+  const report = readShardReport(shard.snapshots?.report?.path ?? path.join(shard.outDir, "run-report.json")).report;
   assert.equal(report.sourceProvenance?.sourcePolicyDigest, contract.digest,
     `shard ${shard.index} has no matching source policy receipt`);
   assert.equal(report.sourceProvenance?.datasetEpoch, contract.datasetEpoch,
@@ -166,7 +336,7 @@ async function assertCompletedShardSource(shard, contract, globalConfigDigest, c
 
 function assertCompletedShardPublication(shard, contract, globalConfigDigest) {
   if (!contract) return;
-  const report = JSON.parse(fs.readFileSync(path.join(shard.outDir, "run-report.json"), "utf8"));
+  const report = readShardReport(shard.snapshots?.report?.path ?? path.join(shard.outDir, "run-report.json")).report;
   assert.equal(report.publicationPolicy?.digest, contract.digest,
     `shard ${shard.index} has no matching publication policy digest`);
   assert.equal(report.publicationPolicy?.globalConfigDigest, globalConfigDigest,
@@ -179,17 +349,42 @@ function artifactTransactionPath(outDir) {
   return path.join(outDir, "global-artifact-transaction.json");
 }
 
+function terminalVerificationMatchesState(outDir) {
+  const reportPath = path.join(outDir, "verify-report.json");
+  const statePath = path.join(outDir, "global-build-state.json");
+  const configPath = path.join(outDir, "approved-run-config.json");
+  if (!fs.existsSync(reportPath) || !fs.existsSync(statePath) || !fs.existsSync(configPath)) return false;
+  const report = JSON.parse(stableReadSmallFile(reportPath, MAX_GLOBAL_STATE_BYTES, "verification report").toString("utf8"));
+  const state = stableDigestFile(statePath, { maxBytes: MAX_GLOBAL_STATE_BYTES, label: "global build state" });
+  const config = stableDigestFile(configPath, { maxBytes: MAX_GLOBAL_STATE_BYTES, label: "approved run config" });
+  const receipt = report?.publicationInputs;
+  return report?.format === "terrain-verification-report-v1" && report?.publishable === true &&
+    Array.isArray(report.problems) && report.problems.length === 0 &&
+    receipt?.format === "terrain-publication-inputs-v2" &&
+    receipt.globalState?.path === "global-build-state.json" &&
+    receipt.globalState?.bytes === state.bytes && receipt.globalState?.sha256 === state.digest &&
+    receipt.approvedConfig?.path === "approved-run-config.json" &&
+    receipt.approvedConfig?.bytes === config.bytes && receipt.approvedConfig?.sha256 === config.digest;
+}
+
+function terminalMergeReportMatchesState(outDir, state) {
+  const reportPath = path.join(outDir, "global-merge-report.json");
+  if (!fs.existsSync(reportPath) || !state.merged) return false;
+  const report = JSON.parse(stableReadSmallFile(reportPath, MAX_GLOBAL_STATE_BYTES, "global merge report").toString("utf8"));
+  return canonicalJson(report) === canonicalJson(state.merged);
+}
+
 function assertArtifactTransaction(transaction, outDir) {
   assert.equal(transaction?.version, 1, "unsupported global artifact transaction");
-  assert.ok(Array.isArray(transaction.entries) && transaction.entries.length === 3,
+  assert.ok(Array.isArray(transaction.entries) && transaction.entries.length >= 3 && transaction.entries.length <= 4,
     "global artifact transaction has an invalid artifact set");
   const root = `${path.resolve(outDir)}${path.sep}`;
-  assert.ok(typeof transaction.stagingDir === "string" && transaction.stagingDir.startsWith(root) &&
+  assert.ok(typeof transaction.stagingDir === "string" && path.resolve(transaction.stagingDir).startsWith(root) &&
     path.basename(transaction.stagingDir).startsWith(".global-merge-stage-"),
   "global artifact transaction staging path is outside the build output");
   for (const entry of transaction.entries) {
     for (const field of ["staged", "destination", "backup"]) {
-      assert.ok(typeof entry[field] === "string" && entry[field].startsWith(root),
+      assert.ok(typeof entry[field] === "string" && path.resolve(entry[field]).startsWith(root),
         `global artifact transaction ${field} is outside the build output`);
     }
     assert.equal(typeof entry.hadDestination, "boolean", "global artifact transaction destination state is missing");
@@ -200,11 +395,15 @@ function assertArtifactTransaction(transaction, outDir) {
 // Keep a durable transaction plus backups until the terminal state receipt is
 // written. On an incomplete restart we restore the previous complete set; on
 // a completed restart we merely finalize stale transaction metadata.
-function recoverArtifactSet(outDir, { completed }) {
+function recoverArtifactSet(outDir, { completed, preserve = false }) {
   const file = artifactTransactionPath(outDir);
   if (!fs.existsSync(file)) return false;
-  const transaction = JSON.parse(fs.readFileSync(file, "utf8"));
+  const transaction = JSON.parse(stableReadSmallFile(file, 128 * 1024, "global artifact transaction").toString("utf8"));
   assertArtifactTransaction(transaction, outDir);
+  // A durable terminal state can precede verify-report.json. Its transaction
+  // backups are still the rollback proof until the verifier binds that exact
+  // state, so do not interpret "completed" as permission to discard them.
+  if (preserve) return true;
   if (completed) {
     for (const entry of transaction.entries) fs.rmSync(entry.backup, { force: true });
   } else {
@@ -213,11 +412,12 @@ function recoverArtifactSet(outDir, { completed }) {
         fs.rmSync(entry.destination, { force: true });
         fs.renameSync(entry.backup, entry.destination);
       } else if (!fs.existsSync(entry.staged)) {
-        // No old destination was backed up, so this destination is the new
-        // artifact that a dead process had already installed.
-        assert.equal(entry.hadDestination, false,
-          `global artifact transaction lost the backup for ${entry.destination}`);
-        fs.rmSync(entry.destination, { force: true });
+        // No old destination means this is either an installed new artifact,
+        // or (for the completion manifest) a reservation made before its
+        // staged bytes were produced. Both cases are safe to remove. When an
+        // old destination exists, no missing backup means installation had
+        // not begun; preserve that old immutable artifact.
+        if (!entry.hadDestination) fs.rmSync(entry.destination, { force: true });
       }
       // If the staged file still exists, this entry was never installed; the
       // destination (if any) is the untouched old one and must be preserved.
@@ -253,7 +453,9 @@ function installArtifactSet(entries, { stagingDir, faultAfter = undefined, crash
     let installed = 0;
     for (const entry of transaction.entries) {
       if (entry.hadDestination) fs.renameSync(entry.destination, entry.backup);
+      fsyncDirectory(outDir);
       fs.renameSync(entry.staged, entry.destination);
+      fsyncArtifact(entry.destination);
       installed += 1;
       if (crashAfter !== undefined && installed >= crashAfter) process.exit(86);
       if (faultAfter !== undefined && installed >= faultAfter) {
@@ -266,6 +468,31 @@ function installArtifactSet(entries, { stagingDir, faultAfter = undefined, crash
     recoverArtifactSet(outDir, { completed: false });
     throw error;
   }
+}
+
+// The source manifest is a fourth member of the tiles/ocean rollback set. Its
+// staged bytes are durable before this intent is appended to the transaction.
+function reserveArtifact(transaction, destination, staged) {
+  const outDir = path.dirname(destination);
+  const entry = {
+    staged,
+    destination,
+    backup: `${destination}.premerge-${process.pid}-${Date.now()}`,
+    hadDestination: fs.existsSync(destination),
+  };
+  transaction.entries.push(entry);
+  writeJsonAtomic(artifactTransactionPath(outDir), transaction);
+  return entry;
+}
+
+function installReservedArtifact(entry) {
+  const outDir = path.dirname(entry.destination);
+  if (entry.hadDestination) {
+    fs.renameSync(entry.destination, entry.backup);
+    fsyncDirectory(outDir);
+  }
+  fs.renameSync(entry.staged, entry.destination);
+  fsyncArtifact(entry.destination);
 }
 
 function finalizeArtifactSet(outDir) {
@@ -285,7 +512,7 @@ async function mergeShardStores(shards, outDir, { faultMergeRenameAfter = undefi
   try {
     const stagedTiles = path.join(staging, "tiles.dttstream");
     const merged = await mergeBoundedFramedStores({
-      inputFiles: ordered.map((shard) => path.join(shard.outDir, "tiles.dttstream")),
+      inputFiles: ordered.map((shard) => shard.snapshots?.tiles?.path ?? path.join(shard.outDir, "tiles.dttstream")),
       outputFile: stagedTiles,
       addressForRecord: (record) => {
         const dtt = readDtt(record);
@@ -297,15 +524,17 @@ async function mergeShardStores(shards, outDir, { faultMergeRenameAfter = undefi
     // would hide an invariant failure from the evidence layer.
     assert.equal(merged.duplicates, 0,
       `shard merge found ${merged.duplicates} duplicate terrain address(es); refusing to hide overlap`);
+    fsyncArtifact(stagedTiles);
     const stagedOcean = path.join(staging, "ocean-skipped.lines");
     const ocean = await mergeOceanSkips({
       inputFiles: ordered.map((shard) => {
-        const streaming = path.join(shard.outDir, "ocean-skipped.lines");
-        return fs.existsSync(streaming) ? streaming : path.join(shard.outDir, "ocean-skipped.json");
+        return shard.snapshots?.oceanLines?.path ?? shard.snapshots?.oceanJson?.path ??
+          path.join(shard.outDir, "ocean-skipped.lines");
       }),
       outputFile: stagedOcean,
     });
     assert.equal(ocean.duplicates, 0, "ocean-skip merge must not hide duplicate shard coverage");
+    fsyncArtifact(stagedOcean);
     const oceanReceipt = path.join(staging, "ocean-skipped.json");
     fs.writeFileSync(
       oceanReceipt,
@@ -317,6 +546,10 @@ async function mergeShardStores(shards, outDir, { faultMergeRenameAfter = undefi
         digest: ocean.digest,
       }, null, 2)}\n`,
     );
+    fsyncArtifact(oceanReceipt);
+    // The stage directory entry and every staged file are durable before the
+    // transaction journal can authorize any destination rename.
+    fsyncDirectory(staging);
     // Install the three related artifacts as a rollback-capable set. Each
     // individual rename is atomic, and a later failure restores every prior
     // destination before the terminal merge receipt can be created.
@@ -346,28 +579,28 @@ async function main() {
   const cacheDir = path.join(outDir, "granule-cache");
   const sourceEpoch = ensureSourceEpoch(cacheDir, sourceContract);
   const state = initializeGlobalState(outDir, runConfig, args.shards);
-  recoverArtifactSet(outDir, { completed: state.completed });
+  const terminalVerified = args.verify && state.completed && terminalVerificationMatchesState(outDir);
+  const terminalMergeReported = state.completed && terminalMergeReportMatchesState(outDir, state);
+  recoverArtifactSet(outDir, {
+    completed: state.completed && terminalVerified && terminalMergeReported,
+    preserve: state.completed && !(terminalVerified && terminalMergeReported),
+  });
   const approvedConfigPath = ensureApprovedRunConfig(outDir, runConfig, state.configDigest);
   const sourceState = bindSourceEpochToState(state, sourceContract);
   if (publicationContract) {
+    const verifierPolicy = verifierPublicationPolicy(publicationContract, state.configDigest);
     const existing = state.publicationPolicy;
     if (existing) {
-      assert.equal(existing.digest, publicationContract.digest,
+      assert.equal(canonicalJson(existing), canonicalJson(verifierPolicy),
         "refusing to resume a state written for a different publication policy");
-      assert.equal(existing.globalConfigDigest, state.configDigest,
-        "refusing to resume publication policy under a different global config digest");
     } else {
-      state.publicationPolicy = {
-        policy: publicationContract.policy,
-        digest: publicationContract.digest,
-        globalConfigDigest: state.configDigest,
-      };
+      state.publicationPolicy = verifierPolicy;
     }
   }
   const finalReport = path.join(outDir, "global-merge-report.json");
   assert.ok(state.completed || !fs.existsSync(finalReport),
     "incomplete global state has a terminal merge report; refuse a torn attempt instead of treating it as approved");
-  saveGlobalState(outDir, state);
+  if (!state.completed) saveGlobalState(outDir, state);
   const configs = makeShardConfigs(runConfig, args.shards, { outDir, cacheDir, cacheMaxBytes }).map((config) => ({
     ...config,
     global_config_digest: state.configDigest,
@@ -375,6 +608,13 @@ async function main() {
   }));
 
   if (state.completed) {
+    // A terminal receipt does not waive the shard evidence: every resume
+    // rechecks every coordinator-owned snapshot before reporting success.
+    for (const shard of state.shards) {
+      assertCompletedShardSnapshots(outDir, shard, sourceContract, publicationContract);
+      if (sourceContract) await assertCompletedShardSource(shard, sourceContract, state.configDigest, cacheDir);
+      assertCompletedShardPublication(shard, publicationContract, state.configDigest);
+    }
     const receipt = state.merged;
     assert.ok(receipt && receipt.completion === "complete", "completed global state has no terminal merge receipt");
     assert.equal(receipt.configDigest, state.configDigest, "completed merge receipt config digest mismatch");
@@ -389,19 +629,23 @@ async function main() {
         "completed source manifest digest does not match its merge receipt");
     }
     if (publicationContract) {
-      assert.equal(receipt.publicationPolicy?.digest, publicationContract.digest,
-        "completed merge receipt publication policy digest mismatch");
-      assert.equal(receipt.publicationPolicy?.globalConfigDigest, state.configDigest,
-        "completed merge receipt publication policy config digest mismatch");
-      assert.equal(canonicalJson(receipt.publicationPolicy?.policy), canonicalJson(publicationContract.policy),
-        "completed merge receipt publication policy mismatch");
+      assert.equal(canonicalJson(receipt.publicationPolicy),
+        canonicalJson(verifierPublicationPolicy(publicationContract, state.configDigest)),
+      "completed merge receipt publication policy mismatch");
     }
-    // State is the atomic completion gate.  If the process died after its
-    // state checkpoint but before this user-facing receipt rename, recreate
-    // the same bytes; an incomplete attempt never exposes a "complete" report.
-    let onDisk = null;
-    try { onDisk = JSON.parse(fs.readFileSync(finalReport, "utf8")); } catch {}
-    if (JSON.stringify(onDisk) !== JSON.stringify(receipt)) writeJsonAtomic(finalReport, receipt);
+    // A terminal state is deliberately written before verification. If a
+    // power loss leaves either report absent, retain transaction backups and
+    // re-run the verifier against this immutable state; never re-merge it.
+    if (args.verify && !terminalVerificationMatchesState(outDir)) {
+      fs.rmSync(finalReport, { force: true });
+      fsyncDirectory(outDir);
+      await runNode([path.join(HERE, "verify.mjs"), "--out", outDir]);
+    }
+    if (args.faultAfterVerify) throw new Error("fault injection after global verification");
+    assert.ok(!args.verify || terminalVerificationMatchesState(outDir),
+      "verifier did not emit a v2 receipt bound to the terminal global state");
+    if (!terminalMergeReportMatchesState(outDir, state)) writeJsonAtomic(finalReport, receipt);
+    finalizeArtifactSet(outDir);
     process.stdout.write(`${JSON.stringify({ outDir, shards: state.shards.length, merged: receipt, resumed: true }, null, 2)}\n`);
     return;
   }
@@ -409,10 +653,14 @@ async function main() {
   const pending = [];
   for (const shard of state.shards) {
     const out = path.join(outDir, "shards", `shard-${String(shard.index).padStart(3, "0")}`);
-    if (shard.status === "complete" && reportIsComplete(out) && shard.outputDigest === await fileDigest(path.join(out, "tiles.dttstream"))) {
-      if (sourceContract) await assertCompletedShardSource({ index: shard.index, outDir: out }, sourceContract, state.configDigest, cacheDir);
-      assertCompletedShardPublication({ index: shard.index, outDir: out }, publicationContract, state.configDigest);
-      continue;
+    if (shard.status === "complete" && shard.snapshots?.tiles && shard.snapshots?.report) {
+      assertCompletedShardSnapshots(outDir, shard, sourceContract, publicationContract);
+      if (reportIsCompleteFile(shard.snapshots.report.path) &&
+          shard.outputDigest === shard.snapshots.tiles.digest) {
+        if (sourceContract) await assertCompletedShardSource(shard, sourceContract, state.configDigest, cacheDir);
+        assertCompletedShardPublication(shard, publicationContract, state.configDigest);
+        continue;
+      }
     }
     markShard(state, shard.index, "pending", { outDir: out });
     pending.push(shard.index);
@@ -429,7 +677,7 @@ async function main() {
       const configFile = path.join(out, "run.json");
       fs.mkdirSync(out, { recursive: true });
       fs.writeFileSync(configFile, `${JSON.stringify(configs[index], null, 2)}\n`);
-      markShard(state, index, "running");
+      markShard(state, index, "running", { snapshots: undefined, outputDigest: undefined });
       saveGlobalState(outDir, state);
       try {
         await runNode([
@@ -439,9 +687,41 @@ async function main() {
           ...(args.wasmedgeVerify === false ? ["--no-wasmedge-verify"] : []),
         ]);
         assert.ok(reportIsComplete(out), `shard ${index} did not leave a clean run report`);
-        if (sourceContract) await assertCompletedShardSource({ index, outDir: out }, sourceContract, state.configDigest, cacheDir);
-        assertCompletedShardPublication({ index, outDir: out }, publicationContract, state.configDigest);
-        markShard(state, index, "complete", { outputDigest: await fileDigest(path.join(out, "tiles.dttstream")) });
+        const snapshotDir = path.join(outDir, ".coordinator-shard-snapshots", `shard-${String(index).padStart(3, "0")}`);
+        // A previously failed attempt can have snapshotted some inputs before
+        // validation. It never reached a durable complete checkpoint, so its
+        // exact coordinator-owned directory may be safely replaced.
+        const snapshotRoot = path.dirname(snapshotDir);
+        fs.mkdirSync(snapshotRoot, { recursive: true });
+        fsyncDirectory(snapshotRoot);
+        fsyncDirectory(outDir);
+        fs.rmSync(snapshotDir, { recursive: true, force: true });
+        fsyncDirectory(snapshotRoot);
+        const snapshots = {
+          report: snapshotShardInput(outDir, index, "run-report.json", path.join(out, "run-report.json"), { maxBytes: MAX_SHARD_REPORT_BYTES }),
+          tiles: snapshotShardInput(outDir, index, "tiles.dttstream", path.join(out, "tiles.dttstream"), {
+            maxBytes: snapshotLimit("tiles", publicationContract),
+          }),
+        };
+        const oceanLines = path.join(out, "ocean-skipped.lines");
+        if (fs.existsSync(oceanLines)) {
+          snapshots.oceanLines = snapshotShardInput(outDir, index, "ocean-skipped.lines", oceanLines, {
+            maxBytes: snapshotLimit("oceanLines", publicationContract),
+          });
+        } else if (fs.existsSync(path.join(out, "ocean-skipped.json"))) {
+          snapshots.oceanJson = snapshotShardInput(outDir, index, "ocean-skipped.json", path.join(out, "ocean-skipped.json"), {
+            maxBytes: snapshotLimit("oceanJson", publicationContract),
+          });
+        }
+        if (sourceContract) {
+          snapshots.sourceLog = snapshotShardInput(outDir, index, "source-observations.ndjson", shardSourceLog({ outDir: out }, sourceContract), {
+            maxBytes: snapshotLimit("sourceLog", publicationContract),
+          });
+          await assertCompletedShardSource({ index, outDir: out, snapshots }, sourceContract, state.configDigest, cacheDir);
+        }
+        assertSnapshotBudget(state, snapshots, publicationContract);
+        assertCompletedShardPublication({ index, outDir: out, snapshots }, publicationContract, state.configDigest);
+        markShard(state, index, "complete", { outputDigest: snapshots.tiles.digest, snapshots });
         saveGlobalState(outDir, state);
         completedThisInvocation += 1;
       } catch (error) {
@@ -459,20 +739,34 @@ async function main() {
   }
   await Promise.all(Array.from({ length: args.workers }, worker));
   assert.ok(state.shards.every((shard) => shard.status === "complete"), "not every shard completed");
-  const { merged } = await mergeShardStores(state.shards, outDir, {
+  const { merged, transaction } = await mergeShardStores(state.shards, outDir, {
     faultMergeRenameAfter: args.faultMergeRenameAfter,
     faultMergeCrashAfter: args.faultMergeCrashAfter,
   });
   state.mergeCandidate = { ...merged, at: new Date().toISOString() };
   saveGlobalState(outDir, state);
-  if (args.verify) await runNode([path.join(HERE, "verify.mjs"), "--out", outDir]);
+  if (publicationContract) {
+    const size = fs.statSync(path.join(outDir, "tiles.dttstream")).size;
+    assert.ok(size <= publicationContract.policy.max_verified_store_bytes,
+      `merged verified store ${size} exceeds approved ${publicationContract.policy.max_verified_store_bytes}-byte ceiling`);
+  }
   const sourceManifest = sourceContract
-    ? await emitCompletionSourceManifest({
-        outDir,
-        logFiles: state.shards.map((shard) => shardSourceLog(shard, sourceContract)),
-        contract: sourceContract,
-        configDigest: state.configDigest,
-      })
+    ? await (async () => {
+        const destination = path.resolve(outDir, sourceContract.policy.manifest.completion_manifest);
+        const staged = path.join(transaction.stagingDir, path.basename(destination));
+        const receipt = await emitCompletionSourceManifest({
+          outDir, outputFile: staged, reportedPath: path.relative(outDir, destination),
+          logFiles: state.shards.map((shard) => shardSourceLog(shard, sourceContract)),
+          contract: sourceContract, configDigest: state.configDigest,
+        });
+        // A crash before this durable staged file exists leaves the original
+        // three-artifact journal untouched. Only then record the fourth
+        // intent, so recovery never has to infer whether an old manifest was
+        // backed up before an absent stage could be installed.
+        const entry = reserveArtifact(transaction, destination, staged);
+        installReservedArtifact(entry);
+        return receipt;
+      })()
     : null;
   const completed = {
     ...merged,
@@ -481,21 +775,24 @@ async function main() {
     configDigest: state.configDigest,
     approvedConfigPath,
     ...(publicationContract ? {
-      publicationPolicy: {
-        policy: publicationContract.policy,
-        digest: publicationContract.digest,
-        globalConfigDigest: state.configDigest,
-      },
+      publicationPolicy: verifierPublicationPolicy(publicationContract, state.configDigest),
     } : {}),
     ...(sourceManifest ? { sourceManifest, sourceEpochReceipt: path.relative(outDir, sourceEpoch.file) } : {}),
   };
   state.merged = completed;
   state.completed = true;
   if (sourceState) sourceState.completed = true;
+  // This is the terminal, immutable verifier input. Do not write state again
+  // below: verify-report v2 binds these exact bytes, and backups remain until
+  // that receipt and the user-facing merge report both exist.
   saveGlobalState(outDir, state);
-  // Write this only after the durable state checkpoint.  The temp+rename
-  // prevents a torn JSON file from looking like approval; resume recreates it
-  // from the terminal state receipt above.
+  if (args.faultAfterTerminalState) throw new Error("fault injection after terminal global state");
+  if (args.verify) await runNode([path.join(HERE, "verify.mjs"), "--out", outDir]);
+  if (args.faultAfterVerify) throw new Error("fault injection after global verification");
+  assert.ok(!args.verify || terminalVerificationMatchesState(outDir),
+    "verifier did not emit a v2 receipt bound to the terminal global state");
+  // Write this only after the durable terminal state and its bound verifier
+  // receipt. The temp+rename prevents a torn JSON file from looking approved.
   writeJsonAtomic(path.join(outDir, "global-merge-report.json"), completed);
   finalizeArtifactSet(outDir);
   process.stdout.write(`${JSON.stringify({ outDir, shards: state.shards.length, merged: completed }, null, 2)}\n`);

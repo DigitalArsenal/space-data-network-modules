@@ -44,7 +44,6 @@ import { MAX_TERRAIN_RECORD_BYTES } from "./dtt-reader.mjs";
 import {
   FixedHistogram,
   SourceRequestObserver,
-  appendRequestObservation,
   canonicalJson,
   commitCellAttempt,
   ensureSourceEpoch,
@@ -52,6 +51,8 @@ import {
   publicationPolicyContract,
   recoverCellAttempt,
   sha256,
+  sourceObservationLine,
+  sourcePolicyAllowsUrl,
   sourcePolicyContract,
   validateCachedSource,
 } from "./source-provenance.mjs";
@@ -662,7 +663,7 @@ async function main() {
     ? new SourceRequestObserver({
         timeoutMs: sourceContract.policy.request.timeout_ms,
         maxOutstanding: sourceContract.policy.request.max_outstanding,
-        allowUrl: (url) => sourceContract.urlPattern.test(url),
+        allowUrl: (url) => sourcePolicyAllowsUrl(sourceContract, url),
       })
     : null;
   function recordSourceObservation(url, fetched, requestedAt, persisted = undefined) {
@@ -677,10 +678,17 @@ async function main() {
     // hits as requests while preserving the immutable response observation
     // which populated that cache generation.  global-build.mjs external-sorts
     // and deduplicates it after every shard has completed.
-    appendRequestObservation(sourceObservationLog, observation, { requestedAt, cacheHit: fetched.hit });
+    // This line is staged with the cell and committed before its $IRM mark.
+    // A resume can therefore never advance past a cell whose request evidence
+    // was merely in the page cache at the time of a power loss.
     stats.sourceObservationRequests += 1;
+    return sourceObservationLine(observation, { requestedAt, cacheHit: fetched.hit });
   }
   async function prefetch(urls) {
+    if (sourceContract) {
+      assert.ok(urls.length <= sourceContract.policy.request.max_outstanding,
+        "cell planner exceeds the approved bounded source-request set");
+    }
     return Promise.all(
       urls.map(async (url) => {
         const requestedAt = new Date().toISOString();
@@ -715,13 +723,13 @@ async function main() {
             } : {}),
             onRetry: () => { stats.fetchRetries += 1; },
           });
-          recordSourceObservation(url, fetched, requestedAt, sourceObservation);
+          const line = recordSourceObservation(url, fetched, requestedAt, sourceObservation);
           if (!fetched.hit) {
             stats.fetches += 1;
             stats.fetchBytes += fetched.body.length;
             if (fetched.status === 404) stats.fetch404 += 1;
           }
-          return sourceObservation;
+          return { observation: sourceObservation, line };
         } finally {
           // fetchWithRetry can fail while reading a successful response body,
           // after the observer retained headers.  Do not let that failed
@@ -1059,7 +1067,11 @@ async function main() {
       break;
     }
     try {
-      const observations = await prefetch(planned.urls);
+      const prefetched = await prefetch(planned.urls);
+      const observations = prefetched.map(({ observation }) => observation);
+      const sourceObservationBytes = Buffer.concat(
+        prefetched.flatMap(({ line }) => Buffer.isBuffer(line) ? [line] : []),
+      );
       if (sourceContract) {
         assert.equal(observations.length, planned.urls.length, "every planned source URL needs one immutable observation");
         activeRetrievedAt = observations.reduce((latest, observation) =>
@@ -1119,6 +1131,7 @@ async function main() {
           name: "ocean", target: oceanSkipLog,
           bytes: Buffer.from(built.stage.oceanAddresses.map((address) => `${address}\n`).join("")),
         }] : []),
+        ...(sourceObservationBytes.length ? [{ name: "source-observations", target: sourceObservationLog, bytes: sourceObservationBytes }] : []),
         { name: "mark", target: path.join(outDir, "irm.records"), bytes: markFrame },
       ],
     });
@@ -1127,7 +1140,7 @@ async function main() {
     // from durable artifacts rather than invocation-local counters.
     store.bytes = fs.statSync(store.recordsPath).size;
     stats.marksWritten += 1;
-    for (const dtt of committedRows) {
+    for (const dtt of indexRows) {
       stats.tiles += 1;
       stats.tileByteHistogram.add(dtt.payloadBytes);
       if (dtt.waterMaskKind === 3) stats.rasterMasks += 1;

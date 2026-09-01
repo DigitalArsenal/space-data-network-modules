@@ -83,6 +83,11 @@ function fsyncDirectory(directory) {
   try { fs.fsyncSync(handle); } finally { fs.closeSync(handle); }
 }
 
+export function fsyncFile(file) {
+  const handle = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try { fs.fsyncSync(handle); } finally { fs.closeSync(handle); }
+}
+
 function writeJsonAtomic(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
@@ -142,6 +147,10 @@ function appendDurably(file, bytes) {
   } finally {
     fs.closeSync(handle);
   }
+  // A source log may be configured below a child directory of the shard. The
+  // `$IRM` mark must never become durable merely because that child entry was
+  // still only in the page cache, so every append acknowledges its own parent.
+  fsyncDirectory(path.dirname(file));
 }
 
 function loadArtifactChains(outDir, targets) {
@@ -251,9 +260,7 @@ export function commitCellAttempt({
   });
   for (const operation of journalOperations) {
     replayCellOperation(operation, { faultPhase });
-    if ((faultPhase === "after-tiles" && operation.name === "tiles") ||
-        (faultPhase === "after-ocean" && operation.name === "ocean") ||
-        (faultPhase === "after-mark" && operation.name === "mark")) {
+    if (faultPhase === `after-${operation.name}`) {
       throw new Error(`fault injection ${faultPhase} for cell ${cell}`);
     }
   }
@@ -324,11 +331,32 @@ function directoryHasEntry(directory) {
   }
 }
 
-function readSmallJson(file, maxBytes, label) {
-  const stat = fs.statSync(file);
-  assert.ok(stat.isFile(), `${label} is not a regular file: ${file}`);
-  assert.ok(stat.size <= maxBytes, `${label} exceeds ${maxBytes} byte bound: ${file}`);
-  return JSON.parse(fs.readFileSync(file, "utf8"));
+function assertStableFileStat(before, after, label, file) {
+  assert.equal(after.dev, before.dev, `${label} inode changed while reading: ${file}`);
+  assert.equal(after.ino, before.ino, `${label} inode changed while reading: ${file}`);
+  assert.equal(after.size, before.size, `${label} changed while reading: ${file}`);
+  // Same-inode, equal-length overwrites are still a TOCTOU. ctime is updated
+  // by writes and cannot be restored with utimes(2); retain mtime too.
+  assert.equal(after.mtimeNs, before.mtimeNs, `${label} changed while reading: ${file}`);
+  assert.equal(after.ctimeNs, before.ctimeNs, `${label} changed while reading: ${file}`);
+}
+
+function readSmallJson(file, maxBytes, label, { fsync = false } = {}) {
+  // Receipt and journal paths are evidence, never hints.  Read one stable,
+  // non-symlink inode: stat(path)+read(path) would permit a same-length swap.
+  const handle = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try {
+    const before = fs.fstatSync(handle, { bigint: true });
+    assert.ok(before.isFile(), `${label} is not a regular file: ${file}`);
+    assert.ok(before.size <= BigInt(maxBytes), `${label} exceeds ${maxBytes} byte bound: ${file}`);
+    const bytes = fs.readFileSync(handle, "utf8");
+    assertStableFileStat(before, fs.fstatSync(handle, { bigint: true }), label, file);
+    const parsed = JSON.parse(bytes);
+    // The EEXIST cache writer validates and fsyncs this same opened regular
+    // inode. Reopening by pathname here would reintroduce a swap window.
+    if (fsync) fs.fsyncSync(handle);
+    return parsed;
+  } finally { fs.closeSync(handle); }
 }
 
 /** A fixed-capacity top-K heap for streaming summaries. compareBest(a,b) > 0 means a is preferred. */
@@ -579,9 +607,9 @@ function assertRequestLogObservation(observation, contract) {
   assert.equal(typeof observation.cache_hit, "boolean", "source request cache_hit must be boolean");
 }
 
-function readReceipt(cacheDir, url) {
+function readReceipt(cacheDir, url, { fsync = false } = {}) {
   try {
-    const observation = readSmallJson(receiptPath(cacheDir, url), MAX_SOURCE_RECEIPT_BYTES, "source observation receipt");
+    const observation = readSmallJson(receiptPath(cacheDir, url), MAX_SOURCE_RECEIPT_BYTES, "source observation receipt", { fsync });
     assertObservation(observation);
     assert.equal(observation.source_key, sourceKey(url), "source receipt URL key mismatch");
     assert.equal(observation.url, url, "source receipt URL mismatch");
@@ -594,7 +622,8 @@ function readReceipt(cacheDir, url) {
 
 function persistReceipt(cacheDir, observation) {
   const file = receiptPath(cacheDir, observation.url);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const receiptDir = path.dirname(file);
+  fs.mkdirSync(receiptDir, { recursive: true });
   const bytes = `${canonicalJson(observation)}\n`;
   try {
     const handle = fs.openSync(file, "wx", 0o600);
@@ -605,14 +634,22 @@ function persistReceipt(cacheDir, observation) {
     // The cache's `current.json` may publish immediately after this callback.
     // Sync the receipt parent too, so a power loss cannot leave the pointer
     // durable while the provenance entry that authorized it is absent.
-    fsyncDirectory(path.dirname(file));
+    fsyncDirectory(receiptDir);
+    // `source-observations` can itself be newly created.  Its parent entry
+    // must survive the same power loss as a subsequently published pointer.
+    fsyncDirectory(cacheDir);
     return observation;
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
-    const existing = readReceipt(cacheDir, observation.url);
+    const existing = readReceipt(cacheDir, observation.url, { fsync: true });
     assert.ok(existing, `source receipt vanished while recording ${observation.url}`);
     assert.equal(sourceObservationIdentity(existing), sourceObservationIdentity(observation),
       `source changed during this policy epoch: ${observation.url}`);
+    // An orphan from a prior process can exist after its writer fsynced the
+    // file but died before the directory.  Make this exact, non-symlink inode
+    // and its namespace durable before authorizing a cache generation.
+    fsyncDirectory(receiptDir);
+    fsyncDirectory(cacheDir);
     return existing;
   }
 }
@@ -718,10 +755,21 @@ export function observationForRequest({ cacheDir, url, fetched, networkObservati
   return persistReceipt(cacheDir, observation);
 }
 
-export function appendRequestObservation(logFile, observation, { requestedAt, cacheHit }) {
+export function sourceObservationLine(observation, { requestedAt, cacheHit }) {
   assertObservation(observation);
   assertCanonicalRfc3339(requestedAt, "source request requested_at");
-  fs.appendFileSync(logFile, `${canonicalJson({ ...observation, requested_at: requestedAt, cache_hit: Boolean(cacheHit) })}\n`);
+  return Buffer.from(`${canonicalJson({ ...observation, requested_at: requestedAt, cache_hit: Boolean(cacheHit) })}\n`);
+}
+
+export function appendRequestObservation(logFile, observation, metadata) {
+  const bytes = sourceObservationLine(observation, metadata);
+  fs.mkdirSync(path.dirname(logFile), { recursive: true });
+  const handle = fs.openSync(logFile, "a", 0o600);
+  try {
+    fs.writeFileSync(handle, bytes);
+    fs.fsyncSync(handle);
+  } finally { fs.closeSync(handle); }
+  fsyncDirectory(path.dirname(logFile));
 }
 
 function codeUnitCompare(a, b) {
@@ -737,25 +785,43 @@ function compareObservation(a, b) {
 
 async function* boundedLines(file, maxBytes) {
   let pending = Buffer.alloc(0);
-  for await (const chunk of fs.createReadStream(file, { highWaterMark: 4096 })) {
-    let start = 0;
-    while (start < chunk.length) {
-      const newline = chunk.indexOf(0x0a, start);
-      const end = newline < 0 ? chunk.length : newline;
-      const segment = chunk.subarray(start, end);
-      assert.ok(pending.length + segment.length <= maxBytes,
-        `line exceeds ${maxBytes} bytes: ${file}`);
-      if (newline < 0) {
-        pending = pending.length ? Buffer.concat([pending, segment]) : Buffer.from(segment);
-        break;
+  const handle = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  const before = fs.fstatSync(handle, { bigint: true });
+  try {
+    assert.ok(before.isFile(), `JSONL input is not a regular file: ${file}`);
+    // Keep the exact opened inode for the full parse. A source-log producer
+    // cannot substitute a same-length file between a preliminary stat and a
+    // later stream open.
+    const size = Number(before.size);
+    assert.ok(Number.isSafeInteger(size), `JSONL input exceeds JavaScript's safe byte range: ${file}`);
+    const chunkBuffer = Buffer.alloc(4096);
+    for (let position = 0; position < size;) {
+      const read = fs.readSync(handle, chunkBuffer, 0, Math.min(chunkBuffer.length, size - position), position);
+      assert.ok(read > 0, `JSONL input ended while reading: ${file}`);
+      position += read;
+      const chunk = chunkBuffer.subarray(0, read);
+      let start = 0;
+      while (start < chunk.length) {
+        const newline = chunk.indexOf(0x0a, start);
+        const end = newline < 0 ? chunk.length : newline;
+        const segment = chunk.subarray(start, end);
+        assert.ok(pending.length + segment.length <= maxBytes,
+          `line exceeds ${maxBytes} bytes: ${file}`);
+        if (newline < 0) {
+          pending = pending.length ? Buffer.concat([pending, segment]) : Buffer.from(segment);
+          break;
+        }
+        const bytes = pending.length ? Buffer.concat([pending, segment]) : segment;
+        pending = Buffer.alloc(0);
+        if (bytes.length) yield bytes;
+        start = newline + 1;
       }
-      const bytes = pending.length ? Buffer.concat([pending, segment]) : segment;
-      pending = Buffer.alloc(0);
-      if (bytes.length) yield bytes;
-      start = newline + 1;
     }
+    assert.equal(pending.length, 0, `JSONL file ends without a newline: ${file}`);
+    assertStableFileStat(before, fs.fstatSync(handle, { bigint: true }), "JSONL input", file);
+  } finally {
+    try { fs.closeSync(handle); } catch (error) { if (error.code !== "EBADF") throw error; }
   }
-  assert.equal(pending.length, 0, `JSONL file ends without a newline: ${file}`);
 }
 
 async function* jsonl(file, { contract = null, requestLog = false } = {}) {
@@ -872,8 +938,14 @@ async function collapseRuns(runs, sortDir, fanIn) {
 async function digestFile(file, contract = null) {
   const hash = createHash("sha256");
   let count = 0;
-  for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
-  for await (const unused of jsonl(file, { contract })) { void unused; count += 1; }
+  for await (const bytes of boundedLines(file, MAX_OBSERVATION_LINE_BYTES)) {
+    hash.update(bytes);
+    hash.update("\n");
+    const row = JSON.parse(bytes.toString("utf8"));
+    assertObservation(row);
+    assertContractObservation(row, contract);
+    count += 1;
+  }
   return { digest: hash.digest("hex"), count };
 }
 
@@ -881,8 +953,12 @@ export async function readSourceManifestEvidence(file, contract) {
   const hash = createHash("sha256");
   let observations = 0;
   let latestObservedAt = "";
-  for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
-  for await (const observation of jsonl(file, { contract })) {
+  for await (const bytes of boundedLines(file, MAX_OBSERVATION_LINE_BYTES)) {
+    hash.update(bytes);
+    hash.update("\n");
+    const observation = JSON.parse(bytes.toString("utf8"));
+    assertObservation(observation);
+    assertContractObservation(observation, contract);
     observations += 1;
     if (observation.observed_at > latestObservedAt) latestObservedAt = observation.observed_at;
   }
@@ -897,6 +973,7 @@ async function writeCanonicalManifest(input, output, contract) {
       fs.writeSync(handle, `${canonicalJson(manifestObservation(row))}\n`);
     }
   } finally {
+    fs.fsyncSync(handle);
     fs.closeSync(handle);
   }
 }
@@ -907,14 +984,16 @@ async function writeCanonicalManifest(input, output, contract) {
  * resume cannot silently overwrite an earlier completion receipt.
  */
 export async function emitCompletionSourceManifest({
-  outDir, logFiles, contract, configDigest,
+  outDir, logFiles, contract, configDigest, outputFile = undefined, reportedPath = undefined,
   // Narrow test hooks prove the external merge remains correct across many
   // chunks without making a unit test manufacture gigabytes of log data.
   sortRunBytes = SOURCE_SORT_RUN_BYTES,
   fanIn = SOURCE_SORT_FAN_IN,
 }) {
   assert.ok(contract, "a source contract is required for a completion manifest");
-  const final = path.resolve(outDir, contract.policy.manifest.completion_manifest);
+  const final = outputFile
+    ? path.resolve(outputFile)
+    : path.resolve(outDir, contract.policy.manifest.completion_manifest);
   assert.ok(final.startsWith(`${path.resolve(outDir)}${path.sep}`),
     "source_policy.manifest.completion_manifest must stay inside the global output");
   const sortDir = fs.mkdtempSync(path.join(outDir, ".source-manifest-runs-"));
@@ -933,6 +1012,8 @@ export async function emitCompletionSourceManifest({
     try {
       fs.linkSync(temporary, final);
       fs.chmodSync(final, 0o444);
+      fsyncFile(final);
+      fsyncDirectory(path.dirname(final));
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
       const existing = await digestFile(final, contract);
@@ -940,7 +1021,7 @@ export async function emitCompletionSourceManifest({
         `refusing to overwrite immutable source manifest with different bytes: ${final}`);
     }
     return {
-      path: path.relative(outDir, final),
+      path: reportedPath ?? path.relative(outDir, final),
       digest: receipt.digest,
       observations: receipt.count,
       configDigest,
@@ -1027,7 +1108,7 @@ async function mergeRecordGroup(inputFiles, output) {
     }
     if (previous) fs.writeSync(handle, `${canonicalJson(previous)}\n`);
   } finally {
-    fs.closeSync(handle);
+    try { fs.closeSync(handle); } catch (error) { if (error.code !== "EBADF") throw error; }
   }
 }
 
@@ -1087,6 +1168,7 @@ export async function mergeBoundedFramedStores({
         }
       }
     } finally {
+      fs.fsyncSync(handle);
       fs.closeSync(handle);
     }
     return { records, duplicates, recordSetDigest: hash.digest("hex") };
@@ -1132,30 +1214,45 @@ async function* legacyOceanAddresses(file) {
   let inString = false;
   let escaped = false;
   let token = "";
-  for await (const chunk of fs.createReadStream(file, { highWaterMark: 4096 })) {
-    for (const char of chunk.toString("utf8")) {
-      if (inString) {
-        if (escaped) throw new Error(`escaped legacy ocean address/key is unsupported: ${file}`);
-        if (char === "\\") { escaped = true; continue; }
-        if (char === "\"") {
-          inString = false;
-          if (state === "key") state = token === "addresses" ? "colon" : "key";
-          else if (state === "array") yield assertOceanAddress(token, file);
-          token = "";
-        } else {
-          assert.ok(token.length < 128, `legacy ocean token is too long: ${file}`);
-          token += char;
+  const handle = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  const before = fs.fstatSync(handle, { bigint: true });
+  try {
+    assert.ok(before.isFile(), `legacy ocean input is not a regular file: ${file}`);
+    const size = Number(before.size);
+    assert.ok(Number.isSafeInteger(size), `legacy ocean input exceeds JavaScript's safe byte range: ${file}`);
+    const chunkBuffer = Buffer.alloc(4096);
+    for (let position = 0; position < size;) {
+      const read = fs.readSync(handle, chunkBuffer, 0, Math.min(chunkBuffer.length, size - position), position);
+      assert.ok(read > 0, `legacy ocean input ended while reading: ${file}`);
+      position += read;
+      const chunk = chunkBuffer.subarray(0, read);
+      for (const char of chunk.toString("utf8")) {
+        if (inString) {
+          if (escaped) throw new Error(`escaped legacy ocean address/key is unsupported: ${file}`);
+          if (char === "\\") { escaped = true; continue; }
+          if (char === "\"") {
+            inString = false;
+            if (state === "key") state = token === "addresses" ? "colon" : "key";
+            else if (state === "array") yield assertOceanAddress(token, file);
+            token = "";
+          } else {
+            assert.ok(token.length < 128, `legacy ocean token is too long: ${file}`);
+            token += char;
+          }
+          continue;
         }
-        continue;
+        if (char === "\"") { inString = true; token = ""; continue; }
+        if (state === "colon" && char === ":") state = "array-start";
+        else if (state === "array-start" && char === "[") state = "array";
+        else if (state === "array" && char === "]") state = "done";
       }
-      if (char === "\"") { inString = true; token = ""; continue; }
-      if (state === "colon" && char === ":") state = "array-start";
-      else if (state === "array-start" && char === "[") state = "array";
-      else if (state === "array" && char === "]") state = "done";
     }
+    assert.equal(inString, false, `unterminated legacy ocean string: ${file}`);
+    assert.equal(state, "done", `legacy ocean file has no complete addresses array: ${file}`);
+    assertStableFileStat(before, fs.fstatSync(handle, { bigint: true }), "legacy ocean input", file);
+  } finally {
+    try { fs.closeSync(handle); } catch (error) { if (error.code !== "EBADF") throw error; }
   }
-  assert.equal(inString, false, `unterminated legacy ocean string: ${file}`);
-  assert.equal(state, "done", `legacy ocean file has no complete addresses array: ${file}`);
 }
 
 async function* oceanAddresses(file) {
@@ -1279,6 +1376,8 @@ export async function mergeOceanSkips({ inputFiles, outputFile, maxRunBytes = SO
     const final = merged.file;
     if (final) fs.renameSync(final, outputFile);
     else fs.writeFileSync(outputFile, "");
+    fsyncFile(outputFile);
+    fsyncDirectory(path.dirname(outputFile));
     const hash = createHash("sha256");
     let count = 0;
     for await (const chunk of fs.createReadStream(outputFile)) hash.update(chunk);

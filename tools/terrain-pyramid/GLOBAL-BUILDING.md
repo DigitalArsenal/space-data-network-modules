@@ -52,7 +52,7 @@ out-of-world planner bug cannot become an authoritative 404 or ocean fact.
   observed. HTTP 404 remains a source result and is not retried; 408, 425, 429
   and 5xx responses are retried. CLI retry/cache overrides must exactly match
   the checked source policy.
-- Each source request appends a bounded JSONL row containing its public URL (or
+- Each source request contributes a bounded JSONL row containing its public URL (or
   stable SHA-256 key), final status, actual body length and digest,
   ETag/Last-Modified when supplied, cached-vs-network status, `requested_at`,
   and exact response `observed_at`. Cache receipts sit beside the immutable
@@ -60,12 +60,22 @@ out-of-world planner bug cannot become an authoritative 404 or ocean fact.
   full response body is read but before `current.json` publishes; a cache hit
   without one fails rather than inheriting
   unprovenanced bytes. A `source-epoch.json` receipt refuses policy/epoch
-  mixing and a legacy cache with unreceipted entries.
+  mixing and a legacy cache with unreceipted entries. The row is staged in the
+  same per-cell journal as tiles/index/ocean output and is fsynced before that
+  cell's terminal `$IRM` mark, so a resumed mark can never outrun the exact
+  requests that justified it. Receipt creation and the EEXIST path both use a
+  stable regular `O_NOFOLLOW` descriptor; the descriptor and receipt parents
+  are durable before a cache generation can become current.
 - Regions are cut into deterministic, non-overlapping longitude slices. A
   worker owns one shard output and a durable `global-build-state.json` records
   its config digest, attempts and output digest. A resumed command refuses a
   changed config or shard count and skips only shards whose clean report and
-  stream digest still match. A `--max-cells` run report is explicitly
+  stream digest still match. Before that state checkpoint, the coordinator
+  copies report, stream, source-log, and ocean inputs through bounded,
+  no-follow descriptors into coordinator-owned immutable snapshots, records
+  their byte counts/digests, rechecks every one on every resume, and refuses a
+  cumulative snapshot set over the approved static-directory ceiling. A
+  `--max-cells` run report is explicitly
   `drained: false`, so it remains resumable work rather than being mistaken for
   a completed shard.
 - Shard merging rejects every boundary duplicate, including byte-identical
@@ -83,13 +93,19 @@ out-of-world planner bug cannot become an authoritative 404 or ocean fact.
   merge report's sorted address/digest set is the order-independent
   parity identity used to compare a multi-worker rehearsal with the existing
   single-process lane.
-- Only after every shard is terminal and `verify.mjs` passes does the
-  coordinator externally sort and deduplicate the shard logs into immutable
-  `source-manifest.ndjson`. Rows are canonical JSONL ordered by stable source
-  key; conflicting observations for one URL fail the run. Its SHA-256 digest,
-  source-policy digest, dataset epoch, and canonical complete-config digest are
-  bound into `global-merge-report.json`. An interrupted shard or a
-  `--skip-verify` source-policy invocation cannot create that manifest.
+- After every shard is terminal, the coordinator externally sorts and
+  deduplicates its immutable snapshots into staged `source-manifest.ndjson`.
+  Rows are canonical JSONL ordered by stable source key; conflicting
+  observations for one URL fail the run. The staged manifest is fsynced and
+  added to the same four-artifact transaction as merged tiles and ocean
+  receipts before any destination rename. The durable terminal state then
+  records its SHA-256 digest, source-policy digest, dataset epoch, and
+  canonical config digest. `verify.mjs` runs only against those exact terminal
+  state bytes and must emit its v2 input receipt before
+  `global-merge-report.json` is exposed or transaction backups are finalized.
+  A crash in either interval preserves the transaction and resumes verification
+  rather than re-merging. An interrupted shard or a `--skip-verify`
+  source-policy invocation cannot create a terminal manifest.
 - Each cell stages records, index rows, ocean lines, and its durable `$IRM`
   mark under an attempt journal. The journal records pre/post lengths and
   digest-chain receipts; startup completes an exact partial append or refuses
@@ -108,9 +124,12 @@ out-of-world planner bug cannot become an authoritative 404 or ocean fact.
   ratio applied to the 8.51 GiB global upper estimate is 108.99 GiB, leaving
   17.4% within the reviewed binary ceiling. Neither number is a host-capacity
   placeholder. The exact
-  policy, policy digest, and global-config digest are carried in every shard
-  `run-report.json`, retained in global state, and bound into
-  `global-merge-report.json`; a shard that reports any other policy is refused.
+  raw policy and policy digest are carried in every shard `run-report.json`;
+  the approved config is its exact immutable lineage. Global state and its
+  merge receipt carry the verifier's normalized
+  `terrain-publication-policy-v1` wrapper (including the same config digest,
+  byte ceilings, and grid), so verifier and coordinator consume one unambiguous
+  shape; a shard that reports any other raw policy is refused.
   The policy fixes `terrain_synth_grid_size: 2`: the shipped source module
   accepts `[2,255]`, and a flat land/water/ancestor tile needs only the four
   coplanar vertices of a 2x2 lattice. The publisher passes that exact key to

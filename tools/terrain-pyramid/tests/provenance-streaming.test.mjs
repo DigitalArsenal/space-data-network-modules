@@ -22,6 +22,7 @@ import {
   sha256,
   sourcePolicyAllowsUrl,
   sourcePolicyContract,
+  sourceObservationLine,
   validateCachedSource,
 } from "../source-provenance.mjs";
 import { BoundedGranuleCache } from "../build-support.mjs";
@@ -180,6 +181,26 @@ test("same URL cannot change content within a source epoch", (t) => {
     cacheDir: cache, url, fetched: fetched("second"),
     networkObservation: { etag: "two", observed_at: "2026-09-01T00:01:00.000Z" },
   }), /source changed/);
+});
+
+test("receipt evidence rejects a symlink rather than following a foreign inode", (t) => {
+  const root = temporary(t);
+  const cache = path.join(root, "cache");
+  const url = "https://example.test/dem/N45/E006";
+  const body = Buffer.from("bytes");
+  const observation = {
+    source_key: `sha256:${sha256(url)}`, url, status: 200, content_length: body.length,
+    content_digest: sha256(body), observed_at: "2026-09-01T00:00:00.000Z",
+  };
+  const receiptDir = path.join(cache, "source-observations");
+  fs.mkdirSync(receiptDir, { recursive: true });
+  const foreign = path.join(root, "foreign-receipt.json");
+  fs.writeFileSync(foreign, `${JSON.stringify(observation)}\n`);
+  fs.symlinkSync(foreign, path.join(receiptDir, `${sha256(url)}.json`));
+  assert.throws(() => observationForRequest({
+    cacheDir: cache, url, fetched: { status: 200, hit: false, body },
+    networkObservation: { observed_at: observation.observed_at },
+  }), /ELOOP|too many symbolic links/);
 });
 
 test("source observer caps retained request metadata and refuses redirects", async () => {
@@ -365,10 +386,11 @@ test("cell journal recovers exactly after each durable artifact boundary", async
     { name: "tiles", target: path.join(dir, "tiles.dttstream"), bytes: Buffer.from("tile-frame") },
     { name: "index", target: path.join(dir, "tiles.index.jsonl"), bytes: Buffer.from('{"level":8}\n') },
     { name: "ocean", target: path.join(dir, "ocean-skipped.lines"), bytes: Buffer.from("8/1/2\n") },
+    { name: "source-observations", target: path.join(dir, "source-observations.ndjson"), bytes: Buffer.from("{\"source\":true}\n") },
     { name: "mark", target: path.join(dir, "irm.records"), bytes: Buffer.from("mark-frame") },
   ];
   const artifactSnapshot = (dir) => Object.fromEntries([
-    "tiles.dttstream", "tiles.index.jsonl", "ocean-skipped.lines", "irm.records", "resume-mark.json",
+    "tiles.dttstream", "tiles.index.jsonl", "ocean-skipped.lines", "source-observations.ndjson", "irm.records", "resume-mark.json",
   ].map((name) => [name, fs.readFileSync(path.join(dir, name))]));
   const clean = path.join(root, "clean");
   fs.mkdirSync(clean);
@@ -377,7 +399,7 @@ test("cell journal recovers exactly after each durable artifact boundary", async
   });
   const expected = artifactSnapshot(clean);
 
-  for (const faultPhase of ["after-tiles", "after-ocean", "after-mark"]) {
+  for (const faultPhase of ["after-tiles", "after-ocean", "after-source-observations", "after-mark"]) {
     const resumed = path.join(root, faultPhase);
     fs.mkdirSync(resumed);
     assert.throws(() => commitCellAttempt({
@@ -404,6 +426,7 @@ test("cell journal recovers exactly after each durable artifact boundary", async
       { name: "tiles", target: path.join(out, "tiles.dttstream"), bytes: Buffer.from("tile-frame") },
       { name: "index", target: path.join(out, "tiles.index.jsonl"), bytes: Buffer.from('{"level":8}\\n') },
       { name: "ocean", target: path.join(out, "ocean-skipped.lines"), bytes: Buffer.from("8/1/2\\n") },
+      { name: "source-observations", target: path.join(out, "source-observations.ndjson"), bytes: Buffer.from("{\\\"source\\\":true}\\n") },
       { name: "mark", target: path.join(out, "irm.records"), bytes: Buffer.from("mark-frame") },
     ] });
   `);
@@ -412,6 +435,17 @@ test("cell journal recovers exactly after each durable artifact boundary", async
   assert.ok(partialBytes > 0 && partialBytes < expected["tiles.dttstream"].length, "child left an actual partial tile append");
   assert.equal(recoverCellAttempt({ outDir: midAppend }), true);
   assert.deepEqual(artifactSnapshot(midAppend), expected, "child-crash recovery finishes the exact staged suffix once");
+});
+
+test("source observation lines are bounded canonical cell-journal payloads", () => {
+  const line = sourceObservationLine({
+    source_key: `sha256:${"a".repeat(64)}`,
+    url: "https://example.test/dem/N45/E006", status: 404,
+    content_length: 0, content_digest: sha256(""), observed_at: "2026-09-01T00:00:00.000Z",
+  }, { requestedAt: "2026-09-01T00:00:00.000Z", cacheHit: false });
+  assert.ok(Buffer.isBuffer(line));
+  assert.ok(line.length < 16 * 1024);
+  assert.equal(line.toString("utf8").endsWith("\n"), true);
 });
 
 test("source epoch and per-URL receipts are stat-capped before JSON parsing", (t) => {
@@ -555,6 +589,14 @@ test("a fault after a source-backed shard checkpoint cannot emit a completion ma
   );
   assert.equal(fs.existsSync(path.join(root, "out", "source-manifest.ndjson")), false);
   assert.equal(fs.existsSync(path.join(root, "out", "global-merge-report.json")), false);
+  const state = JSON.parse(fs.readFileSync(path.join(root, "out", "global-build-state.json"), "utf8"));
+  fs.appendFileSync(state.shards[0].snapshots.sourceLog.path, "x");
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      COORDINATOR, "--config", config, "--out", path.join(root, "out"),
+      "--shards", "2", "--workers", "1", "--runner", runner,
+    ]), /sourceLog snapshot (byte count|digest) changed/,
+  );
 });
 
 test("coordinator rejects a source shard with a mismatched immutable global config digest", async (t) => {
@@ -642,11 +684,18 @@ test("coordinator carries the exact publication policy and config digest through
   ]);
   const shard = JSON.parse(fs.readFileSync(path.join(out, "shards", "shard-000", "run-report.json"), "utf8"));
   const merged = JSON.parse(fs.readFileSync(path.join(out, "global-merge-report.json"), "utf8"));
+  const state = JSON.parse(fs.readFileSync(path.join(out, "global-build-state.json"), "utf8"));
+  const verifierPolicy = {
+    format: "terrain-publication-policy-v1",
+    globalConfigDigest: merged.configDigest,
+    maxVerifiedStoreBytes: publicationPolicy.max_verified_store_bytes,
+    maxStaticDirectoryBytes: publicationPolicy.max_static_directory_bytes,
+    synthGridSize: publicationPolicy.synthesized_tile_grid_size,
+  };
   assert.deepEqual(shard.publicationPolicy.policy, publicationPolicy);
   assert.equal(shard.publicationPolicy.globalConfigDigest, merged.configDigest);
-  assert.deepEqual(merged.publicationPolicy.policy, publicationPolicy);
-  assert.equal(merged.publicationPolicy.digest, shard.publicationPolicy.digest);
-  assert.equal(merged.publicationPolicy.globalConfigDigest, merged.configDigest);
+  assert.deepEqual(state.publicationPolicy, verifierPolicy);
+  assert.deepEqual(merged.publicationPolicy, verifierPolicy);
 });
 
 test("global artifact-set rollback leaves no mixed files at every rename boundary", async (t) => {
@@ -707,6 +756,121 @@ test("global artifact transaction recovers an actual process exit between artifa
     for (const name of ["tiles.dttstream", "ocean-skipped.lines", "ocean-skipped.json"]) {
       assert.equal(fs.existsSync(path.join(out, name)), true, `boundary ${boundary} recovered artifact set includes ${name}`);
     }
+  }
+});
+
+test("an unmaterialized reserved artifact preserves an old destination on transaction recovery", async (t) => {
+  const root = temporary(t);
+  const out = path.join(root, "out");
+  const config = path.join(root, "run.json");
+  const runner = path.join(root, "runner.mjs");
+  const staging = path.join(out, ".global-merge-stage-reservation");
+  fs.mkdirSync(staging, { recursive: true });
+  fs.writeFileSync(config, JSON.stringify({
+    flow_config: { regions: [{ name: "test", west: 0, south: 0, east: 1, north: 1 }] },
+  }));
+  fs.writeFileSync(runner, `
+    import fs from "node:fs"; import path from "node:path";
+    const out = process.argv[process.argv.indexOf("--out") + 1]; fs.mkdirSync(out, { recursive: true });
+    fs.writeFileSync(path.join(out, "tiles.dttstream"), "");
+    fs.writeFileSync(path.join(out, "run-report.json"), JSON.stringify({ drained: true, errors: [] }));
+  `);
+  const oldManifest = path.join(out, "source-manifest.ndjson");
+  fs.writeFileSync(oldManifest, "old immutable receipt\n");
+  const absent = (name) => ({
+    staged: path.join(staging, name), destination: path.join(out, name),
+    backup: path.join(out, `${name}.premerge-test`), hadDestination: false,
+  });
+  fs.writeFileSync(path.join(out, "global-artifact-transaction.json"), JSON.stringify({
+    version: 1, stagingDir: staging,
+    entries: [
+      absent("tiles.dttstream"), absent("ocean-skipped.lines"), absent("ocean-skipped.json"),
+      {
+        staged: path.join(staging, "source-manifest.ndjson"), destination: oldManifest,
+        backup: path.join(out, "source-manifest.ndjson.premerge-test"), hadDestination: true,
+      },
+    ],
+  }));
+  await assert.rejects(execFileAsync(process.execPath, [
+    COORDINATOR, "--config", config, "--out", out, "--runner", runner, "--skip-verify", "--fault-after-shards", "1",
+  ]), /fault injection after 1 completed shard/);
+  assert.equal(fs.readFileSync(oldManifest, "utf8"), "old immutable receipt\n");
+  assert.equal(fs.existsSync(path.join(out, "global-artifact-transaction.json")), false);
+});
+
+test("terminal-state crash windows preserve artifacts until a resumed coordinator writes its final receipt", async (t) => {
+  for (const flag of ["--fault-after-terminal-state", "--fault-after-verify"]) {
+    const root = temporary(t);
+    const out = path.join(root, "out");
+    const config = path.join(root, "run.json");
+    const runner = path.join(root, "runner.mjs");
+    fs.writeFileSync(config, JSON.stringify({
+      flow_config: { regions: [{ name: "test", west: 0, south: 0, east: 1, north: 1 }] },
+    }));
+    fs.writeFileSync(runner, `
+      import fs from "node:fs"; import path from "node:path";
+      const out = process.argv[process.argv.indexOf("--out") + 1]; fs.mkdirSync(out, { recursive: true });
+      fs.writeFileSync(path.join(out, "tiles.dttstream"), "");
+      fs.writeFileSync(path.join(out, "ocean-skipped.json"), JSON.stringify({ addresses: [] }));
+      fs.writeFileSync(path.join(out, "run-report.json"), JSON.stringify({ drained: true, errors: [] }));
+    `);
+    await assert.rejects(execFileAsync(process.execPath, [
+      COORDINATOR, "--config", config, "--out", out, "--runner", runner, "--skip-verify", flag,
+    ]), /fault injection after (terminal global state|global verification)/);
+    const stateBefore = fs.readFileSync(path.join(out, "global-build-state.json"));
+    assert.equal(JSON.parse(stateBefore).completed, true, `${flag} persists terminal state first`);
+    assert.equal(fs.existsSync(path.join(out, "global-artifact-transaction.json")), true, `${flag} retains rollback transaction`);
+    assert.equal(fs.existsSync(path.join(out, "global-merge-report.json")), false, `${flag} does not expose final merge receipt`);
+    const resumeArgs = [COORDINATOR, "--config", config, "--out", out, "--runner", runner, "--skip-verify"];
+    if (flag === "--fault-after-verify") {
+      // Model the exact v2 verifier write that precedes the injected crash.
+      // A matching receipt must let resume finalize without rerunning shards
+      // or replacing the immutable terminal state.
+      fs.writeFileSync(path.join(out, "verify-report.json"), JSON.stringify({
+        format: "terrain-verification-report-v1", publishable: true, problems: [],
+        publicationInputs: {
+          format: "terrain-publication-inputs-v2",
+          globalState: {
+            path: "global-build-state.json", bytes: stateBefore.length, sha256: sha256(stateBefore),
+          },
+          approvedConfig: (() => {
+            const approved = fs.readFileSync(path.join(out, "approved-run-config.json"));
+            return { path: "approved-run-config.json", bytes: approved.length, sha256: sha256(approved) };
+          })(),
+        },
+      }));
+      resumeArgs.pop();
+    }
+    await execFileAsync(process.execPath, resumeArgs);
+    assert.deepEqual(fs.readFileSync(path.join(out, "global-build-state.json")), stateBefore,
+      `${flag} resume does not mutate the terminal verifier input`);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(out, "global-merge-report.json"), "utf8")).completion, "complete");
+    assert.equal(fs.existsSync(path.join(out, "global-artifact-transaction.json")), false, `${flag} finalizes only after receipt`);
+  }
+});
+
+test("resumption rejects a changed coordinator-owned shard snapshot", async (t) => {
+  for (const snapshotName of ["report", "tiles", "oceanJson"]) {
+    const root = temporary(t);
+    const out = path.join(root, "out");
+    const config = path.join(root, "run.json");
+    const runner = path.join(root, "runner.mjs");
+    fs.writeFileSync(config, JSON.stringify({
+      flow_config: { regions: [{ name: "test", west: 0, south: 0, east: 1, north: 1 }] },
+    }));
+    fs.writeFileSync(runner, `
+      import fs from "node:fs"; import path from "node:path";
+      const out = process.argv[process.argv.indexOf("--out") + 1]; fs.mkdirSync(out, { recursive: true });
+      fs.writeFileSync(path.join(out, "tiles.dttstream"), "");
+      fs.writeFileSync(path.join(out, "ocean-skipped.json"), JSON.stringify({ addresses: [] }));
+      fs.writeFileSync(path.join(out, "run-report.json"), JSON.stringify({ drained: true, errors: [] }));
+    `);
+    await execFileAsync(process.execPath, [COORDINATOR, "--config", config, "--out", out, "--runner", runner, "--skip-verify"]);
+    const state = JSON.parse(fs.readFileSync(path.join(out, "global-build-state.json"), "utf8"));
+    fs.appendFileSync(state.shards[0].snapshots[snapshotName].path, "x");
+    await assert.rejects(execFileAsync(process.execPath, [
+      COORDINATOR, "--config", config, "--out", out, "--runner", runner, "--skip-verify",
+    ]), new RegExp(`${snapshotName} snapshot (byte count|digest) changed`));
   }
 });
 
