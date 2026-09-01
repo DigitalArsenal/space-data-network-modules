@@ -33,6 +33,11 @@ const MAX_SOURCE_RECEIPT_BYTES = 16 * 1024;
 const MAX_SOURCE_URL_BYTES = 4 * 1024;
 const MAX_SOURCE_HEADER_BYTES = 8 * 1024;
 const MAX_SOURCE_TIMESTAMP_BYTES = 128;
+// A cell stages at most one bounded terrain frame plus its compact index,
+// source-observation lines, ocean declaration, and $IRM mark. Keep journal
+// replay below the constrained 32 MiB provenance-suite heap even if a forged
+// journal names a sparse multi-gigabyte staged file.
+const MAX_CELL_ATTEMPT_APPEND_BYTES = 2 * 1024 * 1024;
 export const MAX_GLOBAL_SOURCE_RESPONSE_BYTES = 128 * 1024 ** 2;
 
 export function canonicalJson(value) {
@@ -109,13 +114,108 @@ function framedRecord(bytes) {
   return framed;
 }
 
-function tailDigest(file, offset, length) {
-  const handle = fs.openSync(file, "r");
+function lstatIfExists(file) {
+  try { return fs.lstatSync(file); } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function assertNoSymlinkTraversal(outDir, file, label, { final = "regular-or-absent" } = {}) {
+  const root = path.resolve(outDir);
+  const resolved = path.resolve(file);
+  assert.ok(resolved.startsWith(`${root}${path.sep}`), `${label} escapes its output directory`);
+  const rootStat = fs.lstatSync(root);
+  assert.ok(rootStat.isDirectory() && !rootStat.isSymbolicLink(), `${label} output directory is not a real directory`);
+  const parts = path.relative(root, resolved).split(path.sep);
+  let current = root;
+  for (let index = 0; index < parts.length; index += 1) {
+    current = path.join(current, parts[index]);
+    const stat = lstatIfExists(current);
+    if (!stat) return null;
+    assert.ok(!stat.isSymbolicLink(), `${label} traverses a symbolic link: ${current}`);
+    if (index !== parts.length - 1) {
+      assert.ok(stat.isDirectory(), `${label} parent is not a directory: ${current}`);
+      continue;
+    }
+    if (final === "directory") assert.ok(stat.isDirectory(), `${label} is not a directory: ${current}`);
+    else if (final === "regular") assert.ok(stat.isFile(), `${label} is not a regular file: ${current}`);
+    else assert.ok(stat.isFile(), `${label} is not a regular file: ${current}`);
+    return stat;
+  }
+  return null;
+}
+
+function assertHeldFileStillNamed(outDir, file, before, label) {
+  assertNoSymlinkTraversal(outDir, file, label, { final: "regular" });
+  const named = fs.lstatSync(file, { bigint: true });
+  assert.equal(named.dev, before.dev, `${label} pathname changed while reading`);
+  assert.equal(named.ino, before.ino, `${label} pathname changed while reading`);
+}
+
+function assertHeldFileStable(before, after, label) {
+  assert.equal(after.dev, before.dev, `${label} inode changed while reading`);
+  assert.equal(after.ino, before.ino, `${label} inode changed while reading`);
+  assert.equal(after.size, before.size, `${label} changed while reading`);
+  assert.equal(after.mtimeNs, before.mtimeNs, `${label} changed while reading`);
+  assert.equal(after.ctimeNs, before.ctimeNs, `${label} changed while reading`);
+}
+
+function ensureSafeParent(outDir, file, label) {
+  const root = path.resolve(outDir);
+  const parent = path.dirname(path.resolve(file));
+  assert.ok(parent === root || parent.startsWith(`${root}${path.sep}`), `${label} parent escapes its output directory`);
+  const parts = path.relative(root, parent) === "" ? [] : path.relative(root, parent).split(path.sep);
+  let current = root;
+  const rootStat = fs.lstatSync(root);
+  assert.ok(rootStat.isDirectory() && !rootStat.isSymbolicLink(), `${label} output directory is not a real directory`);
+  for (const part of parts) {
+    const next = path.join(current, part);
+    const stat = lstatIfExists(next);
+    if (!stat) {
+      fs.mkdirSync(next, 0o700);
+      fsyncDirectory(current);
+      fsyncDirectory(next);
+    } else {
+      assert.ok(stat.isDirectory() && !stat.isSymbolicLink(), `${label} parent traverses a non-directory or symbolic link: ${next}`);
+    }
+    current = next;
+  }
+}
+
+function readRegularFile(outDir, file, label, expectedLength = undefined) {
+  assertNoSymlinkTraversal(outDir, file, label, { final: "regular" });
+  const handle = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try {
+    const before = fs.fstatSync(handle, { bigint: true });
+    assert.ok(before.isFile(), `${label} is not a regular file: ${file}`);
+    const size = Number(before.size);
+    assert.ok(Number.isSafeInteger(size), `${label} exceeds JavaScript's safe byte range`);
+    if (expectedLength !== undefined) assert.equal(size, expectedLength, `${label} length changed`);
+    const bytes = Buffer.alloc(size);
+    let position = 0;
+    while (position < size) {
+      const read = fs.readSync(handle, bytes, position, size - position, position);
+      assert.ok(read > 0, `${label} ended while reading`);
+      position += read;
+    }
+    assertHeldFileStable(before, fs.fstatSync(handle, { bigint: true }), label);
+    assertHeldFileStillNamed(outDir, file, before, label);
+    return bytes;
+  } finally { fs.closeSync(handle); }
+}
+
+function tailDigest(outDir, file, offset, length) {
+  assertNoSymlinkTraversal(outDir, file, "attempt artifact", { final: "regular" });
+  const handle = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
   const hash = createHash("sha256");
   const chunk = Buffer.alloc(Math.min(64 * 1024, Math.max(1, length)));
   let position = offset;
   let remaining = length;
   try {
+    const stat = fs.fstatSync(handle, { bigint: true });
+    assert.ok(stat.isFile(), `attempt artifact is not a regular file: ${file}`);
+    assert.ok(offset >= 0 && length >= 0 && offset + length <= Number(stat.size), `attempt artifact range is outside ${file}`);
     while (remaining > 0) {
       const read = fs.readSync(handle, chunk, 0, Math.min(chunk.length, remaining), position);
       assert.ok(read > 0, `attempt artifact ended before ${offset + length}: ${file}`);
@@ -123,27 +223,40 @@ function tailDigest(file, offset, length) {
       position += read;
       remaining -= read;
     }
+    assertHeldFileStable(stat, fs.fstatSync(handle, { bigint: true }), "attempt artifact");
+    assertHeldFileStillNamed(outDir, file, stat, "attempt artifact");
   } finally {
     fs.closeSync(handle);
   }
   return hash.digest("hex");
 }
 
-function wholeFileDigest(file) {
-  if (!fs.existsSync(file)) return sha256("");
-  return tailDigest(file, 0, fs.statSync(file).size);
+function wholeFileDigest(outDir, file) {
+  const stat = assertNoSymlinkTraversal(outDir, file, "attempt artifact");
+  if (!stat) return sha256("");
+  return tailDigest(outDir, file, 0, stat.size);
 }
 
 function chainDigest(beforeDigest, appendDigest, afterLength) {
   return sha256(`${beforeDigest}:${appendDigest}:${afterLength}`);
 }
 
-function appendDurably(file, bytes) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const handle = fs.openSync(file, "a", 0o600);
+function appendDurably(outDir, file, bytes, label = "attempt artifact") {
+  ensureSafeParent(outDir, file, label);
+  assertNoSymlinkTraversal(outDir, file, label);
+  const handle = fs.openSync(file,
+    fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW,
+    0o600);
   try {
+    const before = fs.fstatSync(handle, { bigint: true });
+    assert.ok(before.isFile(), `${label} is not a regular file: ${file}`);
     fs.writeFileSync(handle, bytes);
     fs.fsyncSync(handle);
+    const after = fs.fstatSync(handle, { bigint: true });
+    assert.equal(after.dev, before.dev, `${label} inode changed while appending`);
+    assert.equal(after.ino, before.ino, `${label} inode changed while appending`);
+    assert.equal(after.size, before.size + BigInt(bytes.length), `${label} append length changed`);
+    assertHeldFileStillNamed(outDir, file, after, label);
   } finally {
     fs.closeSync(handle);
   }
@@ -153,59 +266,197 @@ function appendDurably(file, bytes) {
   fsyncDirectory(path.dirname(file));
 }
 
-function loadArtifactChains(outDir, targets) {
+const CELL_ARTIFACT_NAMES = Object.freeze({
+  tiles: "tiles.dttstream",
+  index: "tiles.index.jsonl",
+  ocean: "ocean-skipped.lines",
+  "source-observations": "source-observations.ndjson",
+  mark: "irm.records",
+});
+
+function cellArtifactPaths(outDir, supplied = {}) {
+  const root = path.resolve(outDir);
+  assert.ok(supplied && typeof supplied === "object" && !Array.isArray(supplied), "cell artifact paths must be an object");
+  for (const name of Object.keys(supplied)) assert.ok(Object.hasOwn(CELL_ARTIFACT_NAMES, name), `unknown cell artifact ${name}`);
+  const targets = {};
+  for (const [name, basename] of Object.entries(CELL_ARTIFACT_NAMES)) {
+    const target = path.resolve(supplied[name] ?? path.join(root, basename));
+    assert.ok(target.startsWith(`${root}${path.sep}`), `cell artifact ${name} escapes its output directory`);
+    targets[name] = target;
+  }
+  return targets;
+}
+
+function validateChainEntry(entry, target) {
+  assert.ok(entry && typeof entry === "object" && !Array.isArray(entry), `artifact chain entry is invalid for ${target}`);
+  assert.ok(Number.isSafeInteger(entry.length) && entry.length >= 0, `artifact chain length is invalid for ${target}`);
+  assert.match(entry.digest ?? "", /^[0-9a-f]{64}$/, `artifact chain digest is invalid for ${target}`);
+}
+
+function loadArtifactChains(outDir, artifactPaths, targets, { initializeMissing = true, validateLengths = true } = {}) {
   const file = path.join(outDir, "artifact-chains.json");
   let chains = {};
-  try { chains = JSON.parse(fs.readFileSync(file, "utf8")); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  const existing = assertNoSymlinkTraversal(outDir, file, "artifact chain journal");
+  if (existing) chains = readSmallJson(file, 512 * 1024, "artifact chain journal");
+  assert.ok(chains && typeof chains === "object" && !Array.isArray(chains), "artifact chain journal must be an object");
+  const allowedTargets = new Set(Object.values(artifactPaths));
+  for (const [target, entry] of Object.entries(chains)) {
+    assert.ok(allowedTargets.has(target), `artifact chain journal has an unknown target: ${target}`);
+    validateChainEntry(entry, target);
+  }
   for (const target of targets) {
-    const length = fs.existsSync(target) ? fs.statSync(target).size : 0;
-    if (!chains[target]) chains[target] = { length, digest: wholeFileDigest(target) };
-    assert.equal(chains[target].length, length, `artifact chain length does not match ${target}`);
+    const stat = assertNoSymlinkTraversal(outDir, target, "attempt artifact");
+    const length = stat ? stat.size : 0;
+    if (!chains[target] && initializeMissing) chains[target] = { length, digest: wholeFileDigest(outDir, target) };
+    if (chains[target]) {
+      validateChainEntry(chains[target], target);
+      if (validateLengths) assert.equal(chains[target].length, length, `artifact chain length does not match ${target}`);
+    }
   }
   return { file, chains };
 }
 
-function replayCellOperation(operation, { faultPhase = undefined } = {}) {
+function cellStageDirectory(outDir, cell, attemptId) {
+  assert.ok(Number.isSafeInteger(cell) && cell >= 0, "cell attempt has an invalid cell number");
+  assert.match(attemptId ?? "", /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    "cell attempt has an invalid stage identifier");
+  return path.join(path.resolve(outDir), `.cell-stage-${cell}-${attemptId}`);
+}
+
+function validateCellJournal(journal, outDir, artifactPaths, markPath) {
+  assert.equal(journal?.version, 2, "unsupported cell attempt journal");
+  assert.deepEqual(Object.keys(journal).sort(), ["attemptId", "cell", "chains", "markJson", "operations", "version"],
+    "cell attempt journal has unexpected authority-bearing fields");
+  const stageDir = cellStageDirectory(outDir, journal.cell, journal.attemptId);
+  assert.equal(path.resolve(markPath), path.join(path.resolve(outDir), "resume-mark.json"),
+    "cell attempt mark path does not match this run");
+  assert.ok(Array.isArray(journal.operations) && journal.operations.length > 0, "cell attempt has no operations");
+  assert.equal(journal.operations.at(-1).name, "mark", "cell attempt must commit the $IRM mark last");
+  assert.ok(journal.markJson && typeof journal.markJson === "object" && !Array.isArray(journal.markJson),
+    "cell attempt has no operator-readable mark");
+  const names = journal.operations.map((operation) => operation?.name);
+  assert.equal(new Set(names).size, names.length, "cell attempt has duplicate artifact operations");
+  for (const operation of journal.operations) {
+    assert.deepEqual(Object.keys(operation ?? {}).sort(), [
+      "afterDigest", "afterLength", "appendDigest", "appendLength", "beforeDigest", "beforeLength", "name",
+    ], `cell attempt ${operation?.name} has unexpected authority-bearing fields`);
+    assert.ok(Object.hasOwn(artifactPaths, operation?.name), `cell attempt has an unknown artifact operation: ${operation?.name}`);
+    for (const key of ["beforeLength", "appendLength", "afterLength"]) {
+      assert.ok(Number.isSafeInteger(operation[key]) && operation[key] >= 0, `cell attempt ${operation.name} has an invalid ${key}`);
+    }
+    assert.ok(operation.appendLength <= MAX_CELL_ATTEMPT_APPEND_BYTES,
+      `cell attempt ${operation.name} exceeds its ${MAX_CELL_ATTEMPT_APPEND_BYTES}-byte staged append bound`);
+    assert.equal(operation.afterLength, operation.beforeLength + operation.appendLength,
+      `cell attempt ${operation.name} has an invalid append length`);
+    for (const key of ["beforeDigest", "appendDigest", "afterDigest"]) {
+      assert.match(operation[key] ?? "", /^[0-9a-f]{64}$/, `cell attempt ${operation.name} has an invalid ${key}`);
+    }
+    assert.equal(operation.afterDigest, chainDigest(operation.beforeDigest, operation.appendDigest, operation.afterLength),
+      `cell attempt has an invalid ${operation.name} digest chain`);
+  }
+  assert.ok(journal.chains && typeof journal.chains === "object" && !Array.isArray(journal.chains),
+    "cell attempt has invalid artifact chains");
+  const targets = journal.operations.map((operation) => artifactPaths[operation.name]);
+  assert.deepEqual(Object.keys(journal.chains).sort(), [...targets].sort(),
+    "cell attempt chains must name exactly its derived artifact targets");
+  for (const operation of journal.operations) {
+    const target = artifactPaths[operation.name];
+    validateChainEntry(journal.chains[target], target);
+    assert.equal(journal.chains[target].length, operation.afterLength,
+      `cell attempt ${operation.name} final chain length is invalid`);
+    assert.equal(journal.chains[target].digest, operation.afterDigest,
+      `cell attempt ${operation.name} final chain digest is invalid`);
+  }
+  assertNoSymlinkTraversal(outDir, stageDir, "cell attempt stage directory", { final: "directory" });
+  const expectedStages = journal.operations.map((operation) => `${operation.name}.append`).sort();
+  assert.deepEqual(fs.readdirSync(stageDir).sort(), expectedStages,
+    "cell attempt stage directory has unexpected entries");
+  for (const operation of journal.operations) {
+    const stage = path.join(stageDir, `${operation.name}.append`);
+    const bytes = readRegularFile(outDir, stage, `cell attempt staged ${operation.name}`, operation.appendLength);
+    assert.equal(sha256(bytes), operation.appendDigest, `cell attempt stage digest changed for ${operation.name}`);
+  }
+  return { stageDir, targets };
+}
+
+function replayCellOperation(outDir, operation, target, stageDir, { faultPhase = undefined } = {}) {
   assert.equal(operation.afterDigest, chainDigest(operation.beforeDigest, operation.appendDigest, operation.afterLength),
     `cell attempt has an invalid ${operation.name} digest chain`);
-  const actual = fs.existsSync(operation.target) ? fs.statSync(operation.target).size : 0;
+  const stat = assertNoSymlinkTraversal(outDir, target, `cell attempt ${operation.name} target`);
+  const actual = stat ? stat.size : 0;
   if (actual === operation.afterLength) {
-    assert.equal(tailDigest(operation.target, operation.beforeLength, operation.appendLength), operation.appendDigest,
+    assert.equal(tailDigest(outDir, target, operation.beforeLength, operation.appendLength), operation.appendDigest,
       `cell attempt has corrupt committed ${operation.name} bytes`);
     return;
   }
   assert.ok(actual >= operation.beforeLength && actual <= operation.afterLength,
     `cell attempt ${operation.name} has an unexpected length and cannot be recovered safely`);
-  const bytes = fs.readFileSync(operation.stage);
-  assert.equal(bytes.length, operation.appendLength, `cell attempt stage length changed for ${operation.name}`);
+  const bytes = readRegularFile(outDir, path.join(stageDir, `${operation.name}.append`),
+    `cell attempt staged ${operation.name}`, operation.appendLength);
   assert.equal(sha256(bytes), operation.appendDigest, `cell attempt stage digest changed for ${operation.name}`);
   const committedLength = actual - operation.beforeLength;
   if (committedLength) {
-    assert.ok(tailDigest(operation.target, operation.beforeLength, committedLength) === sha256(bytes.subarray(0, committedLength)),
+    assert.ok(tailDigest(outDir, target, operation.beforeLength, committedLength) === sha256(bytes.subarray(0, committedLength)),
       `cell attempt ${operation.name} partial bytes are not a prefix of its staged append`);
   }
   if (faultPhase === `mid-${operation.name}`) {
     const partial = Math.max(1, Math.floor(bytes.length / 2));
-    appendDurably(operation.target, bytes.subarray(0, partial));
+    appendDurably(outDir, target, bytes.subarray(0, partial), `cell attempt ${operation.name} target`);
     throw new Error(`fault injection ${faultPhase} for cell attempt`);
   }
-  appendDurably(operation.target, bytes.subarray(committedLength));
-  assert.equal(fs.statSync(operation.target).size, operation.afterLength, `cell attempt did not append ${operation.name} exactly`);
+  appendDurably(outDir, target, bytes.subarray(committedLength), `cell attempt ${operation.name} target`);
+  assert.equal(fs.statSync(target).size, operation.afterLength, `cell attempt did not append ${operation.name} exactly`);
 }
 
-export function recoverCellAttempt({ outDir, markPath = path.join(outDir, "resume-mark.json") }) {
+function removeCellStage(outDir, stageDir, operations) {
+  assertNoSymlinkTraversal(outDir, stageDir, "cell attempt stage directory", { final: "directory" });
+  const expected = operations.map((operation) => `${operation.name}.append`).sort();
+  assert.deepEqual(fs.readdirSync(stageDir).sort(), expected, "cell attempt stage directory has unexpected entries");
+  for (const name of expected) {
+    const stage = path.join(stageDir, name);
+    assertNoSymlinkTraversal(outDir, stage, "cell attempt staged artifact", { final: "regular" });
+    fs.unlinkSync(stage);
+  }
+  fs.rmdirSync(stageDir);
+  fsyncDirectory(outDir);
+}
+
+export function recoverCellAttempt({
+  outDir,
+  markPath = path.join(outDir, "resume-mark.json"),
+  artifactPaths = undefined,
+}) {
+  outDir = path.resolve(outDir);
   const journalPath = path.join(outDir, "cell-attempt.json");
-  if (!fs.existsSync(journalPath)) return false;
+  const journalStat = assertNoSymlinkTraversal(outDir, journalPath, "cell attempt journal");
+  if (!journalStat) return false;
   const journal = readSmallJson(journalPath, 512 * 1024, "cell attempt journal");
-  assert.equal(journal.version, 1, "unsupported cell attempt journal");
-  assert.equal(journal.markPath, markPath, "cell attempt mark path does not match this run");
-  assert.ok(Array.isArray(journal.operations) && journal.operations.length > 0, "cell attempt has no operations");
-  assert.equal(journal.operations.at(-1).name, "mark", "cell attempt must commit the $IRM mark last");
-  for (const operation of journal.operations) replayCellOperation(operation);
-  if (journal.chainFile && journal.chains) writeJsonAtomic(journal.chainFile, journal.chains);
-  if (journal.markJson) writeJsonAtomic(markPath, journal.markJson);
-  fs.rmSync(journal.stageDir, { recursive: true, force: true });
-  fs.rmSync(journalPath, { force: true });
+  const targets = cellArtifactPaths(outDir, artifactPaths);
+  const validated = validateCellJournal(journal, outDir, targets, markPath);
+  const chain = loadArtifactChains(outDir, targets, validated.targets, {
+    // A crash may have appended a journaled suffix before the separate chain
+    // receipt was replaced.  The persistent chain is therefore the durable
+    // prefix if present, not a claim about the target's current length.
+    initializeMissing: false,
+    validateLengths: false,
+  });
+  for (const operation of journal.operations) {
+    const target = targets[operation.name];
+    if (chain.chains[target]) {
+      const persisted = chain.chains[target];
+      const isPrefix = persisted.length === operation.beforeLength && persisted.digest === operation.beforeDigest;
+      const isAdvanced = persisted.length === operation.afterLength && persisted.digest === operation.afterDigest;
+      assert.ok(isPrefix || isAdvanced,
+        `cell attempt ${operation.name} chain does not match its durable prefix or completed append`);
+    }
+    replayCellOperation(outDir, operation, target, validated.stageDir);
+    chain.chains[target] = journal.chains[target];
+  }
+  writeJsonAtomic(chain.file, chain.chains);
+  writeJsonAtomic(markPath, journal.markJson);
+  removeCellStage(outDir, validated.stageDir, journal.operations);
+  assertNoSymlinkTraversal(outDir, journalPath, "cell attempt journal", { final: "regular" });
+  fs.unlinkSync(journalPath);
   fsyncDirectory(outDir);
   return true;
 }
@@ -223,51 +474,76 @@ export function commitCellAttempt({
   operations,
   markJson,
   markPath = path.join(outDir, "resume-mark.json"),
+  artifactPaths = undefined,
   faultPhase = undefined,
 }) {
+  outDir = path.resolve(outDir);
+  assert.ok(fs.existsSync(outDir), "cell attempt output directory must exist");
+  assertNoSymlinkTraversal(path.dirname(outDir), outDir, "cell attempt output directory", { final: "directory" });
   assert.ok(Array.isArray(operations) && operations.length > 0, "cell attempt operations are required");
   assert.equal(operations.at(-1).name, "mark", "cell attempt must put $IRM mark last");
   assert.ok(Buffer.isBuffer(operations.at(-1).bytes) && operations.at(-1).bytes.length > 0,
     "cell attempt has no durable $IRM mark");
-  const stageDir = path.join(outDir, `.cell-stage-${cell}-${randomUUID()}`);
-  fs.mkdirSync(stageDir, { recursive: true });
+  assert.ok(markJson && typeof markJson === "object" && !Array.isArray(markJson), "cell attempt has no operator-readable mark");
+  const targetsByName = cellArtifactPaths(outDir, artifactPaths);
+  assert.equal(path.resolve(markPath), path.join(outDir, "resume-mark.json"), "cell attempt mark path does not match this run");
+  const attemptId = randomUUID();
+  const stageDir = cellStageDirectory(outDir, cell, attemptId);
+  fs.mkdirSync(stageDir, 0o700);
+  fsyncDirectory(stageDir);
+  fsyncDirectory(outDir);
   const nonEmpty = operations.filter((operation) => Buffer.isBuffer(operation.bytes) && operation.bytes.length > 0);
   assert.equal(nonEmpty.length, operations.length, "cell attempt cannot journal empty artifact operations");
-  const targets = nonEmpty.map((operation) => operation.target);
+  for (const operation of nonEmpty) assert.ok(operation.bytes.length <= MAX_CELL_ATTEMPT_APPEND_BYTES,
+    `cell operation ${operation.name} exceeds its ${MAX_CELL_ATTEMPT_APPEND_BYTES}-byte staged append bound`);
+  const names = nonEmpty.map((operation) => operation.name);
+  assert.equal(new Set(names).size, names.length, "cell attempt artifact operations must be unique");
+  for (const operation of nonEmpty) {
+    assert.ok(Object.hasOwn(targetsByName, operation.name), `unknown cell artifact ${operation.name}`);
+    assert.equal(path.resolve(operation.target ?? ""), targetsByName[operation.name],
+      `cell operation ${operation.name} target does not match this run`);
+  }
+  const targets = names.map((name) => targetsByName[name]);
   assert.equal(new Set(targets).size, targets.length, "cell attempt artifact targets must be unique");
-  const chain = loadArtifactChains(outDir, targets);
+  const chain = loadArtifactChains(outDir, targetsByName, targets);
   const journalOperations = nonEmpty.map((input) => {
     assert.ok(typeof input.name === "string" && input.name.length > 0, "cell operation name is required");
-    assert.ok(typeof input.target === "string" && path.isAbsolute(input.target), "cell operation target must be absolute");
     const bytes = Buffer.from(input.bytes);
     const stage = path.join(stageDir, `${input.name}.append`);
-    appendDurably(stage, bytes);
-    const beforeLength = fs.existsSync(input.target) ? fs.statSync(input.target).size : 0;
-    const beforeDigest = chain.chains[input.target].digest;
+    appendDurably(outDir, stage, bytes, `cell attempt staged ${input.name}`);
+    const target = targetsByName[input.name];
+    const stat = assertNoSymlinkTraversal(outDir, target, `cell attempt ${input.name} target`);
+    const beforeLength = stat ? stat.size : 0;
+    const beforeDigest = chain.chains[target].digest;
     const appendDigest = sha256(bytes);
     const afterLength = beforeLength + bytes.length;
     const afterDigest = chainDigest(beforeDigest, appendDigest, afterLength);
-    chain.chains[input.target] = { length: afterLength, digest: afterDigest };
+    chain.chains[target] = { length: afterLength, digest: afterDigest };
     return {
-      name: input.name, target: input.target, stage, beforeLength, beforeDigest,
+      name: input.name, beforeLength, beforeDigest,
       appendLength: bytes.length, afterLength, appendDigest, afterDigest,
     };
   });
   const journalPath = path.join(outDir, "cell-attempt.json");
+  const journalChains = Object.fromEntries(journalOperations.map((operation) => {
+    const target = targetsByName[operation.name];
+    return [target, chain.chains[target]];
+  }));
   writeJsonAtomic(journalPath, {
-    version: 1, cell, stageDir, operations: journalOperations, markJson, markPath,
-    chainFile: chain.file, chains: chain.chains,
+    version: 2, cell, attemptId, operations: journalOperations, markJson, chains: journalChains,
   });
   for (const operation of journalOperations) {
-    replayCellOperation(operation, { faultPhase });
+    replayCellOperation(outDir, operation, targetsByName[operation.name], stageDir, { faultPhase });
     if (faultPhase === `after-${operation.name}`) {
       throw new Error(`fault injection ${faultPhase} for cell ${cell}`);
     }
   }
   writeJsonAtomic(chain.file, chain.chains);
-  if (markJson) writeJsonAtomic(markPath, markJson);
-  fs.rmSync(stageDir, { recursive: true, force: true });
-  fs.rmSync(journalPath, { force: true });
+  if (faultPhase === "after-chain") throw new Error(`fault injection after artifact chain for cell ${cell}`);
+  writeJsonAtomic(markPath, markJson);
+  removeCellStage(outDir, stageDir, journalOperations);
+  assertNoSymlinkTraversal(outDir, journalPath, "cell attempt journal", { final: "regular" });
+  fs.unlinkSync(journalPath);
   fsyncDirectory(outDir);
   return journalOperations;
 }
@@ -503,6 +779,7 @@ export function sourcePolicyContract(runConfig) {
 
 export function ensureSourceEpoch(cacheDir, contract) {
   if (!contract) return null;
+  cacheDir = path.resolve(cacheDir);
   const file = path.join(cacheDir, "source-epoch.json");
   const receipt = {
     version: SOURCE_MANIFEST_VERSION,
@@ -521,12 +798,17 @@ export function ensureSourceEpoch(cacheDir, contract) {
   }
   try {
     const handle = fs.openSync(file, "wx", 0o600);
-    try { fs.writeFileSync(handle, `${canonicalJson(receipt)}\n`); } finally { fs.closeSync(handle); }
+    try {
+      fs.writeFileSync(handle, `${canonicalJson(receipt)}\n`);
+      // This exact opened inode is the epoch receipt we will later trust to
+      // authorize cache publication. Do not fsync a reopened pathname.
+      fs.fsyncSync(handle);
+    } finally { fs.closeSync(handle); }
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
   }
   let existing;
-  try { existing = readSmallJson(file, MAX_SOURCE_EPOCH_BYTES, "source epoch receipt"); } catch {
+  try { existing = readSmallJson(file, MAX_SOURCE_EPOCH_BYTES, "source epoch receipt", { fsync: true }); } catch {
     throw new Error(`source epoch receipt is torn or unreadable: ${file}`);
   }
   assert.equal(existing.version, receipt.version, `unsupported source epoch receipt in ${file}`);
@@ -534,6 +816,12 @@ export function ensureSourceEpoch(cacheDir, contract) {
     `refusing to mix source policy epochs in cache ${cacheDir}`);
   assert.equal(existing.datasetEpoch, receipt.datasetEpoch,
     `refusing to mix dataset epochs in cache ${cacheDir}`);
+  // A racing EEXIST caller must not return and publish cache bytes while the
+  // creator has only made the receipt visible in a directory's page cache.
+  // Both the receipt directory and the newly-created cache-directory entry
+  // are durable before any caller receives this epoch capability.
+  fsyncDirectory(cacheDir);
+  fsyncDirectory(path.dirname(cacheDir));
   return { file, ...receipt };
 }
 

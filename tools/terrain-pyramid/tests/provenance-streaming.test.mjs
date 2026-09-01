@@ -100,6 +100,34 @@ test("source epoch refuses torn receipts, legacy cache bytes, and changed policy
   assert.throws(() => ensureSourceEpoch(cache, contract({ epoch: "2024-01-01T00:00:00.000Z" })), /mix source policy epochs/);
 });
 
+test("new source epoch fsyncs its exact receipt and both cache directory entries before return", async (t) => {
+  const root = temporary(t);
+  const child = path.join(root, "epoch-durability-child.mjs");
+  fs.writeFileSync(child, `
+    import fs from "node:fs";
+    import { ensureSourceEpoch, sourcePolicyContract } from ${JSON.stringify(PROVENANCE_URL)};
+    const original = fs.fsyncSync;
+    const calls = [];
+    fs.fsyncSync = (fd) => { const stat = fs.fstatSync(fd); calls.push(stat.isFile() ? "file" : stat.isDirectory() ? "directory" : "other"); return original(fd); };
+    const epoch = "2023-04-01T00:00:00.000Z";
+    const contract = sourcePolicyContract({ cache_max_bytes: 96 * 1024 ** 3, flow_config: { dataset_epoch: epoch }, source_policy: {
+      version: 1, provider: "test", dataset_epoch: epoch,
+      url_policy: { base_url: "https://example.test/", dem_template: "dem/{NS}{LAT2}/{EW}{LON3}", water_template: "water/{NS}{LAT2}/{EW}{LON3}" },
+      request: { timeout_ms: 1, retries: 0, retry_base_ms: 1, max_outstanding: 1, max_response_bytes: 1 },
+      no_data: { http_404: "record-no-coverage-never-retry", non_water: "fail" }, ocean_policy: "test", cache: { max_bytes: 96 * 1024 ** 3 },
+      manifest: { format: "canonical-jsonl-v1", digest: "sha256", shard_log: "source-observations.ndjson", completion_manifest: "source-manifest.ndjson" },
+    }});
+    ensureSourceEpoch(process.argv[2], contract);
+    process.stdout.write(JSON.stringify(calls));
+  `);
+  const { stdout } = await execFileAsync(process.execPath, [child, path.join(root, "cache")]);
+  const calls = JSON.parse(stdout);
+  assert.ok(calls.filter((kind) => kind === "file").length >= 2,
+    "creator fsyncs the written receipt and the same stable receipt read");
+  assert.ok(calls.filter((kind) => kind === "directory").length >= 2,
+    "creator fsyncs the receipt/cache directory and its parent before returning");
+});
+
 test("source policy permits only its immutable base URL and naming templates", () => {
   const policy = contract();
   assert.equal(sourcePolicyAllowsUrl(policy, "https://example.test/dem/N45/E006"), true);
@@ -126,6 +154,19 @@ test("source policy permits only its immutable base URL and naming templates", (
     source_policy: policy.policy,
     flow_config: { dataset_epoch: "wrong-epoch" },
   }), /flow_config\.dataset_epoch must equal/);
+});
+
+test("global Copernicus DTT retrieved_at is derived from non-empty observed source evidence", () => {
+  const config = JSON.parse(fs.readFileSync(path.join(HERE, "..", "regions", "global-z10.json"), "utf8"));
+  assert.equal(Object.hasOwn(config.flow_config, "retrieved_at"), false,
+    "checked source policy must not fabricate a fixed retrieval time");
+  const runner = fs.readFileSync(path.join(HERE, "..", "run.mjs"), "utf8");
+  assert.match(runner, /activeRetrievedAt = observations\.reduce\([\s\S]*observation\.observed_at/,
+    "DTT lineage derives its retrieval time from immutable request observations");
+  assert.match(runner, /assert\.ok\(activeRetrievedAt, "source-backed cell has no observed_at evidence for retrieved_at lineage"\)/,
+    "a source-backed DTT cell rejects an empty derived retrieval lineage");
+  assert.match(runner, /retrieved_at: activeRetrievedAt \?\? sourceRunStartedAt/,
+    "the per-cell flow receives the evidence-derived timestamp");
 });
 
 test("publication policy has explicit bounded store/static ceilings and binds synth grid", () => {
@@ -399,17 +440,27 @@ test("cell journal recovers exactly after each durable artifact boundary", async
   });
   const expected = artifactSnapshot(clean);
 
-  for (const faultPhase of ["after-tiles", "after-ocean", "after-source-observations", "after-mark"]) {
+  for (const faultPhase of ["after-tiles", "after-index", "after-ocean", "after-source-observations", "after-mark", "after-chain"]) {
     const resumed = path.join(root, faultPhase);
     fs.mkdirSync(resumed);
     assert.throws(() => commitCellAttempt({
       outDir: resumed, cell: 7, operations: makeOperations(resumed), markJson: { cell: 7 }, faultPhase,
-    }), new RegExp(`fault injection ${faultPhase}`));
+    }), faultPhase === "after-chain" ? /fault injection after artifact chain/ : new RegExp(`fault injection ${faultPhase}`));
     assert.equal(fs.existsSync(path.join(resumed, "cell-attempt.json")), true, `${faultPhase} retains a durable attempt`);
     assert.equal(recoverCellAttempt({ outDir: resumed }), true, `${faultPhase} recovery completes the exact attempt`);
     assert.equal(recoverCellAttempt({ outDir: resumed }), false, `${faultPhase} recovery is idempotent and cannot append twice`);
     assert.deepEqual(artifactSnapshot(resumed), expected, `${faultPhase} resume equals a clean cell and has no duplicate merge input`);
     assert.equal(fs.existsSync(path.join(resumed, "cell-attempt.json")), false);
+  }
+
+  for (const name of ["tiles", "index", "ocean", "source-observations", "mark"]) {
+    const resumed = path.join(root, `mid-${name}`);
+    fs.mkdirSync(resumed);
+    assert.throws(() => commitCellAttempt({
+      outDir: resumed, cell: 7, operations: makeOperations(resumed), markJson: { cell: 7 }, faultPhase: `mid-${name}`,
+    }), new RegExp(`fault injection mid-${name}`));
+    assert.equal(recoverCellAttempt({ outDir: resumed }), true, `mid-${name} recovery completes the exact staged suffix`);
+    assert.deepEqual(artifactSnapshot(resumed), expected, `mid-${name} recovery neither loses nor duplicates a cell artifact`);
   }
 
   // This is a separate process rather than an in-process caught exception:
@@ -435,6 +486,65 @@ test("cell journal recovers exactly after each durable artifact boundary", async
   assert.ok(partialBytes > 0 && partialBytes < expected["tiles.dttstream"].length, "child left an actual partial tile append");
   assert.equal(recoverCellAttempt({ outDir: midAppend }), true);
   assert.deepEqual(artifactSnapshot(midAppend), expected, "child-crash recovery finishes the exact staged suffix once");
+
+  // The chain receipt is written after every append but before the readable
+  // mark. A real process exit in that narrow window must accept the already
+  // advanced chain receipt and finish only the final mark/cleanup.
+  const afterChain = path.join(root, "after-chain-child-crash");
+  fs.mkdirSync(afterChain);
+  const chainChild = path.join(root, "after-chain-child.mjs");
+  fs.writeFileSync(chainChild, `
+    import path from "node:path";
+    import { commitCellAttempt } from ${JSON.stringify(PROVENANCE_URL)};
+    const out = process.argv[2];
+    commitCellAttempt({ outDir: out, cell: 7, markJson: { cell: 7 }, faultPhase: "after-chain", operations: [
+      { name: "tiles", target: path.join(out, "tiles.dttstream"), bytes: Buffer.from("tile-frame") },
+      { name: "index", target: path.join(out, "tiles.index.jsonl"), bytes: Buffer.from('{"level":8}\\n') },
+      { name: "ocean", target: path.join(out, "ocean-skipped.lines"), bytes: Buffer.from("8/1/2\\n") },
+      { name: "source-observations", target: path.join(out, "source-observations.ndjson"), bytes: Buffer.from("{\\\"source\\\":true}\\n") },
+      { name: "mark", target: path.join(out, "irm.records"), bytes: Buffer.from("mark-frame") },
+    ] });
+  `);
+  await assert.rejects(execFileAsync(process.execPath, [chainChild, afterChain]), /fault injection after artifact chain/);
+  assert.equal(recoverCellAttempt({ outDir: afterChain }), true);
+  assert.deepEqual(artifactSnapshot(afterChain), expected, "post-chain child crash preserves exact cell artifacts once");
+});
+
+test("forged cell journal paths and chain targets cannot redirect recovery outside its run", (t) => {
+  const root = temporary(t);
+  const out = path.join(root, "out");
+  const sentinel = path.join(root, "outside-sentinel");
+  fs.mkdirSync(out);
+  fs.writeFileSync(sentinel, "must remain outside\n");
+  const operations = [
+    { name: "tiles", target: path.join(out, "tiles.dttstream"), bytes: Buffer.from("tile-frame") },
+    { name: "mark", target: path.join(out, "irm.records"), bytes: Buffer.from("mark-frame") },
+  ];
+  assert.throws(() => commitCellAttempt({ outDir: out, cell: 7, operations, markJson: { cell: 7 }, faultPhase: "after-tiles" }),
+    /fault injection after-tiles/);
+  const journalPath = path.join(out, "cell-attempt.json");
+  const journal = JSON.parse(fs.readFileSync(journalPath, "utf8"));
+  // These are the former authority-bearing fields. v2 derives all of them
+  // from this outDir/cell/approved artifact mapping and rejects their return.
+  journal.stageDir = path.dirname(sentinel);
+  journal.markPath = sentinel;
+  journal.chainFile = sentinel;
+  journal.operations[0].target = sentinel;
+  journal.operations[0].stage = sentinel;
+  fs.writeFileSync(journalPath, JSON.stringify(journal));
+  assert.throws(() => recoverCellAttempt({ outDir: out }), /unexpected authority-bearing fields/);
+  assert.equal(fs.readFileSync(sentinel, "utf8"), "must remain outside\n");
+
+  const rejected = path.join(root, "rejected");
+  fs.mkdirSync(rejected);
+  assert.throws(() => commitCellAttempt({ outDir: rejected, cell: 7, operations: operations.map((operation) => ({
+    ...operation, target: path.join(rejected, path.basename(operation.target)),
+  })), markJson: { cell: 7 }, faultPhase: "after-tiles" }), /fault injection after-tiles/);
+  const forged = JSON.parse(fs.readFileSync(path.join(rejected, "cell-attempt.json"), "utf8"));
+  forged.chains = { [sentinel]: { length: 1, digest: "0".repeat(64) } };
+  fs.writeFileSync(path.join(rejected, "cell-attempt.json"), JSON.stringify(forged));
+  assert.throws(() => recoverCellAttempt({ outDir: rejected }), /chains must name exactly/);
+  assert.equal(fs.readFileSync(sentinel, "utf8"), "must remain outside\n");
 });
 
 test("source observation lines are bounded canonical cell-journal payloads", () => {
@@ -796,6 +906,45 @@ test("an unmaterialized reserved artifact preserves an old destination on transa
   ]), /fault injection after 1 completed shard/);
   assert.equal(fs.readFileSync(oldManifest, "utf8"), "old immutable receipt\n");
   assert.equal(fs.existsSync(path.join(out, "global-artifact-transaction.json")), false);
+});
+
+test("forged global artifact journals cannot follow symlinks, external paths, or duplicate entries", async (t) => {
+  const root = temporary(t);
+  const config = path.join(root, "run.json");
+  const runner = path.join(root, "runner.mjs");
+  const sentinel = path.join(root, "outside-sentinel");
+  fs.writeFileSync(config, JSON.stringify({
+    flow_config: { regions: [{ name: "test", west: 0, south: 0, east: 1, north: 1 }] },
+  }));
+  fs.writeFileSync(runner, "throw new Error('forged transaction must fail before runner');\n");
+  fs.writeFileSync(sentinel, "must remain outside\n");
+  const names = ["tiles.dttstream", "ocean-skipped.lines", "ocean-skipped.json"];
+  const makeAttempt = (kind) => {
+    const out = path.join(root, `out-${kind}`);
+    const staging = path.join(out, ".global-merge-stage-forged");
+    fs.mkdirSync(staging, { recursive: true });
+    const entries = names.map((name) => {
+      fs.writeFileSync(path.join(staging, name), `${name}\n`);
+      return {
+        staged: path.join(staging, name), destination: path.join(out, name),
+        backup: path.join(out, `${name}.premerge-test`), hadDestination: false,
+      };
+    });
+    if (kind === "external") entries[0].destination = sentinel;
+    if (kind === "symlink") fs.symlinkSync(sentinel, entries[0].backup);
+    if (kind === "duplicate") entries[2] = { ...entries[0] };
+    fs.writeFileSync(path.join(out, "global-artifact-transaction.json"), JSON.stringify({
+      version: 1, stagingDir: staging, entries,
+    }));
+    return out;
+  };
+  for (const kind of ["external", "symlink", "duplicate"]) {
+    const out = makeAttempt(kind);
+    await assert.rejects(execFileAsync(process.execPath, [
+      COORDINATOR, "--config", config, "--out", out, "--runner", runner, "--skip-verify",
+    ]), /coordinator-owned|symbolic link|exact coordinator-owned artifact set/);
+    assert.equal(fs.readFileSync(sentinel, "utf8"), "must remain outside\n", `${kind} journal did not mutate its external sentinel`);
+  }
 });
 
 test("terminal-state crash windows preserve artifacts until a resumed coordinator writes its final receipt", async (t) => {

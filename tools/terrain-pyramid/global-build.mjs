@@ -39,6 +39,12 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CACHE_MAX_BYTES = MAX_GLOBAL_SOURCE_CACHE_BYTES;
 const MAX_SHARD_REPORT_BYTES = 4 * 1024 * 1024;
 const MAX_GLOBAL_STATE_BYTES = 4 * 1024 * 1024;
+const GLOBAL_ARTIFACT_NAMES = Object.freeze([
+  "tiles.dttstream",
+  "ocean-skipped.lines",
+  "ocean-skipped.json",
+]);
+const GLOBAL_SOURCE_MANIFEST_NAME = "source-manifest.ndjson";
 
 function parseArgs(argv) {
   const args = { workers: 1, shards: 1, verify: true };
@@ -374,20 +380,99 @@ function terminalMergeReportMatchesState(outDir, state) {
   return canonicalJson(report) === canonicalJson(state.merged);
 }
 
+function lstatIfExists(file) {
+  try { return fs.lstatSync(file); } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function assertNoSymlinkTraversal(outDir, file, label, { final = "regular-or-absent" } = {}) {
+  const root = path.resolve(outDir);
+  const resolved = path.resolve(file);
+  assert.ok(resolved.startsWith(`${root}${path.sep}`), `${label} escapes the global output directory`);
+  const rootStat = fs.lstatSync(root);
+  assert.ok(rootStat.isDirectory() && !rootStat.isSymbolicLink(), `${label} output directory is not a real directory`);
+  const parts = path.relative(root, resolved).split(path.sep);
+  let current = root;
+  for (let index = 0; index < parts.length; index += 1) {
+    current = path.join(current, parts[index]);
+    const stat = lstatIfExists(current);
+    if (!stat) return null;
+    assert.ok(!stat.isSymbolicLink(), `${label} traverses a symbolic link: ${current}`);
+    if (index !== parts.length - 1) {
+      assert.ok(stat.isDirectory(), `${label} parent is not a directory: ${current}`);
+      continue;
+    }
+    if (final === "directory") assert.ok(stat.isDirectory(), `${label} is not a directory: ${current}`);
+    else assert.ok(stat.isFile(), `${label} is not a regular file: ${current}`);
+    return stat;
+  }
+  return null;
+}
+
+function assertArtifactFile(outDir, file, label, { required = false } = {}) {
+  const stat = assertNoSymlinkTraversal(outDir, file, label);
+  if (required) assert.ok(stat, `${label} is missing: ${file}`);
+  return stat;
+}
+
+function unlinkArtifact(outDir, file, label) {
+  const stat = assertArtifactFile(outDir, file, label);
+  if (stat) fs.unlinkSync(file);
+}
+
+function renameArtifact(outDir, source, destination, label) {
+  assertArtifactFile(outDir, source, `${label} source`, { required: true });
+  assert.equal(assertArtifactFile(outDir, destination, `${label} destination`), null,
+    `${label} destination already exists: ${destination}`);
+  fs.renameSync(source, destination);
+  fsyncDirectory(outDir);
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function assertArtifactTransaction(transaction, outDir) {
   assert.equal(transaction?.version, 1, "unsupported global artifact transaction");
   assert.ok(Array.isArray(transaction.entries) && transaction.entries.length >= 3 && transaction.entries.length <= 4,
     "global artifact transaction has an invalid artifact set");
-  const root = `${path.resolve(outDir)}${path.sep}`;
-  assert.ok(typeof transaction.stagingDir === "string" && path.resolve(transaction.stagingDir).startsWith(root) &&
-    path.basename(transaction.stagingDir).startsWith(".global-merge-stage-"),
-  "global artifact transaction staging path is outside the build output");
-  for (const entry of transaction.entries) {
-    for (const field of ["staged", "destination", "backup"]) {
-      assert.ok(typeof entry[field] === "string" && path.resolve(entry[field]).startsWith(root),
-        `global artifact transaction ${field} is outside the build output`);
-    }
+  assert.deepEqual(Object.keys(transaction).sort(), ["entries", "stagingDir", "version"],
+    "global artifact transaction has unexpected authority-bearing fields");
+  const root = path.resolve(outDir);
+  assertNoSymlinkTraversal(path.dirname(root), root, "global artifact transaction output", { final: "directory" });
+  assert.equal(typeof transaction.stagingDir, "string", "global artifact transaction has no staging directory");
+  const stagingDir = path.resolve(transaction.stagingDir);
+  assert.equal(transaction.stagingDir, stagingDir, "global artifact transaction staging directory must be absolute and canonical");
+  assert.equal(path.dirname(stagingDir), root, "global artifact transaction staging path is not a direct output child");
+  assert.match(path.basename(stagingDir), /^\.global-merge-stage-[A-Za-z0-9_-]+$/,
+    "global artifact transaction has an invalid staging directory name");
+  assertNoSymlinkTraversal(root, stagingDir, "global artifact transaction staging directory", { final: "directory" });
+  const expectedNames = transaction.entries.length === GLOBAL_ARTIFACT_NAMES.length
+    ? GLOBAL_ARTIFACT_NAMES
+    : [...GLOBAL_ARTIFACT_NAMES, GLOBAL_SOURCE_MANIFEST_NAME];
+  assert.deepEqual(transaction.entries.map((entry) => path.basename(entry?.destination ?? "")), expectedNames,
+    "global artifact transaction entries are not the exact coordinator-owned artifact set");
+  for (const [index, entry] of transaction.entries.entries()) {
+    const name = expectedNames[index];
+    assert.ok(entry && typeof entry === "object" && !Array.isArray(entry), "global artifact transaction entry is invalid");
+    assert.deepEqual(Object.keys(entry).sort(), ["backup", "destination", "hadDestination", "staged"],
+      `global artifact transaction ${name} has unexpected authority-bearing fields`);
+    assert.equal(typeof entry.destination, "string", `global artifact transaction ${name} destination is missing`);
+    assert.equal(typeof entry.staged, "string", `global artifact transaction ${name} stage is missing`);
+    assert.equal(entry.destination, path.join(root, name),
+      `global artifact transaction ${name} destination is not coordinator-owned`);
+    assert.equal(entry.staged, path.join(stagingDir, name),
+      `global artifact transaction ${name} stage is not coordinator-owned`);
+    assert.equal(typeof entry.backup, "string", `global artifact transaction ${name} backup is missing`);
+    assert.equal(path.dirname(entry.backup), root, `global artifact transaction ${name} backup is not a direct output child`);
+    assert.match(path.basename(entry.backup), new RegExp(`^${escapeRegExp(name)}\\.premerge-[A-Za-z0-9_-]+$`),
+      `global artifact transaction ${name} backup is not coordinator-owned`);
     assert.equal(typeof entry.hadDestination, "boolean", "global artifact transaction destination state is missing");
+    assertArtifactFile(root, entry.staged, `global artifact transaction ${name} stage`);
+    assertArtifactFile(root, entry.destination, `global artifact transaction ${name} destination`);
+    assertArtifactFile(root, entry.backup, `global artifact transaction ${name} backup`);
   }
 }
 
@@ -397,7 +482,7 @@ function assertArtifactTransaction(transaction, outDir) {
 // a completed restart we merely finalize stale transaction metadata.
 function recoverArtifactSet(outDir, { completed, preserve = false }) {
   const file = artifactTransactionPath(outDir);
-  if (!fs.existsSync(file)) return false;
+  if (!assertArtifactFile(outDir, file, "global artifact transaction journal")) return false;
   const transaction = JSON.parse(stableReadSmallFile(file, 128 * 1024, "global artifact transaction").toString("utf8"));
   assertArtifactTransaction(transaction, outDir);
   // A durable terminal state can precede verify-report.json. Its transaction
@@ -405,26 +490,31 @@ function recoverArtifactSet(outDir, { completed, preserve = false }) {
   // state, so do not interpret "completed" as permission to discard them.
   if (preserve) return true;
   if (completed) {
-    for (const entry of transaction.entries) fs.rmSync(entry.backup, { force: true });
+    for (const entry of transaction.entries) unlinkArtifact(outDir, entry.backup, "global artifact transaction backup");
   } else {
     for (const entry of [...transaction.entries].reverse()) {
-      if (fs.existsSync(entry.backup)) {
-        fs.rmSync(entry.destination, { force: true });
-        fs.renameSync(entry.backup, entry.destination);
-      } else if (!fs.existsSync(entry.staged)) {
+      const backup = assertArtifactFile(outDir, entry.backup, "global artifact transaction backup");
+      const staged = assertArtifactFile(outDir, entry.staged, "global artifact transaction stage");
+      if (backup) {
+        unlinkArtifact(outDir, entry.destination, "global artifact transaction destination");
+        renameArtifact(outDir, entry.backup, entry.destination, "global artifact transaction restore");
+      } else if (!staged) {
         // No old destination means this is either an installed new artifact,
         // or (for the completion manifest) a reservation made before its
         // staged bytes were produced. Both cases are safe to remove. When an
         // old destination exists, no missing backup means installation had
         // not begun; preserve that old immutable artifact.
-        if (!entry.hadDestination) fs.rmSync(entry.destination, { force: true });
+        if (!entry.hadDestination) unlinkArtifact(outDir, entry.destination, "global artifact transaction destination");
       }
       // If the staged file still exists, this entry was never installed; the
       // destination (if any) is the untouched old one and must be preserved.
     }
   }
-  fs.rmSync(transaction.stagingDir, { recursive: true, force: true });
-  fs.rmSync(file, { force: true });
+  for (const entry of transaction.entries) unlinkArtifact(outDir, entry.staged, "global artifact transaction stage");
+  assertNoSymlinkTraversal(outDir, transaction.stagingDir, "global artifact transaction staging directory", { final: "directory" });
+  assert.deepEqual(fs.readdirSync(transaction.stagingDir), [], "global artifact transaction staging directory has unexpected entries");
+  fs.rmdirSync(transaction.stagingDir);
+  unlinkArtifact(outDir, file, "global artifact transaction journal");
   fsyncDirectory(outDir);
   return true;
 }
@@ -443,18 +533,19 @@ function installArtifactSet(entries, { stagingDir, faultAfter = undefined, crash
       staged,
       destination,
       backup: `${destination}.premerge-${token}`,
-      hadDestination: fs.existsSync(destination),
+      hadDestination: Boolean(assertArtifactFile(outDir, destination, "global artifact destination")),
     })),
   };
   const journalPath = artifactTransactionPath(outDir);
-  assert.ok(!fs.existsSync(journalPath), "an unfinished global artifact transaction must be recovered before install");
+  assertArtifactTransaction(transaction, outDir);
+  assert.equal(assertArtifactFile(outDir, journalPath, "global artifact transaction journal"), null,
+    "an unfinished global artifact transaction must be recovered before install");
   writeJsonAtomic(journalPath, transaction);
   try {
     let installed = 0;
     for (const entry of transaction.entries) {
-      if (entry.hadDestination) fs.renameSync(entry.destination, entry.backup);
-      fsyncDirectory(outDir);
-      fs.renameSync(entry.staged, entry.destination);
+      if (entry.hadDestination) renameArtifact(outDir, entry.destination, entry.backup, "global artifact backup");
+      renameArtifact(outDir, entry.staged, entry.destination, "global artifact install");
       fsyncArtifact(entry.destination);
       installed += 1;
       if (crashAfter !== undefined && installed >= crashAfter) process.exit(86);
@@ -474,24 +565,26 @@ function installArtifactSet(entries, { stagingDir, faultAfter = undefined, crash
 // staged bytes are durable before this intent is appended to the transaction.
 function reserveArtifact(transaction, destination, staged) {
   const outDir = path.dirname(destination);
+  assertArtifactTransaction(transaction, outDir);
   const entry = {
     staged,
     destination,
     backup: `${destination}.premerge-${process.pid}-${Date.now()}`,
-    hadDestination: fs.existsSync(destination),
+    hadDestination: Boolean(assertArtifactFile(outDir, destination, "reserved global artifact destination")),
   };
   transaction.entries.push(entry);
+  assertArtifactTransaction(transaction, outDir);
   writeJsonAtomic(artifactTransactionPath(outDir), transaction);
   return entry;
 }
 
-function installReservedArtifact(entry) {
+function installReservedArtifact(transaction, entry) {
   const outDir = path.dirname(entry.destination);
+  assertArtifactTransaction(transaction, outDir);
   if (entry.hadDestination) {
-    fs.renameSync(entry.destination, entry.backup);
-    fsyncDirectory(outDir);
+    renameArtifact(outDir, entry.destination, entry.backup, "reserved global artifact backup");
   }
-  fs.renameSync(entry.staged, entry.destination);
+  renameArtifact(outDir, entry.staged, entry.destination, "reserved global artifact install");
   fsyncArtifact(entry.destination);
 }
 
@@ -569,6 +662,10 @@ async function main() {
   const outDir = path.resolve(args.out);
   const runConfig = JSON.parse(fs.readFileSync(path.resolve(args.config), "utf8"));
   const sourceContract = sourcePolicyContract(runConfig);
+  if (sourceContract) {
+    assert.equal(sourceContract.policy.manifest.completion_manifest, GLOBAL_SOURCE_MANIFEST_NAME,
+      "global source completion manifest must use the coordinator-owned source-manifest.ndjson basename");
+  }
   const publicationContract = publicationPolicyContract(runConfig);
   if (sourceContract) assert.ok(args.verify, "a source-policy build may not use --skip-verify");
   const cacheMaxBytes = args.cacheMaxBytes ?? runConfig.cache_max_bytes ?? DEFAULT_CACHE_MAX_BYTES;
@@ -764,7 +861,7 @@ async function main() {
         // intent, so recovery never has to infer whether an old manifest was
         // backed up before an absent stage could be installed.
         const entry = reserveArtifact(transaction, destination, staged);
-        installReservedArtifact(entry);
+        installReservedArtifact(transaction, entry);
         return receipt;
       })()
     : null;

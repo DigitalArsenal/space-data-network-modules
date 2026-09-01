@@ -475,11 +475,27 @@ async function main() {
   assert.ok(fs.existsSync(RUNTIME_WASM), `build the flow first: ${RUNTIME_WASM}`);
   const { createFlowRuntimeHost } = await import(path.join(SDK_DIR, "src/flow/index.js"));
 
-  recoverCellAttempt({ outDir, markPath: path.join(outDir, "resume-mark.json") });
-  const store = new TileStore(outDir);
+  fs.mkdirSync(outDir, { recursive: true });
+  const outStat = fs.lstatSync(outDir);
+  assert.ok(outStat.isDirectory() && !outStat.isSymbolicLink(), "run output must be a real directory");
   const configuredFlowConfig = runConfig.flow_config ?? {};
   const sourceContract = sourcePolicyContract(runConfig);
   const publicationContract = publicationPolicyContract(runConfig);
+  const sourceObservationLog = sourceContract
+    ? path.resolve(outDir, sourceContract.policy.manifest.shard_log)
+    : null;
+  if (sourceObservationLog) {
+    assert.ok(sourceObservationLog.startsWith(`${outDir}${path.sep}`),
+      "source_policy.manifest.shard_log must stay inside the run output");
+  }
+  // Recovery derives every artifact location from the current approved run,
+  // not from path strings persisted in the interrupted cell journal.
+  recoverCellAttempt({
+    outDir,
+    markPath: path.join(outDir, "resume-mark.json"),
+    artifactPaths: sourceObservationLog ? { "source-observations": sourceObservationLog } : undefined,
+  });
+  const store = new TileStore(outDir);
   // A region config is policy, not evidence.  In particular it must not claim
   // an observation date before a request has happened.  The terrain module
   // requires a retrieved_at lineage field, so the runner derives it from the
@@ -651,12 +667,7 @@ async function main() {
   });
   const oceanSkipLog = path.join(outDir, "ocean-skipped.lines");
   const sourceEpoch = ensureSourceEpoch(granuleCache.dir, sourceContract);
-  const sourceObservationLog = sourceContract
-    ? path.resolve(outDir, sourceContract.policy.manifest.shard_log)
-    : null;
   if (sourceObservationLog) {
-    assert.ok(sourceObservationLog.startsWith(`${outDir}${path.sep}`),
-      "source_policy.manifest.shard_log must stay inside the run output");
     fs.mkdirSync(path.dirname(sourceObservationLog), { recursive: true });
   }
   const sourceRequestObserver = sourceContract
@@ -1120,6 +1131,7 @@ async function main() {
       cell: planned.job.cell_index,
       markJson: built.markJson,
       markPath: store.markPath,
+      artifactPaths: sourceObservationLog ? { "source-observations": sourceObservationLog } : undefined,
       faultPhase: args.faultCellPhase,
       operations: [
         ...(built.stage.recordStream?.length ? [{ name: "tiles", target: store.recordsPath, bytes: built.stage.recordStream }] : []),
