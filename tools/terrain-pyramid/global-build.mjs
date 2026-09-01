@@ -35,6 +35,7 @@ import {
   sha256,
   validateSourceObservationLog,
 } from "./source-provenance.mjs";
+import { buildCanonicalExecutionIdentity } from "./run.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CACHE_MAX_BYTES = MAX_GLOBAL_SOURCE_CACHE_BYTES;
@@ -336,7 +337,7 @@ function assertCompletedShardSnapshots(outDir, shard, sourceContract, publicatio
     `shard ${shard.index} must not mix ocean-skip formats`);
 }
 
-async function assertCompletedShardSource(shard, contract, globalConfigDigest, cacheDir) {
+async function assertCompletedShardSource(shard, contract, globalConfigDigest, executionIdentity, cacheDir) {
   const report = readShardReport(shard.snapshots?.report?.path ?? path.join(shard.outDir, "run-report.json")).report;
   assert.equal(report.sourceProvenance?.sourcePolicyDigest, contract.digest,
     `shard ${shard.index} has no matching source policy receipt`);
@@ -344,9 +345,43 @@ async function assertCompletedShardSource(shard, contract, globalConfigDigest, c
     `shard ${shard.index} has no matching dataset epoch receipt`);
   assert.equal(report.sourceProvenance?.globalConfigDigest, globalConfigDigest,
     `shard ${shard.index} has no matching immutable global config digest`);
+  assert.ok(executionIdentity && typeof executionIdentity === "object",
+    "source shard verification requires a coordinator execution identity");
+  assert.equal(canonicalJson(report.executionIdentity), canonicalJson(executionIdentity),
+    `shard ${shard.index} execution identity does not exactly match the coordinator-bound identity`);
+  assert.ok(typeof report.wasmedgeRuntime === "string" && report.wasmedgeRuntime.length > 0,
+    `shard ${shard.index} has no pinned non-null WasmEdge runtime receipt`);
+  assert.ok(report.wasmedgeRuntime.includes(executionIdentity.wasmedge?.version ?? ""),
+    `shard ${shard.index} WasmEdge runtime receipt does not name the coordinator-pinned engine version`);
+  assert.ok(Number.isSafeInteger(report.cells) && report.cells >= 0,
+    `shard ${shard.index} has an invalid source cell count`);
+  assert.equal(report.wasmedgeVerifiedCells, report.cells,
+    `shard ${shard.index} did not verify every completed source cell under WasmEdge`);
   assert.ok(fs.existsSync(shardSourceLog(shard, contract)),
     `shard ${shard.index} has no source observation log`);
   await validateSourceObservationLog(shardSourceLog(shard, contract), contract, { cacheDir });
+}
+
+function completedShardCount(state) {
+  return state.shards.filter((shard) => shard.status === "complete").length;
+}
+
+// State predating execution identities can only migrate while nothing has
+// completed. Once a source shard is durable, accepting a missing or changed
+// identity would authorize mixed engine/toolchain output on resume.
+export function bindExecutionIdentityToState(state, executionIdentity) {
+  if (!executionIdentity) return null;
+  assert.ok(typeof executionIdentity === "object" && typeof executionIdentity.digest === "string",
+    "execution identity must be a canonical receipt with a digest");
+  if (!state.executionIdentity) {
+    assert.ok(!state.completed && completedShardCount(state) === 0,
+      "refusing to initialize a missing execution identity after source shard completion");
+    state.executionIdentity = executionIdentity;
+    return executionIdentity;
+  }
+  assert.equal(canonicalJson(state.executionIdentity), canonicalJson(executionIdentity),
+    "refusing to resume a state written for a different execution identity");
+  return state.executionIdentity;
 }
 
 function assertCompletedShardPublication(shard, contract, globalConfigDigest) {
@@ -698,14 +733,26 @@ async function main() {
   }
   const publicationContract = publicationPolicyContract(runConfig);
   if (sourceContract) assert.ok(args.verify, "a source-policy build may not use --skip-verify");
+  if (sourceContract) assert.ok(args.wasmedgeVerify !== false,
+    "a source-policy build may not use --no-wasmedge-verify");
+  // `--runner` is a no-network state-machine test hook, but it must not weaken
+  // the coordinator's authorization boundary. The checked-in flow descriptor
+  // and every resolved dependency are validated even when a synthetic shard
+  // runner supplies the report bytes.
+  const executionIdentity = sourceContract
+    ? await buildCanonicalExecutionIdentity()
+    : null;
   const cacheMaxBytes = args.cacheMaxBytes ?? runConfig.cache_max_bytes ?? DEFAULT_CACHE_MAX_BYTES;
   if (sourceContract) assert.equal(cacheMaxBytes, sourceContract.cacheMaxBytes,
     "a source-policy build may not override its approved cache bound");
   assert.ok(cacheMaxBytes <= MAX_GLOBAL_SOURCE_CACHE_BYTES || !sourceContract,
     "a source-policy build may not exceed the 96 GiB cache bound");
   const cacheDir = path.join(outDir, "granule-cache");
-  const sourceEpoch = ensureSourceEpoch(cacheDir, sourceContract);
   const state = initializeGlobalState(outDir, runConfig, args.shards);
+  bindExecutionIdentityToState(state, executionIdentity);
+  // Do not even open/create a source cache epoch until identity reuse has
+  // passed. A mismatched state must fail before it can reuse any durable input.
+  const sourceEpoch = ensureSourceEpoch(cacheDir, sourceContract);
   const terminalVerified = args.verify && state.completed && terminalVerificationMatchesState(outDir);
   const terminalMergeReported = state.completed && terminalMergeReportMatchesState(outDir, state);
   recoverArtifactSet(outDir, {
@@ -732,6 +779,7 @@ async function main() {
     ...config,
     global_config_digest: state.configDigest,
     ...(sourceState ? { source_run_started_at: sourceState.sourceRunStartedAt } : {}),
+    ...(executionIdentity ? { execution_identity: executionIdentity } : {}),
   }));
 
   if (state.completed) {
@@ -739,13 +787,15 @@ async function main() {
     // rechecks every coordinator-owned snapshot before reporting success.
     for (const shard of state.shards) {
       assertCompletedShardSnapshots(outDir, shard, sourceContract, publicationContract);
-      if (sourceContract) await assertCompletedShardSource(shard, sourceContract, state.configDigest, cacheDir);
+      if (sourceContract) await assertCompletedShardSource(shard, sourceContract, state.configDigest, state.executionIdentity, cacheDir);
       assertCompletedShardPublication(shard, publicationContract, state.configDigest);
     }
     const receipt = state.merged;
     assert.ok(receipt && receipt.completion === "complete", "completed global state has no terminal merge receipt");
     assert.equal(receipt.configDigest, state.configDigest, "completed merge receipt config digest mismatch");
     if (sourceContract) {
+      assert.equal(canonicalJson(receipt.executionIdentity), canonicalJson(state.executionIdentity),
+        "completed merge receipt execution identity mismatch");
       assert.equal(receipt.sourceManifest?.sourcePolicyDigest, sourceContract.digest,
         "completed merge receipt source policy digest mismatch");
       assert.equal(receipt.sourceManifest?.configDigest, state.configDigest,
@@ -784,7 +834,7 @@ async function main() {
       assertCompletedShardSnapshots(outDir, shard, sourceContract, publicationContract);
       if (reportIsCompleteFile(shard.snapshots.report.path) &&
           shard.outputDigest === shard.snapshots.tiles.digest) {
-        if (sourceContract) await assertCompletedShardSource(shard, sourceContract, state.configDigest, cacheDir);
+        if (sourceContract) await assertCompletedShardSource(shard, sourceContract, state.configDigest, state.executionIdentity, cacheDir);
         assertCompletedShardPublication(shard, publicationContract, state.configDigest);
         continue;
       }
@@ -844,7 +894,7 @@ async function main() {
           snapshots.sourceLog = snapshotShardInput(outDir, index, "source-observations.ndjson", shardSourceLog({ outDir: out }, sourceContract), {
             maxBytes: snapshotLimit("sourceLog", publicationContract),
           });
-          await assertCompletedShardSource({ index, outDir: out, snapshots }, sourceContract, state.configDigest, cacheDir);
+          await assertCompletedShardSource({ index, outDir: out, snapshots }, sourceContract, state.configDigest, state.executionIdentity, cacheDir);
         }
         assertSnapshotBudget(state, snapshots, publicationContract);
         assertCompletedShardPublication({ index, outDir: out, snapshots }, publicationContract, state.configDigest);
@@ -926,6 +976,7 @@ async function main() {
     completedAt: new Date().toISOString(),
     configDigest: state.configDigest,
     approvedConfigPath,
+    ...(executionIdentity ? { executionIdentity } : {}),
     ...(publicationContract ? {
       publicationPolicy: verifierPublicationPolicy(publicationContract, state.configDigest),
     } : {}),
@@ -950,4 +1001,4 @@ async function main() {
   process.stdout.write(`${JSON.stringify({ outDir, shards: state.shards.length, merged: completed }, null, 2)}\n`);
 }
 
-await main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();

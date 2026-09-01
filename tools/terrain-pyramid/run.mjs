@@ -62,12 +62,288 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..");
 const RUNTIME_WASM = path.join(REPO, "flows", "terrain-ingest", "dist", "runtime.wasm");
 const SDK_DIR = path.join(REPO, "flows", "terrain-ingest", "node_modules", "space-data-module-sdk");
+const FLOW_DIR = path.join(REPO, "flows", "terrain-ingest");
+const FLOW_ARTIFACT = path.join(FLOW_DIR, "dist", "artifact.json");
+const FLOW_DEPS = path.join(FLOW_DIR, "deps.json");
+const FLOW_ISOMORPHIC_WASM = path.join(FLOW_DIR, "dist", "isomorphic", "module.wasm");
+const TERRAIN_SOURCE_PARITY_WASM = path.join(REPO, "data-source", "terrain-source", "dist", "parity", "module.wasm");
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const MAX_CELL_DETAIL_LINE_BYTES = 4096;
 const MAX_CELL_DETAIL_SAMPLE = 128;
 const MAX_RESUME_MARK_BYTES = 256 * 1024;
+
+function digestRegularFile(file, label = path.basename(file)) {
+  const handle = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try {
+    const before = fs.fstatSync(handle, { bigint: true });
+    assert.ok(before.isFile(), `${label} is not a regular file`);
+    assert.ok(before.size <= BigInt(Number.MAX_SAFE_INTEGER), `${label} exceeds JavaScript's safe byte range`);
+    const hash = createHash("sha256");
+    const chunk = Buffer.alloc(64 * 1024);
+    const bytes = Number(before.size);
+    let offset = 0;
+    while (offset < bytes) {
+      const read = fs.readSync(handle, chunk, 0, Math.min(chunk.length, bytes - offset), offset);
+      assert.ok(read > 0, `${label} ended while reading`);
+      hash.update(chunk.subarray(0, read));
+      offset += read;
+    }
+    sameStableFile(before, fs.fstatSync(handle, { bigint: true }), label);
+    return { sha256: hash.digest("hex"), bytes };
+  } finally {
+    fs.closeSync(handle);
+  }
+}
+
+function assertSameRegularFileBytes(left, right, label) {
+  const leftHandle = fs.openSync(left, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  const rightHandle = fs.openSync(right, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try {
+    const leftBefore = fs.fstatSync(leftHandle, { bigint: true });
+    const rightBefore = fs.fstatSync(rightHandle, { bigint: true });
+    assert.ok(leftBefore.isFile() && rightBefore.isFile(), `${label} requires regular files`);
+    assert.equal(leftBefore.size, rightBefore.size, `${label} have different byte counts`);
+    const bytes = Number(leftBefore.size);
+    const leftChunk = Buffer.alloc(64 * 1024);
+    const rightChunk = Buffer.alloc(64 * 1024);
+    let offset = 0;
+    while (offset < bytes) {
+      const expected = Math.min(leftChunk.length, bytes - offset);
+      const leftRead = fs.readSync(leftHandle, leftChunk, 0, expected, offset);
+      const rightRead = fs.readSync(rightHandle, rightChunk, 0, expected, offset);
+      assert.equal(leftRead, expected, `${label} left file ended while reading`);
+      assert.equal(rightRead, expected, `${label} right file ended while reading`);
+      assert.ok(leftChunk.subarray(0, expected).equals(rightChunk.subarray(0, expected)), `${label} have different bytes`);
+      offset += expected;
+    }
+    sameStableFile(leftBefore, fs.fstatSync(leftHandle, { bigint: true }), `${label} left file`);
+    sameStableFile(rightBefore, fs.fstatSync(rightHandle, { bigint: true }), `${label} right file`);
+  } finally {
+    fs.closeSync(leftHandle);
+    fs.closeSync(rightHandle);
+  }
+}
+
+function stableReadJson(file, label) {
+  const handle = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try {
+    const before = fs.fstatSync(handle, { bigint: true });
+    assert.ok(before.isFile(), `${label} is not a regular file`);
+    assert.ok(before.size <= BigInt(4 * 1024 * 1024), `${label} exceeds its 4 MiB bound`);
+    const bytes = fs.readFileSync(handle);
+    sameStableFile(before, fs.fstatSync(handle, { bigint: true }), label);
+    return { value: JSON.parse(bytes.toString("utf8")), digest: sha256(bytes), bytes: bytes.length };
+  } finally {
+    fs.closeSync(handle);
+  }
+}
+
+function assertSha256(value, label) {
+  assert.match(value ?? "", /^[0-9a-f]{64}$/, `${label} must be a lowercase SHA-256 hex digest`);
+}
+
+function exactKeySet(left, right, label) {
+  assert.equal(left.size, right.size, `${label} count differs`);
+  for (const key of left.keys()) assert.ok(right.has(key), `${label} is missing ${key}`);
+}
+
+// The flow has both an external build descriptor and dependency descriptors
+// embedded in its runtime. All three declarations have to agree with the
+// actual immutable modules. A partial check is dangerous here: the old code
+// only compared a descriptor when it happened to find one, so a missing or
+// duplicate descriptor silently passed and could cut a mixed-build pyramid.
+//
+// Kept exported because stale-pin regressions must be proved without invoking
+// a network-backed terrain run.
+export function validateLinkedFlowDescriptor({
+  artifactFile = FLOW_ARTIFACT,
+  depsFile = FLOW_DEPS,
+  runtimeFile = RUNTIME_WASM,
+  isomorphicFile = FLOW_ISOMORPHIC_WASM,
+  linkedDescriptors = undefined,
+} = {}) {
+  const artifactRead = stableReadJson(artifactFile, "flow artifact descriptor");
+  const depsRead = stableReadJson(depsFile, "flow dependency descriptor");
+  const artifact = artifactRead.value;
+  const deps = depsRead.value;
+  assert.ok(artifact && typeof artifact === "object" && !Array.isArray(artifact),
+    "flow artifact descriptor must be an object");
+  assert.ok(artifact.artifact && typeof artifact.artifact === "object",
+    "flow artifact descriptor is missing runtime artifact metadata");
+  assert.equal(artifact.artifact.file, path.basename(runtimeFile),
+    "flow artifact descriptor names a different runtime wasm");
+  assertSha256(artifact.artifact.sha256, "flow artifact runtime SHA-256");
+  assert.ok(Number.isSafeInteger(artifact.artifact.bytes) && artifact.artifact.bytes >= 0,
+    "flow artifact runtime byte count must be a non-negative safe integer");
+
+  const runtime = digestRegularFile(runtimeFile, "flow runtime wasm");
+  assert.equal(runtime.sha256, artifact.artifact.sha256,
+    "flow runtime wasm SHA-256 does not match dist/artifact.json");
+  assert.equal(runtime.bytes, artifact.artifact.bytes,
+    "flow runtime wasm byte count does not match dist/artifact.json");
+  const isomorphic = digestRegularFile(isomorphicFile, "flow isomorphic wasm");
+  assert.equal(isomorphic.bytes, runtime.bytes,
+    "flow runtime.wasm and dist/isomorphic/module.wasm have different byte counts");
+  assert.equal(isomorphic.sha256, runtime.sha256,
+    "flow runtime.wasm and dist/isomorphic/module.wasm have different bytes");
+  assertSameRegularFileBytes(runtimeFile, isomorphicFile,
+    "flow runtime.wasm and dist/isomorphic/module.wasm");
+
+  assert.ok(Array.isArray(artifact.dependencies), "flow artifact descriptor dependencies must be an array");
+  assert.ok(deps && typeof deps === "object" && !Array.isArray(deps),
+    "flow deps.json must be an object");
+  const pinned = new Map();
+  for (const dependency of artifact.dependencies) {
+    assert.ok(dependency && typeof dependency === "object", "flow artifact dependency must be an object");
+    const pluginId = dependency.pluginId;
+    assert.ok(typeof pluginId === "string" && pluginId.length > 0, "flow artifact dependency has no pluginId");
+    assert.ok(!pinned.has(pluginId), `flow artifact descriptor has duplicate dependency pin ${pluginId}`);
+    assertSha256(dependency.sha256, `flow dependency pin ${pluginId}`);
+    pinned.set(pluginId, dependency.sha256);
+  }
+  const dependencyPaths = new Map(Object.entries(deps));
+  for (const [pluginId, relative] of dependencyPaths) {
+    assert.ok(typeof relative === "string" && relative.length > 0,
+      `flow deps.json path for ${pluginId} must be a non-empty string`);
+  }
+  exactKeySet(pinned, dependencyPaths, "flow artifact pins and deps.json");
+
+  const resolvedDependencies = [];
+  for (const [pluginId, pin] of [...pinned.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+    const moduleFile = path.resolve(path.dirname(depsFile), dependencyPaths.get(pluginId), "dist", "isomorphic", "module.wasm");
+    const module = digestRegularFile(moduleFile, `flow dependency ${pluginId} module.wasm`);
+    assert.equal(module.sha256, pin,
+      `flow dependency pin ${pluginId} does not match its deps.json-resolved dist/isomorphic/module.wasm`);
+    resolvedDependencies.push({ pluginId, sha256: module.sha256, bytes: module.bytes });
+  }
+
+  if (linkedDescriptors !== undefined) {
+    assert.ok(Array.isArray(linkedDescriptors), "flow linked descriptors must be an array");
+    const linked = new Map();
+    for (const descriptor of linkedDescriptors) {
+      assert.ok(descriptor && typeof descriptor === "object", "linked flow descriptor must be an object");
+      const pluginId = descriptor.pluginId;
+      assert.ok(typeof pluginId === "string" && pluginId.length > 0, "linked flow descriptor has no pluginId");
+      assert.ok(!linked.has(pluginId), `flow runtime has duplicate linked descriptor ${pluginId}`);
+      // The SDK's linked-direct runtime descriptors intentionally expose the
+      // plugin identity even when their optional hash/byte metadata is null.
+      // Do not turn that supported representation into a false build failure:
+      // artifact.json + deps.json + the resolved module bytes are the strict
+      // hash authority above. If a runtime does supply a hash, however, it is
+      // an additional assertion and must be well formed and exact.
+      if (descriptor.sha256 !== null && descriptor.sha256 !== undefined) {
+        assertSha256(descriptor.sha256, `linked flow descriptor ${pluginId}`);
+      }
+      linked.set(pluginId, descriptor.sha256 ?? null);
+    }
+    exactKeySet(pinned, linked, "flow artifact pins and runtime linked descriptors");
+    for (const [pluginId, pin] of pinned) {
+      if (linked.get(pluginId) !== null) {
+        assert.equal(linked.get(pluginId), pin,
+          `linked flow descriptor ${pluginId} does not match its pinned dependency SHA-256`);
+      }
+    }
+  }
+  return Object.freeze({
+    format: "terrain-flow-linkage-v1",
+    artifactDescriptor: { sha256: artifactRead.digest, bytes: artifactRead.bytes },
+    depsDescriptor: { sha256: depsRead.digest, bytes: depsRead.bytes },
+    runtime,
+    isomorphic,
+    dependencies: Object.freeze(resolvedDependencies),
+  });
+}
+
+function resolvedWasmEdgeLibrary(binary) {
+  if (process.platform !== "darwin") return null;
+  // The macOS WasmEdge executables are small launchers with an @rpath
+  // libwasmedge dependency. Bind the actual dylib, not merely the launcher;
+  // otherwise a library replacement would leave the identity unchanged.
+  const candidates = [
+    path.resolve(path.dirname(binary), "..", "lib", "libwasmedge.0.dylib"),
+    path.resolve(path.dirname(binary), "..", "lib", "libwasmedge.dylib"),
+  ];
+  for (const candidate of candidates) {
+    try {
+      const real = fs.realpathSync(candidate);
+      return { ...digestRegularFile(real, "WasmEdge runtime dylib"), basename: path.basename(real) };
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  throw new Error(`cannot resolve the libwasmedge dylib used by pinned native binary ${binary}; refuse to create an execution identity`);
+}
+
+function resolveExecutableRealpath(binary, label) {
+  if (path.isAbsolute(binary)) return fs.realpathSync(binary);
+  for (const directory of String(process.env.PATH ?? "").split(path.delimiter)) {
+    if (!directory) continue;
+    const candidate = path.join(directory, binary);
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return fs.realpathSync(candidate);
+    } catch (error) {
+      if (error.code !== "ENOENT") continue;
+    }
+  }
+  throw new Error(`cannot resolve executable ${label} ${binary} on PATH for execution identity`);
+}
+
+// Return the canonical, durable identity which authorizes a source-backed
+// global cut. The digest is deliberately over facts rather than paths, so the
+// receipt remains portable while still refusing a changed engine/toolchain.
+export async function buildCanonicalExecutionIdentity() {
+  const sdk = path.join(REPO, "data-source", "terrain-source", "node_modules", "space-data-module-sdk");
+  const { loadWasmEdgePin, assertWasmEdgeVersionMatchesPin } = await import(
+    path.join(sdk, "src/testing/parityHarness.js")
+  );
+  const { resolveWasmEdgeBinary } = await import(path.join(sdk, "src/testing/parityLanes.js"));
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const execFileAsync = promisify(execFile);
+  const pin = loadWasmEdgePin();
+  const binary = await resolveWasmEdgeBinary({});
+  const versionOutput = (await execFileAsync(binary, ["--version"])).stdout;
+  const version = assertWasmEdgeVersionMatchesPin(versionOutput, pin, `native binary ${binary}`);
+  const binaryRealpath = resolveExecutableRealpath(binary, "WasmEdge binary");
+  const compilerCandidate = path.join(path.dirname(binaryRealpath), "wasmedgec");
+  let compiler = { present: false };
+  if (fs.existsSync(compilerCandidate)) {
+    const compilerRealpath = fs.realpathSync(compilerCandidate);
+    const compilerOutput = (await execFileAsync(compilerRealpath, ["--version"])).stdout;
+    const compilerMatch = /version\s+([0-9]+\.[0-9]+\.[0-9]+)/i.exec(String(compilerOutput));
+    assert.ok(compilerMatch, "cannot parse a WasmEdge compiler version for execution identity");
+    assert.equal(compilerMatch[1], pin.wasmedgeVersion,
+      "WasmEdge compiler version does not match the pinned native runtime");
+    compiler = {
+      present: true,
+      version: compilerMatch[1],
+      ...digestRegularFile(compilerRealpath, "WasmEdge compiler"),
+      basename: path.basename(compilerRealpath),
+    };
+  }
+  const linkage = validateLinkedFlowDescriptor();
+  const identity = {
+    format: "terrain-execution-identity-v1",
+    flow: linkage,
+    terrainSourceParityWasm: digestRegularFile(TERRAIN_SOURCE_PARITY_WASM, "terrain-source parity wasm"),
+    scripts: {
+      run: digestRegularFile(path.join(HERE, "run.mjs"), "run.mjs"),
+      globalBuild: digestRegularFile(path.join(HERE, "global-build.mjs"), "global-build.mjs"),
+    },
+    node: { version: process.version, v8: process.versions.v8, platform: process.platform, arch: process.arch },
+    wasmedge: {
+      pin: { version: pin.wasmedgeVersion, sha256: digestRegularFile(pin.pinPath, "WasmEdge pin").sha256 },
+      version,
+      binary: { ...digestRegularFile(binaryRealpath, "WasmEdge binary"), basename: path.basename(binaryRealpath) },
+      compiler,
+      ...(process.platform === "darwin" ? { library: resolvedWasmEdgeLibrary(binaryRealpath) } : {}),
+    },
+  };
+  return Object.freeze({ ...identity, digest: sha256(canonicalJson(identity)) });
+}
 
 function sameStableFile(left, right, label) {
   assert.equal(right.dev, left.dev, `${label} inode changed`);
@@ -172,6 +448,39 @@ function parseArgs(argv) {
     }
   }
   return args;
+}
+
+// A source-policy cell is planned once to discover the eight URLs that must be
+// fetched. Those requests establish the record's RETRIEVED_AT, so the flow's
+// execution plan is necessarily made after that timestamp is known. Re-plan
+// against the unchanged durable mark and require the timestamp to be the ONLY
+// difference. The returned plan is the one the native WasmEdge cross-check
+// must receive; replaying the discovery plan would compare two different
+// provenance records and falsely call that an engine divergence.
+export async function refreshSourceExecutionPlan({ discovered, retrievedAt, planCell }) {
+  assert.ok(discovered?.plan?.provenance, "source discovery plan needs provenance");
+  assert.ok(discovered?.job, "source discovery plan needs a job");
+  assert.ok(typeof retrievedAt === "string" && retrievedAt.length > 0,
+    "source execution plan needs an observed retrieval timestamp");
+  assert.equal(discovered.plan.provenance.retrievedAt, discovered.job.retrieved_at,
+    "source discovery plan carries inconsistent retrieval timestamps");
+
+  const refreshed = await planCell();
+  assert.ok(refreshed, "source-backed cell vanished while refreshing its execution plan");
+  const expected = {
+    ...discovered,
+    plan: {
+      ...discovered.plan,
+      provenance: { ...discovered.plan.provenance, retrievedAt },
+    },
+    job: { ...discovered.job, retrieved_at: retrievedAt },
+  };
+  assert.deepEqual(
+    refreshed,
+    expected,
+    "source-backed cell changed after prefetch by more than its evidence-derived retrieval timestamp",
+  );
+  return refreshed;
 }
 
 // ── THE ENGINE THE TILES ARE SERVED UNDER, EXECUTING THE TILES ─────────────
@@ -562,6 +871,14 @@ async function main() {
   const configuredFlowConfig = runConfig.flow_config ?? {};
   const sourceContract = sourcePolicyContract(runConfig);
   const publicationContract = publicationPolicyContract(runConfig);
+  let executionIdentity = null;
+  if (sourceContract && runConfig.execution_identity !== undefined) {
+    assert.ok(runConfig.execution_identity && typeof runConfig.execution_identity === "object",
+      "configured execution_identity must be a coordinator-bound receipt");
+    executionIdentity = await buildCanonicalExecutionIdentity();
+    assert.equal(canonicalJson(runConfig.execution_identity), canonicalJson(executionIdentity),
+      "configured execution_identity does not match this flow, toolchain, Node runtime, and WasmEdge engine; refuse before source fetch");
+  }
   const sourceObservationLog = sourceContract
     ? path.resolve(outDir, sourceContract.policy.manifest.shard_log)
     : null;
@@ -952,25 +1269,11 @@ async function main() {
       runtimeTarget: "wasmedge",
     });
     memoryRef.memory = probe.memory;
-    const linked = new Map();
+    const linkedDescriptors = [];
     for (let i = 0; i < probe.dependencyCount; i += 1) {
-      const descriptor = probe.getDependencyDescriptor(i);
-      linked.set(descriptor.pluginId, descriptor.sha256);
+      linkedDescriptors.push(probe.getDependencyDescriptor(i));
     }
-    for (const [pluginId, artifact] of [
-      ["com.digitalarsenal.data-source.terrain-ingest", INGEST_WASM],
-      ["com.digitalarsenal.data-source.terrain-source", path.join(REPO, "data-source", "terrain-source", "dist", "isomorphic", "module.wasm")],
-    ]) {
-      const onDisk = createHash("sha256").update(fs.readFileSync(artifact)).digest("hex");
-      const inFlow = linked.get(pluginId);
-      if (inFlow && inFlow !== onDisk) {
-        throw new Error(
-          `${pluginId} in ${path.basename(RUNTIME_WASM)} is ${inFlow} but the built artifact is ` +
-            `${onDisk}. Rebuild the flow (flows/terrain-ingest: npm run build) before building a ` +
-            "pyramid: a flow and a planner from different builds disagree silently.",
-        );
-      }
-    }
+    validateLinkedFlowDescriptor({ linkedDescriptors });
   }
 
   async function planCell({ markBytes = undefined } = {}) {
@@ -1173,11 +1476,17 @@ async function main() {
       const sourceObservationBytes = Buffer.concat(
         prefetched.flatMap(({ line }) => Buffer.isBuffer(line) ? [line] : []),
       );
+      let executionPlan = planned;
       if (sourceContract) {
         assert.equal(observations.length, planned.urls.length, "every planned source URL needs one immutable observation");
         activeRetrievedAt = observations.reduce((latest, observation) =>
           observation.observed_at > latest ? observation.observed_at : latest, "");
         assert.ok(activeRetrievedAt, "source-backed cell has no observed_at evidence for retrieved_at lineage");
+        executionPlan = await refreshSourceExecutionPlan({
+          discovered: planned,
+          retrievedAt: activeRetrievedAt,
+          planCell,
+        });
       }
     const built = await buildCell();
     // THE DURABLE MARK IS THE TEST, not the egress frame. Without a mark IN THE
@@ -1198,7 +1507,7 @@ async function main() {
       break;
     }
     if (wasmedge) {
-      const underWasmEdge = await wasmedge.records(tileInputsFor(planned));
+      const underWasmEdge = await wasmedge.records(tileInputsFor(executionPlan));
       if (!underWasmEdge.equals(lastCellRecords)) {
         stats.errors.push(
           `cell ${planned.job.cell_index}: the record stream differs between engines — ` +
@@ -1305,6 +1614,7 @@ async function main() {
           manifestContract: sourceContract.policy.manifest,
         }
       : null,
+    executionIdentity,
     publicationPolicy: publicationContract
       ? {
           policy: publicationContract.policy,

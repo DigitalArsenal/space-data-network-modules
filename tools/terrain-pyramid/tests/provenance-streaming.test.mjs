@@ -30,7 +30,7 @@ import {
 } from "../source-provenance.mjs";
 import { BoundedGranuleCache } from "../build-support.mjs";
 import { iterateStreamFile } from "../dtt-reader.mjs";
-import { recoverPlannedCellAttempt } from "../run.mjs";
+import { recoverPlannedCellAttempt, refreshSourceExecutionPlan, validateLinkedFlowDescriptor } from "../run.mjs";
 
 const execFileAsync = promisify(execFile);
 const HERE = path.dirname(new URL(import.meta.url).pathname);
@@ -43,6 +43,39 @@ function temporary(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "terrain-provenance-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   return dir;
+}
+
+function linkedFlowFixture(t) {
+  const root = temporary(t);
+  const runtime = path.join(root, "runtime.wasm");
+  const isomorphic = path.join(root, "isomorphic", "module.wasm");
+  const dependencyRoot = path.join(root, "terrain-source");
+  const dependency = path.join(dependencyRoot, "dist", "isomorphic", "module.wasm");
+  fs.mkdirSync(path.dirname(isomorphic), { recursive: true });
+  fs.mkdirSync(path.dirname(dependency), { recursive: true });
+  fs.writeFileSync(runtime, "same-flow-wasm");
+  fs.writeFileSync(isomorphic, "same-flow-wasm");
+  fs.writeFileSync(dependency, "pinned-dependency-wasm");
+  const dependencyDigest = sha256(fs.readFileSync(dependency));
+  const artifact = {
+    artifact: { file: "runtime.wasm", sha256: sha256(fs.readFileSync(runtime)), bytes: fs.statSync(runtime).size },
+    dependencies: [{ pluginId: "com.example.terrain-source", sha256: dependencyDigest }],
+  };
+  const artifactFile = path.join(root, "artifact.json");
+  const depsFile = path.join(root, "deps.json");
+  fs.writeFileSync(artifactFile, JSON.stringify(artifact));
+  fs.writeFileSync(depsFile, JSON.stringify({ "com.example.terrain-source": "./terrain-source" }));
+  return {
+    artifact,
+    artifactFile,
+    depsFile,
+    runtimeFile: runtime,
+    isomorphicFile: isomorphic,
+    dependencyDigest,
+    validate(options = {}) {
+      return validateLinkedFlowDescriptor({ artifactFile, depsFile, runtimeFile: runtime, isomorphicFile: isomorphic, ...options });
+    },
+  };
 }
 
 function sourcePolicyConfig({ epoch = "2023-04-01T00:00:00.000Z", manifest = "source-manifest.ndjson" } = {}) {
@@ -287,6 +320,94 @@ test("global Copernicus DTT retrieved_at is derived from non-empty observed sour
     "a source-backed DTT cell rejects an empty derived retrieval lineage");
   assert.match(runner, /retrieved_at: activeRetrievedAt \?\? sourceRunStartedAt/,
     "the per-cell flow receives the evidence-derived timestamp");
+  assert.match(runner, /executionPlan = await refreshSourceExecutionPlan\([\s\S]*retrievedAt: activeRetrievedAt/,
+    "the parity invocation is replanned after source evidence establishes retrieval time");
+  assert.match(runner, /wasmedge\.records\(tileInputsFor\(executionPlan\)\)/,
+    "WasmEdge receives the refreshed execution plan, not the stale discovery plan");
+});
+
+test("source parity refresh permits only the evidence-derived retrieval timestamp to change", async () => {
+  const discovered = {
+    job: { cell_index: 7, cell_tiles: 2, retrieved_at: "2026-09-01T00:00:00.000Z" },
+    plan: {
+      level: 8,
+      provenance: {
+        datasetId: "copernicus",
+        retrievedAt: "2026-09-01T00:00:00.000Z",
+      },
+      tiles: [{ x: 42, y: 11 }],
+    },
+    urls: ["https://example.test/dem", "https://example.test/water"],
+    backlog: 9,
+  };
+  const retrievedAt = "2026-09-01T00:00:11.435Z";
+  const refreshed = {
+    ...discovered,
+    job: { ...discovered.job, retrieved_at: retrievedAt },
+    plan: {
+      ...discovered.plan,
+      provenance: { ...discovered.plan.provenance, retrievedAt },
+    },
+  };
+  let calls = 0;
+  assert.deepEqual(await refreshSourceExecutionPlan({
+    discovered,
+    retrievedAt,
+    planCell: async () => { calls += 1; return refreshed; },
+  }), refreshed);
+  assert.equal(calls, 1, "the unchanged durable mark is planned exactly once after prefetch");
+
+  await assert.rejects(
+    refreshSourceExecutionPlan({
+      discovered,
+      retrievedAt,
+      planCell: async () => ({ ...refreshed, urls: ["https://example.test/changed"] }),
+    }),
+    /changed after prefetch by more than its evidence-derived retrieval timestamp/,
+    "a changed source request set is not smuggled past the prefetch/execution boundary",
+  );
+});
+
+test("linked flow descriptor validation fails closed for stale, missing, and duplicate pins", (t) => {
+  const fixture = linkedFlowFixture(t);
+  assert.equal(fixture.validate({ linkedDescriptors: [{ pluginId: "com.example.terrain-source", sha256: null, bytes: null }] }).runtime.bytes,
+    fs.statSync(fixture.runtimeFile).size);
+
+  const stale = { ...fixture.artifact, dependencies: [{ ...fixture.artifact.dependencies[0], sha256: "0".repeat(64) }] };
+  fs.writeFileSync(fixture.artifactFile, JSON.stringify(stale));
+  assert.throws(() => fixture.validate(), /does not match its deps\.json-resolved/,
+    "a stale dependency pin cannot authorize the current module bytes");
+
+  fs.writeFileSync(fixture.artifactFile, JSON.stringify(fixture.artifact));
+  assert.throws(() => fixture.validate({ linkedDescriptors: [] }), /runtime linked descriptors count differs/,
+    "a missing runtime descriptor cannot pass the old vacuous check");
+  assert.throws(() => fixture.validate({ linkedDescriptors: [
+    { pluginId: "com.example.terrain-source", sha256: fixture.dependencyDigest },
+    { pluginId: "com.example.terrain-source", sha256: fixture.dependencyDigest },
+  ] }), /duplicate linked descriptor/,
+    "duplicate runtime descriptors are ambiguous and fail closed");
+  assert.throws(() => fixture.validate({ linkedDescriptors: [
+    { pluginId: "com.example.terrain-source", sha256: "0".repeat(64) },
+  ] }), /does not match its pinned dependency/,
+    "a supplied runtime hash must still cross-check against the artifact pin");
+  assert.throws(() => fixture.validate({ linkedDescriptors: [
+    { pluginId: "com.example.terrain-source", sha256: "not-a-digest" },
+  ] }), /must be a lowercase SHA-256/,
+    "a supplied malformed runtime hash cannot become a null-hash exemption");
+});
+
+test("linked flow descriptor validation rejects artifact runtime mismatches", (t) => {
+  const fixture = linkedFlowFixture(t);
+  const mismatch = {
+    ...fixture.artifact,
+    artifact: { ...fixture.artifact.artifact, sha256: "f".repeat(64) },
+  };
+  fs.writeFileSync(fixture.artifactFile, JSON.stringify(mismatch));
+  assert.throws(() => fixture.validate(), /runtime wasm SHA-256 does not match dist\/artifact\.json/);
+
+  fs.writeFileSync(fixture.artifactFile, JSON.stringify(fixture.artifact));
+  fs.writeFileSync(fixture.isomorphicFile, "different-flow-wasm");
+  assert.throws(() => fixture.validate(), /runtime\.wasm and dist\/isomorphic\/module\.wasm have different/);
 });
 
 test("publication policy has explicit bounded store/static ceilings and binds synth grid", () => {
@@ -1042,6 +1163,21 @@ test("incomplete source-policy coordinator cannot emit a completion manifest", a
   assert.equal(fs.existsSync(path.join(root, "out", "source-manifest.ndjson")), false);
 });
 
+test("source-policy coordinator refuses a disabled WasmEdge cross-check", async (t) => {
+  const root = temporary(t);
+  const config = path.join(root, "run.json");
+  const policy = contract();
+  fs.writeFileSync(config, JSON.stringify({
+    cache_max_bytes: policy.cacheMaxBytes,
+    source_policy: policy.policy,
+    flow_config: { dataset_epoch: policy.datasetEpoch, regions: [{ name: "test", west: 0, south: 0, east: 1, north: 1 }] },
+  }));
+  await assert.rejects(
+    execFileAsync(process.execPath, [COORDINATOR, "--config", config, "--out", path.join(root, "out"), "--no-wasmedge-verify"]),
+    /source-policy build may not use --no-wasmedge-verify/,
+  );
+});
+
 test("a fault after a source-backed shard checkpoint cannot emit a completion manifest", async (t) => {
   const root = temporary(t);
   const policy = contract();
@@ -1073,6 +1209,8 @@ test("a fault after a source-backed shard checkpoint cannot emit a completion ma
         sourcePolicyDigest: contract.digest, datasetEpoch: contract.datasetEpoch,
         globalConfigDigest: value.global_config_digest,
       },
+      executionIdentity: value.execution_identity,
+      cells: 0, wasmedgeVerifiedCells: 0, wasmedgeRuntime: "WasmEdge 0.16.4 (rehearsal)",
     }));
   `);
   await assert.rejects(
@@ -1111,7 +1249,7 @@ test("coordinator rejects a source shard with a mismatched immutable global conf
     fs.mkdirSync(out, { recursive: true }); fs.writeFileSync(path.join(out, "tiles.dttstream"), "");
     const url = "https://example.test/dem/N45/E006";
     fs.writeFileSync(path.join(out, contract.policy.manifest.shard_log), canonicalJson({ source_key: "sha256:" + sha256(url), url, status: 200, content_length: 0, content_digest: sha256(""), observed_at: "2026-09-01T00:00:00.000Z", requested_at: "2026-09-01T00:00:00.000Z", cache_hit: false }) + "\\n");
-    fs.writeFileSync(path.join(out, "run-report.json"), JSON.stringify({ drained: true, errors: [], sourceProvenance: { sourcePolicyDigest: contract.digest, datasetEpoch: contract.datasetEpoch, globalConfigDigest: "0".repeat(64) } }));
+    fs.writeFileSync(path.join(out, "run-report.json"), JSON.stringify({ drained: true, errors: [], sourceProvenance: { sourcePolicyDigest: contract.digest, datasetEpoch: contract.datasetEpoch, globalConfigDigest: "0".repeat(64) }, executionIdentity: value.execution_identity, cells: 0, wasmedgeVerifiedCells: 0, wasmedgeRuntime: "WasmEdge 0.16.4 (rehearsal)" }));
   `);
   await assert.rejects(
     execFileAsync(process.execPath, [COORDINATOR, "--config", config, "--out", path.join(root, "out"), "--runner", runner]),
@@ -1136,7 +1274,7 @@ test("coordinator refuses a custom source shard whose request log is outside pol
     fs.mkdirSync(out, { recursive: true }); fs.writeFileSync(path.join(out, "tiles.dttstream"), "");
     const url = "https://foreign.example/DEM.tif";
     fs.writeFileSync(path.join(out, contract.policy.manifest.shard_log), canonicalJson({ source_key: "sha256:" + sha256(url), url, status: 200, content_length: 0, content_digest: sha256(""), observed_at: "2026-09-01T00:00:00.000Z", requested_at: "2026-09-01T00:00:00.000Z", cache_hit: false }) + "\\n");
-    fs.writeFileSync(path.join(out, "run-report.json"), JSON.stringify({ drained: true, errors: [], sourceProvenance: { sourcePolicyDigest: contract.digest, datasetEpoch: contract.datasetEpoch, globalConfigDigest: value.global_config_digest } }));
+    fs.writeFileSync(path.join(out, "run-report.json"), JSON.stringify({ drained: true, errors: [], sourceProvenance: { sourcePolicyDigest: contract.digest, datasetEpoch: contract.datasetEpoch, globalConfigDigest: value.global_config_digest }, executionIdentity: value.execution_identity, cells: 0, wasmedgeVerifiedCells: 0, wasmedgeRuntime: "WasmEdge 0.16.4 (rehearsal)" }));
   `);
   await assert.rejects(
     execFileAsync(process.execPath, [COORDINATOR, "--config", config, "--out", path.join(root, "out"), "--runner", runner]),
@@ -1222,7 +1360,7 @@ test("source manifest sort workspace survives SIGKILL boundaries without contami
     fs.writeFileSync(path.join(out, "run-report.json"), JSON.stringify({ drained: true, errors: [], sourceProvenance: {
       sourcePolicyDigest: contract.digest, datasetEpoch: contract.datasetEpoch,
       globalConfigDigest: value.global_config_digest,
-    } }));
+    }, executionIdentity: value.execution_identity, cells: 0, wasmedgeVerifiedCells: 0, wasmedgeRuntime: "WasmEdge 0.16.4 (rehearsal)" }));
   `);
   const cases = [
     {

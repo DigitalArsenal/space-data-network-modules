@@ -29,6 +29,7 @@ import {
 } from "../build-support.mjs";
 import { iterateStreamFile, readDtt } from "../dtt-reader.mjs";
 import { writeDttRecord } from "../dtt-projection.mjs";
+import { bindExecutionIdentityToState } from "../global-build.mjs";
 
 const execFileAsync = promisify(execFile);
 const HERE = path.dirname(new URL(import.meta.url).pathname);
@@ -56,6 +57,10 @@ function temporary(t) {
 
 function response(status, body = "") {
   return { status, ok: status >= 200 && status < 300, arrayBuffer: async () => Buffer.from(body) };
+}
+
+function executionIdentity(digest) {
+  return { format: "terrain-execution-identity-v1", digest, flow: { runtime: { sha256: digest } } };
 }
 
 // Mirrors terrain-ingest's region_block() and priority ownership rule. This
@@ -186,6 +191,29 @@ test("deterministic shard configs cover each regional longitude slice once", () 
   const slices = first.flatMap((shard) => shard.flow_config.regions.map((r) => [r.west, r.east]));
   assert.deepEqual(slices, [[0, 2.109375], [2.109375, 4]]);
   assert.equal(first[0].global_shard.config_digest, sha256('{"flow_config":{"regions":[{"east":4,"max_level":8,"name":"proof","north":42,"priority":1,"south":40,"west":0}]}}'));
+});
+
+test("execution identity migrates an untouched state but refuses mismatched reuse", () => {
+  const first = executionIdentity("a".repeat(64));
+  const second = executionIdentity("b".repeat(64));
+  const state = {
+    completed: false,
+    shards: [{ index: 0, status: "pending" }, { index: 1, status: "failed" }],
+  };
+  assert.equal(bindExecutionIdentityToState(state, first), first,
+    "a zero-complete pre-identity state has no produced bytes to invalidate");
+  assert.deepEqual(state.executionIdentity, first);
+  assert.throws(() => bindExecutionIdentityToState(state, second), /different execution identity/,
+    "a different flow, script, host, or WasmEdge identity cannot reuse state");
+});
+
+test("execution identity cannot be initialized after any shard completion", () => {
+  const state = {
+    completed: false,
+    shards: [{ index: 0, status: "complete" }, { index: 1, status: "pending" }],
+  };
+  assert.throws(() => bindExecutionIdentityToState(state, executionIdentity("a".repeat(64))),
+    /missing execution identity after source shard completion/);
 });
 
 test("tile-column shard ownership preserves non-aligned coverage without cross-shard duplicates", () => {
