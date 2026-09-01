@@ -35,6 +35,9 @@ function parseArgs(argv) {
     else if (flag === "--workers") args.workers = Number(argv[++i]);
     else if (flag === "--cache-max-bytes") args.cacheMaxBytes = Number(argv[++i]);
     else if (flag === "--max-cells") args.maxCells = Number(argv[++i]);
+    // Test/rehearsal hook: production uses run.mjs. It lets the coordinator's
+    // durable state machine be fault-injected without cutting or fetching data.
+    else if (flag === "--runner") args.runner = argv[++i];
     else if (flag === "--no-wasmedge-verify") args.wasmedgeVerify = false;
     else if (flag === "--skip-verify") args.verify = false;
     // Deliberately test-only.  It proves a persisted state does not rerun the
@@ -157,7 +160,7 @@ async function main() {
       saveGlobalState(outDir, state);
       try {
         await runNode([
-          path.join(HERE, "run.mjs"), "--config", configFile, "--out", out,
+          path.resolve(args.runner ?? path.join(HERE, "run.mjs")), "--config", configFile, "--out", out,
           "--cache-dir", cacheDir, "--cache-max-bytes", String(cacheMaxBytes),
           ...(args.maxCells ? ["--max-cells", String(args.maxCells)] : []),
           ...(args.wasmedgeVerify === false ? ["--no-wasmedge-verify"] : []),
@@ -166,13 +169,16 @@ async function main() {
         markShard(state, index, "complete", { outputDigest: await fileDigest(path.join(out, "tiles.dttstream")) });
         saveGlobalState(outDir, state);
         completedThisInvocation += 1;
-        if (args.faultAfterShards && completedThisInvocation >= args.faultAfterShards) {
-          throw new Error(`fault injection after ${completedThisInvocation} completed shard(s)`);
-        }
       } catch (error) {
         markShard(state, index, "failed", { error: String(error.message ?? error) });
         saveGlobalState(outDir, state);
         throw error;
+      }
+      // This must be outside the try/catch: fault injection models a process
+      // dying *after* its completion checkpoint. Turning that completed shard
+      // into failed would make resume recut it, defeating the test.
+      if (args.faultAfterShards && completedThisInvocation >= args.faultAfterShards) {
+        throw new Error(`fault injection after ${completedThisInvocation} completed shard(s)`);
       }
     }
   }

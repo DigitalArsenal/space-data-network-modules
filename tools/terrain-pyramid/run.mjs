@@ -525,9 +525,6 @@ async function main() {
     dir: args.cacheDir ?? runConfig.cache_dir ?? path.join(outDir, "granules"),
     maxBytes: cacheMaxBytes,
   });
-  const cachePath = (url) => granuleCache.paths(url).body;
-  const statusPath = (url) => granuleCache.paths(url).status;
-
   async function prefetch(urls) {
     await Promise.all(
       urls.map(async (url) => {
@@ -583,14 +580,15 @@ async function main() {
     operation: "http.request",
     matches: () => true,
     respond: (meta) => {
-      if (!fs.existsSync(statusPath(meta.url))) {
+      const cached = granuleCache.read(meta.url);
+      if (!cached) {
         // A cache miss means the URL the flow asked for is not the URL the
         // planner derived, which would mean the enumeration is not the pure
         // function of config-and-mark this runner rests on. Fail loudly.
         return encodeEnvelope({ ok: false, message: `not prefetched: ${meta.url}` });
       }
-      const status = Number(fs.readFileSync(statusPath(meta.url), "utf8"));
-      const body = new Uint8Array(fs.readFileSync(cachePath(meta.url)));
+      const status = cached.status;
+      const body = new Uint8Array(cached.body);
       return encodeEnvelope({ ok: true, status, result: { status, headers: {} } }, [body]);
     },
   });
@@ -835,9 +833,10 @@ async function main() {
     ];
     for (let slot = 0; slot < 4; slot += 1) {
       for (const [port, url] of [["dem", planned.urls[slot * 2]], ["water", planned.urls[slot * 2 + 1]]]) {
-        if (!fs.existsSync(statusPath(url))) continue;
-        const status = Number(fs.readFileSync(statusPath(url), "utf8"));
-        const body = fs.readFileSync(cachePath(url));
+        const cached = granuleCache.read(url);
+        if (!cached) continue;
+        const status = cached.status;
+        const body = cached.body;
         // hostcap/http-request responseWire "raw-body-v1": "$HRB", LE status,
         // body verbatim — the frame the flow's http node hands the encoder.
         const hrb = Buffer.alloc(8 + body.length);
@@ -932,7 +931,7 @@ async function main() {
       // The cell's flow and parity pass have consumed these exact bytes, or
       // have failed. Either way this worker must not leave a permanent lease
       // that makes a resumed global build falsely report the cache exhausted.
-      for (const url of planned.urls) granuleCache.release(url);
+      await Promise.all(planned.urls.map((url) => granuleCache.release(url)));
     }
   }
 

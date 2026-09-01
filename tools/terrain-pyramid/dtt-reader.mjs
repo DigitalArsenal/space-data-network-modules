@@ -16,6 +16,12 @@ import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { createReadStream } from "node:fs";
 
+// A terrain payload is hard-capped at 32 KiB and the fixed FlatBuffer/mask
+// envelope is far below this ceiling. One MiB leaves deliberate format headroom
+// while refusing a corrupt u32 prefix before a stream reader buffers attacker-
+// or disk-corrupted multi-gigabyte data.
+export const MAX_TERRAIN_RECORD_BYTES = 1024 * 1024;
+
 // ── size-prefixed record framing: [u32 LE length][record] ───────────────────
 //
 // A zero length is the store's own "no records here" padding — every reader
@@ -40,7 +46,10 @@ export function splitStream(bytes) {
 // limit.  Yield one framed record at a time so callers keep only the indexes
 // their validation needs, not the entire byte stream.  The carry buffer is at
 // most one record plus a read chunk.
-export async function* iterateStreamFile(file, { highWaterMark = 1024 * 1024 } = {}) {
+export async function* iterateStreamFile(file, {
+  highWaterMark = 1024 * 1024,
+  maxRecordBytes = MAX_TERRAIN_RECORD_BYTES,
+} = {}) {
   let pending = Buffer.alloc(0);
   for await (const chunk of createReadStream(file, { highWaterMark })) {
     pending = pending.length ? Buffer.concat([pending, chunk]) : Buffer.from(chunk);
@@ -51,6 +60,7 @@ export async function* iterateStreamFile(file, { highWaterMark = 1024 * 1024 } =
         offset += 4;
         continue;
       }
+      assert.ok(length <= maxRecordBytes, `record length ${length} exceeds ${maxRecordBytes}-byte terrain safety limit`);
       if (offset + 4 + length > pending.length) break;
       yield pending.subarray(offset + 4, offset + 4 + length);
       offset += 4 + length;

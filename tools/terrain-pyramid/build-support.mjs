@@ -88,146 +88,255 @@ function safeUnlink(file) {
   try { fs.unlinkSync(file); } catch (error) { if (error.code !== "ENOENT") throw error; }
 }
 
+function defaultPidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try { process.kill(pid, 0); return true; } catch (error) { return error.code === "EPERM"; }
+}
+
 /**
- * A disk LRU shared safely enough for independent build processes.  A process
- * leases every URL from planning until its flow and WasmEdge parity pass have
- * consumed it; eviction never removes leased entries.  Files are atomically
- * renamed, so a competing producer sees either a completed cache record or a
- * miss and may harmlessly refetch it, never a truncated granule.
+ * A process-safe, bounded cache.  The global cache lock serializes capacity
+ * reservation, eviction and publication. A per-URL producer lock serializes
+ * a miss all the way through network fetch, so two workers cannot race a 200
+ * and a 404 into different body/status generations. A published entry is one
+ * immutable generation selected by an atomically renamed `current.json`.
  */
 export class BoundedGranuleCache {
-  constructor({ dir, maxBytes, owner = `${process.pid}-${randomUUID()}`, now = () => Date.now() }) {
+  constructor({
+    dir,
+    maxBytes,
+    owner = `${process.pid}-${randomUUID()}`,
+    pid = process.pid,
+    now = () => Date.now(),
+    isPidAlive = defaultPidAlive,
+    leaseTtlMs = 30 * 60_000,
+    lockWaitMs = 60_000,
+  }) {
     assert.ok(dir, "cache dir is required");
     assert.ok(Number.isSafeInteger(maxBytes) && maxBytes > 0, "cache maxBytes must be a positive safe integer");
     this.dir = path.resolve(dir);
     this.maxBytes = maxBytes;
     this.owner = owner;
+    this.pid = pid;
     this.now = now;
+    this.isPidAlive = isPidAlive;
+    this.leaseTtlMs = leaseTtlMs;
+    this.lockWaitMs = lockWaitMs;
     this.retries = 0;
     this.evictions = 0;
-    fs.mkdirSync(path.join(this.dir, "leases"), { recursive: true });
-  }
-
-  paths(url) {
-    const key = urlCacheKey(url);
-    return {
-      key,
-      body: path.join(this.dir, `${key}.bin`),
-      status: path.join(this.dir, `${key}.status`),
-      meta: path.join(this.dir, `${key}.meta.json`),
-      lease: path.join(this.dir, "leases", `${key}.${this.owner}`),
-    };
-  }
-
-  acquire(url) {
-    const entry = this.paths(url);
-    atomicWrite(entry.lease, `${this.now()}\n`);
-    return entry;
-  }
-
-  release(url) {
-    safeUnlink(this.paths(url).lease);
-  }
-
-  releaseAll() {
-    const suffix = `.${this.owner}`;
-    for (const name of fs.readdirSync(path.join(this.dir, "leases"))) {
-      if (name.endsWith(suffix)) safeUnlink(path.join(this.dir, "leases", name));
+    for (const name of ["entries", "leases", "locks", "producer-locks"]) {
+      fs.mkdirSync(path.join(this.dir, name), { recursive: true });
     }
   }
 
-  hasLease(key) {
+  key(url) { return urlCacheKey(url); }
+  entryDir(key) { return path.join(this.dir, "entries", key); }
+  pointerPath(key) { return path.join(this.entryDir(key), "current.json"); }
+  leasePath(key) { return path.join(this.dir, "leases", `${key}.${this.owner}.json`); }
+
+  paths(url) {
+    const key = this.key(url);
+    const current = readJson(this.pointerPath(key));
+    const generation = current?.generation ?? "missing";
+    const dir = this.entryDir(key);
+    return {
+      key,
+      generation,
+      body: path.join(dir, `${generation}.bin`),
+      status: path.join(dir, `${generation}.status`),
+      meta: path.join(dir, `${generation}.meta.json`),
+      pointer: this.pointerPath(key),
+      lease: this.leasePath(key),
+    };
+  }
+
+  async withDirectoryLock(lockDir, action) {
+    const ownerFile = path.join(lockDir, "owner.json");
+    const token = randomUUID();
+    const deadline = Date.now() + this.lockWaitMs;
+    while (true) {
+      try {
+        fs.mkdirSync(lockDir);
+        atomicWrite(ownerFile, `${JSON.stringify({ token, pid: this.pid, acquiredAt: this.now() })}\n`);
+        break;
+      } catch (error) {
+        if (error.code !== "EEXIST") throw error;
+        const owner = readJson(ownerFile);
+        const age = (() => { try { return this.now() - fs.statSync(lockDir).mtimeMs; } catch { return 0; } })();
+        const dead = owner && !this.isPidAlive(Number(owner.pid));
+        // A lock with no owner file can only be reclaimed after its bounded
+        // grace period; otherwise another process between mkdir and write
+        // could have its live lock stolen.
+        if (dead || (!owner && age > this.leaseTtlMs)) {
+          try { fs.rmSync(lockDir, { recursive: true, force: true }); } catch {}
+          continue;
+        }
+        if (Date.now() >= deadline) throw new Error(`timed out waiting for cache lock ${path.basename(lockDir)}`);
+        await sleep(10);
+      }
+    }
+    try {
+      return await action();
+    } finally {
+      const owner = readJson(ownerFile);
+      if (owner?.token === token) fs.rmSync(lockDir, { recursive: true, force: true });
+    }
+  }
+
+  withGlobalLock(action) { return this.withDirectoryLock(path.join(this.dir, "locks", "cache.lock"), action); }
+  withProducerLock(key, action) { return this.withDirectoryLock(path.join(this.dir, "producer-locks", `${key}.lock`), action); }
+
+  reclaimStaleLeasesUnlocked() {
+    const leaseDir = path.join(this.dir, "leases");
+    for (const name of fs.readdirSync(leaseDir)) {
+      const file = path.join(leaseDir, name);
+      const lease = readJson(file);
+      const age = (() => { try { return this.now() - fs.statSync(file).mtimeMs; } catch { return 0; } })();
+      const dead = lease && !this.isPidAlive(Number(lease.pid));
+      if (dead || (!lease && age > this.leaseTtlMs)) safeUnlink(file);
+    }
+  }
+
+  hasLeaseUnlocked(key) {
     const prefix = `${key}.`;
     return fs.readdirSync(path.join(this.dir, "leases")).some((name) => name.startsWith(prefix));
   }
 
-  entries() {
+  readEntryUnlocked(url) {
+    const entry = this.paths(url);
+    if (!fs.existsSync(entry.body) || !fs.existsSync(entry.status) || !fs.existsSync(entry.meta)) return null;
+    const status = Number(fs.readFileSync(entry.status, "utf8"));
+    if (!Number.isInteger(status)) return null;
+    return { status, body: fs.readFileSync(entry.body), hit: true, entry };
+  }
+
+  cleanupEntryUnlocked(key) {
+    const dir = this.entryDir(key);
+    const pointer = readJson(this.pointerPath(key));
+    if (!pointer?.generation || !fs.existsSync(dir)) return;
+    const keep = new Set(["current.json", `${pointer.generation}.bin`, `${pointer.generation}.status`, `${pointer.generation}.meta.json`]);
+    for (const name of fs.readdirSync(dir)) {
+      if (!keep.has(name)) safeUnlink(path.join(dir, name));
+    }
+  }
+
+  entriesUnlocked() {
+    const root = path.join(this.dir, "entries");
     const rows = [];
-    for (const name of fs.readdirSync(this.dir)) {
-      if (!name.endsWith(".bin")) continue;
-      const key = name.slice(0, -4);
-      const body = path.join(this.dir, name);
-      const meta = readJson(path.join(this.dir, `${key}.meta.json`), {});
+    for (const key of fs.readdirSync(root)) {
+      this.cleanupEntryUnlocked(key);
+      const pointer = readJson(this.pointerPath(key));
+      if (!pointer?.generation) continue;
+      const dir = this.entryDir(key);
+      const files = fs.readdirSync(dir).map((name) => path.join(dir, name));
+      if (!files.every((file) => fs.existsSync(file))) continue;
       rows.push({
         key,
-        body,
-        status: path.join(this.dir, `${key}.status`),
-        meta: path.join(this.dir, `${key}.meta.json`),
-        // Count every cache-owned byte, not merely DEM bodies.  This keeps a
-        // global run from trading the old unbounded granule directory for an
-        // unbounded directory of status/metadata sidecars.
-        bytes: [body, path.join(this.dir, `${key}.status`), path.join(this.dir, `${key}.meta.json`)]
-          .filter((file) => fs.existsSync(file))
-          .reduce((total, file) => total + fs.statSync(file).size, 0),
-        lastUsed: Number(meta.lastUsed ?? 0),
+        dir,
+        bytes: files.reduce((total, file) => total + fs.statSync(file).size, 0),
+        lastUsed: Number(pointer.lastUsed ?? 0),
       });
     }
     return rows;
   }
 
-  usageBytes() {
-    return this.entries().reduce((total, entry) => total + entry.bytes, 0);
-  }
+  usageBytes() { return this.entriesUnlocked().reduce((total, entry) => total + entry.bytes, 0); }
 
-  evictFor(requiredBytes) {
+  evictForUnlocked(requiredBytes) {
     assert.ok(requiredBytes <= this.maxBytes, `one granule (${requiredBytes} B) exceeds cache cap ${this.maxBytes} B`);
     let used = this.usageBytes();
     if (used + requiredBytes <= this.maxBytes) return used;
-    const candidates = this.entries()
-      .filter((entry) => !this.hasLease(entry.key))
+    const candidates = this.entriesUnlocked()
+      .filter((entry) => !this.hasLeaseUnlocked(entry.key))
       .sort((a, b) => a.lastUsed - b.lastUsed || a.key.localeCompare(b.key));
     for (const entry of candidates) {
       if (used + requiredBytes <= this.maxBytes) break;
-      safeUnlink(entry.body);
-      safeUnlink(entry.status);
-      safeUnlink(entry.meta);
+      fs.rmSync(entry.dir, { recursive: true, force: true });
       used -= entry.bytes;
       this.evictions += 1;
     }
-    assert.ok(
-      used + requiredBytes <= this.maxBytes,
-      `cache cap ${this.maxBytes} B is exhausted by leased granules; release completed cells or raise cache_max_bytes`,
-    );
+    assert.ok(used + requiredBytes <= this.maxBytes, `cache cap ${this.maxBytes} B is exhausted by leased granules; release completed cells or raise cache_max_bytes`);
     return used;
   }
 
-  get(url) {
-    const entry = this.paths(url);
-    if (!fs.existsSync(entry.status) || !fs.existsSync(entry.body)) return null;
-    const status = Number(fs.readFileSync(entry.status, "utf8"));
-    if (!Number.isInteger(status)) return null;
-    const body = fs.readFileSync(entry.body);
-    atomicWrite(entry.meta, `${JSON.stringify({ url, bytes: body.length, lastUsed: this.now() })}\n`);
-    return { status, body, hit: true };
+  publishUnlocked(url, status, body) {
+    const key = this.key(url);
+    const dir = this.entryDir(key);
+    fs.mkdirSync(dir, { recursive: true });
+    const generation = randomUUID();
+    const bytes = Buffer.from(body);
+    const metadata = `${JSON.stringify({ url, status, bytes: bytes.length, generation })}\n`;
+    const pointer = `${JSON.stringify({ generation, lastUsed: this.now() })}\n`;
+    const requiredBytes = bytes.length + Buffer.byteLength(`${status}\n`) + Buffer.byteLength(metadata) + Buffer.byteLength(pointer);
+    this.evictForUnlocked(requiredBytes);
+    atomicWrite(path.join(dir, `${generation}.bin`), bytes);
+    atomicWrite(path.join(dir, `${generation}.status`), `${status}\n`);
+    atomicWrite(path.join(dir, `${generation}.meta.json`), metadata);
+    atomicWrite(this.pointerPath(key), pointer);
+    return this.readEntryUnlocked(url);
   }
 
-  put(url, status, body) {
-    const entry = this.paths(url);
-    const bytes = Buffer.from(body);
-    const statusBytes = Buffer.byteLength(`${status}\n`);
-    const metadata = `${JSON.stringify({ url, bytes: bytes.length, lastUsed: this.now() })}\n`;
-    this.evictFor(bytes.length + statusBytes + Buffer.byteLength(metadata));
-    atomicWrite(entry.body, bytes);
-    atomicWrite(entry.status, `${status}\n`);
-    atomicWrite(entry.meta, metadata);
-    return { status, body: bytes, hit: false };
+  async acquire(url) {
+    const key = this.key(url);
+    await this.withGlobalLock(async () => {
+      this.reclaimStaleLeasesUnlocked();
+      atomicWrite(this.leasePath(key), `${JSON.stringify({ owner: this.owner, pid: this.pid, acquiredAt: this.now() })}\n`);
+    });
+    return this.paths(url);
+  }
+
+  async release(url) {
+    await this.withGlobalLock(async () => safeUnlink(this.leasePath(this.key(url))));
+  }
+
+  async releaseAll() {
+    await this.withGlobalLock(async () => {
+      const suffix = `.${this.owner}.json`;
+      for (const name of fs.readdirSync(path.join(this.dir, "leases"))) {
+        if (name.endsWith(suffix)) safeUnlink(path.join(this.dir, "leases", name));
+      }
+    });
+  }
+
+  // Synchronous read for the runner's synchronous hostcall bridge.  Callers
+  // must already hold their URL lease, which prevents eviction of its current
+  // immutable generation while the flow consumes it.
+  read(url) { return this.readEntryUnlocked(url); }
+
+  async get(url) {
+    return this.withGlobalLock(async () => {
+      this.reclaimStaleLeasesUnlocked();
+      const cached = this.readEntryUnlocked(url);
+      if (!cached) return null;
+      const pointer = readJson(cached.entry.pointer);
+      atomicWrite(cached.entry.pointer, `${JSON.stringify({ ...pointer, lastUsed: this.now() })}\n`);
+      return { status: cached.status, body: cached.body, hit: true };
+    });
+  }
+
+  async put(url, status, body) {
+    return this.withGlobalLock(async () => {
+      this.reclaimStaleLeasesUnlocked();
+      return { ...this.publishUnlocked(url, status, body), hit: false };
+    });
   }
 
   async fetch(url, options = {}) {
-    this.acquire(url);
-    const cached = this.get(url);
+    await this.acquire(url);
+    const cached = await this.get(url);
     if (cached) return cached;
-    let retries = 0;
-    const response = await fetchWithRetry(url, {
-      ...options,
-      onRetry: (event) => {
-        retries += 1;
-        options.onRetry?.(event);
-      },
+    const key = this.key(url);
+    return this.withProducerLock(key, async () => {
+      const appeared = await this.get(url);
+      if (appeared) return appeared;
+      let retries = 0;
+      const response = await fetchWithRetry(url, {
+        ...options,
+        onRetry: (event) => { retries += 1; options.onRetry?.(event); },
+      });
+      this.retries += retries;
+      const body = response.ok ? Buffer.from(await response.arrayBuffer()) : Buffer.alloc(0);
+      return this.put(url, response.status, body);
     });
-    this.retries += retries;
-    const body = response.ok ? Buffer.from(await response.arrayBuffer()) : Buffer.alloc(0);
-    return this.put(url, response.status, body);
   }
 }
 

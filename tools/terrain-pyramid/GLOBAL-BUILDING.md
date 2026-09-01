@@ -15,9 +15,13 @@ or deploy a flow.
 
 ## Boundaries and resume contract
 
-- The shared source cache is capped (128 GiB by default). Each active cell
-  holds leases for its planned granules; LRU eviction skips leased files and
-  atomically replaces entries, so a worker never consumes a partial file.
+- The shared source cache is capped (128 GiB by default). Capacity reservation,
+  eviction and generation publication are serialized by an inter-process lock;
+  each URL has a second producer lock, so competing 200/404 observations can
+  only publish one immutable body/status generation. Each active cell holds
+  leases for its planned granules; LRU eviction skips live leases, and a resume
+  reclaims a lease only after its recorded PID is no longer alive (or a malformed
+  owner has exceeded the bounded expiry).
 - Network retries are deterministic exponential backoff: four retries after
   the first attempt, starting at 250 ms. HTTP 404 remains a source result and
   is not retried; 408, 425, 429 and 5xx responses are retried.
@@ -51,3 +55,20 @@ confirm the state reports one retained completion rather than recutting it.
 Do not treat a regional rehearsal as evidence that the global z<=10 data set
 exists. The global cut and publication remain separate, explicitly authorised
 tasks.
+
+## Checked local rehearsal
+
+Run this before an authorised source-backed global rehearsal:
+
+```sh
+node tools/terrain-pyramid/rehearse.mjs --out /tmp/terrain-global-rehearsal.json
+```
+
+It runs the shipped terrain-source artifact over two adjacent representative
+regions using the same local DEM/WBM fixture, then compares a single-lane cut
+with two concurrent cuts by complete `$DTT` address/byte digest. The JSON
+report records both timings and is intentionally outside the repository: it is
+performance evidence for the current box, not evidence that a global pyramid
+exists. The checked representative result is
+[`evidence/global-rehearsal.json`](./evidence/global-rehearsal.json); reproduce
+it before relying on its timings.
