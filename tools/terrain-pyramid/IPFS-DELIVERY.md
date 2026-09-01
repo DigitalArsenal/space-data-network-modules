@@ -168,7 +168,7 @@ for this pyramid that is:
 | identity (what IPFS serves) | 66,132 B | 327,267 B | — |
 | gzipped (what the mount served) | 3,555 B | 28,627 B | 30,799 B |
 
-The difference is almost entirely the water mask: a raster mask is 256×256 = 
+The difference is almost entirely the water mask: a raster mask is 256×256 =
 65,536 bytes of near-constant data that gzip erases and a static file cannot.
 49% of this pyramid's tiles carry one.
 
