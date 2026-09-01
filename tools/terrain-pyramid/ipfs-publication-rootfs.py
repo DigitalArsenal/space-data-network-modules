@@ -277,52 +277,6 @@ class RootFs:
             os.close(descriptor)
         return {"synced": True}
 
-    def link(self, source: Any, destination: Any) -> dict[str, bool]:
-        source_parent, source_leaf = self._parent(source)
-        destination_parent, destination_leaf = self._parent(destination)
-        try:
-            os.link(source_leaf, destination_leaf, src_dir_fd=source_parent, dst_dir_fd=destination_parent, follow_symlinks=False)
-        finally:
-            os.close(source_parent)
-            os.close(destination_parent)
-        return {"linked": True}
-
-    def rename_replace_exact(self, source: Any, destination: Any, source_expected: Any, destination_expected: Any) -> dict[str, bool]:
-        source_parent, source_leaf = self._parent(source)
-        destination_parent, destination_leaf = self._parent(destination)
-        try:
-            source_actual = os.stat(source_leaf, dir_fd=source_parent, follow_symlinks=False)
-            destination_actual = os.stat(destination_leaf, dir_fd=destination_parent, follow_symlinks=False)
-            if not same_identity(source_actual, source_expected) or not same_identity(destination_actual, destination_expected):
-                raise RootFsError("ESTALE", "rootfs replace rename identity changed")
-            os.rename(source_leaf, destination_leaf, src_dir_fd=source_parent, dst_dir_fd=destination_parent)
-        finally:
-            os.close(source_parent)
-            os.close(destination_parent)
-        return {"renamed": True}
-
-    def unlink_exact(self, relative: Any, expected: Any) -> dict[str, bool]:
-        parent, leaf = self._parent(relative)
-        try:
-            actual = os.stat(leaf, dir_fd=parent, follow_symlinks=False)
-            if not same_identity(actual, expected):
-                raise RootFsError("ESTALE", "rootfs unlink target identity changed")
-            os.unlink(leaf, dir_fd=parent)
-        finally:
-            os.close(parent)
-        return {"unlinked": True}
-
-    def rmdir_exact(self, relative: Any, expected: Any) -> dict[str, bool]:
-        parent, leaf = self._parent(relative)
-        try:
-            actual = os.stat(leaf, dir_fd=parent, follow_symlinks=False)
-            if not same_identity(actual, expected) or not stat.S_ISDIR(actual.st_mode):
-                raise RootFsError("ESTALE", "rootfs directory removal target identity changed")
-            os.rmdir(leaf, dir_fd=parent)
-        finally:
-            os.close(parent)
-        return {"removed": True}
-
     def rename_noreplace(self, source: Any, destination: Any) -> dict[str, bool]:
         source_parent, source_leaf = self._parent(source)
         destination_parent, destination_leaf = self._parent(destination)
@@ -395,12 +349,6 @@ def main() -> int:
         "fsync": lambda request: rootfs.fsync(request["handle"]),
         "close": lambda request: rootfs.close_handle(request["handle"]),
         "fsync_dir": lambda request: rootfs.fsync_dir(request["path"]),
-        "link": lambda request: rootfs.link(request["source"], request["destination"]),
-        "rename_replace_exact": lambda request: rootfs.rename_replace_exact(
-            request["source"], request["destination"], request["sourceExpected"], request["destinationExpected"],
-        ),
-        "unlink_exact": lambda request: rootfs.unlink_exact(request["path"], request["expected"]),
-        "rmdir_exact": lambda request: rootfs.rmdir_exact(request["path"], request["expected"]),
         "rename_noreplace": lambda request: rootfs.rename_noreplace(request["source"], request["destination"]),
         "statfs": lambda request: rootfs.statfs(),
     }

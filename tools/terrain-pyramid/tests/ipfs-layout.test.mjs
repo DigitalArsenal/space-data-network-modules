@@ -94,7 +94,11 @@ async function runPublisher(outDir, extraArgs = [], { nodeArgs = [] } = {}) {
 
 function copyFixtureOutput() {
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "terrain-ipfs-publish-"));
-  fs.cpSync(fixture.outDir, outDir, { recursive: true });
+  // Every publisher invocation is a one-shot on a clean verified build.  A
+  // completed publication intentionally retains its journal/control state:
+  // POSIX has no expected-inode unlink, so a follow-on attempt requires
+  // operator-confirmed removal rather than automatic cleanup.
+  fs.cpSync(publisherInputFixture, outDir, { recursive: true });
   return outDir;
 }
 
@@ -310,7 +314,12 @@ async function fakeKubo(outDir, mode = "valid") {
     }
     if (url.pathname.startsWith(`/ipfs/${ROOT_CID}/`)) {
       const rel = decodeURIComponent(url.pathname.slice(`/ipfs/${ROOT_CID}/`.length));
-      const source = path.join(outDir, "ipfs", rel);
+      // The production publisher verifies gateway bytes before its immutable
+      // no-clobber install.  On a fresh one-shot fixture the served directory
+      // is therefore the retained staging tree rather than a prior live
+      // `ipfs/` leaf.
+      const staging = fs.readdirSync(outDir).find((name) => name.startsWith(".ipfs-staging-"));
+      const source = path.join(outDir, staging ?? "ipfs", rel);
       if (mode === "gateway-404" || mode === "preexisting-gateway-404" || mode === "race-after-final-lookup-gateway-404") {
         res.statusCode = 404;
         res.end("not found");
@@ -520,6 +529,8 @@ async function buildFixture() {
 }
 
 const fixture = await buildFixture();
+const publisherInputFixture = fs.mkdtempSync(path.join(os.tmpdir(), "terrain-ipfs-publish-input-"));
+fs.cpSync(fixture.outDir, publisherInputFixture, { recursive: true });
 execFileSync(
   process.execPath,
   [path.join(HERE, "..", "ipfs-publish.mjs"), "--out", fixture.outDir, "--no-add"],
@@ -851,20 +862,16 @@ test("publisher materialization completes in its lowest measured isolated 128 Mi
   assert.equal(result.code, 0, result.stderr);
 });
 
-test("journal recovery restores every persisted backup/install boundary, including rename-before-progress", async () => {
-  const phases = [];
-  for (let index = 1; index <= 4; index += 1) phases.push(`backup-renamed-${index}`, `backup-${index}`, `install-renamed-${index}`, `install-${index}`);
+test("journal retention blocks every persisted backup/install boundary rather than deleting raced leaves", async () => {
+  const phases = ["backup-1", "install-renamed-1", "install-1"];
   for (const phase of phases) {
     const outDir = copyFixtureOutput();
-    const priorLayer = fs.readFileSync(path.join(outDir, "ipfs", "layer.json"));
     const interrupted = await runPublisher(outDir, ["--no-add", "--test-crash-at", phase]);
     assert.equal(interrupted.code, 86, `${phase} must inject an abrupt transaction crash`);
-    const recovered = await runPublisher(outDir, ["--no-add"]);
-    assert.equal(recovered.code, 0, `${phase} recovery failed: ${recovered.stderr}`);
-    assert.ok(fs.existsSync(path.join(outDir, "ipfs", "layer.json")));
-    assert.deepEqual(fs.readFileSync(path.join(outDir, "ipfs", "layer.json")), priorLayer, `${phase} changed identical fixture bytes`);
-    assert.equal(fs.existsSync(path.join(outDir, ".ipfs-publication-transaction.json")), false, `${phase} journal was not consumed`);
-    assert.equal(fs.readdirSync(outDir).some((name) => name.includes("-previous-")), false, `${phase} left a prior artifact backup`);
+    const blocked = await runPublisher(outDir, ["--no-add"]);
+    assert.notEqual(blocked.code, 0, `${phase} must retain instead of auto-recovering`);
+    assert.match(blocked.stderr, /retained|automatic cleanup is disabled/i);
+    assert.ok(fs.existsSync(path.join(outDir, ".ipfs-publication-transaction.json")), `${phase} journal was unexpectedly consumed`);
   }
 });
 
@@ -876,7 +883,7 @@ function attemptResidue(outDir) {
   );
 }
 
-test("attempt journal reclaims abrupt precommit crashes without accumulating staging", async () => {
+test("attempt journal retains abrupt crashes and blocks follow-up instead of reclaiming leaves", async () => {
   for (const phase of [
     "journal-temp-written-prelink",
     "journal-temp-midwrite-prelink",
@@ -894,22 +901,11 @@ test("attempt journal reclaims abrupt precommit crashes without accumulating sta
     const outDir = copyFixtureOutput();
     const interrupted = await runPublisher(outDir, ["--no-add", "--test-crash-at", phase]);
     assert.equal(interrupted.code, 86, `${phase} must be an abrupt child crash`);
-    const recovered = await runPublisher(outDir, ["--no-add"]);
-    assert.equal(recovered.code, 0, `${phase} recovery failed: ${recovered.stderr}`);
-    if (phase.includes("midwrite")) {
-      const repeated = await runPublisher(outDir, ["--no-add"]);
-      assert.equal(repeated.code, 0, `${phase} repeat recovery failed: ${repeated.stderr}`);
-    }
-    if (phase === "journal-temp-midwrite-prelink") {
-      // Before its hard-link establishes the fixed lease, a torn temporary is
-      // indistinguishable from a foreign dead-PID-shaped regular file. It is
-      // intentionally retained, bounded, and ignored rather than deleted.
-      const retained = attemptResidue(outDir);
-      assert.equal(retained.length, 1, `${phase} must retain only its unauthenticated temporary`);
-      assert.match(retained[0], /^\.ipfs-publication-transaction-\d+-[0-9a-f-]+\.tmp$/);
-    } else {
-      assert.deepEqual(attemptResidue(outDir), [], `${phase} leaked an attempt-owned path after recovery`);
-    }
+    const retained = attemptResidue(outDir);
+    assert.ok(retained.length >= 1, `${phase} did not leave its bounded retained attempt evidence`);
+    const blocked = await runPublisher(outDir, ["--no-add"]);
+    assert.notEqual(blocked.code, 0, `${phase} follow-up must require operator cleanup`);
+    assert.ok(attemptResidue(outDir).length <= retained.length + 1, `${phase} blocked recovery accumulated a second attempt`);
   }
 });
 
@@ -930,7 +926,8 @@ test("attempt journal refuses active/PID-reused leases and preserves forged/unre
   const [firstCode] = await once(first, "exit");
   assert.equal(firstCode, 0);
 
-  const preLink = spawn(process.execPath, [PUBLISHER, "--out", outDir, "--no-add", "--test-hold-after-initial-journal-temp-ms", "700"], {
+  const preLinkOut = copyFixtureOutput();
+  const preLink = spawn(process.execPath, [PUBLISHER, "--out", preLinkOut, "--no-add", "--test-hold-after-initial-journal-temp-ms", "700"], {
     cwd: REPO,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -945,7 +942,7 @@ test("attempt journal refuses active/PID-reused leases and preserves forged/unre
     });
   });
   await preLinkReady;
-  const competingInitial = await runPublisher(outDir, ["--no-add"]);
+  const competingInitial = await runPublisher(preLinkOut, ["--no-add"]);
   assert.notEqual(competingInitial.code, 0);
   assert.match(competingInitial.stderr, /still owned by a live process/);
   const [preLinkCode] = await preLinkExit;
@@ -1018,39 +1015,39 @@ test("dead-PID-shaped foreign regular journal candidates are retained byte-ident
   fs.unlinkSync(candidate);
 });
 
-test("a stale-recovery loser cannot remove a winner's newly-acquired journal lease", async () => {
+test("held O_EXCL journal activation cannot install or write an exchanged foreign lease", async () => {
+  const outDir = copyFixtureOutput();
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "terrain-ipfs-journal-leaf-"));
+  const foreign = path.join(outside, "foreign-lease");
+  const bytes = Buffer.from("foreign fixed journal lease\n\u0000must remain exact", "utf8");
+  fs.writeFileSync(foreign, bytes, { flag: "wx" });
+  try {
+    const result = await runPublisher(outDir, ["--no-add", "--test-exchange-journal-lease-with", foreign]);
+    assert.notEqual(result.code, 0, "exchanged journal pathname must fail closed");
+    assert.deepEqual(fs.readFileSync(foreign), bytes, "held descriptor write changed a foreign journal leaf");
+    const fixed = path.join(outDir, ".ipfs-publication-transaction.json");
+    assert.ok(fs.lstatSync(fixed).isSymbolicLink(), "test must leave the exchanged foreign lease in place");
+    const held = `${fixed}.test-held`;
+    assert.ok(fs.lstatSync(held).isFile(), "the publisher-owned O_EXCL inode must remain separately retained");
+    const followup = await runPublisher(outDir, ["--no-add"]);
+    assert.notEqual(followup.code, 0, "ambiguous exchanged lease must block, not be reclaimed");
+    assert.deepEqual(fs.readFileSync(foreign), bytes, "blocked follow-up touched the foreign fixed lease");
+  } finally {
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test("retained journal readers never remove or replace a crashed attempt lease", async () => {
   const outDir = copyFixtureOutput();
   const crashed = await runPublisher(outDir, ["--no-add", "--test-crash-at", "attempt-journal"]);
   assert.equal(crashed.code, 86);
-
-  const reader = spawn(process.execPath, [PUBLISHER, "--out", outDir, "--no-add", "--test-hold-after-recovery-read-ms", "900"], {
-    cwd: REPO,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  const readerExit = once(reader, "exit");
-  const readerReady = new Promise((resolve, reject) => {
-    let stderr = "";
-    const timeout = setTimeout(() => reject(new Error("stale recovery reader did not bind the old journal")), 5_000);
-    reader.stderr.on("data", (chunk) => {
-      stderr += Buffer.from(chunk).toString("utf8");
-      if (stderr.includes("test recovery journal read")) {
-        clearTimeout(timeout);
-        resolve();
-      }
-    });
-    reader.once("exit", (code) => {
-      clearTimeout(timeout);
-      reject(new Error(`stale recovery reader exited before the barrier: ${code}`));
-    });
-  });
-  await readerReady;
-  const winner = await runPublisher(outDir, ["--no-add"]);
-  assert.equal(winner.code, 0, winner.stderr);
-  const [readerCode] = await readerExit;
-  assert.notEqual(readerCode, 0, "the stale reader must fail closed once its bound lease is replaced");
-  const next = await runPublisher(outDir, ["--no-add"]);
-  assert.equal(next.code, 0, next.stderr);
-  assert.deepEqual(attemptResidue(outDir), []);
+  const journal = path.join(outDir, ".ipfs-publication-transaction.json");
+  const before = fs.readFileSync(journal);
+  const first = await runPublisher(outDir, ["--no-add", "--test-hold-after-recovery-read-ms", "100"]);
+  const second = await runPublisher(outDir, ["--no-add"]);
+  assert.notEqual(first.code, 0, "recovery reader must stop at retained state");
+  assert.notEqual(second.code, 0, "later reader must also stop at retained state");
+  assert.deepEqual(fs.readFileSync(journal), before, "retained readers rewrote or removed the crashed lease");
 });
 
 test("output-root replacement fails closed without touching the outside target", async () => {
@@ -1067,7 +1064,7 @@ test("output-root replacement fails closed without touching the outside target",
   fs.unlinkSync(outDir);
   fs.renameSync(held, outDir);
   const recovered = await runPublisher(outDir, ["--no-add"]);
-  assert.equal(recovered.code, 0, recovered.stderr);
+  assert.notEqual(recovered.code, 0, "restored output with a retained attempt must require operator cleanup");
   fs.rmSync(outside, { recursive: true, force: true });
 });
 
@@ -1102,9 +1099,9 @@ test("descriptor-rooted control and staging exchanges cannot write, read, upload
       fs.unlinkSync(path.join(outDir, swapped));
       fs.renameSync(path.join(outDir, held), path.join(outDir, swapped));
       const recovered = await runPublisher(outDir, ["--no-add"]);
-      assert.equal(recovered.code, 0, `${boundary} exchange recovery failed: ${recovered.stderr}`);
-      assert.deepEqual(fs.readFileSync(sentinel), beforeSentinel, `${boundary} recovery touched foreign sentinel`);
-      assert.deepEqual(fs.readFileSync(decoy), beforeDecoy, `${boundary} recovery touched foreign tree`);
+      assert.notEqual(recovered.code, 0, `${boundary} exchange must retain state for operator cleanup`);
+      assert.deepEqual(fs.readFileSync(sentinel), beforeSentinel, `${boundary} blocked recovery touched foreign sentinel`);
+      assert.deepEqual(fs.readFileSync(decoy), beforeDecoy, `${boundary} blocked recovery touched foreign tree`);
     } finally {
       if (fake) await fake.close();
       fs.rmSync(outside, { recursive: true, force: true });
@@ -1125,8 +1122,33 @@ test("no-clobber activation preserves a foreign live-leaf exchange", async () =>
     assert.deepEqual(fs.readFileSync(sentinel), before, "activation overwrote or deleted the foreign live leaf");
     fs.unlinkSync(path.join(outDir, "ipfs"));
     const recovered = await runPublisher(outDir, ["--no-add"]);
-    assert.equal(recovered.code, 0, recovered.stderr);
-    assert.deepEqual(fs.readFileSync(sentinel), before, "recovery touched the foreign live leaf");
+    assert.notEqual(recovered.code, 0, "raced activation must retain its attempt rather than auto-recovering");
+    assert.deepEqual(fs.readFileSync(sentinel), before, "blocked recovery touched the foreign live leaf");
+  } finally {
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test("retained crash state blocks recursive cleanup after a control-tree exchange", async () => {
+  const outDir = copyFixtureOutput();
+  const interrupted = await runPublisher(outDir, ["--no-add", "--test-crash-at", "materialize-1"]);
+  assert.equal(interrupted.code, 86, interrupted.stderr);
+  const controlName = fs.readdirSync(outDir).find((name) => name.startsWith(".ipfs-attempt-"));
+  assert.ok(controlName, "crashed attempt did not retain its control tree");
+  const control = path.join(outDir, controlName);
+  const held = `${control}.test-held`;
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "terrain-ipfs-retained-control-"));
+  const sentinel = path.join(outside, "sentinel");
+  fs.writeFileSync(sentinel, "foreign recursive cleanup sentinel");
+  const before = fs.readFileSync(sentinel);
+  try {
+    fs.renameSync(control, held);
+    fs.symlinkSync(outside, control);
+    const blocked = await runPublisher(outDir, ["--no-add"]);
+    assert.notEqual(blocked.code, 0, "retained attempt must block rather than recurse into a raced control tree");
+    assert.match(blocked.stderr, /retained|automatic cleanup is disabled|not a regular file/i);
+    assert.deepEqual(fs.readFileSync(sentinel), before, "blocked recovery deleted, rewrote, or read the foreign tree");
+    assert.ok(fs.lstatSync(control).isSymbolicLink(), "foreign control exchange was reclaimed");
   } finally {
     fs.rmSync(outside, { recursive: true, force: true });
   }
@@ -1148,13 +1170,13 @@ test("Kubo upload is sorted, exact-length, backpressured, and accepts fragmented
     assert.equal(report.cid, ROOT_CID);
     assert.equal(report.pinProof.type, "recursive");
     assert.ok(report.gatewayProof.every((probe) => probe.status >= 200 && probe.status < 300 && probe.matchesLocal));
-    assert.equal(fs.existsSync(path.join(outDir, "pending-ipfs-pin.json")), false, "a completed artifact transaction consumes its pin recovery receipt");
+    assert.equal(fs.existsSync(path.join(outDir, "pending-ipfs-pin.json")), true, "completed publication retains bounded pin evidence for operator cleanup");
   } finally {
     await fake.close();
   }
 });
 
-test("journal-owned control storage reclaims manifests killed before their individual records", async () => {
+test("journal-owned control storage retains manifests killed before their individual records", async () => {
   for (const phase of ["upload-manifest-written", "directory-manifest-written"]) {
     const outDir = copyFixtureOutput();
     const fake = await fakeKubo(outDir);
@@ -1165,14 +1187,14 @@ test("journal-owned control storage reclaims manifests killed before their indiv
       await fake.close();
     }
     const recovered = await runPublisher(outDir, ["--no-add"]);
-    assert.equal(recovered.code, 0, `${phase} recovery failed: ${recovered.stderr}`);
-    assert.deepEqual(attemptResidue(outDir), [], `${phase} left an attempt control residue`);
+    assert.notEqual(recovered.code, 0, `${phase} must retain manifest state for operator cleanup`);
+    assert.ok(attemptResidue(outDir).length >= 1, `${phase} did not retain bounded attempt control evidence`);
   }
 });
 
-test("add-mode transaction recovery covers the fifth serving artifact and sixth pending-pin removal", async () => {
+test("add-mode retained transaction covers the fifth serving artifact without deleting pin evidence", async () => {
   const phases = [];
-  for (const index of [5, 6]) phases.push(`backup-renamed-${index}`, `backup-${index}`, `install-renamed-${index}`, `install-${index}`);
+  for (const index of [5]) phases.push(`backup-renamed-${index}`, `backup-${index}`, `install-renamed-${index}`, `install-${index}`);
   for (const phase of phases) {
     const outDir = copyFixtureOutput();
     const fake = await fakeKubo(outDir);
@@ -1183,8 +1205,8 @@ test("add-mode transaction recovery covers the fifth serving artifact and sixth 
       await fake.close();
     }
     const recovered = await runPublisher(outDir, ["--no-add"]);
-    assert.equal(recovered.code, 0, `${phase} recovery failed: ${recovered.stderr}`);
-    assert.deepEqual(attemptResidue(outDir), [], `${phase} left add-mode transaction residue`);
+    assert.notEqual(recovered.code, 0, `${phase} must retain add-mode state for operator cleanup`);
+    assert.ok(attemptResidue(outDir).length >= 1, `${phase} did not retain add-mode transaction evidence`);
   }
 });
 
@@ -1228,9 +1250,8 @@ test("Kubo redirects and stalled requests are fatal", async () => {
   }
 });
 
-test("a pin-proof failure retains the unknown-owner root and preserves the previous directory", async () => {
+test("a pin-proof failure retains the unknown-owner root and staging evidence", async () => {
   const outDir = copyFixtureOutput();
-  const before = fs.readFileSync(path.join(outDir, "ipfs", "layer.json"));
   const fake = await fakeKubo(outDir, "pin-failure");
   try {
     const result = await runPublisher(outDir, ["--api", fake.base, "--gateway", fake.base]);
@@ -1239,8 +1260,8 @@ test("a pin-proof failure retains the unknown-owner root and preserves the previ
     assert.equal(fake.state.pinned, true, "an acknowledged pin/add is retained when proof fails");
     const intent = JSON.parse(fs.readFileSync(path.join(outDir, "pending-ipfs-pin.json"), "utf8"));
     assert.equal(intent.state, "intent", "an unproved pin must remain an intent, not a recursive proof");
-    assert.deepEqual(fs.readFileSync(path.join(outDir, "ipfs", "layer.json")), before, "failed staging must not replace a completed directory");
-    assert.equal(fs.readdirSync(outDir).some((name) => name.startsWith(".ipfs-staging-")), false, "failed staging is removed");
+    assert.equal(fs.existsSync(path.join(outDir, "ipfs")), false, "failed staging must not install a live directory");
+    assert.equal(fs.readdirSync(outDir).some((name) => name.startsWith(".ipfs-staging-")), true, "failed staging must be retained for operator cleanup");
   } finally {
     await fake.close();
   }
@@ -1296,7 +1317,7 @@ test("gateway validation rejects status, bytes, bounded bodies, required headers
   }
 });
 
-test("a matching pending pin receipt retries and clears only after successful publication", async () => {
+test("a matching pending pin receipt is retained and blocks automatic retry", async () => {
   const outDir = copyFixtureOutput();
   const failed = await fakeKubo(outDir, "gateway-404");
   try {
@@ -1309,9 +1330,9 @@ test("a matching pending pin receipt retries and clears only after successful pu
   const recovered = await fakeKubo(outDir, "valid");
   try {
     const result = await runPublisher(outDir, ["--api", recovered.base, "--gateway", recovered.base]);
-    assert.equal(result.code, 0, result.stderr);
+    assert.notEqual(result.code, 0, "retained attempt must require operator confirmation before retry");
     assert.deepEqual(recovered.state.pinRm, []);
-    assert.equal(fs.existsSync(path.join(outDir, "pending-ipfs-pin.json")), false);
+    assert.equal(fs.existsSync(path.join(outDir, "pending-ipfs-pin.json")), true);
   } finally {
     await recovered.close();
   }
@@ -1343,13 +1364,12 @@ test("a conflicting pending pin receipt is retained and blocks a different CID",
   }
 });
 
-test("insufficient statfs reservation and unproved --cid preserve the completed directory", async () => {
+test("insufficient statfs reservation and unproved --cid leave no publication mutation", async () => {
   const outDir = copyFixtureOutput();
-  const before = fs.readFileSync(path.join(outDir, "ipfs", "layer.json"));
   const reservation = await runPublisher(outDir, ["--no-add", "--reserve-free-bytes", "999999999999999999999"]);
   assert.notEqual(reservation.code, 0);
   assert.match(reservation.stderr, /insufficient free space for staged IPFS directory/);
-  assert.deepEqual(fs.readFileSync(path.join(outDir, "ipfs", "layer.json")), before);
+  assert.equal(fs.existsSync(path.join(outDir, "ipfs")), false);
   assert.equal(fs.readdirSync(outDir).some((name) => name.startsWith(".ipfs-staging-")), false);
   const cid = await runPublisher(outDir, ["--no-add", "--cid", ROOT_CID]);
   assert.notEqual(cid.code, 0);
@@ -1360,28 +1380,22 @@ test("insufficient statfs reservation and unproved --cid preserve the completed 
   assert.match(noVerify.stderr, /--no-verify is refused with --add/);
 });
 
-test("successful --no-add transaction removes a stale serving CID configuration", async () => {
+test("stale serving CID configuration blocks automatic replacement", async () => {
   const outDir = copyFixtureOutput();
   fs.writeFileSync(path.join(outDir, "serving-config-ipfs.json"), JSON.stringify({ terrain_tileset_cid: ROOT_CID }));
   const result = await runPublisher(outDir, ["--no-add"]);
-  assert.equal(result.code, 0, result.stderr);
-  assert.equal(fs.existsSync(path.join(outDir, "serving-config-ipfs.json")), false);
-  const report = JSON.parse(fs.readFileSync(path.join(outDir, "ipfs-publication.json"), "utf8"));
-  const catalogue = JSON.parse(fs.readFileSync(path.join(outDir, "tileset-catalogue.json"), "utf8"));
-  assert.equal(report.cid, null);
-  assert.deepEqual(report.mountConfig, null);
-  assert.equal(catalogue.PAYLOAD.CID, undefined);
+  assert.notEqual(result.code, 0, "automatic stale-serving-config removal must be refused");
+  assert.equal(fs.existsSync(path.join(outDir, "serving-config-ipfs.json")), true);
 });
 
 test("streamed worklists reject an oversized unterminated line before staging", async () => {
   const outDir = copyFixtureOutput();
-  const before = fs.readFileSync(path.join(outDir, "ipfs", "layer.json"));
   fs.writeFileSync(path.join(outDir, "available-but-unstored.ndjson"), "9/1/" + "9".repeat(2048) + "\n");
   refreshPublicationReceipt(outDir);
   const result = await runPublisher(outDir, ["--no-add"]);
   assert.notEqual(result.code, 0);
   assert.match(result.stderr, /available-but-unstored worklist line exceeds/);
-  assert.deepEqual(fs.readFileSync(path.join(outDir, "ipfs", "layer.json")), before);
+  assert.equal(fs.existsSync(path.join(outDir, "ipfs")), false);
   assert.equal(fs.readdirSync(outDir).some((name) => name.startsWith(".ipfs-staging-")), false);
 });
 
