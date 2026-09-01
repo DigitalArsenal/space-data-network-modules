@@ -551,7 +551,11 @@ export class BoundedGranuleCache {
         onRetry: (event) => { retries += 1; options.onRetry?.(event); },
       });
       this.retries += retries;
-      const body = response.ok ? Buffer.from(await response.arrayBuffer()) : Buffer.alloc(0);
+      // Consume every terminal response before provenance is allowed to
+      // publish it. A 404 is evidence too: leaving its body unread would let
+      // the request timeout stop at headers and would record a fabricated
+      // zero-length response digest rather than what the provider returned.
+      const body = Buffer.from(await response.arrayBuffer());
       return this.put(url, response.status, body, { beforePublish: options.beforePublish });
     });
   }
