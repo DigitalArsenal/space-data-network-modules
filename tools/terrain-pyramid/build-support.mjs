@@ -10,6 +10,11 @@ import fs from "node:fs";
 import path from "node:path";
 
 export const GLOBAL_STATE_VERSION = 1;
+// The coordinator keeps one state/config entry per shard. This is a reviewed
+// control-plane ceiling, not a throughput hint: it bounds state, pending-work,
+// shard-config, and source/merge path collections before any allocation.
+export const MAX_GLOBAL_SHARDS = 256;
+export const MAX_GLOBAL_REGIONS = 256;
 
 export function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
@@ -867,6 +872,7 @@ export async function fetchWithRetry(url, {
   retryBaseMs = 250,
   sleepImpl = sleep,
   onRetry = () => {},
+  onDiscardResponse = () => {},
 } = {}) {
   assert.ok(Number.isInteger(retries) && retries >= 0, "retries must be a non-negative integer");
   assert.ok(Number.isFinite(retryBaseMs) && retryBaseMs >= 0, "retryBaseMs must be non-negative");
@@ -876,6 +882,20 @@ export async function fetchWithRetry(url, {
       const response = await fetchImpl(url, { redirect: "follow" });
       if (!retryableStatus(response.status) || attempt === retries) return response;
       lastError = new Error(`transient HTTP ${response.status}`);
+      // A source observer owns a live timer/metadata slot for every response.
+      // Dispose the rejected attempt before retrying the same URL, otherwise
+      // its next fetch is (correctly) seen as a duplicate in-flight request.
+      try {
+        if (response.body?.cancel) await response.body.cancel();
+        else if (response.body?.getReader) {
+          const reader = response.body.getReader();
+          try { await reader.cancel(); } finally { reader.releaseLock?.(); }
+        } else if (typeof response.arrayBuffer === "function") {
+          await response.arrayBuffer();
+        }
+      } finally {
+        await onDiscardResponse({ url, response, attempt });
+      }
     } catch (error) {
       lastError = error;
       if (attempt === retries) throw error;
@@ -887,11 +907,92 @@ export async function fetchWithRetry(url, {
   throw lastError ?? new Error(`fetch retry loop ended unexpectedly for ${url}`);
 }
 
+function responseHeader(response, name) {
+  try {
+    if (typeof response.headers?.get === "function") return response.headers.get(name) ?? undefined;
+    if (response.headers && typeof response.headers === "object") return response.headers[name] ?? response.headers[name.toLowerCase()];
+  } catch {}
+  return undefined;
+}
+
+async function readResponseBodyBounded(response, {
+  maxBytes = Infinity,
+  requireStreaming = false,
+  onLimit = undefined,
+} = {}) {
+  assert.ok(maxBytes === Infinity || (Number.isSafeInteger(maxBytes) && maxBytes >= 0),
+    "response maxBytes must be a non-negative safe integer");
+  const contentLength = responseHeader(response, "content-length");
+  if (contentLength !== undefined) {
+    assert.match(String(contentLength).trim(), /^\d+$/, "response Content-Length must be a decimal byte count");
+    const announced = Number(contentLength);
+    assert.ok(Number.isSafeInteger(announced), "response Content-Length exceeds safe integer range");
+    if (announced > maxBytes) {
+      await onLimit?.({ announced, maxBytes });
+      try { await response.body?.cancel?.(); } catch {}
+      throw new Error(`source response Content-Length ${announced} exceeds approved ${maxBytes}-byte object cap`);
+    }
+  }
+  const chunks = [];
+  let total = 0;
+  const append = async (chunk) => {
+    const bytes = Buffer.from(chunk);
+    if (bytes.length > maxBytes - total) {
+      await onLimit?.({ announced: total + bytes.length, maxBytes });
+      throw new Error(`source response body exceeds approved ${maxBytes}-byte object cap`);
+    }
+    chunks.push(bytes);
+    total += bytes.length;
+  };
+  const stream = response.body;
+  if (stream?.getReader) {
+    const reader = stream.getReader();
+    try {
+      while (true) {
+        const next = await reader.read();
+        if (next.done) break;
+        await append(next.value);
+      }
+    } catch (error) {
+      try { await reader.cancel(error); } catch {}
+      throw error;
+    } finally {
+      reader.releaseLock?.();
+    }
+    return Buffer.concat(chunks, total);
+  }
+  if (stream && typeof stream[Symbol.asyncIterator] === "function") {
+    try {
+      for await (const chunk of stream) await append(chunk);
+    } catch (error) {
+      stream.destroy?.(error);
+      throw error;
+    }
+    return Buffer.concat(chunks, total);
+  }
+  // A no-content response is a valid streamed zero-byte object. Any body we
+  // need to consume for a source-policy cut must expose a stream; arrayBuffer
+  // would allocate it before the cap could be enforced.
+  if (requireStreaming) {
+    if (stream == null && (String(contentLength).trim() === "0" || response.status === 204)) return Buffer.alloc(0);
+    throw new Error("source response has no readable streaming body");
+  }
+  const fallback = Buffer.from(await response.arrayBuffer());
+  await append(fallback);
+  return Buffer.concat(chunks, total);
+}
+
 function atomicWrite(file, bytes) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
-  fs.writeFileSync(temporary, bytes);
+  const handle = fs.openSync(temporary, "wx", 0o600);
+  try {
+    fs.writeFileSync(handle, bytes);
+    fs.fsyncSync(handle);
+  } finally { fs.closeSync(handle); }
   fs.renameSync(temporary, file);
+  const directory = fs.openSync(path.dirname(file), "r");
+  try { fs.fsyncSync(directory); } finally { fs.closeSync(directory); }
 }
 
 function readJson(file, fallback = null) {
@@ -1284,33 +1385,41 @@ export class BoundedGranuleCache {
   // immutable generation while the flow consumes it.
   read(url) { return this.readEntryUnlocked(url); }
 
-  async get(url) {
+  async get(url, { beforeUse = undefined } = {}) {
     return this.withGlobalLock(async () => {
       this.reclaimStaleLeasesUnlocked();
       this.entriesUnlocked({ reclaimOrphans: true });
       const cached = this.readEntryUnlocked(url);
       if (!cached) return null;
+      // A source-backed caller may make cache visibility contingent on a
+      // receipt.  Run this while the current pointer is still protected by
+      // the cache lock so an unattributed generation is never returned.
+      await beforeUse?.({ url, status: cached.status, body: cached.body });
       const pointer = readJson(cached.entry.pointer);
       atomicWrite(cached.entry.pointer, `${JSON.stringify({ ...pointer, lastUsed: this.now() })}\n`);
       return { status: cached.status, body: cached.body, hit: true };
     });
   }
 
-  async put(url, status, body) {
+  async put(url, status, body, { beforePublish = undefined } = {}) {
     return this.withGlobalLock(async () => {
       this.reclaimStaleLeasesUnlocked();
       this.entriesUnlocked({ reclaimOrphans: true });
+      // The immutable body is complete, but current.json has not been made
+      // visible yet.  Provenance receipts belong in this exact window: a
+      // callback failure leaves no cache generation for another worker to use.
+      await beforePublish?.({ url, status, body: Buffer.from(body) });
       return { ...this.publishUnlocked(url, status, body), hit: false };
     });
   }
 
   async fetch(url, options = {}) {
     await this.acquire(url);
-    const cached = await this.get(url);
+    const cached = await this.get(url, { beforeUse: options.beforeUse });
     if (cached) return cached;
     const key = this.key(url);
     return this.withProducerLock(key, async () => {
-      const appeared = await this.get(url);
+      const appeared = await this.get(url, { beforeUse: options.beforeUse });
       if (appeared) return appeared;
       let retries = 0;
       const response = await fetchWithRetry(url, {
@@ -1318,8 +1427,18 @@ export class BoundedGranuleCache {
         onRetry: (event) => { retries += 1; options.onRetry?.(event); },
       });
       this.retries += retries;
-      const body = response.ok ? Buffer.from(await response.arrayBuffer()) : Buffer.alloc(0);
-      return this.put(url, response.status, body);
+      // Consume every terminal response before provenance is allowed to
+      // publish it. A 404 is evidence too: leaving its body unread would let
+      // the request timeout stop at headers and would record a fabricated
+      // zero-length response digest rather than what the provider returned.
+      // Source-policy callers require a stream so the cap is checked before
+      // a hostile response can allocate an arbitrary arrayBuffer.
+      const body = await readResponseBodyBounded(response, {
+        maxBytes: options.maxResponseBytes,
+        requireStreaming: options.requireStreamingBody,
+        onLimit: options.onBodyLimit,
+      });
+      return this.put(url, response.status, body, { beforePublish: options.beforePublish });
     });
   }
 }
@@ -1327,7 +1446,19 @@ export class BoundedGranuleCache {
 function splitRegion(region, shardCount) {
   const west = Number(region.west);
   const east = Number(region.east);
-  assert.ok(Number.isFinite(west) && Number.isFinite(east) && east > west, `region ${region.name ?? "(unnamed)"} needs west < east`);
+  const south = Number(region.south);
+  const north = Number(region.north);
+  // The coordinator accepts one non-wrapping canonical WGS84 interval per
+  // region. Apart from rejecting malformed geographic policy, this bounds
+  // the degree-cut loop before it can allocate from an arbitrary config span.
+  assert.ok(Number.isFinite(west) && Number.isFinite(east) &&
+    west >= -180 && west < east && east <= 180,
+  `region ${region.name ?? "(unnamed)"} needs canonical longitude bounds -180 <= west < east <= 180`);
+  assert.ok(Number.isFinite(south) && Number.isFinite(north) &&
+    south >= -90 && south < north && north <= 90,
+  `region ${region.name ?? "(unnamed)"} needs canonical latitude bounds -90 <= south < north <= 90`);
+  assert.ok(Math.ceil(east) - Math.floor(west) <= 361,
+    `region ${region.name ?? "(unnamed)"} exceeds the 361-slice geographic policy`);
   const cuts = [west];
   // Start strictly east of the existing west edge: an integral west bound is
   // already in `cuts`, and repeating it would create an empty shard region.
@@ -1350,9 +1481,11 @@ function splitRegion(region, shardCount) {
 
 /** Build deterministic, non-overlapping longitude slices for independent runs. */
 export function makeShardConfigs(runConfig, shardCount, { outDir, cacheDir, cacheMaxBytes } = {}) {
-  assert.ok(Number.isInteger(shardCount) && shardCount > 0, "shardCount must be a positive integer");
+  assert.ok(Number.isInteger(shardCount) && shardCount > 0 && shardCount <= MAX_GLOBAL_SHARDS,
+    `shardCount must be in [1, ${MAX_GLOBAL_SHARDS}]`);
   const flow = runConfig.flow_config ?? {};
-  assert.ok(Array.isArray(flow.regions) && flow.regions.length > 0, "flow_config.regions is required");
+  assert.ok(Array.isArray(flow.regions) && flow.regions.length > 0 && flow.regions.length <= MAX_GLOBAL_REGIONS,
+    `flow_config.regions must contain [1, ${MAX_GLOBAL_REGIONS}] regions`);
   const regions = Array.from({ length: shardCount }, () => []);
   for (const region of flow.regions) {
     const pieces = splitRegion(region, shardCount);
@@ -1374,6 +1507,10 @@ export function statePath(outDir) {
 }
 
 export function initializeGlobalState(outDir, runConfig, shardCount) {
+  // This public entry point can be called without makeShardConfigs. Check
+  // before state.shards allocates one object per claimed coordinator shard.
+  assert.ok(Number.isInteger(shardCount) && shardCount > 0 && shardCount <= MAX_GLOBAL_SHARDS,
+    `shardCount must be in [1, ${MAX_GLOBAL_SHARDS}]`);
   const file = statePath(outDir);
   const digest = sha256(canonicalJson(runConfig));
   const existing = readJson(file);

@@ -47,25 +47,76 @@ import path from "node:path";
 import process from "node:process";
 
 import { iterateStreamFile, readDtt } from "./dtt-reader.mjs";
+import { canonicalJson, readSourceManifestEvidence, sha256, sourcePolicyContract } from "./source-provenance.mjs";
 
-const args = {};
+const MAX_LEVEL_SUMMARIES = 64;
+const MAX_SAMPLES_PER_LEVEL = 33; // measure's 32 high-relief entries + one flat control
+// This report carries at most 2,112 sample rows.  Put a byte bound in front of
+// JSON.parse as well: validating a post-parse array cannot undo an allocation
+// from a hostile or accidentally unbounded report.
+const MAX_ACCURACY_REPORT_BYTES = 4 * 1024 * 1024;
+
+const args = { allowLegacyRegional: false };
 for (let i = 2; i < process.argv.length; i += 1) {
   if (process.argv[i] === "--out") args.out = process.argv[++i];
   else if (process.argv[i] === "--json") args.json = true;
+  else if (process.argv[i] === "--allow-legacy-regional") args.allowLegacyRegional = true;
   else throw new Error(`unknown argument ${process.argv[i]}`);
 }
 if (!args.out) throw new Error("--out <store dir> is required");
 const outDir = path.resolve(args.out);
 
-// The record's own figure, read straight off the FlatBuffer.
-async function statedAccuracyByAddress(streamPath) {
-  const out = new Map();
-  // The accuracy report names only a bounded sample.  Index only those
-  // addresses while streaming the global record file; storing every global
-  // address-to-accuracy pair would merely move the old full-buffer failure.
+async function expectedSourceLineage() {
+  const configPath = path.join(outDir, "approved-run-config.json");
+  if (!fs.existsSync(configPath)) {
+    assert.ok(args.allowLegacyRegional,
+      "global cross-check requires approved-run-config.json; use --allow-legacy-regional only for an explicit regional compatibility run");
+    return { kind: "legacy-regional" };
+  }
+  const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+  const contract = sourcePolicyContract(config);
+  const merge = JSON.parse(fs.readFileSync(path.join(outDir, "global-merge-report.json"), "utf8"));
+  assert.equal(merge.completion, "complete", "global cross-check requires a terminal global merge receipt");
+  assert.equal(merge.configDigest, sha256(canonicalJson(config)), "approved config digest mismatch");
+  assert.equal(merge.sourceManifest?.sourcePolicyDigest, contract.digest, "source policy digest mismatch");
+  const evidence = await readSourceManifestEvidence(path.join(outDir, merge.sourceManifest.path), contract);
+  assert.equal(evidence.digest, merge.sourceManifest.digest, "source manifest digest mismatch");
+  return {
+    kind: "global-source-policy",
+    configDigest: merge.configDigest,
+    sourcePolicyDigest: contract.digest,
+    sourceManifestDigest: evidence.digest,
+    sourceManifestObservations: evidence.observations,
+    latestObservedAt: evidence.latestObservedAt,
+  };
+}
+
+function readBoundedAccuracyReport(accuracyPath) {
+  const size = fs.statSync(accuracyPath).size;
+  assert.ok(size <= MAX_ACCURACY_REPORT_BYTES,
+    `accuracy report exceeds ${MAX_ACCURACY_REPORT_BYTES} byte bound`);
+  const report = JSON.parse(fs.readFileSync(accuracyPath, "utf8"));
+  assert.ok(Array.isArray(report.levels) && report.levels.length <= MAX_LEVEL_SUMMARIES,
+    `accuracy report may contain at most ${MAX_LEVEL_SUMMARIES} level summaries`);
   const wanted = new Set();
-  const report = JSON.parse(fs.readFileSync(path.join(outDir, "accuracy-report.json"), "utf8"));
-  for (const level of report.levels) for (const tile of level.tiles) wanted.add(tile.address);
+  for (const level of report.levels) {
+    assert.ok(Number.isSafeInteger(level?.level), "accuracy level must be an integer");
+    assert.ok(Array.isArray(level.tiles) && level.tiles.length <= MAX_SAMPLES_PER_LEVEL,
+      `accuracy level ${level.level} exceeds its ${MAX_SAMPLES_PER_LEVEL}-tile sample cap`);
+    for (const tile of level.tiles) {
+      assert.match(tile?.address ?? "", /^\d+\/\d+\/\d+$/, "accuracy tile has an invalid address");
+      assert.ok(!wanted.has(tile.address), `accuracy report names duplicate tile ${tile.address}`);
+      wanted.add(tile.address);
+    }
+  }
+  return { report, wanted };
+}
+
+// The record's own figure, read straight off the FlatBuffer.  `wanted` was
+// built only after the bounded report above was validated, so neither this
+// lookup nor its output can scale with the global store.
+async function statedAccuracyByAddress(streamPath, wanted) {
+  const out = new Map();
   for await (const record of iterateStreamFile(streamPath)) {
     const dtt = readDtt(record);
     const key = `${dtt.level}/${dtt.x}/${dtt.y}`;
@@ -78,8 +129,16 @@ const accuracyPath = path.join(outDir, "accuracy-report.json");
 if (!fs.existsSync(accuracyPath)) {
   throw new Error(`no accuracy-report.json in ${outDir}: run measure-accuracy.mjs against it first`);
 }
-const report = JSON.parse(fs.readFileSync(accuracyPath, "utf8"));
-const stated = await statedAccuracyByAddress(path.join(outDir, "tiles.dttstream"));
+const { report, wanted } = readBoundedAccuracyReport(accuracyPath);
+const expectedLineage = await expectedSourceLineage();
+if (expectedLineage.kind === "global-source-policy") {
+  assert.equal(report.sourceLineage?.configDigest, expectedLineage.configDigest, "accuracy report config lineage mismatch");
+  assert.equal(report.sourceLineage?.sourcePolicyDigest, expectedLineage.sourcePolicyDigest, "accuracy report source policy lineage mismatch");
+  assert.equal(report.sourceLineage?.sourceManifestDigest, expectedLineage.sourceManifestDigest, "accuracy report source manifest lineage mismatch");
+}
+const stated = await statedAccuracyByAddress(path.join(outDir, "tiles.dttstream"), wanted);
+assert.equal(stated.size, wanted.size,
+  `accuracy report names tile(s) missing from tiles.dttstream: ${[...wanted].filter((address) => !stated.has(address)).join(", ")}`);
 
 const rows = [];
 for (const level of report.levels) {
@@ -105,6 +164,9 @@ for (const level of report.levels) {
 const judged = rows.filter(
   (r) => !r.referenceOutResolvesSource && !r.referenceUnderResolvesSource,
 );
+const excludedLevels = new Set(rows
+  .filter((r) => r.referenceOutResolvesSource || r.referenceUnderResolvesSource)
+  .map((r) => r.level));
 const worst = judged.reduce((a, b) => (b.ratio > (a?.ratio ?? 0) ? b : a), null);
 const summary = {
   outDir,
@@ -113,7 +175,7 @@ const summary = {
   sourcePostsPerTileEdgeByLevel: report.sourcePostsPerTileEdgeByLevel ?? null,
   tilesInStore: rows.length,
   tilesCompared: judged.length,
-  levelsExcluded: [...new Set(rows.filter((r) => !judged.includes(r)).map((r) => r.level))].sort(
+  levelsExcluded: [...excludedLevels].sort(
     (a, b) => a - b,
   ),
   tilesWhereReferenceExceedsRecordBy5Percent: judged.filter((r) => r.ratio > 1.05).length,
@@ -130,6 +192,8 @@ const summary = {
     "the record's own figure is measured at every source post inside the tile, so a ratio at or below 1.0 is the expected result and a ratio above 1.0 is the finding",
   ],
   rows,
+  samplingCaps: { maxLevels: MAX_LEVEL_SUMMARIES, maxTilesPerLevel: MAX_SAMPLES_PER_LEVEL },
+  sourceLineage: expectedLineage,
 };
 
 if (args.json) {

@@ -17,6 +17,7 @@ import {
   fetchWithRetry,
   initializeGlobalState,
   iterateBoundedLines,
+  MAX_GLOBAL_SHARDS,
   makeShardConfigs,
   markShard,
   recordSetDigest,
@@ -157,6 +158,31 @@ test("deterministic shard configs cover each regional longitude slice once", () 
   const slices = first.flatMap((shard) => shard.flow_config.regions.map((r) => [r.west, r.east]));
   assert.deepEqual(slices, [[0, 1], [1, 2], [2, 3], [3, 4]]);
   assert.equal(first[0].global_shard.config_digest, sha256('{"flow_config":{"regions":[{"east":4,"max_level":8,"name":"proof","north":42,"priority":1,"south":40,"west":0}]}}'));
+});
+
+test("coordinator shard/region bounds reject unbounded allocations before slicing or state creation", async (t) => {
+  const out = temporary(t);
+  const bounded = {
+    flow_config: {
+      regions: [{ name: "proof", west: 0, south: 0, east: 1, north: 1 }],
+    },
+  };
+  assert.throws(() => makeShardConfigs(bounded, MAX_GLOBAL_SHARDS + 1),
+    /shardCount must be in/);
+  assert.throws(() => initializeGlobalState(out, bounded, MAX_GLOBAL_SHARDS + 1),
+    /shardCount must be in/);
+  // This previously reached splitRegion's degree loop and allocated one cut
+  // per arbitrary longitude degree. Canonical WGS84 input is rejected first.
+  assert.throws(() => makeShardConfigs({
+    flow_config: { regions: [{ name: "unbounded", west: -1_000_000_000, south: 0, east: 1_000_000_000, north: 1 }] },
+  }, 1), /canonical longitude bounds/);
+  assert.throws(() => makeShardConfigs({
+    flow_config: { regions: [{ name: "wrapped", west: 170, south: 0, east: 190, north: 1 }] },
+  }, 1), /canonical longitude bounds/);
+  await assert.rejects(execFileAsync(process.execPath, [
+    COORDINATOR, "--config", path.join(out, "never-read.json"), "--out", path.join(out, "coordinator-out"),
+    "--shards", String(MAX_GLOBAL_SHARDS + 1),
+  ]), /--shards may not exceed/);
 });
 
 test("state refuses a changed config and preserves a completed shard on resume", (t) => {
