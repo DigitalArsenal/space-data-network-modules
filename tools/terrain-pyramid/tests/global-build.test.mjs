@@ -275,6 +275,35 @@ test("identity-less live directory locks heartbeat through long work and stop on
   await contender.withDirectoryLock(lock, async () => {});
 });
 
+test("an interleaved stale heartbeat never resurrects or disturbs a successor lock", async (t) => {
+  const dir = temporary(t);
+  const lock = path.join(dir, "producer-locks", "race.lock");
+  const oldToken = "old-owner";
+  const successorToken = "successor-owner";
+  let swapOnPulse = true;
+  const old = new BoundedGranuleCache({
+    dir, maxBytes: 4096, owner: "old", heartbeatIntervalMs: 5, identitylessHeartbeatTtlMs: 40,
+    onHeartbeatBeforeWrite: () => {
+      if (!swapOnPulse) return;
+      swapOnPulse = false;
+      fs.rmSync(lock, { recursive: true, force: true });
+      fs.mkdirSync(lock);
+      fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify({ token: successorToken, pid: process.pid, identity: { startToken: null } }));
+    },
+  });
+  fs.mkdirSync(lock);
+  fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify({ token: oldToken, pid: process.pid, identity: { startToken: null } }));
+  const timer = old.startHeartbeat(path.join(lock, "owner.json"), oldToken);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(lock, "owner.json"), "utf8")).token, successorToken);
+  assert.equal(fs.existsSync(path.join(lock, `.heartbeat-${oldToken}`)), false, "old pulse must not remain in successor lock");
+  fs.rmSync(lock, { recursive: true, force: true });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(fs.existsSync(lock), false, "old timer must not recreate a recovered lock directory");
+  clearInterval(timer);
+  const successor = new BoundedGranuleCache({ dir, maxBytes: 4096, owner: "successor" });
+  await successor.withDirectoryLock(lock, async () => {});
+});
+
 test("malformed lock and lease metadata fail closed after their bounded TTL", async (t) => {
   const dir = temporary(t);
   const now = () => 10_000;

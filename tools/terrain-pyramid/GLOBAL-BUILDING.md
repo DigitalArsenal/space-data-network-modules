@@ -25,8 +25,9 @@ or deploy a flow.
   that identity, the actual lock/lease holder refreshes a 20-second ownership
   heartbeat; a live identity-less owner is protected past the ordinary cache
   TTL and is reclaimed only after a separate five-minute no-heartbeat crash
-  bound. Timer cleanup and token checks prevent an old holder overwriting a
-  successor. Malformed ownership gets only the bounded expiry. Interrupted publication
+  bound. Pulses are token-named, non-creating sidecars; timer cleanup and
+  post-write token checks prevent an old holder from recreating or overwriting
+  a successor. Malformed ownership gets only the bounded expiry. Interrupted publication
   directories and corrupt generation pointers are reclaimed under that same
   global lock before usage/capacity accounting.
 - Network retries are deterministic exponential backoff: four retries after

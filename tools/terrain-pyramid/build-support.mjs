@@ -136,6 +136,8 @@ export class BoundedGranuleCache {
     // recovery window, deliberately separate from the 30-minute cache lease.
     identitylessHeartbeatTtlMs = 5 * 60_000,
     heartbeatIntervalMs = 20_000,
+    // Test-only interleave hook for the stale-owner/recovery race.
+    onHeartbeatBeforeWrite = () => {},
     lockWaitMs = 60_000,
   }) {
     assert.ok(dir, "cache dir is required");
@@ -153,6 +155,7 @@ export class BoundedGranuleCache {
     assert.ok(Number.isSafeInteger(heartbeatIntervalMs) && heartbeatIntervalMs > 0 && heartbeatIntervalMs < identitylessHeartbeatTtlMs, "heartbeatIntervalMs must be positive and shorter than identitylessHeartbeatTtlMs");
     this.identitylessHeartbeatTtlMs = identitylessHeartbeatTtlMs;
     this.heartbeatIntervalMs = heartbeatIntervalMs;
+    this.onHeartbeatBeforeWrite = onHeartbeatBeforeWrite;
     this.lockWaitMs = lockWaitMs;
     this.retries = 0;
     this.evictions = 0;
@@ -205,7 +208,22 @@ export class BoundedGranuleCache {
     // an old owner that resumes after its directory was reclaimed can at worst
     // leave an ignored old-token pulse, never replace the new owner's record.
     if (!owner || owner.token !== token) return false;
-    atomicWrite(this.heartbeatPath(file, token), `${this.now()}\n`);
+    this.onHeartbeatBeforeWrite({ file, token });
+    try {
+      // Deliberately NOT atomicWrite: that helper mkdirs its parent. A stale
+      // timer after recovery must get ENOENT, not recreate an owner directory
+      // containing only a heartbeat. If a successor raced in, the post-write
+      // token check removes this old token's otherwise harmless sidecar.
+      fs.writeFileSync(this.heartbeatPath(file, token), `${this.now()}\n`);
+    } catch (error) {
+      if (error.code === "ENOENT") return false;
+      throw error;
+    }
+    const after = readJson(file);
+    if (!after || after.token !== token) {
+      safeUnlink(this.heartbeatPath(file, token));
+      return false;
+    }
     return true;
   }
 
