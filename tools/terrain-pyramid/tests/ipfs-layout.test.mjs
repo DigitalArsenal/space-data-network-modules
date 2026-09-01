@@ -38,17 +38,27 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..", "..");
 const SOURCE = path.join(REPO, "data-source", "terrain-source");
 const { createBrowserModuleHarness } = await import(path.join(SOURCE, "node_modules", "space-data-module-sdk", "src", "testing", "index.js"));
+const { decodeHttpResponse, encodeHttpRequest, HTTP_REQUEST_TYPE_REF } = await import(
+  path.join(SOURCE, "node_modules", "space-data-module-sdk", "src", "http", "index.js"),
+);
 const { buildGeoTiff, decodeQuantizedMesh } = await import(path.join(SOURCE, "tests", "helpers.mjs"));
 
 const encoder = new TextEncoder();
 const PUBLISHER = path.join(HERE, "..", "ipfs-publish.mjs");
 const ROOT_CID = "bafybeigdyrzt5n52ca7m5qz7cdqzsvdbi7lrtqhdq6k4k3v4bnva4y5m4e";
 const RECEIPT_CID = "bafybeihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku";
+const TEST_PUBLICATION_POLICY = Object.freeze({
+  format: "terrain-publication-policy-v1",
+  globalConfigDigest: createHash("sha256").update("ipfs-layout-test-policy").digest("hex"),
+  maxVerifiedStoreBytes: 8 * 1024 * 1024,
+  maxStaticDirectoryBytes: 32 * 1024 * 1024,
+  synthGridSize: 2,
+});
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function runPublisher(outDir, extraArgs = []) {
-  const child = spawn(process.execPath, [PUBLISHER, "--out", outDir, ...extraArgs], {
+async function runPublisher(outDir, extraArgs = [], { nodeArgs = [] } = {}) {
+  const child = spawn(process.execPath, [...nodeArgs, PUBLISHER, "--out", outDir, ...extraArgs], {
     cwd: REPO,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -64,6 +74,49 @@ function copyFixtureOutput() {
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "terrain-ipfs-publish-"));
   fs.cpSync(fixture.outDir, outDir, { recursive: true });
   return outDir;
+}
+
+function sha256File(file) {
+  return createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+}
+
+function lfCount(file) {
+  let count = 0;
+  for (const byte of fs.readFileSync(file)) if (byte === 0x0a) count += 1;
+  return count;
+}
+
+function refreshPublicationReceipt(outDir, policy = TEST_PUBLICATION_POLICY) {
+  const input = (name, countField = null) => {
+    const file = path.join(outDir, name);
+    const entry = { path: name, bytes: fs.statSync(file).size, sha256: sha256File(file) };
+    if (countField) entry[countField] = lfCount(file);
+    return entry;
+  };
+  const tiles = input("tiles.dttstream");
+  tiles.records = splitStream(fs.readFileSync(path.join(outDir, "tiles.dttstream"))).length;
+  const verifyPath = path.join(outDir, "verify-report.json");
+  const prior = fs.existsSync(verifyPath) ? JSON.parse(fs.readFileSync(verifyPath, "utf8")) : {};
+  fs.writeFileSync(
+    verifyPath,
+    JSON.stringify({
+      ...prior,
+      format: "terrain-verification-report-v1",
+      publishable: true,
+      problems: prior.problems ?? [],
+      tiles: tiles.records,
+      publicationPolicy: policy,
+      publicationInputs: {
+        format: "terrain-publication-inputs-v1",
+        tiles,
+        availableButUnstored: input("available-but-unstored.ndjson", "addresses"),
+        layerConfig: input("layer-json-config.json"),
+        oceanReceipt: input("ocean-skipped.json"),
+        oceanAddresses: input("ocean-skipped.lines", "addresses"),
+        oceanLegacyUnbound: false,
+      },
+    }),
+  );
 }
 
 async function readRequest(req, slow = false) {
@@ -87,14 +140,31 @@ async function writeFragments(res, text, bytes = 7) {
 function receiptFromUpload(upload) {
   const names = [...upload.toString("utf8").matchAll(/filename="([^"]+)"/g)]
     .map((match) => decodeURIComponent(match[1]));
+  const root = "ipfs-layout-test";
+  const directories = [];
+  let open = [];
+  for (const name of names) {
+    assert.ok(name.startsWith(`${root}/`));
+    const parents = name.slice(root.length + 1).split("/").slice(0, -1);
+    let common = 0;
+    while (common < open.length && common < parents.length && open[common] === parents[common]) common += 1;
+    for (let index = open.length - 1; index >= common; index -= 1) directories.push(`${root}/${open.slice(0, index + 1).join("/")}`);
+    open = parents;
+  }
+  for (let index = open.length - 1; index >= 0; index -= 1) directories.push(`${root}/${open.slice(0, index + 1).join("/")}`);
   return {
     names,
-    text: [...names.map((Name) => JSON.stringify({ Name, Hash: RECEIPT_CID })), JSON.stringify({ Name: "ipfs-layout-test", Hash: ROOT_CID })].join("\n") + "\n",
+    directories,
+    text: [
+      ...names.map((Name) => JSON.stringify({ Name, Hash: RECEIPT_CID })),
+      ...directories.map((Name) => JSON.stringify({ Name, Hash: RECEIPT_CID })),
+      JSON.stringify({ Name: root, Hash: ROOT_CID }),
+    ].join("\n") + "\n",
   };
 }
 
 async function fakeKubo(outDir, mode = "valid") {
-  const state = { uploadBytes: 0, contentLength: null, uploadNames: [], addPin: null, pinAdd: 0, pinRm: [], pinLsCalls: 0, requests: [], pinned: mode.startsWith("preexisting-") };
+  const state = { uploadBytes: 0, contentLength: null, uploadNames: [], addPin: null, pinAdd: 0, pinRm: [], pinLsCalls: 0, pinLsAbsent500: false, requests: [], pinned: mode.startsWith("preexisting-") };
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://127.0.0.1");
     state.requests.push(url.pathname);
@@ -115,6 +185,7 @@ async function fakeKubo(outDir, mode = "valid") {
       state.addPin = url.searchParams.get("pin");
       const receipt = receiptFromUpload(upload);
       state.uploadNames = receipt.names;
+      state.uploadDirectories = receipt.directories;
       res.setHeader("content-type", "application/x-ndjson");
       if (mode === "oversized-line") {
         res.end(`{"Name":"${"x".repeat(70 * 1024)}`);
@@ -131,6 +202,9 @@ async function fakeKubo(outDir, mode = "valid") {
         res.end([entries[1], entries[0], ...entries.slice(2), root].join("\n") + "\n");
       } else if (mode === "slow-fragmented") {
         await writeFragments(res, receipt.text, 5);
+      } else if (mode === "bulk-timeout") {
+        await delay(100);
+        res.end(receipt.text);
       } else {
         res.end(receipt.text);
       }
@@ -138,12 +212,17 @@ async function fakeKubo(outDir, mode = "valid") {
     }
     if (url.pathname === "/api/v0/pin/ls") {
       state.pinLsCalls += 1;
-      if (mode === "pin-failure" && state.pinLsCalls >= 2) {
+      if (mode === "pin-ls-other-500" || (mode === "pin-failure" && state.pinLsCalls >= 2)) {
         res.statusCode = 500;
         res.end("pin proof failed");
+      } else if (!state.pinned) {
+        state.pinLsAbsent500 = true;
+        res.statusCode = 500;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ Message: `path '${ROOT_CID}' is not pinned`, Code: 0, Type: "error" }));
       } else {
         res.setHeader("content-type", "application/json");
-        res.end(JSON.stringify({ Keys: state.pinned ? { [ROOT_CID]: { Type: "recursive" } } : {} }));
+        res.end(JSON.stringify({ Keys: { [ROOT_CID]: { Type: "recursive" } } }));
       }
       return;
     }
@@ -327,9 +406,15 @@ async function buildFixture() {
       endX: Math.max(...xs), endY: Math.max(...ys),
     });
   }
+  // A declared level-9 miss to the west of the coast is the representative
+  // uniform-water response.  It exercises static bytes against the actual
+  // mounted module, rather than a second synthesizer in this test.
+  const oceanAddress = { level: 9, x: 534, y: 383 };
+  available[9].push({ startX: oceanAddress.x, startY: oceanAddress.y, endX: oceanAddress.x, endY: oceanAddress.y });
   const layerConfig = {
     terrain_maxzoom: 9,
     terrain_ocean_synth_min_level: 9,
+    terrain_synth_grid_size: TEST_PUBLICATION_POLICY.synthGridSize,
     terrain_mount_path: "/api/v1/terrain/",
     terrain_available: available,
   };
@@ -337,20 +422,37 @@ async function buildFixture() {
   fs.writeFileSync(path.join(outDir, "run-report.json"), JSON.stringify({ tiles: records.length }));
   const promised = [];
   const stored = new Set(addresses.map((a) => `${a.level}/${a.x}/${a.y}`));
-  for (let level = 0; level <= 8; level += 1) {
-    const r = available[level][0];
-    for (let y = r.startY; y <= r.endY; y += 1) {
-      for (let x = r.startX; x <= r.endX; x += 1) {
-        const key = `${level}/${x}/${y}`;
-        if (!stored.has(key)) promised.push(key);
+  for (let level = 0; level <= 9; level += 1) {
+    for (const r of available[level]) {
+      for (let y = r.startY; y <= r.endY; y += 1) {
+        for (let x = r.startX; x <= r.endX; x += 1) {
+          const key = `${level}/${x}/${y}`;
+          if (!stored.has(key)) promised.push(key);
+        }
       }
     }
   }
+  promised.sort((left, right) => {
+    const [lz, lx, ly] = left.split("/").map(Number);
+    const [rz, rx, ry] = right.split("/").map(Number);
+    return lz - rz || ly - ry || lx - rx;
+  });
+  fs.writeFileSync(path.join(outDir, "available-but-unstored.ndjson"), `${promised.join("\n")}\n`);
+  const oceanKey = `${oceanAddress.level}/${oceanAddress.x}/${oceanAddress.y}`;
+  const oceanLines = `${oceanKey}\n`;
+  fs.writeFileSync(path.join(outDir, "ocean-skipped.lines"), oceanLines);
   fs.writeFileSync(
-    path.join(outDir, "verify-report.json"),
-    JSON.stringify({ problems: [], availableButUnstoredAddresses: promised }),
+    path.join(outDir, "ocean-skipped.json"),
+    JSON.stringify({
+      generatedAt: "2026-09-01T00:00:00.000Z",
+      format: "terrain-ocean-skips-lines-v1",
+      addressesPath: "ocean-skipped.lines",
+      count: 1,
+      digest: createHash("sha256").update(oceanLines).digest("hex"),
+    }),
   );
-  return { outDir, records, addresses, promised };
+  refreshPublicationReceipt(outDir);
+  return { outDir, records, addresses, promised, oceanAddress: oceanKey };
 }
 
 const fixture = await buildFixture();
@@ -361,6 +463,53 @@ execFileSync(
 );
 const ipfsDir = path.join(fixture.outDir, "ipfs");
 const layerJson = JSON.parse(fs.readFileSync(path.join(ipfsDir, "layer.json"), "utf8"));
+
+async function synthesizeFromShippingMount(config, address) {
+  const harness = await createBrowserModuleHarness({
+    wasmSource: fs.readFileSync(path.join(SOURCE, "dist", "isomorphic", "module.wasm")),
+    manifest: JSON.parse(fs.readFileSync(path.join(SOURCE, "plugin-manifest.json"), "utf8")),
+    surface: "direct",
+    hostcallDispatch: (operation) => {
+      if (operation === "plugin.getConfig") return config;
+      throw new Error(`unexpected hostcall operation: ${operation}`);
+    },
+  });
+  try {
+    const route = await harness.invoke({
+      methodId: "route",
+      inputs: [{
+        portId: "request",
+        typeRef: HTTP_REQUEST_TYPE_REF,
+        payload: encodeHttpRequest({
+          method: "GET",
+          path: `/api/v1/terrain/${address}.terrain`,
+          headers: { "accept-encoding": "identity" },
+        }),
+      }],
+    });
+    assert.equal(route.statusCode, 0, `${route.errorCode}: ${route.errorMessage}`);
+    const context = route.outputs.find((output) => output.portId === "context");
+    assert.ok(context, `route did not produce context for ${address}`);
+    const response = await harness.invoke({
+      methodId: "respond",
+      inputs: [
+        {
+          portId: "stream",
+          typeRef: { wireFormat: "aligned-binary", requiredAlignment: 1, byteLength: 4 },
+          payload: new Uint8Array(4),
+        },
+        { portId: "context", typeRef: context.typeRef, payload: context.payload },
+      ],
+    });
+    assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
+    const http = decodeHttpResponse(new Uint8Array(response.outputs[0].payload));
+    assert.equal(http.status, 200, `mount did not synthesize ${address}`);
+    const encoding = (http.headers ?? []).find((header) => header.name?.toLowerCase() === "content-encoding")?.value?.toLowerCase();
+    return encoding === "gzip" ? zlib.gunzipSync(Buffer.from(http.body)) : Buffer.from(http.body);
+  } finally {
+    await harness.destroy();
+  }
+}
 
 test("layer.json declares the tiles template a CID needs, and the watermask extension", () => {
   // No `?v=` query: the CID is the cache key and it is already in the path.
@@ -420,6 +569,24 @@ test("every address layer.json promises exists as a file", () => {
   }
 });
 
+test("shipping terrain-source synth at approved grid size equals published water, land, and ancestor bytes", async () => {
+  const config = JSON.parse(fs.readFileSync(path.join(fixture.outDir, "layer-json-config.json"), "utf8"));
+  assert.equal(config.terrain_synth_grid_size, TEST_PUBLICATION_POLICY.synthGridSize);
+  const land = fixture.promised.find((address) => address.startsWith("8/"));
+  const ancestor = fixture.promised.find((address) => address.startsWith("0/"));
+  assert.ok(land && ancestor && fixture.promised.includes(fixture.oceanAddress));
+  for (const [kind, address] of [["water", fixture.oceanAddress], ["land", land], ["ancestor", ancestor]]) {
+    const direct = await synthesizeFromShippingMount(config, address);
+    const published = fs.readFileSync(path.join(ipfsDir, `${address}.terrain`));
+    assert.deepEqual(published, direct, `${kind} ${address} differs from direct mount synthesis`);
+    const mesh = decodeQuantizedMesh(published);
+    const mask = mesh.extensions.find((extension) => extension.id === 2);
+    assert.ok(mask, `${kind} ${address} lacks a water mask`);
+    if (kind === "water") assert.deepEqual(Buffer.from(mask.bytes), Buffer.from([0xff]));
+    else assert.deepEqual(Buffer.from(mask.bytes), Buffer.from([0x00]));
+  }
+});
+
 test("the publication report and the directory agree on what was published", () => {
   const report = JSON.parse(fs.readFileSync(path.join(fixture.outDir, "ipfs-publication.json"), "utf8"));
   let files = 0;
@@ -430,6 +597,10 @@ test("the publication report and the directory agree on what was published", () 
   assert.equal(report.storedTiles, fixture.records.length);
   assert.equal(report.synthesizedTiles, fixture.promised.length);
   assert.equal(files, report.storedTiles + report.synthesizedTiles + 1, "tiles plus layer.json");
+  assert.ok(BigInt(report.materializationPlan.reservedStaticPhysicalBytes) >= BigInt(report.materializationPlan.approvedStaticLogicalBytes));
+  assert.ok(BigInt(report.materializationPlan.reservedStaticPhysicalBytes) >= BigInt(report.materializationPlan.actualStaticPhysicalUpperBytes));
+  assert.ok(BigInt(report.materializationPlan.reservedUploadManifestPhysicalBytes) > 0n);
+  assert.ok(BigInt(report.materializationPlan.stagingRequiredBytes) > BigInt(report.materializationPlan.approvedStaticLogicalBytes));
 });
 
 test("an unverified run is refused", () => {
@@ -456,7 +627,12 @@ test("a run verify.mjs failed is refused", () => {
   }
   fs.writeFileSync(
     path.join(dir, "verify-report.json"),
-    JSON.stringify({ problems: ["p99 over the byte bound"], availableButUnstoredAddresses: [] }),
+    JSON.stringify({
+      format: "terrain-verification-report-v1",
+      publishable: true,
+      problems: ["p99 over the byte bound"],
+      availableButUnstoredAddresses: [],
+    }),
   );
   assert.throws(
     () =>
@@ -469,6 +645,117 @@ test("a run verify.mjs failed is refused", () => {
   );
 });
 
+test("a forged non-terminal verification report with problems=[] is refused", async () => {
+  const outDir = copyFixtureOutput();
+  const reportPath = path.join(outDir, "verify-report.json");
+  const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+  report.publishable = false;
+  report.problems = [];
+  fs.writeFileSync(reportPath, JSON.stringify(report));
+  const result = await runPublisher(outDir, ["--no-add"]);
+  assert.notEqual(result.code, 0);
+  assert.match(result.stderr, /not marked publishable/);
+});
+
+test("publicationInputs accepts only the exact bound compact-ocean receipt schema", async () => {
+  const mutations = {
+    missing: (receipt) => { delete receipt.oceanLegacyUnbound; },
+    extra: (receipt) => { receipt.unexpected = true; },
+    nullOcean: (receipt) => { receipt.oceanReceipt = null; },
+    legacy: (receipt) => { receipt.oceanLegacyUnbound = true; },
+  };
+  for (const [name, mutate] of Object.entries(mutations)) {
+    const outDir = copyFixtureOutput();
+    const reportPath = path.join(outDir, "verify-report.json");
+    const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+    mutate(report.publicationInputs);
+    fs.writeFileSync(reportPath, JSON.stringify(report));
+    const result = await runPublisher(outDir, ["--no-add"]);
+    assert.notEqual(result.code, 0, `${name} publicationInputs receipt must be refused`);
+  }
+});
+
+test("bound inputs reject symlinks and same-count mutation after preflight", async () => {
+  for (const name of ["verify-report.json", "tiles.dttstream", "layer-json-config.json", "available-but-unstored.ndjson"]) {
+    const outDir = copyFixtureOutput();
+    const file = path.join(outDir, name);
+    const target = path.join(outDir, `${name}.regular-target`);
+    fs.renameSync(file, target);
+    fs.symlinkSync(target, file);
+    const result = await runPublisher(outDir, ["--no-add"]);
+    assert.notEqual(result.code, 0, `${name} symlink must be refused`);
+  }
+  const outDir = copyFixtureOutput();
+  const mutation = await runPublisher(outDir, ["--no-add", "--test-mutate-layer-config-after-preflight"]);
+  assert.notEqual(mutation.code, 0);
+  assert.match(mutation.stderr, /changed since publication preflight/);
+
+  const realOut = copyFixtureOutput();
+  const symlinkOut = `${realOut}-symlink`;
+  fs.symlinkSync(realOut, symlinkOut);
+  const parent = await runPublisher(symlinkOut, ["--no-add"]);
+  assert.notEqual(parent.code, 0, "a symlinked output parent must be refused");
+});
+
+test("publication policy independently caps store and static-directory materialization", async () => {
+  const tooSmallStore = copyFixtureOutput();
+  refreshPublicationReceipt(tooSmallStore, { ...TEST_PUBLICATION_POLICY, maxVerifiedStoreBytes: 1 });
+  const store = await runPublisher(tooSmallStore, ["--no-add"]);
+  assert.notEqual(store.code, 0);
+  assert.match(store.stderr, /exceeds approved/);
+
+  const wrongGrid = copyFixtureOutput();
+  refreshPublicationReceipt(wrongGrid, { ...TEST_PUBLICATION_POLICY, synthGridSize: 3 });
+  const grid = await runPublisher(wrongGrid, ["--no-add"]);
+  assert.notEqual(grid.code, 0);
+  assert.match(grid.stderr, /terrain_synth_grid_size disagrees/);
+
+  const tooSmallStatic = copyFixtureOutput();
+  refreshPublicationReceipt(tooSmallStatic, { ...TEST_PUBLICATION_POLICY, maxStaticDirectoryBytes: 1 });
+  const staticResult = await runPublisher(tooSmallStatic, ["--no-add"]);
+  assert.notEqual(staticResult.code, 0);
+  assert.match(staticResult.stderr, /static directory would exceed approved/);
+
+  const noSpace = copyFixtureOutput();
+  refreshPublicationReceipt(noSpace, { ...TEST_PUBLICATION_POLICY, maxStaticDirectoryBytes: Number.MAX_SAFE_INTEGER });
+  const capacity = await runPublisher(noSpace, ["--no-add"]);
+  assert.notEqual(capacity.code, 0);
+  assert.match(capacity.stderr, /insufficient free space for staged IPFS directory/);
+});
+
+test("bounded publisher inflate refuses a gzip bomb", async () => {
+  const outDir = copyFixtureOutput();
+  const result = await runPublisher(outDir, ["--no-add", "--test-gzip-bomb"]);
+  assert.notEqual(result.code, 0);
+  assert.match(result.stderr, /test gzip bomb cannot be safely inflated/);
+});
+
+// This host's WASM/SDK initialization OOMs before publisher code at
+// 32/48/64/96 MiB; 128 MiB is the lowest measured isolated V8 heap that
+// starts and completes.
+test("publisher materialization completes in its lowest measured isolated 128 MiB V8 heap", async () => {
+  const outDir = copyFixtureOutput();
+  const result = await runPublisher(outDir, ["--no-add"], { nodeArgs: ["--max-old-space-size=128"] });
+  assert.equal(result.code, 0, result.stderr);
+});
+
+test("journal recovery restores every persisted backup/install boundary, including rename-before-progress", async () => {
+  const phases = [];
+  for (let index = 1; index <= 4; index += 1) phases.push(`backup-${index}`, `install-renamed-${index}`, `install-${index}`);
+  for (const phase of phases) {
+    const outDir = copyFixtureOutput();
+    const priorLayer = fs.readFileSync(path.join(outDir, "ipfs", "layer.json"));
+    const interrupted = await runPublisher(outDir, ["--no-add", "--test-crash-at", phase]);
+    assert.equal(interrupted.code, 86, `${phase} must inject an abrupt transaction crash`);
+    const recovered = await runPublisher(outDir, ["--no-add"]);
+    assert.equal(recovered.code, 0, `${phase} recovery failed: ${recovered.stderr}`);
+    assert.ok(fs.existsSync(path.join(outDir, "ipfs", "layer.json")));
+    assert.deepEqual(fs.readFileSync(path.join(outDir, "ipfs", "layer.json")), priorLayer, `${phase} changed identical fixture bytes`);
+    assert.equal(fs.existsSync(path.join(outDir, ".ipfs-publication-transaction.json")), false, `${phase} journal was not consumed`);
+    assert.equal(fs.readdirSync(outDir).some((name) => name.includes("-previous-")), false, `${phase} left a prior artifact backup`);
+  }
+});
+
 test("Kubo upload is sorted, exact-length, backpressured, and accepts fragmented NDJSON", async () => {
   const outDir = copyFixtureOutput();
   const fake = await fakeKubo(outDir, "slow-fragmented");
@@ -477,13 +764,27 @@ test("Kubo upload is sorted, exact-length, backpressured, and accepts fragmented
     assert.equal(result.code, 0, result.stderr);
     assert.equal(fake.state.contentLength, fake.state.uploadBytes, "multipart Content-Length must include every boundary and CRLF");
     assert.equal(fake.state.addPin, "false", "receipt validation must happen before this invocation creates a pin");
+    assert.equal(fake.state.pinLsAbsent500, true, "Kubo 0.39's exact unpinned HTTP 500 must be treated as ordinary absence");
     assert.deepEqual(fake.state.uploadNames, [...fake.state.uploadNames].sort(), "multipart file plan must be deterministic and sorted");
     assert.ok(fake.state.uploadNames.includes("ipfs-layout-test/layer.json"));
+    assert.ok(fake.state.uploadDirectories.includes("ipfs-layout-test/0"), "faithful Kubo receipt must include intermediate directories");
     const report = JSON.parse(fs.readFileSync(path.join(outDir, "ipfs-publication.json"), "utf8"));
     assert.equal(report.cid, ROOT_CID);
     assert.equal(report.pinProof.type, "recursive");
     assert.ok(report.gatewayProof.every((probe) => probe.status >= 200 && probe.status < 300 && probe.matchesLocal));
     assert.equal(fs.existsSync(path.join(outDir, "pending-ipfs-pin.json")), false, "a completed artifact transaction consumes its pin recovery receipt");
+  } finally {
+    await fake.close();
+  }
+});
+
+test("bulk upload has its own explicit finite timeout, separate from control/gateway RPCs", async () => {
+  const outDir = copyFixtureOutput();
+  const fake = await fakeKubo(outDir, "bulk-timeout");
+  try {
+    const result = await runPublisher(outDir, ["--api", fake.base, "--gateway", fake.base, "--bulk-upload-timeout-ms", "20"]);
+    assert.notEqual(result.code, 0);
+    assert.match(result.stderr, /kubo add timed out after 20 ms/);
   } finally {
     await fake.close();
   }
@@ -526,9 +827,23 @@ test("a pin-proof failure retains the unknown-owner root and preserves the previ
     assert.notEqual(result.code, 0);
     assert.deepEqual(fake.state.pinRm, [], "a failed pin proof must never call pin/rm");
     assert.equal(fake.state.pinned, true, "an acknowledged pin/add is retained when proof fails");
-    assert.equal(fs.existsSync(path.join(outDir, "pending-ipfs-pin.json")), false, "an unproved pin is not misrepresented as recovered");
+    const intent = JSON.parse(fs.readFileSync(path.join(outDir, "pending-ipfs-pin.json"), "utf8"));
+    assert.equal(intent.state, "intent", "an unproved pin must remain an intent, not a recursive proof");
     assert.deepEqual(fs.readFileSync(path.join(outDir, "ipfs", "layer.json")), before, "failed staging must not replace a completed directory");
     assert.equal(fs.readdirSync(outDir).some((name) => name.startsWith(".ipfs-staging-")), false, "failed staging is removed");
+  } finally {
+    await fake.close();
+  }
+});
+
+test("only Kubo 0.39's exact unpinned 500 is absence; every other pin/ls 500 is fatal", async () => {
+  const outDir = copyFixtureOutput();
+  const fake = await fakeKubo(outDir, "pin-ls-other-500");
+  try {
+    const result = await runPublisher(outDir, ["--api", fake.base, "--gateway", fake.base]);
+    assert.notEqual(result.code, 0);
+    assert.equal(fake.state.pinAdd, 0);
+    assert.deepEqual(fake.state.pinRm, []);
   } finally {
     await fake.close();
   }
@@ -597,17 +912,9 @@ test("a conflicting pending pin receipt is retained and blocks a different CID",
   fs.writeFileSync(
     path.join(outDir, "pending-ipfs-pin.json"),
     JSON.stringify({
-      format: "terrain-ipfs-pending-pin-v1",
+      format: "terrain-ipfs-pin-intent-v1",
+      state: "intent",
       cid: RECEIPT_CID,
-      pinProof: {
-        api: "http://127.0.0.1:1",
-        checkedAt: "2026-09-01T00:00:00.000Z",
-        endpoint: `/api/v0/pin/ls?arg=${RECEIPT_CID}&type=recursive`,
-        type: "recursive",
-        response: JSON.stringify({ Keys: { [RECEIPT_CID]: { Type: "recursive" } } }),
-        preexisting: true,
-      },
-      preexisting: true,
       attempt: "prior-attempt",
       recordedAt: "2026-09-01T00:00:00.000Z",
     }),
@@ -659,11 +966,8 @@ test("successful --no-add transaction removes a stale serving CID configuration"
 test("streamed worklists reject an oversized unterminated line before staging", async () => {
   const outDir = copyFixtureOutput();
   const before = fs.readFileSync(path.join(outDir, "ipfs", "layer.json"));
-  fs.writeFileSync(path.join(outDir, "available-but-unstored.ndjson"), "9/1/" + "9".repeat(2048));
-  fs.writeFileSync(
-    path.join(outDir, "verify-report.json"),
-    JSON.stringify({ problems: [], availableButUnstoredPath: "available-but-unstored.ndjson" }),
-  );
+  fs.writeFileSync(path.join(outDir, "available-but-unstored.ndjson"), "9/1/" + "9".repeat(2048) + "\n");
+  refreshPublicationReceipt(outDir);
   const result = await runPublisher(outDir, ["--no-add"]);
   assert.notEqual(result.code, 0);
   assert.match(result.stderr, /available-but-unstored worklist line exceeds/);
@@ -679,10 +983,7 @@ test("the produced compact ocean receipt joins a large raw ASCII worklist withou
   layerConfig.terrain_ocean_synth_min_level = 0;
   layerConfig.terrain_available[9] = [{ startX: 500, startY: 380, endX: 515, endY: 395 }];
   fs.writeFileSync(path.join(outDir, "layer-json-config.json"), JSON.stringify(layerConfig));
-  fs.writeFileSync(
-    path.join(outDir, "verify-report.json"),
-    JSON.stringify({ problems: [], availableButUnstoredAddresses: ocean }),
-  );
+  fs.writeFileSync(path.join(outDir, "available-but-unstored.ndjson"), `${ocean.join("\n")}\n`);
   const oceanLines = `${ocean.join("\n")}\n`;
   fs.writeFileSync(path.join(outDir, "ocean-skipped.lines"), oceanLines);
   fs.writeFileSync(
@@ -695,6 +996,7 @@ test("the produced compact ocean receipt joins a large raw ASCII worklist withou
       digest: createHash("sha256").update(oceanLines).digest("hex"),
     }),
   );
+  refreshPublicationReceipt(outDir);
   const result = await runPublisher(outDir, ["--no-add"]);
   assert.equal(result.code, 0, result.stderr);
   const report = JSON.parse(fs.readFileSync(path.join(outDir, "ipfs-publication.json"), "utf8"));
@@ -718,7 +1020,37 @@ test("compact ocean receipts reject a bad digest, escaped target, and duplicate 
         digest: fault === "digest" ? "0".repeat(64) : createHash("sha256").update(lines).digest("hex"),
       }),
     );
+    refreshPublicationReceipt(outDir);
     const result = await runPublisher(outDir, ["--no-add"]);
     assert.notEqual(result.code, 0, `${fault} compact ocean receipt must fail`);
   }
+});
+
+test("compact ocean ordering is padded numeric level/y/x, not raw lexical address order", async () => {
+  const outDir = copyFixtureOutput();
+  const addresses = ["8/0/0", "9/0/0", "10/0/0"];
+  const configPath = path.join(outDir, "layer-json-config.json");
+  const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+  config.terrain_maxzoom = 10;
+  config.terrain_ocean_synth_min_level = 0;
+  config.terrain_available[8].push({ startX: 0, startY: 0, endX: 0, endY: 0 });
+  config.terrain_available[9].push({ startX: 0, startY: 0, endX: 0, endY: 0 });
+  config.terrain_available[10] = [{ startX: 0, startY: 0, endX: 0, endY: 0 }];
+  fs.writeFileSync(configPath, JSON.stringify(config));
+  const lines = `${addresses.join("\n")}\n`;
+  fs.writeFileSync(path.join(outDir, "available-but-unstored.ndjson"), lines);
+  fs.writeFileSync(path.join(outDir, "ocean-skipped.lines"), lines);
+  fs.writeFileSync(
+    path.join(outDir, "ocean-skipped.json"),
+    JSON.stringify({
+      generatedAt: "2026-09-01T00:00:00.000Z",
+      format: "terrain-ocean-skips-lines-v1",
+      addressesPath: "ocean-skipped.lines",
+      count: addresses.length,
+      digest: createHash("sha256").update(lines).digest("hex"),
+    }),
+  );
+  refreshPublicationReceipt(outDir);
+  const result = await runPublisher(outDir, ["--no-add"]);
+  assert.equal(result.code, 0, result.stderr);
 });

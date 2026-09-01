@@ -55,7 +55,7 @@ import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 
 import { buildDttRecord, writeDttRecord } from "./dtt-projection.mjs";
-import { iterateStreamFile, readDtt, readDttProvenance } from "./dtt-reader.mjs";
+import { MAX_TERRAIN_RECORD_BYTES, readDtt, readDttProvenance } from "./dtt-reader.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..");
@@ -73,20 +73,29 @@ const IPFS_TILES_TEMPLATE = "{z}/{x}/{y}.terrain";
 // runaway mask/payload before a permanent CID is created.
 const STATIC_TRANSPORT_BOUNDS = Object.freeze({ p50: 96 * 1024, p99: 384 * 1024, hard: 512 * 1024 });
 const MAX_MATERIALIZED_FILES = 5_000_000;
-const MAX_MATERIALIZED_BYTES = 1024 * 1024 * 1024 * 1024;
 const STAGING_HEADROOM_BYTES = 64 * 1024 * 1024;
 const MAX_RECEIPT_LINE_BYTES = 64 * 1024;
 const MAX_RECEIPT_NAME_BYTES = 4 * 1024;
 const MAX_RECEIPT_HASH_BYTES = 256;
 const MAX_CONTROL_RESPONSE_BYTES = 64 * 1024;
 const MAX_WORKLIST_LINE_BYTES = 1024;
-const MAX_LEGACY_WORKLIST_BYTES = 8 * 1024 * 1024;
-const MAX_LEGACY_WORKLIST_ADDRESSES = 100_000;
 const MAX_OCEAN_DIAGNOSTICS = 8;
 const OCEAN_SKIP_MAX_RECEIPT_BYTES = 64 * 1024;
 const OCEAN_SKIP_MAX_LINES_BYTES = 512 * 1024 * 1024;
 const OCEAN_SKIP_MAX_LINE_BYTES = 256;
 const TERRAIN_ADDRESS_FIELD_WIDTH = 12;
+const MAX_VERIFY_REPORT_BYTES = 512 * 1024;
+const MAX_LAYER_CONFIG_BYTES = 8 * 1024 * 1024;
+const MAX_LAYER_JSON_BYTES = STATIC_TRANSPORT_BOUNDS.hard;
+const PUBLICATION_INPUTS_FORMAT = "terrain-publication-inputs-v1";
+const PUBLICATION_POLICY_FORMAT = "terrain-publication-policy-v1";
+// A global directory is tens of GiB, not a control-plane request.  Keep the
+// deadline finite but derive it from a deliberately conservative reviewed
+// floor rather than applying the 30-second RPC timeout to the data stream.
+const MIN_BULK_UPLOAD_BYTES_PER_SECOND = 1024 * 1024;
+const BULK_UPLOAD_OVERHEAD_MS = 10n * 60n * 1000n;
+const MIN_PIN_TRAVERSAL_FILES_PER_SECOND = 100;
+const PIN_TRAVERSAL_OVERHEAD_MS = 5n * 60n * 1000n;
 
 function parsePositiveInteger(value, flag) {
   assert.match(value ?? "", /^\d+$/, `${flag} must be a positive integer`);
@@ -107,7 +116,12 @@ function parseArgs(argv) {
     add: true,
     verify: true,
     timeoutMs: 30_000,
+    bulkUploadTimeoutMs: null,
+    pinTimeoutMs: null,
     reserveFreeBytes: 0n,
+    testCrashAt: null,
+    testMutateLayerConfigAfterPreflight: false,
+    testGzipBomb: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
@@ -121,7 +135,15 @@ function parseArgs(argv) {
     else if (flag === "--cid") throw new Error("--cid is refused: use --add so this invocation verifies the recursive pin");
     else if (flag === "--no-verify") args.verify = false;
     else if (flag === "--timeout-ms") args.timeoutMs = parsePositiveInteger(argv[++i], "--timeout-ms");
+    else if (flag === "--bulk-upload-timeout-ms") args.bulkUploadTimeoutMs = parsePositiveInteger(argv[++i], "--bulk-upload-timeout-ms");
+    else if (flag === "--pin-timeout-ms") args.pinTimeoutMs = parsePositiveInteger(argv[++i], "--pin-timeout-ms");
     else if (flag === "--reserve-free-bytes") args.reserveFreeBytes = parseByteCount(argv[++i], "--reserve-free-bytes");
+    // Test-only abrupt termination hook for the durable artifact transaction.
+    else if (flag === "--test-crash-at") args.testCrashAt = argv[++i];
+    // These hooks exercise the same production safety boundaries without
+    // requiring a racing external writer or a giant fixture in CI.
+    else if (flag === "--test-mutate-layer-config-after-preflight") args.testMutateLayerConfigAfterPreflight = true;
+    else if (flag === "--test-gzip-bomb") args.testGzipBomb = true;
     else throw new Error(`unknown argument ${flag}`);
   }
   if (!args.out) throw new Error("--out <builder output dir> is required");
@@ -134,9 +156,107 @@ const args = parseArgs(process.argv.slice(2));
 const outDir = path.resolve(args.out);
 const ipfsDir = path.join(outDir, "ipfs");
 const pendingPinPath = path.join(outDir, "pending-ipfs-pin.json");
+const transactionPath = path.join(outDir, ".ipfs-publication-transaction.json");
+
+const outStat = fs.lstatSync(outDir, { bigint: true });
+assert.ok(outStat.isDirectory() && !outStat.isSymbolicLink(), `builder output is not a real directory: ${outDir}`);
+
+function immutableIdentity(file, label) {
+  const stat = fs.lstatSync(file, { bigint: true });
+  assert.ok(stat.isFile() && !stat.isSymbolicLink(), `${label} is not a regular file: ${file}`);
+  return {
+    dev: stat.dev.toString(), ino: stat.ino.toString(), size: stat.size.toString(), mtimeNs: stat.mtimeNs.toString(),
+  };
+}
+
+function sameImmutableIdentity(left, right) {
+  return left.dev === right.dev && left.ino === right.ino && left.size === right.size && left.mtimeNs === right.mtimeNs;
+}
+
+function assertWithinRealOutput(file, label) {
+  assert.ok(file === outDir || file.startsWith(`${outDir}${path.sep}`), `${label} escapes the builder output`);
+  const relative = path.relative(outDir, file);
+  let current = outDir;
+  for (const part of relative ? relative.split(path.sep) : []) {
+    current = path.join(current, part);
+    if (!fs.existsSync(current)) break;
+    const stat = fs.lstatSync(current, { bigint: true });
+    assert.ok(!stat.isSymbolicLink(), `${label} has a symlinked parent: ${current}`);
+  }
+  return file;
+}
+
+function outputFile(relative, label) {
+  assert.equal(typeof relative, "string", `${label} path must be a string`);
+  assert.ok(relative.length > 0 && !path.isAbsolute(relative), `${label} path must be relative`);
+  const resolved = path.resolve(outDir, relative);
+  assert.ok(resolved.startsWith(`${outDir}${path.sep}`), `${label} path escapes the builder output`);
+  return assertWithinRealOutput(resolved, label);
+}
+
+function openRegularRead(file, label) {
+  const before = immutableIdentity(file, label);
+  const descriptor = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+  const opened = fs.fstatSync(descriptor, { bigint: true });
+  if (!opened.isFile() || opened.dev.toString() !== before.dev || opened.ino.toString() !== before.ino) {
+    fs.closeSync(descriptor);
+    throw new Error(`${label} changed while opening: ${file}`);
+  }
+  return { descriptor, identity: before };
+}
+
+function readBoundedRegularFile(file, maxBytes, label, expectedIdentity = null) {
+  const { descriptor, identity } = openRegularRead(file, label);
+  if (expectedIdentity) assert.ok(sameImmutableIdentity(identity, expectedIdentity), `${label} changed since publication preflight: ${file}`);
+  try {
+    const stat = fs.fstatSync(descriptor, { bigint: true });
+    assert.ok(stat.size <= BigInt(maxBytes), `${label} exceeds ${maxBytes} bytes: ${file}`);
+    const bytes = Buffer.alloc(Number(stat.size));
+    let offset = 0;
+    while (offset < bytes.length) {
+      const read = fs.readSync(descriptor, bytes, offset, bytes.length - offset, offset);
+      assert.ok(read > 0, `${label} ended while being read: ${file}`);
+      offset += read;
+    }
+    const after = immutableIdentity(file, label);
+    assert.ok(sameImmutableIdentity(identity, after), `${label} changed while being read: ${file}`);
+    if (expectedIdentity) assert.ok(sameImmutableIdentity(after, expectedIdentity), `${label} changed since publication preflight: ${file}`);
+    return bytes;
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function readBoundedJson(file, maxBytes, label, expectedIdentity = null) {
+  try {
+    return JSON.parse(readBoundedRegularFile(file, maxBytes, label, expectedIdentity).toString("utf8"));
+  } catch (error) {
+    if (error instanceof SyntaxError) throw new Error(`${label} is invalid JSON: ${file}`, { cause: error });
+    throw error;
+  }
+}
+
+// Recover a previously interrupted artifact transaction before trusting any
+// report or input in this output directory. Its journal names only siblings
+// inside outDir and never touches a pin recovery receipt except transactionally.
+recoverPublicationTransaction();
+
+async function* regularFileChunks(file, label, expectedIdentity = null) {
+  const { descriptor, identity } = openRegularRead(file, label);
+  if (expectedIdentity) assert.ok(sameImmutableIdentity(identity, expectedIdentity), `${label} changed since publication preflight: ${file}`);
+  const stream = fs.createReadStream(null, { fd: descriptor, autoClose: true, highWaterMark: 64 * 1024 });
+  try {
+    for await (const chunk of stream) yield Buffer.from(chunk);
+  } finally {
+    stream.destroy();
+  }
+  const after = immutableIdentity(file, label);
+  assert.ok(sameImmutableIdentity(identity, after), `${label} changed while being streamed: ${file}`);
+  if (expectedIdentity) assert.ok(sameImmutableIdentity(after, expectedIdentity), `${label} changed since publication preflight: ${file}`);
+}
 
 // ── THE RUN HAS TO HAVE PASSED ─────────────────────────────────────────────
-const verifyPath = path.join(outDir, "verify-report.json");
+const verifyPath = outputFile("verify-report.json", "verify report");
 assert.ok(
   fs.existsSync(verifyPath),
   `run verify.mjs first: ${verifyPath} does not exist. A CID is permanent; an ` +
@@ -144,32 +264,33 @@ assert.ok(
     "who has it.",
 );
 assert.ok(
-  fs.statSync(verifyPath).size <= MAX_LEGACY_WORKLIST_BYTES,
-  `verify report exceeds legacy safety cap ${MAX_LEGACY_WORKLIST_BYTES} bytes; use its streamed worklist path`,
+  BigInt(immutableIdentity(verifyPath, "verify report").size) <= BigInt(MAX_VERIFY_REPORT_BYTES),
+  `verify report exceeds safety cap ${MAX_VERIFY_REPORT_BYTES} bytes`,
 );
-const verifyReport = JSON.parse(fs.readFileSync(verifyPath, "utf8"));
+const verifyReport = readBoundedJson(verifyPath, MAX_VERIFY_REPORT_BYTES, "verify report");
+assert.equal(
+  verifyReport.format,
+  "terrain-verification-report-v1",
+  "verify report is not a terminal terrain verification receipt; re-run verify.mjs",
+);
+assert.equal(
+  verifyReport.publishable,
+  true,
+  "verify report is not marked publishable; re-run verify.mjs after every terminal verification succeeds",
+);
 assert.deepEqual(
   verifyReport.problems,
   [],
   `verify.mjs reported ${verifyReport.problems?.length ?? "?"} unmet bounds; fix them before publishing`,
 );
-assert.ok(
-  Array.isArray(verifyReport.availableButUnstoredAddresses) || typeof verifyReport.availableButUnstoredPath === "string",
-  "the verify report predates the streamed available-but-unstored worklist; re-run verify.mjs",
-);
+assert.ok(verifyReport.publicationInputs, "the verify report lacks its bound publicationInputs receipt; re-run verify.mjs");
+assert.ok(verifyReport.publicationPolicy, "the verify report lacks its approved publicationPolicy; re-run verify.mjs");
 
-function outputFile(relative, label) {
-  assert.equal(typeof relative, "string", `${label} path must be a string`);
-  const resolved = path.resolve(outDir, relative);
-  assert.ok(resolved.startsWith(`${outDir}${path.sep}`), `${label} path escapes the builder output`);
-  return resolved;
-}
-
-async function* boundedLines(file, maxLineBytes, label) {
+async function* boundedLines(file, maxLineBytes, label, expectedIdentity = null) {
   const decoder = new StringDecoder("utf8");
   let pending = "";
-  for await (const chunk of fs.createReadStream(file, { highWaterMark: 64 * 1024 })) {
-    pending += decoder.write(Buffer.from(chunk));
+  for await (const chunk of regularFileChunks(file, label, expectedIdentity)) {
+    pending += decoder.write(chunk);
     let newline;
     while ((newline = pending.indexOf("\n")) >= 0) {
       const raw = pending.slice(0, newline);
@@ -188,18 +309,114 @@ async function* boundedLines(file, maxLineBytes, label) {
   }
 }
 
-async function* availableButUnstored() {
-  if (Array.isArray(verifyReport.availableButUnstoredAddresses)) {
-    assert.ok(
-      verifyReport.availableButUnstoredAddresses.length <= MAX_LEGACY_WORKLIST_ADDRESSES,
-      `legacy available-but-unstored array exceeds ${MAX_LEGACY_WORKLIST_ADDRESSES} addresses; use NDJSON`,
-    );
-    for (const address of verifyReport.availableButUnstoredAddresses) yield address;
-    return;
+function assertExactKeys(value, keys, label) {
+  assert.ok(value && typeof value === "object" && !Array.isArray(value), `${label} must be an object`);
+  const expected = [...keys].sort();
+  assert.deepEqual(Object.keys(value).sort(), expected, `${label} has unexpected or missing fields`);
+}
+
+function assertPublicationInputEntry(entry, pathName, countField = null) {
+  const fields = ["path", "bytes", "sha256"];
+  if (countField) fields.push(countField);
+  assertExactKeys(entry, fields, `publicationInputs.${pathName}`);
+  assert.equal(entry.path, pathName === "tiles" ? "tiles.dttstream" :
+    pathName === "availableButUnstored" ? "available-but-unstored.ndjson" :
+      pathName === "layerConfig" ? "layer-json-config.json" :
+        pathName === "oceanReceipt" ? "ocean-skipped.json" : "ocean-skipped.lines",
+  `publicationInputs.${pathName}.path is not the approved output name`);
+  assert.ok(Number.isSafeInteger(entry.bytes) && entry.bytes >= 0, `publicationInputs.${pathName}.bytes must be a non-negative safe integer`);
+  assert.match(entry.sha256 ?? "", /^[a-f0-9]{64}$/, `publicationInputs.${pathName}.sha256 must be SHA-256 hex`);
+  if (countField) assert.ok(Number.isSafeInteger(entry[countField]) && entry[countField] >= 0, `publicationInputs.${pathName}.${countField} must be a non-negative safe integer`);
+  return entry;
+}
+
+function assertPublicationInputs(receipt) {
+  assertExactKeys(receipt, ["format", "tiles", "availableButUnstored", "layerConfig", "oceanReceipt", "oceanAddresses", "oceanLegacyUnbound"], "publicationInputs");
+  assert.equal(receipt.format, PUBLICATION_INPUTS_FORMAT, "unsupported publicationInputs format");
+  assert.equal(receipt.oceanLegacyUnbound, false, "unbound legacy ocean input is refused; re-run the global verifier");
+  assert.ok(receipt.oceanReceipt !== null && receipt.oceanAddresses !== null,
+    "global publication requires bound compact ocean receipt and address inputs");
+  return {
+    tiles: assertPublicationInputEntry(receipt.tiles, "tiles", "records"),
+    availableButUnstored: assertPublicationInputEntry(receipt.availableButUnstored, "availableButUnstored", "addresses"),
+    layerConfig: assertPublicationInputEntry(receipt.layerConfig, "layerConfig"),
+    oceanReceipt: assertPublicationInputEntry(receipt.oceanReceipt, "oceanReceipt"),
+    oceanAddresses: assertPublicationInputEntry(receipt.oceanAddresses, "oceanAddresses", "addresses"),
+  };
+}
+
+function assertPublicationPolicy(policy) {
+  assertExactKeys(policy, ["format", "globalConfigDigest", "maxVerifiedStoreBytes", "maxStaticDirectoryBytes", "synthGridSize"], "publicationPolicy");
+  assert.equal(policy.format, PUBLICATION_POLICY_FORMAT, "unsupported publicationPolicy format");
+  assert.match(policy.globalConfigDigest ?? "", /^[a-f0-9]{64}$/, "publicationPolicy globalConfigDigest must be SHA-256 hex");
+  for (const field of ["maxVerifiedStoreBytes", "maxStaticDirectoryBytes"]) {
+    assert.ok(Number.isSafeInteger(policy[field]) && policy[field] > 0, `publicationPolicy.${field} must be a positive safe integer`);
   }
-  const file = outputFile(verifyReport.availableButUnstoredPath, "verify worklist");
-  assert.ok(fs.existsSync(file), `verify worklist missing: ${file}`);
-  yield* boundedLines(file, MAX_WORKLIST_LINE_BYTES, "available-but-unstored worklist");
+  assert.ok(Number.isSafeInteger(policy.synthGridSize) && policy.synthGridSize >= 2 && policy.synthGridSize <= 255,
+    "publicationPolicy.synthGridSize must be an integer in [2, 255]");
+  return policy;
+}
+
+async function hashPublicationInput(entry, label, countField = null, expectedIdentity = null) {
+  const file = outputFile(entry.path, label);
+  const hash = createHash("sha256");
+  let bytes = 0;
+  let count = 0;
+  let lastByte = null;
+  for await (const chunk of regularFileChunks(file, label, expectedIdentity)) {
+    bytes += chunk.length;
+    assert.ok(bytes <= entry.bytes, `${label} exceeds its verified byte count`);
+    hash.update(chunk);
+    if (countField) {
+      for (const byte of chunk) if (byte === 0x0a) count += 1;
+      if (chunk.length) lastByte = chunk[chunk.length - 1];
+    }
+  }
+  assert.equal(bytes, entry.bytes, `${label} byte count disagrees with publicationInputs`);
+  assert.equal(hash.digest("hex"), entry.sha256, `${label} digest disagrees with publicationInputs`);
+  if (countField) {
+    assert.ok(bytes === 0 || lastByte === 0x0a, `${label} must be LF-terminated`);
+    assert.equal(count, entry[countField], `${label} count disagrees with publicationInputs`);
+  }
+  return { file, identity: immutableIdentity(file, label), entry };
+}
+
+async function verifyPublicationInputs(receipt) {
+  const inputs = assertPublicationInputs(receipt);
+  const verified = {
+    tiles: await hashPublicationInput(inputs.tiles, "tile store"),
+    availableButUnstored: await hashPublicationInput(inputs.availableButUnstored, "available-but-unstored worklist", "addresses"),
+    layerConfig: await hashPublicationInput(inputs.layerConfig, "layer JSON config"),
+    oceanReceipt: await hashPublicationInput(inputs.oceanReceipt, "ocean skip receipt"),
+    oceanAddresses: await hashPublicationInput(inputs.oceanAddresses, "ocean skip addresses", "addresses"),
+  };
+  assert.ok(inputs.tiles.bytes <= publicationPolicy.maxVerifiedStoreBytes,
+    `verified tile store ${inputs.tiles.bytes} exceeds approved ${publicationPolicy.maxVerifiedStoreBytes} bytes`);
+  return verified;
+}
+
+const publicationPolicy = assertPublicationPolicy(verifyReport.publicationPolicy);
+const publicationInputs = await verifyPublicationInputs(verifyReport.publicationInputs);
+
+if (args.testMutateLayerConfigAfterPreflight) {
+  const descriptor = fs.openSync(publicationInputs.layerConfig.file, fs.constants.O_RDWR | (fs.constants.O_NOFOLLOW ?? 0));
+  try {
+    // A same-size mutation proves the materialization identity/hash checks do
+    // not merely trust the preflight pathname or count.
+    fs.writeSync(descriptor, Buffer.from(" "), 0, 1, 0);
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+async function* availableButUnstored() {
+  yield* boundedLines(
+    publicationInputs.availableButUnstored.file,
+    MAX_WORKLIST_LINE_BYTES,
+    "available-but-unstored worklist",
+    publicationInputs.availableButUnstored.identity,
+  );
 }
 
 function compareTerrainAddress(a, b) {
@@ -208,12 +425,8 @@ function compareTerrainAddress(a, b) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-async function* arrayEntries(entries) {
-  yield* entries;
-}
-
 function oceanReceiptPath() {
-  return path.join(outDir, "ocean-skipped.json");
+  return publicationInputs.oceanReceipt.file;
 }
 
 function assertOceanReceipt(receipt) {
@@ -232,43 +445,35 @@ function assertOceanReceipt(receipt) {
   return receipt;
 }
 
-function readOceanReceiptOrLegacy() {
+function readOceanReceipt() {
   const receiptPath = oceanReceiptPath();
-  if (!fs.existsSync(receiptPath)) return { kind: "none" };
-  const stat = fs.lstatSync(receiptPath, { bigint: true });
-  assert.ok(stat.isFile() && !stat.isSymbolicLink(), `ocean skip receipt is not a regular file: ${receiptPath}`);
-  assert.ok(stat.size <= BigInt(OCEAN_SKIP_MAX_LINES_BYTES), `ocean skip input exceeds ${OCEAN_SKIP_MAX_LINES_BYTES} bytes: ${receiptPath}`);
-  // The exact receipt is deliberately tiny.  An oversized JSON document is
-  // never interpreted as a legacy array, because that would quietly turn the
-  // compact global contract back into an unbounded in-memory payload.
-  assert.ok(stat.size <= BigInt(MAX_LEGACY_WORKLIST_BYTES), `ocean skip receipt exceeds ${MAX_LEGACY_WORKLIST_BYTES} bytes`);
+  assert.ok(sameImmutableIdentity(immutableIdentity(receiptPath, "ocean skip receipt"), publicationInputs.oceanReceipt.identity),
+    "ocean skip receipt changed since publication preflight");
+  assert.ok(publicationInputs.oceanReceipt.entry.bytes <= OCEAN_SKIP_MAX_RECEIPT_BYTES,
+    `ocean skip receipt exceeds ${OCEAN_SKIP_MAX_RECEIPT_BYTES} bytes`);
   let document;
   try {
-    document = JSON.parse(fs.readFileSync(receiptPath, "utf8"));
+    document = JSON.parse(readBoundedRegularFile(
+      receiptPath,
+      OCEAN_SKIP_MAX_RECEIPT_BYTES,
+      "ocean skip receipt",
+      publicationInputs.oceanReceipt.identity,
+    ).toString("utf8"));
   } catch (error) {
     throw new Error(`ocean skip receipt is invalid JSON: ${receiptPath}`, { cause: error });
   }
-  if (Object.hasOwn(document ?? {}, "format")) {
-    assert.ok(stat.size <= BigInt(OCEAN_SKIP_MAX_RECEIPT_BYTES), `ocean skip receipt exceeds ${OCEAN_SKIP_MAX_RECEIPT_BYTES} bytes`);
-    return { kind: "receipt", receipt: assertOceanReceipt(document) };
-  }
-  assert.ok(document && typeof document === "object" && !Array.isArray(document), "legacy ocean skip document must be an object");
-  const addresses = document.addresses;
-  assert.ok(Array.isArray(addresses), "legacy ocean skip list addresses must be an array");
-  assert.ok(addresses.length <= MAX_LEGACY_WORKLIST_ADDRESSES, `legacy ocean skip list exceeds ${MAX_LEGACY_WORKLIST_ADDRESSES} addresses; use the compact receipt`);
-  if (document.count !== undefined) assert.equal(document.count, addresses.length, "legacy ocean skip receipt count disagrees with addresses");
-  addresses.sort(compareTerrainAddress);
-  return { kind: "legacy", addresses };
+  return assertOceanReceipt(document);
 }
 
 async function* exactOceanReceiptLines(receipt) {
   const linesPath = outputFile(receipt.addressesPath, "ocean skip receipt");
   assert.equal(linesPath, path.join(outDir, "ocean-skipped.lines"), "ocean skip receipt path is not contained in this output");
-  const stat = fs.lstatSync(linesPath, { bigint: true });
-  assert.ok(stat.isFile() && !stat.isSymbolicLink(), `ocean skip receipt target is not a regular file: ${linesPath}`);
+  assert.equal(linesPath, publicationInputs.oceanAddresses.file, "ocean skip receipt target disagrees with publicationInputs");
+  const stat = immutableIdentity(linesPath, "ocean skip receipt target");
+  assert.ok(sameImmutableIdentity(stat, publicationInputs.oceanAddresses.identity), "ocean skip receipt target changed since publication preflight");
   const countBound = BigInt(receipt.count) * BigInt(OCEAN_SKIP_MAX_LINE_BYTES + 1);
   const statBound = countBound < BigInt(OCEAN_SKIP_MAX_LINES_BYTES) ? countBound : BigInt(OCEAN_SKIP_MAX_LINES_BYTES);
-  assert.ok(stat.size <= statBound, `ocean skip address list exceeds its declared byte bound: ${linesPath}`);
+  assert.ok(BigInt(stat.size) <= statBound, `ocean skip address list exceeds its declared byte bound: ${linesPath}`);
 
   const hash = createHash("sha256");
   let carried = Buffer.alloc(0);
@@ -286,45 +491,30 @@ async function* exactOceanReceiptLines(receipt) {
     assert.ok(count <= receipt.count, "ocean skip receipt contains more lines than its count");
     return address;
   };
-  const stream = fs.createReadStream(linesPath, { highWaterMark: 64 * 1024 });
-  try {
-    for await (const chunk of stream) {
-      const bytes = Buffer.from(chunk);
-      hash.update(bytes);
-      const input = carried.length ? Buffer.concat([carried, bytes], carried.length + bytes.length) : bytes;
-      let start = 0;
-      for (let newline = input.indexOf(0x0a, start); newline >= 0; newline = input.indexOf(0x0a, start)) {
-        const line = input.subarray(start, newline);
-        // The producer writes raw LF-delimited ASCII; accepting CRLF would
-        // make this publisher validate a different byte contract.
-        assert.ok(!line.includes(0x0d), "ocean skip lines must use LF, not CRLF");
-        yield consume(line);
-        start = newline + 1;
-      }
-      carried = Buffer.from(input.subarray(start));
-      assert.ok(carried.length <= OCEAN_SKIP_MAX_LINE_BYTES, `ocean skip line exceeds ${OCEAN_SKIP_MAX_LINE_BYTES} bytes`);
+  for await (const bytes of regularFileChunks(linesPath, "ocean skip receipt target", publicationInputs.oceanAddresses.identity)) {
+    hash.update(bytes);
+    const input = carried.length ? Buffer.concat([carried, bytes], carried.length + bytes.length) : bytes;
+    let start = 0;
+    for (let newline = input.indexOf(0x0a, start); newline >= 0; newline = input.indexOf(0x0a, start)) {
+      const line = input.subarray(start, newline);
+      // The producer writes raw LF-delimited ASCII; accepting CRLF would
+      // make this publisher validate a different byte contract.
+      assert.ok(!line.includes(0x0d), "ocean skip lines must use LF, not CRLF");
+      yield consume(line);
+      start = newline + 1;
     }
-    assert.equal(carried.length, 0, "ocean skip list must end with LF");
-  } finally {
-    stream.destroy();
+    carried = Buffer.from(input.subarray(start));
+    assert.ok(carried.length <= OCEAN_SKIP_MAX_LINE_BYTES, `ocean skip line exceeds ${OCEAN_SKIP_MAX_LINE_BYTES} bytes`);
   }
+  assert.equal(carried.length, 0, "ocean skip list must end with LF");
   assert.equal(count, receipt.count, "ocean skip receipt count disagrees with streamed worklist");
   assert.equal(hash.digest("hex"), receipt.digest, "ocean skip receipt digest disagrees with streamed worklist");
 }
 
 async function oceanSkipJoiner() {
-  const input = readOceanReceiptOrLegacy();
-  let declaredByReceipt = 0;
-  let source;
-  if (input.kind === "receipt") {
-    source = exactOceanReceiptLines(input.receipt);
-    declaredByReceipt = input.receipt.count;
-  } else if (input.kind === "legacy") {
-    source = arrayEntries(input.addresses);
-    declaredByReceipt = input.addresses.length;
-  } else {
-    source = arrayEntries([]);
-  }
+  const receipt = readOceanReceipt();
+  const declaredByReceipt = receipt.count;
+  const source = exactOceanReceiptLines(receipt);
 
   const iterator = source[Symbol.asyncIterator]();
   let next = await iterator.next();
@@ -366,12 +556,73 @@ async function oceanSkipJoiner() {
   };
 }
 
-const layerConfig = JSON.parse(fs.readFileSync(path.join(outDir, "layer-json-config.json"), "utf8"));
-const runReport = JSON.parse(fs.readFileSync(path.join(outDir, "run-report.json"), "utf8"));
-const recordsPath = path.join(outDir, "tiles.dttstream");
+const layerConfig = readBoundedJson(
+  publicationInputs.layerConfig.file,
+  MAX_LAYER_CONFIG_BYTES,
+  "layer JSON config",
+  publicationInputs.layerConfig.identity,
+);
+assert.equal(layerConfig.terrain_synth_grid_size, publicationPolicy.synthGridSize,
+  "layer JSON config terrain_synth_grid_size disagrees with approved publicationPolicy");
+const recordsPath = publicationInputs.tiles.file;
+async function* iterateBoundRecords() {
+  // Do not reopen recordsPath by name after preflight.  The descriptor is the
+  // object we hash and parse: an atomic rename between lstat() and a pathname
+  // read must never let this invocation materialize bytes other than the
+  // publicationInputs-bound store.
+  const { descriptor, identity } = openRegularRead(recordsPath, "tile store");
+  assert.ok(sameImmutableIdentity(identity, publicationInputs.tiles.identity), "tile store changed since publication preflight");
+  const stream = fs.createReadStream(null, {
+    fd: descriptor,
+    autoClose: true,
+    highWaterMark: 64 * 1024,
+  });
+  const hash = createHash("sha256");
+  let bytes = 0;
+  let records = 0;
+  let pending = Buffer.alloc(0);
+  try {
+    for await (const chunk of stream) {
+      const input = Buffer.from(chunk);
+      bytes += input.length;
+      assert.ok(bytes <= publicationInputs.tiles.entry.bytes, "tile store exceeds its verified byte count");
+      hash.update(input);
+      pending = pending.length ? Buffer.concat([pending, input]) : input;
+      let offset = 0;
+      while (offset + 4 <= pending.length) {
+        const length = pending.readUInt32LE(offset);
+        if (length === 0) {
+          offset += 4;
+          continue;
+        }
+        assert.ok(length <= MAX_TERRAIN_RECORD_BYTES,
+          `record length ${length} exceeds ${MAX_TERRAIN_RECORD_BYTES}-byte terrain safety limit`);
+        if (offset + 4 + length > pending.length) break;
+        records += 1;
+        yield pending.subarray(offset + 4, offset + 4 + length);
+        offset += 4 + length;
+      }
+      pending = pending.subarray(offset);
+    }
+    assert.equal(pending.length, 0, "the tile store ends exactly on a record boundary");
+    assert.equal(bytes, publicationInputs.tiles.entry.bytes, "tile store byte count disagrees with publicationInputs");
+    assert.equal(hash.digest("hex"), publicationInputs.tiles.entry.sha256, "tile store digest disagrees with publicationInputs");
+    assert.equal(records, publicationInputs.tiles.entry.records, "tile record count disagrees with publicationInputs");
+  } finally {
+    stream.destroy();
+    const after = immutableIdentity(recordsPath, "tile store");
+    assert.ok(sameImmutableIdentity(identity, after), "tile store changed while records were read");
+    assert.ok(sameImmutableIdentity(after, publicationInputs.tiles.identity), "tile store changed since publication preflight");
+  }
+}
 let firstRecord = null;
-for await (const record of iterateStreamFile(recordsPath)) { firstRecord = Buffer.from(record); break; }
+let verifiedRecordCount = 0;
+for await (const record of iterateBoundRecords()) {
+  if (!firstRecord) firstRecord = Buffer.from(record);
+  verifiedRecordCount += 1;
+}
 assert.ok(firstRecord, "the store holds no records");
+assert.equal(verifiedRecordCount, publicationInputs.tiles.entry.records, "tile record count disagrees with publicationInputs");
 
 // ── THE MODULE, DRIVEN THE WAY THE FLOW DRIVES IT ──────────────────────────
 //
@@ -472,10 +723,29 @@ async function routed(urlPath) {
 const headerOf = (http, name) =>
   (http.headers ?? []).find((h) => h.name?.toLowerCase() === name)?.value ?? "";
 
-const identityBody = (http) =>
-  headerOf(http, "content-encoding").toLowerCase() === "gzip"
-    ? zlib.gunzipSync(Buffer.from(http.body))
-    : Buffer.from(http.body);
+function inflateGzipBounded(bytes, label) {
+  try {
+    const output = zlib.gunzipSync(Buffer.from(bytes), { maxOutputLength: STATIC_TRANSPORT_BOUNDS.hard + 1 });
+    assert.ok(output.length <= STATIC_TRANSPORT_BOUNDS.hard, `${label} exceeds static transport hard cap`);
+    return output;
+  } catch (error) {
+    throw new Error(`${label} cannot be safely inflated within ${STATIC_TRANSPORT_BOUNDS.hard} bytes`, { cause: error });
+  }
+}
+
+if (args.testGzipBomb) {
+  inflateGzipBounded(
+    zlib.gzipSync(Buffer.alloc(STATIC_TRANSPORT_BOUNDS.hard + 1)),
+    "test gzip bomb",
+  );
+}
+
+const identityBody = (http, label) => {
+  const body = Buffer.from(http.body);
+  if (headerOf(http, "content-encoding").toLowerCase() === "gzip") return inflateGzipBounded(body, label);
+  assert.ok(body.length <= STATIC_TRANSPORT_BOUNDS.hard, `${label} exceeds static transport hard cap`);
+  return body;
+};
 
 // layer.json: route it, then render the plan route produced. Going through
 // route() rather than calling layer_json with a hand-built plan is the point —
@@ -491,7 +761,7 @@ async function renderLayerJson() {
   assert.equal(rendered.statusCode, 0, `${rendered.errorCode}: ${rendered.errorMessage}`);
   const http = decodeHttpResponse(new Uint8Array(rendered.outputs[0].payload));
   assert.equal(http.status, 200, "layer.json did not render 200");
-  return identityBody(http);
+  return identityBody(http, "layer.json response");
 }
 
 // A tile the tileset promises and the store does not hold: ask the module for
@@ -512,7 +782,7 @@ async function synthesizeTile(level, x, y) {
     200,
     `the mount answers ${level}/${x}/${y} with ${http.status}; a gateway would answer 404`,
   );
-  return identityBody(http);
+  return identityBody(http, `synthesized ${level}/${x}/${y}`);
 }
 
 // ── EVERY FILE IS CHECKED FOR THE MASK BEFORE IT IS WRITTEN ────────────────
@@ -560,6 +830,7 @@ function assertWaterMaskExtension(bytes, name) {
 }
 
 const layerJson = await renderLayerJson();
+assert.ok(layerJson.length <= MAX_LAYER_JSON_BYTES, `layer.json exceeds ${MAX_LAYER_JSON_BYTES} bytes`);
 
 function parseTerrainAddress(address) {
   assert.equal(typeof address, "string", "terrain address must be a string");
@@ -575,19 +846,18 @@ function terrainAddressOrderKey(address) {
   return `${String(level).padStart(TERRAIN_ADDRESS_FIELD_WIDTH, "0")}|${String(y).padStart(TERRAIN_ADDRESS_FIELD_WIDTH, "0")}|${String(x).padStart(TERRAIN_ADDRESS_FIELD_WIDTH, "0")}`;
 }
 
-// Count and bound the output before a staging directory is made.  A static
-// directory needs room beside an already-complete one, so this is an upper
-// bound rather than a hopeful post-write observation: stored files are sized
-// exactly and synthesized files reserve their transport hard cap.
+// Count file entries before staging. The approved global publication policy
+// names a distinct static-directory ceiling, so this cannot falsely equate a
+// compressed $DTT store estimate with identity files at a gateway.
 async function precomputeMaterializationPlan() {
   let storedFiles = 0;
   let storedBytes = 0;
-  for await (const record of iterateStreamFile(recordsPath)) {
+  for await (const record of iterateBoundRecords()) {
     const dtt = readDtt(record);
     assert.ok(dtt.payload?.bytes, `${dtt.level}/${dtt.x}/${dtt.y}: record carries no payload bytes`);
     const stored = Buffer.from(dtt.payload.bytes);
     const body =
-      (dtt.payload.contentEncoding ?? "").toLowerCase() === "gzip" ? zlib.gunzipSync(stored) : stored;
+      (dtt.payload.contentEncoding ?? "").toLowerCase() === "gzip" ? inflateGzipBounded(stored, `static tile ${dtt.level}/${dtt.x}/${dtt.y}`) : stored;
     assert.ok(body.length <= STATIC_TRANSPORT_BOUNDS.hard, `static tile ${body.length} exceeds hard transport cap`);
     storedFiles += 1;
     storedBytes += body.length;
@@ -602,28 +872,66 @@ async function precomputeMaterializationPlan() {
     synthesizedFiles += 1;
   }
   const files = 1 + storedFiles + synthesizedFiles;
-  const byteUpperBound = BigInt(layerJson.length + storedBytes) +
-    BigInt(synthesizedFiles) * BigInt(STATIC_TRANSPORT_BOUNDS.hard);
   assert.ok(files <= MAX_MATERIALIZED_FILES, `materialization plans ${files} files; hard limit is ${MAX_MATERIALIZED_FILES}`);
-  assert.ok(
-    byteUpperBound <= BigInt(MAX_MATERIALIZED_BYTES),
-    `materialization reserves ${byteUpperBound} bytes; hard limit is ${MAX_MATERIALIZED_BYTES}`,
-  );
-  return { files, storedFiles, synthesizedFiles, byteUpperBound };
+  return { files, storedFiles, synthesizedFiles, decodedStoredBytes: storedBytes };
 }
 
 function reserveStagingSpace(plan) {
   const stats = fs.statfsSync(outDir, { bigint: true });
   const freeBytes = stats.bavail * stats.bsize;
-  const requiredBytes = plan.byteUpperBound + BigInt(STAGING_HEADROOM_BYTES) + args.reserveFreeBytes;
+  assert.ok(stats.bsize > 0n, "statfs returned an invalid allocation block size");
+  const blockSize = stats.bsize;
+  const fileCountBound = BigInt(plan.files);
+  // `maxStaticDirectoryBytes` is a logical-byte policy.  On a 4 KiB volume a
+  // few million small files need one allocation block each in addition to the
+  // logical total, while the bounded, on-disk multipart manifest is live at
+  // the same time as the directory.
+  const approvedLogicalBytes = BigInt(publicationPolicy.maxStaticDirectoryBytes);
+  const payloadRoundingBytes = fileCountBound * (blockSize - 1n);
+  // One further block per output is reserved for inode/directory metadata.
+  // Filesystems vary, so this is a conservative admission reservation, not a
+  // claim that logical directoryBytes is allocated byte-for-byte on disk.
+  const inodeAndDirectoryBytes = fileCountBound * blockSize;
+  const physicalStaticBytes = approvedLogicalBytes + payloadRoundingBytes + inodeAndDirectoryBytes;
+  const manifestLogicalBytes = fileCountBound * BigInt(MAX_WORKLIST_LINE_BYTES);
+  const manifestPhysicalBytes = manifestLogicalBytes + (blockSize - 1n);
+  const journalAndArtifactBytes = BigInt(MAX_CONTROL_RESPONSE_BYTES) * 8n + blockSize * 8n;
+  const headroomBytes = BigInt(STAGING_HEADROOM_BYTES) + journalAndArtifactBytes;
+  const requiredBytes = physicalStaticBytes + manifestPhysicalBytes + headroomBytes + args.reserveFreeBytes;
   assert.ok(
     freeBytes >= requiredBytes,
     `insufficient free space for staged IPFS directory: need ${requiredBytes} bytes, have ${freeBytes}`,
   );
-  return { freeBytes, requiredBytes };
+  return {
+    freeBytes,
+    requiredBytes,
+    approvedLogicalBytes,
+    physicalStaticBytes,
+    payloadRoundingBytes,
+    inodeAndDirectoryBytes,
+    manifestPhysicalBytes,
+    headroomBytes,
+    blockSize,
+  };
+}
+
+async function rehashPublicationInputsForMaterialization() {
+  const checks = [
+    ["tiles", "tile store", null],
+    ["availableButUnstored", "available-but-unstored worklist", "addresses"],
+    ["layerConfig", "layer JSON config", null],
+    ["oceanReceipt", "ocean skip receipt", null],
+    ["oceanAddresses", "ocean skip addresses", "addresses"],
+  ];
+  for (const [key, label, countField] of checks) {
+    const verified = await hashPublicationInput(publicationInputs[key].entry, label, countField, publicationInputs[key].identity);
+    assert.ok(sameImmutableIdentity(verified.identity, publicationInputs[key].identity),
+      `${label} changed between publication preflight and materialization`);
+  }
 }
 
 // ── MATERIALIZE ────────────────────────────────────────────────────────────
+await rehashPublicationInputsForMaterialization();
 const materializationPlan = await precomputeMaterializationPlan();
 const stagingReservation = reserveStagingSpace(materializationPlan);
 const attemptToken = `${process.pid}-${randomUUID()}`;
@@ -652,6 +960,7 @@ function stageArtifact(livePath, bytes) {
   } finally {
     fs.closeSync(descriptor);
   }
+  fsyncDirectory(outDir);
   stagedArtifactPaths.add(stagedPath);
   return stagedPath;
 }
@@ -663,48 +972,169 @@ function discardStagedArtifacts() {
   stagedArtifactPaths.clear();
 }
 
-// Each old target is first moved to an attempt-token sibling.  Only after all
-// staged replacements are live are those prior copies removed; any intervening
-// failure restores every old target and leaves the completed ipfs/ untouched.
-function commitStagedPublication(artifacts) {
-  const replacements = [{ live: ipfsDir, staged: stagingDir }, ...artifacts];
-  const backups = [];
-  const installed = [];
+function assertTransactionPath(value, label, nullable = false) {
+  if (nullable && value === null) return null;
+  assert.equal(typeof value, "string", `${label} must be a path`);
+  assert.equal(path.dirname(value), outDir, `${label} leaves the builder output`);
+  assert.ok(path.basename(value).startsWith("." ) || ["ipfs", "tileset-catalogue.json", "tileset-catalogue.dttstream", "ipfs-publication.json", "serving-config-ipfs.json", "pending-ipfs-pin.json"].includes(path.basename(value)),
+    `${label} is not a publication transaction target`);
+  return assertWithinRealOutput(value, label);
+}
+
+function fsyncTree(target) {
+  const stat = fs.lstatSync(target, { bigint: true });
+  assert.ok(!stat.isSymbolicLink(), `refusing to commit symlinked staged path ${target}`);
+  if (stat.isFile()) {
+    const descriptor = fs.openSync(target, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+    return;
+  }
+  assert.ok(stat.isDirectory(), `staged target is neither file nor directory: ${target}`);
+  for (const entry of fs.readdirSync(target)) fsyncTree(path.join(target, entry));
+  fsyncDirectory(target);
+}
+
+function writeTransactionJournal(journal) {
+  const bytes = Buffer.from(`${JSON.stringify(journal, null, 2)}\n`);
+  assert.ok(bytes.length <= MAX_CONTROL_RESPONSE_BYTES, "publication transaction journal exceeds safety cap");
+  const temporary = path.join(outDir, `.ipfs-publication-transaction-${journal.attempt}.tmp`);
+  const descriptor = fs.openSync(temporary, "wx", 0o600);
   try {
-    for (const replacement of replacements) {
-      const backup = path.join(outDir, `.${path.basename(replacement.live)}-previous-${attemptToken}`);
-      if (fs.existsSync(replacement.live)) {
-        fs.renameSync(replacement.live, backup);
-        backups.push({ live: replacement.live, backup });
-      }
+    fs.writeFileSync(descriptor, bytes);
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  fs.renameSync(temporary, transactionPath);
+  fsyncDirectory(outDir);
+}
+
+function readTransactionJournal() {
+  if (!fs.existsSync(transactionPath)) return null;
+  const journal = readBoundedJson(transactionPath, MAX_CONTROL_RESPONSE_BYTES, "publication transaction journal");
+  assertExactKeys(journal, ["format", "attempt", "backupProgress", "installProgress", "installingIndex", "replacements"], "publication transaction journal");
+  assert.equal(journal.format, "terrain-ipfs-publication-transaction-v1", "unsupported publication transaction journal format");
+  assert.equal(typeof journal.attempt, "string", "publication transaction attempt must be a string");
+  assert.ok(Array.isArray(journal.replacements) && journal.replacements.length > 0 && journal.replacements.length <= 8,
+    "publication transaction replacements are invalid");
+  for (const replacement of journal.replacements) {
+    assertExactKeys(replacement, ["backup", "hadLive", "live", "staged"], "publication transaction replacement");
+    assertTransactionPath(replacement.live, "publication transaction live path");
+    assertTransactionPath(replacement.staged, "publication transaction staged path", true);
+    assertTransactionPath(replacement.backup, "publication transaction backup path");
+    assert.equal(typeof replacement.hadLive, "boolean", "publication transaction hadLive must be boolean");
+  }
+  for (const field of ["backupProgress", "installProgress"]) {
+    assert.ok(Number.isSafeInteger(journal[field]) && journal[field] >= 0 && journal[field] <= journal.replacements.length,
+      `publication transaction ${field} is invalid`);
+  }
+  assert.ok(
+    journal.installingIndex === null ||
+      (Number.isSafeInteger(journal.installingIndex) && journal.installingIndex >= journal.installProgress && journal.installingIndex < journal.replacements.length),
+    "publication transaction installingIndex is invalid",
+  );
+  return journal;
+}
+
+function removePublicationPath(target) {
+  if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
+}
+
+function finishPublicationTransaction(journal) {
+  for (const replacement of journal.replacements) {
+    removePublicationPath(replacement.backup);
+    if (replacement.staged !== null) removePublicationPath(replacement.staged);
+  }
+  fsyncDirectory(outDir);
+  if (fs.existsSync(transactionPath)) fs.rmSync(transactionPath, { force: true });
+  fsyncDirectory(outDir);
+}
+
+function recoverPublicationTransaction() {
+  const journal = readTransactionJournal();
+  if (!journal) return;
+  if (journal.installProgress === journal.replacements.length && journal.installingIndex === null) {
+    finishPublicationTransaction(journal);
+    return;
+  }
+  // `installingIndex` is written and fsynced *before* its staged->live rename.
+  // Therefore a crash after that rename but before installProgress is durable
+  // has an unambiguous recovery state: treat that one replacement as installed
+  // long enough to remove its new live object before restoring its backup.
+  const effectiveInstallProgress = Math.max(
+    journal.installProgress,
+    journal.installingIndex === null ? 0 : journal.installingIndex + 1,
+  );
+  for (let index = journal.replacements.length - 1; index >= 0; index -= 1) {
+    const replacement = journal.replacements[index];
+    if (index < effectiveInstallProgress && replacement.staged !== null) removePublicationPath(replacement.live);
+    if (replacement.hadLive && fs.existsSync(replacement.backup)) fs.renameSync(replacement.backup, replacement.live);
+    else if (!replacement.hadLive) removePublicationPath(replacement.live);
+    if (replacement.staged !== null) removePublicationPath(replacement.staged);
+    fsyncDirectory(outDir);
+  }
+  if (fs.existsSync(transactionPath)) fs.rmSync(transactionPath, { force: true });
+  fsyncDirectory(outDir);
+}
+
+function maybeCrashTransaction(phase) {
+  if (args.testCrashAt !== phase) return;
+  process.stderr.write(`test crash injected at ${phase}\n`);
+  process.exit(86);
+}
+
+// Each transition is persisted before the next rename. A later invocation
+// rolls an interrupted partial install back, or rolls a fully installed one
+// forward by deleting only its journal-declared backups.
+function commitStagedPublication(artifacts) {
+  const replacements = [{ live: ipfsDir, staged: stagingDir }, ...artifacts].map((replacement) => ({
+    live: assertTransactionPath(replacement.live, "publication live path"),
+    staged: replacement.staged === null ? null : assertTransactionPath(replacement.staged, "publication staged path"),
+    backup: path.join(outDir, `.${path.basename(replacement.live)}-previous-${attemptToken}`),
+    hadLive: fs.existsSync(replacement.live),
+  }));
+  fsyncTree(stagingDir);
+  for (const replacement of replacements) if (replacement.staged !== null && replacement.staged !== stagingDir) fsyncTree(replacement.staged);
+  fsyncDirectory(outDir);
+  const journal = {
+    format: "terrain-ipfs-publication-transaction-v1",
+    attempt: attemptToken,
+    backupProgress: 0,
+    installProgress: 0,
+    installingIndex: null,
+    replacements,
+  };
+  writeTransactionJournal(journal);
+  try {
+    for (let index = 0; index < replacements.length; index += 1) {
+      const replacement = replacements[index];
+      if (replacement.hadLive) fs.renameSync(replacement.live, replacement.backup);
+      journal.backupProgress = index + 1;
+      writeTransactionJournal(journal);
+      maybeCrashTransaction(`backup-${index + 1}`);
     }
-    for (const replacement of replacements) {
-      if (replacement.staged === null) continue;
-      fs.renameSync(replacement.staged, replacement.live);
-      installed.push(replacement);
-      stagedArtifactPaths.delete(replacement.staged);
+    for (let index = 0; index < replacements.length; index += 1) {
+      const replacement = replacements[index];
+      // Persist the exact ambiguous boundary first.  Recovery can distinguish
+      // a rename that happened before installProgress was advanced from one
+      // that did not, and can restore a nonempty prior directory idempotently.
+      journal.installingIndex = index;
+      writeTransactionJournal(journal);
+      if (replacement.staged !== null) {
+        fs.renameSync(replacement.staged, replacement.live);
+        stagedArtifactPaths.delete(replacement.staged);
+      }
+      maybeCrashTransaction(`install-renamed-${index + 1}`);
+      journal.installProgress = index + 1;
+      journal.installingIndex = null;
+      writeTransactionJournal(journal);
+      maybeCrashTransaction(`install-${index + 1}`);
     }
   } catch (error) {
-    for (const replacement of [...installed].reverse()) {
-      if (fs.existsSync(replacement.live)) {
-        fs.renameSync(replacement.live, replacement.staged);
-        if (replacement.staged !== stagingDir) stagedArtifactPaths.add(replacement.staged);
-      }
-    }
-    for (const { live, backup } of [...backups].reverse()) {
-      if (fs.existsSync(backup)) fs.renameSync(backup, live);
-    }
+    recoverPublicationTransaction();
     throw error;
   }
-  for (const { backup } of backups) {
-    // Completion already succeeded; a cleanup fault preserves the old sibling
-    // instead of deleting either valid completed state.
-    try {
-      fs.rmSync(backup, { recursive: true, force: true });
-    } catch {
-      // The unique sibling is recoverable and intentionally left in place.
-    }
-  }
+  finishPublicationTransaction(journal);
 }
 
 let fileCount = 0;
@@ -712,6 +1142,8 @@ let totalBytes = 0;
 const write = (rel, bytes) => {
   const full = path.join(stagingDir, rel);
   fs.mkdirSync(path.dirname(full), { recursive: true });
+  assert.ok(BigInt(totalBytes) + BigInt(bytes.length) <= BigInt(publicationPolicy.maxStaticDirectoryBytes),
+    `static directory would exceed approved ${publicationPolicy.maxStaticDirectoryBytes} bytes`);
   fs.writeFileSync(full, bytes);
   fileCount += 1;
   totalBytes += bytes.length;
@@ -750,6 +1182,7 @@ let harnessDestroyed = false;
 let staticIdentity;
 let oceanSkipsDeclared = 0;
 let oceanSkipsServedAsLand = 0;
+let actualStaticPhysicalUpperBytes = null;
 const oceanSkipLandDiagnostics = [];
 
 async function failMaterialization(error) {
@@ -768,7 +1201,7 @@ async function failMaterialization(error) {
 
 try {
 write("layer.json", layerJson);
-for await (const record of iterateStreamFile(recordsPath)) {
+for await (const record of iterateBoundRecords()) {
   const dtt = readDtt(record);
   const key = `${dtt.level}/${dtt.x}/${dtt.y}`;
   // verify.mjs owns global duplicate detection. Keeping every address here
@@ -779,7 +1212,7 @@ for await (const record of iterateStreamFile(recordsPath)) {
   assert.ok(dtt.payload?.bytes, `${key}: record carries no payload bytes`);
   const stored = Buffer.from(dtt.payload.bytes);
   const body =
-    (dtt.payload.contentEncoding ?? "").toLowerCase() === "gzip" ? zlib.gunzipSync(stored) : stored;
+    (dtt.payload.contentEncoding ?? "").toLowerCase() === "gzip" ? inflateGzipBounded(stored, `static tile ${key}`) : stored;
   const mask = assertWaterMaskExtension(body, key);
   if (mask.kind === "RASTER") rasterMasks += 1;
   else uniformMasks += 1;
@@ -848,7 +1281,11 @@ assert.ok(staticIdentity.p50 <= STATIC_TRANSPORT_BOUNDS.p50, `static identity p5
 assert.ok(staticIdentity.p99 <= STATIC_TRANSPORT_BOUNDS.p99, `static identity p99 ${staticIdentity.p99} exceeds ${STATIC_TRANSPORT_BOUNDS.p99}`);
 assert.ok(staticIdentity.max <= STATIC_TRANSPORT_BOUNDS.hard, `static identity max ${staticIdentity.max} exceeds ${STATIC_TRANSPORT_BOUNDS.hard}`);
 assert.equal(fileCount, materializationPlan.files, "materialized file count disagrees with the preflight plan");
-assert.ok(BigInt(totalBytes) <= materializationPlan.byteUpperBound, "materialized bytes exceed the reserved bound");
+assert.ok(BigInt(totalBytes) <= BigInt(publicationPolicy.maxStaticDirectoryBytes), "materialized bytes exceed approved static directory bound");
+actualStaticPhysicalUpperBytes = BigInt(totalBytes) + BigInt(fileCount) *
+  ((stagingReservation.blockSize - 1n) + stagingReservation.blockSize);
+assert.ok(actualStaticPhysicalUpperBytes <= stagingReservation.physicalStaticBytes,
+  "materialized staging tree exceeds its approved physical allocation reservation");
 } catch (error) {
   await failMaterialization(error);
 }
@@ -914,8 +1351,10 @@ function multipartHeader(boundary, name) {
 
 function multipartPlan(directory, boundary) {
   const manifestPath = path.join(outDir, `.ipfs-upload-manifest-${attemptToken}.ndjson`);
+  const directoryManifestPath = path.join(outDir, `.ipfs-upload-directories-${attemptToken}.ndjson`);
   const descriptor = fs.openSync(manifestPath, "wx", 0o600);
   attemptScratchPaths.add(manifestPath);
+  attemptScratchPaths.add(directoryManifestPath);
   let expectedFiles = 0;
   let contentLength = 0n;
   try {
@@ -936,7 +1375,59 @@ function multipartPlan(directory, boundary) {
   contentLength += BigInt(closing.length);
   assert.equal(expectedFiles, fileCount, "materialized file count changed before multipart planning");
   assert.ok(contentLength <= BigInt(Number.MAX_SAFE_INTEGER), "multipart Content-Length exceeds fetch's safe range");
-  return { manifestPath, expectedFiles, boundary, closing, contentLength };
+  // Kubo emits UnixFS intermediate-directory receipts as it closes branches.
+  // A second deterministic walk writes their post-order sequence to disk;
+  // only the active directory ancestry is retained (bounded by path depth).
+  const directoryDescriptor = fs.openSync(directoryManifestPath, "wx", 0o600);
+  let expectedDirectories = 0;
+  let openDirectories = [];
+  try {
+    for (const file of sortedRegularFiles(directory)) {
+      const parents = file.rel.split("/").slice(0, -1);
+      let common = 0;
+      while (common < openDirectories.length && common < parents.length && openDirectories[common] === parents[common]) common += 1;
+      for (let index = openDirectories.length - 1; index >= common; index -= 1) {
+        const name = `${tilesetId}/${openDirectories.slice(0, index + 1).join("/")}`;
+        const line = `${name}\n`;
+        assert.ok(Buffer.byteLength(line) <= MAX_WORKLIST_LINE_BYTES, `directory receipt manifest entry for ${name} exceeds ${MAX_WORKLIST_LINE_BYTES} bytes`);
+        fs.writeSync(directoryDescriptor, line);
+        expectedDirectories += 1;
+      }
+      openDirectories = parents;
+    }
+    for (let index = openDirectories.length - 1; index >= 0; index -= 1) {
+      const name = `${tilesetId}/${openDirectories.slice(0, index + 1).join("/")}`;
+      const line = `${name}\n`;
+      assert.ok(Buffer.byteLength(line) <= MAX_WORKLIST_LINE_BYTES, `directory receipt manifest entry for ${name} exceeds ${MAX_WORKLIST_LINE_BYTES} bytes`);
+      fs.writeSync(directoryDescriptor, line);
+      expectedDirectories += 1;
+    }
+  } finally {
+    fs.closeSync(directoryDescriptor);
+  }
+  assert.ok(Number.isSafeInteger(expectedDirectories) && expectedDirectories <= MAX_MATERIALIZED_FILES * 3,
+    "materialization directory receipt count exceeds its bounded tree shape");
+  return { manifestPath, directoryManifestPath, expectedFiles, expectedDirectories, boundary, closing, contentLength };
+}
+
+function boundedMilliseconds(value, label) {
+  assert.ok(value > 0n && value <= BigInt(Number.MAX_SAFE_INTEGER), `${label} is outside the supported timer range`);
+  return Number(value);
+}
+
+function bulkUploadTimeoutFor(plan) {
+  if (args.bulkUploadTimeoutMs !== null) return args.bulkUploadTimeoutMs;
+  const bytes = plan.contentLength;
+  const milliseconds = ((bytes + BigInt(MIN_BULK_UPLOAD_BYTES_PER_SECOND) - 1n) /
+    BigInt(MIN_BULK_UPLOAD_BYTES_PER_SECOND)) * 1000n + BULK_UPLOAD_OVERHEAD_MS;
+  return boundedMilliseconds(milliseconds, "derived bulk upload timeout");
+}
+
+function pinTraversalTimeoutFor(files) {
+  if (args.pinTimeoutMs !== null) return args.pinTimeoutMs;
+  const milliseconds = ((BigInt(files) + BigInt(MIN_PIN_TRAVERSAL_FILES_PER_SECOND) - 1n) /
+    BigInt(MIN_PIN_TRAVERSAL_FILES_PER_SECOND)) * 1000n + PIN_TRAVERSAL_OVERHEAD_MS;
+  return boundedMilliseconds(milliseconds, "derived pin traversal timeout");
 }
 
 async function* uploadManifestEntries(plan) {
@@ -952,6 +1443,15 @@ async function* uploadManifestEntries(plan) {
     assert.equal(entry.name, `${tilesetId}/${entry.rel}`, "upload manifest name disagrees with path");
     for (const field of ["dev", "ino", "size", "mtimeNs"]) assert.match(entry[field] ?? "", /^\d+$/, `upload manifest ${field} is invalid`);
     yield entry;
+  }
+}
+
+async function* directoryReceiptManifestEntries(plan) {
+  for await (const name of boundedLines(plan.directoryManifestPath, MAX_WORKLIST_LINE_BYTES, "directory receipt manifest")) {
+    assert.equal(typeof name, "string", "directory receipt manifest entry is invalid");
+    assert.ok(name.startsWith(`${tilesetId}/`), "directory receipt manifest escapes its root");
+    assertSafeRelativePath(name.slice(tilesetId.length + 1), "directory receipt manifest path");
+    yield name;
   }
 }
 
@@ -980,18 +1480,18 @@ async function* multipartParts(plan) {
   yield plan.closing;
 }
 
-async function withRequest(url, options, label, consume) {
+async function withRequest(url, options, label, consume, timeoutMs = args.timeoutMs) {
   const controller = new AbortController();
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
     controller.abort();
-  }, args.timeoutMs);
+  }, timeoutMs);
   try {
     const response = await fetch(url, { ...options, signal: controller.signal, redirect: "error" });
     return await consume(response, controller);
   } catch (error) {
-    if (timedOut) throw new Error(`${label} timed out after ${args.timeoutMs} ms`, { cause: error });
+    if (timedOut) throw new Error(`${label} timed out after ${timeoutMs} ms`, { cause: error });
     throw error;
   } finally {
     clearTimeout(timer);
@@ -1048,7 +1548,7 @@ function validateReceiptEntry(entry, index) {
 async function readAddReceipt(response, plan, onRoot, controller) {
   assert.equal(response.status, 200, `kubo add: HTTP ${response.status}`);
   assert.ok(response.body, "kubo add returned an empty response body");
-  const expectedEntries = plan.expectedFiles + 1;
+  const expectedEntries = plan.expectedFiles + plan.expectedDirectories + 1;
   const maxReceiptBytes = BigInt(expectedEntries) * BigInt(MAX_RECEIPT_LINE_BYTES + 1);
   declaredResponseLength(response, maxReceiptBytes, "kubo add receipt", controller);
   const decoder = new StringDecoder("utf8");
@@ -1057,8 +1557,12 @@ async function readAddReceipt(response, plan, onRoot, controller) {
   let entries = 0;
   let root = null;
   let layerEntry = null;
-  const manifest = uploadManifestEntries(plan);
-  let expected = await manifest.next();
+  let files = 0;
+  let directories = 0;
+  const fileManifest = uploadManifestEntries(plan);
+  const directoryManifest = directoryReceiptManifestEntries(plan);
+  let expectedFile = await fileManifest.next();
+  let expectedDirectory = await directoryManifest.next();
 
   const consumeLine = async (raw) => {
     const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
@@ -1073,13 +1577,15 @@ async function readAddReceipt(response, plan, onRoot, controller) {
       throw new Error(`kubo add receipt entry ${entries} is invalid JSON`, { cause: error });
     }
     validateReceiptEntry(entry, entries);
-    if (entries <= plan.expectedFiles) {
-      assert.ok(!expected.done, "kubo add returned a file receipt after the manifest ended");
-      assert.equal(entry.Name, expected.value.name, `kubo add receipt ${entries} is not the planned file`);
+    if (!expectedFile.done && entry.Name === expectedFile.value.name) {
+      files += 1;
       if (entry.Name === `${tilesetId}/layer.json`) layerEntry = entry;
-      expected = await manifest.next();
+      expectedFile = await fileManifest.next();
+    } else if (!expectedDirectory.done && entry.Name === expectedDirectory.value) {
+      directories += 1;
+      expectedDirectory = await directoryManifest.next();
     } else {
-      assert.ok(expected.done, "kubo add returned its root before every planned file receipt");
+      assert.ok(expectedFile.done && expectedDirectory.done, "kubo add returned an unplanned file or directory receipt");
       assert.equal(entry.Name, tilesetId, `kubo add root receipt must be exactly ${tilesetId}`);
       assert.equal(root, null, `kubo add returned more than one root receipt for ${tilesetId}`);
       root = entry;
@@ -1106,10 +1612,13 @@ async function readAddReceipt(response, plan, onRoot, controller) {
   pending += decoder.end();
   if (pending.length > 0) await consumeLine(pending);
   assert.equal(entries, expectedEntries, `kubo add returned ${entries} receipt entries; expected ${expectedEntries}`);
-  assert.ok(expected.done, "kubo add omitted a planned file receipt");
+  assert.equal(files, plan.expectedFiles, "kubo add omitted a planned file receipt");
+  assert.equal(directories, plan.expectedDirectories, "kubo add omitted a planned directory receipt");
+  assert.ok(expectedFile.done, "kubo add omitted a planned file receipt");
+  assert.ok(expectedDirectory.done, "kubo add omitted a planned directory receipt");
   assert.ok(root, `kubo add returned no entry for the root directory ${tilesetId}`);
   assert.ok(layerEntry, `kubo add returned no entry for ${tilesetId}/layer.json`);
-  return { cid: root.Hash, layerJsonCid: layerEntry.Hash, entries };
+  return { cid: root.Hash, layerJsonCid: layerEntry.Hash, entries, directories };
 }
 
 async function addAndPin(apiURL, onRoot) {
@@ -1134,13 +1643,14 @@ async function addAndPin(apiURL, onRoot) {
       },
       "kubo add",
       (response, controller) => readAddReceipt(response, plan, onRoot, controller),
+      bulkUploadTimeoutFor(plan),
     );
   } finally {
     discardAttemptScratch();
   }
 }
 
-async function pinCreatedRoot(apiURL, cid) {
+async function pinCreatedRoot(apiURL, cid, timeoutMs) {
   return withRequest(
     `${apiURL.replace(/\/$/, "")}/api/v0/pin/add?arg=${encodeURIComponent(cid)}&recursive=true`,
     { method: "POST", headers: { "user-agent": "" } },
@@ -1156,6 +1666,7 @@ async function pinCreatedRoot(apiURL, cid) {
       }
       assert.ok(Array.isArray(decoded.Pins) && decoded.Pins.includes(cid), `pin/add did not acknowledge ${cid}`);
     },
+    timeoutMs,
   );
 }
 
@@ -1174,14 +1685,30 @@ async function preflightKubo(apiURL) {
   );
 }
 
-async function lookupRecursivePin(apiURL, cid) {
+function isKuboUnpinnedResponse(text, cid) {
+  let error;
+  try {
+    error = JSON.parse(text);
+  } catch {
+    return false;
+  }
+  return error && typeof error === "object" && !Array.isArray(error) &&
+    Object.keys(error).length === 3 && error.Message === `path '${cid}' is not pinned` &&
+    error.Code === 0 && error.Type === "error";
+}
+
+async function lookupRecursivePin(apiURL, cid, timeoutMs) {
   return withRequest(
     `${apiURL.replace(/\/$/, "")}/api/v0/pin/ls?arg=${encodeURIComponent(cid)}&type=recursive`,
     { method: "POST", headers: { "user-agent": "" } },
     "kubo pin/ls",
     async (response, controller) => {
       const text = await readResponseText(response, MAX_CONTROL_RESPONSE_BYTES, "kubo pin/ls", controller);
-      if (response.status === 404) return { present: false, type: null, response: text };
+      // Kubo 0.39 reports this exact ordinary absence as HTTP 500.  Do not
+      // weaken 500 handling: malformed or different errors remain fatal.
+      if (response.status === 404 || (response.status === 500 && isKuboUnpinnedResponse(text, cid))) {
+        return { present: false, type: null, response: text };
+      }
       assert.equal(response.status, 200, `pin/ls: HTTP ${response.status}: ${text.slice(0, 200)}`);
       let decoded;
       try {
@@ -1196,6 +1723,7 @@ async function lookupRecursivePin(apiURL, cid) {
       assert.equal(entry.Type, "recursive", `the root ${cid} is not recursively pinned`);
       return { present: true, type: entry.Type, response: JSON.stringify(decoded) };
     },
+    timeoutMs,
   );
 }
 
@@ -1207,14 +1735,18 @@ function assertBoundedString(value, label) {
 
 function assertPendingPinReceipt(receipt) {
   assert.ok(receipt && typeof receipt === "object" && !Array.isArray(receipt), "pending IPFS pin receipt must be an object");
-  const allowed = new Set(["format", "cid", "pinProof", "preexisting", "attempt", "recordedAt"]);
-  for (const key of Object.keys(receipt)) assert.ok(allowed.has(key), `pending IPFS pin receipt has unexpected field ${key}`);
-  assert.equal(receipt.format, "terrain-ipfs-pending-pin-v1", "pending IPFS pin receipt format is unsupported");
+  assert.equal(receipt.format, "terrain-ipfs-pin-intent-v1", "pending IPFS pin receipt format is unsupported");
+  assert.ok(["intent", "proven-pending"].includes(receipt.state), "pending IPFS pin receipt state is unsupported");
+  const allowed = receipt.state === "intent"
+    ? ["format", "state", "cid", "attempt", "recordedAt"]
+    : ["format", "state", "cid", "pinProof", "preexisting", "attempt", "recordedAt"];
+  assert.deepEqual(Object.keys(receipt).sort(), [...allowed].sort(), "pending IPFS pin receipt has unexpected or missing fields");
   assert.match(assertBoundedString(receipt.cid, "pending IPFS pin CID"), /^[A-Za-z0-9]+$/, "pending IPFS pin CID is not CID-shaped");
-  assert.equal(typeof receipt.preexisting, "boolean", "pending IPFS pin preexisting must be boolean");
   assertBoundedString(receipt.attempt, "pending IPFS pin attempt");
   assertBoundedString(receipt.recordedAt, "pending IPFS pin time");
   assert.ok(Number.isFinite(Date.parse(receipt.recordedAt)), "pending IPFS pin time is invalid");
+  if (receipt.state === "intent") return receipt;
+  assert.equal(typeof receipt.preexisting, "boolean", "pending IPFS pin preexisting must be boolean");
   const proof = receipt.pinProof;
   assert.ok(proof && typeof proof === "object" && !Array.isArray(proof), "pending IPFS pin proof must be an object");
   for (const key of Object.keys(proof)) assert.ok(["api", "checkedAt", "endpoint", "type", "response", "preexisting"].includes(key), `pending IPFS pin proof has unexpected field ${key}`);
@@ -1230,12 +1762,9 @@ function assertPendingPinReceipt(receipt) {
 
 function readPendingPinReceipt() {
   if (!fs.existsSync(pendingPinPath)) return null;
-  const stat = fs.lstatSync(pendingPinPath, { bigint: true });
-  assert.ok(stat.isFile() && !stat.isSymbolicLink(), `pending IPFS pin receipt is not a regular file: ${pendingPinPath}`);
-  assert.ok(stat.size <= BigInt(MAX_CONTROL_RESPONSE_BYTES), `pending IPFS pin receipt exceeds ${MAX_CONTROL_RESPONSE_BYTES} bytes`);
   let receipt;
   try {
-    receipt = JSON.parse(fs.readFileSync(pendingPinPath, "utf8"));
+    receipt = JSON.parse(readBoundedRegularFile(pendingPinPath, MAX_CONTROL_RESPONSE_BYTES, "pending IPFS pin receipt").toString("utf8"));
   } catch (error) {
     throw new Error(`pending IPFS pin receipt is invalid JSON: ${pendingPinPath}`, { cause: error });
   }
@@ -1251,15 +1780,24 @@ function fsyncDirectory(directory) {
   }
 }
 
-function writePendingPinReceipt(cid, proof) {
-  const receipt = {
-    format: "terrain-ipfs-pending-pin-v1",
-    cid,
-    pinProof: proof,
-    preexisting: proof.preexisting,
-    attempt: attemptToken,
-    recordedAt: new Date().toISOString(),
-  };
+function writePendingPinReceipt(cid, state, proof = null) {
+  const receipt = state === "intent"
+    ? {
+        format: "terrain-ipfs-pin-intent-v1",
+        state,
+        cid,
+        attempt: attemptToken,
+        recordedAt: new Date().toISOString(),
+      }
+    : {
+        format: "terrain-ipfs-pin-intent-v1",
+        state,
+        cid,
+        pinProof: proof,
+        preexisting: proof.preexisting,
+        attempt: attemptToken,
+        recordedAt: new Date().toISOString(),
+      };
   assertPendingPinReceipt(receipt);
   const bytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);
   assert.ok(bytes.length <= MAX_CONTROL_RESPONSE_BYTES, `pending IPFS pin receipt exceeds ${MAX_CONTROL_RESPONSE_BYTES} bytes`);
@@ -1307,15 +1845,20 @@ if (args.add) {
       assert.ok(cid, "kubo add emitted an empty root CID");
     });
     if (pending) assert.equal(pending.cid, publication.cid, `pending IPFS pin is for ${pending.cid}, not this publication ${publication.cid}; refusing to replace recovery evidence`);
+    // The CID is known before any pin mutation. Persist that fact first: an
+    // interrupted/failed pin proof can be resumed for this CID but never
+    // silently redirected to another deterministic directory.
+    writePendingPinReceipt(publication.cid, "intent");
     // CIDs are deterministic, so inspect the recursive pin before calling
     // pin/add.  A later actor may race this point; we make no ownership claim
     // in either case and never issue pin/rm on an error path.
-    const priorPin = await lookupRecursivePin(args.api, publication.cid);
+    const pinTimeoutMs = pinTraversalTimeoutFor(fileCount);
+    const priorPin = await lookupRecursivePin(args.api, publication.cid, pinTimeoutMs);
     let pinned = priorPin;
     let pinPreexisted = priorPin.present;
     if (!priorPin.present) {
-      await pinCreatedRoot(args.api, publication.cid);
-      pinned = await lookupRecursivePin(args.api, publication.cid);
+      await pinCreatedRoot(args.api, publication.cid, pinTimeoutMs);
+      pinned = await lookupRecursivePin(args.api, publication.cid, pinTimeoutMs);
       assert.ok(pinned.present, `pin/add did not create a recursive pin for ${publication.cid}`);
       pinPreexisted = false;
     }
@@ -1330,7 +1873,7 @@ if (args.add) {
     // This is written before a gateway request.  If a later proof or artifact
     // transaction fails, the recursive pin remains deliberately and this
     // exact receipt lets the next invocation retry the same CID safely.
-    writePendingPinReceipt(publication.cid, pinProof);
+    writePendingPinReceipt(publication.cid, "proven-pending", pinProof);
     process.stdout.write(`CID ${publication.cid} pinned ${pinned.type}\n`);
   } catch (error) {
     await abortPublication(error);
@@ -1477,7 +2020,14 @@ const stagedPublicationArtifacts = [];
 async function fetchThroughGateway(cid, rel) {
   const url = `${args.gateway}/ipfs/${cid}/${rel}`;
   const started = Date.now();
-  const local = fs.readFileSync(path.join(stagingDir, rel));
+  assertSafeRelativePath(rel, "gateway staged path");
+  const localPath = path.resolve(stagingDir, rel);
+  assert.ok(localPath.startsWith(`${stagingDir}${path.sep}`), `gateway staged path escapes ${stagingDir}`);
+  const local = readBoundedRegularFile(
+    localPath,
+    rel === "layer.json" ? MAX_LAYER_JSON_BYTES : STATIC_TRANSPORT_BOUNDS.hard,
+    `gateway local ${rel}`,
+  );
   const expectedContentType = rel === "layer.json" ? "application/json" : "application/octet-stream";
   const initial = await withRequest(
     url,
@@ -1566,9 +2116,19 @@ const report = {
     files: materializationPlan.files,
     storedFiles: materializationPlan.storedFiles,
     synthesizedFiles: materializationPlan.synthesizedFiles,
-    byteUpperBound: materializationPlan.byteUpperBound.toString(),
+    decodedStoredBytes: materializationPlan.decodedStoredBytes,
+    approvedStaticDirectoryBytes: publicationPolicy.maxStaticDirectoryBytes,
+    approvedVerifiedStoreBytes: publicationPolicy.maxVerifiedStoreBytes,
     stagingFreeBytes: stagingReservation.freeBytes.toString(),
     stagingRequiredBytes: stagingReservation.requiredBytes.toString(),
+    stagingAllocationBlockBytes: stagingReservation.blockSize.toString(),
+    approvedStaticLogicalBytes: stagingReservation.approvedLogicalBytes.toString(),
+    reservedStaticPhysicalBytes: stagingReservation.physicalStaticBytes.toString(),
+    reservedPayloadRoundingBytes: stagingReservation.payloadRoundingBytes.toString(),
+    reservedInodeAndDirectoryBytes: stagingReservation.inodeAndDirectoryBytes.toString(),
+    actualStaticPhysicalUpperBytes: actualStaticPhysicalUpperBytes?.toString() ?? null,
+    reservedUploadManifestPhysicalBytes: stagingReservation.manifestPhysicalBytes.toString(),
+    reservedStagingHeadroomBytes: stagingReservation.headroomBytes.toString(),
   },
   storedTiles,
   synthesizedTiles,
@@ -1589,7 +2149,7 @@ const report = {
   uniformMasks,
   rasterMasks,
   uniformMaskRatio: Number((uniformMasks / (uniformMasks + rasterMasks)).toFixed(4)),
-  encoderTiles: runReport.tiles,
+  encoderTiles: publicationInputs.tiles.entry.records,
   gatewayProof,
   catalogue,
   // What an operator installs on the serving mount so clients resolve this CID.
