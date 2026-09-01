@@ -58,6 +58,24 @@ export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Bounded external-sort primitive for global verifier facts.  Callers choose
+// an intentionally small run size; no complete address set is retained.
+export function writeSortedJsonRuns(dir, facts, { maxRows = 4096, compare = (a, b) => String(a.key).localeCompare(String(b.key)) } = {}) {
+  assert.ok(Number.isSafeInteger(maxRows) && maxRows > 0, "maxRows must be positive");
+  fs.mkdirSync(dir, { recursive: true });
+  const runs = []; let rows = [];
+  const flush = () => {
+    if (!rows.length) return;
+    rows.sort(compare);
+    const file = path.join(dir, `run-${String(runs.length).padStart(6, "0")}.ndjson`);
+    fs.writeFileSync(file, `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
+    runs.push(file); rows = [];
+  };
+  for (const fact of facts) { rows.push(fact); if (rows.length >= maxRows) flush(); }
+  flush();
+  return runs;
+}
+
 export function retryableStatus(status) {
   return status === 408 || status === 425 || status === 429 || status >= 500;
 }

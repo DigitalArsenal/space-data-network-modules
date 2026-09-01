@@ -16,6 +16,7 @@ import {
   readGenerationCacheEntry,
   saveGlobalState,
   sha256,
+  writeSortedJsonRuns,
 } from "../build-support.mjs";
 import { iterateStreamFile } from "../dtt-reader.mjs";
 
@@ -144,6 +145,14 @@ test("read-only accuracy consumers resolve the cache current generation, not the
 test("multi-worker parity identity is independent of merge order", () => {
   const a = [["8/1/1", "a"], ["8/2/1", "b"], ["9/4/2", "c"]];
   assert.equal(recordSetDigest(a), recordSetDigest([...a].reverse()));
+});
+
+test("bounded fact spool emits sorted fixed-size runs", (t) => {
+  const dir = path.join(temporary(t), "facts");
+  const runs = writeSortedJsonRuns(dir, [{ key: "c" }, { key: "a" }, { key: "b" }, { key: "d" }], { maxRows: 2 });
+  assert.equal(runs.length, 2);
+  assert.deepEqual(fs.readFileSync(runs[0], "utf8").trim().split("\n").map(JSON.parse).map((r) => r.key), ["a", "c"]);
+  assert.deepEqual(fs.readFileSync(runs[1], "utf8").trim().split("\n").map(JSON.parse).map((r) => r.key), ["b", "d"]);
 });
 
 function cacheChild({ dir, maxBytes, url, status, body, delayMs = 0, holdMs = 0, release = false }) {
