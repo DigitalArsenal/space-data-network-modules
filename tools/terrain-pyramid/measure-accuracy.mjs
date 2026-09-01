@@ -52,7 +52,7 @@ import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 
 import { readGenerationCacheEntry } from "./build-support.mjs";
-import { iterateStreamFile, readDtt as readStreamDtt } from "./dtt-reader.mjs";
+import { iterateStreamFile } from "./dtt-reader.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..");
@@ -375,7 +375,7 @@ async function encodeReferenceAt(tile, harness, grid) {
 // low-relief control per level.  The record reader itself is framed/streaming.
 const byLevel = new Map();
 for await (const record of iterateStreamFile(path.join(outDir, "tiles.dttstream"))) {
-  const dtt = readStreamDtt(record);
+  const dtt = readDtt(record);
   const state = byLevel.get(dtt.level) ?? { count: 0, highest: [], flat: null };
   state.count += 1;
   const relief = dtt.maxHeightM - dtt.minHeightM;
