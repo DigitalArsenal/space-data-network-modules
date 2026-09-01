@@ -45,7 +45,7 @@
 
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -83,6 +83,10 @@ const MAX_WORKLIST_LINE_BYTES = 1024;
 const MAX_LEGACY_WORKLIST_BYTES = 8 * 1024 * 1024;
 const MAX_LEGACY_WORKLIST_ADDRESSES = 100_000;
 const MAX_OCEAN_DIAGNOSTICS = 8;
+const OCEAN_SKIP_MAX_RECEIPT_BYTES = 64 * 1024;
+const OCEAN_SKIP_MAX_LINES_BYTES = 512 * 1024 * 1024;
+const OCEAN_SKIP_MAX_LINE_BYTES = 256;
+const TERRAIN_ADDRESS_FIELD_WIDTH = 12;
 
 function parsePositiveInteger(value, flag) {
   assert.match(value ?? "", /^\d+$/, `${flag} must be a positive integer`);
@@ -129,6 +133,7 @@ function parseArgs(argv) {
 const args = parseArgs(process.argv.slice(2));
 const outDir = path.resolve(args.out);
 const ipfsDir = path.join(outDir, "ipfs");
+const pendingPinPath = path.join(outDir, "pending-ipfs-pin.json");
 
 // ── THE RUN HAS TO HAVE PASSED ─────────────────────────────────────────────
 const verifyPath = path.join(outDir, "verify-report.json");
@@ -198,44 +203,127 @@ async function* availableButUnstored() {
 }
 
 function compareTerrainAddress(a, b) {
-  const left = parseTerrainAddress(a);
-  const right = parseTerrainAddress(b);
-  // verify.mjs writes level, then row (y), then column (x).
-  return left.level - right.level || left.y - right.y || left.x - right.x;
+  const left = terrainAddressOrderKey(a);
+  const right = terrainAddressOrderKey(b);
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 async function* arrayEntries(entries) {
   yield* entries;
 }
 
-async function oceanSkipJoiner() {
-  const ndjsonPath = path.join(outDir, "ocean-skipped.ndjson");
-  const receiptPath = path.join(outDir, "ocean-skipped-receipt.json");
-  const legacyPath = path.join(outDir, "ocean-skipped.json");
-  let declaredByReceipt = null;
-  let source;
-  if (fs.existsSync(ndjsonPath)) {
-    if (fs.existsSync(receiptPath)) {
-      assert.ok(fs.statSync(receiptPath).size <= MAX_LEGACY_WORKLIST_BYTES, "ocean skip receipt exceeds safety cap");
-      const receipt = JSON.parse(fs.readFileSync(receiptPath, "utf8"));
-      assert.ok(Number.isSafeInteger(receipt.count) && receipt.count >= 0, "ocean skip receipt has no safe count");
-      declaredByReceipt = receipt.count;
-      if (receipt.path !== undefined) assert.equal(outputFile(receipt.path, "ocean skip receipt"), ndjsonPath, "ocean skip receipt names another worklist");
+function oceanReceiptPath() {
+  return path.join(outDir, "ocean-skipped.json");
+}
+
+function assertOceanReceipt(receipt) {
+  assert.ok(receipt && typeof receipt === "object" && !Array.isArray(receipt), "ocean skip receipt must be an object");
+  const allowed = new Set(["generatedAt", "format", "addressesPath", "count", "digest"]);
+  for (const key of Object.keys(receipt)) assert.ok(allowed.has(key), `ocean skip receipt has unexpected field ${key}`);
+  assert.equal(receipt.format, "terrain-ocean-skips-lines-v1", `unsupported ocean skip receipt format ${receipt.format}`);
+  assert.equal(receipt.addressesPath, "ocean-skipped.lines", "ocean skip receipt must name ocean-skipped.lines");
+  assert.ok(Number.isSafeInteger(receipt.count) && receipt.count >= 0, "ocean skip receipt count must be a non-negative safe integer");
+  assert.ok(receipt.count <= MAX_MATERIALIZED_FILES, `ocean skip receipt count exceeds ${MAX_MATERIALIZED_FILES} files`);
+  assert.match(receipt.digest ?? "", /^[a-f0-9]{64}$/, "ocean skip receipt digest must be a SHA-256 hex digest");
+  if (receipt.generatedAt !== undefined) {
+    assert.equal(typeof receipt.generatedAt, "string", "ocean skip receipt generatedAt must be a string");
+    assert.ok(Number.isFinite(Date.parse(receipt.generatedAt)), "ocean skip receipt generatedAt must be an ISO time");
+  }
+  return receipt;
+}
+
+function readOceanReceiptOrLegacy() {
+  const receiptPath = oceanReceiptPath();
+  if (!fs.existsSync(receiptPath)) return { kind: "none" };
+  const stat = fs.lstatSync(receiptPath, { bigint: true });
+  assert.ok(stat.isFile() && !stat.isSymbolicLink(), `ocean skip receipt is not a regular file: ${receiptPath}`);
+  assert.ok(stat.size <= BigInt(OCEAN_SKIP_MAX_LINES_BYTES), `ocean skip input exceeds ${OCEAN_SKIP_MAX_LINES_BYTES} bytes: ${receiptPath}`);
+  // The exact receipt is deliberately tiny.  An oversized JSON document is
+  // never interpreted as a legacy array, because that would quietly turn the
+  // compact global contract back into an unbounded in-memory payload.
+  assert.ok(stat.size <= BigInt(MAX_LEGACY_WORKLIST_BYTES), `ocean skip receipt exceeds ${MAX_LEGACY_WORKLIST_BYTES} bytes`);
+  let document;
+  try {
+    document = JSON.parse(fs.readFileSync(receiptPath, "utf8"));
+  } catch (error) {
+    throw new Error(`ocean skip receipt is invalid JSON: ${receiptPath}`, { cause: error });
+  }
+  if (Object.hasOwn(document ?? {}, "format")) {
+    assert.ok(stat.size <= BigInt(OCEAN_SKIP_MAX_RECEIPT_BYTES), `ocean skip receipt exceeds ${OCEAN_SKIP_MAX_RECEIPT_BYTES} bytes`);
+    return { kind: "receipt", receipt: assertOceanReceipt(document) };
+  }
+  assert.ok(document && typeof document === "object" && !Array.isArray(document), "legacy ocean skip document must be an object");
+  const addresses = document.addresses;
+  assert.ok(Array.isArray(addresses), "legacy ocean skip list addresses must be an array");
+  assert.ok(addresses.length <= MAX_LEGACY_WORKLIST_ADDRESSES, `legacy ocean skip list exceeds ${MAX_LEGACY_WORKLIST_ADDRESSES} addresses; use the compact receipt`);
+  if (document.count !== undefined) assert.equal(document.count, addresses.length, "legacy ocean skip receipt count disagrees with addresses");
+  addresses.sort(compareTerrainAddress);
+  return { kind: "legacy", addresses };
+}
+
+async function* exactOceanReceiptLines(receipt) {
+  const linesPath = outputFile(receipt.addressesPath, "ocean skip receipt");
+  assert.equal(linesPath, path.join(outDir, "ocean-skipped.lines"), "ocean skip receipt path is not contained in this output");
+  const stat = fs.lstatSync(linesPath, { bigint: true });
+  assert.ok(stat.isFile() && !stat.isSymbolicLink(), `ocean skip receipt target is not a regular file: ${linesPath}`);
+  const countBound = BigInt(receipt.count) * BigInt(OCEAN_SKIP_MAX_LINE_BYTES + 1);
+  const statBound = countBound < BigInt(OCEAN_SKIP_MAX_LINES_BYTES) ? countBound : BigInt(OCEAN_SKIP_MAX_LINES_BYTES);
+  assert.ok(stat.size <= statBound, `ocean skip address list exceeds its declared byte bound: ${linesPath}`);
+
+  const hash = createHash("sha256");
+  let carried = Buffer.alloc(0);
+  let count = 0;
+  let previous = null;
+  const consume = (line) => {
+    assert.ok(line.length > 0, "ocean skip list contains an empty line");
+    assert.ok(line.length <= OCEAN_SKIP_MAX_LINE_BYTES, `ocean skip line exceeds ${OCEAN_SKIP_MAX_LINE_BYTES} bytes`);
+    for (const byte of line) assert.ok(byte >= 0x20 && byte <= 0x7e, `ocean skip line ${count + 1} is not raw ASCII`);
+    const address = line.toString("ascii");
+    const key = terrainAddressOrderKey(address);
+    assert.ok(previous === null || previous < key, `ocean skip lines are not strictly padded level/y/x sorted at ${address}`);
+    previous = key;
+    count += 1;
+    assert.ok(count <= receipt.count, "ocean skip receipt contains more lines than its count");
+    return address;
+  };
+  const stream = fs.createReadStream(linesPath, { highWaterMark: 64 * 1024 });
+  try {
+    for await (const chunk of stream) {
+      const bytes = Buffer.from(chunk);
+      hash.update(bytes);
+      const input = carried.length ? Buffer.concat([carried, bytes], carried.length + bytes.length) : bytes;
+      let start = 0;
+      for (let newline = input.indexOf(0x0a, start); newline >= 0; newline = input.indexOf(0x0a, start)) {
+        const line = input.subarray(start, newline);
+        // The producer writes raw LF-delimited ASCII; accepting CRLF would
+        // make this publisher validate a different byte contract.
+        assert.ok(!line.includes(0x0d), "ocean skip lines must use LF, not CRLF");
+        yield consume(line);
+        start = newline + 1;
+      }
+      carried = Buffer.from(input.subarray(start));
+      assert.ok(carried.length <= OCEAN_SKIP_MAX_LINE_BYTES, `ocean skip line exceeds ${OCEAN_SKIP_MAX_LINE_BYTES} bytes`);
     }
-    source = boundedLines(ndjsonPath, MAX_WORKLIST_LINE_BYTES, "ocean-skipped worklist");
-  } else if (fs.existsSync(legacyPath)) {
-    assert.ok(fs.statSync(legacyPath).size <= MAX_LEGACY_WORKLIST_BYTES, `legacy ocean skip list exceeds ${MAX_LEGACY_WORKLIST_BYTES} bytes; use NDJSON`);
-    const legacy = JSON.parse(fs.readFileSync(legacyPath, "utf8"));
-    const addresses = legacy.addresses ?? [];
-    assert.ok(Array.isArray(addresses), "legacy ocean skip list addresses must be an array");
-    assert.ok(addresses.length <= MAX_LEGACY_WORKLIST_ADDRESSES, `legacy ocean skip list exceeds ${MAX_LEGACY_WORKLIST_ADDRESSES} addresses; use NDJSON`);
-    if (legacy.count !== undefined) assert.equal(legacy.count, addresses.length, "legacy ocean skip receipt count disagrees with addresses");
-    addresses.sort(compareTerrainAddress);
-    source = arrayEntries(addresses);
-    declaredByReceipt = addresses.length;
+    assert.equal(carried.length, 0, "ocean skip list must end with LF");
+  } finally {
+    stream.destroy();
+  }
+  assert.equal(count, receipt.count, "ocean skip receipt count disagrees with streamed worklist");
+  assert.equal(hash.digest("hex"), receipt.digest, "ocean skip receipt digest disagrees with streamed worklist");
+}
+
+async function oceanSkipJoiner() {
+  const input = readOceanReceiptOrLegacy();
+  let declaredByReceipt = 0;
+  let source;
+  if (input.kind === "receipt") {
+    source = exactOceanReceiptLines(input.receipt);
+    declaredByReceipt = input.receipt.count;
+  } else if (input.kind === "legacy") {
+    source = arrayEntries(input.addresses);
+    declaredByReceipt = input.addresses.length;
   } else {
     source = arrayEntries([]);
-    declaredByReceipt = 0;
   }
 
   const iterator = source[Symbol.asyncIterator]();
@@ -474,10 +562,17 @@ function assertWaterMaskExtension(bytes, name) {
 const layerJson = await renderLayerJson();
 
 function parseTerrainAddress(address) {
+  assert.equal(typeof address, "string", "terrain address must be a string");
   assert.match(address, /^\d+\/\d+\/\d+$/, `invalid available-but-unstored address ${JSON.stringify(address)}`);
   const [level, x, y] = address.split("/").map(Number);
-  assert.ok(Number.isSafeInteger(level) && Number.isSafeInteger(x) && Number.isSafeInteger(y), `unsafe terrain address ${address}`);
+  assert.ok(Number.isSafeInteger(level) && level >= 0 && Number.isSafeInteger(x) && x >= 0 && Number.isSafeInteger(y) && y >= 0, `unsafe terrain address ${address}`);
+  assert.equal(address, `${level}/${x}/${y}`, `terrain address is not canonical ${address}`);
   return { level, x, y };
+}
+
+function terrainAddressOrderKey(address) {
+  const { level, x, y } = parseTerrainAddress(address);
+  return `${String(level).padStart(TERRAIN_ADDRESS_FIELD_WIDTH, "0")}|${String(y).padStart(TERRAIN_ADDRESS_FIELD_WIDTH, "0")}|${String(x).padStart(TERRAIN_ADDRESS_FIELD_WIDTH, "0")}`;
 }
 
 // Count and bound the output before a staging directory is made.  A static
@@ -498,8 +593,12 @@ async function precomputeMaterializationPlan() {
     storedBytes += body.length;
   }
   let synthesizedFiles = 0;
+  let previousSynthesizedKey = null;
   for await (const address of availableButUnstored()) {
-    parseTerrainAddress(address);
+    const key = terrainAddressOrderKey(address);
+    assert.ok(previousSynthesizedKey === null || previousSynthesizedKey < key,
+      "available-but-unstored worklist is not strictly padded level/y/x sorted");
+    previousSynthesizedKey = key;
     synthesizedFiles += 1;
   }
   const files = 1 + storedFiles + synthesizedFiles;
@@ -1041,16 +1140,13 @@ async function addAndPin(apiURL, onRoot) {
   }
 }
 
-async function pinCreatedRoot(apiURL, cid, onPinned) {
+async function pinCreatedRoot(apiURL, cid) {
   return withRequest(
     `${apiURL.replace(/\/$/, "")}/api/v0/pin/add?arg=${encodeURIComponent(cid)}&recursive=true`,
     { method: "POST", headers: { "user-agent": "" } },
     "kubo pin/add",
     async (response, controller) => {
-      // Once Kubo has acknowledged pin/add, this invocation owns cleanup even
-      // if its proof payload is malformed or a later gate fails.
       assert.equal(response.status, 200, `pin/add: HTTP ${response.status}`);
-      onPinned();
       const text = await readResponseText(response, MAX_CONTROL_RESPONSE_BYTES, "kubo pin/add", controller);
       let decoded;
       try {
@@ -1103,37 +1199,96 @@ async function lookupRecursivePin(apiURL, cid) {
   );
 }
 
-async function unpinCreatedRoot(apiURL, cid) {
-  return withRequest(
-    `${apiURL.replace(/\/$/, "")}/api/v0/pin/rm?arg=${encodeURIComponent(cid)}&recursive=true`,
-    { method: "POST", headers: { "user-agent": "" } },
-    "kubo pin/rm",
-    async (response, controller) => {
-      const text = await readResponseText(response, MAX_CONTROL_RESPONSE_BYTES, "kubo pin/rm", controller);
-      assert.equal(response.status, 200, `could not remove failed publication pin ${cid}: HTTP ${response.status}: ${text.slice(0, 200)}`);
-    },
-  );
+function assertBoundedString(value, label) {
+  assert.equal(typeof value, "string", `${label} must be a string`);
+  assert.ok(Buffer.byteLength(value) <= MAX_CONTROL_RESPONSE_BYTES, `${label} exceeds ${MAX_CONTROL_RESPONSE_BYTES} bytes`);
+  return value;
+}
+
+function assertPendingPinReceipt(receipt) {
+  assert.ok(receipt && typeof receipt === "object" && !Array.isArray(receipt), "pending IPFS pin receipt must be an object");
+  const allowed = new Set(["format", "cid", "pinProof", "preexisting", "attempt", "recordedAt"]);
+  for (const key of Object.keys(receipt)) assert.ok(allowed.has(key), `pending IPFS pin receipt has unexpected field ${key}`);
+  assert.equal(receipt.format, "terrain-ipfs-pending-pin-v1", "pending IPFS pin receipt format is unsupported");
+  assert.match(assertBoundedString(receipt.cid, "pending IPFS pin CID"), /^[A-Za-z0-9]+$/, "pending IPFS pin CID is not CID-shaped");
+  assert.equal(typeof receipt.preexisting, "boolean", "pending IPFS pin preexisting must be boolean");
+  assertBoundedString(receipt.attempt, "pending IPFS pin attempt");
+  assertBoundedString(receipt.recordedAt, "pending IPFS pin time");
+  assert.ok(Number.isFinite(Date.parse(receipt.recordedAt)), "pending IPFS pin time is invalid");
+  const proof = receipt.pinProof;
+  assert.ok(proof && typeof proof === "object" && !Array.isArray(proof), "pending IPFS pin proof must be an object");
+  for (const key of Object.keys(proof)) assert.ok(["api", "checkedAt", "endpoint", "type", "response", "preexisting"].includes(key), `pending IPFS pin proof has unexpected field ${key}`);
+  assertBoundedString(proof.api, "pending IPFS pin proof api");
+  assertBoundedString(proof.checkedAt, "pending IPFS pin proof checkedAt");
+  assert.ok(Number.isFinite(Date.parse(proof.checkedAt)), "pending IPFS pin proof checkedAt is invalid");
+  assertBoundedString(proof.endpoint, "pending IPFS pin proof endpoint");
+  assert.equal(proof.type, "recursive", "pending IPFS pin proof must be recursive");
+  assertBoundedString(proof.response, "pending IPFS pin proof response");
+  assert.equal(proof.preexisting, receipt.preexisting, "pending IPFS pin proof preexisting disagrees with receipt");
+  return receipt;
+}
+
+function readPendingPinReceipt() {
+  if (!fs.existsSync(pendingPinPath)) return null;
+  const stat = fs.lstatSync(pendingPinPath, { bigint: true });
+  assert.ok(stat.isFile() && !stat.isSymbolicLink(), `pending IPFS pin receipt is not a regular file: ${pendingPinPath}`);
+  assert.ok(stat.size <= BigInt(MAX_CONTROL_RESPONSE_BYTES), `pending IPFS pin receipt exceeds ${MAX_CONTROL_RESPONSE_BYTES} bytes`);
+  let receipt;
+  try {
+    receipt = JSON.parse(fs.readFileSync(pendingPinPath, "utf8"));
+  } catch (error) {
+    throw new Error(`pending IPFS pin receipt is invalid JSON: ${pendingPinPath}`, { cause: error });
+  }
+  return assertPendingPinReceipt(receipt);
+}
+
+function fsyncDirectory(directory) {
+  const descriptor = fs.openSync(directory, "r");
+  try {
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function writePendingPinReceipt(cid, proof) {
+  const receipt = {
+    format: "terrain-ipfs-pending-pin-v1",
+    cid,
+    pinProof: proof,
+    preexisting: proof.preexisting,
+    attempt: attemptToken,
+    recordedAt: new Date().toISOString(),
+  };
+  assertPendingPinReceipt(receipt);
+  const bytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);
+  assert.ok(bytes.length <= MAX_CONTROL_RESPONSE_BYTES, `pending IPFS pin receipt exceeds ${MAX_CONTROL_RESPONSE_BYTES} bytes`);
+  const temporary = path.join(outDir, `.pending-ipfs-pin-${attemptToken}.tmp`);
+  const descriptor = fs.openSync(temporary, "wx", 0o600);
+  try {
+    fs.writeFileSync(descriptor, bytes);
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  try {
+    fs.renameSync(temporary, pendingPinPath);
+    fsyncDirectory(outDir);
+  } finally {
+    if (fs.existsSync(temporary)) fs.rmSync(temporary, { force: true });
+  }
+  return receipt;
 }
 
 let publication = null;
-let createdRootCid = null;
-let rootPinCleanupAttempted = false;
 
 async function abortPublication(error) {
-  let cleanupError = null;
-  if (createdRootCid && !rootPinCleanupAttempted) {
-    rootPinCleanupAttempted = true;
-    try {
-      // The CID comes only from this invocation's validated root receipt.
-      await unpinCreatedRoot(args.api, createdRootCid);
-    } catch (failure) {
-      cleanupError = failure;
-    }
-  }
+  // Kubo's local recursive pins are not reference counted.  A successful
+  // pin/add therefore cannot prove exclusive ownership, even after pin/ls.
+  // Keep a durable recovery receipt and never pin/rm another actor's CID.
   discardStagingDirectory();
   discardStagedArtifacts();
   discardAttemptScratch();
-  if (cleanupError) throw new AggregateError([error, cleanupError], "publication failed and its new root pin could not be removed");
   throw error;
 }
 
@@ -1143,6 +1298,7 @@ async function abortPublication(error) {
 let pinProof = null;
 if (args.add) {
   try {
+    const pending = readPendingPinReceipt();
     process.stdout.write(`adding ${fileCount} files (${(totalBytes / 1e6).toFixed(1)} MB) to ${args.api}\n`);
     const kuboVersion = await preflightKubo(args.api);
     process.stdout.write(`kubo preflight ${kuboVersion}\n`);
@@ -1150,21 +1306,15 @@ if (args.add) {
       assert.equal(publication, null, "kubo add emitted a root after a completed receipt");
       assert.ok(cid, "kubo add emitted an empty root CID");
     });
-    // CIDs are deterministic: a root can already be pinned by somebody else.
-    // Record that state before pin/add and never remove a pre-existing pin on
-    // a later failure.  `add?pin=false` also leaves malformed receipts clean.
-    let priorPin = await lookupRecursivePin(args.api, publication.cid);
-    // Recheck immediately before the mutating call.  This catches a pin that
-    // appeared between receipt validation and the first lookup; such a root
-    // is recorded as pre-existing and is never a cleanup target.
-    if (!priorPin.present) priorPin = await lookupRecursivePin(args.api, publication.cid);
+    if (pending) assert.equal(pending.cid, publication.cid, `pending IPFS pin is for ${pending.cid}, not this publication ${publication.cid}; refusing to replace recovery evidence`);
+    // CIDs are deterministic, so inspect the recursive pin before calling
+    // pin/add.  A later actor may race this point; we make no ownership claim
+    // in either case and never issue pin/rm on an error path.
+    const priorPin = await lookupRecursivePin(args.api, publication.cid);
     let pinned = priorPin;
     let pinPreexisted = priorPin.present;
     if (!priorPin.present) {
-      await pinCreatedRoot(args.api, publication.cid, () => {
-        assert.equal(createdRootCid, null, "kubo pin/add acknowledged more than one root");
-        createdRootCid = publication.cid;
-      });
+      await pinCreatedRoot(args.api, publication.cid);
       pinned = await lookupRecursivePin(args.api, publication.cid);
       assert.ok(pinned.present, `pin/add did not create a recursive pin for ${publication.cid}`);
       pinPreexisted = false;
@@ -1177,6 +1327,10 @@ if (args.add) {
       response: pinned.response,
       preexisting: pinPreexisted,
     };
+    // This is written before a gateway request.  If a later proof or artifact
+    // transaction fails, the recursive pin remains deliberately and this
+    // exact receipt lets the next invocation retry the same CID safely.
+    writePendingPinReceipt(publication.cid, pinProof);
     process.stdout.write(`CID ${publication.cid} pinned ${pinned.type}\n`);
   } catch (error) {
     await abortPublication(error);
@@ -1271,10 +1425,7 @@ let catalogue;
 try {
   catalogue = buildCatalogue(publication?.cid ?? null);
 } catch (error) {
-  if (createdRootCid) await abortPublication(error);
-  discardStagingDirectory();
-  discardStagedArtifacts();
-  throw error;
+  await abortPublication(error);
 }
 const stagedPublicationArtifacts = [];
 
@@ -1312,10 +1463,7 @@ const stagedPublicationArtifacts = [];
     // than only where a wasm is loaded.
     assert.ok(buildDttRecord(sds, catalogue));
   } catch (error) {
-    if (createdRootCid) await abortPublication(error);
-    discardStagingDirectory();
-    discardStagedArtifacts();
-    throw error;
+    await abortPublication(error);
   }
 }
 
@@ -1479,6 +1627,12 @@ try {
         `${JSON.stringify({ ...layerConfig, ...report.mountConfig }, null, 2)}\n`,
       ),
     });
+    // A transaction that exposed the directory, catalogue, report and serving
+    // pointer has consumed the recovery receipt.  Until this exact point it
+    // stays live so a crash or a gateway failure leaves retry evidence.
+    if (fs.existsSync(pendingPinPath)) {
+      stagedPublicationArtifacts.push({ live: pendingPinPath, staged: null });
+    }
   } else if (fs.existsSync(path.join(outDir, "serving-config-ipfs.json"))) {
     // A rehearsal has no verified CID.  Remove a prior serving pointer in the
     // same rollback-capable transaction rather than leaving it to name an old
@@ -1487,10 +1641,7 @@ try {
   }
   commitStagedPublication(stagedPublicationArtifacts);
 } catch (error) {
-  if (createdRootCid) await abortPublication(error);
-  discardStagingDirectory();
-  discardStagedArtifacts();
-  throw error;
+  await abortPublication(error);
 }
 
 process.stdout.write(
