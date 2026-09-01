@@ -1,0 +1,15 @@
+{
+  "name": "@digitalarsenal/sdn-flow-terrain-ingest",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node build.mjs check",
+    "build": "node build.mjs compile",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "^0.8.15",
+    "spacedatastandards.org": "^1.196.0"
+  }
+}

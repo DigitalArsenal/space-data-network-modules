@@ -1,0 +1,37 @@
+# ── THE COMPILED ARTIFACT IS NOT COMMITTED, AND THE REASON IS A REPO CONTRACT ──
+#
+# scripts/check-artifact-reproducibility.mjs governs every committed
+# `*/dist/*.wasm`: it must appear in scripts/artifact-provenance.json with the
+# toolchain that produced it, because "a committed artifact with no recorded
+# toolchain cannot be audited". This lane cannot write that ledger — it is held
+# under an active review-state claim by modules-shipped-artifact-resign-wave
+# (measured: `graphctl claim --paths modules:scripts/artifact-provenance.json`
+# is refused as a cross-claim conflict), and committing a binary that breaks a
+# contract whose whole purpose is auditing binaries is the wrong half of the
+# trade.
+#
+# Nothing is lost that was not already build-first here. Both flow test suites
+# already read data-source/terrain-source/dist/isomorphic/module.wasm, which
+# this lane has always gitignored, and tools/terrain-pyramid/run.mjs already
+# refuses with "build the flow first" if the runtime is absent. `npm run build`
+# in this directory produces it. What IS committed is the composition record the
+# build writes beside it — dist/artifact.json (node ids, dispatch model,
+# capabilities and every dependency's sha256), dist/flow.json, dist/flow.plg and
+# dist/plugin-manifest.json — so what the flow links, and what it is allowed to
+# do, stays auditable in git without an unledgered binary.
+#
+# AND THE RECORD NOW PINS THE RUNTIME ITSELF. dist/artifact.json carries an
+# `artifact` block — the compiled runtime's own sha256 and byte length, stamped
+# by build.mjs after the link step — so the bytes an operator installs are
+# identified by a COMMIT even though the bytes are not in one, and
+# `shasum -a 256 dist/runtime.wasm` against that block is a check anyone with
+# the repo can run. Without it the capability_policy.json approval on host-01,
+# which is keyed to the bundle hash, was derivable from nothing in git.
+#
+# The sha256 of the artifact a given pyramid run executed is ALSO recorded in
+# tools/terrain-pyramid/evidence/<run>/REPRODUCE.md — a run record rather than a
+# deploy manifest, which is why it was never enough on its own. Graph follow-up
+# to put these four artifacts back under the ledger once that claim clears:
+# modules-terrain-artifact-provenance-ledger.
+dist/*.wasm
+dist/isomorphic/

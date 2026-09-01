@@ -1,0 +1,286 @@
+{
+  "programId": "com.digitalarsenal.flows.terrain-serving",
+  "name": "Terrain Tile Serving Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "WASM-served quantized-mesh terrain (mount /api/v1/terrain/, config-mounted on the sdn-server lane). A $HTQ HttpRequest enters on the http-request trigger; terrain-source:route strips the configured mount PREFIX (config key terrain_mount_path, default the basePath below; a path that does not start with it is a 404, so one tile is reachable at exactly one URL) and takes exactly one of four paths. \"\" or \"catalogue.json\" => THE CATALOGUE, the mount's answer to the only question a client cannot answer itself: which tileset epoch to fetch. Owner 2026-08-27 - terrain files are requested over IPFS, so the pyramid is published as one content-addressed directory per epoch (layer.json plus every {z}/{x}/{y}.terrain, the water mask inside each tile) added and pinned through the node's IPFS API by the off-fleet builder, and clients point a native CesiumTerrainProvider at <node>/ipfs/<cid>/. This route names that CID (config key terrain_tileset_cid) with a RELATIVE terrainBasePath a client joins against the node origin it already knows, so no client learns a hostname or hardcodes an epoch; public max-age=60 and a strong ETag, because everything under a CID is immutable and this is the lane's one mutable pointer. With no CID configured it answers delivery \"mount\" and its own mount path, which is what makes a development node with no IPFS daemon work unchanged. The two routes below are then the same-origin fallback and the local-development path, not the delivery path. \"layer.json\" => a layer_plan frame for terrain-source:layer_json, which renders the complete tilejson-2.1.0 body (format quantized-mesh-1.0, scheme tms, EPSG:4326, extensions [watermask], availability VERBATIM from the flow config key terrain_available - the availability index is the ingest orchestrator's knowledge and is configured, not aggregated per request at first light) inside the canonical $HTR envelope. \"{z}/{x}/{y}.terrain\" => a {sql,params} frame for hostcap/flatsql-query:query (SELECT _data FROM DTT WHERE TILESET_ID/LEVEL/X/Y ORDER BY _rowid DESC LIMIT 1 - the newest stored record for the address wins. _rowid, NOT rowid: on a node the relation named DTT is a unified VIEW over per-source shadow tables and a view has no implicit rowid, so the old spelling was 'no such column' on every real node while parsing fine off-node) plus a context frame carrying the address and the client's If-None-Match; terrain-source:respond walks the returned aligned size-prefixed $DTT stream and serves the record's payload with content-type from the record, cache-control public max-age=86400, vary accept-encoding, x-content-type-options nosniff and a strong ETag (record ETAG, else payload DIGEST, else a weak address+size tag); an If-None-Match match answers 304. The stored bytes are gzipped and the ENCODING IS NEGOTIATED: route reads Accept-Encoding, and a client that refused gzip gets them decoded in-guest and served identity under its OWN strong ETag, because two representations under one tag let a cache holding either answer the other's revalidation with 304. An EMPTY stream is decided by the address's position in the published availability, evaluated the way the CLIENT evaluates it - CesiumTerrainProvider asks computeMaximumLevelAtPosition(centre of the tile) >= level, not per-level membership, so a shallow address over a deep region is one it WILL request: OUTSIDE it a cheap CACHEABLE 404 (public, max-age=300), because a miss below the published pyramid is normal traffic and the client's own upsampling relies on layer.json availability; INSIDE it a SYNTHESIZED height-0 tile (200, public max-age=86400, strong digest ETag, header x-terrain-synthesized), whose water mask is uniform-water only at LEVEL >= the config key terrain_ocean_synth_min_level and uniform-LAND otherwise - fabricated water at a level nothing built paints continents as specular ocean. Any other path is a direct cacheable 404 from route; non-GET/HEAD answers 405. Bridge linkage: the only host crossings are the declared storage.flatsql_query_stream hostcall and plugin.getConfig.",
+  "nodes": [
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.data-source.terrain-source",
+      "methodId": "route",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "q",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "query",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "layer",
+      "pluginId": "com.digitalarsenal.data-source.terrain-source",
+      "methodId": "layer_json",
+      "kind": "responder",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "respond",
+      "pluginId": "com.digitalarsenal.data-source.terrain-source",
+      "methodId": "respond",
+      "kind": "responder",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "route-query",
+      "fromNodeId": "route",
+      "fromPortId": "query",
+      "toNodeId": "q",
+      "toPortId": "query",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "route-context",
+      "fromNodeId": "route",
+      "fromPortId": "context",
+      "toNodeId": "respond",
+      "toPortId": "context",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "route-layer-plan",
+      "fromNodeId": "route",
+      "fromPortId": "layer_plan",
+      "toNodeId": "layer",
+      "toPortId": "plan",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "q-stream",
+      "fromNodeId": "q",
+      "fromPortId": "stream",
+      "toNodeId": "respond",
+      "toPortId": "stream",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "route-response",
+      "fromNodeId": "route",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "layer-response",
+      "fromNodeId": "layer",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "respond-response",
+      "fromNodeId": "respond",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "http-request",
+      "kind": "http-request",
+      "source": "host-http",
+      "description": "One $HTQ HttpRequest envelope per invocation, pumped by the host at the flow ingress."
+    }
+  ],
+  "api": {
+    "basePath": "/api/v1/terrain",
+    "tag": "terrain",
+    "tagDescription": "Quantized-mesh terrain tiles served from this node's $DTT record store (wasm; all routing, conditional-request and response shaping run inside the module). Anonymous by design: every response is cacheable and the record store is read-only from this flow.",
+    "routes": [
+      {
+        "path": "/",
+        "method": "GET",
+        "operationId": "getTerrainCatalogue",
+        "summary": "Which tileset epoch this node serves",
+        "description": "The discovery document a client reads to learn WHERE the terrain is, so no client hardcodes a CID or a hostname (owner 2026-08-27: terrain files are requested over IPFS). Names the current tileset CID, its dataset epoch, and terrainBasePath - a path RELATIVE to this node's origin: /ipfs/<cid>/ when a tileset CID is configured (\"delivery\":\"ipfs\") and this mount's own prefix when one is not (\"delivery\":\"mount\", \"cid\":null), so a development node with no IPFS daemon answers the same document rather than an error. Keys are lowercase/camelCase: an API-synthesized discovery document, not a $DTT rendered as JSON. cache-control public max-age=60 with a strong ETag - everything under a CID is immutable and this is the lane's ONE mutable pointer, so a minute bounds how long a client can miss a recut while every revalidation after the first is a 304.",
+        "anonymous": true,
+        "responses": {
+          "200": {
+            "description": "The tileset discovery document.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "description": "Current tileset epoch: tilesetId, delivery, cid, datasetEpoch, terrainBasePath, layerJsonPath, format, scheme, projection, extensions, maxzoom, attribution."
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the If-None-Match ETag."
+          }
+        }
+      },
+      {
+        "path": "/tileset.json",
+        "method": "GET",
+        "operationId": "getTerrainTilesetRecord",
+        "summary": "The current tileset epoch as a $DTT record",
+        "description": "The durable form of the same answer the mount root gives, as a $DTT catalogue record with IDL-EXACT keys - the identical projection the off-fleet builder writes to tileset-catalogue.json and publishes through the dataset lane. PAYLOAD.CID names the content-addressed directory the tiles live in; PAYLOAD.MEDIA_TYPE (application/vnd.ipld.dag-pb) is the discriminator against a TILE record, whose payload is one mesh. THIS is the path the clients read: they pull PAYLOAD.CID and refuse anything that is not a syntactically valid CID. A node serving no IPFS tileset answers a truthful record with no PAYLOAD, and a client keeps its ellipsoid rather than fetching an invented address.",
+        "anonymous": true,
+        "responses": {
+          "200": {
+            "description": "The $DTT tileset catalogue record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "description": "$DTT rendered as JSON, IDL-exact keys: TILESET_ID, TILING_SCHEME, PAYLOAD{CID,SIZE_BYTES,MEDIA_TYPE}, MAX_LEVEL, PROVENANCE."
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the If-None-Match ETag."
+          }
+        }
+      },
+      {
+        "path": "/catalogue.json",
+        "method": "GET",
+        "operationId": "getTerrainCatalogueJson",
+        "summary": "Which tileset epoch this node serves (explicit name)",
+        "description": "Byte-identical to the mount root, under an explicit filename for clients and caches that prefer a named document to a directory path. Declared as its own route because the host admits a mounted route anonymously only if the flow DECLARES it (sdn-server/internal/gateway/anonymous.go): the delivery path of this whole lane is a client resolving the CID from here, so its anonymity must not rest on an operator allowlist entry alone.",
+        "anonymous": true,
+        "responses": {
+          "200": {
+            "description": "The tileset discovery document.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "description": "Current tileset epoch: tilesetId, delivery, cid, datasetEpoch, terrainBasePath, layerJsonPath, format, scheme, projection, extensions, maxzoom, attribution."
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the If-None-Match ETag."
+          }
+        }
+      },
+      {
+        "path": "/layer.json",
+        "method": "GET",
+        "operationId": "getTerrainLayerJson",
+        "summary": "Tileset layer.json",
+        "description": "The complete tilejson-2.1.0 descriptor for the served quantized-mesh-1.0 tileset: scheme tms, projection EPSG:4326, bounds [-180,-90,180,90], minzoom 0, configured maxzoom, extensions [\"watermask\"], and the configured availability index verbatim (octvertexnormals is omitted until normals ship).",
+        "anonymous": true,
+        "responses": {
+          "200": {
+            "description": "layer.json body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "description": "tilejson 2.1.0 quantized-mesh layer descriptor."
+              }
+            }
+          }
+        }
+      },
+      {
+        "path": "/{z}/{x}/{tile}",
+        "method": "GET",
+        "operationId": "getTerrainTile",
+        "summary": "One quantized-mesh terrain tile",
+        "description": "The stored quantized-mesh-1.0 tile at TMS address z/x/y (the path's third segment is \"<y>.terrain\") of the two-root GEOGRAPHIC_WGS84 pyramid (newest stored $DTT record for the address). The body is served VERBATIM from the record's payload: gzip content-encoding as stored, strong ETag, cache-control public max-age=86400. If-None-Match answers 304. An address the tileset never published answers a CACHEABLE 404 (public, max-age=300) - normal traffic, the client upsamples per layer.json availability. An address INSIDE the published availability that the store does not hold is SYNTHESIZED at height 0 rather than 404'd (200, x-terrain-synthesized: uniform-land, or uniform-water only at levels the builder actually built).",
+        "anonymous": true,
+        "params": [
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Zoom level, 0 at the pyramid root."
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Column, eastward from -180."
+          },
+          {
+            "name": "tile",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+\\.terrain$"
+            },
+            "description": "Row + extension: \"<y>.terrain\", TMS row (0 at the south edge)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The tile bytes, gzip content-encoding, strong ETag.",
+            "content": {
+              "application/vnd.quantized-mesh": {
+                "description": "quantized-mesh-1.0 tile (watermask extension included)."
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified (If-None-Match matched the tile ETag)."
+          },
+          "404": {
+            "description": "No tile stored at this address (cacheable; clients upsample per layer.json availability)."
+          }
+        }
+      }
+    ]
+  },
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.terrain-source",
+    "com.digitalarsenal.hostcap.flatsql-query"
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "http-request",
+      "targetNodeId": "route",
+      "targetPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ]
+}

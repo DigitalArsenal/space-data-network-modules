@@ -1,0 +1,466 @@
+{
+  "name": "terrain-source-parity",
+  "threadEnvVar": "SDM_PARITY_THREADS",
+  "threadCounts": [
+    1,
+    2,
+    4,
+    8
+  ],
+  "cases": [
+    {
+      "id": "tile-single",
+      "expect": "ok",
+      "request": {
+        "methodId": "tile",
+        "inputs": [
+          {
+            "portId": "plan",
+            "payloadFile": "parity/plan-single.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 372
+            }
+          },
+          {
+            "portId": "dem",
+            "payloadFile": "parity/dem-granule.hrb",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 153642
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tile-block-amortized",
+      "expect": "ok",
+      "request": {
+        "methodId": "tile",
+        "inputs": [
+          {
+            "portId": "plan",
+            "payloadFile": "parity/plan-block.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 444
+            }
+          },
+          {
+            "portId": "dem",
+            "payloadFile": "parity/dem-granule.hrb",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 153642
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tile-water-raster",
+      "expect": "ok",
+      "request": {
+        "methodId": "tile",
+        "inputs": [
+          {
+            "portId": "plan",
+            "payloadFile": "parity/plan-water.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 372
+            }
+          },
+          {
+            "portId": "dem",
+            "payloadFile": "parity/dem-granule.hrb",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 153642
+            }
+          },
+          {
+            "portId": "water",
+            "payloadFile": "parity/water-granule.hrb",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 4575
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer-json",
+      "expect": "ok",
+      "request": {
+        "methodId": "layer_json",
+        "inputs": [
+          {
+            "portId": "plan",
+            "payloadFile": "parity/plan-layer.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 185
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tile-over-decode-budget",
+      "expect": "ok",
+      "request": {
+        "methodId": "tile",
+        "inputs": [
+          {
+            "portId": "plan",
+            "payloadFile": "parity/plan-oversized.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 370
+            }
+          },
+          {
+            "portId": "dem",
+            "payloadFile": "parity/oversized-granule.hrb",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 246
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "respond-stored-gzip",
+      "expect": "ok",
+      "request": {
+        "methodId": "respond",
+        "inputs": [
+          {
+            "portId": "stream",
+            "payloadFile": "parity/stored-record.dttstream",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 1332
+            }
+          },
+          {
+            "portId": "context",
+            "payloadFile": "parity/context-stored.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 99
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "respond-stored-identity",
+      "expect": "ok",
+      "request": {
+        "methodId": "respond",
+        "inputs": [
+          {
+            "portId": "stream",
+            "payloadFile": "parity/stored-record.dttstream",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 1332
+            }
+          },
+          {
+            "portId": "context",
+            "payloadFile": "parity/context-identity.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 100
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "respond-not-modified",
+      "expect": "ok",
+      "request": {
+        "methodId": "respond",
+        "inputs": [
+          {
+            "portId": "stream",
+            "payloadFile": "parity/stored-record.dttstream",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 1332
+            }
+          },
+          {
+            "portId": "context",
+            "payloadFile": "parity/context-conditional.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 171
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "respond-synthesized-miss",
+      "expect": "ok",
+      "request": {
+        "methodId": "respond",
+        "inputs": [
+          {
+            "portId": "stream",
+            "payloadFile": "parity/stream-empty.bin",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 4
+            }
+          },
+          {
+            "portId": "context",
+            "payloadFile": "parity/context-synth.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 162
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "respond-miss-outside-availability",
+      "expect": "ok",
+      "request": {
+        "methodId": "respond",
+        "inputs": [
+          {
+            "portId": "stream",
+            "payloadFile": "parity/stream-empty.bin",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 4
+            }
+          },
+          {
+            "portId": "context",
+            "payloadFile": "parity/context-miss.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 123
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "respond-malformed-stream",
+      "expect": "ok",
+      "request": {
+        "methodId": "respond",
+        "inputs": [
+          {
+            "portId": "stream",
+            "payloadFile": "parity/stream-malformed.bin",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 31
+            }
+          },
+          {
+            "portId": "context",
+            "payloadFile": "parity/context-stored.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 99
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "route-tile-address",
+      "expect": "ok",
+      "request": {
+        "methodId": "route",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadFile": "parity/request-tile.htq",
+            "typeRef": {
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "route-layer-json",
+      "expect": "ok",
+      "request": {
+        "methodId": "route",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadFile": "parity/request-layer.htq",
+            "typeRef": {
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "route-undeclared-query",
+      "expect": "ok",
+      "request": {
+        "methodId": "route",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadFile": "parity/request-query.htq",
+            "typeRef": {
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "route-declared-version-token",
+      "expect": "ok",
+      "request": {
+        "methodId": "route",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadFile": "parity/request-versioned.htq",
+            "typeRef": {
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "route-catalogue-record",
+      "expect": "ok",
+      "request": {
+        "methodId": "route",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadFile": "parity/request-tileset.htq",
+            "typeRef": {
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest"
+            }
+          },
+          {
+            "portId": "config",
+            "payloadFile": "parity/config-catalogue.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 1076
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "route-catalogue-no-cid",
+      "expect": "ok",
+      "request": {
+        "methodId": "route",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadFile": "parity/request-tileset.htq",
+            "typeRef": {
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest"
+            }
+          },
+          {
+            "portId": "config",
+            "payloadFile": "parity/config-catalogue-no-cid.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 946
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "route-catalogue-lineage-refused",
+      "expect": "ok",
+      "request": {
+        "methodId": "route",
+        "inputs": [
+          {
+            "portId": "request",
+            "payloadFile": "parity/request-tileset.htq",
+            "typeRef": {
+              "schemaName": "HttpRequestAbi.fbs",
+              "fileIdentifier": "$HTQ",
+              "rootTypeName": "HttpRequest"
+            }
+          },
+          {
+            "portId": "config",
+            "payloadFile": "parity/config-catalogue-no-lineage.json",
+            "typeRef": {
+              "wireFormat": "aligned-binary",
+              "requiredAlignment": 1,
+              "byteLength": 1014
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "malformed-stdin",
+      "stdinUtf8": "this is not a PIV invoke frame — the trap/error class must match across every lane"
+    }
+  ]
+}

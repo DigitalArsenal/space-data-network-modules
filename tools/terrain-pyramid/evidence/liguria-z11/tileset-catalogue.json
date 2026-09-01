@@ -1,0 +1,28 @@
+{
+  "TILESET_ID": "spaceaware-terrain",
+  "TILESET_NAME": "spaceaware-terrain",
+  "TILING_SCHEME": "UNSPECIFIED",
+  "WEST_DEG": 7.734375,
+  "SOUTH_DEG": 42.890625,
+  "EAST_DEG": 12.65625,
+  "NORTH_DEG": 47.109375,
+  "PAYLOAD_FORMAT": "QUANTIZED_MESH",
+  "PAYLOAD_FORMAT_VERSION": "1.0",
+  "PAYLOAD": {},
+  "MAX_LEVEL": 13,
+  "WATER_MASK_KIND": "NONE",
+  "VERTICAL_DATUM": "GEOID",
+  "VERTICAL_DATUM_NAME": "EGM2008",
+  "REMARKS": "Heights are geoid-referenced as the source dataset publishes them (VERTICAL_DATUM GEOID); no geoid-to-ellipsoid conversion is applied at this parity floor. A consumer rendering them as above-ellipsoid accepts a bounded (<~100 m) vertical offset.",
+  "PROVENANCE": {
+    "DATASET_ID": "copernicus-glo30-quantized-mesh",
+    "DATASET_NAME": "copernicus-glo30",
+    "DATASET_EPOCH": "2023-04-01T00:00:00.000Z",
+    "RETRIEVED_AT": "2026-08-26T00:00:00.000Z",
+    "LICENSE": "Copernicus DEM: ESA / Airbus Defence and Space (free licence)",
+    "LICENSE_URL": "https://spacedata.copernicus.eu/documents/20123/121286/CSCDA_ESA_Mission-specific+Annex_31_Oct_22.pdf",
+    "ATTRIBUTION": "Produced using Copernicus WorldDEM-30 (c) DLR e.V. 2010-2014 and (c) Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+    "GENERATED_AT": "2026-08-27T21:24:40.339Z",
+    "PROCESSOR": "tools/terrain-pyramid/ipfs-publish.mjs"
+  }
+}

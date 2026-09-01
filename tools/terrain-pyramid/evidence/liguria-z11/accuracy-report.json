@@ -1,0 +1,535 @@
+{
+  "outDir": "/Users/tj/software/worktrees/space-data-network-modules--sdn-terrain-serving-module/tools/terrain-pyramid/out/liguria",
+  "referenceDepthByLevel": {
+    "8": 3,
+    "9": 3,
+    "10": 3,
+    "11": 2,
+    "12": 2,
+    "13": 2
+  },
+  "referenceGridByLevel": {
+    "8": 97,
+    "9": 129,
+    "10": 81,
+    "11": 81,
+    "12": 41,
+    "13": 21
+  },
+  "referencePostsPerTileEdgeByLevel": {
+    "8": 769,
+    "9": 1025,
+    "10": 641,
+    "11": 321,
+    "12": 161,
+    "13": 81
+  },
+  "sourcePostsPerTileEdgeByLevel": {
+    "8": 2531.3,
+    "9": 1265.6,
+    "10": 632.8,
+    "11": 316.4,
+    "12": 158.2,
+    "13": 79.1
+  },
+  "limits": [
+    "the reference is the ENCODER re-sampling the same granules at level+2, so this cannot see a decode, georeference or clamp error — those are checked structurally in verify.mjs and in the module's granule-seam, band-boundary and water-mask tests",
+    "a level flagged referenceUnderResolvesSource has a reference COARSER than the 1-arcsecond source; its max error is a sample observation, never a bound",
+    "a level flagged referenceOutResolvesSource has a reference FINER than the source, so its 'error' includes the reference's own interpolation",
+    "tiles are the highest-relief ones per level plus one flat control, not a sample of the store: a max over them is deliberately harsher than the per-tile share gate verify.mjs owns, and is not a distribution"
+  ],
+  "levels": [
+    {
+      "level": 8,
+      "referenceOutResolvesSource": false,
+      "referenceUnderResolvesSource": true,
+      "referenceDepth": 3,
+      "referenceGrid": 97,
+      "referenceGridWanted": 255,
+      "referenceGridFellBackFromCeiling": true,
+      "referencePostsPerTileEdge": 769,
+      "sourcePostsPerTileEdge": 2531.3,
+      "referenceSpacingDeg": 0.0009155,
+      "sourceSpacingDeg": 0.0002778,
+      "tilesInStore": 40,
+      "tilesMeasured": 7,
+      "errorTargetM": 602.09,
+      "legacyBoundM": 301.04,
+      "legacyRmseBoundM": 75.26,
+      "maxErrorM": 591.844,
+      "rmseM": 81.449,
+      "maxWithinTarget": true,
+      "maxWithinLegacyBound": false,
+      "rmseWithinLegacyBound": false,
+      "tiles": [
+        {
+          "address": "8/267/193",
+          "reliefM": 4339.5,
+          "maxErrorM": 504.291,
+          "rmseM": 77.16,
+          "samples": 1065024,
+          "role": "high-relief"
+        },
+        {
+          "address": "8/270/193",
+          "reliefM": 3676.7,
+          "maxErrorM": 511.71,
+          "rmseM": 87.853,
+          "samples": 1065024,
+          "role": "high-relief"
+        },
+        {
+          "address": "8/267/194",
+          "reliefM": 3597.7,
+          "maxErrorM": 525.335,
+          "rmseM": 64.105,
+          "samples": 1065024,
+          "role": "high-relief"
+        },
+        {
+          "address": "8/271/193",
+          "reliefM": 3524.3,
+          "maxErrorM": 546.735,
+          "rmseM": 82.071,
+          "samples": 1065024,
+          "role": "high-relief"
+        },
+        {
+          "address": "8/271/194",
+          "reliefM": 3352.4,
+          "maxErrorM": 591.844,
+          "rmseM": 86.691,
+          "samples": 1065024,
+          "role": "high-relief"
+        },
+        {
+          "address": "8/269/193",
+          "reliefM": 3226,
+          "maxErrorM": 546.112,
+          "rmseM": 88.156,
+          "samples": 1065024,
+          "role": "high-relief"
+        },
+        {
+          "address": "8/273/191",
+          "reliefM": 24.4,
+          "maxErrorM": 26.663,
+          "rmseM": 1.723,
+          "samples": 602176,
+          "role": "lowest-relief control"
+        }
+      ]
+    },
+    {
+      "level": 9,
+      "referenceOutResolvesSource": false,
+      "referenceUnderResolvesSource": true,
+      "referenceDepth": 3,
+      "referenceGrid": 129,
+      "referenceGridWanted": 160,
+      "referenceGridFellBackFromCeiling": true,
+      "referencePostsPerTileEdge": 1025,
+      "sourcePostsPerTileEdge": 1265.6,
+      "referenceSpacingDeg": 0.0003433,
+      "sourceSpacingDeg": 0.0002778,
+      "tilesInStore": 141,
+      "tilesMeasured": 7,
+      "errorTargetM": 301.04,
+      "legacyBoundM": 150.52,
+      "legacyRmseBoundM": 37.63,
+      "maxErrorM": 277.713,
+      "rmseM": 32.203,
+      "maxWithinTarget": true,
+      "maxWithinLegacyBound": false,
+      "rmseWithinLegacyBound": true,
+      "tiles": [
+        {
+          "address": "9/534/386",
+          "reliefM": 3868.2,
+          "maxErrorM": 271.808,
+          "rmseM": 37.77,
+          "samples": 1065024,
+          "role": "high-relief"
+        },
+        {
+          "address": "9/534/387",
+          "reliefM": 3800.3,
+          "maxErrorM": 254.92,
+          "rmseM": 33.901,
+          "samples": 1065024,
+          "role": "high-relief"
+        },
+        {
+          "address": "9/540/387",
+          "reliefM": 3590.6,
+          "maxErrorM": 256.417,
+          "rmseM": 33.662,
+          "samples": 1065024,
+          "role": "high-relief"
+        },
+        {
+          "address": "9/534/388",
+          "reliefM": 3519.3,
+          "maxErrorM": 263.832,
+          "rmseM": 24.383,
+          "samples": 1065024,
+          "role": "high-relief"
+        },
+        {
+          "address": "9/535/388",
+          "reliefM": 3498.6,
+          "maxErrorM": 257.66,
+          "rmseM": 24.787,
+          "samples": 1065024,
+          "role": "high-relief"
+        },
+        {
+          "address": "9/539/387",
+          "reliefM": 3327.6,
+          "maxErrorM": 277.713,
+          "rmseM": 36.117,
+          "samples": 1065024,
+          "role": "high-relief"
+        },
+        {
+          "address": "9/540/379",
+          "reliefM": 0,
+          "maxErrorM": 245.365,
+          "rmseM": 5.272,
+          "samples": 1638400,
+          "role": "lowest-relief control"
+        }
+      ]
+    },
+    {
+      "level": 10,
+      "referenceOutResolvesSource": false,
+      "referenceUnderResolvesSource": false,
+      "referenceDepth": 3,
+      "referenceGrid": 81,
+      "referenceGridWanted": 81,
+      "referenceGridFellBackFromCeiling": false,
+      "referencePostsPerTileEdge": 641,
+      "sourcePostsPerTileEdge": 632.8,
+      "referenceSpacingDeg": 0.0002747,
+      "sourceSpacingDeg": 0.0002778,
+      "tilesInStore": 491,
+      "tilesMeasured": 7,
+      "errorTargetM": 150.52,
+      "legacyBoundM": 75.26,
+      "legacyRmseBoundM": 18.82,
+      "maxErrorM": 166.106,
+      "rmseM": 12.749,
+      "maxWithinTarget": false,
+      "maxWithinLegacyBound": false,
+      "rmseWithinLegacyBound": true,
+      "tiles": [
+        {
+          "address": "10/1070/777",
+          "reliefM": 3405.8,
+          "maxErrorM": 166.106,
+          "rmseM": 10.989,
+          "samples": 419904,
+          "role": "high-relief"
+        },
+        {
+          "address": "10/1069/776",
+          "reliefM": 3336.2,
+          "maxErrorM": 114,
+          "rmseM": 10.742,
+          "samples": 419904,
+          "role": "high-relief"
+        },
+        {
+          "address": "10/1080/775",
+          "reliefM": 3236.1,
+          "maxErrorM": 123.184,
+          "rmseM": 16.424,
+          "samples": 419904,
+          "role": "high-relief"
+        },
+        {
+          "address": "10/1069/773",
+          "reliefM": 3090.9,
+          "maxErrorM": 132.62,
+          "rmseM": 15.607,
+          "samples": 419904,
+          "role": "high-relief"
+        },
+        {
+          "address": "10/1070/776",
+          "reliefM": 3017.8,
+          "maxErrorM": 97.322,
+          "rmseM": 10.392,
+          "samples": 419904,
+          "role": "high-relief"
+        },
+        {
+          "address": "10/1075/776",
+          "reliefM": 2990.9,
+          "maxErrorM": 98.494,
+          "rmseM": 10.851,
+          "samples": 419904,
+          "role": "high-relief"
+        },
+        {
+          "address": "10/1080/756",
+          "reliefM": 0,
+          "maxErrorM": 85.962,
+          "rmseM": 1.634,
+          "samples": 419904,
+          "role": "lowest-relief control"
+        }
+      ]
+    },
+    {
+      "level": 11,
+      "referenceOutResolvesSource": false,
+      "referenceUnderResolvesSource": false,
+      "referenceDepth": 2,
+      "referenceGrid": 81,
+      "referenceGridWanted": 81,
+      "referenceGridFellBackFromCeiling": false,
+      "referencePostsPerTileEdge": 321,
+      "sourcePostsPerTileEdge": 316.4,
+      "referenceSpacingDeg": 0.0002747,
+      "sourceSpacingDeg": 0.0002778,
+      "tilesInStore": 1776,
+      "tilesMeasured": 7,
+      "errorTargetM": 75.26,
+      "legacyBoundM": 37.63,
+      "legacyRmseBoundM": 9.41,
+      "maxErrorM": 70.129,
+      "rmseM": 6.43,
+      "maxWithinTarget": true,
+      "maxWithinLegacyBound": false,
+      "rmseWithinLegacyBound": true,
+      "tiles": [
+        {
+          "address": "11/2150/1552",
+          "reliefM": 3002.4,
+          "maxErrorM": 70.129,
+          "rmseM": 6.618,
+          "samples": 104976,
+          "role": "high-relief"
+        },
+        {
+          "address": "11/2139/1548",
+          "reliefM": 2823.7,
+          "maxErrorM": 57.732,
+          "rmseM": 6.562,
+          "samples": 104976,
+          "role": "high-relief"
+        },
+        {
+          "address": "11/2140/1552",
+          "reliefM": 2823.7,
+          "maxErrorM": 56.125,
+          "rmseM": 5.9,
+          "samples": 104976,
+          "role": "high-relief"
+        },
+        {
+          "address": "11/2139/1549",
+          "reliefM": 2792.2,
+          "maxErrorM": 59.832,
+          "rmseM": 6.163,
+          "samples": 104976,
+          "role": "high-relief"
+        },
+        {
+          "address": "11/2155/1551",
+          "reliefM": 2784.8,
+          "maxErrorM": 62.648,
+          "rmseM": 6.488,
+          "samples": 104976,
+          "role": "high-relief"
+        },
+        {
+          "address": "11/2173/1555",
+          "reliefM": 2733.4,
+          "maxErrorM": 51.1,
+          "rmseM": 6.808,
+          "samples": 104976,
+          "role": "high-relief"
+        },
+        {
+          "address": "11/2166/1516",
+          "reliefM": 0.6,
+          "maxErrorM": 13.652,
+          "rmseM": 0.326,
+          "samples": 104976,
+          "role": "lowest-relief control"
+        }
+      ]
+    },
+    {
+      "level": 12,
+      "referenceOutResolvesSource": false,
+      "referenceUnderResolvesSource": false,
+      "referenceDepth": 2,
+      "referenceGrid": 41,
+      "referenceGridWanted": 41,
+      "referenceGridFellBackFromCeiling": false,
+      "referencePostsPerTileEdge": 161,
+      "sourcePostsPerTileEdge": 158.2,
+      "referenceSpacingDeg": 0.0002747,
+      "sourceSpacingDeg": 0.0002778,
+      "tilesInStore": 446,
+      "tilesMeasured": 7,
+      "errorTargetM": 37.63,
+      "legacyBoundM": 18.82,
+      "legacyRmseBoundM": 4.7,
+      "maxErrorM": 31.173,
+      "rmseM": 3.588,
+      "maxWithinTarget": true,
+      "maxWithinLegacyBound": false,
+      "rmseWithinLegacyBound": true,
+      "tiles": [
+        {
+          "address": "12/4323/3057",
+          "reliefM": 1373.4,
+          "maxErrorM": 23.339,
+          "rmseM": 3.774,
+          "samples": 26896,
+          "role": "high-relief"
+        },
+        {
+          "address": "12/4310/3059",
+          "reliefM": 1256.5,
+          "maxErrorM": 26.967,
+          "rmseM": 3.744,
+          "samples": 26896,
+          "role": "high-relief"
+        },
+        {
+          "address": "12/4307/3063",
+          "reliefM": 1204.9,
+          "maxErrorM": 31.173,
+          "rmseM": 3.591,
+          "samples": 26896,
+          "role": "high-relief"
+        },
+        {
+          "address": "12/4310/3063",
+          "reliefM": 1187.3,
+          "maxErrorM": 25.178,
+          "rmseM": 3.352,
+          "samples": 26896,
+          "role": "high-relief"
+        },
+        {
+          "address": "12/4323/3058",
+          "reliefM": 1159.2,
+          "maxErrorM": 29.028,
+          "rmseM": 3.875,
+          "samples": 26896,
+          "role": "high-relief"
+        },
+        {
+          "address": "12/4306/3064",
+          "reliefM": 1145.6,
+          "maxErrorM": 24.666,
+          "rmseM": 3.136,
+          "samples": 26896,
+          "role": "high-relief"
+        },
+        {
+          "address": "12/4323/3071",
+          "reliefM": 8.8,
+          "maxErrorM": 7.827,
+          "rmseM": 0.782,
+          "samples": 26896,
+          "role": "lowest-relief control"
+        }
+      ]
+    },
+    {
+      "level": 13,
+      "referenceOutResolvesSource": false,
+      "referenceUnderResolvesSource": false,
+      "referenceDepth": 2,
+      "referenceGrid": 21,
+      "referenceGridWanted": 21,
+      "referenceGridFellBackFromCeiling": false,
+      "referencePostsPerTileEdge": 81,
+      "sourcePostsPerTileEdge": 79.1,
+      "referenceSpacingDeg": 0.0002747,
+      "sourceSpacingDeg": 0.0002778,
+      "tilesInStore": 1721,
+      "tilesMeasured": 7,
+      "errorTargetM": 18.82,
+      "legacyBoundM": 9.41,
+      "legacyRmseBoundM": 2.35,
+      "maxErrorM": 18.703,
+      "rmseM": 2.288,
+      "maxWithinTarget": true,
+      "maxWithinLegacyBound": false,
+      "rmseWithinLegacyBound": true,
+      "tiles": [
+        {
+          "address": "13/8614/6127",
+          "reliefM": 1172.1,
+          "maxErrorM": 18.703,
+          "rmseM": 2.423,
+          "samples": 7056,
+          "role": "high-relief"
+        },
+        {
+          "address": "13/8646/6116",
+          "reliefM": 1156.9,
+          "maxErrorM": 14.115,
+          "rmseM": 2.394,
+          "samples": 7056,
+          "role": "high-relief"
+        },
+        {
+          "address": "13/8647/6115",
+          "reliefM": 1086.1,
+          "maxErrorM": 17.027,
+          "rmseM": 2.695,
+          "samples": 7056,
+          "role": "high-relief"
+        },
+        {
+          "address": "13/8621/6119",
+          "reliefM": 1017.3,
+          "maxErrorM": 15.921,
+          "rmseM": 1.987,
+          "samples": 7056,
+          "role": "high-relief"
+        },
+        {
+          "address": "13/8621/6126",
+          "reliefM": 992.7,
+          "maxErrorM": 18.442,
+          "rmseM": 2.468,
+          "samples": 7056,
+          "role": "high-relief"
+        },
+        {
+          "address": "13/8614/6129",
+          "reliefM": 969,
+          "maxErrorM": 15.102,
+          "rmseM": 1.584,
+          "samples": 7056,
+          "role": "high-relief"
+        },
+        {
+          "address": "13/8641/6101",
+          "reliefM": 0,
+          "maxErrorM": 0.329,
+          "rmseM": 0.008,
+          "samples": 7056,
+          "role": "lowest-relief control"
+        }
+      ]
+    }
+  ],
+  "verdict": "OVER TARGET",
+  "legacyVerdict": "OVER THE RETIRED BOUND",
+  "levelsNotMeasurable": [
+    8,
+    9
+  ]
+}

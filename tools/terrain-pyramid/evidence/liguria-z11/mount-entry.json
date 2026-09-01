@@ -1,0 +1,15 @@
+{
+  "//": "flows.mounts[] entry keys for config.module-delivery-sidecar.yaml. `memory_pages` is a SIBLING of `config:`, never a member of it; the module config keys live in layer-json-config.json and go INSIDE `config:`.",
+  "path": "/api/v1/terrain/",
+  "flow": "com.digitalarsenal.flows.terrain-serving",
+  "memory_pages": 384,
+  "// pool": {
+    "availabilityIndexBytes": 9107,
+    "memoryPages": 384,
+    "memoryMiB": 24,
+    "hostDefaultPages": 1024,
+    "poolMiBAtFourInstances": 96,
+    "mustBeConfigured": false,
+    "yamlLocation": "flows.mounts[].memory_pages (sibling of `config:`, never inside it)"
+  }
+}
