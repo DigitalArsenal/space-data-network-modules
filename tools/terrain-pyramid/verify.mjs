@@ -9,7 +9,7 @@
 //   node tools/terrain-pyramid/verify.mjs --out <dir> [--json]
 
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -68,6 +68,28 @@ const MAX_MESH_BYTES = 4 * 1024 * 1024;
 const MAX_COMPRESSED_PAYLOAD_BYTES = 1024 * 1024;
 const MAX_MASK_BYTES = 256 * 256;
 const MAX_RUN_REPORT_BYTES = 1024 * 1024;
+
+// Every non-padding DTT frame costs a u32 prefix plus at least one record
+// byte.  Every compact ocean address costs at least `0/0/0` (five bytes).
+// These deliberately pessimistic lower bounds make the maximum number of
+// external-sort runs finite without excluding any workload allowed by the
+// absolute publication ceilings.  The actual global z10 cut is orders of
+// magnitude smaller; these caps protect the stream/manifest arithmetic should
+// a future approved policy approach its byte ceiling.
+const MIN_NON_PADDING_DTT_FRAME_BYTES = 5;
+const MIN_OCEAN_ADDRESS_LINE_BYTES = 5;
+const ceilDivide = (numerator, denominator) => Math.ceil(numerator / denominator);
+const MAX_VERIFIED_RECORDS = Math.floor(PUBLICATION_LIMITS.maxVerifiedStoreBytes / MIN_NON_PADDING_DTT_FRAME_BYTES);
+const MAX_OCEAN_ADDRESS_LINES = Math.floor(PUBLICATION_LIMITS.maxStaticDirectoryBytes / MIN_OCEAN_ADDRESS_LINE_BYTES);
+const MAX_ADDRESS_FACTS = MAX_VERIFIED_RECORDS + MAX_OCEAN_ADDRESS_LINES;
+const MAX_CLOSURE_FACTS = MAX_ADDRESS_FACTS * (MAX_TERRAIN_LEVEL + 1);
+const MAX_EDGE_FACT_RUNS = ceilDivide(MAX_VERIFIED_RECORDS * 8, 128); // mesh plus optional raster-mask edges
+const MAX_ADDRESS_FACT_RUNS = ceilDivide(MAX_ADDRESS_FACTS, 512);
+const MAX_SIZE_FACT_RUNS = ceilDivide(MAX_VERIFIED_RECORDS, 1024);
+const MAX_CLOSURE_FACT_RUNS = ceilDivide(MAX_CLOSURE_FACTS, 512);
+const MAX_MEMBERSHIP_FACT_RUNS = MAX_ADDRESS_FACT_RUNS;
+const MAX_CANDIDATE_FACT_RUNS = ceilDivide(MAX_CLOSURE_FACTS + 2, 512);
+const MAX_AVAILABLE_CHILD_FACT_RUNS = ceilDivide(MAX_CLOSURE_FACTS, 512);
 // The share of tiles per level that may ship at the cap without meeting the
 // error target, and the level from which that share is gated at all.
 import { memoryPagesAdvice, memoryPagesFor } from "./memory-pages.mjs";
@@ -177,45 +199,45 @@ function waitForTestReceiptBarrier() {
   }
 }
 
-function atomicWriteWithRawTopLevelProperty(file, object, property, rawFile, rawOptions) {
-  const staged = `${file}.${process.pid}.${Date.now()}.tmp`;
+let verifierStaging = null;
+
+function requireVerifierStaging() {
+  assert.ok(verifierStaging, "verifier publication staging was not acquired");
+  return verifierStaging;
+}
+
+function atomicWriteWithRawTopLevelProperty(file, object, property, rawFile, rawOptions, stageName) {
+  const staging = requireVerifierStaging();
   const encoded = JSON.stringify(object, null, 2);
   assert.ok(encoded.endsWith("}"), "top-level JSON object must end with a brace");
-  let handle = null;
   let published = false;
+  const stage = staging.open(stageName);
   try {
-    handle = fs.openSync(staged, "wx");
-    fs.writeSync(handle, `${encoded.slice(0, -1)},\n  ${JSON.stringify(property)}: `);
-    const raw = copyStableRegularFileToHandle(rawFile, handle, rawOptions);
-    fs.writeSync(handle, "\n}\n");
-    fs.fsyncSync(handle);
-    fs.closeSync(handle);
-    handle = null;
-    fs.renameSync(staged, file);
-    fsyncDirectory(path.dirname(file));
+    fs.writeSync(stage.handle, `${encoded.slice(0, -1)},\n  ${JSON.stringify(property)}: `);
+    const raw = copyStableRegularFileToHandle(rawFile, stage.handle, rawOptions);
+    fs.writeSync(stage.handle, "\n}\n");
+    staging.seal(stage);
+    staging.publish(stage, file);
     published = true;
     return raw;
   } finally {
-    if (handle !== null) fs.closeSync(handle);
-    if (!published) fs.rmSync(staged, { force: true });
+    if (!published) staging.discard(stage);
   }
 }
 
-function atomicWriteJson(file, value) {
-  const staged = `${file}.${process.pid}.${Date.now()}.tmp`;
+function atomicWriteJson(file, value, stageName) {
+  const staging = requireVerifierStaging();
   const encoded = `${JSON.stringify(value, null, 2)}\n`;
-  const handle = fs.openSync(staged, "wx");
+  const stage = staging.open(stageName);
+  let published = false;
   try {
-    fs.writeSync(handle, encoded);
-  } catch (error) {
-    fs.closeSync(handle);
-    fs.rmSync(staged, { force: true });
-    throw error;
+    fs.writeSync(stage.handle, encoded);
+    staging.seal(stage);
+    staging.publish(stage, file);
+    published = true;
+  } finally {
+    if (!published) staging.discard(stage);
   }
-  fs.fsyncSync(handle);
-  fs.closeSync(handle);
-  fs.renameSync(staged, file);
-  fsyncDirectory(path.dirname(file));
 }
 
 // ── the four EDGE post rows of a quantized mesh, in metres ─────────────────
@@ -600,6 +622,691 @@ function stableJsonInput(outDir, relativePath, maxBytes) {
   return { value, receipt: stable.receipt, mutation: stable.mutation };
 }
 
+// Every publishable verifier output is staged under one exact directory.  A
+// single deterministic name means SIGKILL cannot grow an unbounded collection
+// of PID/timestamp files.  The owner record pins the inode of each stage before
+// it is written: recovery can remove only a regular file that this verifier
+// created, and refuses a symlink, replacement, corrupt record, or unknown
+// entry.  A live or identity-ambiguous owner is never reclaimed.
+const VERIFIER_STAGING_FORMAT = "terrain-verifier-staging-v1";
+const VERIFIER_STAGING_DIRECTORY = ".terrain-verifier-staging-v1";
+const VERIFIER_RECOVERY_DIRECTORY = ".terrain-verifier-recovery-v1";
+const VERIFIER_LEASE_PATH = ".terrain-verifier-lease-v1";
+const VERIFIER_LEASE_LINK_PREFIX = "terrain-verifier-lease-v1:";
+const VERIFIER_STAGING_OWNER_SLOTS = Object.freeze(["owner.a.json", "owner.b.json"]);
+const VERIFIER_STAGE_FILES = Object.freeze({
+  availability: "terrain-available.json.stage",
+  availableButUnstored: "available-but-unstored.ndjson.stage",
+  layerConfig: "layer-json-config.json.stage",
+  mountEntry: "mount-entry.json.stage",
+  verifyReport: "verify-report.json.stage",
+});
+const VERIFIER_SCRATCH_DIRECTORIES = Object.freeze({
+  edgeFacts: ".verify-edge-facts", edgeMerge: ".verify-edge-merge",
+  addressFacts: ".verify-address-facts", addressMerge: ".verify-address-merge",
+  sizeFacts: ".verify-size-facts", sizeMerge: ".verify-size-merge",
+  closureFacts: ".verify-closure-facts", closureMerge: ".verify-closure-merge",
+  membershipFacts: ".verify-membership-facts", membershipMerge: ".verify-membership-merge",
+  candidateFacts: ".verify-available-candidates", candidateMerge: ".verify-available-candidate-merge",
+  availableChildren: ".verify-available-children",
+});
+const VERIFIER_STAGE_MAX_OWNER_BYTES = 16 * 1024;
+
+function stageIdentity(stat) {
+  return { device: String(stat.dev), inode: String(stat.ino) };
+}
+
+function sameStageIdentity(left, right) {
+  return left?.device === right?.device && left?.inode === right?.inode;
+}
+
+function stageFileStat(file, label) {
+  const stat = fs.lstatSync(file, { bigint: true });
+  assert.ok(stat.isFile(), `${label} is not a regular file`);
+  return stat;
+}
+
+function lstatOrNull(file) {
+  try { return fs.lstatSync(file, { bigint: true }); } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function validateVerifierLease(value) {
+  exactObjectKeys(value, ["format", "token", "pid", "identity", "digest"], "verifier staging lease");
+  assert.equal(value.format, VERIFIER_STAGING_FORMAT, "unsupported verifier staging lease format");
+  assert.match(value.token, /^[0-9a-f-]{36}$/i, "verifier staging lease token is invalid");
+  assert.ok(Number.isSafeInteger(value.pid) && value.pid > 0, "verifier staging lease PID is invalid");
+  exactObjectKeys(value.identity, ["pid", "startToken"], "verifier staging lease identity");
+  assert.equal(value.identity.pid, value.pid, "verifier staging lease identity PID mismatches lease PID");
+  assert.ok(value.identity.startToken === null || typeof value.identity.startToken === "string",
+    "verifier staging lease start token is invalid");
+  const { digest, ...unsigned } = value;
+  assert.match(digest, /^[a-f0-9]{64}$/, "verifier staging lease digest is invalid");
+  assert.equal(digest, sha256(canonicalJson(unsigned)), "verifier staging lease digest mismatches its contents");
+  return value;
+}
+
+function signedVerifierLease(lease) {
+  const { digest: _discarded, ...unsigned } = lease;
+  return { ...unsigned, digest: sha256(canonicalJson(unsigned)) };
+}
+
+function readStableVerifierLease(file) {
+  // The lease is an atomically-created symbolic-link value, not a file which
+  // could be killed half way through a write.  We never follow the link: its
+  // target is an encoded, bounded metadata record and lstat/readlink/lstat
+  // must all observe the same exact pathname identity.
+  const beforeStat = fs.lstatSync(file, { bigint: true });
+  assert.ok(beforeStat.isSymbolicLink(), "verifier staging lease is not a symbolic link");
+  const before = fileMutationSnapshot(beforeStat);
+  assert.ok(before.bytes <= VERIFIER_STAGE_MAX_OWNER_BYTES, "verifier staging lease exceeds bounded metadata size");
+  const target = fs.readlinkSync(file, "utf8");
+  const after = fileMutationSnapshot(fs.lstatSync(file, { bigint: true }));
+  assert.ok(sameFileMutation(before, after), "verifier staging lease pathname changed while reading");
+  assert.ok(target.startsWith(VERIFIER_LEASE_LINK_PREFIX), "verifier staging lease has an invalid link target");
+  const encoded = target.slice(VERIFIER_LEASE_LINK_PREFIX.length);
+  assert.match(encoded, /^[A-Za-z0-9_-]+$/, "verifier staging lease has invalid encoded metadata");
+  let value;
+  try { value = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")); } catch { assert.fail("verifier staging lease is not JSON"); }
+  assert.equal(Buffer.from(JSON.stringify(value)).toString("base64url"), encoded,
+    "verifier staging lease metadata is not canonically encoded");
+  return { value: validateVerifierLease(value), mutation: before };
+}
+
+function unlinkOwnedPath(file, expectedMutation, label, { symbolicLink = false } = {}) {
+  const stat = fs.lstatSync(file, { bigint: true });
+  assert.ok(symbolicLink ? stat.isSymbolicLink() : stat.isFile(), `${label} has an unexpected file type`);
+  const actual = fileMutationSnapshot(stat);
+  assert.ok(sameFileMutation(actual, expectedMutation), `${label} was exchanged before unlink`);
+  fs.unlinkSync(file);
+}
+
+function readStableStagingOwner(ownerPath) {
+  const before = fileMutationSnapshot(stageFileStat(ownerPath, "verifier staging owner"));
+  assert.ok(before.bytes <= VERIFIER_STAGE_MAX_OWNER_BYTES, "verifier staging owner exceeds bounded metadata size");
+  const handle = fs.openSync(ownerPath, fs.constants.O_RDONLY | NO_FOLLOW);
+  try {
+    const opened = fileMutationSnapshot(fs.fstatSync(handle, { bigint: true }));
+    assert.ok(sameFileMutation(before, opened), "verifier staging owner changed before opening");
+    const bytes = Buffer.alloc(opened.bytes);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const read = fs.readSync(handle, bytes, offset, bytes.length - offset, offset);
+      assert.ok(read > 0, "verifier staging owner truncated while reading");
+      offset += read;
+    }
+    const closed = fileMutationSnapshot(fs.fstatSync(handle, { bigint: true }));
+    const after = fileMutationSnapshot(stageFileStat(ownerPath, "verifier staging owner"));
+    assert.ok(sameFileMutation(opened, closed), "verifier staging owner changed while reading");
+    assert.ok(sameFileMutation(opened, after), "verifier staging owner pathname changed while reading");
+    let value;
+    try { value = JSON.parse(bytes.toString("utf8")); } catch { assert.fail("verifier staging owner is not JSON"); }
+    return { value, mutation: opened };
+  } finally {
+    fs.closeSync(handle);
+  }
+}
+
+function exactObjectKeys(value, keys, label) {
+  assert.ok(value && typeof value === "object" && !Array.isArray(value), `${label} must be an object`);
+  assert.deepEqual(Object.keys(value).sort(), [...keys].sort(), `${label} has unexpected keys`);
+}
+
+function validateStageOwner(value) {
+  exactObjectKeys(value, ["format", "sequence", "token", "pid", "identity", "directory", "stages", "scratch", "digest"], "verifier staging owner");
+  assert.equal(value.format, VERIFIER_STAGING_FORMAT, "unsupported verifier staging owner format");
+  assert.ok(Number.isSafeInteger(value.sequence) && value.sequence > 0, "verifier staging owner sequence is invalid");
+  assert.match(value.token, /^[0-9a-f-]{36}$/i, "verifier staging owner token is invalid");
+  assert.ok(Number.isSafeInteger(value.pid) && value.pid > 0, "verifier staging owner PID is invalid");
+  exactObjectKeys(value.identity, ["pid", "startToken"], "verifier staging owner identity");
+  assert.equal(value.identity.pid, value.pid, "verifier staging owner identity PID mismatches owner PID");
+  assert.ok(value.identity.startToken === null || typeof value.identity.startToken === "string",
+    "verifier staging owner start token is invalid");
+  exactObjectKeys(value.directory, ["device", "inode"], "verifier staging owner directory");
+  assert.ok(typeof value.directory.device === "string" && typeof value.directory.inode === "string",
+    "verifier staging owner directory identity is invalid");
+  exactObjectKeys(value.stages, Object.keys(VERIFIER_STAGE_FILES), "verifier staging owner stages");
+  for (const [name, identity] of Object.entries(value.stages)) {
+    if (identity === null) continue;
+    if (identity?.state === "creating") {
+      exactObjectKeys(identity, ["state"], `verifier staging owner stage ${name}`);
+      continue;
+    }
+    const identityKeys = Object.keys(identity).sort();
+    const inodeKeys = ["device", "inode"].sort();
+    const mutationKeys = ["device", "inode", "bytes", "mtimeNs", "ctimeNs"].sort();
+    assert.ok(JSON.stringify(identityKeys) === JSON.stringify(inodeKeys)
+      || JSON.stringify(identityKeys) === JSON.stringify(mutationKeys),
+    `verifier staging owner stage ${name} identity is invalid`);
+    assert.ok(typeof identity.device === "string" && typeof identity.inode === "string",
+      `verifier staging owner stage ${name} identity is invalid`);
+  }
+  exactObjectKeys(value.scratch, Object.keys(VERIFIER_SCRATCH_DIRECTORIES), "verifier staging owner scratch");
+  for (const [name, identity] of Object.entries(value.scratch)) {
+    if (identity === null) continue;
+    if (identity?.state === "creating") {
+      exactObjectKeys(identity, ["state"], `verifier staging owner scratch ${name}`);
+      continue;
+    }
+    exactObjectKeys(identity, ["device", "inode"], `verifier staging owner scratch ${name}`);
+  }
+  const { digest, ...unsigned } = value;
+  assert.match(digest, /^[a-f0-9]{64}$/, "verifier staging owner digest is invalid");
+  assert.equal(digest, sha256(canonicalJson(unsigned)), "verifier staging owner digest mismatches its contents");
+  return value;
+}
+
+function signedStageOwner(owner) {
+  const { digest: _discarded, ...unsigned } = owner;
+  return { ...unsigned, digest: sha256(canonicalJson(unsigned)) };
+}
+
+function verifierPidAlive(pid) {
+  try { process.kill(pid, 0); return true; } catch (error) { return error.code === "EPERM"; }
+}
+
+function verifierProcessIdentity(pid) {
+  try {
+    const boot = fs.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+    const fields = stat.slice(stat.lastIndexOf(")") + 2).trim().split(/\s+/);
+    const start = fields[19];
+    return { pid, startToken: start ? `${boot}:${start}` : null };
+  } catch {
+    return { pid, startToken: null };
+  }
+}
+
+function ownerIsDefinitelyStale(owner) {
+  if (!verifierPidAlive(owner.pid)) return true;
+  const expected = owner.identity.startToken;
+  const observed = verifierProcessIdentity(owner.pid).startToken;
+  return Boolean(expected && observed && expected !== observed);
+}
+
+function createVerifierLease(outDir, lease) {
+  const file = path.join(outDir, VERIFIER_LEASE_PATH);
+  const target = `${VERIFIER_LEASE_LINK_PREFIX}${Buffer.from(JSON.stringify(signedVerifierLease(lease))).toString("base64url")}`;
+  assert.ok(Buffer.byteLength(target) <= VERIFIER_STAGE_MAX_OWNER_BYTES, "verifier staging lease metadata exceeds bounded size");
+  // symlink(2) is atomic: unlike a fixed candidate regular file it cannot
+  // leave a torn, unrecoverable metadata record when this process is killed.
+  fs.symlinkSync(target, file);
+  waitForTestStagingBarrier("lease-created-before-fsync");
+  fsyncDirectory(outDir);
+  return fileMutationSnapshot(fs.lstatSync(file, { bigint: true }));
+}
+
+function recoverVerifierLease(outDir, staleLease, staleMutation) {
+  assert.ok(ownerIsDefinitelyStale(staleLease),
+    "verifier staging lease is owned by a live or identity-ambiguous process; refusing concurrent verification");
+  const staging = path.join(outDir, VERIFIER_STAGING_DIRECTORY);
+  const recovery = path.join(outDir, VERIFIER_RECOVERY_DIRECTORY);
+  if (lstatOrNull(recovery)) reclaimVerifierStagingDirectory(outDir, recovery, { alreadyRecovery: true, expectedToken: staleLease.token });
+  if (lstatOrNull(staging)) reclaimVerifierStagingDirectory(outDir, staging, { expectedToken: staleLease.token });
+  unlinkOwnedPath(path.join(outDir, VERIFIER_LEASE_PATH), staleMutation, "verifier staging lease", { symbolicLink: true });
+  fsyncDirectory(outDir);
+}
+
+function acquireVerifierLease(outDir) {
+  const leasePath = path.join(outDir, VERIFIER_LEASE_PATH);
+  const lease = {
+    format: VERIFIER_STAGING_FORMAT,
+    token: randomUUID(),
+    pid: process.pid,
+    identity: verifierProcessIdentity(process.pid),
+  };
+  try {
+    // A single symlink creation arbitrates the lease atomically and its link
+    // target contains all durable metadata.  There is no writable candidate
+    // pathname whose partial contents could strand a future verifier.
+    waitForTestStagingBarrier("lease-before-create");
+    const createdMutation = createVerifierLease(outDir, lease);
+    const stable = readStableVerifierLease(leasePath);
+    assert.equal(stable.value.token, lease.token, "verifier staging lease changed during acquisition");
+    assert.ok(sameFileMutation(stable.mutation, createdMutation), "verifier staging lease changed after acquisition");
+    return { value: stable.value, mutation: stable.mutation };
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+    const existing = readStableVerifierLease(leasePath);
+    recoverVerifierLease(outDir, existing.value, existing.mutation);
+    return acquireVerifierLease(outDir);
+  }
+}
+
+function releaseVerifierLease(outDir, lease, mutation) {
+  const file = path.join(outDir, VERIFIER_LEASE_PATH);
+  const stable = readStableVerifierLease(file);
+  assert.equal(stable.value.token, lease.token, "verifier staging lease ownership changed before release");
+  assert.ok(sameFileMutation(stable.mutation, mutation), "verifier staging lease pathname changed before release");
+  unlinkOwnedPath(file, mutation, "verifier staging lease", { symbolicLink: true });
+  fsyncDirectory(outDir);
+}
+
+function waitForTestStagingBarrier(point) {
+  const requested = process.env.TERRAIN_VERIFY_TEST_STAGING_BARRIER;
+  if (requested !== point) return;
+  const requestedOccurrence = Number(process.env.TERRAIN_VERIFY_TEST_STAGING_BARRIER_OCCURRENCE ?? "1");
+  assert.ok(Number.isSafeInteger(requestedOccurrence) && requestedOccurrence > 0,
+    "staging barrier occurrence must be a positive integer");
+  const counts = globalThis.__terrainVerifierStagingBarrierCounts ??= new Map();
+  const occurrence = (counts.get(point) ?? 0) + 1;
+  counts.set(point, occurrence);
+  if (occurrence !== requestedOccurrence) return;
+  assert.equal(process.env.NODE_ENV, "test", "staging barrier is test-only");
+  const root = process.env.TERRAIN_VERIFY_TEST_STAGING_BARRIER_PATH;
+  assert.ok(root && path.isAbsolute(root), "staging barrier path must be absolute");
+  const ready = `${root}.${point}.ready`;
+  const release = `${root}.${point}.release`;
+  fs.writeFileSync(ready, "ready\n", { encoding: "utf8", flag: "wx", mode: 0o600 });
+  const deadline = Date.now() + 30_000;
+  const waitWord = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
+  while (!fs.existsSync(release)) {
+    assert.ok(Date.now() < deadline, `test staging barrier ${point} timed out`);
+    Atomics.wait(waitWord, 0, 0, 10);
+  }
+}
+
+function ownerSlotPath(directory, slot) {
+  assert.ok(VERIFIER_STAGING_OWNER_SLOTS.includes(slot), "unknown verifier staging owner slot");
+  return path.join(directory, slot);
+}
+
+function writeStagingOwnerSlot(directory, slot, owner, expectedMutation = null) {
+  const file = ownerSlotPath(directory, slot);
+  const bytes = Buffer.from(`${JSON.stringify(signedStageOwner(owner))}\n`);
+  assert.ok(bytes.length <= VERIFIER_STAGE_MAX_OWNER_BYTES, "verifier staging owner exceeds bounded metadata size");
+  let handle = null;
+  try {
+    if (expectedMutation === null) {
+      handle = fs.openSync(file, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | NO_FOLLOW, 0o600);
+    } else {
+      const before = fileMutationSnapshot(stageFileStat(file, "verifier staging owner slot"));
+      assert.ok(sameFileMutation(before, expectedMutation), "verifier staging owner slot was exchanged before update");
+      handle = fs.openSync(file, fs.constants.O_WRONLY | NO_FOLLOW);
+      const opened = fileMutationSnapshot(fs.fstatSync(handle, { bigint: true }));
+      assert.ok(sameFileMutation(opened, expectedMutation), "verifier staging owner slot was exchanged while opening");
+      fs.ftruncateSync(handle, 0);
+    }
+    waitForTestStagingBarrier("owner-before-write");
+    fs.writeSync(handle, bytes, 0, bytes.length, 0);
+    fs.fsyncSync(handle);
+  } finally {
+    if (handle !== null) fs.closeSync(handle);
+  }
+  fsyncDirectory(directory);
+  waitForTestStagingBarrier("owner-after-write");
+  return fileMutationSnapshot(stageFileStat(file, "verifier staging owner slot"));
+}
+
+function readStagingOwnerSlots(directory) {
+  const names = fs.readdirSync(directory);
+  const allowed = new Set([
+    ...VERIFIER_STAGING_OWNER_SLOTS,
+    ...Object.values(VERIFIER_STAGE_FILES),
+    ...Object.values(VERIFIER_SCRATCH_DIRECTORIES),
+  ]);
+  for (const name of names) assert.ok(allowed.has(name), `verifier staging found unknown entry ${name}`);
+  const slots = [];
+  for (const slot of VERIFIER_STAGING_OWNER_SLOTS) {
+    const file = ownerSlotPath(directory, slot);
+    if (!lstatOrNull(file)) continue;
+    try {
+      const stable = readStableStagingOwner(file);
+      slots.push({ slot, owner: validateStageOwner(stable.value), mutation: stable.mutation });
+    } catch (error) {
+      slots.push({ slot, invalid: error });
+    }
+  }
+  const valid = slots.filter((entry) => entry.owner);
+  if (valid.length) {
+    const tokens = new Set(valid.map((entry) => entry.owner.token));
+    assert.equal(tokens.size, 1, "verifier staging owner slots disagree on owner token");
+  }
+  valid.sort((left, right) => right.owner.sequence - left.owner.sequence);
+  return { names: new Set(names), slots, active: valid[0] ?? null };
+}
+
+function removeKnownRegularFile(file, label) {
+  const mutation = fileMutationSnapshot(stageFileStat(file, label));
+  unlinkOwnedPath(file, mutation, label);
+}
+
+// These are the only names the bounded external sorter may create below one
+// of the verifier-owned scratch roots.  A root inode belongs to the lease;
+// validating both the root and every direct entry means recovery never turns
+// a convenient recursive reset into deletion of a substituted tree.
+const VERIFIER_SCRATCH_ENTRY = /^(?:runs\.manifest\.ndjson|run-\d{6,12}\.ndjson|pass-\d{4}(?:\.manifest|-run-\d{6,12})\.ndjson)(?:\.\d+\.[0-9a-f-]+\.tmp)?$/;
+
+function ownedScratchEntries(directory, expectedIdentity, label) {
+  const before = fs.lstatSync(directory, { bigint: true });
+  assert.ok(before.isDirectory() && sameStageIdentity(expectedIdentity, stageIdentity(before)),
+    `${label} was exchanged before entry scan`);
+  const entries = fs.readdirSync(directory).map((name) => {
+    assert.match(name, VERIFIER_SCRATCH_ENTRY, `${label} contains an unknown entry ${name}`);
+    const file = path.join(directory, name);
+    const stat = fs.lstatSync(file, { bigint: true });
+    assert.ok(stat.isFile(), `${label} contains a non-regular entry ${name}`);
+    return { file, mutation: fileMutationSnapshot(stat) };
+  });
+  const after = fs.lstatSync(directory, { bigint: true });
+  assert.ok(after.isDirectory() && sameStageIdentity(expectedIdentity, stageIdentity(after)),
+    `${label} was exchanged during entry scan`);
+  return entries;
+}
+
+function removeOwnedScratchDirectory(directory, expectedIdentity, label) {
+  for (const entry of ownedScratchEntries(directory, expectedIdentity, label)) {
+    // Rebind the parent immediately before each deletion as well as binding
+    // the child mutation.  A rename/replacement race therefore fails closed.
+    const parent = fs.lstatSync(directory, { bigint: true });
+    assert.ok(parent.isDirectory() && sameStageIdentity(expectedIdentity, stageIdentity(parent)),
+      `${label} was exchanged before entry deletion`);
+    unlinkOwnedPath(entry.file, entry.mutation, `${label} entry`);
+  }
+  const final = fs.lstatSync(directory, { bigint: true });
+  assert.ok(final.isDirectory() && sameStageIdentity(expectedIdentity, stageIdentity(final)),
+    `${label} was exchanged before removal`);
+  fs.rmdirSync(directory);
+}
+
+function assertOwnedStagingDirectory(directory, expectedIdentity, label) {
+  const stat = fs.lstatSync(directory, { bigint: true });
+  assert.ok(stat.isDirectory() && sameStageIdentity(expectedIdentity, stageIdentity(stat)), `${label} was exchanged`);
+}
+
+class VerifierStaging {
+  constructor(outDir, directory, owner, activeSlot, slotMutations) {
+    this.outDir = outDir;
+    this.directory = directory;
+    this.owner = owner;
+    this.activeSlot = activeSlot;
+    this.slotMutations = slotMutations;
+    this.released = false;
+  }
+
+  stagePath(name) {
+    assert.ok(Object.hasOwn(VERIFIER_STAGE_FILES, name), `unknown verifier stage ${name}`);
+    return path.join(this.directory, VERIFIER_STAGE_FILES[name]);
+  }
+
+  scratchPath(name) {
+    assert.ok(Object.hasOwn(VERIFIER_SCRATCH_DIRECTORIES, name), `unknown verifier scratch ${name}`);
+    return path.join(this.directory, VERIFIER_SCRATCH_DIRECTORIES[name]);
+  }
+
+  openScratch(name) {
+    const directory = this.scratchPath(name);
+    assertOwnedStagingDirectory(this.directory, this.owner.directory, "verifier staging directory before scratch creation");
+    this.owner.scratch[name] = { state: "creating" };
+    this.persistOwner();
+    waitForTestStagingBarrier(`scratch-${name}-creating`);
+    fs.mkdirSync(directory, { mode: 0o700 });
+    fsyncDirectory(this.directory);
+    const stat = fs.lstatSync(directory, { bigint: true });
+    assert.ok(stat.isDirectory(), `verifier scratch ${name} is not a directory`);
+    const identity = stageIdentity(stat);
+    waitForTestStagingBarrier(`scratch-${name}-created`);
+    this.owner.scratch[name] = identity;
+    this.persistOwner();
+    waitForTestStagingBarrier(`scratch-${name}-opened`);
+    return directory;
+  }
+
+  clearScratch(name) {
+    const directory = this.scratchPath(name);
+    const expected = this.owner.scratch[name];
+    assert.ok(expected, `verifier scratch ${name} is not owned`);
+    assert.notEqual(expected.state, "creating", `verifier scratch ${name} creation is incomplete`);
+    assertOwnedStagingDirectory(this.directory, this.owner.directory, "verifier staging directory before scratch cleanup");
+    removeOwnedScratchDirectory(directory, expected, `verifier scratch ${name}`);
+    fsyncDirectory(this.directory);
+    this.owner.scratch[name] = null;
+    this.persistOwner();
+  }
+
+  persistOwner() {
+    assertOwnedStagingDirectory(this.directory, this.owner.directory, "verifier staging directory before owner update");
+    const nextSlot = VERIFIER_STAGING_OWNER_SLOTS.find((slot) => slot !== this.activeSlot);
+    this.owner = { ...this.owner, sequence: this.owner.sequence + 1 };
+    const mutation = writeStagingOwnerSlot(this.directory, nextSlot, this.owner, this.slotMutations[nextSlot] ?? null);
+    this.slotMutations[nextSlot] = mutation;
+    this.activeSlot = nextSlot;
+  }
+
+  open(name) {
+    assertOwnedStagingDirectory(this.directory, this.owner.directory, "verifier staging directory before output creation");
+    this.owner.stages[name] = { state: "creating" };
+    this.persistOwner();
+    waitForTestStagingBarrier(`stage-${name}-creating`);
+    const file = this.stagePath(name);
+    const handle = fs.openSync(file, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | NO_FOLLOW, 0o600);
+    const identity = stageIdentity(fs.fstatSync(handle, { bigint: true }));
+    fsyncDirectory(this.directory);
+    waitForTestStagingBarrier(`stage-${name}-created`);
+    this.owner.stages[name] = identity;
+    this.persistOwner();
+    waitForTestStagingBarrier(`stage-${name}-opened`);
+    return { name, file, handle, identity, sealed: false };
+  }
+
+  assertOwnedStage(stage) {
+    const actualStat = stageFileStat(stage.file, `verifier stage ${stage.name}`);
+    const actual = stageIdentity(actualStat);
+    assert.ok(sameStageIdentity(stage.identity, actual), `verifier stage ${stage.name} was exchanged`);
+    assert.ok(this.owner.stages[stage.name]?.state !== "creating", `verifier stage ${stage.name} owner record is incomplete`);
+    const recorded = this.owner.stages[stage.name];
+    if (Object.hasOwn(recorded, "bytes")) {
+      assert.ok(sameFileMutation(recorded, fileMutationSnapshot(actualStat)),
+        `verifier stage ${stage.name} bytes changed after sealing`);
+    } else {
+      assert.ok(sameStageIdentity(recorded, actual), `verifier stage ${stage.name} owner record mismatches`);
+    }
+  }
+
+  seal(stage) {
+    assert.notEqual(stage.handle, null, `verifier stage ${stage.name} is already closed`);
+    fs.fsyncSync(stage.handle);
+    fs.closeSync(stage.handle);
+    stage.handle = null;
+    this.assertOwnedStage(stage);
+    this.owner.stages[stage.name] = fileMutationSnapshot(stageFileStat(stage.file, `verifier stage ${stage.name}`));
+    this.persistOwner();
+    stage.sealed = true;
+    waitForTestStagingBarrier(`stage-${stage.name}-sealed`);
+  }
+
+  publish(stage, finalPath) {
+    assert.ok(stage.sealed, `verifier stage ${stage.name} must be sealed before publication`);
+    this.assertOwnedStage(stage);
+    fs.renameSync(stage.file, finalPath);
+    fsyncDirectory(path.dirname(finalPath));
+    this.owner.stages[stage.name] = null;
+    this.persistOwner();
+  }
+
+  discard(stage) {
+    if (stage.handle !== null) {
+      fs.closeSync(stage.handle);
+      stage.handle = null;
+    }
+    try {
+      this.assertOwnedStage(stage);
+      unlinkOwnedPath(stage.file, fileMutationSnapshot(stageFileStat(stage.file, `verifier stage ${stage.name}`)),
+        `verifier stage ${stage.name}`);
+      fsyncDirectory(this.directory);
+      this.owner.stages[stage.name] = null;
+      this.persistOwner();
+    } catch (error) {
+      // A malformed/exchanged stage is intentionally retained for a later
+      // fail-closed operator decision rather than deleting an unverified path.
+      if (error?.code === "ENOENT") return;
+      throw error;
+    }
+  }
+
+  release() {
+    if (this.released) return;
+    const slots = readStagingOwnerSlots(this.directory);
+    assert.ok(slots.active, "verifier staging owner is missing at release");
+    const owner = slots.active.owner;
+    assert.equal(slots.active.slot, this.activeSlot, "verifier staging owner slot changed before release");
+    assert.ok(sameFileMutation(slots.active.mutation, this.slotMutations[this.activeSlot]),
+      "verifier staging owner pathname changed before release");
+    assert.equal(owner.token, this.owner.token, "verifier staging ownership changed before release");
+    assert.ok(Object.values(owner.stages).every((stage) => stage === null), "verifier staging retains an unfinished output");
+    assert.ok(Object.values(owner.scratch).every((scratch) => scratch === null), "verifier staging retains unfinished scratch");
+    for (const name of Object.values(VERIFIER_STAGE_FILES)) {
+      assert.equal(slots.names.has(name), false, "verifier staging has an unfinished stage at release");
+    }
+    for (const name of Object.values(VERIFIER_SCRATCH_DIRECTORIES)) {
+      assert.equal(slots.names.has(name), false, "verifier staging has unfinished scratch at release");
+    }
+    assertOwnedStagingDirectory(this.directory, owner.directory, "verifier staging directory before release");
+    for (const slot of VERIFIER_STAGING_OWNER_SLOTS) {
+      const expected = this.slotMutations[slot];
+      if (!expected) continue;
+      const actual = fileMutationSnapshot(stageFileStat(ownerSlotPath(this.directory, slot), "verifier staging owner slot"));
+      assert.ok(sameFileMutation(actual, expected),
+        "verifier staging owner slot was exchanged before release");
+      fs.unlinkSync(ownerSlotPath(this.directory, slot));
+    }
+    fsyncDirectory(this.directory);
+    fs.rmdirSync(this.directory);
+    fsyncDirectory(this.outDir);
+    this.released = true;
+  }
+}
+
+function reclaimVerifierStagingDirectory(outDir, directory, { alreadyRecovery = false, expectedToken = null } = {}) {
+  const directoryStat = fs.lstatSync(directory, { bigint: true });
+  assert.ok(directoryStat.isDirectory(), "verifier staging path is not a directory");
+  const directoryIdentity = stageIdentity(directoryStat);
+  const slots = readStagingOwnerSlots(directory);
+  if (!slots.active) {
+    assert.ok(Object.values(VERIFIER_STAGE_FILES).every((name) => !slots.names.has(name)),
+      "verifier staging without a valid owner contains an unverified stage");
+    assert.ok(Object.values(VERIFIER_SCRATCH_DIRECTORIES).every((name) => !slots.names.has(name)),
+      "verifier staging without a valid owner contains unverified scratch");
+    assert.ok(expectedToken, "verifier staging owner initialization is in progress; refusing concurrent verification");
+    for (const slot of VERIFIER_STAGING_OWNER_SLOTS) {
+      if (slots.names.has(slot)) removeKnownRegularFile(ownerSlotPath(directory, slot), "verifier staging damaged owner slot");
+    }
+    fsyncDirectory(directory);
+    fs.rmdirSync(directory);
+    fsyncDirectory(outDir);
+    return;
+  }
+  const owner = slots.active.owner;
+  assert.ok(sameStageIdentity(owner.directory, directoryIdentity), "verifier staging directory was exchanged");
+  if (expectedToken !== null) assert.equal(owner.token, expectedToken, "verifier staging owner does not match its lease");
+  assert.ok(ownerIsDefinitelyStale(owner),
+    "verifier staging is owned by a live or identity-ambiguous process; refusing concurrent verification");
+  const recoveryDirectory = path.join(outDir, VERIFIER_RECOVERY_DIRECTORY);
+  if (!alreadyRecovery) {
+    assert.equal(lstatOrNull(recoveryDirectory), null, "verifier staging recovery is already pending; refusing verification");
+    fs.renameSync(directory, recoveryDirectory);
+    fsyncDirectory(outDir);
+    assert.ok(sameStageIdentity(directoryIdentity, stageIdentity(fs.lstatSync(recoveryDirectory, { bigint: true }))),
+      "verifier staging directory changed during recovery rename");
+    waitForTestStagingBarrier("recovery-after-rename");
+    return reclaimVerifierStagingDirectory(outDir, recoveryDirectory, { alreadyRecovery: true, expectedToken });
+  }
+  for (const [name, filename] of Object.entries(VERIFIER_STAGE_FILES)) {
+    assertOwnedStagingDirectory(directory, owner.directory, "verifier staging directory before stage recovery");
+    const expected = owner.stages[name];
+    const present = slots.names.has(filename);
+    if (expected === null) {
+      assert.equal(present, false, `verifier staging recovery found unowned stage ${filename}`);
+      continue;
+    }
+    if (expected.state === "creating") {
+      if (present) removeKnownRegularFile(path.join(directory, filename), `verifier creating stage ${name}`);
+      continue;
+    }
+    // A crash after rename but before clearing the owner record leaves no
+    // stage to reclaim, which is safe because the completed final already won.
+    if (!present) continue;
+    const stagePath = path.join(directory, filename);
+    const stageStat = stageFileStat(stagePath, `verifier stage ${name}`);
+    const actual = stageIdentity(stageStat);
+    assert.ok(sameStageIdentity(expected, actual), `verifier staging recovery refuses exchanged stage ${filename}`);
+    if (Object.hasOwn(expected, "bytes")) {
+      assert.ok(sameFileMutation(expected, fileMutationSnapshot(stageStat)),
+        `verifier staging recovery refuses changed sealed stage ${filename}`);
+    }
+    unlinkOwnedPath(stagePath, fileMutationSnapshot(stageStat), `verifier stage ${name}`);
+    fsyncDirectory(directory);
+    waitForTestStagingBarrier("recovery-after-stage-delete");
+  }
+  for (const [name, dirname] of Object.entries(VERIFIER_SCRATCH_DIRECTORIES)) {
+    assertOwnedStagingDirectory(directory, owner.directory, "verifier staging directory before scratch recovery");
+    const expected = owner.scratch[name];
+    const scratchPath = path.join(directory, dirname);
+    if (expected === null) {
+      assert.equal(lstatOrNull(scratchPath), null, `verifier staging recovery found unowned scratch ${dirname}`);
+      continue;
+    }
+    if (expected.state === "creating") {
+      // The durable owner transition precedes mkdir.  A dead creator can have
+      // left either no root or only this fixed, verifier-reserved root; it
+      // must still meet the same bounded-name/non-symlink rules before it is
+      // removed.  A live creator was rejected above.
+      const creatingStat = lstatOrNull(scratchPath);
+      if (creatingStat) {
+        assert.ok(creatingStat.isDirectory(), `verifier staging recovery refuses non-directory creating scratch ${dirname}`);
+        removeOwnedScratchDirectory(scratchPath, stageIdentity(creatingStat), `verifier staging recovery creating scratch ${dirname}`);
+        fsyncDirectory(directory);
+      }
+      continue;
+    }
+    removeOwnedScratchDirectory(scratchPath, expected, `verifier staging recovery scratch ${dirname}`);
+    fsyncDirectory(directory);
+  }
+  for (const slot of VERIFIER_STAGING_OWNER_SLOTS) {
+    assertOwnedStagingDirectory(directory, owner.directory, "verifier staging directory before owner-slot recovery");
+    if (slots.names.has(slot)) removeKnownRegularFile(ownerSlotPath(directory, slot), "verifier staging owner slot");
+  }
+  fsyncDirectory(directory);
+  fs.rmdirSync(directory);
+  fsyncDirectory(outDir);
+}
+
+function acquireVerifierStaging(outDir, lease) {
+  const directory = path.join(outDir, VERIFIER_STAGING_DIRECTORY);
+  const recoveryDirectory = path.join(outDir, VERIFIER_RECOVERY_DIRECTORY);
+  assert.equal(lstatOrNull(recoveryDirectory), null, "verifier staging recovery is pending after lease acquisition");
+  try {
+    fs.mkdirSync(directory, { mode: 0o700 });
+  } catch (error) {
+    if (error.code === "EEXIST") throw new Error("verifier staging directory exists after lease acquisition; refusing verification");
+    throw error;
+  }
+  fsyncDirectory(outDir);
+  waitForTestStagingBarrier("mkdir-before-owner");
+  const owner = {
+    format: VERIFIER_STAGING_FORMAT,
+    sequence: 1,
+    token: lease.value.token,
+    pid: lease.value.pid,
+    identity: lease.value.identity,
+    directory: stageIdentity(fs.lstatSync(directory, { bigint: true })),
+    stages: Object.fromEntries(Object.keys(VERIFIER_STAGE_FILES).map((name) => [name, null])),
+    scratch: Object.fromEntries(Object.keys(VERIFIER_SCRATCH_DIRECTORIES).map((name) => [name, null])),
+  };
+  try {
+    const firstSlot = VERIFIER_STAGING_OWNER_SLOTS[0];
+    const firstMutation = writeStagingOwnerSlot(directory, firstSlot, owner);
+    return new VerifierStaging(outDir, directory, signedStageOwner(owner), firstSlot, { [firstSlot]: firstMutation });
+  } catch (error) {
+    // The fixed, fully-arbitrated lease remains durable. Its stale recovery
+    // owns this exact directory and can distinguish this bootstrap window from
+    // a live concurrent creator without an unsafe time-based grace period.
+    throw error;
+  }
+}
+
 // New global cuts write a compact receipt beside a separately streamed raw
 // ASCII address list (one `level/x/y` line each).  It is read once through a
 // no-follow descriptor: the digest, the address facts, and the later receipt
@@ -731,6 +1438,21 @@ async function* iterateOceanSkippedAddresses(outDir, legacyPath, evidence) {
 const args = parseArgs(process.argv.slice(2));
 const outDir = path.resolve(args.out);
 const verifyReportPath = path.join(outDir, "verify-report.json");
+const verifierLease = acquireVerifierLease(outDir);
+const releaseVerifierStagingOnExit = () => {
+  try { verifierStaging?.release(); } catch {}
+  if (!verifierStaging || verifierStaging.released) {
+    try { releaseVerifierLease(outDir, verifierLease.value, verifierLease.mutation); } catch {}
+  }
+};
+process.once("exit", releaseVerifierStagingOnExit);
+try {
+  verifierStaging = acquireVerifierStaging(outDir, verifierLease);
+} catch (error) {
+  // Keep the fixed lease if bootstrap was interrupted. Its stale-owner path
+  // owns the exact directory and is the only code allowed to reclaim it.
+  throw error;
+}
 // A previous successful receipt must never survive a later failed invocation.
 fs.rmSync(verifyReportPath, { force: true });
 // The unlink is itself a publication-state transition.  A malformed input can
@@ -961,29 +1683,35 @@ let verifiedTilesSha256 = null;
 // These directories are disposable, attempt-scoped external-sort state.  The
 // writer and merger each reclaim stale material before use; the successful
 // path below removes it too, so a global run never leaves a second tile index.
-const edgeFactRunDir = path.join(outDir, ".verify-edge-facts");
-const edgeFactScratchDir = path.join(outDir, ".verify-edge-merge");
+const edgeFactRunDir = verifierStaging.openScratch("edgeFacts");
+const edgeFactScratchDir = verifierStaging.openScratch("edgeMerge");
 const edgeFactWriter = createSortedJsonRunWriter(edgeFactRunDir, {
   maxRows: 128,
   maxRowBytes: 64 * 1024,
   maxBufferedBytes: 1024 * 1024,
+  maxRuns: MAX_EDGE_FACT_RUNS,
   returnManifest: true,
+  reset: false,
 });
-const addressFactRunDir = path.join(outDir, ".verify-address-facts");
-const addressFactScratchDir = path.join(outDir, ".verify-address-merge");
+const addressFactRunDir = verifierStaging.openScratch("addressFacts");
+const addressFactScratchDir = verifierStaging.openScratch("addressMerge");
 const addressFactWriter = createSortedJsonRunWriter(addressFactRunDir, {
   maxRows: 512,
   maxRowBytes: 4096,
   maxBufferedBytes: 1024 * 1024,
+  maxRuns: MAX_ADDRESS_FACT_RUNS,
   returnManifest: true,
+  reset: false,
 });
-const sizeFactRunDir = path.join(outDir, ".verify-size-facts");
-const sizeFactScratchDir = path.join(outDir, ".verify-size-merge");
+const sizeFactRunDir = verifierStaging.openScratch("sizeFacts");
+const sizeFactScratchDir = verifierStaging.openScratch("sizeMerge");
 const sizeFactWriter = createSortedJsonRunWriter(sizeFactRunDir, {
   maxRows: 1024,
   maxRowBytes: 256,
   maxBufferedBytes: 256 * 1024,
+  maxRuns: MAX_SIZE_FACT_RUNS,
   returnManifest: true,
+  reset: false,
 });
 let recordCount = 0;
 let firstRecord = null;
@@ -1333,10 +2061,11 @@ try {
     maxOpenRuns: 32,
     maxRowBytes: 64 * 1024,
     scratchDir: edgeFactScratchDir,
+    resetScratch: false,
   });
 } finally {
-  fs.rmSync(edgeFactRunDir, { recursive: true, force: true });
-  fs.rmSync(edgeFactScratchDir, { recursive: true, force: true });
+  verifierStaging.clearScratch("edgeFacts");
+  verifierStaging.clearScratch("edgeMerge");
 }
 // Edge diagnostics are deliberately capped inside the external-sort consumer:
 // a global seam regression can produce millions of bad shared posts, and this
@@ -1375,6 +2104,7 @@ try {
     maxOpenRuns: 32,
     maxRowBytes: 256,
     scratchDir: sizeFactScratchDir,
+    resetScratch: false,
     onRow: async (fact) => {
       if (sizeOrdinal === payloadQuantileIndexes.p50) payloadQuantiles.p50 = fact.bytes;
       if (sizeOrdinal === payloadQuantileIndexes.p99) payloadQuantiles.p99 = fact.bytes;
@@ -1383,8 +2113,8 @@ try {
     },
   });
 } finally {
-  fs.rmSync(sizeFactRunDir, { recursive: true, force: true });
-  fs.rmSync(sizeFactScratchDir, { recursive: true, force: true });
+  verifierStaging.clearScratch("sizeFacts");
+  verifierStaging.clearScratch("sizeMerge");
 }
 assert.equal(sizeOrdinal, recordCount, "payload fact count must match tile records");
 const pct = (p) => {
@@ -1412,21 +2142,25 @@ const pct = (p) => {
 // available and asked for them. Declaring the closure makes the published index
 // say what the client is going to conclude from it anyway.
 const addressFactRuns = addressFactWriter.finish();
-const closureFactRunDir = path.join(outDir, ".verify-closure-facts");
-const closureFactScratchDir = path.join(outDir, ".verify-closure-merge");
+const closureFactRunDir = verifierStaging.openScratch("closureFacts");
+const closureFactScratchDir = verifierStaging.openScratch("closureMerge");
 const closureFactWriter = createSortedJsonRunWriter(closureFactRunDir, {
   maxRows: 512,
   maxRowBytes: 256,
   maxBufferedBytes: 256 * 1024,
+  maxRuns: MAX_CLOSURE_FACT_RUNS,
   returnManifest: true,
+  reset: false,
 });
-const membershipFactRunDir = path.join(outDir, ".verify-membership-facts");
-const membershipFactScratchDir = path.join(outDir, ".verify-membership-merge");
+const membershipFactRunDir = verifierStaging.openScratch("membershipFacts");
+const membershipFactScratchDir = verifierStaging.openScratch("membershipMerge");
 const membershipFactWriter = createSortedJsonRunWriter(membershipFactRunDir, {
   maxRows: 512,
   maxRowBytes: 512,
   maxBufferedBytes: 512 * 1024,
+  maxRuns: MAX_MEMBERSHIP_FACT_RUNS,
   returnManifest: true,
+  reset: false,
 });
 const tilesPerLevel = new Map();
 let distinctAddresses = 0;
@@ -1507,6 +2241,7 @@ try {
     maxOpenRuns: 32,
     maxRowBytes: 4096,
     scratchDir: addressFactScratchDir,
+    resetScratch: false,
     onRow: async (fact) => {
       assert.equal(typeof fact.key, "string", "address fact must have a key");
       if (!groupedAddress || groupedAddress.key !== fact.key) {
@@ -1540,22 +2275,23 @@ try {
   });
   finishAddressGroup();
 } finally {
-  fs.rmSync(addressFactRunDir, { recursive: true, force: true });
-  fs.rmSync(addressFactScratchDir, { recursive: true, force: true });
+  verifierStaging.clearScratch("addressFacts");
+  verifierStaging.clearScratch("addressMerge");
 }
 
 const membershipFactRuns = membershipFactWriter.finish();
 const closureFactRuns = closureFactWriter.finish();
 const availabilityPath = path.join(outDir, "terrain-available.json");
-const availabilityStagedPath = `${availabilityPath}.${process.pid}.${Date.now()}.tmp`;
-const candidateFactRunDir = path.join(outDir, ".verify-available-candidates");
-const candidateFactScratchDir = path.join(outDir, ".verify-available-candidate-merge");
+const availabilityStage = verifierStaging.open("availability");
+const availabilityStagedPath = availabilityStage.file;
+const candidateFactRunDir = verifierStaging.openScratch("candidateFacts");
+const candidateFactScratchDir = verifierStaging.openScratch("candidateMerge");
 const candidateFactWriter = createSortedJsonRunWriter(candidateFactRunDir, {
-  maxRows: 512, maxRowBytes: 256, maxBufferedBytes: 256 * 1024, returnManifest: true,
+  maxRows: 512, maxRowBytes: 256, maxBufferedBytes: 256 * 1024, maxRuns: MAX_CANDIDATE_FACT_RUNS, returnManifest: true, reset: false,
 });
-const availableChildFactRunDir = path.join(outDir, ".verify-available-children");
+const availableChildFactRunDir = verifierStaging.openScratch("availableChildren");
 const availableChildFactWriter = createSortedJsonRunWriter(availableChildFactRunDir, {
-  maxRows: 512, maxRowBytes: 256, maxBufferedBytes: 256 * 1024, returnManifest: true,
+  maxRows: 512, maxRowBytes: 256, maxBufferedBytes: 256 * 1024, maxRuns: MAX_AVAILABLE_CHILD_FACT_RUNS, returnManifest: true, reset: false,
 });
 // Level zero is forced into layer availability even for a one-hemisphere
 // regional cut.  It is therefore a serving promise too: seed both roots into
@@ -1566,7 +2302,7 @@ for (const x of [0, 1]) {
 }
 // Availability is an output-sized JSON value.  Keep it on disk while closure
 // facts stream through; no verifier decision needs a resident rectangle index.
-const availabilityHandle = fs.openSync(availabilityStagedPath, "wx");
+const availabilityHandle = availabilityStage.handle;
 fs.writeSync(availabilityHandle, "[");
 let availabilityLevel = -1;
 let availabilityLevelOpen = false;
@@ -1614,6 +2350,7 @@ try {
     maxOpenRuns: 32,
     maxRowBytes: 256,
     scratchDir: closureFactScratchDir,
+    resetScratch: false,
     onRow: async (fact) => {
       // The legacy verifier's maxLevel is based only on stored records, so an
       // out-of-range skip is reported but cannot widen the published index.
@@ -1639,18 +2376,16 @@ try {
   while (availabilityLevel < maxLevel) openAvailabilityLevel(availabilityLevel + 1);
   if (availabilityLevelOpen) fs.writeSync(availabilityHandle, "]");
   fs.writeSync(availabilityHandle, "]");
-  fs.fsyncSync(availabilityHandle);
-  fs.closeSync(availabilityHandle);
+  verifierStaging.seal(availabilityStage);
   availabilityClosed = true;
   availabilityComplete = true;
 } finally {
   if (!availabilityClosed) fs.closeSync(availabilityHandle);
-  if (!availabilityComplete) fs.rmSync(availabilityStagedPath, { force: true });
-  fs.rmSync(closureFactRunDir, { recursive: true, force: true });
-  fs.rmSync(closureFactScratchDir, { recursive: true, force: true });
+  if (!availabilityComplete) verifierStaging.discard(availabilityStage);
+  verifierStaging.clearScratch("closureFacts");
+  verifierStaging.clearScratch("closureMerge");
 }
-fs.renameSync(availabilityStagedPath, availabilityPath);
-fsyncDirectory(path.dirname(availabilityPath));
+verifierStaging.publish(availabilityStage, availabilityPath);
 // This is the exact generated value that layer-json-config.json is allowed to
 // embed.  A later stable descriptor copy compares every identity field, not
 // merely the size, so an in-place rewrite or an exchanged same-size file cannot
@@ -1728,7 +2463,8 @@ const tilesetExtent = Number.isFinite(extentWest)
 // The global all-water set can be millions of addresses.  Keep the complete
 // publication worklist on disk; reports retain counts and a bounded sample.
 const availableButUnstoredPath = path.join(outDir, "available-but-unstored.ndjson");
-const availableButUnstoredStagedPath = `${availableButUnstoredPath}.${process.pid}.${Date.now()}.tmp`;
+const availableButUnstoredStage = verifierStaging.open("availableButUnstored");
+const availableButUnstoredStagedPath = availableButUnstoredStage.file;
 // The closure check above proves a directly declared address is exactly what
 // the serving module sees at its centre.  Enumerating each rectangle therefore
 // avoids the former bounding-box scan and repeated all-level rectangle search.
@@ -1739,7 +2475,7 @@ let ancestorPlaceholders = 0;
 const unstoredByLevel = {};
 let availableButUnstored = 0;
 let joinedCandidate = null;
-let availableButUnstoredHandle = null;
+let availableButUnstoredHandle = availableButUnstoredStage.handle;
 let availableButUnstoredPublished = false;
 const finishCandidateGroup = () => {
   if (!joinedCandidate) return;
@@ -1758,12 +2494,12 @@ try {
   // a pre-existing symlink with "w" follows it and can corrupt a file outside
   // this run directory.  A same-directory wx stage is complete and durable
   // before rename replaces the final name atomically (without following it).
-  availableButUnstoredHandle = fs.openSync(availableButUnstoredStagedPath, "wx");
   await mergeSortedJsonRunSources([candidateFactRuns, membershipFactRuns], {
     dedupe: false,
     maxOpenRuns: 32,
     maxRowBytes: 512,
     scratchDir: candidateFactScratchDir,
+    resetScratch: false,
     onRow: async (fact) => {
       if (!joinedCandidate || joinedCandidate.key !== fact.key) {
         finishCandidateGroup();
@@ -1785,17 +2521,15 @@ try {
     },
   });
   finishCandidateGroup();
-  fs.fsyncSync(availableButUnstoredHandle);
-  fs.closeSync(availableButUnstoredHandle);
+  verifierStaging.seal(availableButUnstoredStage);
   availableButUnstoredHandle = null;
-  fs.renameSync(availableButUnstoredStagedPath, availableButUnstoredPath);
-  fsyncDirectory(path.dirname(availableButUnstoredPath));
+  verifierStaging.publish(availableButUnstoredStage, availableButUnstoredPath);
   availableButUnstoredPublished = true;
 } finally {
-  if (availableButUnstoredHandle !== null) fs.closeSync(availableButUnstoredHandle);
-  if (!availableButUnstoredPublished) fs.rmSync(availableButUnstoredStagedPath, { force: true });
-  fs.rmSync(candidateFactRunDir, { recursive: true, force: true });
-  fs.rmSync(candidateFactScratchDir, { recursive: true, force: true });
+  if (availableButUnstoredHandle !== null) availableButUnstoredStage.handle = availableButUnstoredHandle;
+  if (!availableButUnstoredPublished) verifierStaging.discard(availableButUnstoredStage);
+  verifierStaging.clearScratch("candidateFacts");
+  verifierStaging.clearScratch("candidateMerge");
 }
 
 // ── CHILD_AVAILABILITY: A SET BIT IS A CLAIM, AND EVERY CLAIM IS CHECKED ───
@@ -1832,6 +2566,7 @@ try {
     maxOpenRuns: 32,
     maxRowBytes: 512,
     scratchDir: membershipFactScratchDir,
+    resetScratch: false,
     onRow: async (fact) => {
       if (!childAvailabilityGroup || childAvailabilityGroup.key !== fact.key) {
         finishChildAvailabilityGroup();
@@ -1856,9 +2591,9 @@ try {
   });
   finishChildAvailabilityGroup();
 } finally {
-  fs.rmSync(membershipFactRunDir, { recursive: true, force: true });
-  fs.rmSync(membershipFactScratchDir, { recursive: true, force: true });
-  fs.rmSync(availableChildFactRunDir, { recursive: true, force: true });
+  verifierStaging.clearScratch("membershipFacts");
+  verifierStaging.clearScratch("membershipMerge");
+  verifierStaging.clearScratch("availableChildren");
 }
 if (childBitsWrong) {
   recordProblem(
@@ -2165,6 +2900,7 @@ atomicWriteWithRawTopLevelProperty(
     maxBytes: availabilityPolicyMaxBytes,
     label: "generated terrain availability",
   },
+  "layerConfig",
 );
 
 // Bind the publication lane to the exact bytes this verifier accepted.  The
@@ -2259,6 +2995,7 @@ atomicWriteJson(
       memory_pages: memoryPagesFor(availableBytes),
       "// pool": memoryPagesAdvice(availableBytes),
   },
+  "mountEntry",
 );
 
 const overCeilingShare = accuracy.filter((a) => !a.withinCeilingShare);
@@ -2317,7 +3054,10 @@ if (failures.length) {
 }
 summary.format = "terrain-verification-report-v1";
 summary.publishable = true;
-atomicWriteJson(verifyReportPath, summary);
+atomicWriteJson(verifyReportPath, summary, "verifyReport");
+verifierStaging.release();
+releaseVerifierLease(outDir, verifierLease.value, verifierLease.mutation);
+process.removeListener("exit", releaseVerifierStagingOnExit);
 if (args.json) console.log(JSON.stringify(summary, null, 2));
 else console.log(JSON.stringify(summary, null, 2));
 console.log("\nPUBLISHABLE: every bound met.");

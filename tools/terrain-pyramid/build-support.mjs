@@ -104,6 +104,8 @@ export function createSortedJsonRunWriter(dir, {
   maxRowBytes = 64 * 1024,
   maxBufferedBytes = 8 * 1024 * 1024,
   compare = compareJsonFactKeys,
+  reset = true,
+  maxRuns = Number.MAX_SAFE_INTEGER,
   // Global callers must not retain one pathname per flushed run.  A manifest
   // is itself a bounded line stream, so the merge can batch it on disk.
   returnManifest = false,
@@ -112,11 +114,17 @@ export function createSortedJsonRunWriter(dir, {
   assert.ok(Number.isSafeInteger(maxRowBytes) && maxRowBytes > 0, "maxRowBytes must be positive");
   assert.ok(Number.isSafeInteger(maxBufferedBytes) && maxBufferedBytes >= maxRowBytes,
     "maxBufferedBytes must be at least maxRowBytes");
+  assert.ok(Number.isSafeInteger(maxRuns) && maxRuns > 0, "maxRuns must be a positive safe integer");
   assert.equal(typeof compare, "function", "compare must be a function");
   // A fact-run directory is attempt-scoped.  Remove stale runs before writing
   // so a shorter retry cannot accidentally merge prior-attempt facts.
-  fs.rmSync(dir, { recursive: true, force: true });
-  fs.mkdirSync(dir, { recursive: true });
+  if (reset) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.mkdirSync(dir, { recursive: true });
+  } else {
+    assert.ok(fs.lstatSync(dir).isDirectory(), "owned fact-run directory is not a directory");
+    assert.equal(fs.readdirSync(dir).length, 0, "owned fact-run directory is not empty");
+  }
   const runs = [];
   const manifestPath = path.join(dir, "runs.manifest.ndjson");
   const manifestHandle = returnManifest ? fs.openSync(manifestPath, "wx") : null;
@@ -126,6 +134,7 @@ export function createSortedJsonRunWriter(dir, {
   let finished = false;
   const flush = () => {
     if (!rows.length) return;
+    assert.ok(runCount < maxRuns, "fact spool exceeded its admitted external-sort run count");
     rows.sort((a, b) => compare(a.row, b.row));
     const file = path.join(dir, `run-${String(runCount).padStart(returnManifest ? 12 : 6, "0")}.ndjson`);
     writeLines(file, rows);
@@ -477,6 +486,7 @@ export async function mergeSortedJsonRunSources(sources, {
   maxOpenRuns = 32,
   maxRowBytes = 64 * 1024,
   scratchDir,
+  resetScratch = true,
 } = {}) {
   assert.ok(Array.isArray(sources) && sources.length > 0, "fact manifest sources are required");
   assert.equal(typeof compare, "function", "compare must be a function");
@@ -490,8 +500,13 @@ export async function mergeSortedJsonRunSources(sources, {
   }
   const options = { compare, maxRowBytes };
   const totalSourceRuns = sources.reduce((total, source) => total + source.runCount, 0);
-  fs.rmSync(scratchDir, { recursive: true, force: true });
-  fs.mkdirSync(scratchDir, { recursive: true });
+  if (resetScratch) {
+    fs.rmSync(scratchDir, { recursive: true, force: true });
+    fs.mkdirSync(scratchDir, { recursive: true });
+  } else {
+    assert.ok(fs.lstatSync(scratchDir).isDirectory(), "owned fact merge directory is not a directory");
+    assert.equal(fs.readdirSync(scratchDir).length, 0, "owned fact merge directory is not empty");
+  }
   try {
     let currentSources = sources;
     let currentRunCount = totalSourceRuns;
@@ -540,7 +555,10 @@ export async function mergeSortedJsonRunSources(sources, {
       previous = row;
     });
   } finally {
-    fs.rmSync(scratchDir, { recursive: true, force: true });
+    // A verifier lease can provide an identity-bound scratch directory.  It
+    // owns reclamation in that mode, so this generic helper must not perform
+    // an unqualified recursive reset of a path it did not create.
+    if (resetScratch) fs.rmSync(scratchDir, { recursive: true, force: true });
   }
 }
 
@@ -561,10 +579,11 @@ export async function mergeSortedJsonRuns(runs, {
   maxOpenRuns = 32,
   maxRowBytes = 64 * 1024,
   scratchDir,
+  resetScratch = true,
 } = {}) {
   if (!Array.isArray(runs)) {
     return mergeSortedJsonRunSources([runs], {
-      compare, onRow, onDuplicate, dedupe, maxOpenRuns, maxRowBytes, scratchDir,
+      compare, onRow, onDuplicate, dedupe, maxOpenRuns, maxRowBytes, scratchDir, resetScratch,
     });
   }
   assert.ok(Array.isArray(runs), "runs must be an array");
@@ -580,8 +599,13 @@ export async function mergeSortedJsonRuns(runs, {
   }
   // The scratch directory is attempt-scoped too.  A killed merge leaves only
   // disposable intermediate runs, which the next attempt removes here.
-  fs.rmSync(resolvedScratch, { recursive: true, force: true });
-  fs.mkdirSync(resolvedScratch, { recursive: true });
+  if (resetScratch) {
+    fs.rmSync(resolvedScratch, { recursive: true, force: true });
+    fs.mkdirSync(resolvedScratch, { recursive: true });
+  } else {
+    assert.ok(fs.lstatSync(resolvedScratch).isDirectory(), "owned fact merge directory is not a directory");
+    assert.equal(fs.readdirSync(resolvedScratch).length, 0, "owned fact merge directory is not empty");
+  }
   const options = { compare, maxRowBytes };
   try {
     if (!runs.length) return;
@@ -615,7 +639,7 @@ export async function mergeSortedJsonRuns(runs, {
       previous = row;
     });
   } finally {
-    fs.rmSync(resolvedScratch, { recursive: true, force: true });
+    if (resetScratch) fs.rmSync(resolvedScratch, { recursive: true, force: true });
   }
 }
 
@@ -678,6 +702,7 @@ export async function evaluateTerrainEdgeFacts(runs, {
   maxOpenRuns = 32,
   maxRowBytes = 64 * 1024,
   scratchDir,
+  resetScratch = true,
 } = {}) {
   let adjacencies = 0;
   let worstSeam = 0;
@@ -799,6 +824,7 @@ export async function evaluateTerrainEdgeFacts(runs, {
     maxOpenRuns,
     maxRowBytes,
     scratchDir,
+    resetScratch,
     onRow: async (fact) => {
       assert.equal(typeof fact?.key, "string", "edge fact needs a string key");
       if (groupKey !== null && fact.key !== groupKey) finishGroup();

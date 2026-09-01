@@ -220,6 +220,10 @@ test("bounded fact spool emits sorted fixed-size runs", (t) => {
   const retry = writeSortedJsonRuns(dir, [{ key: "z" }], { maxRows: 2 });
   assert.deepEqual(retry.map((file) => path.basename(file)), ["run-000000.ndjson"]);
   assert.throws(() => writeSortedJsonRuns(dir, [{ key: "x", value: "x".repeat(32) }], { maxRowBytes: 16 }), /fact row exceeds/);
+  assert.throws(() => writeSortedJsonRuns(dir, [{ key: "a" }, { key: "b" }, { key: "c" }], {
+    maxRows: 1,
+    maxRuns: 2,
+  }), /admitted external-sort run count/);
   assert.equal(compareCodeUnits("Z", "a"), -1, "fact ordering is code-unit order, never host locale order");
 });
 
@@ -770,6 +774,104 @@ function writeVerifierSwapWorkload(outDir) {
   }
 }
 
+const VERIFIER_STAGING_DIRECTORY = ".terrain-verifier-staging-v1";
+const VERIFIER_RECOVERY_DIRECTORY = ".terrain-verifier-recovery-v1";
+const VERIFIER_STAGE_FILES = Object.freeze({
+  availability: "terrain-available.json.stage",
+  availableButUnstored: "available-but-unstored.ndjson.stage",
+  layerConfig: "layer-json-config.json.stage",
+});
+const VERIFIER_SCRATCH_DIRECTORIES = Object.freeze({
+  edgeFacts: ".verify-edge-facts", edgeMerge: ".verify-edge-merge",
+  addressFacts: ".verify-address-facts", addressMerge: ".verify-address-merge",
+  sizeFacts: ".verify-size-facts", sizeMerge: ".verify-size-merge",
+  closureFacts: ".verify-closure-facts", closureMerge: ".verify-closure-merge",
+  membershipFacts: ".verify-membership-facts", membershipMerge: ".verify-membership-merge",
+  candidateFacts: ".verify-available-candidates", candidateMerge: ".verify-available-candidate-merge",
+  availableChildren: ".verify-available-children",
+});
+
+function startVerifier(outDir, extraEnv = {}) {
+  return spawn(process.execPath, ["--max-old-space-size=64", VERIFY, "--out", outDir, "--json"], {
+    stdio: ["ignore", "ignore", "ignore"],
+    env: { ...process.env, ...extraEnv },
+  });
+}
+
+function childExit(child) {
+  return new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", (code, signal) => resolve({ code, signal }));
+  });
+}
+
+async function waitForVerifierStage(outDir, stageName) {
+  const directory = path.join(outDir, VERIFIER_STAGING_DIRECTORY);
+  const stage = path.join(directory, VERIFIER_STAGE_FILES[stageName]);
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    try {
+      const stat = fs.lstatSync(stage, { bigint: true });
+      if (stat.isFile()) {
+        const owners = fs.readdirSync(directory)
+          .filter((name) => /^owner\.[ab]\.json$/.test(name))
+          .flatMap((name) => {
+            try { return [JSON.parse(fs.readFileSync(path.join(directory, name), "utf8"))]; } catch { return []; }
+          });
+        if (owners.some((owner) => owner.stages?.[stageName]?.device === String(stat.dev)
+          && owner.stages?.[stageName]?.inode === String(stat.ino))) return { directory, stage };
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    assert.ok(Date.now() < deadline, `verifier did not create owned ${stageName} stage`);
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+}
+
+async function waitForStagingBarrier(root, point) {
+  const ready = `${root}.${point}.ready`;
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    try {
+      if (fs.readFileSync(ready, "utf8") === "ready\n") return;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    assert.ok(Date.now() < deadline, `verifier did not reach staging barrier ${point}`);
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+}
+
+async function killVerifierAtStage(outDir, stageName, extraEnv = {}) {
+  const child = startVerifier(outDir, extraEnv);
+  const exited = childExit(child);
+  const stage = await waitForVerifierStage(outDir, stageName);
+  assert.equal(child.kill("SIGKILL"), true, `kill verifier at ${stageName} stage`);
+  assert.equal((await exited).signal, "SIGKILL");
+  return stage;
+}
+
+async function killVerifierAtStagingBarrier(outDir, barrierRoot, point, occurrence = 1) {
+  const child = startVerifier(outDir, {
+    NODE_ENV: "test",
+    TERRAIN_VERIFY_TEST_STAGING_BARRIER: point,
+    TERRAIN_VERIFY_TEST_STAGING_BARRIER_OCCURRENCE: String(occurrence),
+    TERRAIN_VERIFY_TEST_STAGING_BARRIER_PATH: barrierRoot,
+  });
+  const exited = childExit(child);
+  await waitForStagingBarrier(barrierRoot, point);
+  assert.equal(child.kill("SIGKILL"), true, `kill verifier at staging barrier ${point}`);
+  assert.equal((await exited).signal, "SIGKILL");
+}
+
+const writeStagingFixture = (outDir) => fs.writeFileSync(
+  path.join(outDir, "tiles.dttstream"), Buffer.from(TIGHT_HEAP_DTTSTREAM, "base64"),
+);
+const runStagedVerifier = (outDir) => execFileAsync(process.execPath, ["--max-old-space-size=64", VERIFY, "--out", outDir, "--json"], {
+  timeout: 30_000, maxBuffer: 1024 * 1024,
+});
+
 schemaTest("verifier fails closed when generated availability is exchanged before the receipted layer config", { timeout: 180_000 }, async (t) => {
   const attempt = async (name, replace, expected) => {
     const root = temporary(t);
@@ -825,7 +927,7 @@ schemaTest("verifier fails closed when generated availability is exchanged befor
   );
 });
 
-schemaTest("available-but-unstored publication never follows a symlink and survives a killed staged attempt", { timeout: 180_000 }, async (t) => {
+schemaTest("bounded verifier staging protects outputs across repeated kills and never follows a symlink", { timeout: 180_000 }, async (t) => {
   const root = temporary(t);
   const outDir = path.join(root, "out");
   fs.mkdirSync(outDir);
@@ -846,34 +948,184 @@ schemaTest("available-but-unstored publication never follows a symlink and survi
   const predecessor = "previous-complete-output\n";
   fs.writeFileSync(finalPath, predecessor);
   fs.rmSync(path.join(outDir, "verify-report.json"));
-  const child = spawn(process.execPath, ["--max-old-space-size=64", VERIFY, "--out", outDir, "--json"], {
-    stdio: ["ignore", "ignore", "ignore"],
-  });
-  const exited = new Promise((resolve, reject) => {
-    child.once("error", reject);
-    child.once("exit", (code, signal) => resolve({ code, signal }));
-  });
-  const stagePrefix = "available-but-unstored.ndjson.";
-  const deadline = Date.now() + 30_000;
-  for (;;) {
-    const staged = fs.readdirSync(outDir).some((name) => name.startsWith(stagePrefix) && name.endsWith(".tmp"));
-    if (staged) {
-      assert.equal(child.kill("SIGKILL"), true, "kill the verifier after the staged output exists but before rename");
-      break;
-    }
-    assert.ok(Date.now() < deadline, "verifier did not create the staged available-but-unstored output");
-    await new Promise((resolve) => setTimeout(resolve, 1));
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const staged = await killVerifierAtStage(outDir, "availableButUnstored");
+    assert.equal(fs.readFileSync(finalPath, "utf8"), predecessor,
+      "a killed staged attempt leaves the prior complete output intact, never a torn final file");
+    const names = fs.readdirSync(staged.directory).sort();
+    assert.ok(names.length <= 2 + Object.keys(VERIFIER_STAGE_FILES).length + Object.keys(VERIFIER_SCRATCH_DIRECTORIES).length,
+      "repeated kills retain a fixed bounded set of owner, output, and scratch paths");
+    assert.ok(names.every((name) => /^owner\.[ab]\.json$/.test(name)
+      || Object.values(VERIFIER_STAGE_FILES).includes(name)
+      || Object.values(VERIFIER_SCRATCH_DIRECTORIES).includes(name)),
+    "staging retains only exact verifier-owned names");
   }
-  const killed = await exited;
-  assert.equal(killed.signal, "SIGKILL");
-  assert.equal(fs.readFileSync(finalPath, "utf8"), predecessor,
-    "a killed staged attempt leaves the prior complete output intact, never a torn final file");
 
   await execFileAsync(process.execPath, ["--max-old-space-size=64", VERIFY, "--out", outDir, "--json"], {
     timeout: 180_000,
     maxBuffer: 1024 * 1024,
   });
   assert.notEqual(fs.readFileSync(finalPath, "utf8"), predecessor, "a later complete attempt atomically replaces the predecessor");
+  assert.equal(fs.existsSync(path.join(outDir, VERIFIER_STAGING_DIRECTORY)), false, "a clean completion removes its exact staging directory");
+});
+
+schemaTest("verifier staging recovers owned crash boundaries and refuses live or forged state", { timeout: 180_000 }, async (t) => {
+  const writeFixture = writeStagingFixture;
+  const run = runStagedVerifier;
+  const finalForStage = {
+    availability: "terrain-available.json",
+    layerConfig: "layer-json-config.json",
+    mountEntry: "mount-entry.json",
+    verifyReport: "verify-report.json",
+  };
+
+  for (const stageName of Object.keys(finalForStage)) {
+    const root = temporary(t);
+    const outDir = path.join(root, stageName);
+    fs.mkdirSync(outDir);
+    writeFixture(outDir);
+    await run(outDir);
+    const final = path.join(outDir, finalForStage[stageName]);
+    const predecessor = fs.existsSync(final) ? fs.readFileSync(final) : null;
+    const barrier = path.join(root, `stage-${stageName}`);
+    await killVerifierAtStagingBarrier(outDir, barrier, `stage-${stageName}-sealed`);
+    if (predecessor !== null && stageName !== "verifyReport") {
+      assert.deepEqual(fs.readFileSync(final), predecessor, `${stageName} kill preserves the prior complete final`);
+    }
+    assert.equal(fs.existsSync(path.join(outDir, VERIFIER_STAGING_DIRECTORY)), true, `${stageName} kill leaves one exact recoverable staging directory`);
+    await run(outDir);
+    assert.equal(fs.existsSync(path.join(outDir, VERIFIER_STAGING_DIRECTORY)), false, `${stageName} recovery removes staging residue`);
+    assert.equal(fs.existsSync(path.join(outDir, VERIFIER_RECOVERY_DIRECTORY)), false, `${stageName} recovery removes recovery residue`);
+  }
+
+  for (const [point, occurrence] of [["mkdir-before-owner", 1], ["owner-before-write", 1], ["owner-before-write", 2], ["owner-after-write", 1]]) {
+    const root = temporary(t);
+    const outDir = path.join(root, `${point}-${occurrence}`);
+    fs.mkdirSync(outDir);
+    writeFixture(outDir);
+    const barrier = path.join(root, "bootstrap");
+    await killVerifierAtStagingBarrier(outDir, barrier, point, occurrence);
+    await run(outDir);
+    assert.equal(fs.existsSync(path.join(outDir, VERIFIER_STAGING_DIRECTORY)), false, `${point}/${occurrence} recovery removes staging residue`);
+  }
+
+  for (const point of ["lease-before-create", "lease-created-before-fsync"]) {
+    const root = temporary(t);
+    const outDir = path.join(root, point);
+    fs.mkdirSync(outDir);
+    writeFixture(outDir);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const barrier = path.join(root, `${point}-${attempt}`);
+      await killVerifierAtStagingBarrier(outDir, barrier, point);
+      const lease = path.join(outDir, ".terrain-verifier-lease-v1");
+      if (point === "lease-before-create") assert.equal(fs.existsSync(lease), false,
+        "a pre-create kill leaves no partially written fixed lease");
+      else assert.equal(fs.lstatSync(lease).isSymbolicLink(), true,
+        "a post-create kill leaves only an atomic self-contained lease link");
+    }
+    await run(outDir);
+    assert.equal(fs.existsSync(path.join(outDir, ".terrain-verifier-lease-v1")), false,
+      "a clean verifier run reclaims the exact stale lease link");
+  }
+});
+
+schemaTest("verifier staging reclaims every lease-owned fact scratch root", { timeout: 180_000 }, async (t) => {
+  const writeFixture = writeStagingFixture;
+  const run = runStagedVerifier;
+
+  for (const [name, dirname] of Object.entries(VERIFIER_SCRATCH_DIRECTORIES)) {
+    const root = temporary(t);
+    const outDir = path.join(root, `scratch-${name}`);
+    fs.mkdirSync(outDir);
+    writeFixture(outDir);
+    const barrier = path.join(root, `scratch-${name}`);
+    await killVerifierAtStagingBarrier(outDir, barrier, `scratch-${name}-created`);
+    assert.equal(fs.lstatSync(path.join(outDir, VERIFIER_STAGING_DIRECTORY, dirname)).isDirectory(), true,
+      `${name} crash leaves exactly one recoverable scratch root`);
+    await run(outDir);
+    assert.equal(fs.existsSync(path.join(outDir, VERIFIER_STAGING_DIRECTORY, dirname)), false,
+      `${name} root is reclaimed after a clean retry`);
+    assert.equal(fs.existsSync(path.join(outDir, VERIFIER_STAGING_DIRECTORY)), false,
+      `${name} retry leaves no staging residue`);
+  }
+
+  {
+    const root = temporary(t);
+    const outDir = path.join(root, "foreign-scratch-sibling");
+    fs.mkdirSync(outDir);
+    writeFixture(outDir);
+    const sentinel = path.join(root, "outside-scratch-sentinel");
+    fs.writeFileSync(sentinel, "outside scratch must survive\n");
+    const foreignScratch = path.join(outDir, VERIFIER_SCRATCH_DIRECTORIES.edgeFacts);
+    fs.symlinkSync(sentinel, foreignScratch);
+    await run(outDir);
+    assert.equal(fs.lstatSync(foreignScratch).isSymbolicLink(), true,
+      "a fixed foreign scratch sibling is outside the owned staging namespace");
+    assert.equal(fs.readFileSync(sentinel, "utf8"), "outside scratch must survive\n");
+  }
+
+  {
+    const root = temporary(t);
+    const outDir = path.join(root, "forged-creating-scratch");
+    fs.mkdirSync(outDir);
+    writeFixture(outDir);
+    const barrier = path.join(root, "creating-scratch");
+    await killVerifierAtStagingBarrier(outDir, barrier, "scratch-edgeFacts-creating");
+    const sentinel = path.join(root, "creating-scratch-sentinel");
+    fs.writeFileSync(sentinel, "must not be followed or removed\n");
+    fs.symlinkSync(sentinel, path.join(outDir, VERIFIER_STAGING_DIRECTORY, VERIFIER_SCRATCH_DIRECTORIES.edgeFacts));
+    await assert.rejects(run(outDir), /non-directory creating scratch/);
+    assert.equal(fs.readFileSync(sentinel, "utf8"), "must not be followed or removed\n");
+    assert.equal(fs.lstatSync(path.join(outDir, VERIFIER_RECOVERY_DIRECTORY, VERIFIER_SCRATCH_DIRECTORIES.edgeFacts)).isSymbolicLink(), true);
+  }
+});
+
+schemaTest("verifier staging resumes recovery and refuses live or forged state", { timeout: 180_000 }, async (t) => {
+  const writeFixture = writeStagingFixture;
+  const run = runStagedVerifier;
+
+  for (const point of ["stage-availability-created", "recovery-after-rename", "recovery-after-stage-delete"]) {
+    const root = temporary(t);
+    const outDir = path.join(root, point);
+    fs.mkdirSync(outDir);
+    writeFixture(outDir);
+    if (point.startsWith("recovery-")) await killVerifierAtStage(outDir, "availability");
+    const barrier = path.join(root, "recovery");
+    await killVerifierAtStagingBarrier(outDir, barrier, point);
+    await run(outDir);
+    assert.equal(fs.existsSync(path.join(outDir, VERIFIER_STAGING_DIRECTORY)), false, `${point} recovery removes staging residue`);
+    assert.equal(fs.existsSync(path.join(outDir, VERIFIER_RECOVERY_DIRECTORY)), false, `${point} recovery removes recovery residue`);
+  }
+
+  const root = temporary(t);
+  const outDir = path.join(root, "live");
+  fs.mkdirSync(outDir);
+  writeFixture(outDir);
+  const barrier = path.join(root, "live-holder");
+  const holder = startVerifier(outDir, {
+    NODE_ENV: "test",
+    TERRAIN_VERIFY_TEST_STAGING_BARRIER: "stage-availability-creating",
+    TERRAIN_VERIFY_TEST_STAGING_BARRIER_PATH: barrier,
+  });
+  const holderExit = childExit(holder);
+  await waitForStagingBarrier(barrier, "stage-availability-creating");
+  await assert.rejects(run(outDir), /live or identity-ambiguous process/);
+  assert.equal(holder.kill("SIGKILL"), true);
+  assert.equal((await holderExit).signal, "SIGKILL");
+  await run(outDir);
+
+  const forgedRoot = temporary(t);
+  const forgedOut = path.join(forgedRoot, "forged");
+  fs.mkdirSync(forgedOut);
+  writeFixture(forgedOut);
+  const sentinel = path.join(forgedRoot, "outside-sentinel");
+  fs.writeFileSync(sentinel, "must-not-be-touched\n");
+  const forgedDirectory = path.join(forgedOut, VERIFIER_STAGING_DIRECTORY);
+  fs.mkdirSync(forgedDirectory);
+  fs.symlinkSync(sentinel, path.join(forgedDirectory, VERIFIER_STAGE_FILES.availability));
+  await assert.rejects(run(forgedOut), /staging directory exists after lease acquisition/);
+  assert.equal(fs.readFileSync(sentinel, "utf8"), "must-not-be-touched\n");
+  assert.equal(fs.lstatSync(path.join(forgedDirectory, VERIFIER_STAGE_FILES.availability)).isSymbolicLink(), true);
 });
 
 schemaTest("verifier rejects bounded-decode bombs, truncated mesh sections, and invalid terrain fields", {}, async (t) => {
