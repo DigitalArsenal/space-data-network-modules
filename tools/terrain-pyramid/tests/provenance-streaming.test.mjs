@@ -30,6 +30,7 @@ import {
 } from "../source-provenance.mjs";
 import { BoundedGranuleCache } from "../build-support.mjs";
 import { iterateStreamFile } from "../dtt-reader.mjs";
+import { assertCompletedShardSource } from "../global-build.mjs";
 import { recoverPlannedCellAttempt, refreshSourceExecutionPlan, validateLinkedFlowDescriptor } from "../run.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -1178,106 +1179,95 @@ test("source-policy coordinator refuses a disabled WasmEdge cross-check", async 
   );
 });
 
-test("a fault after a source-backed shard checkpoint cannot emit a completion manifest", async (t) => {
+test("source-policy coordinator rejects a custom runner before state or shard execution", async (t) => {
   const root = temporary(t);
   const policy = contract();
   const config = path.join(root, "run.json");
   const runner = path.join(root, "source-runner.mjs");
+  const marker = path.join(root, "runner-executed");
+  const out = path.join(root, "out");
   fs.writeFileSync(config, JSON.stringify({
     cache_max_bytes: policy.cacheMaxBytes,
     source_policy: policy.policy,
-    flow_config: { dataset_epoch: policy.datasetEpoch, regions: [{ name: "test", west: 0, south: 0, east: 2, north: 1 }] },
+    flow_config: { dataset_epoch: policy.datasetEpoch, regions: [{ name: "test", west: 0, south: 0, east: 1, north: 1 }] },
   }));
   fs.writeFileSync(runner, `
     import fs from "node:fs";
-    import path from "node:path";
-    import { appendRequestObservation, observationForRequest, sourcePolicyContract } from ${JSON.stringify(PROVENANCE_URL)};
-    const value = JSON.parse(fs.readFileSync(process.argv[process.argv.indexOf("--config") + 1], "utf8"));
-    const out = process.argv[process.argv.indexOf("--out") + 1];
-    const contract = sourcePolicyContract(value);
-    fs.mkdirSync(out, { recursive: true });
-    fs.writeFileSync(path.join(out, "tiles.dttstream"), "");
-    const url = "https://example.test/dem/N45/E006";
-    const observation = observationForRequest({ cacheDir: value.cache_dir, url,
-      fetched: { status: 200, hit: false, body: Buffer.alloc(0) },
-      networkObservation: { observed_at: "2026-09-01T00:00:00.000Z" },
-    });
-    appendRequestObservation(path.join(out, contract.policy.manifest.shard_log), observation,
-      { requestedAt: "2026-09-01T00:00:00.000Z", cacheHit: false });
-    fs.writeFileSync(path.join(out, "run-report.json"), JSON.stringify({
-      drained: true, errors: [], sourceProvenance: {
-        sourcePolicyDigest: contract.digest, datasetEpoch: contract.datasetEpoch,
-        globalConfigDigest: value.global_config_digest,
-      },
-      executionIdentity: value.execution_identity,
-      cells: 0, wasmedgeVerifiedCells: 0, wasmedgeRuntime: "WasmEdge 0.16.4 (rehearsal)",
-    }));
+    fs.writeFileSync(${JSON.stringify(marker)}, "executed");
   `);
   await assert.rejects(
     execFileAsync(process.execPath, [
-      COORDINATOR, "--config", config, "--out", path.join(root, "out"),
-      "--shards", "2", "--workers", "1", "--runner", runner, "--fault-after-shards", "1",
+      COORDINATOR, "--config", config, "--out", out, "--runner", runner,
     ]),
-    /fault injection after 1 completed shard/,
+    /source-policy build may not use --runner/,
   );
-  assert.equal(fs.existsSync(path.join(root, "out", "source-manifest.ndjson")), false);
-  assert.equal(fs.existsSync(path.join(root, "out", "global-merge-report.json")), false);
-  const state = JSON.parse(fs.readFileSync(path.join(root, "out", "global-build-state.json"), "utf8"));
-  fs.appendFileSync(state.shards[0].snapshots.sourceLog.path, "x");
-  await assert.rejects(
-    execFileAsync(process.execPath, [
-      COORDINATOR, "--config", config, "--out", path.join(root, "out"),
-      "--shards", "2", "--workers", "1", "--runner", runner,
-    ]), /sourceLog snapshot (byte count|digest) changed/,
-  );
+  assert.equal(fs.existsSync(marker), false, "the rejected runner never executes");
+  assert.equal(fs.existsSync(out), false, "rejection precedes state, cache, and shard creation");
 });
 
 test("coordinator rejects a source shard with a mismatched immutable global config digest", async (t) => {
   const root = temporary(t);
   const policy = contract();
-  const config = path.join(root, "run.json");
-  const runner = path.join(root, "mismatch-runner.mjs");
-  fs.writeFileSync(config, JSON.stringify({
-    cache_max_bytes: policy.cacheMaxBytes, source_policy: policy.policy,
-    flow_config: { dataset_epoch: policy.datasetEpoch, regions: [{ name: "test", west: 0, south: 0, east: 1, north: 1 }] },
+  const report = path.join(root, "run-report.json");
+  const sourceLog = path.join(root, policy.policy.manifest.shard_log);
+  const executionIdentity = { digest: "e".repeat(64), wasmedge: { version: "0.16.4" } };
+  fs.writeFileSync(report, JSON.stringify({
+    sourceProvenance: {
+      sourcePolicyDigest: policy.digest,
+      datasetEpoch: policy.datasetEpoch,
+      globalConfigDigest: "0".repeat(64),
+    },
+    executionIdentity,
+    cells: 0,
+    wasmedgeVerifiedCells: 0,
+    wasmedgeRuntime: "WasmEdge 0.16.4",
   }));
-  fs.writeFileSync(runner, `
-    import fs from "node:fs"; import path from "node:path";
-    import { canonicalJson, sha256, sourcePolicyContract } from ${JSON.stringify(PROVENANCE_URL)};
-    const value = JSON.parse(fs.readFileSync(process.argv[process.argv.indexOf("--config") + 1], "utf8"));
-    const out = process.argv[process.argv.indexOf("--out") + 1]; const contract = sourcePolicyContract(value);
-    fs.mkdirSync(out, { recursive: true }); fs.writeFileSync(path.join(out, "tiles.dttstream"), "");
-    const url = "https://example.test/dem/N45/E006";
-    fs.writeFileSync(path.join(out, contract.policy.manifest.shard_log), canonicalJson({ source_key: "sha256:" + sha256(url), url, status: 200, content_length: 0, content_digest: sha256(""), observed_at: "2026-09-01T00:00:00.000Z", requested_at: "2026-09-01T00:00:00.000Z", cache_hit: false }) + "\\n");
-    fs.writeFileSync(path.join(out, "run-report.json"), JSON.stringify({ drained: true, errors: [], sourceProvenance: { sourcePolicyDigest: contract.digest, datasetEpoch: contract.datasetEpoch, globalConfigDigest: "0".repeat(64) }, executionIdentity: value.execution_identity, cells: 0, wasmedgeVerifiedCells: 0, wasmedgeRuntime: "WasmEdge 0.16.4 (rehearsal)" }));
-  `);
+  fs.writeFileSync(sourceLog, "");
   await assert.rejects(
-    execFileAsync(process.execPath, [COORDINATOR, "--config", config, "--out", path.join(root, "out"), "--runner", runner]),
+    assertCompletedShardSource({
+      index: 0,
+      outDir: root,
+      snapshots: { report: { path: report }, sourceLog: { path: sourceLog } },
+    }, policy, "a".repeat(64), executionIdentity, path.join(root, "cache")),
     /matching immutable global config digest/,
   );
 });
 
-test("coordinator refuses a custom source shard whose request log is outside policy", async (t) => {
+test("coordinator refuses a source shard whose request log is outside policy", async (t) => {
   const root = temporary(t);
   const policy = contract();
-  const config = path.join(root, "run.json");
-  const runner = path.join(root, "foreign-log-runner.mjs");
-  fs.writeFileSync(config, JSON.stringify({
-    cache_max_bytes: policy.cacheMaxBytes, source_policy: policy.policy,
-    flow_config: { dataset_epoch: policy.datasetEpoch, regions: [{ name: "test", west: 0, south: 0, east: 1, north: 1 }] },
+  const report = path.join(root, "run-report.json");
+  const sourceLog = path.join(root, policy.policy.manifest.shard_log);
+  const globalConfigDigest = "a".repeat(64);
+  const executionIdentity = { digest: "e".repeat(64), wasmedge: { version: "0.16.4" } };
+  fs.writeFileSync(report, JSON.stringify({
+    sourceProvenance: {
+      sourcePolicyDigest: policy.digest,
+      datasetEpoch: policy.datasetEpoch,
+      globalConfigDigest,
+    },
+    executionIdentity,
+    cells: 0,
+    wasmedgeVerifiedCells: 0,
+    wasmedgeRuntime: "WasmEdge 0.16.4",
   }));
-  fs.writeFileSync(runner, `
-    import fs from "node:fs"; import path from "node:path";
-    import { canonicalJson, sha256, sourcePolicyContract } from ${JSON.stringify(PROVENANCE_URL)};
-    const value = JSON.parse(fs.readFileSync(process.argv[process.argv.indexOf("--config") + 1], "utf8"));
-    const out = process.argv[process.argv.indexOf("--out") + 1]; const contract = sourcePolicyContract(value);
-    fs.mkdirSync(out, { recursive: true }); fs.writeFileSync(path.join(out, "tiles.dttstream"), "");
-    const url = "https://foreign.example/DEM.tif";
-    fs.writeFileSync(path.join(out, contract.policy.manifest.shard_log), canonicalJson({ source_key: "sha256:" + sha256(url), url, status: 200, content_length: 0, content_digest: sha256(""), observed_at: "2026-09-01T00:00:00.000Z", requested_at: "2026-09-01T00:00:00.000Z", cache_hit: false }) + "\\n");
-    fs.writeFileSync(path.join(out, "run-report.json"), JSON.stringify({ drained: true, errors: [], sourceProvenance: { sourcePolicyDigest: contract.digest, datasetEpoch: contract.datasetEpoch, globalConfigDigest: value.global_config_digest }, executionIdentity: value.execution_identity, cells: 0, wasmedgeVerifiedCells: 0, wasmedgeRuntime: "WasmEdge 0.16.4 (rehearsal)" }));
-  `);
+  const url = "https://foreign.example/DEM.tif";
+  fs.writeFileSync(sourceLog, `${canonicalJson({
+    source_key: `sha256:${sha256(url)}`,
+    url,
+    status: 200,
+    content_length: 0,
+    content_digest: sha256(""),
+    observed_at: "2026-09-01T00:00:00.000Z",
+    requested_at: "2026-09-01T00:00:00.000Z",
+    cache_hit: false,
+  })}\n`);
   await assert.rejects(
-    execFileAsync(process.execPath, [COORDINATOR, "--config", config, "--out", path.join(root, "out"), "--runner", runner]),
+    assertCompletedShardSource({
+      index: 0,
+      outDir: root,
+      snapshots: { report: { path: report }, sourceLog: { path: sourceLog } },
+    }, policy, globalConfigDigest, executionIdentity, path.join(root, "cache")),
     /outside the approved naming policy/,
   );
 });
@@ -1331,11 +1321,12 @@ test("coordinator carries the exact publication policy and config digest through
   assert.deepEqual(merged.publicationPolicy, verifierPolicy);
 });
 
-test("source manifest sort workspace survives SIGKILL boundaries without contaminating the artifact transaction", async (t) => {
+test("a custom source runner cannot reach source-manifest transaction fault hooks", async (t) => {
   const root = temporary(t);
   const policy = contract();
   const config = path.join(root, "run.json");
   const runner = path.join(root, "source-runner.mjs");
+  const marker = path.join(root, "runner-executed");
   fs.writeFileSync(config, JSON.stringify({
     cache_max_bytes: policy.cacheMaxBytes,
     source_policy: policy.policy,
@@ -1343,75 +1334,25 @@ test("source manifest sort workspace survives SIGKILL boundaries without contami
   }));
   fs.writeFileSync(runner, `
     import fs from "node:fs";
-    import path from "node:path";
-    import { appendRequestObservation, observationForRequest, sourcePolicyContract } from ${JSON.stringify(PROVENANCE_URL)};
-    const value = JSON.parse(fs.readFileSync(process.argv[process.argv.indexOf("--config") + 1], "utf8"));
-    const out = process.argv[process.argv.indexOf("--out") + 1];
-    const contract = sourcePolicyContract(value);
-    fs.mkdirSync(out, { recursive: true });
-    fs.writeFileSync(path.join(out, "tiles.dttstream"), "");
-    const url = "https://example.test/dem/N45/E006";
-    const observation = observationForRequest({ cacheDir: value.cache_dir, url,
-      fetched: { status: 200, hit: false, body: Buffer.alloc(0) },
-      networkObservation: { observed_at: "2026-09-01T00:00:00.000Z" },
-    });
-    appendRequestObservation(path.join(out, contract.policy.manifest.shard_log), observation,
-      { requestedAt: "2026-09-01T00:00:00.000Z", cacheHit: false });
-    fs.writeFileSync(path.join(out, "run-report.json"), JSON.stringify({ drained: true, errors: [], sourceProvenance: {
-      sourcePolicyDigest: contract.digest, datasetEpoch: contract.datasetEpoch,
-      globalConfigDigest: value.global_config_digest,
-    }, executionIdentity: value.execution_identity, cells: 0, wasmedgeVerifiedCells: 0, wasmedgeRuntime: "WasmEdge 0.16.4 (rehearsal)" }));
+    fs.writeFileSync(${JSON.stringify(marker)}, "executed");
   `);
   const cases = [
-    {
-      fault: "--fault-source-manifest-crash-before-stage-link",
-      workEntries: ["source-manifest.ndjson"], stagedEntries: [],
-      label: "sort workspace before transaction reservation",
-    },
-    {
-      fault: "--fault-source-manifest-crash-after-stage-link",
-      workEntries: ["source-manifest.ndjson"], stagedEntries: ["source-manifest.ndjson"],
-      label: "hard-linked stage before work-output unlink",
-    },
-    {
-      fault: "--fault-source-manifest-crash-before-reserve",
-      workEntries: [], stagedEntries: ["source-manifest.ndjson"],
-      label: "durable unreserved stage after work-output cleanup",
-    },
-    {
-      fault: "--fault-source-manifest-crash-after-reserve",
-      workEntries: [], stagedEntries: [],
-      label: "reserved and installed source manifest",
-    },
+    "--fault-source-manifest-crash-before-stage-link",
+    "--fault-source-manifest-crash-after-stage-link",
+    "--fault-source-manifest-crash-before-reserve",
+    "--fault-source-manifest-crash-after-reserve",
+    "--fault-after-source-manifest-reserve",
   ];
-  for (const scenario of cases) {
-    const out = path.join(root, scenario.fault.slice(2));
+  for (const fault of cases) {
+    const out = path.join(root, fault.slice(2));
     const baseArgs = [COORDINATOR, "--config", config, "--out", out, "--runner", runner];
-    await assert.rejects(execFileAsync(process.execPath, [...baseArgs, scenario.fault]),
-      (error) => error.signal === "SIGKILL", `${scenario.label} actually SIGKILLs`);
-    const transaction = JSON.parse(fs.readFileSync(path.join(out, "global-artifact-transaction.json"), "utf8"));
-    const stagedEntries = fs.readdirSync(transaction.stagingDir).sort();
-    assert.deepEqual(stagedEntries, scenario.stagedEntries, `${scenario.label} leaves only its exact stage`);
-    const work = path.join(out, ".source-manifest-sort-work");
-    const workEntries = fs.readdirSync(work).sort();
-    assert.deepEqual(workEntries, scenario.workEntries,
-      `${scenario.label} leaves only fixed workspace protocol artifacts`);
-    for (const name of workEntries) assert.equal(name, "source-manifest.ndjson");
-
-    // This ordinary injected stop is reached only after startup recovered the
-    // SIGKILL residue, rebuilt the exact source-manifest path, and installed
-    // its fourth transaction member. It prevents the test from needing a
-    // verifier runtime while proving the resume path itself.
-    await assert.rejects(execFileAsync(process.execPath, [
-      ...baseArgs, "--fault-after-source-manifest-reserve",
-    ]), /fault injection after source manifest reserve/);
-    assert.deepEqual(fs.readdirSync(work).sort(), [], `${scenario.label} resume consumes all workspace residue`);
-    const resumed = JSON.parse(fs.readFileSync(path.join(out, "global-artifact-transaction.json"), "utf8"));
-    assert.equal(resumed.entries.length, 4, `${scenario.label} resume has the exact four-member transaction`);
-    assert.deepEqual(fs.readdirSync(resumed.stagingDir), [], `${scenario.label} resume finishes transaction staging empty`);
-    assert.equal(fs.existsSync(path.join(out, "source-manifest.ndjson")), true,
-      `${scenario.label} resume installs the immutable completion manifest`);
+    await assert.rejects(
+      execFileAsync(process.execPath, [...baseArgs, fault]),
+      /source-policy build may not use --runner/,
+    );
+    assert.equal(fs.existsSync(out), false, `${fault} is rejected before any transaction state exists`);
   }
+  assert.equal(fs.existsSync(marker), false, "the custom runner never executes for any source fault hook");
 });
 
 test("global artifact-set rollback leaves no mixed files at every rename boundary", async (t) => {

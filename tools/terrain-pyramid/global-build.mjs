@@ -337,7 +337,7 @@ function assertCompletedShardSnapshots(outDir, shard, sourceContract, publicatio
     `shard ${shard.index} must not mix ocean-skip formats`);
 }
 
-async function assertCompletedShardSource(shard, contract, globalConfigDigest, executionIdentity, cacheDir) {
+export async function assertCompletedShardSource(shard, contract, globalConfigDigest, executionIdentity, cacheDir) {
   const report = readShardReport(shard.snapshots?.report?.path ?? path.join(shard.outDir, "run-report.json")).report;
   assert.equal(report.sourceProvenance?.sourcePolicyDigest, contract.digest,
     `shard ${shard.index} has no matching source policy receipt`);
@@ -735,10 +735,8 @@ async function main() {
   if (sourceContract) assert.ok(args.verify, "a source-policy build may not use --skip-verify");
   if (sourceContract) assert.ok(args.wasmedgeVerify !== false,
     "a source-policy build may not use --no-wasmedge-verify");
-  // `--runner` is a no-network state-machine test hook, but it must not weaken
-  // the coordinator's authorization boundary. The checked-in flow descriptor
-  // and every resolved dependency are validated even when a synthetic shard
-  // runner supplies the report bytes.
+  assert.ok(!sourceContract || args.runner === undefined,
+    "a source-policy build may not use --runner");
   const executionIdentity = sourceContract
     ? await buildCanonicalExecutionIdentity()
     : null;
