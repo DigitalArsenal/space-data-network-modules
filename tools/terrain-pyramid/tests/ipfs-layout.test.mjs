@@ -21,24 +21,182 @@
 
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
+import { once } from "node:events";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 
-import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
-
 import { readDtt, splitStream } from "../dtt-reader.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..", "..");
 const SOURCE = path.join(REPO, "data-source", "terrain-source");
+const { createBrowserModuleHarness } = await import(path.join(SOURCE, "node_modules", "space-data-module-sdk", "src", "testing", "index.js"));
 const { buildGeoTiff, decodeQuantizedMesh } = await import(path.join(SOURCE, "tests", "helpers.mjs"));
 
 const encoder = new TextEncoder();
+const PUBLISHER = path.join(HERE, "..", "ipfs-publish.mjs");
+const ROOT_CID = "bafybeigdyrzt5n52ca7m5qz7cdqzsvdbi7lrtqhdq6k4k3v4bnva4y5m4e";
+const RECEIPT_CID = "bafybeihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku";
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function runPublisher(outDir, extraArgs = []) {
+  const child = spawn(process.execPath, [PUBLISHER, "--out", outDir, ...extraArgs], {
+    cwd: REPO,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const stdout = [];
+  const stderr = [];
+  child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
+  child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
+  const [code, signal] = await once(child, "exit");
+  return { code, signal, stdout: Buffer.concat(stdout).toString("utf8"), stderr: Buffer.concat(stderr).toString("utf8") };
+}
+
+function copyFixtureOutput() {
+  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "terrain-ipfs-publish-"));
+  fs.cpSync(fixture.outDir, outDir, { recursive: true });
+  return outDir;
+}
+
+async function readRequest(req, slow = false) {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.from(chunk));
+    if (slow) await delay(2);
+  }
+  return Buffer.concat(chunks);
+}
+
+async function writeFragments(res, text, bytes = 7) {
+  const body = Buffer.from(text);
+  for (let at = 0; at < body.length; at += bytes) {
+    res.write(body.subarray(at, at + bytes));
+    await delay(1);
+  }
+  res.end();
+}
+
+function receiptFromUpload(upload) {
+  const names = [...upload.toString("utf8").matchAll(/filename="([^"]+)"/g)]
+    .map((match) => decodeURIComponent(match[1]));
+  return {
+    names,
+    text: [...names.map((Name) => JSON.stringify({ Name, Hash: RECEIPT_CID })), JSON.stringify({ Name: "ipfs-layout-test", Hash: ROOT_CID })].join("\n") + "\n",
+  };
+}
+
+async function fakeKubo(outDir, mode = "valid") {
+  const state = { uploadBytes: 0, contentLength: null, uploadNames: [], addPin: null, pinRm: [], requests: [] };
+  const server = http.createServer(async (req, res) => {
+    const url = new URL(req.url, "http://127.0.0.1");
+    state.requests.push(url.pathname);
+    if (url.pathname === "/api/v0/version") {
+      if (mode === "redirect") {
+        res.writeHead(302, { location: "/api/v0/version-next" });
+        res.end();
+      } else if (mode !== "timeout") {
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ Version: "fake-kubo" }));
+      }
+      return;
+    }
+    if (url.pathname === "/api/v0/add") {
+      const upload = await readRequest(req, mode === "slow-fragmented");
+      state.uploadBytes = upload.length;
+      state.contentLength = Number(req.headers["content-length"]);
+      state.addPin = url.searchParams.get("pin");
+      const receipt = receiptFromUpload(upload);
+      state.uploadNames = receipt.names;
+      res.setHeader("content-type", "application/x-ndjson");
+      if (mode === "oversized-line") {
+        res.end(`{"Name":"${"x".repeat(70 * 1024)}`);
+      } else if (mode === "malformed") {
+        res.end('{"Name":"ipfs-layout-test/layer.json",');
+      } else if (mode === "missing-root") {
+        res.end(receipt.text.split("\n").slice(0, -2).join("\n") + "\n");
+      } else if (mode === "extra-root") {
+        const entries = receipt.text.trim().split("\n");
+        res.end([entries.at(-1), ...entries].join("\n") + "\n");
+      } else if (mode === "slow-fragmented") {
+        await writeFragments(res, receipt.text, 5);
+      } else {
+        res.end(receipt.text);
+      }
+      return;
+    }
+    if (url.pathname === "/api/v0/pin/ls") {
+      if (mode === "pin-failure") {
+        res.statusCode = 500;
+        res.end("pin proof failed");
+      } else {
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ Keys: { [ROOT_CID]: { Type: "recursive" } } }));
+      }
+      return;
+    }
+    if (url.pathname === "/api/v0/pin/add") {
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ Pins: [url.searchParams.get("arg")] }));
+      return;
+    }
+    if (url.pathname === "/api/v0/pin/rm") {
+      state.pinRm.push(url.searchParams.get("arg"));
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ Pins: [url.searchParams.get("arg")] }));
+      return;
+    }
+    if (url.pathname.startsWith(`/ipfs/${ROOT_CID}/`)) {
+      const rel = decodeURIComponent(url.pathname.slice(`/ipfs/${ROOT_CID}/`.length));
+      const source = path.join(outDir, "ipfs", rel);
+      if (mode === "gateway-404") {
+        res.statusCode = 404;
+        res.end("not found");
+        return;
+      }
+      const body = fs.readFileSync(source);
+      if (req.headers["if-none-match"] && mode !== "gateway-conditional") {
+        res.statusCode = 304;
+        res.setHeader("etag", '"fake-etag"');
+        res.end();
+        return;
+      }
+      res.setHeader("content-type", rel === "layer.json" ? "application/json" : "application/octet-stream");
+      res.setHeader("cache-control", "public, max-age=60, immutable");
+      res.setHeader("access-control-allow-origin", "*");
+      if (mode !== "gateway-header") res.setHeader("etag", '"fake-etag"');
+      if (mode === "gateway-oversized-content-length") {
+        res.setHeader("content-length", String(body.length + 1));
+        res.end(body);
+      } else if (mode === "gateway-chunked-oversize") {
+        res.write(body);
+        res.end(Buffer.from("x"));
+      } else {
+        res.end(mode === "gateway-byte" ? Buffer.concat([body, Buffer.from("x")]) : body);
+      }
+      return;
+    }
+    res.statusCode = 404;
+    res.end("unexpected request");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  return {
+    base: `http://127.0.0.1:${address.port}`,
+    state,
+    async close() {
+      server.close();
+      await once(server, "close");
+    },
+  };
+}
 
 // One granule of real relief, and a water mask with a coast through it so the
 // block yields both a RASTER-mask tile and a uniform one.
@@ -296,4 +454,97 @@ test("a run verify.mjs failed is refused", () => {
       ),
     /unmet bounds/,
   );
+});
+
+test("Kubo upload is sorted, exact-length, backpressured, and accepts fragmented NDJSON", async () => {
+  const outDir = copyFixtureOutput();
+  const fake = await fakeKubo(outDir, "slow-fragmented");
+  try {
+    const result = await runPublisher(outDir, ["--api", fake.base, "--gateway", fake.base]);
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(fake.state.contentLength, fake.state.uploadBytes, "multipart Content-Length must include every boundary and CRLF");
+    assert.equal(fake.state.addPin, "false", "receipt validation must happen before this invocation creates a pin");
+    assert.deepEqual(fake.state.uploadNames, [...fake.state.uploadNames].sort(), "multipart file plan must be deterministic and sorted");
+    assert.ok(fake.state.uploadNames.includes("ipfs-layout-test/layer.json"));
+    const report = JSON.parse(fs.readFileSync(path.join(outDir, "ipfs-publication.json"), "utf8"));
+    assert.equal(report.cid, ROOT_CID);
+    assert.equal(report.pinProof.type, "recursive");
+    assert.ok(report.gatewayProof.every((probe) => probe.status >= 200 && probe.status < 300 && probe.matchesLocal));
+  } finally {
+    await fake.close();
+  }
+});
+
+test("Kubo receipt parser rejects oversized, malformed, missing, and duplicate root receipts", async () => {
+  for (const mode of ["oversized-line", "malformed", "missing-root", "extra-root"]) {
+    const outDir = copyFixtureOutput();
+    const fake = await fakeKubo(outDir, mode);
+    try {
+      const result = await runPublisher(outDir, ["--api", fake.base, "--gateway", fake.base]);
+      assert.notEqual(result.code, 0, `${mode} receipt must fail`);
+      assert.deepEqual(fake.state.pinRm, [], `${mode} must not pin before the complete receipt validates`);
+    } finally {
+      await fake.close();
+    }
+  }
+});
+
+test("Kubo redirects and stalled requests are fatal", async () => {
+  for (const mode of ["redirect", "timeout"]) {
+    const outDir = copyFixtureOutput();
+    const fake = await fakeKubo(outDir, mode);
+    try {
+      const result = await runPublisher(outDir, ["--api", fake.base, "--gateway", fake.base, "--timeout-ms", "40"]);
+      assert.notEqual(result.code, 0, `${mode} must fail`);
+      if (mode === "timeout") assert.match(result.stderr, /timed out after 40 ms/);
+    } finally {
+      await fake.close();
+    }
+  }
+});
+
+test("a pin-proof failure removes exactly the new root and preserves the previous directory", async () => {
+  const outDir = copyFixtureOutput();
+  const before = fs.readFileSync(path.join(outDir, "ipfs", "layer.json"));
+  const fake = await fakeKubo(outDir, "pin-failure");
+  try {
+    const result = await runPublisher(outDir, ["--api", fake.base, "--gateway", fake.base]);
+    assert.notEqual(result.code, 0);
+    assert.deepEqual(fake.state.pinRm, [ROOT_CID], "pin/rm must target only the new root, exactly once");
+    assert.deepEqual(fs.readFileSync(path.join(outDir, "ipfs", "layer.json")), before, "failed staging must not replace a completed directory");
+    assert.equal(fs.readdirSync(outDir).some((name) => name.startsWith(".ipfs-staging-")), false, "failed staging is removed");
+  } finally {
+    await fake.close();
+  }
+});
+
+test("gateway validation rejects status, bytes, bounded bodies, required headers, and missing conditional 304", async () => {
+  for (const mode of ["gateway-404", "gateway-byte", "gateway-oversized-content-length", "gateway-chunked-oversize", "gateway-header", "gateway-conditional"]) {
+    const outDir = copyFixtureOutput();
+    const fake = await fakeKubo(outDir, mode);
+    try {
+      const result = await runPublisher(outDir, ["--api", fake.base, "--gateway", fake.base]);
+      assert.notEqual(result.code, 0, `${mode} must fail the gateway gate`);
+      assert.deepEqual(fake.state.pinRm, [ROOT_CID], `${mode} must clean up exactly the new root`);
+    } finally {
+      await fake.close();
+    }
+  }
+});
+
+test("insufficient statfs reservation and unproved --cid preserve the completed directory", async () => {
+  const outDir = copyFixtureOutput();
+  const before = fs.readFileSync(path.join(outDir, "ipfs", "layer.json"));
+  const reservation = await runPublisher(outDir, ["--no-add", "--reserve-free-bytes", "999999999999999999999"]);
+  assert.notEqual(reservation.code, 0);
+  assert.match(reservation.stderr, /insufficient free space for staged IPFS directory/);
+  assert.deepEqual(fs.readFileSync(path.join(outDir, "ipfs", "layer.json")), before);
+  assert.equal(fs.readdirSync(outDir).some((name) => name.startsWith(".ipfs-staging-")), false);
+  const cid = await runPublisher(outDir, ["--no-add", "--cid", ROOT_CID]);
+  assert.notEqual(cid.code, 0);
+  assert.match(cid.stderr, /--cid is refused/);
+  assert.equal(fs.existsSync(path.join(outDir, "serving-config-ipfs.json")), false);
+  const noVerify = await runPublisher(outDir, ["--no-verify"]);
+  assert.notEqual(noVerify.code, 0);
+  assert.match(noVerify.stderr, /--no-verify is refused with --add/);
 });

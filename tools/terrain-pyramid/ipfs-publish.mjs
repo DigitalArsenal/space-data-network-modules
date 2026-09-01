@@ -45,11 +45,13 @@
 
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { Readable } from "node:stream";
 import { createInterface } from "node:readline";
+import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 
@@ -71,6 +73,26 @@ const IPFS_TILES_TEMPLATE = "{z}/{x}/{y}.terrain";
 // and p99 327,267 B with a bounded review margin, while still rejecting a
 // runaway mask/payload before a permanent CID is created.
 const STATIC_TRANSPORT_BOUNDS = Object.freeze({ p50: 96 * 1024, p99: 384 * 1024, hard: 512 * 1024 });
+const MAX_MATERIALIZED_FILES = 5_000_000;
+const MAX_MATERIALIZED_BYTES = 1024 * 1024 * 1024 * 1024;
+const STAGING_HEADROOM_BYTES = 64 * 1024 * 1024;
+const MAX_RECEIPT_BYTES = 16 * 1024 * 1024;
+const MAX_RECEIPT_LINE_BYTES = 64 * 1024;
+const MAX_RECEIPT_NAME_BYTES = 4 * 1024;
+const MAX_RECEIPT_HASH_BYTES = 256;
+const MAX_CONTROL_RESPONSE_BYTES = 64 * 1024;
+
+function parsePositiveInteger(value, flag) {
+  assert.match(value ?? "", /^\d+$/, `${flag} must be a positive integer`);
+  const parsed = Number(value);
+  assert.ok(Number.isSafeInteger(parsed) && parsed > 0, `${flag} is outside the safe integer range`);
+  return parsed;
+}
+
+function parseByteCount(value, flag) {
+  assert.match(value ?? "", /^\d+$/, `${flag} must be a non-negative integer`);
+  return BigInt(value);
+}
 
 function parseArgs(argv) {
   const args = {
@@ -78,6 +100,8 @@ function parseArgs(argv) {
     gateway: "https://sdn.spaceaware.io",
     add: true,
     verify: true,
+    timeoutMs: 30_000,
+    reserveFreeBytes: 0n,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
@@ -85,15 +109,17 @@ function parseArgs(argv) {
     else if (flag === "--api") args.api = argv[++i];
     else if (flag === "--gateway") args.gateway = argv[++i];
     else if (flag === "--no-add") args.add = false;
-    // Re-emit the catalogue and the operator config for a directory that is
-    // ALREADY published, without pushing 358 MiB through the tunnel again.
-    // The materialized bytes are deterministic, so the CID is a fact about
-    // them and re-asserting it costs nothing; --add would have proven it.
-    else if (flag === "--cid") { args.cid = argv[++i]; args.add = false; }
+    // A bare CID says nothing about its recursive pin.  Do not emit a serving
+    // config from an unverified assertion: a trusted import path can be added
+    // only when it carries an independently verified pin receipt.
+    else if (flag === "--cid") throw new Error("--cid is refused: use --add so this invocation verifies the recursive pin");
     else if (flag === "--no-verify") args.verify = false;
+    else if (flag === "--timeout-ms") args.timeoutMs = parsePositiveInteger(argv[++i], "--timeout-ms");
+    else if (flag === "--reserve-free-bytes") args.reserveFreeBytes = parseByteCount(argv[++i], "--reserve-free-bytes");
     else throw new Error(`unknown argument ${flag}`);
   }
   if (!args.out) throw new Error("--out <builder output dir> is required");
+  assert.ok(!args.add || args.verify, "--no-verify is refused with --add: a serving CID requires gateway proof");
   while (args.gateway.endsWith("/")) args.gateway = args.gateway.slice(0, -1);
   return args;
 }
@@ -326,22 +352,143 @@ function assertWaterMaskExtension(bytes, name) {
   return { kind: "RASTER", bytes: extensionLength, side };
 }
 
+const layerJson = await renderLayerJson();
+
+function parseTerrainAddress(address) {
+  assert.match(address, /^\d+\/\d+\/\d+$/, `invalid available-but-unstored address ${JSON.stringify(address)}`);
+  const [level, x, y] = address.split("/").map(Number);
+  assert.ok(Number.isSafeInteger(level) && Number.isSafeInteger(x) && Number.isSafeInteger(y), `unsafe terrain address ${address}`);
+  return { level, x, y };
+}
+
+// Count and bound the output before a staging directory is made.  A static
+// directory needs room beside an already-complete one, so this is an upper
+// bound rather than a hopeful post-write observation: stored files are sized
+// exactly and synthesized files reserve their transport hard cap.
+async function precomputeMaterializationPlan() {
+  let storedFiles = 0;
+  let storedBytes = 0;
+  for await (const record of iterateStreamFile(recordsPath)) {
+    const dtt = readDtt(record);
+    assert.ok(dtt.payload?.bytes, `${dtt.level}/${dtt.x}/${dtt.y}: record carries no payload bytes`);
+    const stored = Buffer.from(dtt.payload.bytes);
+    const body =
+      (dtt.payload.contentEncoding ?? "").toLowerCase() === "gzip" ? zlib.gunzipSync(stored) : stored;
+    assert.ok(body.length <= STATIC_TRANSPORT_BOUNDS.hard, `static tile ${body.length} exceeds hard transport cap`);
+    storedFiles += 1;
+    storedBytes += body.length;
+  }
+  let synthesizedFiles = 0;
+  for await (const address of availableButUnstored()) {
+    parseTerrainAddress(address);
+    synthesizedFiles += 1;
+  }
+  const files = 1 + storedFiles + synthesizedFiles;
+  const byteUpperBound = BigInt(layerJson.length + storedBytes) +
+    BigInt(synthesizedFiles) * BigInt(STATIC_TRANSPORT_BOUNDS.hard);
+  assert.ok(files <= MAX_MATERIALIZED_FILES, `materialization plans ${files} files; hard limit is ${MAX_MATERIALIZED_FILES}`);
+  assert.ok(
+    byteUpperBound <= BigInt(MAX_MATERIALIZED_BYTES),
+    `materialization reserves ${byteUpperBound} bytes; hard limit is ${MAX_MATERIALIZED_BYTES}`,
+  );
+  return { files, storedFiles, synthesizedFiles, byteUpperBound };
+}
+
+function reserveStagingSpace(plan) {
+  const stats = fs.statfsSync(outDir, { bigint: true });
+  const freeBytes = stats.bavail * stats.bsize;
+  const requiredBytes = plan.byteUpperBound + BigInt(STAGING_HEADROOM_BYTES) + args.reserveFreeBytes;
+  assert.ok(
+    freeBytes >= requiredBytes,
+    `insufficient free space for staged IPFS directory: need ${requiredBytes} bytes, have ${freeBytes}`,
+  );
+  return { freeBytes, requiredBytes };
+}
+
 // ── MATERIALIZE ────────────────────────────────────────────────────────────
-fs.rmSync(ipfsDir, { recursive: true, force: true });
-fs.mkdirSync(ipfsDir, { recursive: true });
+const materializationPlan = await precomputeMaterializationPlan();
+const stagingReservation = reserveStagingSpace(materializationPlan);
+const attemptToken = `${process.pid}-${randomUUID()}`;
+const stagingDir = path.join(outDir, `.ipfs-staging-${attemptToken}`);
+fs.mkdirSync(stagingDir, { recursive: false });
+const stagedArtifactPaths = new Set();
+
+function discardStagingDirectory() {
+  if (fs.existsSync(stagingDir)) fs.rmSync(stagingDir, { recursive: true, force: true });
+}
+
+function stageArtifact(livePath, bytes) {
+  const stagedPath = path.join(outDir, `.${path.basename(livePath)}-staging-${attemptToken}`);
+  fs.writeFileSync(stagedPath, bytes);
+  const descriptor = fs.openSync(stagedPath, "r");
+  try {
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  stagedArtifactPaths.add(stagedPath);
+  return stagedPath;
+}
+
+function discardStagedArtifacts() {
+  for (const stagedPath of stagedArtifactPaths) {
+    if (fs.existsSync(stagedPath)) fs.rmSync(stagedPath, { force: true });
+  }
+  stagedArtifactPaths.clear();
+}
+
+// Each old target is first moved to an attempt-token sibling.  Only after all
+// staged replacements are live are those prior copies removed; any intervening
+// failure restores every old target and leaves the completed ipfs/ untouched.
+function commitStagedPublication(artifacts) {
+  const replacements = [{ live: ipfsDir, staged: stagingDir }, ...artifacts];
+  const backups = [];
+  const installed = [];
+  try {
+    for (const replacement of replacements) {
+      const backup = path.join(outDir, `.${path.basename(replacement.live)}-previous-${attemptToken}`);
+      if (fs.existsSync(replacement.live)) {
+        fs.renameSync(replacement.live, backup);
+        backups.push({ live: replacement.live, backup });
+      }
+    }
+    for (const replacement of replacements) {
+      fs.renameSync(replacement.staged, replacement.live);
+      installed.push(replacement);
+      stagedArtifactPaths.delete(replacement.staged);
+    }
+  } catch (error) {
+    for (const replacement of [...installed].reverse()) {
+      if (fs.existsSync(replacement.live)) {
+        fs.renameSync(replacement.live, replacement.staged);
+        if (replacement.staged !== stagingDir) stagedArtifactPaths.add(replacement.staged);
+      }
+    }
+    for (const { live, backup } of [...backups].reverse()) {
+      if (fs.existsSync(backup)) fs.renameSync(backup, live);
+    }
+    throw error;
+  }
+  for (const { backup } of backups) {
+    // Completion already succeeded; a cleanup fault preserves the old sibling
+    // instead of deleting either valid completed state.
+    try {
+      fs.rmSync(backup, { recursive: true, force: true });
+    } catch {
+      // The unique sibling is recoverable and intentionally left in place.
+    }
+  }
+}
 
 let fileCount = 0;
 let totalBytes = 0;
 const write = (rel, bytes) => {
-  const full = path.join(ipfsDir, rel);
+  const full = path.join(stagingDir, rel);
   fs.mkdirSync(path.dirname(full), { recursive: true });
   fs.writeFileSync(full, bytes);
   fileCount += 1;
   totalBytes += bytes.length;
 };
-
-const layerJson = await renderLayerJson();
-write("layer.json", layerJson);
 
 function boundedDistribution(limit, bucketBytes = 1024) {
   const buckets = new Uint32Array(Math.ceil(limit / bucketBytes) + 1);
@@ -372,6 +519,26 @@ let rasterMasks = 0;
 let storedTiles = 0;
 let shallowStored = null;
 let deepStored = null;
+let harnessDestroyed = false;
+let staticIdentity;
+let oceanSkipsDeclared;
+const oceanSkipsServedAsLand = [];
+
+async function failMaterialization(error) {
+  if (!harnessDestroyed) {
+    try {
+      await harness.destroy();
+    } catch {
+      // Preserve the original materialization error.
+    }
+  }
+  discardStagingDirectory();
+  discardStagedArtifacts();
+  throw error;
+}
+
+try {
+write("layer.json", layerJson);
 for await (const record of iterateStreamFile(recordsPath)) {
   const dtt = readDtt(record);
   const key = `${dtt.level}/${dtt.x}/${dtt.y}`;
@@ -391,6 +558,9 @@ for await (const record of iterateStreamFile(recordsPath)) {
   gzipSizes.add(stored.length);
   write(`${dtt.level}/${dtt.x}/${dtt.y}.terrain`, body);
 }
+} catch (error) {
+  await failMaterialization(error);
+}
 
 // The promise layer.json makes, kept by files rather than by respond().
 //
@@ -407,16 +577,16 @@ let synthesizedTiles = 0;
 let lastSynthesized = null;
 let synthesizedWater = 0;
 let synthesizedLand = 0;
-const oceanSkipsDeclared = new Set(
+try {
+oceanSkipsDeclared = new Set(
   JSON.parse(
     fs.existsSync(path.join(outDir, "ocean-skipped.json"))
       ? fs.readFileSync(path.join(outDir, "ocean-skipped.json"), "utf8")
       : '{"addresses":[]}',
   ).addresses ?? [],
 );
-const oceanSkipsServedAsLand = [];
 for await (const address of availableButUnstored()) {
-  const [level, x, y] = address.split("/").map(Number);
+  const { level, x, y } = parseTerrainAddress(address);
   const body = await synthesizeTile(level, x, y);
   const mask = assertWaterMaskExtension(body, `${address} (synthesized)`);
   if (mask.kind === "UNIFORM_WATER") synthesizedWater += 1;
@@ -440,17 +610,23 @@ assert.deepEqual(
     "published as land — check terrain_ocean_synth_min_level against the levels this run built",
 );
 await harness.destroy();
+harnessDestroyed = true;
 
 // Every promised unstored address is written in the single streaming loop
 // above. Re-reading the complete worklist solely to build an in-memory check
 // would defeat the bounded publication contract.
 
-const staticIdentity = {
+staticIdentity = {
   p50: identitySizes.percentile(0.5), p99: identitySizes.percentile(0.99), max: identitySizes.max(),
 };
 assert.ok(staticIdentity.p50 <= STATIC_TRANSPORT_BOUNDS.p50, `static identity p50 ${staticIdentity.p50} exceeds ${STATIC_TRANSPORT_BOUNDS.p50}`);
 assert.ok(staticIdentity.p99 <= STATIC_TRANSPORT_BOUNDS.p99, `static identity p99 ${staticIdentity.p99} exceeds ${STATIC_TRANSPORT_BOUNDS.p99}`);
 assert.ok(staticIdentity.max <= STATIC_TRANSPORT_BOUNDS.hard, `static identity max ${staticIdentity.max} exceeds ${STATIC_TRANSPORT_BOUNDS.hard}`);
+assert.equal(fileCount, materializationPlan.files, "materialized file count disagrees with the preflight plan");
+assert.ok(BigInt(totalBytes) <= materializationPlan.byteUpperBound, "materialized bytes exceed the reserved bound");
+} catch (error) {
+  await failMaterialization(error);
+}
 
 // ── ADD AND PIN THROUGH THE NODE'S IPFS API ────────────────────────────────
 //
@@ -460,131 +636,328 @@ assert.ok(staticIdentity.max <= STATIC_TRANSPORT_BOUNDS.hard, `static identity m
 // cellular snapshot used them: base32 CIDv1 is what a subdomain gateway needs
 // and raw leaves keep a small file's CID equal to its own hash, which is what
 // the gateway then serves as the ETag.
-async function addAndPin(apiURL) {
-  const boundary = "----terrain-pyramid-" + Date.now().toString(16);
-  async function* parts() {
-    const walk = function* (dir, prefix = "") {
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        const rel = path.join(prefix, entry.name);
-        if (entry.isDirectory()) yield* walk(path.join(dir, entry.name), rel);
-        else if (entry.isFile()) yield rel;
+function compareBytewise(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function multipartPlan(directory, boundary) {
+  const files = [];
+  const walk = (dir, prefix = "") => {
+    const entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => compareBytewise(a.name, b.name));
+    for (const entry of entries) {
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full, rel);
+      else if (entry.isFile()) {
+        const stat = fs.statSync(full);
+        assert.ok(stat.isFile(), `${full} changed while planning multipart upload`);
+        const name = `${tilesetId}/${rel}`;
+        const header = Buffer.from(
+          `--${boundary}\r\nContent-Disposition: form-data; name="file"; ` +
+            `filename="${encodeURIComponent(name)}"\r\n` +
+            "Content-Type: application/octet-stream\r\n\r\n",
+        );
+        files.push({ full, rel, name, header, size: BigInt(stat.size) });
       }
-    };
-    for (const rel of walk(ipfsDir)) {
-      const name = `${tilesetId}/${rel}`;
-      yield Buffer.from(
-        `--${boundary}\r\nContent-Disposition: form-data; name="file"; ` +
-          `filename="${encodeURIComponent(name)}"\r\n` +
-          "Content-Type: application/octet-stream\r\n\r\n",
-      );
-      for await (const chunk of fs.createReadStream(path.join(ipfsDir, rel), { highWaterMark: 64 * 1024 })) yield chunk;
-      yield Buffer.from("\r\n");
     }
-    yield Buffer.from(`--${boundary}--\r\n`);
+  };
+  walk(directory);
+  const closing = Buffer.from(`--${boundary}--\r\n`);
+  const contentLength = files.reduce(
+    (total, file) => total + BigInt(file.header.length) + file.size + 2n,
+    BigInt(closing.length),
+  );
+  assert.equal(files.length, fileCount, "materialized file count changed before multipart planning");
+  assert.ok(contentLength <= BigInt(Number.MAX_SAFE_INTEGER), "multipart Content-Length exceeds fetch's safe range");
+  return { files, closing, contentLength };
+}
+
+// This generator opens one file only after the preceding file's stream has
+// ended.  Readable.from pulls it on demand, so a slow Kubo consumer applies
+// backpressure all the way to the one open file descriptor.
+async function* multipartParts(plan) {
+  for (const file of plan.files) {
+    yield file.header;
+    for await (const chunk of fs.createReadStream(file.full, { highWaterMark: 64 * 1024 })) yield chunk;
+    yield Buffer.from("\r\n");
   }
-  const url =
-    `${apiURL.replace(/\/$/, "")}/api/v0/add` +
-    "?pin=true&cid-version=1&raw-leaves=true&wrap-with-directory=false";
-  const response = await fetch(url, {
-    method: "POST",
-    // kubo rejects a browser-shaped User-Agent on the RPC API.
-    headers: { "content-type": `multipart/form-data; boundary=${boundary}`, "user-agent": "" },
-    body: Readable.from(parts()),
-    duplex: "half",
-  });
+  yield plan.closing;
+}
+
+async function withRequest(url, options, label, consume) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, args.timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal, redirect: "error" });
+    return await consume(response, controller);
+  } catch (error) {
+    if (timedOut) throw new Error(`${label} timed out after ${args.timeoutMs} ms`, { cause: error });
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function declaredResponseLength(response, maxBytes, label, controller, exactBytes = null) {
+  const value = response.headers.get("content-length");
+  if (value === null) return;
+  if (!/^\d+$/.test(value)) {
+    controller.abort();
+    throw new Error(`${label}: invalid Content-Length`);
+  }
+  const bytes = BigInt(value);
+  if (bytes > BigInt(maxBytes) || (exactBytes !== null && bytes !== BigInt(exactBytes))) {
+    controller.abort();
+    throw new Error(`${label}: Content-Length ${bytes} violates the response bound`);
+  }
+}
+
+async function readResponseBytes(response, maxBytes, label, controller, exactBytes = null) {
+  declaredResponseLength(response, maxBytes, label, controller, exactBytes);
+  if (!response.body) return Buffer.alloc(0);
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of response.body) {
+    const bytes = Buffer.from(chunk);
+    total += bytes.length;
+    if (total > maxBytes) {
+      controller.abort();
+      throw new Error(`${label}: response body exceeds ${maxBytes} bytes`);
+    }
+    chunks.push(bytes);
+  }
+  if (exactBytes !== null && total !== exactBytes) {
+    throw new Error(`${label}: response body is ${total} bytes; expected ${exactBytes}`);
+  }
+  return Buffer.concat(chunks, total);
+}
+
+async function readResponseText(response, maxBytes, label, controller) {
+  return (await readResponseBytes(response, maxBytes, label, controller)).toString("utf8");
+}
+
+function validateReceiptEntry(entry, index) {
+  assert.ok(entry && typeof entry === "object" && !Array.isArray(entry), `kubo add receipt entry ${index} is not an object`);
+  assert.equal(typeof entry.Name, "string", `kubo add receipt entry ${index} has no string Name`);
+  assert.equal(typeof entry.Hash, "string", `kubo add receipt entry ${index} has no string Hash`);
+  assert.ok(Buffer.byteLength(entry.Name) <= MAX_RECEIPT_NAME_BYTES, `kubo add receipt entry ${index} Name exceeds ${MAX_RECEIPT_NAME_BYTES} bytes`);
+  assert.ok(Buffer.byteLength(entry.Hash) <= MAX_RECEIPT_HASH_BYTES, `kubo add receipt entry ${index} Hash exceeds ${MAX_RECEIPT_HASH_BYTES} bytes`);
+  assert.match(entry.Hash, /^[A-Za-z0-9]+$/, `kubo add receipt entry ${index} Hash is not a CID-shaped token`);
+}
+
+async function readAddReceipt(response, expectedFiles, onRoot, controller) {
   assert.equal(response.status, 200, `kubo add: HTTP ${response.status}`);
+  assert.ok(response.body, "kubo add returned an empty response body");
+  declaredResponseLength(response, MAX_RECEIPT_BYTES, "kubo add receipt", controller);
+  const decoder = new StringDecoder("utf8");
+  let pending = "";
+  let totalBytes = 0;
+  let entries = 0;
   let root = null;
   let layerEntry = null;
-  let entries = 0;
-  let pending = "";
+  const expectedEntries = expectedFiles + 1;
+
+  const consumeLine = (raw) => {
+    const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+    assert.ok(line.length > 0, "kubo add receipt contains an empty NDJSON entry");
+    assert.ok(Buffer.byteLength(line) <= MAX_RECEIPT_LINE_BYTES, `kubo add receipt line exceeds ${MAX_RECEIPT_LINE_BYTES} bytes`);
+    entries += 1;
+    assert.ok(entries <= expectedEntries, `kubo add returned more than ${expectedEntries} receipt entries`);
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch (error) {
+      throw new Error(`kubo add receipt entry ${entries} is invalid JSON`, { cause: error });
+    }
+    validateReceiptEntry(entry, entries);
+    if (entry.Name === tilesetId) {
+      assert.equal(root, null, `kubo add returned more than one root receipt for ${tilesetId}`);
+      root = entry;
+      onRoot(entry.Hash);
+    }
+    if (entry.Name === `${tilesetId}/layer.json`) {
+      assert.equal(layerEntry, null, "kubo add returned more than one layer.json receipt");
+      layerEntry = entry;
+    }
+  };
+
   for await (const chunk of response.body) {
-    pending += Buffer.from(chunk).toString("utf8");
+    const bytes = Buffer.from(chunk);
+    totalBytes += bytes.length;
+    if (totalBytes > MAX_RECEIPT_BYTES) {
+      controller.abort();
+      throw new Error(`kubo add receipt exceeds ${MAX_RECEIPT_BYTES} bytes`);
+    }
+    pending += decoder.write(bytes);
+    assert.ok(Buffer.byteLength(pending) <= MAX_RECEIPT_LINE_BYTES, `kubo add receipt line exceeds ${MAX_RECEIPT_LINE_BYTES} bytes`);
     let newline;
     while ((newline = pending.indexOf("\n")) >= 0) {
-      const line = pending.slice(0, newline); pending = pending.slice(newline + 1);
-      if (!line) continue;
-      const entry = JSON.parse(line); entries += 1;
-      if (entry.Name === tilesetId) root = entry;
-      if (entry.Name === `${tilesetId}/layer.json`) layerEntry = entry;
+      const line = pending.slice(0, newline);
+      pending = pending.slice(newline + 1);
+      consumeLine(line);
     }
   }
-  if (pending.trim()) {
-    const entry = JSON.parse(pending); entries += 1;
-    if (entry.Name === tilesetId) root = entry;
-    if (entry.Name === `${tilesetId}/layer.json`) layerEntry = entry;
-  }
+  pending += decoder.end();
+  if (pending.length > 0) consumeLine(pending);
+  assert.equal(entries, expectedEntries, `kubo add returned ${entries} receipt entries; expected ${expectedEntries}`);
   assert.ok(root, `kubo add returned no entry for the root directory ${tilesetId}`);
-  return { cid: root.Hash, layerJsonCid: layerEntry?.Hash, entries };
+  assert.ok(layerEntry, `kubo add returned no entry for ${tilesetId}/layer.json`);
+  return { cid: root.Hash, layerJsonCid: layerEntry.Hash, entries };
+}
+
+async function addAndPin(apiURL, onRoot) {
+  const boundary = `----terrain-pyramid-${randomUUID()}`;
+  const plan = multipartPlan(stagingDir, boundary);
+  const url =
+    `${apiURL.replace(/\/$/, "")}/api/v0/add` +
+    "?pin=false&cid-version=1&raw-leaves=true&wrap-with-directory=false";
+  return withRequest(
+    url,
+    {
+      method: "POST",
+      // kubo rejects a browser-shaped User-Agent on the RPC API.
+      headers: {
+        "content-type": `multipart/form-data; boundary=${boundary}`,
+        "content-length": String(plan.contentLength),
+        "user-agent": "",
+      },
+      body: Readable.from(multipartParts(plan), { objectMode: false, highWaterMark: 64 * 1024 }),
+      duplex: "half",
+    },
+    "kubo add",
+    (response, controller) => readAddReceipt(response, plan.files.length, onRoot, controller),
+  );
+}
+
+async function pinCreatedRoot(apiURL, cid, onPinned) {
+  return withRequest(
+    `${apiURL.replace(/\/$/, "")}/api/v0/pin/add?arg=${encodeURIComponent(cid)}&recursive=true`,
+    { method: "POST", headers: { "user-agent": "" } },
+    "kubo pin/add",
+    async (response, controller) => {
+      // Once Kubo has acknowledged pin/add, this invocation owns cleanup even
+      // if its proof payload is malformed or a later gate fails.
+      assert.equal(response.status, 200, `pin/add: HTTP ${response.status}`);
+      onPinned();
+      const text = await readResponseText(response, MAX_CONTROL_RESPONSE_BYTES, "kubo pin/add", controller);
+      let decoded;
+      try {
+        decoded = JSON.parse(text);
+      } catch (error) {
+        throw new Error("pin/add returned malformed JSON", { cause: error });
+      }
+      assert.ok(Array.isArray(decoded.Pins) && decoded.Pins.includes(cid), `pin/add did not acknowledge ${cid}`);
+    },
+  );
 }
 
 async function preflightKubo(apiURL) {
-  const response = await fetch(`${apiURL.replace(/\/$/, "")}/api/v0/version`, {
-    method: "POST", headers: { "user-agent": "" }, signal: AbortSignal.timeout(10_000),
-  });
-  const text = await response.text();
-  assert.equal(response.status, 200, `kubo preflight /version: HTTP ${response.status}: ${text.slice(0, 200)}`);
-  const version = JSON.parse(text);
-  assert.ok(version.Version, "kubo preflight returned no Version");
-  return version.Version;
+  return withRequest(
+    `${apiURL.replace(/\/$/, "")}/api/v0/version`,
+    { method: "POST", headers: { "user-agent": "" } },
+    "kubo preflight /version",
+    async (response, controller) => {
+      const text = await readResponseText(response, MAX_CONTROL_RESPONSE_BYTES, "kubo preflight /version", controller);
+      assert.equal(response.status, 200, `kubo preflight /version: HTTP ${response.status}: ${text.slice(0, 200)}`);
+      const version = JSON.parse(text);
+      assert.ok(version.Version, "kubo preflight returned no Version");
+      return version.Version;
+    },
+  );
+}
+
+async function assertRecursivePin(apiURL, cid) {
+  return withRequest(
+    `${apiURL.replace(/\/$/, "")}/api/v0/pin/ls?arg=${encodeURIComponent(cid)}&type=recursive`,
+    { method: "POST", headers: { "user-agent": "" } },
+    "kubo pin/ls",
+    async (response, controller) => {
+      const text = await readResponseText(response, MAX_CONTROL_RESPONSE_BYTES, "kubo pin/ls", controller);
+      assert.equal(response.status, 200, `pin/ls: HTTP ${response.status}: ${text.slice(0, 200)}`);
+      let decoded;
+      try {
+        decoded = JSON.parse(text);
+      } catch (error) {
+        throw new Error("pin/ls returned malformed JSON", { cause: error });
+      }
+      assert.ok(decoded && typeof decoded === "object" && !Array.isArray(decoded), "pin/ls returned no object");
+      assert.ok(decoded.Keys && typeof decoded.Keys === "object" && !Array.isArray(decoded.Keys), "pin/ls returned no Keys object");
+      assert.equal(decoded.Keys[cid]?.Type, "recursive", `the root ${cid} is not recursively pinned`);
+      return { type: decoded.Keys[cid].Type, response: JSON.stringify(decoded) };
+    },
+  );
 }
 
 async function unpinCreatedRoot(apiURL, cid) {
-  const response = await fetch(`${apiURL.replace(/\/$/, "")}/api/v0/pin/rm?arg=${encodeURIComponent(cid)}&recursive=true`, {
-    method: "POST", headers: { "user-agent": "" }, signal: AbortSignal.timeout(30_000),
-  });
-  assert.equal(response.status, 200, `could not remove failed publication pin ${cid}: HTTP ${response.status}`);
+  return withRequest(
+    `${apiURL.replace(/\/$/, "")}/api/v0/pin/rm?arg=${encodeURIComponent(cid)}&recursive=true`,
+    { method: "POST", headers: { "user-agent": "" } },
+    "kubo pin/rm",
+    async (response, controller) => {
+      const text = await readResponseText(response, MAX_CONTROL_RESPONSE_BYTES, "kubo pin/rm", controller);
+      assert.equal(response.status, 200, `could not remove failed publication pin ${cid}: HTTP ${response.status}: ${text.slice(0, 200)}`);
+    },
+  );
 }
 
-let publication = args.cid ? { cid: args.cid, layerJsonCid: undefined, entries: 0 } : null;
-// The pin assertion's OWN EVIDENCE. `--cid` re-emits the catalogue for a
-// directory that is already published and never touches the API, so the
-// committed publication record said `"api": null` while the run report claimed
-// "added+pinned through host-01's kubo RPC" — the pin was real, and nothing in
-// the repo established it. The proof now rides with the claim, and its absence
-// is stated rather than implied.
+let publication = null;
+let createdRootCid = null;
+let rootPinCleanupAttempted = false;
+
+async function abortPublication(error) {
+  let cleanupError = null;
+  if (createdRootCid && !rootPinCleanupAttempted) {
+    rootPinCleanupAttempted = true;
+    try {
+      // The CID comes only from this invocation's validated root receipt.
+      await unpinCreatedRoot(args.api, createdRootCid);
+    } catch (failure) {
+      cleanupError = failure;
+    }
+  }
+  discardStagingDirectory();
+  discardStagedArtifacts();
+  if (cleanupError) throw new AggregateError([error, cleanupError], "publication failed and its new root pin could not be removed");
+  throw error;
+}
+
+// The pin assertion's OWN EVIDENCE.  A CID is never accepted as a substitute
+// for this proof, because it cannot establish that the complete directory is
+// recursively retained.
 let pinProof = null;
 if (args.add) {
-  process.stdout.write(`adding ${fileCount} files (${(totalBytes / 1e6).toFixed(1)} MB) to ${args.api}\n`);
-  const kuboVersion = await preflightKubo(args.api);
-  process.stdout.write(`kubo preflight ${kuboVersion}\n`);
-  publication = await addAndPin(args.api);
-  // pin=true on add already pins the root recursively; assert it rather than
-  // assume it, because an unpinned root is garbage-collected out from under
-  // every client that ever resolved it.
-  const pinned = await fetch(
-    `${args.api.replace(/\/$/, "")}/api/v0/pin/ls?arg=${publication.cid}&type=recursive`,
-    { method: "POST", headers: { "user-agent": "" } },
-  );
-  const pinText = await pinned.text();
-  let pinType = null;
   try {
-    assert.equal(pinned.status, 200, `pin/ls: HTTP ${pinned.status}: ${pinText.slice(0, 200)}`);
-    assert.ok(pinText.includes(publication.cid), `the root ${publication.cid} is not pinned`);
-    try {
-      pinType = JSON.parse(pinText)?.Keys?.[publication.cid]?.Type ?? null;
-    } catch {
-      pinType = null;
-    }
-    assert.equal(
-    pinType,
-    "recursive",
-    `the root ${publication.cid} is pinned as ${pinType ?? "an unreadable type"}, not recursive — ` +
-      "only a recursive pin holds the tiles under it",
-    );
+    process.stdout.write(`adding ${fileCount} files (${(totalBytes / 1e6).toFixed(1)} MB) to ${args.api}\n`);
+    const kuboVersion = await preflightKubo(args.api);
+    process.stdout.write(`kubo preflight ${kuboVersion}\n`);
+    publication = await addAndPin(args.api, (cid) => {
+      assert.equal(publication, null, "kubo add emitted a root after a completed receipt");
+      assert.ok(cid, "kubo add emitted an empty root CID");
+    });
+    // `add?pin=false` cannot leak a pin on a malformed pre-root receipt.  The
+    // explicit pin/add below gives this invocation one exact, cleanable root.
+    await pinCreatedRoot(args.api, publication.cid, () => {
+      assert.equal(createdRootCid, null, "kubo pin/add acknowledged more than one root");
+      createdRootCid = publication.cid;
+    });
+    // pin/add acknowledgement is still an instruction, not proof.  Require
+    // Kubo's typed recursive pin record before a CID becomes serving config.
+    const pinned = await assertRecursivePin(args.api, publication.cid);
+    pinProof = {
+      api: args.api,
+      checkedAt: new Date().toISOString(),
+      endpoint: `/api/v0/pin/ls?arg=${publication.cid}&type=recursive`,
+      type: pinned.type,
+      response: pinned.response,
+    };
+    process.stdout.write(`CID ${publication.cid} pinned ${pinned.type}\n`);
   } catch (error) {
-    // This invocation created the root, so removing only its pin is safe. Do
-    // not leave a malformed or unverifiable directory pinned after a fault.
-    await unpinCreatedRoot(args.api, publication.cid);
-    throw error;
+    await abortPublication(error);
   }
-  pinProof = {
-    api: args.api,
-    checkedAt: new Date().toISOString(),
-    endpoint: `/api/v0/pin/ls?arg=${publication.cid}&type=recursive`,
-    type: pinType,
-    response: pinText.trim().slice(0, 400),
-  };
-  process.stdout.write(`CID ${publication.cid} pinned ${pinType}\n`);
 }
 
 // ── THE $DTT CATALOGUE RECORD ──────────────────────────────────────────────
@@ -671,11 +1044,16 @@ function buildCatalogue(cid) {
   };
 }
 
-const catalogue = buildCatalogue(publication?.cid ?? null);
-fs.writeFileSync(
-  path.join(outDir, "tileset-catalogue.json"),
-  `${JSON.stringify(catalogue, null, 2)}\n`,
-);
+let catalogue;
+try {
+  catalogue = buildCatalogue(publication?.cid ?? null);
+} catch (error) {
+  if (createdRootCid) await abortPublication(error);
+  discardStagingDirectory();
+  discardStagedArtifacts();
+  throw error;
+}
+const stagedPublicationArtifacts = [];
 
 // The same record as SDS wire bytes, size-prefixed exactly like tiles.dttstream,
 // so the dataset-publication lane ingests it with the tiles and nothing has to
@@ -690,18 +1068,32 @@ fs.writeFileSync(
 // enforces `required` — so the JSON beside these bytes cannot be a document
 // that is not also a record.
 {
-  const sds = await import(path.join(SOURCE_DIR, "node_modules", "spacedatastandards.org", "index.js"));
-  const bytes = writeDttRecord(sds, catalogue);
-  fs.writeFileSync(path.join(outDir, "tileset-catalogue.dttstream"), bytes);
-  // And it reads back as the record the JSON says it is.
-  const [read] = sds.readFB(bytes);
-  assert.equal(read.TILESET_ID, catalogue.TILESET_ID);
-  assert.equal(read.PROVENANCE.RETRIEVED_AT, catalogue.PROVENANCE.RETRIEVED_AT);
-  assert.equal(read.PAYLOAD.CID ?? null, catalogue.PAYLOAD.CID ?? null);
-  // Not just "buildDttRecord accepted it": the projection is what the SERVING
-  // MODULE has to be able to answer too, so the shape is exercised here rather
-  // than only where a wasm is loaded.
-  assert.ok(buildDttRecord(sds, catalogue));
+  try {
+    stagedPublicationArtifacts.push({
+      live: path.join(outDir, "tileset-catalogue.json"),
+      staged: stageArtifact(path.join(outDir, "tileset-catalogue.json"), `${JSON.stringify(catalogue, null, 2)}\n`),
+    });
+    const sds = await import(path.join(SOURCE_DIR, "node_modules", "spacedatastandards.org", "index.js"));
+    const bytes = writeDttRecord(sds, catalogue);
+    stagedPublicationArtifacts.push({
+      live: path.join(outDir, "tileset-catalogue.dttstream"),
+      staged: stageArtifact(path.join(outDir, "tileset-catalogue.dttstream"), bytes),
+    });
+    // And it reads back as the record the JSON says it is.
+    const [read] = sds.readFB(bytes);
+    assert.equal(read.TILESET_ID, catalogue.TILESET_ID);
+    assert.equal(read.PROVENANCE.RETRIEVED_AT, catalogue.PROVENANCE.RETRIEVED_AT);
+    assert.equal(read.PAYLOAD.CID ?? null, catalogue.PAYLOAD.CID ?? null);
+    // Not just "buildDttRecord accepted it": the projection is what the SERVING
+    // MODULE has to be able to answer too, so the shape is exercised here rather
+    // than only where a wasm is loaded.
+    assert.ok(buildDttRecord(sds, catalogue));
+  } catch (error) {
+    if (createdRootCid) await abortPublication(error);
+    discardStagingDirectory();
+    discardStagedArtifacts();
+    throw error;
+  }
 }
 
 // ── READ THE PUBLICATION BACK THROUGH THE GATEWAY ──────────────────────────
@@ -714,27 +1106,62 @@ fs.writeFileSync(
 async function fetchThroughGateway(cid, rel) {
   const url = `${args.gateway}/ipfs/${cid}/${rel}`;
   const started = Date.now();
-  const response = await fetch(url);
-  const bytes = Buffer.from(await response.arrayBuffer());
-  const etag = response.headers.get("etag");
-  let conditional = null;
-  if (etag) {
-    const again = await fetch(url, { headers: { "if-none-match": etag } });
-    conditional = again.status;
-    await again.arrayBuffer();
-  }
+  const local = fs.readFileSync(path.join(stagingDir, rel));
+  const expectedContentType = rel === "layer.json" ? "application/json" : "application/octet-stream";
+  const initial = await withRequest(
+    url,
+    { method: "GET", headers: { "accept-encoding": "identity" } },
+    `gateway GET ${rel}`,
+    async (response, controller) => {
+    assert.ok(response.status >= 200 && response.status < 300, `gateway ${rel}: expected 2xx, got HTTP ${response.status}`);
+    const bytes = await readResponseBytes(response, local.length, `gateway ${rel}`, controller, local.length);
+    const etag = response.headers.get("etag");
+    const cacheControl = response.headers.get("cache-control");
+    const contentType = response.headers.get("content-type");
+    const contentEncoding = response.headers.get("content-encoding");
+    const accessControlAllowOrigin = response.headers.get("access-control-allow-origin");
+    assert.ok(etag, `gateway ${rel}: missing ETag`);
+    assert.match(cacheControl ?? "", /(?:^|,)\s*public(?:,|$)/i, `gateway ${rel}: Cache-Control must be public`);
+    assert.match(cacheControl ?? "", /(?:^|,)\s*immutable(?:,|$)/i, `gateway ${rel}: Cache-Control must be immutable`);
+    assert.match(cacheControl ?? "", /max-age=\d+/i, `gateway ${rel}: Cache-Control must state max-age`);
+    assert.equal(contentType?.split(";", 1)[0].trim().toLowerCase(), expectedContentType, `gateway ${rel}: unexpected Content-Type`);
+    assert.ok(!contentEncoding || contentEncoding.toLowerCase() === "identity", `gateway ${rel}: content must be identity`);
+    assert.equal(accessControlAllowOrigin, "*", `gateway ${rel}: Access-Control-Allow-Origin must be *`);
+    assert.ok(bytes.equals(local), `gateway ${rel}: body differs from the staged file`);
+    return {
+      status: response.status,
+      bytes,
+      etag,
+      cacheControl,
+      contentType,
+      contentEncoding,
+      accessControlAllowOrigin,
+    };
+    },
+  );
+  const conditional = await withRequest(
+    url,
+    { method: "GET", headers: { "if-none-match": initial.etag, "accept-encoding": "identity" } },
+    `gateway conditional GET ${rel}`,
+    async (response, controller) => {
+      assert.equal(response.status, 304, `gateway ${rel}: conditional request must return 304`);
+      const body = await readResponseBytes(response, 0, `gateway conditional GET ${rel}`, controller, 0);
+      assert.equal(body.length, 0, `gateway ${rel}: 304 response must not include a body`);
+      return response.status;
+    },
+  );
   return {
     url,
-    status: response.status,
-    bytes: bytes.length,
+    status: initial.status,
+    bytes: initial.bytes.length,
     ms: Date.now() - started,
-    contentType: response.headers.get("content-type"),
-    cacheControl: response.headers.get("cache-control"),
-    etag,
-    contentEncoding: response.headers.get("content-encoding"),
-    accessControlAllowOrigin: response.headers.get("access-control-allow-origin"),
+    contentType: initial.contentType,
+    cacheControl: initial.cacheControl,
+    etag: initial.etag,
+    contentEncoding: initial.contentEncoding,
+    accessControlAllowOrigin: initial.accessControlAllowOrigin,
     conditionalStatus: conditional,
-    matchesLocal: bytes.equals(fs.readFileSync(path.join(ipfsDir, rel))),
+    matchesLocal: true,
   };
 }
 
@@ -742,7 +1169,11 @@ const gatewayProof = [];
 if (publication?.cid && args.verify) {
   const probes = ["layer.json", `${shallowStored}.terrain`, `${deepStored}.terrain`];
   if (lastSynthesized) probes.push(`${lastSynthesized}.terrain`);
-  for (const rel of probes) gatewayProof.push(await fetchThroughGateway(publication.cid, rel));
+  try {
+    for (const rel of probes) gatewayProof.push(await fetchThroughGateway(publication.cid, rel));
+  } catch (error) {
+    await abortPublication(error);
+  }
 }
 
 const report = {
@@ -760,6 +1191,14 @@ const report = {
   cid: publication?.cid ?? null,
   layerJsonCid: publication?.layerJsonCid ?? null,
   files: fileCount,
+  materializationPlan: {
+    files: materializationPlan.files,
+    storedFiles: materializationPlan.storedFiles,
+    synthesizedFiles: materializationPlan.synthesizedFiles,
+    byteUpperBound: materializationPlan.byteUpperBound.toString(),
+    stagingFreeBytes: stagingReservation.freeBytes.toString(),
+    stagingRequiredBytes: stagingReservation.requiredBytes.toString(),
+  },
   storedTiles,
   synthesizedTiles,
   // What the synthesized half STATES about water. Before the ocean skips were
@@ -804,25 +1243,26 @@ const report = {
       }
     : null,
 };
-fs.writeFileSync(path.join(outDir, "ipfs-publication.json"), `${JSON.stringify(report, null, 2)}\n`);
-
-// ── THE COMPLETE `config:` BLOCK FOR THE SERVING MOUNT ─────────────────────
-//
-// One file an operator installs, rather than two the operator has to merge.
-// It is layer-json-config.json — which the mount still needs, because the
-// mount still answers layer.json and tiles for a node with no CID and for
-// every same-origin fallback — plus the three keys that make this node point
-// its clients at the published directory.
-//
-// terrain_tiles_template is deliberately NOT among them: the mount's own
-// layer.json keeps its `?v=` cache-key query, because the mount's tiles are
-// not content-addressed and that query is what keys them. Only the layer.json
-// INSIDE the CID drops it, and that one is rendered here.
-if (publication?.cid) {
-  fs.writeFileSync(
-    path.join(outDir, "serving-config-ipfs.json"),
-    `${JSON.stringify({ ...layerConfig, ...report.mountConfig }, null, 2)}\n`,
-  );
+try {
+  stagedPublicationArtifacts.push({
+    live: path.join(outDir, "ipfs-publication.json"),
+    staged: stageArtifact(path.join(outDir, "ipfs-publication.json"), `${JSON.stringify(report, null, 2)}\n`),
+  });
+  if (publication?.cid) {
+    stagedPublicationArtifacts.push({
+      live: path.join(outDir, "serving-config-ipfs.json"),
+      staged: stageArtifact(
+        path.join(outDir, "serving-config-ipfs.json"),
+        `${JSON.stringify({ ...layerConfig, ...report.mountConfig }, null, 2)}\n`,
+      ),
+    });
+  }
+  commitStagedPublication(stagedPublicationArtifacts);
+} catch (error) {
+  if (createdRootCid) await abortPublication(error);
+  discardStagingDirectory();
+  discardStagedArtifacts();
+  throw error;
 }
 
 process.stdout.write(
