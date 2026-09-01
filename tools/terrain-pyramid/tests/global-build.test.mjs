@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -738,6 +738,143 @@ async function runVerifierExpectFailure(outDir, pattern) {
   assert.match(failure.stderr, pattern);
   assert.equal(fs.existsSync(path.join(outDir, "verify-report.json")), false, "failed verification must remove any stale publishable receipt");
 }
+
+async function waitForVerifierReceiptBarrier(barrier) {
+  const ready = `${barrier}.ready`;
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    try {
+      if (fs.readFileSync(ready, "utf8") === "ready\n") return;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    assert.ok(Date.now() < deadline, "verifier did not reach the receipted layer-config barrier");
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+}
+
+function writeVerifierSwapWorkload(outDir) {
+  const records = 8_000;
+  const handle = fs.openSync(path.join(outDir, "tiles.dttstream"), "w");
+  try {
+    for (let index = 0; index < records; index += 1) {
+      appendTerrainFrame(handle, syntheticTerrainRecord({
+        level: 9,
+        x: index % 1024,
+        y: Math.floor(index / 1024),
+        serial: index,
+      }));
+    }
+  } finally {
+    fs.closeSync(handle);
+  }
+}
+
+schemaTest("verifier fails closed when generated availability is exchanged before the receipted layer config", { timeout: 180_000 }, async (t) => {
+  const attempt = async (name, replace, expected) => {
+    const root = temporary(t);
+    const outDir = path.join(root, name);
+    const barrier = path.join(root, "receipt-barrier");
+    fs.mkdirSync(outDir);
+    writeVerifierSwapWorkload(outDir);
+    const invocation = execFileAsync(process.execPath, ["--max-old-space-size=64", VERIFY, "--out", outDir, "--json"], {
+      timeout: 180_000,
+      maxBuffer: 1024 * 1024,
+      env: {
+        ...process.env,
+        NODE_ENV: "test",
+        TERRAIN_VERIFY_TEST_RECEIPT_BARRIER: barrier,
+      },
+    });
+    await waitForVerifierReceiptBarrier(barrier);
+    const availability = path.join(outDir, "terrain-available.json");
+    const stat = fs.lstatSync(availability);
+    assert.equal(stat.isFile(), true, "verifier must capture a regular generated availability file before the exchange");
+    replace(availability, stat.size);
+    fs.writeFileSync(`${barrier}.release`, "release\n", { flag: "wx" });
+    let failure;
+    try {
+      await invocation;
+    } catch (error) {
+      failure = error;
+    }
+    assert.notEqual(failure, undefined, `${name} exchange must fail verification`);
+    assert.match(failure.stderr, expected);
+    assert.equal(fs.existsSync(path.join(outDir, "verify-report.json")), false,
+      `${name} exchange must leave no publishable receipt`);
+  };
+
+  await attempt(
+    "same-size-replacement",
+    (availability, size) => {
+      fs.rmSync(availability);
+      fs.writeFileSync(availability, Buffer.alloc(size, 0x20));
+    },
+    /generated terrain availability pathname changed before layer config copy/,
+  );
+
+  const escaped = path.join(temporary(t), "availability-outside.json");
+  fs.writeFileSync(escaped, "[]\n");
+  await attempt(
+    "symlink-replacement",
+    (availability) => {
+      fs.rmSync(availability);
+      fs.symlinkSync(escaped, availability);
+    },
+    /generated terrain availability is not a regular file/,
+  );
+});
+
+schemaTest("available-but-unstored publication never follows a symlink and survives a killed staged attempt", { timeout: 180_000 }, async (t) => {
+  const root = temporary(t);
+  const outDir = path.join(root, "out");
+  fs.mkdirSync(outDir);
+  writeVerifierSwapWorkload(outDir);
+  const finalPath = path.join(outDir, "available-but-unstored.ndjson");
+  const sentinel = path.join(root, "outside-sentinel.ndjson");
+  fs.writeFileSync(sentinel, "outside-sentinel-must-survive\n");
+  fs.symlinkSync(sentinel, finalPath);
+
+  await execFileAsync(process.execPath, ["--max-old-space-size=64", VERIFY, "--out", outDir, "--json"], {
+    timeout: 180_000,
+    maxBuffer: 1024 * 1024,
+  });
+  assert.equal(fs.readFileSync(sentinel, "utf8"), "outside-sentinel-must-survive\n");
+  assert.equal(fs.lstatSync(finalPath).isFile(), true, "atomic rename replaces the symlink itself");
+  assert.equal(fs.readFileSync(finalPath, "utf8").includes("outside-sentinel"), false);
+
+  const predecessor = "previous-complete-output\n";
+  fs.writeFileSync(finalPath, predecessor);
+  fs.rmSync(path.join(outDir, "verify-report.json"));
+  const child = spawn(process.execPath, ["--max-old-space-size=64", VERIFY, "--out", outDir, "--json"], {
+    stdio: ["ignore", "ignore", "ignore"],
+  });
+  const exited = new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", (code, signal) => resolve({ code, signal }));
+  });
+  const stagePrefix = "available-but-unstored.ndjson.";
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    const staged = fs.readdirSync(outDir).some((name) => name.startsWith(stagePrefix) && name.endsWith(".tmp"));
+    if (staged) {
+      assert.equal(child.kill("SIGKILL"), true, "kill the verifier after the staged output exists but before rename");
+      break;
+    }
+    assert.ok(Date.now() < deadline, "verifier did not create the staged available-but-unstored output");
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  const killed = await exited;
+  assert.equal(killed.signal, "SIGKILL");
+  assert.equal(fs.readFileSync(finalPath, "utf8"), predecessor,
+    "a killed staged attempt leaves the prior complete output intact, never a torn final file");
+
+  await execFileAsync(process.execPath, ["--max-old-space-size=64", VERIFY, "--out", outDir, "--json"], {
+    timeout: 180_000,
+    maxBuffer: 1024 * 1024,
+  });
+  assert.notEqual(fs.readFileSync(finalPath, "utf8"), predecessor, "a later complete attempt atomically replaces the predecessor");
+});
 
 schemaTest("verifier rejects bounded-decode bombs, truncated mesh sections, and invalid terrain fields", {}, async (t) => {
   const rejectOne = async (name, record, pattern) => {
