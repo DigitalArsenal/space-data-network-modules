@@ -193,27 +193,48 @@ test("deterministic shard configs cover each regional longitude slice once", () 
   assert.equal(first[0].global_shard.config_digest, sha256('{"flow_config":{"regions":[{"east":4,"max_level":8,"name":"proof","north":42,"priority":1,"south":40,"west":0}]}}'));
 });
 
-test("execution identity migrates an untouched state but refuses mismatched reuse", () => {
+test("execution identity migrates an untouched state but refuses mismatched reuse", (t) => {
   const first = executionIdentity("a".repeat(64));
   const second = executionIdentity("b".repeat(64));
+  const outDir = temporary(t);
   const state = {
     completed: false,
-    shards: [{ index: 0, status: "pending" }, { index: 1, status: "failed" }],
+    shards: [{ index: 0, status: "pending", attempts: 0 }, { index: 1, status: "pending", attempts: 0 }],
   };
-  assert.equal(bindExecutionIdentityToState(state, first), first,
+  assert.equal(bindExecutionIdentityToState(state, first, { outDir }), first,
     "a zero-complete pre-identity state has no produced bytes to invalidate");
   assert.deepEqual(state.executionIdentity, first);
-  assert.throws(() => bindExecutionIdentityToState(state, second), /different execution identity/,
+  assert.throws(() => bindExecutionIdentityToState(state, second, { outDir }), /different execution identity/,
     "a different flow, script, host, or WasmEdge identity cannot reuse state");
 });
 
-test("execution identity cannot be initialized after any shard completion", () => {
+test("execution identity cannot be initialized after durable pre-identity shard output", (t) => {
+  for (const status of ["failed", "running", "pending"]) {
+    const outDir = temporary(t);
+    const shardDir = path.join(outDir, "shards", "shard-000");
+    fs.mkdirSync(shardDir, { recursive: true });
+    fs.writeFileSync(path.join(shardDir, "tiles.dttstream"), "pre-identity tile bytes");
+    fs.writeFileSync(path.join(shardDir, "irm.records"), "pre-identity $IRM bytes");
+    const state = {
+      completed: false,
+      shards: [{ index: 0, status, attempts: status === "pending" ? 0 : 1 }],
+    };
+    assert.throws(() => bindExecutionIdentityToState(state, executionIdentity("a".repeat(64)), { outDir }),
+      status === "pending"
+        ? /missing execution identity after source shard 0 durable output/
+        : /missing execution identity after source shard 0 progress/,
+      `${status} source shard output cannot be resumed under a new execution identity`);
+  }
+});
+
+test("execution identity cannot be initialized after any shard completion", (t) => {
+  const outDir = temporary(t);
   const state = {
     completed: false,
-    shards: [{ index: 0, status: "complete" }, { index: 1, status: "pending" }],
+    shards: [{ index: 0, status: "complete", attempts: 1 }, { index: 1, status: "pending", attempts: 0 }],
   };
-  assert.throws(() => bindExecutionIdentityToState(state, executionIdentity("a".repeat(64))),
-    /missing execution identity after source shard completion/);
+  assert.throws(() => bindExecutionIdentityToState(state, executionIdentity("a".repeat(64)), { outDir }),
+    /missing execution identity after source shard 0 progress/);
 });
 
 test("tile-column shard ownership preserves non-aligned coverage without cross-shard duplicates", () => {

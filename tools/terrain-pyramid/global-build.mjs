@@ -362,20 +362,65 @@ export async function assertCompletedShardSource(shard, contract, globalConfigDi
   await validateSourceObservationLog(shardSourceLog(shard, contract), contract, { cacheDir });
 }
 
-function completedShardCount(state) {
-  return state.shards.filter((shard) => shard.status === "complete").length;
+function lstatExists(file) {
+  try {
+    return fs.lstatSync(file);
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+// A pre-identity coordinator state is safe to migrate only before it has
+// started a shard. A shard can durably append tiles and $IRM marks long before
+// it reaches the coordinator's `complete` checkpoint, so status=failed (or a
+// stale status=pending after a crash) is not evidence that its directory is
+// empty. Treat every non-empty shard or snapshot directory as progress rather
+// than resuming mixed toolchain output under a new identity.
+function assertIdentityLessSourceStateIsPristine(state, outDir) {
+  assert.ok(typeof outDir === "string" && outDir.length > 0,
+    "source execution identity migration requires the coordinator output directory");
+  assert.ok(!state.completed && !state.mergeCandidate && !state.merged,
+    "refusing to initialize a missing execution identity after source build progress");
+  assert.ok(Array.isArray(state.shards), "source execution identity migration requires shard state");
+  const root = path.resolve(outDir);
+  for (const shard of state.shards) {
+    assert.ok(Number.isSafeInteger(shard?.index) && shard.index >= 0,
+      "source execution identity migration found an invalid shard index");
+    assert.equal(shard.status, "pending",
+      `refusing to initialize a missing execution identity after source shard ${shard.index} progress`);
+    assert.equal(shard.attempts, 0,
+      `refusing to initialize a missing execution identity after source shard ${shard.index} attempts`);
+    assert.equal(shard.snapshots, undefined,
+      `refusing to initialize a missing execution identity after source shard ${shard.index} snapshots`);
+    assert.equal(shard.outputDigest, undefined,
+      `refusing to initialize a missing execution identity after source shard ${shard.index} output`);
+    assert.equal(shard.error, undefined,
+      `refusing to initialize a missing execution identity after source shard ${shard.index} error`);
+
+    const name = `shard-${String(shard.index).padStart(3, "0")}`;
+    for (const directory of [
+      path.join(root, "shards", name),
+      path.join(root, ".coordinator-shard-snapshots", name),
+    ]) {
+      const stat = lstatExists(directory);
+      assert.ok(!stat || (stat.isDirectory() && !stat.isSymbolicLink()),
+        `refusing to initialize a missing execution identity after source shard ${shard.index} output path`);
+      assert.ok(!stat || fs.readdirSync(directory).length === 0,
+        `refusing to initialize a missing execution identity after source shard ${shard.index} durable output`);
+    }
+  }
 }
 
 // State predating execution identities can only migrate while nothing has
-// completed. Once a source shard is durable, accepting a missing or changed
-// identity would authorize mixed engine/toolchain output on resume.
-export function bindExecutionIdentityToState(state, executionIdentity) {
+// been written. Once a source shard has durable output, accepting a missing or
+// changed identity would authorize mixed engine/toolchain output on resume.
+export function bindExecutionIdentityToState(state, executionIdentity, { outDir } = {}) {
   if (!executionIdentity) return null;
   assert.ok(typeof executionIdentity === "object" && typeof executionIdentity.digest === "string",
     "execution identity must be a canonical receipt with a digest");
   if (!state.executionIdentity) {
-    assert.ok(!state.completed && completedShardCount(state) === 0,
-      "refusing to initialize a missing execution identity after source shard completion");
+    assertIdentityLessSourceStateIsPristine(state, outDir);
     state.executionIdentity = executionIdentity;
     return executionIdentity;
   }
@@ -747,7 +792,7 @@ async function main() {
     "a source-policy build may not exceed the 96 GiB cache bound");
   const cacheDir = path.join(outDir, "granule-cache");
   const state = initializeGlobalState(outDir, runConfig, args.shards);
-  bindExecutionIdentityToState(state, executionIdentity);
+  bindExecutionIdentityToState(state, executionIdentity, { outDir });
   // Do not even open/create a source cache epoch until identity reuse has
   // passed. A mismatched state must fail before it can reuse any durable input.
   const sourceEpoch = ensureSourceEpoch(cacheDir, sourceContract);
