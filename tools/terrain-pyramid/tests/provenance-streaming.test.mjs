@@ -29,6 +29,7 @@ import {
 } from "../source-provenance.mjs";
 import { BoundedGranuleCache } from "../build-support.mjs";
 import { iterateStreamFile } from "../dtt-reader.mjs";
+import { recoverPlannedCellAttempt } from "../run.mjs";
 
 const execFileAsync = promisify(execFile);
 const HERE = path.dirname(new URL(import.meta.url).pathname);
@@ -42,8 +43,8 @@ function temporary(t) {
   return dir;
 }
 
-function contract({ epoch = "2023-04-01T00:00:00.000Z", manifest = "source-manifest.ndjson" } = {}) {
-  return sourcePolicyContract({
+function sourcePolicyConfig({ epoch = "2023-04-01T00:00:00.000Z", manifest = "source-manifest.ndjson" } = {}) {
+  return {
     cache_max_bytes: 96 * 1024 ** 3,
     flow_config: { dataset_epoch: epoch },
     source_policy: {
@@ -69,7 +70,11 @@ function contract({ epoch = "2023-04-01T00:00:00.000Z", manifest = "source-manif
         completion_manifest: manifest,
       },
     },
-  });
+  };
+}
+
+function contract(options = {}) {
+  return sourcePolicyContract(sourcePolicyConfig(options));
 }
 
 function fetched(body, { status = 200, hit = false } = {}) {
@@ -82,6 +87,100 @@ function framed(records) {
     length.writeUInt32LE(record.length);
     return [length, record];
   }));
+}
+
+function sortStageEntries(root) {
+  return fs.readdirSync(root).filter((name) => name.includes("-sort-stage-"));
+}
+
+function sortLeasePath(outputFile, kind) {
+  return path.join(path.dirname(outputFile), `.${path.basename(outputFile)}.${kind}-sort-lease.json`);
+}
+
+function assertSortResidue(root, { stages, leases, candidates, candidateFiles = 0 }) {
+  const entries = fs.readdirSync(root).filter((name) => name.includes("-sort-stage-") || name.includes("-sort-lease"));
+  const stageEntries = entries.filter((name) => name.includes("-sort-stage-"));
+  const leaseEntries = entries.filter((name) => name.endsWith("-sort-lease.json"));
+  const candidateEntries = entries.filter((name) => name.endsWith("-sort-lease-candidates"));
+  assert.equal(stageEntries.length, stages, "exact tokenized stage residue count");
+  assert.equal(leaseEntries.length, leases, "exact fixed lease residue count");
+  assert.equal(candidateEntries.length, candidates, "exact candidate-directory residue count");
+  const files = candidateEntries.flatMap((candidate) => fs.readdirSync(path.join(root, candidate)));
+  assert.equal(files.length, candidateFiles, "exact bounded candidate-file residue count");
+  for (const file of files) assert.match(file, /^candidate-[0-9a-f-]{36}\.json$/i);
+}
+
+function prepareSortCase(root, kind) {
+  if (kind === "source") {
+    const log = path.join(root, "source-observations.ndjson");
+    const observation = {
+      source_key: `sha256:${sha256("https://example.test/dem/N45/E006")}`,
+      url: "https://example.test/dem/N45/E006",
+      status: 200,
+      content_length: 5,
+      content_digest: sha256("bytes"),
+      observed_at: "2026-09-01T00:00:00.000Z",
+    };
+    fs.writeFileSync(log, sourceObservationLine(observation, {
+      requestedAt: "2026-09-01T00:00:00.000Z", cacheHit: false,
+    }));
+    return { kind, root, output: path.join(root, "source-manifest.ndjson"), log, policy: contract() };
+  }
+  if (kind === "terrain") {
+    const input = path.join(root, "input.dttstream");
+    fs.writeFileSync(input, framed([Buffer.from("8/1/1|sort-stage-record")]));
+    return { kind, root, input, output: path.join(root, "merged.dttstream") };
+  }
+  const input = path.join(root, "input.lines");
+  fs.writeFileSync(input, "8/1/1\n");
+  return { kind, root, input, output: path.join(root, "ocean-skipped.lines") };
+}
+
+async function runSortCase(sortCase, options = {}) {
+  const common = { sortRunBytes: 1024, maxRunBytes: 1024, fanIn: 2, ...options };
+  if (sortCase.kind === "source") {
+    return emitCompletionSourceManifest({
+      outDir: sortCase.root, outputFile: sortCase.output, logFiles: [sortCase.log],
+      contract: sortCase.policy, configDigest: "a".repeat(64),
+      sortRunBytes: common.sortRunBytes, fanIn: common.fanIn,
+      sortFaultPhase: common.sortFaultPhase,
+      sortHoldMs: common.sortHoldMs,
+    });
+  }
+  if (sortCase.kind === "terrain") {
+    return mergeBoundedFramedStores({
+      inputFiles: [sortCase.input], outputFile: sortCase.output,
+      addressForRecord: (record) => record.toString("utf8").split("|", 1)[0],
+      maxRunBytes: common.maxRunBytes, fanIn: common.fanIn,
+      sortFaultPhase: common.sortFaultPhase,
+      sortHoldMs: common.sortHoldMs,
+    });
+  }
+  return mergeOceanSkips({
+    inputFiles: [sortCase.input], outputFile: sortCase.output,
+    maxRunBytes: common.maxRunBytes, fanIn: common.fanIn,
+    sortFaultPhase: common.sortFaultPhase,
+    sortHoldMs: common.sortHoldMs,
+  });
+}
+
+function writeSortCrashChild(root) {
+  const child = path.join(root, "sort-crash-child.mjs");
+  fs.writeFileSync(child, `
+    import path from "node:path";
+    import { emitCompletionSourceManifest, mergeBoundedFramedStores, mergeOceanSkips, sourcePolicyContract } from ${JSON.stringify(PROVENANCE_URL)};
+    const [kind, root, faultPhase, holdMs = "0"] = process.argv.slice(2);
+    const options = { sortFaultPhase: faultPhase, sortHoldMs: Number(holdMs), fanIn: 2 };
+    if (kind === "source") {
+      const config = ${JSON.stringify(sourcePolicyConfig())};
+      await emitCompletionSourceManifest({ outDir: root, outputFile: path.join(root, "source-manifest.ndjson"), logFiles: [path.join(root, "source-observations.ndjson")], contract: sourcePolicyContract(config), configDigest: "${"a".repeat(64)}", sortRunBytes: 1024, ...options });
+    } else if (kind === "terrain") {
+      await mergeBoundedFramedStores({ inputFiles: [path.join(root, "input.dttstream")], outputFile: path.join(root, "merged.dttstream"), addressForRecord: (record) => record.toString("utf8").split("|", 1)[0], maxRunBytes: 1024, ...options });
+    } else {
+      await mergeOceanSkips({ inputFiles: [path.join(root, "input.lines")], outputFile: path.join(root, "ocean-skipped.lines"), maxRunBytes: 1024, ...options });
+    }
+  `);
+  return child;
 }
 
 test("source epoch refuses torn receipts, legacy cache bytes, and changed policy resumes", (t) => {
@@ -449,8 +548,9 @@ test("cell journal recovers exactly after each durable artifact boundary", async
       outDir: resumed, cell: 7, operations: makeOperations(resumed), markJson: { cell: 7 }, faultPhase,
     }), faultPhase === "after-chain" ? /fault injection after artifact chain/ : new RegExp(`fault injection ${faultPhase}`));
     assert.equal(fs.existsSync(path.join(resumed, "cell-attempt.json")), true, `${faultPhase} retains a durable attempt`);
-    assert.equal(recoverCellAttempt({ outDir: resumed }), true, `${faultPhase} recovery completes the exact attempt`);
-    assert.equal(recoverCellAttempt({ outDir: resumed }), false, `${faultPhase} recovery is idempotent and cannot append twice`);
+    const recovery = { outDir: resumed, maxAppendBytes: cellAttemptAppendBound(1), expectedCell: 7 };
+    assert.equal(recoverCellAttempt(recovery), true, `${faultPhase} recovery completes the exact attempt`);
+    assert.equal(recoverCellAttempt(recovery), false, `${faultPhase} recovery is idempotent and cannot append twice`);
     assert.deepEqual(artifactSnapshot(resumed), expected, `${faultPhase} resume equals a clean cell and has no duplicate merge input`);
     assert.equal(fs.existsSync(path.join(resumed, "cell-attempt.json")), false);
   }
@@ -461,7 +561,7 @@ test("cell journal recovers exactly after each durable artifact boundary", async
     assert.throws(() => commitCellAttempt({
       outDir: resumed, cell: 7, operations: makeOperations(resumed), markJson: { cell: 7 }, faultPhase: `mid-${name}`,
     }), new RegExp(`fault injection mid-${name}`));
-    assert.equal(recoverCellAttempt({ outDir: resumed }), true, `mid-${name} recovery completes the exact staged suffix`);
+    assert.equal(recoverCellAttempt({ outDir: resumed, maxAppendBytes: cellAttemptAppendBound(1), expectedCell: 7 }), true, `mid-${name} recovery completes the exact staged suffix`);
     assert.deepEqual(artifactSnapshot(resumed), expected, `mid-${name} recovery neither loses nor duplicates a cell artifact`);
   }
 
@@ -486,7 +586,7 @@ test("cell journal recovers exactly after each durable artifact boundary", async
   await assert.rejects(execFileAsync(process.execPath, [child, midAppend]), /fault injection mid-tiles/);
   const partialBytes = fs.statSync(path.join(midAppend, "tiles.dttstream")).size;
   assert.ok(partialBytes > 0 && partialBytes < expected["tiles.dttstream"].length, "child left an actual partial tile append");
-  assert.equal(recoverCellAttempt({ outDir: midAppend }), true);
+  assert.equal(recoverCellAttempt({ outDir: midAppend, maxAppendBytes: cellAttemptAppendBound(1), expectedCell: 7 }), true);
   assert.deepEqual(artifactSnapshot(midAppend), expected, "child-crash recovery finishes the exact staged suffix once");
 
   // The chain receipt is written after every append but before the readable
@@ -508,8 +608,80 @@ test("cell journal recovers exactly after each durable artifact boundary", async
     ] });
   `);
   await assert.rejects(execFileAsync(process.execPath, [chainChild, afterChain]), /fault injection after artifact chain/);
-  assert.equal(recoverCellAttempt({ outDir: afterChain }), true);
+  assert.equal(recoverCellAttempt({ outDir: afterChain, maxAppendBytes: cellAttemptAppendBound(1), expectedCell: 7 }), true);
   assert.deepEqual(artifactSnapshot(afterChain), expected, "post-chain child crash preserves exact cell artifacts once");
+
+  // The most subtle terminal window is after the readable sidecar is durable,
+  // but before the journal/stage cleanup. The next real planner invocation
+  // correctly names cell 8, not the journal's completed cell 7. SIGKILL here
+  // proves terminal validation cleans only an exact sidecar+chain+artifact
+  // match rather than rejecting it as a wrong live cell or replaying it.
+  const afterResumeMark = path.join(root, "after-resume-mark-child-crash");
+  fs.mkdirSync(afterResumeMark);
+  const markChild = path.join(root, "after-resume-mark-child.mjs");
+  fs.writeFileSync(markChild, `
+    import path from "node:path";
+    import { commitCellAttempt } from ${JSON.stringify(PROVENANCE_URL)};
+    const out = process.argv[2];
+    commitCellAttempt({ outDir: out, cell: 7, markJson: { cell: 7 }, faultPhase: "crash-after-resume-mark", operations: [
+      { name: "tiles", target: path.join(out, "tiles.dttstream"), bytes: Buffer.from("tile-frame") },
+      { name: "index", target: path.join(out, "tiles.index.jsonl"), bytes: Buffer.from('{"level":8}\\n') },
+      { name: "ocean", target: path.join(out, "ocean-skipped.lines"), bytes: Buffer.from("8/1/2\\n") },
+      { name: "source-observations", target: path.join(out, "source-observations.ndjson"), bytes: Buffer.from("{\\"source\\":true}\\n") },
+      { name: "mark", target: path.join(out, "irm.records"), bytes: Buffer.from("mark-frame") },
+    ] });
+  `);
+  await assert.rejects(execFileAsync(process.execPath, [markChild, afterResumeMark]),
+    (error) => error.signal === "SIGKILL");
+  assert.equal(fs.existsSync(path.join(afterResumeMark, "resume-mark.json")), true);
+  assert.equal(fs.existsSync(path.join(afterResumeMark, "cell-attempt.json")), true);
+  assert.equal(recoverCellAttempt({
+    outDir: afterResumeMark,
+    // This is the live planner's next-cell cap/identity, deliberately unlike
+    // the completed journal. Terminal evidence, not journal self-assertion,
+    // authorizes its exact cleanup.
+    maxAppendBytes: cellAttemptAppendBound(1), expectedCell: 8,
+  }), true);
+  assert.equal(fs.existsSync(path.join(afterResumeMark, "cell-attempt.json")), false);
+  assert.deepEqual(artifactSnapshot(afterResumeMark), expected,
+    "terminal cleanup leaves exactly the completed cell before cell 8 starts");
+  assert.doesNotThrow(() => commitCellAttempt({
+    outDir: afterResumeMark, cell: 8, markJson: { cell: 8 }, maxAppendBytes: cellAttemptAppendBound(1),
+    operations: [
+      { name: "tiles", target: path.join(afterResumeMark, "tiles.dttstream"), bytes: Buffer.from("next-tile-frame") },
+      { name: "mark", target: path.join(afterResumeMark, "irm.records"), bytes: Buffer.from("next-mark-frame") },
+    ],
+  }), "the actual next planned cell can proceed after terminal cleanup");
+
+  // Drive the same planner/recovery handshake that run.mjs uses. The planner
+  // sees the durable pre-attempt sidecar (cell 7) and therefore returns its
+  // real next job (cell 8); it does not receive or trust journal authority.
+  const plannerAfterResumeMark = path.join(root, "after-resume-mark-planner-child-crash");
+  fs.mkdirSync(plannerAfterResumeMark);
+  await assert.rejects(execFileAsync(process.execPath, [markChild, plannerAfterResumeMark]),
+    (error) => error.signal === "SIGKILL");
+  let plannedWith;
+  const plannedRecovery = await recoverPlannedCellAttempt({
+    outDir: plannerAfterResumeMark,
+    planCell: async ({ markBytes }) => {
+      plannedWith = JSON.parse(markBytes.toString("utf8"));
+      return { job: { cell_index: 8, cell_tiles: 1 } };
+    },
+  });
+  assert.deepEqual(plannedWith, { cell: 7 }, "run planner receives the pre-attempt sidecar bytes");
+  assert.equal(plannedRecovery.recoveryPlan.job.cell_index, 8,
+    "run planner selected the next cell before terminal journal cleanup");
+  assert.equal(plannedRecovery.recovered, true);
+  assert.equal(fs.existsSync(path.join(plannerAfterResumeMark, "cell-attempt.json")), false,
+    "planner-integrated terminal recovery removes the completed prior attempt exactly once");
+  assert.doesNotThrow(() => commitCellAttempt({
+    outDir: plannerAfterResumeMark, cell: plannedRecovery.recoveryPlan.job.cell_index,
+    markJson: { cell: 8 }, maxAppendBytes: cellAttemptAppendBound(plannedRecovery.recoveryPlan.job.cell_tiles),
+    operations: [
+      { name: "tiles", target: path.join(plannerAfterResumeMark, "tiles.dttstream"), bytes: Buffer.from("planner-next-tile") },
+      { name: "mark", target: path.join(plannerAfterResumeMark, "irm.records"), bytes: Buffer.from("planner-next-mark") },
+    ],
+  }), "actual planner-selected next cell proceeds after its terminal predecessor cleanup");
 });
 
 test("planner-derived cell append bounds preserve Liguria-scale cells and reject a smaller live recovery bound", (t) => {
@@ -535,7 +707,7 @@ test("planner-derived cell append bounds preserve Liguria-scale cells and reject
       { name: "mark", target: path.join(out, "irm.records"), bytes: Buffer.from("mark-frame") },
     ],
   }), /fault injection after-tiles/);
-  assert.throws(() => recoverCellAttempt({ outDir: out, maxAppendBytes: cellAttemptAppendBound(2) }),
+  assert.throws(() => recoverCellAttempt({ outDir: out, maxAppendBytes: cellAttemptAppendBound(2), expectedCell: 7 }),
     /live staged append bound/);
   assert.throws(() => recoverCellAttempt({ outDir: out, maxAppendBytes, expectedCell: 8 }),
     /does not match the current live planner cell/);
@@ -645,6 +817,161 @@ test("external multi-chunk manifest merge deduplicates deterministically across 
     outDir: root, logFiles: logs, contract: policy, configDigest: "f".repeat(64), sortRunBytes: 1, fanIn: 2,
   });
   assert.deepEqual(repeat, receipt, "an immutable manifest may be read back but never rewritten with new bytes");
+});
+
+test("owned external-sort stages recover exact creator/recovery crash windows without leaking or racing", async (t) => {
+  const root = temporary(t);
+  const child = writeSortCrashChild(root);
+  const kinds = [
+    ["source", "source-manifest"],
+    ["terrain", "terrain-merge"],
+    ["ocean", "ocean-skip"],
+  ];
+  const creatorKills = [
+    "crash-after-sort-stage-mkdir",
+    "crash-mid-sort-stage-owner",
+    "crash-after-sort-stage-owner",
+  ];
+
+  for (const [kind] of kinds) {
+    const caseRoot = path.join(root, `${kind}-creator-kills`);
+    fs.mkdirSync(caseRoot);
+    const sortCase = prepareSortCase(caseRoot, kind);
+    if (kind === "source") await runSortCase(sortCase);
+    else fs.writeFileSync(sortCase.output, `prior-${kind}-output`);
+    for (const phase of creatorKills) {
+      const prior = fs.readFileSync(sortCase.output);
+      await assert.rejects(execFileAsync(process.execPath, [child, kind, caseRoot, phase]),
+        (error) => error.signal === "SIGKILL");
+      assert.equal(sortStageEntries(caseRoot).length, 1,
+        `${kind} has exactly one tokenized owned stage after ${phase}`);
+      assertSortResidue(caseRoot, { stages: 1, leases: 1, candidates: 1 });
+      assert.deepEqual(fs.readFileSync(sortCase.output), prior,
+        `${kind} preserves the pre-existing output until the staged result is installed`);
+      await runSortCase(sortCase);
+      assert.deepEqual(sortStageEntries(caseRoot), [], `${kind} reclaims its dead creator stage exactly once`);
+      assertSortResidue(caseRoot, { stages: 0, leases: 0, candidates: 0 });
+      assert.ok(fs.statSync(sortCase.output).isFile());
+    }
+  }
+
+  // A kill before the atomic candidate->fixed-lease link leaves no stage at
+  // all. The next acquisition reaps only that tiny exact candidate; repeated
+  // failures cannot accumulate sort-sized scratch outputs for any sort kind.
+  for (const [kind] of kinds) {
+    const caseRoot = path.join(root, `${kind}-prelink-kill`);
+    fs.mkdirSync(caseRoot);
+    const sortCase = prepareSortCase(caseRoot, kind);
+    if (kind !== "source") fs.writeFileSync(sortCase.output, `prior-${kind}-output`);
+    const prior = fs.existsSync(sortCase.output) ? fs.readFileSync(sortCase.output) : null;
+    await assert.rejects(execFileAsync(process.execPath, [child, kind, caseRoot, "crash-after-sort-lease-candidate"]),
+      (error) => error.signal === "SIGKILL");
+    assert.deepEqual(sortStageEntries(caseRoot), [], `${kind} pre-link kill cannot create a stage`);
+    assertSortResidue(caseRoot, { stages: 0, leases: 0, candidates: 1, candidateFiles: 1 });
+    if (prior) assert.deepEqual(fs.readFileSync(sortCase.output), prior);
+    await runSortCase(sortCase);
+    assertSortResidue(caseRoot, { stages: 0, leases: 0, candidates: 0 });
+  }
+
+  // The fixed lease itself is also recoverable when a process dies after the
+  // atomic hard-link but before mkdir. It names no stage, so recovery unlinks
+  // only that exact dead lease and retains the prior output.
+  for (const [kind] of kinds) {
+    const caseRoot = path.join(root, `${kind}-postlink-kill`);
+    fs.mkdirSync(caseRoot);
+    const sortCase = prepareSortCase(caseRoot, kind);
+    if (kind !== "source") fs.writeFileSync(sortCase.output, `prior-${kind}-output`);
+    const prior = fs.existsSync(sortCase.output) ? fs.readFileSync(sortCase.output) : null;
+    await assert.rejects(execFileAsync(process.execPath, [child, kind, caseRoot, "crash-after-sort-lease-link"]),
+      (error) => error.signal === "SIGKILL");
+    assertSortResidue(caseRoot, { stages: 0, leases: 1, candidates: 1 });
+    if (prior) assert.deepEqual(fs.readFileSync(sortCase.output), prior);
+    await runSortCase(sortCase);
+    assertSortResidue(caseRoot, { stages: 0, leases: 0, candidates: 0 });
+  }
+
+  // A recovery can itself die before, or while, removing a known-dead stage.
+  // Repeated restart must accept only the fixed stage and converge to none.
+  for (const phase of ["crash-before-sort-stage-recovery-delete", "crash-mid-sort-stage-recovery-delete"]) {
+    const caseRoot = path.join(root, phase);
+    fs.mkdirSync(caseRoot);
+    const sortCase = prepareSortCase(caseRoot, "terrain");
+    await assert.rejects(execFileAsync(process.execPath, [child, "terrain", caseRoot, "crash-after-sort-stage-owner"]),
+      (error) => error.signal === "SIGKILL");
+    await assert.rejects(execFileAsync(process.execPath, [child, "terrain", caseRoot, phase]),
+      (error) => error.signal === "SIGKILL");
+    assert.equal(sortStageEntries(caseRoot).length, 1, `${phase} leaves at most the exact fixed stage`);
+    assertSortResidue(caseRoot, { stages: 1, leases: 1, candidates: 1 });
+    await runSortCase(sortCase);
+    assert.deepEqual(sortStageEntries(caseRoot), [], `${phase} restart removes the partial recovery stage`);
+    assertSortResidue(caseRoot, { stages: 0, leases: 0, candidates: 0 });
+  }
+
+  // After the durable output rename, a kill may leave the owned stage behind.
+  // Recovery is allowed to remove that stage only; the installed bytes remain.
+  const installedRoot = path.join(root, "installed-output");
+  fs.mkdirSync(installedRoot);
+  const installed = prepareSortCase(installedRoot, "terrain");
+  await assert.rejects(execFileAsync(process.execPath, [child, "terrain", installedRoot, "crash-after-sort-output-rename"]),
+    (error) => error.signal === "SIGKILL");
+  const installedBytes = fs.readFileSync(installed.output);
+  assert.equal(sortStageEntries(installedRoot).length, 1);
+  assertSortResidue(installedRoot, { stages: 1, leases: 1, candidates: 1 });
+  await runSortCase(installed);
+  assert.deepEqual(fs.readFileSync(installed.output), installedBytes,
+    "restart keeps the atomically installed terrain bytes after stage cleanup");
+  assert.deepEqual(sortStageEntries(installedRoot), []);
+  assertSortResidue(installedRoot, { stages: 0, leases: 0, candidates: 0 });
+
+  // A simultaneous owner is never treated as stale merely because the caller
+  // wants the same fixed stage. The child deliberately holds its lease.
+  const concurrentRoot = path.join(root, "concurrent");
+  fs.mkdirSync(concurrentRoot);
+  const concurrent = prepareSortCase(concurrentRoot, "terrain");
+  const live = execFileAsync(process.execPath, [child, "terrain", concurrentRoot, "hold-after-sort-stage-mkdir", "1200"]);
+  for (let attempt = 0; attempt < 120 && sortStageEntries(concurrentRoot).length === 0; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.equal(sortStageEntries(concurrentRoot).length, 1, "live writer acquired its tokenized stage");
+  assertSortResidue(concurrentRoot, { stages: 1, leases: 1, candidates: 1 });
+  try {
+    await assert.rejects(runSortCase(concurrent), /live process/);
+  } finally {
+    await live;
+  }
+  assert.deepEqual(sortStageEntries(concurrentRoot), [], "live owner cleans its own stage");
+  assertSortResidue(concurrentRoot, { stages: 0, leases: 0, candidates: 0 });
+
+  // Never convert a malicious owner entry or copied owner token into cleanup
+  // authority. In particular, no path under the stage may redirect an unlink.
+  const sentinel = path.join(root, "external-sentinel");
+  fs.writeFileSync(sentinel, "must survive sort-stage rejection");
+  const adversarialRoot = path.join(root, "adversarial");
+  fs.mkdirSync(adversarialRoot);
+  const adversarial = prepareSortCase(adversarialRoot, "terrain");
+  const adversarialLease = sortLeasePath(adversarial.output, "terrain-merge");
+  fs.symlinkSync(sentinel, adversarialLease);
+  await assert.rejects(runSortCase(adversarial), /symlink|symbolic/i);
+  assert.equal(fs.readFileSync(sentinel, "utf8"), "must survive sort-stage rejection");
+  assert.equal(fs.existsSync(adversarialLease), true);
+  fs.unlinkSync(adversarialLease);
+  const token = "00000000-0000-4000-8000-000000000000";
+  const adversarialStage = path.join(adversarialRoot,
+    `.${path.basename(adversarial.output)}.terrain-merge-sort-stage-${token}`);
+  fs.mkdirSync(adversarialStage);
+  const stat = fs.lstatSync(adversarialStage, { bigint: true });
+  fs.writeFileSync(path.join(adversarialStage, "owner.json"), JSON.stringify({
+    version: 1, kind: "terrain-merge", output: path.basename(adversarial.output), pid: process.pid,
+    identity: null, stageDev: String(stat.dev), stageIno: "0",
+    token,
+  }));
+  fs.writeFileSync(adversarialLease, JSON.stringify({
+    version: 1, kind: "terrain-merge", output: path.basename(adversarial.output), pid: 999999,
+    identity: null, token,
+  }));
+  await assert.rejects(runSortCase(adversarial), /foreign or replaced ownership/);
+  assert.equal(fs.existsSync(adversarialStage), true, "copied/replaced owner cannot authorize stage deletion");
+  assert.equal(fs.readFileSync(sentinel, "utf8"), "must survive sort-stage rejection");
 });
 
 test("byte-capped JSONL reader rejects an unterminated oversized line under a constrained heap", async (t) => {
@@ -1095,6 +1422,36 @@ test("bounded terrain merge rejects different records at one shard address", asy
     }),
     /shards disagree on duplicate address 8\/1\/1/,
   );
+});
+
+test("external terrain and ocean sorts retain only bounded fan-in state across many runs", async (t) => {
+  const root = temporary(t);
+  const terrainInput = path.join(root, "many-terrain.dttstream");
+  const terrainOutput = path.join(root, "many-terrain-merged.dttstream");
+  const terrainRecords = Array.from({ length: 192 }, (_, index) =>
+    Buffer.from(`8/${index}/1|${String(index).padStart(3, "0")}-${"x".repeat(300)}`));
+  fs.writeFileSync(terrainInput, framed(terrainRecords));
+  const terrain = await mergeBoundedFramedStores({
+    inputFiles: [terrainInput], outputFile: terrainOutput,
+    addressForRecord: (record) => record.toString("utf8").split("|", 1)[0],
+    maxRunBytes: 1024, fanIn: 2,
+  });
+  assert.equal(terrain.records, terrainRecords.length);
+  let terrainCount = 0;
+  for await (const unused of iterateStreamFile(terrainOutput, { highWaterMark: 97 })) {
+    void unused;
+    terrainCount += 1;
+  }
+  assert.equal(terrainCount, terrainRecords.length);
+
+  const oceanInput = path.join(root, "many-ocean.lines");
+  const oceanOutput = path.join(root, "many-ocean-merged.lines");
+  fs.writeFileSync(oceanInput, Array.from({ length: 192 }, (_, index) => `10/${index}/0`).join("\n") + "\n");
+  const ocean = await mergeOceanSkips({
+    inputFiles: [oceanInput], outputFile: oceanOutput, maxRunBytes: 1, fanIn: 2,
+  });
+  assert.equal(ocean.count, 192);
+  assert.equal(fs.readFileSync(oceanOutput, "utf8").trim().split("\n").length, 192);
 });
 
 test("ocean-skip merge streams legacy JSON and JSONL into a compact receipt", async (t) => {

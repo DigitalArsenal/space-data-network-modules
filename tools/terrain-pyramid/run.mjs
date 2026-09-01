@@ -122,6 +122,32 @@ function readPriorResumeMark(outDir) {
   }
 }
 
+// Kept separate from the WASM runner setup so the exact planner/recovery
+// handshake is testable without loading a runtime. `planCell` is the same
+// closure main uses below: it receives the PRE-attempt sidecar bytes and
+// returns current approved-plan data, never journal-derived authority.
+export async function recoverPlannedCellAttempt({ outDir, sourceObservationLog, planCell }) {
+  assert.equal(typeof planCell, "function", "a live cell planner is required for journal recovery");
+  const cellAttemptJournal = path.join(outDir, "cell-attempt.json");
+  let hasCellAttempt = false;
+  try { hasCellAttempt = Boolean(fs.lstatSync(cellAttemptJournal)); } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  const recoveryPlan = hasCellAttempt ? await planCell({ markBytes: readPriorResumeMark(outDir) }) : null;
+  assert.ok(!hasCellAttempt || recoveryPlan,
+    "interrupted cell attempt exists but the live planner is already drained");
+  const recovered = recoverCellAttempt({
+    outDir,
+    markPath: path.join(outDir, "resume-mark.json"),
+    artifactPaths: sourceObservationLog ? { "source-observations": sourceObservationLog } : undefined,
+    ...(recoveryPlan ? {
+      maxAppendBytes: cellAttemptAppendBound(recoveryPlan.job.cell_tiles),
+      expectedCell: recoveryPlan.job.cell_index,
+    } : {}),
+  });
+  return { recovered, recoveryPlan };
+}
+
 // ── argv ────────────────────────────────────────────────────────────────────
 function parseArgs(argv) {
   const args = { maxCells: Infinity, docker: false, wasmedgeVerify: true };
@@ -1112,25 +1138,13 @@ async function main() {
   // current approved-run data; do not recover with a size recorded by the
   // journal itself. This makes the staged-byte ceiling both resumable and
   // resistant to forged oversized journal fields.
-  const cellAttemptJournal = path.join(outDir, "cell-attempt.json");
-  let hasCellAttempt = false;
-  try { hasCellAttempt = Boolean(fs.lstatSync(cellAttemptJournal)); } catch (error) {
-    if (error.code !== "ENOENT") throw error;
-  }
-  const recoveryPlan = hasCellAttempt ? await planCell({ markBytes: readPriorResumeMark(outDir) }) : null;
-  assert.ok(!hasCellAttempt || recoveryPlan,
-    "interrupted cell attempt exists but the live planner is already drained");
   // Recovery derives every artifact location and its exact payload bound from
   // the current approved run, not from path strings or byte limits persisted
   // in the interrupted cell journal.
-  recoverCellAttempt({
+  await recoverPlannedCellAttempt({
     outDir,
-    markPath: path.join(outDir, "resume-mark.json"),
-    artifactPaths: sourceObservationLog ? { "source-observations": sourceObservationLog } : undefined,
-    ...(recoveryPlan ? {
-      maxAppendBytes: cellAttemptAppendBound(recoveryPlan.job.cell_tiles),
-      expectedCell: recoveryPlan.job.cell_index,
-    } : {}),
+    sourceObservationLog,
+    planCell,
   });
   store.bytes = fs.statSync(store.recordsPath).size;
 
@@ -1379,4 +1393,4 @@ async function main() {
   console.log(JSON.stringify(summary, null, 2));
 }
 
-await main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();

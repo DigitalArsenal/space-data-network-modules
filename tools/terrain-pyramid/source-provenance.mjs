@@ -28,6 +28,18 @@ const SOURCE_SORT_RUN_BYTES = 4 * 1024 * 1024;
 const SOURCE_SORT_FAN_IN = 32;
 const MAX_MERGE_RECORD_LINE_BYTES = 2 * 1024 * 1024;
 const TERRAIN_SORT_RUN_BYTES = 16 * 1024 * 1024;
+// External sorts write their run names to disk, retaining only one fan-in
+// group.  These caps still bound stage metadata, cleanup work, and temporary
+// disk: 24,576 source runs at 4 MiB cover the reviewed 96 GiB source-cache
+// ceiling; 1,024 terrain runs at 16 MiB cover the 16 GiB verified-store
+// ceiling; 256 ocean runs at 4 MiB are far above a full z<=10 address set.
+const MAX_SOURCE_SORT_RUNS = 24 * 1024;
+const MAX_TERRAIN_SORT_RUNS = 1024;
+const MAX_OCEAN_SORT_RUNS = 256;
+const MAX_SORT_INPUT_FILES = 256;
+const MAX_SORT_FAN_IN = 64;
+const MAX_SORT_OWNER_BYTES = 1024;
+const MAX_SORT_LEASE_CANDIDATES = 8;
 const MAX_SOURCE_EPOCH_BYTES = 4 * 1024;
 const MAX_SOURCE_RECEIPT_BYTES = 16 * 1024;
 const MAX_SOURCE_URL_BYTES = 4 * 1024;
@@ -440,11 +452,39 @@ function removeCellStage(outDir, stageDir, operations) {
   fsyncDirectory(outDir);
 }
 
+function cellAttemptHasDurableTerminalMark(outDir, journal, targets, validated, markPath) {
+  let durableMark;
+  try {
+    durableMark = readNamedSmallJson(outDir, markPath, 512 * 1024, "cell attempt resume mark");
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  }
+  if (canonicalJson(durableMark) !== canonicalJson(journal.markJson)) return false;
+  // The sidecar alone is not authority to discard a journal. Its equality is
+  // accepted only after every exact artifact chain is present at its terminal
+  // length/digest and every staged suffix is still the bytes on disk.
+  const chain = loadArtifactChains(outDir, targets, validated.targets, {
+    initializeMissing: false,
+    validateLengths: true,
+  });
+  for (const operation of journal.operations) {
+    const persisted = chain.chains[targets[operation.name]];
+    assert.ok(persisted, `terminal cell attempt has no durable ${operation.name} chain`);
+    assert.equal(persisted.length, operation.afterLength,
+      `terminal cell attempt ${operation.name} chain length is incomplete`);
+    assert.equal(persisted.digest, operation.afterDigest,
+      `terminal cell attempt ${operation.name} chain digest is incomplete`);
+    replayCellOperation(outDir, operation, targets[operation.name], validated.stageDir);
+  }
+  return true;
+}
+
 export function recoverCellAttempt({
   outDir,
   markPath = path.join(outDir, "resume-mark.json"),
   artifactPaths = undefined,
-  maxAppendBytes = MAX_CELL_ATTEMPT_APPEND_BYTES,
+  maxAppendBytes = undefined,
   expectedCell = undefined,
 }) {
   outDir = path.resolve(outDir);
@@ -453,13 +493,27 @@ export function recoverCellAttempt({
   if (!journalStat) return false;
   const journal = readSmallJson(journalPath, 512 * 1024, "cell attempt journal");
   const targets = cellArtifactPaths(outDir, artifactPaths);
+  // First validate against the reviewed global ceiling. A journal whose exact
+  // sidecar/chain/artifacts are already terminal may be cleaned even though
+  // the live planner now quite properly names the NEXT cell. It never replays
+  // bytes or accepts journal-provided limits in that terminal cleanup path.
   const validated = validateCellJournal(journal, outDir, targets, markPath,
-    assertCellAttemptAppendBound(maxAppendBytes));
-  if (expectedCell !== undefined) {
-    assert.ok(Number.isSafeInteger(expectedCell) && expectedCell >= 0,
-      "current live planner cell is invalid");
-    assert.equal(journal.cell, expectedCell,
-      "cell attempt does not match the current live planner cell");
+    MAX_CELL_ATTEMPT_APPEND_BYTES);
+  if (cellAttemptHasDurableTerminalMark(outDir, journal, targets, validated, markPath)) {
+    removeCellStage(outDir, validated.stageDir, journal.operations);
+    assertNoSymlinkTraversal(outDir, journalPath, "cell attempt journal", { final: "regular" });
+    fs.unlinkSync(journalPath);
+    fsyncDirectory(outDir);
+    return true;
+  }
+  maxAppendBytes = assertCellAttemptAppendBound(maxAppendBytes);
+  assert.ok(Number.isSafeInteger(expectedCell) && expectedCell >= 0,
+    "current live planner cell is required for a non-terminal attempt recovery");
+  assert.equal(journal.cell, expectedCell,
+    "cell attempt does not match the current live planner cell");
+  for (const operation of journal.operations) {
+    assert.ok(operation.appendLength <= maxAppendBytes,
+      `cell attempt ${operation.name} exceeds its ${maxAppendBytes}-byte live staged append bound`);
   }
   const chain = loadArtifactChains(outDir, targets, validated.targets, {
     // A crash may have appended a journaled suffix before the separate chain
@@ -571,6 +625,10 @@ export function commitCellAttempt({
   writeJsonAtomic(chain.file, chain.chains);
   if (faultPhase === "after-chain") throw new Error(`fault injection after artifact chain for cell ${cell}`);
   writeJsonAtomic(markPath, markJson);
+  if (faultPhase === "after-resume-mark") {
+    throw new Error(`fault injection after durable resume mark for cell ${cell}`);
+  }
+  if (faultPhase === "crash-after-resume-mark") process.kill(process.pid, "SIGKILL");
   removeCellStage(outDir, stageDir, journalOperations);
   assertNoSymlinkTraversal(outDir, journalPath, "cell attempt journal", { final: "regular" });
   fs.unlinkSync(journalPath);
@@ -1152,6 +1210,504 @@ async function* jsonl(file, { contract = null, requestLog = false } = {}) {
   }
 }
 
+function assertSortInputs(files, label) {
+  assert.ok(Array.isArray(files), `${label} must be an array`);
+  assert.ok(files.length <= MAX_SORT_INPUT_FILES,
+    `${label} exceeds the ${MAX_SORT_INPUT_FILES}-input global sort policy`);
+}
+
+function assertSortParameters(maxRunBytes, fanIn, maxRunBytesCap, label) {
+  assert.ok(Number.isSafeInteger(maxRunBytes) && maxRunBytes > 0 && maxRunBytes <= maxRunBytesCap,
+    `${label} run bytes must be in [1, ${maxRunBytesCap}]`);
+  assert.ok(Number.isSafeInteger(fanIn) && fanIn > 1 && fanIn <= MAX_SORT_FAN_IN,
+    `${label} fan-in must be in [2, ${MAX_SORT_FAN_IN}]`);
+}
+
+function sortProcessIdentity(pid) {
+  try {
+    const boot = fs.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+    const fields = stat.slice(stat.lastIndexOf(")") + 2).trim().split(/\s+/);
+    return fields[19] ? `${boot}:${fields[19]}` : null;
+  } catch {
+    return null;
+  }
+}
+
+function sortOwnerIsLive(owner) {
+  try {
+    process.kill(owner.pid, 0);
+  } catch (error) {
+    // Only ESRCH proves the recorded process is gone. EPERM and every
+    // unexpected platform error are live/unknown and must fail closed.
+    return error.code !== "ESRCH";
+  }
+  const current = sortProcessIdentity(owner.pid);
+  // A reused Linux PID is not a live owner. On a platform without a process
+  // start token, retain the stage rather than risking a concurrent writer.
+  return !(owner.identity && current && owner.identity !== current);
+}
+
+function sortStageAllowedName(name, extension) {
+  return name === "owner.json" || name === "output.tmp" ||
+    new RegExp(`^(?:run|merge)-\\d{8}\\.${extension}$`).test(name) ||
+    /^list-\d{8}\.txt$/.test(name);
+}
+
+function assertSortStageEntry(parent, stage, name, extension) {
+  assert.ok(sortStageAllowedName(name, extension), `sort stage has an unexpected entry: ${name}`);
+  const file = path.join(stage, name);
+  assertNoSymlinkTraversal(parent, file, "sort stage entry", { final: "regular" });
+  return file;
+}
+
+function inspectSortStage(parent, stage, extension, maxRuns) {
+  assertNoSymlinkTraversal(parent, stage, "sort stage", { final: "directory" });
+  const handle = fs.opendirSync(stage);
+  let count = 0;
+  try {
+    for (let entry = handle.readSync(); entry; entry = handle.readSync()) {
+      count += 1;
+      assert.ok(count <= maxRuns + 4, "sort stage has too many owned entries");
+      assertSortStageEntry(parent, stage, entry.name, extension);
+    }
+  } finally {
+    handle.closeSync();
+  }
+}
+
+function assertSortStageIdentity(parent, stage, expected) {
+  assertNoSymlinkTraversal(parent, stage, "sort stage", { final: "directory" });
+  const current = fs.lstatSync(stage, { bigint: true });
+  assert.equal(current.dev, expected.dev, "sort stage directory changed during recovery");
+  assert.equal(current.ino, expected.ino, "sort stage directory changed during recovery");
+}
+
+function sameNamedFileStat(before, after, label, file) {
+  assertStableFileStat(before, after, label, file);
+}
+
+function readNamedSmallJson(parent, file, maxBytes, label) {
+  assertNoSymlinkTraversal(parent, file, label, { final: "regular" });
+  const named = fs.lstatSync(file, { bigint: true });
+  const handle = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try {
+    const before = fs.fstatSync(handle, { bigint: true });
+    assert.ok(before.isFile(), `${label} is not a regular file: ${file}`);
+    sameNamedFileStat(named, before, label, file);
+    assert.ok(before.size <= BigInt(maxBytes), `${label} exceeds ${maxBytes} byte bound: ${file}`);
+    const bytes = fs.readFileSync(handle, "utf8");
+    sameNamedFileStat(before, fs.fstatSync(handle, { bigint: true }), label, file);
+    const after = fs.lstatSync(file, { bigint: true });
+    sameNamedFileStat(before, after, `${label} pathname`, file);
+    return JSON.parse(bytes);
+  } finally {
+    fs.closeSync(handle);
+  }
+}
+
+function inspectSortStageOwner(parent, stage, { kind, extension, output }) {
+  assertNoSymlinkTraversal(parent, stage, "sort stage", { final: "directory" });
+  const stageStat = fs.lstatSync(stage, { bigint: true });
+  assert.ok(stageStat.isDirectory() && !stageStat.isSymbolicLink(), "sort stage is not a real directory");
+  const ownerFile = path.join(stage, "owner.json");
+  let owner;
+  try {
+    owner = readNamedSmallJson(parent, ownerFile, MAX_SORT_OWNER_BYTES, "sort stage owner");
+  } catch (error) {
+    // A creator can be killed before owner.json exists or after a torn
+    // prefix reaches disk. A dead fixed lease is the sole authority for
+    // reclaiming those two shapes. Every other malformed/unsafe owner is foreign:
+    // treating an O_NOFOLLOW, size, or identity failure as ownerless could
+    // let recovery delete an adversarial stage.
+    if (error.code === "ENOENT" || error instanceof SyntaxError) {
+      return { status: "ownerless", stageStat };
+    }
+    throw error;
+  }
+  const fields = ["identity", "kind", "output", "pid", "stageDev", "stageIno", "token", "version"];
+  if (JSON.stringify(Object.keys(owner ?? {}).sort()) !== JSON.stringify(fields)) return { status: "ownerless", stageStat };
+  if (owner.version !== 1 || owner.kind !== kind || owner.output !== output ||
+    !Number.isSafeInteger(owner.pid) || owner.pid <= 0 ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(owner.token ?? "") ||
+    !(owner.identity === null || (typeof owner.identity === "string" && owner.identity.length <= 256)) ||
+    !/^\d+$/.test(owner.stageDev ?? "") || !/^\d+$/.test(owner.stageIno ?? "")) {
+    return { status: "foreign", stageStat };
+  }
+  if (owner.stageDev !== String(stageStat.dev) || owner.stageIno !== String(stageStat.ino)) {
+    return { status: "replaced", stageStat };
+  }
+  return { status: "owned", stageStat, owner };
+}
+
+function sortLeasePath(parent, basename, kind) {
+  const lease = path.join(parent, `.${basename}.${kind}-sort-lease.json`);
+  assert.equal(path.dirname(lease), parent, "sort lease escapes its output parent");
+  return lease;
+}
+
+function sortLeaseCandidateDirectory(parent, basename, kind) {
+  const directory = path.join(parent, `.${basename}.${kind}-sort-lease-candidates`);
+  assert.equal(path.dirname(directory), parent, "sort lease candidate directory escapes its output parent");
+  return directory;
+}
+
+function sortStagePath(parent, basename, kind, token) {
+  assert.match(token, /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    "sort lease token is not a UUID");
+  const stage = path.join(parent, `.${basename}.${kind}-sort-stage-${token}`);
+  assert.equal(path.dirname(stage), parent, "sort lease stage escapes its output parent");
+  return stage;
+}
+
+function assertSortLeaseOwner(owner, { kind, output }) {
+  const fields = ["identity", "kind", "output", "pid", "token", "version"];
+  assert.deepEqual(Object.keys(owner ?? {}).sort(), fields, "sort lease has an unexpected schema");
+  assert.equal(owner.version, 1, "sort lease has an unsupported version");
+  assert.equal(owner.kind, kind, "sort lease kind does not match this coordinator operation");
+  assert.equal(owner.output, output, "sort lease output does not match this coordinator operation");
+  assert.ok(Number.isSafeInteger(owner.pid) && owner.pid > 0, "sort lease has an invalid pid");
+  assert.ok(owner.identity === null || (typeof owner.identity === "string" && owner.identity.length <= 256),
+    "sort lease has an invalid process identity");
+  assert.match(owner.token ?? "", /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    "sort lease has an invalid token");
+}
+
+function sameSortLease(left, right) {
+  return left.version === right.version && left.kind === right.kind && left.output === right.output &&
+    left.pid === right.pid && left.identity === right.identity && left.token === right.token;
+}
+
+function readSortLease(parent, lease, expected) {
+  const owner = readNamedSmallJson(parent, lease, MAX_SORT_OWNER_BYTES, "sort stage lease");
+  assertSortLeaseOwner(owner, expected);
+  return owner;
+}
+
+function ensureSortLeaseCandidateDirectory(parent, basename, kind) {
+  const directory = sortLeaseCandidateDirectory(parent, basename, kind);
+  const existing = assertNoSymlinkTraversal(parent, directory, "sort lease candidate directory", { final: "directory" });
+  if (!existing) {
+    fs.mkdirSync(directory, 0o700);
+    fsyncDirectory(parent);
+    fsyncDirectory(directory);
+  }
+  return directory;
+}
+
+function candidateNameForToken(token) {
+  return `candidate-${token}.json`;
+}
+
+function candidateTokenFromName(name) {
+  const match = /^candidate-([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.json$/i.exec(name);
+  return match?.[1] ?? null;
+}
+
+function removeSortLeaseCandidate(candidateDir, candidate, expected) {
+  const file = path.join(candidateDir, candidate);
+  assert.equal(path.dirname(file), candidateDir, "sort lease candidate escapes its owned directory");
+  const owner = readNamedSmallJson(candidateDir, file, MAX_SORT_OWNER_BYTES, "sort lease candidate");
+  assert.ok(sameSortLease(owner, expected), "sort lease candidate changed before cleanup");
+  const before = fs.lstatSync(file, { bigint: true });
+  const after = fs.lstatSync(file, { bigint: true });
+  sameNamedFileStat(before, after, "sort lease candidate", file);
+  fs.unlinkSync(file);
+  fsyncDirectory(candidateDir);
+}
+
+function reapSortLeaseCandidates(parent, basename, kind, expected) {
+  const candidateDir = ensureSortLeaseCandidateDirectory(parent, basename, kind);
+  const handle = fs.opendirSync(candidateDir);
+  const candidates = [];
+  try {
+    for (let entry = handle.readSync(); entry; entry = handle.readSync()) {
+      assert.ok(candidates.length < MAX_SORT_LEASE_CANDIDATES,
+        `sort lease candidate directory exceeds its ${MAX_SORT_LEASE_CANDIDATES}-file policy`);
+      const token = candidateTokenFromName(entry.name);
+      assert.ok(token, `sort lease candidate directory has an unexpected entry: ${entry.name}`);
+      candidates.push({ name: entry.name, token });
+    }
+  } finally {
+    handle.closeSync();
+  }
+  // A candidate has not linked the fixed lease and therefore cannot name a
+  // live stage. Reaping it may force a paused pre-link creator to retry, but
+  // cannot reclaim or delete a live writer's staging directory.
+  for (const candidate of candidates) {
+    const file = path.join(candidateDir, candidate.name);
+    const owner = readNamedSmallJson(candidateDir, file, MAX_SORT_OWNER_BYTES, "sort lease candidate");
+    assertSortLeaseOwner(owner, expected);
+    assert.equal(owner.token, candidate.token, "sort lease candidate token does not match its exact filename");
+    removeSortLeaseCandidate(candidateDir, candidate.name, owner);
+  }
+  return candidateDir;
+}
+
+function removeEmptySortLeaseCandidateDirectory(parent, basename, kind) {
+  const directory = sortLeaseCandidateDirectory(parent, basename, kind);
+  const stat = assertNoSymlinkTraversal(parent, directory, "sort lease candidate directory", { final: "directory" });
+  if (!stat) return;
+  const handle = fs.opendirSync(directory);
+  let first;
+  try { first = handle.readSync(); } finally { handle.closeSync(); }
+  // A simultaneous pre-link creator may own no fixed lease yet. It can safely
+  // retry if this empty directory disappears, but we never remove one that
+  // contains even a single candidate file.
+  if (!first) {
+    try { fs.rmdirSync(directory); } catch (error) {
+      if (error.code !== "ENOTEMPTY") throw error;
+      return;
+    }
+    fsyncDirectory(parent);
+  }
+}
+
+function recoverDeadSortLease(parent, lease, owner, { basename, kind, extension, maxRuns, output, faultPhase }) {
+  const confirmed = readSortLease(parent, lease, { kind, output: basename });
+  assert.ok(sameSortLease(confirmed, owner), "sort lease changed during dead-owner recovery");
+  assert.equal(sortOwnerIsLive(confirmed), false, "sort lease became live during recovery");
+  const stage = sortStagePath(parent, basename, kind, confirmed.token);
+  const stageStat = assertNoSymlinkTraversal(parent, stage, "sort stage", { final: "directory" });
+  if (stageStat) {
+    const inspected = inspectSortStageOwner(parent, stage, { kind, extension, output: basename });
+    if (inspected.status === "foreign" || inspected.status === "replaced") {
+      throw new Error(`sort stage has foreign or replaced ownership; refusing ${kind} recovery`);
+    }
+    if (inspected.status === "owned") {
+      assert.equal(inspected.owner.token, confirmed.token, "sort stage owner does not match its fixed lease");
+    }
+    removeOwnedSortStage(parent, stage, extension, maxRuns, {
+      faultPhase, recovering: true, expectedStage: inspected.stageStat,
+    });
+  }
+  const beforeUnlink = readSortLease(parent, lease, { kind, output: basename });
+  assert.ok(sameSortLease(beforeUnlink, confirmed), "sort lease changed before unlink");
+  fs.unlinkSync(lease);
+  fsyncDirectory(parent);
+}
+
+function acquireSortLease(parent, basename, kind, extension, maxRuns, faultPhase) {
+  const lease = sortLeasePath(parent, basename, kind);
+  const expected = { kind, output: basename };
+  const existing = lstatIfExists(lease);
+  if (existing) {
+    const owner = readSortLease(parent, lease, expected);
+    if (sortOwnerIsLive(owner)) {
+      throw new Error(`sort stage lease is held by live process ${owner.pid}; refusing concurrent ${kind} writer`);
+    }
+    recoverDeadSortLease(parent, lease, owner, { basename, kind, extension, maxRuns, output: basename, faultPhase });
+  }
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const candidateDir = reapSortLeaseCandidates(parent, basename, kind, expected);
+    const token = randomUUID();
+    const owner = {
+      version: 1, kind, output: basename, pid: process.pid,
+      identity: sortProcessIdentity(process.pid), token,
+    };
+    const candidate = candidateNameForToken(token);
+    const candidateFile = path.join(candidateDir, candidate);
+    let handle;
+    try {
+      handle = fs.openSync(candidateFile, "wx", 0o600);
+    } catch (error) {
+      if (error.code === "ENOENT") continue;
+      throw error;
+    }
+    try {
+      fs.writeFileSync(handle, `${canonicalJson(owner)}\n`);
+      fs.fsyncSync(handle);
+    } finally {
+      fs.closeSync(handle);
+    }
+    fsyncDirectory(candidateDir);
+    if (faultPhase === "crash-after-sort-lease-candidate") process.kill(process.pid, "SIGKILL");
+    try {
+      fs.linkSync(candidateFile, lease);
+      fsyncDirectory(parent);
+    } catch (error) {
+      if (error.code !== "EEXIST" && error.code !== "ENOENT") throw error;
+      try { removeSortLeaseCandidate(candidateDir, candidate, owner); } catch (cleanupError) {
+        if (cleanupError.code !== "ENOENT") throw cleanupError;
+      }
+      const winnerStat = lstatIfExists(lease);
+      if (winnerStat) {
+        const winner = readSortLease(parent, lease, expected);
+        if (sortOwnerIsLive(winner)) {
+          throw new Error(`sort stage lease is held by live process ${winner.pid}; refusing concurrent ${kind} writer`);
+        }
+      }
+      continue;
+    }
+    try { removeSortLeaseCandidate(candidateDir, candidate, owner); } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    const confirmed = readSortLease(parent, lease, expected);
+    assert.ok(sameSortLease(confirmed, owner), "sort lease changed after atomic acquisition");
+    if (faultPhase === "crash-after-sort-lease-link") process.kill(process.pid, "SIGKILL");
+    return { lease, owner, stage: sortStagePath(parent, basename, kind, token) };
+  }
+  throw new Error(`sort lease acquisition raced repeatedly for ${kind}; refusing to guess ownership`);
+}
+
+function releaseSortLease(parent, lease, owner, { kind, output }) {
+  const confirmed = readSortLease(parent, lease, { kind, output });
+  assert.ok(sameSortLease(confirmed, owner), "sort lease changed before release");
+  fs.unlinkSync(lease);
+  fsyncDirectory(parent);
+  removeEmptySortLeaseCandidateDirectory(parent, output, kind);
+}
+
+function removeOwnedSortStage(parent, stage, extension, maxRuns, {
+  faultPhase = undefined, recovering = false, expectedStage = undefined,
+} = {}) {
+  // First validate every entry. A foreign/symlinked entry leaves the entire
+  // stage intact for operator inspection; cleanup never broad-globs or follows
+  // a path that was not minted by this exact stage protocol.
+  if (expectedStage) assertSortStageIdentity(parent, stage, expectedStage);
+  inspectSortStage(parent, stage, extension, maxRuns);
+  if (recovering && faultPhase === "crash-before-sort-stage-recovery-delete") process.kill(process.pid, "SIGKILL");
+  const handle = fs.opendirSync(stage);
+  let removed = 0;
+  try {
+    for (let entry = handle.readSync(); entry; entry = handle.readSync()) {
+      if (expectedStage) assertSortStageIdentity(parent, stage, expectedStage);
+      const file = assertSortStageEntry(parent, stage, entry.name, extension);
+      fs.unlinkSync(file);
+      removed += 1;
+      if (recovering && removed === 1 && faultPhase === "crash-mid-sort-stage-recovery-delete") {
+        process.kill(process.pid, "SIGKILL");
+      }
+    }
+  } finally {
+    handle.closeSync();
+  }
+  if (expectedStage) assertSortStageIdentity(parent, stage, expectedStage);
+  else assertNoSymlinkTraversal(parent, stage, "sort stage", { final: "directory" });
+  fs.rmdirSync(stage);
+  fsyncDirectory(parent);
+}
+
+async function withOwnedSortStage({
+  outputFile, kind, extension, maxRuns,
+  faultPhase = undefined, holdMs = 0,
+}, action) {
+  assert.ok(Number.isSafeInteger(holdMs) && holdMs >= 0, "sort stage hold must be a non-negative safe integer");
+  const output = path.resolve(outputFile);
+  const parent = path.dirname(output);
+  fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
+  const parentStat = fs.lstatSync(parent);
+  assert.ok(parentStat.isDirectory() && !parentStat.isSymbolicLink(), "sort output parent is not a real directory");
+  const basename = path.basename(output);
+  // An immutable fixed lease is acquired before mkdir. A creator paused in
+  // the former mkdir->owner.json window still owns that lease, so no recovery
+  // path can mistake its tokenized stage for abandoned work. Only a dead
+  // lease names a stage eligible for exact-shape cleanup.
+  const lease = acquireSortLease(parent, basename, kind, extension, maxRuns, faultPhase);
+  const stage = lease.stage;
+  fs.mkdirSync(stage, 0o700);
+  fsyncDirectory(parent);
+  fsyncDirectory(stage);
+  // Test-only pause at the formerly unsafe acquisition boundary. The fixed
+  // lease already exists, so a second writer must fail closed even while this
+  // live creator has not yet written owner.json.
+  if (faultPhase === "hold-after-sort-stage-mkdir" && holdMs) {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, holdMs);
+  }
+  if (faultPhase === "crash-after-sort-stage-mkdir") process.kill(process.pid, "SIGKILL");
+  const stageStat = fs.lstatSync(stage, { bigint: true });
+  const owner = {
+    version: 1, kind, output: basename, pid: process.pid,
+    identity: lease.owner.identity, stageDev: String(stageStat.dev), stageIno: String(stageStat.ino), token: lease.owner.token,
+  };
+  const ownerFile = path.join(stage, "owner.json");
+  const handle = fs.openSync(ownerFile, "wx", 0o600);
+  try {
+    const bytes = Buffer.from(`${canonicalJson(owner)}\n`);
+    if (faultPhase === "crash-mid-sort-stage-owner") {
+      fs.writeSync(handle, bytes.subarray(0, Math.max(1, Math.floor(bytes.length / 2))));
+      fs.fsyncSync(handle);
+      process.kill(process.pid, "SIGKILL");
+    }
+    fs.writeFileSync(handle, bytes);
+    fs.fsyncSync(handle);
+  } finally {
+    fs.closeSync(handle);
+  }
+  fsyncDirectory(stage);
+  if (faultPhase === "crash-after-sort-stage-owner") process.kill(process.pid, "SIGKILL");
+  if (holdMs && faultPhase !== "hold-after-sort-stage-mkdir") {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, holdMs);
+  }
+  const state = { next: 0, maxNames: maxRuns * 3 + MAX_SORT_INPUT_FILES + 8, maxRuns };
+  try {
+    return await action({ parent, stage, state, output, extension, maxRuns, faultPhase });
+  } finally {
+    const stat = assertNoSymlinkTraversal(parent, stage, "sort stage", { final: "directory" });
+    if (stat) {
+      const current = inspectSortStageOwner(parent, stage, { kind, extension, output: basename });
+      assert.equal(current.status, "owned", "sort stage ownership changed before cleanup");
+      assert.equal(current.owner.token, lease.owner.token, "sort stage ownership changed before cleanup");
+      removeOwnedSortStage(parent, stage, extension, maxRuns, { expectedStage: current.stageStat });
+    }
+    releaseSortLease(parent, lease.lease, lease.owner, { kind, output: basename });
+  }
+}
+
+function allocateSortName(context, prefix, extension) {
+  assert.ok(context.state.next < context.state.maxNames, "sort stage exhausted its bounded file-name budget");
+  const name = `${prefix}-${String(context.state.next++).padStart(8, "0")}.${extension}`;
+  assert.ok(sortStageAllowedName(name, context.extension), "sort stage generated an invalid owned name");
+  return path.join(context.stage, name);
+}
+
+function createSortList(context) {
+  return allocateSortName(context, "list", "txt");
+}
+
+function createEmptySortList(context) {
+  const file = createSortList(context);
+  fs.writeFileSync(file, "", { flag: "wx", mode: 0o600 });
+  return file;
+}
+
+function appendSortRun(listFile, runFile) {
+  fs.appendFileSync(listFile, `${path.basename(runFile)}\n`);
+}
+
+function writeSortStageText(file, text) {
+  fs.writeFileSync(file, text, { flag: "wx", mode: 0o600 });
+}
+
+function deleteSortStageFile(context, file) {
+  assert.equal(path.dirname(path.resolve(file)), context.stage, "sort stage file escapes its owned directory");
+  assertSortStageEntry(context.parent, context.stage, path.basename(file), context.extension);
+  fs.unlinkSync(file);
+}
+
+async function* listedSortRuns(context, listFile) {
+  assertSortStageEntry(context.parent, context.stage, path.basename(listFile), context.extension);
+  for await (const bytes of boundedLines(listFile, 128)) {
+    const name = bytes.toString("utf8");
+    assert.ok(sortStageAllowedName(name, context.extension) && name !== "owner.json" && name !== "output.tmp" &&
+      !name.startsWith("list-"), `sort run list names an invalid run: ${name}`);
+    const file = assertSortStageEntry(context.parent, context.stage, name, context.extension);
+    yield file;
+  }
+}
+
+function installStagedSortOutput(context, staged) {
+  assertSortStageEntry(context.parent, context.stage, path.basename(staged), context.extension);
+  assertNoSymlinkTraversal(context.parent, context.output, "sort output artifact");
+  fs.renameSync(staged, context.output);
+  fsyncDirectory(context.parent);
+  // Exercise the installed-output/recovery boundary separately from the
+  // creator's final stage cleanup. A later restart may remove only its exact
+  // owned scratch directory; it must preserve this atomically installed file.
+  if (context.faultPhase === "crash-after-sort-output-rename") process.kill(process.pid, "SIGKILL");
+}
+
 export async function validateSourceObservationLog(file, contract, { cacheDir = undefined } = {}) {
   let count = 0;
   for await (const row of jsonl(file, { contract, requestLog: true })) {
@@ -1168,20 +1724,24 @@ export async function validateSourceObservationLog(file, contract, { cacheDir = 
   return count;
 }
 
-function flushRun(rows, dir, ordinal) {
+function flushObservationRun(rows, context, listFile) {
   if (!rows.length) return null;
   rows.sort(compareObservation);
-  const file = path.join(dir, `run-${String(ordinal).padStart(8, "0")}.ndjson`);
-  fs.writeFileSync(file, `${rows.map(canonicalJson).join("\n")}\n`);
+  assert.ok(context.state.runs < context.maxRuns,
+    `source manifest exceeds its ${context.maxRuns}-run reviewed scratch policy`);
+  const file = allocateSortName(context, "run", context.extension);
+  writeSortStageText(file, `${rows.map(canonicalJson).join("\n")}\n`);
+  appendSortRun(listFile, file);
+  context.state.runs += 1;
   rows.length = 0;
   return file;
 }
 
-async function sortObservationLogs(logFiles, dir, maxRunBytes, contract) {
-  fs.mkdirSync(dir, { recursive: true });
+async function sortObservationLogs(logFiles, context, maxRunBytes, contract) {
+  assertSortInputs(logFiles, "source manifest shard logs");
+  const listFile = createEmptySortList(context);
   const rows = [];
   let bytes = 0;
-  const runs = [];
   for (const file of logFiles) {
     assert.ok(fs.existsSync(file), `missing completed shard source log: ${file}`);
     for await (const row of jsonl(file, { contract, requestLog: true })) {
@@ -1189,20 +1749,19 @@ async function sortObservationLogs(logFiles, dir, maxRunBytes, contract) {
       rows.push(row);
       bytes += Buffer.byteLength(canonical) + 1;
       if (bytes >= maxRunBytes) {
-        runs.push(flushRun(rows, dir, runs.length));
+        flushObservationRun(rows, context, listFile);
         bytes = 0;
       }
     }
   }
-  const final = flushRun(rows, dir, runs.length);
-  if (final) runs.push(final);
-  return runs;
+  flushObservationRun(rows, context, listFile);
+  return listFile;
 }
 
 async function mergeObservationGroup(inputFiles, output) {
   const iterators = inputFiles.map((file) => jsonl(file));
   const current = await Promise.all(iterators.map((iterator) => iterator.next()));
-  const handle = fs.openSync(output, "w", 0o600);
+  const handle = fs.openSync(output, "wx", 0o600);
   let previous = null;
   let count = 0;
   const emit = (row) => {
@@ -1236,21 +1795,41 @@ async function mergeObservationGroup(inputFiles, output) {
   return count;
 }
 
-async function collapseRuns(runs, sortDir, fanIn) {
-  let round = 0;
-  let active = runs;
-  while (active.length > 1) {
-    const next = [];
-    for (let start = 0; start < active.length; start += fanIn) {
-      const file = path.join(sortDir, `merge-${String(round).padStart(4, "0")}-${String(next.length).padStart(6, "0")}.ndjson`);
-      await mergeObservationGroup(active.slice(start, start + fanIn), file);
-      next.push(file);
+async function collapseObservationRuns(listFile, context, fanIn) {
+  let activeList = listFile;
+  while (true) {
+    const nextList = createEmptySortList(context);
+    let inputs = 0;
+    let outputs = 0;
+    let final = null;
+    let group = [];
+    const flush = async () => {
+      if (!group.length) return;
+      const file = allocateSortName(context, "merge", context.extension);
+      await mergeObservationGroup(group, file);
+      for (const input of group) deleteSortStageFile(context, input);
+      appendSortRun(nextList, file);
+      final = file;
+      outputs += 1;
+      group = [];
+    };
+    for await (const input of listedSortRuns(context, activeList)) {
+      group.push(input);
+      inputs += 1;
+      if (group.length >= fanIn) await flush();
     }
-    for (const file of active) fs.unlinkSync(file);
-    active = next;
-    round += 1;
+    await flush();
+    deleteSortStageFile(context, activeList);
+    if (!inputs) {
+      deleteSortStageFile(context, nextList);
+      return null;
+    }
+    if (outputs === 1) {
+      deleteSortStageFile(context, nextList);
+      return final;
+    }
+    activeList = nextList;
   }
-  return active[0] ?? null;
 }
 
 async function digestFile(file, contract = null) {
@@ -1285,7 +1864,7 @@ export async function readSourceManifestEvidence(file, contract) {
 }
 
 async function writeCanonicalManifest(input, output, contract) {
-  const handle = fs.openSync(output, "w", 0o600);
+  const handle = fs.openSync(output, "wx", 0o600);
   try {
     for await (const row of jsonl(input, { contract, requestLog: true })) {
       fs.writeSync(handle, `${canonicalJson(manifestObservation(row))}\n`);
@@ -1307,6 +1886,9 @@ export async function emitCompletionSourceManifest({
   // chunks without making a unit test manufacture gigabytes of log data.
   sortRunBytes = SOURCE_SORT_RUN_BYTES,
   fanIn = SOURCE_SORT_FAN_IN,
+  // Test-only crash/acquisition hooks for the owned external-sort stage.
+  sortFaultPhase = undefined,
+  sortHoldMs = 0,
 }) {
   assert.ok(contract, "a source contract is required for a completion manifest");
   const final = outputFile
@@ -1314,19 +1896,20 @@ export async function emitCompletionSourceManifest({
     : path.resolve(outDir, contract.policy.manifest.completion_manifest);
   assert.ok(final.startsWith(`${path.resolve(outDir)}${path.sep}`),
     "source_policy.manifest.completion_manifest must stay inside the global output");
-  const sortDir = fs.mkdtempSync(path.join(outDir, ".source-manifest-runs-"));
-  const temporary = path.join(outDir, `.source-manifest-${process.pid}.tmp`);
-  try {
-    assert.ok(Number.isSafeInteger(sortRunBytes) && sortRunBytes > 0, "sortRunBytes must be positive");
-    assert.ok(Number.isSafeInteger(fanIn) && fanIn > 1, "fanIn must exceed one");
-    const runs = await sortObservationLogs(logFiles, sortDir, sortRunBytes, contract);
-    assert.ok(runs.length > 0, "a source-backed completion has no source observations");
-    const collapsed = await collapseRuns(runs, sortDir, fanIn);
+  assertSortParameters(sortRunBytes, fanIn, SOURCE_SORT_RUN_BYTES, "source manifest sort");
+  assertSortInputs(logFiles, "source manifest shard logs");
+  return withOwnedSortStage({
+    outputFile: final, kind: "source-manifest", extension: "ndjson", maxRuns: MAX_SOURCE_SORT_RUNS,
+    faultPhase: sortFaultPhase, holdMs: sortHoldMs,
+  }, async (context) => {
+    context.state.runs = 0;
+    const listFile = await sortObservationLogs(logFiles, context, sortRunBytes, contract);
+    const collapsed = await collapseObservationRuns(listFile, context, fanIn);
     assert.ok(collapsed, "source observation merge produced no manifest run");
+    const temporary = path.join(context.stage, "output.tmp");
     await writeCanonicalManifest(collapsed, temporary, contract);
     const receipt = await digestFile(temporary, contract);
     assert.ok(receipt.count > 0, "a source-backed completion has an empty source manifest");
-    fs.mkdirSync(path.dirname(final), { recursive: true });
     try {
       fs.linkSync(temporary, final);
       fs.chmodSync(final, 0o444);
@@ -1347,10 +1930,7 @@ export async function emitCompletionSourceManifest({
       datasetEpoch: contract.datasetEpoch,
       format: contract.policy.manifest.format,
     };
-  } finally {
-    try { fs.unlinkSync(temporary); } catch (error) { if (error.code !== "ENOENT") throw error; }
-    fs.rmSync(sortDir, { recursive: true, force: true });
-  }
+  });
 }
 
 function compareRecordRow(a, b) {
@@ -1368,17 +1948,22 @@ async function* recordRows(file) {
   }
 }
 
-function flushRecordRun(rows, dir, ordinal) {
+function flushRecordRun(rows, context, listFile) {
   if (!rows.length) return null;
   rows.sort(compareRecordRow);
-  const file = path.join(dir, `terrain-run-${String(ordinal).padStart(8, "0")}.ndjson`);
-  fs.writeFileSync(file, `${rows.map(canonicalJson).join("\n")}\n`);
+  assert.ok(context.state.runs < context.maxRuns,
+    `terrain merge exceeds its ${context.maxRuns}-run reviewed scratch policy`);
+  const file = allocateSortName(context, "run", context.extension);
+  writeSortStageText(file, `${rows.map(canonicalJson).join("\n")}\n`);
+  appendSortRun(listFile, file);
+  context.state.runs += 1;
   rows.length = 0;
   return file;
 }
 
-async function writeRecordRuns(inputFiles, dir, addressForRecord, maxRunBytes) {
-  const runs = [];
+async function writeRecordRuns(inputFiles, context, addressForRecord, maxRunBytes) {
+  assertSortInputs(inputFiles, "terrain merge inputs");
+  const listFile = createEmptySortList(context);
   const rows = [];
   let bytes = 0;
   for (const file of inputFiles) {
@@ -1391,20 +1976,19 @@ async function writeRecordRuns(inputFiles, dir, addressForRecord, maxRunBytes) {
       rows.push(row);
       bytes += size;
       if (bytes >= maxRunBytes) {
-        runs.push(flushRecordRun(rows, dir, runs.length));
+        flushRecordRun(rows, context, listFile);
         bytes = 0;
       }
     }
   }
-  const final = flushRecordRun(rows, dir, runs.length);
-  if (final) runs.push(final);
-  return runs;
+  flushRecordRun(rows, context, listFile);
+  return listFile;
 }
 
 async function mergeRecordGroup(inputFiles, output) {
   const iterators = inputFiles.map((file) => recordRows(file));
   const current = await Promise.all(iterators.map((iterator) => iterator.next()));
-  const handle = fs.openSync(output, "w", 0o600);
+  const handle = fs.openSync(output, "wx", 0o600);
   try {
     let previous = null;
     while (true) {
@@ -1430,43 +2014,60 @@ async function mergeRecordGroup(inputFiles, output) {
   }
 }
 
-async function collapseRecordRuns(runs, dir, fanIn) {
-  let active = runs;
-  let round = 0;
-  while (active.length > 1) {
-    const next = [];
-    for (let start = 0; start < active.length; start += fanIn) {
-      const file = path.join(dir, `terrain-merge-${String(round).padStart(4, "0")}-${String(next.length).padStart(6, "0")}.ndjson`);
-      await mergeRecordGroup(active.slice(start, start + fanIn), file);
-      next.push(file);
+async function collapseRecordRuns(listFile, context, fanIn) {
+  let activeList = listFile;
+  while (true) {
+    const nextList = createEmptySortList(context);
+    let inputs = 0;
+    let outputs = 0;
+    let final = null;
+    let group = [];
+    const flush = async () => {
+      if (!group.length) return;
+      const file = allocateSortName(context, "merge", context.extension);
+      await mergeRecordGroup(group, file);
+      for (const input of group) deleteSortStageFile(context, input);
+      appendSortRun(nextList, file);
+      final = file;
+      outputs += 1;
+      group = [];
+    };
+    for await (const input of listedSortRuns(context, activeList)) {
+      group.push(input);
+      inputs += 1;
+      if (group.length >= fanIn) await flush();
     }
-    for (const file of active) fs.unlinkSync(file);
-    active = next;
-    round += 1;
+    await flush();
+    deleteSortStageFile(context, activeList);
+    if (!inputs) {
+      deleteSortStageFile(context, nextList);
+      return null;
+    }
+    if (outputs === 1) {
+      deleteSortStageFile(context, nextList);
+      return final;
+    }
+    activeList = nextList;
   }
-  if (!active.length) return null;
-  // A single initial run is still only sorted, not de-duplicated. Normalize
-  // it through the same merge path so one small shard set cannot bypass the
-  // overlap check that multi-run input receives.
-  const normalized = path.join(dir, `terrain-normalized-${String(round).padStart(4, "0")}.ndjson`);
-  await mergeRecordGroup(active, normalized);
-  fs.unlinkSync(active[0]);
-  return normalized;
 }
 
 /** Stream, sort, de-duplicate and merge framed terrain stores without an O(N) address map. */
 export async function mergeBoundedFramedStores({
   inputFiles, outputFile, addressForRecord,
   maxRunBytes = TERRAIN_SORT_RUN_BYTES, fanIn = SOURCE_SORT_FAN_IN,
+  sortFaultPhase = undefined, sortHoldMs = 0,
 }) {
-  assert.ok(Number.isSafeInteger(maxRunBytes) && maxRunBytes > 0, "maxRunBytes must be positive");
-  assert.ok(Number.isSafeInteger(fanIn) && fanIn > 1, "fanIn must exceed one");
-  const outputDir = path.dirname(outputFile);
-  const sortDir = fs.mkdtempSync(path.join(outputDir, ".terrain-merge-runs-"));
-  try {
-    const runs = await writeRecordRuns(inputFiles, sortDir, addressForRecord, maxRunBytes);
-    const collapsed = await collapseRecordRuns(runs, sortDir, fanIn);
-    const handle = fs.openSync(outputFile, "w", 0o600);
+  assertSortParameters(maxRunBytes, fanIn, TERRAIN_SORT_RUN_BYTES, "terrain merge sort");
+  assertSortInputs(inputFiles, "terrain merge inputs");
+  return withOwnedSortStage({
+    outputFile, kind: "terrain-merge", extension: "ndjson", maxRuns: MAX_TERRAIN_SORT_RUNS,
+    faultPhase: sortFaultPhase, holdMs: sortHoldMs,
+  }, async (context) => {
+    context.state.runs = 0;
+    const listFile = await writeRecordRuns(inputFiles, context, addressForRecord, maxRunBytes);
+    const collapsed = await collapseRecordRuns(listFile, context, fanIn);
+    const stagedOutput = path.join(context.stage, "output.tmp");
+    const handle = fs.openSync(stagedOutput, "wx", 0o600);
     const hash = createHash("sha256");
     let records = 0;
     let duplicates = 0;
@@ -1489,10 +2090,9 @@ export async function mergeBoundedFramedStores({
       fs.fsyncSync(handle);
       fs.closeSync(handle);
     }
+    installStagedSortOutput(context, stagedOutput);
     return { records, duplicates, recordSetDigest: hash.digest("hex") };
-  } finally {
-    fs.rmSync(sortDir, { recursive: true, force: true });
-  }
+  });
 }
 
 function oceanAddressKey(address, file) {
@@ -1584,7 +2184,7 @@ async function* oceanAddresses(file) {
 async function mergeOceanGroup(inputFiles, output, { allowDuplicate = false } = {}) {
   const iterators = inputFiles.map((file) => oceanAddresses(file));
   const current = await Promise.all(iterators.map((iterator) => iterator.next()));
-  const handle = fs.openSync(output, "w", 0o600);
+  const handle = fs.openSync(output, "wx", 0o600);
   let previous = null;
   let count = 0;
   let duplicates = 0;
@@ -1615,93 +2215,108 @@ async function mergeOceanGroup(inputFiles, output, { allowDuplicate = false } = 
   return { count, duplicates };
 }
 
-function flushOceanRun(rows, dir, ordinal) {
+function flushOceanRun(rows, context, listFile) {
   if (!rows.length) return null;
   rows.sort(compareOceanAddress);
-  const run = path.join(dir, `ocean-run-${String(ordinal).padStart(8, "0")}.lines`);
-  fs.writeFileSync(run, `${rows.join("\n")}\n`);
+  assert.ok(context.state.runs < context.maxRuns,
+    `ocean merge exceeds its ${context.maxRuns}-run reviewed scratch policy`);
+  const run = allocateSortName(context, "run", context.extension);
+  writeSortStageText(run, `${rows.join("\n")}\n`);
+  appendSortRun(listFile, run);
+  context.state.runs += 1;
   rows.length = 0;
   return run;
 }
 
-async function collapseOceanRuns(runs, dir, fanIn, { allowDuplicate }) {
-  let active = runs;
-  let round = 0;
+async function collapseOceanRuns(listFile, context, fanIn, { allowDuplicate }) {
+  let activeList = listFile;
   let duplicates = 0;
-  while (active.length > 1) {
-    const next = [];
-    for (let start = 0; start < active.length; start += fanIn) {
-      const file = path.join(dir, `ocean-merge-${String(round).padStart(4, "0")}-${String(next.length).padStart(6, "0")}.lines`);
-      const result = await mergeOceanGroup(active.slice(start, start + fanIn), file, { allowDuplicate });
+  while (true) {
+    const nextList = createEmptySortList(context);
+    let inputs = 0;
+    let outputs = 0;
+    let final = null;
+    let group = [];
+    const flush = async () => {
+      if (!group.length) return;
+      const file = allocateSortName(context, "merge", context.extension);
+      const result = await mergeOceanGroup(group, file, { allowDuplicate });
       duplicates += result.duplicates;
-      next.push(file);
+      for (const input of group) deleteSortStageFile(context, input);
+      appendSortRun(nextList, file);
+      final = file;
+      outputs += 1;
+      group = [];
+    };
+    for await (const input of listedSortRuns(context, activeList)) {
+      group.push(input);
+      inputs += 1;
+      if (group.length >= fanIn) await flush();
     }
-    for (const file of active) fs.unlinkSync(file);
-    active = next;
-    round += 1;
+    await flush();
+    deleteSortStageFile(context, activeList);
+    if (!inputs) {
+      deleteSortStageFile(context, nextList);
+      return { file: null, duplicates };
+    }
+    if (outputs === 1) {
+      deleteSortStageFile(context, nextList);
+      return { file: final, duplicates };
+    }
+    activeList = nextList;
   }
-  if (!active.length) return { file: null, duplicates };
-  // One sorted initial run has not passed through duplicate handling yet.
-  const normalized = path.join(dir, `ocean-normalized-${String(round).padStart(4, "0")}.lines`);
-  const result = await mergeOceanGroup(active, normalized, { allowDuplicate });
-  duplicates += result.duplicates;
-  fs.unlinkSync(active[0]);
-  return { file: normalized, duplicates };
 }
 
-async function oceanRunsForInput(file, dir, ordinalStart, maxRunBytes, fanIn) {
-  const localDir = fs.mkdtempSync(path.join(dir, "ocean-input-"));
+async function oceanRunsForInput(file, context, maxRunBytes, fanIn) {
+  const listFile = createEmptySortList(context);
   const rows = [];
-  const runs = [];
   let bytes = 0;
-  try {
-    for await (const address of oceanAddresses(file)) {
-      rows.push(address);
-      bytes += Buffer.byteLength(address) + 1;
-      if (bytes >= maxRunBytes) {
-        runs.push(flushOceanRun(rows, localDir, ordinalStart + runs.length));
-        bytes = 0;
-      }
+  for await (const address of oceanAddresses(file)) {
+    rows.push(address);
+    bytes += Buffer.byteLength(address) + 1;
+    if (bytes >= maxRunBytes) {
+      flushOceanRun(rows, context, listFile);
+      bytes = 0;
     }
-    if (rows.length) runs.push(flushOceanRun(rows, localDir, ordinalStart + runs.length));
-    const collapsed = await collapseOceanRuns(runs, localDir, fanIn, { allowDuplicate: true });
-    if (!collapsed.file) return collapsed;
-    const output = path.join(dir, `ocean-shard-${String(ordinalStart).padStart(8, "0")}.lines`);
-    fs.renameSync(collapsed.file, output);
-    return { ...collapsed, file: output };
-  } finally {
-    fs.rmSync(localDir, { recursive: true, force: true });
   }
+  flushOceanRun(rows, context, listFile);
+  return collapseOceanRuns(listFile, context, fanIn, { allowDuplicate: true });
 }
 
 /** Produce the stream-friendly global ocean-skip artifact, accepting legacy JSON inputs. */
-export async function mergeOceanSkips({ inputFiles, outputFile, maxRunBytes = SOURCE_SORT_RUN_BYTES, fanIn = SOURCE_SORT_FAN_IN }) {
-  assert.ok(Number.isSafeInteger(maxRunBytes) && maxRunBytes > 0, "maxRunBytes must be positive");
-  assert.ok(Number.isSafeInteger(fanIn) && fanIn > 1, "fanIn must exceed one");
-  const sortDir = fs.mkdtempSync(path.join(path.dirname(outputFile), ".ocean-skip-runs-"));
-  try {
-    const shardRuns = [];
-    let ordinal = 0;
+export async function mergeOceanSkips({
+  inputFiles, outputFile, maxRunBytes = SOURCE_SORT_RUN_BYTES, fanIn = SOURCE_SORT_FAN_IN,
+  sortFaultPhase = undefined, sortHoldMs = 0,
+}) {
+  assertSortParameters(maxRunBytes, fanIn, SOURCE_SORT_RUN_BYTES, "ocean merge sort");
+  assertSortInputs(inputFiles, "ocean merge inputs");
+  return withOwnedSortStage({
+    outputFile, kind: "ocean-skip", extension: "lines", maxRuns: MAX_OCEAN_SORT_RUNS,
+    faultPhase: sortFaultPhase, holdMs: sortHoldMs,
+  }, async (context) => {
+    context.state.runs = 0;
+    const shardList = createEmptySortList(context);
     let duplicateLinesWithinShards = 0;
     for (const file of inputFiles) {
       if (!fs.existsSync(file)) continue;
-      const local = await oceanRunsForInput(file, sortDir, ordinal, maxRunBytes, fanIn);
-      ordinal += 1_000_000;
+      const local = await oceanRunsForInput(file, context, maxRunBytes, fanIn);
       duplicateLinesWithinShards += local.duplicates;
-      if (local.file) shardRuns.push(local.file);
+      if (local.file) appendSortRun(shardList, local.file);
     }
-    const merged = await collapseOceanRuns(shardRuns, sortDir, fanIn, { allowDuplicate: false });
+    const merged = await collapseOceanRuns(shardList, context, fanIn, { allowDuplicate: false });
     const final = merged.file;
-    if (final) fs.renameSync(final, outputFile);
-    else fs.writeFileSync(outputFile, "");
-    fsyncFile(outputFile);
-    fsyncDirectory(path.dirname(outputFile));
+    const stagedOutput = path.join(context.stage, "output.tmp");
+    if (final) fs.renameSync(final, stagedOutput);
+    else writeSortStageText(stagedOutput, "");
+    fsyncFile(stagedOutput);
     const hash = createHash("sha256");
     let count = 0;
-    for await (const chunk of fs.createReadStream(outputFile)) hash.update(chunk);
-    for await (const unused of oceanAddresses(outputFile)) { void unused; count += 1; }
+    for await (const chunk of fs.createReadStream(stagedOutput)) hash.update(chunk);
+    for await (const bytes of boundedLines(stagedOutput, 128)) {
+      assertOceanAddress(bytes.toString("utf8"), stagedOutput);
+      count += 1;
+    }
+    installStagedSortOutput(context, stagedOutput);
     return { count, duplicates: 0, duplicateLinesWithinShards, digest: hash.digest("hex"), path: path.basename(outputFile) };
-  } finally {
-    fs.rmSync(sortDir, { recursive: true, force: true });
-  }
+  });
 }

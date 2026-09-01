@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   initializeGlobalState,
+  MAX_GLOBAL_SHARDS,
   makeShardConfigs,
   markShard,
   saveGlobalState,
@@ -76,6 +77,8 @@ function parseArgs(argv) {
     if (value !== undefined) assert.ok(Number.isSafeInteger(value) && value > 0, `${name} must be a positive integer`);
   }
   assert.ok(args.workers <= args.shards, "--workers may not exceed --shards");
+  assert.ok(args.shards <= MAX_GLOBAL_SHARDS,
+    `--shards may not exceed the ${MAX_GLOBAL_SHARDS}-shard coordinator policy`);
   return args;
 }
 

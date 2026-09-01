@@ -10,6 +10,12 @@ import fs from "node:fs";
 import path from "node:path";
 
 export const GLOBAL_STATE_VERSION = 1;
+// The coordinator keeps one state/config entry per shard. This is a reviewed
+// control-plane ceiling, not a throughput hint: it bounds state, pending-work,
+// shard-config, and source/merge path collections before any allocation.
+export const MAX_GLOBAL_SHARDS = 256;
+export const MAX_GLOBAL_REGIONS = 256;
+export const MAX_FACT_SORT_RUNS = 4096;
 
 export function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
@@ -66,6 +72,8 @@ export function writeSortedJsonRuns(dir, facts, { maxRows = 4096, compare = (a, 
   const runs = []; let rows = [];
   const flush = () => {
     if (!rows.length) return;
+    assert.ok(runs.length < MAX_FACT_SORT_RUNS,
+      `fact spool exceeds its ${MAX_FACT_SORT_RUNS}-run reviewed path budget`);
     rows.sort(compare);
     const file = path.join(dir, `run-${String(runs.length).padStart(6, "0")}.ndjson`);
     fs.writeFileSync(file, `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
@@ -666,7 +674,19 @@ export class BoundedGranuleCache {
 function splitRegion(region, shardCount) {
   const west = Number(region.west);
   const east = Number(region.east);
-  assert.ok(Number.isFinite(west) && Number.isFinite(east) && east > west, `region ${region.name ?? "(unnamed)"} needs west < east`);
+  const south = Number(region.south);
+  const north = Number(region.north);
+  // The coordinator accepts one non-wrapping canonical WGS84 interval per
+  // region. Apart from rejecting malformed geographic policy, this bounds
+  // the degree-cut loop before it can allocate from an arbitrary config span.
+  assert.ok(Number.isFinite(west) && Number.isFinite(east) &&
+    west >= -180 && west < east && east <= 180,
+  `region ${region.name ?? "(unnamed)"} needs canonical longitude bounds -180 <= west < east <= 180`);
+  assert.ok(Number.isFinite(south) && Number.isFinite(north) &&
+    south >= -90 && south < north && north <= 90,
+  `region ${region.name ?? "(unnamed)"} needs canonical latitude bounds -90 <= south < north <= 90`);
+  assert.ok(Math.ceil(east) - Math.floor(west) <= 361,
+    `region ${region.name ?? "(unnamed)"} exceeds the 361-slice geographic policy`);
   const cuts = [west];
   // Start strictly east of the existing west edge: an integral west bound is
   // already in `cuts`, and repeating it would create an empty shard region.
@@ -689,9 +709,11 @@ function splitRegion(region, shardCount) {
 
 /** Build deterministic, non-overlapping longitude slices for independent runs. */
 export function makeShardConfigs(runConfig, shardCount, { outDir, cacheDir, cacheMaxBytes } = {}) {
-  assert.ok(Number.isInteger(shardCount) && shardCount > 0, "shardCount must be a positive integer");
+  assert.ok(Number.isInteger(shardCount) && shardCount > 0 && shardCount <= MAX_GLOBAL_SHARDS,
+    `shardCount must be in [1, ${MAX_GLOBAL_SHARDS}]`);
   const flow = runConfig.flow_config ?? {};
-  assert.ok(Array.isArray(flow.regions) && flow.regions.length > 0, "flow_config.regions is required");
+  assert.ok(Array.isArray(flow.regions) && flow.regions.length > 0 && flow.regions.length <= MAX_GLOBAL_REGIONS,
+    `flow_config.regions must contain [1, ${MAX_GLOBAL_REGIONS}] regions`);
   const regions = Array.from({ length: shardCount }, () => []);
   for (const region of flow.regions) {
     const pieces = splitRegion(region, shardCount);
@@ -713,6 +735,10 @@ export function statePath(outDir) {
 }
 
 export function initializeGlobalState(outDir, runConfig, shardCount) {
+  // This public entry point can be called without makeShardConfigs. Check
+  // before state.shards allocates one object per claimed coordinator shard.
+  assert.ok(Number.isInteger(shardCount) && shardCount > 0 && shardCount <= MAX_GLOBAL_SHARDS,
+    `shardCount must be in [1, ${MAX_GLOBAL_SHARDS}]`);
   const file = statePath(outDir);
   const digest = sha256(canonicalJson(runConfig));
   const existing = readJson(file);
