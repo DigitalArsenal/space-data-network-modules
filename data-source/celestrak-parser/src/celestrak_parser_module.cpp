@@ -1012,6 +1012,23 @@ std::string normalize_satcat_ops_status(const std::string& value) {
     return "UNKNOWN";
 }
 
+// CelesTrak's CSV OWNER values are canonical legacyCountryCode labels. Keep
+// this mapping deliberately strict: a source value must exactly match a label
+// in the generated SDS enum. Do not substitute names, ISO codes, or values
+// from a separate country catalog.
+legacyCountryCode satcat_owner_code(const std::string& value) {
+    const std::string owner = trim(value);
+    const auto& values = EnumValueslegacyCountryCode();
+    const char* const* names = EnumNameslegacyCountryCode();
+    for (size_t i = 0; i <= static_cast<size_t>(legacyCountryCode_MAX); ++i) {
+        if (owner == names[i]) return values[i];
+    }
+    // OWNER is optional in CSV and unavailable in fixed-width SATCAT. Encode
+    // UNK explicitly: omitting the field would silently decode as AB, which
+    // is Arab Satellite Communications Organization rather than "unknown".
+    return legacyCountryCode_UNK;
+}
+
 // internal/sds CATBuilder.Build() with the runner's population rules.
 std::vector<uint8_t> build_cat_record(const Row& row, uint32_t norad) {
     // Builder defaults (NewCATBuilder) that the runner leaves in place.
@@ -1022,6 +1039,7 @@ std::vector<uint8_t> build_cat_record(const Row& row, uint32_t norad) {
     std::string object_type = normalize_satcat_object_type(row_value(row, {"OBJECT_TYPE"}));
     std::string ops_status =
         normalize_satcat_ops_status(row_value(row, {"OPS_STATUS_CODE", "OPS_STATUS", "STATUS"}));
+    const legacyCountryCode owner = satcat_owner_code(row_value(row, {"OWNER"}));
     std::string launch_date = row_value(row, {"LAUNCH_DATE", "LAUNCH"});
     if (launch_date.empty()) launch_date = "1998-11-20";  // NewCATBuilder default (runner parity)
 
@@ -1065,6 +1083,7 @@ std::vector<uint8_t> build_cat_record(const Row& row, uint32_t norad) {
     builder.add_NORAD_CAT_ID(norad);
     builder.add_OBJECT_TYPE(cat_object_type(object_type));
     builder.add_OPS_STATUS_CODE(cat_ops_status(ops_status));
+    builder.add_OWNER(owner);
     builder.add_LAUNCH_DATE(launch_date_off);
     builder.add_LAUNCH_SITE(launch_site_off);
     builder.add_DECAY_DATE(decay_date_off);
@@ -1211,6 +1230,9 @@ bool parse_satcat_rows(const std::vector<uint8_t>& content, std::vector<Row>* ro
             row[normalize_key("RCS")] = satcat_column(line, 120, 127);
             row[normalize_key("OBJECT_TYPE")] =
                 infer_fixed_width_object_type(row[normalize_key("OBJECT_NAME")]);
+            // The public fixed-width SATCAT layout has no OWNER column. The
+            // builder explicitly encodes UNK; never infer ownership from a
+            // launch site or object identity.
             rows->push_back(std::move(row));
         }
         line.clear();

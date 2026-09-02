@@ -101,6 +101,32 @@ function fileIdentifier(record) {
   return decoder.decode(record.subarray(4, 8));
 }
 
+function catFieldOffset(record, fieldIndex) {
+  const view = new DataView(record.buffer, record.byteOffset, record.byteLength);
+  const table = view.getUint32(0, true);
+  const vtable = table - view.getInt32(table, true);
+  return view.getUint16(vtable + 4 + fieldIndex * 2, true);
+}
+
+function catNoradID(record) {
+  const fieldOffset = catFieldOffset(record, 2);
+  assert.notEqual(fieldOffset, 0, "CAT record is missing NORAD_CAT_ID");
+  const view = new DataView(record.buffer, record.byteOffset, record.byteLength);
+  const table = view.getUint32(0, true);
+  return view.getUint32(table + fieldOffset, true);
+}
+
+// CAT OWNER is legacyCountryCode field 5. The records emitted by parse_satcat
+// are framed with a size prefix; splitStream validates and removes that prefix
+// before this FlatBuffer field decode.
+function catOwner(record) {
+  const fieldOffset = catFieldOffset(record, 5);
+  if (fieldOffset === 0) return 0;
+  const view = new DataView(record.buffer, record.byteOffset, record.byteLength);
+  const table = view.getUint32(0, true);
+  return view.getInt8(table + fieldOffset);
+}
+
 function httpResponse(bodyBytes, headers = {}) {
   return {
     status: 200,
@@ -234,8 +260,48 @@ for (const [label, payload] of [
     for (const record of catRecords) {
       assert.equal(fileIdentifier(record), "$CAT");
     }
+    if (label === "fixed-width txt") {
+      assert.deepEqual(
+        catRecords.map(catOwner),
+        [118, 118],
+        "fixed-width SATCAT lacks OWNER and must encode explicit legacyCountryCode UNK",
+      );
+    }
   });
 }
+
+test("parse_satcat maps CSV OWNER codes only from the canonical legacy enum", async (t) => {
+  const ownerCSV = Buffer.from(
+    [
+      "OBJECT_NAME,OBJECT_ID,NORAD_CAT_ID,OBJECT_TYPE,OPS_STATUS_CODE,OWNER,LAUNCH_DATE,LAUNCH_SITE,DECAY_DATE,PERIOD,INCLINATION,APOGEE,PERIGEE,RCS,DATA_STATUS_CODE,ORBIT_CENTER,ORBIT_TYPE",
+      "ALSAT-1,2002-054A,27559,PAY,,ALG,2002-11-28,PLMSC,,97.41,98.25,649,620,0.3270,,EA,ORB",
+      "ISS (ZARYA),1998-067A,25544,PAY,+,US,1998-11-20,TYMSC,,92.68,51.6,423,417,0.0,,EA,ORB",
+      "UNKNOWN-OWNER,2026-001A,90001,PAY,+,NOT_A_COUNTRY,2026-01-01,TYMSC,,90,51,500,490,0.0,,EA,ORB",
+      "ABSENT-OWNER,2026-001B,90002,PAY,+,,2026-01-01,TYMSC,,90,51,500,490,0.0,,EA,ORB",
+      "EXPLICIT-AB,2026-001C,90003,PAY,+,AB,2026-01-01,TYMSC,,90,51,500,490,0.0,,EA,ORB",
+    ].join("\n"),
+  );
+  const harness = await createHarness(t);
+  const response = await harness.invoke({
+    methodId: "parse_satcat",
+    inputs: [
+      jsonInput("job", {
+        source_url: "https://celestrak.org/pub/satcat.csv",
+        source_name: "celestrak-satcat-csv",
+      }),
+      jsonInput("response", httpResponse(ownerCSV)),
+    ],
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+
+  const records = splitStream(outputsByPort(response).get("cat_records").payload);
+  const ownersByNorad = new Map(records.map((record) => [catNoradID(record), catOwner(record)]));
+  assert.equal(ownersByNorad.get(27559), 3, "ALSAT-1 OWNER must decode as legacyCountryCode ALG");
+  assert.equal(ownersByNorad.get(25544), 120, "ISS OWNER must decode as legacyCountryCode US");
+  assert.equal(ownersByNorad.get(90001), 118, "unknown OWNER must decode as explicit legacyCountryCode UNK");
+  assert.equal(ownersByNorad.get(90002), 118, "absent OWNER must decode as explicit legacyCountryCode UNK");
+  assert.equal(ownersByNorad.get(90003), 0, "explicit OWNER=AB must remain legacyCountryCode AB");
+});
 
 test("parse_satcat rejects duplicate NORAD ids (runner parity)", async (t) => {
   const harness = await createHarness(t);
