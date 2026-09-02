@@ -2307,7 +2307,6 @@ fs.writeSync(availabilityHandle, "[");
 let availabilityLevel = -1;
 let availabilityLevelOpen = false;
 let availabilityLevelRectangles = 0;
-let availabilityClosed = false;
 let availabilityComplete = false;
 const openAvailabilityLevel = (level) => {
   while (availabilityLevel < level) {
@@ -2377,10 +2376,8 @@ try {
   if (availabilityLevelOpen) fs.writeSync(availabilityHandle, "]");
   fs.writeSync(availabilityHandle, "]");
   verifierStaging.seal(availabilityStage);
-  availabilityClosed = true;
   availabilityComplete = true;
 } finally {
-  if (!availabilityClosed) fs.closeSync(availabilityHandle);
   if (!availabilityComplete) verifierStaging.discard(availabilityStage);
   verifierStaging.clearScratch("closureFacts");
   verifierStaging.clearScratch("closureMerge");

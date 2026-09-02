@@ -1010,7 +1010,11 @@ schemaTest("verifier fails closed when generated availability is exchanged befor
     const outDir = path.join(root, name);
     const barrier = path.join(root, "receipt-barrier");
     fs.mkdirSync(outDir);
-    writeVerifierSwapWorkload(outDir);
+    // The exchange boundary is the generated availability file copied into
+    // layer-json-config.json. Use the committed one-frame production fixture
+    // so reaching that boundary does not depend on completing a global-sized
+    // verifier workload within a wall-clock polling window.
+    writeStagingFixture(outDir);
     const invocation = execFileAsync(process.execPath, ["--max-old-space-size=64", VERIFY, "--out", outDir, "--json"], {
       timeout: 180_000,
       maxBuffer: 1024 * 1024,
