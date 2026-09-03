@@ -1,0 +1,25 @@
+== area=hessen epoch=2026-09-02T20:20:51Z pbf=/private/tmp/claude-501/osm-context/data/hessen-latest.osm.pbf retrieved_at=2026-09-03T18:56:15Z processor=planetiler 0.10.2
+== verify profile
+[1m[32m21 passed[0m
+== build 2026-09-03T22:11:31Z
+== built in 17 s wall;    16s cpu:3m10s avg:11.6
+   Max tile: 231k (gzipped: 151k)
+   Avg tile: 28k (gzipped: 19k) using weighted average based on OSM traffic
+    # tiles: 13,150
+ # features: 6,964,957
+-rw-r--r--  1 tj  wheel  107086168 Sep  3 18:11 /private/tmp/claude-501/osm-context/out/osm-context-hessen-20260902T202051Z.pmtiles
+== header
+pmtiles spec version: 3
+tile type: mvt
+bounds: (long: 7.768021, lat: 49.393212) (long: 10.245952, lat: 51.659158)
+min zoom: 0
+max zoom: 14
+center zoom: 7
+addressed tiles count: 13150
+tile entries count: 13150
+tile contents count: 13150
+internal compression: gzip
+tile compression: gzip
+planetiler:osm:osmosisreplicationtime 2026-09-02T20:20:51Z
+== record
+wrote /private/tmp/claude-501/osm-context/out/osm-context-hessen-20260902T202051Z.vtt.json

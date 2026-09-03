@@ -1,0 +1,94 @@
+{
+  "TILESET_ID": "osm-context-hessen-20260902T202051Z",
+  "TILESET_NAME": "OSM context tileset, hessen, epoch 2026-09-02T20:20:51Z",
+  "TILING_SCHEME": "WEB_MERCATOR",
+  "MIN_ZOOM": 0,
+  "MAX_ZOOM": 14,
+  "BOUNDS": [
+    7.768021,
+    49.393212,
+    10.245952,
+    51.659158
+  ],
+  "LAYERS": [
+    {
+      "NAME": "aeroway",
+      "MIN_ZOOM": 8,
+      "MAX_ZOOM": 14,
+      "FIELDS": [
+        "kind"
+      ]
+    },
+    {
+      "NAME": "building",
+      "MIN_ZOOM": 13,
+      "MAX_ZOOM": 14,
+      "FIELDS": [
+        "building:levels",
+        "height",
+        "min_height",
+        "roof:shape"
+      ]
+    },
+    {
+      "NAME": "industrial",
+      "MIN_ZOOM": 10,
+      "MAX_ZOOM": 14,
+      "FIELDS": [
+        "kind"
+      ]
+    },
+    {
+      "NAME": "parking",
+      "MIN_ZOOM": 13,
+      "MAX_ZOOM": 14,
+      "FIELDS": []
+    },
+    {
+      "NAME": "rail",
+      "MIN_ZOOM": 8,
+      "MAX_ZOOM": 14,
+      "FIELDS": [
+        "class"
+      ]
+    },
+    {
+      "NAME": "road",
+      "MIN_ZOOM": 5,
+      "MAX_ZOOM": 14,
+      "FIELDS": [
+        "class",
+        "lanes",
+        "width"
+      ]
+    },
+    {
+      "NAME": "water",
+      "MIN_ZOOM": 8,
+      "MAX_ZOOM": 14,
+      "FIELDS": [
+        "kind"
+      ]
+    }
+  ],
+  "PAYLOAD": {
+    "CID": "",
+    "SIZE_BYTES": 107086168,
+    "DIGEST": "sha256:e4bfa21bc3539e71a6ea605c77bf046a69c28dc226068b8972870ff68f4c7f39",
+    "MEDIA_TYPE": "application/vnd.pmtiles"
+  },
+  "PROVENANCE": {
+    "DATASET_ID": "openstreetmap",
+    "DATASET_NAME": "OpenStreetMap",
+    "DATASET_URL": "https://www.openstreetmap.org",
+    "DATASET_EPOCH": "2026-09-02T20:20:51Z",
+    "SOURCE_URL": "https://download.geofabrik.de/europe/germany/hessen-latest.osm.pbf",
+    "RETRIEVED_AT": "2026-09-03T18:56:15Z",
+    "LICENSE": "ODbL-1.0",
+    "LICENSE_URL": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "ATTRIBUTION": "© OpenStreetMap contributors",
+    "SHARE_ALIKE": true,
+    "NON_COMMERCIAL_ONLY": false,
+    "PROCESSOR": "planetiler 0.10.2"
+  }
+}

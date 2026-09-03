@@ -1,0 +1,25 @@
+== area=zuid-holland epoch=2026-09-02T20:20:51Z pbf=/private/tmp/claude-501/osm-context/data/zuid-holland-latest.osm.pbf retrieved_at=2026-09-03T19:09:14Z processor=planetiler 0.10.2
+== verify profile
+[1m[32m21 passed[0m
+== build 2026-09-03T22:11:49Z
+== built in 15 s wall;    14s cpu:2m34s avg:11
+   Max tile: 375k (gzipped: 221k)
+   Avg tile: 38k (gzipped: 25k) using weighted average based on OSM traffic
+    # tiles: 5,500
+ # features: 3,512,770
+-rw-r--r--  1 tj  wheel  58306577 Sep  3 18:12 /private/tmp/claude-501/osm-context/out/osm-context-zuid-holland-20260902T202051Z.pmtiles
+== header
+pmtiles spec version: 3
+tile type: mvt
+bounds: (long: 3.345328, lat: 51.642520) (long: 5.032393, lat: 52.476112)
+min zoom: 0
+max zoom: 14
+center zoom: 8
+addressed tiles count: 5500
+tile entries count: 2591
+tile contents count: 2427
+internal compression: gzip
+tile compression: gzip
+planetiler:osm:osmosisreplicationtime 2026-09-02T20:20:51Z
+== record
+wrote /private/tmp/claude-501/osm-context/out/osm-context-zuid-holland-20260902T202051Z.vtt.json

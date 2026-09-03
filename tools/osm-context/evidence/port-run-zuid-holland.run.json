@@ -1,0 +1,243 @@
+{
+  "tool": "tools/osm-context/build.mjs",
+  "region": "zuid-holland",
+  "epoch": "2026-09-02T20:20:51Z",
+  "tileset_id": "osm-context-zuid-holland-20260902T202051Z",
+  "started_at": "2026-09-03T22:33:27Z",
+  "finished_at": "2026-09-03T22:33:46Z",
+  "wall_seconds": 19,
+  "java": {
+    "path": "java",
+    "version": "openjdk version \"25.0.2\" 2026-01-20"
+  },
+  "planetiler": {
+    "version": "0.10.2",
+    "jar": "/private/tmp/claude-501/osm-context/bin/planetiler.jar",
+    "bytes": 93278824,
+    "sha256": "f310bd0413e2e4512b27f4046d418664e8e1d3bf31603c2a70e23de06c167e4d",
+    "url": "https://github.com/onthegomap/planetiler/releases/download/v0.10.2/planetiler.jar",
+    "git_hash": "0e5588c4a6e8c29a270a33afe8df62027d889604",
+    "downloaded": null
+  },
+  "profile": {
+    "file": "tools/osm-context/profile/osm-context.yml",
+    "sha256": "85c4589425d578fc1ef603bd5252e1f9892c56cf9397965d2c3d022824a1c262",
+    "verify": {
+      "passed": 21,
+      "expected": 21,
+      "planetiler_exit_code": 0
+    }
+  },
+  "inputs": {
+    "extract": {
+      "url": "https://download.geofabrik.de/europe/netherlands/zuid-holland-latest.osm.pbf",
+      "md5_url": "https://download.geofabrik.de/europe/netherlands/zuid-holland-latest.osm.pbf.md5",
+      "state_url": "https://download.geofabrik.de/europe/netherlands/zuid-holland-updates/state.txt",
+      "path": "/private/tmp/claude-501/osm-context/data/zuid-holland-latest.osm.pbf",
+      "bytes": 210780407,
+      "md5": "c7ee6d2cce54e7c981ed3b4e8a044cbd",
+      "retrieved_at": "2026-09-03T19:09:14Z",
+      "retrieved_at_source": "file mtime",
+      "downloaded_this_run": false,
+      "state": {
+        "timestamp": "2026-09-02T20:20:51Z",
+        "sequenceNumber": 2839,
+        "originalSequenceNumber": 7269936
+      }
+    },
+    "ocean": {
+      "url": "https://osmdata.openstreetmap.de/download/water-polygons-split-3857.zip",
+      "path": "/private/tmp/claude-501/osm-context/data/sources/water-polygons-split-3857.zip",
+      "bytes": 928928907,
+      "sha256": "05ba9c22b108adcae9724946f6da9b395119556c75cfac12cddc0f8079215435",
+      "pinned_sha256": "05ba9c22b108adcae9724946f6da9b395119556c75cfac12cddc0f8079215435",
+      "pin_source": "regions.json",
+      "files_dated": "2026-09-01T23:28:00Z",
+      "last_modified": null,
+      "retrieved_at": "2026-09-03T18:57:35Z",
+      "retrieved_at_source": "file mtime",
+      "downloaded_this_run": false
+    }
+  },
+  "build": {
+    "command": [
+      "java",
+      "-Xmx24g",
+      "-jar",
+      "/private/tmp/claude-501/osm-context/bin/planetiler.jar",
+      "generate-custom",
+      "--schema=/Users/tj/software/worktrees/space-data-network-modules--modules-osm-context-tiles/tools/osm-context/profile/osm-context.yml",
+      "--area=zuid-holland",
+      "--osm_local_path=/private/tmp/claude-501/osm-context/data/zuid-holland-latest.osm.pbf",
+      "--ocean_local_path=/private/tmp/claude-501/osm-context/data/sources/water-polygons-split-3857.zip",
+      "--output=/Users/tj/software/worktrees/space-data-network-modules--modules-osm-context-tiles/tools/osm-context/out/osm-context-zuid-holland-20260902T202051Z.pmtiles",
+      "--tmpdir=/Users/tj/software/worktrees/space-data-network-modules--modules-osm-context-tiles/tools/osm-context/out/tmp/zuid-holland",
+      "--force",
+      "--maxzoom=14",
+      "--render_maxzoom=14"
+    ],
+    "log": "/Users/tj/software/worktrees/space-data-network-modules--modules-osm-context-tiles/tools/osm-context/out/build-zuid-holland.log",
+    "wall_seconds": 17,
+    "planetiler": {
+      "finished": true,
+      "tiles": 5500,
+      "features": 3512770,
+      "maxTile": {
+        "raw": "375k",
+        "gzipped": "221k"
+      },
+      "avgTile": {
+        "raw": "38k",
+        "gzipped": "25k"
+      },
+      "overall": {
+        "wall": "16s",
+        "cpu": "2m23s",
+        "avg": "9.1"
+      },
+      "phases": {
+        "osm_pass1": {
+          "wall": "3s",
+          "cpu": "25s",
+          "avg": "7.3"
+        },
+        "osm_pass2": {
+          "wall": "4s",
+          "cpu": "1m17s",
+          "avg": "20.3"
+        },
+        "ocean": {
+          "wall": "7s",
+          "cpu": "11s",
+          "avg": "1.6"
+        },
+        "sort": {
+          "wall": "0.4s",
+          "cpu": "6s",
+          "avg": "12.9"
+        },
+        "archive": {
+          "wall": "1s",
+          "cpu": "24s",
+          "avg": "20.1"
+        }
+      },
+      "dataErrors": {
+        "render_snap_fix_input": 9914,
+        "osm_multipolygon_missing_way": 72
+      }
+    }
+  },
+  "archive": {
+    "path": "/Users/tj/software/worktrees/space-data-network-modules--modules-osm-context-tiles/tools/osm-context/out/osm-context-zuid-holland-20260902T202051Z.pmtiles",
+    "bytes": 58306577,
+    "sha256": "f543f2ed8277cbf29ea0018dbffb6836c7bdf5b0e12b06ed24772b986b59fb56",
+    "header": {
+      "version": 3,
+      "root_dir_offset": 127,
+      "root_dir_length": 6587,
+      "metadata_offset": 58305946,
+      "metadata_length": 631,
+      "leaf_dirs_offset": 58306577,
+      "leaf_dirs_length": 0,
+      "tile_data_offset": 16384,
+      "tile_data_length": 58289562,
+      "addressed_tiles_count": 5500,
+      "tile_entries_count": 2591,
+      "tile_contents_count": 2427,
+      "clustered": true,
+      "internal_compression": "gzip",
+      "tile_compression": "gzip",
+      "tile_type": "mvt",
+      "min_zoom": 0,
+      "max_zoom": 14,
+      "min_lon_e7": 33453280,
+      "min_lat_e7": 516425200,
+      "max_lon_e7": 50323930,
+      "max_lat_e7": 524761120,
+      "center_zoom": 8,
+      "center_lon_e7": 41888605,
+      "center_lat_e7": 520593159
+    },
+    "metadata": {
+      "vector_layers": [
+        {
+          "id": "aeroway",
+          "fields": {
+            "kind": "String"
+          },
+          "minzoom": 8,
+          "maxzoom": 14
+        },
+        {
+          "id": "building",
+          "fields": {
+            "building:levels": "Number",
+            "height": "Number",
+            "min_height": "Number",
+            "roof:shape": "String"
+          },
+          "minzoom": 13,
+          "maxzoom": 14
+        },
+        {
+          "id": "industrial",
+          "fields": {
+            "kind": "String"
+          },
+          "minzoom": 10,
+          "maxzoom": 14
+        },
+        {
+          "id": "parking",
+          "fields": {},
+          "minzoom": 13,
+          "maxzoom": 14
+        },
+        {
+          "id": "rail",
+          "fields": {
+            "class": "String"
+          },
+          "minzoom": 8,
+          "maxzoom": 14
+        },
+        {
+          "id": "road",
+          "fields": {
+            "class": "String",
+            "lanes": "Number",
+            "width": "Number"
+          },
+          "minzoom": 5,
+          "maxzoom": 14
+        },
+        {
+          "id": "water",
+          "fields": {
+            "kind": "String"
+          },
+          "minzoom": 0,
+          "maxzoom": 14
+        }
+      ],
+      "attribution": "<a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">&copy; OpenStreetMap contributors</a>",
+      "description": "Seven-layer OSM context tileset (water, road, rail, aeroway, parking, industrial, building) for the Space Data Network detector and LOD1 building extrusion. Zoom 0-14, Web Mercator, Mapbox Vector Tiles.",
+      "name": "osm-context",
+      "planetiler:buildtime": "2026-03-28T14:35:36.815Z",
+      "planetiler:githash": "0e5588c4a6e8c29a270a33afe8df62027d889604",
+      "planetiler:osm:osmosisreplicationseq": "2839",
+      "planetiler:osm:osmosisreplicationtime": "2026-09-02T20:20:51Z",
+      "planetiler:osm:osmosisreplicationurl": "https://download.geofabrik.de/europe/netherlands/zuid-holland-updates",
+      "planetiler:version": "0.10.2",
+      "type": "baselayer",
+      "version": "0.1.0"
+    }
+  },
+  "pmtiles_show": {
+    "cli": "/private/tmp/claude-501/osm-context/bin/pmtiles",
+    "version": "pmtiles 1.31.2, commit a3e4951ea6a0477b784c27c1dcbfd9c130878c5a, built at 2026-07-22T18:59:03Z",
+    "output": "pmtiles spec version: 3\ntile type: mvt\nbounds: (long: 3.345328, lat: 51.642520) (long: 5.032393, lat: 52.476112)\nmin zoom: 0\nmax zoom: 14\ncenter: (long: 4.188860, lat: 52.059316)\ncenter zoom: 8\naddressed tiles count: 5500\ntile entries count: 2591\ntile contents count: 2427\nclustered: true\ninternal compression: gzip\ntile compression: gzip\nplanetiler:osm:osmosisreplicationseq 2839\nplanetiler:osm:osmosisreplicationtime 2026-09-02T20:20:51Z\nplanetiler:osm:osmosisreplicationurl https://download.geofabrik.de/europe/netherlands/zuid-holland-updates\nplanetiler:version 0.10.2\nversion 0.1.0\nvector_layers <object, use --metadata to view full JSON metadata>\nattribution <a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">&copy; OpenStreetMap contributors</a>\nname osm-context\nplanetiler:buildtime 2026-03-28T14:35:36.815Z\nplanetiler:githash 0e5588c4a6e8c29a270a33afe8df62027d889604\ntype baselayer\ndescription Seven-layer OSM context tileset (water, road, rail, aeroway, parking, industrial, building) for the Space Data Network detector and LOD1 building extrusion. Zoom 0-14, Web Mercator, Mapbox Vector Tiles."
+  },
+  "record": "/Users/tj/software/worktrees/space-data-network-modules--modules-osm-context-tiles/tools/osm-context/out/osm-context-zuid-holland-20260902T202051Z.vtt.json"
+}

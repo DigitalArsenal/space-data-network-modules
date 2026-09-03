@@ -1,0 +1,23 @@
+{
+  "//": "The inputs build.mjs knows. Each region names a Geofabrik extract: `pbf` is the -latest file, `md5` its published checksum (the integrity check on the bytes), `state` the replication state file whose `timestamp` is the tileset epoch. planetiler copies the extract header's own replication timestamp into the archive metadata and build.mjs refuses a build where the two disagree. Add a region by adding an entry; tests/regions.test.mjs checks every URL's shape against the extract name.",
+  "ocean": {
+    "//": "osmcoastline water polygons in EPSG:3857 from osmdata.openstreetmap.de, the standard source for ocean fills (natural=coastline is not closed, so the ocean cannot come from the extract itself). ODbL. The file is REPLACED DAILY at the same URL and has no published checksum, so this pin is the digest of the file the evidence build used (the shapefile inside is dated 2026-09-01 23:28 UTC; downloaded 2026-09-03T18:57:35Z). A fresh download will not match it: build.mjs then refuses to build until the operator states the new digest with --ocean-sha256 (recorded in the run report) or updates this pin. That gap between the ocean's date and the extract's epoch is the ocean-epoch-drift open item in README.md.",
+    "url": "https://osmdata.openstreetmap.de/download/water-polygons-split-3857.zip",
+    "sha256": "05ba9c22b108adcae9724946f6da9b395119556c75cfac12cddc0f8079215435",
+    "bytes": 928928907,
+    "files_dated": "2026-09-01T23:28:00Z",
+    "license": "ODbL-1.0"
+  },
+  "regions": {
+    "hessen": {
+      "pbf": "https://download.geofabrik.de/europe/germany/hessen-latest.osm.pbf",
+      "md5": "https://download.geofabrik.de/europe/germany/hessen-latest.osm.pbf.md5",
+      "state": "https://download.geofabrik.de/europe/germany/hessen-updates/state.txt"
+    },
+    "zuid-holland": {
+      "pbf": "https://download.geofabrik.de/europe/netherlands/zuid-holland-latest.osm.pbf",
+      "md5": "https://download.geofabrik.de/europe/netherlands/zuid-holland-latest.osm.pbf.md5",
+      "state": "https://download.geofabrik.de/europe/netherlands/zuid-holland-updates/state.txt"
+    }
+  }
+}

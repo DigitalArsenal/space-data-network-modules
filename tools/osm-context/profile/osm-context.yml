@@ -1,0 +1,471 @@
+# tools/osm-context/profile/osm-context.yml — landed from the 2026-09-03
+# prototype build (evidence/BUILD-EVIDENCE.md). Tested with planetiler 0.10.2
+# (jar sha256 f310bd0413e2e4512b27f4046d418664e8e1d3bf31603c2a70e23de06c167e4d,
+# git 0e5588c4a6e8c29a270a33afe8df62027d889604) on OpenJDK 25.0.2: `verify`
+# passes all 21 cases below; Hessen built in 17 s and Zuid-Holland in 15 s.
+# Everything after this comment block is byte-for-byte the prototype's
+# profile/osm-context.yml. build.mjs runs `verify` before every build and
+# accepts only "<n> passed" with n equal to the number of examples here,
+# because planetiler exits 0 even when cases fail.
+#
+# osm-context: purpose-built OSM context tileset for the Space Data Network
+# detector and LOD1 building work ("OpenStreetMap on SDN" plan).
+#
+# Seven layers, zoom 0-14, Web Mercator, written straight to PMTiles by
+# planetiler (Apache-2.0) using its YAML "custom schema" profile
+# (planetiler-custommap).  Run with:
+#
+#   java -jar planetiler.jar generate-custom --schema=profile/osm-context.yml \
+#        --area=hessen --output=out/osm-context-hessen-<epoch>.pmtiles --force
+#
+# Test the tag rules without any data:
+#
+#   java -jar planetiler.jar verify profile/osm-context.yml
+#
+schema_name: osm-context
+schema_description: >-
+  Seven-layer OSM context tileset (water, road, rail, aeroway, parking,
+  industrial, building) for the Space Data Network detector and LOD1
+  building extrusion. Zoom 0-14, Web Mercator, Mapbox Vector Tiles.
+attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>'
+version: "0.1.0"
+is_overlay: false
+
+args:
+  area:
+    description: Geofabrik area name; only used to derive the default OSM local path
+    default: hessen
+  osm_local_path:
+    description: Local path to the OSM PBF extract (Geofabrik "-latest" file)
+    default: '${ "data/" + args.area + "-latest.osm.pbf" }'
+  ocean_local_path:
+    description: >-
+      Local path to osmdata.openstreetmap.de water polygons (osmcoastline output,
+      EPSG:3857, ODbL). Downloaded automatically from `url` if missing.
+    default: data/sources/water-polygons-split-3857.zip
+  minzoom: 0
+  maxzoom: 14
+  render_maxzoom: 14
+
+sources:
+  osm:
+    type: osm
+    local_path: '${ args.osm_local_path }'
+  ocean:
+    type: shapefile
+    url: https://osmdata.openstreetmap.de/download/water-polygons-split-3857.zip
+    local_path: '${ args.ocean_local_path }'
+
+definitions:
+  # Roads and rails: merge same-attribute segments per tile; never simplify at z14.
+  line_merge: &line_merge
+    merge_line_strings:
+      min_length: 1
+      min_length_at_max_zoom: 0
+      tolerance: 1
+      tolerance_at_max_zoom: -1
+      buffer: 4
+
+layers:
+  # ---------------------------------------------------------------- water
+  # natural=water, waterway=riverbank|dock, landuse=reservoir|basin from OSM,
+  # plus ocean polygons derived from natural=coastline (osmcoastline, via the
+  # osmdata.openstreetmap.de water-polygons shapefile).
+  - id: water
+    features:
+      - source: ocean
+        geometry: polygon
+        min_zoom: 0
+        attributes:
+          - key: kind
+            value: ocean
+      - source: osm
+        geometry: polygon
+        include_when:
+          natural: water
+          waterway: [riverbank, dock]
+          landuse: [reservoir, basin]
+        min_zoom:
+          default_value: 8
+          overrides:
+            12:
+              waterway: dock
+        attributes:
+          - key: kind
+            type: match_value
+
+  # ----------------------------------------------------------------- road
+  # highway=* minus footway|path|steps|cycleway. Lines only (no highway areas).
+  - id: road
+    features:
+      - source: osm
+        geometry: line
+        include_when:
+          highway: __any__
+        exclude_when:
+          highway: [footway, path, steps, cycleway]
+        min_zoom:
+          default_value: 13
+          overrides:
+            5:
+              highway: motorway
+            6:
+              highway: trunk
+            8:
+              highway: primary
+            9:
+              highway: secondary
+            10:
+              highway: [tertiary, motorway_link, trunk_link]
+            11:
+              highway: [primary_link, secondary_link]
+            12:
+              highway: [residential, unclassified, living_street, tertiary_link]
+        attributes:
+          - key: class
+            type: match_value
+          - key: lanes
+            tag_value: lanes
+            type: integer
+          - key: width
+            tag_value: width
+            type: double
+    tile_post_process: *line_merge
+
+  # ----------------------------------------------------------------- rail
+  - id: rail
+    features:
+      - source: osm
+        geometry: line
+        include_when:
+          railway: [rail, light_rail, tram]
+        min_zoom:
+          default_value: 12
+          overrides:
+            8:
+              __all__:
+                railway: rail
+                __not__:
+                  service: __any__
+        attributes:
+          - key: class
+            type: match_value
+    tile_post_process: *line_merge
+
+  # -------------------------------------------------------------- aeroway
+  # Explicit polygon / line / point blocks. `geometry: any` must NOT be used:
+  # a closed OSM way without an area tag is both canBePolygon and canBeLine,
+  # planetiler's matcher then fires once per geometry trigger and anyGeometry()
+  # picks polygon both times, so every closed way would be emitted twice.
+  - id: aeroway
+    features:
+      - source: osm
+        geometry: polygon
+        include_when:
+          __all__:
+            - aeroway: [aerodrome, apron, runway, taxiway, helipad, hangar]
+            # runway/taxiway rings are lines unless explicitly area=yes
+            - __not__:
+                __all__:
+                  aeroway: [runway, taxiway]
+                  __not__:
+                    area: yes
+        min_zoom: &aeroway_zoom
+          default_value: 13
+          overrides:
+            8:
+              aeroway: aerodrome
+            10:
+              aeroway: runway
+            11:
+              aeroway: [apron, taxiway]
+        attributes: &aeroway_attrs
+          - key: kind
+            tag_value: aeroway
+      - source: osm
+        geometry: line
+        include_when:
+          aeroway: [runway, taxiway]
+        exclude_when:
+          area: yes
+        min_zoom: *aeroway_zoom
+        attributes: *aeroway_attrs
+      - source: osm
+        geometry: point
+        include_when:
+          aeroway: [aerodrome, helipad]
+        min_zoom: *aeroway_zoom
+        attributes: *aeroway_attrs
+
+  # -------------------------------------------------------------- parking
+  - id: parking
+    features:
+      - source: osm
+        geometry: polygon
+        include_when:
+          amenity: parking
+        min_zoom: 13
+
+  # ----------------------------------------------------------- industrial
+  # Same polygon / line / point split as aeroway (see note there).
+  - id: industrial
+    features:
+      - source: osm
+        geometry: polygon
+        include_when:
+          landuse: [industrial, port, harbour]
+          man_made: [works, storage_tank, pier]
+        min_zoom: &industrial_zoom
+          default_value: 13
+          overrides:
+            10:
+              landuse: [industrial, port, harbour]
+        attributes: &industrial_attrs
+          - key: kind
+            type: match_value
+      - source: osm
+        geometry: line
+        include_when:
+          man_made: pier
+        exclude_when:
+          area: yes
+        min_zoom: *industrial_zoom
+        attributes: *industrial_attrs
+      - source: osm
+        geometry: point
+        include_when:
+          man_made: [works, storage_tank]
+        min_zoom: *industrial_zoom
+        attributes: *industrial_attrs
+
+  # ------------------------------------------------------------- building
+  # building=* minus building=no. At z14 nothing is simplified or dropped
+  # (tolerance -1 = skip Douglas-Peucker; min size 0); below z14 planetiler's
+  # default size filter / tolerance apply.
+  - id: building
+    features:
+      - source: osm
+        geometry: polygon
+        include_when:
+          building: __any__
+        exclude_when:
+          building: "no"
+        min_zoom: 13
+        min_size_at_max_zoom: 0
+        tolerance_at_max_zoom: -1
+        attributes:
+          - key: height
+            tag_value: height
+            type: double
+          - key: building:levels
+            tag_value: building:levels
+            type: double
+          - key: roof:shape
+            tag_value: roof:shape
+          - key: min_height
+            tag_value: min_height
+            type: double
+
+# ------------------------------------------------------------- test cases
+# `java -jar planetiler.jar verify profile/osm-context.yml`
+examples:
+  - name: building with height and levels
+    input:
+      source: osm
+      geometry: polygon
+      tags: { building: yes, height: "12.5", "building:levels": "4", "roof:shape": flat }
+    output:
+      - layer: building
+        geometry: polygon
+        min_zoom: 13
+        tags: { height: 12.5, "building:levels": 4.0, "roof:shape": flat, min_height: null }
+  - name: building=no is dropped
+    input:
+      source: osm
+      geometry: polygon
+      tags: { building: "no" }
+    output: []
+  - name: footway is dropped
+    input:
+      source: osm
+      geometry: line
+      tags: { highway: footway }
+    output: []
+  - name: primary road with lanes and width
+    input:
+      source: osm
+      geometry: line
+      tags: { highway: primary, lanes: "2", width: "7.5" }
+    output:
+      - layer: road
+        geometry: line
+        min_zoom: 8
+        tags: { class: primary, lanes: 2, width: 7.5 }
+  - name: service road at z13
+    input:
+      source: osm
+      geometry: line
+      tags: { highway: service }
+    output:
+      - layer: road
+        geometry: line
+        min_zoom: 13
+        tags: { class: service }
+  - name: mainline rail
+    input:
+      source: osm
+      geometry: line
+      tags: { railway: rail }
+    output:
+      - layer: rail
+        geometry: line
+        min_zoom: 8
+        tags: { class: rail }
+  - name: siding rail only from z12
+    input:
+      source: osm
+      geometry: line
+      tags: { railway: rail, service: siding }
+    output:
+      - layer: rail
+        geometry: line
+        min_zoom: 12
+        tags: { class: rail }
+  - name: apron polygon
+    input:
+      source: osm
+      geometry: polygon
+      tags: { aeroway: apron }
+    output:
+      - layer: aeroway
+        geometry: polygon
+        min_zoom: 11
+        tags: { kind: apron }
+  - name: runway line
+    input:
+      source: osm
+      geometry: line
+      tags: { aeroway: runway }
+    output:
+      - layer: aeroway
+        geometry: line
+        min_zoom: 10
+        tags: { kind: runway }
+  - name: taxiway ring without area=yes is not a polygon
+    input:
+      source: osm
+      geometry: polygon
+      tags: { aeroway: taxiway }
+    output: []
+  - name: runway area polygon
+    input:
+      source: osm
+      geometry: polygon
+      tags: { aeroway: runway, area: "yes" }
+    output:
+      - layer: aeroway
+        geometry: polygon
+        min_zoom: 10
+        tags: { kind: runway }
+  - name: aerodrome node
+    input:
+      source: osm
+      geometry: point
+      tags: { aeroway: aerodrome }
+    output:
+      - layer: aeroway
+        geometry: point
+        min_zoom: 8
+        tags: { kind: aerodrome }
+  - name: hangar polygon
+    input:
+      source: osm
+      geometry: polygon
+      tags: { aeroway: hangar, building: hangar }
+    output:
+      - layer: aeroway
+        geometry: polygon
+        min_zoom: 13
+        tags: { kind: hangar }
+      - layer: building
+        geometry: polygon
+        min_zoom: 13
+  - name: storage tank node
+    input:
+      source: osm
+      geometry: point
+      tags: { man_made: storage_tank }
+    output:
+      - layer: industrial
+        geometry: point
+        min_zoom: 13
+        tags: { kind: storage_tank }
+  - name: pier line
+    input:
+      source: osm
+      geometry: line
+      tags: { man_made: pier }
+    output:
+      - layer: industrial
+        geometry: line
+        min_zoom: 13
+        tags: { kind: pier }
+  - name: parking polygon
+    input:
+      source: osm
+      geometry: polygon
+      tags: { amenity: parking }
+    output:
+      - layer: parking
+        geometry: polygon
+        min_zoom: 13
+  - name: storage tank
+    input:
+      source: osm
+      geometry: polygon
+      tags: { man_made: storage_tank }
+    output:
+      - layer: industrial
+        geometry: polygon
+        min_zoom: 13
+        tags: { kind: storage_tank }
+  - name: port landuse
+    input:
+      source: osm
+      geometry: polygon
+      tags: { landuse: port }
+    output:
+      - layer: industrial
+        geometry: polygon
+        min_zoom: 10
+        tags: { kind: port }
+  - name: lake
+    input:
+      source: osm
+      geometry: polygon
+      tags: { natural: water, water: lake }
+    output:
+      - layer: water
+        geometry: polygon
+        min_zoom: 8
+        tags: { kind: water }
+  - name: dock
+    input:
+      source: osm
+      geometry: polygon
+      tags: { waterway: dock }
+    output:
+      - layer: water
+        geometry: polygon
+        min_zoom: 12
+        tags: { kind: dock }
+  - name: ocean polygon from coastline shapefile
+    input:
+      source: ocean
+      geometry: polygon
+      tags: {}
+    output:
+      - layer: water
+        geometry: polygon
+        min_zoom: 0
+        tags: { kind: ocean }

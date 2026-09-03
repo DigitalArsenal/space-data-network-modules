@@ -1,0 +1,33 @@
+[0m0:00:00 DEB - argument: watch=false (Watch files for changes and re-run validation when schema or spec changes)
+[m[0m0:00:00 DEB - argument: schema=profile/osm-context.yml (Schema file)
+[mOK
+
+Validating...
+
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::arrayBaseOffset has been called by com.google.protobuf.UnsafeUtil (file:/private/tmp/claude-501/osm-context/bin/planetiler.jar)
+WARNING: Please consider reporting this to the maintainers of class com.google.protobuf.UnsafeUtil
+WARNING: sun.misc.Unsafe::arrayBaseOffset will be removed in a future release
+[7m[1m[32m PASS [0m building with height and levels
+[7m[1m[32m PASS [0m building=no is dropped
+[7m[1m[32m PASS [0m footway is dropped
+[7m[1m[32m PASS [0m primary road with lanes and width
+[7m[1m[32m PASS [0m service road at z13
+[7m[1m[32m PASS [0m mainline rail
+[7m[1m[32m PASS [0m siding rail only from z12
+[7m[1m[32m PASS [0m apron polygon
+[7m[1m[32m PASS [0m runway line
+[7m[1m[32m PASS [0m taxiway ring without area=yes is not a polygon
+[7m[1m[32m PASS [0m runway area polygon
+[7m[1m[32m PASS [0m aerodrome node
+[7m[1m[32m PASS [0m hangar polygon
+[7m[1m[32m PASS [0m storage tank node
+[7m[1m[32m PASS [0m pier line
+[7m[1m[32m PASS [0m parking polygon
+[7m[1m[32m PASS [0m storage tank
+[7m[1m[32m PASS [0m port landuse
+[7m[1m[32m PASS [0m lake
+[7m[1m[32m PASS [0m dock
+[7m[1m[32m PASS [0m ocean polygon from coastline shapefile
+
+[1m[32m21 passed[0m
