@@ -1,0 +1,235 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.weathernext-parser",
+  "name": "Global Ensemble Forecast Parser Nodes",
+  "version": "0.1.0",
+  "description": "Pure WASM parser flow nodes for a machine-learned global ensemble weather forecast source: parse_cloud_chunks joins the request-builder's per-chunk job JSON (one per Zarr v3 chunk of a cloud-cover array) with the matching hostcap/http-request responses POSITIONALLY (job k <-> response k), decodes each chunk through its declared codec chain (bytes float32/float16 in this build; a zstd stage reports codec-unsupported until a decoder is vendored), validates the byte length against the declared chunk shape, and emits one size-prefixed $WXF tile per chunk (own GRID, TILE_INDEX/TILE_COUNT over the declared global grid, VALUE_MIN/VALUE_MAX/MISSING_COUNT, licence class copied from the job) plus the storage.ingest_with_source meta (batch = sha256 of the concatenated chunk bodies, licence-bearing provenance). parse_cyclone_tracks turns the tropical-cyclone track CSV into one $TCT record per (storm, member) with points sorted by valid time, knots/hPa/nautical-mile source units converted exactly to m/s, Pa and km, wind radii at 34/50/64 kt by quadrant and the intensity category from maximum sustained wind; it emits the meta, the record stream and the raw CSV for archiving. Records are built with the spacedatastandards.org GENERATED C++ code. No capabilities: this node performs no I/O. Nothing about the upstream bucket layout is hardcoded — chunk shape, codecs, dimension order, dtype and grid arrive on the job JSON and are validated by size, because the store is allow-listed and its layout could not be verified anonymously.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Both methods are single-pass transforms over the frames the flow hands them: parse_cloud_chunks decodes each chunk body once into one tile record, parse_cyclone_tracks walks the CSV rows once and groups them by storm and member. There is no shared mutable state, no worker pool and no fan-out inside the guest; the fan-out across chunks is the flow's, through the http connector node. This guest can never spawn a thread, so it compiles clang/wasi-sequential rather than claiming a wasi-threads contract it does not honour."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "parse_cloud_chunks",
+      "displayName": "Parse Cloud-Cover Chunks into $WXF Tiles",
+      "description": "Decodes N Zarr v3 chunk responses into N size-prefixed $WXF tile records plus one storage.ingest_with_source meta. Jobs and responses are paired BY POSITION (job k describes response k, exactly the order the request builder emitted them); differing counts are refused with job-response-count-mismatch rather than guessed, because a shifted pairing would label every later tile with the wrong array, lead or grid cell. A non-200 response fails the batch (fetch-failed); an undeclared codec fails it (codec-unsupported); a body whose length differs from product(chunk_shape) * itemsize fails it (chunk-size-mismatch). Padding beyond the declared global grid edge is dropped so an edge tile carries only real rows and columns. Both input ports are multi-stream by contract, so no batched-frame guard applies here.",
+      "inputPorts": [
+        {
+          "portId": "jobs",
+          "acceptedTypeSets": [
+            {
+              "setId": "weathernext-chunk-job-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON chunk job: source attribution, array, init/lead/member, dtype, codecs, chunk_shape, chunk_index, dims, grid, licence.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-chunk fetch-job attribution and declared Zarr layout emitted by the source module's plan node inside the same flow; ingest bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "One chunk job per request frame the plan node emitted, in emission order."
+        },
+        {
+          "portId": "responses",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "hostcap/http-request response, one per job: an aligned-binary $HRB raw-body-v1 frame (status plus verbatim body) or the legacy JSON {status,headers,bodyB64} lane.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request response frame ($HRB raw-body-v1, or legacy {status,headers,bodyB64}) consumed inside this flow; its shape is defined by that generic connector, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "One HTTP response per chunk job, positionally aligned."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "wxf_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-meta-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON storage.ingest_with_source meta for the $WXF batch (schema/provider/source/batch/reconcile/licence/provenance).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "storage.ingest_with_source meta (schema, provider/source/url/batch attribution, reconcile mode, licence and citation, provenance) consumed by hostcap/storage-ingest inside this flow."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "WXF ingest meta."
+        },
+        {
+          "portId": "wxf_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "WXF.fbs",
+                  "fileIdentifier": "$WXF",
+                  "rootTypeName": "WXF",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $WXF FlatBuffer record stream, one tile per chunk."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "WXF record stream."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "methodId": "parse_cyclone_tracks",
+      "displayName": "Parse Cyclone Track CSV into $TCT",
+      "description": "Decodes the tropical-cyclone track CSV (one row per storm x member x lead) into one size-prefixed $TCT record per (storm, member) with points in ascending valid time, exact unit conversions (1 kt = 1852/3600 m/s, 1 hPa = 100 Pa, 1 nmi = 1.852 km), quadrant wind radii at 34/50/64 kt (blank -> -1 not reported, 0 stays 0), intensity category from maximum sustained wind and the genesis/existing origin flag, plus the ingest meta (batch = sha256 of the CSV bytes) and the raw CSV for archiving. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned would destroy every other frame it was handed there. A surplus is refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames.",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "weathernext-cyclone-job-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON cyclone job: source attribution, archive naming, model identity, ensemble size, wind averaging period, licence.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Fetch-job attribution emitted by the source module's cyclone_request node inside the same flow; ingest bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Fetch-job attribution from the request-builder node."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "hostcap/http-request response: JSON {status,headers,bodyB64} or an aligned-binary $HRB raw-body-v1 frame.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request response frame ({status,headers,bodyB64}, or $HRB raw-body-v1) consumed inside this flow; its shape is defined by that generic connector, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP response carrying the cyclone track CSV."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "tct_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-meta-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON storage.ingest_with_source meta for the $TCT batch (with archive naming and licence-bearing provenance).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "storage.ingest_with_source meta (schema, provider/source/url/batch attribution, reconcile mode, archive naming, licence and citation, provenance) consumed by hostcap/storage-ingest inside this flow."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "TCT ingest meta."
+        },
+        {
+          "portId": "tct_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "TCT.fbs",
+                  "fileIdentifier": "$TCT",
+                  "rootTypeName": "TCT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $TCT FlatBuffer record stream, one track per (storm, member)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "TCT record stream."
+        },
+        {
+          "portId": "raw",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-raw-payload",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "The decoded source payload bytes (for raw archiving).",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "text/csv",
+                "detail": "The verbatim cyclone track CSV as fetched from the upstream store, archived byte-for-byte for provenance. It is an external wire format with no SDS identity."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Raw fetched payload."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "WXF.fbs",
+      "fileIdentifier": "$WXF",
+      "rootTypeName": "WXF"
+    },
+    {
+      "schemaName": "TCT.fbs",
+      "fileIdentifier": "$TCT",
+      "rootTypeName": "TCT"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "weathernext-parser-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

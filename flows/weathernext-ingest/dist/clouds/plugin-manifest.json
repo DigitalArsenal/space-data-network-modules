@@ -1,0 +1,399 @@
+{
+  "pluginId": "com.digitalarsenal.flows.weathernext-clouds-ingest",
+  "name": "Global Ensemble Forecast Cloud-Cover Ingest Flow",
+  "version": "0.1.0",
+  "pluginFamily": "flow",
+  "description": "Per-provider ingest flow for the cloud-cover fields of a machine-learned global ensemble weather forecast served as Zarr v3 objects: a module cron TIMER tick enters at weathernext-source:plan, which (only when node CONFIG sets weathernext_live_access) emits one raw-body-v1 hostcap/http-request GET per (array x lead x chunk) plus the positional chunk job; hostcap/http-request fetches every chunk in order; weathernext-parser:parse_cloud_chunks pairs job k with response k, decodes each chunk through its declared codec chain and emits one size-prefixed $WXF tile per chunk (batch = sha256 of the concatenated chunk bodies, licence-bearing provenance); hostcap/storage-ingest persists the batch through the policy-mediated storage.ingest_with_source cap op. Ingest results and skip-status frames land on the egress sink. After each store, weathernext-source:publish_request joins the ingest result with the parser meta and (only when node CONFIG carries weathernext_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; its response also lands on egress. The credential capability (secrets:gcp-weathernext) belongs to the source node alone; all decisions live in-wasm and the host contributes timers, HTTP egress and guarded persistence only.",
+  "capabilities": [
+    "http",
+    "secrets:gcp-weathernext",
+    "storage_ingest"
+  ],
+  "dependencies": [
+    {
+      "pluginId": "com.digitalarsenal.data-source.weathernext-source",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.data-source.weathernext-parser",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    }
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "host-http",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "http",
+      "resource": "https://*",
+      "description": "Outbound HTTP through the host http.request hostcall. Go server host: 4 MiB response cap, 30 s default timeout. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
+      "properties": {
+        "hostOps": [
+          "http.request"
+        ]
+      }
+    },
+    {
+      "interfaceId": "host-storage-ingest",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_ingest",
+      "resource": "sdn://storage/ingest",
+      "description": "Provenance/batch-capable record ingest through the host storage.ingest_with_source hostcall (sdn-server modulert/caps/storage.go).",
+      "properties": {
+        "hostOps": [
+          "storage.ingest_with_source"
+        ]
+      }
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "timer_wx_clouds",
+      "displayName": "Flow trigger timer-wx-clouds",
+      "description": "Compiled-flow ingress for trigger \"timer-wx-clouds\" (timer).",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Timer tick frame (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Cron timer tick frame produced by the flow runtime and consumed inside this flow only; it carries no payload of its own, so there is no SDS record to name."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-result-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON host result: {\"schema\",\"inserted\",\"batch_id\",\"reconciled_duplicates\"?,\"reconciled_old_batches\"?,\"archived\"?,\"provenance\"?}."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Ingest result summary."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "WXF.fbs",
+      "fileIdentifier": "$WXF",
+      "rootTypeName": "WXF"
+    },
+    {
+      "schemaName": "TCT.fbs",
+      "fileIdentifier": "$TCT",
+      "rootTypeName": "TCT"
+    }
+  ],
+  "runtimeTargets": [
+    "wasmedge"
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "com_digitalarsenal_flows_weathernext_clouds_ingest-flow-runtime",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "wasmedge"
+    }
+  ],
+  "flowNodes": [
+    {
+      "nodeId": "req",
+      "pluginId": "com.digitalarsenal.data-source.weathernext-source",
+      "methodId": "plan",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.weathernext-parser",
+      "methodId": "parse_cloud_chunks",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "ingest_wxf",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "publish_wxf",
+      "pluginId": "com.digitalarsenal.data-source.weathernext-source",
+      "methodId": "publish_request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "publish_http_wxf",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "dispatchModel": "host-capability",
+      "uiX": 0,
+      "uiY": 0
+    }
+  ],
+  "flowEdges": [
+    {
+      "edgeId": "req-http",
+      "fromNodeId": "req",
+      "fromPortId": "requests",
+      "toNodeId": "http",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "req-parse-jobs",
+      "fromNodeId": "req",
+      "fromPortId": "jobs",
+      "toNodeId": "parse",
+      "toPortId": "jobs",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http-parse",
+      "fromNodeId": "http",
+      "fromPortId": "response",
+      "toNodeId": "parse",
+      "toPortId": "responses",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-wxf-meta",
+      "fromNodeId": "parse",
+      "fromPortId": "wxf_meta",
+      "toNodeId": "ingest_wxf",
+      "toPortId": "meta",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-wxf-records",
+      "fromNodeId": "parse",
+      "fromPortId": "wxf_records",
+      "toNodeId": "ingest_wxf",
+      "toPortId": "records",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "WXF.fbs",
+          "fileIdentifier": "$WXF",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "WXF",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "ingest-wxf-egress",
+      "fromNodeId": "ingest_wxf",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "ingest-wxf-publish",
+      "fromNodeId": "ingest_wxf",
+      "fromPortId": "result",
+      "toNodeId": "publish_wxf",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-wxf-meta-publish",
+      "fromNodeId": "parse",
+      "fromPortId": "wxf_meta",
+      "toNodeId": "publish_wxf",
+      "toPortId": "meta",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "publish-wxf-http",
+      "fromNodeId": "publish_wxf",
+      "fromPortId": "request",
+      "toNodeId": "publish_http_wxf",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "publish-wxf-egress",
+      "fromNodeId": "publish_http_wxf",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "req-status-egress",
+      "fromNodeId": "req",
+      "fromPortId": "status",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    }
+  ],
+  "flowTriggers": [
+    {
+      "triggerId": "timer-wx-clouds",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 21600000,
+      "httpPath": null
+    }
+  ],
+  "flowTriggerBindings": [
+    {
+      "triggerId": "timer-wx-clouds",
+      "targetNodeId": "req",
+      "targetPortId": "tick"
+    }
+  ],
+  "abiVersion": 1
+}

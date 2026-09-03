@@ -1,0 +1,205 @@
+{
+  "programId": "com.digitalarsenal.flows.weathernext-cyclones-ingest",
+  "name": "Global Ensemble Forecast Cyclone Track Ingest Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "Per-provider ingest flow for the tropical-cyclone tracks of a machine-learned global ensemble weather forecast: a module cron TIMER tick enters at weathernext-source:cyclone_request, which (only when node CONFIG sets weathernext_live_access and weathernext_cyclone_url) emits the hostcap/http-request GET for the track CSV plus its parse job; hostcap/http-request fetches it; weathernext-parser:parse_cyclone_tracks groups the rows by (storm, member) into size-prefixed $TCT records with exact unit conversions and points in valid-time order (batch = sha256 of the CSV), emitting the ingest meta with archive naming and the raw CSV; hostcap/storage-ingest persists the batch and archives the payload through the policy-mediated storage.ingest_with_source cap op. Ingest results and skip-status frames land on the egress sink. After each store, weathernext-source:publish_request joins the ingest result with the parser meta and (only when node CONFIG carries weathernext_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; its response also lands on egress. The credential capability (secrets:gcp-weathernext) belongs to the source node alone; all decisions live in-wasm and the host contributes timers, HTTP egress and guarded persistence only.",
+  "nodes": [
+    {
+      "nodeId": "req",
+      "pluginId": "com.digitalarsenal.data-source.weathernext-source",
+      "methodId": "cyclone_request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.weathernext-parser",
+      "methodId": "parse_cyclone_tracks",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest_tct",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish_tct",
+      "pluginId": "com.digitalarsenal.data-source.weathernext-source",
+      "methodId": "publish_request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish_http_tct",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "req-http",
+      "fromNodeId": "req",
+      "fromPortId": "request",
+      "toNodeId": "http",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "req-parse-job",
+      "fromNodeId": "req",
+      "fromPortId": "job",
+      "toNodeId": "parse",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-parse",
+      "fromNodeId": "http",
+      "fromPortId": "response",
+      "toNodeId": "parse",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-tct-meta",
+      "fromNodeId": "parse",
+      "fromPortId": "tct_meta",
+      "toNodeId": "ingest_tct",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-tct-records",
+      "fromNodeId": "parse",
+      "fromPortId": "tct_records",
+      "toNodeId": "ingest_tct",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": false,
+      "_comment": "NOT opaque: both ports resolve the concrete $TCT identity, so the record type is declared on the wire rather than signed away."
+    },
+    {
+      "edgeId": "parse-tct-raw",
+      "fromNodeId": "parse",
+      "fromPortId": "raw",
+      "toNodeId": "ingest_tct",
+      "toPortId": "raw",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "ingest-tct-egress",
+      "fromNodeId": "ingest_tct",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "ingest-tct-publish",
+      "fromNodeId": "ingest_tct",
+      "fromPortId": "result",
+      "toNodeId": "publish_tct",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-tct-meta-publish",
+      "fromNodeId": "parse",
+      "fromPortId": "tct_meta",
+      "toNodeId": "publish_tct",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "publish-tct-http",
+      "fromNodeId": "publish_tct",
+      "fromPortId": "request",
+      "toNodeId": "publish_http_tct",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "publish-tct-egress",
+      "fromNodeId": "publish_http_tct",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "req-status-egress",
+      "fromNodeId": "req",
+      "fromPortId": "status",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "timer-wx-cyclones",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 21600000,
+      "description": "Cyclone track sync timer (synoptic cycle cadence, 6 h)."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "timer-wx-cyclones",
+      "targetNodeId": "req",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.weathernext-source",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.data-source.weathernext-parser",
+    "com.digitalarsenal.hostcap.storage-ingest"
+  ]
+}

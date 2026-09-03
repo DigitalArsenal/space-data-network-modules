@@ -1,0 +1,269 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.weathernext-source",
+  "name": "Global Ensemble Forecast Request Builder Nodes",
+  "version": "0.1.0",
+  "description": "Request-builder flow nodes for a machine-learned global ensemble weather forecast source served as Zarr v3 objects from an allow-listed cloud bucket. A module cron TIMER tick enters on 'tick'; plan emits one hostcap/http-request GET per (cloud-cover array x lead x chunk) as a raw-body-v1 request together with the positional per-chunk parse job for weathernext-parser:parse_cloud_chunks; cyclone_request emits the tropical-cyclone track CSV fetch plus its job; publish_request turns a completed storage-ingest result plus the parser's ingest meta into the dataset-publication POST for the node's loopback admin endpoint, emitting nothing when weathernext_publish_url is unset. EVERYTHING is node CONFIG through the builtin plugin.getConfig hostcall: weathernext_live_access is the live switch (default false: no request, no job, no secrets.get, one status frame {skipped: live-access-disabled}); weathernext_auth_mode none|bearer|refresh-token (bearer reads the operator's OAuth2 access token from the machine-bound credential store lane weathernext_secrets_lane through secrets.get and places it ONLY on the request frames, never on a job frame, wiping it after use; refresh-token is reserved and reports auth-mode-unsupported); the store path, arrays, init time, leads, chunk indices, chunk shape, codecs, dimension order, dtype and grid are all operator-declared because anonymous reads of the bucket are refused and its layout could not be verified. Licence class is decided per (init, lead) from valid time against the clock: at least one hour old is Historical (open attribution licence), otherwise RealTimeExperimental (experimental real-time terms). This is the ONLY node in the flow holding the credential capability, so the parser sibling stays capabilities:[] and browser-instantiable; every rebuild changes this artifact's hash and revokes the operator's secrets approval for it by design.",
+  "pluginFamily": "data_source",
+  "capabilities": ["secrets:gcp-weathernext"],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["wasmedge"],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "One method over one control frame: read the node config, make at most a handful of synchronous hostcalls in a fixed order (plugin.getConfig, then secrets.get in bearer mode), emit request and job frames. No shared mutable state, no worker pool, no fan-out inside the guest. This guest can never spawn a thread, so it compiles the single-thread lane rather than claiming a wasi-threads contract it does not honour."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "plan",
+      "displayName": "Cloud-Cover Chunk Fetch Plan",
+      "description": "Turns one timer tick into N raw-body-v1 http request frames and N positional chunk jobs, one pair per (array x lead x chunk index pair) from node CONFIG, or one status frame when weathernext_live_access is false / the store path is missing. Chunk key layout: <base>/<store_path>/<array>/c/<init_index>/<member_index>/<lead_index>/<latChunk>/<lonChunk> with lead_index = lead_hours / weathernext_lead_step_hours. BATCHING: the tick port is single-stream BY CONTRACT and that is ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a second tick in one invocation would emit one plan for two ticks. A surplus is refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames.",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "Timer tick frame (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Cron timer tick frame produced by the flow runtime and consumed inside this flow only; it carries no payload of its own, so there is no SDS record to name."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON for hostcap/http-request: {\"method\":\"GET\",\"url\",\"headers\"?,\"timeoutMs\",\"responseWire\":\"raw-body-v1\"}, one per chunk.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request request descriptor ({method,url,headers,timeoutMs,responseWire}) produced and consumed inside this flow; its shape is defined by the host http.request op, not by SDS. In bearer mode it carries the authorization header and travels only to the http node."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "One chunk fetch request per (array x lead x chunk); ABSENT when live access is disabled."
+        },
+        {
+          "portId": "jobs",
+          "acceptedTypeSets": [
+            {
+              "setId": "weathernext-chunk-job-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON chunk job for weathernext-parser:parse_cloud_chunks, positionally aligned with the request frames.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-chunk fetch-job attribution and declared Zarr layout (array, init/lead/member, dtype, codecs, chunk_shape, chunk_index, dims, grid, licence) consumed by this module's parser sibling inside the same flow; ingest bookkeeping, never persisted as a record and never carrying a credential."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "One parse job per request frame, in the same order; ABSENT when live access is disabled."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "weathernext-status-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON status frame, e.g. {\"skipped\":\"live-access-disabled\"}.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Skip/status notice ({skipped: reason}) delivered to the flow's egress sink so an operator can see why a cycle fetched nothing; flow bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Status frame, emitted only when the cycle is skipped."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "cyclone_request",
+      "displayName": "Cyclone Track CSV Fetch Request",
+      "description": "Turns one timer tick into the tropical-cyclone track CSV fetch request (default JSON/bodyB64 response lane) plus the parse job for weathernext-parser:parse_cyclone_tracks, under the same live-access and auth rules as plan; with no weathernext_cyclone_url configured it emits a status frame {skipped: cyclone-url-missing}. BATCHING: the tick port is single-stream BY CONTRACT and that is ENFORCED IN CODE; a surplus is refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames.",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "Timer tick frame (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Cron timer tick frame produced by the flow runtime and consumed inside this flow only; it carries no payload of its own, so there is no SDS record to name."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON for hostcap/http-request: {\"method\":\"GET\",\"url\",\"headers\"?,\"timeoutMs\"}.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request request descriptor ({method,url,headers,timeoutMs}) produced and consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Cyclone track CSV fetch request; ABSENT when live access is disabled or no URL is configured."
+        },
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "weathernext-cyclone-job-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON cyclone job for weathernext-parser:parse_cyclone_tracks.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Fetch-job attribution (source, archive naming, model identity, ensemble size, wind averaging period, licence) consumed by this module's parser sibling inside the same flow; ingest bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Cyclone parse job; ABSENT when the request is."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "weathernext-status-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON status frame, e.g. {\"skipped\":\"cyclone-url-missing\"}.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Skip/status notice ({skipped: reason}) delivered to the flow's egress sink so an operator can see why a cycle fetched nothing; flow bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Status frame, emitted only when the cycle is skipped."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "publish_request",
+      "displayName": "Dataset Publication Request",
+      "description": "Turns a completed ingest (storage-ingest result + parser meta) into the loopback dataset-publication POST for hostcap/http-request. Emits nothing unless node CONFIG carries weathernext_publish_url — absence of configuration is not permission to publish. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE; a second result in one invocation would publish one record for two ingests, attributing the wrong meta to the wrong result, so a surplus is refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames.",
+      "inputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-result-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON hostcap/storage-ingest result: {\"schema\",\"inserted\",\"batch_id\",...}.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/storage-ingest result ({schema,inserted,batch_id,reconciled_*}) consumed inside this flow; its shape is defined by the host storage.ingest_with_source op, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Completed storage-ingest result for the batch that was just stored."
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-meta-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON parser ingest meta — the ONLY carrier of provider_id and source_name.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "storage.ingest_with_source meta (schema, provider/source/batch attribution, licence, provenance) produced by the parser sibling inside this flow; ingest bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Parser ingest meta for the same batch."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "description": "UTF-8 JSON for hostcap/http-request: POST {\"schema\",\"providerId\",\"sourceName\",\"batchId\"} as bodyB64.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request request descriptor for the node's loopback dataset-publication endpoint, produced and consumed inside this flow; its shape is defined by the host http.request op and the node's admin API, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Dataset-publication POST request; ABSENT when no weathernext_publish_url is configured (fail-closed)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [],
+  "buildArtifacts": [
+    {
+      "artifactId": "weathernext-source-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

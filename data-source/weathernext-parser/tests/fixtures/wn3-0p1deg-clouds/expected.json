@@ -1,0 +1,243 @@
+{
+  "generator": "tests/fixtures/generate-fixtures.mjs",
+  "grid": {
+    "lat0": 90,
+    "lon0": 0,
+    "dlat": -0.1,
+    "dlon": 0.1,
+    "nlat": 1801,
+    "nlon": 3600,
+    "periodic_lon": true
+  },
+  "chunk_shape": [
+    1,
+    1,
+    1,
+    64,
+    64
+  ],
+  "dims": [
+    "init_time",
+    "member",
+    "lead_time",
+    "latitude",
+    "longitude"
+  ],
+  "dtype": "float32",
+  "layers": [
+    {
+      "array": "low_cloud_cover",
+      "layer": 0,
+      "variable": "LowCloudCover"
+    },
+    {
+      "array": "medium_cloud_cover",
+      "layer": 1,
+      "variable": "MediumCloudCover"
+    },
+    {
+      "array": "high_cloud_cover",
+      "layer": 2,
+      "variable": "HighCloudCover"
+    }
+  ],
+  "job": {
+    "model_id": "weathernext-3",
+    "model_class": "MachineLearnedGlobalEnsemble",
+    "init_time": "2026-09-02T00:00:00Z",
+    "init_time_ms": 1788307200000,
+    "lead_hours": 6,
+    "valid_time_ms": 1788328800000,
+    "horizon_hours": 360,
+    "member_kind": "Member",
+    "member_index": 0,
+    "ensemble_size": 64,
+    "units": "1",
+    "level_kind": "EntireAtmosphere",
+    "temporal_kind": "Instantaneous",
+    "origin_id": "storage.googleapis.com",
+    "dataset_id": "weathernext3_spatial",
+    "source_name": "weathernext3-clouds-0p1deg"
+  },
+  "field_ids": {
+    "low_cloud_cover": "weathernext-3|2026-09-02T00:00:00Z|Member0|low_cloud_cover|6h",
+    "medium_cloud_cover": "weathernext-3|2026-09-02T00:00:00Z|Member0|medium_cloud_cover|6h",
+    "high_cloud_cover": "weathernext-3|2026-09-02T00:00:00Z|Member0|high_cloud_cover|6h"
+  },
+  "chunks": {
+    "low_cloud_cover.c.0.0.6.14.7.bin": {
+      "array": "low_cloud_cover",
+      "layer": 0,
+      "chunk_index": [
+        0,
+        0,
+        6,
+        14,
+        7
+      ],
+      "sha256": "85e510838b00eb474d702ff6e38aabb7cc5609958bb9018922a24531f6d033db",
+      "byte_length": 16384,
+      "NLAT": 64,
+      "NLON": 64,
+      "LAT0": 0.3999999999999915,
+      "LON0": 44.800000000000004,
+      "DLAT": -0.1,
+      "DLON": 0.1,
+      "PERIODIC_LON": false,
+      "TILE_INDEX": 805,
+      "TILE_COUNT": 1653,
+      "VALUE_MIN": 0.965573251247406,
+      "VALUE_MAX": 1,
+      "MISSING_COUNT": 0,
+      "cell_count": 4096,
+      "spots": [
+        {
+          "i": 0,
+          "j": 0,
+          "value": 0.9998781681060791
+        },
+        {
+          "i": 63,
+          "j": 63,
+          "value": 0.965573251247406
+        },
+        {
+          "i": 31,
+          "j": 17,
+          "value": 0.9943334460258484
+        }
+      ],
+      "zst_file": "low_cloud_cover.c.0.0.6.14.7.bin.zst",
+      "zst_sha256": "1aa0096d9d3f6a9970a6ae59264679c30f337de88761b07bf81436bd51371e00",
+      "zst_byte_length": 11307
+    },
+    "medium_cloud_cover.c.0.0.6.14.7.bin": {
+      "array": "medium_cloud_cover",
+      "layer": 1,
+      "chunk_index": [
+        0,
+        0,
+        6,
+        14,
+        7
+      ],
+      "sha256": "50234b47435294ecb519bd1a0b2c0ba86618e6bc3ee47d34cded4d2f041b9628",
+      "byte_length": 16384,
+      "NLAT": 64,
+      "NLON": 64,
+      "LAT0": 0.3999999999999915,
+      "LON0": 44.800000000000004,
+      "DLAT": -0.1,
+      "DLON": 0.1,
+      "PERIODIC_LON": false,
+      "TILE_INDEX": 805,
+      "TILE_COUNT": 1653,
+      "VALUE_MIN": 0.28486719727516174,
+      "VALUE_MAX": 0.4447118639945984,
+      "MISSING_COUNT": 9,
+      "cell_count": 4096,
+      "spots": [
+        {
+          "i": 0,
+          "j": 0,
+          "value": 0.40255168080329895
+        },
+        {
+          "i": 63,
+          "j": 63,
+          "value": 0.3779425621032715
+        },
+        {
+          "i": 31,
+          "j": 17,
+          "value": 0.3945121467113495
+        }
+      ],
+      "zst_file": "medium_cloud_cover.c.0.0.6.14.7.bin.zst",
+      "zst_sha256": "91bdcd96bc051ab0f5e108eabbb8ad73dedfd10af2179c3343c797878a056332",
+      "zst_byte_length": 13705
+    },
+    "high_cloud_cover.c.0.0.6.14.7.bin": {
+      "array": "high_cloud_cover",
+      "layer": 2,
+      "chunk_index": [
+        0,
+        0,
+        6,
+        14,
+        7
+      ],
+      "sha256": "2d280497387b4d49369d46e46bc962759bd5115f40778c9a55a198ef66f44611",
+      "byte_length": 16384,
+      "NLAT": 64,
+      "NLON": 64,
+      "LAT0": 0.3999999999999915,
+      "LON0": 44.800000000000004,
+      "DLAT": -0.1,
+      "DLON": 0.1,
+      "PERIODIC_LON": false,
+      "TILE_INDEX": 805,
+      "TILE_COUNT": 1653,
+      "VALUE_MIN": 0.47560036182403564,
+      "VALUE_MAX": 0.6129379272460938,
+      "MISSING_COUNT": 0,
+      "cell_count": 4096,
+      "spots": [
+        {
+          "i": 0,
+          "j": 0,
+          "value": 0.5247106552124023
+        },
+        {
+          "i": 63,
+          "j": 63,
+          "value": 0.47560036182403564
+        },
+        {
+          "i": 31,
+          "j": 17,
+          "value": 0.5482330918312073
+        }
+      ],
+      "zst_file": "high_cloud_cover.c.0.0.6.14.7.bin.zst",
+      "zst_sha256": "8f240f32005a66c157bac4636f73c75edbfbf05d4e725e997f70696c6fb028f5",
+      "zst_byte_length": 13500
+    },
+    "low_cloud_cover.c.0.0.6.28.7.bin": {
+      "array": "low_cloud_cover",
+      "layer": 0,
+      "chunk_index": [
+        0,
+        0,
+        6,
+        28,
+        7
+      ],
+      "sha256": "6b489896947581d7264b83c7cb3e4f26366ae1d887a3b7898a1175d69b868963",
+      "byte_length": 16384,
+      "NLAT": 9,
+      "NLON": 64,
+      "LAT0": -89.20000000000002,
+      "LON0": 44.800000000000004,
+      "DLAT": -0.1,
+      "DLON": 0.1,
+      "PERIODIC_LON": false,
+      "TILE_INDEX": 1603,
+      "TILE_COUNT": 1653,
+      "VALUE_MIN": 0.47906216979026794,
+      "VALUE_MAX": 0.5,
+      "MISSING_COUNT": 0,
+      "cell_count": 576,
+      "spots": [
+        {
+          "i": 8,
+          "j": 63,
+          "value": 0.5
+        }
+      ],
+      "zst_file": "low_cloud_cover.c.0.0.6.28.7.bin.zst",
+      "zst_sha256": "bf94229759fd1913dd983ee6ba053030ea37358af146a36dfb4ac1c4ef775a2c",
+      "zst_byte_length": 1599
+    }
+  }
+}
