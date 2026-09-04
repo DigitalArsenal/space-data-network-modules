@@ -56,6 +56,7 @@ const CASES = [
   ["satcat", "tick", []],
   ["spw", "tick", []],
   ["eop", "tick", []],
+  ["socrates", "tick", []],
   ["publish_request", "result", ["meta"]],
   ["cache_warm", "result", []],
 ];

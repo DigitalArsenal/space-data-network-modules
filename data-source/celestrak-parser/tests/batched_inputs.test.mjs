@@ -56,6 +56,7 @@ const CASES = [
   ["parse_satcat", "response", ["job"]],
   ["parse_spw", "response", ["job"]],
   ["parse_eop", "response", ["job"]],
+  ["parse_socrates", "response", ["job"]],
 ];
 
 for (const [methodId, port, others] of CASES) {

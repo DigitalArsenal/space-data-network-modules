@@ -14,6 +14,8 @@
  *             request_csv/job_csv         (legacy fixed-width + CSV snapshot)
  *   spw    -> request/job                 (SW-All.csv space weather)
  *   eop    -> request/job                 (EOP-All.csv Earth orientation)
+ *   socrates -> request_minrange/job_minrange +
+ *               request_maxprob/job_maxprob (SOCRATES sort files)
  *
  *   publish_request -> request            (§19 dataset-publication trigger)
  *     Joins the hostcap/storage-ingest "result" with the parser's ingest
@@ -56,6 +58,10 @@ constexpr const char* kDefaultSatcatURL = "https://celestrak.org/pub/satcat.txt"
 constexpr const char* kDefaultSatcatCSVURL = "https://celestrak.org/pub/satcat.csv";
 constexpr const char* kDefaultSpaceWeatherURL = "https://celestrak.org/SpaceData/SW-All.csv";
 constexpr const char* kDefaultEOPURL = "https://celestrak.org/SpaceData/EOP-All.csv";
+constexpr const char* kDefaultSocratesMinRangeURL =
+    "https://celestrak.org/SOCRATES/sort-minRange.csv";
+constexpr const char* kDefaultSocratesMaxProbURL =
+    "https://celestrak.org/SOCRATES/sort-maxProb.csv";
 constexpr long kDefaultTimeoutMs = 90000;  // runner HTTPTimeout default (90 s)
 
 // Per-lane response byte budgets. The value rides on the request JSON as
@@ -422,6 +428,38 @@ int eop(void) {
 
     return emit_single("request", "job", "celestrak_eop_url", kDefaultEOPURL, "celestrak-eop",
                        "EOP-All.csv", "eop-all", "celestrak_eop_max_bytes", kDefaultEOPMaxBytes);
+}
+
+// socrates: timer tick -> BOTH SOCRATES sort files (minimum range and
+// maximum probability), each its own lane with its own snapshot batch.
+int socrates(void) {
+    char batch_message[384];
+    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
+        plugin_set_error("batched-input-frames", batch_message);
+        return 500;
+    }
+
+    const std::string config = load_config();
+    const long timeout = config_timeout_ms(config);
+    const long max_bytes =
+        config_max_bytes(config, "celestrak_socrates_max_bytes", kDefaultSocratesMaxBytes);
+    const std::string minrange_url =
+        config_url(config, "celestrak_socrates_minrange_url", kDefaultSocratesMinRangeURL);
+    const std::string maxprob_url =
+        config_url(config, "celestrak_socrates_maxprob_url", kDefaultSocratesMaxProbURL);
+    if (push_json("request_minrange", build_request_json(minrange_url, timeout, max_bytes)) < 0)
+        return 500;
+    if (push_json("job_minrange",
+                  build_job_json(config, minrange_url, "celestrak-socrates-minrange", "celestrak",
+                                 "sort-minRange.csv", "socrates-minrange")) < 0)
+        return 500;
+    if (push_json("request_maxprob", build_request_json(maxprob_url, timeout, max_bytes)) < 0)
+        return 500;
+    if (push_json("job_maxprob",
+                  build_job_json(config, maxprob_url, "celestrak-socrates-maxprob", "celestrak",
+                                 "sort-maxProb.csv", "socrates-maxprob")) < 0)
+        return 500;
+    return 0;
 }
 
 // publish_request: (storage-ingest result, parser ingest meta) -> the

@@ -7,7 +7,8 @@
  * code (OMM/MPE/CAT/SPW main_generated.h inlined by build.mjs — never
  * hand-written bindings).
  *
- * Contract per method (parse_gp / parse_satcat / parse_spw / parse_eop):
+ * Contract per method (parse_gp / parse_satcat / parse_spw / parse_eop /
+ * parse_socrates):
  *   inputs:
  *     "job"      UTF-8 JSON from the request-builder node:
  *                {"source_url","source_name","provider_id"?,
@@ -1303,6 +1304,80 @@ std::vector<uint8_t> build_eop_record(const Row& row, const std::string& date_rf
 }
 
 // ---------------------------------------------------------------------------
+// SOCRATES sort-minRange.csv / sort-maxProb.csv -> $CSM. Header as published:
+//   NORAD_CAT_ID_1,OBJECT_NAME_1,DSE_1,NORAD_CAT_ID_2,OBJECT_NAME_2,DSE_2,
+//   TCA,TCA_RANGE,TCA_RELATIVE_SPEED,MAX_PROB,DILUTION
+// Column names are resolved through the alternates below so a renamed
+// header (obj1_norad / min_range_km / rel_speed_kms / dilution_km, the shape
+// the conjunction-assessment reference uses) still parses. OBJECT_NAME_n
+// carries the operational status as a " [+]" suffix; it is split off into
+// OPS_STATUS_CODE of the nested CAT table. TCA is unix seconds as a double
+// with the published millisecond fraction; ranges km, speeds km/s.
+// ---------------------------------------------------------------------------
+
+// Fractional-second part of a "YYYY-MM-DD HH:MM:SS.fff" timestamp (0 when
+// the value carries no seconds field); parse_epoch keeps the whole seconds.
+double parse_epoch_fraction(const std::string& raw_in) {
+    const std::string raw = trim(raw_in);
+    if (raw.size() < 19 || raw[16] != ':') return 0.0;
+    const double ss = strtod(raw.c_str() + 17, nullptr);
+    return ss - std::floor(ss);
+}
+
+// "STARLINK-32469 [+]" -> ("STARLINK-32469", "+"); no suffix -> ("", "").
+void split_socrates_name(const std::string& raw, std::string* name, std::string* status) {
+    const std::string s = trim(raw);
+    *name = s;
+    status->clear();
+    if (s.size() >= 4 && s.back() == ']') {
+        const size_t open = s.rfind(" [");
+        if (open != std::string::npos && open + 2 < s.size() - 1) {
+            *status = s.substr(open + 2, s.size() - 1 - (open + 2));
+            *name = trim(s.substr(0, open));
+        }
+    }
+}
+
+// Minimal nested CAT: identity + status only (the SATCAT lane carries the
+// full catalog row; a conjunction names its objects).
+::flatbuffers::Offset<CAT> build_csm_object(::flatbuffers::FlatBufferBuilder& fbb,
+                                            const std::string& raw_name, uint32_t norad) {
+    std::string name, status;
+    split_socrates_name(raw_name, &name, &status);
+    if (name.empty()) name = "SAT-" + std::to_string(norad);
+    const auto name_off = fbb.CreateString(name);
+    CATBuilder builder(fbb);
+    builder.add_OBJECT_NAME(name_off);
+    builder.add_NORAD_CAT_ID(norad);
+    builder.add_OPS_STATUS_CODE(cat_ops_status(normalize_satcat_ops_status(status)));
+    return builder.Finish();
+}
+
+std::vector<uint8_t> build_csm_record(const Row& row, uint32_t norad1, uint32_t norad2, double tca) {
+    ::flatbuffers::FlatBufferBuilder fbb(512);
+    const auto object_1 = build_csm_object(
+        fbb, row_value(row, {"OBJECT_NAME_1", "NAME_1", "OBJ1_NAME"}), norad1);
+    const auto object_2 = build_csm_object(
+        fbb, row_value(row, {"OBJECT_NAME_2", "NAME_2", "OBJ2_NAME"}), norad2);
+    CSMBuilder builder(fbb);
+    builder.add_OBJECT_1(object_1);
+    builder.add_DSE_1(parse_float_or_zero(row_value(row, {"DSE_1", "OBJ1_DSE"})));
+    builder.add_OBJECT_2(object_2);
+    builder.add_DSE_2(parse_float_or_zero(row_value(row, {"DSE_2", "OBJ2_DSE"})));
+    builder.add_TCA(tca);
+    builder.add_TCA_RANGE(
+        parse_float_or_zero(row_value(row, {"TCA_RANGE", "MIN_RANGE_KM", "MIN_RANGE"})));
+    builder.add_TCA_RELATIVE_SPEED(parse_float_or_zero(
+        row_value(row, {"TCA_RELATIVE_SPEED", "REL_SPEED_KMS", "RELATIVE_SPEED"})));
+    builder.add_MAX_PROB(parse_float_or_zero(row_value(row, {"MAX_PROB", "MAX_PROBABILITY"})));
+    builder.add_DILUTION(parse_float_or_zero(row_value(row, {"DILUTION", "DILUTION_KM"})));
+    const auto csm = builder.Finish();
+    FinishSizePrefixedCSMBuffer(fbb, csm);
+    auto bytes = finished_copy(fbb);
+    return std::vector<uint8_t>(bytes.begin() + 4, bytes.end());
+}
+
+// ---------------------------------------------------------------------------
 // SATCAT fixed-width (runner parseSatcatFixedWidth; 1-based inclusive cols).
 // ---------------------------------------------------------------------------
 
@@ -1867,6 +1942,83 @@ int parse_eop(void) {
                                                    provenance);
     if (push_json("eop_meta", eop_meta) < 0) return 500;
     if (push_record_stream("eop_records", "EOP.fbs", "$EOP", "EOP", eop_stream) < 0) return 500;
+    if (push_bytes("raw", ctx.body) < 0) return 500;
+    return 0;
+}
+
+// parse_socrates: one SOCRATES sort file (sort-minRange.csv or
+// sort-maxProb.csv) -> $CSM records. Each file is a snapshot of the current
+// conjunction list, so the batch supersedes the previous one ("current").
+int parse_socrates(void) {
+    char batch_message[384];
+    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
+        plugin_set_error("batched-input-frames", batch_message);
+        return 500;
+    }
+
+    FetchContext ctx;
+    if (!load_fetch_context(&ctx)) return 400;
+    if (ctx.not_modified) return emit_unchanged(ctx);
+
+    std::vector<Row> rows;
+    std::vector<std::string> header;
+    std::string err;
+    if (!parse_csv(ctx.body, &rows, &header, &err)) {
+        plugin_set_error("socrates-parse-failed", err.c_str());
+        return 422;
+    }
+    if (!require_csv_column(header, {"NORAD_CAT_ID_1", "NORAD_1", "OBJ1_NORAD"}) ||
+        !require_csv_column(header, {"NORAD_CAT_ID_2", "NORAD_2", "OBJ2_NORAD"})) {
+        plugin_set_error("socrates-parse-failed",
+                         "SOCRATES payload is missing NORAD_CAT_ID_1 / NORAD_CAT_ID_2.");
+        return 422;
+    }
+    if (!require_csv_column(header, {"TCA"})) {
+        plugin_set_error("socrates-parse-failed", "SOCRATES payload is missing required column TCA.");
+        return 422;
+    }
+
+    std::vector<uint8_t> csm_stream;
+    Sha256 normalized;
+    int count = 0;
+    for (const Row& row : rows) {
+        uint32_t norad1 = 0, norad2 = 0;
+        if (!parse_uint32(row_value(row, {"NORAD_CAT_ID_1", "NORAD_1", "OBJ1_NORAD"}), &norad1) ||
+            !parse_uint32(row_value(row, {"NORAD_CAT_ID_2", "NORAD_2", "OBJ2_NORAD"}), &norad2) ||
+            norad1 == 0 || norad2 == 0) {
+            continue;
+        }
+        const std::string raw_tca = row_value(row, {"TCA"});
+        const ParsedEpoch tca = parse_epoch(raw_tca);
+        if (!tca.valid) {
+            char msg[96];
+            std::snprintf(msg, sizeof(msg), "malformed TCA for pair %u/%u", norad1, norad2);
+            plugin_set_error("socrates-parse-failed", msg);
+            return 422;
+        }
+        const double tca_seconds =
+            static_cast<double>(tca.unix_seconds) + parse_epoch_fraction(raw_tca);
+        const std::vector<uint8_t> csm = build_csm_record(row, norad1, norad2, tca_seconds);
+        append_size_prefixed(&csm_stream, csm);
+        normalized_hash_record(&normalized, "CSM.fbs", csm);
+        count++;
+    }
+    if (count == 0) {
+        plugin_set_error("socrates-parse-failed", "no CSM rows parsed");
+        return 422;
+    }
+
+    const std::string normalized_hex = normalized.hex_digest();
+    char counts[48];
+    std::snprintf(counts, sizeof(counts), "{\"CSM.fbs\":%d}", count);
+    const std::string provenance =
+        build_provenance_json(ctx, "celestrak-socrates-wasm/v1", normalized_hex, count, counts);
+
+    const std::string csm_meta = build_ingest_meta(ctx, "CSM.fbs", "current",
+                                                   /*with_archive=*/true, ctx.source_name,
+                                                   provenance);
+    if (push_json("csm_meta", csm_meta) < 0) return 500;
+    if (push_record_stream("csm_records", "CSM.fbs", "$CSM", "CSM", csm_stream) < 0) return 500;
     if (push_bytes("raw", ctx.body) < 0) return 500;
     return 0;
 }

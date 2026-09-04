@@ -1,0 +1,359 @@
+{
+  "programId": "com.digitalarsenal.flows.celestrak-socrates-ingest",
+  "name": "CelesTrak SOCRATES Ingest Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "Per-provider ingest flow, SOCRATES conjunctions: a module cron TIMER tick enters at celestrak-request:socrates, which fans out to BOTH sort files (sort-minRange.csv and sort-maxProb.csv; URLs, byte budget and usage terms from node CONFIG / the origin registry); two hostcap/http-request nodes fetch them with the recorded ETag / Last-Modified validators, two celestrak-parser:parse_socrates nodes normalize each into a $CSM record stream (nested CAT identities with the status suffix split into OPS_STATUS_CODE, TCA as unix seconds with the published fraction; batch = sha256 of the payload; HTTP 304 emits one unchanged notice to the egress sink and stores nothing), and two hostcap/storage-ingest nodes persist them under their own source tags with reconcile \"current\" (each sort file is a snapshot of the current conjunction list). Results land on the egress sink. After each store, celestrak-request:publish_request joins that ingest result with the parser meta and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; the publication responses also land on the egress sink. All decisions live in-wasm.",
+  "nodes": [
+    {
+      "nodeId": "req",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "methodId": "socrates",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_minrange",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_maxprob",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "parse_minrange",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
+      "methodId": "parse_socrates",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "parse_maxprob",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
+      "methodId": "parse_socrates",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest_minrange",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest_maxprob",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish_minrange",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "methodId": "publish_request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish_maxprob",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "methodId": "publish_request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish_http_minrange",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish_http_maxprob",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "req-http-minrange",
+      "fromNodeId": "req",
+      "fromPortId": "request_minrange",
+      "toNodeId": "http_minrange",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "req-http-maxprob",
+      "fromNodeId": "req",
+      "fromPortId": "request_maxprob",
+      "toNodeId": "http_maxprob",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "req-parse-minrange-job",
+      "fromNodeId": "req",
+      "fromPortId": "job_minrange",
+      "toNodeId": "parse_minrange",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "req-parse-maxprob-job",
+      "fromNodeId": "req",
+      "fromPortId": "job_maxprob",
+      "toNodeId": "parse_maxprob",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-parse-minrange",
+      "fromNodeId": "http_minrange",
+      "fromPortId": "response",
+      "toNodeId": "parse_minrange",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-parse-maxprob",
+      "fromNodeId": "http_maxprob",
+      "fromPortId": "response",
+      "toNodeId": "parse_maxprob",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-minrange-meta",
+      "fromNodeId": "parse_minrange",
+      "fromPortId": "csm_meta",
+      "toNodeId": "ingest_minrange",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-minrange-records",
+      "fromNodeId": "parse_minrange",
+      "fromPortId": "csm_records",
+      "toNodeId": "ingest_minrange",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": false
+    },
+    {
+      "edgeId": "parse-minrange-raw",
+      "fromNodeId": "parse_minrange",
+      "fromPortId": "raw",
+      "toNodeId": "ingest_minrange",
+      "toPortId": "raw",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-maxprob-meta",
+      "fromNodeId": "parse_maxprob",
+      "fromPortId": "csm_meta",
+      "toNodeId": "ingest_maxprob",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-maxprob-records",
+      "fromNodeId": "parse_maxprob",
+      "fromPortId": "csm_records",
+      "toNodeId": "ingest_maxprob",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": false
+    },
+    {
+      "edgeId": "parse-maxprob-raw",
+      "fromNodeId": "parse_maxprob",
+      "fromPortId": "raw",
+      "toNodeId": "ingest_maxprob",
+      "toPortId": "raw",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "ingest-minrange-egress",
+      "fromNodeId": "ingest_minrange",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "ingest-maxprob-egress",
+      "fromNodeId": "ingest_maxprob",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "ingest-minrange-publish",
+      "fromNodeId": "ingest_minrange",
+      "fromPortId": "result",
+      "toNodeId": "publish_minrange",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-minrange-meta-publish",
+      "fromNodeId": "parse_minrange",
+      "fromPortId": "csm_meta",
+      "toNodeId": "publish_minrange",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "ingest-maxprob-publish",
+      "fromNodeId": "ingest_maxprob",
+      "fromPortId": "result",
+      "toNodeId": "publish_maxprob",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-maxprob-meta-publish",
+      "fromNodeId": "parse_maxprob",
+      "fromPortId": "csm_meta",
+      "toNodeId": "publish_maxprob",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "publish-minrange-http",
+      "fromNodeId": "publish_minrange",
+      "fromPortId": "request",
+      "toNodeId": "publish_http_minrange",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "publish-maxprob-http",
+      "fromNodeId": "publish_maxprob",
+      "fromPortId": "request",
+      "toNodeId": "publish_http_maxprob",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "publish-minrange-egress",
+      "fromNodeId": "publish_http_minrange",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "publish-maxprob-egress",
+      "fromNodeId": "publish_http_maxprob",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-minrange-unchanged-egress",
+      "fromNodeId": "parse_minrange",
+      "fromPortId": "unchanged",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-maxprob-unchanged-egress",
+      "fromNodeId": "parse_maxprob",
+      "fromPortId": "unchanged",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1,
+      "opaque": true
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "timer-socrates",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 28800000,
+      "description": "SOCRATES sync timer (the list updates roughly every 10-11 hours; 8 h keeps one fetch per update)."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "timer-socrates",
+      "targetNodeId": "req",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.celestrak-request",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.data-source.celestrak-parser",
+    "com.digitalarsenal.hostcap.storage-ingest"
+  ]
+}

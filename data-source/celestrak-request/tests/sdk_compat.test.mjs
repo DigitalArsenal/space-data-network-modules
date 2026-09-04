@@ -122,6 +122,8 @@ const LANES = [
   ["satcat", "request_csv", "job_csv", "celestrak-satcat-csv", "satcat-csv", 33554432],
   ["spw", "request", "job", "celestrak-space-weather", "sw-all", 4194304],
   ["eop", "request", "job", "celestrak-eop", "eop-all", 4194304],
+  ["socrates", "request_minrange", "job_minrange", "celestrak-socrates-minrange", "socrates-minrange", 8388608],
+  ["socrates", "request_maxprob", "job_maxprob", "celestrak-socrates-maxprob", "socrates-maxprob", 8388608],
 ];
 
 for (const [methodId, requestPort, jobPort, sourceName, datasetId, maxBytes] of LANES) {
@@ -225,6 +227,22 @@ test("eop emits the Earth-orientation fetch + job (URL override via node CONFIG)
   );
   assert.equal(overridden.get("request").url, "https://fixtures.test/EOP-All.csv");
   assert.equal(overridden.get("request").maxBytes, 2048);
+});
+
+test("socrates emits BOTH sort-file fetches as their own lanes", async (t) => {
+  const stub = createConfigStub();
+  const harness = await createHarness(t, stub);
+  const outputs = outputsByPort(
+    await harness.invoke({ methodId: "socrates", inputs: [tickInput()] }),
+  );
+  assert.equal(outputs.get("request_minrange").url, "https://celestrak.org/SOCRATES/sort-minRange.csv");
+  assert.equal(outputs.get("request_maxprob").url, "https://celestrak.org/SOCRATES/sort-maxProb.csv");
+  assert.equal(outputs.get("job_minrange").source_name, "celestrak-socrates-minrange");
+  assert.equal(outputs.get("job_maxprob").source_name, "celestrak-socrates-maxprob");
+  assert.equal(outputs.get("job_minrange").archive_name, "sort-minRange.csv");
+  assert.equal(outputs.get("job_maxprob").archive_name, "sort-maxProb.csv");
+  assert.equal(outputs.get("job_minrange").source_url, outputs.get("request_minrange").url);
+  assert.equal(outputs.get("job_maxprob").source_url, outputs.get("request_maxprob").url);
 });
 
 // --------------------------------------------------------------------------

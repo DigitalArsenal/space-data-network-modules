@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.data-source.celestrak-request",
   "name": "CelesTrak Request Builder Nodes",
   "version": "0.1.0",
-  "description": "Request-builder flow nodes for CelesTrak ingest (loop C.8a): a module cron TIMER tick enters on 'tick'; each method emits the hostcap/http-request request JSON plus the parser 'job' JSON (source attribution + archive naming). publish_request additionally turns a completed storage-ingest result plus the parser's ingest meta into the dataset-publication POST for the node's loopback admin endpoint (§19), emitting nothing when celestrak_publish_url is unset. cache_warm additionally turns a completed storage-ingest result into the dataset's default-query frame for hostcap/flatsql-query, warming the materialized-cache response artifact on every ingest (graph task sdn-dataset-default-query-materialized-cache). Every request carries a per-lane response byte budget (maxBytes; hostcap/http-request forwards it as max_bytes and the Go host errors past it, never truncates: gp 67108864, satcat 33554432, spw 4194304). Every job carries the upstream origin (origin_id celestrak.org, origin_name CelesTrak, dataset_id gp-full-catalog / satcat / satcat-csv / sw-all) and the origin's usage terms (license = the usage-policy sentence quoted verbatim, license_url = https://celestrak.org/usage-policy.php, citation) so the parser's ingest meta and the host's connector ledger name the organisation the bytes came from. URLs/timeout/provider/defaults are overridable via node CONFIG through the builtin plugin.getConfig hostcall (keys: celestrak_gp_url, celestrak_satcat_url, celestrak_satcat_csv_url, celestrak_space_weather_url, celestrak_http_timeout_ms, celestrak_provider_id, celestrak_publish_url, celestrak_cache_sql, celestrak_cache_max_rows, celestrak_gp_max_bytes, celestrak_satcat_max_bytes, celestrak_spw_max_bytes, celestrak_license, celestrak_license_url, celestrak_citation) — never via host code. No capabilities: plugin.getConfig is a builtin.",
+  "description": "Request-builder flow nodes for CelesTrak ingest (loop C.8a): a module cron TIMER tick enters on 'tick'; each method emits the hostcap/http-request request JSON plus the parser 'job' JSON (source attribution + archive naming). publish_request additionally turns a completed storage-ingest result plus the parser's ingest meta into the dataset-publication POST for the node's loopback admin endpoint (§19), emitting nothing when celestrak_publish_url is unset. cache_warm additionally turns a completed storage-ingest result into the dataset's default-query frame for hostcap/flatsql-query, warming the materialized-cache response artifact on every ingest (graph task sdn-dataset-default-query-materialized-cache). Every request carries a per-lane response byte budget (maxBytes; hostcap/http-request forwards it as max_bytes and the Go host errors past it, never truncates: gp 67108864, satcat 33554432, spw 4194304, eop 4194304, socrates 8388608). Every job carries the upstream origin (origin_id celestrak.org, origin_name CelesTrak, dataset_id gp-full-catalog / satcat / satcat-csv / sw-all / eop-all / socrates-minrange / socrates-maxprob) and the origin's usage terms (license = the usage-policy sentence quoted verbatim, license_url = https://celestrak.org/usage-policy.php, citation) so the parser's ingest meta and the host's connector ledger name the organisation the bytes came from. URLs/timeout/provider/defaults are overridable via node CONFIG through the builtin plugin.getConfig hostcall (keys: celestrak_gp_url, celestrak_satcat_url, celestrak_satcat_csv_url, celestrak_space_weather_url, celestrak_http_timeout_ms, celestrak_provider_id, celestrak_publish_url, celestrak_cache_sql, celestrak_cache_max_rows, celestrak_eop_url, celestrak_socrates_minrange_url, celestrak_socrates_maxprob_url, celestrak_gp_max_bytes, celestrak_satcat_max_bytes, celestrak_spw_max_bytes, celestrak_eop_max_bytes, celestrak_socrates_max_bytes, celestrak_license, celestrak_license_url, celestrak_citation) — never via host code. No capabilities: plugin.getConfig is a builtin.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": ["direct", "command"],
@@ -274,6 +274,132 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot",
       "description": "Turns one timer tick into the EOP-All.csv fetch request (maxBytes 4194304, node CONFIG celestrak_eop_url / celestrak_eop_max_bytes) and its parser job (source celestrak-eop, dataset eop-all, archive EOP-All.csv, origin celestrak.org + usage terms). BATCHING: the tick port is single-stream by contract and ENFORCED IN CODE; a surplus is refused with error code \"batched-input-frames\" (see graph task modules-guest-nodes-drop-batched-frames)."
+    },
+    {
+      "methodId": "socrates",
+      "displayName": "SOCRATES Fetch Requests",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Timer tick frame (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Host cron timer tick frame ({firedAt}) delivered by the flow trigger binding; its content is ignored and it is never persisted."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request_minrange",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON for hostcap/http-request: {\"method\":\"GET\",\"url\",\"timeoutMs\",\"maxBytes\"}.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request request descriptor ({method,url,timeoutMs,maxBytes}) produced and consumed inside this flow; its shape is defined by that generic connector, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "HTTP request for sort-minRange.csv."
+        },
+        {
+          "portId": "job_minrange",
+          "acceptedTypeSets": [
+            {
+              "setId": "celestrak-ingest-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON job attribution (source celestrak-socrates-minrange, origin celestrak.org, licence).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Fetch-job attribution (source_url, source_name, provider_id, archive naming, origin_id/origin_name/dataset_id, license/license_url/citation) consumed by celestrak-parser:parse_socrates inside this flow; ingest bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Parse job (source celestrak-socrates-minrange)."
+        },
+        {
+          "portId": "request_maxprob",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON for hostcap/http-request: {\"method\":\"GET\",\"url\",\"timeoutMs\",\"maxBytes\"}.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request request descriptor ({method,url,timeoutMs,maxBytes}) produced and consumed inside this flow; its shape is defined by that generic connector, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "HTTP request for sort-maxProb.csv."
+        },
+        {
+          "portId": "job_maxprob",
+          "acceptedTypeSets": [
+            {
+              "setId": "celestrak-ingest-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON job attribution (source celestrak-socrates-maxprob, origin celestrak.org, licence).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Fetch-job attribution (source_url, source_name, provider_id, archive naming, origin_id/origin_name/dataset_id, license/license_url/citation) consumed by celestrak-parser:parse_socrates inside this flow; ingest bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Parse job (source celestrak-socrates-maxprob)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Turns one timer tick into BOTH SOCRATES sort-file fetches (sort-minRange.csv and sort-maxProb.csv; maxBytes 8388608 each; node CONFIG celestrak_socrates_minrange_url / celestrak_socrates_maxprob_url / celestrak_socrates_max_bytes) and their parser jobs (sources celestrak-socrates-minrange / celestrak-socrates-maxprob, datasets socrates-minrange / socrates-maxprob, archives sort-minRange.csv / sort-maxProb.csv, origin celestrak.org + usage terms). BATCHING: the tick port is single-stream by contract and ENFORCED IN CODE; a surplus is refused with error code \"batched-input-frames\" (see graph task modules-guest-nodes-drop-batched-frames)."
     },
     {
       "methodId": "publish_request",

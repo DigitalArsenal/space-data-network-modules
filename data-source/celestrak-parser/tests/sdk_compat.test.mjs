@@ -29,6 +29,7 @@ const SATCAT_TXT = fs.readFileSync(new URL("./fixtures/celestrak-satcat.txt", im
 const SATCAT_CSV = fs.readFileSync(new URL("./fixtures/celestrak-satcat.csv", import.meta.url));
 const SW_CSV = fs.readFileSync(new URL("./fixtures/celestrak-sw-all.csv", import.meta.url));
 const EOP_CSV = fs.readFileSync(new URL("./fixtures/celestrak-eop-all.csv", import.meta.url));
+const SOCRATES_CSV = fs.readFileSync(new URL("./fixtures/celestrak-socrates-minrange.csv", import.meta.url));
 
 function readManifest() {
   return JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
@@ -119,9 +120,9 @@ function catNoradID(record) {
 
 // Generic table-field access over an unprefixed FlatBuffer record: the
 // absolute offset of field `index` inside the root table, or 0 when absent.
-function tableField(record, index) {
+function tableField(record, index, table = null) {
   const view = new DataView(record.buffer, record.byteOffset, record.byteLength);
-  const table = view.getUint32(0, true);
+  if (table === null) table = view.getUint32(0, true);
   const vtable = table - view.getInt32(table, true);
   const vtableLen = view.getUint16(vtable, true);
   const slot = 4 + index * 2;
@@ -130,8 +131,8 @@ function tableField(record, index) {
   return fieldOffset === 0 ? 0 : table + fieldOffset;
 }
 
-function readString(record, index) {
-  const at = tableField(record, index);
+function readString(record, index, table = null) {
+  const at = tableField(record, index, table);
   if (at === 0) return null;
   const view = new DataView(record.buffer, record.byteOffset, record.byteLength);
   const str = at + view.getUint32(at, true);
@@ -139,8 +140,8 @@ function readString(record, index) {
   return decoder.decode(record.subarray(str + 4, str + 4 + len));
 }
 
-function readScalar(record, index, kind) {
-  const at = tableField(record, index);
+function readScalar(record, index, kind, table = null) {
+  const at = tableField(record, index, table);
   if (at === 0) return 0; // absent == schema default (0)
   const view = new DataView(record.buffer, record.byteOffset, record.byteLength);
   switch (kind) {
@@ -152,6 +153,14 @@ function readScalar(record, index, kind) {
     case "i8": return view.getInt8(at);
     default: throw new Error(`unknown scalar kind ${kind}`);
   }
+}
+
+// Absolute position of a nested table stored at field `index`, or 0.
+function subTable(record, index) {
+  const at = tableField(record, index);
+  if (at === 0) return 0;
+  const view = new DataView(record.buffer, record.byteOffset, record.byteLength);
+  return at + view.getUint32(at, true);
 }
 
 // CAT LAUNCH_SITE is field 7 (VT_LAUNCH_SITE = 18).
@@ -672,4 +681,103 @@ test("parse_eop answers HTTP 304 with one unchanged notice and zero record frame
     source_url: EOP_JOB.source_url,
     dataset_id: "eop-all",
   });
+});
+
+// --------------------------------------------------------------------------
+// parse_socrates — SOCRATES sort CSV -> $CSM. CSM fields: OBJECT_1 0, DSE_1 1,
+// OBJECT_2 2, DSE_2 3, TCA 4, TCA_RANGE 5, TCA_RELATIVE_SPEED 6, MAX_PROB 7,
+// DILUTION 8. Nested CAT: OBJECT_NAME 0, NORAD_CAT_ID 2, OPS_STATUS_CODE 4.
+// --------------------------------------------------------------------------
+
+// CAT operationalState: OPERATIONAL = 0, NONOPERATIONAL = 1 (UNKNOWN = 7 is
+// the schema default, so a present OPERATIONAL is distinguishable from an
+// absent field only by checking presence — which the test does).
+const OPS_OPERATIONAL = 0;
+const OPS_NONOPERATIONAL = 1;
+
+const SOCRATES_JOB = {
+  source_url: "https://celestrak.org/SOCRATES/sort-minRange.csv",
+  source_name: "celestrak-socrates-minrange",
+  archive_source: "celestrak",
+  archive_name: "sort-minRange.csv",
+  dataset_id: "socrates-minrange",
+  ...ORIGIN_JOB,
+};
+
+// The guest computes TCA as (whole unix seconds) + (published seconds field
+// minus its integer part); the same two operations here make the expected
+// value bit-exact rather than "close".
+function socratesTca(tcaText) {
+  const iso = tcaText.replace(" ", "T") + "Z";
+  const whole = Math.floor(Date.parse(iso) / 1000);
+  const seconds = Number(tcaText.slice(17));
+  return whole + (seconds - Math.floor(seconds));
+}
+
+test("parse_socrates builds $CSM records with nested CAT identities and an exact TCA", async (t) => {
+  const harness = await createHarness(t);
+  const response = await harness.invoke({
+    methodId: "parse_socrates",
+    inputs: [jsonInput("job", SOCRATES_JOB), jsonInput("response", httpResponse(SOCRATES_CSV))],
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const outputs = outputsByPort(response);
+
+  const meta = jsonFrame(outputs, "csm_meta");
+  assert.equal(meta.schema, "CSM.fbs");
+  assert.equal(meta.source_name, "celestrak-socrates-minrange");
+  assert.equal(meta.batch_id, sha256Hex(SOCRATES_CSV));
+  assert.equal(meta.reconcile, "current", "each sort file is a snapshot of the current list");
+  assert.equal(meta.origin_id, "celestrak.org");
+  assert.equal(meta.dataset_id, "socrates-minrange");
+  const provenance = JSON.parse(Buffer.from(meta.provenance.json, "base64").toString("utf8"));
+  assert.equal(provenance.parser_version, "celestrak-socrates-wasm/v1");
+  assert.equal(provenance.schema_counts["CSM.fbs"], 2);
+
+  const records = splitStream(outputs.get("csm_records").payload);
+  assert.equal(records.length, 2);
+  for (const record of records) assert.equal(fileIdentifier(record), "$CSM");
+
+  const [first, second] = records;
+  const object1 = subTable(first, 0);
+  const object2 = subTable(first, 2);
+  assert.notEqual(object1, 0, "OBJECT_1 present");
+  assert.notEqual(object2, 0, "OBJECT_2 present");
+  assert.equal(readScalar(first, 2, "u32", object1), 49107, "OBJECT_1.NORAD_CAT_ID");
+  assert.equal(readScalar(first, 2, "u32", object2), 47079, "OBJECT_2.NORAD_CAT_ID");
+  assert.equal(readString(first, 0, object1), "ONEWEB-0329", "status suffix split off the name");
+  assert.equal(readString(first, 0, object2), "SL-14 DEB");
+  assert.notEqual(tableField(first, 4, object1), 0, "OPS_STATUS_CODE written explicitly for [+]");
+  assert.equal(readScalar(first, 4, "i8", object1), OPS_OPERATIONAL, "[+] -> OPERATIONAL");
+  assert.equal(readScalar(first, 4, "i8", object2), OPS_NONOPERATIONAL, "[-] -> NONOPERATIONAL");
+  assert.equal(readScalar(first, 1, "f64"), 6.058, "DSE_1");
+  assert.equal(readScalar(first, 3, "f64"), 7.833, "DSE_2");
+  assert.equal(readScalar(first, 4, "f64"), socratesTca("2026-05-12 04:07:04.871"), "TCA unix seconds, exact");
+  assert.ok(Math.abs(readScalar(first, 4, "f64") - Date.parse("2026-05-12T04:07:04.871Z") / 1000) < 1e-6);
+  assert.equal(readScalar(first, 5, "f64"), 0.018, "TCA_RANGE km");
+  assert.equal(readScalar(first, 6, "f64"), 13.179, "TCA_RELATIVE_SPEED km/s");
+  assert.equal(readScalar(first, 7, "f64"), Number("2.170E-02"), "MAX_PROB");
+  assert.equal(readScalar(first, 8, "f64"), 0.008, "DILUTION");
+
+  assert.equal(readScalar(second, 2, "u32", subTable(second, 0)), 56963);
+  assert.equal(readScalar(second, 2, "u32", subTable(second, 2)), 65204);
+  assert.equal(readScalar(second, 4, "f64"), socratesTca("2026-05-11 12:09:59.834"));
+
+  assert.deepEqual(Buffer.from(outputs.get("raw").payload), Buffer.from(SOCRATES_CSV));
+});
+
+test("parse_socrates answers HTTP 304 with one unchanged notice and zero record frames", async (t) => {
+  const harness = await createHarness(t);
+  const response = await harness.invoke({
+    methodId: "parse_socrates",
+    inputs: [
+      jsonInput("job", SOCRATES_JOB),
+      jsonInput("response", { status: 304, headers: {}, bodyB64: "" }),
+    ],
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.equal(response.outputs.length, 1);
+  const outputs = outputsByPort(response);
+  for (const port of ["csm_meta", "csm_records", "raw"]) assert.equal(outputs.has(port), false, port);
+  assert.equal(jsonFrame(outputs, "unchanged").dataset_id, "socrates-minrange");
 });
