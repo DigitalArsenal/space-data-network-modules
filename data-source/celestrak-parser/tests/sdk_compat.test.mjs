@@ -142,6 +142,16 @@ const GP_JOB = {
   archive_name: "catalog.csv",
 };
 
+// What the request-builder node puts on every job besides attribution: the
+// upstream origin and its usage terms.
+const ORIGIN_JOB = {
+  origin_id: "celestrak.org",
+  origin_name: "CelesTrak",
+  license: "Only download the data you need, when you are going to use it, and only download data once per update.",
+  license_url: "https://celestrak.org/usage-policy.php",
+  citation: "CelesTrak Usage Policy, by Dr. T.S. Kelso, https://celestrak.org/usage-policy.php",
+};
+
 test("celestrak-parser artifact passes SDK compliance", async () => {
   const report = await validateArtifactWithStandards({
     manifest: readManifest(),
@@ -217,6 +227,103 @@ test("parse_gp produces OMM + MPE streams with full attribution", async (t) => {
   const raw = outputs.get("raw");
   assert.deepEqual(Buffer.from(raw.payload), Buffer.from(GP_CSV), "raw payload passthrough");
 });
+
+test("parse_gp forwards the job's licence and origin into the ingest meta", async (t) => {
+  const harness = await createHarness(t);
+  const response = await harness.invoke({
+    methodId: "parse_gp",
+    inputs: [
+      jsonInput("job", { ...GP_JOB, ...ORIGIN_JOB, dataset_id: "gp-full-catalog" }),
+      jsonInput("response", httpResponse(GP_CSV)),
+    ],
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const outputs = outputsByPort(response);
+  for (const port of ["omm_meta", "mpe_meta"]) {
+    const meta = jsonFrame(outputs, port);
+    assert.equal(meta.license, ORIGIN_JOB.license, `${port} licence`);
+    assert.equal(meta.license_url, ORIGIN_JOB.license_url, `${port} licence url`);
+    assert.equal(meta.citation, ORIGIN_JOB.citation, `${port} citation`);
+    assert.equal(meta.origin_id, "celestrak.org", `${port} origin`);
+    assert.equal(meta.origin_name, "CelesTrak", `${port} origin name`);
+    assert.equal(meta.dataset_id, "gp-full-catalog", `${port} dataset`);
+  }
+});
+
+test("parse_gp emits no licence or origin keys the job did not declare", async (t) => {
+  const harness = await createHarness(t);
+  const response = await harness.invoke({
+    methodId: "parse_gp",
+    inputs: [jsonInput("job", GP_JOB), jsonInput("response", httpResponse(GP_CSV))],
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const meta = jsonFrame(outputsByPort(response), "omm_meta");
+  for (const key of ["license", "license_url", "citation", "origin_id", "origin_name", "dataset_id"]) {
+    assert.equal(key in meta, false, `${key} must not be invented`);
+  }
+});
+
+// The Go host hands headers back under net/http canonical keys ("Etag", not
+// "ETag"/"etag"); the provenance record must capture the validator under
+// every host spelling so the connector ledger can gate the next pull.
+for (const [label, headers] of [
+  ["Go canonical Etag", { Etag: 'W/"x"', "Last-Modified": "Fri, 02 Jan 2026 12:00:00 GMT" }],
+  ["fetch lower-case etag", { etag: 'W/"x"', "last-modified": "Fri, 02 Jan 2026 12:00:00 GMT" }],
+  ["mixed-case ETag", { ETag: 'W/"x"', "Last-Modified": "Fri, 02 Jan 2026 12:00:00 GMT" }],
+]) {
+  test(`parse_gp captures the response validators under ${label}`, async (t) => {
+    const harness = await createHarness(t);
+    const response = await harness.invoke({
+      methodId: "parse_gp",
+      inputs: [jsonInput("job", GP_JOB), jsonInput("response", httpResponse(GP_CSV, headers))],
+    });
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    const meta = jsonFrame(outputsByPort(response), "omm_meta");
+    const provenance = JSON.parse(Buffer.from(meta.provenance.json, "base64").toString("utf8"));
+    assert.equal(provenance.etag, 'W/"x"');
+    assert.equal(provenance.last_modified, "Fri, 02 Jan 2026 12:00:00 GMT");
+  });
+}
+
+// HTTP 304 Not Modified: the host sent the recorded validators and the origin
+// confirmed the document is current. No batch exists, so no record port may
+// fire — only the single "unchanged" notice, and the invocation succeeds.
+for (const [methodId, job, recordPorts] of [
+  ["parse_gp", { ...GP_JOB, dataset_id: "gp-full-catalog" }, ["omm_meta", "omm_records", "mpe_meta", "mpe_records", "raw"]],
+  [
+    "parse_satcat",
+    { source_url: "https://celestrak.org/pub/satcat.csv", source_name: "celestrak-satcat-csv", dataset_id: "satcat-csv" },
+    ["cat_meta", "cat_records", "raw"],
+  ],
+  [
+    "parse_spw",
+    { source_url: "https://celestrak.org/SpaceData/SW-All.csv", source_name: "celestrak-space-weather", dataset_id: "sw-all" },
+    ["spw_meta", "spw_records", "raw"],
+  ],
+]) {
+  test(`${methodId} answers HTTP 304 with one unchanged notice and zero record frames`, async (t) => {
+    const harness = await createHarness(t);
+    const response = await harness.invoke({
+      methodId,
+      inputs: [
+        jsonInput("job", job),
+        jsonInput("response", { status: 304, headers: { Etag: 'W/"x"' }, bodyB64: "" }),
+      ],
+    });
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    assert.equal(response.outputs.length, 1, "exactly one frame");
+    const outputs = outputsByPort(response);
+    for (const port of recordPorts) assert.equal(outputs.has(port), false, `${port} must stay silent`);
+    const notice = jsonFrame(outputs, "unchanged");
+    assert.deepEqual(notice, {
+      status: 304,
+      unchanged: true,
+      source_name: job.source_name,
+      source_url: job.source_url,
+      dataset_id: job.dataset_id,
+    });
+  });
+}
 
 test("parse_gp rejects non-200 fetches", async (t) => {
   const harness = await createHarness(t);

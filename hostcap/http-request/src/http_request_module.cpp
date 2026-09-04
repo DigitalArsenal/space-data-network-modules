@@ -4,7 +4,7 @@
  * Capability node for the host http.request hostcall. One method:
  *
  *   request — "request" JSON {"method","url","headers","bodyB64","timeoutMs",
- *                              "responseWire":"raw-body-v1"}
+ *                              "maxBytes","responseWire":"raw-body-v1"}
  *             -> http.request -> one "response" frame. The default is JSON
  *             {"status":N,"headers":{...},"bodyB64":"..."}; raw-body-v1 is
  *             $HRB + status + the body bytes, with no base64 expansion.
@@ -14,9 +14,11 @@
  *   - SDK JS hosts take {url,method,headers,body,timeoutMs,responseType}
  *     and return {status,statusText,ok,headers,body} with body as raw
  *     bytes (binary envelope segment) when responseType=binary.
- *   - The Go host takes {method,url,headers,body,body_encoding,timeout_ms}
- *     and returns {status,headers,body,body_encoding} with body as a JSON
- *     string (utf8 or base64), bounded by host policy.
+ *   - The Go host takes {method,url,headers,body,body_encoding,timeout_ms,
+ *     max_bytes} and returns {status,headers,body,body_encoding} with body
+ *     as a JSON string (utf8 or base64), bounded by host policy and by the
+ *     request's own max_bytes budget (exceeding either is an error, never a
+ *     truncation).
  * The request meta therefore carries BOTH dialects (timeout_ms + timeoutMs,
  * body as binary segment which the Go bridge attaches as a base64 string
  * matched by body_encoding=base64), and the response path normalizes either
@@ -639,6 +641,14 @@ int perform_one_request(const std::string& request_json) {
     double timeout_ms = 0.0;
     const bool has_timeout = json_number_field(request_json, "timeoutMs", &timeout_ms) &&
                              timeout_ms > 0;
+    // Per-request response byte budget. Forwarded to the Go host as
+    // "max_bytes", where the cap lowers its read limit and ERRORS when the
+    // body exceeds it — the host never truncates, so a flow that declares a
+    // budget can never ingest a partial document as if it were complete.
+    // The SDK JS hosts ignore the key.
+    double max_bytes = 0.0;
+    const bool has_max_bytes = json_number_field(request_json, "maxBytes", &max_bytes) &&
+                               max_bytes > 0;
 
     std::vector<uint8_t> body;
     bool has_body = false;
@@ -667,6 +677,11 @@ int perform_one_request(const std::string& request_json) {
         char timeout_buf[32];
         std::snprintf(timeout_buf, sizeof(timeout_buf), "%.0f", timeout_ms);
         payload += std::string(",\"timeout_ms\":") + timeout_buf + ",\"timeoutMs\":" + timeout_buf;
+    }
+    if (has_max_bytes) {
+        char max_bytes_buf[32];
+        std::snprintf(max_bytes_buf, sizeof(max_bytes_buf), "%.0f", max_bytes);
+        payload += std::string(",\"max_bytes\":") + max_bytes_buf;
     }
     if (has_body) {
         payload += ",\"body\":{\"$bin\":0},\"body_encoding\":\"base64\"";

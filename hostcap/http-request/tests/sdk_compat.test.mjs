@@ -185,6 +185,18 @@ test("request forwards method/url/headers/body/timeout and normalizes a JS-host 
   );
 });
 
+test("request forwards maxBytes to the host as max_bytes (Go-host response byte budget)", async (t) => {
+  const stub = createJsHostStub();
+  const harness = await createHarness(t, stub);
+  const response = await harness.invoke({
+    methodId: "request",
+    inputs: [jsonInput("request", { url: "https://example.test/EOP-All.csv", maxBytes: 4194304 })],
+  });
+  decodeResponse(response);
+  const { params } = stub.calls[0];
+  assert.equal(params.max_bytes, 4194304, "the host cap clamps its read limit to this and errors past it");
+});
+
 test("request defaults to GET with no body and no timeout fields", async (t) => {
   const stub = createJsHostStub();
   const harness = await createHarness(t, stub);
@@ -198,6 +210,7 @@ test("request defaults to GET with no body and no timeout fields", async (t) => 
   assert.equal(params.method, "GET");
   assert.equal(params.body, undefined, "no body field without bodyB64");
   assert.equal(params.timeoutMs, undefined);
+  assert.equal(params.max_bytes, undefined, "no budget field without maxBytes");
 });
 
 test("request normalizes the Go-host utf8 string body dialect to bodyB64", async (t) => {

@@ -56,6 +56,34 @@ constexpr const char* kDefaultSatcatCSVURL = "https://celestrak.org/pub/satcat.c
 constexpr const char* kDefaultSpaceWeatherURL = "https://celestrak.org/SpaceData/SW-All.csv";
 constexpr long kDefaultTimeoutMs = 90000;  // runner HTTPTimeout default (90 s)
 
+// Per-lane response byte budgets. The value rides on the request JSON as
+// "maxBytes"; hostcap/http-request forwards it to the host http cap as
+// "max_bytes", where the Go cap clamps its read limit and ERRORS when the
+// body exceeds it — a truncated catalog is never delivered as if complete.
+// Overridable per lane via node CONFIG celestrak_<lane>_max_bytes.
+constexpr long kDefaultGPMaxBytes = 67108864;        // 64 MiB full-catalog CSV
+constexpr long kDefaultSatcatMaxBytes = 33554432;    // 32 MiB satcat txt/csv
+constexpr long kDefaultSPWMaxBytes = 4194304;        // 4 MiB SW-All.csv
+constexpr long kDefaultEOPMaxBytes = 4194304;        // 4 MiB EOP-All.csv
+constexpr long kDefaultSocratesMaxBytes = 8388608;   // 8 MiB per SOCRATES sort
+
+// Upstream origin registry. Provenance is structural: the producer is the
+// ingesting node's signed $EPM, and the upstream ORIGIN rides on the job so
+// the ingest meta (and from there the host's $ICN connector ledger) can name
+// the organisation the bytes came from. The licence text is quoted VERBATIM
+// from the origin's usage-policy page (fetched once, 2026-09-03); it is not
+// a grant of rights and must never be reworded here — an operator overrides
+// it through node CONFIG celestrak_license / celestrak_license_url /
+// celestrak_citation.
+constexpr const char* kOriginID = "celestrak.org";
+constexpr const char* kOriginName = "CelesTrak";
+constexpr const char* kDefaultLicense =
+    "Only download the data you need, when you are going to use it, and only download data "
+    "once per update.";
+constexpr const char* kDefaultLicenseURL = "https://celestrak.org/usage-policy.php";
+constexpr const char* kDefaultCitation =
+    "CelesTrak Usage Policy, by Dr. T.S. Kelso, https://celestrak.org/usage-policy.php";
+
 bool is_ws(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
 
 bool json_string_field(const std::string& json, const std::string& key, std::string* out) {
@@ -198,6 +226,18 @@ std::string provider_id(const std::string& config) {
     return "space-data-network-02";
 }
 
+long config_max_bytes(const std::string& config, const char* key, long fallback) {
+    double v = 0;
+    if (json_number_field(config, key, &v) && v > 0) return static_cast<long>(v);
+    return fallback;
+}
+
+std::string config_string(const std::string& config, const char* key, const char* fallback) {
+    std::string value;
+    if (json_string_field(config, key, &value)) return value;
+    return fallback;
+}
+
 // The input frame on a named port, or nullptr when the port carries none.
 const plugin_input_frame_t* frame_for(const char* port_id) {
     const int32_t index = plugin_find_input_index(port_id, 0);
@@ -212,29 +252,46 @@ int push_json(const char* port, const std::string& json) {
                                  static_cast<uint32_t>(json.size()));
 }
 
-std::string build_request_json(const std::string& url, long timeout_ms) {
+std::string build_request_json(const std::string& url, long timeout_ms, long max_bytes) {
     char timeout_buf[24];
     std::snprintf(timeout_buf, sizeof(timeout_buf), "%ld", timeout_ms);
+    char max_bytes_buf[24];
+    std::snprintf(max_bytes_buf, sizeof(max_bytes_buf), "%ld", max_bytes);
     return std::string("{\"method\":\"GET\",\"url\":\"") + json_escape(url) +
-           "\",\"timeoutMs\":" + timeout_buf + "}";
+           "\",\"timeoutMs\":" + timeout_buf + ",\"maxBytes\":" + max_bytes_buf + "}";
 }
 
+// The parser job: attribution + archive naming + the upstream origin and
+// licence the ingest meta carries forward. dataset_id names the origin's
+// product (gp-full-catalog, satcat, sw-all, ...), never a tag string.
 std::string build_job_json(const std::string& config, const std::string& url,
                            const char* source_name, const char* archive_source,
-                           const char* archive_name) {
+                           const char* archive_name, const char* dataset_id) {
     return std::string("{\"source_url\":\"") + json_escape(url) + "\"" +
            ",\"source_name\":\"" + source_name + "\"" +
            ",\"provider_id\":\"" + json_escape(provider_id(config)) + "\"" +
            ",\"archive_source\":\"" + archive_source + "\"" +
-           ",\"archive_name\":\"" + archive_name + "\"}";
+           ",\"archive_name\":\"" + archive_name + "\"" +
+           ",\"origin_id\":\"" + kOriginID + "\"" +
+           ",\"origin_name\":\"" + kOriginName + "\"" +
+           ",\"dataset_id\":\"" + dataset_id + "\"" +
+           ",\"license\":\"" + json_escape(config_string(config, "celestrak_license", kDefaultLicense)) + "\"" +
+           ",\"license_url\":\"" +
+           json_escape(config_string(config, "celestrak_license_url", kDefaultLicenseURL)) + "\"" +
+           ",\"citation\":\"" +
+           json_escape(config_string(config, "celestrak_citation", kDefaultCitation)) + "\"}";
 }
 
 int emit_single(const char* request_port, const char* job_port, const char* config_key,
-                const char* default_url, const char* source_name, const char* archive_name) {
+                const char* default_url, const char* source_name, const char* archive_name,
+                const char* dataset_id, const char* max_bytes_key, long default_max_bytes) {
     const std::string config = load_config();
     const std::string url = config_url(config, config_key, default_url);
-    if (push_json(request_port, build_request_json(url, config_timeout_ms(config))) < 0) return 500;
-    if (push_json(job_port, build_job_json(config, url, source_name, "celestrak", archive_name)) < 0)
+    const long max_bytes = config_max_bytes(config, max_bytes_key, default_max_bytes);
+    if (push_json(request_port, build_request_json(url, config_timeout_ms(config), max_bytes)) < 0)
+        return 500;
+    if (push_json(job_port, build_job_json(config, url, source_name, "celestrak", archive_name,
+                                           dataset_id)) < 0)
         return 500;
     return 0;
 }
@@ -309,7 +366,8 @@ int gp(void) {
     }
 
     return emit_single("request", "job", "celestrak_gp_url", kDefaultGPURL, "celestrak-gp",
-                       "catalog.csv");
+                       "catalog.csv", "gp-full-catalog", "celestrak_gp_max_bytes",
+                       kDefaultGPMaxBytes);
 }
 
 // satcat: timer tick -> BOTH the legacy fixed-width and CSV snapshot fetches
@@ -323,16 +381,18 @@ int satcat(void) {
 
     const std::string config = load_config();
     const long timeout = config_timeout_ms(config);
+    const long max_bytes =
+        config_max_bytes(config, "celestrak_satcat_max_bytes", kDefaultSatcatMaxBytes);
     const std::string txt_url = config_url(config, "celestrak_satcat_url", kDefaultSatcatURL);
     const std::string csv_url =
         config_url(config, "celestrak_satcat_csv_url", kDefaultSatcatCSVURL);
-    if (push_json("request_txt", build_request_json(txt_url, timeout)) < 0) return 500;
-    if (push_json("job_txt",
-                  build_job_json(config, txt_url, "celestrak-satcat", "celestrak", "satcat.txt")) < 0)
+    if (push_json("request_txt", build_request_json(txt_url, timeout, max_bytes)) < 0) return 500;
+    if (push_json("job_txt", build_job_json(config, txt_url, "celestrak-satcat", "celestrak",
+                                            "satcat.txt", "satcat")) < 0)
         return 500;
-    if (push_json("request_csv", build_request_json(csv_url, timeout)) < 0) return 500;
+    if (push_json("request_csv", build_request_json(csv_url, timeout, max_bytes)) < 0) return 500;
     if (push_json("job_csv", build_job_json(config, csv_url, "celestrak-satcat-csv", "celestrak",
-                                            "satcat.csv")) < 0)
+                                            "satcat.csv", "satcat-csv")) < 0)
         return 500;
     return 0;
 }
@@ -346,7 +406,8 @@ int spw(void) {
     }
 
     return emit_single("request", "job", "celestrak_space_weather_url", kDefaultSpaceWeatherURL,
-                       "celestrak-space-weather", "SW-All.csv");
+                       "celestrak-space-weather", "SW-All.csv", "sw-all",
+                       "celestrak_spw_max_bytes", kDefaultSPWMaxBytes);
 }
 
 // publish_request: (storage-ingest result, parser ingest meta) -> the
@@ -427,6 +488,58 @@ int publish_request(void) {
         base64_encode(reinterpret_cast<const uint8_t*>(body.data()), body.size()) + "\"" +
         ",\"timeoutMs\":" + timeout_buf + "}";
     return push_json("request", request) < 0 ? 500 : 0;
+}
+
+// ---------------------------------------------------------------------------
+// cache_warm: materialize-on-ingest for the dataset's default query
+// (graph task sdn-dataset-default-query-materialized-cache, FOLLOW-UP C:
+// celestrak catalog). Receives the storage-ingest result frame and emits the
+// {"sql","params"} frame that hostcap/flatsql-query:query needs to warm the
+// engine's response artifact (flatsqlrt RawStream / response-artifact cache),
+// so a later dataset load serves the materialized flatbuffer without
+// re-executing. Self-triggered in the SAME wasm invocation right after the
+// ingest lane's store commit, so the warm query sees exactly what was just
+// persisted. When a host ingest-completion signal exists (contract section 3
+// FOLLOW-UP A), only the trigger rewires; this node is unchanged.
+//
+// Config (Hermes contract section 1, generalisation rule):
+//   celestrak_cache_sql        default "SELECT data FROM sds_omm ORDER BY
+//                                rowid DESC LIMIT ?"
+//   celestrak_cache_max_rows   server-side clamp on the caller's LIMIT
+// The plan node NEVER interpolates a caller-supplied value into the SQL; the
+// LIMIT is a bound i64 parameter, so capabilities stay [].
+constexpr const char* kDefaultCacheSql =
+    "SELECT data FROM sds_omm ORDER BY rowid DESC LIMIT ?";
+constexpr long kDefaultCacheMaxRows = 5000;
+
+int cache_warm(void) {
+    char batch_message[384];
+    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
+        plugin_set_error("batched-input-frames", batch_message);
+        return 500;
+    }
+    const plugin_input_frame_t* result_frame = frame_for("result");
+    if (result_frame == nullptr || result_frame->payload == nullptr ||
+        result_frame->payload_length == 0) {
+        plugin_set_error("missing-result-frame",
+                         "cache_warm requires the storage-ingest result frame.");
+        return 400;
+    }
+    const std::string config = load_config();
+    std::string sql;
+    if (!json_string_field(config, "celestrak_cache_sql", &sql) || sql.empty()) {
+        sql = kDefaultCacheSql;
+    }
+    long max_rows = kDefaultCacheMaxRows;
+    double v = 0;
+    if (json_number_field(config, "celestrak_cache_max_rows", &v) && v > 0) {
+        max_rows = static_cast<long>(v);
+    }
+    char limit_buf[32];
+    std::snprintf(limit_buf, sizeof(limit_buf), "%ld", max_rows);
+    const std::string query = std::string("{\"sql\":\"") + json_escape(sql) + "\"" +
+                              ",\"params\":[{\"t\":\"i64\",\"v\":" + limit_buf + "}]}";
+    return push_json("query", query) < 0 ? 500 : 0;
 }
 
 }  // extern "C"

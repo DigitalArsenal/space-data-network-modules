@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
   "name": "CelesTrak Provider Parser Nodes",
   "version": "0.1.0",
-  "description": "Pure WASM provider-parser flow nodes for CelesTrak ingest (loop C.8a): parse_gp (GP CSV -> OMM + MPE record streams), parse_satcat (SATCAT fixed-width txt or CSV -> CAT record stream), parse_spw (SW-All.csv -> SPW record stream with the 7-day stale-source gate). Each method joins the request-builder 'job' JSON with the hostcap/http-request 'response' JSON, decodes the payload, computes batch_id = sha256(payload), builds records with the spacedatastandards.org GENERATED C++ code mirroring sdn-server internal/ingest parsing rules and internal/sds builder defaults byte-for-byte, and emits per-schema storage.ingest_with_source metas (attribution, reconcile mode, archive naming, wasm-authored provenance JSON) plus size-prefixed record streams and the raw payload for archiving. No capabilities: this node performs no I/O.",
+  "description": "Pure WASM provider-parser flow nodes for CelesTrak ingest (loop C.8a): parse_gp (GP CSV -> OMM + MPE record streams), parse_satcat (SATCAT fixed-width txt or CSV -> CAT record stream), parse_spw (SW-All.csv -> SPW record stream with the 7-day stale-source gate). Each method joins the request-builder 'job' JSON with the hostcap/http-request 'response' JSON, decodes the payload, computes batch_id = sha256(payload), builds records with the spacedatastandards.org GENERATED C++ code mirroring sdn-server internal/ingest parsing rules and internal/sds builder defaults byte-for-byte, and emits per-schema storage.ingest_with_source metas (attribution, reconcile mode, archive naming, licence/citation and upstream origin from the job, wasm-authored provenance JSON) plus size-prefixed record streams and the raw payload for archiving. Response validators are read under every host spelling (etag/Etag/ETag, last-modified/Last-Modified, content-type/Content-Type, date/Date) so the provenance record always carries them. HTTP 304 Not Modified is accepted: the method emits a single notice on its 'unchanged' port and nothing else, so no batch is stored or announced. No capabilities: this node performs no I/O.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": ["direct", "command"],
@@ -111,6 +111,25 @@
           "maxStreams": 1,
           "required": true,
           "description": "Raw fetched payload."
+        },
+        {
+          "portId": "unchanged",
+          "acceptedTypeSets": [
+            {
+              "setId": "celestrak-unchanged-notice-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "HTTP 304 notice {status:304,unchanged:true,source_name,source_url,dataset_id} produced when the origin confirms the previously fetched document is current; delivered to the flow's egress sink, never persisted as a record."
+              },
+              "description": "UTF-8 JSON {\"status\":304,\"unchanged\":true,\"source_name\",\"source_url\",\"dataset_id\"}."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Emitted ONLY when the fetch answered HTTP 304 Not Modified (the host sent the recorded ETag / Last-Modified validators): one notice frame and no meta/records/raw frames, so the ingest node never becomes ready and nothing is stored or announced."
         }
       ],
       "maxBatch": 1,
@@ -192,6 +211,25 @@
           "maxStreams": 1,
           "required": true,
           "description": "Raw fetched payload."
+        },
+        {
+          "portId": "unchanged",
+          "acceptedTypeSets": [
+            {
+              "setId": "celestrak-unchanged-notice-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "HTTP 304 notice {status:304,unchanged:true,source_name,source_url,dataset_id} produced when the origin confirms the previously fetched document is current; delivered to the flow's egress sink, never persisted as a record."
+              },
+              "description": "UTF-8 JSON {\"status\":304,\"unchanged\":true,\"source_name\",\"source_url\",\"dataset_id\"}."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Emitted ONLY when the fetch answered HTTP 304 Not Modified (the host sent the recorded ETag / Last-Modified validators): one notice frame and no meta/records/raw frames, so the ingest node never becomes ready and nothing is stored or announced."
         }
       ],
       "maxBatch": 1,
@@ -273,6 +311,25 @@
           "maxStreams": 1,
           "required": true,
           "description": "Raw fetched payload."
+        },
+        {
+          "portId": "unchanged",
+          "acceptedTypeSets": [
+            {
+              "setId": "celestrak-unchanged-notice-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "HTTP 304 notice {status:304,unchanged:true,source_name,source_url,dataset_id} produced when the origin confirms the previously fetched document is current; delivered to the flow's egress sink, never persisted as a record."
+              },
+              "description": "UTF-8 JSON {\"status\":304,\"unchanged\":true,\"source_name\",\"source_url\",\"dataset_id\"}."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Emitted ONLY when the fetch answered HTTP 304 Not Modified (the host sent the recorded ETag / Last-Modified validators): one notice frame and no meta/records/raw frames, so the ingest node never becomes ready and nothing is stored or announced."
         }
       ],
       "maxBatch": 1,

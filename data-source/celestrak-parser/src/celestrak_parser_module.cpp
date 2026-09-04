@@ -23,6 +23,11 @@
  *                   ([u32le len][record bytes], records unprefixed inside).
  *     "raw"         the decoded source payload (for raw archiving by the
  *                   ingest capability node; emitted once per fetch).
+ *     "unchanged"   ONLY on HTTP 304: one JSON notice
+ *                   {"status":304,"unchanged":true,"source_name","source_url",
+ *                   "dataset_id"}; no meta/records/raw frames are emitted.
+ *   The job also carries origin_id/origin_name/dataset_id and
+ *   license/license_url/citation; every ingest meta forwards them.
  *
  * Behavior parity with the Go runner is FIELD-EXACT and, for the record
  * bytes, aims byte-exact: builders replicate internal/sds builder defaults
@@ -712,11 +717,25 @@ struct FetchContext {
     std::string archive_source;
     std::string archive_name;
     std::string reconcile;
+    // Upstream origin + licence, carried from the request-builder job into
+    // the ingest meta (the host records the licence against the batch and
+    // feeds the origin keys to its $ICN connector ledger).
+    std::string origin_id;
+    std::string origin_name;
+    std::string dataset_id;
+    std::string license;
+    std::string license_url;
+    std::string citation;
     std::string etag;
     std::string last_modified;
     std::string content_type;
     std::string response_date;
     long status = 0;
+    // HTTP 304 Not Modified: the host sent the validators it recorded from
+    // the previous pull (If-None-Match / If-Modified-Since) and the origin
+    // answered that nothing changed. No body, no batch — the parser emits one
+    // "unchanged" notice and no record ports.
+    bool not_modified = false;
     std::vector<uint8_t> body;
     std::string batch_id;
 };
@@ -736,6 +755,12 @@ bool load_fetch_context(FetchContext* ctx) {
     json_string_field(ctx->job_json, "archive_source", &ctx->archive_source);
     json_string_field(ctx->job_json, "archive_name", &ctx->archive_name);
     json_string_field(ctx->job_json, "reconcile", &ctx->reconcile);
+    json_string_field(ctx->job_json, "origin_id", &ctx->origin_id);
+    json_string_field(ctx->job_json, "origin_name", &ctx->origin_name);
+    json_string_field(ctx->job_json, "dataset_id", &ctx->dataset_id);
+    json_string_field(ctx->job_json, "license", &ctx->license);
+    json_string_field(ctx->job_json, "license_url", &ctx->license_url);
+    json_string_field(ctx->job_json, "citation", &ctx->citation);
     if (ctx->provider_id.empty()) ctx->provider_id = kDefaultProviderID;
     if (ctx->source_name.empty()) {
         plugin_set_error("missing-source-name", "job must carry source_name.");
@@ -748,15 +773,19 @@ bool load_fetch_context(FetchContext* ctx) {
         return false;
     }
     ctx->status = static_cast<long>(status);
-    if (ctx->status != 200) {
+    if (ctx->status != 200 && ctx->status != 304) {
         char msg[96];
         std::snprintf(msg, sizeof(msg), "source fetch returned HTTP status %ld", ctx->status);
         plugin_set_error("fetch-failed", msg);
         return false;
     }
     const std::string headers = json_object_slice(ctx->response_json, "headers");
-    // Header names as normalized by hosts: try common spellings.
+    // Header names as the hosts spell them: the SDK JS hosts lower-case
+    // (fetch Headers), the Go host uses net/http canonical keys ("Etag",
+    // "Last-Modified", "Content-Type", "Date"). Exact-key lookups, every
+    // spelling tried, so the validators are captured on every host.
     json_string_field(headers, "etag", &ctx->etag);
+    if (ctx->etag.empty()) json_string_field(headers, "Etag", &ctx->etag);
     if (ctx->etag.empty()) json_string_field(headers, "ETag", &ctx->etag);
     json_string_field(headers, "last-modified", &ctx->last_modified);
     if (ctx->last_modified.empty()) json_string_field(headers, "Last-Modified", &ctx->last_modified);
@@ -764,6 +793,13 @@ bool load_fetch_context(FetchContext* ctx) {
     if (ctx->content_type.empty()) json_string_field(headers, "Content-Type", &ctx->content_type);
     json_string_field(headers, "date", &ctx->response_date);
     if (ctx->response_date.empty()) json_string_field(headers, "Date", &ctx->response_date);
+
+    if (ctx->status == 304) {
+        // Nothing changed upstream: no body is expected and no batch exists.
+        ctx->not_modified = true;
+        ctx->body.clear();
+        return true;
+    }
 
     std::string body_b64;
     if (!json_string_field(ctx->response_json, "bodyB64", &body_b64) || body_b64.empty()) {
@@ -794,6 +830,20 @@ std::string build_ingest_meta(const FetchContext& ctx, const char* schema,
                        ",\"content_key_id\":\"" + kContentKeyID + "\"" +
                        ",\"source_peer\":\"" + kSourcePeer + "\"" +
                        ",\"reconcile\":\"" + json_escape(reconcile) + "\"";
+    // Licence carriage (the host records it against the batch via
+    // SourceTags and binds it into the publication) and the upstream origin
+    // (host $ICN connector ledger: ORIGIN_ID/ORIGIN_NAME/DATASET_ID). Keys
+    // are emitted only when the job declared them; an empty value is never
+    // a declaration.
+    if (!ctx.license.empty()) meta += ",\"license\":\"" + json_escape(ctx.license) + "\"";
+    if (!ctx.license_url.empty())
+        meta += ",\"license_url\":\"" + json_escape(ctx.license_url) + "\"";
+    if (!ctx.citation.empty()) meta += ",\"citation\":\"" + json_escape(ctx.citation) + "\"";
+    if (!ctx.origin_id.empty()) meta += ",\"origin_id\":\"" + json_escape(ctx.origin_id) + "\"";
+    if (!ctx.origin_name.empty())
+        meta += ",\"origin_name\":\"" + json_escape(ctx.origin_name) + "\"";
+    if (!ctx.dataset_id.empty())
+        meta += ",\"dataset_id\":\"" + json_escape(ctx.dataset_id) + "\"";
     if (with_archive && !ctx.archive_source.empty() && !ctx.archive_name.empty()) {
         meta += ",\"archive\":{\"source\":\"" + json_escape(ctx.archive_source) +
                 "\",\"name\":\"" + json_escape(ctx.archive_name) + "\"}";
@@ -840,6 +890,19 @@ std::string build_provenance_json(const FetchContext& ctx, const char* parser_ve
            ",\"schema_counts\":" + schema_counts_json +
            ",\"warnings\":[],\"from_cache\":false}";
     return out;
+}
+
+// HTTP 304: one notice frame on the "unchanged" port, nothing on the record
+// ports. The ingest nodes never become ready (their required meta/records
+// ports stay empty), so nothing is stored and no batch is announced; the
+// notice reaches the flow's egress sink so the operator can see the pull
+// happened and found nothing new.
+int emit_unchanged(const FetchContext& ctx) {
+    const std::string notice = std::string("{\"status\":304,\"unchanged\":true") +
+                               ",\"source_name\":\"" + json_escape(ctx.source_name) + "\"" +
+                               ",\"source_url\":\"" + json_escape(ctx.source_url) + "\"" +
+                               ",\"dataset_id\":\"" + json_escape(ctx.dataset_id) + "\"}";
+    return push_json("unchanged", notice) < 0 ? 500 : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -1323,6 +1386,7 @@ int parse_gp(void) {
 
     FetchContext ctx;
     if (!load_fetch_context(&ctx)) return 400;
+    if (ctx.not_modified) return emit_unchanged(ctx);
 
     std::vector<Row> rows;
     std::vector<std::string> header;
@@ -1466,6 +1530,7 @@ int parse_satcat(void) {
 
     FetchContext ctx;
     if (!load_fetch_context(&ctx)) return 400;
+    if (ctx.not_modified) return emit_unchanged(ctx);
 
     std::vector<Row> rows;
     std::vector<std::string> header;
@@ -1530,6 +1595,7 @@ int parse_spw(void) {
 
     FetchContext ctx;
     if (!load_fetch_context(&ctx)) return 400;
+    if (ctx.not_modified) return emit_unchanged(ctx);
 
     std::vector<Row> rows;
     std::vector<std::string> header;

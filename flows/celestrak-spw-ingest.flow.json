@@ -165,6 +165,16 @@
       "backpressurePolicy": "queue",
       "queueDepth": 4,
       "opaque": true
+    },
+    {
+      "edgeId": "parse-unchanged-egress",
+      "fromNodeId": "parse",
+      "fromPortId": "unchanged",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1,
+      "opaque": true
     }
   ],
   "triggers": [

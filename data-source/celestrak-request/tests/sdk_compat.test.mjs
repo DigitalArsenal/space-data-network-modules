@@ -97,6 +97,7 @@ test("gp emits the runner-default request + job with attribution", async (t) => 
     "https://celestrak.org/NORAD/elements/gp.php?SPECIAL=full-catalog&FORMAT=csv",
   );
   assert.equal(request.timeoutMs, 90000, "runner HTTPTimeout default");
+  assert.equal(request.maxBytes, 67108864, "GP full-catalog byte budget (64 MiB)");
   const job = outputs.get("job");
   assert.equal(job.source_name, "celestrak-gp");
   assert.equal(job.provider_id, "space-data-network-02");
@@ -104,6 +105,65 @@ test("gp emits the runner-default request + job with attribution", async (t) => 
   assert.equal(job.archive_source, "celestrak");
   assert.equal(job.archive_name, "catalog.csv");
   assert.deepEqual(stub.calls, ["plugin.getConfig"]);
+});
+
+// The upstream origin and its usage terms ride on EVERY job so the parser's
+// ingest meta (and from there the host's connector ledger) names the
+// organisation the bytes came from — an organisation, never a tag string.
+const ORIGIN = Object.freeze({
+  origin_id: "celestrak.org",
+  origin_name: "CelesTrak",
+  license_url: "https://celestrak.org/usage-policy.php",
+});
+
+const LANES = [
+  ["gp", "request", "job", "celestrak-gp", "gp-full-catalog", 67108864],
+  ["satcat", "request_txt", "job_txt", "celestrak-satcat", "satcat", 33554432],
+  ["satcat", "request_csv", "job_csv", "celestrak-satcat-csv", "satcat-csv", 33554432],
+  ["spw", "request", "job", "celestrak-space-weather", "sw-all", 4194304],
+];
+
+for (const [methodId, requestPort, jobPort, sourceName, datasetId, maxBytes] of LANES) {
+  test(`${methodId}/${jobPort} carries the origin registry, licence and byte budget`, async (t) => {
+    const stub = createConfigStub();
+    const harness = await createHarness(t, stub);
+    const outputs = outputsByPort(
+      await harness.invoke({ methodId, inputs: [tickInput()] }),
+    );
+    const request = outputs.get(requestPort);
+    assert.equal(request.maxBytes, maxBytes, "per-lane response byte budget");
+    const job = outputs.get(jobPort);
+    assert.equal(job.source_name, sourceName);
+    assert.equal(job.origin_id, ORIGIN.origin_id);
+    assert.equal(job.origin_name, ORIGIN.origin_name);
+    assert.equal(job.dataset_id, datasetId);
+    assert.equal(job.license_url, ORIGIN.license_url);
+    // The licence text is the origin's usage-policy sentence quoted verbatim;
+    // it must be a non-empty declaration, never an invented grant.
+    assert.equal(typeof job.license, "string");
+    assert.ok(job.license.length > 0, "licence sentence present");
+    assert.match(job.license, /^Only download the data you need/);
+    assert.ok(job.citation.includes("https://celestrak.org/usage-policy.php"));
+  });
+}
+
+test("byte budgets and licence text honour node-CONFIG overrides", async (t) => {
+  const stub = createConfigStub({
+    celestrak_gp_max_bytes: 1048576,
+    celestrak_license: "CC0-1.0",
+    celestrak_license_url: "https://example.test/terms",
+    celestrak_citation: "Example citation",
+  });
+  const harness = await createHarness(t, stub);
+  const outputs = outputsByPort(
+    await harness.invoke({ methodId: "gp", inputs: [tickInput()] }),
+  );
+  assert.equal(outputs.get("request").maxBytes, 1048576);
+  const job = outputs.get("job");
+  assert.equal(job.license, "CC0-1.0");
+  assert.equal(job.license_url, "https://example.test/terms");
+  assert.equal(job.citation, "Example citation");
+  assert.equal(job.origin_id, "celestrak.org", "the origin is the registry's, not configurable");
 });
 
 test("gp honors node-CONFIG URL/timeout/provider overrides", async (t) => {

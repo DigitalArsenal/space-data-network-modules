@@ -310,6 +310,26 @@
       "backpressurePolicy": "queue",
       "queueDepth": 4,
       "opaque": true
+    },
+    {
+      "edgeId": "parse-txt-unchanged-egress",
+      "fromNodeId": "parse_txt",
+      "fromPortId": "unchanged",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-csv-unchanged-egress",
+      "fromNodeId": "parse_csv",
+      "fromPortId": "unchanged",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1,
+      "opaque": true
     }
   ],
   "triggers": [

@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.data-source.celestrak-request",
   "name": "CelesTrak Request Builder Nodes",
   "version": "0.1.0",
-  "description": "Request-builder flow nodes for CelesTrak ingest (loop C.8a): a module cron TIMER tick enters on 'tick'; each method emits the hostcap/http-request request JSON plus the parser 'job' JSON (source attribution + archive naming). publish_request additionally turns a completed storage-ingest result plus the parser's ingest meta into the dataset-publication POST for the node's loopback admin endpoint (§19), emitting nothing when celestrak_publish_url is unset. URLs/timeout/provider default to the in-daemon ingest runner values and are overridable via node CONFIG through the builtin plugin.getConfig hostcall (keys: celestrak_gp_url, celestrak_satcat_url, celestrak_satcat_csv_url, celestrak_space_weather_url, celestrak_http_timeout_ms, celestrak_provider_id, celestrak_publish_url) — never via host code. No capabilities: plugin.getConfig is a builtin.",
+  "description": "Request-builder flow nodes for CelesTrak ingest (loop C.8a): a module cron TIMER tick enters on 'tick'; each method emits the hostcap/http-request request JSON plus the parser 'job' JSON (source attribution + archive naming). publish_request additionally turns a completed storage-ingest result plus the parser's ingest meta into the dataset-publication POST for the node's loopback admin endpoint (§19), emitting nothing when celestrak_publish_url is unset. cache_warm additionally turns a completed storage-ingest result into the dataset's default-query frame for hostcap/flatsql-query, warming the materialized-cache response artifact on every ingest (graph task sdn-dataset-default-query-materialized-cache). Every request carries a per-lane response byte budget (maxBytes; hostcap/http-request forwards it as max_bytes and the Go host errors past it, never truncates: gp 67108864, satcat 33554432, spw 4194304). Every job carries the upstream origin (origin_id celestrak.org, origin_name CelesTrak, dataset_id gp-full-catalog / satcat / satcat-csv / sw-all) and the origin's usage terms (license = the usage-policy sentence quoted verbatim, license_url = https://celestrak.org/usage-policy.php, citation) so the parser's ingest meta and the host's connector ledger name the organisation the bytes came from. URLs/timeout/provider/defaults are overridable via node CONFIG through the builtin plugin.getConfig hostcall (keys: celestrak_gp_url, celestrak_satcat_url, celestrak_satcat_csv_url, celestrak_space_weather_url, celestrak_http_timeout_ms, celestrak_provider_id, celestrak_publish_url, celestrak_cache_sql, celestrak_cache_max_rows, celestrak_gp_max_bytes, celestrak_satcat_max_bytes, celestrak_spw_max_bytes, celestrak_license, celestrak_license_url, celestrak_citation) — never via host code. No capabilities: plugin.getConfig is a builtin.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": ["direct", "command"],
@@ -34,7 +34,7 @@
             {
               "setId": "sdn-hostcap-http-request-json",
               "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "UTF-8 JSON for hostcap/http-request: {\"method\":\"GET\",\"url\",\"timeoutMs\"}."
+              "description": "UTF-8 JSON for hostcap/http-request: {\"method\":\"GET\",\"url\",\"timeoutMs\",\"maxBytes\"}."
             }
           ],
           "minStreams": 1,
@@ -48,7 +48,7 @@
             {
               "setId": "celestrak-ingest-job-json",
               "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-              "description": "UTF-8 JSON job attribution for the parser node."
+              "description": "UTF-8 JSON job attribution for the parser node: {\"source_url\",\"source_name\",\"provider_id\",\"archive_source\",\"archive_name\",\"origin_id\",\"origin_name\",\"dataset_id\",\"license\",\"license_url\",\"citation\"}."
             }
           ],
           "minStreams": 1,
@@ -247,6 +247,55 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot",
       "description": "Turns a completed ingest (storage-ingest result + parser meta) into the loopback dataset-publication POST for hostcap/http-request. Emits nothing unless node CONFIG carries celestrak_publish_url — absence of configuration is not permission to publish. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
+    },
+    {
+      "methodId": "cache_warm",
+      "displayName": "Dataset Default-Query Warm",
+      "inputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-result-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              },
+              "description": "UTF-8 JSON hostcap/storage-ingest result: {\"schema\",\"inserted\",\"batch_id\",...}."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Completed storage-ingest result — fires the warm query in the same wasm invocation (contract sdn-dataset-default-query-materialized-cache section 3 self-trigger pattern)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "query",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-flatsql-query-json",
+              "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              },
+              "description": "UTF-8 JSON for hostcap/flatsql-query:query: {\"sql\",\"params\":[{\"t\":\"i64\",\"v\":<max_rows>}]}."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Default-query frame warming the engine's response artifact for the dataset."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Materialize-on-ingest for the dataset's default FlatSQL query (graph task sdn-dataset-default-query-materialized-cache, celestrak catalog lane): a completed storage-ingest result in 'result' emits the {'sql','params'} frame that hostcap/flatsql-query:query re-executes against the store the same lane just committed, warming the flatsqlrt response-artifact cache the dataset load serves from. SQL comes from node CONFIG key celestrak_cache_sql (default SELECT data FROM sds_omm ORDER BY rowid DESC LIMIT ? — a bound parameter, never caller-interpolated); the LIMIT comes from celestrak_cache_max_rows (default 5000, server-side clamp). No capabilities: plugin.getConfig is a builtin. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
     }
   ],
   "buildArtifacts": [
