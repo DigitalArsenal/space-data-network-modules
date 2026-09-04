@@ -5,7 +5,7 @@
   "CRS": "EPSG:4326",
   "PAYLOAD": {
     "CID": "",
-    "SIZE_BYTES": 1112929744,
+    "SIZE_BYTES": 1112927256,
     "MEDIA_TYPE": "application/vnd.ipld.dag-pb"
   },
   "FILES": [
@@ -19,17 +19,6 @@
       "FEATURE_COUNT": 18895,
       "LAYER": "multipolygons",
       "WHERE": "natural = 'water' OR waterway IN ('riverbank','dock') OR landuse IN ('reservoir','basin')"
-    },
-    {
-      "NAME": "water-lines.fgb",
-      "CATEGORY": "water",
-      "KIND": "line",
-      "MEDIA_TYPE": "application/x-flatgeobuf",
-      "BYTES": 1360,
-      "SHA256": "b026ccf1741d9539efc517c79e0e0f8c589ea29fc2eef38804d48508f9e805ff",
-      "FEATURE_COUNT": 0,
-      "LAYER": "lines",
-      "WHERE": "natural = 'coastline'"
     },
     {
       "NAME": "road-lines.fgb",
@@ -118,17 +107,6 @@
       "FEATURE_COUNT": 2763936,
       "LAYER": "multipolygons",
       "WHERE": "building IS NOT NULL AND building <> 'no'"
-    },
-    {
-      "NAME": "ocean.fgb",
-      "CATEGORY": "water",
-      "KIND": "polygon",
-      "MEDIA_TYPE": "application/x-flatgeobuf",
-      "BYTES": 1128,
-      "SHA256": "cfef654845e67b657cfb24314c1195e0094e8adc74019400c92e5971dea0db5f",
-      "FEATURE_COUNT": 0,
-      "LAYER": "ocean",
-      "WHERE": null
     }
   ],
   "DATASET_EPOCH": "2026-09-02T20:20:51Z",

@@ -1,7 +1,7 @@
 == osmium-tool 1.19.1 + GDAL 3.13.3 (ogr2ogr FlatGeobuf)
 == hessen epoch 2026-09-02T20:20:51Z, bbox {"west":7.4266936,"south":49.055006,"east":11.0048436,"north":51.8773002}
 == water.fgb: 18895 features, 9756928 bytes
-== water-lines.fgb: 0 features, 1360 bytes
+== water-lines.fgb: 0 features, not written
 == road-lines.fgb: 1189806 features, 281731032 bytes
 == rail-lines.fgb: 18987 features, 5068000 bytes
 == aeroway.fgb: 377 features, 193752 bytes
@@ -10,6 +10,6 @@
 == industrial.fgb: 6664 features, 3087496 bytes
 == industrial-lines.fgb: 1567 features, 261416 bytes
 == building.fgb: 2763936 features, 797351152 bytes
-== ocean.fgb: 0 features, 1128 bytes
+== ocean.fgb: 0 features (landlocked extract), not written
 == wrote /Users/tj/software/worktrees/space-data-network-modules--modules-osm-context-tiles/tools/osm-context/out/osm-context-hessen-20260902T202051Z-fgb/osm-context.fgb.json
 FGB_BUILD_EXIT=0

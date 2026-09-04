@@ -1,8 +1,8 @@
 {
   "region": "hessen",
   "epoch": "2026-09-02T20:20:51Z",
-  "startedAt": "2026-09-04T02:08:56Z",
-  "finishedAt": "2026-09-04T02:22:42Z",
+  "startedAt": "2026-09-04T02:28:59Z",
+  "finishedAt": "2026-09-04T02:36:34Z",
   "versions": {
     "osmium": "1.19.1",
     "gdal": "3.13.3"
@@ -35,16 +35,6 @@
       "bytes": 9756928,
       "sha256": "e656a7ac1f3da62422c8f7458c808a170857831e93ea1caaa04087bb67d2c859",
       "featureCount": 18895
-    },
-    {
-      "name": "water-lines.fgb",
-      "category": "water",
-      "kind": "line",
-      "layer": "lines",
-      "where": "natural = 'coastline'",
-      "bytes": 1360,
-      "sha256": "b026ccf1741d9539efc517c79e0e0f8c589ea29fc2eef38804d48508f9e805ff",
-      "featureCount": 0
     },
     {
       "name": "road-lines.fgb",
@@ -125,37 +115,27 @@
       "bytes": 797351152,
       "sha256": "9da8c0c83c9639e50e0fe5c85efd5a326228d4129fd7c06141d6b3e6378f8aab",
       "featureCount": 2763936
-    },
-    {
-      "name": "ocean.fgb",
-      "category": "water",
-      "kind": "polygon",
-      "layer": "ocean",
-      "where": null,
-      "bytes": 1128,
-      "sha256": "cfef654845e67b657cfb24314c1195e0094e8adc74019400c92e5971dea0db5f",
-      "featureCount": 0
     }
   ],
   "timingsMs": {
-    "osmium:water": 11304,
-    "ogr2ogr:water.fgb": 1348,
-    "ogr2ogr:water-lines.fgb": 560,
-    "osmium:road": 15443,
-    "ogr2ogr:road-lines.fgb": 28514,
-    "osmium:rail": 8154,
-    "ogr2ogr:rail-lines.fgb": 1103,
-    "osmium:aeroway": 10545,
-    "ogr2ogr:aeroway.fgb": 729,
-    "ogr2ogr:aeroway-lines.fgb": 645,
-    "osmium:parking": 10164,
-    "ogr2ogr:parking.fgb": 2573,
-    "osmium:industrial": 14095,
-    "ogr2ogr:industrial.fgb": 1100,
-    "ogr2ogr:industrial-lines.fgb": 854,
-    "osmium:building": 22477,
-    "ogr2ogr:building.fgb": 76253,
-    "ogr2ogr:ocean.fgb": 605221
+    "osmium:water": 11234,
+    "ogr2ogr:water.fgb": 1460,
+    "ogr2ogr:water-lines.fgb": 785,
+    "osmium:road": 16899,
+    "ogr2ogr:road-lines.fgb": 27350,
+    "osmium:rail": 8043,
+    "ogr2ogr:rail-lines.fgb": 1375,
+    "osmium:aeroway": 12605,
+    "ogr2ogr:aeroway.fgb": 938,
+    "ogr2ogr:aeroway-lines.fgb": 1344,
+    "osmium:parking": 22107,
+    "ogr2ogr:parking.fgb": 3674,
+    "osmium:industrial": 18331,
+    "ogr2ogr:industrial.fgb": 1373,
+    "ogr2ogr:industrial-lines.fgb": 1085,
+    "osmium:building": 23797,
+    "ogr2ogr:building.fgb": 133998,
+    "ogr2ogr:ocean.fgb": 153312
   },
   "outputs": {
     "dir": "/Users/tj/software/worktrees/space-data-network-modules--modules-osm-context-tiles/tools/osm-context/out/osm-context-hessen-20260902T202051Z-fgb",
