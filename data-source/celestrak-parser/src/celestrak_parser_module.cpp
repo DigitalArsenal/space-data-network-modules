@@ -7,7 +7,7 @@
  * code (OMM/MPE/CAT/SPW main_generated.h inlined by build.mjs — never
  * hand-written bindings).
  *
- * Contract per method (parse_gp / parse_satcat / parse_spw):
+ * Contract per method (parse_gp / parse_satcat / parse_spw / parse_eop):
  *   inputs:
  *     "job"      UTF-8 JSON from the request-builder node:
  *                {"source_url","source_name","provider_id"?,
@@ -696,6 +696,14 @@ int push_bytes(const char* port, const std::vector<uint8_t>& bytes) {
                                  bytes.data(), static_cast<uint32_t>(bytes.size()));
 }
 
+// Record streams whose port declares a concrete SDS identity carry it on the
+// frame too (schema name, file identifier, root type).
+int push_record_stream(const char* port, const char* schema, const char* identifier,
+                       const char* root, const std::vector<uint8_t>& bytes) {
+    return plugin_push_output_ex(port, schema, identifier, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+                                 root, 0, 0, bytes.data(), static_cast<uint32_t>(bytes.size()));
+}
+
 void append_size_prefixed(std::vector<uint8_t>* stream, const std::vector<uint8_t>& record) {
     const uint32_t len = static_cast<uint32_t>(record.size());
     stream->push_back(static_cast<uint8_t>(len & 0xff));
@@ -1229,6 +1237,72 @@ std::vector<uint8_t> build_spw_record(const Row& row, const std::string& spw_dat
 }
 
 // ---------------------------------------------------------------------------
+// EOP-All.csv -> $EOP. Columns as published:
+//   DATE,MJD,X,Y,UT1-UTC,LOD,DPSI,DEPS,DX,DY,DAT,DATA_TYPE
+// X, Y (polar motion), DX, DY (celestial pole offsets) and DPSI, DEPS
+// (nutation corrections) are arcseconds; UT1-UTC and LOD are seconds; DAT is
+// TAI-UTC in whole seconds; DATA_TYPE is O (observed) or P (predicted).
+// Angles are stored in radians: the double-precision _HP fields are
+// authoritative and the float32 fields are rounded copies of the same value
+// (schema precedence rule), so readers pinned to either stay correct.
+// ---------------------------------------------------------------------------
+
+constexpr double kArcsecToRad = M_PI / 648000.0;  // 1 arcsec = pi / (180 * 3600) rad
+
+DataType parse_eop_data_type(const std::string& raw) {
+    return upper(trim(raw)) == "P" ? DataType_PREDICTED : DataType_OBSERVED;
+}
+
+std::vector<uint8_t> build_eop_record(const Row& row, const std::string& date_rfc3339,
+                                      const std::string& data_set_epoch) {
+    uint32_t mjd = 0;
+    parse_uint32(row_value(row, {"MJD"}), &mjd);
+    const double x = parse_float_or_zero(row_value(row, {"X"})) * kArcsecToRad;
+    const double y = parse_float_or_zero(row_value(row, {"Y"})) * kArcsecToRad;
+    const double dx = parse_float_or_zero(row_value(row, {"DX"})) * kArcsecToRad;
+    const double dy = parse_float_or_zero(row_value(row, {"DY"})) * kArcsecToRad;
+    const double dpsi = parse_float_or_zero(row_value(row, {"DPSI"})) * kArcsecToRad;
+    const double deps = parse_float_or_zero(row_value(row, {"DEPS"})) * kArcsecToRad;
+    const double ut1_utc = parse_float_or_zero(row_value(row, {"UT1-UTC", "UT1_UTC"}));
+    const double lod = parse_float_or_zero(row_value(row, {"LOD"}));
+    uint32_t dat = 0;
+    parse_uint32(row_value(row, {"DAT"}), &dat);
+    const DataType data_type = parse_eop_data_type(row_value(row, {"DATA_TYPE"}));
+
+    ::flatbuffers::FlatBufferBuilder fbb(512);
+    const auto date_off = fbb.CreateString(date_rfc3339);
+    ::flatbuffers::Offset<::flatbuffers::String> epoch_off;
+    if (!data_set_epoch.empty()) epoch_off = fbb.CreateString(data_set_epoch);
+
+    EOPBuilder builder(fbb);
+    builder.add_DATE(date_off);
+    builder.add_MJD(mjd);
+    builder.add_X_POLE_WANDER_RADIANS(static_cast<float>(x));
+    builder.add_Y_POLE_WANDER_RADIANS(static_cast<float>(y));
+    builder.add_X_CELESTIAL_POLE_OFFSET_RADIANS(static_cast<float>(dx));
+    builder.add_Y_CELESTIAL_POLE_OFFSET_RADIANS(static_cast<float>(dy));
+    builder.add_UT1_MINUS_UTC_SECONDS(static_cast<float>(ut1_utc));
+    builder.add_TAI_MINUS_UTC_SECONDS(static_cast<uint16_t>(dat));
+    builder.add_LENGTH_OF_DAY_CORRECTION_SECONDS(static_cast<float>(lod));
+    builder.add_DATA_TYPE(data_type);
+    builder.add_SERIES(eopSeries_FINALS2000A);
+    builder.add_IAU_CONVENTION(iauPrecessionNutationModel_IAU_2000A);
+    builder.add_X_POLE_WANDER_RADIANS_HP(x);
+    builder.add_Y_POLE_WANDER_RADIANS_HP(y);
+    builder.add_X_CELESTIAL_POLE_OFFSET_RADIANS_HP(dx);
+    builder.add_Y_CELESTIAL_POLE_OFFSET_RADIANS_HP(dy);
+    builder.add_UT1_MINUS_UTC_SECONDS_HP(ut1_utc);
+    builder.add_LENGTH_OF_DAY_CORRECTION_SECONDS_HP(lod);
+    if (!data_set_epoch.empty()) builder.add_DATA_SET_EPOCH(epoch_off);
+    builder.add_NUTATION_DPSI_RADIANS(dpsi);
+    builder.add_NUTATION_DEPS_RADIANS(deps);
+    const auto eop = builder.Finish();
+    FinishSizePrefixedEOPBuffer(fbb, eop);
+    auto bytes = finished_copy(fbb);
+    return std::vector<uint8_t>(bytes.begin() + 4, bytes.end());
+}
+
+// ---------------------------------------------------------------------------
 // SATCAT fixed-width (runner parseSatcatFixedWidth; 1-based inclusive cols).
 // ---------------------------------------------------------------------------
 
@@ -1685,6 +1759,114 @@ int parse_spw(void) {
                                                    provenance);
     if (push_json("spw_meta", spw_meta) < 0) return 500;
     if (push_bytes("spw_records", spw_stream) < 0) return 500;
+    if (push_bytes("raw", ctx.body) < 0) return 500;
+    return 0;
+}
+
+// parse_eop: CelesTrak EOP-All.csv -> $EOP records. Whole-history snapshot
+// (reconcile "current"); the 7-day stale gate runs on the newest OBSERVED
+// row (predicted rows always lead the reference and prove nothing).
+int parse_eop(void) {
+    char batch_message[384];
+    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
+        plugin_set_error("batched-input-frames", batch_message);
+        return 500;
+    }
+
+    FetchContext ctx;
+    if (!load_fetch_context(&ctx)) return 400;
+    if (ctx.not_modified) return emit_unchanged(ctx);
+
+    std::vector<Row> rows;
+    std::vector<std::string> header;
+    std::string err;
+    if (!parse_csv(ctx.body, &rows, &header, &err)) {
+        plugin_set_error("eop-parse-failed", err.c_str());
+        return 422;
+    }
+    for (const char* required : {"DATE", "MJD", "X", "Y", "UT1-UTC", "DAT"}) {
+        if (!require_csv_column(header, {required})) {
+            plugin_set_error("eop-parse-failed",
+                             (std::string("EOP payload is missing required column ") + required + ".")
+                                 .c_str());
+            return 422;
+        }
+    }
+
+    // Stale-source gate on the newest OBSERVED row against Last-Modified
+    // (else now), same 7-day threshold as the space-weather lane.
+    int64_t latest_observed = 0;
+    for (const Row& row : rows) {
+        const std::string raw = row_value(row, {"DATE"});
+        if (trim(raw).empty()) continue;
+        const ParsedEpoch parsed = parse_epoch(raw);
+        if (!parsed.valid) {
+            plugin_set_error("eop-parse-failed", ("malformed DATE " + raw).c_str());
+            return 422;
+        }
+        if (parse_eop_data_type(row_value(row, {"DATA_TYPE"})) == DataType_OBSERVED &&
+            parsed.unix_seconds > latest_observed) {
+            latest_observed = parsed.unix_seconds;
+        }
+    }
+    int64_t reference = 0;
+    if (ctx.last_modified.empty() || !parse_http_date(ctx.last_modified, &reference)) {
+        reference = now_unix_seconds();
+    }
+    if (latest_observed != 0 && reference != 0 &&
+        latest_observed < reference - kStaleThresholdSeconds) {
+        plugin_set_error("eop-stale-source",
+                         ("stale source timestamp for " + ctx.source_name + ": latest observed=" +
+                          format_rfc3339(latest_observed) + " reference=" + format_rfc3339(reference))
+                             .c_str());
+        return 422;
+    }
+
+    // DATA_SET_EPOCH names the issue of the series these rows came from:
+    // the origin's Last-Modified when it sent one.
+    std::string data_set_epoch;
+    {
+        int64_t lm = 0;
+        if (!ctx.last_modified.empty() && parse_http_date(ctx.last_modified, &lm)) {
+            data_set_epoch = format_rfc3339(lm);
+        }
+    }
+
+    std::vector<uint8_t> eop_stream;
+    Sha256 normalized;
+    int count = 0;
+    for (const Row& row : rows) {
+        const std::string raw_date = row_value(row, {"DATE"});
+        if (trim(raw_date).empty()) continue;
+        const ParsedEpoch parsed = parse_epoch(raw_date);
+        if (!parsed.valid) {
+            plugin_set_error("eop-parse-failed", ("malformed DATE " + raw_date).c_str());
+            return 422;
+        }
+        const std::vector<uint8_t> eop =
+            build_eop_record(row, format_rfc3339(parsed.unix_seconds), data_set_epoch);
+        append_size_prefixed(&eop_stream, eop);
+        normalized_hash_record(&normalized, "EOP.fbs", eop);
+        count++;
+    }
+    if (count == 0) {
+        plugin_set_error("eop-parse-failed", "no EOP rows parsed");
+        return 422;
+    }
+
+    const std::string normalized_hex = normalized.hex_digest();
+    char counts[48];
+    std::snprintf(counts, sizeof(counts), "{\"EOP.fbs\":%d}", count);
+    const std::string provenance =
+        build_provenance_json(ctx, "celestrak-eop-wasm/v1", normalized_hex, count, counts);
+
+    // Whole-history snapshot: each batch supersedes the previous one (the
+    // same reconciliation the space-weather lane uses).
+    const std::string eop_meta = build_ingest_meta(ctx, "EOP.fbs", "current",
+                                                   /*with_archive=*/true, ctx.source_name,
+                                                   provenance);
+    if (push_json("eop_meta", eop_meta) < 0) return 500;
+    if (push_record_stream("eop_records", "EOP.fbs", "$EOP", "EOP", eop_stream) < 0) return 500;
     if (push_bytes("raw", ctx.body) < 0) return 500;
     return 0;
 }

@@ -335,6 +335,153 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot",
       "description": "Parses CelesTrak SW-All.csv into an SPW record stream; enforces the 7-day stale-source gate against Last-Modified (else now). BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames."
+    },
+    {
+      "methodId": "parse_eop",
+      "displayName": "Parse CelesTrak EOP-All CSV",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "celestrak-ingest-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON: {\"source_url\",\"source_name\",\"provider_id\"?,\"archive_source\"?,\"archive_name\"?,\"reconcile\"?,\"origin_id\",\"origin_name\",\"dataset_id\",\"license\",\"license_url\",\"citation\"}.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Fetch-job attribution (source, archive naming, upstream origin and licence) emitted by celestrak-request:eop inside the same flow; ingest bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Fetch-job attribution from the request-builder node."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON from hostcap/http-request.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request response frame ({status,headers,bodyB64}) consumed inside this flow; its shape is defined by that generic connector, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP response carrying EOP-All.csv (or HTTP 304)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "eop_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-meta-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON storage.ingest_with_source meta for the EOP batch (reconcile \"current\", archive naming, licence/origin, provenance).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "storage.ingest_with_source meta (schema, provider/source/url/batch attribution, reconcile mode, archive naming, licence and origin, provenance) consumed by hostcap/storage-ingest inside this flow."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "EOP ingest meta."
+        },
+        {
+          "portId": "eop_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $EOP FlatBuffer record stream, one record per DATE."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "EOP record stream."
+        },
+        {
+          "portId": "raw",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-raw-payload",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The decoded source payload bytes (for raw archiving).",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "text/csv",
+                "detail": "The verbatim EOP-All.csv as fetched from the origin, archived byte-for-byte for provenance. It is an external wire format with no SDS identity."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Raw fetched payload."
+        },
+        {
+          "portId": "unchanged",
+          "acceptedTypeSets": [
+            {
+              "setId": "celestrak-unchanged-notice-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "HTTP 304 notice {status:304,unchanged:true,source_name,source_url,dataset_id} produced when the origin confirms the previously fetched document is current; delivered to the flow's egress sink, never persisted as a record."
+              },
+              "description": "UTF-8 JSON {\"status\":304,\"unchanged\":true,\"source_name\",\"source_url\",\"dataset_id\"}."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Emitted ONLY when the fetch answered HTTP 304 Not Modified (the host sent the recorded ETag / Last-Modified validators): one notice frame and no meta/records/raw frames, so the ingest node never becomes ready and nothing is stored or announced."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Parses CelesTrak EOP-All.csv (DATE,MJD,X,Y,UT1-UTC,LOD,DPSI,DEPS,DX,DY,DAT,DATA_TYPE) into an $EOP record stream: arcsecond columns to radians in the authoritative double-precision _HP fields with float32 copies, DAT to TAI_MINUS_UTC_SECONDS, DATA_TYPE O/P, SERIES FINALS2000A, IAU_2000A, DATA_SET_EPOCH from Last-Modified; enforces the 7-day stale-source gate on the newest OBSERVED row; reconcile \"current\" because each fetch is the whole history and supersedes the previous snapshot. BATCHING: every input port here is single-stream BY CONTRACT and ENFORCED IN CODE; a surplus is refused with error code \"batched-input-frames\" (see graph task modules-guest-nodes-drop-batched-frames)."
     }
   ],
   "buildArtifacts": [

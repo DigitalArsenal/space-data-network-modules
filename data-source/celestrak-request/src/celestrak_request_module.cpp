@@ -13,6 +13,7 @@
  *   satcat -> request_txt/job_txt +
  *             request_csv/job_csv         (legacy fixed-width + CSV snapshot)
  *   spw    -> request/job                 (SW-All.csv space weather)
+ *   eop    -> request/job                 (EOP-All.csv Earth orientation)
  *
  *   publish_request -> request            (§19 dataset-publication trigger)
  *     Joins the hostcap/storage-ingest "result" with the parser's ingest
@@ -54,6 +55,7 @@ constexpr const char* kDefaultGPURL =
 constexpr const char* kDefaultSatcatURL = "https://celestrak.org/pub/satcat.txt";
 constexpr const char* kDefaultSatcatCSVURL = "https://celestrak.org/pub/satcat.csv";
 constexpr const char* kDefaultSpaceWeatherURL = "https://celestrak.org/SpaceData/SW-All.csv";
+constexpr const char* kDefaultEOPURL = "https://celestrak.org/SpaceData/EOP-All.csv";
 constexpr long kDefaultTimeoutMs = 90000;  // runner HTTPTimeout default (90 s)
 
 // Per-lane response byte budgets. The value rides on the request JSON as
@@ -408,6 +410,18 @@ int spw(void) {
     return emit_single("request", "job", "celestrak_space_weather_url", kDefaultSpaceWeatherURL,
                        "celestrak-space-weather", "SW-All.csv", "sw-all",
                        "celestrak_spw_max_bytes", kDefaultSPWMaxBytes);
+}
+
+// eop: timer tick -> Earth-orientation (EOP-All.csv) fetch request + job.
+int eop(void) {
+    char batch_message[384];
+    if (find_batched_input_port(batch_message, sizeof(batch_message))) {
+        plugin_set_error("batched-input-frames", batch_message);
+        return 500;
+    }
+
+    return emit_single("request", "job", "celestrak_eop_url", kDefaultEOPURL, "celestrak-eop",
+                       "EOP-All.csv", "eop-all", "celestrak_eop_max_bytes", kDefaultEOPMaxBytes);
 }
 
 // publish_request: (storage-ingest result, parser ingest meta) -> the

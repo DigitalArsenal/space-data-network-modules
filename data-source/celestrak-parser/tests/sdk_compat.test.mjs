@@ -28,6 +28,7 @@ const GP_CSV = fs.readFileSync(new URL("./fixtures/celestrak-gp-omm.csv", import
 const SATCAT_TXT = fs.readFileSync(new URL("./fixtures/celestrak-satcat.txt", import.meta.url));
 const SATCAT_CSV = fs.readFileSync(new URL("./fixtures/celestrak-satcat.csv", import.meta.url));
 const SW_CSV = fs.readFileSync(new URL("./fixtures/celestrak-sw-all.csv", import.meta.url));
+const EOP_CSV = fs.readFileSync(new URL("./fixtures/celestrak-eop-all.csv", import.meta.url));
 
 function readManifest() {
   return JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
@@ -136,6 +137,21 @@ function readString(record, index) {
   const str = at + view.getUint32(at, true);
   const len = view.getUint32(str, true);
   return decoder.decode(record.subarray(str + 4, str + 4 + len));
+}
+
+function readScalar(record, index, kind) {
+  const at = tableField(record, index);
+  if (at === 0) return 0; // absent == schema default (0)
+  const view = new DataView(record.buffer, record.byteOffset, record.byteLength);
+  switch (kind) {
+    case "f64": return view.getFloat64(at, true);
+    case "f32": return view.getFloat32(at, true);
+    case "u32": return view.getUint32(at, true);
+    case "u16": return view.getUint16(at, true);
+    case "u8": return view.getUint8(at);
+    case "i8": return view.getInt8(at);
+    default: throw new Error(`unknown scalar kind ${kind}`);
+  }
 }
 
 // CAT LAUNCH_SITE is field 7 (VT_LAUNCH_SITE = 18).
@@ -546,4 +562,114 @@ test("parse_spw enforces the 7-day stale-source gate", async (t) => {
   });
   assert.notEqual(response.statusCode, 0);
   assert.match(response.errorMessage ?? "", /stale source timestamp/);
+});
+
+// --------------------------------------------------------------------------
+// parse_eop — EOP-All.csv -> $EOP. Field indices follow the EOP schema
+// (VT_x = 4 + 2*index): DATE 0, MJD 1, X_POLE_WANDER_RADIANS 2,
+// UT1_MINUS_UTC_SECONDS 6, TAI_MINUS_UTC_SECONDS 7, DATA_TYPE 9, SERIES 10,
+// IAU_CONVENTION 11, X_POLE_WANDER_RADIANS_HP 18, UT1_..._HP 22, LOD_HP 23,
+// DATA_SET_EPOCH 24, NUTATION_DPSI_RADIANS 26, NUTATION_DEPS_RADIANS 27.
+// --------------------------------------------------------------------------
+
+const EOP_JOB = {
+  source_url: "https://celestrak.org/SpaceData/EOP-All.csv",
+  source_name: "celestrak-eop",
+  archive_source: "celestrak",
+  archive_name: "EOP-All.csv",
+  dataset_id: "eop-all",
+  ...ORIGIN_JOB,
+};
+// Fixture rows are 2026-08-30/31 observed + 2026-09-01 predicted: a
+// Last-Modified in the same window keeps the 7-day gate green.
+const EOP_HEADERS = { "Last-Modified": "Tue, 01 Sep 2026 12:00:00 GMT", Etag: '"154cec7daf3bdd1:0"' };
+const ARCSEC_TO_RAD = Math.PI / 648000;
+
+test("parse_eop builds $EOP records with radians in the _HP fields and float32 copies", async (t) => {
+  const harness = await createHarness(t);
+  const response = await harness.invoke({
+    methodId: "parse_eop",
+    inputs: [jsonInput("job", EOP_JOB), jsonInput("response", httpResponse(EOP_CSV, EOP_HEADERS))],
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const outputs = outputsByPort(response);
+
+  const meta = jsonFrame(outputs, "eop_meta");
+  assert.equal(meta.schema, "EOP.fbs");
+  assert.equal(meta.source_name, "celestrak-eop");
+  assert.equal(meta.batch_id, sha256Hex(EOP_CSV), "batch id = sha256 of the fetched payload");
+  assert.equal(meta.reconcile, "current", "whole-history snapshot supersedes the previous one");
+  assert.equal(meta.origin_id, "celestrak.org");
+  assert.equal(meta.dataset_id, "eop-all");
+  assert.equal(meta.license, ORIGIN_JOB.license);
+  assert.deepEqual(meta.archive, { source: "celestrak", name: "EOP-All.csv" });
+  const provenance = JSON.parse(Buffer.from(meta.provenance.json, "base64").toString("utf8"));
+  assert.equal(provenance.parser_version, "celestrak-eop-wasm/v1");
+  assert.equal(provenance.schema_counts["EOP.fbs"], 3);
+  assert.equal(provenance.etag, '"154cec7daf3bdd1:0"');
+
+  const records = splitStream(outputs.get("eop_records").payload);
+  assert.equal(records.length, 3);
+  for (const record of records) assert.equal(fileIdentifier(record), "$EOP");
+
+  const [first, , predicted] = records;
+  assert.equal(readString(first, 0), "2026-08-30T00:00:00Z", "DATE is RFC3339 midnight UTC");
+  assert.equal(readScalar(first, 1, "u32"), 61282, "MJD");
+
+  // X = 0.1 arcsec -> 4.84813681109536e-7 rad, authoritative in _HP.
+  const xHp = readScalar(first, 18, "f64");
+  assert.ok(Math.abs(xHp - 4.84813681109536e-7) < 1e-20, `X_HP=${xHp}`);
+  assert.equal(xHp, 0.1 * ARCSEC_TO_RAD, "same arithmetic as the guest, bit-exact");
+  assert.equal(readScalar(first, 2, "f32"), Math.fround(xHp), "float32 copy rounds from the _HP value");
+  assert.equal(readScalar(first, 19, "f64"), 0.25 * ARCSEC_TO_RAD, "Y_HP");
+  assert.equal(readScalar(first, 22, "f64"), 0.0123456, "UT1-UTC seconds (_HP)");
+  assert.equal(readScalar(first, 6, "f32"), Math.fround(0.0123456), "UT1-UTC float32 copy");
+  assert.equal(readScalar(first, 23, "f64"), 0.000789, "LOD seconds (_HP)");
+  assert.equal(readScalar(first, 26, "f64"), -0.105432 * ARCSEC_TO_RAD, "NUTATION_DPSI radians");
+  assert.equal(readScalar(first, 27, "f64"), -0.011234 * ARCSEC_TO_RAD, "NUTATION_DEPS radians");
+  assert.equal(readScalar(first, 20, "f64"), 0.000321 * ARCSEC_TO_RAD, "DX -> X celestial pole offset");
+  assert.equal(readScalar(first, 7, "u16"), 37, "DAT -> TAI_MINUS_UTC_SECONDS");
+  assert.equal(readScalar(first, 10, "u8"), 5, "SERIES FINALS2000A");
+  assert.equal(readScalar(first, 11, "u8"), 1, "IAU_CONVENTION IAU_2000A");
+  assert.equal(readScalar(first, 9, "i8"), 0, "DATA_TYPE O -> OBSERVED");
+  assert.equal(readScalar(predicted, 9, "i8"), 1, "DATA_TYPE P -> PREDICTED");
+  assert.equal(readString(first, 24), "2026-09-01T12:00:00Z", "DATA_SET_EPOCH = Last-Modified as RFC3339");
+
+  assert.deepEqual(Buffer.from(outputs.get("raw").payload), Buffer.from(EOP_CSV));
+});
+
+test("parse_eop gates staleness on the newest OBSERVED row", async (t) => {
+  const harness = await createHarness(t);
+  const response = await harness.invoke({
+    methodId: "parse_eop",
+    inputs: [
+      jsonInput("job", EOP_JOB),
+      // A reference a month past the newest observed DATE (2026-08-31).
+      jsonInput("response", httpResponse(EOP_CSV, { "Last-Modified": "Fri, 02 Oct 2026 00:00:00 GMT" })),
+    ],
+  });
+  assert.notEqual(response.statusCode, 0);
+  assert.match(response.errorMessage ?? "", /stale source timestamp/);
+});
+
+test("parse_eop answers HTTP 304 with one unchanged notice and zero record frames", async (t) => {
+  const harness = await createHarness(t);
+  const response = await harness.invoke({
+    methodId: "parse_eop",
+    inputs: [
+      jsonInput("job", EOP_JOB),
+      jsonInput("response", { status: 304, headers: { Etag: '"154cec7daf3bdd1:0"' }, bodyB64: "" }),
+    ],
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.equal(response.outputs.length, 1);
+  const outputs = outputsByPort(response);
+  for (const port of ["eop_meta", "eop_records", "raw"]) assert.equal(outputs.has(port), false, port);
+  assert.deepEqual(jsonFrame(outputs, "unchanged"), {
+    status: 304,
+    unchanged: true,
+    source_name: "celestrak-eop",
+    source_url: EOP_JOB.source_url,
+    dataset_id: "eop-all",
+  });
 });

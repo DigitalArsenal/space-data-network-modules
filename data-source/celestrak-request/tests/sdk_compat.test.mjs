@@ -121,6 +121,7 @@ const LANES = [
   ["satcat", "request_txt", "job_txt", "celestrak-satcat", "satcat", 33554432],
   ["satcat", "request_csv", "job_csv", "celestrak-satcat-csv", "satcat-csv", 33554432],
   ["spw", "request", "job", "celestrak-space-weather", "sw-all", 4194304],
+  ["eop", "request", "job", "celestrak-eop", "eop-all", 4194304],
 ];
 
 for (const [methodId, requestPort, jobPort, sourceName, datasetId, maxBytes] of LANES) {
@@ -204,6 +205,26 @@ test("spw emits the space-weather fetch + job", async (t) => {
   assert.equal(outputs.get("request").url, "https://celestrak.org/SpaceData/SW-All.csv");
   assert.equal(outputs.get("job").source_name, "celestrak-space-weather");
   assert.equal(outputs.get("job").archive_name, "SW-All.csv");
+});
+
+test("eop emits the Earth-orientation fetch + job (URL override via node CONFIG)", async (t) => {
+  const stub = createConfigStub();
+  const harness = await createHarness(t, stub);
+  const outputs = outputsByPort(
+    await harness.invoke({ methodId: "eop", inputs: [tickInput()] }),
+  );
+  assert.equal(outputs.get("request").url, "https://celestrak.org/SpaceData/EOP-All.csv");
+  assert.equal(outputs.get("request").method, "GET");
+  assert.equal(outputs.get("job").source_name, "celestrak-eop");
+  assert.equal(outputs.get("job").archive_name, "EOP-All.csv");
+  assert.equal(outputs.get("job").dataset_id, "eop-all");
+
+  const override = createConfigStub({ celestrak_eop_url: "https://fixtures.test/EOP-All.csv", celestrak_eop_max_bytes: 2048 });
+  const overridden = outputsByPort(
+    await (await createHarness(t, override)).invoke({ methodId: "eop", inputs: [tickInput()] }),
+  );
+  assert.equal(overridden.get("request").url, "https://fixtures.test/EOP-All.csv");
+  assert.equal(overridden.get("request").maxBytes, 2048);
 });
 
 // --------------------------------------------------------------------------

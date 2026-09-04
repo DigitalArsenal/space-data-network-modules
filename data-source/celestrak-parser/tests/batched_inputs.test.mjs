@@ -51,7 +51,12 @@ async function invoke(t, methodId, inputs) {
   return harness.invoke({ methodId, inputs });
 }
 
-const CASES = [["parse_gp", "response", ["job"]], ["parse_satcat", "response", ["job"]], ["parse_spw", "response", ["job"]]];
+const CASES = [
+  ["parse_gp", "response", ["job"]],
+  ["parse_satcat", "response", ["job"]],
+  ["parse_spw", "response", ["job"]],
+  ["parse_eop", "response", ["job"]],
+];
 
 for (const [methodId, port, others] of CASES) {
   test(`${methodId} refuses two frames on the single-stream "${port}" port`, async (t) => {

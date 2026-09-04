@@ -26,8 +26,8 @@ function inlineGeneratedHeader(source) {
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
 // Topological order over the flatc include graph: RFM/TIM/MET feed OMM,
-// MET feeds MPE, IDM->PLD + LCC feed CAT, SPW is standalone.
-const inlineStandards = ["RFM", "TIM", "MET", "IDM", "PLD", "LCC", "OMM", "MPE", "CAT", "SPW"];
+// MET feeds MPE, IDM->PLD + LCC feed CAT, SPW and EOP are standalone.
+const inlineStandards = ["RFM", "TIM", "MET", "IDM", "PLD", "LCC", "OMM", "MPE", "CAT", "SPW", "EOP"];
 const headers = await Promise.all(
   inlineStandards.map((standard) =>
     fs.readFile(path.join(standardsRoot, "lib", "cpp", standard, "main_generated.h"), "utf8"),
