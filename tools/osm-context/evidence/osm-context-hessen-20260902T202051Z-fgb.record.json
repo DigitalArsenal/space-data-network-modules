@@ -1,0 +1,150 @@
+{
+  "FORMAT": "osm-context-fgb/1",
+  "TILESET_ID": "osm-context-hessen-20260902T202051Z-fgb",
+  "REGION": "hessen",
+  "CRS": "EPSG:4326",
+  "PAYLOAD": {
+    "CID": "",
+    "SIZE_BYTES": 1112929744,
+    "MEDIA_TYPE": "application/vnd.ipld.dag-pb"
+  },
+  "FILES": [
+    {
+      "NAME": "water.fgb",
+      "CATEGORY": "water",
+      "KIND": "polygon",
+      "MEDIA_TYPE": "application/x-flatgeobuf",
+      "BYTES": 9756928,
+      "SHA256": "e656a7ac1f3da62422c8f7458c808a170857831e93ea1caaa04087bb67d2c859",
+      "FEATURE_COUNT": 18895,
+      "LAYER": "multipolygons",
+      "WHERE": "natural = 'water' OR waterway IN ('riverbank','dock') OR landuse IN ('reservoir','basin')"
+    },
+    {
+      "NAME": "water-lines.fgb",
+      "CATEGORY": "water",
+      "KIND": "line",
+      "MEDIA_TYPE": "application/x-flatgeobuf",
+      "BYTES": 1360,
+      "SHA256": "b026ccf1741d9539efc517c79e0e0f8c589ea29fc2eef38804d48508f9e805ff",
+      "FEATURE_COUNT": 0,
+      "LAYER": "lines",
+      "WHERE": "natural = 'coastline'"
+    },
+    {
+      "NAME": "road-lines.fgb",
+      "CATEGORY": "road",
+      "KIND": "line",
+      "MEDIA_TYPE": "application/x-flatgeobuf",
+      "BYTES": 281731032,
+      "SHA256": "6361683540703a40c089f245a9f506a4be74e6d9b510aaac4208f0f687ca6e2b",
+      "FEATURE_COUNT": 1189806,
+      "LAYER": "lines",
+      "WHERE": "highway IS NOT NULL"
+    },
+    {
+      "NAME": "rail-lines.fgb",
+      "CATEGORY": "rail",
+      "KIND": "line",
+      "MEDIA_TYPE": "application/x-flatgeobuf",
+      "BYTES": 5068000,
+      "SHA256": "759571008484c01f9458c9cbfb47cc0987b373d94a9146e0c48be0b0433bcf60",
+      "FEATURE_COUNT": 18987,
+      "LAYER": "lines",
+      "WHERE": "railway IN ('rail','light_rail','tram')"
+    },
+    {
+      "NAME": "aeroway.fgb",
+      "CATEGORY": "aeroway",
+      "KIND": "polygon",
+      "MEDIA_TYPE": "application/x-flatgeobuf",
+      "BYTES": 193752,
+      "SHA256": "728a9aea8ae00b0340d546316d43b9de033d10a0bd88c9188420055cebc6ebca",
+      "FEATURE_COUNT": 377,
+      "LAYER": "multipolygons",
+      "WHERE": "aeroway IN ('aerodrome','apron','runway','taxiway','helipad','hangar')"
+    },
+    {
+      "NAME": "aeroway-lines.fgb",
+      "CATEGORY": "aeroway",
+      "KIND": "line",
+      "MEDIA_TYPE": "application/x-flatgeobuf",
+      "BYTES": 274960,
+      "SHA256": "bb833cfe206a7ebb26e2dab9ed332f1518dcc3db26ce6477aa83f0e7b74d4729",
+      "FEATURE_COUNT": 955,
+      "LAYER": "lines",
+      "WHERE": "aeroway IN ('runway','taxiway')"
+    },
+    {
+      "NAME": "parking.fgb",
+      "CATEGORY": "parking",
+      "KIND": "polygon",
+      "MEDIA_TYPE": "application/x-flatgeobuf",
+      "BYTES": 15202520,
+      "SHA256": "c37e36df925f18c667263c75023b53fdf1ee96f0d071f4f511a977bfabd6675a",
+      "FEATURE_COUNT": 48776,
+      "LAYER": "multipolygons",
+      "WHERE": "amenity = 'parking'"
+    },
+    {
+      "NAME": "industrial.fgb",
+      "CATEGORY": "industrial",
+      "KIND": "polygon",
+      "MEDIA_TYPE": "application/x-flatgeobuf",
+      "BYTES": 3087496,
+      "SHA256": "f36f45823cddd103f8e6b285651e4cf1f9b1cf56c72cd21403729dd5f364b62d",
+      "FEATURE_COUNT": 6664,
+      "LAYER": "multipolygons",
+      "WHERE": "landuse IN ('industrial','port','harbour') OR industrial IS NOT NULL OR man_made IN ('works','storage_tank','pier')"
+    },
+    {
+      "NAME": "industrial-lines.fgb",
+      "CATEGORY": "industrial",
+      "KIND": "line",
+      "MEDIA_TYPE": "application/x-flatgeobuf",
+      "BYTES": 261416,
+      "SHA256": "6407c71221a70eb85b5053b6a589269b2276e30b5badab8b28ec05e7d09f121d",
+      "FEATURE_COUNT": 1567,
+      "LAYER": "lines",
+      "WHERE": "man_made = 'pier'"
+    },
+    {
+      "NAME": "building.fgb",
+      "CATEGORY": "building",
+      "KIND": "polygon",
+      "MEDIA_TYPE": "application/x-flatgeobuf",
+      "BYTES": 797351152,
+      "SHA256": "9da8c0c83c9639e50e0fe5c85efd5a326228d4129fd7c06141d6b3e6378f8aab",
+      "FEATURE_COUNT": 2763936,
+      "LAYER": "multipolygons",
+      "WHERE": "building IS NOT NULL AND building <> 'no'"
+    },
+    {
+      "NAME": "ocean.fgb",
+      "CATEGORY": "water",
+      "KIND": "polygon",
+      "MEDIA_TYPE": "application/x-flatgeobuf",
+      "BYTES": 1128,
+      "SHA256": "cfef654845e67b657cfb24314c1195e0094e8adc74019400c92e5971dea0db5f",
+      "FEATURE_COUNT": 0,
+      "LAYER": "ocean",
+      "WHERE": null
+    }
+  ],
+  "DATASET_EPOCH": "2026-09-02T20:20:51Z",
+  "PROVENANCE": {
+    "SOURCE": "OpenStreetMap",
+    "SOURCE_URL": "https://download.geofabrik.de/europe/germany/hessen-latest.osm.pbf",
+    "RETRIEVED_AT": "2026-09-04T02:04:32Z",
+    "PROCESSOR": "osmium-tool 1.19.1 + GDAL 3.13.3 (ogr2ogr FlatGeobuf)",
+    "LICENSE": "ODbL-1.0",
+    "SHARE_ALIKE": true,
+    "ATTRIBUTION": "© OpenStreetMap contributors",
+    "OCEAN": {
+      "SOURCE_URL": "https://osmdata.openstreetmap.de/download/water-polygons-split-3857.zip",
+      "SHA256": "05ba9c22b108adcae9724946f6da9b395119556c75cfac12cddc0f8079215435",
+      "FILES_DATED": "2026-09-01T23:28:00Z",
+      "LICENSE": "ODbL-1.0"
+    }
+  }
+}
