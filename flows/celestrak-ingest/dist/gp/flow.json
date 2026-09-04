@@ -1,9 +1,9 @@
 {
   "programId": "com.digitalarsenal.flows.celestrak-gp-ingest",
   "name": "CelesTrak GP Ingest Flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engineLinkage": "bridge",
-  "description": "Per-provider ingest flow (loop C.8a), GP catalog: a module cron TIMER tick enters at the request-builder node (celestrak-request:gp, URLs/timeout from node CONFIG), hostcap/http-request fetches the CSV, celestrak-parser:parse_gp normalizes it into OMM + MPE record streams with full SourceTags attribution (batch = sha256 of the payload) plus archive naming and wasm-authored provenance, and two hostcap/storage-ingest nodes persist the batches through the policy-mediated storage.ingest_with_source cap op (disk guardrail, pre/post duplicate reconcile, raw + provenance archiving host-side). Ingest results land on the egress sink. After each store, celestrak-request:publish_request joins that ingest result with the parser meta and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; the publication response also lands on the egress sink. All decisions live in-wasm; the host contributes timers, HTTP egress, and guarded persistence only.",
+  "description": "Per-provider ingest flow (loop C.8a), GP catalog: a module cron TIMER tick enters at the request-builder node (celestrak-request:gp, URLs/timeout from node CONFIG), hostcap/http-request fetches the CSV, celestrak-parser:parse_gp normalizes it into OMM + MPE record streams with full SourceTags attribution (batch = sha256 of the payload) plus archive naming and wasm-authored provenance, and two hostcap/storage-ingest nodes persist the batches through the policy-mediated storage.ingest_with_source cap op (disk guardrail, pre/post duplicate reconcile, raw + provenance archiving host-side). Ingest results land on the egress sink. After each store, celestrak-request:publish_request joins that ingest result with the parser meta and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; the publication response also lands on the egress sink. After the OMM store, celestrak-request:cache_warm receives the same ingest result and emits the dataset default-query frame (node CONFIG celestrak_cache_sql/celestrak_cache_max_rows; graph task sdn-dataset-default-query-materialized-cache FOLLOW-UP C) into hostcap/flatsql-query:query, which re-executes it against the just-committed store in the same wasm invocation and warms the engine's response-artifact cache the dataset load serves from. All decisions live in-wasm; the host contributes timers, HTTP egress, and guarded persistence only.",
   "nodes": [
     {
       "nodeId": "req",
@@ -65,6 +65,20 @@
       "nodeId": "publish_http_mpe",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "warm",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
+      "methodId": "cache_warm",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "warm_q",
+      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
+      "methodId": "query",
       "kind": "transform",
       "drainPolicy": "single-shot"
     },
@@ -188,6 +202,26 @@
       "opaque": true
     },
     {
+      "edgeId": "ingest-omm-warm",
+      "fromNodeId": "ingest_omm",
+      "fromPortId": "result",
+      "toNodeId": "warm",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "warm-warm-q",
+      "fromNodeId": "warm",
+      "fromPortId": "query",
+      "toNodeId": "warm_q",
+      "toPortId": "query",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
       "edgeId": "parse-omm-meta-publish",
       "fromNodeId": "parse",
       "fromPortId": "omm_meta",
@@ -256,6 +290,16 @@
       "backpressurePolicy": "queue",
       "queueDepth": 4,
       "opaque": true
+    },
+    {
+      "edgeId": "parse-unchanged-egress",
+      "fromNodeId": "parse",
+      "fromPortId": "unchanged",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1,
+      "opaque": true
     }
   ],
   "triggers": [
@@ -280,6 +324,7 @@
     "com.digitalarsenal.data-source.celestrak-request",
     "com.digitalarsenal.hostcap.http-request",
     "com.digitalarsenal.data-source.celestrak-parser",
-    "com.digitalarsenal.hostcap.storage-ingest"
+    "com.digitalarsenal.hostcap.storage-ingest",
+    "com.digitalarsenal.hostcap.flatsql-query"
   ]
 }

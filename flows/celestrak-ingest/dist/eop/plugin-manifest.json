@@ -1,9 +1,9 @@
 {
-  "pluginId": "com.digitalarsenal.flows.celestrak-spw-ingest",
-  "name": "CelesTrak Space Weather Ingest Flow",
+  "pluginId": "com.digitalarsenal.flows.celestrak-eop-ingest",
+  "name": "CelesTrak Earth Orientation Ingest Flow",
   "version": "0.1.0",
   "pluginFamily": "flow",
-  "description": "Per-provider ingest flow (loop C.8a), space weather: a module cron TIMER tick enters at celestrak-request:spw, hostcap/http-request fetches SW-All.csv, celestrak-parser:parse_spw normalizes it into an SPW record stream (batch = sha256 of the payload; the runner's 7-day stale-source gate fails the batch in-wasm), and hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op. Results land on the egress sink. After the store, celestrak-request:publish_request joins that ingest result with the parser meta and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; the publication response also lands on the egress sink. All decisions live in-wasm.",
+  "description": "Per-provider ingest flow, Earth orientation: a module cron TIMER tick enters at celestrak-request:eop (URL, byte budget and usage terms from node CONFIG / the origin registry), hostcap/http-request fetches EOP-All.csv with the recorded ETag / Last-Modified validators, celestrak-parser:parse_eop normalizes it into an EOP record stream (arcsecond columns to radians in the double-precision _HP fields with float32 copies, DAT to TAI_MINUS_UTC_SECONDS, DATA_TYPE O/P, series FINALS2000A, IAU_2000A; batch = sha256 of the payload; the 7-day stale gate on the newest OBSERVED row fails the batch in-wasm; HTTP 304 emits one unchanged notice to the egress sink and stores nothing), and hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op with reconcile \"current\" (each whole-history snapshot supersedes the previous one). Results land on the egress sink. After the store, celestrak-request:publish_request joins that ingest result with the parser meta and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; the publication response also lands on the egress sink. All decisions live in-wasm.",
   "capabilities": [
     "http",
     "storage_ingest"
@@ -60,9 +60,9 @@
   ],
   "methods": [
     {
-      "methodId": "timer_spw",
-      "displayName": "Flow trigger timer-spw",
-      "description": "Compiled-flow ingress for trigger \"timer-spw\" (timer).",
+      "methodId": "timer_eop",
+      "displayName": "Flow trigger timer-eop",
+      "description": "Compiled-flow ingress for trigger \"timer-eop\" (timer).",
       "inputPorts": [
         {
           "portId": "tick",
@@ -74,7 +74,12 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "Timer tick frame (content ignored)."
+              "description": "Timer tick frame (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Host cron timer tick frame ({firedAt}) delivered by the flow trigger binding; its content is ignored and it is never persisted."
+              }
             }
           ],
           "minStreams": 1,
@@ -114,7 +119,7 @@
   ],
   "buildArtifacts": [
     {
-      "artifactId": "com_digitalarsenal_flows_celestrak_spw_ingest-flow-runtime",
+      "artifactId": "com_digitalarsenal_flows_celestrak_eop_ingest-flow-runtime",
       "kind": "wasm",
       "path": "dist/isomorphic/module.wasm",
       "target": "browser,wasmedge"
@@ -124,7 +129,7 @@
     {
       "nodeId": "req",
       "pluginId": "com.digitalarsenal.data-source.celestrak-request",
-      "methodId": "spw",
+      "methodId": "eop",
       "kind": "transform",
       "dispatchModel": null,
       "uiX": 0,
@@ -142,14 +147,14 @@
     {
       "nodeId": "parse",
       "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
-      "methodId": "parse_spw",
+      "methodId": "parse_eop",
       "kind": "transform",
       "dispatchModel": null,
       "uiX": 0,
       "uiY": 0
     },
     {
-      "nodeId": "ingest_spw",
+      "nodeId": "ingest_eop",
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
       "methodId": "ingest",
       "kind": "transform",
@@ -158,7 +163,7 @@
       "uiY": 0
     },
     {
-      "nodeId": "publish_spw",
+      "nodeId": "publish_eop",
       "pluginId": "com.digitalarsenal.data-source.celestrak-request",
       "methodId": "publish_request",
       "kind": "transform",
@@ -167,7 +172,7 @@
       "uiY": 0
     },
     {
-      "nodeId": "publish_http_spw",
+      "nodeId": "publish_http_eop",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "methodId": "request",
       "kind": "transform",
@@ -232,10 +237,10 @@
       }
     },
     {
-      "edgeId": "parse-spw-meta",
+      "edgeId": "parse-eop-meta",
       "fromNodeId": "parse",
-      "fromPortId": "spw_meta",
-      "toNodeId": "ingest_spw",
+      "fromPortId": "eop_meta",
+      "toNodeId": "ingest_eop",
       "toPortId": "meta",
       "contract": {
         "canonicalType": null,
@@ -247,25 +252,36 @@
       }
     },
     {
-      "edgeId": "parse-spw-records",
+      "edgeId": "parse-eop-records",
       "fromNodeId": "parse",
-      "fromPortId": "spw_records",
-      "toNodeId": "ingest_spw",
+      "fromPortId": "eop_records",
+      "toNodeId": "ingest_eop",
       "toPortId": "records",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "EOP.fbs",
+          "fileIdentifier": "$EOP",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "EOP",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
     {
-      "edgeId": "parse-spw-raw",
+      "edgeId": "parse-eop-raw",
       "fromNodeId": "parse",
       "fromPortId": "raw",
-      "toNodeId": "ingest_spw",
+      "toNodeId": "ingest_eop",
       "toPortId": "raw",
       "contract": {
         "canonicalType": null,
@@ -277,8 +293,8 @@
       }
     },
     {
-      "edgeId": "ingest-spw-egress",
-      "fromNodeId": "ingest_spw",
+      "edgeId": "ingest-eop-egress",
+      "fromNodeId": "ingest_eop",
       "fromPortId": "result",
       "toNodeId": "egress",
       "toPortId": "result",
@@ -292,10 +308,10 @@
       }
     },
     {
-      "edgeId": "ingest-spw-publish",
-      "fromNodeId": "ingest_spw",
+      "edgeId": "ingest-eop-publish",
+      "fromNodeId": "ingest_eop",
       "fromPortId": "result",
-      "toNodeId": "publish_spw",
+      "toNodeId": "publish_eop",
       "toPortId": "result",
       "contract": {
         "canonicalType": null,
@@ -307,10 +323,10 @@
       }
     },
     {
-      "edgeId": "parse-spw-meta-publish",
+      "edgeId": "parse-eop-meta-publish",
       "fromNodeId": "parse",
-      "fromPortId": "spw_meta",
-      "toNodeId": "publish_spw",
+      "fromPortId": "eop_meta",
+      "toNodeId": "publish_eop",
       "toPortId": "meta",
       "contract": {
         "canonicalType": null,
@@ -322,10 +338,10 @@
       }
     },
     {
-      "edgeId": "publish-spw-http",
-      "fromNodeId": "publish_spw",
+      "edgeId": "publish-eop-http",
+      "fromNodeId": "publish_eop",
       "fromPortId": "request",
-      "toNodeId": "publish_http_spw",
+      "toNodeId": "publish_http_eop",
       "toPortId": "request",
       "contract": {
         "canonicalType": null,
@@ -337,8 +353,8 @@
       }
     },
     {
-      "edgeId": "publish-spw-egress",
-      "fromNodeId": "publish_http_spw",
+      "edgeId": "publish-eop-egress",
+      "fromNodeId": "publish_http_eop",
       "fromPortId": "response",
       "toNodeId": "egress",
       "toPortId": "result",
@@ -369,16 +385,16 @@
   ],
   "flowTriggers": [
     {
-      "triggerId": "timer-spw",
+      "triggerId": "timer-eop",
       "kind": "timer",
       "source": "host-cron",
-      "defaultIntervalMs": 10800000,
+      "defaultIntervalMs": 86400000,
       "httpPath": null
     }
   ],
   "flowTriggerBindings": [
     {
-      "triggerId": "timer-spw",
+      "triggerId": "timer-eop",
       "targetNodeId": "req",
       "targetPortId": "tick"
     }

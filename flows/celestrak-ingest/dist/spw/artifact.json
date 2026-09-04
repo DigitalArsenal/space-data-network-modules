@@ -5,7 +5,7 @@
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
   "nodes": 7,
-  "edges": 11,
+  "edges": 12,
   "triggers": 1,
   "capabilities": [
     "http",
@@ -69,7 +69,7 @@
       "dependencyId": "com.digitalarsenal.data-source.celestrak-request",
       "pluginId": "com.digitalarsenal.data-source.celestrak-request",
       "version": "0.1.0",
-      "sha256": "440abbc50015f234a77854e79d16dfce23c95015f73e25366737b21badb8e388",
+      "sha256": "3df2113c79b7eb3c8325a14071d04c884016f4a12fae140b861cf93bd436064d",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -78,7 +78,10 @@
         "gp": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d72657175657374_gp",
         "satcat": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d72657175657374_satcat",
         "spw": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d72657175657374_spw",
-        "publish_request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d72657175657374_publish_request"
+        "eop": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d72657175657374_eop",
+        "socrates": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d72657175657374_socrates",
+        "publish_request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d72657175657374_publish_request",
+        "cache_warm": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d72657175657374_cache_warm"
       }
     },
     {
@@ -86,7 +89,7 @@
       "dependencyId": "com.digitalarsenal.hostcap.http-request",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "version": "0.1.0",
-      "sha256": "e99fece3e3622247bb88145c1e9db78b272f500ba60e121ca6335df0836bebef",
+      "sha256": "da255ce8bf0029a39f58cdc381e7812f0dd3fa9c8a2d2136da1698356e9f522d",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -100,7 +103,7 @@
       "dependencyId": "com.digitalarsenal.data-source.celestrak-parser",
       "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
       "version": "0.1.0",
-      "sha256": "893a5476c92941e3ce9ba5706add8c78ab86f5ffea20893130244beef7a45771",
+      "sha256": "8994bd4f943ca49339eb0f22c55278410ddea5df39071fef773a2935030ad25c",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -108,7 +111,9 @@
       "methodSymbols": {
         "parse_gp": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d706172736572_parse_gp",
         "parse_satcat": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d706172736572_parse_satcat",
-        "parse_spw": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d706172736572_parse_spw"
+        "parse_spw": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d706172736572_parse_spw",
+        "parse_eop": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d706172736572_parse_eop",
+        "parse_socrates": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e63656c65737472616b2d706172736572_parse_socrates"
       }
     },
     {

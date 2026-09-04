@@ -24,6 +24,8 @@ const decoder = new TextDecoder();
 const GP_WASM = new URL("../dist/gp/runtime.wasm", import.meta.url);
 const SATCAT_WASM = new URL("../dist/satcat/runtime.wasm", import.meta.url);
 const SPW_WASM = new URL("../dist/spw/runtime.wasm", import.meta.url);
+const EOP_WASM = new URL("../dist/eop/runtime.wasm", import.meta.url);
+const SOCRATES_WASM = new URL("../dist/socrates/runtime.wasm", import.meta.url);
 
 const GP_CSV = fs.readFileSync(
   new URL("../../../data-source/celestrak-parser/tests/fixtures/celestrak-gp-omm.csv", import.meta.url),
@@ -36,6 +38,12 @@ const SATCAT_CSV = fs.readFileSync(
 );
 const SW_CSV = fs.readFileSync(
   new URL("../../../data-source/celestrak-parser/tests/fixtures/celestrak-sw-all.csv", import.meta.url),
+);
+const EOP_CSV = fs.readFileSync(
+  new URL("../../../data-source/celestrak-parser/tests/fixtures/celestrak-eop-all.csv", import.meta.url),
+);
+const SOCRATES_CSV = fs.readFileSync(
+  new URL("../../../data-source/celestrak-parser/tests/fixtures/celestrak-socrates-minrange.csv", import.meta.url),
 );
 
 function sha256Hex(bytes) {
@@ -137,6 +145,14 @@ function createIngestHostStub({ fetches, config = {} }) {
             ok: true,
             result: { schema: meta.schema, inserted: count, batch_id: meta.batch_id },
           });
+          return 0;
+        }
+        if (operation === "storage.flatsql_query_stream") {
+          // Materialized-cache warm query from the cache_warm lane. The host
+          // answers with the engine's response artifact; zero segments is a
+          // legitimate cold-store ``empty`` answer. The guest forwards the
+          // first segment verbatim on its ``stream`` port (unconnected here).
+          response = encodeHostcallEnvelope({ ok: true, result: {} });
           return 0;
         }
         response = encodeHostcallEnvelope({ ok: false, message: `unexpected op ${operation}` });
@@ -381,6 +397,12 @@ test("celestrak-spw-ingest: fresh source ingests; config URL override reaches th
   assert.equal(ingests[0].meta.schema, "SPW.fbs");
   assert.equal(ingests[0].meta.source_name, "celestrak-space-weather");
   assert.equal(ingests[0].meta.source_url, overrideURL, "node CONFIG override drove the fetch");
+  // SW-All.csv is a whole-history snapshot: every batch supersedes the older
+  // ones, so the lane converges on one row per DATE (a reconciliation of
+  // duplicate snapshots, never a loss).
+  assert.equal(ingests[0].meta.reconcile, "current");
+  assert.equal(ingests[0].meta.origin_id, "celestrak.org");
+  assert.equal(ingests[0].meta.dataset_id, "sw-all");
   assert.equal(results.length, 1);
   assert.equal(results[0].inserted, 2);
 });
@@ -402,4 +424,135 @@ test("celestrak-spw-ingest: the stale-source gate stops the batch before any ing
   if (!drainError) {
     assert.deepEqual(results, [], "no results reach the egress sink");
   }
+});
+
+// --------------------------------------------------------------------------
+// Politeness + provenance across the hostcall boundary: the request node's
+// byte budget must reach the host http cap as max_bytes, and the parser's
+// meta must carry the origin registry and licence into storage.ingest.
+// --------------------------------------------------------------------------
+
+function fetchCalls(stub, url) {
+  return stub.calls.filter((call) => call.operation === "http.request" && call.meta.url === url);
+}
+
+test("celestrak-gp-ingest: the fetch carries the lane byte budget and the meta carries the origin", async () => {
+  const gpURL = "https://celestrak.org/NORAD/elements/gp.php?SPECIAL=full-catalog&FORMAT=csv";
+  const stub = createIngestHostStub({ fetches: { [gpURL]: { body: GP_CSV } } });
+  await runFlowOnce(GP_WASM, stub);
+
+  const [fetch] = fetchCalls(stub, gpURL);
+  assert.ok(fetch, "one GP fetch");
+  assert.equal(fetch.meta.max_bytes, 67108864, "64 MiB budget forwarded as max_bytes");
+  assert.equal(fetch.meta.headers, undefined, "no request headers: the host adds its recorded validators");
+
+  const omm = ingestCalls(stub).find((call) => call.meta.schema === "OMM.fbs");
+  assert.equal(omm.meta.origin_id, "celestrak.org");
+  assert.equal(omm.meta.origin_name, "CelesTrak");
+  assert.equal(omm.meta.dataset_id, "gp-full-catalog");
+  assert.equal(omm.meta.license_url, "https://celestrak.org/usage-policy.php");
+  assert.match(omm.meta.license, /^Only download the data you need/);
+  assert.ok(omm.meta.citation.length > 0);
+});
+
+test("celestrak-eop-ingest: tick -> EOP-All fetch (budget, no headers) -> one attributed $EOP ingest", async () => {
+  const eopURL = "https://celestrak.org/SpaceData/EOP-All.csv";
+  const stub = createIngestHostStub({
+    fetches: {
+      [eopURL]: {
+        body: EOP_CSV,
+        headers: { "Last-Modified": "Tue, 01 Sep 2026 12:00:00 GMT", Etag: '"154cec7daf3bdd1:0"' },
+      },
+    },
+  });
+  const results = await runFlowOnce(EOP_WASM, stub);
+
+  const [fetch] = fetchCalls(stub, eopURL);
+  assert.ok(fetch, "one EOP fetch");
+  assert.equal(fetch.meta.max_bytes, 4194304, "4 MiB budget forwarded as max_bytes");
+  assert.equal(fetch.meta.headers, undefined, "headers-free: validators are the host's");
+
+  const ingests = ingestCalls(stub);
+  assert.equal(ingests.length, 1);
+  const [ingest] = ingests;
+  assert.equal(ingest.meta.schema, "EOP.fbs");
+  assert.equal(ingest.meta.provider_id, "space-data-network-02");
+  assert.equal(ingest.meta.source_name, "celestrak-eop");
+  assert.equal(ingest.meta.batch_id, sha256Hex(EOP_CSV));
+  assert.equal(ingest.meta.reconcile, "current");
+  assert.equal(ingest.meta.origin_id, "celestrak.org");
+  assert.equal(ingest.meta.dataset_id, "eop-all");
+  assert.equal(ingest.meta.license_url, "https://celestrak.org/usage-policy.php");
+  assert.equal(ingest.meta.archive.name, "EOP-All.csv");
+  assert.equal(ingest.segments.length, 2, "records + archive raw segments");
+  const records = Buffer.from(ingest.segments[0]);
+  let count = 0;
+  for (let off = 0; off < records.length; ) {
+    const len = records.readUInt32LE(off);
+    assert.equal(records.subarray(off + 8, off + 12).toString("latin1"), "$EOP");
+    off += 4 + len;
+    count++;
+  }
+  assert.equal(count, 3, "fixture has 3 rows");
+  assert.deepEqual(Buffer.from(ingest.segments[1]), Buffer.from(EOP_CSV), "raw archive bytes");
+
+  assert.equal(results.length, 1);
+  assert.equal(results[0].inserted, 3);
+});
+
+test("celestrak-eop-ingest: HTTP 304 stores nothing and reports one unchanged notice", async () => {
+  const eopURL = "https://celestrak.org/SpaceData/EOP-All.csv";
+  const stub = createIngestHostStub({
+    fetches: { [eopURL]: { status: 304, body: "", headers: { Etag: '"154cec7daf3bdd1:0"' } } },
+  });
+  const results = await runFlowOnce(EOP_WASM, stub);
+
+  assert.equal(ingestCalls(stub).length, 0, "no ingest hostcall on 304");
+  assert.deepEqual(publishBodies(stub), [], "nothing stored, nothing published");
+  assert.equal(results.length, 1, "the unchanged notice reaches the egress sink");
+  assert.deepEqual(results[0], {
+    status: 304,
+    unchanged: true,
+    source_name: "celestrak-eop",
+    source_url: eopURL,
+    dataset_id: "eop-all",
+  });
+});
+
+test("celestrak-socrates-ingest: one tick fans out to BOTH sort files as their own $CSM lanes", async () => {
+  const minRangeURL = "https://celestrak.org/SOCRATES/sort-minRange.csv";
+  const maxProbURL = "https://celestrak.org/SOCRATES/sort-maxProb.csv";
+  const stub = createIngestHostStub({
+    fetches: { [minRangeURL]: { body: SOCRATES_CSV }, [maxProbURL]: { body: SOCRATES_CSV } },
+  });
+  const results = await runFlowOnce(SOCRATES_WASM, stub);
+
+  for (const url of [minRangeURL, maxProbURL]) {
+    const [fetch] = fetchCalls(stub, url);
+    assert.ok(fetch, `fetch for ${url}`);
+    assert.equal(fetch.meta.max_bytes, 8388608, "8 MiB budget forwarded as max_bytes");
+    assert.equal(fetch.meta.headers, undefined);
+  }
+
+  const ingests = ingestCalls(stub);
+  assert.equal(ingests.length, 2, "minRange + maxProb batches");
+  assert.deepEqual(
+    ingests.map((call) => call.meta.source_name).sort(),
+    ["celestrak-socrates-maxprob", "celestrak-socrates-minrange"],
+  );
+  assert.deepEqual(
+    ingests.map((call) => call.meta.dataset_id).sort(),
+    ["socrates-maxprob", "socrates-minrange"],
+  );
+  for (const call of ingests) {
+    assert.equal(call.meta.schema, "CSM.fbs");
+    assert.equal(call.meta.reconcile, "current", "each sort file is a snapshot");
+    assert.equal(call.meta.origin_id, "celestrak.org");
+    assert.equal(call.meta.batch_id, sha256Hex(SOCRATES_CSV));
+    assert.equal(call.meta.license_url, "https://celestrak.org/usage-policy.php");
+    const records = Buffer.from(call.segments[0]);
+    assert.equal(records.subarray(8, 12).toString("latin1"), "$CSM");
+  }
+  assert.equal(results.length, 2);
+  for (const result of results) assert.equal(result.inserted, 2);
 });

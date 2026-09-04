@@ -1,9 +1,9 @@
 {
-  "pluginId": "com.digitalarsenal.flows.celestrak-satcat-ingest",
-  "name": "CelesTrak SATCAT Ingest Flow",
+  "pluginId": "com.digitalarsenal.flows.celestrak-socrates-ingest",
+  "name": "CelesTrak SOCRATES Ingest Flow",
   "version": "0.1.0",
   "pluginFamily": "flow",
-  "description": "Per-provider ingest flow (loop C.8a), SATCAT snapshot: a module cron TIMER tick enters at celestrak-request:satcat which emits BOTH source fetches (legacy fixed-width satcat.txt and satcat.csv — runner dual-source parity); two hostcap/http-request nodes fetch, two celestrak-parser:parse_satcat nodes normalize into CAT record streams (batch = sha256 of each payload, reconcile mode 'current' since only the newest snapshot batch is meaningful), and two hostcap/storage-ingest nodes persist through the policy-mediated storage.ingest_with_source cap op. Results land on the egress sink. After each store, celestrak-request:publish_request joins that ingest result with the parser meta and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives per lane; the publication responses also land on the egress sink. All decisions live in-wasm.",
+  "description": "Per-provider ingest flow, SOCRATES conjunctions: a module cron TIMER tick enters at celestrak-request:socrates, which fans out to BOTH sort files (sort-minRange.csv and sort-maxProb.csv; URLs, byte budget and usage terms from node CONFIG / the origin registry); two hostcap/http-request nodes fetch them with the recorded ETag / Last-Modified validators, two celestrak-parser:parse_socrates nodes normalize each into a $CSM record stream (nested CAT identities with the status suffix split into OPS_STATUS_CODE, TCA as unix seconds with the published fraction; batch = sha256 of the payload; HTTP 304 emits one unchanged notice to the egress sink and stores nothing), and two hostcap/storage-ingest nodes persist them under their own source tags with reconcile \"current\" (each sort file is a snapshot of the current conjunction list). Results land on the egress sink. After each store, celestrak-request:publish_request joins that ingest result with the parser meta and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; the publication responses also land on the egress sink. All decisions live in-wasm.",
   "capabilities": [
     "http",
     "storage_ingest"
@@ -60,9 +60,9 @@
   ],
   "methods": [
     {
-      "methodId": "timer_satcat",
-      "displayName": "Flow trigger timer-satcat",
-      "description": "Compiled-flow ingress for trigger \"timer-satcat\" (timer).",
+      "methodId": "timer_socrates",
+      "displayName": "Flow trigger timer-socrates",
+      "description": "Compiled-flow ingress for trigger \"timer-socrates\" (timer).",
       "inputPorts": [
         {
           "portId": "tick",
@@ -74,7 +74,12 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "Timer tick frame (content ignored)."
+              "description": "Timer tick frame (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Host cron timer tick frame ({firedAt}) delivered by the flow trigger binding; its content is ignored and it is never persisted."
+              }
             }
           ],
           "minStreams": 1,
@@ -114,7 +119,7 @@
   ],
   "buildArtifacts": [
     {
-      "artifactId": "com_digitalarsenal_flows_celestrak_satcat_ingest-flow-runtime",
+      "artifactId": "com_digitalarsenal_flows_celestrak_socrates_ingest-flow-runtime",
       "kind": "wasm",
       "path": "dist/isomorphic/module.wasm",
       "target": "browser,wasmedge"
@@ -124,14 +129,14 @@
     {
       "nodeId": "req",
       "pluginId": "com.digitalarsenal.data-source.celestrak-request",
-      "methodId": "satcat",
+      "methodId": "socrates",
       "kind": "transform",
       "dispatchModel": null,
       "uiX": 0,
       "uiY": 0
     },
     {
-      "nodeId": "http_txt",
+      "nodeId": "http_minrange",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "methodId": "request",
       "kind": "transform",
@@ -140,7 +145,7 @@
       "uiY": 0
     },
     {
-      "nodeId": "http_csv",
+      "nodeId": "http_maxprob",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "methodId": "request",
       "kind": "transform",
@@ -149,25 +154,25 @@
       "uiY": 0
     },
     {
-      "nodeId": "parse_txt",
+      "nodeId": "parse_minrange",
       "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
-      "methodId": "parse_satcat",
+      "methodId": "parse_socrates",
       "kind": "transform",
       "dispatchModel": null,
       "uiX": 0,
       "uiY": 0
     },
     {
-      "nodeId": "parse_csv",
+      "nodeId": "parse_maxprob",
       "pluginId": "com.digitalarsenal.data-source.celestrak-parser",
-      "methodId": "parse_satcat",
+      "methodId": "parse_socrates",
       "kind": "transform",
       "dispatchModel": null,
       "uiX": 0,
       "uiY": 0
     },
     {
-      "nodeId": "ingest_txt",
+      "nodeId": "ingest_minrange",
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
       "methodId": "ingest",
       "kind": "transform",
@@ -176,7 +181,7 @@
       "uiY": 0
     },
     {
-      "nodeId": "ingest_csv",
+      "nodeId": "ingest_maxprob",
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
       "methodId": "ingest",
       "kind": "transform",
@@ -185,7 +190,7 @@
       "uiY": 0
     },
     {
-      "nodeId": "publish_txt",
+      "nodeId": "publish_minrange",
       "pluginId": "com.digitalarsenal.data-source.celestrak-request",
       "methodId": "publish_request",
       "kind": "transform",
@@ -194,7 +199,7 @@
       "uiY": 0
     },
     {
-      "nodeId": "publish_csv",
+      "nodeId": "publish_maxprob",
       "pluginId": "com.digitalarsenal.data-source.celestrak-request",
       "methodId": "publish_request",
       "kind": "transform",
@@ -203,7 +208,7 @@
       "uiY": 0
     },
     {
-      "nodeId": "publish_http_txt",
+      "nodeId": "publish_http_minrange",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "methodId": "request",
       "kind": "transform",
@@ -212,7 +217,7 @@
       "uiY": 0
     },
     {
-      "nodeId": "publish_http_csv",
+      "nodeId": "publish_http_maxprob",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "methodId": "request",
       "kind": "transform",
@@ -232,10 +237,10 @@
   ],
   "flowEdges": [
     {
-      "edgeId": "req-http-txt",
+      "edgeId": "req-http-minrange",
       "fromNodeId": "req",
-      "fromPortId": "request_txt",
-      "toNodeId": "http_txt",
+      "fromPortId": "request_minrange",
+      "toNodeId": "http_minrange",
       "toPortId": "request",
       "contract": {
         "canonicalType": null,
@@ -247,10 +252,10 @@
       }
     },
     {
-      "edgeId": "req-http-csv",
+      "edgeId": "req-http-maxprob",
       "fromNodeId": "req",
-      "fromPortId": "request_csv",
-      "toNodeId": "http_csv",
+      "fromPortId": "request_maxprob",
+      "toNodeId": "http_maxprob",
       "toPortId": "request",
       "contract": {
         "canonicalType": null,
@@ -262,10 +267,10 @@
       }
     },
     {
-      "edgeId": "req-parse-txt-job",
+      "edgeId": "req-parse-minrange-job",
       "fromNodeId": "req",
-      "fromPortId": "job_txt",
-      "toNodeId": "parse_txt",
+      "fromPortId": "job_minrange",
+      "toNodeId": "parse_minrange",
       "toPortId": "job",
       "contract": {
         "canonicalType": null,
@@ -277,10 +282,10 @@
       }
     },
     {
-      "edgeId": "req-parse-csv-job",
+      "edgeId": "req-parse-maxprob-job",
       "fromNodeId": "req",
-      "fromPortId": "job_csv",
-      "toNodeId": "parse_csv",
+      "fromPortId": "job_maxprob",
+      "toNodeId": "parse_maxprob",
       "toPortId": "job",
       "contract": {
         "canonicalType": null,
@@ -292,10 +297,10 @@
       }
     },
     {
-      "edgeId": "http-parse-txt",
-      "fromNodeId": "http_txt",
+      "edgeId": "http-parse-minrange",
+      "fromNodeId": "http_minrange",
       "fromPortId": "response",
-      "toNodeId": "parse_txt",
+      "toNodeId": "parse_minrange",
       "toPortId": "response",
       "contract": {
         "canonicalType": null,
@@ -307,10 +312,10 @@
       }
     },
     {
-      "edgeId": "http-parse-csv",
-      "fromNodeId": "http_csv",
+      "edgeId": "http-parse-maxprob",
+      "fromNodeId": "http_maxprob",
       "fromPortId": "response",
-      "toNodeId": "parse_csv",
+      "toNodeId": "parse_maxprob",
       "toPortId": "response",
       "contract": {
         "canonicalType": null,
@@ -322,10 +327,10 @@
       }
     },
     {
-      "edgeId": "parse-txt-meta",
-      "fromNodeId": "parse_txt",
-      "fromPortId": "cat_meta",
-      "toNodeId": "ingest_txt",
+      "edgeId": "parse-minrange-meta",
+      "fromNodeId": "parse_minrange",
+      "fromPortId": "csm_meta",
+      "toNodeId": "ingest_minrange",
       "toPortId": "meta",
       "contract": {
         "canonicalType": null,
@@ -337,25 +342,36 @@
       }
     },
     {
-      "edgeId": "parse-txt-records",
-      "fromNodeId": "parse_txt",
-      "fromPortId": "cat_records",
-      "toNodeId": "ingest_txt",
+      "edgeId": "parse-minrange-records",
+      "fromNodeId": "parse_minrange",
+      "fromPortId": "csm_records",
+      "toNodeId": "ingest_minrange",
       "toPortId": "records",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "CSM.fbs",
+          "fileIdentifier": "$CSM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "CSM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
     {
-      "edgeId": "parse-txt-raw",
-      "fromNodeId": "parse_txt",
+      "edgeId": "parse-minrange-raw",
+      "fromNodeId": "parse_minrange",
       "fromPortId": "raw",
-      "toNodeId": "ingest_txt",
+      "toNodeId": "ingest_minrange",
       "toPortId": "raw",
       "contract": {
         "canonicalType": null,
@@ -367,10 +383,10 @@
       }
     },
     {
-      "edgeId": "parse-csv-meta",
-      "fromNodeId": "parse_csv",
-      "fromPortId": "cat_meta",
-      "toNodeId": "ingest_csv",
+      "edgeId": "parse-maxprob-meta",
+      "fromNodeId": "parse_maxprob",
+      "fromPortId": "csm_meta",
+      "toNodeId": "ingest_maxprob",
       "toPortId": "meta",
       "contract": {
         "canonicalType": null,
@@ -382,25 +398,36 @@
       }
     },
     {
-      "edgeId": "parse-csv-records",
-      "fromNodeId": "parse_csv",
-      "fromPortId": "cat_records",
-      "toNodeId": "ingest_csv",
+      "edgeId": "parse-maxprob-records",
+      "fromNodeId": "parse_maxprob",
+      "fromPortId": "csm_records",
+      "toNodeId": "ingest_maxprob",
       "toPortId": "records",
       "contract": {
-        "canonicalType": null,
+        "canonicalType": {
+          "schemaName": "CSM.fbs",
+          "fileIdentifier": "$CSM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "CSM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
         "alignedType": null,
         "canonicalFallbackAvailable": true,
         "alignedEligible": false,
-        "opaque": true,
+        "opaque": false,
         "routePolicy": "canonical-only"
       }
     },
     {
-      "edgeId": "parse-csv-raw",
-      "fromNodeId": "parse_csv",
+      "edgeId": "parse-maxprob-raw",
+      "fromNodeId": "parse_maxprob",
       "fromPortId": "raw",
-      "toNodeId": "ingest_csv",
+      "toNodeId": "ingest_maxprob",
       "toPortId": "raw",
       "contract": {
         "canonicalType": null,
@@ -412,8 +439,8 @@
       }
     },
     {
-      "edgeId": "ingest-txt-egress",
-      "fromNodeId": "ingest_txt",
+      "edgeId": "ingest-minrange-egress",
+      "fromNodeId": "ingest_minrange",
       "fromPortId": "result",
       "toNodeId": "egress",
       "toPortId": "result",
@@ -427,8 +454,8 @@
       }
     },
     {
-      "edgeId": "ingest-csv-egress",
-      "fromNodeId": "ingest_csv",
+      "edgeId": "ingest-maxprob-egress",
+      "fromNodeId": "ingest_maxprob",
       "fromPortId": "result",
       "toNodeId": "egress",
       "toPortId": "result",
@@ -442,10 +469,10 @@
       }
     },
     {
-      "edgeId": "ingest-txt-publish",
-      "fromNodeId": "ingest_txt",
+      "edgeId": "ingest-minrange-publish",
+      "fromNodeId": "ingest_minrange",
       "fromPortId": "result",
-      "toNodeId": "publish_txt",
+      "toNodeId": "publish_minrange",
       "toPortId": "result",
       "contract": {
         "canonicalType": null,
@@ -457,10 +484,10 @@
       }
     },
     {
-      "edgeId": "parse-txt-meta-publish",
-      "fromNodeId": "parse_txt",
-      "fromPortId": "cat_meta",
-      "toNodeId": "publish_txt",
+      "edgeId": "parse-minrange-meta-publish",
+      "fromNodeId": "parse_minrange",
+      "fromPortId": "csm_meta",
+      "toNodeId": "publish_minrange",
       "toPortId": "meta",
       "contract": {
         "canonicalType": null,
@@ -472,10 +499,10 @@
       }
     },
     {
-      "edgeId": "ingest-csv-publish",
-      "fromNodeId": "ingest_csv",
+      "edgeId": "ingest-maxprob-publish",
+      "fromNodeId": "ingest_maxprob",
       "fromPortId": "result",
-      "toNodeId": "publish_csv",
+      "toNodeId": "publish_maxprob",
       "toPortId": "result",
       "contract": {
         "canonicalType": null,
@@ -487,10 +514,10 @@
       }
     },
     {
-      "edgeId": "parse-csv-meta-publish",
-      "fromNodeId": "parse_csv",
-      "fromPortId": "cat_meta",
-      "toNodeId": "publish_csv",
+      "edgeId": "parse-maxprob-meta-publish",
+      "fromNodeId": "parse_maxprob",
+      "fromPortId": "csm_meta",
+      "toNodeId": "publish_maxprob",
       "toPortId": "meta",
       "contract": {
         "canonicalType": null,
@@ -502,10 +529,10 @@
       }
     },
     {
-      "edgeId": "publish-txt-http",
-      "fromNodeId": "publish_txt",
+      "edgeId": "publish-minrange-http",
+      "fromNodeId": "publish_minrange",
       "fromPortId": "request",
-      "toNodeId": "publish_http_txt",
+      "toNodeId": "publish_http_minrange",
       "toPortId": "request",
       "contract": {
         "canonicalType": null,
@@ -517,10 +544,10 @@
       }
     },
     {
-      "edgeId": "publish-csv-http",
-      "fromNodeId": "publish_csv",
+      "edgeId": "publish-maxprob-http",
+      "fromNodeId": "publish_maxprob",
       "fromPortId": "request",
-      "toNodeId": "publish_http_csv",
+      "toNodeId": "publish_http_maxprob",
       "toPortId": "request",
       "contract": {
         "canonicalType": null,
@@ -532,8 +559,8 @@
       }
     },
     {
-      "edgeId": "publish-txt-egress",
-      "fromNodeId": "publish_http_txt",
+      "edgeId": "publish-minrange-egress",
+      "fromNodeId": "publish_http_minrange",
       "fromPortId": "response",
       "toNodeId": "egress",
       "toPortId": "result",
@@ -547,8 +574,8 @@
       }
     },
     {
-      "edgeId": "publish-csv-egress",
-      "fromNodeId": "publish_http_csv",
+      "edgeId": "publish-maxprob-egress",
+      "fromNodeId": "publish_http_maxprob",
       "fromPortId": "response",
       "toNodeId": "egress",
       "toPortId": "result",
@@ -562,8 +589,8 @@
       }
     },
     {
-      "edgeId": "parse-txt-unchanged-egress",
-      "fromNodeId": "parse_txt",
+      "edgeId": "parse-minrange-unchanged-egress",
+      "fromNodeId": "parse_minrange",
       "fromPortId": "unchanged",
       "toNodeId": "egress",
       "toPortId": "result",
@@ -577,8 +604,8 @@
       }
     },
     {
-      "edgeId": "parse-csv-unchanged-egress",
-      "fromNodeId": "parse_csv",
+      "edgeId": "parse-maxprob-unchanged-egress",
+      "fromNodeId": "parse_maxprob",
       "fromPortId": "unchanged",
       "toNodeId": "egress",
       "toPortId": "result",
@@ -594,16 +621,16 @@
   ],
   "flowTriggers": [
     {
-      "triggerId": "timer-satcat",
+      "triggerId": "timer-socrates",
       "kind": "timer",
       "source": "host-cron",
-      "defaultIntervalMs": 86400000,
+      "defaultIntervalMs": 28800000,
       "httpPath": null
     }
   ],
   "flowTriggerBindings": [
     {
-      "triggerId": "timer-satcat",
+      "triggerId": "timer-socrates",
       "targetNodeId": "req",
       "targetPortId": "tick"
     }
