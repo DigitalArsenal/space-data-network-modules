@@ -58,12 +58,59 @@ The layer rules and the zoom ladder are in `profile/osm-context.yml`, verbatim
 from the prototype build, with 21 `verify` cases at the bottom that planetiler
 checks without any data.
 
+## FlatGeobuf epoch (`build-fgb.mjs`) — the hosted form
+
+Owner decision 2026-09-03: the context is hosted as FlatGeobuf, not PMTiles.
+`build-fgb.mjs` runs the same seven categories through `osmium tags-filter`
+and `ogr2ogr -f FlatGeobuf` (GDAL's OSM driver with `profile/osmconf-fgb.ini`,
+which declares exactly the tag columns the detector reads and turns
+`other_tags` off) into ONE DIRECTORY per epoch:
+
+```
+out/osm-context-<region>-<epoch>-fgb/
+  osm-context.fgb.json     the epoch record: FILES (name, category, kind,
+                           bytes, sha256, feature count, GDAL layer and WHERE),
+                           DATASET_EPOCH, PROVENANCE (source, ODbL, attribution,
+                           the ocean pin); PAYLOAD.CID empty until pinned
+  building.fgb             multipolygons: closed ways and relations, holes intact,
+                           columns building, height, building:levels, min_height, roof:shape
+  road-lines.fgb           lines: highway, lanes, width, area
+  rail-lines.fgb           lines: railway
+  water.fgb / water-lines.fgb          natural=water etc. polygons / coastline lines
+  aeroway.fgb / aeroway-lines.fgb      aerodrome, apron, hangar, helipad polygons / runway, taxiway lines
+  parking.fgb              amenity=parking
+  industrial.fgb / industrial-lines.fgb   landuse, industrial, man_made polygons / pier lines
+  ocean.fgb                osmdata water polygons reprojected to EPSG:4326 and clipped to the extract bbox
+```
+
+Every file is EPSG:4326 with a packed Hilbert R-tree index, so a client
+range-reads only the features under its view; there is no server component
+and no tile pyramid. The trade is storage: FlatGeobuf holds full-resolution
+float64 geometry uncompressed, so Hessen is 797 MB of buildings and 282 MB of
+roads against the 107 MB PMTiles archive of all seven layers. What a viewport
+pass transfers is similar under both. The reader is
+`OrbPro/packages/orbpro-integration/analysis.imagery-detection/runtime/fgbContext.js`
+(`setContext({ source: "fgb", baseUrl })`); the record's `FORMAT` is
+`osm-context-fgb/1` and its shape is what that reader validates.
+
+```
+node tools/osm-context/build-fgb.mjs --region hessen [--out out] [--cache cache]
+     [--offline] [--no-ocean] [--ocean-sha256 <hex>] [--osmium|--ogr2ogr|--ogrinfo <path>]
+```
+
+Needs osmium-tool (>= 1.14) and GDAL (>= 3.6) on PATH; the extract, its md5
+and state file and the ocean zip are the ones `build.mjs` caches (same
+`cache/` layout, same pins), so the two builders answer the same epoch.
+`tests/build-fgb.test.mjs` covers the argv, the parsers and the record with
+no tools installed.
+
 ## Layout
 
 ```
-build.mjs            verify -> inputs -> build -> header -> record -> run report, one region per call
+build.mjs            verify -> inputs -> build -> header -> record -> run report, one region per call (PMTiles)
+build-fgb.mjs        inputs -> osmium tags-filter -> ogr2ogr FlatGeobuf per category -> ocean -> record (the hosted form)
 write-record.mjs     the tileset record from an archive's header and metadata (CLI and library)
-profile/             osm-context.yml, the planetiler custom-schema profile with its test cases
+profile/             osm-context.yml (planetiler profile with test cases), osmconf-fgb.ini (GDAL OSM driver columns for build-fgb)
 regions.json         the Geofabrik extracts the builder knows, and the ocean polygons pin
 tests/               node:test suites that need neither Java nor network
 evidence/            the prototype's two records, its console output, the port's proof run, BUILD-EVIDENCE.md
