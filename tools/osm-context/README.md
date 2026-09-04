@@ -91,7 +91,11 @@ roads against the 107 MB PMTiles archive of all seven layers. What a viewport
 pass transfers is similar under both. The reader is
 `OrbPro/packages/orbpro-integration/analysis.imagery-detection/runtime/fgbContext.js`
 (`setContext({ source: "fgb", baseUrl })`); the record's `FORMAT` is
-`osm-context-fgb/1` and its shape is what that reader validates.
+`osm-context-fgb/1` and its shape is what that reader validates. On a node the
+record is served by `data-source/osm-source` through
+`flows/osm-serving.flow.json` at `/api/v1/osm/tileset.json` (anonymous), with
+`PAYLOAD.CID` and `EPOCH_BASE_PATH` filled in from the mount config once the
+directory is pinned.
 
 ```
 node tools/osm-context/build-fgb.mjs --region hessen [--out out] [--cache cache]
