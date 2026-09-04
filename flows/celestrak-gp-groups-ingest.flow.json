@@ -1,0 +1,188 @@
+{
+  "programId": "com.digitalarsenal.flows.celestrak-gp-groups-ingest",
+  "name": "CelesTrak GP Groups Ingest Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "Per-provider ingest flow for the CelesTrak GP group queries (47 GROUP tokens plus the gpz / gpz-plus SPECIAL queries): a module cron TIMER tick enters at celestrak-reference:gp_groups, which emits one hostcap/http-request frame per group and ONE job frame carrying the ordered group list; the http node answers one response per request in order; celestrak-reference:parse_gp_groups pairs them by ordinal and emits one $EGP (Entity Group, QUERY_SNAPSHOT membership over the group's OMM rows) per group, with batch = sha256 of the concatenated payloads and reconcile 'current' for a complete snapshot ('duplicates' when some groups answered 304); hostcap/storage-ingest persists through the policy-mediated storage.ingest_with_source cap op. Groups that answered Not Modified land on the egress sink as an 'unchanged' notice. The optional OMM re-emission lane (node CONFIG celestrak_gp_groups_emit_omm) stores the group rows as OMM when enabled. All decisions live in-wasm.",
+  "nodes": [
+    {
+      "nodeId": "req",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-reference",
+      "methodId": "gp_groups",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-reference",
+      "methodId": "parse_gp_groups",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest_egp",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest_omm",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "req-http",
+      "fromNodeId": "req",
+      "fromPortId": "request",
+      "toNodeId": "http",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 64,
+      "opaque": true
+    },
+    {
+      "edgeId": "req-parse-job",
+      "fromNodeId": "req",
+      "fromPortId": "job",
+      "toNodeId": "parse",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-parse",
+      "fromNodeId": "http",
+      "fromPortId": "response",
+      "toNodeId": "parse",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 64,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-egp-meta",
+      "fromNodeId": "parse",
+      "fromPortId": "egp_meta",
+      "toNodeId": "ingest_egp",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-egp-records",
+      "fromNodeId": "parse",
+      "fromPortId": "egp_records",
+      "toNodeId": "ingest_egp",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": false,
+      "_comment": "NOT opaque: both ports resolve the concrete $EGP identity, so the record type is declared on the wire rather than signed away."
+    },
+    {
+      "edgeId": "parse-egp-raw",
+      "fromNodeId": "parse",
+      "fromPortId": "raw",
+      "toNodeId": "ingest_egp",
+      "toPortId": "raw",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-omm-meta",
+      "fromNodeId": "parse",
+      "fromPortId": "omm_meta",
+      "toNodeId": "ingest_omm",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-omm-records",
+      "fromNodeId": "parse",
+      "fromPortId": "omm_records",
+      "toNodeId": "ingest_omm",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": false,
+      "_comment": "NOT opaque: both ports resolve the concrete $OMM identity, so the record type is declared on the wire rather than signed away."
+    },
+    {
+      "edgeId": "parse-unchanged-egress",
+      "fromNodeId": "parse",
+      "fromPortId": "unchanged",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "ingest-egp-egress",
+      "fromNodeId": "ingest_egp",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "ingest-omm-egress",
+      "fromNodeId": "ingest_omm",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "timer-gp-groups",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 86400000,
+      "description": "GP group snapshot timer (24 h)."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "timer-gp-groups",
+      "targetNodeId": "req",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.celestrak-reference",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.hostcap.storage-ingest"
+  ]
+}

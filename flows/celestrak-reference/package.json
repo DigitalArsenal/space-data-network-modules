@@ -1,0 +1,14 @@
+{
+  "name": "@digitalarsenal/sdn-flow-celestrak-reference",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../celestrak-gp-groups-ingest.flow.json --deps ../celestrak-reference.deps.json && node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../celestrak-satcat-reference-ingest.flow.json --deps ../celestrak-reference.deps.json",
+    "build": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../celestrak-gp-groups-ingest.flow.json --deps ../celestrak-reference.deps.json --out ./dist/gp-groups && node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../celestrak-satcat-reference-ingest.flow.json --deps ../celestrak-reference.deps.json --out ./dist/satcat-reference",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk"
+  }
+}

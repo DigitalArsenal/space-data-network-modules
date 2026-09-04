@@ -1,0 +1,504 @@
+{
+  "pluginId": "com.digitalarsenal.flows.celestrak-satcat-reference-ingest",
+  "name": "CelesTrak SATCAT Reference Ingest Flow",
+  "version": "0.1.0",
+  "pluginFamily": "flow",
+  "description": "Per-provider ingest flow for the CelesTrak SATCAT reference tables: a module cron TIMER tick enters at celestrak-reference:satcat_reference, which emits BOTH table fetches (launch sites and owners/sources); two hostcap/http-request nodes fetch, two celestrak-reference:parse_satcat_reference nodes read the HTML tables into $SIT (launch sites) and $LCC (legacy owner codes) record streams (batch = sha256 of each page, reconcile 'current' since only the newest table is meaningful), and two hostcap/storage-ingest nodes persist through the policy-mediated storage.ingest_with_source cap op. Results and Not-Modified notices land on the egress sink. All decisions live in-wasm.",
+  "capabilities": [
+    "http",
+    "storage_ingest"
+  ],
+  "dependencies": [
+    {
+      "pluginId": "com.digitalarsenal.data-source.celestrak-reference",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    }
+  ],
+  "externalInterfaces": [
+    {
+      "interfaceId": "host-http",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "http",
+      "resource": "https://*",
+      "description": "Outbound HTTP through the host http.request hostcall. Go server host: 100 MiB response ceiling lowered per request by max_bytes (exceeding the effective bound is an error, never a truncation), 30 s default timeout, per-destination egress pacing. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
+      "properties": {
+        "hostOps": [
+          "http.request"
+        ]
+      }
+    },
+    {
+      "interfaceId": "host-storage-ingest",
+      "kind": "host-service",
+      "direction": "bidirectional",
+      "capability": "storage_ingest",
+      "resource": "sdn://storage/ingest",
+      "description": "Provenance/batch-capable record ingest through the host storage.ingest_with_source hostcall (sdn-server modulert/caps/storage.go).",
+      "properties": {
+        "hostOps": [
+          "storage.ingest_with_source"
+        ]
+      }
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "timer_satcat_reference",
+      "displayName": "Flow trigger timer-satcat-reference",
+      "description": "Compiled-flow ingress for trigger \"timer-satcat-reference\" (timer).",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Timer tick frame (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Cron timer tick frame produced by the flow runtime and consumed inside this flow only; it carries no payload of its own, so there is no SDS record to name."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "celestrak-unchanged-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON {\"status\":304,\"unchanged\":true,\"source_name\",\"source_url\",\"dataset_id\",\"origin_id\"} when the page answered Not Modified.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Not-Modified notice delivered to the flow's egress sink so an operator can see that the page was unchanged this cycle; flow bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Not-Modified notice."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "EGP.fbs",
+      "fileIdentifier": "$EGP",
+      "rootTypeName": "EGP"
+    },
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "SIT.fbs",
+      "fileIdentifier": "$SIT",
+      "rootTypeName": "SIT"
+    },
+    {
+      "schemaName": "LCC.fbs",
+      "fileIdentifier": "$LCC",
+      "rootTypeName": "LCC"
+    }
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "com_digitalarsenal_flows_celestrak_satcat_reference_ingest-flow-runtime",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "flowNodes": [
+    {
+      "nodeId": "req",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-reference",
+      "methodId": "satcat_reference",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "http_sites",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "http_owners",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "parse_sites",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-reference",
+      "methodId": "parse_satcat_reference",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "parse_owners",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-reference",
+      "methodId": "parse_satcat_reference",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "ingest_sites",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "ingest_owners",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "dispatchModel": "host-capability",
+      "uiX": 0,
+      "uiY": 0
+    }
+  ],
+  "flowEdges": [
+    {
+      "edgeId": "req-http-sites",
+      "fromNodeId": "req",
+      "fromPortId": "request_sites",
+      "toNodeId": "http_sites",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "req-http-owners",
+      "fromNodeId": "req",
+      "fromPortId": "request_owners",
+      "toNodeId": "http_owners",
+      "toPortId": "request",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "req-parse-sites-job",
+      "fromNodeId": "req",
+      "fromPortId": "job_sites",
+      "toNodeId": "parse_sites",
+      "toPortId": "job",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "req-parse-owners-job",
+      "fromNodeId": "req",
+      "fromPortId": "job_owners",
+      "toNodeId": "parse_owners",
+      "toPortId": "job",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http-parse-sites",
+      "fromNodeId": "http_sites",
+      "fromPortId": "response",
+      "toNodeId": "parse_sites",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "http-parse-owners",
+      "fromNodeId": "http_owners",
+      "fromPortId": "response",
+      "toNodeId": "parse_owners",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-sites-meta",
+      "fromNodeId": "parse_sites",
+      "fromPortId": "sit_meta",
+      "toNodeId": "ingest_sites",
+      "toPortId": "meta",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-sites-records",
+      "fromNodeId": "parse_sites",
+      "fromPortId": "sit_records",
+      "toNodeId": "ingest_sites",
+      "toPortId": "records",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "SIT.fbs",
+          "fileIdentifier": "$SIT",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "SIT",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-sites-raw",
+      "fromNodeId": "parse_sites",
+      "fromPortId": "raw",
+      "toNodeId": "ingest_sites",
+      "toPortId": "raw",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-owners-meta",
+      "fromNodeId": "parse_owners",
+      "fromPortId": "lcc_meta",
+      "toNodeId": "ingest_owners",
+      "toPortId": "meta",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-owners-records",
+      "fromNodeId": "parse_owners",
+      "fromPortId": "lcc_records",
+      "toNodeId": "ingest_owners",
+      "toPortId": "records",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "LCC.fbs",
+          "fileIdentifier": "$LCC",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "LCC",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-owners-raw",
+      "fromNodeId": "parse_owners",
+      "fromPortId": "raw",
+      "toNodeId": "ingest_owners",
+      "toPortId": "raw",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-sites-unchanged-egress",
+      "fromNodeId": "parse_sites",
+      "fromPortId": "unchanged",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-owners-unchanged-egress",
+      "fromNodeId": "parse_owners",
+      "fromPortId": "unchanged",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "ingest-sites-egress",
+      "fromNodeId": "ingest_sites",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "ingest-owners-egress",
+      "fromNodeId": "ingest_owners",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    }
+  ],
+  "flowTriggers": [
+    {
+      "triggerId": "timer-satcat-reference",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 604800000,
+      "httpPath": null
+    }
+  ],
+  "flowTriggerBindings": [
+    {
+      "triggerId": "timer-satcat-reference",
+      "targetNodeId": "req",
+      "targetPortId": "tick"
+    }
+  ],
+  "abiVersion": 1
+}

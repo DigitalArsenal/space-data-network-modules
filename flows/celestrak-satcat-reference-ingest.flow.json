@@ -1,0 +1,252 @@
+{
+  "programId": "com.digitalarsenal.flows.celestrak-satcat-reference-ingest",
+  "name": "CelesTrak SATCAT Reference Ingest Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "Per-provider ingest flow for the CelesTrak SATCAT reference tables: a module cron TIMER tick enters at celestrak-reference:satcat_reference, which emits BOTH table fetches (launch sites and owners/sources); two hostcap/http-request nodes fetch, two celestrak-reference:parse_satcat_reference nodes read the HTML tables into $SIT (launch sites) and $LCC (legacy owner codes) record streams (batch = sha256 of each page, reconcile 'current' since only the newest table is meaningful), and two hostcap/storage-ingest nodes persist through the policy-mediated storage.ingest_with_source cap op. Results and Not-Modified notices land on the egress sink. All decisions live in-wasm.",
+  "nodes": [
+    {
+      "nodeId": "req",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-reference",
+      "methodId": "satcat_reference",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_sites",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_owners",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "parse_sites",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-reference",
+      "methodId": "parse_satcat_reference",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "parse_owners",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-reference",
+      "methodId": "parse_satcat_reference",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest_sites",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest_owners",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "req-http-sites",
+      "fromNodeId": "req",
+      "fromPortId": "request_sites",
+      "toNodeId": "http_sites",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "req-http-owners",
+      "fromNodeId": "req",
+      "fromPortId": "request_owners",
+      "toNodeId": "http_owners",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "req-parse-sites-job",
+      "fromNodeId": "req",
+      "fromPortId": "job_sites",
+      "toNodeId": "parse_sites",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "req-parse-owners-job",
+      "fromNodeId": "req",
+      "fromPortId": "job_owners",
+      "toNodeId": "parse_owners",
+      "toPortId": "job",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-parse-sites",
+      "fromNodeId": "http_sites",
+      "fromPortId": "response",
+      "toNodeId": "parse_sites",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-parse-owners",
+      "fromNodeId": "http_owners",
+      "fromPortId": "response",
+      "toNodeId": "parse_owners",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-sites-meta",
+      "fromNodeId": "parse_sites",
+      "fromPortId": "sit_meta",
+      "toNodeId": "ingest_sites",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-sites-records",
+      "fromNodeId": "parse_sites",
+      "fromPortId": "sit_records",
+      "toNodeId": "ingest_sites",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": false,
+      "_comment": "NOT opaque: both ports resolve the concrete $SIT identity, so the record type is declared on the wire rather than signed away."
+    },
+    {
+      "edgeId": "parse-sites-raw",
+      "fromNodeId": "parse_sites",
+      "fromPortId": "raw",
+      "toNodeId": "ingest_sites",
+      "toPortId": "raw",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-owners-meta",
+      "fromNodeId": "parse_owners",
+      "fromPortId": "lcc_meta",
+      "toNodeId": "ingest_owners",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-owners-records",
+      "fromNodeId": "parse_owners",
+      "fromPortId": "lcc_records",
+      "toNodeId": "ingest_owners",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": false,
+      "_comment": "NOT opaque: both ports resolve the concrete $LCC identity, so the record type is declared on the wire rather than signed away."
+    },
+    {
+      "edgeId": "parse-owners-raw",
+      "fromNodeId": "parse_owners",
+      "fromPortId": "raw",
+      "toNodeId": "ingest_owners",
+      "toPortId": "raw",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-sites-unchanged-egress",
+      "fromNodeId": "parse_sites",
+      "fromPortId": "unchanged",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-owners-unchanged-egress",
+      "fromNodeId": "parse_owners",
+      "fromPortId": "unchanged",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "ingest-sites-egress",
+      "fromNodeId": "ingest_sites",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "ingest-owners-egress",
+      "fromNodeId": "ingest_owners",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "timer-satcat-reference",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 604800000,
+      "description": "SATCAT reference-table sync timer (7 d)."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "timer-satcat-reference",
+      "targetNodeId": "req",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.celestrak-reference",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.hostcap.storage-ingest"
+  ]
+}

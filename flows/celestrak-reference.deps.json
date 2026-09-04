@@ -1,0 +1,5 @@
+{
+  "com.digitalarsenal.data-source.celestrak-reference": "../data-source/celestrak-reference",
+  "com.digitalarsenal.hostcap.http-request": "../hostcap/http-request",
+  "com.digitalarsenal.hostcap.storage-ingest": "../hostcap/storage-ingest"
+}
