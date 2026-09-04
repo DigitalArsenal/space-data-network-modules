@@ -1105,6 +1105,14 @@ std::vector<uint8_t> build_cat_record(const Row& row, uint32_t norad) {
     const legacyCountryCode owner = satcat_owner_code(row_value(row, {"OWNER"}));
     std::string launch_date = row_value(row, {"LAUNCH_DATE", "LAUNCH"});
     if (launch_date.empty()) launch_date = "1998-11-20";  // NewCATBuilder default (runner parity)
+    // LAUNCH_SITE is a real SATCAT column (CSV LAUNCH_SITE, fixed-width cols
+    // 69-73). The NewCATBuilder default "TYMSC" survives ONLY when the source
+    // carries no such column at all; a present-but-empty cell is an honest
+    // empty site, never a Baikonur launch.
+    const bool has_launch_site_column = row.count(normalize_key("LAUNCH_SITE")) > 0 ||
+                                        row.count(normalize_key("SITE")) > 0;
+    const std::string launch_site =
+        has_launch_site_column ? row_value(row, {"LAUNCH_SITE", "SITE"}) : std::string("TYMSC");
 
     const double period = parse_float_or_zero(row_value(row, {"PERIOD"}));
     const double inclination = parse_float_or_zero(row_value(row, {"INCLINATION", "INCL"}));
@@ -1136,7 +1144,7 @@ std::vector<uint8_t> build_cat_record(const Row& row, uint32_t norad) {
     const auto object_name_off = fbb.CreateString(object_name);
     const auto object_id_off = fbb.CreateString(object_id);
     const auto launch_date_off = fbb.CreateString(launch_date);
-    const auto launch_site_off = fbb.CreateString("TYMSC");  // NewCATBuilder default
+    const auto launch_site_off = fbb.CreateString(launch_site);
     const auto decay_date_off = fbb.CreateString("");
     const auto orbit_center_off = fbb.CreateString("EARTH");
 
@@ -1662,11 +1670,17 @@ int parse_spw(void) {
     const std::string provenance = build_provenance_json(
         ctx, "celestrak-space-weather-wasm/v1", normalized_hex, count, counts);
 
-    // Runner parity: syncCelestrakSpaceWeather performs NO source-batch
-    // reconcile (SPW rows carry no indexed identity key — the duplicates
-    // reconcile would collapse them; replay idempotence comes from
-    // content-addressed CID dedupe alone).
-    const std::string spw_meta = build_ingest_meta(ctx, "SPW.fbs", "none",
+    // SW-All.csv is the COMPLETE history (1957 to the prediction horizon):
+    // every fetch is a whole snapshot, not an increment, so each new batch
+    // SUPERSEDES the older batches of this lane. "current" makes the host's
+    // ReconcileSourceBatch retire everything but the newest batch after the
+    // store, which is how the lane converges on one row per DATE (~23.5k
+    // days) instead of one row per (DATE, fetch). That is a reconciliation
+    // of duplicate snapshots, never a loss: the retired rows are re-emitted
+    // verbatim by the batch that replaced them. The duplicates pass is a
+    // no-op for SPW (rows carry no indexed identity key), and freshness stays
+    // the DATE stale gate above.
+    const std::string spw_meta = build_ingest_meta(ctx, "SPW.fbs", "current",
                                                    /*with_archive=*/true, ctx.source_name,
                                                    provenance);
     if (push_json("spw_meta", spw_meta) < 0) return 500;

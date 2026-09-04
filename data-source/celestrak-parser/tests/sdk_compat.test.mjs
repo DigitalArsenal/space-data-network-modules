@@ -116,6 +116,33 @@ function catNoradID(record) {
   return view.getUint32(table + fieldOffset, true);
 }
 
+// Generic table-field access over an unprefixed FlatBuffer record: the
+// absolute offset of field `index` inside the root table, or 0 when absent.
+function tableField(record, index) {
+  const view = new DataView(record.buffer, record.byteOffset, record.byteLength);
+  const table = view.getUint32(0, true);
+  const vtable = table - view.getInt32(table, true);
+  const vtableLen = view.getUint16(vtable, true);
+  const slot = 4 + index * 2;
+  if (slot + 2 > vtableLen) return 0;
+  const fieldOffset = view.getUint16(vtable + slot, true);
+  return fieldOffset === 0 ? 0 : table + fieldOffset;
+}
+
+function readString(record, index) {
+  const at = tableField(record, index);
+  if (at === 0) return null;
+  const view = new DataView(record.buffer, record.byteOffset, record.byteLength);
+  const str = at + view.getUint32(at, true);
+  const len = view.getUint32(str, true);
+  return decoder.decode(record.subarray(str + 4, str + 4 + len));
+}
+
+// CAT LAUNCH_SITE is field 7 (VT_LAUNCH_SITE = 18).
+function catLaunchSite(record) {
+  return readString(record, 7);
+}
+
 // CAT OWNER is legacyCountryCode field 5. The records emitted by parse_satcat
 // are framed with a size prefix; splitStream validates and removes that prefix
 // before this FlatBuffer field decode.
@@ -373,9 +400,53 @@ for (const [label, payload] of [
         [118, 118],
         "fixed-width SATCAT lacks OWNER and must encode explicit legacyCountryCode UNK",
       );
+      assert.deepEqual(
+        catRecords.map(catLaunchSite),
+        ["TTM", "AFET"],
+        "fixed-width LAUNCH_SITE comes from columns 69-73 of the row",
+      );
+    } else {
+      assert.deepEqual(
+        catRecords.map(catLaunchSite),
+        ["TYMSC", "AFETR"],
+        "CSV LAUNCH_SITE comes from the LAUNCH_SITE column",
+      );
+      const ownersByNorad = new Map(catRecords.map((record) => [catNoradID(record), catOwner(record)]));
+      assert.equal(ownersByNorad.get(40909), 120, "STARLINK-1001 OWNER US from the OWNER column");
     }
   });
 }
+
+test("parse_satcat keeps the builder's TYMSC launch site ONLY when the source has no LAUNCH_SITE column", async (t) => {
+  const noSiteCSV = Buffer.from(
+    [
+      "NORAD_CAT_ID,OBJECT_NAME,OBJECT_ID,OBJECT_TYPE,OPS_STATUS_CODE,LAUNCH_DATE",
+      "25544,ISS (ZARYA),1998-067A,PAYLOAD,+,1998-11-20",
+    ].join("\n"),
+  );
+  const emptySiteCSV = Buffer.from(
+    [
+      "NORAD_CAT_ID,OBJECT_NAME,OBJECT_ID,OBJECT_TYPE,OPS_STATUS_CODE,LAUNCH_DATE,LAUNCH_SITE",
+      "25544,ISS (ZARYA),1998-067A,PAYLOAD,+,1998-11-20,",
+    ].join("\n"),
+  );
+  const harness = await createHarness(t);
+  for (const [payload, expected, why] of [
+    [noSiteCSV, "TYMSC", "no LAUNCH_SITE column -> builder default"],
+    [emptySiteCSV, "", "present-but-empty LAUNCH_SITE cell -> empty, never invented"],
+  ]) {
+    const response = await harness.invoke({
+      methodId: "parse_satcat",
+      inputs: [
+        jsonInput("job", { source_url: "https://celestrak.org/pub/satcat.csv", source_name: "celestrak-satcat-csv" }),
+        jsonInput("response", httpResponse(payload)),
+      ],
+    });
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    const [record] = splitStream(outputsByPort(response).get("cat_records").payload);
+    assert.equal(catLaunchSite(record), expected, why);
+  }
+});
 
 test("parse_satcat maps CSV OWNER codes only from the canonical legacy enum", async (t) => {
   const ownerCSV = Buffer.from(
@@ -448,6 +519,10 @@ test("parse_spw builds SPW records when the source is fresh", async (t) => {
   const spwMeta = jsonFrame(outputs, "spw_meta");
   assert.equal(spwMeta.schema, "SPW.fbs");
   assert.equal(spwMeta.batch_id, sha256Hex(SW_CSV));
+  // SW-All.csv is a whole-history snapshot: each batch supersedes the older
+  // ones, so the lane converges on one row per DATE (a reconciliation of
+  // duplicate snapshots, not a loss).
+  assert.equal(spwMeta.reconcile, "current", "SPW snapshot supersedes older batches");
   const spwRecords = splitStream(outputs.get("spw_records").payload);
   assert.equal(spwRecords.length, 2);
   for (const record of spwRecords) {
