@@ -1,0 +1,112 @@
+{
+  "programId": "com.digitalarsenal.flows.osm-serving",
+  "name": "OSM Context Epoch Serving Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "The OSM context epoch, named (mount /api/v1/osm/, config-mounted on the sdn-server lane; plan \"OpenStreetMap on SDN\" phase 3, owner decision 2026-09-03: hosted as FlatGeobuf). A $HTQ HttpRequest enters on the http-request trigger; osm-source:route answers with exactly one $HTR. \"tileset.json\" => the epoch record the off-fleet builder wrote (tools/osm-context/build-fgb.mjs), with PAYLOAD.CID from config key osm_epoch_cid and EPOCH_BASE_PATH relative to this node's origin (<osm_gateway_path><cid>/), public max-age=60, strong ETag, 304 on If-None-Match, CORS *. \"\" or \"catalogue.json\" => the camelCase discovery document. Without osm_epoch_record + osm_epoch_cid the record route answers 503 naming the keys. Anything else 404 no-store; non-GET/HEAD 405. The FlatGeobuf bytes are served by the node's IPFS gateway under the named CID, never by this flow; clients range-read them. Bridge linkage: the only host crossing is plugin.getConfig.",
+  "nodes": [
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.data-source.osm-source",
+      "methodId": "route",
+      "kind": "responder",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "route-response",
+      "fromNodeId": "route",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "http-request",
+      "kind": "http-request",
+      "source": "host-http",
+      "description": "One $HTQ HttpRequest envelope per invocation, pumped by the host at the flow ingress."
+    }
+  ],
+  "api": {
+    "basePath": "/api/v1/osm",
+    "tag": "osm",
+    "tagDescription": "The OpenStreetMap context epoch this node serves for the imagery detector (wasm; routing, conditional requests and response shaping run inside the module). Anonymous by design: every response is a cacheable pointer to content-addressed, ODbL-licensed data; nothing is written.",
+    "routes": [
+      {
+        "path": "/",
+        "method": "GET",
+        "operationId": "getOsmContextCatalogue",
+        "summary": "Which OSM context epoch this node serves",
+        "description": "The discovery document: epochId, delivery (ipfs | none), cid, datasetEpoch, epochBasePath (relative to this origin: <gateway path>/<cid>/), recordPath, format osm-context-fgb/1, attribution. cache-control public max-age=60 with a strong ETag.",
+        "anonymous": true,
+        "responses": {
+          "200": {
+            "description": "The discovery document.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "description": "epochId, delivery, cid, datasetEpoch, epochBasePath, recordPath, format, attribution."
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the If-None-Match ETag."
+          }
+        }
+      },
+      {
+        "path": "/tileset.json",
+        "method": "GET",
+        "operationId": "getOsmContextEpochRecord",
+        "summary": "The current OSM context epoch record",
+        "description": "The record tools/osm-context/build-fgb.mjs wrote for the pinned epoch (FORMAT osm-context-fgb/1): FILES with name, category, kind, bytes, sha256 and feature counts per FlatGeobuf file, DATASET_EPOCH, PROVENANCE (ODbL, attribution), PAYLOAD.CID naming the directory and EPOCH_BASE_PATH relative to this origin. THIS is the path clients read (OrbPro runtime/fgbContext.js loadFgbEpoch): they join EPOCH_BASE_PATH against the origin they already know and range-read the files. 503 with missingConfigKeys when no epoch is pinned.",
+        "anonymous": true,
+        "responses": {
+          "200": {
+            "description": "The epoch record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "description": "osm-context-fgb/1 record with PAYLOAD.CID and EPOCH_BASE_PATH set."
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged since the If-None-Match ETag."
+          },
+          "503": {
+            "description": "No epoch configured; missingConfigKeys names the flow config keys."
+          }
+        }
+      }
+    ]
+  },
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.osm-source"
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "http-request",
+      "targetNodeId": "route",
+      "targetPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    }
+  ]
+}

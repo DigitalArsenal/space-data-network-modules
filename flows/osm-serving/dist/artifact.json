@@ -1,0 +1,49 @@
+{
+  "programId": "com.digitalarsenal.flows.osm-serving",
+  "name": "OSM Context Epoch Serving Flow",
+  "version": "0.1.0",
+  "artifact": {
+    "file": "runtime.wasm",
+    "sha256": "4369af26d6fea3e5322c9c174917d670302899e06f4e533dbeaaabe3bec2df71",
+    "bytes": 83921
+  },
+  "compiler": "space-data-module flow compile (isomorphic, emception)",
+  "threadModel": "single-thread",
+  "nodes": 2,
+  "edges": 1,
+  "triggers": 1,
+  "capabilities": [],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.data-source.osm-source",
+      "methodId": "route",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.osm-source",
+      "pluginId": "com.digitalarsenal.data-source.osm-source",
+      "version": "0.1.0",
+      "sha256": "27e22ecb09e241a3189c69fb1d8cff495cf096f2ebf42315c0b9763e2022c8d7",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6f736d2d736f75726365_",
+      "methodSymbols": {
+        "route": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6f736d2d736f75726365_route"
+      }
+    }
+  ]
+}

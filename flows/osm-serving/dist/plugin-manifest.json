@@ -1,0 +1,148 @@
+{
+  "pluginId": "com.digitalarsenal.flows.osm-serving",
+  "name": "OSM Context Epoch Serving Flow",
+  "version": "0.1.0",
+  "pluginFamily": "flow",
+  "description": "The OSM context epoch, named (mount /api/v1/osm/, config-mounted on the sdn-server lane; plan \"OpenStreetMap on SDN\" phase 3, owner decision 2026-09-03: hosted as FlatGeobuf). A $HTQ HttpRequest enters on the http-request trigger; osm-source:route answers with exactly one $HTR. \"tileset.json\" => the epoch record the off-fleet builder wrote (tools/osm-context/build-fgb.mjs), with PAYLOAD.CID from config key osm_epoch_cid and EPOCH_BASE_PATH relative to this node's origin (<osm_gateway_path><cid>/), public max-age=60, strong ETag, 304 on If-None-Match, CORS *. \"\" or \"catalogue.json\" => the camelCase discovery document. Without osm_epoch_record + osm_epoch_cid the record route answers 503 naming the keys. Anything else 404 no-store; non-GET/HEAD 405. The FlatGeobuf bytes are served by the node's IPFS gateway under the named CID, never by this flow; clients range-read them. Bridge linkage: the only host crossing is plugin.getConfig.",
+  "capabilities": [],
+  "dependencies": [
+    {
+      "pluginId": "com.digitalarsenal.data-source.osm-source",
+      "minVersion": "0.1.0",
+      "maxVersion": "0.1.0"
+    }
+  ],
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "http_request",
+      "displayName": "Flow trigger http-request",
+      "description": "Compiled-flow ingress for trigger \"http-request\" (http-request).",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequestAbi.fbs",
+                  "fileIdentifier": "$HTQ",
+                  "rootTypeName": "HttpRequest"
+                }
+              ],
+              "description": "One $HTQ HttpRequest envelope (module-sdk schemas/HttpRequestAbi.fbs)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP request to route."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-response-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponseAbi.fbs",
+                  "fileIdentifier": "$HTR",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Canonical WASM-served HTTP response envelope ($HTR). The host streams it back verbatim."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The one response: the epoch record, the discovery document, a 304, a 404, a 405 or a 503."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "com_digitalarsenal_flows_osm_serving-flow-runtime",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "flowNodes": [
+    {
+      "nodeId": "route",
+      "pluginId": "com.digitalarsenal.data-source.osm-source",
+      "methodId": "route",
+      "kind": "responder",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "dispatchModel": "host-capability",
+      "uiX": 0,
+      "uiY": 0
+    }
+  ],
+  "flowEdges": [
+    {
+      "edgeId": "route-response",
+      "fromNodeId": "route",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "response",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "HttpResponseAbi.fbs",
+          "fileIdentifier": "$HTR",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "HttpResponse",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    }
+  ],
+  "flowTriggers": [
+    {
+      "triggerId": "http-request",
+      "kind": "http-request",
+      "source": "host-http",
+      "defaultIntervalMs": 0,
+      "httpPath": null
+    }
+  ],
+  "flowTriggerBindings": [
+    {
+      "triggerId": "http-request",
+      "targetNodeId": "route",
+      "targetPortId": "request"
+    }
+  ],
+  "abiVersion": 1
+}
