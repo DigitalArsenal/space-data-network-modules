@@ -1,0 +1,1136 @@
+{
+  "generator": "tests/fixtures/generate-fixtures.mjs",
+  "csv_sha256": "a0de119be2b16461f368f759ac0a5aaccd3e58cc4e6412334031b2c6bfa40d96",
+  "csv_byte_length": 4052,
+  "row_count": 30,
+  "record_count": 6,
+  "init_time": "2026-09-02T00:00:00Z",
+  "init_time_ms": 1788307200000,
+  "ensemble_size": 64,
+  "wind_averaging_period_s": 60,
+  "source_name": "weathernext3-cyclone-tracks",
+  "archive": {
+    "source": "weathernext",
+    "name": "cyclone-tracks.csv"
+  },
+  "track_order": [
+    "2026245N12300|0",
+    "2026248N15290|0",
+    "2026245N12300|1",
+    "2026248N15290|1",
+    "2026245N12300|2",
+    "2026248N15290|2"
+  ],
+  "tracks": {
+    "2026245N12300|0": {
+      "STORM_ID": "2026245N12300",
+      "STORM_NAME": "ALPHA",
+      "BASIN": "NorthAtlantic",
+      "TRACK_KIND": "Forecast",
+      "TRACK_ORIGIN": "ExistingSystem",
+      "MEMBER_KIND": "Member",
+      "MEMBER_INDEX": 0,
+      "INIT_TIME_MS": 1788307200000,
+      "point_count": 5,
+      "first_valid_time_ms": 1788307200000,
+      "last_valid_time_ms": 1788393600000,
+      "points": [
+        {
+          "VALID_TIME_MS": 1788307200000,
+          "LEAD_HOURS": 0,
+          "LATITUDE": 12,
+          "LONGITUDE": -60,
+          "MAX_SUSTAINED_WIND_MS": 15.433333396911621,
+          "MIN_CENTRAL_PRESSURE_PA": 100500,
+          "RADIUS_MAX_WIND_KM": 55.560001373291016,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            }
+          ],
+          "CATEGORY": "TropicalDepression",
+          "EXISTENCE_PROBABILITY": 1
+        },
+        {
+          "VALID_TIME_MS": 1788328800000,
+          "LEAD_HOURS": 6,
+          "LATITUDE": 12.5,
+          "LONGITUDE": -61,
+          "MAX_SUSTAINED_WIND_MS": 20.577777862548828,
+          "MIN_CENTRAL_PRESSURE_PA": 100000,
+          "RADIUS_MAX_WIND_KM": 46.29999923706055,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": 111.12000274658203,
+              "SE_KM": 92.5999984741211,
+              "SW_KM": 74.08000183105469,
+              "NW_KM": 92.5999984741211
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            }
+          ],
+          "CATEGORY": "TropicalStorm",
+          "EXISTENCE_PROBABILITY": 1
+        },
+        {
+          "VALID_TIME_MS": 1788350400000,
+          "LEAD_HOURS": 12,
+          "LATITUDE": 13,
+          "LONGITUDE": -62,
+          "MAX_SUSTAINED_WIND_MS": 28.294445037841797,
+          "MIN_CENTRAL_PRESSURE_PA": 99200,
+          "RADIUS_MAX_WIND_KM": 37.040000915527344,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": 148.16000366210938,
+              "SE_KM": 129.63999938964844,
+              "SW_KM": 111.12000274658203,
+              "NW_KM": 129.63999938964844
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": 55.560001373291016,
+              "SE_KM": 46.29999923706055,
+              "SW_KM": 37.040000915527344,
+              "NW_KM": 46.29999923706055
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            }
+          ],
+          "CATEGORY": "TropicalStorm",
+          "EXISTENCE_PROBABILITY": 1
+        },
+        {
+          "VALID_TIME_MS": 1788372000000,
+          "LEAD_HOURS": 18,
+          "LATITUDE": 13.5,
+          "LONGITUDE": -63,
+          "MAX_SUSTAINED_WIND_MS": 33.43888854980469,
+          "MIN_CENTRAL_PRESSURE_PA": 98500,
+          "RADIUS_MAX_WIND_KM": 27.780000686645508,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": 166.67999267578125,
+              "SE_KM": 148.16000366210938,
+              "SW_KM": 129.63999938964844,
+              "NW_KM": 148.16000366210938
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": 83.33999633789062,
+              "SE_KM": 74.08000183105469,
+              "SW_KM": 64.81999969482422,
+              "NW_KM": 74.08000183105469
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": 27.780000686645508,
+              "SE_KM": 18.520000457763672,
+              "SW_KM": 18.520000457763672,
+              "NW_KM": 27.780000686645508
+            }
+          ],
+          "CATEGORY": "Category1",
+          "EXISTENCE_PROBABILITY": 1
+        },
+        {
+          "VALID_TIME_MS": 1788393600000,
+          "LEAD_HOURS": 24,
+          "LATITUDE": 14,
+          "LONGITUDE": -64,
+          "MAX_SUSTAINED_WIND_MS": 38.58333206176758,
+          "MIN_CENTRAL_PRESSURE_PA": 97800,
+          "RADIUS_MAX_WIND_KM": 27.780000686645508,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": 185.1999969482422,
+              "SE_KM": 166.67999267578125,
+              "SW_KM": 148.16000366210938,
+              "NW_KM": 166.67999267578125
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": 101.86000061035156,
+              "SE_KM": 92.5999984741211,
+              "SW_KM": 74.08000183105469,
+              "NW_KM": 92.5999984741211
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": 46.29999923706055,
+              "SE_KM": 37.040000915527344,
+              "SW_KM": 27.780000686645508,
+              "NW_KM": 37.040000915527344
+            }
+          ],
+          "CATEGORY": "Category1",
+          "EXISTENCE_PROBABILITY": 1
+        }
+      ]
+    },
+    "2026248N15290|0": {
+      "STORM_ID": "2026248N15290",
+      "STORM_NAME": "",
+      "BASIN": "NorthAtlantic",
+      "TRACK_KIND": "Forecast",
+      "TRACK_ORIGIN": "Genesis",
+      "MEMBER_KIND": "Member",
+      "MEMBER_INDEX": 0,
+      "INIT_TIME_MS": 1788307200000,
+      "point_count": 5,
+      "first_valid_time_ms": 1788307200000,
+      "last_valid_time_ms": 1788393600000,
+      "points": [
+        {
+          "VALID_TIME_MS": 1788307200000,
+          "LEAD_HOURS": 0,
+          "LATITUDE": 15,
+          "LONGITUDE": -70,
+          "MAX_SUSTAINED_WIND_MS": 10.288888931274414,
+          "MIN_CENTRAL_PRESSURE_PA": 100800,
+          "RADIUS_MAX_WIND_KM": -1,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            }
+          ],
+          "CATEGORY": "TropicalDepression",
+          "EXISTENCE_PROBABILITY": 0.35
+        },
+        {
+          "VALID_TIME_MS": 1788328800000,
+          "LEAD_HOURS": 6,
+          "LATITUDE": 15.4,
+          "LONGITUDE": -70.8,
+          "MAX_SUSTAINED_WIND_MS": 12.86111068725586,
+          "MIN_CENTRAL_PRESSURE_PA": 100700,
+          "RADIUS_MAX_WIND_KM": 74.08000183105469,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            }
+          ],
+          "CATEGORY": "TropicalDepression",
+          "EXISTENCE_PROBABILITY": 0.5
+        },
+        {
+          "VALID_TIME_MS": 1788350400000,
+          "LEAD_HOURS": 12,
+          "LATITUDE": 15.8,
+          "LONGITUDE": -71.6,
+          "MAX_SUSTAINED_WIND_MS": 15.433333396911621,
+          "MIN_CENTRAL_PRESSURE_PA": 100500,
+          "RADIUS_MAX_WIND_KM": 64.81999969482422,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            }
+          ],
+          "CATEGORY": "TropicalDepression",
+          "EXISTENCE_PROBABILITY": 0.7
+        },
+        {
+          "VALID_TIME_MS": 1788372000000,
+          "LEAD_HOURS": 18,
+          "LATITUDE": 16.2,
+          "LONGITUDE": -72.4,
+          "MAX_SUSTAINED_WIND_MS": 18.005556106567383,
+          "MIN_CENTRAL_PRESSURE_PA": 100200,
+          "RADIUS_MAX_WIND_KM": 55.560001373291016,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": 74.08000183105469,
+              "SE_KM": 55.560001373291016,
+              "SW_KM": 55.560001373291016,
+              "NW_KM": 74.08000183105469
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            }
+          ],
+          "CATEGORY": "TropicalStorm",
+          "EXISTENCE_PROBABILITY": 0.85
+        },
+        {
+          "VALID_TIME_MS": 1788393600000,
+          "LEAD_HOURS": 24,
+          "LATITUDE": 16.6,
+          "LONGITUDE": -73.2,
+          "MAX_SUSTAINED_WIND_MS": 20.577777862548828,
+          "MIN_CENTRAL_PRESSURE_PA": 100000,
+          "RADIUS_MAX_WIND_KM": 55.560001373291016,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": 92.5999984741211,
+              "SE_KM": 74.08000183105469,
+              "SW_KM": 74.08000183105469,
+              "NW_KM": 92.5999984741211
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            }
+          ],
+          "CATEGORY": "TropicalStorm",
+          "EXISTENCE_PROBABILITY": 0.9
+        }
+      ]
+    },
+    "2026245N12300|1": {
+      "STORM_ID": "2026245N12300",
+      "STORM_NAME": "ALPHA",
+      "BASIN": "NorthAtlantic",
+      "TRACK_KIND": "Forecast",
+      "TRACK_ORIGIN": "ExistingSystem",
+      "MEMBER_KIND": "Member",
+      "MEMBER_INDEX": 1,
+      "INIT_TIME_MS": 1788307200000,
+      "point_count": 5,
+      "first_valid_time_ms": 1788307200000,
+      "last_valid_time_ms": 1788393600000,
+      "points": [
+        {
+          "VALID_TIME_MS": 1788307200000,
+          "LEAD_HOURS": 0,
+          "LATITUDE": 12.1,
+          "LONGITUDE": -60,
+          "MAX_SUSTAINED_WIND_MS": 15.433333396911621,
+          "MIN_CENTRAL_PRESSURE_PA": 100500,
+          "RADIUS_MAX_WIND_KM": 55.560001373291016,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            }
+          ],
+          "CATEGORY": "TropicalDepression",
+          "EXISTENCE_PROBABILITY": 1
+        },
+        {
+          "VALID_TIME_MS": 1788328800000,
+          "LEAD_HOURS": 6,
+          "LATITUDE": 12.6,
+          "LONGITUDE": -61,
+          "MAX_SUSTAINED_WIND_MS": 23.149999618530273,
+          "MIN_CENTRAL_PRESSURE_PA": 99800,
+          "RADIUS_MAX_WIND_KM": 40.74399948120117,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": 120.37999725341797,
+              "SE_KM": 101.86000061035156,
+              "SW_KM": 83.33999633789062,
+              "NW_KM": 101.86000061035156
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            }
+          ],
+          "CATEGORY": "TropicalStorm",
+          "EXISTENCE_PROBABILITY": 1
+        },
+        {
+          "VALID_TIME_MS": 1788350400000,
+          "LEAD_HOURS": 12,
+          "LATITUDE": 13.1,
+          "LONGITUDE": -62,
+          "MAX_SUSTAINED_WIND_MS": 30.866666793823242,
+          "MIN_CENTRAL_PRESSURE_PA": 98900,
+          "RADIUS_MAX_WIND_KM": 33.33599853515625,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": 157.4199981689453,
+              "SE_KM": 138.89999389648438,
+              "SW_KM": 120.37999725341797,
+              "NW_KM": 138.89999389648438
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": 64.81999969482422,
+              "SE_KM": 55.560001373291016,
+              "SW_KM": 46.29999923706055,
+              "NW_KM": 55.560001373291016
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            }
+          ],
+          "CATEGORY": "TropicalStorm",
+          "EXISTENCE_PROBABILITY": 1
+        },
+        {
+          "VALID_TIME_MS": 1788372000000,
+          "LEAD_HOURS": 18,
+          "LATITUDE": 13.6,
+          "LONGITUDE": -63,
+          "MAX_SUSTAINED_WIND_MS": 36.011112213134766,
+          "MIN_CENTRAL_PRESSURE_PA": 98100,
+          "RADIUS_MAX_WIND_KM": 25.92799949645996,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": 175.94000244140625,
+              "SE_KM": 157.4199981689453,
+              "SW_KM": 138.89999389648438,
+              "NW_KM": 157.4199981689453
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": 92.5999984741211,
+              "SE_KM": 83.33999633789062,
+              "SW_KM": 74.08000183105469,
+              "NW_KM": 83.33999633789062
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": 37.040000915527344,
+              "SE_KM": 27.780000686645508,
+              "SW_KM": 27.780000686645508,
+              "NW_KM": 37.040000915527344
+            }
+          ],
+          "CATEGORY": "Category1",
+          "EXISTENCE_PROBABILITY": 1
+        },
+        {
+          "VALID_TIME_MS": 1788393600000,
+          "LEAD_HOURS": 24,
+          "LATITUDE": 14.1,
+          "LONGITUDE": -64,
+          "MAX_SUSTAINED_WIND_MS": 43.727779388427734,
+          "MIN_CENTRAL_PRESSURE_PA": 97000,
+          "RADIUS_MAX_WIND_KM": 22.224000930786133,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": 203.72000122070312,
+              "SE_KM": 175.94000244140625,
+              "SW_KM": 157.4199981689453,
+              "NW_KM": 175.94000244140625
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": 111.12000274658203,
+              "SE_KM": 101.86000061035156,
+              "SW_KM": 83.33999633789062,
+              "NW_KM": 101.86000061035156
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": 55.560001373291016,
+              "SE_KM": 46.29999923706055,
+              "SW_KM": 37.040000915527344,
+              "NW_KM": 46.29999923706055
+            }
+          ],
+          "CATEGORY": "Category2",
+          "EXISTENCE_PROBABILITY": 1
+        }
+      ]
+    },
+    "2026248N15290|1": {
+      "STORM_ID": "2026248N15290",
+      "STORM_NAME": "",
+      "BASIN": "NorthAtlantic",
+      "TRACK_KIND": "Forecast",
+      "TRACK_ORIGIN": "Genesis",
+      "MEMBER_KIND": "Member",
+      "MEMBER_INDEX": 1,
+      "INIT_TIME_MS": 1788307200000,
+      "point_count": 5,
+      "first_valid_time_ms": 1788307200000,
+      "last_valid_time_ms": 1788393600000,
+      "points": [
+        {
+          "VALID_TIME_MS": 1788307200000,
+          "LEAD_HOURS": 0,
+          "LATITUDE": 15.1,
+          "LONGITUDE": -70,
+          "MAX_SUSTAINED_WIND_MS": 10.288888931274414,
+          "MIN_CENTRAL_PRESSURE_PA": 100800,
+          "RADIUS_MAX_WIND_KM": -1,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            }
+          ],
+          "CATEGORY": "TropicalDepression",
+          "EXISTENCE_PROBABILITY": 0.35
+        },
+        {
+          "VALID_TIME_MS": 1788328800000,
+          "LEAD_HOURS": 6,
+          "LATITUDE": 15.5,
+          "LONGITUDE": -70.8,
+          "MAX_SUSTAINED_WIND_MS": 12.34666633605957,
+          "MIN_CENTRAL_PRESSURE_PA": 100700,
+          "RADIUS_MAX_WIND_KM": 77.78399658203125,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            }
+          ],
+          "CATEGORY": "TropicalDepression",
+          "EXISTENCE_PROBABILITY": 0.5
+        },
+        {
+          "VALID_TIME_MS": 1788350400000,
+          "LEAD_HOURS": 12,
+          "LATITUDE": 15.9,
+          "LONGITUDE": -71.6,
+          "MAX_SUSTAINED_WIND_MS": 14.404444694519043,
+          "MIN_CENTRAL_PRESSURE_PA": 100600,
+          "RADIUS_MAX_WIND_KM": 70.3759994506836,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            }
+          ],
+          "CATEGORY": "TropicalDepression",
+          "EXISTENCE_PROBABILITY": 0.7
+        },
+        {
+          "VALID_TIME_MS": 1788372000000,
+          "LEAD_HOURS": 18,
+          "LATITUDE": 16.3,
+          "LONGITUDE": -72.4,
+          "MAX_SUSTAINED_WIND_MS": 16.976667404174805,
+          "MIN_CENTRAL_PRESSURE_PA": 100400,
+          "RADIUS_MAX_WIND_KM": 62.96799850463867,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            }
+          ],
+          "CATEGORY": "TropicalDepression",
+          "EXISTENCE_PROBABILITY": 0.85
+        },
+        {
+          "VALID_TIME_MS": 1788393600000,
+          "LEAD_HOURS": 24,
+          "LATITUDE": 16.7,
+          "LONGITUDE": -73.2,
+          "MAX_SUSTAINED_WIND_MS": 19.54888916015625,
+          "MIN_CENTRAL_PRESSURE_PA": 100100,
+          "RADIUS_MAX_WIND_KM": 55.560001373291016,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": 83.33999633789062,
+              "SE_KM": 64.81999969482422,
+              "SW_KM": 64.81999969482422,
+              "NW_KM": 83.33999633789062
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            }
+          ],
+          "CATEGORY": "TropicalStorm",
+          "EXISTENCE_PROBABILITY": 0.9
+        }
+      ]
+    },
+    "2026245N12300|2": {
+      "STORM_ID": "2026245N12300",
+      "STORM_NAME": "ALPHA",
+      "BASIN": "NorthAtlantic",
+      "TRACK_KIND": "Forecast",
+      "TRACK_ORIGIN": "ExistingSystem",
+      "MEMBER_KIND": "Member",
+      "MEMBER_INDEX": 2,
+      "INIT_TIME_MS": 1788307200000,
+      "point_count": 5,
+      "first_valid_time_ms": 1788307200000,
+      "last_valid_time_ms": 1788393600000,
+      "points": [
+        {
+          "VALID_TIME_MS": 1788307200000,
+          "LEAD_HOURS": 0,
+          "LATITUDE": 12.2,
+          "LONGITUDE": -60,
+          "MAX_SUSTAINED_WIND_MS": 14.404444694519043,
+          "MIN_CENTRAL_PRESSURE_PA": 100600,
+          "RADIUS_MAX_WIND_KM": -1,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            }
+          ],
+          "CATEGORY": "TropicalDepression",
+          "EXISTENCE_PROBABILITY": 1
+        },
+        {
+          "VALID_TIME_MS": 1788328800000,
+          "LEAD_HOURS": 6,
+          "LATITUDE": 12.7,
+          "LONGITUDE": -61,
+          "MAX_SUSTAINED_WIND_MS": 18.005556106567383,
+          "MIN_CENTRAL_PRESSURE_PA": 100200,
+          "RADIUS_MAX_WIND_KM": 51.85599899291992,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": 74.08000183105469,
+              "SE_KM": 55.560001373291016,
+              "SW_KM": 55.560001373291016,
+              "NW_KM": 74.08000183105469
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            }
+          ],
+          "CATEGORY": "TropicalStorm",
+          "EXISTENCE_PROBABILITY": 1
+        },
+        {
+          "VALID_TIME_MS": 1788350400000,
+          "LEAD_HOURS": 12,
+          "LATITUDE": 13.2,
+          "LONGITUDE": -62,
+          "MAX_SUSTAINED_WIND_MS": 25.72222137451172,
+          "MIN_CENTRAL_PRESSURE_PA": 99500,
+          "RADIUS_MAX_WIND_KM": 44.448001861572266,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": 129.63999938964844,
+              "SE_KM": 111.12000274658203,
+              "SW_KM": 92.5999984741211,
+              "NW_KM": 111.12000274658203
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": 37.040000915527344,
+              "SE_KM": 27.780000686645508,
+              "SW_KM": 27.780000686645508,
+              "NW_KM": 37.040000915527344
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            }
+          ],
+          "CATEGORY": "TropicalStorm",
+          "EXISTENCE_PROBABILITY": 1
+        },
+        {
+          "VALID_TIME_MS": 1788372000000,
+          "LEAD_HOURS": 18,
+          "LATITUDE": 13.7,
+          "LONGITUDE": -63,
+          "MAX_SUSTAINED_WIND_MS": 31.89555549621582,
+          "MIN_CENTRAL_PRESSURE_PA": 98800,
+          "RADIUS_MAX_WIND_KM": 37.040000915527344,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": 148.16000366210938,
+              "SE_KM": 129.63999938964844,
+              "SW_KM": 111.12000274658203,
+              "NW_KM": 129.63999938964844
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": 64.81999969482422,
+              "SE_KM": 55.560001373291016,
+              "SW_KM": 46.29999923706055,
+              "NW_KM": 55.560001373291016
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            }
+          ],
+          "CATEGORY": "TropicalStorm",
+          "EXISTENCE_PROBABILITY": 1
+        },
+        {
+          "VALID_TIME_MS": 1788393600000,
+          "LEAD_HOURS": 24,
+          "LATITUDE": 14.2,
+          "LONGITUDE": -64,
+          "MAX_SUSTAINED_WIND_MS": 33.95333480834961,
+          "MIN_CENTRAL_PRESSURE_PA": 98600,
+          "RADIUS_MAX_WIND_KM": 33.33599853515625,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": 157.4199981689453,
+              "SE_KM": 138.89999389648438,
+              "SW_KM": 120.37999725341797,
+              "NW_KM": 138.89999389648438
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": 74.08000183105469,
+              "SE_KM": 64.81999969482422,
+              "SW_KM": 55.560001373291016,
+              "NW_KM": 64.81999969482422
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": 18.520000457763672,
+              "SE_KM": 18.520000457763672,
+              "SW_KM": 9.260000228881836,
+              "NW_KM": 18.520000457763672
+            }
+          ],
+          "CATEGORY": "Category1",
+          "EXISTENCE_PROBABILITY": 1
+        }
+      ]
+    },
+    "2026248N15290|2": {
+      "STORM_ID": "2026248N15290",
+      "STORM_NAME": "",
+      "BASIN": "NorthAtlantic",
+      "TRACK_KIND": "Forecast",
+      "TRACK_ORIGIN": "Genesis",
+      "MEMBER_KIND": "Member",
+      "MEMBER_INDEX": 2,
+      "INIT_TIME_MS": 1788307200000,
+      "point_count": 5,
+      "first_valid_time_ms": 1788307200000,
+      "last_valid_time_ms": 1788393600000,
+      "points": [
+        {
+          "VALID_TIME_MS": 1788307200000,
+          "LEAD_HOURS": 0,
+          "LATITUDE": 15.2,
+          "LONGITUDE": -70,
+          "MAX_SUSTAINED_WIND_MS": 11.317777633666992,
+          "MIN_CENTRAL_PRESSURE_PA": 100800,
+          "RADIUS_MAX_WIND_KM": -1,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            }
+          ],
+          "CATEGORY": "TropicalDepression",
+          "EXISTENCE_PROBABILITY": 0.35
+        },
+        {
+          "VALID_TIME_MS": 1788328800000,
+          "LEAD_HOURS": 6,
+          "LATITUDE": 15.6,
+          "LONGITUDE": -70.8,
+          "MAX_SUSTAINED_WIND_MS": 13.890000343322754,
+          "MIN_CENTRAL_PRESSURE_PA": 100600,
+          "RADIUS_MAX_WIND_KM": 70.3759994506836,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            }
+          ],
+          "CATEGORY": "TropicalDepression",
+          "EXISTENCE_PROBABILITY": 0.5
+        },
+        {
+          "VALID_TIME_MS": 1788350400000,
+          "LEAD_HOURS": 12,
+          "LATITUDE": 16,
+          "LONGITUDE": -71.6,
+          "MAX_SUSTAINED_WIND_MS": 16.976667404174805,
+          "MIN_CENTRAL_PRESSURE_PA": 100400,
+          "RADIUS_MAX_WIND_KM": 59.263999938964844,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": -1,
+              "SE_KM": -1,
+              "SW_KM": -1,
+              "NW_KM": -1
+            }
+          ],
+          "CATEGORY": "TropicalDepression",
+          "EXISTENCE_PROBABILITY": 0.7
+        },
+        {
+          "VALID_TIME_MS": 1788372000000,
+          "LEAD_HOURS": 18,
+          "LATITUDE": 16.4,
+          "LONGITUDE": -72.4,
+          "MAX_SUSTAINED_WIND_MS": 20.06333351135254,
+          "MIN_CENTRAL_PRESSURE_PA": 100000,
+          "RADIUS_MAX_WIND_KM": 51.85599899291992,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": 64.81999969482422,
+              "SE_KM": 55.560001373291016,
+              "SW_KM": 46.29999923706055,
+              "NW_KM": 55.560001373291016
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            }
+          ],
+          "CATEGORY": "TropicalStorm",
+          "EXISTENCE_PROBABILITY": 0.85
+        },
+        {
+          "VALID_TIME_MS": 1788393600000,
+          "LEAD_HOURS": 24,
+          "LATITUDE": 16.8,
+          "LONGITUDE": -73.2,
+          "MAX_SUSTAINED_WIND_MS": 23.664443969726562,
+          "MIN_CENTRAL_PRESSURE_PA": 99600,
+          "RADIUS_MAX_WIND_KM": 46.29999923706055,
+          "RADII": [
+            {
+              "THRESHOLD_WIND_MS": 17.491111755371094,
+              "NE_KM": 111.12000274658203,
+              "SE_KM": 92.5999984741211,
+              "SW_KM": 83.33999633789062,
+              "NW_KM": 92.5999984741211
+            },
+            {
+              "THRESHOLD_WIND_MS": 25.72222137451172,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            },
+            {
+              "THRESHOLD_WIND_MS": 32.92444610595703,
+              "NE_KM": 0,
+              "SE_KM": 0,
+              "SW_KM": 0,
+              "NW_KM": 0
+            }
+          ],
+          "CATEGORY": "TropicalStorm",
+          "EXISTENCE_PROBABILITY": 0.9
+        }
+      ]
+    }
+  }
+}

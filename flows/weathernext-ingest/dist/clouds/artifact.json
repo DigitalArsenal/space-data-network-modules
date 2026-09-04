@@ -1,0 +1,128 @@
+{
+  "programId": "com.digitalarsenal.flows.weathernext-clouds-ingest",
+  "name": "Global Ensemble Forecast Cloud-Cover Ingest Flow",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (isomorphic, emception)",
+  "threadModel": "single-thread",
+  "nodes": 7,
+  "edges": 11,
+  "triggers": 1,
+  "capabilities": [
+    "http",
+    "secrets:gcp-weathernext",
+    "storage_ingest"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "req",
+      "pluginId": "com.digitalarsenal.data-source.weathernext-source",
+      "methodId": "plan",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.weathernext-parser",
+      "methodId": "parse_cloud_chunks",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "ingest_wxf",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "publish_wxf",
+      "pluginId": "com.digitalarsenal.data-source.weathernext-source",
+      "methodId": "publish_request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "publish_http_wxf",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.weathernext-source",
+      "pluginId": "com.digitalarsenal.data-source.weathernext-source",
+      "version": "0.1.0",
+      "sha256": "cca109c000b0220f3e5d98595213ad6dc180d5dea2c412382d9184a47d785c9f",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e776561746865726e6578742d736f75726365_",
+      "methodSymbols": {
+        "plan": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e776561746865726e6578742d736f75726365_plan",
+        "cyclone_request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e776561746865726e6578742d736f75726365_cyclone_request",
+        "publish_request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e776561746865726e6578742d736f75726365_publish_request"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.http-request",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "version": "0.1.0",
+      "sha256": "e99fece3e3622247bb88145c1e9db78b272f500ba60e121ca6335df0836bebef",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_",
+      "methodSymbols": {
+        "request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_request"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.weathernext-parser",
+      "pluginId": "com.digitalarsenal.data-source.weathernext-parser",
+      "version": "0.1.0",
+      "sha256": "d89731029025ed10a80e8da81459799112430e0e913db293d25b5957224bafee",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e776561746865726e6578742d706172736572_",
+      "methodSymbols": {
+        "parse_cloud_chunks": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e776561746865726e6578742d706172736572_parse_cloud_chunks",
+        "parse_cyclone_tracks": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e776561746865726e6578742d706172736572_parse_cyclone_tracks"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.storage-ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "version": "0.1.0",
+      "sha256": "c8d55314b14880723da95996a7dc2f089a4452a21551bb171e456cf936a18104",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_",
+      "methodSymbols": {
+        "ingest": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_ingest"
+      }
+    }
+  ]
+}

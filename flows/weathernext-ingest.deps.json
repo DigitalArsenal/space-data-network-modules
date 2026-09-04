@@ -1,0 +1,6 @@
+{
+  "com.digitalarsenal.data-source.weathernext-source": "../data-source/weathernext-source",
+  "com.digitalarsenal.hostcap.http-request": "../hostcap/http-request",
+  "com.digitalarsenal.data-source.weathernext-parser": "../data-source/weathernext-parser",
+  "com.digitalarsenal.hostcap.storage-ingest": "../hostcap/storage-ingest"
+}

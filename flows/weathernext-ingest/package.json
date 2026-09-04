@@ -1,0 +1,14 @@
+{
+  "name": "@digitalarsenal/sdn-flow-weathernext-ingest",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../weathernext-clouds-ingest.flow.json --deps ../weathernext-ingest.deps.json && node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../weathernext-cyclones-ingest.flow.json --deps ../weathernext-ingest.deps.json",
+    "build": "export SPACE_DATA_STANDARDS_ROOT=\"${SPACE_DATA_STANDARDS_ROOT:-$(cd ../../../spacedatastandards.org && pwd)}\"; node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../weathernext-clouds-ingest.flow.json --deps ../weathernext-ingest.deps.json --out ./dist/clouds && node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../weathernext-cyclones-ingest.flow.json --deps ../weathernext-ingest.deps.json --out ./dist/cyclones",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk"
+  }
+}

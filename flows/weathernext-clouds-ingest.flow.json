@@ -1,0 +1,195 @@
+{
+  "programId": "com.digitalarsenal.flows.weathernext-clouds-ingest",
+  "name": "Global Ensemble Forecast Cloud-Cover Ingest Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "Per-provider ingest flow for the cloud-cover fields of a machine-learned global ensemble weather forecast served as Zarr v3 objects: a module cron TIMER tick enters at weathernext-source:plan, which (only when node CONFIG sets weathernext_live_access) emits one raw-body-v1 hostcap/http-request GET per (array x lead x chunk) plus the positional chunk job; hostcap/http-request fetches every chunk in order; weathernext-parser:parse_cloud_chunks pairs job k with response k, decodes each chunk through its declared codec chain and emits one size-prefixed $WXF tile per chunk (batch = sha256 of the concatenated chunk bodies, licence-bearing provenance); hostcap/storage-ingest persists the batch through the policy-mediated storage.ingest_with_source cap op. Ingest results and skip-status frames land on the egress sink. After each store, weathernext-source:publish_request joins the ingest result with the parser meta and (only when node CONFIG carries weathernext_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; its response also lands on egress. The credential capability (secrets:gcp-weathernext) belongs to the source node alone; all decisions live in-wasm and the host contributes timers, HTTP egress and guarded persistence only.",
+  "nodes": [
+    {
+      "nodeId": "req",
+      "pluginId": "com.digitalarsenal.data-source.weathernext-source",
+      "methodId": "plan",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.weathernext-parser",
+      "methodId": "parse_cloud_chunks",
+      "kind": "transform",
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "nodeId": "ingest_wxf",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish_wxf",
+      "pluginId": "com.digitalarsenal.data-source.weathernext-source",
+      "methodId": "publish_request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish_http_wxf",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "req-http",
+      "fromNodeId": "req",
+      "fromPortId": "requests",
+      "toNodeId": "http",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4096,
+      "opaque": true
+    },
+    {
+      "edgeId": "req-parse-jobs",
+      "fromNodeId": "req",
+      "fromPortId": "jobs",
+      "toNodeId": "parse",
+      "toPortId": "jobs",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4096,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-parse",
+      "fromNodeId": "http",
+      "fromPortId": "response",
+      "toNodeId": "parse",
+      "toPortId": "responses",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4096,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-wxf-meta",
+      "fromNodeId": "parse",
+      "fromPortId": "wxf_meta",
+      "toNodeId": "ingest_wxf",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-wxf-records",
+      "fromNodeId": "parse",
+      "fromPortId": "wxf_records",
+      "toNodeId": "ingest_wxf",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": false,
+      "_comment": "NOT opaque: both ports resolve the concrete $WXF identity, so the record type is declared on the wire rather than signed away."
+    },
+    {
+      "edgeId": "ingest-wxf-egress",
+      "fromNodeId": "ingest_wxf",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "ingest-wxf-publish",
+      "fromNodeId": "ingest_wxf",
+      "fromPortId": "result",
+      "toNodeId": "publish_wxf",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-wxf-meta-publish",
+      "fromNodeId": "parse",
+      "fromPortId": "wxf_meta",
+      "toNodeId": "publish_wxf",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "publish-wxf-http",
+      "fromNodeId": "publish_wxf",
+      "fromPortId": "request",
+      "toNodeId": "publish_http_wxf",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "publish-wxf-egress",
+      "fromNodeId": "publish_http_wxf",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "req-status-egress",
+      "fromNodeId": "req",
+      "fromPortId": "status",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "timer-wx-clouds",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 21600000,
+      "description": "Cloud-cover field sync timer (synoptic cycle cadence, 6 h)."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "timer-wx-clouds",
+      "targetNodeId": "req",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.weathernext-source",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.data-source.weathernext-parser",
+    "com.digitalarsenal.hostcap.storage-ingest"
+  ]
+}
