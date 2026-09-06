@@ -399,3 +399,45 @@ It exercises a Hohmann transfer from LEO-like radius to GEO.
 ## License
 
 Apache-2.0.
+# Native orbit geometry (0.6.0)
+
+The existing `invoke` command now also exposes the geometry needed to draw and
+schedule a maneuver. These operations compose the canonical
+`foundation/orbits/src/state_representations.hpp` conversions. Positions are
+inertial metres, velocities and delta-v are m/s, angles are radians, `mu` is
+m³/s² (Earth by default), and elapsed time is SI seconds from the supplied
+state. No Earth rotation or time-scale conversion is implied.
+
+- `evaluateOrbitGeometry`: exactly one `state: {position, velocity}` or
+  `elements: {semiMajorAxis, eccentricity, inclination, raan,
+  argumentOfPeriapsis, trueAnomaly|meanAnomaly}`. Optionally evaluate at
+  `atTrueAnomaly` or coast for `elapsedSeconds` (never both). An optional
+  `deltaV` must name `deltaVFrame: "ECI"|"RIC"|"VNC"`. The result contains
+  `state`, `elements` (including both anomalies, mean motion, period and apsis
+  radii), `radius`, and the **departure** RIC and VNC bases. VNC axes are
+  velocity, angular-momentum normal, and their cross product; RIC axes are
+  radial, in-track and cross-track. They are different away from apsides.
+- `convertOrbitAnomaly`: `eccentricity`, `anomaly`, and an explicit
+  `from: "true"|"mean"|"eccentric"`; returns all three anomalies in [0, 2π).
+- `orbitTimeOfFlight`: the same orbit input, `fromTrueAnomaly`,
+  `toTrueAnomaly`, and optional integer `revolutions` in [0, 100000]. Returns
+  forward elapsed `seconds`. A mean-anomaly separation within 1e-5 rad of the
+  wrap boundary is the same burn point, preserving the existing scheduler's
+  resolution instead of postponing a burn by a revolution.
+- `sampleOrbitGeometry`: the same orbit input, `count` in [2, 4096], optional
+  `fromTrueAnomaly` (0) and signed `sweep` (2π, at most one revolution).
+  Returns `count` and packed xyz `positions`, including both endpoints.
+
+These preview operations accept finite closed orbits only. Escape, singular
+states, invalid frames and out-of-range sampling return structured refusals;
+the caller retains its last valid preview. A refusal does not poison the
+instance. The manifest now declares both `direct` and `command` invocation on
+the same isomorphic artifact. The existing foreign JSON payload declaration
+and pending `$MVW` standard remain explicit; these bytes are not advertised as
+an SDS FlatBuffer payload.
+
+`tests/orbit_geometry.test.mjs` runs the published Orekit ellipse reference,
+analytic circular coasting/sampling, explicit frame checks, high-eccentricity
+Kepler residuals and A/B/A refusal recovery through browser command, persistent
+browser direct and WasmEdge command surfaces. Each test states its units,
+frame, epoch and tolerance. This does not assert container-host coverage.

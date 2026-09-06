@@ -6,6 +6,7 @@
 #include "maneuver/fault.h"
 #include "maneuver/json_lite.h"
 #include "maneuver/math.h"
+#include "maneuver/orbit_geometry.h"
 #include "maneuver/propagation.h"
 #include "maneuver/rendezvous.h"
 #include "maneuver/stm.h"
@@ -57,7 +58,7 @@ namespace {
 /// three releases went by without it moving because nothing compared it to
 /// anything. `tests/behavior.test.mjs` now asserts this string against the
 /// manifest, so the next release cannot forget it.
-constexpr const char* kModuleVersion = "0.5.0";
+constexpr const char* kModuleVersion = "0.6.0";
 
 std::string version() { return kModuleVersion; }
 
@@ -1489,6 +1490,10 @@ std::string dispatch(const std::string& operation, const Value& params) {
     if (operation == "phasingFromTargetState") return phasingFromTargetState(params);
     if (operation == "planeChange") return planeChange(params);
     if (operation == "transformDeltaV") return transformDeltaVOp(params);
+    if (operation == "evaluateOrbitGeometry" || operation == "convertOrbitAnomaly" ||
+        operation == "orbitTimeOfFlight" || operation == "sampleOrbitGeometry") {
+        return orbitGeometryOperation(operation, params);
+    }
     if (operation == "combinedManeuver") return combinedManeuver(params);
     if (operation == "computeRoeStateTransition") return computeRoeStateTransition(params);
     if (operation == "planRelativeWaypointMission") return planRelativeWaypointMission(params);

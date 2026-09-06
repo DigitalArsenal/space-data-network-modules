@@ -3,7 +3,7 @@
   "private": true,
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
-    "test": "node vectors/tools/build-vectors.mjs --check && node --test tests/sdk_compat.test.mjs tests/behavior.test.mjs tests/vectors.test.mjs tests/ratchet.test.mjs tests/error_path.test.mjs tests/frame_and_sign.test.mjs tests/lambert_izzo_crosscheck.test.mjs",
+    "test": "node vectors/tools/build-vectors.mjs --check && node --test tests/sdk_compat.test.mjs tests/behavior.test.mjs tests/vectors.test.mjs tests/ratchet.test.mjs tests/error_path.test.mjs tests/frame_and_sign.test.mjs tests/lambert_izzo_crosscheck.test.mjs tests/orbit_geometry.test.mjs",
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs",
     "vectors:build": "node vectors/tools/build-vectors.mjs",
     "vectors:check": "node vectors/tools/build-vectors.mjs --check",

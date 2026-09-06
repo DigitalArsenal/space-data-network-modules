@@ -88,7 +88,10 @@ void testBiEllipticTransfer() {
     // Bi-elliptic should have 3 burns
     assert(result.dv1 > 0.0);
     assert(result.dv2 > 0.0);
-    assert(result.dv3 > 0.0);
+    // The third burn circularizes at the transfer periapsis: it is retrograde.
+    // Since 0.5.0 scalars carry their signed in-track components.
+    assert(result.dv3 < 0.0);
+    assertNear(result.dv3, result.dv3_ric[1], 1e-10, "bielliptic_signed_dv3");
 
     // Total delta-v should be higher than Hohmann for this ratio
     // (bi-elliptic only wins when r2/r1 > 11.94)

@@ -71,6 +71,7 @@ const HEADERS = [
   "sixdof_core.h",
   "maneuver_plugin.h",
   "plugin_runtime.h",
+  "orbit_geometry.h",
 ];
 
 /** Sources, in the same order the static library lists them. */
@@ -87,6 +88,7 @@ const SOURCES = [
   "rendezvous.cpp",
   "maneuver_plugin.cpp",
   "plugin_runtime.cpp",
+  "orbit_geometry.cpp",
   // The invoke entry point last: it is the only file that reaches for the
   // SDK-generated `space_data_module_invoke.h`, which the compiler writes
   // beside the amalgamated source.
@@ -99,7 +101,7 @@ async function readStripped(file) {
   const text = await fs.readFile(file, "utf8");
   const kept = [];
   for (const line of text.split("\n")) {
-    if (LOCAL_INCLUDE.test(line)) {
+    if (LOCAL_INCLUDE.test(line) || line.trim() === '#include "state_representations.hpp"') {
       // The one local include that must SURVIVE: the SDK writes this header
       // into the compile directory, so it is resolved by -I, not amalgamated.
       if (line.includes("space_data_module_invoke.h")) {
@@ -123,6 +125,7 @@ const parts = [
 
 parts.push("// ---- shared lambert-izzo/include/lambert_izzo/solver.hpp ----");
 parts.push(await fs.readFile(lambertSolverPath, "utf8"));
+parts.push(await fs.readFile(path.join(packageRoot, "../../foundation/orbits/src/state_representations.hpp"), "utf8"));
 
 for (const header of HEADERS) {
   const file = path.join(cppRoot, "include", "maneuver", header);

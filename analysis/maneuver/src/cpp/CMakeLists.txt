@@ -30,12 +30,13 @@ add_library(
     src/propagation.cpp
     src/targeting.cpp
     src/classical.cpp
+    src/orbit_geometry.cpp
     src/approach.cpp
     src/rendezvous.cpp
     src/maneuver_plugin.cpp
     src/plugin_runtime.cpp
 )
-target_include_directories(maneuver PUBLIC include)
+target_include_directories(maneuver PUBLIC include PRIVATE ../../../../foundation/orbits/src)
 
 add_executable(test_math tests/test_math.cpp)
 target_link_libraries(test_math maneuver)
