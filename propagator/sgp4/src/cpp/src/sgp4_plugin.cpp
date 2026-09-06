@@ -1852,6 +1852,16 @@ bool initSatrecFromOMM(const OrbProOMMRecord& omm, elsetrec& satrec) {
     return propOk && satrec.error == 0;
 }
 
+// Keep the cached propagator and its OMM readout on the same history record.
+// Called only when selecting from a multi-OMM map; the single-OMM fast path
+// does not need another lookup.
+void setActiveSatrec(SatelliteEntity& entity, const elsetrec& satrec, double epoch) {
+    entity.satrec = satrec;
+    entity.currentSatrecEpoch = epoch;
+    const auto pointer = entity.ommPointers.find(epoch);
+    entity.currentOmmPointer = pointer != entity.ommPointers.end() ? pointer->second : -1;
+}
+
 // -------------------------------------------------------------------------
 // Core propagation helper — handles single and multi-OMM entities.
 //
@@ -1883,8 +1893,7 @@ bool propagateEntityTEME(SatelliteEntity& entity, double julian_date,
             double tsince = (julian_date - tleEpoch) * 1440.0;
             bool ok = SGP4Funcs::sgp4(sat, tsince, r, v);
             if (ok && sat.error == 0) {
-                entity.satrec = sat;
-                entity.currentSatrecEpoch = nearest;
+                setActiveSatrec(entity, sat, nearest);
             }
             return ok && sat.error == 0;
         }
@@ -1906,6 +1915,9 @@ bool propagateEntityTEME(SatelliteEntity& entity, double julian_date,
             auto& sat = entity.satrecs[nearest];
             double tleEpoch = sat.jdsatepoch + sat.jdsatepochF;
             bool ok = SGP4Funcs::sgp4(sat, (julian_date - tleEpoch) * 1440.0, r, v);
+            if (ok && sat.error == 0) {
+                setActiveSatrec(entity, sat, nearest);
+            }
             return ok && sat.error == 0;
         }
 
@@ -1924,11 +1936,9 @@ bool propagateEntityTEME(SatelliteEntity& entity, double julian_date,
 
         // Update entity.satrec to the nearest bracket for metadata queries
         if (julian_date - indices.first < indices.second - julian_date) {
-            entity.satrec = sat1;
-            entity.currentSatrecEpoch = indices.first;
+            setActiveSatrec(entity, sat1, indices.first);
         } else {
-            entity.satrec = sat2;
-            entity.currentSatrecEpoch = indices.second;
+            setActiveSatrec(entity, sat2, indices.second);
         }
         return true;
     }
@@ -1940,8 +1950,7 @@ bool propagateEntityTEME(SatelliteEntity& entity, double julian_date,
     double tsince = (julian_date - tleEpoch) * 1440.0;
     bool ok = SGP4Funcs::sgp4(sat, tsince, r, v);
     if (ok && sat.error == 0) {
-        entity.satrec = sat;
-        entity.currentSatrecEpoch = nearest;
+        setActiveSatrec(entity, sat, nearest);
     }
     return ok && sat.error == 0;
 }
@@ -2580,8 +2589,9 @@ int32_t plugin_init_omm(const OrbProOMMRecord* records, uint32_t count) {
             entity.satrecs[epochJD] = satrec;
             entity.ommPointers[epochJD] = ommPointer;
 
-            // Keep entity.satrec pointing to the most recent epoch
-            if (epochJD > entity.currentSatrecEpoch) {
+            // The last record at an epoch replaces the active cache as well
+            // as the map entry, including the single-epoch fast path.
+            if (epochJD >= entity.currentSatrecEpoch) {
                 entity.satrec = satrec;
                 entity.currentSatrecEpoch = epochJD;
                 entity.currentOmmPointer = ommPointer;
@@ -3934,8 +3944,7 @@ int32_t plugin_propagate_path_adaptive(
     if (entity.satrecs.size() > 1) {
         double nearest = findSatrecIndex(entity.satrecs, start_jd);
         if (nearest >= 0) {
-            entity.satrec = entity.satrecs[nearest];
-            entity.currentSatrecEpoch = nearest;
+            setActiveSatrec(entity, entity.satrecs[nearest], nearest);
         }
     }
 
@@ -4257,8 +4266,9 @@ double plugin_entity_add_omm(uint32_t entity_index, const OrbProOMMRecord* recor
     entity.satrecs[epochJD] = newSatrec;
     entity.ommPointers[epochJD] = ommPointer;
 
-    // Only update entity.satrec if this is the most recent epoch
-    if (epochJD > entity.currentSatrecEpoch) {
+    // Also refresh replacements at the active epoch: the single-OMM fast
+    // path reads this cache directly instead of the overwritten map entry.
+    if (epochJD >= entity.currentSatrecEpoch) {
         entity.satrec = newSatrec;
         entity.currentSatrecEpoch = epochJD;
         entity.currentOmmPointer = ommPointer;
