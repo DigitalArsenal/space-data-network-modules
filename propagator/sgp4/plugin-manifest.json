@@ -6,28 +6,55 @@
   "pluginFamily": "propagator",
   "capabilities": [],
   "externalInterfaces": [],
-  "invokeSurfaces": ["command"],
-  "runtimeTargets": ["browser", "wasi", "wasmedge"],
+  "invokeSurfaces": [
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasi",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "ingest_omm",
       "displayName": "Ingest OMM",
-      "description": "Loads 1..n OMM frames into the propagator catalog and ephemeris store. Accepts direct $OMM, size-prefixed $OMM streams, or $REC union frames carrying OMM records.",
+      "description": "Loads OMM frames into the propagator catalog and ephemeris store. Accepts direct $OMM, size-prefixed $OMM streams, or $REC union frames carrying OMM records. Direct frames use the primary port; REC frames use records. An empty request is a no-op.",
       "inputPorts": [
         {
           "portId": "omm",
           "acceptedTypeSets": [
             {
-              "setId": "orbpro.sds.omm-or-rec",
+              "setId": "orbpro.sds.omm",
               "allowedTypes": [
-                { "schemaName": "orbpro.sds.omm", "fileIdentifier": "$OMM" },
-                { "schemaName": "orbpro.sds.rec", "fileIdentifier": "$REC" }
+                {
+                  "schemaName": "orbpro.sds.omm",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
               ]
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 65535,
-          "required": true
+          "required": false
+        },
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.sds.rec",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.sds.rec",
+                  "fileIdentifier": "$REC",
+                  "rootTypeName": "REC"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false
         }
       ],
       "outputPorts": [],
@@ -37,22 +64,43 @@
     {
       "methodId": "upsert_cat",
       "displayName": "Upsert CAT",
-      "description": "Loads 1..n CAT metadata frames into the in-memory catalog index. Accepts direct $CAT, size-prefixed $CAT streams, or $REC union frames carrying CAT records.",
+      "description": "Loads CAT metadata frames into the in-memory catalog index. Accepts direct $CAT, size-prefixed $CAT streams, or $REC union frames carrying CAT records. Direct frames use the primary port; REC frames use records. An empty request is a no-op.",
       "inputPorts": [
         {
           "portId": "catalog",
           "acceptedTypeSets": [
             {
-              "setId": "orbpro.sds.cat-or-rec",
+              "setId": "orbpro.sds.cat",
               "allowedTypes": [
-                { "schemaName": "orbpro.sds.cat", "fileIdentifier": "$CAT" },
-                { "schemaName": "orbpro.sds.rec", "fileIdentifier": "$REC" }
+                {
+                  "schemaName": "orbpro.sds.cat",
+                  "fileIdentifier": "$CAT",
+                  "rootTypeName": "CAT"
+                }
               ]
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 65535,
-          "required": true
+          "required": false
+        },
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.sds.rec",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.sds.rec",
+                  "fileIdentifier": "$REC",
+                  "rootTypeName": "REC"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false
         }
       ],
       "outputPorts": [],
@@ -62,24 +110,18 @@
     {
       "methodId": "propagate_state",
       "displayName": "Propagate State",
-      "description": "Propagates requested objects to requested epochs and emits aligned-binary PropagatorState frames.",
+      "description": "Propagates requested objects to requested epochs and emits FlatBuffer PropagatorState frames.",
       "inputPorts": [
         {
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "orbpro.propagator.batch-request",
+              "setId": "orbpro.propagator.PropagatorBatchRequest",
               "allowedTypes": [
                 {
                   "schemaName": "orbpro.propagator.PropagatorBatchRequest",
-                  "fileIdentifier": "PROP"
-                },
-                {
-                  "schemaName": "orbpro.propagator.PropagatorBatchRequest",
                   "fileIdentifier": "PROP",
-                  "wireFormat": "aligned-binary",
-                  "rootTypeName": "PropagatorBatchRequest",
-                  "requiredAlignment": 8
+                  "rootTypeName": "PropagatorBatchRequest"
                 }
               ]
             }
@@ -94,63 +136,12 @@
           "portId": "state",
           "acceptedTypeSets": [
             {
-              "setId": "orbpro.plugins.propagator-state",
+              "setId": "orbpro.plugins.PropagatorState",
               "allowedTypes": [
-                {
-                  "schemaName": "orbpro.plugins.PropagatorState",
-                  "fileIdentifier": "PRST"
-                },
                 {
                   "schemaName": "orbpro.plugins.PropagatorState",
                   "fileIdentifier": "PRST",
-                  "wireFormat": "aligned-binary",
-                  "rootTypeName": "PropagatorState",
-                  "requiredAlignment": 8
-                }
-              ]
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 65535,
-          "required": true
-        }
-      ],
-      "maxBatch": 1,
-      "drainPolicy": "drain-until-yield"
-    },
-    {
-      "methodId": "propagate_path",
-      "displayName": "Propagate Path",
-      "description": "Produces orbit-path samples for requested objects and intervals.",
-      "inputPorts": [
-        {
-          "portId": "request",
-          "acceptedTypeSets": [
-            {
-              "setId": "flatbuffers.any",
-              "allowedTypes": [
-                {
-                  "schemaName": "orbpro.flatbuffer.any",
-                  "acceptsAnyFlatbuffer": true
-                }
-              ]
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 65535,
-          "required": true
-        }
-      ],
-      "outputPorts": [
-        {
-          "portId": "samples",
-          "acceptedTypeSets": [
-            {
-              "setId": "flatbuffers.any",
-              "allowedTypes": [
-                {
-                  "schemaName": "orbpro.flatbuffer.any",
-                  "acceptsAnyFlatbuffer": true
+                  "rootTypeName": "PropagatorState"
                 }
               ]
             }
@@ -166,24 +157,18 @@
     {
       "methodId": "catalog_query",
       "displayName": "Catalog Query",
-      "description": "Queries in-memory CAT metadata and emits matching catalog rows as CatalogQueryResult frames.",
+      "description": "Queries in-memory CAT metadata and emits matching catalog rows as FlatBuffer CatalogQueryResult frames.",
       "inputPorts": [
         {
           "portId": "request",
           "acceptedTypeSets": [
             {
-              "setId": "orbpro.query.catalog-request",
+              "setId": "orbpro.query.CatalogQueryRequest",
               "allowedTypes": [
                 {
                   "schemaName": "orbpro.query.CatalogQueryRequest",
-                  "fileIdentifier": "CQRQ"
-                },
-                {
-                  "schemaName": "orbpro.query.CatalogQueryRequest",
                   "fileIdentifier": "CQRQ",
-                  "wireFormat": "aligned-binary",
-                  "rootTypeName": "CatalogQueryRequest",
-                  "requiredAlignment": 8
+                  "rootTypeName": "CatalogQueryRequest"
                 }
               ]
             }
@@ -198,18 +183,12 @@
           "portId": "results",
           "acceptedTypeSets": [
             {
-              "setId": "orbpro.query.catalog-result",
+              "setId": "orbpro.query.CatalogQueryResult",
               "allowedTypes": [
                 {
                   "schemaName": "orbpro.query.CatalogQueryResult",
-                  "fileIdentifier": "CQRS"
-                },
-                {
-                  "schemaName": "orbpro.query.CatalogQueryResult",
                   "fileIdentifier": "CQRS",
-                  "wireFormat": "aligned-binary",
-                  "rootTypeName": "CatalogQueryResult",
-                  "requiredAlignment": 8
+                  "rootTypeName": "CatalogQueryResult"
                 }
               ]
             }

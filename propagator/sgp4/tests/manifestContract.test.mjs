@@ -14,10 +14,23 @@ import { fileURLToPath } from "node:url";
 import { inspectModule } from "space-data-module-sdk";
 import {
   decodePlgManifest,
+  encodePlgManifest,
   isPlgManifestBuffer,
+  legacyManifestToPlg,
 } from "space-data-module-sdk/manifest";
 
-import { loadRawSgp4Module } from "./lib/pivInvokeHelper.mjs";
+import { invokePiv, loadRawSgp4Module } from "./lib/pivInvokeHelper.mjs";
+import {
+  CatalogQueryKind,
+  decodeCatalogQueryResult,
+  decodePropagatorState,
+  encodeCatPayload,
+  encodeCatalogQueryRequest,
+  encodeOmmPayload,
+  encodePropagatorBatchRequest,
+  encodeRecWithCat,
+  encodeRecWithOmm,
+} from "./lib/payloadEncoders.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(__dirname, "..");
@@ -67,6 +80,75 @@ test("SGP4 wasm artifact exports SDS PIV invoke surface alongside OrbPro direct-
   );
 });
 
+test("PIV outputs declare the FlatBuffer representation actually emitted", async () => {
+  const module = await loadRawSgp4Module();
+  try {
+    const ingested = invokePiv(module, {
+      methodId: "ingest_omm",
+      inputs: [{ portId: "omm", payload: encodeOmmPayload(),
+        typeRef: { schemaName: "orbpro.sds.omm", fileIdentifier: "$OMM", rootTypeName: "OMM" } }],
+    });
+    assert.equal(ingested.response.STATUS_CODE, 0);
+    const propagated = invokePiv(module, {
+      methodId: "propagate_state",
+      inputs: [{ portId: "request", payload: encodePropagatorBatchRequest({ epoch: 2460310.5, entityHandles: [0], maxCount: 1 }),
+        typeRef: { schemaName: "orbpro.propagator.PropagatorBatchRequest", fileIdentifier: "PROP", rootTypeName: "PropagatorBatchRequest" } }],
+      outputStreamCap: 1,
+    });
+    const queried = invokePiv(module, {
+      methodId: "catalog_query",
+      inputs: [{ portId: "request", payload: encodeCatalogQueryRequest({ queryKind: CatalogQueryKind.CATALOG_ROW, entityIndex: 0 }),
+        typeRef: { schemaName: "orbpro.query.CatalogQueryRequest", fileIdentifier: "CQRQ", rootTypeName: "CatalogQueryRequest" } }],
+      outputStreamCap: 1,
+    });
+    for (const result of [propagated, queried]) {
+      assert.equal(result.response.STATUS_CODE, 0);
+      assert.equal(result.outputPayloads.length, 1);
+      assert.equal(result.outputPayloads[0].wireFormat, "flatbuffer");
+    }
+    assert.ok(decodePropagatorState(propagated.outputPayloads[0].bytes));
+    assert.equal(decodeCatalogQueryResult(queried.outputPayloads[0].bytes).row?.noradCatId, 25544);
+  } finally {
+    module._plugin_destroy();
+  }
+});
+
+test("the manifest does not advertise an unimplemented PIV path method", async () => {
+  const manifest = JSON.parse(await readFile(manifestJsonPath, "utf8"));
+  const module = await loadRawSgp4Module();
+  try {
+    assert.equal(manifest.methods.some((method) => method.methodId === "propagate_path"), false);
+    const response = invokePiv(module, { methodId: "propagate_path" }).response;
+    assert.equal(response.STATUS_CODE, 404);
+    assert.equal(response.ERROR_CODE, "unknown-method");
+    assert.equal(typeof module._plugin_propagate_path, "function", "direct native path API remains available");
+  } finally {
+    module._plugin_destroy();
+  }
+});
+
+test("REC alternatives use separately typed ports and retain native ingestion", async () => {
+  const manifest = JSON.parse(await readFile(manifestJsonPath, "utf8"));
+  const module = await loadRawSgp4Module();
+  try {
+    for (const [methodId, payload] of [
+      ["ingest_omm", encodeRecWithOmm(encodeOmmPayload())],
+      ["upsert_cat", encodeRecWithCat(encodeCatPayload())],
+    ]) {
+      const method = manifest.methods.find((entry) => entry.methodId === methodId);
+      const records = method.inputPorts.find((port) => port.portId === "records");
+      assert.equal(records.acceptedTypeSets[0].allowedTypes[0].rootTypeName, "REC");
+      const result = invokePiv(module, { methodId, inputs: [{ portId: "records", payload,
+        typeRef: { schemaName: "orbpro.sds.rec", fileIdentifier: "$REC", rootTypeName: "REC" } }] });
+      assert.equal(result.response.STATUS_CODE, 0);
+      assert.equal(invokePiv(module, { methodId }).response.STATUS_CODE, 0, "empty stream ingestion remains a no-op");
+    }
+    assert.equal(module._get_satellite_count(), 1);
+  } finally {
+    module._plugin_destroy();
+  }
+});
+
 test("SGP4 embedded manifest identity matches plugin-manifest.json", async () => {
   const module = await loadRawSgp4Module();
   try {
@@ -91,13 +173,11 @@ test("SGP4 embedded manifest identity matches plugin-manifest.json", async () =>
       authoredManifest.methods.map((method) => method.methodId),
     );
 
-    const runtimeMethodIds = runtimeManifest.entryFunctions
-      .map((entry) => entry.name)
-      .sort();
-    const authoredMethodIds = authoredManifest.methods
-      .map((method) => method.methodId)
-      .sort();
-    assert.deepEqual(runtimeMethodIds, authoredMethodIds);
+    assert.deepEqual(
+      runtimeManifest,
+      decodePlgManifest(encodePlgManifest(legacyManifestToPlg(authoredManifest))),
+      "embedded ports and type identities must match the full authored SDK contract",
+    );
   } finally {
     module._plugin_destroy();
   }
