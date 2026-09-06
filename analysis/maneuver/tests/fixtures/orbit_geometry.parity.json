@@ -1,0 +1,32 @@
+{
+  "name": "maneuver-native-orbit-geometry",
+  "threadCounts": [1],
+  "cases": [
+    {
+      "id": "circle-quarter-period",
+      "expect": "ok",
+      "request": {"methodId": "invoke", "inputs": [{"portId": "request", "payloadUtf8": "{\"operation\":\"evaluateOrbitGeometry\",\"params\":{\"mu\":1,\"elements\":{\"semiMajorAxis\":1,\"eccentricity\":0,\"inclination\":0,\"raan\":0,\"argumentOfPeriapsis\":0,\"trueAnomaly\":0},\"elapsedSeconds\":1.5707963267948966}}"}]}
+    },
+    {
+      "id": "escape-refusal",
+      "expect": "ok",
+      "description": "The command exits successfully with a PIV nonzero status and structured error output. orbit_geometry.test.mjs checks that PIV status; this fixture compares its exact output bytes across runtimes.",
+      "request": {"methodId": "invoke", "inputs": [{"portId": "request", "payloadUtf8": "{\"operation\":\"evaluateOrbitGeometry\",\"params\":{\"mu\":1,\"elements\":{\"semiMajorAxis\":1,\"eccentricity\":0,\"inclination\":0,\"raan\":0,\"argumentOfPeriapsis\":0,\"trueAnomaly\":0},\"deltaV\":[0,2,0],\"deltaVFrame\":\"ECI\"}}"}]}
+    },
+    {
+      "id": "high-eccentricity-anomaly",
+      "expect": "ok",
+      "request": {"methodId": "invoke", "inputs": [{"portId": "request", "payloadUtf8": "{\"operation\":\"convertOrbitAnomaly\",\"params\":{\"eccentricity\":0.999999,\"anomaly\":0.001,\"from\":\"mean\"}}"}]}
+    },
+    {
+      "id": "same-point-time-of-flight",
+      "expect": "ok",
+      "request": {"methodId": "invoke", "inputs": [{"portId": "request", "payloadUtf8": "{\"operation\":\"orbitTimeOfFlight\",\"params\":{\"mu\":1,\"elements\":{\"semiMajorAxis\":1,\"eccentricity\":0,\"inclination\":0,\"raan\":0,\"argumentOfPeriapsis\":0,\"trueAnomaly\":0},\"fromTrueAnomaly\":0,\"toTrueAnomaly\":-1e-12}}"}]}
+    },
+    {
+      "id": "native-257-point-ring",
+      "expect": "ok",
+      "request": {"methodId": "invoke", "inputs": [{"portId": "request", "payloadUtf8": "{\"operation\":\"sampleOrbitGeometry\",\"params\":{\"mu\":1,\"elements\":{\"semiMajorAxis\":1,\"eccentricity\":0,\"inclination\":0,\"raan\":0,\"argumentOfPeriapsis\":0,\"trueAnomaly\":0},\"count\":257}}"}]}
+    }
+  ]
+}

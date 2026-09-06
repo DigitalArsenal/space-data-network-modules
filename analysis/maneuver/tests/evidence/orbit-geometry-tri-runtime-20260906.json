@@ -1,0 +1,171 @@
+{
+  "ok": true,
+  "fixture": "maneuver-native-orbit-geometry",
+  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--saw-beta-sgp4-epoch-cache/analysis/maneuver/dist/isomorphic/module.wasm",
+  "artifactSha256": "95f83369ebd0e79fa610cfb22497b0fed3841b70f0dec0929c6bc751be170ea1",
+  "moduleSha256": "95f83369ebd0e79fa610cfb22497b0fed3841b70f0dec0929c6bc751be170ea1",
+  "pin": "0.16.4",
+  "lanes": [
+    {
+      "lane": "browser",
+      "runs": 5,
+      "durationMs": 1184
+    },
+    {
+      "lane": "wasmedge",
+      "runs": 5,
+      "durationMs": 152
+    },
+    {
+      "lane": "docker-wasmedge",
+      "runs": 5,
+      "durationMs": 888
+    }
+  ],
+  "cases": [
+    "circle-quarter-period",
+    "escape-refusal",
+    "high-eccentricity-anomaly",
+    "same-point-time-of-flight",
+    "native-257-point-ring"
+  ],
+  "comparisons": 25,
+  "failures": [],
+  "runs": [
+    {
+      "lane": "browser",
+      "caseId": "circle-quarter-period",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "eb3fea920c173ed2648d040ea7dddd1696c28398cda93b4ffdd5c5bed52e4080",
+      "stdoutLength": 760
+    },
+    {
+      "lane": "browser",
+      "caseId": "escape-refusal",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ee5e354e9b25dbf43d668cc71c1d3f099baaf0d574c60ac89884ba487e7e51c7",
+      "stdoutLength": 400
+    },
+    {
+      "lane": "browser",
+      "caseId": "high-eccentricity-anomaly",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "cfba5734e2d71c0a2fd8ba78614dec94a1da0f75219fab6eeacdbe05ace58a3c",
+      "stdoutLength": 248
+    },
+    {
+      "lane": "browser",
+      "caseId": "same-point-time-of-flight",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "e4eb2ec1199ec228d926a22a889bc214b7f1d37394df06b7c913009dc3deec6e",
+      "stdoutLength": 152
+    },
+    {
+      "lane": "browser",
+      "caseId": "native-257-point-ring",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "809dca02aeed92c491a8f77967c7e6cd61867e2c0c01b5463de2c19362073885",
+      "stdoutLength": 10656
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "circle-quarter-period",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "eb3fea920c173ed2648d040ea7dddd1696c28398cda93b4ffdd5c5bed52e4080",
+      "stdoutLength": 760
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "escape-refusal",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ee5e354e9b25dbf43d668cc71c1d3f099baaf0d574c60ac89884ba487e7e51c7",
+      "stdoutLength": 400
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "high-eccentricity-anomaly",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "cfba5734e2d71c0a2fd8ba78614dec94a1da0f75219fab6eeacdbe05ace58a3c",
+      "stdoutLength": 248
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "same-point-time-of-flight",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "e4eb2ec1199ec228d926a22a889bc214b7f1d37394df06b7c913009dc3deec6e",
+      "stdoutLength": 152
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "native-257-point-ring",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "809dca02aeed92c491a8f77967c7e6cd61867e2c0c01b5463de2c19362073885",
+      "stdoutLength": 10656
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "circle-quarter-period",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "eb3fea920c173ed2648d040ea7dddd1696c28398cda93b4ffdd5c5bed52e4080",
+      "stdoutLength": 760
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "escape-refusal",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ee5e354e9b25dbf43d668cc71c1d3f099baaf0d574c60ac89884ba487e7e51c7",
+      "stdoutLength": 400
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "high-eccentricity-anomaly",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "cfba5734e2d71c0a2fd8ba78614dec94a1da0f75219fab6eeacdbe05ace58a3c",
+      "stdoutLength": 248
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "same-point-time-of-flight",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "e4eb2ec1199ec228d926a22a889bc214b7f1d37394df06b7c913009dc3deec6e",
+      "stdoutLength": 152
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "native-257-point-ring",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "809dca02aeed92c491a8f77967c7e6cd61867e2c0c01b5463de2c19362073885",
+      "stdoutLength": 10656
+    }
+  ]
+}

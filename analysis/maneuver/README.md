@@ -440,4 +440,15 @@ an SDS FlatBuffer payload.
 analytic circular coasting/sampling, explicit frame checks, high-eccentricity
 Kepler residuals and A/B/A refusal recovery through browser command, persistent
 browser direct and WasmEdge command surfaces. Each test states its units,
-frame, epoch and tolerance. This does not assert container-host coverage.
+frame, epoch and tolerance.
+
+The SDK tri-runtime fixture `tests/fixtures/orbit_geometry.parity.json` also
+compares five command cases byte-for-byte in real headless Chrome, native
+WasmEdge 0.16.4 and Docker WasmEdge 0.16.4. Its receipt is
+`tests/evidence/orbit-geometry-tri-runtime-20260906.json`: 15 runs, 25 comparisons,
+no failures, artifact SHA-256
+`95f83369ebd0e79fa610cfb22497b0fed3841b70f0dec0929c6bc751be170ea1`.
+The fixture's process outcome for a refused request is `ok`: the command exits
+zero while carrying a nonzero PIV status and structured error. The native
+geometry test separately asserts that PIV refusal and persistent-instance
+recovery; a command-only receipt does not prove persistence.
