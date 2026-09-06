@@ -399,7 +399,9 @@ It exercises a Hohmann transfer from LEO-like radius to GEO.
 ## License
 
 Apache-2.0.
-# Native orbit geometry (0.6.0)
+# Native orbit geometry (0.6.1)
+
+Sampling returns packed inertial `positions` and parallel signed `offsets` in seconds in one call. Full rings end at exactly one period, including reverse sampling. Element results also report the ascending-node true anomaly.
 
 The existing `invoke` command now also exposes the geometry needed to draw and
 schedule a maneuver. These operations compose the canonical
@@ -447,7 +449,7 @@ compares five command cases byte-for-byte in real headless Chrome, native
 WasmEdge 0.16.4 and Docker WasmEdge 0.16.4. Its receipt is
 `tests/evidence/orbit-geometry-tri-runtime-20260906.json`: 15 runs, 25 comparisons,
 no failures, artifact SHA-256
-`95f83369ebd0e79fa610cfb22497b0fed3841b70f0dec0929c6bc751be170ea1`.
+`25e56a6a958b94ca56c1ad14f5e69eda420ac7996c79477a370dee76cd1b3183`.
 The fixture's process outcome for a refused request is `ok`: the command exits
 zero while carrying a nonzero PIV status and structured error. The native
 geometry test separately asserts that PIV refusal and persistent-instance

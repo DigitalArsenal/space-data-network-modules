@@ -62,6 +62,15 @@ for (const [runtime, surface] of [["browser", "command"], ["browser", "direct"],
     const ring = await invoke("sampleOrbitGeometry", {...circle, count: 5});
     vectorNear(ring.positions, [1,0,0, 0,1,0, -1,0,0, 0,-1,0, 1,0,0], 1e-12);
 
+    vectorNear(ring.offsets, [0, Math.PI/2, Math.PI, 3*Math.PI/2, 2*Math.PI], 1e-12);
+    const reverse = await invoke("sampleOrbitGeometry", {...circle, count: 5, fromTrueAnomaly: 0.7, sweep: -2*Math.PI});
+    vectorNear(reverse.offsets, [0, -Math.PI/2, -Math.PI, -3*Math.PI/2, -2*Math.PI], 1e-12);
+    const eccentricRing = await invoke("sampleOrbitGeometry", {...circle,
+      elements: {...circle.elements, eccentricity: 0.98}, count: 257, fromTrueAnomaly: 2.8});
+    assert.equal(eccentricRing.offsets[0], 0);
+    near(eccentricRing.offsets.at(-1), 2*Math.PI, 1e-12);
+    assert.ok(eccentricRing.offsets.every((v, i, a) => i === 0 || v > a[i-1]), "eccentric sample times strictly increase across the anomaly wrap");
+
     // RIC and VNC differ away from apsides. At r=(7e6,0,0), v=(1000,7000,0),
     // RIC radial=(1,0,0), VNC velocity=(1,7,0)/sqrt(50). 1e-12 is a unit-vector
     // roundoff allowance, not an orbital modelling tolerance.

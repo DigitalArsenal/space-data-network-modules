@@ -117,6 +117,7 @@ std::string writeElements(const orb::Keplerian& e, double mu) {
         .number("inclination", e.inclination).number("raan", e.raan)
         .number("argumentOfPeriapsis", e.argumentOfPeriapsis)
         .number("trueAnomaly", e.trueAnomaly).number("meanAnomaly", meanAnomaly(e))
+        .number("ascendingNodeTrueAnomaly", orb::wrapTwoPi(-e.argumentOfPeriapsis))
         .number("meanMotion", motion(e, mu)).number("period", orb::kTwoPi / motion(e, mu))
         .number("periapsisRadius", e.semiMajorAxis * (1.0 - e.eccentricity))
         .number("apoapsisRadius", e.semiMajorAxis * (1.0 + e.eccentricity));
@@ -225,16 +226,28 @@ std::string sample(const Value& p) {
     if (count < 2 || count > 4096 || std::abs(sweep) > orb::kTwoPi) {
         refuse("Orbit sampling requires 2..4096 points and at most one revolution."); return {};
     }
-    std::vector<double> positions;
+    std::vector<double> positions, offsets;
+    offsets.reserve(count);
+    e.trueAnomaly = from;
+    const double firstMean = meanAnomaly(e);
+    const double n = motion(e, mu);
     positions.reserve(static_cast<std::size_t>(count) * 3);
     for (int i = 0; i < count; ++i) {
         e.trueAnomaly = from + sweep * i / (count - 1);
         orb::Cartesian state;
         if (!orb::cartesianFromKeplerian(e, mu, &state)) { refuse("Orbit sample is not finite."); return {}; }
         positions.insert(positions.end(), {state.position.x, state.position.y, state.position.z});
+        double deltaMean = sweep < 0.0
+            ? -orb::wrapTwoPi(firstMean - meanAnomaly(e))
+            : orb::wrapTwoPi(meanAnomaly(e) - firstMean);
+        if (i == 0 || sweep == 0.0) deltaMean = 0.0;
+        else if (i == count - 1 && std::abs(sweep) >= orb::kTwoPi - 1e-12)
+            deltaMean = std::copysign(orb::kTwoPi, sweep);
+        offsets.push_back(deltaMean / n);
     }
     ObjectWriter out;
-    out.numbers("positions", positions.data(), positions.size()).integer("count", count);
+    out.numbers("positions", positions.data(), positions.size())
+        .numbers("offsets", offsets.data(), offsets.size()).integer("count", count);
     return out.finish();
 }
 }  // namespace orbit_geometry
