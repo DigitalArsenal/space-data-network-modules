@@ -1,0 +1,118 @@
+{
+  "pluginId": "com.digitalarsenal.analysis.catalog-composer",
+  "name": "Catalog Editor",
+  "version": "0.1.0",
+  "description": "Compose immutable CAT snapshots with explicit source precedence, identifier conflict review and per-object orbital-state source selection.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "compose",
+      "displayName": "Compose catalogs",
+      "inputPorts": [
+        {
+          "portId": "recipe",
+          "acceptedTypeSets": [
+            {
+              "setId": "recipe-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Version 1 composition recipe: ordered source snapshots, native keys, overrides, state-source IDs, asOf and maximum age.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Version 1 composition recipe: ordered source snapshots, native keys, overrides, state-source IDs, asOf and maximum age. Module configuration/decision metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Version 1 composition recipe: ordered source snapshots, native keys, overrides, state-source IDs, asOf and maximum age."
+        },
+        {
+          "portId": "catalogs",
+          "acceptedTypeSets": [
+            {
+              "setId": "catalogs-v1",
+              "allowedTypes": [
+                {
+                  "schemaName": "CAT.fbs",
+                  "fileIdentifier": "$CAT",
+                  "rootTypeName": "CAT"
+                }
+              ],
+              "description": "Canonical size-prefixed CAT streams, one per recipe layer in the same order."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 16,
+          "required": true,
+          "description": "Canonical size-prefixed CAT streams, one per recipe layer in the same order."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "catalog",
+          "acceptedTypeSets": [
+            {
+              "setId": "catalog-v1",
+              "allowedTypes": [
+                {
+                  "schemaName": "CAT.fbs",
+                  "fileIdentifier": "$CAT",
+                  "rootTypeName": "CAT"
+                }
+              ],
+              "description": "Selected CAT records with original bytes preserved; unresolved identifier conflicts are excluded."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Selected CAT records with original bytes preserved; unresolved identifier conflicts are excluded."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Composition decisions and source/frame provenance for the editor.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Composition decisions and source/frame provenance for the editor. Module configuration/decision metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Composition decisions and source/frame provenance for the editor."
+        }
+      ],
+      "maxBatch": 17,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "One bounded composition invocation deterministically selects immutable records; it starts no workers. Independent catalog requests can run in separate host instances."
+  }
+}

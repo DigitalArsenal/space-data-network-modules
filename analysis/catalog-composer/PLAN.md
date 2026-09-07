@@ -35,7 +35,15 @@ Four independent provider nodes offer canonical SDS CAT records: CelesTrak, Jona
 ## Status
 
 - [x] Inspect existing SDK bundle/APP and datastore contracts; verify public source documentation.
-- [ ] Store cache and complete-dataset search.
+- [x] Store offering cache: source merged and local backend/browser reload verified.
+- [ ] Complete-dataset search: FTS5 engine support merged; automatic index lifecycle and local/remote query wiring remain.
 - [ ] Module composition and APP UI; SDK and browser verification.
 - [ ] Provider parsers, source schema/provenance coverage and ingestion.
 - [ ] Resource-verified multiple-node launch, signed delivery and live source pages.
+
+The CAT module and embedded editor now pass SDK/Node, native WasmEdge and
+Chromium fixture checks (1,501 objects across three pages, source override,
+save/reopen and responsive layout). The generic launcher verifies APP and module
+hashes, bounds data reads and isolates admin credentials. Delivery now retains
+the complete REC/MBL inside customer ciphertext. These checks do not establish
+live provider ingestion, orbital-state resolution or container parity.
