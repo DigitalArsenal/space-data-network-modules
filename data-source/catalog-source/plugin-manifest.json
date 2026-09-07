@@ -1,0 +1,114 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.catalog-source",
+  "name": "Catalog Source",
+  "version": "0.1.0",
+  "description": "Parse provider catalog editions into canonical CAT records with strict identifiers and source-native key diagnostics.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "parse_gcat",
+      "displayName": "Read GCAT standard or extended catalog",
+      "inputPorts": [
+        {
+          "portId": "source",
+          "acceptedTypeSets": [
+            {
+              "setId": "source",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "A complete GCAT satcat or satcat100k TSV edition, including its header; bounded to 128 MiB.",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "text/tab-separated-values",
+                "detail": "A complete GCAT satcat or satcat100k TSV edition, including its header; bounded to 128 MiB."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "A complete GCAT satcat or satcat100k TSV edition, including its header; bounded to 128 MiB."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "catalog",
+          "acceptedTypeSets": [
+            {
+              "setId": "cat",
+              "allowedTypes": [
+                {
+                  "schemaName": "CAT.fbs",
+                  "fileIdentifier": "$CAT",
+                  "rootTypeName": "CAT"
+                }
+              ],
+              "description": "Canonical size-prefixed CAT records."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Canonical size-prefixed CAT records."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Parser diagnostics and original keys in record order.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Parser diagnostics and original keys in record order; module control metadata, not an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Parser diagnostics and original keys in record order; module control metadata, not an observation."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "CAT.fbs",
+      "fileIdentifier": "$CAT",
+      "rootTypeName": "CAT"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "catalog-source-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Parse one complete bounded TSV edition in input order into canonical CAT frames; the host parallelizes independent editions and this parser does not create threads."
+  }
+}
