@@ -56,3 +56,11 @@ and container WasmEdge. Unassigned NORAD numbers remain unset; original GCAT
 keys are emitted as control metadata. Publication must preserve that metadata
 before native-key composition is offered. Provider ingestion and placement
 remain unchecked.
+
+Catalog Source 0.2.0 also parses the complete McCants classified and integrated
+editions (407 and 63 records in the 2026-09-07 fixtures). It validates element
+line checksums and paired IDs, accepts Alpha-5, and extracts catalog identity
+without treating integrated elements as observations. The 131/14 analyst IDs
+remain source-native; neither their numbers nor synthetic designators enter
+global join fields. Both feeds still require durable native-key publication
+and provider placement before they can be offered by independent CAT nodes.

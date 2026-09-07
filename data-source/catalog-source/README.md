@@ -1,7 +1,7 @@
 # Catalog Source
 
-An SDK module that transforms one complete GCAT `satcat.tsv` or
-`satcat100k.tsv` edition into canonical, size-prefixed SDS CAT records.
+An SDK module that transforms complete GCAT or McCants editions into
+canonical, size-prefixed SDS CAT records.
 The same artifact runs in the browser and WasmEdge. HTTP retrieval,
 scheduling, provenance publication and storage belong to the SDN host flow.
 
@@ -11,6 +11,21 @@ same order as the records, the upstream update text, and counts of values
 that cannot be represented faithfully. A host must preserve this report
 alongside the edition before presenting native-key catalog composition.
 The report is control metadata, not an SDS dataset offered in the Store.
+
+`parse_mccants_tle_catalog` reads a decompressed `classfd.tle` or
+`inttles.tle` edition and returns the same two ports. It accepts two-line
+elements and optional name lines, verifies line lengths, checksums and
+paired IDs, and supports Space-Track Alpha-5 numbers. It emits catalog
+names and identifiers only. The host must keep classified and integrated
+editions separate and retain their source URL, hash and retrieval time.
+McCants' analyst numbers in 90000–99999 remain source-native keys:
+`NORAD_CAT_ID` and `OBJECT_ID` stay unset for those entries. This prevents
+analyst numbers and synthetic designators from joining unrelated catalogs.
+McCants input lines are bounded to 1 KiB.
+
+These CAT outputs contain no propagated states. In particular, McCants'
+integrated products include model assumptions that cannot be replaced by
+an arbitrary SGP4 run while retaining the original product's meaning.
 
 Identity uses explicit SATCAT numbers only. `NNA` leaves `NORAD_CAT_ID`
 unset; its GCAT key remains in the report. A JCAT sequence number is never
@@ -34,6 +49,8 @@ Build with `npm ci && npm run build`; then run `npm test`. Set
 `SPACE_DATA_STANDARDS_ROOT` when the canonical standards checkout is not
 the sibling repository. `GCAT_TEST_EDITION=/path/to/satcat.tsv npm test`
 also validates every row of a downloaded edition. Run
+`MCCANTS_TEST_EDITION=/path/to/classfd.tle npm test` for a McCants edition.
+Run
 `SDN_RUN_CATALOG_PARITY=1 node --test tests/parity.test.mjs` with the SDK's
 Chromium and native/container WasmEdge test lanes available.
 
@@ -43,3 +60,12 @@ Source and mapping authority: Jonathan C. McDowell,
 GCAT data is CC BY 4.0; host publication must retain the provider attribution,
 edition and license. Tests use published values from the 2026-09-06 edition;
 the numerical checks test parsing precision, not orbit propagation.
+
+McCants sources: [element archives](https://mmccants.org/tles/) and
+[integration methods](https://mmccants.org/tles/discussion.html).
+The 2026-09-07 fixtures cover 407 classified entries (131 analyst IDs)
+and 63 integrated entries (14 analyst IDs). The
+[SatNOGS Optical analyst-band analysis](https://gitlab.com/librespacefoundation/satnogs-optical/satnogs-optical/-/blob/main/CHANGELOG.md)
+documents the same source numbering convention. McCants' source terms and
+attribution must accompany publication; a parser build does not establish
+redistribution rights or create an operational provider node.
