@@ -33,10 +33,13 @@ const result = await compileModuleFromSource({
 });
 if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
 const canonical = await computeCanonicalModuleHash(await fs.readFile(outputPath));
+const searchWasm = await fs.readFile(path.join(root,'node_modules/flatsql/wasm/flatsql.wasm'));
 const editor = await build({
   entryPoints: [path.join(root, 'app/editor.js')], bundle: true, write: false,
   platform: 'browser', format: 'esm', minify: true, target: 'es2022',
-  define: { __PLUGIN_MANIFEST__: JSON.stringify(manifest) },
+  alias: { 'catalog-search-wasm-factory':path.join(root,'node_modules/flatsql/wasm/flatsql.js') },
+  external:['node:*','fs','path','url','module'],
+  define: { __PLUGIN_MANIFEST__: JSON.stringify(manifest), __SEARCH_WASM__:JSON.stringify(searchWasm.toString('base64')) },
 });
 const script = editor.outputFiles[0].text.replaceAll('__MODULE_HASH__', canonical.hashHex).replaceAll('</script', '<\\/script');
 const page = (await fs.readFile(path.join(root, 'app/index.html'), 'utf8')).replace('__EDITOR_SCRIPT__', () => script);

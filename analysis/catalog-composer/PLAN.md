@@ -36,7 +36,7 @@ Four independent provider nodes offer canonical SDS CAT records: CelesTrak, Jona
 
 - [x] Inspect existing SDK bundle/APP and datastore contracts; verify public source documentation.
 - [x] Store offering cache: source merged and local backend/browser reload verified.
-- [ ] Complete-dataset search: FTS5 engine support merged; automatic index lifecycle and local/remote query wiring remain.
+- [ ] Complete-dataset search: published FlatSQL FTS5, persistent server indexes and remote pagination are implemented. Catalog Editor 0.1.3 has a complete-composition FTS5 index. Local table adapter integration and live archive verification remain.
 - [x] Module composition and APP UI; SDK, browser, native and container verification.
 - [ ] Provider parsers, source schema/provenance coverage and ingestion.
 - [ ] Resource-verified multiple-node launch, signed delivery and live source pages.
@@ -49,3 +49,10 @@ the complete REC/MBL inside customer ciphertext. Reads use one complete
 published batch instead of scanning and mixing historical record editions. These checks do not establish
 live provider ingestion or orbital-state resolution. The editor is installed on
 the local customer through the normal encrypted delivery path.
+
+GCAT standard and extended parsers now pass complete upstream-edition tests
+(69,999 and 642 objects), SDK compliance and byte parity in Chromium plus native
+and container WasmEdge. Unassigned NORAD numbers remain unset; original GCAT
+keys are emitted as control metadata. Publication must preserve that metadata
+before native-key composition is offered. Provider ingestion and placement
+remain unchecked.

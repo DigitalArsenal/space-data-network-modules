@@ -2,9 +2,11 @@ import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-m
 import { callHost } from './bridge.js';
 import { sourceLanes, loadCatalog } from './catalog-data.js';
 import { validateRecipe } from './recipe.js';
+import { catalogSearch } from './search-runtime.js';
 
 const $ = (id) => document.getElementById(id), encoder = new TextEncoder(), decoder = new TextDecoder();
 let discovering = false;
+let search;
 let module, available = [], loaded = new Map(), report = [], catalog, page = 1, editedKey, busy = false;
 let recipe = { version: 1, layers: [], stateSources: [], asOf: Math.floor(Date.now() / 1000), maxAgeSeconds: 86400, overrides: {} };
 function status(message, error = false, loading = false) {
@@ -55,19 +57,21 @@ function renderLayers() {
   $('compose').disabled = busy || !module || !recipe.layers.length;
 }
 function render() {
-  const query = $('search').value.trim().toLocaleLowerCase();
-  const rows = report.filter(row => !query || `${row.key} ${row.name} ${row.candidates.map(c => `${c.name} ${c.nativeKey} ${c.designator}`).join(' ')}`.toLocaleLowerCase().includes(query));
-  const pages = Math.max(1, Math.ceil(rows.length / 100)); page = Math.min(page, pages);
+  let result;
+  try { result = search?.page($('search').value, page) ?? {total:0,page:1,pages:1,indices:[]}; }
+  catch (error) { status(error.message,true); return; }
+  const {total,pages,indices} = result; page = result.page;
   $('rows').replaceChildren();
-  for (const row of rows.slice((page - 1) * 100, page * 100)) {
+  for (const index of indices) {
+    const row = report[index];
     const tr = document.createElement('tr'); tr.tabIndex = 0; tr.onclick = () => edit(row); tr.onkeydown = (event) => { if (event.key === 'Enter') edit(row); };
     const cells = [row.name || row.key, layerLabel(row.selectedLayer), row.status === 'identity-conflict' ? 'Review conflict' : row.key,
       recipe.overrides[row.key]?.stateSources?.[0] ? stateLabel(recipe.overrides[row.key].stateSources[0]) : recipe.stateSources[0] ? stateLabel(recipe.stateSources[0]) : 'Choose a source'];
     cells.forEach((text, i) => { const td = document.createElement('td'); td.textContent = text; if (i === 2 && row.status === 'identity-conflict') td.className = 'conflict'; tr.append(td); }); $('rows').append(tr);
   }
-  $('empty').hidden = rows.length > 0;
+  $('empty').hidden = total > 0;
   $('empty').textContent = report.length ? 'No matching objects.' : recipe.layers.length ? 'Load the selected catalogs to see their objects.' : 'Add a catalog layer to begin.';
-  $('count').textContent = `${rows.length.toLocaleString()} objects`;
+  $('count').textContent = `${total.toLocaleString()} objects`;
   $('page-info').textContent = `Page ${page} of ${pages}`;
   $('previous').disabled = page <= 1; $('next').disabled = page >= pages;
 }
@@ -94,6 +98,9 @@ async function compose(refresh = true) {
     ] });
     if (response.statusCode !== 0) throw new Error(response.errorMessage || 'Catalog composition failed.');
     const result = JSON.parse(decoder.decode(response.outputs.find(f => f.portId === 'report').payload));
+    status('Indexing catalogs…',false,true);
+    search ??= await catalogSearch();
+    await search.replace(result.objects);
     report = result.objects; catalog = response.outputs.find(f => f.portId === 'catalog')?.payload; page = 1;
     $('download').disabled = !catalog?.length || report.some(row => row.status === 'identity-conflict');
     status(`${result.objectCount.toLocaleString()} objects${result.identityConflicts ? ` · ${report.filter(row => row.status === 'identity-conflict').length} identity conflicts need review` : ''}`);
@@ -141,7 +148,7 @@ $('recipe-file').onchange = async () => { try {
   if (busy) return;
   const file = $('recipe-file').files[0]; if (!file || file.size > 1024 * 1024) throw new Error('Choose a recipe smaller than 1 MiB.');
   const value = validateRecipe(JSON.parse(await file.text()));
-  recipe = value; loaded.clear(); report = []; changed(); renderLayers(); render(); status('Recipe imported. Load its catalog snapshots to continue.');
+  recipe = value; loaded.clear(); report = []; search?.clear(); changed(); renderLayers(); render(); status('Recipe imported. Load its catalog snapshots to continue.');
 } catch (error) { status(error.message, true); } };
 
 try {
