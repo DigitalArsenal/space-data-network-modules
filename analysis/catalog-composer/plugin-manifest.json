@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.catalog-composer",
   "name": "Catalog Editor",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Compose immutable CAT snapshots with explicit source precedence, identifier conflict review and per-object orbital-state source selection.",
   "pluginFamily": "analysis",
   "capabilities": [],
