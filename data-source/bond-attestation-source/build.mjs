@@ -152,7 +152,7 @@ __attribute__((visibility("default"))) uint32_t plugin_get_manifest_flatbuffer_s
   if (fs.existsSync(CORE_SDS_GENERATED_DIR)) includes.push(`-I${shellQuote(CORE_SDS_GENERATED_DIR)}`);
 
   run(
-    `${shellQuote(emxx)} -O2 -std=c++17 -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0 -DSDN_WASI_PLUGIN=1 ` +
+    `${shellQuote(emxx)} -O2 -std=c++17 -fno-exceptions -DJSON_NOEXCEPTION -DSDN_WASI_PLUGIN=1 ` +
       `${includes.join(" ")} ` +
       `${shellQuote(srcPath)} ${shellQuote(manifestExportsPath)} ` +
       `-sWASM=1 -sSTANDALONE_WASM=1 -sPURE_WASI=1 -sINITIAL_MEMORY=16777216 -sALLOW_MEMORY_GROWTH=1 ` +
