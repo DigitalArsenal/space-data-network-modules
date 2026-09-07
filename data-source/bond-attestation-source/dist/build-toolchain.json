@@ -1,0 +1,10 @@
+{
+  "lane": "raw-em++",
+  "pinId": "em-6.0.1",
+  "era": false,
+  "emscriptenVersion": "6.0.1",
+  "emscriptenRelease": "releases-4857659ec65fbcf1f3e43c88499925475957b238-64bit",
+  "llvmRevision": "25e4e8d6550d392ba9e0c2936bce7cf41ee47cc0",
+  "emsdkCommit": "c68d67a7c82f8d9c56301dff5ff34367e3892553",
+  "emsdkRoot": "../../spacedatanetwork-stack/repos/main-packages/space-data-network-modules/data-source/iss-source/deps/emsdk"
+}
