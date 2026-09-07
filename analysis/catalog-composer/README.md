@@ -47,10 +47,14 @@ is `dist/isomorphic/module.wasm`.
 Tests invoke the actual WASM through the SDK browser harness and validate the
 manifest/artifact contract (`node --test tests/sdk_compat.test.mjs`). The bundle
 contains one SDS APP with a gzip/base64 HTML page, its decoded content hash, and
-the exact canonical WASM hash. There are no separate UI artifacts to deploy.
+the exact canonical WASM hash. There are no separate UI artifacts to deploy. Run `npm run test:parity` with
+Chromium, native WasmEdge and the SDK container image installed to verify
+byte-identical output across all three runtimes.
 
-The editor loads selected sources in bounded remote pages, checks counts and
-snapshot consistency, and records each assembled stream's SHA-256. Each explicit
+The editor resolves the selected DSS publication to one complete provider batch,
+reads immutable published shards in bounded ranges, verifies every shard hash
+and record count, and records the assembled stream's SHA-256. Historical batches
+are never combined into one input layer. Each explicit
 load refreshes the sources. It saves source order and object overrides in the
 host's node/app namespace and supports recipe and CAT downloads. Catalogs remain
 read-only; download is disabled until identifier conflicts are resolved.
@@ -58,4 +62,4 @@ read-only; download is disabled until identifier conflicts are resolved.
 The editor configures orbital-state priorities; it does not yet fetch candidate
 orbit records. The source adapter must provide native identifiers before an
 unnumbered, undesignated CAT can be composed. Full datastore FTS, provider
-ingestion, container parity and operational placement remain in [PLAN.md](PLAN.md).
+ingestion and operational placement remain in [PLAN.md](PLAN.md).

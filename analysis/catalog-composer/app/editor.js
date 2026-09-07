@@ -4,6 +4,7 @@ import { sourceLanes, loadCatalog } from './catalog-data.js';
 import { validateRecipe } from './recipe.js';
 
 const $ = (id) => document.getElementById(id), encoder = new TextEncoder(), decoder = new TextDecoder();
+let discovering = false;
 let module, available = [], loaded = new Map(), report = [], catalog, page = 1, editedKey, busy = false;
 let recipe = { version: 1, layers: [], stateSources: [], asOf: Math.floor(Date.now() / 1000), maxAgeSeconds: 86400, overrides: {} };
 function status(message, error = false, loading = false) {
@@ -32,7 +33,9 @@ function renderLayers() {
     const remove = document.createElement('button'); remove.textContent = 'Remove'; remove.disabled = busy;
     remove.onclick = () => { recipe.layers.splice(index, 1); loaded.delete(layer.id); for (const choice of Object.values(recipe.overrides)) if (choice.catalogLayer === layer.id) delete choice.catalogLayer; changed(); renderLayers(); }; controls.append(remove); li.append(title, controls); $('layers').append(li);
   });
-  $('source-picker').replaceChildren(option('', 'Choose a catalog'));
+  $('source-picker').replaceChildren(option('', discovering ? 'Finding catalogs…' : available.some(l => l.schema === 'CAT') ? 'Choose a catalog' : 'No catalogs discovered yet'));
+  $('refresh-sources').disabled = busy || discovering;
+  $('refresh-sources').textContent = discovering ? 'Refreshing…' : 'Refresh sources';
   for (const source of available.filter(l => l.schema === 'CAT' && !recipe.layers.some(r => r.id === l.id))) $('source-picker').append(option(source.id, label(source)));
   $('state-options').replaceChildren();
   // Checked sources retain selection order, so rechecking moves one last.
@@ -74,9 +77,12 @@ async function compose(refresh = true) {
   const controller = new AbortController();
   try {
     status('Loading catalogs…', false, true);
-    if (refresh) recipe.asOf = Math.floor(Date.now() / 1000);
+    if (refresh) { recipe.asOf = Math.floor(Date.now() / 1000); await refreshSources(); }
     if (refresh) for (const layer of recipe.layers) {
-      const result = await loadCatalog(layer, { signal: controller.signal, onProgress: (count, total) => status(`${layer.source}: ${count.toLocaleString()}${Number.isFinite(total) ? ` / ${total.toLocaleString()}` : ''} records`, false, true) });
+      const source = available.find(item => item.id === layer.id);
+      if (!source?.manifest) throw new Error(`${layer.source} has no published edition available.`);
+      layer.manifest = source.manifest;
+      const result = await loadCatalog(layer, { signal: controller.signal, onRetry: (attempt, seconds) => status(`${layer.source}: retry ${attempt} in ${seconds}s`, false, true), onProgress: (count, total) => status(`${layer.source}: ${count.toLocaleString()}${Number.isFinite(total) ? ` / ${total.toLocaleString()}` : ''} records`, false, true) });
       if (!result.count) throw new Error(`${layer.source} has no catalog records in this snapshot.`);
       loaded.set(layer.id, result); layer.head = result.head; layer.contentSha256 = result.contentSha256;
     }
@@ -109,6 +115,14 @@ function edit(row) {
 function download(bytes, name, type) {
   const url = URL.createObjectURL(new Blob([bytes], { type })), link = document.createElement('a'); link.href = url; link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+async function refreshSources() {
+  if (discovering) return;
+  discovering = true; renderLayers();
+  try { available = await sourceLanes(); }
+  catch (error) { status(error.message, true); }
+  finally { discovering = false; renderLayers(); }
+}
+$('refresh-sources').onclick = () => refreshSources();
 $('add').onclick = () => { const source = available.find(l => l.id === $('source-picker').value); if (!source || recipe.layers.length >= 16) return; recipe.layers.push({ ...source }); changed(); renderLayers(); render(); };
 $('max-age').onchange = () => { const age = Number($('max-age').value); if (Number.isFinite(age) && age >= 0) { recipe.maxAgeSeconds = age * 3600; changed(); } };
 $('compose').onclick = () => compose(); $('search').oninput = () => { page = 1; render(); };
@@ -138,6 +152,7 @@ try {
   module = await createBrowserModuleHarness({ wasmSource: artifact.bytes, manifest: __PLUGIN_MANIFEST__, surface: 'direct' });
   const saved = await callHost('configuration.read');
   if (saved != null) recipe = validateRecipe(saved);
-  available = await sourceLanes(); renderLayers(); render(); status('Ready');
+  await refreshSources(); renderLayers(); render();
+  if (!$('status').classList.contains('error')) status('Ready');
 } catch (error) { status(error.message, true); }
 finally { busy = false; renderLayers(); render(); }
