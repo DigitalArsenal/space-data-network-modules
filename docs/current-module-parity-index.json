@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-07T16:53:12.327Z",
+  "generatedAt": "2026-09-07T17:03:08.051Z",
   "moduleCount": 91,
   "parityScopeModuleCount": 36,
   "isomorphicWasmCount": 83,
@@ -898,9 +898,10 @@
       "pluginId": "com.digitalarsenal.data-source.catalog-source",
       "name": "Catalog Source",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
-        "parse_gcat"
+        "parse_gcat",
+        "parse_mccants_tle_catalog"
       ],
       "runtimeTargets": [
         "browser",
@@ -914,13 +915,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 3,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/catalog_source.cpp"
       ],
       "testFiles": [
+        "tests/mccants.test.mjs",
         "tests/parity.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]

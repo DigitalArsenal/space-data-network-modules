@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.catalog-source",
   "name": "Catalog Source",
-  "version": "0.1.0",
-  "description": "Parse provider catalog editions into canonical CAT records with strict identifiers and source-native key diagnostics.",
+  "version": "0.2.0",
+  "description": "Parse GCAT and McCants catalog editions into canonical CAT records while preserving source-native identities.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": [
@@ -89,6 +89,82 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "parse_mccants_tle_catalog",
+      "displayName": "Read McCants catalog from an element edition",
+      "inputPorts": [
+        {
+          "portId": "source",
+          "acceptedTypeSets": [
+            {
+              "setId": "source",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "One complete decompressed classfd.tle or inttles.tle edition; catalog identities only, bounded to 128 MiB.",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "text/plain",
+                "detail": "One complete decompressed classfd.tle or inttles.tle edition; catalog identities only, bounded to 128 MiB."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One complete decompressed classfd.tle or inttles.tle edition; catalog identities only, bounded to 128 MiB."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "catalog",
+          "acceptedTypeSets": [
+            {
+              "setId": "cat",
+              "allowedTypes": [
+                {
+                  "schemaName": "CAT.fbs",
+                  "fileIdentifier": "$CAT",
+                  "rootTypeName": "CAT"
+                }
+              ],
+              "description": "Canonical size-prefixed CAT records."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Canonical size-prefixed CAT records."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Parser diagnostics and original keys in record order.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Parser diagnostics and original keys in record order; module control metadata, not an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Parser diagnostics and original keys in record order; module control metadata, not an observation."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
   ],
   "schemasUsed": [
@@ -109,6 +185,6 @@
   "abiVersion": 1,
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Parse one complete bounded TSV edition in input order into canonical CAT frames; the host parallelizes independent editions and this parser does not create threads."
+    "detail": "Parse one complete bounded provider edition in input order into canonical CAT frames; the host parallelizes independent editions and this parser does not create threads."
   }
 }

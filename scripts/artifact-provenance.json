@@ -729,11 +729,11 @@
       }
     },
     "data-source/catalog-source/dist/isomorphic/module.wasm": {
-      "sha256": "b77faa7fb337dca7c628fba40f471e2bd3ab269ca568e3b0d273e0963a9bd81d",
-      "bytes": 124918,
+      "sha256": "c4caf155a5f624ba6a5c5d18a0e6a0ae92590e81b995676608472eeabfad1a79",
+      "bytes": 137004,
       "module": "data-source/catalog-source",
-      "lastCommit": "64e50a589d5330faf7b82f990b2bc7e8a800d64b",
-      "lastCommitDate": "2026-09-07T12:26:17-04:00",
+      "lastCommit": "05d22a0b46424b7ced59124c3ab3c84aa7889fb2",
+      "lastCommitDate": "2026-09-07T13:01:26-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": null,
