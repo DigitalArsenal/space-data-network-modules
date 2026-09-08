@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs/promises';
 import { normalizeParityFixture, runParityHarness, formatParityReport } from 'space-data-module-sdk/testing';
 
 test('the same parser artifact agrees in Chromium and native/container WasmEdge', {skip:process.env.SDN_RUN_CATALOG_PARITY !== '1'}, async () => {
@@ -15,6 +16,7 @@ test('the same parser artifact agrees in Chromium and native/container WasmEdge'
     {id:'mccants-truncated-edition',request:mccantsRequest(mccants+'Incomplete object\n'),expect:'ok'},
   ]});
   const report = await runParityHarness({wasmPath:fileURLToPath(new URL('../dist/isomorphic/module.wasm',import.meta.url)),plan,autoBuildDockerImage:false,timeoutMs:30000,log:message=>console.log(message)});
+  if (process.env.CATALOG_PARITY_REPORT) await fs.writeFile(process.env.CATALOG_PARITY_REPORT,JSON.stringify(report,null,2)+'\n');
   console.log(formatParityReport(report));
   assert.equal(report.ok,true,formatParityReport(report));
   assert.equal(report.lanes.length,3);

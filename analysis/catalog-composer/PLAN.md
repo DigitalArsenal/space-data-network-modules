@@ -32,70 +32,55 @@ Four independent provider nodes offer canonical SDS CAT records: CelesTrak, Jona
 - Vimpel: https://spacedata.vimpel.ru/ — direct probe timed out; owner feed clarification requested. GCAT vimcat is a separate derived source.
 - Existing UI bundle example: flows/supplemental-omm/scripts/package-bundle.mjs embeds APP.fbs in auxiliary entry app.app using the SDK createSingleFileBundle API.
 
-## Status
+## Status — 2026-09-08
 
-### Live checkpoint — 2026-09-08
+The installed Catalog Editor 0.1.3 previously combined 70,587 objects from the
+two CelesTrak publications on the existing remote provider, found
+`norad:100087` beyond the first page through FTS5, and restored its recipe after
+reopening. It has not yet completed a four-provider rollout. Orbital-state
+preferences exist; live state fetching is unfinished.
 
-The installed Catalog Editor 0.1.3 completed a real read of the CelesTrak
-`celestrak-satcat` and `celestrak-satcat-csv` publications from provider
-`16Uiu2HAmGjaPxkWFSXBbmhs9K5x1Zo6euJw95VjS6Jj2bcPpYr2U`. It combined
-70,587 objects, found `norad:100087` beyond the first page through its FTS5
-index, and restored both source choices after reopening. No browser errors
-were recorded. This verifies two publications from one provider, not four
-independent provider nodes.
+Four new owner-local representative SDN instances are running at ports
+7181–7184, each with its own SDN and Kubo identity, keys, data, journal and ports.
+The GCAT, McCants and Vimpel instances retained their identities through a
+controlled restart. All four Kubo blockstores connect to the customer's Kubo;
+the customer trusts the four publisher peer IDs without granting admin access.
+The stack's `deployment/catalog-nodes` scripts and README record lifecycle,
+verified bundle staging, capabilities, loopback connections and rollout gates.
 
-The customer runs SDN dev commit `5591c6f3e6b40674e1a3656b28e977ced1dda93c`.
-Its completed archive resumed after a graceful restart from journal offset
-19,335,070,555, applying eight tail events. The same paginated OMM search
-passed before and after restart. This is checkpoint-resume evidence; it is
-not a claim that a cold archive rebuild completes in that time.
+The dedicated CelesTrak node is importing an original SATCAT edition through
+its existing SDK flow. Original HTTPS fetch works through an owner-local SSH
+SOCKS tunnel to the existing VPS; TLS remains verified. Repeated datastore
+writes dominate ingestion. Completion, immutable publication and customer
+retrieval still require live verification. Its daily cadence is saved for
+restart; no history was erased or timestamps fabricated to bypass retry logic.
 
-Fresh upstream editions retrieved on 2026-09-08 also passed Catalog Source
-0.2.0's actual WASM parser tests: GCAT standard 69,999, GCAT extended 642,
-McCants classified 407 (131 source-native analyst identities), and McCants
-integrated 63 (14 analyst identities). Native identities remain control
-output until the canonical CAT extension is released.
+Catalog Source 0.3.0 separates the pure parser from Catalog Fetch 0.1.0.
+The final parser artifact passed 19 checks, including complete original GCAT
+and McCants editions and byte parity in Chromium, native WasmEdge and container
+WasmEdge. Four candidate product flows passed eight recovery scenarios each
+against complete real downloads: GCAT 69,999/642 and McCants 407/63 records.
+These flow checks used stub HTTP/storage capabilities, not live publication.
 
-| Provider | Rollout state | Remaining gate |
-| --- | --- | --- |
-| CelesTrak | Live CAT publications and installed-editor composition verified | Keep publication freshness and remote paging checks in release verification |
-| GCAT | Current editions parse successfully; dedicated node not deployed | Publish additive CAT native-identity fields, consume the release, then verify ingestion and node isolation |
-| McCants | Both current products parse successfully; dedicated node not deployed | Same native-identity release; keep classified and integrated products separate |
-| Vimpel | Not configured or advertised as operational | Obtain the original feed; the direct site remains unavailable, and GCAT vimcat is a different source |
+SDS 1.213.0 adds original catalog namespace and object ID fields, including
+edition scoping for reassignable identifiers. Its schema/generated bindings
+landed at `2a13500d07788f1233b422214daef3f4041b0022`; all 289 SDS tests passed.
+The release remains incomplete because PyPI's legacy version ordering blocked
+publication. The GitHub Packages consumer lookup also needs unavailable
+`read:packages` scope. Do not advance consumers until the documented SDS
+release gates are met. Current parser artifacts still use SDS 1.212.0 and
+return native keys only in diagnostic metadata; GCAT/McCants feeds therefore
+remain disabled rather than publishing records with lost identities.
 
-The current SDS release files have an existing claim, and the active graph is
-at its 15-task limit. An isolated release-task/claim exception has been requested;
-it has not been assumed. Remote backend CI also remains red: its shutdown quota
-race is fixed in the dev candidate, while package timeouts and a missing
-public-query flow test artifact still need resolution before fleet promotion.
+Vimpel's instance is running without a configured feed. No original login or
+export was found in the bounded local checks; the owner was asked for its
+file path. The inspected original portal failed HTTPS hostname validation.
+No credentials were sent over HTTP, and McDowell's Vimpel-derived catalog was
+not substituted.
 
-- [x] Inspect existing SDK bundle/APP and datastore contracts; verify public source documentation.
-- [x] Store offering cache: source merged and local backend/browser reload verified.
-- [ ] Complete-dataset search: published FlatSQL FTS5, persistent server indexes and remote pagination are implemented. Catalog Editor 0.1.3 has a complete-composition FTS5 index. Local table adapter integration and live archive verification remain.
-- [x] Module composition and APP UI; SDK, browser, native and container verification.
-- [ ] Provider parsers, source schema/provenance coverage and ingestion.
-- [ ] Resource-verified multiple-node launch, signed delivery and live source pages.
-
-The CAT module and embedded editor now pass SDK/Node, native/container WasmEdge
-parity and Chromium fixture checks (1,501 objects across three verified shards, source override,
-save/reopen and responsive layout). The generic launcher verifies APP and module
-hashes, bounds data reads and isolates admin credentials. Delivery now retains
-the complete REC/MBL inside customer ciphertext. Reads use one complete
-published batch instead of scanning and mixing historical record editions. These checks do not establish
-live provider ingestion or orbital-state resolution. The editor is installed on
-the local customer through the normal encrypted delivery path.
-
-GCAT standard and extended parsers now pass complete upstream-edition tests
-(69,999 and 642 objects), SDK compliance and byte parity in Chromium plus native
-and container WasmEdge. Unassigned NORAD numbers remain unset; original GCAT
-keys are emitted as control metadata. Publication must preserve that metadata
-before native-key composition is offered. Provider ingestion and placement
-remain unchecked.
-
-Catalog Source 0.2.0 also parses the complete McCants classified and integrated
-editions (407 and 63 records in the 2026-09-07 fixtures). It validates element
-line checksums and paired IDs, accepts Alpha-5, and extracts catalog identity
-without treating integrated elements as observations. The 131/14 analyst IDs
-remain source-native; neither their numbers nor synthetic designators enter
-global join fields. Both feeds still require durable native-key publication
-and provider placement before they can be offered by independent CAT nodes.
+Remaining work: finish SDS visibility and the required SDN dependency refresh,
+consume its native identity fields in both modules, enable GCAT/McCants feeds,
+connect the original Vimpel export/HTTPS source, and repeat the installed-editor
+checks against the independent nodes. The separately claimed SDN/UI source has
+not been edited for this rollout. The earlier 15 stale graph tasks were cleared;
+they are not current work.

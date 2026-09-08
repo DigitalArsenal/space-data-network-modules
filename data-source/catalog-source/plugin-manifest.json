@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.catalog-source",
   "name": "Catalog Source",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Parse GCAT and McCants catalog editions into canonical CAT records while preserving source-native identities.",
   "pluginFamily": "data_source",
   "capabilities": [],
@@ -40,6 +40,29 @@
           "maxStreams": 1,
           "required": true,
           "description": "A complete GCAT satcat or satcat100k TSV edition, including its header; bounded to 128 MiB."
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "meta",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Edition hash, original attribution and storage reconciliation metadata.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Edition hash, original attribution and storage reconciliation metadata."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Edition hash, original attribution and storage reconciliation metadata."
         }
       ],
       "outputPorts": [
@@ -85,6 +108,29 @@
           "maxStreams": 1,
           "required": true,
           "description": "Parser diagnostics and original keys in record order; module control metadata, not an observation."
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "meta",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Edition hash, original attribution and storage reconciliation metadata.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Edition hash, original attribution and storage reconciliation metadata."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Edition hash, original attribution and storage reconciliation metadata."
         }
       ],
       "maxBatch": 1,
@@ -116,6 +162,29 @@
           "maxStreams": 1,
           "required": true,
           "description": "One complete decompressed classfd.tle or inttles.tle edition; catalog identities only, bounded to 128 MiB."
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "meta",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Edition hash, original attribution and storage reconciliation metadata.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Edition hash, original attribution and storage reconciliation metadata."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Edition hash, original attribution and storage reconciliation metadata."
         }
       ],
       "outputPorts": [
@@ -161,6 +230,29 @@
           "maxStreams": 1,
           "required": true,
           "description": "Parser diagnostics and original keys in record order; module control metadata, not an observation."
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "meta",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Edition hash, original attribution and storage reconciliation metadata.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Edition hash, original attribution and storage reconciliation metadata."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Edition hash, original attribution and storage reconciliation metadata."
         }
       ],
       "maxBatch": 1,
@@ -185,6 +277,7 @@
   "abiVersion": 1,
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Parse one complete bounded provider edition in input order into canonical CAT frames; the host parallelizes independent editions and this parser does not create threads."
-  }
+    "detail": "Pure bounded catalog parsing. Optional edition metadata is forwarded only after the complete input parses successfully; the host schedules independent editions."
+  },
+  "externalInterfaces": []
 }

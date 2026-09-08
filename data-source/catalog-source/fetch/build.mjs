@@ -1,0 +1,20 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {compileModuleFromSource} from 'space-data-module-sdk/compiler';
+import {minizSourceFragments} from '../../geonames-source/miniz-source.mjs';
+
+const root=fileURLToPath(new URL('.',import.meta.url)),repo=path.resolve(root,'../../..');
+process.env.SPACE_DATA_STANDARDS_ROOT??=path.resolve(root,'../node_modules/spacedatastandards.org');
+const manifest=JSON.parse(await fs.readFile(path.join(root,'plugin-manifest.json'),'utf8'));
+const fragments=await minizSourceFragments();
+for(const file of ['propagator/sgp4/src/cpp/include/nlohmann/json.hpp','files/orbit-products/src/sha256.hpp'])fragments.push(await fs.readFile(path.join(repo,file),'utf8'));
+fragments.push(await fs.readFile(path.join(root,'src/catalog_fetch.cpp'),'utf8'));
+const outputPath=path.join(root,'dist/isomorphic/module.wasm');await fs.mkdir(path.dirname(outputPath),{recursive:true});
+const result=await compileModuleFromSource({manifest,sourceCode:fragments.join('\n\n'),language:'c++',outputPath,threadModel:'single-thread',allowUndefinedImports:true});
+if(!result.report?.ok)throw new Error(JSON.stringify(result.report?.issues));
+const dir=path.join(root,'dist/guest-link');await fs.mkdir(dir,{recursive:true});
+await fs.writeFile(path.join(dir,'module-link.o'),result.guestLink.objectBytes);
+const {format,language,threadModel,symbolPrefix,methodSymbols}=result.guestLink;
+await fs.writeFile(path.join(dir,'metadata.json'),JSON.stringify({version:1,format,language,threadModel,symbolPrefix,methodSymbols},null,2)+'\n');
+console.log(`Catalog Fetch compiled: ${outputPath}`);

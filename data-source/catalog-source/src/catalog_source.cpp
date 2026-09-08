@@ -80,11 +80,40 @@ bool tleLine(const std::string& line, char kind) {
   }
   return sum%10 == static_cast<unsigned>(line[68]-'0');
 }
+const plugin_input_frame_t* catalogInput(Json& meta) {
+  const plugin_input_frame_t* source=nullptr;
+  bool hasMeta=false;
+  if (plugin_get_input_count()>2) return nullptr;
+  for (uint32_t i=0;i<plugin_get_input_count();++i) {
+    const auto* frame=plugin_get_input_frame(i);
+    if (!frame || !frame->port_id || !frame->payload) return nullptr;
+    if (!std::strcmp(frame->port_id,"source")) {
+      if (source) return nullptr;
+      source=frame;
+    } else if (!std::strcmp(frame->port_id,"meta") && !hasMeta && frame->payload_length<=65536) {
+      hasMeta=true; meta=Json::parse(frame->payload,frame->payload+frame->payload_length,nullptr,false);
+      if (!meta.is_object()) return nullptr;
+    } else return nullptr;
+  }
+  if (!source || source->payload_length>kMaxBytes) return nullptr;
+  if (hasMeta) {
+    if (!meta.contains("_source_text_sha256") || !meta["_source_text_sha256"].is_string() ||
+        meta["_source_text_sha256"]!=ephem::sha256_hex(source->payload,source->payload_length)) return nullptr;
+    meta.erase("_source_text_sha256");
+  }
+  return source;
+}
+int pushCatalogMeta(const Json& meta) {
+  if (!meta.is_object()) return 0;
+  const auto bytes=meta.dump();
+  return plugin_push_output_ex("meta",nullptr,nullptr,PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY,nullptr,0,1,
+    reinterpret_cast<const uint8_t*>(bytes.data()),static_cast<uint32_t>(bytes.size()))<0 ? 1 : 0;
+}
 }
 
 extern "C" int parse_gcat(void) {
-  if (plugin_get_input_count() != 1) return fail("Exactly one complete GCAT edition is required.");
-  const auto* input = plugin_get_input_frame(0);
+  Json sourceMeta;
+  const auto* input = catalogInput(sourceMeta);
   if (!input || !input->port_id || std::strcmp(input->port_id, "source") || !input->payload || !input->payload_length || input->payload_length > kMaxBytes) return fail("The source must be a bounded GCAT TSV edition.");
   const std::string source(reinterpret_cast<const char*>(input->payload), input->payload_length);
   if (source.find('\0') != std::string::npos) return fail("GCAT text contains an embedded NUL.");
@@ -153,13 +182,14 @@ extern "C" int parse_gcat(void) {
     {"unrepresentedDesignators",omittedDesignators},{"unrepresentedLaunchDates",omittedDates},{"unnumberedObjects",unnumbered}}).dump();
   if (plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
       reinterpret_cast<const uint8_t*>(report.data()),static_cast<uint32_t>(report.size())) < 0) return 1;
-  return plugin_push_output_ex("catalog", "CAT.fbs", "$CAT", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "CAT", 0, 0,
-    output.data(),static_cast<uint32_t>(output.size())) < 0 ? 1 : 0;
+  if (plugin_push_output_ex("catalog", "CAT.fbs", "$CAT", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "CAT", 0, 0,
+    output.data(),static_cast<uint32_t>(output.size())) < 0) return 1;
+  return pushCatalogMeta(sourceMeta);
 }
 
 extern "C" int parse_mccants_tle_catalog(void) {
-  if (plugin_get_input_count()!=1) return fail("Exactly one complete McCants element edition is required.");
-  const auto* input=plugin_get_input_frame(0);
+  Json sourceMeta;
+  const auto* input=catalogInput(sourceMeta);
   if (!input || !input->port_id || std::strcmp(input->port_id,"source") || !input->payload || !input->payload_length || input->payload_length>kMaxBytes) return fail("The source must be a bounded, decompressed McCants TLE edition.");
   const std::string source(reinterpret_cast<const char*>(input->payload),input->payload_length);
   if (source.find('\0')!=std::string::npos) return fail("McCants text contains an embedded NUL.");
@@ -219,5 +249,6 @@ extern "C" int parse_mccants_tle_catalog(void) {
   if (seen.empty()) return fail("No McCants element records were supplied.");
   const auto report=Json({{"version",1},{"records",seen.size()},{"nativeKeys",nativeKeys},{"unnumberedObjects",unnumbered},{"unrepresentedDesignators",omittedDesignators}}).dump();
   if (plugin_push_output_ex("report",nullptr,nullptr,PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY,nullptr,0,1,reinterpret_cast<const uint8_t*>(report.data()),static_cast<uint32_t>(report.size()))<0) return 1;
-  return plugin_push_output_ex("catalog","CAT.fbs","$CAT",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"CAT",0,0,output.data(),static_cast<uint32_t>(output.size()))<0 ? 1 : 0;
+  if (plugin_push_output_ex("catalog","CAT.fbs","$CAT",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"CAT",0,0,output.data(),static_cast<uint32_t>(output.size()))<0) return 1;
+  return pushCatalogMeta(sourceMeta);
 }

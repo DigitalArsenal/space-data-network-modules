@@ -2,11 +2,17 @@
 
 An SDK module that transforms complete GCAT or McCants editions into
 canonical, size-prefixed SDS CAT records.
-The same artifact runs in the browser and WasmEdge. HTTP retrieval,
-scheduling, provenance publication and storage belong to the SDN host flow.
+The same parser artifact runs in the browser and WasmEdge without host calls.
+The companion `fetch/` module prepares requests, validates original downloads
+and ZIP members, and prepares publication requests. An SDK flow connects these
+modules to the existing HTTP and storage capability modules; the SDN host
+contains no GCAT or McCants parser.
 
 `parse_gcat` takes the TSV edition on `source` and returns `catalog` plus a
-JSON control `report`. The report contains source-native keys in exactly the
+JSON control `report`. An optional `meta` frame passes through only after the
+entire edition parses successfully and its text hash matches. This keeps a
+failed parse from leaving metadata queued for a later storage operation.
+The report contains source-native keys in exactly the
 same order as the records, the upstream update text, and counts of values
 that cannot be represented faithfully. A host must preserve this report
 alongside the edition before presenting native-key catalog composition.
@@ -45,14 +51,23 @@ Input and output are each bounded to 128 MiB, editions to 250,000 records,
 and individual input lines to 1 MiB. Damaged rows, duplicate identifiers or
 disagreeing IDs reject the entire edition before any output is emitted.
 
-Build with `npm ci && npm run build`; then run `npm test`. Set
-`SPACE_DATA_STANDARDS_ROOT` when the canonical standards checkout is not
-the sibling repository. `GCAT_TEST_EDITION=/path/to/satcat.tsv npm test`
+Build both modules with `npm ci && npm run build`; then run `npm test`. Set
+`SPACE_DATA_STANDARDS_ROOT` only to override the installed SDS package used
+for SDK contract checks. `GCAT_TEST_EDITION=/path/to/satcat.tsv npm test`
 also validates every row of a downloaded edition. Run
 `MCCANTS_TEST_EDITION=/path/to/classfd.tle npm test` for a McCants edition.
 Run
 `SDN_RUN_CATALOG_PARITY=1 node --test tests/parity.test.mjs` with the SDK's
 Chromium and native/container WasmEdge test lanes available.
+`MCCANTS_TEST_ZIP=/path/to/classfd.zip npm test` also checks the original ZIP
+through the fetch module and then through the parser. The stack's
+`deployment/catalog-nodes/build-flows.mjs` composes four independent product
+flows; `verify-flows.mjs` checks complete downloaded editions and recovery
+after malformed responses, HTTP errors, unchanged responses and storage errors.
+
+The current build still uses SDS 1.212.0. Do not enable native-identity feeds
+until SDS 1.213.0 has completed its release gates and these modules consume
+its generated bindings. The diagnostic report is not durable CAT identity.
 
 Source and mapping authority: Jonathan C. McDowell,
 [General Catalog of Artificial Space Objects](https://planet4589.org/space/gcat/),

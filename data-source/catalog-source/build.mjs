@@ -5,7 +5,7 @@ import { compileModuleFromSource } from 'space-data-module-sdk/compiler';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const repo = path.resolve(root, '../..');
-process.env.SPACE_DATA_STANDARDS_ROOT ??= path.resolve(repo, '../spacedatastandards.org');
+process.env.SPACE_DATA_STANDARDS_ROOT ??= path.join(root, 'node_modules/spacedatastandards.org');
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
 const headers = [];
 for (const code of ['IDM', 'PLD', 'LCC', 'CAT']) {
@@ -14,10 +14,11 @@ for (const code of ['IDM', 'PLD', 'LCC', 'CAT']) {
 }
 const json = await fs.readFile(path.join(repo, 'propagator/sgp4/src/cpp/include/nlohmann/json.hpp'), 'utf8');
 const source = await fs.readFile(path.join(root, 'src/catalog_source.cpp'), 'utf8');
+const sha256 = await fs.readFile(path.join(repo, 'files/orbit-products/src/sha256.hpp'), 'utf8');
 const outputPath = path.join(root, 'dist/isomorphic/module.wasm');
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
-const result = await compileModuleFromSource({ manifest, sourceCode: [...headers, json, source].join('\n\n'),
-  language: 'c++', outputPath, threadModel: 'wasi-sequential' });
+const result = await compileModuleFromSource({ manifest, sourceCode: [...headers, json, sha256, source].join('\n\n'),
+  language: 'c++', outputPath, threadModel: 'single-thread' });
 if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
 // Retain the SDK link object so a host can compose this pure parser with its
 // HTTP and storage capability nodes without adding provider code to the host.
