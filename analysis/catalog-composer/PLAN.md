@@ -48,12 +48,13 @@ the customer trusts the four publisher peer IDs without granting admin access.
 The stack's `deployment/catalog-nodes` scripts and README record lifecycle,
 verified bundle staging, capabilities, loopback connections and rollout gates.
 
-The dedicated CelesTrak node is importing an original SATCAT edition through
-its existing SDK flow. Original HTTPS fetch works through an owner-local SSH
-SOCKS tunnel to the existing VPS; TLS remains verified. Repeated datastore
-writes dominate ingestion. Completion, immutable publication and customer
-retrieval still require live verification. Its daily cadence is saved for
-restart; no history was erased or timestamps fabricated to bypass retry logic.
+The dedicated CelesTrak node has published its complete original TXT CAT
+edition: 69,999 records in two shards. The customer fetched all 14,222,132 bytes
+through the remote SDN path in 5,462 ms, validating shard hashes and record
+counts. The CSV import continues. Original HTTPS fetch uses an owner-local SSH
+SOCKS tunnel to the existing VPS, with TLS verified. Repeated datastore writes
+dominate ingestion. The daily cadence is saved for restart; no history was
+erased or timestamps fabricated to bypass retry logic.
 
 Catalog Source 0.3.0 separates the pure parser from Catalog Fetch 0.1.0.
 The final parser artifact passed 19 checks, including complete original GCAT
@@ -84,3 +85,10 @@ connect the original Vimpel export/HTTPS source, and repeat the installed-editor
 checks against the independent nodes. The separately claimed SDN/UI source has
 not been edited for this rollout. The earlier 15 stale graph tasks were cleared;
 they are not current work.
+
+The current installed-editor rollout check is not a pass: its discovery call
+to `/api/v1/sync` can exceed the host's 25-second timeout while ingestion is
+busy. A direct sample completed in 19.1 seconds, while an APP read timed out.
+The complete remote immutable CAT read passed separately. Fix the discovery
+projection/cache in the SDN/UI lane before treating that transfer as evidence
+of reliable editor startup.
