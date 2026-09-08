@@ -1,13 +1,12 @@
 {
   "pluginId": "com.digitalarsenal.flows.celestrak-gp-ingest",
   "name": "CelesTrak GP Ingest Flow",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "pluginFamily": "flow",
-  "description": "Per-provider ingest flow (loop C.8a), GP catalog: a module cron TIMER tick enters at the request-builder node (celestrak-request:gp, URLs/timeout from node CONFIG), hostcap/http-request fetches the CSV, celestrak-parser:parse_gp normalizes it into OMM + MPE record streams with full SourceTags attribution (batch = sha256 of the payload) plus archive naming and wasm-authored provenance, and two hostcap/storage-ingest nodes persist the batches through the policy-mediated storage.ingest_with_source cap op (disk guardrail, pre/post duplicate reconcile, raw + provenance archiving host-side). Ingest results land on the egress sink. After each store, celestrak-request:publish_request joins that ingest result with the parser meta and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; the publication response also lands on the egress sink. After the OMM store, celestrak-request:cache_warm receives the same ingest result and emits the dataset default-query frame (node CONFIG celestrak_cache_sql/celestrak_cache_max_rows; graph task sdn-dataset-default-query-materialized-cache FOLLOW-UP C) into hostcap/flatsql-query:query, which re-executes it against the just-committed store in the same wasm invocation and warms the engine's response-artifact cache the dataset load serves from. All decisions live in-wasm; the host contributes timers, HTTP egress, and guarded persistence only.",
+  "description": "Per-provider ingest flow (loop C.8a), GP catalog: a module cron TIMER tick enters at the request-builder node (celestrak-request:gp, URLs/timeout from node CONFIG), hostcap/http-request fetches the CSV, celestrak-parser:parse_gp normalizes it into OMM + MPE record streams with full SourceTags attribution (batch = sha256 of the payload) plus archive naming and wasm-authored provenance, and two hostcap/storage-ingest nodes persist the batches through the policy-mediated storage.ingest_with_source cap op (disk guardrail, pre/post duplicate reconcile, raw + provenance archiving host-side). Ingest results land on the egress sink. After each store, celestrak-request:publish_request joins that ingest result with the parser meta and (only when node CONFIG carries celestrak_publish_url) emits the loopback dataset-publication POST that a second hostcap/http-request node drives; the publication response also lands on the egress sink. The optional host-query cache-warming branch is removed; native reads materialize query responses on demand. All decisions live in-wasm; the host contributes timers, HTTP egress, and guarded persistence only.",
   "capabilities": [
     "http",
-    "storage_ingest",
-    "storage_query"
+    "storage_ingest"
   ],
   "dependencies": [
     {
@@ -29,11 +28,6 @@
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
       "minVersion": "0.1.0",
       "maxVersion": "0.1.0"
-    },
-    {
-      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
-      "minVersion": "0.2.0",
-      "maxVersion": "0.2.0"
     }
   ],
   "externalInterfaces": [
@@ -60,21 +54,6 @@
       "properties": {
         "hostOps": [
           "storage.ingest_with_source"
-        ]
-      }
-    },
-    {
-      "interfaceId": "flatsql-query-stream",
-      "kind": "host-service",
-      "direction": "bidirectional",
-      "capability": "storage_query",
-      "resource": "storage://flatsql",
-      "description": "Host FlatSQL engine-native query streaming (storage.flatsql_query_stream). Served by the Go node today; browser-side flatsql stream ops are not exposed by the SDK BrowserHost storage adapter (server-only until flatsql ships as an in-wasm component dependency).",
-      "properties": {
-        "hostOps": [
-          "storage.flatsql_query_stream",
-          "storage.query_sandboxed",
-          "storage.query_surface"
         ]
       }
     }
@@ -218,24 +197,6 @@
       "nodeId": "publish_http_mpe",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "methodId": "request",
-      "kind": "transform",
-      "dispatchModel": null,
-      "uiX": 0,
-      "uiY": 0
-    },
-    {
-      "nodeId": "warm",
-      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
-      "methodId": "cache_warm",
-      "kind": "transform",
-      "dispatchModel": null,
-      "uiX": 0,
-      "uiY": 0
-    },
-    {
-      "nodeId": "warm_q",
-      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
-      "methodId": "query",
       "kind": "transform",
       "dispatchModel": null,
       "uiX": 0,
@@ -408,36 +369,6 @@
       "fromPortId": "result",
       "toNodeId": "publish_omm",
       "toPortId": "result",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "ingest-omm-warm",
-      "fromNodeId": "ingest_omm",
-      "fromPortId": "result",
-      "toNodeId": "warm",
-      "toPortId": "result",
-      "contract": {
-        "canonicalType": null,
-        "alignedType": null,
-        "canonicalFallbackAvailable": true,
-        "alignedEligible": false,
-        "opaque": true,
-        "routePolicy": "canonical-only"
-      }
-    },
-    {
-      "edgeId": "warm-warm-q",
-      "fromNodeId": "warm",
-      "fromPortId": "query",
-      "toNodeId": "warm_q",
-      "toPortId": "query",
       "contract": {
         "canonicalType": null,
         "alignedType": null,

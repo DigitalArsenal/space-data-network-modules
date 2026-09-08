@@ -2,6 +2,5 @@
   "com.digitalarsenal.data-source.celestrak-request": "../data-source/celestrak-request",
   "com.digitalarsenal.hostcap.http-request": "../hostcap/http-request",
   "com.digitalarsenal.data-source.celestrak-parser": "../data-source/celestrak-parser",
-  "com.digitalarsenal.hostcap.storage-ingest": "../hostcap/storage-ingest",
-  "com.digitalarsenal.hostcap.flatsql-query": "../hostcap/flatsql-query"
+  "com.digitalarsenal.hostcap.storage-ingest": "../hostcap/storage-ingest"
 }

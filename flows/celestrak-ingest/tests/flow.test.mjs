@@ -147,14 +147,6 @@ function createIngestHostStub({ fetches, config = {} }) {
           });
           return 0;
         }
-        if (operation === "storage.flatsql_query_stream") {
-          // Materialized-cache warm query from the cache_warm lane. The host
-          // answers with the engine's response artifact; zero segments is a
-          // legitimate cold-store ``empty`` answer. The guest forwards the
-          // first segment verbatim on its ``stream`` port (unconnected here).
-          response = encodeHostcallEnvelope({ ok: true, result: {} });
-          return 0;
-        }
         response = encodeHostcallEnvelope({ ok: false, message: `unexpected op ${operation}` });
         return 1;
       },
@@ -263,6 +255,30 @@ test("celestrak-gp-ingest: each stored batch triggers its own dataset publicatio
   // 2 ingest results + 2 publication responses reach the egress sink.
   assert.equal(results.length, 4);
   assert.equal(results.filter((entry) => entry.status === 202).length, 2);
+});
+
+test("celestrak-gp-ingest: never asks the host to query while ingesting and publishing", async () => {
+  const gpURL = "https://celestrak.org/NORAD/elements/gp.php?SPECIAL=full-catalog&FORMAT=csv";
+  const stub = createIngestHostStub({
+    config: {
+      celestrak_publish_url: PUBLISH_URL,
+      // Retained operator configuration must not restore the removed host
+      // query branch. Native reads materialize their cache on demand.
+      celestrak_cache_sql: "SELECT data FROM sds_omm ORDER BY rowid DESC LIMIT ?",
+      celestrak_cache_max_rows: 2,
+    },
+    fetches: { [gpURL]: { body: GP_CSV }, [PUBLISH_URL]: PUBLISH_FETCH },
+  });
+  const results = await runFlowOnce(GP_WASM, stub);
+
+  assert.equal(ingestCalls(stub).length, 2, "OMM and MPE still ingest");
+  assert.equal(publishBodies(stub).length, 2, "both stored batches still publish");
+  assert.equal(results.length, 4, "both ingests and publications reach egress");
+  assert.deepEqual(
+    [...new Set(stub.calls.map((call) => call.operation))].sort(),
+    ["http.request", "plugin.getConfig", "storage.ingest_with_source"],
+    "retrieval may use configuration, HTTP, and guarded persistence only",
+  );
 });
 
 test("celestrak-satcat-ingest: both snapshot lanes publish their own batch", async () => {

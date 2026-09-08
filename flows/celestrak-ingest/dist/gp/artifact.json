@@ -1,16 +1,15 @@
 {
   "programId": "com.digitalarsenal.flows.celestrak-gp-ingest",
   "name": "CelesTrak GP Ingest Flow",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
-  "nodes": 12,
-  "edges": 21,
+  "nodes": 10,
+  "edges": 19,
   "triggers": 1,
   "capabilities": [
     "http",
-    "storage_ingest",
-    "storage_query"
+    "storage_ingest"
   ],
   "engineLinkage": "bridge",
   "dispatch": [
@@ -74,20 +73,6 @@
       "nodeId": "publish_http_mpe",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "methodId": "request",
-      "dispatchModel": "linked-direct",
-      "resolvedFromPluginFamily": null
-    },
-    {
-      "nodeId": "warm",
-      "pluginId": "com.digitalarsenal.data-source.celestrak-request",
-      "methodId": "cache_warm",
-      "dispatchModel": "linked-direct",
-      "resolvedFromPluginFamily": null
-    },
-    {
-      "nodeId": "warm_q",
-      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
-      "methodId": "query",
       "dispatchModel": "linked-direct",
       "resolvedFromPluginFamily": null
     },
@@ -164,21 +149,6 @@
       "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_",
       "methodSymbols": {
         "ingest": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_ingest"
-      }
-    },
-    {
-      "kind": "node",
-      "dependencyId": "com.digitalarsenal.hostcap.flatsql-query",
-      "pluginId": "com.digitalarsenal.hostcap.flatsql-query",
-      "version": "0.2.0",
-      "sha256": "b8ebf6b73d3166e373ce26bf6e59e3a4f0b474b732ffcf38697d4dff4b1cbad7",
-      "dispatchModel": "linked-direct",
-      "artifactPath": null,
-      "publisher": null,
-      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e666c617473716c2d7175657279_",
-      "methodSymbols": {
-        "query": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e666c617473716c2d7175657279_query",
-        "sandbox_query": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e666c617473716c2d7175657279_sandbox_query"
       }
     }
   ]
