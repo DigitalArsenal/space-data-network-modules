@@ -34,6 +34,41 @@ Four independent provider nodes offer canonical SDS CAT records: CelesTrak, Jona
 
 ## Status
 
+### Live checkpoint — 2026-09-08
+
+The installed Catalog Editor 0.1.3 completed a real read of the CelesTrak
+`celestrak-satcat` and `celestrak-satcat-csv` publications from provider
+`16Uiu2HAmGjaPxkWFSXBbmhs9K5x1Zo6euJw95VjS6Jj2bcPpYr2U`. It combined
+70,587 objects, found `norad:100087` beyond the first page through its FTS5
+index, and restored both source choices after reopening. No browser errors
+were recorded. This verifies two publications from one provider, not four
+independent provider nodes.
+
+The customer runs SDN dev commit `5591c6f3e6b40674e1a3656b28e977ced1dda93c`.
+Its completed archive resumed after a graceful restart from journal offset
+19,335,070,555, applying eight tail events. The same paginated OMM search
+passed before and after restart. This is checkpoint-resume evidence; it is
+not a claim that a cold archive rebuild completes in that time.
+
+Fresh upstream editions retrieved on 2026-09-08 also passed Catalog Source
+0.2.0's actual WASM parser tests: GCAT standard 69,999, GCAT extended 642,
+McCants classified 407 (131 source-native analyst identities), and McCants
+integrated 63 (14 analyst identities). Native identities remain control
+output until the canonical CAT extension is released.
+
+| Provider | Rollout state | Remaining gate |
+| --- | --- | --- |
+| CelesTrak | Live CAT publications and installed-editor composition verified | Keep publication freshness and remote paging checks in release verification |
+| GCAT | Current editions parse successfully; dedicated node not deployed | Publish additive CAT native-identity fields, consume the release, then verify ingestion and node isolation |
+| McCants | Both current products parse successfully; dedicated node not deployed | Same native-identity release; keep classified and integrated products separate |
+| Vimpel | Not configured or advertised as operational | Obtain the original feed; the direct site remains unavailable, and GCAT vimcat is a different source |
+
+The current SDS release files have an existing claim, and the active graph is
+at its 15-task limit. An isolated release-task/claim exception has been requested;
+it has not been assumed. Remote backend CI also remains red: its shutdown quota
+race is fixed in the dev candidate, while package timeouts and a missing
+public-query flow test artifact still need resolution before fleet promotion.
+
 - [x] Inspect existing SDK bundle/APP and datastore contracts; verify public source documentation.
 - [x] Store offering cache: source merged and local backend/browser reload verified.
 - [ ] Complete-dataset search: published FlatSQL FTS5, persistent server indexes and remote pagination are implemented. Catalog Editor 0.1.3 has a complete-composition FTS5 index. Local table adapter integration and live archive verification remain.
