@@ -238,6 +238,29 @@
       },
       "declaration": null
     },
+    "analysis/catalog-composer/dist/isomorphic/module.wasm": {
+      "sha256": "15517f553240a32e2a1db85f99eadabfed94ff9b176363c9d15666c19014f3b1",
+      "bytes": 5800708,
+      "module": "analysis/catalog-composer",
+      "lastCommit": "9a3cf0f6fdbe0f5566f3cbddf71c9527ee7a77fd",
+      "lastCommitDate": "2026-09-07T12:43:29-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "wasi-sequential"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
     "analysis/catalog-synthesis/dist/catalog-synthesis.wasm": {
       "sha256": "463ea35d3e3ad48e39e89325a616b4f09a0a0db3b849d03a5658c27913b13f27",
       "bytes": 163884,
@@ -703,6 +726,29 @@
         "toolchain": null,
         "confidence": "none",
         "evidence": "build.mjs resolves ONLY its own deps/emsdk, which is absent from this machine. Artifact committed 2026-08-03 by an emsdk that was cloned at build time and has since been deleted. Unrecoverable."
+      }
+    },
+    "data-source/catalog-source/dist/isomorphic/module.wasm": {
+      "sha256": "c4caf155a5f624ba6a5c5d18a0e6a0ae92590e81b995676608472eeabfad1a79",
+      "bytes": 137004,
+      "module": "data-source/catalog-source",
+      "lastCommit": "05d22a0b46424b7ced59124c3ab3c84aa7889fb2",
+      "lastCommitDate": "2026-09-07T13:01:26-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "wasi-sequential"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
       }
     },
     "data-source/celestrak-parser/dist/isomorphic/module.wasm": {

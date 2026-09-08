@@ -1,19 +1,24 @@
 {
-  "generatedAt": "2026-09-03T23:38:07.411Z",
-  "moduleCount": 85,
-  "parityScopeModuleCount": 35,
-  "isomorphicWasmCount": 81,
+  "generatedAt": "2026-09-07T17:03:08.051Z",
+  "moduleCount": 91,
+  "parityScopeModuleCount": 36,
+  "isomorphicWasmCount": 83,
   "missingIsomorphicWasm": [
+    "data-source/cell-tower-ingest",
     "data-source/geonames-ingest",
     "data-source/geonames-source",
+    "data-source/osm-source",
+    "data-source/terrain-ingest",
+    "data-source/terrain-source",
     "hostcap/flatsql-store",
     "maneuver/star-search"
   ],
-  "browserWasmEdgeTargetCount": 79,
+  "browserWasmEdgeTargetCount": 85,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
     "analysis/access",
+    "analysis/catalog-composer",
     "analysis/catalog-synthesis",
     "analysis/conjunction-assessment",
     "analysis/covariance",
@@ -83,6 +88,42 @@
       ]
     },
     {
+      "modulePath": "analysis/catalog-composer",
+      "pluginId": "com.digitalarsenal.analysis.catalog-composer",
+      "name": "Catalog Editor",
+      "pluginFamily": "analysis",
+      "version": "0.1.3",
+      "methodIds": [
+        "compose"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 6,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/catalog_composer.cpp"
+      ],
+      "testFiles": [
+        "tests/catalog-publication.test.mjs",
+        "tests/catalog-search.test.mjs",
+        "tests/parity.test.mjs",
+        "tests/read-page.test.mjs",
+        "tests/recipe.test.mjs",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
       "modulePath": "analysis/catalog-synthesis",
       "pluginId": "com.orbpro.catalog-synthesis",
       "name": "Supplemental Catalog Synthesis",
@@ -148,7 +189,7 @@
       ],
       "cxxSourceFileCount": 26,
       "cSourceFileCount": 0,
-      "testFileCount": 104,
+      "testFileCount": 101,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -198,9 +239,6 @@
         "tests/archiveStreamingSmoke.test.mjs",
         "tests/buildTreeHygiene.test.mjs",
         "tests/celestrakFetchCache.test.mjs",
-        "tests/data/.celestrak-cache/3d064973fb7154c9101b0dd808b6fe8b3b3bda5c445167b9a9f5311f48f71ac6.csv",
-        "tests/data/.celestrak-cache/gp_49107,47079.json",
-        "tests/data/.celestrak-fetch-ledger",
         "tests/data/README.md",
         "tests/direct-entry.test.mjs",
         "tests/fixtures/aerospace-real-window/README.md",
@@ -458,7 +496,7 @@
       "pluginId": "maneuver-planner",
       "name": "Maneuver Planning Plugin",
       "pluginFamily": "maneuver",
-      "version": "0.5.0",
+      "version": "0.6.1",
       "methodIds": [
         "invoke"
       ],
@@ -473,9 +511,9 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 20,
+      "cxxSourceFileCount": 21,
       "cSourceFileCount": 0,
-      "testFileCount": 17,
+      "testFileCount": 20,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -485,6 +523,7 @@
         "src/cpp/src/json_lite.cpp",
         "src/cpp/src/maneuver_plugin.cpp",
         "src/cpp/src/math.cpp",
+        "src/cpp/src/orbit_geometry.cpp",
         "src/cpp/src/plugin_entrypoints.cpp",
         "src/cpp/src/plugin_runtime.cpp",
         "src/cpp/src/propagation.cpp",
@@ -510,11 +549,14 @@
         "src/cpp/tests/test_targeting.cpp",
         "tests/behavior.test.mjs",
         "tests/error_path.test.mjs",
+        "tests/evidence/orbit-geometry-tri-runtime-20260906.json",
         "tests/fixtures/hosted-runtime/maneuver.single-plugin.flow.json",
+        "tests/fixtures/orbit_geometry.parity.json",
         "tests/fixtures/request.hohmann.json",
         "tests/fixtures/request.rendezvous.json",
         "tests/frame_and_sign.test.mjs",
         "tests/lambert_izzo_crosscheck.test.mjs",
+        "tests/orbit_geometry.test.mjs",
         "tests/ratchet.test.mjs",
         "tests/sdk_compat.test.mjs",
         "tests/vectors.test.mjs"
@@ -826,7 +868,7 @@
       "pluginId": "org.spacedatanetwork.bond-attestation",
       "name": "Security Bond Attestation",
       "pluginFamily": "data_source",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "methodIds": [
         "attest"
       ],
@@ -841,13 +883,49 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 0,
+      "testFileCount": 1,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/bond_attestation.cpp"
       ],
-      "testFiles": []
+      "testFiles": [
+        "tests/bond.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/catalog-source",
+      "pluginId": "com.digitalarsenal.data-source.catalog-source",
+      "name": "Catalog Source",
+      "pluginFamily": "data_source",
+      "version": "0.2.0",
+      "methodIds": [
+        "parse_gcat",
+        "parse_mccants_tle_catalog"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 3,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/catalog_source.cpp"
+      ],
+      "testFiles": [
+        "tests/mccants.test.mjs",
+        "tests/parity.test.mjs",
+        "tests/sdk_compat.test.mjs"
+      ]
     },
     {
       "modulePath": "data-source/celestrak-parser",
@@ -856,9 +934,52 @@
       "pluginFamily": "data_source",
       "version": "0.1.0",
       "methodIds": [
+        "parse_eop",
         "parse_gp",
         "parse_satcat",
+        "parse_socrates",
         "parse_spw"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 8,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/celestrak_parser_module.cpp"
+      ],
+      "testFiles": [
+        "tests/batched_inputs.test.mjs",
+        "tests/fixtures/celestrak-eop-all.csv",
+        "tests/fixtures/celestrak-gp-omm.csv",
+        "tests/fixtures/celestrak-satcat.csv",
+        "tests/fixtures/celestrak-satcat.txt",
+        "tests/fixtures/celestrak-socrates-minrange.csv",
+        "tests/fixtures/celestrak-sw-all.csv",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/celestrak-reference",
+      "pluginId": "com.digitalarsenal.data-source.celestrak-reference",
+      "name": "CelesTrak Reference Nodes",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "gp_groups",
+        "parse_gp_groups",
+        "parse_satcat_reference",
+        "satcat_reference"
       ],
       "runtimeTargets": [
         "browser",
@@ -876,14 +997,14 @@
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
-        "src/celestrak_parser_module.cpp"
+        "src/celestrak_reference_module.cpp"
       ],
       "testFiles": [
         "tests/batched_inputs.test.mjs",
-        "tests/fixtures/celestrak-gp-omm.csv",
-        "tests/fixtures/celestrak-satcat.csv",
-        "tests/fixtures/celestrak-satcat.txt",
-        "tests/fixtures/celestrak-sw-all.csv",
+        "tests/fixtures/celestrak-gp-group-gpz.csv",
+        "tests/fixtures/celestrak-gp-group-stations.csv",
+        "tests/fixtures/celestrak-launchsites.html",
+        "tests/fixtures/celestrak-sources.html",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -894,9 +1015,12 @@
       "pluginFamily": "data_source",
       "version": "0.1.0",
       "methodIds": [
+        "cache_warm",
+        "eop",
         "gp",
         "publish_request",
         "satcat",
+        "socrates",
         "spw"
       ],
       "runtimeTargets": [
@@ -1013,7 +1137,7 @@
       ],
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": true,
+      "hasIsomorphicWasm": false,
       "sourceLanguages": [
         "c++"
       ],
@@ -1447,6 +1571,38 @@
       ]
     },
     {
+      "modulePath": "data-source/osm-source",
+      "pluginId": "com.digitalarsenal.data-source.osm-source",
+      "name": "OSM Context Epoch Source",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "route"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 2,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/osm_source_module.cpp"
+      ],
+      "testFiles": [
+        "tests/sdk_compat.test.mjs",
+        "tests/serve.test.mjs"
+      ]
+    },
+    {
       "modulePath": "data-source/retrieval",
       "pluginId": "com.digitalarsenal.data-source.retrieval",
       "name": "SDN Data Retrieval",
@@ -1624,6 +1780,121 @@
         "tests/fixture_arc.hpp",
         "tests/make_containers.cpp",
         "tests/module_abi.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/terrain-ingest",
+      "pluginId": "com.digitalarsenal.data-source.terrain-ingest",
+      "name": "Terrain Tile Ingest Scheduler Nodes",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "granule_plan",
+        "ingest_meta",
+        "ingest_plan",
+        "mark_query",
+        "publish_request"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 4,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/terrain_ingest_module.cpp"
+      ],
+      "testFiles": [
+        "tests/batched_inputs.test.mjs",
+        "tests/granule_plan.test.mjs",
+        "tests/irm_mark.test.mjs",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/terrain-source",
+      "pluginId": "com.digitalarsenal.data-source.terrain-source",
+      "name": "Terrain Tile Source Nodes",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "layer_json",
+        "respond",
+        "route",
+        "tile"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": false,
+      "sourceLanguages": [
+        "c",
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 1,
+      "testFileCount": 42,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/terrain_source_module.cpp",
+        "vendor/miniz-3.1.2/miniz.c"
+      ],
+      "testFiles": [
+        "tests/amortization.test.mjs",
+        "tests/catalogue.test.mjs",
+        "tests/engine-query.test.mjs",
+        "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/build-parity-fixture.mjs",
+        "tests/fixtures/parity/config-catalogue-no-cid.json",
+        "tests/fixtures/parity/config-catalogue-no-lineage.json",
+        "tests/fixtures/parity/config-catalogue.json",
+        "tests/fixtures/parity/context-conditional.json",
+        "tests/fixtures/parity/context-identity.json",
+        "tests/fixtures/parity/context-miss.json",
+        "tests/fixtures/parity/context-stored.json",
+        "tests/fixtures/parity/context-synth.json",
+        "tests/fixtures/parity/dem-granule.hrb",
+        "tests/fixtures/parity/oversized-granule.hrb",
+        "tests/fixtures/parity/plan-block.json",
+        "tests/fixtures/parity/plan-layer.json",
+        "tests/fixtures/parity/plan-oversized.json",
+        "tests/fixtures/parity/plan-single.json",
+        "tests/fixtures/parity/plan-water.json",
+        "tests/fixtures/parity/request-layer.htq",
+        "tests/fixtures/parity/request-query.htq",
+        "tests/fixtures/parity/request-tile.htq",
+        "tests/fixtures/parity/request-tileset.htq",
+        "tests/fixtures/parity/request-versioned.htq",
+        "tests/fixtures/parity/stored-record.dttstream",
+        "tests/fixtures/parity/stream-empty.bin",
+        "tests/fixtures/parity/stream-malformed.bin",
+        "tests/fixtures/parity/water-granule.hrb",
+        "tests/fixtures/terrain-parity.json",
+        "tests/granule-seams.test.mjs",
+        "tests/helpers.mjs",
+        "tests/memory-bound.test.mjs",
+        "tests/miss-synthesis.test.mjs",
+        "tests/parity-artifact.test.mjs",
+        "tests/produce-real-dtt.mjs",
+        "tests/route-cost.test.mjs",
+        "tests/sdk_compat.test.mjs",
+        "tests/serve.test.mjs",
+        "tests/serving-memory.test.mjs",
+        "tests/tile.test.mjs",
+        "tests/watermask-seams.test.mjs"
       ]
     },
     {
@@ -3023,7 +3294,7 @@
       ],
       "cxxSourceFileCount": 16,
       "cSourceFileCount": 0,
-      "testFileCount": 20,
+      "testFileCount": 19,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -3061,7 +3332,6 @@
         "tests/vectors/reference/test1_DVEGA.summary.json",
         "tests/vectors/reference/test2_EMEJ.jsonl",
         "tests/vectors/reference/test2_EMEJ.summary.json",
-        "tests/vectors/test2_EMEJ.cpp.jsonl",
         "tests/vectors/test2_EMEJ.ephem",
         "tests/vectors/test2_EMEJ.parity.txt",
         "tests/vectors/test2_EMEJ.problem"
@@ -3336,7 +3606,6 @@
       "methodIds": [
         "catalog_query",
         "ingest_omm",
-        "propagate_path",
         "propagate_state",
         "upsert_cat"
       ],
@@ -3354,7 +3623,7 @@
       ],
       "cxxSourceFileCount": 3,
       "cSourceFileCount": 1,
-      "testFileCount": 66,
+      "testFileCount": 67,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -3428,6 +3697,7 @@
         "tests/lib/pivInvokeHelper.mjs",
         "tests/manifestContract.test.mjs",
         "tests/pivInvokeContract.test.mjs",
+        "tests/sameEpochReplacement.test.mjs",
         "tests/sdk_compat.test.mjs",
         "tests/tudat_wasm_derived.test.mjs"
       ]
