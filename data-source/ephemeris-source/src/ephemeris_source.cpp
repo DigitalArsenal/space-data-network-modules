@@ -86,7 +86,10 @@ struct Context {
       require(fixtures.contains(url),"Discovery response fixture missing.");const auto& f=fixtures[url];out.status=f.value("status",200);out.headers=f.value("headers",Json::object());
       const auto text=f.value("body",std::string());out.body=f.value("body_encoding",std::string())=="base64"?base64(text):Bytes(text.begin(),text.end());
     } else {
-      const Json params={{"url",url},{"method",method},{"body",body},{"headers",headers},{"timeout_ms",requestTimeout},{"timeoutMs",requestTimeout},{"max_bytes",maxBytes},{"maxBytes",maxBytes}};
+      Json params={{"url",url},{"method",method},{"body",body},{"headers",headers},{"timeout_ms",requestTimeout},{"timeoutMs",requestTimeout},{"max_bytes",maxBytes},{"maxBytes",maxBytes}};
+#ifdef EPHEMERIS_AUTH_SUPPORT
+      params["follow_redirects"]=false;
+#endif
       auto r=call("http.request",params);require(r.value.is_object(),"Invalid HTTP capability response.");out.status=r.value.value("status",0);out.headers=r.value.value("headers",Json::object());
       const auto f=r.value.value("body",Json());
       if(f.is_object())out.body=binary(r,f);
