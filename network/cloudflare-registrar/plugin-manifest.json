@@ -1,0 +1,77 @@
+{
+  "pluginId": "com.digitalarsenal.network.cloudflare-registrar",
+  "name": "Cloudflare peer routing",
+  "version": "0.1.0",
+  "description": "Plan explicit peer-ID DNS inclusion and exclusion while preserving unmanaged records. Execution and origin verification are host responsibilities.",
+  "pluginFamily": "infrastructure",
+  "externalInterfaces": [],
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "plan",
+      "displayName": "Plan peer routes",
+      "inputPorts": [
+        {
+          "portId": "snapshot",
+          "acceptedTypeSets": [
+            {
+              "setId": "snapshot-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Authenticated operator configuration and a complete, fresh verified discovery/origin and DNS snapshot. Routing control metadata, never persisted as an SDS observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Authenticated operator configuration and a complete, fresh verified discovery/origin and DNS snapshot."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "plan",
+          "acceptedTypeSets": [
+            {
+              "setId": "plan-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Deterministic DNS actions and per-peer status; applied is always false until the host verifies execution. Routing control metadata, never persisted as an SDS observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Deterministic DNS actions and per-peer status; applied is always false until the host verifies execution."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Bounded deterministic DNS comparison and identity encoding; no workers or network access inside this planning method."
+  }
+}
