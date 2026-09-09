@@ -1,0 +1,43 @@
+{
+  "verifiedAt": "2026-09-09T15:34:29.292601+00:00",
+  "version": "0.1.1",
+  "runtimeCandidate": "88991243",
+  "runtimeRequires": "http.request response_encoding=binary; legacy response fallback remains supported",
+  "sourceRegistryCommit": "1a1caaf9c062d296cc96fd5ef0829f2c412640fa",
+  "artifacts": {
+    "dist/isomorphic/module.wasm": "534dc1b6bb273fbf83d3e6f77d93855d3992950a6ad96c5e4fd1d18a4939d69a",
+    "host-adapter/dist/isomorphic/module.wasm": "b5d93a5e7930203e74a7cd9797044d01b3d437231d4a1e87376b6f616af4e02e"
+  },
+  "checks": [
+    {
+      "log": "ephemeris-large-native-before.log",
+      "sha256": "9979b33a3627f760f15af47ba57b41e2e9603750b5cc5c944b8d4b69eb47a573",
+      "result": "FAIL: original 64 MiB guest memory trap"
+    },
+    {
+      "log": "ephemeris-large-native-scanner.log",
+      "sha256": "a3cdf934f8a155f612d3490933227c11f1d3d1d5319bde4732b0e99a31f5c5fe",
+      "result": "PASS: 16 MiB directory in 64 MiB guest; durable resume and exact source bytes"
+    },
+    {
+      "log": "ephemeris-actual-directory-native.log",
+      "sha256": "00c80d12fd9b5f0261709bdd53f568b59ef4c8c2ad17acb601c04c22ab7c01d1",
+      "result": "PASS: actual ESA directory 11069991 bytes"
+    },
+    {
+      "log": "ephemeris-reliability-focused-final.log",
+      "sha256": "08226936fb8e573660827ffc59a227804d8378ac8da7fd66a4ee017809c531c2",
+      "result": "PASS: 26 focused cases"
+    },
+    {
+      "log": "ephemeris-reliability-parity.log",
+      "sha256": "5e2f03d532899371349f97641fc34670b99c67028d394f97fbc27b2a42c16700",
+      "result": "PASS: 27 cases across browser, native and container WasmEdge; 135 byte comparisons"
+    }
+  ],
+  "liveDirectory": {
+    "url": "http://navigation-office.esa.int/products/cpf_predictions/",
+    "bytes": 11069991,
+    "sha256": "e4bc6e1d69989514d6608e7d4e416e8c392bebdf43768fe2e95fe411b5ea8f42"
+  }
+}

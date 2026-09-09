@@ -139,11 +139,32 @@ inline Json discover_public(const Json& source,int64_t epoch,const Fetch& fetch)
     for(const auto& name:matches(html,"data_content_([a-z0-9]+)\\.js"))add("https://service.eumetsat.int/tle/javascript/data_content_"+name+".js");
   } else if(id=="cpf") {
     const std::string base="http://navigation-office.esa.int/products/cpf_predictions/";
-    const auto html=fetch(base);const std::regex re("([a-z0-9]+)_cpf_([0-9]{6})_([0-9]+)\\.esa",std::regex::icase);
+    const auto html=fetch(base);
     std::map<std::string,std::tuple<std::string,uint64_t,std::string>> best;
-    for(std::sregex_iterator i(html.begin(),html.end(),re),end;i!=end;++i) {
-      const auto target=(*i)[1].str(),date=(*i)[2].str(); const auto seq=std::stoull((*i)[3].str());
-      auto& old=best[target]; if(std::make_pair(date,seq)>std::make_pair(std::get<0>(old),std::get<1>(old)))old={date,seq,(*i)[0].str()};
+    // ESA keeps years of predictions in one directory. Scan filename markers
+    // once rather than starting a backtracking regex at every HTML character.
+    auto alnum=[](char c){return (c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9');};
+    auto equal_fold=[&](size_t at,const char* token){
+      for(size_t i=0;token[i];++i)if(at+i>=html.size()||std::tolower(static_cast<unsigned char>(html[at+i]))!=token[i])return false;
+      return true;
+    };
+    for(size_t marker=0;(marker=html.find('_',marker))!=std::string::npos;++marker) {
+      if(!equal_fold(marker,"_cpf_"))continue;
+      size_t start=marker;while(start>0&&alnum(html[start-1]))--start;
+      if(start==marker)continue;
+      const size_t dateStart=marker+5, sequenceStart=dateStart+7;
+      if(sequenceStart>=html.size()||html[dateStart+6]!='_')continue;
+      bool dateValid=true;for(size_t i=dateStart;i<dateStart+6;++i)dateValid&=html[i]>='0'&&html[i]<='9';
+      if(!dateValid)continue;
+      size_t end=sequenceStart;uint64_t sequence=0;
+      while(end<html.size()&&html[end]>='0'&&html[end]<='9') {
+        const auto digit=static_cast<unsigned>(html[end]-'0');
+        require(sequence<=(UINT64_MAX-digit)/10,"CPF sequence exceeds its supported range.");
+        sequence=sequence*10+digit;++end;
+      }
+      if(end==sequenceStart||!equal_fold(end,".esa"))continue;
+      const auto target=html.substr(start,marker-start),date=html.substr(dateStart,6);
+      auto& old=best[target];if(std::make_pair(date,sequence)>std::make_pair(std::get<0>(old),std::get<1>(old)))old={date,sequence,html.substr(start,end+4-start)};
     }
     for(const auto& entry:best)add(base+std::get<2>(entry.second));
   } else {record_error("This source requires the restricted credential adapter.");return Json();}

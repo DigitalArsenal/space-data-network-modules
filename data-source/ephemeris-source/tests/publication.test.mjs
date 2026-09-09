@@ -72,3 +72,26 @@ test('unledgered legacy checkpoints fail closed without requesting or pinning ne
  const f=fixture(1);let h=await nativeFixture(f.dispatch);assert.equal(h.invoke({methodId:'pull',inputs:[]}).statusCode,0);const latest=f.stored.get('IRM').at(-1);latest.row.NOTES='legacy checkpoint without cumulative reservations';latest.bytes=repack('IRM',latest.row);const requests=f.requests.length,pins=f.files.size;
  h=await nativeFixture(f.dispatch);const result=h.invoke({methodId:'pull',inputs:[]});assert.notEqual(result.statusCode,0);assert.match(result.errorMessage,/archive ledger/);assert.equal(f.requests.length,requests);assert.equal(f.files.size,pins);
 });
+
+
+test('large HTML directory responses stay within the adapter memory without copying each body',async()=>{
+ // ESA CPF directory observed 2026-09-09: 11,069,991 bytes and 63,165 links.
+ // Exercise the full 16 MiB response budget with a deterministic listing and a
+ // latest-per-target selection that can be checked independently.
+ const prefix='<a href="lageos1_cpf_260908_1.esa">old</a>\n';
+ const suffix='<a href="lageos1_cpf_260909_2.esa">new</a>\n';
+ const html=prefix+' '.repeat(16*1024*1024-prefix.length-suffix.length)+suffix;
+ let requests=0;let ingested=0;
+ const h=await nativeFixture((op,p)=>{
+  if(op==='plugin.getConfig')return {ephemeris_enabled:true,ephemeris_source_id:'cpf',ephemeris_max_resources:1};
+  if(op==='storage.flatsql_query_stream')return {rows:0};
+  if(op==='http.request'){requests++;return {status:200,body:p.url.endsWith('/')?html:'H1 CPF 2 ESA fixture',body_encoding:'utf8',headers:{}};}
+  if(op==='ipfs.add')return {Hash:'bafy'+hash(p.content)};
+  if(op==='storage.write')return {cid:'bafy'+hash(p.data)};
+  if(op==='storage.ingest_with_source'){assert.equal(p.source_name,'cpf');assert.ok(p.source_url.endsWith('lageos1_cpf_260909_2.esa'));ingested++;return {inserted:1};}
+  throw Error(op);
+ });
+ const result=h.invoke({methodId:'pull',inputs:[]});
+ assert.equal(result.statusCode,0,result.errorMessage);
+ assert.equal(output(result,'status').status,'complete');assert.equal(requests,2);assert.equal(ingested,1);
+});

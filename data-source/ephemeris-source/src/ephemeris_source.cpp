@@ -50,10 +50,14 @@ Reply call(const std::string& op,const Json& params,const std::vector<sdm_hostca
   const auto size=sdm_host_response_len();require(size>=8 && size<=int32_t(maxEnvelope),"Host capability response exceeds bounds.");
   Bytes bytes(size);require(sdm_host_read_response(reinterpret_cast<char*>(bytes.data()),size)==size,"Incomplete host response.");sdm_host_clear_response();
   sdm_hostcall::Response envelope;require(sdm_hostcall::parse_envelope(bytes.data(),bytes.size(),&envelope),"Invalid capability envelope.");
-  const auto j=Json::parse(envelope.meta,nullptr,false);
+  // Release each large transport buffer before parsing/copying the next.
+  // The native host permits 16 MiB HTTP bodies inside a 64 MiB guest.
+  Bytes{}.swap(bytes);
+  auto j=Json::parse(envelope.meta,nullptr,false);
+  std::string{}.swap(envelope.meta);
   // Do not echo host errors: authenticated providers may include request bodies.
   require(j.is_object() && j.value("ok",false),"A required host capability failed.");
-  return {j.value("result",Json()),std::move(envelope.segments)};
+  return {j.contains("result")?std::move(j["result"]):Json(),std::move(envelope.segments)};
 #else
   record_error("Portable core requires explicit response frames; host capabilities belong to the scheduled adapter.");return {};
 #endif
@@ -95,14 +99,14 @@ struct Context {
       require(fixtures.contains(url),"Discovery response fixture missing.");const auto& f=fixtures[url];out.status=f.value("status",200);out.headers=f.value("headers",Json::object());out.header_values=f.value("header_values",Json::object());
       const auto text=f.value("body",std::string());out.body=f.value("body_encoding",std::string())=="base64"?base64(text):Bytes(text.begin(),text.end());
     } else {
-      Json params={{"url",url},{"method",method},{"body",body},{"headers",headers},{"timeout_ms",requestTimeout},{"timeoutMs",requestTimeout},{"max_bytes",maxBytes},{"maxBytes",maxBytes}};
+      Json params={{"url",url},{"method",method},{"body",body},{"headers",headers},{"timeout_ms",requestTimeout},{"timeoutMs",requestTimeout},{"max_bytes",maxBytes},{"maxBytes",maxBytes},{"response_encoding","binary"}};
 #ifdef EPHEMERIS_AUTH_SUPPORT
       params["follow_redirects"]=false;
 #endif
       auto r=call("http.request",params);require(r.value.is_object(),"Invalid HTTP capability response.");out.status=r.value.value("status",0);out.headers=r.value.value("headers",Json::object());out.header_values=r.value.value("header_values",Json::object());
-      const auto f=r.value.value("body",Json());
+      const auto& f=r.value["body"];
       if(f.is_object())out.body=binary(r,f);
-      else if(f.is_string()){const auto text=f.get<std::string>();out.body=r.value.value("body_encoding",std::string())=="base64"?base64(text):Bytes(text.begin(),text.end());}
+      else if(f.is_string()){const auto& text=f.get_ref<const std::string&>();out.body=r.value.value("body_encoding",std::string())=="base64"?base64(text):Bytes(text.begin(),text.end());}
     }
     require(out.body.size()<=maxBytes,"HTTP response exceeds the byte budget; no truncated artifact is accepted.");return out;
   }

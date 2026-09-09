@@ -55,3 +55,17 @@ All host calls use the SDK binary envelope. Expected validation, HTTP and storag
 `SDN_RUN_EPHEMERIS_PARITY=1 node --test tests/parity.test.mjs` runs real Chrome, native WasmEdge and container WasmEdge on the same portable artifact. `node tests/live.mjs` performs bounded real public HTTP acquisition through the shipped WASM, using isolated IPFS/storage fixtures; its report is not live SDN publication evidence. `SOURCE_IDS=css-tiangong node tests/live.mjs` limits a probe. Native integration fixtures prove exact byte hashes, attribution and queue recovery after ingestion failure, including failure before the first file.
 
 The September 2026 sampled Starlink run discovered 11,134 files and fetched a 2,041,024-byte sample. Multiplication gives about 22.7 GB (21.2 GiB), an estimate rather than a full-queue measurement. Pinned files are not bounded by a Kubo garbage-collection target. The default 1 GiB archive budget intentionally cannot finish this estimated Starlink edition; an explicit 32 GiB budget permits the initial edition but will eventually pause future refreshes. Reservations bound cumulative queue/raw pins, not host metadata or other applications using the same IPFS store. Operators must provide disk reserve; this package does not automatically remove prior editions.
+
+
+### Large provider directories (0.1.1)
+
+The scheduled adapter requests exact binary HTTP response segments when the host
+supports `response_encoding: "binary"`; legacy string responses remain accepted.
+The binary path avoids expanding source bytes into JSON or base64 copies. The
+ESA CPF directory scanner selects the newest date and numeric sequence per target
+in one pass, without a regex backtracking over the complete directory. Response,
+archive and resource limits remain unchanged. The native regression covers a
+16 MiB listing inside SDN's 64 MiB guest ceiling and the actual ESA directory.
+See `tests/reliability-verification.json` for exact candidate hashes and parity
+results. A server without the binary response option may still exceed its guest
+memory ceiling on very large listings; update the runtime before this rollout.

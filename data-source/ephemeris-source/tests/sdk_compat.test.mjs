@@ -20,3 +20,15 @@ test('rejects a foreign source origin without emitting a descriptor',async()=>{
  const h=await createBrowserModuleHarness({wasmSource:wasm,manifest,surface:'direct'});
  try {const rejected=await h.invoke({methodId:'describe_artifact',inputs:[input('resource',{source_id:'iss',url:'https://foreign.example/file',format:'ccsds-oem-kvn'}),input('receipt',{cid:'testcid'}),input('body',Buffer.from('CCSDS_OEM_VERS = 2.0'))]});assert.notEqual(rejected.statusCode,0);assert.equal(rejected.outputs.length,0);const next=await h.invoke({methodId:'describe_sources',inputs:[]});assert.equal(next.statusCode,0);}finally{await h.destroy();}
 });
+
+test('CPF selection compares date then numeric sequence, ignores malformed names, and recovers from overflow',async()=>{
+ const h=await createBrowserModuleHarness({wasmSource:wasm,manifest,surface:'direct'});
+ const invoke=body=>h.invoke({methodId:'discover_sources',inputs:[input('config',{source_id:'cpf',epoch_seconds:fixtures.epoch_seconds}),input('responses',{'http://navigation-office.esa.int/products/cpf_predictions/':{status:200,body}})]});
+ try {
+  const body=['lageos1_cpf_260908_99.esa','lageos1_cpf_260909_2.esa','lageos1_cpf_260909_10.esa','lageos1_cpf_260909_9.esa','starlette_CPF_260909_1.ESA','broken_cpf_26090_4.esa','broken_cpf_260909_.esa','broken_cpf_26x909_4.esa'].map(name=>`<a href="${name}">${name}</a>`).join('\n');
+  let r=await invoke(body);assert.equal(r.statusCode,0,r.errorMessage);
+  assert.deepEqual(output(r,'resources').map(x=>x.url.split('/').at(-1)),['lageos1_cpf_260909_10.esa','starlette_CPF_260909_1.ESA']);
+  r=await invoke('lageos1_cpf_260909_18446744073709551616.esa');assert.notEqual(r.statusCode,0);assert.match(r.errorMessage,/sequence/);
+  r=await invoke(body);assert.equal(r.statusCode,0,r.errorMessage);
+ }finally{await h.destroy();}
+});
