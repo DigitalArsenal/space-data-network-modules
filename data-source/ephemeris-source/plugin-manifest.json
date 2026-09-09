@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.ephemeris-source",
   "name": "Ephemeris Source Retriever",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Portable C++ ephemeris discovery and raw source descriptor processing. Network replies are explicit frames; scheduled acquisition uses the companion host adapter.",
   "pluginFamily": "data_source",
   "capabilities": [],

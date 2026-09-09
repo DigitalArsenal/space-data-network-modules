@@ -195,7 +195,7 @@ Bytes object_coverage(const Json& item, const Bytes& raw) {
   while(at<input.size()) {
     const auto end=input.find('\n',at);const auto line=trim_value(input.substr(at,end==std::string::npos?std::string::npos:end-at));at=end==std::string::npos?input.size():end+1;
     if(line=="META_START"){metadata=true;id.clear();name.clear();continue;}
-    if(line=="META_STOP"){if(metadata&&valid(id))objects[id]=name;metadata=false;continue;}
+    if(line=="META_STOP"){if(id.size()>8 && id[8]=='-')id.erase(8,1);if(metadata&&valid(id))objects[id]=name;metadata=false;continue;}
     if(!metadata)continue;
     const auto equals=line.find('=');if(equals==std::string::npos)continue;
     const auto key=trim_value(line.substr(0,equals)),value=trim_value(line.substr(equals+1));
@@ -325,3 +325,29 @@ extern "C" int pull(){return ephemeris::guarded(ephemeris::execute_pull);}
 #endif
 
 extern "C" int describe_coverage(){return ephemeris::guarded([]()->int{using namespace ephemeris;const auto item=input("resource");const auto* body=frame("body");require(body,"Raw source bytes are required.");const Bytes bytes(body->payload,body->payload+body->payload_length);require(validate_raw(item,bytes),"Invalid source bytes.");const auto coverage=object_coverage(item,bytes);if(coverage.empty())return 0;return emit_record("catalog","CAT.fbs","$CAT","CAT",coverage)<0?1:0;});}
+
+#ifdef EPHEMERIS_HOST_ADAPTER
+extern "C" int backfill_coverage(){return ephemeris::guarded([]()->int{using namespace ephemeris;
+  auto options=input("request");if(options.is_null())options=Json::object();require(options.is_object(),"Coverage page options must be an object.");const auto host=configured_options();
+  const auto sourceId=options.value("source_id",host.value("ephemeris_source_id",std::string()));source_for(sourceId);require(!has_error() && !sourceId.empty(),"Source configuration required.");
+#ifdef EPHEMERIS_FIXED_SOURCE_ID
+  require(sourceId==EPHEMERIS_FIXED_SOURCE_ID,"This artifact only serves its compiled provider.");
+#endif
+  require(sourceId.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789-")==std::string::npos,"Invalid source ID.");
+  const int offset=options.value("offset",0),limit=options.value("limit",4);require(offset>=0 && offset<=100000 && limit>=1 && limit<=4,"Invalid coverage page.");
+  const auto query=call("storage.flatsql_query_stream",{{"sql","SELECT _data FROM \"NCD@"+sourceId+"\" ORDER BY _rowid ASC LIMIT ? OFFSET ?"},{"params",Json::array({{{"t","i64"},{"v",limit}},{{"t","i64"},{"v",offset}}})}});
+  require(query.value.is_object(),"Invalid descriptor query.");const auto count=query.value.value("rows",0);if(!count)return emit_json("status",{{"scanned",0},{"next_offset",offset},{"complete",true}})<0?1:0;
+  const auto stream=binary(query,query.value.at("stream"));size_t at=0;int supported=0;uint64_t processedBytes=0;
+  while(at<stream.size()) {
+    require(at+4<=stream.size(),"Truncated descriptor frame.");const auto size=flatbuffers::ReadScalar<uint32_t>(stream.data()+at);require(size>=8 && size+4<=stream.size()-at,"Invalid descriptor frame.");
+    flatbuffers::Verifier verifier(stream.data()+at,size+4);require(VerifySizePrefixedNCDBuffer(verifier),"Invalid NCD.");const auto* ncd=GetSizePrefixedNCD(stream.data()+at);at+=size+4;
+    if(ncd->FORMAT()!=ncdContainerFormat_CCSDS_OEM_KVN)continue;
+    require(ncd->SOURCE_CID() && ncd->SOURCE_SHA256(),"Descriptor lacks immutable source binding.");require(ncd->SOURCE_BYTE_LENGTH()<=hardMaxBytes && processedBytes+ncd->SOURCE_BYTE_LENGTH()<=64*1024*1024,"Coverage page exceeds its byte budget.");processedBytes+=ncd->SOURCE_BYTE_LENGTH();const auto cid=ncd->SOURCE_CID()->str(),hash=ncd->SOURCE_SHA256()->str();const auto raw=ipfs_cat(cid);require(digest(raw)==hash && raw.size()==ncd->SOURCE_BYTE_LENGTH(),"Archived source does not match its descriptor.");
+    const auto coverage=object_coverage({{"format","ccsds-oem-kvn"}},raw);if(coverage.empty())continue;
+    const auto provenance=Json{{"source_id",sourceId},{"source_cid",cid},{"source_sha256",hash},{"parser_version","primary-object-coverage/0.1.3"}}.dump();
+    const auto result=call("storage.ingest_with_source",{{"schema","CAT.fbs"},{"provider_id","ephemeris-provider:"+sourceId},{"source_name",sourceId},{"source_url","ipfs://"+cid},{"batch_id",hash},{"reconcile","duplicates"},{"records",{{"$bin",0}}},{"provenance",{{"source",sourceId},{"json",{{"$bin",1}}}}}},{{coverage.data(),coverage.size()},{reinterpret_cast<const uint8_t*>(provenance.data()),provenance.size()}});
+    require(result.value.is_object() && result.value.contains("inserted"),"Coverage was not stored.");++supported;
+  }
+  return emit_json("status",{{"scanned",count},{"supported_containers",supported},{"next_offset",offset+count},{"complete",count<limit}})<0?1:0;
+});}
+#endif

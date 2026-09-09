@@ -63,3 +63,20 @@ The editor configures orbital-state priorities; it does not yet fetch candidate
 orbit records. The source adapter must provide native identifiers before an
 unnumbered, undesignated CAT can be composed. Full datastore FTS, provider
 ingestion and operational placement remain in [PLAN.md](PLAN.md).
+
+### Primary-source coverage and identity
+
+Editor recipes use version 2 and international designators from CAT `OBJECT_ID`
+for matching. A numeric catalog identifier cannot merge objects. Entries without
+an international designator remain separate and are excluded from authoritative
+CAT export. Legacy recipes require review of their former object overrides.
+
+Orbital providers are discovered from their published orbital datasets. To be
+selectable, a provider publishes a CAT membership catalog under the same node,
+provider and source identity. The editor loads that complete immutable catalog,
+records its publication head, and compares membership by international
+designator. Selecting overlapping sources highlights their shared objects;
+**Review overlaps** filters the object list, and each object's editor selects
+its orbital source independently. Global maximum state age has been removed.
+Providers without published membership remain visible as unavailable coverage;
+no other provider's catalog is silently used to infer their coverage.

@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.ephemeris-source-host",
   "name": "Ephemeris Scheduled Publication Adapter",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Bounded raw source acquisition into immutable IPFS files and attributed canonical NCD records; durable IRM continuation. Existing SDN source publisher independently signs and distributes NCD datasets.",
   "pluginFamily": "data_source",
   "capabilities": [
@@ -238,6 +238,58 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "backfill_coverage",
+      "displayName": "Publish coverage from archived source files",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "required": false,
+          "minStreams": 0,
+          "maxStreams": 1,
+          "acceptedTypeSets": [
+            {
+              "setId": "timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Bounded archive page offset and limit only; no data records or credentials."
+              }
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "status",
+          "required": false,
+          "minStreams": 0,
+          "maxStreams": 1,
+          "acceptedTypeSets": [
+            {
+              "setId": "retrieval-status",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Bounded retrieval progress only; never a normalized data record."
+              }
+            }
+          ]
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
   ],
   "schemasUsed": [
@@ -250,6 +302,11 @@
       "schemaName": "IRM.fbs",
       "fileIdentifier": "$IRM",
       "rootTypeName": "IRM"
+    },
+    {
+      "schemaName": "CAT.fbs",
+      "fileIdentifier": "$CAT",
+      "rootTypeName": "CAT"
     }
   ],
   "timers": [
