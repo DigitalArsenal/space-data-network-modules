@@ -285,9 +285,10 @@
   },
   "artifact_sha256": {
     "dist/isomorphic/module.wasm": "330a94d79515248ee5ba0358c2ec35920f3854db6dc196d20e13fe0bfaa28ccb",
-    "host-adapter/dist/isomorphic/module.wasm": "385e661b72e2bdc08597ea704cabb6e9cc65658c83dd4eb2bb0efeb0859000eb"
+    "host-adapter/dist/isomorphic/module.wasm": "f08188c9480dd7a4a6be6405aeb5c5f9552b9f8c08bc967170b0f74ae3cd217a"
   },
   "real_sdn_publication": "Separate parent-owned real HostBridge/source-publisher integration gate; isolated fixture receipts are not evidence of network publication.",
-  "focused_tests": 20,
-  "real_sdn_capabilities": "Parent confirmed isolated native SDN HostBridge HTTP/IPFS/storage, exact NCD raw CID/hash/length, distinct resource URL/hash batch attribution and durable resume; standalone configure/recovery recheck pending."
+  "focused_tests": 24,
+  "real_sdn_capabilities": "Parent confirmed isolated native SDN HostBridge HTTP/IPFS/storage, exact NCD raw CID/hash/length, distinct resource URL/hash batch attribution and durable resume; standalone configure/recovery recheck pending.",
+  "archive_budget_tests": "Durable reservation before queue/raw pin; restart after queue pin failure; no pin or cursor advance at budget; cumulative failed-ingest and refreshed-edition charge; legacy unledgered mark refusal."
 }

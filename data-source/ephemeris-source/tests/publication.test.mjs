@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';import test from 'node:test';import {createHash} from 'node:crypto';import {createRequire} from 'node:module';import {pathToFileURL} from 'node:url';import path from 'node:path';
 import {nativeFixture,output,input} from './harness.mjs';
-const require=createRequire(import.meta.url),sds=path.dirname(require.resolve('spacedatastandards.org/package.json'));const {ByteBuffer}=require('flatbuffers');
+const require=createRequire(import.meta.url),sds=path.dirname(require.resolve('spacedatastandards.org/package.json'));const {ByteBuffer,Builder}=require('flatbuffers');
 const classes={};for(const code of ['NCD','IRM'])classes[code]=(await import(pathToFileURL(path.join(sds,'lib/js',code,'main.js'))))[code];
 const record=(code,bytes)=>classes[code]['getSizePrefixedRootAs'+code](new ByteBuffer(bytes)).unpack();
 const hash=x=>createHash('sha256').update(x).digest('hex');
+const repack=(code,row)=>{const b=new Builder(1024);b.finishSizePrefixed(row.pack(b),'$'+code);return Buffer.from(b.asUint8Array());};
+const reserved=f=>JSON.parse(f.stored.get('IRM').at(-1).row.NOTES).archive_reserved_bytes;
 function fixture(count=5) {
  const files=new Map(),stored=new Map(),calls=[],requests=[];let failAt='',httpStatus=200,configuration={ephemeris_enabled:true,ephemeris_source_id:'spacex-starlink',ephemeris_max_resources:2};
  const manifest=Array.from({length:count},(_,i)=>`STARLINK-${i}.txt`).join('\n');
@@ -49,4 +51,24 @@ test('configure restores safe runtime inputs without fetching, then standalone c
  assert.equal(output(h.invoke({methodId:'pull',inputs:[]}),'status').completed,2);
  const reloaded=await nativeFixture(f.dispatch);assert.equal(reloaded.invoke({methodId:'configure',inputs:[input('request',options)]}).statusCode,0);assert.equal(output(reloaded.invoke({methodId:'pull',inputs:[]}),'status').remaining,0);
  const rejected=reloaded.invoke({methodId:'configure',inputs:[input('request',{...options,password:'never-persist-this-fixture'})]});assert.notEqual(rejected.statusCode,0);assert.ok(!rejected.errorMessage.includes('never-persist'));assert.equal(output(reloaded.invoke({methodId:'pull',inputs:[]}),'status').status,'waiting-refresh');
+});
+
+test('archive reservations survive a crash before queue pin and conservatively charge retries',async()=>{
+ const f=fixture(2);f.setFailure('ipfs.add');let h=await nativeFixture(f.dispatch);const failed=h.invoke({methodId:'pull',inputs:[]});assert.notEqual(failed.statusCode,0);assert.equal(f.files.size,0);const initial=reserved(f);assert.ok(initial>0);assert.equal(f.stored.get('IRM').at(-1).row.NEXT_CHUNK_INDEX,0);assert.equal(f.stored.get('IRM').at(-1).row.SOURCE.SOURCE_CID,null);
+ f.setFailure('');h=await nativeFixture(f.dispatch);assert.equal(h.invoke({methodId:'pull',inputs:[]}).statusCode,0);assert.ok(reserved(f)>2*initial);assert.equal(f.stored.get('IRM').at(-1).row.NEXT_CHUNK_INDEX,2);
+});
+test('raw budget stops before pin and never advances an uncommitted resource across restart',async()=>{
+ const f=fixture(2);f.setConfig({ephemeris_enabled:true,ephemeris_source_id:'spacex-starlink',ephemeris_max_resources:2,ephemeris_archive_max_bytes:1024});
+ const dispatch=(op,p)=>op==='http.request'&&!p.url.endsWith('MANIFEST.txt')?{status:200,body:'MEME '+ 'x'.repeat(1024),headers:{}}:f.dispatch(op,p);
+ let h=await nativeFixture(dispatch),result=h.invoke({methodId:'pull',inputs:[]});assert.equal(result.statusCode,0,result.errorMessage);assert.equal(output(result,'status').status,'archive-budget-reached');const budget=reserved(f);assert.equal(f.files.size,1);assert.equal(f.stored.has('NCD'),false);assert.equal(f.stored.get('IRM').at(-1).row.NEXT_CHUNK_INDEX,0);
+ h=await nativeFixture(dispatch);result=h.invoke({methodId:'pull',inputs:[]});assert.equal(output(result,'status').remaining,2);assert.equal(reserved(f),budget);assert.equal(f.files.size,1);
+});
+test('archive reservation is cumulative across refreshes and pins that precede failed ingestion',async()=>{
+ const f=fixture(1);let h=await nativeFixture(f.dispatch);f.setFailure('storage.ingest_with_source');assert.notEqual(h.invoke({methodId:'pull',inputs:[]}).statusCode,0);const failedCharge=reserved(f);assert.equal(f.files.size,2);
+ f.setFailure('');h=await nativeFixture(f.dispatch);assert.equal(h.invoke({methodId:'pull',inputs:[]}).statusCode,0);assert.ok(reserved(f)>failedCharge);const prior=reserved(f),latest=f.stored.get('IRM').at(-1);latest.row.UPDATED_AT='2000-01-01T00:00:00.000Z';latest.bytes=repack('IRM',latest.row);
+ h=await nativeFixture(f.dispatch);assert.equal(h.invoke({methodId:'pull',inputs:[]}).statusCode,0);assert.ok(reserved(f)>prior);assert.equal(f.requests.filter(x=>x.endsWith('MANIFEST.txt')).length,2);
+});
+test('unledgered legacy checkpoints fail closed without requesting or pinning new files',async()=>{
+ const f=fixture(1);let h=await nativeFixture(f.dispatch);assert.equal(h.invoke({methodId:'pull',inputs:[]}).statusCode,0);const latest=f.stored.get('IRM').at(-1);latest.row.NOTES='legacy checkpoint without cumulative reservations';latest.bytes=repack('IRM',latest.row);const requests=f.requests.length,pins=f.files.size;
+ h=await nativeFixture(f.dispatch);const result=h.invoke({methodId:'pull',inputs:[]});assert.notEqual(result.statusCode,0);assert.match(result.errorMessage,/archive ledger/);assert.equal(f.requests.length,requests);assert.equal(f.files.size,pins);
 });

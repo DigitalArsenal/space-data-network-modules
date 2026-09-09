@@ -178,24 +178,41 @@ Bytes descriptor(const Json& item,const Bytes& raw,const std::string& cid) {
   b.FinishSizePrefixed(record.Finish(),"$NCD");return finish(b);
 }
 #ifdef EPHEMERIS_HOST_ADAPTER
-struct Resume {uint64_t sequence=0,bytes=0;uint32_t next=0;std::string queueCid;bool complete=false;std::string updated;};
+struct Resume {uint64_t sequence=0,bytes=0,reserved=0,lastBytes=0;uint32_t next=0;std::string queueCid;bool complete=false;std::string updated,lastHash,lastStamp;};
 Resume restore(const std::string& job) {
   const auto r=call("storage.flatsql_query_stream",{{"sql","SELECT _data FROM IRM WHERE JOB_ID = ? ORDER BY SEQUENCE DESC LIMIT 1"},{"params",Json::array({{{"t","str"},{"v",job}}})}});
   require(r.value.is_object(),"Invalid resume query result.");if(r.value.value("rows",0)==0)return {};
   const auto bytes=binary(r,r.value.at("stream"));flatbuffers::Verifier verifier(bytes.data(),bytes.size());require(VerifySizePrefixedIRMBuffer(verifier),"Invalid durable resume record.");
-  const auto* mark=GetSizePrefixedIRM(bytes.data());require(mark->JOB_ID() && mark->JOB_ID()->str()==job && mark->SOURCE() && mark->SOURCE()->SOURCE_CID() && mark->UPDATED_AT(),"Resume mark identity mismatch.");
+  const auto* mark=GetSizePrefixedIRM(bytes.data());require(mark->JOB_ID() && mark->JOB_ID()->str()==job && mark->SOURCE() && mark->UPDATED_AT(),"Resume mark identity mismatch.");
   require(mark->RANGE_MODE()==irmRangeMode_PART_INDEX,"Resume mark has incompatible addressing.");
-  return {mark->SEQUENCE(),mark->BYTES_COMMITTED(),mark->NEXT_CHUNK_INDEX(),mark->SOURCE()->SOURCE_CID()->str(),mark->STATE()==irmJobState_COMPLETE,mark->UPDATED_AT()->str()};
+  require(mark->NOTES(),"Legacy resume mark has no durable archive ledger; operator migration is required.");
+  const auto notes=Json::parse(mark->NOTES()->str(),nullptr,false);require(notes.is_object() && notes.value("archive_ledger_version",0)==1 && notes.contains("archive_reserved_bytes") && notes["archive_reserved_bytes"].is_number_unsigned(),"Legacy or invalid archive ledger; operator migration is required.");
+  Resume out;out.sequence=mark->SEQUENCE();out.bytes=mark->BYTES_COMMITTED();out.reserved=notes["archive_reserved_bytes"].get<uint64_t>();out.next=mark->NEXT_CHUNK_INDEX();out.complete=mark->STATE()==irmJobState_COMPLETE;out.updated=mark->UPDATED_AT()->str();
+  if(mark->SOURCE()->SOURCE_CID())out.queueCid=mark->SOURCE()->SOURCE_CID()->str();require(!out.queueCid.empty() || (!out.next && !out.complete),"Committed resume position has no pinned queue.");
+  if(out.next){const auto* chunk=mark->LAST_CHUNK();require(chunk && chunk->CHUNK_SHA256() && chunk->COMMITTED_AT(),"Committed resume position has no chunk receipt.");out.lastHash=chunk->CHUNK_SHA256()->str();out.lastBytes=chunk->BYTE_LENGTH();out.lastStamp=chunk->COMMITTED_AT()->str();}
+  return out;
 }
-Bytes checkpoint(const Context& ctx,const Resume& resume,const std::string& job,size_t total,const std::string& rawHash,size_t rawBytes,const std::string& stamp) {
-  flatbuffers::FlatBufferBuilder b(2048);auto cid=b.CreateString(resume.queueCid),locator=b.CreateString("ipfs://"+resume.queueCid),object=b.CreateString(ctx.source["source_id"].get<std::string>());
-  IRMSourceBuilder source(b);source.add_SOURCE_URL(locator);source.add_SOURCE_CID(cid);source.add_SOURCE_OBJECT_ID(object);source.add_VALIDATOR_MATCH(irmValidatorMatch_MATCHED);const auto src=source.Finish();
-  const auto batch=b.CreateString(rawHash),time=b.CreateString(stamp);IRMChunkBuilder chunk(b);chunk.add_CHUNK_INDEX(resume.next?resume.next-1:0);chunk.add_BATCH_ID(batch);chunk.add_BYTE_LENGTH(rawBytes);chunk.add_CHUNK_SHA256(batch);chunk.add_RECORDS_DECODED(1);chunk.add_RECORDS_STORED(1);chunk.add_ATTEMPTS(1);chunk.add_COMMITTED_AT(time);const auto part=chunk.Finish();
-  const auto name=b.CreateString(job),ingestor=b.CreateString(moduleId),standard=b.CreateString("$NCD"),reconcile=b.CreateString("append"),merge=b.CreateString("content-sha256"),note=b.CreateString("PART_INDEX enumerates the immutable credential-free resource index. Next part advances only after raw file and attributed NCD are durable. SDN source publication retries independently.");
-  IRMBuilder mark(b);mark.add_JOB_ID(name);mark.add_SEQUENCE(resume.sequence);mark.add_PROVIDER_ID(object);mark.add_INGESTOR_ID(ingestor);mark.add_SOURCE(src);mark.add_STATE(resume.next==total?irmJobState_COMPLETE:irmJobState_IN_PROGRESS);mark.add_RANGE_MODE(irmRangeMode_PART_INDEX);mark.add_NEXT_CHUNK_INDEX(resume.next);mark.add_CHUNK_BYTE_BUDGET(ctx.maxBytes);if(resume.next)mark.add_LAST_CHUNK(part);mark.add_CHUNKS_COMMITTED(resume.next);mark.add_BYTES_COMMITTED(resume.bytes);mark.add_RECORDS_COMMITTED(resume.next);mark.add_TARGET_STANDARD(standard);mark.add_RECONCILE_MODE(reconcile);mark.add_MERGE_POLICY(merge);mark.add_UPDATED_AT(time);mark.add_NOTES(note);if(resume.next==total)mark.add_COMPLETED_AT(time);
+Bytes checkpoint(const Context& ctx,const Resume& resume,const std::string& job,const std::string& stamp) {
+  flatbuffers::FlatBufferBuilder b(2048);auto cid=b.CreateString(resume.queueCid),locator=b.CreateString(resume.queueCid.empty()?ctx.source["origins"][0].get<std::string>():"ipfs://"+resume.queueCid),object=b.CreateString(ctx.source["source_id"].get<std::string>());
+  IRMSourceBuilder source(b);source.add_SOURCE_URL(locator);if(!resume.queueCid.empty())source.add_SOURCE_CID(cid);source.add_SOURCE_OBJECT_ID(object);source.add_VALIDATOR_MATCH(resume.queueCid.empty()?irmValidatorMatch_UNVERIFIABLE:irmValidatorMatch_MATCHED);const auto src=source.Finish();
+  const auto batch=b.CreateString(resume.lastHash),time=b.CreateString(stamp),committed=b.CreateString(resume.lastStamp);IRMChunkBuilder chunk(b);chunk.add_CHUNK_INDEX(resume.next?resume.next-1:0);chunk.add_BATCH_ID(batch);chunk.add_BYTE_LENGTH(resume.lastBytes);chunk.add_CHUNK_SHA256(batch);chunk.add_RECORDS_DECODED(1);chunk.add_RECORDS_STORED(1);chunk.add_ATTEMPTS(1);chunk.add_COMMITTED_AT(committed);const auto part=chunk.Finish();
+  const auto name=b.CreateString(job),ingestor=b.CreateString(moduleId),standard=b.CreateString("$NCD"),reconcile=b.CreateString("append"),merge=b.CreateString("content-sha256"),note=b.CreateString(Json{{"archive_ledger_version",1},{"archive_reserved_bytes",resume.reserved},{"note","Archive reservation is cumulative and conservative; the source cursor advances only after raw pin and attributed NCD ingestion. SDN source publication retries independently."}}.dump());
+  IRMBuilder mark(b);mark.add_JOB_ID(name);mark.add_SEQUENCE(resume.sequence);mark.add_PROVIDER_ID(object);mark.add_INGESTOR_ID(ingestor);mark.add_SOURCE(src);mark.add_STATE(resume.complete?irmJobState_COMPLETE:irmJobState_IN_PROGRESS);mark.add_RANGE_MODE(irmRangeMode_PART_INDEX);mark.add_NEXT_CHUNK_INDEX(resume.next);mark.add_CHUNK_BYTE_BUDGET(ctx.maxBytes);if(resume.next)mark.add_LAST_CHUNK(part);mark.add_CHUNKS_COMMITTED(resume.next);mark.add_BYTES_COMMITTED(resume.bytes);mark.add_RECORDS_COMMITTED(resume.next);mark.add_TARGET_STANDARD(standard);mark.add_RECONCILE_MODE(reconcile);mark.add_MERGE_POLICY(merge);mark.add_UPDATED_AT(time);mark.add_NOTES(note);if(resume.complete)mark.add_COMPLETED_AT(time);
   b.FinishSizePrefixed(mark.Finish(),"$IRM");return finish(b);
 }
-const std::set<std::string>& option_names(){static const std::set<std::string> names={"ephemeris_enabled","ephemeris_source_id","ephemeris_max_resources","ephemeris_max_bytes","ephemeris_timeout_ms","ephemeris_max_runtime_ms","ephemeris_refresh_interval_sec","ephemeris_secret_id","ephemeris_spire_paths"};return names;}
+const std::set<std::string>& option_names(){static const std::set<std::string> names={"ephemeris_enabled","ephemeris_source_id","ephemeris_max_resources","ephemeris_max_bytes","ephemeris_timeout_ms","ephemeris_max_runtime_ms","ephemeris_refresh_interval_sec","ephemeris_archive_max_bytes","ephemeris_secret_id","ephemeris_spire_paths"};return names;}
+uint64_t archive_limit(const Json& config){
+  constexpr uint64_t maximum=32ULL*1024*1024*1024;
+  if(!config.contains("ephemeris_archive_max_bytes"))return 1024ULL*1024*1024;
+  const auto& value=config["ephemeris_archive_max_bytes"];require(value.is_number_integer(),"Archive budget must be an integer byte count.");const auto n=value.get<int64_t>();require(n>=1024 && uint64_t(n)<=maximum,"Archive budget must be between 1024 bytes and 32 GiB.");return uint64_t(n);
+}
+bool reserve_archive(const Context& ctx,Resume& resume,const std::string& job,uint64_t bytes,uint64_t limit){
+  if(resume.reserved>limit || bytes>limit-resume.reserved)return false;
+  resume.reserved+=bytes;++resume.sequence;return store("IRM.fbs",checkpoint(ctx,resume,job,iso(now())));
+}
+int budget_status(const std::string& sourceId,const Resume& resume,uint64_t limit,size_t total){
+  Json status={{"source_id",sourceId},{"status","archive-budget-reached"},{"archive_reserved_bytes",resume.reserved},{"archive_max_bytes",limit},{"completed",resume.next},{"normalized_records",0}};if(total){status["total"]=total;status["remaining"]=total-resume.next;}return emit_json("status",status)<0?1:0;
+}
 Json& configured_options(){static Json value=Json::object();return value;}
 Json validate_options(const Json& value){
   require(value.is_object(),"Retriever configuration must be an object.");
@@ -208,6 +225,7 @@ Json validate_options(const Json& value){
   }
   if(value.value("ephemeris_enabled",false))require(value.contains("ephemeris_source_id"),"Enabled retrieval requires a source_id.");
   bounded_config(value,"ephemeris_max_resources",4,1,64);bounded_config(value,"ephemeris_max_bytes",16*1024*1024,1024,hardMaxBytes);bounded_config(value,"ephemeris_timeout_ms",15000,1000,30000);bounded_config(value,"ephemeris_max_runtime_ms",90000,1000,300000);bounded_config(value,"ephemeris_refresh_interval_sec",86400,3600,604800);
+  archive_limit(value);
   if(value.contains("ephemeris_secret_id")){require(value["ephemeris_secret_id"].is_string(),"A secret lane ID must be a string.");const auto lane=value["ephemeris_secret_id"].get<std::string>();require(lane.size()>=2 && lane.size()<=64 && lane.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_-")==std::string::npos,"Invalid secret lane identifier.");}
   if(value.contains("ephemeris_spire_paths")){const auto& paths=value["ephemeris_spire_paths"];require(paths.is_array() && !paths.empty() && paths.size()<=16,"Spire paths must be a bounded nonempty array.");for(const auto& path:paths){require(path.is_string(),"Spire paths must be strings.");const auto text=path.get<std::string>();require(text.size()<=128 && !text.empty() && text[0]=='/' && text.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-/")==std::string::npos && text.find("//")==std::string::npos,"Spire paths must be safe absolute API paths without query parameters.");}}
   require(!has_error(),"Invalid retriever configuration.");return value;
@@ -228,28 +246,33 @@ int execute_pull() {
   if(!authenticated_ready(ctx))return emit_json("status",{{"source_id",sourceId},{"status","credential-unavailable"},{"normalized_records",0}})<0?1:0;
 #endif
   const int cap=bounded_config(host,"ephemeris_max_resources",4,1,64),wall=bounded_config(host,"ephemeris_max_runtime_ms",90000,1000,300000);
-  const auto started=std::chrono::steady_clock::now();const auto job=std::string(moduleId)+":"+sourceId;auto resume=restore(job);Json queue;
+  const auto started=std::chrono::steady_clock::now();const auto job=std::string(moduleId)+":"+sourceId;auto resume=restore(job);require(!has_error(),"Could not restore source state.");const auto archiveMax=archive_limit(host);Json queue;
+  if(resume.reserved>=archiveMax && (resume.complete || resume.queueCid.empty()))return budget_status(sourceId,resume,archiveMax,resume.complete?resume.next:0);
   const auto refresh=bounded_config(host,"ephemeris_refresh_interval_sec",ctx.source["refresh_interval_sec"].get<int>(),3600,604800);
   if(resume.complete && resume.updated>iso(ctx.epoch-refresh))return emit_json("status",{{"source_id",sourceId},{"status","waiting-refresh"},{"completed",resume.next},{"normalized_records",0}})<0?1:0;
   if(!resume.queueCid.empty() && !resume.complete) {
     const auto bytes=ipfs_cat(resume.queueCid);const auto envelope=Json::parse(bytes,nullptr,false);require(envelope.is_object() && envelope.contains("resources"),"Invalid pinned discovery envelope.");queue=envelope["resources"];require(queue.is_array() && !queue.empty() && queue.size()<=100000,"Invalid pinned discovery queue.");
   } else {
-    queue=discover(ctx);require(queue.is_array() && !queue.empty() && queue.size()<=100000,"Discovery must return a bounded nonempty source queue.");const auto text=Json{{"discovered_at",iso(ctx.epoch)},{"resources",queue}}.dump();resume.queueCid=ipfs_add(Bytes(text.begin(),text.end()));resume.next=0;resume.bytes=0;resume.complete=false;++resume.sequence;store("IRM.fbs",checkpoint(ctx,resume,job,queue.size(),"",0,iso(ctx.epoch)));
+    queue=discover(ctx);require(queue.is_array() && !queue.empty() && queue.size()<=100000,"Discovery must return a bounded nonempty source queue.");const auto text=Json{{"discovered_at",iso(ctx.epoch)},{"resources",queue}}.dump();require(text.size()<=hardMaxBytes,"Discovery queue exceeds its byte budget.");
+    resume.queueCid.clear();resume.next=0;resume.bytes=0;resume.complete=false;resume.lastHash.clear();resume.lastStamp.clear();resume.lastBytes=0;
+    if(!reserve_archive(ctx,resume,job,text.size(),archiveMax))return budget_status(sourceId,resume,archiveMax,queue.size());
+    resume.queueCid=ipfs_add(Bytes(text.begin(),text.end()));require(!has_error(),"Could not pin discovery queue.");++resume.sequence;store("IRM.fbs",checkpoint(ctx,resume,job,iso(ctx.epoch)));
   }
-  require(resume.next<=queue.size(),"Resume position exceeds the resource index.");int fetched=0;
+  require(resume.next<=queue.size(),"Resume position exceeds the resource index.");if(resume.reserved>=archiveMax)return budget_status(sourceId,resume,archiveMax,queue.size());int fetched=0;
   for(;resume.next<queue.size() && fetched<cap;++fetched) {
     if(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-started).count()>=wall)break;
     const auto& item=queue[resume.next];const auto response=fetch_resource(ctx,item);
     if(item["format"]=="vimpel-html")return emit_json("status",{{"source_id",sourceId},{"status","provider-page-only"},{"source_url",item["url"]},{"bytes",response.body.size()},{"sha256",digest(response.body)},{"normalized_records",0},{"note","Authenticated provider page is not an orbital export; no NCD was stored."}})<0?1:0;
-    validate_raw(item,response.body);
+    require(validate_raw(item,response.body),"Raw source validation failed.");
+    if(!reserve_archive(ctx,resume,job,response.body.size(),archiveMax))return budget_status(sourceId,resume,archiveMax,queue.size());
     const auto stamp=iso(now()),rawCid=ipfs_add(response.body),hash=digest(response.body);const auto ncd=descriptor(item,response.body,rawCid);
     const auto provenance=Json{{"source_id",sourceId},{"source_url",item["url"]},{"format",item["format"]},{"source_cid",rawCid},{"source_sha256",hash},{"source_byte_length",response.body.size()},{"retrieved_at",stamp},{"normalized_records",0},{"discovery_queue_cid",resume.queueCid},{"discovery_job_id",digest(resume.queueCid)},{"parser_version","raw-preservation/0.1.0"}}.dump();
     const auto ingested=call("storage.ingest_with_source",{{"schema","NCD.fbs"},{"provider_id","ephemeris-provider:"+sourceId},{"source_name",sourceId},{"source_url",item["url"]},{"batch_id",hash},{"reconcile","duplicates"},{"records",{{"$bin",0}}},{"provenance",{{"source",sourceId},{"json",{{"$bin",1}}}}}},{{ncd.data(),ncd.size()},{reinterpret_cast<const uint8_t*>(provenance.data()),provenance.size()}});
     require(ingested.value.is_object() && ingested.value.contains("inserted"),"Source ingestion did not confirm durable records.");
-    ++resume.next;++resume.sequence;resume.bytes+=response.body.size();store("IRM.fbs",checkpoint(ctx,resume,job,queue.size(),hash,response.body.size(),stamp));
+    ++resume.next;++resume.sequence;resume.bytes+=response.body.size();resume.lastHash=hash;resume.lastBytes=response.body.size();resume.lastStamp=stamp;resume.complete=resume.next==queue.size();store("IRM.fbs",checkpoint(ctx,resume,job,stamp));
     require(emit_record("descriptor","NCD.fbs","$NCD","NCD",ncd)>=0,"Could not emit acquisition receipt.");
   }
-  return emit_json("status",{{"source_id",sourceId},{"retrieved",fetched},{"completed",resume.next},{"total",queue.size()},{"remaining",queue.size()-resume.next},{"queue_cid",resume.queueCid},{"normalized_records",0},{"status",resume.next==queue.size()?"complete":"in-progress"}})<0?1:0;
+  return emit_json("status",{{"source_id",sourceId},{"retrieved",fetched},{"completed",resume.next},{"total",queue.size()},{"remaining",queue.size()-resume.next},{"queue_cid",resume.queueCid},{"archive_reserved_bytes",resume.reserved},{"archive_max_bytes",archiveMax},{"normalized_records",0},{"status",resume.next==queue.size()?"complete":"in-progress"}})<0?1:0;
 }
 #endif
 int guarded(const std::function<int()>& action){clear_error();const auto status=action();if(has_error()){plugin_set_error("ephemeris-retrieval-failed",error_text().c_str());return 1;}return status;}
