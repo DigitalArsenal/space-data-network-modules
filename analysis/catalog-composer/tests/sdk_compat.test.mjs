@@ -3,6 +3,11 @@ import fs from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Builder } from 'flatbuffers';
+import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
+import { parseSingleFileBundle, createSingleFileBundle } from 'space-data-module-sdk/bundle';
+import { decodeAppManifest } from 'space-data-module-sdk/app';
+import { isPlgManifestBuffer } from 'space-data-module-sdk/manifest';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
 import { validateArtifactWithStandards } from 'space-data-module-sdk/compliance';
 
@@ -35,9 +40,29 @@ async function compose(host, config, catalogs) {
   return { report: JSON.parse(decoder.decode(result.outputs.find(f => f.portId === 'report').payload)), catalog: result.outputs.find(f => f.portId === 'catalog')?.payload ?? new Uint8Array() };
 }
 
-test('the complete SDK bundle is compliant', async () => {
-  const result = await validateArtifactWithStandards({ wasmPath: fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url)), manifest, standardsRoot: process.env.SPACE_DATA_STANDARDS_ROOT });
+test('the executable and every SDK bundle record satisfy their own contracts', async () => {
+  const bundle = await parseSingleFileBundle(wasm);
+  const hash = bytes => createHash('sha256').update(bytes).digest();
+  assert.deepEqual(Buffer.from(bundle.bundle.canonicalModuleHash), hash(bundle.canonicalWasmBytes));
+  for (const entry of bundle.entries) assert.deepEqual(Buffer.from(entry.sha256Bytes), hash(entry.payloadBytes));
+  const declared = bundle.entries.find(entry => entry.entryId === 'manifest');
+  assert(isPlgManifestBuffer(declared.payloadBytes));
+  assert.deepEqual(Buffer.from(bundle.bundle.manifestHash), hash(declared.payloadBytes));
+  assert.equal(bundle.manifest.pluginId, manifest.pluginId); assert.equal(bundle.manifest.version, manifest.version);
+  // SDK 0.8.15 searches arbitrary bytes for ASCII PMAN. Gzipped/base64 APP
+  // content can contain that substring without containing a legacy manifest.
+  // Validate the executable as WASM and validate the separate REC/MBL/APP
+  // payloads structurally and by their hashes, rather than ignoring an issue.
+  const executable = await createSingleFileBundle({ wasmBytes: bundle.canonicalWasmBytes, manifestBytes: declared.payloadBytes });
+  const result = await validateArtifactWithStandards({ wasmBytes: executable.wasmBytes, manifest, standardsRoot: process.env.SPACE_DATA_STANDARDS_ROOT });
   assert.equal(result.ok, true, JSON.stringify(result.issues));
+  const app = decodeAppManifest(bundle.entries.find(entry => entry.entryId === 'app.app').payloadBytes);
+  assert.equal(app.version, manifest.version);
+  assert.equal(app.modules[0].contentHash, bundle.canonicalModuleHashHex);
+  for (const page of app.pages) {
+    assert.equal(page.encoding, 'base64_gzip');
+    assert.equal(hash(gunzipSync(Buffer.from(page.content, 'base64'))).toString('hex'), page.contentSha256);
+  }
 });
 test('combines exact identities in layer order, preserves bytes, and supports an explicit override', async (t) => {
   const host = await harness(t), first = cat(1, 'First'), second = cat(1, 'Second'), third = cat(2, 'Third');

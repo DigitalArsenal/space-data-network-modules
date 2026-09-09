@@ -34,9 +34,10 @@ export async function loadPublishedCatalog(layer, { request, signal, onProgress 
     if (offset === totalPublications) break;
   }
   const targets = publications.filter(p => p.manifest_cid === layer.manifest);
-  if (targets.length !== 1 || !targets[0].batch_id) throw new Error('The selected catalog edition is no longer available. Refresh sources.');
+  if (targets.length !== 1 || typeof targets[0].batch_id !== 'string') throw new Error('The selected catalog edition is no longer available. Refresh sources.');
   const target = targets[0];
   const shards = publications.filter(p => p.batch_id === target.batch_id).sort((a, b) => a.offset - b.offset);
+  if (!target.batch_id && (shards.length !== 1 || target.offset !== 0 || target.record_count !== layer.total)) throw new Error('This source needs an unambiguous complete catalog publication.');
   const last = shards.at(-1), expected = last.offset + last.record_count;
   if (!integer(expected, 1, 250000)) throw new Error('Invalid catalog edition size.');
   let count = 0, size = 0;

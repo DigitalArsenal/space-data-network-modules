@@ -38,3 +38,10 @@ test('binds the responding peer and requires an explicit publication',async()=>{
  const wrong=async(...args)=>{const r=await f.request(...args);r.headers.set('X-SDN-Remote-Peer','another-node');return r;};
  await assert.rejects(loadPublishedCatalog(layer,{request:wrong}),/responding node/);
 });
+test('loads a complete source-scoped publication without inventing a batch identity',async()=>{
+ const f=fixture(pubs=>{pubs.splice(1);Object.assign(pubs[0],{batch_id:'',manifest_cid:layer.manifest});});
+ const result=await loadPublishedCatalog({...layer,total:2},{request:f.request});assert.equal(result.count,2);assert.equal(result.batch,'');assert.equal(f.calls[1].batch_id,'');
+ await assert.rejects(loadPublishedCatalog({...layer,total:3},{request:f.request}),/unambiguous complete/);
+ const ambiguous=fixture(pubs=>{for(const p of pubs)p.batch_id='';});
+ await assert.rejects(loadPublishedCatalog({...layer,total:3},{request:ambiguous.request}),/unambiguous complete/);
+});
