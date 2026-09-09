@@ -12,7 +12,12 @@
 namespace ephemeris {
 using Json = nlohmann::json;
 using Fetch = std::function<std::string(const std::string&)>;
-inline void require(bool ok, const char* message) { if (!ok) ephemeris_failure(message); }
+inline std::string& error_text(){static std::string value;return value;}
+inline bool has_error(){return !error_text().empty();}
+inline void clear_error(){error_text().clear();}
+inline void record_error(const char* message){if(!has_error())error_text()=message;}
+struct Failure {template<typename T> operator T() const {return T{};}};
+#define require(condition,message) do { if(::ephemeris::has_error() || !(condition)){::ephemeris::record_error(message);return ::ephemeris::Failure{};} } while(false)
 inline std::string trim(std::string s) {
   const auto a=s.find_first_not_of(" \r\n\t");
   return a==std::string::npos ? "" : s.substr(a,s.find_last_not_of(" \r\n\t")-a+1);
@@ -42,15 +47,16 @@ inline std::string origin(const std::string& url) {
   const auto start=url.find("://"); require(start!=std::string::npos,"Invalid upstream URL.");
   const auto end=url.find('/',start+3); return url.substr(0,end);
 }
-inline void validate_url(const Json& source,const std::string& url) {
+inline bool validate_url(const Json& source,const std::string& url) {
+  require(source.is_object() && source.contains("origins") && source["origins"].is_array(),"Invalid source origin policy.");
   require(url.size()<=4096 && url.find_first_of("\r\n\t\\") == std::string::npos,"Invalid upstream URL.");
   require(url.find("/../")==std::string::npos && url.find("/./")==std::string::npos && url.find('#')==std::string::npos,"Unsafe upstream path.");
   const auto host=origin(url); bool allowed=false;
   for(const auto& entry:source["origins"]) if(entry==host)allowed=true;
-  require(allowed,"Discovered URL is outside the source's permitted origins.");
+  require(allowed,"Discovered URL is outside the source's permitted origins.");return true;
 }
 inline Json resource(const Json& source,const std::string& url,const std::string& format="",const std::string& id="") {
-  validate_url(source,url);
+  require(validate_url(source,url),"Invalid resource URL.");
   return {{"source_id",source["source_id"]},{"resource_id",id.empty()?basename(url):id},{"url",url},
     {"format",format.empty()?source["format"].get<std::string>():format}};
 }
@@ -140,7 +146,7 @@ inline Json discover_public(const Json& source,int64_t epoch,const Fetch& fetch)
       auto& old=best[target]; if(std::make_pair(date,seq)>std::make_pair(std::get<0>(old),std::get<1>(old)))old={date,seq,(*i)[0].str()};
     }
     for(const auto& entry:best)add(base+std::get<2>(entry.second));
-  } else ephemeris_failure("This source requires the restricted credential adapter.");
+  } else {record_error("This source requires the restricted credential adapter.");return Json();}
   require(!out.empty(),"Upstream discovery returned no resources; this is not a successful empty feed.");
   require(out.size()<=100000,"Discovery resource limit exceeded.");
   std::map<std::string,Json> unique;for(const auto& item:out)unique[item["url"].get<std::string>()]=item;

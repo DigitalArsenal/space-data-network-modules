@@ -18,5 +18,5 @@ test('core and adapter both satisfy published SDK and SDS contracts',async()=>{
 });
 test('rejects a foreign source origin without emitting a descriptor',async()=>{
  const h=await createBrowserModuleHarness({wasmSource:wasm,manifest,surface:'direct'});
- try {await assert.rejects(()=>h.invoke({methodId:'describe_artifact',inputs:[input('resource',{source_id:'iss',url:'https://foreign.example/file',format:'ccsds-oem-kvn'}),input('receipt',{cid:'testcid'}),input('body',Buffer.from('CCSDS_OEM_VERS = 2.0'))]}));}finally{await h.destroy();}
+ try {const rejected=await h.invoke({methodId:'describe_artifact',inputs:[input('resource',{source_id:'iss',url:'https://foreign.example/file',format:'ccsds-oem-kvn'}),input('receipt',{cid:'testcid'}),input('body',Buffer.from('CCSDS_OEM_VERS = 2.0'))]});assert.notEqual(rejected.statusCode,0);assert.equal(rejected.outputs.length,0);const next=await h.invoke({methodId:'describe_sources',inputs:[]});assert.equal(next.statusCode,0);}finally{await h.destroy();}
 });

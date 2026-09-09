@@ -28,7 +28,9 @@ The portable C++ WASM core plans listing requests, discovers file URLs from expl
 
 `com.digitalarsenal.data-source.ephemeris-source` has no host imports. Its methods are `describe_sources`, `plan_source_requests`, `discover_sources`, and `describe_artifact`. JSON ports carry explicit control or foreign-format frames with SDK wildcard justifications; NCD output uses SDS `$NCD`. Direct URL sources need no listing requests and return their resource descriptors immediately. Supply listing responses as a URL-keyed object to `discover_sources`; a 404 GPS-week listing permits previous-week fallback.
 
-`com.digitalarsenal.data-source.ephemeris-source-host` exposes `pull` with a required timer `tick`, and `descriptor` / `status` outputs. Install it in a scheduled service flow. Scheduling is supplied by that service flow; the adapter declares no timer or clock host capability because it uses the WASI clock. Configuration is read through `plugin.getConfig`:
+`com.digitalarsenal.data-source.ephemeris-source-host` is a standalone SDK module. Its `pull` timer runs every 60 seconds with an optional `request` control frame, and emits `descriptor` / `status`. The host supplies the timer through its existing CronProvider; no flow wrapper is required. Call `configure` with one JSON `request` frame and persist that method input using the host's runtime input settings. On restart the host reapplies `configure` before scheduled retrieval. Configuration never fetches data or reads secrets. Explicit known `plugin.getConfig` options take precedence over saved guest options; absent or null host configuration leaves saved inputs in effect.
+
+Safe configuration fields are:
 
 - `ephemeris_enabled`: false until explicitly activated.
 - `ephemeris_source_id`: exact registry ID.
@@ -43,7 +45,7 @@ The adapter pins an immutable credential-free discovery envelope and writes an i
 
 The SDN source publisher signs and announces NCD datasets independently, including catch-up and retry. Configure the opt-in `publishing.auto_publish[].publish_scope: source` host mode to coalesce source changes and publish the accumulated source window: an automatic publisher that suppresses a batch after its first notification or drops later batches inside a rate limit does not cover a multi-file source. Consumers follow NCD.SOURCE_CID to the immutable raw bytes. This module does not invent a raw-only DPM signature protocol or report synchronous PNM delivery. Canonical NCD registration and the existing source publisher must be enabled in the host. A Vimpel HTML page produces `provider-page-only` status and no NCD or raw public pin; it is not an orbital container.
 
-All host calls use the SDK binary envelope. Malformed or failed input aborts the invocation; a host must discard a trapped instance and resume from durable IRM, rather than reuse that failed instance. Restricted extensions may scrub transient credentials in their failure prelude. No username, password, cookie, bearer token or authentication POST body is persisted in queues, NCD, provenance or IRM.
+All host calls use the SDK binary envelope. Expected validation, HTTP and storage failures return a structured SDK error and preserve instance reuse; a later invocation resumes from durable IRM. Unexpected internal JSON failures remain fail-closed traps and require instance replacement. Restricted extensions scrub transient credentials with ordinary RAII cleanup on success and error, and a final cleanup hook on an unexpected trap. No username, password, cookie, bearer token or authentication POST body is persisted in queues, NCD, provenance or IRM.
 
 ## Build and verification
 

@@ -31,10 +31,10 @@ Json input(const char* port) {
   auto j=Json::parse(f->payload,f->payload+f->payload_length,nullptr,false);require(!j.is_discarded(),"Invalid JSON input.");return j;
 }
 int emit_json(const char* port,const Json& j) {
-  const auto s=j.dump();return plugin_push_output_ex(port,nullptr,nullptr,PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY,nullptr,0,1,reinterpret_cast<const uint8_t*>(s.data()),s.size());
+  if(has_error())return -1;const auto s=j.dump();return plugin_push_output_ex(port,nullptr,nullptr,PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY,nullptr,0,1,reinterpret_cast<const uint8_t*>(s.data()),s.size());
 }
 int emit_record(const char* port,const char* schema,const char* identifier,const char* root,const Bytes& bytes) {
-  return plugin_push_output_ex(port,schema,identifier,PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,root,0,0,bytes.data(),bytes.size());
+  if(has_error())return -1;return plugin_push_output_ex(port,schema,identifier,PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,root,0,0,bytes.data(),bytes.size());
 }
 std::string digest(const Bytes& b){return ephem::sha256_hex(b.data(),b.size());}
 std::string digest(const std::string& s){return ephem::sha256_hex(reinterpret_cast<const uint8_t*>(s.data()),s.size());}
@@ -44,6 +44,7 @@ Bytes base64(const std::string& value) {
 }
 Reply call(const std::string& op,const Json& params,const std::vector<sdm_hostcall::Segment>& segments={}) {
 #ifdef EPHEMERIS_HOST_ADAPTER
+  if(has_error())return {};
   const auto request=sdm_hostcall::build_envelope(params.dump(),segments);
   sdm_host_call(op.data(),op.size(),reinterpret_cast<const char*>(request.data()),request.size());
   const auto size=sdm_host_response_len();require(size>=8 && size<=int32_t(maxEnvelope),"Host capability response exceeds bounds.");
@@ -54,7 +55,7 @@ Reply call(const std::string& op,const Json& params,const std::vector<sdm_hostca
   require(j.is_object() && j.value("ok",false),"A required host capability failed.");
   return {j.value("result",Json()),std::move(envelope.segments)};
 #else
-  ephemeris_failure("Portable core requires explicit response frames; host capabilities belong to the scheduled adapter.");
+  record_error("Portable core requires explicit response frames; host capabilities belong to the scheduled adapter.");return {};
 #endif
 }
 Bytes binary(const Reply& r,const Json& field) {
@@ -63,34 +64,42 @@ Bytes binary(const Reply& r,const Json& field) {
   }
   require(field.is_string(),"Missing binary capability payload.");return base64(field.get<std::string>());
 }
-Json source_for(const std::string& id) {for(const auto& s:registry()["sources"])if(s["source_id"]==id)return s;ephemeris_failure("Unknown ephemeris source ID.");}
+Json source_for(const std::string& id) {for(const auto& s:registry()["sources"])if(s["source_id"]==id)return s;record_error("Unknown ephemeris source ID.");return {};}
 int bounded_config(const Json& config,const char* name,int fallback,int low,int high) {
   if(!config.contains(name))return fallback;
   require(config[name].is_number_integer(),"Retriever limits must be integers.");const auto n=config[name].get<int64_t>();
   require(n>=low && n<=high,"Retriever limit is outside its permitted bounds.");return int(n);
 }
-struct Http {int status=0;Bytes body;Json headers=Json::object();};
+struct Http {int status=0;Bytes body;Json headers=Json::object(),header_values=Json::object();};
+#ifdef EPHEMERIS_AUTH_SUPPORT
+struct Context;void authenticated_cleanup(Context&);
+#endif
 struct Context {
   Json source,config,fixtures,private_state=Json::object();int64_t epoch;int timeout=15000;size_t maxBytes=16*1024*1024;size_t requests=0;std::chrono::steady_clock::time_point deadline;
-  Context(Json cfg,Json responses=Json()):config(std::move(cfg)),fixtures(std::move(responses)) {
+  bool ready=false;
+  Context(Json cfg,Json responses=Json()):config(std::move(cfg)),fixtures(std::move(responses)){ready=initialize();}
+#ifdef EPHEMERIS_AUTH_SUPPORT
+  ~Context(){authenticated_cleanup(*this);}
+#endif
+  bool initialize() {
     require(config.is_object() && config.contains("source_id") && config["source_id"].is_string(),"A source_id is required.");source=source_for(config["source_id"]);
-    epoch=config.value("epoch_seconds",now());require(epoch>315964800 && epoch<4102444800LL,"Invalid retrieval epoch.");
+    if(config.contains("epoch_seconds"))require(config["epoch_seconds"].is_number_integer(),"Retrieval epoch must be an integer.");epoch=config.value("epoch_seconds",now());require(epoch>315964800 && epoch<4102444800LL,"Invalid retrieval epoch.");
     deadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(bounded_config(config,"max_runtime_ms",90000,1000,300000));
-    timeout=bounded_config(config,"timeout_ms",15000,1000,30000);maxBytes=bounded_config(config,"max_bytes",16*1024*1024,1024,hardMaxBytes);
+    timeout=bounded_config(config,"timeout_ms",15000,1000,30000);maxBytes=bounded_config(config,"max_bytes",16*1024*1024,1024,hardMaxBytes);require(!has_error(),"Invalid context limits.");return true;
   }
   Http request(const std::string& url,const std::string& method="GET",const std::string& body="",Json headers=Json::object()) {
     validate_url(source,url);require(++requests<=128,"Per-invocation HTTP request budget exceeded.");
     const auto remaining=std::chrono::duration_cast<std::chrono::milliseconds>(deadline-std::chrono::steady_clock::now()).count();require(remaining>=1000,"Retrieval deadline reached; durable position is unchanged.");const int requestTimeout=std::min<int64_t>(timeout,remaining);
     Http out;
     if(fixtures.is_object()) {
-      require(fixtures.contains(url),"Discovery response fixture missing.");const auto& f=fixtures[url];out.status=f.value("status",200);out.headers=f.value("headers",Json::object());
+      require(fixtures.contains(url),"Discovery response fixture missing.");const auto& f=fixtures[url];out.status=f.value("status",200);out.headers=f.value("headers",Json::object());out.header_values=f.value("header_values",Json::object());
       const auto text=f.value("body",std::string());out.body=f.value("body_encoding",std::string())=="base64"?base64(text):Bytes(text.begin(),text.end());
     } else {
       Json params={{"url",url},{"method",method},{"body",body},{"headers",headers},{"timeout_ms",requestTimeout},{"timeoutMs",requestTimeout},{"max_bytes",maxBytes},{"maxBytes",maxBytes}};
 #ifdef EPHEMERIS_AUTH_SUPPORT
       params["follow_redirects"]=false;
 #endif
-      auto r=call("http.request",params);require(r.value.is_object(),"Invalid HTTP capability response.");out.status=r.value.value("status",0);out.headers=r.value.value("headers",Json::object());
+      auto r=call("http.request",params);require(r.value.is_object(),"Invalid HTTP capability response.");out.status=r.value.value("status",0);out.headers=r.value.value("headers",Json::object());out.header_values=r.value.value("header_values",Json::object());
       const auto f=r.value.value("body",Json());
       if(f.is_object())out.body=binary(r,f);
       else if(f.is_string()){const auto text=f.get<std::string>();out.body=r.value.value("body_encoding",std::string())=="base64"?base64(text):Bytes(text.begin(),text.end());}
@@ -119,24 +128,25 @@ Json discover(Context& ctx) {
 #ifdef EPHEMERIS_AUTH_SUPPORT
     return discover_authenticated(ctx);
 #else
-    ephemeris_failure("Credentials required: install the restricted source adapter for this source.");
+    record_error("Credentials required: install the restricted source adapter for this source.");return {};
 #endif
   }
-  return discover_public(ctx.source,ctx.epoch,[&](const std::string& url){const auto r=ctx.request(url); if(r.status==404 && url.find("/products/")!=std::string::npos)return std::string(); require(r.status==200 && !r.body.empty(),"Discovery requires a complete HTTP 200 listing.");return std::string(r.body.begin(),r.body.end());});
+  return discover_public(ctx.source,ctx.epoch,[&](const std::string& url)->std::string{const auto r=ctx.request(url); if(r.status==404 && url.find("/products/")!=std::string::npos)return std::string(); require(r.status==200 && !r.body.empty(),"Discovery requires a complete HTTP 200 listing.");return std::string(r.body.begin(),r.body.end());});
 }
 Http fetch_resource(Context& ctx,const Json& item) {
-  require(item.is_object() && item.value("source_id",std::string())==ctx.source["source_id"],"Resource source mismatch.");
+  require(item.is_object() && item.contains("source_id") && item["source_id"].is_string() && item.contains("url") && item["url"].is_string() && item.contains("format") && item["format"].is_string(),"Invalid source resource descriptor.");
+  require(item["source_id"]==ctx.source["source_id"],"Resource source mismatch.");
   if(ctx.source["credentialed"]==true) {
 #ifdef EPHEMERIS_AUTH_SUPPORT
     return fetch_authenticated(ctx,item);
 #else
-    ephemeris_failure("Credentials required: install the restricted source adapter for this source.");
+    record_error("Credentials required: install the restricted source adapter for this source.");return {};
 #endif
   }
   return ctx.full(item.at("url").get<std::string>());
 }
-void validate_raw(const Json& item,const Bytes& bytes) {
-  require(!bytes.empty() && bytes.size()<=hardMaxBytes,"Invalid raw artifact size.");const auto format=item["format"].get<std::string>();require(format!="vimpel-html","Provider HTML is not an orbital container and cannot be represented as NCD.");
+bool validate_raw(const Json& item,const Bytes& bytes) {
+  require(item.is_object() && item.contains("format") && item["format"].is_string(),"Raw format descriptor missing.");require(!bytes.empty() && bytes.size()<=hardMaxBytes,"Invalid raw artifact size.");const auto format=item["format"].get<std::string>();require(format!="vimpel-html","Provider HTML is not an orbital container and cannot be represented as NCD.");
   if(format=="sp3-gzip")require(bytes.size()>2 && bytes[0]==31 && bytes[1]==139,"SP3 archive is not gzip data.");
   else if(format=="css-oem-zip")require(bytes.size()>4 && bytes[0]=='P' && bytes[1]=='K',"CSS archive is not ZIP data.");
   else if(format!="vimpel-html") {
@@ -144,6 +154,7 @@ void validate_raw(const Json& item,const Bytes& bytes) {
     std::transform(head.begin(),head.end(),head.begin(),[](unsigned char c){return char(std::tolower(c));});
     require(head.find("<!doctype html")==std::string::npos && head.find("<html")==std::string::npos,"Upstream returned an HTML page instead of the requested source file.");
   }
+  return true;
 }
 #ifdef EPHEMERIS_HOST_ADAPTER
 std::string ipfs_add(const Bytes& bytes) {
@@ -152,9 +163,9 @@ std::string ipfs_add(const Bytes& bytes) {
   require(!cid.empty() && cid.size()<200 && cid.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")==std::string::npos,"IPFS did not return a valid content identifier.");return cid;
 }
 Bytes ipfs_cat(const std::string& cid) {auto r=call("ipfs.cat",{{"cid",cid}});if(r.value.is_object() && r.value.contains("data"))return binary(r,r.value["data"]);return binary(r,r.value);}
-void store(const char* schema,const Bytes& bytes) {
+bool store(const char* schema,const Bytes& bytes) {
   auto r=call("storage.write",{{"schema",schema},{"data",{{"$bin",0}}}},{{bytes.data(),bytes.size()}});
-  require(r.value.is_object() && !r.value.value("cid",std::string()).empty(),"Storage did not confirm the durable record.");
+  require(r.value.is_object() && !r.value.value("cid",std::string()).empty(),"Storage did not confirm the durable record.");return true;
 }
 #endif
 Bytes finish(flatbuffers::FlatBufferBuilder& b){return Bytes(b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());}
@@ -172,7 +183,7 @@ Resume restore(const std::string& job) {
   const auto r=call("storage.flatsql_query_stream",{{"sql","SELECT _data FROM IRM WHERE JOB_ID = ? ORDER BY SEQUENCE DESC LIMIT 1"},{"params",Json::array({{{"t","str"},{"v",job}}})}});
   require(r.value.is_object(),"Invalid resume query result.");if(r.value.value("rows",0)==0)return {};
   const auto bytes=binary(r,r.value.at("stream"));flatbuffers::Verifier verifier(bytes.data(),bytes.size());require(VerifySizePrefixedIRMBuffer(verifier),"Invalid durable resume record.");
-  const auto* mark=GetSizePrefixedIRM(bytes.data());require(mark->JOB_ID() && mark->JOB_ID()->str()==job && mark->SOURCE() && mark->SOURCE()->SOURCE_CID(),"Resume mark identity mismatch.");
+  const auto* mark=GetSizePrefixedIRM(bytes.data());require(mark->JOB_ID() && mark->JOB_ID()->str()==job && mark->SOURCE() && mark->SOURCE()->SOURCE_CID() && mark->UPDATED_AT(),"Resume mark identity mismatch.");
   require(mark->RANGE_MODE()==irmRangeMode_PART_INDEX,"Resume mark has incompatible addressing.");
   return {mark->SEQUENCE(),mark->BYTES_COMMITTED(),mark->NEXT_CHUNK_INDEX(),mark->SOURCE()->SOURCE_CID()->str(),mark->STATE()==irmJobState_COMPLETE,mark->UPDATED_AT()->str()};
 }
@@ -184,13 +195,32 @@ Bytes checkpoint(const Context& ctx,const Resume& resume,const std::string& job,
   IRMBuilder mark(b);mark.add_JOB_ID(name);mark.add_SEQUENCE(resume.sequence);mark.add_PROVIDER_ID(object);mark.add_INGESTOR_ID(ingestor);mark.add_SOURCE(src);mark.add_STATE(resume.next==total?irmJobState_COMPLETE:irmJobState_IN_PROGRESS);mark.add_RANGE_MODE(irmRangeMode_PART_INDEX);mark.add_NEXT_CHUNK_INDEX(resume.next);mark.add_CHUNK_BYTE_BUDGET(ctx.maxBytes);if(resume.next)mark.add_LAST_CHUNK(part);mark.add_CHUNKS_COMMITTED(resume.next);mark.add_BYTES_COMMITTED(resume.bytes);mark.add_RECORDS_COMMITTED(resume.next);mark.add_TARGET_STANDARD(standard);mark.add_RECONCILE_MODE(reconcile);mark.add_MERGE_POLICY(merge);mark.add_UPDATED_AT(time);mark.add_NOTES(note);if(resume.next==total)mark.add_COMPLETED_AT(time);
   b.FinishSizePrefixed(mark.Finish(),"$IRM");return finish(b);
 }
+const std::set<std::string>& option_names(){static const std::set<std::string> names={"ephemeris_enabled","ephemeris_source_id","ephemeris_max_resources","ephemeris_max_bytes","ephemeris_timeout_ms","ephemeris_max_runtime_ms","ephemeris_refresh_interval_sec","ephemeris_secret_id","ephemeris_spire_paths"};return names;}
+Json& configured_options(){static Json value=Json::object();return value;}
+Json validate_options(const Json& value){
+  require(value.is_object(),"Retriever configuration must be an object.");
+  for(auto i=value.begin();i!=value.end();++i)require(option_names().count(i.key()),"Unknown retriever option; credentials never belong in module inputs.");
+  if(value.contains("ephemeris_enabled"))require(value["ephemeris_enabled"].is_boolean(),"ephemeris_enabled must be boolean.");
+  if(value.contains("ephemeris_source_id")){require(value["ephemeris_source_id"].is_string(),"source_id must be a string.");const auto source=source_for(value["ephemeris_source_id"]);require(!has_error(),"Unknown source configuration.");
+#ifdef EPHEMERIS_FIXED_SOURCE_ID
+    require(value["ephemeris_source_id"]==EPHEMERIS_FIXED_SOURCE_ID,"This artifact only serves its compiled provider.");
+#endif
+  }
+  if(value.value("ephemeris_enabled",false))require(value.contains("ephemeris_source_id"),"Enabled retrieval requires a source_id.");
+  bounded_config(value,"ephemeris_max_resources",4,1,64);bounded_config(value,"ephemeris_max_bytes",16*1024*1024,1024,hardMaxBytes);bounded_config(value,"ephemeris_timeout_ms",15000,1000,30000);bounded_config(value,"ephemeris_max_runtime_ms",90000,1000,300000);bounded_config(value,"ephemeris_refresh_interval_sec",86400,3600,604800);
+  if(value.contains("ephemeris_secret_id")){require(value["ephemeris_secret_id"].is_string(),"A secret lane ID must be a string.");const auto lane=value["ephemeris_secret_id"].get<std::string>();require(lane.size()>=2 && lane.size()<=64 && lane.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_-")==std::string::npos,"Invalid secret lane identifier.");}
+  if(value.contains("ephemeris_spire_paths")){const auto& paths=value["ephemeris_spire_paths"];require(paths.is_array() && !paths.empty() && paths.size()<=16,"Spire paths must be a bounded nonempty array.");for(const auto& path:paths){require(path.is_string(),"Spire paths must be strings.");const auto text=path.get<std::string>();require(text.size()<=128 && !text.empty() && text[0]=='/' && text.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-/")==std::string::npos && text.find("//")==std::string::npos,"Spire paths must be safe absolute API paths without query parameters.");}}
+  require(!has_error(),"Invalid retriever configuration.");return value;
+}
+int execute_configure(){const auto options=validate_options(input("request"));require(!has_error(),"Invalid retriever configuration.");configured_options()=options;return emit_json("status",{{"status","configured"},{"source_id",options.value("ephemeris_source_id",std::string())},{"enabled",options.value("ephemeris_enabled",false)}})<0?1:0;}
 int execute_pull() {
-  const auto host=call("plugin.getConfig",Json::object()).value;require(host.is_object(),"Host configuration unavailable.");
+  auto supplied=call("plugin.getConfig",Json::object()).value;require(supplied.is_null() || supplied.is_object(),"Host configuration unavailable.");if(supplied.is_null())supplied=Json::object();
+  Json merged=configured_options();for(const auto& key:option_names())if(supplied.contains(key))merged[key]=supplied[key];const auto host=validate_options(merged);require(!has_error(),"Invalid retriever configuration.");
   if(!host.value("ephemeris_enabled",false))return emit_json("status",{{"status","disabled"}})<0?1:0;
   Json cfg={{"source_id",host.value("ephemeris_source_id",std::string())},{"max_bytes",host.value("ephemeris_max_bytes",16*1024*1024)},{"timeout_ms",host.value("ephemeris_timeout_ms",15000)},{"max_runtime_ms",host.value("ephemeris_max_runtime_ms",90000)}};
   if(host.contains("ephemeris_secret_id"))cfg["secret_id"]=host["ephemeris_secret_id"];
   if(host.contains("ephemeris_spire_paths"))cfg["spire_paths"]=host["ephemeris_spire_paths"];
-  Context ctx(cfg);const auto sourceId=ctx.source["source_id"].get<std::string>();
+  Context ctx(cfg);require(ctx.ready,"Invalid source configuration.");const auto sourceId=ctx.source["source_id"].get<std::string>();
 #ifdef EPHEMERIS_FIXED_SOURCE_ID
   require(sourceId==EPHEMERIS_FIXED_SOURCE_ID,"This artifact only serves its compiled provider.");
 #endif
@@ -222,13 +252,14 @@ int execute_pull() {
   return emit_json("status",{{"source_id",sourceId},{"retrieved",fetched},{"completed",resume.next},{"total",queue.size()},{"remaining",queue.size()-resume.next},{"queue_cid",resume.queueCid},{"normalized_records",0},{"status",resume.next==queue.size()?"complete":"in-progress"}})<0?1:0;
 }
 #endif
-int guarded(const std::function<int()>& action){return action();}
+int guarded(const std::function<int()>& action){clear_error();const auto status=action();if(has_error()){plugin_set_error("ephemeris-retrieval-failed",error_text().c_str());return 1;}return status;}
 }
-extern "C" int describe_sources(){return ephemeris::guarded([]{return ephemeris::emit_json("sources",ephemeris::registry())<0?1:0;});}
-extern "C" int plan_source_requests(){return ephemeris::guarded([]{using namespace ephemeris;Context ctx(input("config"));auto requests=initial_requests(ctx.source,ctx.epoch);for(auto& r:requests){r["timeout_ms"]=ctx.timeout;r["max_bytes"]=ctx.maxBytes;}return emit_json("requests",requests)<0?1:0;});}
-extern "C" int discover_sources(){return ephemeris::guarded([]{ephemeris::Context ctx(ephemeris::input("config"),ephemeris::input("responses"));return ephemeris::emit_json("resources",ephemeris::discover(ctx))<0?1:0;});}
-extern "C" int describe_artifact(){return ephemeris::guarded([]{using namespace ephemeris;const auto item=input("resource"),receipt=input("receipt");const auto* payload=frame("body");require(payload,"Raw body frame missing.");const Bytes bytes(payload->payload,payload->payload+payload->payload_length);validate_url(source_for(item.at("source_id")),item.at("url"));validate_raw(item,bytes);const auto cid=receipt.value("cid",std::string());require(!cid.empty(),"Content identifier missing.");return emit_record("descriptor","NCD.fbs","$NCD","NCD",descriptor(item,bytes,cid))<0?1:0;});}
+extern "C" int describe_sources(){return ephemeris::guarded([]()->int{return ephemeris::emit_json("sources",ephemeris::registry())<0?1:0;});}
+extern "C" int plan_source_requests(){return ephemeris::guarded([]()->int{using namespace ephemeris;Context ctx(input("config"));require(ctx.ready,"Invalid source configuration.");auto requests=initial_requests(ctx.source,ctx.epoch);for(auto& r:requests){r["timeout_ms"]=ctx.timeout;r["max_bytes"]=ctx.maxBytes;}return emit_json("requests",requests)<0?1:0;});}
+extern "C" int discover_sources(){return ephemeris::guarded([]()->int{ephemeris::Context ctx(ephemeris::input("config"),ephemeris::input("responses"));require(ctx.ready,"Invalid source configuration.");return ephemeris::emit_json("resources",ephemeris::discover(ctx))<0?1:0;});}
+extern "C" int describe_artifact(){return ephemeris::guarded([]()->int{using namespace ephemeris;const auto item=input("resource"),receipt=input("receipt");require(item.is_object() && item.contains("source_id") && item["source_id"].is_string() && item.contains("url") && item["url"].is_string() && receipt.is_object() && receipt.contains("cid") && receipt["cid"].is_string(),"Invalid artifact descriptor inputs.");const auto* payload=frame("body");require(payload,"Raw body frame missing.");const Bytes bytes(payload->payload,payload->payload+payload->payload_length);validate_url(source_for(item.at("source_id")),item.at("url"));validate_raw(item,bytes);const auto cid=receipt.value("cid",std::string());require(!cid.empty(),"Content identifier missing.");return emit_record("descriptor","NCD.fbs","$NCD","NCD",descriptor(item,bytes,cid))<0?1:0;});}
 #ifdef EPHEMERIS_HOST_ADAPTER
+extern "C" int configure(){return ephemeris::guarded(ephemeris::execute_configure);}
 extern "C" int pull(){return ephemeris::guarded(ephemeris::execute_pull);}
 
 #endif

@@ -284,8 +284,10 @@
     "result": "byte-identical"
   },
   "artifact_sha256": {
-    "dist/isomorphic/module.wasm": "eb13624fd0f859275d8bce7cec95773e1cd56e78c7422324d58a08dabd4dc87e",
-    "host-adapter/dist/isomorphic/module.wasm": "35cec35aa3637ac3a6e506d0877e806b6d3ab0218376ce16a4f4424f3b149dfe"
+    "dist/isomorphic/module.wasm": "330a94d79515248ee5ba0358c2ec35920f3854db6dc196d20e13fe0bfaa28ccb",
+    "host-adapter/dist/isomorphic/module.wasm": "385e661b72e2bdc08597ea704cabb6e9cc65658c83dd4eb2bb0efeb0859000eb"
   },
-  "real_sdn_publication": "Separate parent-owned real HostBridge/source-publisher integration gate; isolated fixture receipts are not evidence of network publication."
+  "real_sdn_publication": "Separate parent-owned real HostBridge/source-publisher integration gate; isolated fixture receipts are not evidence of network publication.",
+  "focused_tests": 20,
+  "real_sdn_capabilities": "Parent confirmed isolated native SDN HostBridge HTTP/IPFS/storage, exact NCD raw CID/hash/length, distinct resource URL/hash batch attribution and durable resume; standalone configure/recovery recheck pending."
 }

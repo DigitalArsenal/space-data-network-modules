@@ -9,7 +9,8 @@
     "ipfs",
     "storage_query",
     "storage_write",
-    "storage_ingest"
+    "storage_ingest",
+    "timers"
   ],
   "externalInterfaces": [
     {
@@ -117,11 +118,11 @@
   },
   "methods": [
     {
-      "methodId": "pull",
-      "displayName": "Retrieve and publish raw source files",
+      "methodId": "configure",
+      "displayName": "Configure source retrieval",
       "inputPorts": [
         {
-          "portId": "tick",
+          "portId": "request",
           "required": true,
           "minStreams": 1,
           "maxStreams": 1,
@@ -136,7 +137,59 @@
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "Required generic timer tick; configuration comes from plugin.getConfig."
+                "detail": "Safe ephemeris configuration only; runtime input persistence reapplies this method after restart. Secret values are forbidden."
+              }
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "status",
+          "required": false,
+          "minStreams": 0,
+          "maxStreams": 1,
+          "acceptedTypeSets": [
+            {
+              "setId": "retrieval-status",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Bounded retrieval progress only; never a normalized data record."
+              }
+            }
+          ]
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "pull",
+      "displayName": "Retrieve and publish raw source files",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "required": false,
+          "minStreams": 0,
+          "maxStreams": 1,
+          "acceptedTypeSets": [
+            {
+              "setId": "timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Optional direct invocation control frame; standalone cron invokes with no payload."
               }
             }
           ]
@@ -197,6 +250,14 @@
       "schemaName": "IRM.fbs",
       "fileIdentifier": "$IRM",
       "rootTypeName": "IRM"
+    }
+  ],
+  "timers": [
+    {
+      "timerId": "ephemeris-pull",
+      "methodId": "pull",
+      "defaultIntervalMs": 60000,
+      "description": "Continue a bounded source queue when explicitly configured and enabled."
     }
   ]
 }
