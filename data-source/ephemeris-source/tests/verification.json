@@ -1,0 +1,291 @@
+{
+  "retrieved_at": "2026-09-09T11:34:34.068Z",
+  "scope": "Live public HTTP discovery and sampled acquisition through WASM; isolated capability fixtures, not live SDN publication. All13 acquired at least1rawartifact; complete constellations were not downloaded.",
+  "sources": [
+    {
+      "source_id": "spacex-starlink",
+      "ok": true,
+      "discovered": 11134,
+      "remaining": 11133,
+      "requests": [
+        {
+          "url": "https://api.starlink.com/public-files/ephemerides/MANIFEST.txt",
+          "status": 200,
+          "bytes": 821305,
+          "sha256": "0e700520864b93635abcbb008e6fefe11946113d521b41bb4ae319239c026789"
+        },
+        {
+          "url": "https://api.starlink.com/public-files/ephemerides/MEME_100001_STARLINK-38128_2520100_Operational_1473210060_UNCLASSIFIED.txt",
+          "status": 200,
+          "bytes": 2041024,
+          "sha256": "5bd33876354ea563dd109a1784b474fbb5b21095a8e6e9e4d1a0f2db7122ea5d"
+        }
+      ],
+      "sample_retrieved_at": "2026-09-09T11:34:34.068Z"
+    },
+    {
+      "source_id": "eutelsat-oneweb",
+      "ok": true,
+      "discovered": 1,
+      "remaining": 0,
+      "requests": [
+        {
+          "url": "https://ephemeris.oneweb.net/ltef/ltef.csv",
+          "status": 200,
+          "bytes": 44811,
+          "sha256": "3ff9ae26368c2190bb1d5ff1f8559323a9451f8711b110794723d0dc4e794e35"
+        }
+      ],
+      "sample_retrieved_at": "2026-09-09T11:34:34.068Z"
+    },
+    {
+      "source_id": "planet",
+      "ok": true,
+      "discovered": 2,
+      "remaining": 1,
+      "requests": [
+        {
+          "url": "https://ephemerides.planet-labs.com/planet.states",
+          "status": 200,
+          "bytes": 19299,
+          "sha256": "7fc0809ee8ccaa0e5d95f5a6ca5c88a458003c7e51da02b3a6cd4cc8653fccd8"
+        }
+      ],
+      "sample_retrieved_at": "2026-09-09T11:34:34.068Z"
+    },
+    {
+      "source_id": "iss",
+      "ok": true,
+      "discovered": 1,
+      "remaining": 0,
+      "requests": [
+        {
+          "url": "https://nasa-public-data.s3.amazonaws.com/iss-coords/current/ISS_OEM/ISS.OEM_J2K_EPH.txt",
+          "status": 200,
+          "bytes": 718647,
+          "sha256": "b3d9930306b645ba4d9a0db7f0201f3ecd5c436f6c4b4dea966878e93ec1cc96"
+        }
+      ],
+      "sample_retrieved_at": "2026-09-09T11:34:34.068Z"
+    },
+    {
+      "source_id": "ses",
+      "ok": true,
+      "discovered": 41,
+      "remaining": 40,
+      "requests": [
+        {
+          "url": "https://www.ses.com/network-and-technology/technical-data-and-tools/satellite-orbital-data",
+          "status": 200,
+          "bytes": 199600,
+          "sha256": "0db0df625c65319c409e33261ce180bcc26464b353f6c9e439c935e0ad718685"
+        },
+        {
+          "url": "https://ses-satellite-orbital-data-public.s3.eu-west-1.amazonaws.com/public/ephemeris/A1L_THRU.I11",
+          "status": 200,
+          "bytes": 1120,
+          "sha256": "aa0ee04aee63372df36a80a188334b2e62af3e9d5c66cf256bda4d44fe19b108"
+        }
+      ],
+      "sample_retrieved_at": "2026-09-09T11:34:34.068Z"
+    },
+    {
+      "source_id": "intelsat",
+      "ok": true,
+      "discovered": 64,
+      "remaining": 63,
+      "requests": [
+        {
+          "url": "https://my.intelsat.com/ephemeris/public",
+          "status": 200,
+          "bytes": 78872,
+          "sha256": "e9815633ebe563e507744807cd578d04e7f1ea58c00c22f4af0cbf5d25c1e311"
+        },
+        {
+          "url": "https://my.intelsat.com/Resource/Ephemeris/i_aor_e_302.00_is-21_20260908_235300.txt",
+          "status": 200,
+          "bytes": 31750,
+          "sha256": "529c6cb2d765ebd895b87040de025461c36911eeb46b6f8aad60202b510fe2ab"
+        }
+      ],
+      "sample_retrieved_at": "2026-09-09T11:34:34.068Z"
+    },
+    {
+      "source_id": "telesat",
+      "ok": true,
+      "discovered": 12,
+      "remaining": 11,
+      "requests": [
+        {
+          "url": "https://app.telesat.com/data/FleetLong.csv",
+          "status": 200,
+          "bytes": 221,
+          "sha256": "163d2778382cc64687dc3a676a6d8ae9b7d8056d00289dddc21d9c5a7d8cf2a9"
+        },
+        {
+          "url": "https://app.telesat.com/data/AnikF1R.C.csv",
+          "status": 200,
+          "bytes": 521,
+          "sha256": "f5b7f03bb547d54118d1094e9bfad1d3c805b05b95b059d8214bf83626d84526"
+        }
+      ],
+      "sample_retrieved_at": "2026-09-09T11:34:34.068Z"
+    },
+    {
+      "source_id": "css-tiangong",
+      "ok": true,
+      "discovered": 1,
+      "remaining": 0,
+      "requests": [
+        {
+          "url": "https://www.cmse.gov.cn/gfgg/zgkjzgdcs/",
+          "status": 200,
+          "bytes": 22187,
+          "sha256": "aba78e58e70dc9b8f8389e483fc8638dc5b454673175b204b21abd52cad0de8e"
+        },
+        {
+          "url": "https://www.cmse.gov.cn/gfgg/zgkjzgdcs/202609/W020260909408287570353.zip",
+          "status": 200,
+          "bytes": 122153,
+          "sha256": "9f792e42e647335e95785ec77015a50497b39c3147f7e17d8f100446f7ea8e17"
+        }
+      ],
+      "sample_retrieved_at": "2026-09-09T11:31:44.436Z",
+      "transport_note": "A successful bounded 30 s sample fetched the 122153 B ZIP. Other 20 s and 30 s attempts timed out during TLS/listing transfer. A later timer retry is required; continuous availability is not claimed."
+    },
+    {
+      "source_id": "gps-precise",
+      "ok": true,
+      "discovered": 1,
+      "remaining": 0,
+      "requests": [
+        {
+          "url": "https://igs.bkg.bund.de/root_ftp/IGS/products/2435/",
+          "status": 200,
+          "bytes": 11764,
+          "sha256": "36157f12dd3e1e99b95e4d8d27611a5566cd56c86459ed01c8a466f13b175310"
+        },
+        {
+          "url": "https://igs.bkg.bund.de/root_ftp/IGS/products/2435/IGS0OPSULT_20262510600_02D_15M_ORB.SP3.gz",
+          "status": 200,
+          "bytes": 201429,
+          "sha256": "dc9437e3cc4ab5850dd9e3a4b4ee992dcfc377445bced05f83665861fdfec423"
+        }
+      ],
+      "sample_retrieved_at": "2026-09-09T11:34:34.068Z"
+    },
+    {
+      "source_id": "glonass-precise",
+      "ok": true,
+      "discovered": 1,
+      "remaining": 0,
+      "requests": [
+        {
+          "url": "http://navigation-office.esa.int/products/gnss-products/2435/",
+          "status": 200,
+          "bytes": 24915,
+          "sha256": "23eef23f5dd5c52b0a6ee7144516d193fbf2a62baf1966e97573b12e728757aa"
+        },
+        {
+          "url": "http://navigation-office.esa.int/products/gnss-products/2435/ESA0OPSULT_20262510600_02D_05M_ORB.SP3.gz",
+          "status": 200,
+          "bytes": 875432,
+          "sha256": "baf79e0b56984d5b37be6f9e6ec1f7b930ed366c8b4225fa07be4dbd847eace7"
+        }
+      ],
+      "sample_retrieved_at": "2026-09-09T11:34:34.068Z"
+    },
+    {
+      "source_id": "esa-pod",
+      "ok": true,
+      "discovered": 3,
+      "remaining": 2,
+      "requests": [
+        {
+          "url": "http://navigation-office.esa.int/products/gnss-products/2435/",
+          "status": 200,
+          "bytes": 24915,
+          "sha256": "23eef23f5dd5c52b0a6ee7144516d193fbf2a62baf1966e97573b12e728757aa"
+        },
+        {
+          "url": "http://navigation-office.esa.int/products/swarm/",
+          "status": 200,
+          "bytes": 2697163,
+          "sha256": "85affcf1d218e3287f909fe0599569116ed26ba3c7c3676e3483358a74b15a9b"
+        },
+        {
+          "url": "http://navigation-office.esa.int/products/cryosat2/",
+          "status": 200,
+          "bytes": 3683782,
+          "sha256": "540290fc71b06e58b87929e8b235d2ac15ea921d5d3c0f7130e480b07d1da627"
+        },
+        {
+          "url": "http://navigation-office.esa.int/products/cryosat2/260814.cs2.v4.sp3.gz",
+          "status": 200,
+          "bytes": 74454,
+          "sha256": "2544971ee171e407d3ad78d34f6c570197ec41e37a64d7e8f86714ef2455fc0d"
+        }
+      ],
+      "sample_retrieved_at": "2026-09-09T11:34:34.068Z"
+    },
+    {
+      "source_id": "eumetsat",
+      "ok": true,
+      "discovered": 10,
+      "remaining": 9,
+      "requests": [
+        {
+          "url": "https://service.eumetsat.int/tle/",
+          "status": 200,
+          "bytes": 17368,
+          "sha256": "56a222f43298aff4ccb50874c76fed31e23743e788aaaca1d9d45ddc866acf13"
+        },
+        {
+          "url": "https://service.eumetsat.int/tle/javascript/data_content_m01.js",
+          "status": 200,
+          "bytes": 1850,
+          "sha256": "030ecf015fa9839853f9aca9b3f52e08179428d109358e141bae7ac47ea831b3"
+        }
+      ],
+      "sample_retrieved_at": "2026-09-09T11:34:34.068Z"
+    },
+    {
+      "source_id": "cpf",
+      "ok": true,
+      "discovered": 34,
+      "remaining": 33,
+      "requests": [
+        {
+          "url": "http://navigation-office.esa.int/products/cpf_predictions/",
+          "status": 200,
+          "bytes": 11069991,
+          "sha256": "e4bc6e1d69989514d6608e7d4e416e8c392bebdf43768fe2e95fe411b5ea8f42"
+        },
+        {
+          "url": "http://navigation-office.esa.int/products/cpf_predictions/galileo101_cpf_260909_25201.esa",
+          "status": 200,
+          "bytes": 39580,
+          "sha256": "db917fea46b0c03621e44f03c2da46d9cc6fbcd783b1d17ee5b94a17d3f320cc"
+        }
+      ],
+      "sample_retrieved_at": "2026-09-09T11:34:34.068Z"
+    }
+  ],
+  "sdk": "0.8.19",
+  "sds": "1.215.0",
+  "parity": {
+    "cases": 27,
+    "runtimes": [
+      "Chrome",
+      "native WasmEdge",
+      "container WasmEdge"
+    ],
+    "comparisons": 135,
+    "result": "byte-identical"
+  },
+  "artifact_sha256": {
+    "dist/isomorphic/module.wasm": "eb13624fd0f859275d8bce7cec95773e1cd56e78c7422324d58a08dabd4dc87e",
+    "host-adapter/dist/isomorphic/module.wasm": "32525d4ac5840ef5b8dd1b5e87e1b08bdc4180e08930bb82addc72ee8b80ffe9"
+  },
+  "real_sdn_publication": "Separate parent-owned real HostBridge/source-publisher integration gate; isolated fixture receipts are not evidence of network publication."
+}

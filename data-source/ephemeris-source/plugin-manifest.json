@@ -1,0 +1,277 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.ephemeris-source",
+  "name": "Ephemeris Source Retriever",
+  "version": "0.1.0",
+  "description": "Portable C++ ephemeris discovery and raw source descriptor processing. Network replies are explicit frames; scheduled acquisition uses the companion host adapter.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "A bounded ordered source acquisition advances one durable checkpoint only after each immutable artifact and signed publication commits. It deliberately performs no concurrent guest work."
+  },
+  "methods": [
+    {
+      "methodId": "describe_sources",
+      "displayName": "Describe Sources",
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portId": "sources",
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1,
+          "acceptedTypeSets": [
+            {
+              "setId": "ephemeris-sources",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Bounded host orchestration metadata or unmodified source bytes; not a normalized data record."
+              }
+            }
+          ]
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "plan_source_requests",
+      "displayName": "Plan source discovery requests",
+      "inputPorts": [
+        {
+          "portId": "config",
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1,
+          "acceptedTypeSets": [
+            {
+              "setId": "ephemeris-config",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Bounded host orchestration metadata or unmodified source bytes; not a normalized data record."
+              }
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "requests",
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1,
+          "acceptedTypeSets": [
+            {
+              "setId": "ephemeris-resources",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Bounded credential-free HTTP request descriptors for generic browser orchestration."
+              }
+            }
+          ]
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "discover_sources",
+      "displayName": "Discover Sources",
+      "inputPorts": [
+        {
+          "portId": "config",
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1,
+          "acceptedTypeSets": [
+            {
+              "setId": "ephemeris-config",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Bounded host orchestration metadata or unmodified source bytes; not a normalized data record."
+              }
+            }
+          ]
+        },
+        {
+          "portId": "responses",
+          "required": false,
+          "minStreams": 0,
+          "maxStreams": 1,
+          "acceptedTypeSets": [
+            {
+              "setId": "ephemeris-responses",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Bounded host orchestration metadata or unmodified source bytes; not a normalized data record."
+              }
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "resources",
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1,
+          "acceptedTypeSets": [
+            {
+              "setId": "ephemeris-resources",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Bounded host orchestration metadata or unmodified source bytes; not a normalized data record."
+              }
+            }
+          ]
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "describe_artifact",
+      "displayName": "Describe Artifact",
+      "inputPorts": [
+        {
+          "portId": "resource",
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1,
+          "acceptedTypeSets": [
+            {
+              "setId": "ephemeris-resource",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Bounded host orchestration metadata or unmodified source bytes; not a normalized data record."
+              }
+            }
+          ]
+        },
+        {
+          "portId": "receipt",
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1,
+          "acceptedTypeSets": [
+            {
+              "setId": "ephemeris-receipt",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Bounded host orchestration metadata or unmodified source bytes; not a normalized data record."
+              }
+            }
+          ]
+        },
+        {
+          "portId": "body",
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1,
+          "acceptedTypeSets": [
+            {
+              "setId": "ephemeris-body",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/vnd.sdn.ephemeris-source-file",
+                "detail": "Exact bytes of the resource format named in the accompanying discovery descriptor: Starlink MEME, OneWeb LTEF, Planet states/TLE, CCSDS OEM KVN, SES I11, Intelsat TXT, Telesat CSV, CSS OEM ZIP, compressed SP3, ESA CPF or EUMETSAT TLE JavaScript. No SDS identity is asserted for foreign source bytes."
+              }
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "descriptor",
+          "required": false,
+          "minStreams": 0,
+          "maxStreams": 64,
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                }
+              ],
+              "description": "Canonical size-prefixed SDS record."
+            }
+          ]
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "NCD.fbs",
+      "fileIdentifier": "$NCD",
+      "rootTypeName": "NCD"
+    }
+  ]
+}

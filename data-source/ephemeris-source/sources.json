@@ -1,0 +1,198 @@
+{
+  "upstream_repository": "https://github.com/DigitalArsenal/starlink_downloader",
+  "upstream_revision": "1a1caaf9c062d296cc96fd5ef0829f2c412640fa",
+  "registry_path": "src/host/sources/index.ts",
+  "sources": [
+    {
+      "source_id": "spacex-starlink",
+      "name": "SpaceX Starlink",
+      "operator": "SpaceX",
+      "format": "starlink-meme",
+      "origins": [
+        "https://api.starlink.com"
+      ],
+      "refresh_interval_sec": 21600,
+      "credentialed": false
+    },
+    {
+      "source_id": "eutelsat-oneweb",
+      "name": "Eutelsat OneWeb",
+      "operator": "Eutelsat OneWeb",
+      "format": "oneweb-ltef",
+      "origins": [
+        "https://ephemeris.oneweb.net"
+      ],
+      "refresh_interval_sec": 21600,
+      "credentialed": false
+    },
+    {
+      "source_id": "planet",
+      "name": "Planet Labs",
+      "operator": "Planet Labs PBC",
+      "format": "planet-states",
+      "origins": [
+        "https://ephemerides.planet-labs.com"
+      ],
+      "refresh_interval_sec": 43200,
+      "credentialed": false
+    },
+    {
+      "source_id": "iss",
+      "name": "NASA ISS",
+      "operator": "NASA",
+      "format": "ccsds-oem-kvn",
+      "origins": [
+        "https://nasa-public-data.s3.amazonaws.com"
+      ],
+      "refresh_interval_sec": 43200,
+      "credentialed": false
+    },
+    {
+      "source_id": "ses",
+      "name": "SES",
+      "operator": "SES S.A.",
+      "format": "ses-i11",
+      "origins": [
+        "https://www.ses.com",
+        "https://ses-satellite-orbital-data-public.s3.eu-west-1.amazonaws.com"
+      ],
+      "refresh_interval_sec": 86400,
+      "credentialed": false
+    },
+    {
+      "source_id": "intelsat",
+      "name": "Intelsat",
+      "operator": "Intelsat",
+      "format": "intelsat-ecf",
+      "origins": [
+        "https://my.intelsat.com"
+      ],
+      "refresh_interval_sec": 86400,
+      "credentialed": false
+    },
+    {
+      "source_id": "telesat",
+      "name": "Telesat",
+      "operator": "Telesat",
+      "format": "telesat-cob",
+      "origins": [
+        "https://app.telesat.com"
+      ],
+      "refresh_interval_sec": 86400,
+      "credentialed": false
+    },
+    {
+      "source_id": "css-tiangong",
+      "name": "China Space Station",
+      "operator": "China Manned Space Agency (BACC)",
+      "format": "css-oem-zip",
+      "origins": [
+        "https://www.cmse.gov.cn"
+      ],
+      "refresh_interval_sec": 43200,
+      "credentialed": false
+    },
+    {
+      "source_id": "gps-precise",
+      "name": "IGS / BKG GPS Precise",
+      "operator": "IGS / BKG",
+      "format": "sp3-gzip",
+      "origins": [
+        "https://igs.bkg.bund.de"
+      ],
+      "refresh_interval_sec": 21600,
+      "credentialed": false
+    },
+    {
+      "source_id": "glonass-precise",
+      "name": "ESA GLONASS Precise",
+      "operator": "IGS / ESA",
+      "format": "sp3-gzip",
+      "origins": [
+        "http://navigation-office.esa.int",
+        "https://navigation-office.esa.int"
+      ],
+      "refresh_interval_sec": 21600,
+      "credentialed": false
+    },
+    {
+      "source_id": "esa-pod",
+      "name": "ESA Precise Orbit Determination",
+      "operator": "ESA / ESOC Navigation Office",
+      "format": "sp3-gzip",
+      "origins": [
+        "http://navigation-office.esa.int",
+        "https://navigation-office.esa.int"
+      ],
+      "refresh_interval_sec": 43200,
+      "credentialed": false
+    },
+    {
+      "source_id": "eumetsat",
+      "name": "EUMETSAT",
+      "operator": "EUMETSAT",
+      "format": "eumetsat-tle-js",
+      "origins": [
+        "https://service.eumetsat.int"
+      ],
+      "refresh_interval_sec": 43200,
+      "credentialed": false
+    },
+    {
+      "source_id": "cpf",
+      "name": "ESA CPF Predictions",
+      "operator": "ESA / ESOC Navigation Office",
+      "format": "cpf",
+      "origins": [
+        "http://navigation-office.esa.int",
+        "https://navigation-office.esa.int"
+      ],
+      "refresh_interval_sec": 43200,
+      "credentialed": false
+    },
+    {
+      "source_id": "spire",
+      "name": "Spire Global",
+      "operator": "Spire Global",
+      "format": "spire-json",
+      "origins": [
+        "https://api.orb.spire.com"
+      ],
+      "refresh_interval_sec": 43200,
+      "credentialed": true
+    },
+    {
+      "source_id": "space-track",
+      "name": "Space-Track",
+      "operator": "Space-Track.org / 18th SDS",
+      "format": "omm-gp-json",
+      "origins": [
+        "https://www.space-track.org"
+      ],
+      "refresh_interval_sec": 21600,
+      "credentialed": true
+    },
+    {
+      "source_id": "vimpel",
+      "name": "JSC Vimpel",
+      "operator": "JSC MAK Vimpel",
+      "format": "vimpel-html",
+      "origins": [
+        "http://spacedata.vimpel.ru"
+      ],
+      "refresh_interval_sec": 86400,
+      "credentialed": true
+    },
+    {
+      "source_id": "cpf-edc",
+      "name": "EDC CPF Predictions",
+      "operator": "EDC / DGFI-TUM (ILRS)",
+      "format": "cpf",
+      "origins": [
+        "https://edc.dgfi.tum.de"
+      ],
+      "refresh_interval_sec": 43200,
+      "credentialed": true
+    }
+  ]
+}

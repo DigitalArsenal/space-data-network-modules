@@ -1,0 +1,65 @@
+{
+  "epoch_seconds": 1788652800,
+  "provenance": "Structural fixtures adapted from pinned starlink_downloader source discovery grammar and existing module provider fixtures. Filenames and snippets are representative test data, not current acquisition evidence.",
+  "responses": {
+    "spacex-starlink": {
+      "https://api.starlink.com/public-files/ephemerides/MANIFEST.txt": {
+        "body": "MEME_67851_STARLINK-36348_1340149_Operational_1463017800_UNCLASSIFIED.txt\nMEME_67850_STARLINK-36840_1340142_Operational_1463017380_UNCLASSIFIED.txt\n"
+      }
+    },
+    "eutelsat-oneweb": {},
+    "planet": {},
+    "iss": {},
+    "ses": {
+      "https://www.ses.com/network-and-technology/technical-data-and-tools/satellite-orbital-data": {
+        "body": "<a href=\"https://ses-satellite-orbital-data-public.s3.eu-west-1.amazonaws.com/public/ephemeris/SES1_THRU.I11\">Ephemeris</a><a href=\"https://ses-satellite-orbital-data-public.s3.eu-west-1.amazonaws.com/public/norad_tle/SES1.TLE\">TLE</a>"
+      }
+    },
+    "intelsat": {
+      "https://my.intelsat.com/ephemeris/public": {
+        "body": "<select><option value=\"i_aor_e_302.00_is-21_20260710_235300\">ECF</option><option value=\"i_aor_c_302.00_is-21_20260710_235300\">COB</option><option value=\"i_aor_e_315.00_is-14_20260710_235300\">ECF</option></select>"
+      }
+    },
+    "telesat": {
+      "https://app.telesat.com/data/FleetLong.csv": {
+        "body": "2026-07-13T00:00:00Z\nANIKF1,107.3\nANIKF2,111.1\n"
+      }
+    },
+    "css-tiangong": {
+      "https://www.cmse.gov.cn/gfgg/zgkjzgdcs/": {
+        "body": "<a href=\"./202607/W020260713123456.zip\">Latest ephemeris</a>"
+      }
+    },
+    "gps-precise": {
+      "https://igs.bkg.bund.de/root_ftp/IGS/products/2435/": {
+        "body": "<a href=\"IGS0OPSULT_20262480000_02D_15M_ORB.SP3.gz\">A</a><a href=\"IGS0OPSULT_20262480600_02D_15M_ORB.SP3.gz\">B</a><a href=\"IGS0OPSRAP_20262490000_01D_15M_ORB.SP3.gz\">C</a>"
+      }
+    },
+    "glonass-precise": {
+      "http://navigation-office.esa.int/products/gnss-products/2435/": {
+        "body": "<a href=\"ESA0OPSULT_20262480600_02D_15M_ORB.SP3.gz\">Latest</a>"
+      }
+    },
+    "esa-pod": {
+      "http://navigation-office.esa.int/products/gnss-products/2435/": {
+        "body": "<a href=\"ESA0MGNFIN_20262410000_01D_05M_ORB.SP3.gz\">Final</a><a href=\"ESA0OPSULT_20262480600_02D_15M_ORB.SP3.gz\">Ultra</a>"
+      },
+      "http://navigation-office.esa.int/products/swarm/": {
+        "body": "<a href=\"SWRAesoc24340.sp3.gz\">old</a><a href=\"SWRAesoc24350.sp3.gz\">latest</a>"
+      },
+      "http://navigation-office.esa.int/products/cryosat2/": {
+        "body": "<a href=\"260908.cs2.v3.sp3.gz\">v3</a><a href=\"260901.cs2.v4.sp3.gz\">v4</a>"
+      }
+    },
+    "eumetsat": {
+      "https://service.eumetsat.int/tle/": {
+        "body": "<script src=\"javascript/data_content_m01.js\"></script><a href=\"javascript/data_content_s3a.js\">S3A</a><script src=\"javascript/data_content_m01.js\"></script>"
+      }
+    },
+    "cpf": {
+      "http://navigation-office.esa.int/products/cpf_predictions/": {
+        "body": "<a href=\"galileo101_cpf_260909_9.esa\">old</a><a href=\"galileo101_cpf_260909_10.esa\">new</a><a href=\"galileo102_cpf_260909_1.esa\">second target</a>"
+      }
+    }
+  }
+}

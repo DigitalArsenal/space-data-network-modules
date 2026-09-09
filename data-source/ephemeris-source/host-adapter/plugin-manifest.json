@@ -1,0 +1,202 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.ephemeris-source-host",
+  "name": "Ephemeris Scheduled Publication Adapter",
+  "version": "0.1.0",
+  "description": "Bounded raw source acquisition into immutable IPFS files and attributed canonical NCD records; durable IRM continuation. Existing SDN source publisher independently signs and distributes NCD datasets.",
+  "pluginFamily": "data_source",
+  "capabilities": [
+    "http",
+    "ipfs",
+    "storage_query",
+    "storage_write",
+    "storage_ingest"
+  ],
+  "externalInterfaces": [
+    {
+      "kind": "http",
+      "host": "navigation-office.esa.int",
+      "interfaceId": "provider-0",
+      "direction": "bidirectional",
+      "capability": "http"
+    },
+    {
+      "kind": "http",
+      "host": "api.starlink.com",
+      "interfaceId": "provider-1",
+      "direction": "bidirectional",
+      "capability": "http"
+    },
+    {
+      "kind": "http",
+      "host": "app.telesat.com",
+      "interfaceId": "provider-2",
+      "direction": "bidirectional",
+      "capability": "http"
+    },
+    {
+      "kind": "http",
+      "host": "ephemerides.planet-labs.com",
+      "interfaceId": "provider-3",
+      "direction": "bidirectional",
+      "capability": "http"
+    },
+    {
+      "kind": "http",
+      "host": "ephemeris.oneweb.net",
+      "interfaceId": "provider-4",
+      "direction": "bidirectional",
+      "capability": "http"
+    },
+    {
+      "kind": "http",
+      "host": "igs.bkg.bund.de",
+      "interfaceId": "provider-5",
+      "direction": "bidirectional",
+      "capability": "http"
+    },
+    {
+      "kind": "http",
+      "host": "my.intelsat.com",
+      "interfaceId": "provider-6",
+      "direction": "bidirectional",
+      "capability": "http"
+    },
+    {
+      "kind": "http",
+      "host": "nasa-public-data.s3.amazonaws.com",
+      "interfaceId": "provider-7",
+      "direction": "bidirectional",
+      "capability": "http"
+    },
+    {
+      "kind": "http",
+      "host": "navigation-office.esa.int",
+      "interfaceId": "provider-8",
+      "direction": "bidirectional",
+      "capability": "http"
+    },
+    {
+      "kind": "http",
+      "host": "service.eumetsat.int",
+      "interfaceId": "provider-9",
+      "direction": "bidirectional",
+      "capability": "http"
+    },
+    {
+      "kind": "http",
+      "host": "ses-satellite-orbital-data-public.s3.eu-west-1.amazonaws.com",
+      "interfaceId": "provider-10",
+      "direction": "bidirectional",
+      "capability": "http"
+    },
+    {
+      "kind": "http",
+      "host": "www.cmse.gov.cn",
+      "interfaceId": "provider-11",
+      "direction": "bidirectional",
+      "capability": "http"
+    },
+    {
+      "kind": "http",
+      "host": "www.ses.com",
+      "interfaceId": "provider-12",
+      "direction": "bidirectional",
+      "capability": "http"
+    }
+  ],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "A bounded ordered source acquisition advances one durable checkpoint only after each immutable artifact and signed publication commits. It deliberately performs no concurrent guest work."
+  },
+  "methods": [
+    {
+      "methodId": "pull",
+      "displayName": "Retrieve and publish raw source files",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "required": false,
+          "minStreams": 0,
+          "maxStreams": 1,
+          "acceptedTypeSets": [
+            {
+              "setId": "timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Optional generic timer tick; configuration comes from plugin.getConfig."
+              }
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "descriptor",
+          "required": false,
+          "minStreams": 0,
+          "maxStreams": 64,
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "status",
+          "required": false,
+          "minStreams": 0,
+          "maxStreams": 1,
+          "acceptedTypeSets": [
+            {
+              "setId": "retrieval-status",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Bounded retrieval progress only; never a normalized data record."
+              }
+            }
+          ]
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "NCD.fbs",
+      "fileIdentifier": "$NCD",
+      "rootTypeName": "NCD"
+    },
+    {
+      "schemaName": "IRM.fbs",
+      "fileIdentifier": "$IRM",
+      "rootTypeName": "IRM"
+    }
+  ]
+}
