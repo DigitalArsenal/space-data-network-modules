@@ -1,6 +1,6 @@
 {
   "retrieved_at": "2026-09-09T11:34:34.068Z",
-  "scope": "Live public HTTP discovery and sampled acquisition through WASM; isolated capability fixtures, not live SDN publication. All13 acquired at least1rawartifact; complete constellations were not downloaded.",
+  "scope": "Live public HTTP discovery and sampled acquisition through WASM; isolated capability fixtures, not live SDN publication. All 13 public sources acquired at least one raw artifact; complete constellations were not downloaded.",
   "sources": [
     {
       "source_id": "spacex-starlink",
@@ -289,6 +289,6 @@
   },
   "real_sdn_publication": "Separate parent-owned real HostBridge/source-publisher integration gate; isolated fixture receipts are not evidence of network publication.",
   "focused_tests": 24,
-  "real_sdn_capabilities": "Parent confirmed isolated native SDN HostBridge HTTP/IPFS/storage, exact NCD raw CID/hash/length, distinct resource URL/hash batch attribution and durable resume; standalone configure/recovery recheck pending.",
+  "real_sdn_capabilities": "PASS: parent-owned TestEphemerisNativeModule, real native WasmEdge/SDN HostBridge and canonical codec overlay, 3.665 s. ApplyRuntimeModuleInputs configure then InvokeCron(nil), same-instance HTTP503 recovery, persisted IRM resume, lowered archive budget before pin/cursor advance, exact raw CID/SHA256/length and two per-resource URL/hash batches. Temporary HTTP/IPFS fixture plus real FlatSQL; this is not live network publication.",
   "archive_budget_tests": "Durable reservation before queue/raw pin; restart after queue pin failure; no pin or cursor advance at budget; cumulative failed-ingest and refreshed-edition charge; legacy unledgered mark refusal."
 }
