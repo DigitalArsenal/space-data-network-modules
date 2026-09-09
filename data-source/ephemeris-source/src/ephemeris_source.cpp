@@ -201,7 +201,7 @@ int execute_pull() {
   if(!resume.queueCid.empty() && !resume.complete) {
     const auto bytes=ipfs_cat(resume.queueCid);const auto envelope=Json::parse(bytes,nullptr,false);require(envelope.is_object() && envelope.contains("resources"),"Invalid pinned discovery envelope.");queue=envelope["resources"];require(queue.is_array() && !queue.empty() && queue.size()<=100000,"Invalid pinned discovery queue.");
   } else {
-    queue=discover(ctx);const auto text=Json{{"discovered_at",iso(ctx.epoch)},{"resources",queue}}.dump();resume.queueCid=ipfs_add(Bytes(text.begin(),text.end()));resume.next=0;resume.bytes=0;resume.complete=false;++resume.sequence;store("IRM.fbs",checkpoint(ctx,resume,job,queue.size(),"",0,iso(ctx.epoch)));
+    queue=discover(ctx);require(queue.is_array() && !queue.empty() && queue.size()<=100000,"Discovery must return a bounded nonempty source queue.");const auto text=Json{{"discovered_at",iso(ctx.epoch)},{"resources",queue}}.dump();resume.queueCid=ipfs_add(Bytes(text.begin(),text.end()));resume.next=0;resume.bytes=0;resume.complete=false;++resume.sequence;store("IRM.fbs",checkpoint(ctx,resume,job,queue.size(),"",0,iso(ctx.epoch)));
   }
   require(resume.next<=queue.size(),"Resume position exceeds the resource index.");int fetched=0;
   for(;resume.next<queue.size() && fetched<cap;++fetched) {
@@ -210,8 +210,8 @@ int execute_pull() {
     if(item["format"]=="vimpel-html")return emit_json("status",{{"source_id",sourceId},{"status","provider-page-only"},{"source_url",item["url"]},{"bytes",response.body.size()},{"sha256",digest(response.body)},{"normalized_records",0},{"note","Authenticated provider page is not an orbital export; no NCD was stored."}})<0?1:0;
     validate_raw(item,response.body);
     const auto stamp=iso(now()),rawCid=ipfs_add(response.body),hash=digest(response.body);const auto ncd=descriptor(item,response.body,rawCid);
-    const auto provenance=Json{{"source_id",sourceId},{"source_url",item["url"]},{"format",item["format"]},{"source_cid",rawCid},{"source_sha256",hash},{"source_byte_length",response.body.size()},{"retrieved_at",stamp},{"normalized_records",0},{"parser_version","raw-preservation/0.1.0"}}.dump();
-    const auto ingested=call("storage.ingest_with_source",{{"schema","NCD.fbs"},{"provider_id","ephemeris-provider:"+sourceId},{"source_name",sourceId},{"source_url",item["url"]},{"batch_id",digest(resume.queueCid)},{"reconcile","duplicates"},{"records",{{"$bin",0}}},{"provenance",{{"source",sourceId},{"json",{{"$bin",1}}}}}},{{ncd.data(),ncd.size()},{reinterpret_cast<const uint8_t*>(provenance.data()),provenance.size()}});
+    const auto provenance=Json{{"source_id",sourceId},{"source_url",item["url"]},{"format",item["format"]},{"source_cid",rawCid},{"source_sha256",hash},{"source_byte_length",response.body.size()},{"retrieved_at",stamp},{"normalized_records",0},{"discovery_queue_cid",resume.queueCid},{"discovery_job_id",digest(resume.queueCid)},{"parser_version","raw-preservation/0.1.0"}}.dump();
+    const auto ingested=call("storage.ingest_with_source",{{"schema","NCD.fbs"},{"provider_id","ephemeris-provider:"+sourceId},{"source_name",sourceId},{"source_url",item["url"]},{"batch_id",hash},{"reconcile","duplicates"},{"records",{{"$bin",0}}},{"provenance",{{"source",sourceId},{"json",{{"$bin",1}}}}}},{{ncd.data(),ncd.size()},{reinterpret_cast<const uint8_t*>(provenance.data()),provenance.size()}});
     require(ingested.value.is_object() && ingested.value.contains("inserted"),"Source ingestion did not confirm durable records.");
     ++resume.next;++resume.sequence;resume.bytes+=response.body.size();store("IRM.fbs",checkpoint(ctx,resume,job,queue.size(),hash,response.body.size(),stamp));
     require(emit_record("descriptor","NCD.fbs","$NCD","NCD",ncd)>=0,"Could not emit acquisition receipt.");

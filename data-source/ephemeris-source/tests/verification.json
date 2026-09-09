@@ -285,7 +285,7 @@
   },
   "artifact_sha256": {
     "dist/isomorphic/module.wasm": "eb13624fd0f859275d8bce7cec95773e1cd56e78c7422324d58a08dabd4dc87e",
-    "host-adapter/dist/isomorphic/module.wasm": "32525d4ac5840ef5b8dd1b5e87e1b08bdc4180e08930bb82addc72ee8b80ffe9"
+    "host-adapter/dist/isomorphic/module.wasm": "35cec35aa3637ac3a6e506d0877e806b6d3ab0218376ce16a4f4424f3b149dfe"
   },
   "real_sdn_publication": "Separate parent-owned real HostBridge/source-publisher integration gate; isolated fixture receipts are not evidence of network publication."
 }

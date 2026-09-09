@@ -112,8 +112,8 @@
     "wasmedge"
   ],
   "sequentialJustification": {
-    "kind": "pure-transform",
-    "detail": "A bounded ordered source acquisition advances one durable checkpoint only after each immutable artifact and signed publication commits. It deliberately performs no concurrent guest work."
+    "kind": "inherently-sequential-algorithm",
+    "detail": "Each source part advances an ordered durable IRM checkpoint only after its immutable raw pin and attributed NCD ingestion succeed. No guest threads are spawned."
   },
   "methods": [
     {
@@ -122,8 +122,8 @@
       "inputPorts": [
         {
           "portId": "tick",
-          "required": false,
-          "minStreams": 0,
+          "required": true,
+          "minStreams": 1,
           "maxStreams": 1,
           "acceptedTypeSets": [
             {
@@ -136,7 +136,7 @@
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "Optional generic timer tick; configuration comes from plugin.getConfig."
+                "detail": "Required generic timer tick; configuration comes from plugin.getConfig."
               }
             }
           ]

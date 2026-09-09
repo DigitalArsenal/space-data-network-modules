@@ -1,7 +1,7 @@
 // Opt-in public acquisition verification. HTTP is generic; discovery and raw
 // validation run inside the shipped WASM. Storage/signing are isolated fixtures.
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {spawnSync} from 'node:child_process';import {createHash} from 'node:crypto';
-import {nativeFixture,output,moduleRoot} from './harness.mjs';
+import {nativeFixture,output,input,moduleRoot} from './harness.mjs';
 const sources=JSON.parse(fs.readFileSync(path.join(moduleRoot,'sources.json'))).sources.filter(x=>!x.credentialed && (!process.env.SOURCE_IDS || process.env.SOURCE_IDS.split(",").includes(x.source_id)));
 const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'ephemeris-public-probe-'));const report=[];
 const sha=x=>createHash('sha256').update(x).digest('hex');
@@ -20,7 +20,7 @@ try {for(const source of sources){const files=new Map(),requests=[],records=[];l
   if(op==='storage.write'){records.push({schema:p.schema,bytes:p.data.length,sha256:sha(p.data)});return {cid:'fixture'+sha(p.data)};}
   throw Error('Unexpected test capability '+op);
  };
- try{const h=await nativeFixture(dispatch);const r=h.invoke({methodId:'pull',inputs:[]});if(r.statusCode!==0)throw Error(r.errorMessage);result={source_id:source.source_id,ok:true,progress:output(r,'status'),requests,records};}
+ try{const h=await nativeFixture(dispatch);const r=h.invoke({methodId:'pull',inputs:[input('tick',{})]});if(r.statusCode!==0)throw Error(r.errorMessage);result={source_id:source.source_id,ok:true,progress:output(r,'status'),requests,records};}
  catch(error){result={source_id:source.source_id,ok:false,error:String(error.message),requests,records};}
  report.push(result);console.log(JSON.stringify({source_id:result.source_id,ok:result.ok,discovered:result.progress?.total,requests:requests.length,last_bytes:requests.at(-1)?.bytes,error:result.error}));
  }

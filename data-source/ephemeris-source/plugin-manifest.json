@@ -16,7 +16,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "A bounded ordered source acquisition advances one durable checkpoint only after each immutable artifact and signed publication commits. It deliberately performs no concurrent guest work."
+    "detail": "Bounded request planning, explicit listing-response discovery and raw NCD descriptor transformation. The core has no host imports and spawns no threads."
   },
   "methods": [
     {
