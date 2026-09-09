@@ -35,3 +35,18 @@ test('rebuilds coverage from a bounded, hash-verified archive page without fetch
  corrupt=true;result=adapter.invoke({methodId:'backfill_coverage',inputs:[]});assert.notEqual(result.statusCode,0);assert.match(result.errorMessage,/does not match/);assert.equal(stored,1);
  result=adapter.invoke({methodId:'backfill_coverage',inputs:[input('request',{limit:5})]});assert.notEqual(result.statusCode,0);assert.equal(stored,1);
 });
+
+test('extracts primary TLE international designators, verifies both checksums, and never uses numeric IDs as identities',async t=>{
+ const host=await createBrowserModuleHarness({wasmSource:wasm,manifest,surface:'direct'});t.after(()=>host.destroy());
+ const check=line=>{line=line.slice(0,68).padEnd(68);return line+[...line].reduce((sum,c)=>sum+(/\d/.test(c)?Number(c):c==='-'?1:0),0)%10;};
+ const first=check('1 60481U 24149P   26252.19802083  .00000000  00000+0  84314-3 0    0'),second=check('2 60481 097.3714 336.1650 0001501 341.8259 059.4190 15.43694059    0');
+ const duplicate=check(first.replace('60481','60519')),paired=check(second.replace('60481','60519'));
+ const unresolved=check(first.replace('24149P  ','PLANET  '));
+ for(const format of ['planet-states','eumetsat-tle-js']){
+  const lines=[first,second,duplicate,paired,unresolved,second,first.slice(0,68)+(Number(first[68])+1)%10,second];
+  const body=Buffer.from(format==='planet-states'?'0 FLOCK 4BE 7\n'+lines.join('\n'):lines.map(line=>'sga1_TLE[i++] = '+JSON.stringify(line)+';').join('\n'));
+  const result=await host.invoke({methodId:'describe_coverage',inputs:[input('resource',{format}),input('body',body)]});assert.equal(result.statusCode,0,result.errorMessage);
+  const bytes=result.outputs.find(o=>o.portId==='catalog').payload;assert.equal(new DataView(bytes.buffer,bytes.byteOffset).getUint32(0,true)+4,bytes.length);
+  const row=CAT.getSizePrefixedRootAsCAT(new ByteBuffer(bytes));assert.equal(row.OBJECT_ID(),'2024-149P');assert.equal(row.NORAD_CAT_ID(),0);
+ }
+});

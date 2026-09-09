@@ -72,7 +72,7 @@ memory ceiling on very large listings; update the runtime before this rollout.
 
 ### Primary object coverage
 
-Version 0.1.3 emits source-scoped CAT records alongside OEM archives when a
+Version 0.1.4 emits source-scoped CAT records alongside OEM archives when a
 complete OEM metadata block declares an international designator. The NASA form
 `1998-067-A` is normalized to `1998-067A`. Numeric NORAD/native identifiers are
 never substituted for missing designators. Unsupported formats continue to
@@ -85,3 +85,12 @@ and byte length; a page is capped at 64 MiB. The returned offset permits explici
 paging. This method is not scheduled automatically. Coverage retains the source
 provider, immutable CID and hash provenance; it is not an assertion that an
 unparsed archive or an incomplete acquisition covers a whole constellation.
+
+Planet TLE streams and EUMETSAT TLE JavaScript assignments also publish the
+international designator carried in the element set. Both line checksums and
+the line-pair identifier must match. Non-designator placeholders such as
+`PLANET` remain unresolved. JavaScript is parsed as literal assignments, never
+executed. The two-digit launch year follows the [documented TLE convention](https://celestrak.org/columns/v04n03/),
+and the designator comes from [line 1 columns 10–17](https://celestrak.org/norad/documentation/tle-fmt.php).
+This validates the pair's structure; it does not use the numeric satellite
+catalog field as an object matching key.

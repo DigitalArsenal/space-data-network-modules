@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.ephemeris-source-host",
   "name": "Ephemeris Scheduled Publication Adapter",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Bounded raw source acquisition into immutable IPFS files and attributed canonical NCD records; durable IRM continuation. Existing SDN source publisher independently signs and distributes NCD datasets.",
   "pluginFamily": "data_source",
   "capabilities": [

@@ -185,15 +185,34 @@ Bytes descriptor(const Json& item,const Bytes& raw,const std::string& cid) {
 // filenames, numeric catalog IDs, or arbitrary designators elsewhere in a file.
 Bytes object_coverage(const Json& item, const Bytes& raw) {
   const auto format=item.value("format",std::string());
-  if (format != "ccsds-oem-kvn") return {};
+  if (format != "ccsds-oem-kvn" && format != "planet-states" && format != "eumetsat-tle-js") return {};
   const std::string input(raw.begin(),raw.end());
   std::map<std::string,std::string> objects;
   bool metadata=false;std::string id,name;
   auto trim_value=[](std::string value) {const auto first=value.find_first_not_of(" \t\r");if(first==std::string::npos)return std::string();return value.substr(first,value.find_last_not_of(" \t\r")-first+1);};
   auto valid=[](const std::string& value) {if(value.size()<9||value.size()>11||value[4]!='-')return false;for(size_t i=0;i<value.size();++i){if(i==4)continue;if(i<8?(value[i]<'0'||value[i]>'9'):(value[i]<'A'||value[i]>'Z'))return false;}return true;};
+  auto tle_checksum=[](const std::string& line) {if(line.size()!=69 || line[68]<'0' || line[68]>'9')return false;int sum=0;for(size_t i=0;i<68;++i){if(line[i]>='0'&&line[i]<='9')sum+=line[i]-'0';else if(line[i]=='-')++sum;}return sum%10==line[68]-'0';};
+  std::string firstTle;
   size_t at=0;
   while(at<input.size()) {
-    const auto end=input.find('\n',at);const auto line=trim_value(input.substr(at,end==std::string::npos?std::string::npos:end-at));at=end==std::string::npos?input.size():end+1;
+    const auto end=input.find('\n',at);auto line=trim_value(input.substr(at,end==std::string::npos?std::string::npos:end-at));at=end==std::string::npos?input.size():end+1;
+    if(format!="ccsds-oem-kvn") {
+      if(format=="eumetsat-tle-js") {
+        const auto marker=line.find("[i++]");if(marker==std::string::npos || marker==0)continue;
+        const auto variable=line.substr(0,marker);if(variable.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")!=std::string::npos)continue;
+        auto value=trim_value(line.substr(marker+5));if(value.empty() || value[0]!='=')continue;value=trim_value(value.substr(1));if(!value.empty() && value.back()==';')value.pop_back();
+        const auto literal=Json::parse(value,nullptr,false);if(!literal.is_string())continue;line=literal.get<std::string>();
+      }
+      if(line.rfind("0 ",0)==0){name=trim_value(line.substr(2));firstTle.clear();continue;}
+      if(line.rfind("1 ",0)==0){firstTle=tle_checksum(line)?line:"";continue;}
+      if(line.rfind("2 ",0)!=0 || firstTle.empty() || !tle_checksum(line) || line.substr(2,5)!=firstTle.substr(2,5)){firstTle.clear();continue;}
+      const auto token=trim_value(firstTle.substr(9,8));firstTle.clear();
+      if(token.size()<6 || token.size()>8 || token.substr(0,5).find_first_not_of("0123456789")!=std::string::npos)continue;
+      const int year=(token[0]-'0')*10+token[1]-'0';
+      const auto designator=std::to_string(year>=57?1900+year:2000+year)+"-"+token.substr(2);
+      if(valid(designator))objects[designator]=name;
+      continue;
+    }
     if(line=="META_START"){metadata=true;id.clear();name.clear();continue;}
     if(line=="META_STOP"){if(id.size()>8 && id[8]=='-')id.erase(8,1);if(metadata&&valid(id))objects[id]=name;metadata=false;continue;}
     if(!metadata)continue;
@@ -341,10 +360,11 @@ extern "C" int backfill_coverage(){return ephemeris::guarded([]()->int{using nam
   while(at<stream.size()) {
     require(at+4<=stream.size(),"Truncated descriptor frame.");const auto size=flatbuffers::ReadScalar<uint32_t>(stream.data()+at);require(size>=8 && size+4<=stream.size()-at,"Invalid descriptor frame.");
     flatbuffers::Verifier verifier(stream.data()+at,size+4);require(VerifySizePrefixedNCDBuffer(verifier),"Invalid NCD.");const auto* ncd=GetSizePrefixedNCD(stream.data()+at);at+=size+4;
-    if(ncd->FORMAT()!=ncdContainerFormat_CCSDS_OEM_KVN)continue;
+    const auto format=ncd->FORMAT()==ncdContainerFormat_CCSDS_OEM_KVN?std::string("ccsds-oem-kvn"):ncd->FORMAT()==ncdContainerFormat_PROVIDER_DEFINED && ncd->PROVIDER_DEFINED_FORMAT_NAME()?ncd->PROVIDER_DEFINED_FORMAT_NAME()->str():std::string();
+    if(format!="ccsds-oem-kvn" && format!="planet-states" && format!="eumetsat-tle-js")continue;
     require(ncd->SOURCE_CID() && ncd->SOURCE_SHA256(),"Descriptor lacks immutable source binding.");require(ncd->SOURCE_BYTE_LENGTH()<=hardMaxBytes && processedBytes+ncd->SOURCE_BYTE_LENGTH()<=64*1024*1024,"Coverage page exceeds its byte budget.");processedBytes+=ncd->SOURCE_BYTE_LENGTH();const auto cid=ncd->SOURCE_CID()->str(),hash=ncd->SOURCE_SHA256()->str();const auto raw=ipfs_cat(cid);require(digest(raw)==hash && raw.size()==ncd->SOURCE_BYTE_LENGTH(),"Archived source does not match its descriptor.");
-    const auto coverage=object_coverage({{"format","ccsds-oem-kvn"}},raw);if(coverage.empty())continue;
-    const auto provenance=Json{{"source_id",sourceId},{"source_cid",cid},{"source_sha256",hash},{"parser_version","primary-object-coverage/0.1.3"}}.dump();
+    const auto coverage=object_coverage({{"format",format}},raw);if(coverage.empty())continue;
+    const auto provenance=Json{{"source_id",sourceId},{"source_cid",cid},{"source_sha256",hash},{"parser_version","primary-object-coverage/0.1.4"}}.dump();
     const auto result=call("storage.ingest_with_source",{{"schema","CAT.fbs"},{"provider_id","ephemeris-provider:"+sourceId},{"source_name",sourceId},{"source_url","ipfs://"+cid},{"batch_id",hash},{"reconcile","duplicates"},{"records",{{"$bin",0}}},{"provenance",{{"source",sourceId},{"json",{{"$bin",1}}}}}},{{coverage.data(),coverage.size()},{reinterpret_cast<const uint8_t*>(provenance.data()),provenance.size()}});
     require(result.value.is_object() && result.value.contains("inserted"),"Coverage was not stored.");++supported;
   }
