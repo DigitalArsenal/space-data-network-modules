@@ -106,3 +106,26 @@ test('rejects malformed, ambiguous and mismatched inputs without poisoning the i
   }
   assert.equal((await compose(host, valid, [[cat(1)]])).report.objectCount, 1);
 });
+
+// CAT.OBJECT_ID is the SDS international-designator identity. These are
+// identifier-selection tests, with exact byte equality; no orbital numerics.
+test('international identity merges matching designators without using NORAD numbers', async t => {
+ const host=await harness(t);
+ const config={...recipe([layer('a'),layer('b')]),version:2};delete config.maxAgeSeconds;
+ const result=await compose(host,config,[[cat(1,'First','2020-001A')],[cat(99,'Second','2020-001A'),cat(1,'Distinct','2021-001A'),cat(1,'Unresolved')]]);
+ assert.equal(result.report.objectCount,3);
+ assert.equal(result.report.objects.find(row=>row.key==='cospar:2020-001A').candidates.length,2);
+ assert.equal(result.report.objects.filter(row=>row.status==='missing-designator').length,1);
+ assert(!result.report.objects.some(row=>row.key.startsWith('norad:')));
+});
+test('overlapping declared coverage requires an individual choice and rejects uncovered sources', async t => {
+ const host=await harness(t), config={...recipe([layer('a')]),version:2,stateSources:['primary','other'],coverage:[{sourceId:'primary',head:'immutable-one',objects:['2020-001A']},{sourceId:'other',head:'immutable-two',objects:['2020-001A']}]};delete config.maxAgeSeconds;
+ const catalogs=[[cat(1,'Object','2020-001A')]];
+ let result=await compose(host,config,catalogs);
+ assert.equal(result.report.objects[0].state.status,'overlap');
+ config.overrides={'cospar:2020-001A':{stateSources:['other']}};
+ result=await compose(host,config,catalogs);
+ assert.equal(result.report.objects[0].state.sourceId,'other');
+ config.overrides['cospar:2020-001A'].stateSources=['uncovered'];
+ assert.notEqual((await host.invoke(request(config,catalogs))).statusCode,0);
+});

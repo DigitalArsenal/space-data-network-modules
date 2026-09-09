@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-ephemeris-source",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",

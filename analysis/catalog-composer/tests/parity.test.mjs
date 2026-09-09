@@ -5,8 +5,8 @@ import { Builder } from 'flatbuffers';
 import { normalizeParityFixture, runParityHarness, formatParityReport } from 'space-data-module-sdk/testing';
 
 test('one artifact produces identical output in Chromium, native WasmEdge and container WasmEdge', { skip: process.env.SDN_RUN_CATALOG_PARITY !== '1' }, async () => {
-  const record = (name, id) => { const b = new Builder(); const n = b.createString(name); b.startObject(3); b.addFieldOffset(0,n,0); b.addFieldInt32(2,id,0); b.finishSizePrefixed(b.endObject(),'$CAT'); return new Uint8Array(b.asUint8Array()); };
-  const config = { version:1, layers:['a','b'].map(id=>({id,node:`peer-${id}`,provider:id,source:'satcat',head:`snapshot-${id}`})),asOf:1000,maxAgeSeconds:100,stateSources:[],overrides:{'norad:1':{catalogLayer:'b'}} };
+  const record = (name, id) => { const b = new Builder(); const n = b.createString(name), d=b.createString('2020-001A'); b.startObject(3); b.addFieldOffset(0,n,0); b.addFieldOffset(1,d,0); b.addFieldInt32(2,id,0); b.finishSizePrefixed(b.endObject(),'$CAT'); return new Uint8Array(b.asUint8Array()); };
+  const config = { version:2, layers:['a','b'].map(id=>({id,node:`peer-${id}`,provider:id,source:'satcat',head:`snapshot-${id}`})),asOf:1000,maxAgeSeconds:100,stateSources:[],overrides:{'cospar:2020-001A':{catalogLayer:'b'}} };
   const recipe = JSON.stringify(config);
   const request = { methodId:'compose',inputs:[
     {portId:'recipe',payloadUtf8:recipe,typeRef:{wireFormat:'aligned-binary',byteLength:new TextEncoder().encode(recipe).length,requiredAlignment:1}},

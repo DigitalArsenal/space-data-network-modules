@@ -10,3 +10,7 @@ test('rejects malformed saved configuration before rendering the editor', () => 
   const duplicate = recipe(); duplicate.layers.push(duplicate.layers[0]); assert.throws(() => validateRecipe(duplicate));
   const missing = recipe(); missing.overrides['norad:1'].catalogLayer = 'removed'; assert.throws(() => validateRecipe(missing));
 });
+test('international-designator recipes do not require a global maximum age', () => {
+ const value={...recipe(),version:2,overrides:{'cospar:2020-001A':{catalogLayer:'a'}}};delete value.maxAgeSeconds;
+ assert.deepEqual(validateRecipe(value),value);
+});

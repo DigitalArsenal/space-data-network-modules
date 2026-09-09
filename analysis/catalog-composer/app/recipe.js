@@ -2,8 +2,8 @@ const plain = value => value && typeof value === 'object' && !Array.isArray(valu
 const text = value => typeof value === 'string' && value.length > 0 && value.length <= 8192;
 const ids = value => Array.isArray(value) && value.length <= 64 && value.every(text) && new Set(value).size === value.length;
 export function validateRecipe(value) {
-  if (!plain(value) || value.version !== 1 || !Array.isArray(value.layers) || value.layers.length > 16 ||
-      !ids(value.stateSources) || !plain(value.overrides) || !Number.isFinite(value.maxAgeSeconds) || value.maxAgeSeconds < 0 ||
+  if (!plain(value) || ![1, 2].includes(value.version) || !Array.isArray(value.layers) || value.layers.length > 16 ||
+      !ids(value.stateSources) || !plain(value.overrides) || (value.version === 1 && (!Number.isFinite(value.maxAgeSeconds) || value.maxAgeSeconds < 0)) ||
       !Number.isFinite(value.asOf) || value.asOf <= 0) throw new Error('This is not a valid Catalog Editor recipe.');
   const layerIds = new Set();
   for (const layer of value.layers) {

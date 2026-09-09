@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.ephemeris-source",
   "name": "Ephemeris Source Retriever",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Portable C++ ephemeris discovery and raw source descriptor processing. Network replies are explicit frames; scheduled acquisition uses the companion host adapter.",
   "pluginFamily": "data_source",
   "capabilities": [],
@@ -259,6 +259,76 @@
                 }
               ],
               "description": "Canonical size-prefixed SDS record."
+            }
+          ]
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "describe_coverage",
+      "displayName": "Describe primary object coverage",
+      "inputPorts": [
+        {
+          "portId": "resource",
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1,
+          "acceptedTypeSets": [
+            {
+              "setId": "ephemeris-resource",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Bounded host orchestration metadata or unmodified source bytes; not a normalized data record."
+              }
+            }
+          ]
+        },
+        {
+          "portId": "body",
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1,
+          "acceptedTypeSets": [
+            {
+              "setId": "ephemeris-body",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/vnd.sdn.ephemeris-source-file",
+                "detail": "Exact bytes of the resource format named in the accompanying discovery descriptor: Starlink MEME, OneWeb LTEF, Planet states/TLE, CCSDS OEM KVN, SES I11, Intelsat TXT, Telesat CSV, CSS OEM ZIP, compressed SP3, ESA CPF or EUMETSAT TLE JavaScript. No SDS identity is asserted for foreign source bytes."
+              }
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "catalog",
+          "required": false,
+          "minStreams": 0,
+          "maxStreams": 64,
+          "acceptedTypeSets": [
+            {
+              "setId": "coverage-cat",
+              "allowedTypes": [
+                {
+                  "schemaName": "CAT.fbs",
+                  "fileIdentifier": "$CAT",
+                  "rootTypeName": "CAT"
+                }
+              ]
             }
           ]
         }

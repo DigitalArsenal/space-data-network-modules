@@ -18,7 +18,7 @@ export async function sourceLanes(signal) {
       const row = DSS.getSizePrefixedRootAsDSS(new ByteBuffer(frame));
       const schema = row.SCHEMA_NAME()?.replace(/\.fbs$/i, '').toUpperCase();
       const node = row.PROVIDER_PEER_ID(), provider = row.PROVIDER_ID(), source = row.SOURCE_NAME();
-      if (node && provider && source && ['CAT', 'MPE', 'OMM', 'OEM', 'OCM'].includes(schema)) {
+      if (node && provider && source && ['CAT', 'MPE', 'OMM', 'OEM', 'OCM', 'NCD', 'PPE'].includes(schema)) {
         const id = JSON.stringify([node, provider, source, schema]);
         if (!lanes.some(l => l.id === id)) lanes.push({ id, node, provider, source, schema, head: row.FEED_HEAD() || '', manifest: row.LAST_PUBLICATION_CID() || '', total: Number(row.TOTAL_ROWS()) });
       }

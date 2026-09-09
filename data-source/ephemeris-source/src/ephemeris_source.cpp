@@ -181,6 +181,34 @@ Bytes descriptor(const Json& item,const Bytes& raw,const std::string& cid) {
   record.add_SOURCE_BYTE_LENGTH(raw.size());record.add_SOURCE_SHA256(hash);record.add_SOURCE_CID(content);
   b.FinishSizePrefixed(record.Finish(),"$NCD");return finish(b);
 }
+// Coverage is an assertion extracted from object metadata, never guessed from
+// filenames, numeric catalog IDs, or arbitrary designators elsewhere in a file.
+Bytes object_coverage(const Json& item, const Bytes& raw) {
+  const auto format=item.value("format",std::string());
+  if (format != "ccsds-oem-kvn") return {};
+  const std::string input(raw.begin(),raw.end());
+  std::map<std::string,std::string> objects;
+  bool metadata=false;std::string id,name;
+  auto trim_value=[](std::string value) {const auto first=value.find_first_not_of(" \t\r");if(first==std::string::npos)return std::string();return value.substr(first,value.find_last_not_of(" \t\r")-first+1);};
+  auto valid=[](const std::string& value) {if(value.size()<9||value.size()>11||value[4]!='-')return false;for(size_t i=0;i<value.size();++i){if(i==4)continue;if(i<8?(value[i]<'0'||value[i]>'9'):(value[i]<'A'||value[i]>'Z'))return false;}return true;};
+  size_t at=0;
+  while(at<input.size()) {
+    const auto end=input.find('\n',at);const auto line=trim_value(input.substr(at,end==std::string::npos?std::string::npos:end-at));at=end==std::string::npos?input.size():end+1;
+    if(line=="META_START"){metadata=true;id.clear();name.clear();continue;}
+    if(line=="META_STOP"){if(metadata&&valid(id))objects[id]=name;metadata=false;continue;}
+    if(!metadata)continue;
+    const auto equals=line.find('=');if(equals==std::string::npos)continue;
+    const auto key=trim_value(line.substr(0,equals)),value=trim_value(line.substr(equals+1));
+    if(key=="OBJECT_ID")id=value;else if(key=="OBJECT_NAME")name=value;
+  }
+  Bytes result;
+  for(const auto& [designator,label]:objects) {
+    flatbuffers::FlatBufferBuilder b(256);const auto objectId=b.CreateString(designator),objectName=b.CreateString(label);
+    CATBuilder cat(b);cat.add_OBJECT_ID(objectId);cat.add_OBJECT_NAME(objectName);b.FinishSizePrefixed(cat.Finish(),"$CAT");
+    const auto frame=finish(b);result.insert(result.end(),frame.begin(),frame.end());
+  }
+  return result;
+}
 #ifdef EPHEMERIS_HOST_ADAPTER
 struct Resume {uint64_t sequence=0,bytes=0,reserved=0,lastBytes=0;uint32_t next=0;std::string queueCid;bool complete=false;std::string updated,lastHash,lastStamp;};
 Resume restore(const std::string& job) {
@@ -273,6 +301,11 @@ int execute_pull() {
     const auto provenance=Json{{"source_id",sourceId},{"source_url",item["url"]},{"format",item["format"]},{"source_cid",rawCid},{"source_sha256",hash},{"source_byte_length",response.body.size()},{"retrieved_at",stamp},{"normalized_records",0},{"discovery_queue_cid",resume.queueCid},{"discovery_job_id",digest(resume.queueCid)},{"parser_version","raw-preservation/0.1.0"}}.dump();
     const auto ingested=call("storage.ingest_with_source",{{"schema","NCD.fbs"},{"provider_id","ephemeris-provider:"+sourceId},{"source_name",sourceId},{"source_url",item["url"]},{"batch_id",hash},{"reconcile","duplicates"},{"records",{{"$bin",0}}},{"provenance",{{"source",sourceId},{"json",{{"$bin",1}}}}}},{{ncd.data(),ncd.size()},{reinterpret_cast<const uint8_t*>(provenance.data()),provenance.size()}});
     require(ingested.value.is_object() && ingested.value.contains("inserted"),"Source ingestion did not confirm durable records.");
+    const auto coverage=object_coverage(item,response.body);
+    if(!coverage.empty()) {
+      const auto accepted=call("storage.ingest_with_source",{{"schema","CAT.fbs"},{"provider_id","ephemeris-provider:"+sourceId},{"source_name",sourceId},{"source_url",item["url"]},{"batch_id",hash},{"reconcile","duplicates"},{"records",{{"$bin",0}}},{"provenance",{{"source",sourceId},{"json",{{"$bin",1}}}}}},{{coverage.data(),coverage.size()},{reinterpret_cast<const uint8_t*>(provenance.data()),provenance.size()}});
+      require(accepted.value.is_object() && accepted.value.contains("inserted"),"Object coverage ingestion did not confirm durable records.");
+    }
     ++resume.next;++resume.sequence;resume.bytes+=response.body.size();resume.lastHash=hash;resume.lastBytes=response.body.size();resume.lastStamp=stamp;resume.complete=resume.next==queue.size();store("IRM.fbs",checkpoint(ctx,resume,job,stamp));
     require(emit_record("descriptor","NCD.fbs","$NCD","NCD",ncd)>=0,"Could not emit acquisition receipt.");
   }
@@ -290,3 +323,5 @@ extern "C" int configure(){return ephemeris::guarded(ephemeris::execute_configur
 extern "C" int pull(){return ephemeris::guarded(ephemeris::execute_pull);}
 
 #endif
+
+extern "C" int describe_coverage(){return ephemeris::guarded([]()->int{using namespace ephemeris;const auto item=input("resource");const auto* body=frame("body");require(body,"Raw source bytes are required.");const Bytes bytes(body->payload,body->payload+body->payload_length);require(validate_raw(item,bytes),"Invalid source bytes.");const auto coverage=object_coverage(item,bytes);if(coverage.empty())return 0;return emit_record("catalog","CAT.fbs","$CAT","CAT",coverage)<0?1:0;});}

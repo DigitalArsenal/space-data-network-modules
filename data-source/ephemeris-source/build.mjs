@@ -12,7 +12,7 @@ const pieces=[`#include "space_data_module_invoke.h"
 [[noreturn]] void ephemeris_failure(const char* message) { plugin_set_error("ephemeris-retrieval-failed",message); __builtin_trap(); }
 #define JSON_THROW_USER(exception) ephemeris_failure("Invalid JSON value shape.")
 `];
-for(const code of ['NCD','IRM'])pieces.push((await readSdsHeader(code,import.meta.url)).replaceAll('FLATBUFFERS_GENERATED_MAIN_H_',`EPHEMERIS_GENERATED_${code}_H_`));
+for(const code of ['IDM','PLD','LCC','CAT','NCD','IRM'])pieces.push((await readSdsHeader(code,import.meta.url)).replace(/^#include "(?:\.\.\/)?(?:IDM|PLD|LCC)\/main_generated.h"\s*$/gm,'').replace(/^#include "main_generated.h"\s*$/gm,'').replaceAll('FLATBUFFERS_GENERATED_MAIN_H_',`EPHEMERIS_GENERATED_${code}_H_`));
 for(const file of ['../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp','../../files/orbit-products/src/sha256.hpp','../../common/sdm_hostcall_wire.hpp'])pieces.push(await fs.readFile(path.resolve(root,file),'utf8'));
 pieces.push(await fs.readFile(path.join(sdk,'src/host/cpp/keyslotClient.hpp'),'utf8'));
 const registry=JSON.stringify(JSON.parse(await fs.readFile(path.join(root,'sources.json'),'utf8')));

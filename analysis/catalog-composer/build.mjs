@@ -47,7 +47,7 @@ const app = encodeAppManifest({
   id: 'catalog-editor', name: 'Catalog Editor', version: manifest.version,
   description: manifest.description,
   modules: [{ id: 'composer', pluginId: manifest.pluginId, contentHash: canonical.hashHex, version: manifest.version, role: 'primary', runtimeTarget: 'both' }],
-  data: ['CAT', 'MPE', 'OMM', 'OEM', 'OCM'].map(code => ({ id: code.toLowerCase(), sdsType: code, direction: code === 'CAT' ? 'both' : 'consumes', moduleId: 'composer' })),
+  data: ['CAT', 'MPE', 'OMM', 'OEM', 'OCM', 'NCD', 'PPE'].map(code => ({ id: code.toLowerCase(), sdsType: code, direction: code === 'CAT' ? 'both' : 'consumes', moduleId: 'composer' })),
   pages: [{ id: 'editor', title: 'Catalog Editor', mediaType: 'text/html', entry: true, encoding: 'base64_gzip', content: gzipSync(page, { level: 9 }).toString('base64'), contentSha256: createHash('sha256').update(page).digest('hex') }],
 });
 const bundle = await createSingleFileBundle({ wasmBytes: canonical.canonicalWasmBytes, manifestBytes: encodePluginManifest(manifest),

@@ -53,7 +53,7 @@ bool strings(const Json& values) {
 using StateIndex = std::map<std::string, std::map<std::string, const Json*>>;
 Json selectState(const std::string& key, const Json& recipe, const Json& override, const StateIndex& states) {
   const auto& sources = field(override, "stateSources").is_array() ? field(override, "stateSources") : field(recipe, "stateSources");
-  const double maxAge = field(override, "maxAgeSeconds").is_number() ? number(field(override, "maxAgeSeconds")) : number(field(recipe, "maxAgeSeconds"));
+  const double maxAge = field(override, "maxAgeSeconds").is_number() ? number(field(override, "maxAgeSeconds")) : number(field(recipe, "version")) == 1 ? number(field(recipe, "maxAgeSeconds")) : INFINITY;
   const double asOf = number(field(recipe, "asOf"));
   const auto candidates = states.find(key);
   bool found = false, past = false;
@@ -85,9 +85,10 @@ extern "C" int compose(void) {
   if (!recipeFrame || !recipeFrame->payload || recipeFrame->payload_length > 32 * 1024 * 1024) return fail("A bounded recipe frame is required.");
   const auto recipe = Json::parse(recipeFrame->payload, recipeFrame->payload + recipeFrame->payload_length, nullptr, false);
   const auto& layers = field(recipe, "layers");
-  if (recipe.is_discarded() || number(field(recipe, "version")) != 1 || !layers.is_array() || layers.empty() || layers.size() != inputs.size() || layers.size() > 16) return fail("Recipe version 1 needs one catalog frame per layer, in priority order (maximum 16).");
-  const double asOf = number(field(recipe, "asOf")), maxAge = number(field(recipe, "maxAgeSeconds"));
-  if (!std::isfinite(asOf) || asOf <= 0 || !std::isfinite(maxAge) || maxAge < 0 || !strings(field(recipe, "stateSources"))) return fail("Specify asOf, a nonnegative maximum state age, and distinct state source IDs.");
+  if (recipe.is_discarded() || (number(field(recipe, "version")) != 1 && number(field(recipe, "version")) != 2) || !layers.is_array() || layers.empty() || layers.size() != inputs.size() || layers.size() > 16) return fail("Recipe version 1 needs one catalog frame per layer, in priority order (maximum 16).");
+  const bool internationalIdentity = number(field(recipe, "version")) == 2;
+  const double asOf = number(field(recipe, "asOf")), maxAge = internationalIdentity ? INFINITY : number(field(recipe, "maxAgeSeconds"));
+  if (!std::isfinite(asOf) || asOf <= 0 || (!internationalIdentity && !std::isfinite(maxAge)) || maxAge < 0 || !strings(field(recipe, "stateSources"))) return fail("Specify asOf, a nonnegative maximum state age, and distinct state source IDs.");
   const auto& overrides = field(recipe, "overrides");
   if (!overrides.is_null() && !overrides.is_object()) return fail("Object overrides must be a map.");
   for (const auto& override : overrides) {
@@ -106,6 +107,18 @@ extern "C" int compose(void) {
     auto& newest = stateIndex[text(field(state, "objectKey"))][text(field(state, "sourceId"))];
     const double epoch = number(field(state, "epoch"));
     if (epoch <= asOf && (!newest || epoch > number(field(*newest, "epoch")))) newest = &state;
+  }
+
+  std::map<std::string, std::vector<std::string>> coverageIndex;
+  const auto& coverage = field(recipe, "coverage");
+  if (!coverage.is_null() && !coverage.is_array()) return fail("Source coverage must be an array.");
+  for (const auto& source : coverage) {
+    const auto id = text(field(source, "sourceId"));
+    if (id.empty() || text(field(source, "head")).empty() || !strings(field(source, "objects"))) return fail("Coverage needs a source, immutable publication and distinct international designators.");
+    for (const auto& designator : field(source, "objects")) {
+      if (!cospar(text(designator))) return fail("Coverage identifiers must be international designators.");
+      coverageIndex["cospar:" + text(designator)].push_back(id);
+    }
   }
 
   std::vector<Record> records;
@@ -134,7 +147,9 @@ extern "C" int compose(void) {
       const auto* cat = GetSizePrefixedCAT(bytes);
       Record record{layerIndex, ordinal, bytes, size + 4, "", cat->OBJECT_NAME() ? cat->OBJECT_NAME()->str() : "", cat->OBJECT_ID() ? trimmed(cat->OBJECT_ID()->str()) : "", "", cat->NORAD_CAT_ID()};
       if (nativeKeys.is_array() && ordinal < nativeKeys.size()) record.nativeKey = text(nativeKeys[ordinal]);
-      if (record.norad) record.key = "norad:" + std::to_string(record.norad);
+      if (internationalIdentity && cospar(record.designator)) record.key = "cospar:" + record.designator;
+      else if (internationalIdentity) record.key = "unresolved:" + Json::array({field(layer, "node"), field(layer, "id"), ordinal}).dump();
+      else if (record.norad) record.key = "norad:" + std::to_string(record.norad);
       else if (cospar(record.designator)) record.key = "cospar:" + record.designator;
       else if (!record.nativeKey.empty()) record.key = "source:" + Json::array({field(layer, "provider"), field(layer, "source"), record.nativeKey}).dump();
       else return fail("An unnumbered object needs a valid international designator or its original source-native key.");
@@ -150,7 +165,7 @@ extern "C" int compose(void) {
   // record to a numbered one. Ambiguous designators remain separate conflicts.
   for (size_t index = 0; index < records.size(); ++index) {
     auto& record = records[index];
-    if (record.norad || !cospar(record.designator)) continue;
+    if (internationalIdentity || record.norad || !cospar(record.designator)) continue;
     const auto owners = designatorOwners.find(record.designator);
     if (owners != designatorOwners.end() && owners->second.size() == 1) record.key = "norad:" + std::to_string(*owners->second.begin());
   }
@@ -177,14 +192,26 @@ extern "C" int compose(void) {
       if (cospar(record.designator)) designators.insert(record.designator);
       candidates.push_back({{"layer", field(layers[record.layer], "id")}, {"record", record.ordinal}, {"nativeKey", record.nativeKey}, {"name", record.name}, {"designator", record.designator}});
     }
-    bool conflict = designators.size() > 1;
-    for (const auto& designator : designators) if (designatorOwners[designator].size() > 1) conflict = true;
+    bool conflict = internationalIdentity ? !cospar(selected.designator) : designators.size() > 1;
+    if (!internationalIdentity) for (const auto& designator : designators) if (designatorOwners[designator].size() > 1) conflict = true;
     if (conflict) ++conflictCount;
     // Conflicting identifiers are visible but never silently published. A
     // per-object layer choice is the user's explicit resolution.
-    const bool resolved = !conflict || !preferred.empty();
+    const bool resolved = internationalIdentity ? !conflict : !conflict || !preferred.empty();
     if (resolved) output.insert(output.end(), selected.bytes, selected.bytes + selected.length);
-    rows.push_back({{"key", key}, {"name", selected.name}, {"selectedLayer", field(layers[selected.layer], "id")}, {"status", resolved ? "selected" : "identity-conflict"}, {"candidates", candidates}, {"state", selectState(key, recipe, override, stateIndex)}});
+    Json state = selectState(key, recipe, override, stateIndex);
+    if (internationalIdentity) {
+      std::vector<std::string> covered;
+      for (const auto& source : field(recipe, "stateSources")) {
+        const auto& candidates = coverageIndex[key];
+        if (std::find(candidates.begin(), candidates.end(), text(source)) != candidates.end()) covered.push_back(text(source));
+      }
+      const auto& choices = field(override, "stateSources");
+      const auto selectedSource = choices.is_array() && !choices.empty() ? text(choices.front()) : covered.size() == 1 ? covered.front() : "";
+      if (!selectedSource.empty() && std::find(covered.begin(), covered.end(), selectedSource) == covered.end()) return fail("The selected orbital source does not declare coverage of this object.");
+      state = {{"status", !selectedSource.empty() ? "covered" : covered.size() > 1 ? "overlap" : "missing"}, {"sourceId", selectedSource}, {"sources", covered}};
+    }
+    rows.push_back({{"key", key}, {"internationalDesignator", selected.designator}, {"name", selected.name}, {"selectedLayer", field(layers[selected.layer], "id")}, {"status", resolved ? "selected" : internationalIdentity ? "missing-designator" : "identity-conflict"}, {"candidates", candidates}, {"state", state}});
   }
   const auto report = Json({{"version", 1}, {"inputRecords", records.size()}, {"objectCount", rows.size()}, {"identityConflicts", conflictCount}, {"objects", rows}}).dump();
   if (plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1, reinterpret_cast<const uint8_t*>(report.data()), static_cast<uint32_t>(report.size())) < 0) return 1;
