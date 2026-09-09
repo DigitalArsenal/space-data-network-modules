@@ -19,7 +19,7 @@ Json json(const char* port){const auto* f=frame(port);return f?Json::parse(f->pa
 int output(const char* port,const Json& j){const auto bytes=j.dump();return plugin_push_output_ex(port,nullptr,nullptr,PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY,nullptr,0,1,reinterpret_cast<const uint8_t*>(bytes.data()),bytes.size());}
 }
 // Generic host configuration and clock are the only runtime inputs here.
-// HTTP, persistence, signing and IPFS remain in their existing host nodes.
+// HTTP, persistence, signing and IPFS remain in existing host services.
 extern "C" {
 __attribute__((import_module("space_data_module_host"),import_name("call")))
 int32_t weather_host_call(const uint8_t*,int32_t,const uint8_t*,int32_t);
@@ -48,7 +48,9 @@ bool enabled(const Json& cfg) { return cfg.is_object() && cfg.contains("open_met
 extern "C" int prepare_scheduled() {
   CHECK(plugin_get_input_count()==1 && plugin_get_input_frame(0) && plugin_get_input_frame(0)->port_id && std::strcmp(plugin_get_input_frame(0)->port_id,"tick")==0,"Exactly one timer tick is required.");
   const auto cfg=configuration();
+  CHECK(cfg.is_object(),"Host configuration unavailable.");
   if(!enabled(cfg)) return output("status",{{"skipped","disabled"}})<0?1:0;
+  CHECK(text(cfg,"open_meteo_producer_peer_id") && !cfg["open_meteo_producer_peer_id"].get<std::string>().empty(),"Producer peer ID is required before fetching.");
   CHECK(cfg.contains("open_meteo_forecast") && cfg["open_meteo_forecast"].is_object(),"Forecast configuration missing.");
   const auto& forecast=cfg["open_meteo_forecast"];
   CHECK(text(forecast,"access") && forecast["access"]=="noncommercial","Scheduled customer API access requires a credential adapter; no request was sent.");

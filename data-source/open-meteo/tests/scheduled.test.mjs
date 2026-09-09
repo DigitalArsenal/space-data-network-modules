@@ -22,6 +22,9 @@ test('scheduled fetch is disabled until explicitly configured and sends bounded 
   assert.equal(disabled.statusCode,0,disabled.errorMessage);assert.deepEqual(disabled.outputs.map(f=>f.portId),['status']);
   const enabled=await prepare(await host(t,cfg()));assert.equal(enabled.statusCode,0,enabled.errorMessage);
   assert.deepEqual(decode(enabled,'config'),config);
+  for(const broken of [null,{...cfg(),open_meteo_producer_peer_id:''}]) {
+    const rejected=await prepare(await host(t,broken));assert.notEqual(rejected.statusCode,0);assert.equal(rejected.outputs.length,0);
+  }
   const paid=cfg();paid.open_meteo_forecast={...config,access:'customer'};
   const unsupported=await prepare(await host(t,paid));assert.notEqual(unsupported.statusCode,0);assert.equal(unsupported.outputs.length,0);
 });
