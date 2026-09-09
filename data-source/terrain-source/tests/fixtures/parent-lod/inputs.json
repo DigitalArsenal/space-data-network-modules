@@ -1,0 +1,21 @@
+{
+  "generator": "generate.mjs",
+  "fixtureKind": "synthetic native tile outputs; not source terrain",
+  "files": [
+    {
+      "name": "analytic.dttstream",
+      "bytes": 6528,
+      "sha256": "dce7b343a1724fd227b7f37f6fb8a293d681001fd2aa47d199a7320bdf294a0a"
+    },
+    {
+      "name": "missing-child.dttstream",
+      "bytes": 4708,
+      "sha256": "4cfb4d4837bf343b53590d7d77970265f3c18d6fddc025ffff2ff6284b3c2023"
+    },
+    {
+      "name": "ocean.dttstream",
+      "bytes": 5360,
+      "sha256": "14186114314e853ce01bac7b46934d8f0f707093c536b57079176751049b2887"
+    }
+  ]
+}

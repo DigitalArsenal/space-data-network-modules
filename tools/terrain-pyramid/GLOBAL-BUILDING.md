@@ -1,5 +1,93 @@
 # Bounded, resumable global terrain builds
 
+The native coarse-ocean target is `regions/global-z8.json`: retain all
+131,072 geographic z8 records, then reduce four actual sibling records to each
+parent through z0 (43,690 parents, including both roots). Missing records are
+errors, never water observations. The native planner accepts the explicit
+`skipOceanTiles: false` option; its existing default remains true.
+
+This is a build recipe, **not evidence of a completed global dataset**. Before
+a global run, reproduce a bounded coastal cut with current native source,
+V8/WasmEdge/container parity and native OrbPro decode/culling checks. Measure
+actual source/cache, DTT and static-directory bytes and elapsed time. Admit the
+job against the host's free-disk floor, including the cache, original leaves,
+derived store and temporary sorts. The config's 32 GiB cache and provisional
+4 GiB DTT / 48 GiB static ceilings are separate bounds. Historical Liguria
+measurements explain the estimates; they do not establish that the new global
+job fits. A host with 115 GiB free and a 100 GiB floor cannot admit this job.
+
+The z8 ceiling is a coarse-data proof, not a drop-in replacement for a finer
+land provider. Publication and console adoption also require a verified native
+route that retains the existing close-ground detail. Completing water masks
+does not authorize lowering the active terrain's maximum detail.
+
+After that admission and matching native source/planner/compiled-flow builds:
+
+```sh
+node tools/terrain-pyramid/global-build.mjs \
+  --config tools/terrain-pyramid/regions/global-z8.json --out <scratch>/z8-leaves \
+  --shards 24 --workers 1 --cache-max-bytes 34359738368
+node tools/terrain-pyramid/coarsen.mjs \
+  --input <scratch>/z8-leaves --out <scratch>/z0-z8-derived
+node tools/terrain-pyramid/verify.mjs --out <scratch>/z0-z8-derived
+```
+
+The first verifier receipt says `validated: true`, `publishable: false` and
+`coarseCoverage.phase: "leaves"`. That allows a completed leaf cut to resume
+without pretending it is ready to publish. The IPFS publisher requires the
+final `publishable: true` receipt, complete native coarse coverage and zero
+unmeasured ancestor placeholders or available-but-unstored addresses.
+
+`coarsen.mjs` uses bounded address/offset/hash external sorts and at most one
+four-record native invocation at a time. `reduce_parent` consumes a single
+`children` port containing exactly four canonical size-prefixed `$DTT` records
+and returns one on `records`. JavaScript neither decodes terrain for production
+nor computes heights, masks, interpolation or accuracy. The native method
+orders SW/SE/NW/NE, derives the parent address, and refuses incompatible
+siblings. Its SOURCE_QUERY binds all four **unprefixed full-record** SHA-256
+multihashes, method/version, mesh-bound method and water-coverage reduction.
+This is area reduction of decoded water coverage, not averaging source WBM
+category identifiers.
+
+Original leaf bytes and source-post measurements remain unchanged. Native
+parents report a conservative child/parent mesh-envelope difference and an
+inherited source bound only when all children supply one. An observed ocean
+record can have no DEM source-post bound; the resulting unknown source
+accuracy remains unknown upstream. The verifier reports those parents
+separately and never counts a mesh-only bound as a direct source-post test.
+
+The reducer writes a new directory, retains original leaf-state/verification
+receipts and public source metadata, and writes `coarsen-report.json` only
+after all quartets and files succeed. It refuses an existing output directory;
+a failed attempt is retained without a successful receipt, not silently
+resumed or published. The original terminal leaf directory is never modified.
+
+### Bounded coastal observation, 2026-09-09
+
+The native planner cut the four z8 children of Genoa-area parent z7/134/95
+from 18 public Copernicus DEM/WBM responses, all HTTP 200, totaling
+280,468,510 unique source bytes. Direct public SDK invocations used source
+WASM `37e99d2682e03d7c4eb4b85caabb79d360c431b368a1030e578daf691ceebdae`.
+The four DTT records totaled 15,160 bytes; their native parent totaled
+10,676 bytes. This was a direct-module rehearsal, not compiled-flow parity
+or a global throughput sample.
+
+Native `route`/`respond` with identity encoding materialized just these five
+stored tiles: 429,211 logical bytes and 446,464 allocated file bytes from
+the 25,836-byte combined DTT stream (16.61 times its size). This excludes
+`layer.json`, catalog records, UnixFS and directory overhead. The regional
+verifier also identified eight unstored ancestors; this measurement is not
+a complete static directory or publication acceptance. Do not apply this
+five-tile ratio as a global capacity estimate.
+
+The production verifier accepted the four recorded source-post bounds and
+the separate inherited parent bound. Independent public OrbPro interpolation
+checked 1,156 parent/child samples: maximum difference 278.285 m against the
+native 1,024.421 m mesh-envelope bound. Those values describe coarse z8/z7
+geometry and do not establish close-ground terrain quality.
+
+## Existing deeper regional/global cut
+
 `run.mjs` remains the authoritative one-cell flow host. This companion
 orchestrator is the only supported way to scale that host to a global run:
 
@@ -17,7 +105,9 @@ observation, all-water synthesis, and a failing non-water/no-data gap. It does
 not prefill `retrieved_at`: each cell derives its DTT lineage value from the
 latest immutable `observed_at` among the source objects it actually prefetched;
 build start remains separately named metadata. It stores source-backed z8--z10 records; z0--z7 are
-declared global ancestors synthesized by the serving flow. It does not publish
+declared global ancestors synthesized by the serving flow. Those placeholders
+do not solve global coarse ocean coverage; use the native reduction target
+above for that requirement. It does not publish
 an IPFS CID, tunnel to a host, or deploy a flow.
 
 Template shape is not enough: every requested URL is also checked as a real
@@ -27,7 +117,8 @@ out-of-world planner bug cannot become an authoritative 404 or ocean fact.
 
 ## Boundaries and resume contract
 
-- The shared source cache is capped at 96 GiB, while every individual source
+- The historical z10 source cache is capped at 96 GiB (the new z8 target uses
+  32 GiB), while every individual source
   response is capped at the approved 128 MiB before it is buffered. The runner
   rejects an over-cap `Content-Length` and streams body chunks with abort-on-cap
   while the request observation timer remains live. Capacity reservation,

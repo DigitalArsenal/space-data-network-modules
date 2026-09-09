@@ -1,0 +1,82 @@
+{
+  "//": "OFF-FLEET native coarse-ocean candidate. Build every z8 address with observed water records retained, then run native reduce_parent through z0. This config is not evidence that a global build or publication exists. Native/source/parity rehearsal and measured disk admission are required before the full cut.",
+  "out": "tools/terrain-pyramid/out/global-z8-leaves",
+  "cache_max_bytes": 34359738368,
+  "publication_policy": {
+    "version": 1,
+    "max_verified_store_bytes": 4294967296,
+    "max_static_directory_bytes": 51539607552,
+    "synthesized_tile_grid_size": 2,
+    "static_directory_basis": "Admission ceiling, not a completed global measurement: retained Liguria measured 7,616 DTT bytes/tile and 450,180,397 static bytes / 35,149,748 DTT bytes (12.8075x). Applying the observed average to 174,762 z0-z8 addresses estimates 1.24 GiB DTT and 15.88 GiB static. The bounded 4 GiB store / 48 GiB static ceilings allow headroom but MUST be confirmed against the new native parent/coastal rehearsal before a global job. Cache is separately capped at 32 GiB; source leaves and derived output coexist and must be included in free-disk admission."
+  },
+  "source_policy": {
+    "version": 1,
+    "provider": "Copernicus DEM",
+    "dataset_epoch": "2023-04-01T00:00:00.000Z",
+    "url_policy": {
+      "base_url": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/",
+      "dem_template": "Copernicus_DSM_COG_10_{NS}{LAT2}_00_{EW}{LON3}_00_DEM/Copernicus_DSM_COG_10_{NS}{LAT2}_00_{EW}{LON3}_00_DEM.tif",
+      "water_template": "Copernicus_DSM_COG_10_{NS}{LAT2}_00_{EW}{LON3}_00_DEM/AUXFILES/Copernicus_DSM_COG_10_{NS}{LAT2}_00_{EW}{LON3}_00_WBM.tif",
+      "object_identity": "the exact HTTPS URL and response SHA-256 in source-manifest.ndjson are immutable source identity; URL templates alone are never treated as content identity"
+    },
+    "request": {
+      "timeout_ms": 120000,
+      "retries": 4,
+      "retry_base_ms": 250,
+      "max_outstanding": 8,
+      "max_response_bytes": 134217728,
+      "retryable": "network failures and HTTP 408, 425, 429, and 5xx only; exponential backoff without jitter"
+    },
+    "no_data": {
+      "http_404": "record-no-coverage-never-retry",
+      "non_water": "a non-404 failure, partial coverage, or no-data over non-water fails the cut; it is never synthesized"
+    },
+    "ocean_policy": "Native observed all-water records are retained for every leaf address; an absent child is never a water classification.",
+    "cache": {
+      "max_bytes": 34359738368,
+      "eviction": "shared on-disk leased LRU; every active shard shares this <=32 GiB bound"
+    },
+    "manifest": {
+      "format": "canonical-jsonl-v1",
+      "digest": "sha256",
+      "shard_log": "source-observations.ndjson",
+      "completion_manifest": "source-manifest.ndjson"
+    },
+    "config_digest_contract": "SHA-256 over canonical JSON bytes of this complete run config; run-report.json and global-merge-report.json bind the observed source manifest to that digest"
+  },
+  "flow_config": {
+    "dataset_id": "copernicus-glo30-quantized-mesh",
+    "tileset_id": "spaceaware-terrain",
+    "dataset_epoch": "2023-04-01T00:00:00.000Z",
+    "provider_id": "copernicus",
+    "source_name": "Copernicus DEM GLO-30",
+    "source_url": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/",
+    "source_license": "Licence for Copernicus DEM instance COP-DEM-GLO-30-F",
+    "source_coverage_policy": "HTTP 200 is sampled source. HTTP 404 is an immutable no-coverage observation, recorded in the shared generation cache and interpreted as ocean only where the paired water classification is all-water. Other HTTP failures are retried by the bounded runner and then fail the cut; partial/non-water no-data is never filled as land or water.",
+    "ocean_policy": "Retain native observed UNIFORM_WATER records; derive z0-z7 only from complete four-record sibling sets. No unmeasured shallow ancestor placeholders may be published.",
+    "terrain_synth_grid_size": 2,
+    "grid_size": 65,
+    "max_grid_size": 361,
+    "min_level": 8,
+    "max_level": 8,
+    "timeout_ms": 120000,
+    "regions": [
+      {
+        "name": "worldwide-z8-leaves",
+        "west": -180,
+        "south": -90,
+        "east": 180,
+        "north": 90,
+        "max_level": 8,
+        "priority": 0
+      }
+    ],
+    "skipOceanTiles": false
+  },
+  "coarsening": {
+    "method": "reduce_parent",
+    "base_level": 8,
+    "minimum_level": 0,
+    "required_for_publication": true
+  }
+}

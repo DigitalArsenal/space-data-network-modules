@@ -1,0 +1,31 @@
+{
+  "name": "terrain-source-parent-lod",
+  "threadEnvVar": "SDM_PARITY_THREADS",
+  "threadCounts": [1],
+  "cases": [
+    {
+      "id": "analytic-coast",
+      "expect": "ok",
+      "request": { "methodId": "reduce_parent", "inputs": [{
+        "portId": "children", "payloadFile": "analytic.dttstream",
+        "typeRef": { "schemaName": "DTT.fbs", "fileIdentifier": "$DTT", "rootTypeName": "DTT", "wireFormat": "flatbuffer" }
+      }] }
+    },
+    {
+      "id": "observed-ocean",
+      "expect": "ok",
+      "request": { "methodId": "reduce_parent", "inputs": [{
+        "portId": "children", "payloadFile": "ocean.dttstream",
+        "typeRef": { "schemaName": "DTT.fbs", "fileIdentifier": "$DTT", "rootTypeName": "DTT", "wireFormat": "flatbuffer" }
+      }] }
+    },
+    {
+      "id": "missing-child-refusal",
+      "expect": "ok",
+      "request": { "methodId": "reduce_parent", "inputs": [{
+        "portId": "children", "payloadFile": "missing-child.dttstream",
+        "typeRef": { "schemaName": "DTT.fbs", "fileIdentifier": "$DTT", "rootTypeName": "DTT", "wireFormat": "flatbuffer" }
+      }] }
+    }
+  ]
+}

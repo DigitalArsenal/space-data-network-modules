@@ -109,7 +109,7 @@ test("one invocation plans ONE cell: four DEM + four water descriptors and one t
   assert.equal(plan.scheme, "GEOGRAPHIC_WGS84");
   assert.equal(plan.rowOriginNorth, false);
   assert.equal(plan.gridSize, 65);
-  assert.equal(plan.skipOceanTiles, true, "ocean tiles are never stored");
+  assert.equal(plan.skipOceanTiles, true, "ocean omission remains the default");
   assert.ok(Array.isArray(plan.tiles) && plan.tiles.length > 0);
 
   // The provenance keys are the ones DTTProvenance is built from, verbatim.
@@ -133,6 +133,22 @@ test("one invocation plans ONE cell: four DEM + four water descriptors and one t
     assert.equal(descriptor.method, "GET");
   }
   for (const url of wbmUrls) assert.ok(url.includes("_WBM"), `water-body auxiliary, got ${url}`);
+});
+
+test("native planner retains observed ocean records only on explicit boolean opt-in", async (t) => {
+  const baseline = (await planOnce(t)).byPort;
+  for (const skipOceanTiles of [false, true]) {
+    const { byPort } = await planOnce(t, { config: { ...CONFIG, skipOceanTiles } });
+    assert.equal(byPort.get("plan").skipOceanTiles, skipOceanTiles);
+    assert.deepEqual({ ...byPort.get("plan"), skipOceanTiles: true }, baseline.get("plan"),
+      "the opt-in changes no addresses, geometry options or source provenance");
+    assert.deepEqual(byPort.get("job"), baseline.get("job"));
+  }
+  for (const skipOceanTiles of ["false", 0, null, {}]) {
+    const response = await planOnce(t, { config: { ...CONFIG, skipOceanTiles } });
+    assert.equal(response.error, "invalid-ocean-skip-option");
+    assert.equal(response.byPort, undefined);
+  }
 });
 
 test("the enumeration PARTITIONS the region: every tile once, none missed", async (t) => {

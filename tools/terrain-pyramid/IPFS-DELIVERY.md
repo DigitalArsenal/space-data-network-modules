@@ -96,9 +96,13 @@ It is bounded and it is owned:
 
 - **Bounded** because a regional pyramid only ever states the region it built;
   the residue is entirely at levels the run did not build.
-- **Resolved by** `terrain-pyramid-global-build-tooling` — the global z0–z10
-  land pyramid. With a global build there is no ancestor band below the
-  authoritative floor, so the residue disappears rather than being patched.
+- **Requires actual native coarse records.** The historical global-z10 recipe
+  still starts at z8 and therefore does not resolve this ancestor band by
+  itself. The new global-z8 recipe retains observed-ocean records and native
+  `reduce_parent` derives every z0–z7 address from complete siblings. It is a
+  candidate build route, not a claim that a global dataset has been built or
+  published. See [GLOBAL-BUILDING.md](GLOBAL-BUILDING.md) for admission,
+  verification, inherited-accuracy limits and the two-stage command.
 - **Not patched here** because the two local options both make the record less
   honest than the gap: emitting no watermask chunk on the ancestors makes those
   tiles disagree with `layer.json`'s `extensions:["watermask"]`, and
@@ -106,6 +110,14 @@ It is bounded and it is owned:
 
 What changed this round is that a client now refines PAST the ancestors
 everywhere the pyramid was actually built.
+
+For an approved native-coarsening target, a completed leaf receipt is
+`validated: true` but `publishable: false`. The existing publisher refuses it,
+and also checks `coarseCoverage.complete`, the derived stage and zero
+`ancestorPlaceholders` / `availableButUnstored`. Final records include actual
+native water masks at coarse levels. No publishing code turns a missing child
+or a below-sea-level height into an ocean classification. Source-post leaf
+accuracy and native derived mesh bounds remain distinct in the verifier report.
 
 `layer.json` is rendered by the module's own `layer_json` method, driven
 through `route()` so the plan is the mount's plan. The ONLY difference from

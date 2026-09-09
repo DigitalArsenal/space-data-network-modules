@@ -205,6 +205,26 @@ double json_number_or(const std::string& json, const char* key, double fallback)
     return json_number_field(json, key, &v) ? v : fallback;
 }
 
+// Preserve the existing omitted-ocean default; retaining observed native
+// records is an explicit boolean opt-in for complete sibling reduction.
+bool ocean_skip_option(const std::string& config, bool* out) {
+    *out = true;
+    const std::string key = "\"skipOceanTiles\"";
+    const size_t at = config.find(key);
+    if (at == std::string::npos) return true;
+    size_t pos = at + key.size();
+    while (pos < config.size() && is_ws(config[pos])) pos++;
+    if (pos == config.size() || config[pos++] != ':') return false;
+    while (pos < config.size() && is_ws(config[pos])) pos++;
+    size_t length = 0;
+    if (config.compare(pos, 4, "true") == 0) length = 4;
+    else if (config.compare(pos, 5, "false") == 0) { length = 5; *out = false; }
+    else return false;
+    pos += length;
+    while (pos < config.size() && is_ws(config[pos])) pos++;
+    return pos < config.size() && (config[pos] == ',' || config[pos] == '}');
+}
+
 std::string json_escape(const std::string& s) {
     std::string out;
     out.reserve(s.size());
@@ -1254,6 +1274,11 @@ int granule_plan(void) {
 
     const std::string tick = input_text("tick");
     const std::string config = load_config();
+    bool skip_ocean_tiles = true;
+    if (!ocean_skip_option(config, &skip_ocean_tiles)) {
+        plugin_set_error("invalid-ocean-skip-option", "skipOceanTiles must be a JSON boolean");
+        return 400;
+    }
 
     const std::string dataset = config_string(config, "dataset_id", kDefaultDatasetId);
     const std::string tileset = config_string(config, "tileset_id", "");
@@ -1508,10 +1533,9 @@ int granule_plan(void) {
         ",\"level\":" + std::to_string(cell.level) + ",\"gridSize\":" + std::to_string(grid) +
         ",\"maxGridSize\":" + std::to_string(max_grid) +
         ",\"maxLevel\":" + std::to_string(cell.region->max_level) +
-        // Ocean tiles are NOT stored: they are identical, there are millions of
-        // them, and the serving lane synthesizes an unstored address inside
-        // published availability as exactly that.
-        ",\"skipOceanTiles\":true" +
+        // Native coarsening needs four actual sibling records, including
+        // observed water. Other builds retain the historical skip default.
+        ",\"skipOceanTiles\":" + (skip_ocean_tiles ? "true" : "false") +
         // SOURCE_CLASS is DATA, like every other provenance field: the encoder
         // no longer hard-codes it, so an operator who repoints this lane at an
         // optical-stereo or lidar dataset stops publishing records that assert

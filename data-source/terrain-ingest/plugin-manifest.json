@@ -425,7 +425,7 @@
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "The encoder plan for this cell: tileset identity, the level, gridSize, maxLevel, skipOceanTiles, the vertical datum name, the DTTProvenance block with the keys the record is built from verbatim, and the tiles[] BLOCK \u2014 every tile of the level whose south-west corner lies in the cell. ONE plan frame per cell, so the encoder decodes the granule set ONCE for all of them.",
+              "description": "The encoder plan for this cell: tileset identity, the level, gridSize, maxLevel, skipOceanTiles (boolean config; defaults true, explicit false retains native observed-ocean DTT records for complete sibling reduction), the vertical datum name, the DTTProvenance block with the keys the record is built from verbatim, and the tiles[] BLOCK \u2014 every tile of the level whose south-west corner lies in the cell. ONE plan frame per cell, so the encoder decodes the granule set ONCE for all of them.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",

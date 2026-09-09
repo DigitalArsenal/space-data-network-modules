@@ -27,9 +27,10 @@ import {
   mergeSortedJsonRuns,
   writeSortedJsonRuns,
 } from "../build-support.mjs";
-import { iterateStreamFile, readDtt } from "../dtt-reader.mjs";
+import { iterateStreamFile, iterateStreamFd, readDtt, splitStream } from "../dtt-reader.mjs";
 import { writeDttRecord } from "../dtt-projection.mjs";
-import { bindExecutionIdentityToState } from "../global-build.mjs";
+import { bindExecutionIdentityToState, terminalVerificationMatchesState } from "../global-build.mjs";
+import { coarsen, REDUCER_PROCESSOR } from "../coarsen.mjs";
 
 const execFileAsync = promisify(execFile);
 const HERE = path.dirname(new URL(import.meta.url).pathname);
@@ -327,6 +328,55 @@ test("stream reader rejects a corrupt oversized prefix before buffering it", asy
   }, /terrain safety limit/);
 });
 
+test("descriptor reader leaves borrowed descriptors owned by the caller after early refusal", async (t) => {
+  const dir = temporary(t); const file = path.join(dir, "bad-stream");
+  const prefix = Buffer.alloc(4); prefix.writeUInt32LE(0xffffffff); fs.writeFileSync(file, prefix);
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const fd = fs.openSync(file, "r");
+    await assert.rejects(async () => { for await (const unused of iterateStreamFd(fd)) void unused; }, /terrain safety limit/);
+    fs.closeSync(fd);
+    // Reuse a descriptor number immediately: a pending stream.destroy must
+    // not close this unrelated file after the rejected iterator has returned.
+    const replacement = fs.openSync(file, "r");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.ok(fs.fstatSync(replacement).isFile()); fs.closeSync(replacement);
+  }
+});
+
+test("global z8 config retains native ocean leaves and separates the bounded coarse target", () => {
+  const config = JSON.parse(fs.readFileSync(path.join(HERE, "../regions/global-z8.json"), "utf8"));
+  assert.equal(config.cache_max_bytes, 32 * 1024 ** 3);
+  assert.equal(config.source_policy.cache.max_bytes, config.cache_max_bytes);
+  assert.equal(config.flow_config.skipOceanTiles, false);
+  assert.equal(config.flow_config.min_level, 8); assert.equal(config.flow_config.max_level, 8);
+  assert.deepEqual(config.coarsening, { method: "reduce_parent", base_level: 8, minimum_level: 0, required_for_publication: true });
+  assert.ok(config.publication_policy.max_verified_store_bytes <= 4 * 1024 ** 3);
+  assert.ok(config.publication_policy.max_static_directory_bytes <= 48 * 1024 ** 3);
+  assert.match(config.publication_policy.static_directory_basis, /rehearsal/);
+});
+
+test("coordinator can terminalize verified native leaves without marking them publishable", (t) => {
+  const out = temporary(t);
+  const config = JSON.parse(fs.readFileSync(path.join(HERE, "../regions/global-z8.json"), "utf8"));
+  const state = { version: 1, completed: true, merged: { completion: "complete", records: 131072 } };
+  fs.writeFileSync(path.join(out, "approved-run-config.json"), JSON.stringify(config));
+  fs.writeFileSync(path.join(out, "global-build-state.json"), JSON.stringify(state));
+  const bind = (name) => { const b = fs.readFileSync(path.join(out, name)); return { path: name, bytes: b.length, sha256: sha256(b) }; };
+  const report = {
+    format: "terrain-verification-report-v1", validated: true, publishable: false, problems: [],
+    coarseCoverage: { required: true, phase: "leaves", complete: false, counts: { 8: 131072 } },
+    publicationInputs: { format: "terrain-publication-inputs-v2", globalState: bind("global-build-state.json"), approvedConfig: bind("approved-run-config.json") },
+  };
+  const write = () => fs.writeFileSync(path.join(out, "verify-report.json"), JSON.stringify(report));
+  write(); assert.equal(terminalVerificationMatchesState(out), true);
+  report.validated = false; write(); assert.equal(terminalVerificationMatchesState(out), false);
+  report.validated = true; report.coarseCoverage.counts[8] -= 1; write(); assert.equal(terminalVerificationMatchesState(out), false);
+  report.coarseCoverage.counts[8] += 1;
+  delete config.coarsening; fs.writeFileSync(path.join(out, "approved-run-config.json"), JSON.stringify(config));
+  report.publicationInputs.approvedConfig = bind("approved-run-config.json"); write();
+  assert.equal(terminalVerificationMatchesState(out), false, "ordinary failed publication must not become resumable native leaves");
+});
+
 test("read-only accuracy consumers resolve the cache current generation, not the retired flat layout", async (t) => {
   const dir = temporary(t);
   const cache = new BoundedGranuleCache({ dir, maxBytes: 4096, owner: "generation-reader" });
@@ -600,6 +650,8 @@ function syntheticTerrainRecord({
   dataCoverageFraction = 1,
   digestOverride = null,
   etagOverride = null,
+  provenanceOverride = {},
+  maxLevel = 12,
 } = {}) {
   const raster = waterMaskKind === "RASTER" || waterMaskKind === 3;
   const uniformWater = waterMaskKind === "UNIFORM_WATER" || waterMaskKind === 2;
@@ -651,16 +703,83 @@ function syntheticTerrainRecord({
       WATER_MASK_HEIGHT: 256,
     } : {}),
     CHILD_AVAILABILITY: childAvailability,
-    MAX_LEVEL: 12,
+    MAX_LEVEL: maxLevel,
     PROVENANCE: {
       DATASET_ID: "streaming-fixture",
       DATASET_EPOCH: "2026-09-01T00:00:00.000Z",
       RETRIEVED_AT: "2026-09-01T00:00:00.000Z",
       LICENSE: "test licence",
+      ...provenanceOverride,
     },
     ETAG: etagOverride ?? `"${statedDigest}"`,
   })).subarray(4);
 }
+
+schemaTest("production verifier keeps derived accuracy separate and verifies exact child lineage", {}, async (t) => {
+  const input = temporary(t); const output = path.join(input, "coarsened");
+  const fd = fs.openSync(path.join(input, "tiles.dttstream"), "wx");
+  try {
+    for (let y = 0; y < 2; y += 1) for (let x = 0; x < 4; x += 1) {
+      appendTerrainFrame(fd, syntheticTerrainRecord({ level: 1, x, y, maxLevel: 1, accuracyConfidence: x === 0 && y === 0 ? 0 : 1 }));
+    }
+  } finally { fs.closeSync(fd); }
+  await coarsen({ inputFile: path.join(input, "tiles.dttstream"), outDir: output, baseLevel: 1,
+    global: false, maxOutputBytes: 4 * 1024 ** 2,
+    reduce: async (bytes) => {
+      const children = splitStream(bytes);
+      const first = readDtt(children[0]);
+      const query = {
+        method: "reduce_parent", version: 1,
+        children: children.map((record) => { const d = readDtt(record); return { level: d.level, x: d.x, y: d.y, digest: `1220${sha256(record)}` }; }),
+        heightBound: "child-cell-parent-cell-envelope-v1", waterReduction: "coverage-2x2-round-half-up-v1",
+        meshDifferenceBoundM: 0, inheritedAccuracyComplete: children.every((record) => readDtt(record).accuracyConfidence === 1),
+      };
+      const record = syntheticTerrainRecord({ level: 0, x: first.x / 2, y: 0, childAvailability: 15, maxLevel: 1,
+        accuracyConfidence: query.inheritedAccuracyComplete ? 1 : 0,
+        provenanceOverride: { PROCESSOR: REDUCER_PROCESSOR, SOURCE_QUERY: JSON.stringify(query) } });
+      const prefix = Buffer.alloc(4); prefix.writeUInt32LE(record.length);
+      return Buffer.concat([prefix, record]);
+    },
+  });
+  await execFileAsync(process.execPath, [VERIFY, "--out", output, "--json"], { maxBuffer: 1024 * 1024 });
+  const report = JSON.parse(fs.readFileSync(path.join(output, "verify-report.json"), "utf8"));
+  assert.equal(report.tilesStatingMeasuredAccuracy, 7, "parents and unavailable leaf accuracy must never count as directly measured source-post tiles");
+  assert.equal(report.nativeDerivedAccuracy.tiles, 2);
+  assert.equal(report.nativeDerivedAccuracy.withInheritedSourceAccuracy, 1);
+  assert.equal(report.nativeDerivedAccuracy.withoutInheritedSourceAccuracy, 1);
+  assert.equal(report.ancestorPlaceholders, 0);
+  assert.equal(report.coarseCoverage, null, "a rehearsal must not claim an approved global publication");
+  assert.equal(report.publishable, true);
+  const bad = path.join(input, "bad-lineage"); fs.cpSync(output, bad, { recursive: true });
+  const records = splitStream(fs.readFileSync(path.join(bad, "tiles.dttstream")));
+  // Same-length edit in SOURCE_QUERY; update only the output digest so the
+  // verifier must catch the child join, not merely a stale aggregate hash.
+  const payload = Buffer.from(records[8]);
+  const goodDigest = `1220${sha256(records[0])}`;
+  const digestAt = payload.indexOf(goodDigest); assert.ok(digestAt >= 0);
+  Buffer.from(`1220${"0".repeat(64)}`).copy(payload, digestAt); records[8] = payload;
+  const handle = fs.openSync(path.join(bad, "tiles.dttstream"), "w");
+  try { for (const record of records) appendTerrainFrame(handle, record); } finally { fs.closeSync(handle); }
+  const coarsenReport = JSON.parse(fs.readFileSync(path.join(bad, "coarsen-report.json"), "utf8"));
+  coarsenReport.output.sha256 = sha256(fs.readFileSync(path.join(bad, "tiles.dttstream")));
+  fs.writeFileSync(path.join(bad, "coarsen-report.json"), JSON.stringify(coarsenReport));
+  await assert.rejects(execFileAsync(process.execPath, [VERIFY, "--out", bad], { maxBuffer: 1024 * 1024 }), /native child hash differs/);
+});
+
+schemaTest("canonical child availability uses SW/SE/NW/NE bits and refuses the missing north-east child", {}, async (t) => {
+  for (const omitNorthEast of [false, true]) {
+    const out = temporary(t); const fd = fs.openSync(path.join(out, "tiles.dttstream"), "wx");
+    try {
+      appendTerrainFrame(fd, syntheticTerrainRecord({ level: 0, x: 0, y: 0, childAvailability: 15, maxLevel: 1 }));
+      for (let q = 0; q < 4; q += 1) if (!(omitNorthEast && q === 3)) {
+        appendTerrainFrame(fd, syntheticTerrainRecord({ level: 1, x: q % 2, y: Math.floor(q / 2), maxLevel: 1 }));
+      }
+    } finally { fs.closeSync(fd); }
+    const run = execFileAsync(process.execPath, [VERIFY, "--out", out], { maxBuffer: 1024 * 1024 });
+    if (omitNorthEast) await assert.rejects(run, /CLAIM a CHILD_AVAILABILITY bit/);
+    else await run;
+  }
+});
 
 function appendTerrainFrame(handle, record) {
   const length = Buffer.alloc(4);

@@ -892,6 +892,15 @@ function assertAuthoritativeGlobalInputs() {
     "canonical approved run config does not match publicationPolicy.globalConfigDigest",
   );
   const approvedPolicy = approvedConfig?.publication_policy;
+  if (approvedConfig.coarsening !== undefined) {
+    assert.deepEqual(approvedConfig.coarsening, {
+      method: "reduce_parent", base_level: 8, minimum_level: 0, required_for_publication: true,
+    }, "unsupported native coarsening target");
+    assert.equal(verifyReport.coarseCoverage?.complete, true, "global native coarse coverage is incomplete; run coarsen.mjs and verify.mjs first");
+    assert.equal(verifyReport.coarseCoverage?.phase, "derived");
+    assert.equal(verifyReport.ancestorPlaceholders, 0, "native global output still promises unmeasured ancestors");
+    assert.equal(verifyReport.availableButUnstored, 0, "native global output still promises unstored tiles");
+  }
   assert.ok(approvedPolicy && typeof approvedPolicy === "object" && !Array.isArray(approvedPolicy),
     "approved run config lacks publication_policy");
   assert.deepEqual(
@@ -917,6 +926,13 @@ function assertAuthoritativeGlobalInputs() {
   );
   const merged = state.merged;
   assert.ok(merged && typeof merged === "object" && !Array.isArray(merged), "global build state lacks merged completion receipt");
+  if (approvedConfig.coarsening) {
+    assert.equal(merged.coarsening, "coarsen-report.json", "native global state lacks completed coarsening");
+    for (let level = 0; level <= 8; level += 1) {
+      assert.equal(verifyReport.coarseCoverage.counts?.[level], 2 * 4 ** level,
+        `native global coverage is incomplete at z${level}`);
+    }
+  }
   assert.equal(merged.completion, "complete", "global merged receipt is not complete");
   assert.equal(merged.configDigest, publicationPolicy.globalConfigDigest,
     "global merged receipt configDigest disagrees with verify publicationPolicy");

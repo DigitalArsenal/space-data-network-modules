@@ -112,7 +112,7 @@ function lfCount(file) {
   return count;
 }
 
-function refreshPublicationReceipt(outDir, policy = TEST_PUBLICATION_POLICY) {
+function refreshPublicationReceipt(outDir, policy = TEST_PUBLICATION_POLICY, { coarsening = null } = {}) {
   const rawPolicy = {
     ...TEST_RAW_PUBLICATION_POLICY,
     max_verified_store_bytes: policy.maxVerifiedStoreBytes,
@@ -123,6 +123,7 @@ function refreshPublicationReceipt(outDir, policy = TEST_PUBLICATION_POLICY) {
     ...TEST_APPROVED_CONFIG,
     flow_config: { ...TEST_APPROVED_CONFIG.flow_config, terrain_synth_grid_size: policy.synthGridSize },
     publication_policy: rawPolicy,
+    ...(coarsening ? { coarsening } : {}),
   };
   const globalConfigDigest = createHash("sha256").update(canonicalJson(approvedConfig)).digest("hex");
   const boundPolicy = { ...policy, globalConfigDigest };
@@ -732,6 +733,24 @@ test("a forged non-terminal verification report with problems=[] is refused", as
   const result = await runPublisher(outDir, ["--no-add"]);
   assert.notEqual(result.code, 0);
   assert.match(result.stderr, /not marked publishable/);
+});
+
+test("native global publication refuses leaf-only, missing or placeholder coarse coverage even if publishable was forged", async (t) => {
+  for (const coverage of [null, { complete: false, phase: "leaves" }, { complete: true, phase: "leaves" }, { complete: true, phase: "derived" }]) {
+    const outDir = copyFixtureOutput(); t.after(() => fs.rmSync(outDir, { recursive: true, force: true }));
+    refreshPublicationReceipt(outDir, TEST_PUBLICATION_POLICY, { coarsening: {
+      method: "reduce_parent", base_level: 8, minimum_level: 0, required_for_publication: true,
+    } });
+    const reportPath = path.join(outDir, "verify-report.json");
+    const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+    report.publishable = true; report.coarseCoverage = coverage;
+    report.ancestorPlaceholders = 1; report.availableButUnstored = 1;
+    fs.writeFileSync(reportPath, JSON.stringify(report));
+    const result = await runPublisher(outDir, ["--no-add"]);
+    assert.notEqual(result.code, 0);
+    assert.match(result.stderr, /coarse coverage is incomplete|derived|unmeasured ancestors/);
+    assert.equal(fs.existsSync(path.join(outDir, "publish-receipt.json")), false);
+  }
 });
 
 test("publicationInputs accepts only the exact bound compact-ocean receipt schema", async () => {

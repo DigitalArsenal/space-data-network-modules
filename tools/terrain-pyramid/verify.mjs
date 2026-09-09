@@ -25,6 +25,7 @@ import {
   sha256,
 } from "./build-support.mjs";
 import { iterateStreamFd, readDtt, readDttProvenance } from "./dtt-reader.mjs";
+import { assertGlobalCoverage, reductionLineage } from "./coarsen.mjs";
 
 // ── THE BOUNDS THIS PYRAMID HAS TO SATISFY TO BE PUBLISHABLE ───────────────
 //
@@ -644,6 +645,7 @@ const VERIFIER_STAGE_FILES = Object.freeze({
 const VERIFIER_SCRATCH_DIRECTORIES = Object.freeze({
   edgeFacts: ".verify-edge-facts", edgeMerge: ".verify-edge-merge",
   addressFacts: ".verify-address-facts", addressMerge: ".verify-address-merge",
+  reductionFacts: ".verify-reduction-facts", reductionMerge: ".verify-reduction-merge",
   sizeFacts: ".verify-size-facts", sizeMerge: ".verify-size-merge",
   closureFacts: ".verify-closure-facts", closureMerge: ".verify-closure-merge",
   membershipFacts: ".verify-membership-facts", membershipMerge: ".verify-membership-merge",
@@ -1577,6 +1579,9 @@ let approvedConfigInput = null;
 let globalStateMutation = null;
 let approvedConfigMutation = null;
 let globalMergedRecords = null;
+let coarseningTarget = null;
+let coarsenInput = null;
+let coarsenReport = null;
 if (globalVerification) {
   assert.ok(fs.existsSync(globalStatePath), "global verification requires global-build-state.json");
   assert.ok(fs.existsSync(approvedConfigPath), "global verification requires approved-run-config.json");
@@ -1601,6 +1606,40 @@ if (globalVerification) {
   assert.ok(Number.isSafeInteger(state.merged.records) && state.merged.records >= 0,
     "global merged records must be a non-negative safe integer");
   globalMergedRecords = state.merged.records;
+  if (approvedConfig.coarsening !== undefined) {
+    assert.deepEqual(approvedConfig.coarsening, {
+      method: "reduce_parent", base_level: 8, minimum_level: 0, required_for_publication: true,
+    }, "unsupported native global coarsening target");
+    assert.equal(approvedConfig.flow_config?.skipOceanTiles, false,
+      "native global coarsening requires retained observed-ocean records");
+    assert.equal(approvedConfig.flow_config?.min_level, 8);
+    assert.equal(approvedConfig.flow_config?.max_level, 8);
+    coarseningTarget = approvedConfig.coarsening;
+    if (state.merged.coarsening !== undefined) {
+      assert.equal(state.merged.coarsening, "coarsen-report.json");
+      coarsenInput = stableJsonInput(outDir, "coarsen-report.json", MAX_RUN_REPORT_BYTES);
+      coarsenReport = coarsenInput.value;
+      assert.equal(coarsenReport.format, "terrain-native-coarsening-v1");
+      assert.equal(coarsenReport.completed, true);
+      assert.equal(coarsenReport.global, true);
+      assert.equal(coarsenReport.baseLevel, 8);
+      assert.equal(coarsenReport.minimumLevel, 0);
+      assert.equal(coarsenReport.configSha256, configStable.receipt.sha256);
+      const leafState = stableJsonInput(outDir, "source-global-build-state.json", MAX_RUN_REPORT_BYTES);
+      assert.equal(leafState.receipt.sha256, coarsenReport.sourceStateSha256, "original leaf state digest differs");
+      assert.equal(leafState.value.completed, true);
+      assert.equal(leafState.value.configDigest, state.configDigest);
+      assert.equal(leafState.value.merged?.records, coarsenReport.input.records);
+      const leafVerification = stableJsonInput(outDir, "source-verify-report.json", MAX_RUN_REPORT_BYTES);
+      assert.equal(leafVerification.receipt.sha256, coarsenReport.sourceVerificationSha256);
+      assert.equal(leafVerification.value.validated, true);
+      assert.equal(leafVerification.value.coarseCoverage?.phase, "leaves");
+      assert.equal(leafVerification.value.publicationInputs?.globalState?.sha256, leafState.receipt.sha256);
+      assert.equal(leafVerification.value.publicationInputs?.tiles?.sha256, coarsenReport.input.sha256);
+    }
+  } else {
+    assert.equal(state.merged.coarsening, undefined, "derived global output lacks an approved coarsening target");
+  }
   const canonicalDigest = sha256(canonicalJson(approvedConfig));
   for (const [name, digest] of [["state", state.configDigest], ["merged", state.merged.configDigest]]) {
     assert.match(digest, /^[a-f0-9]{64}$/, `${name} global configDigest must be SHA-256 hex`);
@@ -1636,6 +1675,18 @@ if (globalVerification) {
   // Regional runs retain the direct report form because they have no approved
   // global-state/config pair to bind a shard wrapper against.
   publicationPolicy = validatePublicationPolicy(runReport.publicationPolicy);
+}
+// Bounded native coastal rehearsals use the same binary reducer without
+// claiming global coverage. Their actual output and child hashes are checked
+// below by the same verifier; no global publication metadata is fabricated.
+if (!globalVerification && fs.existsSync(path.join(outDir, "coarsen-report.json"))) {
+  coarsenInput = stableJsonInput(outDir, "coarsen-report.json", MAX_RUN_REPORT_BYTES);
+  coarsenReport = coarsenInput.value;
+  assert.equal(coarsenReport.format, "terrain-native-coarsening-v1");
+  assert.equal(coarsenReport.completed, true);
+  assert.equal(coarsenReport.global, false, "global native output requires terminal source state/config");
+  assert.ok(Number.isInteger(coarsenReport.baseLevel) && coarsenReport.baseLevel >= 1 && coarsenReport.baseLevel <= 8);
+  assert.ok(Number.isInteger(coarsenReport.minimumLevel) && coarsenReport.minimumLevel >= 0 && coarsenReport.minimumLevel < coarsenReport.baseLevel);
 }
 
 // ── THE ADDRESSES THE OCEAN TEST SKIPPED ───────────────────────────────────
@@ -1713,6 +1764,16 @@ const sizeFactWriter = createSortedJsonRunWriter(sizeFactRunDir, {
   returnManifest: true,
   reset: false,
 });
+const reductionFactWriter = coarseningTarget || coarsenReport ? createSortedJsonRunWriter(verifierStaging.openScratch("reductionFacts"), {
+  maxRows: 512, maxRowBytes: 2048, maxBufferedBytes: 1024 * 1024,
+  maxRuns: MAX_ADDRESS_FACT_RUNS, returnManifest: true, reset: false,
+}) : null;
+const storedCounts = {};
+let derivedRecords = 0;
+let derivedWithInheritedAccuracy = 0;
+let derivedMeshDifferenceBoundM = 0;
+const verifiedLeafHash = createHash("sha256");
+let verifiedLeafBytes = 0;
 let recordCount = 0;
 let firstRecord = null;
 
@@ -1766,6 +1827,27 @@ for await (const record of iterateStreamFd(tilesFd, { onChunk: (chunk) => proces
   const dtt = readDtt(record);
   validateDtt(dtt, record);
   const key = terrainAddress(dtt.level, dtt.x, dtt.y);
+  const derived = reductionLineage(record, dtt);
+  storedCounts[dtt.level] = (storedCounts[dtt.level] ?? 0) + 1;
+  if (derived) {
+    assert.ok(coarsenReport, "derived records require their completed native coarsening receipt");
+    derivedRecords += 1;
+    if (derived.inheritedAccuracyComplete) derivedWithInheritedAccuracy += 1;
+    derivedMeshDifferenceBoundM = Math.max(derivedMeshDifferenceBoundM, derived.meshDifferenceBoundM);
+    for (const child of derived.children) reductionFactWriter.push({
+      key: addressFactKey(child.level, child.x, child.y), kind: "claim", digest: child.digest,
+      parent: key, bound: dtt.verticalAccuracyM, meshBound: derived.meshDifferenceBoundM,
+      inherited: derived.inheritedAccuracyComplete,
+    });
+  } else if (coarseningTarget || coarsenReport) {
+    assert.equal(dtt.level, coarsenReport?.baseLevel ?? 8, "a native ancestor must carry derived lineage");
+    const prefix = Buffer.alloc(4); prefix.writeUInt32LE(record.length);
+    verifiedLeafHash.update(prefix); verifiedLeafHash.update(record); verifiedLeafBytes += 4 + record.length;
+  }
+  if (reductionFactWriter) reductionFactWriter.push({
+    key: addressFactKey(dtt.level, dtt.x, dtt.y), kind: "stored",
+    digest: `1220${sha256(record)}`, confidence: dtt.accuracyConfidence, accuracy: dtt.verticalAccuracyM,
+  });
   maxLevel = Math.max(maxLevel, dtt.level);
   minLevel = Math.min(minLevel, dtt.level);
 
@@ -1849,7 +1931,7 @@ for await (const record of iterateStreamFd(tilesFd, { onChunk: (chunk) => proces
     // ocean whatever its accuracy figure says, and the serving flow synthesizes
     // those. Storing them inflates the pyramid with identical flat records.
     oceanStored += 1;
-    recordProblem(`all-ocean tile stored at ${key}`);
+    if (!coarseningTarget && !coarsenReport) recordProblem(`all-ocean tile stored at ${key}`);
   }
   if (dtt.waterMaskKind === 2 && !(dtt.minHeightM === 0 && dtt.maxHeightM === 0)) {
     uniformWaterNotFlat += 1;
@@ -1897,7 +1979,7 @@ for await (const record of iterateStreamFd(tilesFd, { onChunk: (chunk) => proces
   // The tile's own MEASURED departure from the source between posts. Absent
   // (confidence 0) means the encoder did not measure it, which is itself worth
   // saying: an unmeasured pyramid cannot be judged against Atlas's bound.
-  if (dtt.accuracyConfidence > 0) {
+  if (!derived && dtt.accuracyConfidence > 0) {
     accuracyByLevel.set(dtt.level, Math.max(accuracyByLevel.get(dtt.level) ?? 0, dtt.verticalAccuracyM));
     accuracyMeasured += 1;
     const seenAtLevel = atCeilingByLevel.get(dtt.level) ?? { total: 0, over: 0 };
@@ -1954,7 +2036,12 @@ for await (const record of iterateStreamFd(tilesFd, { onChunk: (chunk) => proces
     }
     partialCoverage += 1;
     const width = grid;
-    if (missing % width === 0 && missing / width <= 4) {
+    const retainedObservedOcean = (coarseningTarget || coarsenReport) &&
+      dtt.waterMaskKind === 2 && dtt.minHeightM === 0 && dtt.maxHeightM === 0 && dtt.dataCoverageFraction === 0;
+    // A native parent carries aggregate child coverage, not this lattice's
+    // missing-post count. Explicit observed-ocean records likewise carry no
+    // DEM posts. Keep the original missing-row gate on measured leaf terrain.
+    if (!derived && !retainedObservedOcean && missing % width === 0 && missing / width <= 4) {
       wholeRowsMissing += 1;
       recordProblem(
         `${key} is missing ${missing / width} whole post row(s)/column(s) ` +
@@ -2028,6 +2115,50 @@ assert.ok(tilesPathAfter.isFile() && sameFileMutation(tilesIdentityBefore, fileM
 if (globalVerification) {
   assert.equal(globalMergedRecords, recordCount,
     "global merged records does not match the verified tiles.dttstream record count");
+}
+if (reductionFactWriter) {
+  let group = [];
+  let lastKey;
+  const flush = () => {
+    if (!group.length) return;
+    const stored = group.filter((row) => row.kind === "stored");
+    const claims = group.filter((row) => row.kind === "claim");
+    assert.equal(stored.length, 1, `missing/duplicate native child record ${lastKey}`);
+    assert.ok(claims.length <= 1, `duplicate native child references ${lastKey}`);
+    for (const claim of claims) {
+      assert.equal(claim.digest, stored[0].digest, `native child hash differs at ${lastKey}`);
+      if (claim.inherited) {
+        assert.equal(stored[0].confidence, 1, `derived parent ${claim.parent} claims unavailable child accuracy`);
+        assert.ok(claim.bound >= stored[0].accuracy + claim.meshBound,
+          `derived parent ${claim.parent} omits its inherited child error`);
+      }
+    }
+    group = [];
+  };
+  await mergeSortedJsonRuns(reductionFactWriter.finish(), {
+    scratchDir: verifierStaging.openScratch("reductionMerge"), resetScratch: false,
+    maxOpenRuns: 16, maxRowBytes: 2048, dedupe: false,
+    onRow: (row) => {
+      if (lastKey !== row.key) { flush(); lastKey = row.key; }
+      assert.ok(group.length < 2, `duplicate native reduction facts ${row.key}`); group.push(row);
+    },
+  });
+  flush();
+  verifierStaging.clearScratch("reductionFacts");
+  verifierStaging.clearScratch("reductionMerge");
+  if (coarsenReport) {
+    if (coarseningTarget) assertGlobalCoverage(storedCounts, 8, 0);
+    assert.equal(coarsenReport.output.sha256, verifiedTilesSha256, "coarsened output digest differs");
+    assert.equal(coarsenReport.output.bytes, tilesIdentityBefore.bytes);
+    assert.equal(coarsenReport.output.records, recordCount);
+    assert.equal(coarsenReport.input.sha256, verifiedLeafHash.digest("hex"), "original leaf records changed in the derived output");
+    assert.equal(coarsenReport.input.bytes, verifiedLeafBytes);
+    assert.equal(coarsenReport.leaves, storedCounts[coarsenReport.baseLevel]);
+    assert.equal(coarsenReport.parents, derivedRecords);
+    assert.deepEqual(coarsenReport.counts, storedCounts);
+  } else {
+    assertGlobalCoverage(storedCounts, 8, 8);
+  }
 }
 
 const oceanInputEvidence = {};
@@ -2356,7 +2487,7 @@ try {
       if (fact.level > maxLevel) return;
       candidateFactWriter.push({ key: fact.key, kind: "candidate", level: fact.level, x: fact.x, y: fact.y, address: terrainAddress(fact.level, fact.x, fact.y) });
       if (fact.level > 0) {
-        const bit = (fact.x % 2 ? 2 : 1) | (fact.y % 2 ? 4 : 0);
+        const bit = 1 << (2 * (fact.y % 2) + fact.x % 2);
         availableChildFactWriter.push({ key: addressFactKey(fact.level - 1, Math.floor(fact.x / 2), Math.floor(fact.y / 2)), kind: "available-child", childBit: bit });
       }
       if (fact.level === 0) return;
@@ -2727,6 +2858,12 @@ const summary = {
   oceanSkipsDeclared,
   oceanSkipsBelowAuthoritativeFloor: oceanSkipsBelowFloorCount,
   ancestorPlaceholders,
+  coarseCoverage: coarseningTarget ? {
+    required: true, baseLevel: 8, minimumLevel: 0,
+    phase: coarsenReport ? "derived" : "leaves",
+    complete: Boolean(coarsenReport) && ancestorPlaceholders === 0 && availableButUnstored === 0,
+    counts: storedCounts,
+  } : null,
   tilesetExtent,
   childAvailabilityClaims: childBitsClaimed,
   childAvailabilityUnservedClaims: childBitsWrong,
@@ -2746,6 +2883,12 @@ const summary = {
   },
   verticalAccuracy: accuracy,
   tilesStatingMeasuredAccuracy: accuracyMeasured,
+  nativeDerivedAccuracy: {
+    tiles: derivedRecords, withInheritedSourceAccuracy: derivedWithInheritedAccuracy,
+    withoutInheritedSourceAccuracy: derivedRecords - derivedWithInheritedAccuracy,
+    maximumMeshDifferenceBoundM: derivedMeshDifferenceBoundM,
+    basis: "native child-cell/parent-cell envelope plus inherited child source bounds when available; not a direct source-post measurement",
+  },
   // Tiles as accurate as the cap allowed and no more — reported ALWAYS, so the
   // ruling's "never silently" is a number a reviewer can read rather than an
   // absence they have to notice.
@@ -2942,6 +3085,11 @@ if (globalVerification) {
   globalStateMutation = stateNow.mutation;
   approvedConfigMutation = configNow.mutation;
 }
+if (coarsenInput) {
+  const now = stablePublicationInput(outDir, "coarsen-report.json", { maxBytes: MAX_RUN_REPORT_BYTES });
+  assert.deepEqual(now.receipt, coarsenInput.receipt, "native coarsening receipt changed during verification");
+  assert.ok(sameFileMutation(now.mutation, coarsenInput.mutation), "native coarsening receipt was modified during verification");
+}
 summary.publicationInputs = {
   format: "terrain-publication-inputs-v2",
   tiles: (() => {
@@ -2997,6 +3145,8 @@ atomicWriteJson(
 
 const overCeilingShare = accuracy.filter((a) => !a.withinCeilingShare);
 const failures = [
+  coarseningTarget && coarsenReport && (ancestorPlaceholders !== 0 || availableButUnstored !== 0)
+    ? "native coarsened global output still contains unmeasured ancestor placeholders" : null,
   verifierProblemCount ? `${verifierProblemCount} problems` : null,
   wholeRowsMissing ? `${wholeRowsMissing} tiles missing a whole post row` : null,
   digestMismatch ? `${digestMismatch} digest mismatches` : null,
@@ -3050,11 +3200,12 @@ if (failures.length) {
   process.exit(1);
 }
 summary.format = "terrain-verification-report-v1";
-summary.publishable = true;
+summary.validated = true;
+summary.publishable = !coarseningTarget || summary.coarseCoverage.complete;
 atomicWriteJson(verifyReportPath, summary, "verifyReport");
 verifierStaging.release();
 releaseVerifierLease(outDir, verifierLease.value, verifierLease.mutation);
 process.removeListener("exit", releaseVerifierStagingOnExit);
 if (args.json) console.log(JSON.stringify(summary, null, 2));
 else console.log(JSON.stringify(summary, null, 2));
-console.log("\nPUBLISHABLE: every bound met.");
+console.log(summary.publishable ? "\nPUBLISHABLE: every bound met." : "\nLEAVES VALIDATED: native coarse coverage is required before publication.");

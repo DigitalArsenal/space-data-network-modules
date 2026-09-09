@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.terrain-source",
   "name": "Terrain Tile Source Nodes",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The PURE half of the terrain serving lane: it decodes source DEM GeoTIFF granules into quantized-mesh-1.0 tiles wrapped in $DTT records, and renders the tileset's layer.json, and does nothing else. capabilities [], browser + wasmedge, request-scoped, no state between invocations. Every DEM byte it decodes was fetched by com.digitalarsenal.hostcap.http-request and every record it emits is persisted downstream; scheduling and pyramid orchestration live in the sibling terrain-ingest module, exactly as geonames-source / geonames-ingest are split. The source granules are DEFLATE-compressed Cloud-Optimized GeoTIFFs and there is no host inflate capability (and none may be added), so miniz 3.1.2 is vendored under vendor/miniz-3.1.2 (MIT, SHA-256 pinned and re-verified on every build) - the same vendored copy geonames-source and cell-tower-source use. A minimal little-endian TIFF/BigTIFF reader (tiled or strip layout, DEFLATE via tinfl, predictor 1 and floating-point predictor 3) lives in-guest for the same reason. Heights are redistributed on the source dataset's own vertical datum (a geoid), stated verbatim in VERTICAL_DATUM/VERTICAL_DATUM_NAME, never silently converted.",
   "pluginFamily": "data_source",
   "capabilities": [],
@@ -19,6 +19,38 @@
   },
   "externalInterfaces": [],
   "methods": [
+    {
+      "methodId": "reduce_parent",
+      "displayName": "Reduce four recorded terrain siblings to one parent",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "children",
+          "acceptedTypeSets": [{
+            "setId": "terrain-dtt-children",
+            "allowedTypes": [{ "schemaName": "DTT.fbs", "fileIdentifier": "$DTT", "rootTypeName": "DTT", "wireFormat": "flatbuffer" }],
+            "description": "Exactly four size-prefixed DTT siblings in one stream. Geographic WGS84 TMS regular-grid quantized meshes with inline digest-verified payloads and recorded water masks. Maximum 2 MiB per record; no missing-child synthesis."
+          }],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "records",
+          "acceptedTypeSets": [{
+            "setId": "terrain-dtt-parent",
+            "allowedTypes": [{ "schemaName": "DTT.fbs", "fileIdentifier": "$DTT", "rootTypeName": "DTT", "wireFormat": "flatbuffer" }],
+            "description": "One size-prefixed DTT parent: native 65x65 mesh, 256x256 reduced water coverage, ordered full child-record hashes, retained dataset terms, and explicit derived height-bound provenance."
+          }],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ]
+    },
     {
       "methodId": "tile",
       "displayName": "Encode one quantized-mesh terrain tile from source DEM granules",

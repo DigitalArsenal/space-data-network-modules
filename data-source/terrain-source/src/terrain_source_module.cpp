@@ -39,6 +39,7 @@
  */
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -2624,9 +2625,498 @@ constexpr const char* kGeoidRemark =
     "GEOID); no geoid-to-ellipsoid conversion is applied at this parity floor. A consumer "
     "rendering them as above-ellipsoid accepts a bounded (<~100 m) vertical offset.";
 
+// The offline parent lane accepts only this module's regular-grid mesh codec.
+// It is a bounded binary transform, not a general mesh repair/import facility.
+constexpr uint32_t kParentGrid = 65;
+constexpr size_t kParentRecordLimit = 2u * 1024u * 1024u;
+constexpr size_t kParentStreamLimit = 4u * (kParentRecordLimit + 4u);
+constexpr const char* kParentProcessor =
+    "com.digitalarsenal.data-source.terrain-source/reduce_parent@0.1.1";
+constexpr const char* kParentBound = "child-cell-parent-cell-envelope-v1";
+
+std::string parent_string(const flatbuffers::String* s) { return s ? s->str() : ""; }
+
+struct ParentMesh {
+    uint32_t grid = 0;
+    std::vector<double> axis, heights;
+    std::vector<uint8_t> water;
+};
+
+struct ParentChild {
+    std::vector<uint8_t> record;
+    const DTT* tile = nullptr;
+    ParentMesh mesh;
+    std::string digest;
+};
+
+// Inflate into the declared, capped allocation. Heap-growing inflate followed
+// by an ISIZE check would allow a hostile stream to allocate before refusal.
+bool parent_payload(const DTTPayloadRef* ref, size_t limit, const char* media,
+                    std::vector<uint8_t>* out) {
+    if (!ref || !ref->BYTES() || ref->BYTES()->size() == 0 ||
+        ref->BYTES()->size() > kParentRecordLimit ||
+        ref->SIZE_BYTES() != ref->BYTES()->size() ||
+        parent_string(ref->MEDIA_TYPE()) != media) return false;
+    const std::vector<uint8_t> stored(ref->BYTES()->begin(), ref->BYTES()->end());
+    if (parent_string(ref->DIGEST()) != sha256_multihash(stored)) return false;
+    const auto encoding = parent_string(ref->CONTENT_ENCODING());
+    if (encoding.empty()) {
+        if (stored.size() > limit) return false;
+        *out = stored;
+        return true;
+    }
+    if (encoding != "gzip" || stored.size() < 18 || stored[0] != 31 ||
+        stored[1] != 139 || stored[2] != 8 || stored[3] != 0) return false;
+    const auto little = [&](size_t p) {
+        return uint32_t(stored[p]) | uint32_t(stored[p + 1]) << 8 |
+               uint32_t(stored[p + 2]) << 16 | uint32_t(stored[p + 3]) << 24;
+    };
+    const uint32_t length = little(stored.size() - 4);
+    if (length == 0 || length > limit) return false;
+    out->resize(length);
+    const size_t actual = tinfl_decompress_mem_to_mem(
+        out->data(), out->size(), stored.data() + 10, stored.size() - 18, 0);
+    return actual == length &&
+           uint32_t(mz_crc32(MZ_CRC32_INIT, out->data(), out->size())) ==
+               little(stored.size() - 8);
+}
+
+bool parent_decode_mesh(const DTT* tile, ParentMesh* out) {
+    std::vector<uint8_t> bytes;
+    if (!parent_payload(tile->PAYLOAD(), 8u * 1024u * 1024u,
+                        "application/vnd.quantized-mesh", &bytes) || bytes.size() < 92)
+        return false;
+    size_t at = 0;
+    bool good = true;
+    auto integer = [&](size_t width) -> uint32_t {
+        if (at + width > bytes.size()) { good = false; return 0; }
+        uint32_t value = 0;
+        for (size_t i = 0; i < width; ++i) value |= uint32_t(bytes[at++]) << (8 * i);
+        return value;
+    };
+    float min_h, max_h;
+    std::memcpy(&min_h, bytes.data() + 24, 4);
+    std::memcpy(&max_h, bytes.data() + 28, 4);
+    if (!std::isfinite(min_h) || !std::isfinite(max_h) || min_h > max_h ||
+        std::fabs(double(min_h) - tile->MIN_HEIGHT_M()) >
+            std::max(0.001, std::fabs(double(min_h)) * 0.000001) ||
+        std::fabs(double(max_h) - tile->MAX_HEIGHT_M()) >
+            std::max(0.001, std::fabs(double(max_h)) * 0.000001)) return false;
+    at = 88;
+    const uint32_t count = integer(4);
+    if (count < 4 || count > 511u * 511u) return false;
+    const uint32_t grid = uint32_t(std::sqrt(double(count)));
+    if (grid * grid != count || bytes.size() - at < size_t(count) * 6) return false;
+    out->grid = grid;
+    out->axis.resize(grid);
+    std::vector<uint16_t> quant_axis(grid);
+    for (uint32_t i = 0; i < grid; ++i) {
+        quant_axis[i] = uint16_t(32767ull * i / (grid - 1));
+        out->axis[i] = double(quant_axis[i]) / 32767.0;
+    }
+    std::array<std::vector<uint16_t>, 3> values;
+    for (auto& array : values) {
+        array.resize(count);
+        int32_t value = 0;
+        for (uint32_t i = 0; i < count; ++i) {
+            const uint32_t code = integer(2);
+            value += int32_t(code >> 1) ^ -int32_t(code & 1);
+            if (value < 0 || value > 32767) return false;
+            array[i] = uint16_t(value);
+        }
+    }
+    out->heights.assign(count, 0);
+    std::vector<uint32_t> remap(count);
+    std::vector<bool> seen(count, false);
+    for (uint32_t i = 0; i < count; ++i) {
+        const auto u = std::lower_bound(quant_axis.begin(), quant_axis.end(), values[0][i]);
+        const auto v = std::lower_bound(quant_axis.begin(), quant_axis.end(), values[1][i]);
+        if (u == quant_axis.end() || v == quant_axis.end() ||
+            *u != values[0][i] || *v != values[1][i]) return false;
+        const uint32_t index = uint32_t(v - quant_axis.begin()) * grid +
+                               uint32_t(u - quant_axis.begin());
+        if (seen[index]) return false;
+        seen[index] = true;
+        remap[i] = index;
+        out->heights[index] = double(min_h) +
+            (double(max_h) - double(min_h)) * double(values[2][i]) / 32767.0;
+    }
+    const size_t width = count > 65536 ? 4 : 2;
+    at = (at + width - 1) / width * width;
+    const uint32_t triangles = integer(4);
+    if (triangles != (grid - 1) * (grid - 1) * 2 ||
+        size_t(triangles) * 3 * width > bytes.size() - at) return false;
+    uint32_t highest = 0;
+    std::vector<uint8_t> cells((grid - 1) * (grid - 1), 0);
+    for (uint32_t i = 0; i < triangles; ++i) {
+        uint32_t ids[3];
+        for (auto& id : ids) {
+            const uint32_t code = integer(width);
+            if (code > highest) return false;
+            const uint32_t index = highest - code;
+            if (code == 0) ++highest;
+            if (index >= count) return false;
+            id = remap[index];
+        }
+        const uint32_t lo = std::min(ids[0], std::min(ids[1], ids[2]));
+        const uint32_t x = lo % grid, y = lo / grid;
+        if (x >= grid - 1 || y >= grid - 1) return false;
+        uint8_t kind = 0;
+        for (uint32_t r = 0; r < 3; ++r) {
+            if (ids[r] != lo) continue;
+            if (ids[(r + 1) % 3] == lo + 1 && ids[(r + 2) % 3] == lo + grid + 1)
+                kind = 1;
+            if (ids[(r + 1) % 3] == lo + grid + 1 && ids[(r + 2) % 3] == lo + grid)
+                kind = 2;
+        }
+        auto& cell = cells[y * (grid - 1) + x];
+        if (!kind || (cell & kind)) return false;
+        cell |= kind;
+    }
+    for (uint8_t cell : cells) if (cell != 3) return false;
+    for (uint32_t edge = 0; edge < 4; ++edge) {
+        if (integer(4) != grid) return false;
+        std::vector<bool> edge_seen(count, false);
+        for (uint32_t i = 0; i < grid; ++i) {
+            const uint32_t index = integer(width);
+            if (!good || index >= count || edge_seen[index]) return false;
+            edge_seen[index] = true;
+            const uint32_t id = remap[index];
+            if ((edge == 0 && id % grid != 0) ||
+                (edge == 1 && id / grid != 0) ||
+                (edge == 2 && id % grid != grid - 1) ||
+                (edge == 3 && id / grid != grid - 1)) return false;
+        }
+    }
+    if (integer(1) != 2) return false;
+    const uint32_t mask_length = integer(4);
+    if (!good || (mask_length != 1 && mask_length != kMaskSize * kMaskSize) ||
+        at + mask_length != bytes.size()) return false;
+    out->water.assign(bytes.begin() + at, bytes.end());
+    const auto kind = tile->WATER_MASK_KIND();
+    if (kind == dttWaterMask_RASTER) {
+        std::vector<uint8_t> mask;
+        if (mask_length != kMaskSize * kMaskSize ||
+            tile->WATER_MASK_WIDTH() != kMaskSize || tile->WATER_MASK_HEIGHT() != kMaskSize ||
+            !parent_payload(tile->WATER_MASK(), kMaskSize * kMaskSize,
+                            "application/octet-stream", &mask) || mask != out->water) return false;
+    } else {
+        if (mask_length != 1 || tile->WATER_MASK() || tile->WATER_MASK_WIDTH() ||
+            tile->WATER_MASK_HEIGHT() ||
+            (kind != dttWaterMask_UNIFORM_LAND && kind != dttWaterMask_UNIFORM_WATER) ||
+            out->water[0] != (kind == dttWaterMask_UNIFORM_WATER ? 255 : 0)) return false;
+        const uint8_t uniform_coverage = out->water[0];
+        out->water.assign(kMaskSize * kMaskSize, uniform_coverage);
+    }
+    return true;
+}
+
+uint32_t parent_cell(const ParentMesh& mesh, double coordinate) {
+    const auto found = std::upper_bound(mesh.axis.begin(), mesh.axis.end(), coordinate);
+    return std::min(mesh.grid - 2, uint32_t(std::max<ptrdiff_t>(0, found - mesh.axis.begin() - 1)));
+}
+
+double parent_sample(const ParentMesh& mesh, double u, double v) {
+    const uint32_t x = parent_cell(mesh, u), y = parent_cell(mesh, v), n = mesh.grid;
+    const double fu = (u - mesh.axis[x]) / (mesh.axis[x + 1] - mesh.axis[x]);
+    const double fv = (v - mesh.axis[y]) / (mesh.axis[y + 1] - mesh.axis[y]);
+    const double bl = mesh.heights[y * n + x], br = mesh.heights[y * n + x + 1];
+    const double tl = mesh.heights[(y + 1) * n + x], tr = mesh.heights[(y + 1) * n + x + 1];
+    return fu >= fv ? bl * (1 - fu) + br * (fu - fv) + tr * fv
+                    : bl * (1 - fv) + tr * fu + tl * (fv - fu);
+}
+
+// A linear triangle stays inside its vertex height envelope. Each child cell
+// overlaps only a bounded set of parent cells; comparing their envelopes is a
+// conservative bound everywhere, including triangle crossings between posts.
+// Sampling only child vertices would NOT establish this bound.
+double parent_difference_bound(const ParentMesh& child, const ParentMesh& parent,
+                               uint32_t east, uint32_t north) {
+    double bound = 0;
+    for (uint32_t y = 0; y + 1 < child.grid; ++y) {
+        for (uint32_t x = 0; x + 1 < child.grid; ++x) {
+            const double h[] = {child.heights[y * child.grid + x],
+                child.heights[y * child.grid + x + 1],
+                child.heights[(y + 1) * child.grid + x],
+                child.heights[(y + 1) * child.grid + x + 1]};
+            const double low = *std::min_element(h, h + 4), high = *std::max_element(h, h + 4);
+            const uint32_t x0 = parent_cell(parent, (east + child.axis[x]) / 2);
+            const uint32_t x1 = parent_cell(parent, (east + child.axis[x + 1]) / 2);
+            const uint32_t y0 = parent_cell(parent, (north + child.axis[y]) / 2);
+            const uint32_t y1 = parent_cell(parent, (north + child.axis[y + 1]) / 2);
+            for (uint32_t py = y0; py <= y1; ++py) for (uint32_t px = x0; px <= x1; ++px) {
+                const double p[] = {parent.heights[py * parent.grid + px],
+                    parent.heights[py * parent.grid + px + 1],
+                    parent.heights[(py + 1) * parent.grid + px],
+                    parent.heights[(py + 1) * parent.grid + px + 1]};
+                const double p_low = *std::min_element(p, p + 4), p_high = *std::max_element(p, p + 4);
+                bound = std::max(bound, std::max(std::fabs(p_high - low), std::fabs(high - p_low)));
+            }
+        }
+    }
+    return bound;
+}
+
+bool parent_timestamp(const std::string& s) {
+    if (s.size() != 24 || s[4] != '-' || s[7] != '-' || s[10] != 'T' ||
+        s[13] != ':' || s[16] != ':' || s[19] != '.' || s[23] != 'Z') return false;
+    for (size_t i = 0; i < s.size(); ++i)
+        if (i != 4 && i != 7 && i != 10 && i != 13 && i != 16 && i != 19 && i != 23 &&
+            (s[i] < '0' || s[i] > '9')) return false;
+    const int month = std::atoi(s.substr(5, 2).c_str()), day = std::atoi(s.substr(8, 2).c_str());
+    return month >= 1 && month <= 12 && day >= 1 && day <= 31 &&
+        std::atoi(s.substr(11, 2).c_str()) <= 23 && std::atoi(s.substr(14, 2).c_str()) <= 59 &&
+        std::atoi(s.substr(17, 2).c_str()) <= 59;
+}
+
+bool parent_same_provenance(const DTTProvenance* a, const DTTProvenance* b) {
+    if (!a || !b) return a == b;
+    return parent_string(a->DATASET_ID()) == parent_string(b->DATASET_ID()) &&
+        parent_string(a->DATASET_NAME()) == parent_string(b->DATASET_NAME()) &&
+        parent_string(a->DATASET_URL()) == parent_string(b->DATASET_URL()) &&
+        parent_string(a->DATASET_EPOCH()) == parent_string(b->DATASET_EPOCH()) &&
+        parent_string(a->DATASET_CID()) == parent_string(b->DATASET_CID()) &&
+        parent_string(a->LICENSE()) == parent_string(b->LICENSE()) &&
+        parent_string(a->LICENSE_URL()) == parent_string(b->LICENSE_URL()) &&
+        parent_string(a->ATTRIBUTION()) == parent_string(b->ATTRIBUTION()) &&
+        a->NON_COMMERCIAL_ONLY() == b->NON_COMMERCIAL_ONLY() && a->SHARE_ALIKE() == b->SHARE_ALIKE();
+}
+
+flatbuffers::Offset<DTTProvenance> parent_provenance(flatbuffers::FlatBufferBuilder& b,
+    const DTTProvenance* source, const std::string& retrieved, const std::string& query) {
+    const auto copy = [&](const flatbuffers::String* s) {
+        return s ? b.CreateString(s->str()) : flatbuffers::Offset<flatbuffers::String>(0);
+    };
+    const auto id = copy(source->DATASET_ID()), name = copy(source->DATASET_NAME());
+    const auto url = copy(source->DATASET_URL()), epoch = copy(source->DATASET_EPOCH());
+    const auto cid = copy(source->DATASET_CID()), license = copy(source->LICENSE());
+    const auto license_url = copy(source->LICENSE_URL()), attribution = copy(source->ATTRIBUTION());
+    const auto when = b.CreateString(retrieved), selection = b.CreateString(query);
+    const auto processor = b.CreateString(kParentProcessor);
+    DTTProvenanceBuilder builder(b);
+    builder.add_DATASET_ID(id); builder.add_DATASET_NAME(name); builder.add_DATASET_URL(url);
+    builder.add_DATASET_EPOCH(epoch); builder.add_DATASET_CID(cid);
+    builder.add_LICENSE(license); builder.add_LICENSE_URL(license_url); builder.add_ATTRIBUTION(attribution);
+    builder.add_NON_COMMERCIAL_ONLY(source->NON_COMMERCIAL_ONLY());
+    builder.add_SHARE_ALIKE(source->SHARE_ALIKE()); builder.add_RETRIEVED_AT(when);
+    builder.add_SOURCE_QUERY(selection); builder.add_PROCESSOR(processor);
+    // No invented production timestamp or single-granule URL for a derived tile.
+    return builder.Finish();
+}
+
 }  // namespace
 
 extern "C" {
+
+int reduce_parent(void) {
+    const auto fail = [](const char* message) {
+        plugin_set_error("invalid-parent-children", message);
+        return 400;
+    };
+    if (plugin_get_input_count() != 1)
+        return fail("reduce_parent requires exactly one children stream.");
+    const plugin_input_frame_t* input = plugin_get_input_frame(0);
+    if (!input || !input->port_id || std::strcmp(input->port_id, "children") ||
+        !input->payload || input->payload_length > kParentStreamLimit)
+        return fail("The children stream is absent, misaddressed, or exceeds the byte limit.");
+    std::array<ParentChild, 4> storage;
+    std::array<ParentChild*, 4> children{};
+    size_t at = 0;
+    for (auto& child : storage) {
+        if (at + 4 > input->payload_length) return fail("Four complete DTT records are required.");
+        uint32_t size = 0;
+        for (uint32_t i = 0; i < 4; ++i) size |= uint32_t(input->payload[at++]) << (8 * i);
+        if (size < 8 || size > kParentRecordLimit || size > input->payload_length - at)
+            return fail("A child DTT frame has an invalid size.");
+        child.record.assign(input->payload + at, input->payload + at + size);
+        at += size;
+        flatbuffers::Verifier verifier(child.record.data(), child.record.size(), 32, 128);
+        if (!VerifyDTTBuffer(verifier)) return fail("A child is not a valid canonical DTT record.");
+        child.tile = GetDTT(child.record.data());
+        const DTT* t = child.tile;
+        const auto* p = t->PROVENANCE();
+        if (t->LEVEL() < 1 || t->LEVEL() > 24 || t->X() >= (2u << t->LEVEL()) ||
+            t->Y() >= (1u << t->LEVEL()) || t->ROW_ORIGIN_NORTH() ||
+            t->TILING_SCHEME() != dttTilingScheme_GEOGRAPHIC_WGS84 ||
+            t->PAYLOAD_FORMAT() != dttPayloadFormat_QUANTIZED_MESH ||
+            parent_string(t->PAYLOAD_FORMAT_VERSION()) != "1.0" ||
+            parent_string(t->TILESET_ID()).empty() || !p ||
+            parent_string(p->DATASET_ID()).empty() || parent_string(p->LICENSE()).empty() ||
+            !parent_timestamp(parent_string(p->DATASET_EPOCH())) ||
+            !parent_timestamp(parent_string(p->RETRIEVED_AT())) ||
+            !std::isfinite(t->MIN_HEIGHT_M()) || !std::isfinite(t->MAX_HEIGHT_M()) ||
+            t->MIN_HEIGHT_M() > t->MAX_HEIGHT_M() ||
+            !std::isfinite(t->DATA_COVERAGE_FRACTION()) ||
+            t->DATA_COVERAGE_FRACTION() < 0 || t->DATA_COVERAGE_FRACTION() > 1 ||
+            !std::isfinite(t->SOURCE_POST_SPACING_M()) || t->SOURCE_POST_SPACING_M() < 0 ||
+            t->MAX_LEVEL() < t->LEVEL() || t->VERTICAL_DATUM() == dttVerticalDatum_UNSPECIFIED ||
+            parent_string(t->VERTICAL_DATUM_NAME()).empty())
+            return fail("Child address, codec, datum, edition, coverage, or provenance is unsupported.");
+        const double span = std::ldexp(180.0, -int(t->LEVEL()));
+        if (t->WEST_DEG() != -180 + t->X() * span ||
+            t->EAST_DEG() != -180 + (t->X() + 1) * span ||
+            t->SOUTH_DEG() != -90 + t->Y() * span ||
+            t->NORTH_DEG() != -90 + (t->Y() + 1) * span)
+            return fail("Child extent disagrees with its geographic TMS address.");
+        const uint32_t quadrant = (t->Y() & 1) * 2 + (t->X() & 1);
+        if (children[quadrant]) return fail("Duplicate child quadrant.");
+        children[quadrant] = &child;
+        child.digest = sha256_multihash(child.record);
+        if (!parent_decode_mesh(t, &child.mesh))
+            return fail("Child mesh or water mask is corrupt, inconsistent, or outside the supported codec.");
+    }
+    if (at != input->payload_length) return fail("Trailing or excessive child records are refused.");
+    const DTT* first = children[0]->tile;
+    std::string retrieved, water_retrieved;
+    bool inherited_complete = true;
+    double coverage = 0, source_spacing = 0;
+    for (const ParentChild* child : children) {
+        const DTT* t = child->tile;
+        if (t->LEVEL() != first->LEVEL() || t->X() / 2 != first->X() / 2 ||
+            t->Y() / 2 != first->Y() / 2 || t->MAX_LEVEL() != first->MAX_LEVEL() ||
+            parent_string(t->TILESET_ID()) != parent_string(first->TILESET_ID()) ||
+            parent_string(t->TILESET_NAME()) != parent_string(first->TILESET_NAME()) ||
+            t->VERTICAL_DATUM() != first->VERTICAL_DATUM() ||
+            parent_string(t->VERTICAL_DATUM_NAME()) != parent_string(first->VERTICAL_DATUM_NAME()) ||
+            parent_string(t->EPOCH()) != parent_string(first->EPOCH()) ||
+            t->SOURCE_CLASS() != first->SOURCE_CLASS() ||
+            !parent_same_provenance(t->PROVENANCE(), first->PROVENANCE()) ||
+            !parent_same_provenance(t->WATER_MASK_PROVENANCE(), first->WATER_MASK_PROVENANCE()))
+            return fail("Children must be siblings from one compatible dataset, edition, datum, and licence.");
+        retrieved = std::max(retrieved, parent_string(t->PROVENANCE()->RETRIEVED_AT()));
+        if (const auto* p = t->WATER_MASK_PROVENANCE()) {
+            const auto time = parent_string(p->RETRIEVED_AT());
+            if (!parent_timestamp(time) || !parent_timestamp(parent_string(p->DATASET_EPOCH())) ||
+                parent_string(p->DATASET_ID()).empty() || parent_string(p->LICENSE()).empty())
+                return fail("Incomplete water-mask provenance.");
+            water_retrieved = std::max(water_retrieved, time);
+        }
+        if (!std::isfinite(t->VERTICAL_ACCURACY_M()) || t->VERTICAL_ACCURACY_M() < 0 ||
+            t->ACCURACY_CONFIDENCE() != 1.0) inherited_complete = false;
+        coverage += t->DATA_COVERAGE_FRACTION() / 4.0;
+        source_spacing = std::max(source_spacing, t->SOURCE_POST_SPACING_M());
+    }
+    TileJob job;
+    job.level = first->LEVEL() - 1; job.x = first->X() / 2; job.y = first->Y() / 2;
+    const double span = std::ldexp(180.0, -int(job.level));
+    TileExtent extent;
+    extent.west = -180 + job.x * span; extent.east = extent.west + span;
+    extent.south = -90 + job.y * span; extent.north = extent.south + span;
+    std::vector<double> heights(kParentGrid * kParentGrid);
+    for (uint32_t y = 0; y < kParentGrid; ++y) for (uint32_t x = 0; x < kParentGrid; ++x) {
+        const double u = double(x) / (kParentGrid - 1), v = double(y) / (kParentGrid - 1);
+        const uint32_t east = u >= 0.5 ? 1 : 0, north = v >= 0.5 ? 1 : 0;
+        heights[y * kParentGrid + x] = parent_sample(children[north * 2 + east]->mesh,
+                                                       u * 2 - east, v * 2 - north);
+    }
+    // Mask rows start NORTH, unlike mesh/TMS rows. Values are water coverage
+    // (0..255), already classified by the native WBM reader, not category IDs.
+    std::vector<uint8_t> water(kMaskSize * kMaskSize);
+    for (uint32_t y = 0; y < kMaskSize; ++y) for (uint32_t x = 0; x < kMaskSize; ++x) {
+        uint32_t sum = 0;
+        for (uint32_t dy = 0; dy < 2; ++dy) for (uint32_t dx = 0; dx < 2; ++dx) {
+            const uint32_t mx = x * 2 + dx, my = y * 2 + dy;
+            const uint32_t east = mx / kMaskSize, north = 1 - my / kMaskSize;
+            sum += children[north * 2 + east]->mesh.water[
+                (my % kMaskSize) * kMaskSize + mx % kMaskSize];
+        }
+        water[y * kMaskSize + x] = uint8_t((sum + 2) / 4);
+    }
+    const bool uniform = std::all_of(water.begin(), water.end(), [&](uint8_t v) { return v == water[0]; }) &&
+                         (water[0] == 0 || water[0] == 255);
+    std::vector<uint8_t> mesh, compressed, mask_compressed;
+    encode_quantized_mesh(job, kParentGrid, extent, heights,
+                          uniform ? std::vector<uint8_t>() : water, water[0] == 255, &mesh);
+    if (!gzip_compress(mesh, &compressed) || (!uniform && !gzip_compress(water, &mask_compressed)))
+        return fail("Could not encode the bounded parent payload.");
+    const double low = *std::min_element(heights.begin(), heights.end());
+    const double high = *std::max_element(heights.begin(), heights.end());
+    ParentMesh decoded_parent;
+    decoded_parent.grid = kParentGrid;
+    decoded_parent.axis.resize(kParentGrid);
+    decoded_parent.heights.resize(heights.size());
+    for (uint32_t i = 0; i < kParentGrid; ++i)
+        decoded_parent.axis[i] = double(32767ull * i / (kParentGrid - 1)) / 32767.0;
+    for (size_t i = 0; i < heights.size(); ++i) {
+        const double q = high > low ? std::lround(32767 * (heights[i] - low) / (high - low)) : 0;
+        decoded_parent.heights[i] = double(float(low)) + (double(float(high)) - double(float(low))) * q / 32767;
+    }
+    double difference = 0, accuracy = 0;
+    for (uint32_t q = 0; q < 4; ++q) {
+        const double bound = parent_difference_bound(children[q]->mesh, decoded_parent, q % 2, q / 2);
+        difference = std::max(difference, bound);
+        if (inherited_complete) accuracy = std::max(accuracy, children[q]->tile->VERTICAL_ACCURACY_M());
+    }
+    // Outward numerical allowance; zero relief remains exactly zero.
+    if (difference > 0) difference += std::max(1e-8, difference * 1e-12);
+    if (inherited_complete) accuracy += difference;
+    if (accuracy > 0) accuracy += std::max(1e-8, accuracy * 1e-12);
+    char number[64]; std::snprintf(number, sizeof(number), "%.17g", difference);
+    std::string query = "{\"method\":\"reduce_parent\",\"version\":1,\"children\":[";
+    for (uint32_t q = 0; q < 4; ++q) {
+        const DTT* t = children[q]->tile;
+        if (q) query += ",";
+        query += "{\"level\":" + std::to_string(t->LEVEL()) + ",\"x\":" + std::to_string(t->X()) +
+            ",\"y\":" + std::to_string(t->Y()) + ",\"digest\":\"" + children[q]->digest + "\"}";
+    }
+    query += std::string("],\"heightBound\":\"") + kParentBound +
+        "\",\"waterReduction\":\"coverage-2x2-round-half-up-v1\",\"meshDifferenceBoundM\":" + number +
+        ",\"inheritedAccuracyComplete\":" + (inherited_complete ? "true}" : "false}");
+    flatbuffers::FlatBufferBuilder b(compressed.size() + mask_compressed.size() + 4096);
+    const auto provenance = parent_provenance(b, first->PROVENANCE(), retrieved, query);
+    const auto water_provenance = first->WATER_MASK_PROVENANCE()
+        ? parent_provenance(b, first->WATER_MASK_PROVENANCE(), water_retrieved, query)
+        : flatbuffers::Offset<DTTProvenance>(0);
+    const auto payload = [&](const std::vector<uint8_t>& bytes, const char* media) {
+        const auto data = b.CreateVector(bytes);
+        const auto digest = b.CreateString(sha256_multihash(bytes));
+        const auto encoding = b.CreateString("gzip"), content_type = b.CreateString(media);
+        DTTPayloadRefBuilder builder(b);
+        builder.add_BYTES(data); builder.add_SIZE_BYTES(bytes.size()); builder.add_DIGEST(digest);
+        builder.add_CONTENT_ENCODING(encoding); builder.add_MEDIA_TYPE(content_type);
+        return builder.Finish();
+    };
+    const auto mesh_ref = payload(compressed, "application/vnd.quantized-mesh");
+    const auto water_ref = uniform ? flatbuffers::Offset<DTTPayloadRef>(0)
+                                  : payload(mask_compressed, "application/octet-stream");
+    const auto tileset = b.CreateString(parent_string(first->TILESET_ID()));
+    const auto tileset_name = first->TILESET_NAME() ? b.CreateString(first->TILESET_NAME()->str()) : 0;
+    const auto format = b.CreateString("1.0"), datum = b.CreateString(parent_string(first->VERTICAL_DATUM_NAME()));
+    const auto epoch = first->EPOCH() ? b.CreateString(first->EPOCH()->str()) : 0;
+    const auto etag = b.CreateString("\"" + sha256_multihash(compressed) + "\"");
+    const auto remarks = b.CreateString(
+        "Native parent reduction of four recorded siblings; heights retain their stated vertical datum. "
+        "Vertical accuracy, when available, is an inherited source-post bound plus a conservative "
+        "decoded child-cell/parent-cell envelope bound, not a new source-post measurement. "
+        "Water values are rounded 2x2 coverage reductions of recorded child masks; missing children are refused.");
+    DTTBuilder builder(b);
+    builder.add_TILESET_ID(tileset); builder.add_TILESET_NAME(tileset_name);
+    builder.add_TILING_SCHEME(dttTilingScheme_GEOGRAPHIC_WGS84);
+    builder.add_LEVEL(job.level); builder.add_X(job.x); builder.add_Y(job.y);
+    builder.add_WEST_DEG(extent.west); builder.add_SOUTH_DEG(extent.south);
+    builder.add_EAST_DEG(extent.east); builder.add_NORTH_DEG(extent.north);
+    builder.add_MIN_HEIGHT_M(low); builder.add_MAX_HEIGHT_M(high);
+    builder.add_PAYLOAD_FORMAT(dttPayloadFormat_QUANTIZED_MESH); builder.add_PAYLOAD_FORMAT_VERSION(format);
+    builder.add_PAYLOAD(mesh_ref); builder.add_POST_SPACING_M(span / (kParentGrid - 1) * kPi / 180 * 6371008.8);
+    builder.add_SOURCE_POST_SPACING_M(source_spacing); builder.add_VERTICAL_DATUM(first->VERTICAL_DATUM());
+    builder.add_VERTICAL_DATUM_NAME(datum);
+    if (inherited_complete) { builder.add_VERTICAL_ACCURACY_M(accuracy); builder.add_ACCURACY_CONFIDENCE(1); }
+    builder.add_DATA_COVERAGE_FRACTION(coverage);
+    builder.add_WATER_MASK_KIND(uniform ? (water[0] ? dttWaterMask_UNIFORM_WATER : dttWaterMask_UNIFORM_LAND)
+                                       : dttWaterMask_RASTER);
+    if (!uniform) {
+        builder.add_WATER_MASK(water_ref); builder.add_WATER_MASK_WIDTH(kMaskSize);
+        builder.add_WATER_MASK_HEIGHT(kMaskSize);
+    }
+    builder.add_WATER_MASK_PROVENANCE(water_provenance); builder.add_CHILD_AVAILABILITY(15);
+    builder.add_MAX_LEVEL(first->MAX_LEVEL()); builder.add_SOURCE_CLASS(first->SOURCE_CLASS());
+    builder.add_PROVENANCE(provenance); builder.add_EPOCH(epoch); builder.add_ETAG(etag); builder.add_REMARKS(remarks);
+    FinishDTTBuffer(b, builder.Finish());
+    std::vector<uint8_t> stream;
+    put_u32(&stream, b.GetSize());
+    stream.insert(stream.end(), b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+    return push_dtt_stream("records", stream);
+}
 
 // ---------------------------------------------------------------------------
 // tile — plan + DEM granule responses (+ optional water-body granule

@@ -444,16 +444,26 @@ function artifactTransactionPath(outDir) {
   return path.join(outDir, "global-artifact-transaction.json");
 }
 
-function terminalVerificationMatchesState(outDir) {
+export function terminalVerificationMatchesState(outDir) {
   const reportPath = path.join(outDir, "verify-report.json");
   const statePath = path.join(outDir, "global-build-state.json");
   const configPath = path.join(outDir, "approved-run-config.json");
   if (!fs.existsSync(reportPath) || !fs.existsSync(statePath) || !fs.existsSync(configPath)) return false;
   const report = JSON.parse(stableReadSmallFile(reportPath, MAX_GLOBAL_STATE_BYTES, "verification report").toString("utf8"));
   const state = stableDigestFile(statePath, { maxBytes: MAX_GLOBAL_STATE_BYTES, label: "global build state" });
-  const config = stableDigestFile(configPath, { maxBytes: MAX_GLOBAL_STATE_BYTES, label: "approved run config" });
+  const configBytes = stableReadSmallFile(configPath, MAX_GLOBAL_STATE_BYTES, "approved run config");
+  const config = { digest: sha256(configBytes), bytes: configBytes.length };
   const receipt = report?.publicationInputs;
-  return report?.format === "terrain-verification-report-v1" && report?.publishable === true &&
+  const approved = JSON.parse(configBytes.toString("utf8"));
+  const completedLeaves = report?.validated === true && report?.publishable === false &&
+    report?.coarseCoverage?.phase === "leaves" && report?.coarseCoverage?.complete === false &&
+    report?.coarseCoverage?.required === true && report?.coarseCoverage?.counts?.[8] === 131072 &&
+    approved.flow_config?.skipOceanTiles === false &&
+    approved.flow_config?.min_level === 8 && approved.flow_config?.max_level === 8 &&
+    canonicalJson(approved.coarsening) === canonicalJson({
+      method: "reduce_parent", base_level: 8, minimum_level: 0, required_for_publication: true,
+    });
+  return report?.format === "terrain-verification-report-v1" && (report?.publishable === true || completedLeaves) &&
     Array.isArray(report.problems) && report.problems.length === 0 &&
     receipt?.format === "terrain-publication-inputs-v2" &&
     receipt.globalState?.path === "global-build-state.json" &&

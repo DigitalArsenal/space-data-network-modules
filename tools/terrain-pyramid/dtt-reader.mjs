@@ -14,7 +14,7 @@
 
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
-import { createReadStream } from "node:fs";
+import { createReadStream, readSync } from "node:fs";
 
 // A terrain payload is hard-capped at 32 KiB and the fixed FlatBuffer/mask
 // envelope is far below this ceiling. One MiB leaves deliberate format headroom
@@ -86,7 +86,22 @@ export async function* iterateStreamFd(fd, {
   maxRecordBytes = MAX_TERRAIN_RECORD_BYTES,
   onChunk = null,
 } = {}) {
-  yield* iterateFramedStream(createReadStream(null, { fd, autoClose: false, highWaterMark }), { maxRecordBytes, onChunk });
+  assert.ok(Number.isSafeInteger(highWaterMark) && highWaterMark > 0 && highWaterMark <= 1024 * 1024,
+    "descriptor read chunks must be bounded to 1 MiB");
+  // A ReadStream async iterator destroys itself on an early parsing failure;
+  // that can close a borrowed descriptor asynchronously after its caller has
+  // closed/reused the number. This iterator never owns or closes the fd.
+  async function* chunks() {
+    const buffer = Buffer.alloc(highWaterMark);
+    let offset = 0;
+    for (;;) {
+      const count = readSync(fd, buffer, 0, buffer.length, offset);
+      if (!count) return;
+      offset += count;
+      yield buffer.subarray(0, count);
+    }
+  }
+  yield* iterateFramedStream(chunks(), { maxRecordBytes, onChunk });
 }
 
 // ── a hand-written $DTT reader (field ids follow schema/DTT/main.fbs) ───────
@@ -219,6 +234,8 @@ export function readDttProvenance(record) {
   });
   if (boolAt(pat(11))) raw.NON_COMMERCIAL_ONLY = true;
   if (boolAt(pat(12))) raw.SHARE_ALIKE = true;
+  const processor = strAt(pat(15));
+  if (processor !== undefined) raw.PROCESSOR = processor;
   // NATIVE_ID (13), SOURCE_URL (5) and SOURCE_QUERY (6) name the ONE GRANULE a
   // tile was cut from. They are read for a tile and dropped by the caller for
   // a tileset: a pyramid is cut from thousands of granules and a record that
