@@ -72,14 +72,16 @@ memory ceiling on very large listings; update the runtime before this rollout.
 
 ### Primary object coverage
 
-Version 0.1.4 emits source-scoped CAT records alongside OEM archives when a
+Version 0.1.5 emits source-scoped CAT records alongside OEM archives when a
 complete OEM metadata block declares an international designator. The NASA form
 `1998-067-A` is normalized to `1998-067A`. Numeric NORAD/native identifiers are
 never substituted for missing designators. Unsupported formats continue to
 publish their original NCD archives without claiming object coverage.
 
-`backfill_coverage` reprocesses an existing source's NCD archive page without
-fetching the provider. Its optional JSON control input accepts `source_id`,
+`backfill_coverage` reprocesses a required `descriptors` NCD stream supplied
+from a source-filtered archive query, without fetching the provider. It never
+uses the FlatSQL hot window as a substitute for full history. Its optional
+JSON control input accepts `source_id`,
 `offset` and `limit` (default/max 4). Each file must match its descriptor's SHA-256
 and byte length; a page is capped at 64 MiB. The returned offset permits explicit
 paging. This method is not scheduled automatically. Coverage retains the source

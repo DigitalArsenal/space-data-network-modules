@@ -185,7 +185,7 @@ Bytes descriptor(const Json& item,const Bytes& raw,const std::string& cid) {
 // filenames, numeric catalog IDs, or arbitrary designators elsewhere in a file.
 Bytes object_coverage(const Json& item, const Bytes& raw) {
   const auto format=item.value("format",std::string());
-  if (format != "ccsds-oem-kvn" && format != "planet-states" && format != "eumetsat-tle-js") return {};
+  if (format != "ccsds-oem-kvn" && format != "tle" && format != "eumetsat-tle-js") return {};
   const std::string input(raw.begin(),raw.end());
   std::map<std::string,std::string> objects;
   bool metadata=false;std::string id,name;
@@ -354,17 +354,17 @@ extern "C" int backfill_coverage(){return ephemeris::guarded([]()->int{using nam
 #endif
   require(sourceId.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789-")==std::string::npos,"Invalid source ID.");
   const int offset=options.value("offset",0),limit=options.value("limit",4);require(offset>=0 && offset<=100000 && limit>=1 && limit<=4,"Invalid coverage page.");
-  const auto query=call("storage.flatsql_query_stream",{{"sql","SELECT _data FROM \"NCD@"+sourceId+"\" ORDER BY _rowid ASC LIMIT ? OFFSET ?"},{"params",Json::array({{{"t","i64"},{"v",limit}},{{"t","i64"},{"v",offset}}})}});
-  require(query.value.is_object(),"Invalid descriptor query.");const auto count=query.value.value("rows",0);if(!count)return emit_json("status",{{"scanned",0},{"next_offset",offset},{"complete",true}})<0?1:0;
-  const auto stream=binary(query,query.value.at("stream"));size_t at=0;int supported=0;uint64_t processedBytes=0;
+  const auto* page=frame("descriptors");require(page && page->payload_length<=256*1024,"A bounded NCD descriptor page is required.");
+  const Bytes stream(page->payload,page->payload+page->payload_length);size_t at=0;int supported=0,count=0;uint64_t processedBytes=0;
   while(at<stream.size()) {
+    require(++count<=limit,"Too many descriptors in this coverage page.");
     require(at+4<=stream.size(),"Truncated descriptor frame.");const auto size=flatbuffers::ReadScalar<uint32_t>(stream.data()+at);require(size>=8 && size+4<=stream.size()-at,"Invalid descriptor frame.");
     flatbuffers::Verifier verifier(stream.data()+at,size+4);require(VerifySizePrefixedNCDBuffer(verifier),"Invalid NCD.");const auto* ncd=GetSizePrefixedNCD(stream.data()+at);at+=size+4;
     const auto format=ncd->FORMAT()==ncdContainerFormat_CCSDS_OEM_KVN?std::string("ccsds-oem-kvn"):ncd->FORMAT()==ncdContainerFormat_PROVIDER_DEFINED && ncd->PROVIDER_DEFINED_FORMAT_NAME()?ncd->PROVIDER_DEFINED_FORMAT_NAME()->str():std::string();
-    if(format!="ccsds-oem-kvn" && format!="planet-states" && format!="eumetsat-tle-js")continue;
+    if(format!="ccsds-oem-kvn" && format!="tle" && format!="eumetsat-tle-js")continue;
     require(ncd->SOURCE_CID() && ncd->SOURCE_SHA256(),"Descriptor lacks immutable source binding.");require(ncd->SOURCE_BYTE_LENGTH()<=hardMaxBytes && processedBytes+ncd->SOURCE_BYTE_LENGTH()<=64*1024*1024,"Coverage page exceeds its byte budget.");processedBytes+=ncd->SOURCE_BYTE_LENGTH();const auto cid=ncd->SOURCE_CID()->str(),hash=ncd->SOURCE_SHA256()->str();const auto raw=ipfs_cat(cid);require(digest(raw)==hash && raw.size()==ncd->SOURCE_BYTE_LENGTH(),"Archived source does not match its descriptor.");
     const auto coverage=object_coverage({{"format",format}},raw);if(coverage.empty())continue;
-    const auto provenance=Json{{"source_id",sourceId},{"source_cid",cid},{"source_sha256",hash},{"parser_version","primary-object-coverage/0.1.4"}}.dump();
+    const auto provenance=Json{{"source_id",sourceId},{"source_cid",cid},{"source_sha256",hash},{"parser_version","primary-object-coverage/0.1.5"}}.dump();
     const auto result=call("storage.ingest_with_source",{{"schema","CAT.fbs"},{"provider_id","ephemeris-provider:"+sourceId},{"source_name",sourceId},{"source_url","ipfs://"+cid},{"batch_id",hash},{"reconcile","duplicates"},{"records",{{"$bin",0}}},{"provenance",{{"source",sourceId},{"json",{{"$bin",1}}}}}},{{coverage.data(),coverage.size()},{reinterpret_cast<const uint8_t*>(provenance.data()),provenance.size()}});
     require(result.value.is_object() && result.value.contains("inserted"),"Coverage was not stored.");++supported;
   }
