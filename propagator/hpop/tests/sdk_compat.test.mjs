@@ -146,6 +146,8 @@ function instantiateStandaloneModule(wasmBytes) {
     fd_close() {
       return 52;
     },
+    environ_get() { return 0; },
+    environ_sizes_get() { return 0; },
     args_get() {
       return 0;
     },

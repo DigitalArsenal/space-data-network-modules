@@ -5,7 +5,7 @@
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
-    "test": "node --test tests/sdk_compat.test.mjs tests/direct-entry.test.mjs tests/tudat_wasm_derived.test.mjs tests/drag_atmosphere.test.mjs tests/batch_all_positions.test.mjs",
+    "test": "node --test tests/sdk_compat.test.mjs tests/direct-entry.test.mjs tests/tudat_wasm_derived.test.mjs tests/drag_atmosphere.test.mjs tests/batch_all_positions.test.mjs tests/path_state_vectors.test.mjs",
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs",
     "test:tudat": "node --test tests/tudat_wasm_derived.test.mjs"
   },

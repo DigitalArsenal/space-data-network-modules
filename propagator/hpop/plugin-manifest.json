@@ -2,7 +2,7 @@
   "pluginId": "com.orbpro.hpop",
   "name": "HPOP High-Precision Orbit Propagator",
   "version": "1.0.0",
-  "description": "High-precision numerical orbit propagator with configurable force models, integrators, and covariance propagation. Atmosphere models: real NRLMSISE-00 (vendored Picone/Hedin/Drob reference C port), US Standard Atmosphere 1976 (geopotential formulation, 0-86 km), Vallado exponential table; JB2008 and DTM2020 entries are simplified approximations, not the published coefficient models.",
+  "description": "High-precision numerical orbit propagator with configurable force models, integrators, and covariance propagation. Atmosphere models: real NRLMSISE-00 (vendored Picone/Hedin/Drob reference C port), US Standard Atmosphere 1976 (geopotential formulation, 0-86 km), Vallado exponential table; JB2008 and DTM2020 entries are simplified approximations, not the published coefficient models. Native catalogue ABI: plugin_propagate_path_sv(entityIndex,startUtcJD,stepDays,count,outPtr) and plugin_eval_states(utcJD,outPtr,maxCount) write six ECEF metre/metre-per-second doubles per state; plugin_set_visibility_mask(ptr,count) accepts a resident Uint8 bitmap.",
   "pluginFamily": "propagator",
   "capabilities": [],
   "externalInterfaces": [],

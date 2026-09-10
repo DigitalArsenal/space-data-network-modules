@@ -92,6 +92,12 @@ struct ChebyshevSegment {
 /// Forward declarations used by cache pruning and arc helpers.
 static StateVector propagateInternal(const StateVector& initial, double targetJD);
 static StateVector propagateEntity(int entityIndex, double targetJD);
+// Host-owned module-memory bitmap. Null means every entity is visible.
+static const uint8_t* g_visibilityMask = nullptr;
+static int g_visibilityCount = 0;
+static bool entityVisible(int i) {
+    return !g_visibilityMask || (i < g_visibilityCount && g_visibilityMask[i] != 0);
+}
 
 static inline void writeSegmentState(double posOut[3], double velOut[3], const StateVector& s) {
     posOut[0] = s.position.x; posOut[1] = s.position.y; posOut[2] = s.position.z;
@@ -1011,6 +1017,8 @@ int plugin_init() {
     g_nextSegmentSetHandle = 1u;
     g_retentionBehindDays = 1e30;
     g_gridStagger = false;
+    g_visibilityMask = nullptr;
+    g_visibilityCount = 0;
     g_initialized = true;
     g_configVersion++;
 
@@ -1052,10 +1060,17 @@ int plugin_init_states(double* statesPtr, int count) {
         entity.initialState.velocity.y = s[5];
         entity.initialState.velocity.z = s[6];
 
-        computeOrbitalElements(entity.initialState.position,
-                               entity.initialState.velocity,
-                               entity.orbitalPeriodMin,
-                               entity.eccentricity);
+        // A zero seed denotes an invalid/decayed catalogue row, not an orbit.
+        // Preserve its index but never integrate it or derive orbital elements.
+        entity.valid = s[0] > 0.0 && (s[1] != 0.0 || s[2] != 0.0 || s[3] != 0.0);
+        entity.orbitalPeriodMin = 0.0;
+        entity.eccentricity = 0.0;
+        if (entity.valid) {
+            computeOrbitalElements(entity.initialState.position,
+                                   entity.initialState.velocity,
+                                   entity.orbitalPeriodMin,
+                                   entity.eccentricity);
+        }
 
         entity.cachedJD = 0;
         entity.cachedConfigVer = 0;
@@ -1064,7 +1079,6 @@ int plugin_init_states(double* statesPtr, int count) {
         entity.burnCount = 0;
         entity.arcs = nullptr;
         entity.arcCount = 0;
-        entity.valid = true;
     }
 
     g_entityCount = n;
@@ -1096,7 +1110,7 @@ double get_eccentricity(int entityIndex) {
 /// Output: [epochJD, rx, ry, rz, vx, vy, vz] in ECEF meters, m/s.
 /// Returns 0 on success, negative on error.
 int plugin_propagate(double jd, int entityIndex, double* outPtr) {
-    if (!g_initialized || entityIndex < 0 || entityIndex >= g_entityCount) return -1;
+    if (!g_initialized || !outPtr || !std::isfinite(jd) || entityIndex < 0 || entityIndex >= g_entityCount || !g_entities[entityIndex].valid) return -1;
 
     StateVector result = propagateEntity(entityIndex, jd);
 
@@ -1171,6 +1185,56 @@ int plugin_propagate_path_entity(int entityIndex, double startJD, double stepDay
     }
 
     return valid;
+}
+
+/// Uniform UTC-JD state track. Six doubles/sample, ECEF metres and m/s.
+/// Uses the same native arc/ephemeris dispatch as plugin_propagate, including burns.
+int plugin_propagate_path_sv(int entityIndex, double startJD, double stepDays,
+                            int count, double* outPtr) {
+    if (!g_initialized || !outPtr || count <= 0 || entityIndex < 0 ||
+        entityIndex >= g_entityCount || !g_entities[entityIndex].valid ||
+        !std::isfinite(startJD) || !std::isfinite(stepDays)) return 0;
+    for (int i = 0; i < count; ++i) {
+        const double jd = startJD + i * stepDays;
+        const StateVector state = propagateEntity(entityIndex, jd);
+        eciToEcefMeters(state, jd, outPtr + i * 6, outPtr + i * 6 + 3);
+    }
+    return count;
+}
+
+/// Set a bitmap in this instance's memory; the host keeps it alive until cleared.
+void plugin_set_visibility_mask(const uint8_t* mask, int count) {
+    g_visibilityMask = mask;
+    g_visibilityCount = std::max(0, count);
+}
+
+/// Evaluation only: six doubles/entity in ECEF metres and m/s. No integration,
+/// including burn entities (which belong on the separate focus instance).
+/// Uncovered/hidden/invalid states are zero; return the indexed output length.
+int plugin_eval_states(double jd, double* outPtr, int maxCount) {
+    if (!g_initialized || !outPtr || maxCount <= 0 || !std::isfinite(jd)) return 0;
+    const int n = std::min(g_entityCount, maxCount);
+    const auto rotation = coords::getTransformMatrix(coords::Frame::GCRF, coords::Frame::ECEF, jd);
+    const auto omega = rotation.apply(coords::Vec3(0.0, 0.0, coords::constants::EARTH_ROTATION_RATE));
+    for (int i = 0; i < n; ++i) {
+        double* out = outPtr + i * 6;
+        std::fill(out, out + 6, 0.0);
+        HPOPEntity& entity = g_entities[i];
+        if (!entity.valid || !entityVisible(i) || entity.arcCount > 0) continue;
+        int segment = -1;
+        // Never mislabel a state at a coverage edge as the requested epoch.
+        if (!lookupCoveredSegment(entity.ephemeris, jd, segment)) continue;
+        StateVector state;
+        chebyshevEvalState(entity.ephemeris.segments[segment], jd,
+                          state.position, state.velocity);
+        // Same coords::transform velocity transport, with the shared epoch's
+        // rotation computed once for the entire catalogue shard.
+        const auto position = rotation.apply(coords::Vec3(state.position.x, state.position.y, state.position.z));
+        const auto velocity = rotation.apply(coords::Vec3(state.velocity.x, state.velocity.y, state.velocity.z)) - omega.cross(position);
+        out[0] = position.x * 1000.0; out[1] = position.y * 1000.0; out[2] = position.z * 1000.0;
+        out[3] = velocity.x * 1000.0; out[4] = velocity.y * 1000.0; out[5] = velocity.z * 1000.0;
+    }
+    return n;
 }
 
 /// Batch propagation at arbitrary sorted Julian Dates for a specific entity.
@@ -1297,7 +1361,7 @@ int plugin_ensure_coverage(double julianDate, int startEntity, int count) {
     int processed = 0;
     for (int i = startEntity; i < end; i++) {
         HPOPEntity& entity = g_entities[i];
-        if (!entity.valid) continue;
+        if (!entity.valid || !entityVisible(i)) continue;
         if (entity.arcCount > 0) {
             // Arc-aware entities (burns) keep the full propagateEntity path.
             propagateEntity(i, julianDate);
@@ -1393,6 +1457,7 @@ int plugin_init_states_ecef(double* statesPtr, int count) {
     int n = (count > MAX_ENTITIES) ? MAX_ENTITIES : count;
     for (int i = 0; i < n; i++) {
         double* s = statesPtr + i * 7;
+        if (!(s[0] > 0.0) || (s[1] == 0.0 && s[2] == 0.0 && s[3] == 0.0)) continue;
         const coords::StateVec ecef(
             {s[1] / 1000.0, s[2] / 1000.0, s[3] / 1000.0},
             {s[4] / 1000.0, s[5] / 1000.0, s[6] / 1000.0});
@@ -2910,6 +2975,8 @@ void plugin_destroy() {
     g_nextSegmentSetHandle = 1u;
     g_retentionBehindDays = 1e30;
     g_gridStagger = false;
+    g_visibilityMask = nullptr;
+    g_visibilityCount = 0;
     g_initialized = false;
 }
 
