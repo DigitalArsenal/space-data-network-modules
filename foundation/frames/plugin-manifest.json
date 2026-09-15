@@ -69,9 +69,9 @@
             }
           ],
           "minStreams": 0,
-          "maxStreams": 1,
+          "maxStreams": 366,
           "required": false,
-          "description": "Earth-orientation row for the request epoch, from the signed EOP data module. Axis chains that read Earth orientation return MISSING_EOP_DATA when it is absent rather than extrapolating."
+          "description": "One instantaneous SDS EOP row, or up to 366 ordered daily rows as frames or a size-prefixed stream. Tables are linearly interpolated at EPOCH without extrapolation, preserving UT1 continuity through leap seconds. Do not mix series or dataset provenance."
         },
         {
           "portId": "object_state",

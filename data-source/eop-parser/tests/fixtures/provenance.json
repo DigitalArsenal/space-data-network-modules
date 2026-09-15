@@ -1,0 +1,63 @@
+[
+  {
+    "file": "finals2000A.all.excerpt.txt",
+    "url": "https://datacenter.iers.org/data/9/finals2000A.all",
+    "retrieved_utc": "2026-09-15T14:35:15.555199+00:00",
+    "full_source_sha256": "d7adc96fca77e27746586e8b7dd75376eebbc82ba5f65ced13379cf0ebd62327",
+    "excerpt_sha256": "754579e0c626cc4c252e53c977e62cf623a6542f3ba5a58d29cf4459b49df2a5",
+    "published_line_numbers": [
+      16070,
+      16071,
+      18316,
+      18317,
+      18318,
+      19611,
+      19612,
+      20033
+    ]
+  },
+  {
+    "file": "eopc04.1962-now.excerpt.txt",
+    "url": "https://hpiers.obspm.fr/iers/eop/eopc04/eopc04.1962-now",
+    "retrieved_utc": "2026-09-15T14:35:15.569874+00:00",
+    "full_source_sha256": "191490b70fa89bff8056200e785412654a4541dac96e76808231bd8d6ee85445",
+    "excerpt_sha256": "b9a32b44e3eca0bcb747bf69df30e12bd06c1a59d904d921577abea22fa8705f",
+    "published_line_numbers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      22341,
+      22342,
+      22343
+    ]
+  },
+  {
+    "file": "eopc04_IAU2000.62-now.excerpt.txt",
+    "url": "https://hpiers.obspm.fr/iers/eop/eopc04/eopc04_IAU2000.62-now",
+    "retrieved_utc": "2026-09-15T14:35:15.585607+00:00",
+    "full_source_sha256": "0e197c819a663abb23849cc7b6781bf9d90a8f0b11a31214fb717e9f0c505830",
+    "excerpt_sha256": "a85d28402a8a528a93f2fb8329c0a51258ba59f31bcbb68353edbb39bd0f534e",
+    "published_line_numbers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      22349,
+      22350,
+      22351
+    ]
+  }
+]

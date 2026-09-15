@@ -1326,48 +1326,8 @@ const plugin_input_frame_t* find_frame(const char* portId) {
   return nullptr;
 }
 
-/// Read the Earth-orientation row the caller supplied. The _HP doubles are
-/// AUTHORITATIVE when present (SDS $EOP precedence rule); the float fields are
-/// the fallback and cannot carry this task's 1e-9 acceptance, which is exactly
-/// why the doubles were ratified.
-bool read_earth_orientation(EvaluationContext* context) {
-  const plugin_input_frame_t* frame = find_frame("earth_orientation");
-  if (frame == nullptr || frame->payload == nullptr || frame->payload_length == 0) {
-    return false;
-  }
-  if (!EOPBufferHasIdentifier(frame->payload)) {
-    return false;
-  }
-  ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-  if (!VerifyEOPBuffer(verifier)) {
-    return false;
-  }
-  const EOP* row = GetEOP(frame->payload);
-  if (row == nullptr) {
-    return false;
-  }
-  const bool haveHp = row->UT1_MINUS_UTC_SECONDS_HP() != 0.0 ||
-      row->X_POLE_WANDER_RADIANS_HP() != 0.0 || row->Y_POLE_WANDER_RADIANS_HP() != 0.0;
-  if (haveHp) {
-    context->eop.dut1 = row->UT1_MINUS_UTC_SECONDS_HP();
-    context->eop.xPole = row->X_POLE_WANDER_RADIANS_HP();
-    context->eop.yPole = row->Y_POLE_WANDER_RADIANS_HP();
-    context->eop.dX = row->X_CELESTIAL_POLE_OFFSET_RADIANS_HP();
-    context->eop.dY = row->Y_CELESTIAL_POLE_OFFSET_RADIANS_HP();
-    context->eop.lengthOfDay = row->LENGTH_OF_DAY_CORRECTION_SECONDS_HP();
-  } else {
-    context->eop.dut1 = row->UT1_MINUS_UTC_SECONDS();
-    context->eop.xPole = row->X_POLE_WANDER_RADIANS();
-    context->eop.yPole = row->Y_POLE_WANDER_RADIANS();
-    context->eop.dX = row->X_CELESTIAL_POLE_OFFSET_RADIANS();
-    context->eop.dY = row->Y_CELESTIAL_POLE_OFFSET_RADIANS();
-    context->eop.lengthOfDay = row->LENGTH_OF_DAY_CORRECTION_SECONDS();
-  }
-  context->eopDataSetEpoch = row->DATA_SET_EPOCH() != nullptr ? row->DATA_SET_EPOCH()->c_str() : nullptr;
-  context->eopDataSetCid = row->DATA_SET_CID() != nullptr ? row->DATA_SET_CID()->c_str() : nullptr;
-  context->eopSupplied = true;
-  return true;
-}
+// EOP table helpers are inserted here by the SDK build.
+#include "eop_table.hpp"
 
 /// Read the referenced object's state, in the ROOT axes about the root origin.
 void read_object_state(EvaluationContext* context) {
@@ -1427,7 +1387,6 @@ extern "C" int transform_frame_position(void) {
   const char* trace_id = request && request->TRACE_ID() ? request->TRACE_ID()->c_str() : nullptr;
 
   EvaluationContext context;
-  read_earth_orientation(&context);
   read_object_state(&context);
 
   // The geomagnetic dipole model is a PARAMETER of GSM. IGRF-13 epoch 2020.0
@@ -1467,6 +1426,19 @@ extern "C" int transform_frame_position(void) {
           {frmResultStatus::INVALID_INPUT, "EPOCH is not an ISO 8601 UTC timestamp.", {}},
           trace_id);
     }
+    double utc1, utc2;
+    if (eraDtf2d("UTC", year, month, day, hour, minute, second, &utc1, &utc2) != 0) {
+      return emit_frame_transform_result({frmResultStatus::INVALID_INPUT, "Invalid UTC epoch.", {}}, trace_id);
+    }
+    const EOP* eopProvenance = nullptr;
+    const std::string eopError = read_eop_table(utc1, utc2, &context.eop, &eopProvenance, &context.eopSupplied);
+    if (!eopError.empty()) {
+      return emit_frame_transform_result({frmResultStatus::INVALID_INPUT, eopError.c_str(), {}}, trace_id);
+    }
+    if (eopProvenance) {
+      context.eopDataSetEpoch = eopProvenance->DATA_SET_EPOCH() ? eopProvenance->DATA_SET_EPOCH()->c_str() : nullptr;
+      context.eopDataSetCid = eopProvenance->DATA_SET_CID() ? eopProvenance->DATA_SET_CID()->c_str() : nullptr;
+    }
     if (!ax::epochFromUtc(year, month, day, hour, minute, second, context.eop, &context.epoch)) {
       return emit_frame_transform_result(
           {frmResultStatus::INVALID_INPUT,
@@ -1474,6 +1446,15 @@ extern "C" int transform_frame_position(void) {
            "rather than extrapolating.",
            {}},
           trace_id);
+    }
+    if (eopProvenance && eopProvenance->IAU_CONVENTION() == iauPrecessionNutationModel::IAU_2000A) {
+      // Preserve the observed CIP when moving offsets from IAU 2000A to 2006/2000A.
+      // SOFA Earth Attitude cookbook section 5.1 footnote 2.
+      double x00,y00,s00,x06,y06;
+      eraXys00a(context.epoch.tt1,context.epoch.tt2,&x00,&y00,&s00);
+      eraXy06(context.epoch.tt1,context.epoch.tt2,&x06,&y06);
+      context.eop.dX += x00-x06;
+      context.eop.dY += y00-y06;
     }
   }
 
