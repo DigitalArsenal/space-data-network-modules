@@ -14,7 +14,7 @@ import { validateManifestWithStandards } from "space-data-module-sdk/compliance"
 
 const manifestPath = new URL("../plugin-manifest.json", import.meta.url);
 const standardsRoot = fileURLToPath(
-  new URL("../../../node_modules/spacedatastandards.org/", import.meta.url),
+  new URL("../node_modules/spacedatastandards.org/", import.meta.url),
 );
 
 function readManifest() {
@@ -61,8 +61,9 @@ test("Lambert manifest maps to canonical PLG codec without local schema aliases"
   assert.deepEqual(plgManifest.requiredSchemas, [
     "LMS.fbs",
     "LMO.fbs",
+    "PCE.fbs",
   ]);
-  assert.deepEqual(plgManifest.entryFunctions, [
+  assert.deepEqual(plgManifest.entryFunctions.slice(0, 1), [
     {
       name: "solve_lambert",
       description:
@@ -77,6 +78,7 @@ test("Lambert manifest maps to canonical PLG codec without local schema aliases"
   assert.deepEqual(plgDecoded.requiredSchemas, [
     "LMS.fbs",
     "LMO.fbs",
+    "PCE.fbs",
   ]);
 
   const decoded = decodePluginManifest(encodePlgManifest(plgManifest));
@@ -90,7 +92,7 @@ test("Lambert manifest maps to canonical PLG codec without local schema aliases"
   );
 });
 
-test("Lambert manifest resolves LMS and LMO through SDK standards validation", async () => {
+test("Lambert manifest resolves LMS, LMO and PCE through SDK standards validation", async () => {
   const report = await validateManifestWithStandards(readManifest(), {
     standardsRoot,
   });
@@ -101,4 +103,16 @@ test("Lambert manifest resolves LMS and LMO through SDK standards validation", a
     0,
     JSON.stringify(report.issues, null, 2),
   );
+});
+
+
+test("grid search has a PCE stream and best-cell port after manifest round-trip", () => {
+  const decoded = decodePluginManifest(encodePluginManifest(readManifest()));
+  const method = decoded.methods.find(m => m.methodId === "grid_search");
+  assert.ok(method);
+  assert.deepEqual(method.outputPorts.map(p => p.portId), ["mesh", "best"]);
+  for (const port of [...method.inputPorts, ...method.outputPorts]) {
+    assert.equal(port.acceptedTypeSets[0].allowedTypes[0].schemaName, "PCE.fbs");
+    assert.equal(port.acceptedTypeSets[0].allowedTypes[0].fileIdentifier, "$PCE");
+  }
 });

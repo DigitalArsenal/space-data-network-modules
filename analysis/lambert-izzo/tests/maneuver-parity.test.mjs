@@ -120,7 +120,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     });
     if (!maneuver) return;
     const izzo = await createStandaloneHarnessOrSkip(runtimeKind, IZZO_WASM, t, {
-      enableThreads: false,
+      enableThreads: true,
     });
     if (!izzo) {
       await maneuver.destroy();

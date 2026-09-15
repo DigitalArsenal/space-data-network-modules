@@ -5,3 +5,5 @@ export default {
   isomorphicWasmPath,
   manifestUrl,
 };
+
+export { encodeGridRequest, decodeGridRecord, gridTypeRef } from './grid-codec.js';

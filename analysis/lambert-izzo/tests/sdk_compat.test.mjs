@@ -25,7 +25,7 @@ const ISOMORPHIC_WASM_PATH = new URL(
   import.meta.url,
 );
 const STANDARDS_ROOT = fileURLToPath(
-  new URL("../../../node_modules/spacedatastandards.org/", import.meta.url),
+  new URL("../node_modules/spacedatastandards.org/", import.meta.url),
 );
 
 function readManifest() {
@@ -258,7 +258,7 @@ test("built artifact loads through the WasmEdge server path when available", asy
     harness = await loadModule({
       wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
       runtimeKind: "wasmedge",
-      enableThreads: false,
+      enableThreads: true,
     });
   } catch (error) {
     if (isWasmEdgeUnavailable(error)) {
@@ -437,7 +437,7 @@ test("built artifact returns deterministic circular benchmark output in browser 
     wasmedgeHarness = await loadModule({
       wasmSource: wasmPath,
       runtimeKind: "wasmedge",
-      enableThreads: false,
+      enableThreads: true,
     });
   } catch (error) {
     if (isWasmEdgeUnavailable(error)) {
