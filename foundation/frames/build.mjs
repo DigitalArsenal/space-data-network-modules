@@ -46,10 +46,15 @@ const stateRepresentations = await fs.readFile(
 // from those same vendored sources; nothing is re-derived or re-tabulated.
 const erfa = await composeErfaTranslationUnit();
 
-const axisEngine = (await fs.readFile(axisEnginePath, "utf8")).replace(
-  /extern "C" \{\n#include "erfa\.h"\n#include "erfam\.h"\n\}\n/,
-  "// ERFA declarations are amalgamated ahead of this header by build.mjs.\n",
+const bodyModels = await fs.readFile(
+  path.join(packageRoot, "src", "iau_body_models.hpp"), "utf8",
 );
+const axisEngine = (await fs.readFile(axisEnginePath, "utf8"))
+  .replace('#include "iau_body_models.hpp"', "")
+  .replace(
+    /extern "C" \{\n#include "erfa\.h"\n#include "erfam\.h"\n\}\n/,
+    "// ERFA declarations are amalgamated ahead of this header by build.mjs.\n",
+  );
 const implementationSource = await fs.readFile(sourcePath, "utf8");
 
 const sourceCode = [
@@ -57,6 +62,7 @@ const sourceCode = [
   frmHeader,
   eopHeader,
   erfa.source,
+  bodyModels,
   axisEngine,
   stateRepresentations,
   implementationSource,

@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.199.0",
+  "spacedatastandards": "1.202.0",
   "erfaSourceFiles": 248,
   "erfaRoot": "../../higherpop/third_party/erfa",
   "threadModel": "single-thread"
