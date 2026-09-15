@@ -1,0 +1,8 @@
+Module-local Python FlatBuffer bindings
+SDK schema source: https://github.com/DigitalArsenal/space-data-module-sdk
+SDK version: 0.8.18
+SDK-derived files retain the Apache-2.0 terms in SDK-LICENSE.txt.
+Other schemas come from this modules repository; this notice does not
+relicense those modules. bindings.lock.json identifies each source.
+Python generated with flatc-wasm 26.1.32; qualified Python
+imports are rewritten by scripts/vendor_sds.py. No wire schema changed.
