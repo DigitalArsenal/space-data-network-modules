@@ -23,6 +23,6 @@
     "flatbuffers": "^25.9.23",
     "flatc-wasm": "^26.1.32",
     "space-data-module-sdk": "^0.8.16",
-    "spacedatastandards.org": "^1.202.0"
+    "spacedatastandards.org": "^1.219.0"
   }
 }
