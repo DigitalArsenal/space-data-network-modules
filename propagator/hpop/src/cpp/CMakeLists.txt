@@ -8,8 +8,18 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(EMSCRIPTEN)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -flto -DNDEBUG")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -O3 -flto")
+    # Invoke reports invalid inputs and unsupported derivatives through C++
+    # catches. Use standardized native Wasm EH: JavaScript-assisted exceptions
+    # add env imports, and legacy Wasm EH is rejected by WasmEdge 0.16.4.
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -flto -DNDEBUG -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -O3 -flto -fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0")
+    # WasmEdge 0.16.4 corrupts an exception-cleanup pointer in optimized
+    # plugin_runtime.cpp: invalid STM_METHOD traps instead of returning the
+    # invoke error that the identical bytes return in V8. O0/no-LTO for this
+    # JSON/invoke boundary fixes the measured failure; all physics stays O3.
+    # variational-parity.mjs retains invalid-input cases as the regression gate.
+    set_source_files_properties(src/plugin_runtime.cpp PROPERTIES
+        COMPILE_OPTIONS "-O0;-fno-inline;-fno-lto")
 else()
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -flto -march=native -mtune=native")
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
@@ -49,6 +59,8 @@ add_library(
     hpop STATIC
     "${HPOP_LIB_DIR}/astrodynamics.cpp"
     "${HPOP_LIB_DIR}/integrators.cpp"
+    "${HPOP_LIB_DIR}/variational.cpp"
+    "${HPOP_LIB_DIR}/force_partials.cpp"
     "${HPOP_LIB_DIR}/coords.cpp"
     "${HPOP_LIB_DIR}/atmosphere_plugin.cpp"
     "${HPOP_LIB_DIR}/environment_models.cpp"
@@ -89,7 +101,7 @@ if(EMSCRIPTEN)
         hpop_wasm PROPERTIES
         SUFFIX ".js"
         LINK_FLAGS "\
-            -s EXPORTED_FUNCTIONS='[\"__initialize\",\"_wasm_malloc\",\"_wasm_free\",\"_wasm_invoke_json\",\"_plugin_init\",\"_plugin_init_states\",\"_plugin_stream_invoke\",\"_get_entity_count\",\"_get_orbital_period\",\"_get_eccentricity\",\"_plugin_propagate\",\"_plugin_propagate_all_positions\",\"_plugin_propagate_path_entity\",\"_plugin_propagate_path_times\",\"_plugin_set_integrator\",\"_plugin_set_state\",\"_plugin_set_force_model\",\"_plugin_set_force_model_v2\",\"_plugin_get_atmosphere_model_status\",\"_plugin_get_atmosphere_model_count\",\"_plugin_get_atmosphere_model_name\",\"_plugin_get_atmosphere_model_provenance\",\"_plugin_load_gravity_field\",\"_plugin_get_gravity_field_error\",\"_plugin_get_gravity_field_name\",\"_plugin_register_force_contribution\",\"_plugin_clear_force_contributions\",\"_plugin_get_force_contribution_slots\",\"_plugin_get_body_constants\",\"_plugin_load_solar_activity_predictions\",\"_plugin_get_solar_activity_prediction_error\",\"_plugin_set_solar_activity_from_prediction\",\"_plugin_get_acceleration_breakdown_v2\",\"_plugin_set_drag_options\",\"_plugin_set_atmosphere_model\",\"_plugin_set_solar_activity\",\"_plugin_set_gravity\",\"_plugin_set_tides\",\"_plugin_set_relativity\",\"_plugin_set_earth_radiation\",\"_plugin_set_third_body_extended\",\"_plugin_set_empirical\",\"_plugin_propagate_to\",\"_plugin_propagate_path\",\"_plugin_compute_stm\",\"_plugin_propagate_covariance\",\"_plugin_get_covariance_ellipsoid\",\"_plugin_get_acceleration_breakdown\",\"_plugin_set_burns\",\"_plugin_clear_burns\",\"_plugin_ensure_coverage\",\"_plugin_eval_positions\",\"_plugin_eval_states\",\"_plugin_set_visibility_mask\",\"_plugin_propagate_path_sv\",\"_plugin_set_ephemeris_retention\",\"_plugin_set_grid_stagger\",\"_plugin_init_states_ecef\",\"_plugin_destroy\",\"_plugin_alloc\",\"_plugin_free\",\"_plugin_invoke_stream\",\"_plugin_get_manifest_flatbuffer\",\"_plugin_get_manifest_flatbuffer_size\",\"_malloc\",\"_free\"]' \
+            -s EXPORTED_FUNCTIONS='[\"__initialize\",\"_wasm_malloc\",\"_wasm_free\",\"_wasm_invoke_json\",\"_plugin_init\",\"_plugin_init_states\",\"_plugin_stream_invoke\",\"_get_entity_count\",\"_get_orbital_period\",\"_get_eccentricity\",\"_plugin_propagate\",\"_plugin_propagate_all_positions\",\"_plugin_propagate_path_entity\",\"_plugin_propagate_path_times\",\"_plugin_set_integrator\",\"_plugin_set_state\",\"_plugin_set_force_model\",\"_plugin_set_force_model_v2\",\"_plugin_get_atmosphere_model_status\",\"_plugin_get_atmosphere_model_count\",\"_plugin_get_atmosphere_model_name\",\"_plugin_get_atmosphere_model_provenance\",\"_plugin_load_gravity_field\",\"_plugin_get_gravity_field_error\",\"_plugin_get_gravity_field_name\",\"_plugin_register_force_contribution\",\"_plugin_clear_force_contributions\",\"_plugin_get_force_contribution_slots\",\"_plugin_get_body_constants\",\"_plugin_load_solar_activity_predictions\",\"_plugin_get_solar_activity_prediction_error\",\"_plugin_set_solar_activity_from_prediction\",\"_plugin_get_acceleration_breakdown_v2\",\"_plugin_set_drag_options\",\"_plugin_set_atmosphere_model\",\"_plugin_set_solar_activity\",\"_plugin_set_gravity\",\"_plugin_set_tides\",\"_plugin_set_relativity\",\"_plugin_set_earth_radiation\",\"_plugin_set_third_body_extended\",\"_plugin_set_empirical\",\"_plugin_propagate_to\",\"_plugin_propagate_path\",\"_plugin_set_stm_method\",\"_plugin_compute_stm\",\"_plugin_propagate_covariance\",\"_plugin_get_covariance_ellipsoid\",\"_plugin_get_acceleration_breakdown\",\"_plugin_set_burns\",\"_plugin_clear_burns\",\"_plugin_ensure_coverage\",\"_plugin_eval_positions\",\"_plugin_eval_states\",\"_plugin_set_visibility_mask\",\"_plugin_propagate_path_sv\",\"_plugin_set_ephemeris_retention\",\"_plugin_set_grid_stagger\",\"_plugin_init_states_ecef\",\"_plugin_destroy\",\"_plugin_alloc\",\"_plugin_free\",\"_plugin_invoke_stream\",\"_plugin_get_manifest_flatbuffer\",\"_plugin_get_manifest_flatbuffer_size\",\"_malloc\",\"_free\"]' \
             -s EXPORTED_RUNTIME_METHODS='[\"ccall\",\"cwrap\",\"UTF8ToString\",\"stringToUTF8\",\"lengthBytesUTF8\",\"HEAPU8\",\"HEAPU32\",\"HEAP8\",\"HEAP32\",\"HEAPF64\"]' \
             -s MODULARIZE=1 \
             -s EXPORT_NAME='HPOPModule' \

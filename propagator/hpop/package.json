@@ -5,9 +5,13 @@
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
-    "test": "node --test tests/sdk_compat.test.mjs tests/direct-entry.test.mjs tests/tudat_wasm_derived.test.mjs tests/drag_atmosphere.test.mjs tests/batch_all_positions.test.mjs tests/path_state_vectors.test.mjs",
+    "test": "node --test tests/sdk_compat.test.mjs tests/direct-entry.test.mjs tests/tudat_wasm_derived.test.mjs tests/drag_atmosphere.test.mjs tests/batch_all_positions.test.mjs tests/path_state_vectors.test.mjs tests/force_partials.test.mjs tests/variational.test.mjs tests/variational_controls.test.mjs tests/variational_invoke.test.mjs",
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs",
-    "test:tudat": "node --test tests/tudat_wasm_derived.test.mjs"
+    "test:tudat": "node --test tests/tudat_wasm_derived.test.mjs",
+    "test:stm": "node --test tests/force_partials.test.mjs tests/variational.test.mjs tests/variational_controls.test.mjs tests/variational_invoke.test.mjs",
+    "test:stm-parity": "node tests/variational-parity.mjs",
+    "bench:stm": "node tests/variational-benchmark.mjs",
+    "check:sdk-build": "node tests/sdk-build-preflight.mjs"
   },
   "main": "index.js",
   "exports": {

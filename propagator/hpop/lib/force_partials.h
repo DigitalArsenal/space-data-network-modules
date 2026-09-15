@@ -15,6 +15,11 @@ struct AccelerationPartials {
     double dv[3][3]{};       ///< partial acceleration / velocity, s^-1
 };
 
+/// Returns nullptr when the configured force derivatives are supported at this
+/// position, otherwise a static error message. Integrators use this status path
+/// so expected unsupported-input failures do not require exception unwinding.
+const char* ValidateAccelerationPartials(const Vec3& position, const ForceModelSet& forceSet);
+
 /// Cartesian force Jacobian at fixed epoch (jd TDB), same frame and units as
 /// ComputeTotalAcceleration. First-order forward chain rule, no perturbed
 /// force-model evaluations except optional scalar atmospheric density calls.

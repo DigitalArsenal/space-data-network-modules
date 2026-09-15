@@ -14,6 +14,7 @@
 #include "../lib/astrodynamics_types.h"
 #include "../lib/astrodynamics.h"
 #include "../lib/integrators.h"
+#include "../lib/variational.h"
 #include "../lib/force_models.h"
 #include "../lib/coords.h"
 #include "../lib/coords_types.h"
@@ -44,6 +45,8 @@ using namespace astro;
 static IntegratorConfig g_integratorConfig;
 static ForceModel::ForceModelSet g_forceSet;
 static IntegrationMethod g_integratorType = IntegrationMethod::RK78;
+static bool g_analyticSTM = true;
+static ForceModel::DensityGradient g_densityGradient = ForceModel::DensityGradient::Neglected;
 static SpaceWeatherData g_weather;
 static bool g_initialized = false;
 
@@ -2061,13 +2064,28 @@ int plugin_propagate_path(double startJD, double stepDays, int count, double* ou
     return valid;
 }
 
+/// Select low-level STM method: 0 ANALYTIC (default), 1 FINITE_DIFFERENCE.
+/// Density gradient: 0 neglected (default), 1 finite-differenced density only.
+int plugin_set_stm_method(int method, int densityGradient) {
+    if(method<0||method>1||densityGradient<0||densityGradient>1)return -1;
+    g_analyticSTM=method==0;
+    g_densityGradient=densityGradient==0?ForceModel::DensityGradient::Neglected:ForceModel::DensityGradient::FiniteDifference;
+    return 0;
+}
+static bool computeSelectedSTM(double dt,Mat6& stm) {
+    if(!g_analyticSTM){stm=computeSTMFiniteDifference(g_state,dt);return true;}
+    auto config=g_integratorConfig;config.method=g_integratorType;
+    auto result=Integrator::PropagateVariational(g_state,dt,config,g_forceSet,g_densityGradient);
+    if(!result.success)return false;
+    stm=result.stm;return true;
+}
 /// Compute state transition matrix (6x6) over dt seconds.
-/// Uses full configured force model and integrator via central finite
-/// differences around the current working state.
+/// Integrates analytical force partials with the state by default.
 int plugin_compute_stm(double dt, double* outSTMPtr) {
     if (!g_initialized) return -1;
 
-    Mat6 stm = computeSTMFiniteDifference(g_state, dt);
+    Mat6 stm;
+    if(!outSTMPtr||!computeSelectedSTM(dt,stm))return -2;
 
     for (int i = 0; i < 6; i++) {
         for (int j = 0; j < 6; j++) {
@@ -2082,7 +2100,8 @@ int plugin_compute_stm(double dt, double* outSTMPtr) {
 int plugin_propagate_covariance(double* covInPtr, double dt, double* covOutPtr) {
     if (!g_initialized) return -1;
 
-    Mat6 phi = computeSTMFiniteDifference(g_state, dt);
+    Mat6 phi;
+    if(!covInPtr||!covOutPtr||!computeSelectedSTM(dt,phi))return -2;
 
     double P[6][6];
     for (int i = 0; i < 6; i++)

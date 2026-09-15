@@ -279,18 +279,41 @@ V relativity(const V& r,const V& v,double jd,const ForceModelSet& f) {
     return a;
 }
 
-void validate(const ForceModelSet& f) {
+const char* configError(const ForceModelSet& f) {
     if(f.useEarthAlbedo || f.useThermalReradiation || f.useSolidTides || f.useOceanTides || f.usePoleTide || f.useEmpiricalAccel || f.hasFiniteManeuver)
-        throw std::invalid_argument("ANALYTIC STM: albedo, thermal, tides, empirical and finite-thrust partials are unavailable; select FINITE_DIFFERENCE");
+        return "ANALYTIC STM: albedo, thermal, tides, empirical and finite-thrust partials are unavailable; select FINITE_DIFFERENCE";
     if(f.useSRP && f.srp.model!=SRPModelType::Cannonball)
-        throw std::invalid_argument("ANALYTIC STM requires cannonball SRP; select FINITE_DIFFERENCE for attitude-dependent SRP");
+        return "ANALYTIC STM requires cannonball SRP; select FINITE_DIFFERENCE for attitude-dependent SRP";
     if(f.useDrag && f.drag.includeWinds && f.dragModel!=DragModelType::Exponential)
-        throw std::invalid_argument("ANALYTIC STM does not support atmosphere wind gradients; select FINITE_DIFFERENCE");
+        return "ANALYTIC STM does not support atmosphere wind gradients; select FINITE_DIFFERENCE";
+    return nullptr;
 }
 } // namespace
 
+const char* ValidateAccelerationPartials(const Vec3& position,const ForceModelSet& f) {
+    if(const char* error=configError(f))return error;
+    if(std::sqrt(position.x*position.x+position.y*position.y)<1e-12 && position.magnitude()>=100) {
+        GravityMode mode=f.gravityMode;
+        bool hasCentral=true;
+        if(mode==GravityMode::Infer) {
+            if(f.useLoadedField&&f.loadedField)mode=GravityMode::LoadedField;
+            else if(f.useEGM2008)mode=GravityMode::EGM2008;
+            else if(f.useSphericalHarmonics)mode=GravityMode::SphericalHarmonics;
+            else if(f.usePointMass)mode=GravityMode::PointMass;
+            else hasCentral=false;
+        }
+        const bool inlineCentral=hasCentral && mode!=GravityMode::PointMass &&
+            mode!=GravityMode::J2Only && mode!=GravityMode::J2J4 &&
+            mode!=GravityMode::LoadedField && mode!=GravityMode::EGM2008;
+        if((inlineCentral&&f.sphericalHarmonics.maxDegree>0&&f.sphericalHarmonics.maxOrder>0)||
+           (f.useGRGM1200A&&f.grgm1200a.truncationOrder>0))
+            return "ANALYTIC STM: inline tesseral gravity at polar coordinate singularity; use loaded field or FINITE_DIFFERENCE";
+    }
+    return nullptr;
+}
+
 AccelerationPartials ComputeAccelerationPartials(const Vec3& position,const Vec3& velocity,double jd,ForceModelSet& f,DensityGradient gradient) {
-    validate(f);
+    if(const char* error=ValidateAccelerationPartials(position,f))throw std::invalid_argument(error);
     const V r=positionSeed(position),v=velocitySeed(velocity);
     V a=centralGravity(r,f);
     if(f.useGRGM1200A)a=a+inlineGravity(r,initGRGM1200A(std::min<uint16_t>(f.grgm1200a.truncationDegree,20),std::min<uint16_t>(f.grgm1200a.truncationOrder,20)));

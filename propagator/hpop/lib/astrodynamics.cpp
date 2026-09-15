@@ -1,3 +1,4 @@
+#include "rk_augmented.h"
 // astrodynamics.cpp - Astrodynamics Plugin Implementation
 // =============================================================================
 // Phase 8: Space Domain Enhancement
@@ -419,124 +420,9 @@ void rkf45Step(double t, double h, const double* y,
 // RKF78 - Runge-Kutta-Fehlberg 7(8) Adaptive
 // -----------------------------------------------------------------------------
 
-// Fehlberg 7(8) coefficients
-namespace rkf78 {
-    // Nodes (c values)
-    constexpr double c[] = {0, 2.0/27.0, 1.0/9.0, 1.0/6.0, 5.0/12.0, 1.0/2.0,
-                            5.0/6.0, 1.0/6.0, 2.0/3.0, 1.0/3.0, 1.0, 0, 1.0};
-
-    // 8th order weights
-    constexpr double b8[] = {41.0/840.0, 0, 0, 0, 0, 34.0/105.0, 9.0/35.0, 9.0/35.0,
-                             9.0/280.0, 9.0/280.0, 41.0/840.0, 0, 0};
-
-    // 7th order weights (for error estimation)
-    constexpr double b7[] = {0, 0, 0, 0, 0, 34.0/105.0, 9.0/35.0, 9.0/35.0,
-                             9.0/280.0, 9.0/280.0, 0, 41.0/840.0, 41.0/840.0};
-}
-
-void rkf78Step(double t, double h, const double* y,
-               double* yout, double* yerr,
+void rkf78Step(double t, double h, const double* y, double* yout, double* yerr,
                DerivativeFunc deriv, void* params) {
-    constexpr int N = 6;
-    constexpr int S = 13;  // Number of stages
-    double k[S][N];
-    double ytmp[N];
-
-    // Stage coefficients (simplified Butcher tableau - using subset)
-    // Full 13-stage RKF78 with all a_ij coefficients
-
-    // Stage 1
-    deriv(t, y, k[0], params);
-
-    // Stage 2
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * (2.0/27.0) * k[0][i];
-    deriv(t + (2.0/27.0)*h, ytmp, k[1], params);
-
-    // Stage 3
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * ((1.0/36.0)*k[0][i] + (1.0/12.0)*k[1][i]);
-    deriv(t + (1.0/9.0)*h, ytmp, k[2], params);
-
-    // Stage 4
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * ((1.0/24.0)*k[0][i] + (1.0/8.0)*k[2][i]);
-    deriv(t + (1.0/6.0)*h, ytmp, k[3], params);
-
-    // Stage 5
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * ((5.0/12.0)*k[0][i] - (25.0/16.0)*k[2][i] + (25.0/16.0)*k[3][i]);
-    deriv(t + (5.0/12.0)*h, ytmp, k[4], params);
-
-    // Stage 6
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * ((1.0/20.0)*k[0][i] + (1.0/4.0)*k[3][i] + (1.0/5.0)*k[4][i]);
-    deriv(t + 0.5*h, ytmp, k[5], params);
-
-    // Stage 7
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * ((-25.0/108.0)*k[0][i] + (125.0/108.0)*k[3][i] +
-                              (-65.0/27.0)*k[4][i] + (125.0/54.0)*k[5][i]);
-    deriv(t + (5.0/6.0)*h, ytmp, k[6], params);
-
-    // Stage 8
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * ((31.0/300.0)*k[0][i] + (61.0/225.0)*k[4][i] +
-                              (-2.0/9.0)*k[5][i] + (13.0/900.0)*k[6][i]);
-    deriv(t + (1.0/6.0)*h, ytmp, k[7], params);
-
-    // Stage 9
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * (2.0*k[0][i] - (53.0/6.0)*k[3][i] + (704.0/45.0)*k[4][i] +
-                              (-107.0/9.0)*k[5][i] + (67.0/90.0)*k[6][i] + 3.0*k[7][i]);
-    deriv(t + (2.0/3.0)*h, ytmp, k[8], params);
-
-    // Stage 10
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * ((-91.0/108.0)*k[0][i] + (23.0/108.0)*k[3][i] +
-                              (-976.0/135.0)*k[4][i] + (311.0/54.0)*k[5][i] +
-                              (-19.0/60.0)*k[6][i] + (17.0/6.0)*k[7][i] + (-1.0/12.0)*k[8][i]);
-    deriv(t + (1.0/3.0)*h, ytmp, k[9], params);
-
-    // Stage 11
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * ((2383.0/4100.0)*k[0][i] - (341.0/164.0)*k[3][i] +
-                              (4496.0/1025.0)*k[4][i] + (-301.0/82.0)*k[5][i] +
-                              (2133.0/4100.0)*k[6][i] + (45.0/82.0)*k[7][i] +
-                              (45.0/164.0)*k[8][i] + (18.0/41.0)*k[9][i]);
-    deriv(t + h, ytmp, k[10], params);
-
-    // Stage 12
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * ((3.0/205.0)*k[0][i] + (-6.0/41.0)*k[5][i] +
-                              (-3.0/205.0)*k[6][i] + (-3.0/41.0)*k[7][i] +
-                              (3.0/41.0)*k[8][i] + (6.0/41.0)*k[9][i]);
-    deriv(t, ytmp, k[11], params);
-
-    // Stage 13
-    for (int i = 0; i < N; i++)
-        ytmp[i] = y[i] + h * ((-1777.0/4100.0)*k[0][i] - (341.0/164.0)*k[3][i] +
-                              (4496.0/1025.0)*k[4][i] + (-289.0/82.0)*k[5][i] +
-                              (2193.0/4100.0)*k[6][i] + (51.0/82.0)*k[7][i] +
-                              (33.0/164.0)*k[8][i] + (12.0/41.0)*k[9][i] + k[11][i]);
-    deriv(t + h, ytmp, k[12], params);
-
-    // 8th order solution
-    for (int i = 0; i < N; i++) {
-        yout[i] = y[i] + h * (rkf78::b8[0]*k[0][i] + rkf78::b8[5]*k[5][i] +
-                              rkf78::b8[6]*k[6][i] + rkf78::b8[7]*k[7][i] +
-                              rkf78::b8[8]*k[8][i] + rkf78::b8[9]*k[9][i] +
-                              rkf78::b8[10]*k[10][i]);
-    }
-
-    // Error estimate (difference between 8th and 7th order)
-    for (int i = 0; i < N; i++) {
-        double y7 = y[i] + h * (rkf78::b7[5]*k[5][i] + rkf78::b7[6]*k[6][i] +
-                                rkf78::b7[7]*k[7][i] + rkf78::b7[8]*k[8][i] +
-                                rkf78::b7[9]*k[9][i] + rkf78::b7[11]*k[11][i] +
-                                rkf78::b7[12]*k[12][i]);
-        yerr[i] = yout[i] - y7;
-    }
+    rk_detail::rkf78Step<6>(t, h, y, yout, yerr, deriv, params);
 }
 
 // -----------------------------------------------------------------------------
