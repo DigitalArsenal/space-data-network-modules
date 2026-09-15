@@ -366,6 +366,20 @@ test("the event locator answers on the wire", { concurrency: false }, async (t) 
     const closed = events.filter((event) => event.stop);
     assert.ok(closed.length >= 1, "at least one intrusion closes inside the scan");
     assert.ok(closed[0].duration > 0, "a positive duration");
+    // Independent closed form: the central-body direction is -r. It enters
+    // the +X cone at phase pi-alpha and exits at pi+alpha, where
+    // alpha=atan(A*tan(halfAngle)/hypot(B,C)). Metres/radians, inertial axes,
+    // UTC seconds from START. 1 ms admits the 10 s Hermite interpolation error
+    // and ISO epoch rendering, and rejects reporting the outside interval.
+    const alpha = Math.atan(A * Math.tan(0.4) / Math.hypot(B, C));
+    const expectedEntry = (Math.PI - alpha - PHASE) / OMEGA;
+    const expectedExit = (Math.PI + alpha - PHASE) / OMEGA;
+    const entryError = Math.abs(secondsOf(closed[0].start) - expectedEntry);
+    const exitError = Math.abs(secondsOf(closed[0].stop) - expectedExit);
+    assert.ok(entryError < 1e-3, `conic entry error ${entryError} s`);
+    assert.ok(exitError < 1e-3, `conic exit error ${exitError} s`);
+    console.log(`  conic closed-form entry/exit errors: ${entryError}, ${exitError} s`);
+
   });
 
   await t.test("a missing ephemeris is refused, not guessed at", async () => {

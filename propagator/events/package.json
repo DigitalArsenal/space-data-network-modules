@@ -17,9 +17,12 @@
   ],
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "check:compliance": "node check-compliance.mjs",
+    "test:parity": "node tests/kernel-parity.mjs"
   },
   "devDependencies": {
+    "esbuild": "0.28.2",
     "flatbuffers": "^25.9.23",
     "flatc-wasm": "^26.1.32",
     "space-data-module-sdk": "^0.8.16",
