@@ -1,0 +1,9 @@
+spacedatastandards.org generated Python bindings
+Source: https://github.com/DigitalArsenal/spacedatastandards.org
+Version: 1.217.0+1789398499674
+Git revision: b76da41467e260c83b3432ba7f34a1eb05cc7ac7
+License: Apache License, Version 2.0 (see LICENSE.txt).
+The pinned package.json and README.md declare Apache-2.0; the upstream
+tree contains no SDS LICENSE or NOTICE file. Generated-file comments
+are preserved. Imports have been rewritten by scripts/vendor_sds.py
+to resolve within spacedatanetwork_astro.sds. No wire schema changed.

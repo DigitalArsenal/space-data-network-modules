@@ -1,0 +1,219 @@
+{
+  "format_version": 1,
+  "status": "ctypes WasmEdge runtime; see docs/verification.md for validation limits",
+  "version": "0.1.0.dev0+modules.e4612363998b.af1dde329812d",
+  "source_revision": "e4612363998bd1c732aaab2b242de0015104f096",
+  "artifact_set_sha256": "f1dde329812d7404eba8f1969b6aae38c00b4a30088f40d01e2ffaebb0de7160",
+  "modules": [
+    {
+      "id": "propagator/sgp4",
+      "plugin_id": "com.orbpro.sgp4",
+      "manifest_version": "1.0.0",
+      "files": [
+        {
+          "name": "module.wasm",
+          "source_path": "propagator/sgp4/dist/isomorphic/module.wasm",
+          "package_path": "artifacts/propagator-sgp4/module.wasm",
+          "sha256": "debb82d251cfe441e01e1f70f9d735b8878bb820bc48720fff1416ee129647e6",
+          "size": 1178699
+        },
+        {
+          "name": "plugin-manifest.json",
+          "source_path": "propagator/sgp4/plugin-manifest.json",
+          "package_path": "artifacts/propagator-sgp4/plugin-manifest.json",
+          "sha256": "5869df30f9b14667a1c973b15b8cdc8581f6da2a03a91b3cbb4614cd66bf4cc4",
+          "size": 6030
+        }
+      ]
+    },
+    {
+      "id": "propagator/hpop",
+      "plugin_id": "com.orbpro.hpop",
+      "manifest_version": "1.0.0",
+      "files": [
+        {
+          "name": "module.wasm",
+          "source_path": "propagator/hpop/dist/isomorphic/module.wasm",
+          "package_path": "artifacts/propagator-hpop/module.wasm",
+          "sha256": "be374f69201c17187c413c7ac0846b5387a5b90c762b8ade74df32ffe8b2306c",
+          "size": 602855
+        },
+        {
+          "name": "plugin-manifest.json",
+          "source_path": "propagator/hpop/plugin-manifest.json",
+          "package_path": "artifacts/propagator-hpop/plugin-manifest.json",
+          "sha256": "8e35b02e53d0bb60d9e4092f38ba3db6ada5cf63c20239ee122e3fe06c23a76a",
+          "size": 9781
+        }
+      ]
+    },
+    {
+      "id": "analysis/estimation",
+      "plugin_id": "com.digitalarsenal.analysis.estimation",
+      "manifest_version": "0.1.0",
+      "files": [
+        {
+          "name": "module.wasm",
+          "source_path": "analysis/estimation/dist/isomorphic/module.wasm",
+          "package_path": "artifacts/analysis-estimation/module.wasm",
+          "sha256": "42d10718037289a1e53d70755ee2374cf450e54fee96313be04c55828582cc16",
+          "size": 279278
+        },
+        {
+          "name": "plugin-manifest.json",
+          "source_path": "analysis/estimation/plugin-manifest.json",
+          "package_path": "artifacts/analysis-estimation/plugin-manifest.json",
+          "sha256": "66123baf5c32d1eea9b8bb53baf51ee40c7ec704ad6743edb59383d5d34e8bef",
+          "size": 8655
+        },
+        {
+          "name": "build-provenance.json",
+          "source_path": "analysis/estimation/dist/build-provenance.json",
+          "package_path": "artifacts/analysis-estimation/build-provenance.json",
+          "sha256": "5bb56f140bb5007f64d7482f427e41e8fc910c2fa1d12e6afac1c9da417df7e0",
+          "size": 205
+        }
+      ]
+    },
+    {
+      "id": "analysis/conjunction-assessment",
+      "plugin_id": "conjunction-assessment",
+      "manifest_version": "0.2.0",
+      "files": [
+        {
+          "name": "module.wasm",
+          "source_path": "analysis/conjunction-assessment/dist/isomorphic/module.wasm",
+          "package_path": "artifacts/analysis-conjunction-assessment/module.wasm",
+          "sha256": "acfedd6de4baaaae7d9265f7be992f2fe522afaa6f5dc739a20fbe2b6206fc72",
+          "size": 802909
+        },
+        {
+          "name": "plugin-manifest.json",
+          "source_path": "analysis/conjunction-assessment/plugin-manifest.json",
+          "package_path": "artifacts/analysis-conjunction-assessment/plugin-manifest.json",
+          "sha256": "47a7a504bffdd7ab506369ecb8f5dad6fe12d2f61f62d06c4192b2d27c0ee61d",
+          "size": 17512
+        }
+      ]
+    },
+    {
+      "id": "analysis/access",
+      "plugin_id": "com.orbpro.access",
+      "manifest_version": "1.0.0",
+      "files": [
+        {
+          "name": "module.wasm",
+          "source_path": "analysis/access/dist/isomorphic/module.wasm",
+          "package_path": "artifacts/analysis-access/module.wasm",
+          "sha256": "98315481714d59fb2ba03cc032b6ca7764a32b3847c59cd0eaac5675cd73401a",
+          "size": 112216
+        },
+        {
+          "name": "plugin-manifest.json",
+          "source_path": "analysis/access/plugin-manifest.json",
+          "package_path": "artifacts/analysis-access/plugin-manifest.json",
+          "sha256": "348f532089d25b12413ea090f4e8d0de91c953a42a8a8a4517af92dd213bf853",
+          "size": 2860
+        }
+      ]
+    },
+    {
+      "id": "propagator/events",
+      "plugin_id": "com.digitalarsenal.propagator.events",
+      "manifest_version": "0.1.0",
+      "files": [
+        {
+          "name": "module.wasm",
+          "source_path": "propagator/events/dist/isomorphic/module.wasm",
+          "package_path": "artifacts/propagator-events/module.wasm",
+          "sha256": "c6f2cf1845099d89dddaec7f9ca14621a1617e1814b3d850753a77d02e327a87",
+          "size": 430181
+        },
+        {
+          "name": "plugin-manifest.json",
+          "source_path": "propagator/events/plugin-manifest.json",
+          "package_path": "artifacts/propagator-events/plugin-manifest.json",
+          "sha256": "053bddf0879671f37f243797098b51dcb614a0d3f875e7c8d482e826db5c9bda",
+          "size": 12754
+        },
+        {
+          "name": "build-provenance.json",
+          "source_path": "propagator/events/dist/build-provenance.json",
+          "package_path": "artifacts/propagator-events/build-provenance.json",
+          "sha256": "435da4b8be031d5ac8e94a70d98855b743c18f0b66afc956121c0e6ce2cf4d89",
+          "size": 130
+        }
+      ]
+    },
+    {
+      "id": "analysis/lambert-izzo",
+      "plugin_id": "com.orbpro.lambert-izzo",
+      "manifest_version": "0.1.0",
+      "files": [
+        {
+          "name": "module.wasm",
+          "source_path": "analysis/lambert-izzo/dist/isomorphic/module.wasm",
+          "package_path": "artifacts/analysis-lambert-izzo/module.wasm",
+          "sha256": "cbb256c91ed03c6623db0974476bfc26c2feaca586a45408a85bb84eb303b242",
+          "size": 111364
+        },
+        {
+          "name": "plugin-manifest.json",
+          "source_path": "analysis/lambert-izzo/plugin-manifest.json",
+          "package_path": "artifacts/analysis-lambert-izzo/plugin-manifest.json",
+          "sha256": "6c41fa061e5bc593dc3510191dbf2046ae3f59d5c8a59089c48618c51f352f7d",
+          "size": 2916
+        }
+      ]
+    },
+    {
+      "id": "foundation/time",
+      "plugin_id": "com.digitalarsenal.foundation.time",
+      "manifest_version": "0.1.0",
+      "files": [
+        {
+          "name": "module.wasm",
+          "source_path": "foundation/time/dist/isomorphic/module.wasm",
+          "package_path": "artifacts/foundation-time/module.wasm",
+          "sha256": "8f06eec747d0001f2bf7a241402603830b0ffcb882ba054b8eb3d95be93b5eec",
+          "size": 147589
+        },
+        {
+          "name": "plugin-manifest.json",
+          "source_path": "foundation/time/plugin-manifest.json",
+          "package_path": "artifacts/foundation-time/plugin-manifest.json",
+          "sha256": "3c6ed8f5c0257383995177547d92d6011d6f358525878a9bbfaa641aebb755c4",
+          "size": 2815
+        }
+      ]
+    },
+    {
+      "id": "foundation/frames",
+      "plugin_id": "com.digitalarsenal.foundation.frames",
+      "manifest_version": "0.2.0",
+      "files": [
+        {
+          "name": "module.wasm",
+          "source_path": "foundation/frames/dist/isomorphic/module.wasm",
+          "package_path": "artifacts/foundation-frames/module.wasm",
+          "sha256": "ee436101fea73bc8ea432aaf3b442935321efcfd22c81b3d8c66f857b62bcb55",
+          "size": 400197
+        },
+        {
+          "name": "plugin-manifest.json",
+          "source_path": "foundation/frames/plugin-manifest.json",
+          "package_path": "artifacts/foundation-frames/plugin-manifest.json",
+          "sha256": "d8e804b464ca2997fd83ef714d1d045241f51d6127fcea76d27728cf77e9119f",
+          "size": 5557
+        },
+        {
+          "name": "build-provenance.json",
+          "source_path": "foundation/frames/dist/build-provenance.json",
+          "package_path": "artifacts/foundation-frames/build-provenance.json",
+          "sha256": "6fe809fc2f487962557ea2c4783a1a1a3a6cf767081fa65f2e448e1e64e0a22d",
+          "size": 148
+        }
+      ]
+    }
+  ]
+}

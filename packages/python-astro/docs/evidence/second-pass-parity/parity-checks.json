@@ -1,0 +1,203 @@
+{
+  "scope": "SDK error-path command fixture only; no numerical/Python parity claim",
+  "checks": [
+    {
+      "module": "propagator/sgp4",
+      "command": [
+        "node",
+        "/Users/tj/software/worktrees/modules-python-astro/node_modules/space-data-module-sdk/bin/space-data-module.js",
+        "parity",
+        "--wasm",
+        "/Users/tj/software/worktrees/modules-python-astro/packages/python-astro/src/spacedatanetwork_astro/artifacts/propagator-sgp4/module.wasm",
+        "--fixture",
+        "/Users/tj/software/worktrees/modules-python-astro/node_modules/space-data-module-sdk/parity/sdk-command.json",
+        "--wasmedge-binary",
+        "/Users/tj/.wasmedge/bin/wasmedge",
+        "--lanes",
+        "browser,wasmedge,docker-wasmedge",
+        "--json",
+        "--timeout-sec",
+        "15"
+      ],
+      "exit_code": 0,
+      "artifact_sha256": "debb82d251cfe441e01e1f70f9d735b8878bb820bc48720fff1416ee129647e6",
+      "log": "propagator-sgp4.log"
+    },
+    {
+      "module": "propagator/hpop",
+      "command": [
+        "node",
+        "/Users/tj/software/worktrees/modules-python-astro/node_modules/space-data-module-sdk/bin/space-data-module.js",
+        "parity",
+        "--wasm",
+        "/Users/tj/software/worktrees/modules-python-astro/packages/python-astro/src/spacedatanetwork_astro/artifacts/propagator-hpop/module.wasm",
+        "--fixture",
+        "/Users/tj/software/worktrees/modules-python-astro/node_modules/space-data-module-sdk/parity/sdk-command.json",
+        "--wasmedge-binary",
+        "/Users/tj/.wasmedge/bin/wasmedge",
+        "--lanes",
+        "browser,wasmedge,docker-wasmedge",
+        "--json",
+        "--timeout-sec",
+        "15"
+      ],
+      "exit_code": 0,
+      "artifact_sha256": "be374f69201c17187c413c7ac0846b5387a5b90c762b8ade74df32ffe8b2306c",
+      "log": "propagator-hpop.log"
+    },
+    {
+      "module": "analysis/estimation",
+      "command": [
+        "node",
+        "/Users/tj/software/worktrees/modules-python-astro/node_modules/space-data-module-sdk/bin/space-data-module.js",
+        "parity",
+        "--wasm",
+        "/Users/tj/software/worktrees/modules-python-astro/packages/python-astro/src/spacedatanetwork_astro/artifacts/analysis-estimation/module.wasm",
+        "--fixture",
+        "/Users/tj/software/worktrees/modules-python-astro/node_modules/space-data-module-sdk/parity/sdk-command.json",
+        "--wasmedge-binary",
+        "/Users/tj/.wasmedge/bin/wasmedge",
+        "--lanes",
+        "browser,wasmedge,docker-wasmedge",
+        "--json",
+        "--timeout-sec",
+        "15"
+      ],
+      "exit_code": 0,
+      "artifact_sha256": "42d10718037289a1e53d70755ee2374cf450e54fee96313be04c55828582cc16",
+      "log": "analysis-estimation.log"
+    },
+    {
+      "module": "analysis/conjunction-assessment",
+      "command": [
+        "node",
+        "/Users/tj/software/worktrees/modules-python-astro/node_modules/space-data-module-sdk/bin/space-data-module.js",
+        "parity",
+        "--wasm",
+        "/Users/tj/software/worktrees/modules-python-astro/packages/python-astro/src/spacedatanetwork_astro/artifacts/analysis-conjunction-assessment/module.wasm",
+        "--fixture",
+        "/Users/tj/software/worktrees/modules-python-astro/node_modules/space-data-module-sdk/parity/sdk-command.json",
+        "--wasmedge-binary",
+        "/Users/tj/.wasmedge/bin/wasmedge",
+        "--lanes",
+        "browser,wasmedge,docker-wasmedge",
+        "--json",
+        "--timeout-sec",
+        "15"
+      ],
+      "exit_code": 2,
+      "artifact_sha256": "acfedd6de4baaaae7d9265f7be992f2fe522afaa6f5dc739a20fbe2b6206fc72",
+      "log": "analysis-conjunction-assessment.log"
+    },
+    {
+      "module": "analysis/access",
+      "command": [
+        "node",
+        "/Users/tj/software/worktrees/modules-python-astro/node_modules/space-data-module-sdk/bin/space-data-module.js",
+        "parity",
+        "--wasm",
+        "/Users/tj/software/worktrees/modules-python-astro/packages/python-astro/src/spacedatanetwork_astro/artifacts/analysis-access/module.wasm",
+        "--fixture",
+        "/Users/tj/software/worktrees/modules-python-astro/node_modules/space-data-module-sdk/parity/sdk-command.json",
+        "--wasmedge-binary",
+        "/Users/tj/.wasmedge/bin/wasmedge",
+        "--lanes",
+        "browser,wasmedge,docker-wasmedge",
+        "--json",
+        "--timeout-sec",
+        "15"
+      ],
+      "exit_code": 2,
+      "artifact_sha256": "98315481714d59fb2ba03cc032b6ca7764a32b3847c59cd0eaac5675cd73401a",
+      "log": "analysis-access.log"
+    },
+    {
+      "module": "propagator/events",
+      "command": [
+        "node",
+        "/Users/tj/software/worktrees/modules-python-astro/node_modules/space-data-module-sdk/bin/space-data-module.js",
+        "parity",
+        "--wasm",
+        "/Users/tj/software/worktrees/modules-python-astro/packages/python-astro/src/spacedatanetwork_astro/artifacts/propagator-events/module.wasm",
+        "--fixture",
+        "/Users/tj/software/worktrees/modules-python-astro/node_modules/space-data-module-sdk/parity/sdk-command.json",
+        "--wasmedge-binary",
+        "/Users/tj/.wasmedge/bin/wasmedge",
+        "--lanes",
+        "browser,wasmedge,docker-wasmedge",
+        "--json",
+        "--timeout-sec",
+        "15"
+      ],
+      "exit_code": 0,
+      "artifact_sha256": "c6f2cf1845099d89dddaec7f9ca14621a1617e1814b3d850753a77d02e327a87",
+      "log": "propagator-events.log"
+    },
+    {
+      "module": "analysis/lambert-izzo",
+      "command": [
+        "node",
+        "/Users/tj/software/worktrees/modules-python-astro/node_modules/space-data-module-sdk/bin/space-data-module.js",
+        "parity",
+        "--wasm",
+        "/Users/tj/software/worktrees/modules-python-astro/packages/python-astro/src/spacedatanetwork_astro/artifacts/analysis-lambert-izzo/module.wasm",
+        "--fixture",
+        "/Users/tj/software/worktrees/modules-python-astro/node_modules/space-data-module-sdk/parity/sdk-command.json",
+        "--wasmedge-binary",
+        "/Users/tj/.wasmedge/bin/wasmedge",
+        "--lanes",
+        "browser,wasmedge,docker-wasmedge",
+        "--json",
+        "--timeout-sec",
+        "15"
+      ],
+      "exit_code": 0,
+      "artifact_sha256": "cbb256c91ed03c6623db0974476bfc26c2feaca586a45408a85bb84eb303b242",
+      "log": "analysis-lambert-izzo.log"
+    },
+    {
+      "module": "foundation/time",
+      "command": [
+        "node",
+        "/Users/tj/software/worktrees/modules-python-astro/node_modules/space-data-module-sdk/bin/space-data-module.js",
+        "parity",
+        "--wasm",
+        "/Users/tj/software/worktrees/modules-python-astro/packages/python-astro/src/spacedatanetwork_astro/artifacts/foundation-time/module.wasm",
+        "--fixture",
+        "/Users/tj/software/worktrees/modules-python-astro/node_modules/space-data-module-sdk/parity/sdk-command.json",
+        "--wasmedge-binary",
+        "/Users/tj/.wasmedge/bin/wasmedge",
+        "--lanes",
+        "browser,wasmedge,docker-wasmedge",
+        "--json",
+        "--timeout-sec",
+        "15"
+      ],
+      "exit_code": 0,
+      "artifact_sha256": "8f06eec747d0001f2bf7a241402603830b0ffcb882ba054b8eb3d95be93b5eec",
+      "log": "foundation-time.log"
+    },
+    {
+      "module": "foundation/frames",
+      "command": [
+        "node",
+        "/Users/tj/software/worktrees/modules-python-astro/node_modules/space-data-module-sdk/bin/space-data-module.js",
+        "parity",
+        "--wasm",
+        "/Users/tj/software/worktrees/modules-python-astro/packages/python-astro/src/spacedatanetwork_astro/artifacts/foundation-frames/module.wasm",
+        "--fixture",
+        "/Users/tj/software/worktrees/modules-python-astro/node_modules/space-data-module-sdk/parity/sdk-command.json",
+        "--wasmedge-binary",
+        "/Users/tj/.wasmedge/bin/wasmedge",
+        "--lanes",
+        "browser,wasmedge,docker-wasmedge",
+        "--json",
+        "--timeout-sec",
+        "15"
+      ],
+      "exit_code": 0,
+      "artifact_sha256": "ee436101fea73bc8ea432aaf3b442935321efcfd22c81b3d8c66f857b62bcb55",
+      "log": "foundation-frames.log"
+    }
+  ]
+}

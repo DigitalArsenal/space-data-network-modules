@@ -1,0 +1,12 @@
+{
+  "command": [
+    "node",
+    "--test",
+    "--test-reporter=tap",
+    "tests/sdk_compat.test.mjs"
+  ],
+  "cwd": "propagator/events",
+  "exit_code": 0,
+  "artifact": "restored from e461236 git object after failed build",
+  "log": "committed-propagator-events.log"
+}

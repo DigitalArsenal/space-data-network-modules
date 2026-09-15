@@ -1,0 +1,29 @@
+{
+  "spacedatanetwork_astro-0.1.0.dev0+modules.e4612363998b.af1dde329812d-py3-none-macosx_11_0_arm64.whl": {
+    "sha256": "65776edca9347a4498c23fcca8efbc620ec9f951d6d4e31c0313e01d326ee24b",
+    "bytes": 5370115
+  },
+  "spacedatanetwork_astro-0.1.0.dev0+modules.e4612363998b.af1dde329812d.tar.gz": {
+    "sha256": "faaa009f3aa2ca273ddca6d5631a12032e109f4755ec74eda425cc66fc45a506",
+    "bytes": 4092165
+  },
+  "source_match_files": [
+    "runtime.py",
+    "api.py",
+    "_codec.py",
+    "__init__.py",
+    "__main__.py",
+    "bindings.lock.json",
+    "artifacts.lock.json"
+  ],
+  "assertions": "PASS: wheel and sdist runtime/API/binding locks exactly match committed source",
+  "installed_module_path": "/private/tmp/lane09-python-wheel-secondpass-20260915/lib/python3.14/site-packages/spacedatanetwork_astro/__init__.py",
+  "installed_code_matches_source": true,
+  "installed_tests": {
+    "command": "PYTHONPATH=/Users/tj/software/worktrees/modules-python-astro/packages/python-astro /private/tmp/lane09-python-wheel-secondpass-20260915/bin/python -m pytest -q -s tests",
+    "cwd": "/Users/tj/software/worktrees/modules-python-astro/packages/python-astro",
+    "result": "36 passed, 2194 subtests passed in 59.07s",
+    "exit_code": 0,
+    "log": "second-pass-installed-wheel.log"
+  }
+}

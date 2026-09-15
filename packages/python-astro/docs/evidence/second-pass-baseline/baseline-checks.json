@@ -1,0 +1,80 @@
+{
+  "source_revision": "e4612363998bd1c732aaab2b242de0015104f096",
+  "sdk": "0.8.18",
+  "sds": "1.202.0",
+  "wasmedge": "0.16.4",
+  "checks": [
+    {
+      "module": "propagator/hpop",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk_compat.test.mjs"
+      ],
+      "exit_code": 1,
+      "summary": [
+        "# tests 10",
+        "# pass 9",
+        "# fail 1",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "propagator-hpop.log"
+    },
+    {
+      "module": "analysis/conjunction-assessment",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk_compat.test.mjs"
+      ],
+      "exit_code": 1,
+      "summary": [
+        "# tests 10",
+        "# pass 9",
+        "# fail 1",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "analysis-conjunction-assessment.log"
+    },
+    {
+      "module": "analysis/lambert-izzo",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk-compat.test.mjs"
+      ],
+      "exit_code": 1,
+      "summary": [
+        "# tests 16",
+        "# pass 14",
+        "# fail 2",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "analysis-lambert-izzo.log"
+    },
+    {
+      "module": "analysis/access",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "test/manifestContract.test.mjs"
+      ],
+      "exit_code": 1,
+      "summary": [
+        "# tests 1",
+        "# pass 0",
+        "# fail 1",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "analysis-access.log"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+TAP version 13
+# Subtest: events DE440 invoke + explicit fallback + refusal (browser)
+ok 1 - events DE440 invoke + explicit fallback + refusal (browser)
+  ---
+  duration_ms: 88.631541
+  type: 'test'
+  ...
+# Subtest: events DE440 invoke + explicit fallback + refusal (wasmedge)
+ok 2 - events DE440 invoke + explicit fallback + refusal (wasmedge)
+  ---
+  duration_ms: 1575.094917
+  type: 'test'
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2385.371209

@@ -1,0 +1,5 @@
+shared:INFO: [32m(Emscripten: Running sanity checks)[0m
+cache:INFO: [32mgenerating system library: sysroot/lib/wasm32-emscripten/libstandalonewasm-memgrow.a... (this will be cached in "/emscripten/cache/sysroot/lib/wasm32-emscripten/libstandalonewasm-memgrow.a" for subsequent builds)[0m
+system_libs:INFO: [32mcompiled 20 inputs[0m
+cache:INFO: [32m - ok[0m
+Built dist/isomorphic/module.wasm against spacedatastandards.org@1.217.0+1789398499674

@@ -1,0 +1,415 @@
+{
+  "purpose": "Existing module baseline; not Python wrapper validation",
+  "runtime_bin": "/Users/tj/.wasmedge/bin",
+  "missing_sdk_compat_suites": [
+    "analysis/estimation",
+    "propagator/events"
+  ],
+  "checks": [
+    {
+      "phase": "sdk",
+      "module": "propagator/sgp4",
+      "cwd": "propagator/sgp4",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk_compat.test.mjs"
+      ],
+      "exit_code": 0,
+      "summary": [
+        "# tests 7",
+        "# pass 7",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "sdk-propagator-sgp4.log",
+      "coverage_complete": true,
+      "artifact_sha256": "debb82d251cfe441e01e1f70f9d735b8878bb820bc48720fff1416ee129647e6",
+      "artifact_unchanged": true
+    },
+    {
+      "phase": "sdk",
+      "module": "propagator/hpop",
+      "cwd": "propagator/hpop",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk_compat.test.mjs"
+      ],
+      "exit_code": 1,
+      "summary": [
+        "# tests 10",
+        "# pass 9",
+        "# fail 1",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "sdk-propagator-hpop.log",
+      "coverage_complete": true,
+      "artifact_sha256": "0e095fb680ecd7a19fe7a4c118f8d19fd7751cafb0a8ec3c92f6aed749cd4e94",
+      "artifact_unchanged": true
+    },
+    {
+      "phase": "sdk",
+      "module": "analysis/conjunction-assessment",
+      "cwd": "analysis/conjunction-assessment",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk_compat.test.mjs"
+      ],
+      "exit_code": 1,
+      "summary": [
+        "# tests 10",
+        "# pass 9",
+        "# fail 1",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "sdk-analysis-conjunction-assessment.log",
+      "coverage_complete": true,
+      "artifact_sha256": "acfedd6de4baaaae7d9265f7be992f2fe522afaa6f5dc739a20fbe2b6206fc72",
+      "artifact_unchanged": true
+    },
+    {
+      "phase": "sdk",
+      "module": "foundation/time",
+      "cwd": "foundation/time",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk_compat.test.mjs"
+      ],
+      "exit_code": 0,
+      "summary": [
+        "# tests 4",
+        "# pass 4",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "sdk-foundation-time.log",
+      "coverage_complete": true,
+      "artifact_sha256": "8f06eec747d0001f2bf7a241402603830b0ffcb882ba054b8eb3d95be93b5eec",
+      "artifact_unchanged": true
+    },
+    {
+      "phase": "sdk",
+      "module": "foundation/frames",
+      "cwd": "foundation/frames",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk_compat.test.mjs"
+      ],
+      "exit_code": 0,
+      "summary": [
+        "# tests 5",
+        "# pass 5",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "sdk-foundation-frames.log",
+      "coverage_complete": true,
+      "artifact_sha256": "654810eaf12a0aa433e6ac6801149b18eade85168ac98363dd8eb66244609af3",
+      "artifact_unchanged": true
+    },
+    {
+      "phase": "sdk",
+      "module": "analysis/lambert-izzo",
+      "cwd": "analysis/lambert-izzo",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk-compat.test.mjs"
+      ],
+      "exit_code": 1,
+      "summary": [
+        "# tests 16",
+        "# pass 14",
+        "# fail 2",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "sdk-analysis-lambert-izzo.log",
+      "coverage_complete": true,
+      "artifact_sha256": "cbb256c91ed03c6623db0974476bfc26c2feaca586a45408a85bb84eb303b242",
+      "artifact_unchanged": true
+    },
+    {
+      "phase": "sdk",
+      "module": "analysis/access",
+      "cwd": "analysis/access",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "test/manifestContract.test.mjs"
+      ],
+      "exit_code": 1,
+      "summary": [
+        "# tests 1",
+        "# pass 0",
+        "# fail 1",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "sdk-analysis-access.log",
+      "coverage_complete": false,
+      "artifact_sha256": "98315481714d59fb2ba03cc032b6ca7764a32b3847c59cd0eaac5675cd73401a",
+      "artifact_unchanged": true
+    },
+    {
+      "phase": "evidence",
+      "module": "analysis/estimation",
+      "cwd": "analysis/estimation",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/conformance.test.mjs"
+      ],
+      "exit_code": 0,
+      "summary": [
+        "# tests 1",
+        "# pass 1",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "evidence-analysis-estimation.log",
+      "coverage_complete": true,
+      "artifact_sha256": "42d10718037289a1e53d70755ee2374cf450e54fee96313be04c55828582cc16",
+      "artifact_unchanged": true
+    },
+    {
+      "phase": "numerical",
+      "module": "propagator/sgp4",
+      "cwd": "propagator/sgp4",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern",
+        "tudat vallado sgp4 benchmark",
+        "tests/tudat_wasm_derived.test.mjs"
+      ],
+      "exit_code": 0,
+      "summary": [
+        "# tests 1",
+        "# pass 1",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "numerical-propagator-sgp4.log",
+      "coverage_complete": true,
+      "artifact_sha256": "debb82d251cfe441e01e1f70f9d735b8878bb820bc48720fff1416ee129647e6",
+      "artifact_unchanged": true
+    },
+    {
+      "phase": "numerical",
+      "module": "propagator/hpop",
+      "cwd": "propagator/hpop",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern",
+        "tudat two-body samples",
+        "tests/tudat_wasm_derived.test.mjs"
+      ],
+      "exit_code": 0,
+      "summary": [
+        "# tests 2",
+        "# pass 2",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "numerical-propagator-hpop.log",
+      "coverage_complete": true,
+      "artifact_sha256": "0e095fb680ecd7a19fe7a4c118f8d19fd7751cafb0a8ec3c92f6aed749cd4e94",
+      "artifact_unchanged": true
+    },
+    {
+      "phase": "numerical-native",
+      "module": "analysis/estimation",
+      "cwd": "analysis/estimation",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/native.test.mjs"
+      ],
+      "exit_code": 0,
+      "summary": [
+        "# tests 1",
+        "# pass 1",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "numerical-native-analysis-estimation.log",
+      "coverage_complete": true,
+      "artifact_sha256": "42d10718037289a1e53d70755ee2374cf450e54fee96313be04c55828582cc16",
+      "artifact_unchanged": true
+    },
+    {
+      "phase": "numerical",
+      "module": "analysis/conjunction-assessment",
+      "cwd": "analysis/conjunction-assessment",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/socratesScreenCatalogParity.test.mjs"
+      ],
+      "exit_code": 1,
+      "summary": [
+        "# tests 1",
+        "# pass 0",
+        "# fail 1",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "numerical-analysis-conjunction-assessment.log",
+      "coverage_complete": false,
+      "artifact_sha256": "acfedd6de4baaaae7d9265f7be992f2fe522afaa6f5dc739a20fbe2b6206fc72",
+      "artifact_unchanged": true
+    },
+    {
+      "phase": "numerical",
+      "module": "analysis/access",
+      "cwd": "analysis/access",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern",
+        "inverse azimuth/elevation/range",
+        "test/accessAnalyzer.test.mjs"
+      ],
+      "exit_code": 0,
+      "summary": [
+        "# tests 1",
+        "# pass 1",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "numerical-analysis-access.log",
+      "coverage_complete": true,
+      "artifact_sha256": "98315481714d59fb2ba03cc032b6ca7764a32b3847c59cd0eaac5675cd73401a",
+      "artifact_unchanged": true
+    },
+    {
+      "phase": "numerical",
+      "module": "propagator/events",
+      "cwd": "propagator/events",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern",
+        "node crossings land",
+        "tests/events.test.mjs"
+      ],
+      "exit_code": 0,
+      "summary": [
+        "# tests 1",
+        "# pass 1",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "numerical-propagator-events.log",
+      "coverage_complete": true,
+      "artifact_sha256": "e3d09bbab47f8e83c60ed5fdb192511afb2f7ebf02271bb3afc7d7d567cfe2f3",
+      "artifact_unchanged": true
+    },
+    {
+      "phase": "numerical",
+      "module": "analysis/lambert-izzo",
+      "cwd": "analysis/lambert-izzo",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern",
+        "closed-form circular quarter-orbit",
+        "tests/sdk-compat.test.mjs"
+      ],
+      "exit_code": 0,
+      "summary": [
+        "# tests 1",
+        "# pass 1",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "numerical-analysis-lambert-izzo.log",
+      "coverage_complete": true,
+      "artifact_sha256": "cbb256c91ed03c6623db0974476bfc26c2feaca586a45408a85bb84eb303b242",
+      "artifact_unchanged": true
+    },
+    {
+      "phase": "numerical",
+      "module": "foundation/time",
+      "cwd": "foundation/time",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern",
+        "converts Orekit TAIScaleTest.testAAS06134",
+        "tests/time_conversion.test.mjs"
+      ],
+      "exit_code": 0,
+      "summary": [
+        "# tests 1",
+        "# pass 1",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "numerical-foundation-time.log",
+      "coverage_complete": true,
+      "artifact_sha256": "8f06eec747d0001f2bf7a241402603830b0ffcb882ba054b8eb3d95be93b5eec",
+      "artifact_unchanged": true
+    },
+    {
+      "phase": "numerical",
+      "module": "foundation/frames",
+      "cwd": "foundation/frames",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern",
+        "matches Basilisk GeodeticConversion.testPCI2PCPF",
+        "tests/frame_transform.test.mjs"
+      ],
+      "exit_code": 0,
+      "summary": [
+        "# tests 1",
+        "# pass 1",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "numerical-foundation-frames.log",
+      "coverage_complete": true,
+      "artifact_sha256": "654810eaf12a0aa433e6ac6801149b18eade85168ac98363dd8eb66244609af3",
+      "artifact_unchanged": true
+    }
+  ]
+}

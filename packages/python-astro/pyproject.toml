@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools==84.0.0"]
+build-backend = "build_backend"
+backend-path = ["."]
+
+[project]
+name = "spacedatanetwork-astro"
+dynamic = ["version"]
+description = "NumPy interfaces to pinned C++ astrodynamics WASM modules through WasmEdge"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24,<3", "flatbuffers==25.12.19", "cryptography==46.0.4"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+]
+
+[project.scripts]
+spacedatanetwork-astro = "spacedatanetwork_astro.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "spacedatanetwork_astro._version.__version__"}
+
+[tool.setuptools.package-data]
+spacedatanetwork_astro = ["artifacts.lock.json", "bindings.lock.json", "artifacts/*/*.wasm", "artifacts/*/*.json", "py.typed"]
+"spacedatanetwork_astro.sds" = ["*.txt"]
+"spacedatanetwork_astro.invoke" = ["*.txt"]

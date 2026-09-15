@@ -1,0 +1,85 @@
+Generated SDS headers: ACI, ACL, ACM, ACR, ACT, ACW, AEM, AGR, ANI, AOF, APL, APM, APP, ARM, AST, ATD, ATM, AVL, BAL, BEM, BMC, BOV, BPF, BSP, BUS, CAQ, CAT, CCT, CDM, CES, CFP, CHN, CLM, CLT, CMR, CMS, CMT, CNP, COM, COT, CPS, CRD, CRM, CSM, CTR, CVG, CVP, CZM, DFH, DMG, DOA, DPM, DSS, DTT, EGP, EMC, EME, ENC, ENT, ENV, EOO, EOP, EPF, EPM, ESL, ETM, EVL, EWR, FCS, FPC, FRM, FSB, FSM, FSO, FSP, GCT, GDI, GEL, GEO, GJN, GNO, GNP, GPX, GRV, GST, GVH, HEL, HFC, HYP, ICN, IDM, ION, IQC, IRM, IRO, KMF, KML, KRF, LAM, LCC, LCF, LCH, LDM, LGR, LKS, LMO, LMR, LMS, LND, LNE, LPF, LWK, MBL, MDP, MDS, MEM, MET, MFE, MNF, MNV, MPE, MSL, MST, MTI, NAV, NCD, NDS, NST, NUM, OBD, OBT, OCM, ODR, OEM, OMM, OOA, OOB, OOD, OOE, OOI, OOL, OON, OOS, OOT, OPM, OPP, OSM, PAP, PCE, PCF, PGM, PHY, PIV, PKB, PLD, PLG, PLK, PMM, PNL, PNM, PPE, PRG, PRR, PRW, PSS, PUR, QEM, QRP, RAF, RBK, RCF, RDM, RDO, REC, REM, REV, RFB, RFE, RFL, RFM, RFO, RFS, ROC, RPT, RSD, SAR, SBM, SCC, SCM, SCN, SCV, SCX, SDF, SDL, SDR, SEN, SEO, SEV, SHC, SHW, SIT, SKI, SLP, SNR, SNW, SOI, SON, SPP, SPW, SRI, STF, STO, STR, STV, STX, SUB, SWR, TAB, TBS, TCF, TCT, TDM, TFN, TIM, TKG, TME, TMF, TMS, TNR, TPN, TRE, TRH, TRK, TRN, TRP, TRS, TRV, TXS, VAM, VCF, VCM, VEP, VST, WKS, WPN, WTH, WXF, XTC
+Generated plugin_manifest_bytes.h (4464 bytes)
+Generated 57 JS bindings in tests/lib/generated/
+Configuring Emscripten build...
+emcmake: cmake -S /Users/tj/software/worktrees/modules-python-astro-baseline/propagator/sgp4/src/cpp -B /Users/tj/software/worktrees/modules-python-astro-baseline/propagator/sgp4/src/cpp/build-wasm -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake -DCMAKE_CROSSCOMPILING_EMULATOR=/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/node/22.16.0_64bit/bin/node in directory /Users/tj/software/worktrees/modules-python-astro-baseline/propagator/sgp4
+-- Configuring done (1.4s)
+-- Generating done (0.6s)
+-- Build files have been written to: /Users/tj/software/worktrees/modules-python-astro-baseline/propagator/sgp4/src/cpp/build-wasm
+
+Building propagator.sgp4 wasm module...
+[ 12%] Building C object CMakeFiles/sgp4_sqlite3.dir/deps/sqlite3/sqlite3.c.o
+[ 25%] Linking C static library libsgp4_sqlite3.a
+[ 25%] Built target sgp4_sqlite3
+[ 62%] Building CXX object CMakeFiles/sgp4_core.dir/src/SGP4.cpp.o
+[ 62%] Building CXX object CMakeFiles/sgp4_core.dir/src/sgp4_plugin.cpp.o
+[ 62%] Building C object CMakeFiles/sgp4_core.dir/src/standalone_stubs.c.o
+/Users/tj/software/worktrees/modules-python-astro-baseline/propagator/sgp4/src/cpp/src/sgp4_plugin.cpp:4591:35: warning: use of infinity is undefined behavior due to the currently enabled floating-point options [-Wnan-infinity-disabled]
+ 4591 |     double bestPositionResidual = std::numeric_limits<double>::infinity();
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/tj/software/worktrees/modules-python-astro-baseline/propagator/sgp4/src/cpp/src/sgp4_plugin.cpp:4592:35: warning: use of infinity is undefined behavior due to the currently enabled floating-point options [-Wnan-infinity-disabled]
+ 4592 |     double bestVelocityResidual = std::numeric_limits<double>::infinity();
+      |                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+[ 75%] Linking CXX static library libsgp4_core.a
+[ 75%] Built target sgp4_core
+[ 87%] Building CXX object CMakeFiles/sgp4_wasm.dir/src/plugin_invoke_bridge.cpp.o
+[100%] Linking CXX executable sgp4_wasm.js
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libstandalonewasm-memgrow.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libstandalonewasm-memgrow.a" for subsequent builds)
+system_libs:INFO: compiled 14 inputs in 0.44s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libcompiler_rt-wasmsjlj.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libcompiler_rt-wasmsjlj.a" for subsequent builds)
+system_libs:INFO: compiled 184 inputs in 3.72s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libc++-wasmexcept.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libc++-wasmexcept.a" for subsequent builds)
+system_libs:INFO: compiled 57 inputs in 3.56s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libc++abi-wasmexcept.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libc++abi-wasmexcept.a" for subsequent builds)
+system_libs:INFO: compiled 19 inputs in 1.38s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libunwind-wasmexcept.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libunwind-wasmexcept.a" for subsequent builds)
+system_libs:INFO: compiled 1 inputs in 0.18s
+cache:INFO:  - ok
+[100%] Built target sgp4_wasm
+
+Building propagator.sgp4 browser-shared wasm module...
+[ 25%] Built target sgp4_sqlite3
+[ 75%] Built target sgp4_core
+[ 87%] Building CXX object CMakeFiles/sgp4_wasm_browser_shared.dir/src/plugin_invoke_bridge.cpp.o
+[100%] Linking CXX executable sgp4_wasm_browser_shared.js
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libGL-ww-getprocaddr.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libGL-ww-getprocaddr.a" for subsequent builds)
+system_libs:INFO: compiled 4 inputs in 0.23s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libc-ww.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libc-ww.a" for subsequent builds)
+system_libs:INFO: compiled 1011 inputs in 4.71s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libemmalloc-ww.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libemmalloc-ww.a" for subsequent builds)
+system_libs:INFO: compiled 2 inputs in 0.33s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libcompiler_rt-wasmsjlj-ww.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libcompiler_rt-wasmsjlj-ww.a" for subsequent builds)
+system_libs:INFO: compiled 184 inputs in 1.57s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libc++-ww-wasmexcept.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libc++-ww-wasmexcept.a" for subsequent builds)
+system_libs:INFO: compiled 57 inputs in 2.45s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libc++abi-ww-wasmexcept.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libc++abi-ww-wasmexcept.a" for subsequent builds)
+system_libs:INFO: compiled 19 inputs in 0.99s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libunwind-ww-wasmexcept.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libunwind-ww-wasmexcept.a" for subsequent builds)
+system_libs:INFO: compiled 1 inputs in 0.20s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libsockets-ww.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libsockets-ww.a" for subsequent builds)
+system_libs:INFO: compiled 27 inputs in 0.35s
+cache:INFO:  - ok
+warning: undefined symbol: emscripten_thread_sleep (referenced by root reference (e.g. compiled C/C++ code))
+warning: undefined symbol: pthread_mutex_lock (referenced by root reference (e.g. compiled C/C++ code))
+warning: undefined symbol: pthread_mutex_unlock (referenced by root reference (e.g. compiled C/C++ code))
+em++: warning: warnings in JS library compilation [-Wjs-compiler]
+[100%] Built target sgp4_wasm_browser_shared
+
+=== Build Complete ===
+-rw-r--r--  1 tj  staff    23K Sep 15 10:52 /Users/tj/software/worktrees/modules-python-astro-baseline/propagator/sgp4/dist/browser-shared/module.js
+-rwxr-xr-x  1 tj  staff   1.1M Sep 15 10:52 /Users/tj/software/worktrees/modules-python-astro-baseline/propagator/sgp4/dist/browser-shared/module.wasm
+-rw-r--r--  1 tj  staff    22K Sep 15 10:52 /Users/tj/software/worktrees/modules-python-astro-baseline/propagator/sgp4/dist/browser/module.js
+-rwxr-xr-x  1 tj  staff   1.1M Sep 15 10:52 /Users/tj/software/worktrees/modules-python-astro-baseline/propagator/sgp4/dist/browser/module.wasm
+-rwxr-xr-x  1 tj  staff   1.1M Sep 15 10:52 /Users/tj/software/worktrees/modules-python-astro-baseline/propagator/sgp4/dist/isomorphic/module.wasm

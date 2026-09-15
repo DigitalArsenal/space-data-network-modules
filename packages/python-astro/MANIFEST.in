@@ -1,0 +1,8 @@
+include build_backend.py
+include prepare_artifacts.py
+include README.md
+recursive-include src/spacedatanetwork_astro *.py *.json *.wasm *.txt py.typed
+recursive-include tests *.py *.json
+recursive-include docs *.md *.json *.log
+recursive-include scripts *.py *.mjs
+recursive-include examples *.py

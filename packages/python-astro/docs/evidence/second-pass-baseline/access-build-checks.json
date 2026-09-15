@@ -1,0 +1,54 @@
+{
+  "build_command": [
+    "node",
+    "build.js",
+    "--force"
+  ],
+  "build_exit_code": 0,
+  "environment": {
+    "ORBPRO_ROOT": "/Users/tj/software/worktrees/modules-python-astro-baseline/analysis/access/node_modules/.orbpro-build",
+    "ORBPRO_WASM_BUILD_BACKEND": "local-emsdk",
+    "EM_CACHE": "/Users/tj/software/worktrees/modules-python-astro-baseline/analysis/access/.emcache",
+    "FLATBUFFERS_INCLUDE_DIR": "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/flatbuffers/include",
+    "SPACE_DATA_STANDARDS_ROOT": "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/spacedatastandards.org"
+  },
+  "artifact_sha256": "7e5116d4f6000b3cee7a460f40824b2f68f5f71daf38a06164c727122573829a",
+  "checks": [
+    {
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "test/manifestContract.test.mjs"
+      ],
+      "exit_code": 1,
+      "summary": [
+        "# tests 1",
+        "# pass 0",
+        "# fail 1",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "postbuild-analysis-access.log"
+    },
+    {
+      "command": [
+        "node",
+        "--loader",
+        "./node_modules/baseline-import-loader.mjs",
+        "--test",
+        "--test-reporter=tap",
+        "test/manifestContract.test.mjs"
+      ],
+      "exit_code": 1,
+      "summary": [
+        "# tests 1",
+        "# pass 0",
+        "# fail 1",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "layout-adapted-analysis-access.log"
+    }
+  ]
+}

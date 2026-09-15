@@ -1,0 +1,39 @@
+Generated NCD kernel descriptor header from pinned SDS schema.
+Generated plugin_manifest_bytes.h (6236 bytes)
+Configuring Emscripten build...
+emcmake: cmake -S /Users/tj/software/worktrees/modules-python-astro-baseline/propagator/hpop/src/cpp -B /Users/tj/software/worktrees/modules-python-astro-baseline/propagator/hpop/src/cpp/build-wasm -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake -DCMAKE_CROSSCOMPILING_EMULATOR=/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/node/22.16.0_64bit/bin/node in directory /Users/tj/software/worktrees/modules-python-astro-baseline/propagator/hpop
+-- Configuring done (1.1s)
+-- Generating done (0.5s)
+-- Build files have been written to: /Users/tj/software/worktrees/modules-python-astro-baseline/propagator/hpop/src/cpp/build-wasm
+
+Building browser adapter...
+[ 63%] Building CXX object CMakeFiles/hpop.dir/Users/tj/software/worktrees/modules-python-astro-baseline/propagator/hpop/lib/environment_models.cpp.o
+[ 68%] Building CXX object CMakeFiles/hpop.dir/Users/tj/software/worktrees/modules-python-astro-baseline/propagator/hpop/lib/astrodynamics.cpp.o
+[ 68%] Building CXX object CMakeFiles/hpop.dir/Users/tj/software/worktrees/modules-python-astro-baseline/propagator/hpop/lib/integrators.cpp.o
+[ 68%] Building CXX object CMakeFiles/hpop.dir/Users/tj/software/worktrees/modules-python-astro-baseline/propagator/hpop/lib/force_models.cpp.o
+[ 68%] Building CXX object CMakeFiles/hpop.dir/Users/tj/software/worktrees/modules-python-astro-baseline/propagator/hpop/lib/atmosphere_plugin.cpp.o
+[ 68%] Building C object CMakeFiles/hpop.dir/Users/tj/software/worktrees/modules-python-astro-baseline/third_party/nrlmsise00/nrlmsise-00.c.o
+[ 68%] Building CXX object CMakeFiles/hpop.dir/Users/tj/software/worktrees/modules-python-astro-baseline/propagator/hpop/lib/coords.cpp.o
+[ 68%] Building CXX object CMakeFiles/hpop.dir/Users/tj/software/worktrees/modules-python-astro-baseline/propagator/hpop/lib/ephemeris.cpp.o
+[ 68%] Building CXX object CMakeFiles/hpop.dir/Users/tj/software/worktrees/modules-python-astro-baseline/propagator/hpop/lib/time_convert.cpp.o
+[ 68%] Building CXX object CMakeFiles/hpop.dir/Users/tj/software/worktrees/modules-python-astro-baseline/propagator/hpop/lib/nrlmsise00.cpp.o
+[ 68%] Building CXX object CMakeFiles/hpop.dir/src/plugin_runtime.cpp.o
+[ 68%] Building CXX object CMakeFiles/hpop.dir/Users/tj/software/worktrees/modules-python-astro-baseline/propagator/hpop/lib/us76.cpp.o
+[ 68%] Building C object CMakeFiles/hpop.dir/Users/tj/software/worktrees/modules-python-astro-baseline/third_party/nrlmsise00/nrlmsise-00_data.c.o
+/Users/tj/software/worktrees/modules-python-astro-baseline/propagator/hpop/lib/astrodynamics.cpp:5892:5: warning: 'snprintf' will always be truncated; specified size is 70, but format string expands to at least 73 [-Wformat-truncation]
+ 5892 |     std::snprintf(line1, sizeof(line1),
+      |     ^
+1 warning generated.
+[ 73%] Linking CXX static library libhpop.a
+[ 73%] Built target hpop
+[ 94%] Building CXX object CMakeFiles/hpop_wasm.dir/src/plugin_entrypoints.cpp.o
+[ 94%] Building CXX object CMakeFiles/hpop_wasm.dir/Users/tj/software/worktrees/modules-python-astro-baseline/propagator/hpop/src/hpop_plugin.cpp.o
+[ 94%] Building CXX object CMakeFiles/hpop_wasm.dir/src/plugin_invoke_bridge.cpp.o
+[ 94%] Building CXX object CMakeFiles/hpop_wasm.dir/wasm_api.cpp.o
+[100%] Linking CXX executable hpop_wasm.js
+[100%] Built target hpop_wasm
+
+=== Build Complete ===
+-rw-r--r--  1 tj  staff    22K Sep 15 10:49 /Users/tj/software/worktrees/modules-python-astro-baseline/propagator/hpop/dist/browser/module.js
+-rwxr-xr-x  1 tj  staff   589K Sep 15 10:49 /Users/tj/software/worktrees/modules-python-astro-baseline/propagator/hpop/dist/browser/module.wasm
+-rwxr-xr-x  1 tj  staff   589K Sep 15 10:49 /Users/tj/software/worktrees/modules-python-astro-baseline/propagator/hpop/dist/isomorphic/module.wasm

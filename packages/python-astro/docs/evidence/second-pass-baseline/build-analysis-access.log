@@ -1,0 +1,6 @@
+Compiling Access plugin with local EMSDK (/Users/tj/software/worktrees/modules-python-astro-baseline/analysis/access/node_modules/.orbpro-build/packages/wasm-engine/.emsdk)...
+clang++: warning: treating 'c' input as 'c++' when in C++ mode, this behavior is deprecated [-Wdeprecated]
+Build complete.
+  WASM: /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/access/dist/access.wasm (112424 bytes)
+  Hash: 7e5116d4f6000b3cee7a460f40824b2f68f5f71daf38a06164c727122573829a
+  Manifest: /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/access/dist/manifest.json

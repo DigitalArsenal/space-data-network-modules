@@ -1,0 +1,137 @@
+{
+  "source_revision": "e4612363998bd1c732aaab2b242de0015104f096",
+  "environment": {
+    "SPACE_DATA_STANDARDS_ROOT": "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/spacedatastandards.org",
+    "SDN_FLATBUFFERS_INCLUDE_DIR": "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/flatbuffers/include",
+    "FLATBUFFERS_INCLUDE_DIR": "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/flatbuffers/include"
+  },
+  "checks": [
+    {
+      "module": "propagator/sgp4",
+      "command": [
+        "bash",
+        "build.sh"
+      ],
+      "exit_code": 0,
+      "log": "build-propagator-sgp4.log",
+      "artifact_before": "debb82d251cfe441e01e1f70f9d735b8878bb820bc48720fff1416ee129647e6",
+      "artifact_after": "debb82d251cfe441e01e1f70f9d735b8878bb820bc48720fff1416ee129647e6"
+    },
+    {
+      "module": "propagator/sgp4",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk_compat.test.mjs"
+      ],
+      "exit_code": 1,
+      "log": "postbuild-propagator-sgp4.log",
+      "summary": [
+        "# tests 1",
+        "# pass 0",
+        "# fail 1",
+        "# cancelled 0",
+        "# skipped 0"
+      ]
+    },
+    {
+      "module": "analysis/estimation",
+      "command": [
+        "node",
+        "build.mjs"
+      ],
+      "exit_code": 0,
+      "log": "build-analysis-estimation.log",
+      "artifact_before": "42d10718037289a1e53d70755ee2374cf450e54fee96313be04c55828582cc16",
+      "artifact_after": "42d10718037289a1e53d70755ee2374cf450e54fee96313be04c55828582cc16"
+    },
+    {
+      "module": "analysis/estimation",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/conformance.test.mjs"
+      ],
+      "exit_code": 0,
+      "log": "postbuild-analysis-estimation.log",
+      "summary": [
+        "# tests 1",
+        "# pass 1",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ]
+    },
+    {
+      "module": "propagator/events",
+      "command": [
+        "node",
+        "build.mjs"
+      ],
+      "exit_code": 1,
+      "log": "build-propagator-events.log",
+      "artifact_before": "c6f2cf1845099d89dddaec7f9ca14621a1617e1814b3d850753a77d02e327a87",
+      "artifact_after": null
+    },
+    {
+      "module": "foundation/time",
+      "command": [
+        "node",
+        "build.mjs"
+      ],
+      "exit_code": 0,
+      "log": "build-foundation-time.log",
+      "artifact_before": "8f06eec747d0001f2bf7a241402603830b0ffcb882ba054b8eb3d95be93b5eec",
+      "artifact_after": "8f06eec747d0001f2bf7a241402603830b0ffcb882ba054b8eb3d95be93b5eec"
+    },
+    {
+      "module": "foundation/time",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk_compat.test.mjs"
+      ],
+      "exit_code": 0,
+      "log": "postbuild-foundation-time.log",
+      "summary": [
+        "# tests 4",
+        "# pass 4",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ]
+    },
+    {
+      "module": "foundation/frames",
+      "command": [
+        "node",
+        "build.mjs"
+      ],
+      "exit_code": 0,
+      "log": "build-foundation-frames.log",
+      "artifact_before": "ee436101fea73bc8ea432aaf3b442935321efcfd22c81b3d8c66f857b62bcb55",
+      "artifact_after": "25e61665169dbbcfbe3f294c21181766582f12a799e67c09a406e610ea7261f0"
+    },
+    {
+      "module": "foundation/frames",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk_compat.test.mjs"
+      ],
+      "exit_code": 0,
+      "log": "postbuild-foundation-frames.log",
+      "summary": [
+        "# tests 5",
+        "# pass 5",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ]
+    }
+  ]
+}

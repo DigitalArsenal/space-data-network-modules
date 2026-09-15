@@ -1,0 +1,479 @@
+{
+  "ok": false,
+  "fixture": "sdk-command-parity",
+  "wasmPath": "/Users/tj/software/worktrees/modules-python-astro/packages/python-astro/src/spacedatanetwork_astro/artifacts/analysis-access/module.wasm",
+  "artifactSha256": "98315481714d59fb2ba03cc032b6ca7764a32b3847c59cd0eaac5675cd73401a",
+  "moduleSha256": "98315481714d59fb2ba03cc032b6ca7764a32b3847c59cd0eaac5675cd73401a",
+  "pin": "0.16.4",
+  "lanes": [
+    {
+      "lane": "browser",
+      "runs": 12,
+      "durationMs": 1834
+    },
+    {
+      "lane": "wasmedge",
+      "runs": 12,
+      "durationMs": 828
+    },
+    {
+      "lane": "docker-wasmedge",
+      "runs": 12,
+      "durationMs": 13069
+    }
+  ],
+  "cases": [
+    "empty-stdin",
+    "malformed-stdin",
+    "truncated-piv-header"
+  ],
+  "comparisons": 36,
+  "failures": [
+    {
+      "caseId": "empty-stdin",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-stdin",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-stdin",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-stdin",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-stdin",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-stdin",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-stdin",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-stdin",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "malformed-stdin",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "malformed-stdin",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "malformed-stdin",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "malformed-stdin",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "malformed-stdin",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "malformed-stdin",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "malformed-stdin",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "malformed-stdin",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-piv-header",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-piv-header",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-piv-header",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-piv-header",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-piv-header",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-piv-header",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-piv-header",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-piv-header",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
+    }
+  ],
+  "runs": [
+    {
+      "lane": "browser",
+      "caseId": "empty-stdin",
+      "threadCount": 1,
+      "exitClass": "trap",
+      "exitDetail": "TypeError: WebAssembly.instantiate(): Import #0 \"env\": module is not an object or function",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-stdin",
+      "threadCount": 2,
+      "exitClass": "trap",
+      "exitDetail": "TypeError: WebAssembly.instantiate(): Import #0 \"env\": module is not an object or function",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-stdin",
+      "threadCount": 4,
+      "exitClass": "trap",
+      "exitDetail": "TypeError: WebAssembly.instantiate(): Import #0 \"env\": module is not an object or function",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-stdin",
+      "threadCount": 8,
+      "exitClass": "trap",
+      "exitDetail": "TypeError: WebAssembly.instantiate(): Import #0 \"env\": module is not an object or function",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "malformed-stdin",
+      "threadCount": 1,
+      "exitClass": "trap",
+      "exitDetail": "TypeError: WebAssembly.instantiate(): Import #0 \"env\": module is not an object or function",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "malformed-stdin",
+      "threadCount": 2,
+      "exitClass": "trap",
+      "exitDetail": "TypeError: WebAssembly.instantiate(): Import #0 \"env\": module is not an object or function",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "malformed-stdin",
+      "threadCount": 4,
+      "exitClass": "trap",
+      "exitDetail": "TypeError: WebAssembly.instantiate(): Import #0 \"env\": module is not an object or function",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "malformed-stdin",
+      "threadCount": 8,
+      "exitClass": "trap",
+      "exitDetail": "TypeError: WebAssembly.instantiate(): Import #0 \"env\": module is not an object or function",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-piv-header",
+      "threadCount": 1,
+      "exitClass": "trap",
+      "exitDetail": "TypeError: WebAssembly.instantiate(): Import #0 \"env\": module is not an object or function",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-piv-header",
+      "threadCount": 2,
+      "exitClass": "trap",
+      "exitDetail": "TypeError: WebAssembly.instantiate(): Import #0 \"env\": module is not an object or function",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-piv-header",
+      "threadCount": 4,
+      "exitClass": "trap",
+      "exitDetail": "TypeError: WebAssembly.instantiate(): Import #0 \"env\": module is not an object or function",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-piv-header",
+      "threadCount": 8,
+      "exitClass": "trap",
+      "exitDetail": "TypeError: WebAssembly.instantiate(): Import #0 \"env\": module is not an object or function",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-stdin",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-stdin",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-stdin",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-stdin",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "malformed-stdin",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "malformed-stdin",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "malformed-stdin",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "malformed-stdin",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv-header",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv-header",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv-header",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv-header",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-stdin",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-stdin",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-stdin",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-stdin",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "malformed-stdin",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "malformed-stdin",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "malformed-stdin",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "malformed-stdin",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv-header",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv-header",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv-header",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv-header",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    }
+  ]
+}
