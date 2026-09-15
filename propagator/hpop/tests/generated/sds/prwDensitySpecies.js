@@ -1,0 +1,12 @@
+export var prwDensitySpecies = /*#__PURE__*/ function(prwDensitySpecies) {
+    prwDensitySpecies[prwDensitySpecies["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+    prwDensitySpecies[prwDensitySpecies["HELIUM"] = 1] = "HELIUM";
+    prwDensitySpecies[prwDensitySpecies["ATOMIC_OXYGEN"] = 2] = "ATOMIC_OXYGEN";
+    prwDensitySpecies[prwDensitySpecies["MOLECULAR_NITROGEN"] = 3] = "MOLECULAR_NITROGEN";
+    prwDensitySpecies[prwDensitySpecies["MOLECULAR_OXYGEN"] = 4] = "MOLECULAR_OXYGEN";
+    prwDensitySpecies[prwDensitySpecies["ARGON"] = 5] = "ARGON";
+    prwDensitySpecies[prwDensitySpecies["HYDROGEN"] = 6] = "HYDROGEN";
+    prwDensitySpecies[prwDensitySpecies["ATOMIC_NITROGEN"] = 7] = "ATOMIC_NITROGEN";
+    prwDensitySpecies[prwDensitySpecies["ANOMALOUS_OXYGEN"] = 8] = "ANOMALOUS_OXYGEN";
+    return prwDensitySpecies;
+}({});

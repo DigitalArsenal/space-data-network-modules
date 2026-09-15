@@ -1,0 +1,554 @@
+{
+  "nativeNumericalResultLines": 109,
+  "afterLines": 109,
+  "exactlyUnchanged": true,
+  "timingExcluded": true,
+  "source": "Existing cited lane01/03/04 native numerical suites",
+  "results": [
+    {
+      "before": "RESULT Sun 2.7745692215067836e-22 1e-18 PASS",
+      "after": "RESULT Sun 2.7745692215067836e-22 1e-18 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT Moon 3.1515065703092862e-24 1e-18 PASS",
+      "after": "RESULT Moon 3.1515065703092862e-24 1e-18 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT Mercury 1.8717589098414146e-28 1e-18 PASS",
+      "after": "RESULT Mercury 1.8717589098414146e-28 1e-18 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT Venus 4.6966503963072539e-28 1e-18 PASS",
+      "after": "RESULT Venus 4.6966503963072539e-28 1e-18 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT Mars 2.9039174767017646e-30 1e-18 PASS",
+      "after": "RESULT Mars 2.9039174767017646e-30 1e-18 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT Jupiter 1.3640258749650362e-25 1e-18 PASS",
+      "after": "RESULT Jupiter 1.3640258749650362e-25 1e-18 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT Saturn 3.9453885613479032e-27 1e-18 PASS",
+      "after": "RESULT Saturn 3.9453885613479032e-27 1e-18 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT Uranus 4.1977529063185979e-28 1e-18 PASS",
+      "after": "RESULT Uranus 4.1977529063185979e-28 1e-18 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT Neptune 1.2470088261128012e-30 1e-18 PASS",
+      "after": "RESULT Neptune 1.2470088261128012e-30 1e-18 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT SRP_kernel_sun 0 1e-18 PASS",
+      "after": "RESULT SRP_kernel_sun 0 1e-18 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT Orekit_mass_kg error=4.547473508864641e-11 tolerance=1e-08 PASS",
+      "after": "RESULT Orekit_mass_kg error=4.547473508864641e-11 tolerance=1e-08 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT Orekit_inclination_deg error=2.299477306921816e-05 tolerance=0.0001 PASS",
+      "after": "RESULT Orekit_inclination_deg error=2.299477306921816e-05 tolerance=0.0001 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT Orekit_semimajor_km error=0.06620405708599719 tolerance=1 PASS",
+      "after": "RESULT Orekit_semimajor_km error=0.06620405708599719 tolerance=1 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT Tsiolkovsky_mass_kg error=1.836042429204099e-10 tolerance=2e-08 PASS",
+      "after": "RESULT Tsiolkovsky_mass_kg error=1.836042429204099e-10 tolerance=2e-08 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT Tsiolkovsky_deltaV_km_s error=3.535366444040733e-15 tolerance=2e-11 PASS",
+      "after": "RESULT Tsiolkovsky_deltaV_km_s error=3.535366444040733e-15 tolerance=2e-11 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT Tsiolkovsky_propellant_kg error=3.869127240818671e-14 tolerance=2e-08 PASS",
+      "after": "RESULT Tsiolkovsky_propellant_kg error=3.869127240818671e-14 tolerance=2e-08 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT Edelbaum_spiral_semimajor_km error=2.993944690388162e-06 tolerance=0.0005 PASS",
+      "after": "RESULT Edelbaum_spiral_semimajor_km error=2.993944690388162e-06 tolerance=0.0005 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT impulsive_limit_monotone_1.000000 error=0.01251467886255791 tolerance=0.25 PASS",
+      "after": "RESULT impulsive_limit_monotone_1.000000 error=0.01251467886255791 tolerance=0.25 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT impulsive_limit_monotone_0.100000 error=0.04465210714331239 tolerance=0.25 PASS",
+      "after": "RESULT impulsive_limit_monotone_0.100000 error=0.04465210714331239 tolerance=0.25 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT impulsive_limit_final_balanced_km error=3.515031142889315e-09 tolerance=2e-05 PASS",
+      "after": "RESULT impulsive_limit_final_balanced_km error=3.515031142889315e-09 tolerance=2e-05 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT frame_direction_0 error=7.56620637319114e-10 tolerance=2e-05 PASS",
+      "after": "RESULT frame_direction_0 error=7.56620637319114e-10 tolerance=2e-05 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT frame_direction_1 error=4.875009193133179e-06 tolerance=2e-05 PASS",
+      "after": "RESULT frame_direction_1 error=4.875009193133179e-06 tolerance=2e-05 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT frame_direction_2 error=6.441924529423966e-08 tolerance=2e-05 PASS",
+      "after": "RESULT frame_direction_2 error=6.441924529423966e-08 tolerance=2e-05 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT frame_direction_3 error=7.533455338260779e-10 tolerance=2e-05 PASS",
+      "after": "RESULT frame_direction_3 error=7.533455338260779e-10 tolerance=2e-05 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT frame_direction_4 error=7.533455338260779e-10 tolerance=2e-05 PASS",
+      "after": "RESULT frame_direction_4 error=7.533455338260779e-10 tolerance=2e-05 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT linear_steering_integral_km_s error=2.015085044177694e-15 tolerance=9.999999999999999e-12 PASS",
+      "after": "RESULT linear_steering_integral_km_s error=2.015085044177694e-15 tolerance=9.999999999999999e-12 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT linear_steering_coarse_integral_km_s error=6.728470631934192e-16 tolerance=9.999999999999999e-12 PASS",
+      "after": "RESULT linear_steering_coarse_integral_km_s error=6.728470631934192e-16 tolerance=9.999999999999999e-12 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT acceleration_mode_exponential_mass_kg error=2.930988785010413e-13 tolerance=1e-08 PASS",
+      "after": "RESULT acceleration_mode_exponential_mass_kg error=2.930988785010413e-13 tolerance=1e-08 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT throttle_mass_kg error=2.273736754432321e-13 tolerance=1e-08 PASS",
+      "after": "RESULT throttle_mass_kg error=2.273736754432321e-13 tolerance=1e-08 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT throttle_deltaV_km_s error=2.015531838650553e-16 tolerance=9.999999999999999e-12 PASS",
+      "after": "RESULT throttle_deltaV_km_s error=2.015531838650553e-16 tolerance=9.999999999999999e-12 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT STM7_frame_0 error=1.519554375452247e-10 tolerance=3e-06 PASS",
+      "after": "RESULT STM7_frame_0 error=1.519554375452247e-10 tolerance=3e-06 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT STM7_frame_1 error=1.577762861231219e-10 tolerance=3e-06 PASS",
+      "after": "RESULT STM7_frame_1 error=1.577762861231219e-10 tolerance=3e-06 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT STM7_frame_2 error=1.781192695667408e-10 tolerance=3e-06 PASS",
+      "after": "RESULT STM7_frame_2 error=1.781192695667408e-10 tolerance=3e-06 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT STM7_frame_3 error=2.201741889614438e-10 tolerance=3e-06 PASS",
+      "after": "RESULT STM7_frame_3 error=2.201741889614438e-10 tolerance=3e-06 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT STM7_frame_4 error=1.736661683174156e-10 tolerance=3e-06 PASS",
+      "after": "RESULT STM7_frame_4 error=1.736661683174156e-10 tolerance=3e-06 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_fired_1 error=0 tolerance=0 PASS",
+      "after": "RESULT event_fired_1 error=0 tolerance=0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_STM7_1 error=9.995246709827583e-08 tolerance=5e-06 PASS",
+      "after": "RESULT event_STM7_1 error=9.995246709827583e-08 tolerance=5e-06 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_STM7_half_step_1 error=2.495315764815306e-08 tolerance=5e-06 PASS",
+      "after": "RESULT event_STM7_half_step_1 error=2.495315764815306e-08 tolerance=5e-06 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_fired_2 error=0 tolerance=0 PASS",
+      "after": "RESULT event_fired_2 error=0 tolerance=0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_STM7_2 error=9.100622683361385e-10 tolerance=5e-06 PASS",
+      "after": "RESULT event_STM7_2 error=9.100622683361385e-10 tolerance=5e-06 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_STM7_half_step_2 error=1.279411574572588e-09 tolerance=5e-06 PASS",
+      "after": "RESULT event_STM7_half_step_2 error=1.279411574572588e-09 tolerance=5e-06 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_fired_3 error=0 tolerance=0 PASS",
+      "after": "RESULT event_fired_3 error=0 tolerance=0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_STM7_3 error=6.289993690779483e-10 tolerance=5e-06 PASS",
+      "after": "RESULT event_STM7_3 error=6.289993690779483e-10 tolerance=5e-06 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_STM7_half_step_3 error=1.461986537952981e-09 tolerance=5e-06 PASS",
+      "after": "RESULT event_STM7_half_step_3 error=1.461986537952981e-09 tolerance=5e-06 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_fired_4 error=0 tolerance=0 PASS",
+      "after": "RESULT event_fired_4 error=0 tolerance=0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_STM7_4 error=1.505247897594862e-09 tolerance=5e-06 PASS",
+      "after": "RESULT event_STM7_4 error=1.505247897594862e-09 tolerance=5e-06 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_STM7_half_step_4 error=7.324479914194979e-10 tolerance=5e-06 PASS",
+      "after": "RESULT event_STM7_half_step_4 error=7.324479914194979e-10 tolerance=5e-06 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_fired_5 error=0 tolerance=0 PASS",
+      "after": "RESULT event_fired_5 error=0 tolerance=0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_STM7_5 error=1.48756358786746e-09 tolerance=5e-06 PASS",
+      "after": "RESULT event_STM7_5 error=1.48756358786746e-09 tolerance=5e-06 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_STM7_half_step_5 error=4.040596750534851e-10 tolerance=5e-06 PASS",
+      "after": "RESULT event_STM7_half_step_5 error=4.040596750534851e-10 tolerance=5e-06 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_start_fired error=0 tolerance=0 PASS",
+      "after": "RESULT event_start_fired error=0 tolerance=0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_start_epoch_s error=0 tolerance=1e-08 PASS",
+      "after": "RESULT event_start_epoch_s error=0 tolerance=1e-08 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_start_mass_kg error=1.70530256582424e-12 tolerance=1e-08 PASS",
+      "after": "RESULT event_start_mass_kg error=1.70530256582424e-12 tolerance=1e-08 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_start_STM7 error=1.504440090513924e-09 tolerance=5e-06 PASS",
+      "after": "RESULT event_start_STM7 error=1.504440090513924e-09 tolerance=5e-06 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT event_start_STM7_half_step error=4.895353161573121e-10 tolerance=5e-06 PASS",
+      "after": "RESULT event_start_STM7_half_step error=4.895353161573121e-10 tolerance=5e-06 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT unmet_start_event_reported error=0 tolerance=0 PASS",
+      "after": "RESULT unmet_start_event_reported error=0 tolerance=0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT unmet_start_event_mass_kg error=0 tolerance=1e-12 PASS",
+      "after": "RESULT unmet_start_event_mass_kg error=0 tolerance=1e-12 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT overlap_impulse_position_km error=2.296108708614003e-13 tolerance=1e-08 PASS",
+      "after": "RESULT overlap_impulse_position_km error=2.296108708614003e-13 tolerance=1e-08 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT overlap_impulse_velocity_km_s error=8.881784197001252e-16 tolerance=9.999999999999999e-12 PASS",
+      "after": "RESULT overlap_impulse_velocity_km_s error=8.881784197001252e-16 tolerance=9.999999999999999e-12 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT overlap_impulse_mass_kg error=0 tolerance=1e-08 PASS",
+      "after": "RESULT overlap_impulse_mass_kg error=0 tolerance=1e-08 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT acceleration_mode_exact_STM7 error=2.842170943040401e-14 tolerance=1e-10 PASS",
+      "after": "RESULT acceleration_mode_exact_STM7 error=2.842170943040401e-14 tolerance=1e-10 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT acceleration_mode_exact_covariance7 error=1.4210854715202e-14 tolerance=1e-10 PASS",
+      "after": "RESULT acceleration_mode_exact_covariance7 error=1.4210854715202e-14 tolerance=1e-10 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT environment_mass_signal_0 error=0 tolerance=0 PASS",
+      "after": "RESULT environment_mass_signal_0 error=0 tolerance=0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT environment_mass_column_0_h0.100000 error=1.985794968298528e-07 tolerance=1e-05 PASS",
+      "after": "RESULT environment_mass_column_0_h0.100000 error=1.985794968298528e-07 tolerance=1e-05 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT environment_mass_column_0_h0.050000 error=3.459472623723277e-07 tolerance=1e-05 PASS",
+      "after": "RESULT environment_mass_column_0_h0.050000 error=3.459472623723277e-07 tolerance=1e-05 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT environment_mass_signal_1 error=0 tolerance=0 PASS",
+      "after": "RESULT environment_mass_signal_1 error=0 tolerance=0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT environment_mass_column_1_h0.100000 error=2.436271280356633e-07 tolerance=1e-05 PASS",
+      "after": "RESULT environment_mass_column_1_h0.100000 error=2.436271280356633e-07 tolerance=1e-05 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT environment_mass_column_1_h0.050000 error=1.910341554233057e-07 tolerance=1e-05 PASS",
+      "after": "RESULT environment_mass_column_1_h0.050000 error=1.910341554233057e-07 tolerance=1e-05 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT environment_mass_signal_2 error=0 tolerance=0 PASS",
+      "after": "RESULT environment_mass_signal_2 error=0 tolerance=0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT environment_mass_column_2_h0.100000 error=1.625168424293649e-07 tolerance=1e-05 PASS",
+      "after": "RESULT environment_mass_column_2_h0.100000 error=1.625168424293649e-07 tolerance=1e-05 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT environment_mass_column_2_h0.050000 error=4.35272400237681e-07 tolerance=1e-05 PASS",
+      "after": "RESULT environment_mass_column_2_h0.050000 error=4.35272400237681e-07 tolerance=1e-05 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT dry_mass_event_fired error=0 tolerance=0 PASS",
+      "after": "RESULT dry_mass_event_fired error=0 tolerance=0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT dry_mass_event_epoch_s error=0 tolerance=1e-09 PASS",
+      "after": "RESULT dry_mass_event_epoch_s error=0 tolerance=1e-09 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT dry_mass_final_kg error=0 tolerance=1e-09 PASS",
+      "after": "RESULT dry_mass_final_kg error=0 tolerance=1e-09 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT dry_mass_rocket_deltaV_km_s error=8.881784197001252e-16 tolerance=1e-09 PASS",
+      "after": "RESULT dry_mass_rocket_deltaV_km_s error=8.881784197001252e-16 tolerance=1e-09 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT dry_mass_step_refinement_position_km error=2.459816853617074e-11 tolerance=1e-08 PASS",
+      "after": "RESULT dry_mass_step_refinement_position_km error=2.459816853617074e-11 tolerance=1e-08 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT dry_mass_fixed_endpoint_mass_derivative error=0 tolerance=1e-10 PASS",
+      "after": "RESULT dry_mass_fixed_endpoint_mass_derivative error=0 tolerance=1e-10 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT reject_zero_Isp error=0 tolerance=0 PASS",
+      "after": "RESULT reject_zero_Isp error=0 tolerance=0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT reject_zero_direction error=0 tolerance=0 PASS",
+      "after": "RESULT reject_zero_direction error=0 tolerance=0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT reject_velocity_steering error=0 tolerance=0 PASS",
+      "after": "RESULT reject_velocity_steering error=0 tolerance=0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT reject_throttle_above_one error=0 tolerance=0 PASS",
+      "after": "RESULT reject_throttle_above_one error=0 tolerance=0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT reject_zero_mass error=0 tolerance=0 PASS",
+      "after": "RESULT reject_zero_mass error=0 tolerance=0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT reject_step_budget error=0 tolerance=0 PASS",
+      "after": "RESULT reject_step_budget error=0 tolerance=0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT reject_mass_exhaustion error=0 tolerance=0 PASS",
+      "after": "RESULT reject_mass_exhaustion error=0 tolerance=0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT reject_event_scheduled_tie error=0 tolerance=0 PASS",
+      "after": "RESULT reject_event_scheduled_tie error=0 tolerance=0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT circular_references_0.125000 1.2057135295373323e-16 9.9999999999999998e-13 PASS",
+      "after": "RESULT circular_references_0.125000 1.2057135295373323e-16 9.9999999999999998e-13 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT kepler_circular_0.125000 4.9565093952486504e-16 1.0000000000000001e-09 PASS",
+      "after": "RESULT kepler_circular_0.125000 4.9565093952486504e-16 1.0000000000000001e-09 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT circular_references_0.500000 7.1858019103878959e-16 9.9999999999999998e-13 PASS",
+      "after": "RESULT circular_references_0.500000 7.1858019103878959e-16 9.9999999999999998e-13 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT kepler_circular_0.500000 2.5242904759333642e-15 1.0000000000000001e-09 PASS",
+      "after": "RESULT kepler_circular_0.500000 2.5242904759333642e-15 1.0000000000000001e-09 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT circular_references_1.000000 9.0108998518038805e-16 9.9999999999999998e-13 PASS",
+      "after": "RESULT circular_references_1.000000 9.0108998518038805e-16 9.9999999999999998e-13 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT kepler_circular_1.000000 1.2104894054113792e-14 1.0000000000000001e-09 PASS",
+      "after": "RESULT kepler_circular_1.000000 1.2104894054113792e-14 1.0000000000000001e-09 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT kepler_eccentric_0.125000 6.3543693597039642e-16 1.0000000000000001e-09 PASS",
+      "after": "RESULT kepler_eccentric_0.125000 6.3543693597039642e-16 1.0000000000000001e-09 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT kepler_eccentric_0.500000 4.4126132235947097e-15 1.0000000000000001e-09 PASS",
+      "after": "RESULT kepler_eccentric_0.500000 4.4126132235947097e-15 1.0000000000000001e-09 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT kepler_eccentric_1_orbit 3.041679099438583e-14 1.0000000000000001e-09 PASS",
+      "after": "RESULT kepler_eccentric_1_orbit 3.041679099438583e-14 1.0000000000000001e-09 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT J2_FD_step_convergence 5.9362256529886854e-10 9.9999999999999995e-07 PASS",
+      "after": "RESULT J2_FD_step_convergence 5.9362256529886854e-10 9.9999999999999995e-07 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT J2_FD_integration_convergence 1.0303903888304467e-09 9.9999999999999995e-07 PASS",
+      "after": "RESULT J2_FD_integration_convergence 1.0303903888304467e-09 9.9999999999999995e-07 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT J2_STM_Richardson 7.2368748019204709e-10 9.9999999999999995e-07 PASS",
+      "after": "RESULT J2_STM_Richardson 7.2368748019204709e-10 9.9999999999999995e-07 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT J2_determinant 1.7763568394002505e-14 1.0000000000000001e-09 PASS",
+      "after": "RESULT J2_determinant 1.7763568394002505e-14 1.0000000000000001e-09 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT J2_symplectic 1.9669591394513481e-13 1.0000000000000001e-09 PASS",
+      "after": "RESULT J2_symplectic 1.9669591394513481e-13 1.0000000000000001e-09 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT covariance_1000_Wishart_z 1.6655686661933486 4 PASS",
+      "after": "RESULT covariance_1000_Wishart_z 1.6655686661933486 4 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT covariance_1000_nonlinear_RMS 3.9877549125606949e-05 0.001 PASS",
+      "after": "RESULT covariance_1000_nonlinear_RMS 3.9877549125606949e-05 0.001 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT impulse_inertial_endpoint_state 6.261122863422356e-16 1e-10 PASS",
+      "after": "RESULT impulse_inertial_endpoint_state 6.261122863422356e-16 1e-10 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT impulse_inertial_endpoint_STM 9.5941353310946812e-16 1.0000000000000001e-09 PASS",
+      "after": "RESULT impulse_inertial_endpoint_STM 9.5941353310946812e-16 1.0000000000000001e-09 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT impulse_chain_sample_0 1.7327585359744599e-08 9.9999999999999995e-07 PASS",
+      "after": "RESULT impulse_chain_sample_0 1.7327585359744599e-08 9.9999999999999995e-07 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT impulse_sample_epoch_0 0 0 PASS",
+      "after": "RESULT impulse_sample_epoch_0 0 0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT impulse_chain_sample_1 3.9381562122997807e-08 9.9999999999999995e-07 PASS",
+      "after": "RESULT impulse_chain_sample_1 3.9381562122997807e-08 9.9999999999999995e-07 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT impulse_sample_epoch_1 0 0 PASS",
+      "after": "RESULT impulse_sample_epoch_1 0 0 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT impulse_chain_sample_2 6.2863913906285365e-08 9.9999999999999995e-07 PASS",
+      "after": "RESULT impulse_chain_sample_2 6.2863913906285365e-08 9.9999999999999995e-07 PASS",
+      "unchanged": true
+    },
+    {
+      "before": "RESULT impulse_sample_epoch_2 0 0 PASS",
+      "after": "RESULT impulse_sample_epoch_2 0 0 PASS",
+      "unchanged": true
+    }
+  ]
+}

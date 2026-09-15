@@ -103,7 +103,7 @@ VariationalResult scheduled(const StateVector& initial,double dt,const Integrato
     double elapsed=0;
     auto advance=[&](double until) {
         if(until==elapsed)return true;
-        WeatherEpochScope epochScope(forces.weather.epoch,out.finalState.epoch);
+        WeatherEpochScope epochScope(forces.explicitEpochContract ? forces.integrationEpochTDB : forces.weather.epoch,out.finalState.epoch);
         const double duration=until-elapsed;
         VariationalResult segment;
         if(analytic)segment=PropagateVariational(out.finalState,duration,config,forces,density);

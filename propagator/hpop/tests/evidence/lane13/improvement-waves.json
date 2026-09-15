@@ -1,0 +1,27 @@
+{
+  "question": "What's the best next safe and deployable and accretive improvement you could make to this plan/artifact right now, and if none exists return NO_BETTER_OPTION?",
+  "scope": "Proposal 6.2 HPOP PRW migration; no publication or deployment",
+  "scoreDimensions": ["impact_on_objective", "deployability_now", "safety_fit_fail_closed", "lineage_clarity"],
+  "baseline": {"choice": "Parallel implementation by owned files, followed by completion gates", "scores": [8, 8, 9, 8], "total": 33},
+  "waves": [
+    {
+      "wave": "W1",
+      "candidates": [
+        {"choice": "Capture authoritative before/after numerical receipts and bind runtime evidence to the final artifact hash", "scores": [10, 9, 10, 10], "total": 39},
+        {"choice": "Add another general integration suite", "scores": [7, 7, 9, 8], "total": 31},
+        {"choice": "Start with only a version-query build", "scores": [6, 9, 9, 8], "total": 32},
+        {"choice": "Revisit SDS schema design", "scores": [3, 1, 5, 7], "total": 16, "rejected": "outside ratified consumer scope"},
+        {"choice": "Add host UI verification", "scores": [3, 4, 8, 5], "total": 20, "rejected": "outside module lane scope"}
+      ],
+      "accepted": "Capture authoritative before/after numerical receipts and bind runtime evidence to the final artifact hash",
+      "reason": "Delta 6; deployability and fail-closed safety nondecreasing; preserves bounded scope"
+    },
+    {
+      "wave": "W2",
+      "result": "NO_BETTER_OPTION",
+      "reason": "Contract negative cases, three-runtime classifications, numerical receipts, published-binding provenance and final hash cover the requested acceptance risks; additional scope does not improve this lane safely."
+    }
+  ],
+  "finalSelectedImprovement": "Capture authoritative before/after numerical receipts and bind runtime evidence to the final artifact hash",
+  "stopReason": "NO_BETTER_OPTION"
+}

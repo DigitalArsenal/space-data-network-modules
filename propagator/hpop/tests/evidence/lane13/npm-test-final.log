@@ -1,0 +1,273 @@
+
+> @orbpro/plugin-hpop@1.0.0 test
+> node --test tests/sdk_compat.test.mjs tests/direct-entry.test.mjs tests/tudat_wasm_derived.test.mjs tests/drag_atmosphere.test.mjs tests/batch_all_positions.test.mjs tests/path_state_vectors.test.mjs tests/force_partials.test.mjs tests/variational.test.mjs tests/variational_controls.test.mjs tests/variational_invoke.test.mjs tests/finite_burn.test.mjs tests/finite_burn_invoke.test.mjs tests/prw_contract.test.mjs tests/prw_resident.test.mjs tests/kernel_invoke.test.mjs tests/de440_force.test.mjs
+
+batch-vs-per-entity parity: 576 coordinate comparisons over 3 epochs x 64 entities, max |delta| = 0 m
+✔ batch propagate_all_positions matches per-entity plugin_propagate (54.304ms)
+✔ batch propagate_all_positions honors max_count and empty state (30.373625ms)
+✔ E.6 batch-scale API: ensure/eval split, stagger, retention, ECEF seeding (136.182709ms)
+RESULT Sun 2.7745692215067836e-22 1e-18 PASS
+RESULT Moon 3.1515065703092862e-24 1e-18 PASS
+RESULT Mercury 1.8717589098414146e-28 1e-18 PASS
+RESULT Venus 4.6966503963072539e-28 1e-18 PASS
+RESULT Mars 2.9039174767017646e-30 1e-18 PASS
+RESULT Jupiter 1.3640258749650362e-25 1e-18 PASS
+RESULT Saturn 3.9453885613479032e-27 1e-18 PASS
+RESULT Uranus 4.1977529063185979e-28 1e-18 PASS
+RESULT Neptune 1.2470088261128012e-30 1e-18 PASS
+RESULT SRP_kernel_sun 0 1e-18 PASS
+PASS DE440 force cases=10 failures=0
+✔ HPOP third-body and SRP forces consume authoritative DE440 vectors (6161.6615ms)
+✔ hpop direct entry loads the shipped browser/isomorphic module (16.672625ms)
+✔ NRLMSISE-00 canonical test vectors reproduce on browser (61.21375ms)
+✔ US76 path returns published Table I values on browser (13.068875ms)
+✔ NRLMSISE-00 density at 400 km stays in published bounds on browser (13.084834ms)
+✔ drag-enabled propagation decays an ISS-like orbit plausibly on browser (42.664541ms)
+✔ NRLMSISE-00 canonical test vectors reproduce on wasmedge (156.083792ms)
+✔ US76 path returns published Table I values on wasmedge (113.611208ms)
+✔ NRLMSISE-00 density at 400 km stays in published bounds on wasmedge (70.487709ms)
+✔ drag-enabled propagation decays an ISS-like orbit plausibly on wasmedge (2042.292208ms)
+RESULT Orekit_mass_kg error=4.547473508864641e-11 tolerance=1e-08 PASS
+RESULT Orekit_inclination_deg error=2.299477306921816e-05 tolerance=0.0001 PASS
+RESULT Orekit_semimajor_km error=0.06620405708599719 tolerance=1 PASS
+MEASURED Orekit mass_kg=2007.882454426169 inclination_deg=2.687177005226931 semimajor_km=28970.06620405709
+RESULT Tsiolkovsky_mass_kg error=1.836042429204099e-10 tolerance=2e-08 PASS
+RESULT Tsiolkovsky_deltaV_km_s error=3.535366444040733e-15 tolerance=2e-11 PASS
+RESULT Tsiolkovsky_propellant_kg error=3.869127240818671e-14 tolerance=2e-08 PASS
+RESULT Edelbaum_spiral_semimajor_km error=2.993944690388162e-06 tolerance=0.0005 PASS
+MEASURED spiral mass_kg=999.706321730846 deltaV_km_s=0.008641268938568597 semimajor_km=7016.059508869828 approximation_km=7016.059505875884
+MEASURED impulsive duration_s=10 balanced_error_km=6.290244248400663e-06
+RESULT impulsive_limit_monotone_1.000000 error=0.01251467886255791 tolerance=0.25 PASS
+MEASURED impulsive duration_s=1 balanced_error_km=7.872038673578625e-08
+RESULT impulsive_limit_monotone_0.100000 error=0.04465210714331239 tolerance=0.25 PASS
+MEASURED impulsive duration_s=0.1 balanced_error_km=3.515031142889315e-09
+RESULT impulsive_limit_final_balanced_km error=3.515031142889315e-09 tolerance=2e-05 PASS
+RESULT frame_direction_0 error=7.56620637319114e-10 tolerance=2e-05 PASS
+RESULT frame_direction_1 error=4.875009193133179e-06 tolerance=2e-05 PASS
+RESULT frame_direction_2 error=6.441924529423966e-08 tolerance=2e-05 PASS
+RESULT frame_direction_3 error=7.533455338260779e-10 tolerance=2e-05 PASS
+RESULT frame_direction_4 error=7.533455338260779e-10 tolerance=2e-05 PASS
+RESULT linear_steering_integral_km_s error=2.015085044177694e-15 tolerance=9.999999999999999e-12 PASS
+RESULT linear_steering_coarse_integral_km_s error=6.728470631934192e-16 tolerance=9.999999999999999e-12 PASS
+RESULT acceleration_mode_exponential_mass_kg error=2.930988785010413e-13 tolerance=1e-08 PASS
+RESULT throttle_mass_kg error=2.273736754432321e-13 tolerance=1e-08 PASS
+RESULT throttle_deltaV_km_s error=2.015531838650553e-16 tolerance=9.999999999999999e-12 PASS
+RESULT STM7_frame_0 error=1.519554375452247e-10 tolerance=3e-06 PASS
+RESULT STM7_frame_1 error=1.577762861231219e-10 tolerance=3e-06 PASS
+RESULT STM7_frame_2 error=1.781192695667408e-10 tolerance=3e-06 PASS
+RESULT STM7_frame_3 error=2.201741889614438e-10 tolerance=3e-06 PASS
+RESULT STM7_frame_4 error=1.736661683174156e-10 tolerance=3e-06 PASS
+RESULT event_fired_1 error=0 tolerance=0 PASS
+RESULT event_STM7_1 error=9.995246709827583e-08 tolerance=5e-06 PASS
+RESULT event_STM7_half_step_1 error=2.495315764815306e-08 tolerance=5e-06 PASS
+RESULT event_fired_2 error=0 tolerance=0 PASS
+RESULT event_STM7_2 error=9.100622683361385e-10 tolerance=5e-06 PASS
+RESULT event_STM7_half_step_2 error=1.279411574572588e-09 tolerance=5e-06 PASS
+RESULT event_fired_3 error=0 tolerance=0 PASS
+RESULT event_STM7_3 error=6.289993690779483e-10 tolerance=5e-06 PASS
+RESULT event_STM7_half_step_3 error=1.461986537952981e-09 tolerance=5e-06 PASS
+RESULT event_fired_4 error=0 tolerance=0 PASS
+RESULT event_STM7_4 error=1.505247897594862e-09 tolerance=5e-06 PASS
+RESULT event_STM7_half_step_4 error=7.324479914194979e-10 tolerance=5e-06 PASS
+RESULT event_fired_5 error=0 tolerance=0 PASS
+RESULT event_STM7_5 error=1.48756358786746e-09 tolerance=5e-06 PASS
+RESULT event_STM7_half_step_5 error=4.040596750534851e-10 tolerance=5e-06 PASS
+RESULT event_start_fired error=0 tolerance=0 PASS
+RESULT event_start_epoch_s error=0 tolerance=1e-08 PASS
+RESULT event_start_mass_kg error=1.70530256582424e-12 tolerance=1e-08 PASS
+RESULT event_start_STM7 error=1.504440090513924e-09 tolerance=5e-06 PASS
+RESULT event_start_STM7_half_step error=4.895353161573121e-10 tolerance=5e-06 PASS
+RESULT unmet_start_event_reported error=0 tolerance=0 PASS
+RESULT unmet_start_event_mass_kg error=0 tolerance=1e-12 PASS
+RESULT overlap_impulse_position_km error=2.296108708614003e-13 tolerance=1e-08 PASS
+RESULT overlap_impulse_velocity_km_s error=8.881784197001252e-16 tolerance=9.999999999999999e-12 PASS
+RESULT overlap_impulse_mass_kg error=0 tolerance=1e-08 PASS
+RESULT acceleration_mode_exact_STM7 error=2.842170943040401e-14 tolerance=1e-10 PASS
+RESULT acceleration_mode_exact_covariance7 error=1.4210854715202e-14 tolerance=1e-10 PASS
+RESULT environment_mass_signal_0 error=0 tolerance=0 PASS
+RESULT environment_mass_column_0_h0.100000 error=1.985794968298528e-07 tolerance=1e-05 PASS
+RESULT environment_mass_column_0_h0.050000 error=3.459472623723277e-07 tolerance=1e-05 PASS
+RESULT environment_mass_signal_1 error=0 tolerance=0 PASS
+RESULT environment_mass_column_1_h0.100000 error=2.436271280356633e-07 tolerance=1e-05 PASS
+RESULT environment_mass_column_1_h0.050000 error=1.910341554233057e-07 tolerance=1e-05 PASS
+RESULT environment_mass_signal_2 error=0 tolerance=0 PASS
+RESULT environment_mass_column_2_h0.100000 error=1.625168424293649e-07 tolerance=1e-05 PASS
+RESULT environment_mass_column_2_h0.050000 error=4.35272400237681e-07 tolerance=1e-05 PASS
+RESULT dry_mass_event_fired error=0 tolerance=0 PASS
+RESULT dry_mass_event_epoch_s error=0 tolerance=1e-09 PASS
+RESULT dry_mass_final_kg error=0 tolerance=1e-09 PASS
+RESULT dry_mass_rocket_deltaV_km_s error=8.881784197001252e-16 tolerance=1e-09 PASS
+RESULT dry_mass_step_refinement_position_km error=2.459816853617074e-11 tolerance=1e-08 PASS
+RESULT dry_mass_fixed_endpoint_mass_derivative error=0 tolerance=1e-10 PASS
+RESULT reject_zero_Isp error=0 tolerance=0 PASS
+RESULT reject_zero_direction error=0 tolerance=0 PASS
+RESULT reject_velocity_steering error=0 tolerance=0 PASS
+RESULT reject_throttle_above_one error=0 tolerance=0 PASS
+RESULT reject_zero_mass error=0 tolerance=0 PASS
+RESULT reject_step_budget error=0 tolerance=0 PASS
+RESULT reject_mass_exhaustion error=0 tolerance=0 PASS
+RESULT reject_event_scheduled_tie error=0 tolerance=0 PASS
+PASS HPOP finite burns checks=75 failures=0
+✔ HPOP finite burns: Orekit, rocket equation, spiral, impulsive limit, frames, STM and events (8536.411ms)
+PASS WASM Orekit mass_error_kg=4.547473508864641e-11 inclination_error_deg=0.000022994773068774066 semimajor_error_km=0.06620405696230591
+✔ WASM finite orbit agrees with Orekit published ConstantThrustManeuver example (49.5375ms)
+PASS WASM NASA rocket throttle mass_max_error_kg=3.410605131648481e-13 deltaV_max_error_km_s=2.0166160408230382e-16
+✔ WASM finite thrust and throttle agree with exact NASA mass and rocket equations (11.89425ms)
+PASS WASM elementary steering velocity_max_error_km_s=5.491755054182201e-16 exponential_mass_error_kg=0
+✔ WASM acceleration mode and original-epoch linear steering match elementary integrals (8.750084ms)
+PASS WASM all six frame names direction_max_error=0.0000048750091931331795 tolerance=2e-5
+✔ WASM all finite-burn frames match independent Orekit axis definitions (30.709542ms)
+PASS WASM STM7 mass-column covariance samples partial_error_km_s_kg=2.769797737521562e-19 tolerance=1e-12
+✔ WASM seven-state mass partials and covariance preserve the rocket-equation derivative (8.621833ms)
+PASS WASM events stop_time_error_s=4.561684363579843e-12 saltation_mass_partial_error=4.336808689942018e-19
+✔ WASM event cutoff and event start preserve exact elapsed-time and mass sensitivities (25.568334ms)
+PASS WASM JD-defined burn edges and automatic finite STM
+✔ WASM epoch burn edges and omitted includeSTM retain full finite-burn state (9.583583ms)
+PASS WASM negative controls=26 same-instance recovery
+✔ WASM invalid finite-burn controls return named errors and recover (80.287459ms)
+RESULT point_mass_closed_form error=1.4155571944398801e-16 bound=2e-14 PASS
+RESULT point_mass_FD error=1.2168841605563548e-09 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT J2_FD error=1.3313211295860226e-09 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT J2J4_FD error=1.4020446578948186e-09 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT isolated_J2_FD error=8.5077240611245299e-10 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT isolated_J3_FD error=5.7274916338580927e-10 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT isolated_J4_FD error=7.491375675203859e-10 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT isolated_J5_FD error=5.6148081989600297e-10 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT isolated_J6_FD error=6.1767795993819388e-10 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT spherical_harmonics_6_FD error=1.1711310741406625e-09 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT zonal_harmonics_6_FD error=9.8852608906726892e-10 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT EGM70_FD error=1.3170728625914737e-09 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT EGM70_order0_legacy_FD error=1.2159794419701182e-09 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT loaded_degree80_FD error=1.4056517895705811e-09 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT nine_third_bodies_FD error=1.1560619380246685e-09 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT drag_exponential_FD error=1.6930079213240479e-09 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT drag_NRLMSISE00_FD error=1.3656913762702726e-09 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT drag_HarrisPriester_FD error=1.6717251257727987e-09 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT drag_USSA1976_FD error=1.6930079213240479e-09 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT drag_nonrotating_FD error=1.5250350077838798e-09 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT cannonball_SRP_closed_form error=3.560378359523267e-16 bound=2e-14 PASS
+RESULT cannonball_SRP_lit_FD error=6.3518833647456345e-08 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT cannonball_SRP_penumbra_FD error=9.7051313701932179e-10 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT cannonball_SRP_umbra error=0 bound=0 PASS
+RESULT relativity_FD error=3.2718083568581731e-09 bound=9.9999999999999995e-07 PASS
+RESULT acceleration_unchanged error=0 bound=0 PASS
+RESULT inertial_impulse_identity error=0 bound=0 PASS
+RESULT RTN_impulse_jump error=2.0346629615313645e-09 bound=9.9999999999999995e-07 PASS
+RESULT density_mode_velocity_invariant error=0 bound=0 PASS
+RESULT density_gradient_enabled error=0 bound=0 PASS
+RESULT drag_closed_velocity_jacobian error=1.0550126938497659e-16 bound=2e-14 PASS
+RESULT unsupported_force_rejected error=0 bound=0 PASS
+RESULT unsupported_attitude_SRP_rejected error=0 bound=0 PASS
+RESULT unsupported_wind_rejected error=0 bound=0 PASS
+PASS force partials cases=55 failures=0
+✔ analytical force Jacobians match closed forms and independent force differences (7095.909291ms)
+PASS HPOP WASM CSPICE states=12 position_error_km=1.4901161193847656e-8 velocity_error_km_s=1.7763568394002505e-15
+✔ HPOP WASM kernel invoke matches independent CSPICE DE440 vectors, with source and fail-closed coverage (139.781042ms)
+✔ HPOP propagation reports explicit Analytical fallback after a kernel invocation (32.049708ms)
+✔ HPOP native tracks preserve ECEF seed and match the single-state API (19.149084ms)
+✔ PRW SI 6/7 covariance and STM preserve nonzero cross terms at initial epoch (38.411083ms)
+PASS PRW negative controls=14 same-instance recovery
+✔ PRW rejects malformed, ambiguous and unsupported requests and recovers (9.03675ms)
+PRW resident runtime=browser wasm_sha256=7305c5ef6db04cfb5babc4f2c5f87b17b1e5901e4c14bd25cf9ca7b14b7b48b1
+✔ PRW resident retains SI state and host handles at the initial TDB epoch (37.484208ms)
+✔ PRW resident UTC clock is converted inside WASM before TDB integration (7.144792ms)
+✔ PRW replacement is atomic and rejects stale generations and unsupported controls (11.674791ms)
+✔ PRW resident rejects unsupported axes, wrong arms and invalid selected states (6.30625ms)
+✔ PRW resident preserves requested ordering and validates duplicates (6.219333ms)
+✔ PRW resident invalidates diagnostic configuration and burn mutations (5.67575ms)
+PASS PRW resident SI/UTC-generation/PPE: 2 sources, 13 coefficients per axis, quality UNMEASURED, 1-source chunks
+✔ PRW trajectory exports nested PPE, honest quality, and bounded source chunks (8.584208ms)
+✔ canonical browser and isomorphic artifacts are identical (2.080125ms)
+✔ diagnostic browser factory loads same bytes and safely initializes allocation (23.120083ms)
+✔ artifact passes standards-aware SDK compliance (26.729375ms)
+✔ all method ports use the ratified canonical PRW identity (0.42875ms)
+✔ PLG codec round-trips every declared method and port (4.683458ms)
+✔ standalone artifact has canonical exports and only WASI imports (2.47ms)
+✔ embedded PLG matches authored manifest encoding (7.390458ms)
+✔ typed version request works through SDK browser command surface (17.220917ms)
+✔ typed version request works through SDK native WasmEdge surface (60.492875ms)
+✔ tudat two-body samples match the copied state history on browser (64.527417ms)
+✔ tudat two-body samples match the copied state history on wasmedge (357.859792ms)
+✔ tudat high-fidelity samples stay within the copied perturbation envelope on browser (37.395042ms)
+✔ tudat high-fidelity samples stay within the copied perturbation envelope on wasmedge (977.318042ms)
+CONTEXT J2000 km km/s JD2451545.0_TDB elapsed_seconds mu=398600.4418 relative_metric=Frobenius(D^-1_Phi_D)
+RESULT circular_references_0.125000 1.2057135295373323e-16 9.9999999999999998e-13 PASS
+RESULT kepler_circular_0.125000 4.9565093952486504e-16 1.0000000000000001e-09 PASS
+RESULT circular_references_0.500000 7.1858019103878959e-16 9.9999999999999998e-13 PASS
+RESULT kepler_circular_0.500000 2.5242904759333642e-15 1.0000000000000001e-09 PASS
+RESULT circular_references_1.000000 9.0108998518038805e-16 9.9999999999999998e-13 PASS
+RESULT kepler_circular_1.000000 1.2104894054113792e-14 1.0000000000000001e-09 PASS
+RESULT kepler_eccentric_0.125000 6.3543693597039642e-16 1.0000000000000001e-09 PASS
+RESULT kepler_eccentric_0.500000 4.4126132235947097e-15 1.0000000000000001e-09 PASS
+RESULT kepler_eccentric_1_orbit 3.041679099438583e-14 1.0000000000000001e-09 PASS
+RESULT J2_FD_step_convergence 5.9362256529886854e-10 9.9999999999999995e-07 PASS
+RESULT J2_FD_integration_convergence 1.0303903888304467e-09 9.9999999999999995e-07 PASS
+RESULT J2_STM_Richardson 7.2368748019204709e-10 9.9999999999999995e-07 PASS
+RESULT J2_determinant 1.7763568394002505e-14 1.0000000000000001e-09 PASS
+RESULT J2_symplectic 1.9669591394513481e-13 1.0000000000000001e-09 PASS
+RESULT covariance_1000_Wishart_z 1.6655686661933486 4 PASS
+RESULT covariance_1000_nonlinear_RMS 3.9877549125606949e-05 0.001 PASS
+METRIC covariance_1000_max_diagonal_relative=0.060416238344903395 seed=0x202609150003
+RESULT impulse_inertial_endpoint_state 6.261122863422356e-16 1e-10 PASS
+RESULT impulse_inertial_endpoint_STM 9.5941353310946812e-16 1.0000000000000001e-09 PASS
+RESULT impulse_chain_sample_0 1.7327585359744599e-08 9.9999999999999995e-07 PASS
+RESULT impulse_sample_epoch_0 0 0 PASS
+RESULT impulse_chain_sample_1 3.9381562122997807e-08 9.9999999999999995e-07 PASS
+RESULT impulse_sample_epoch_1 0 0 PASS
+RESULT impulse_chain_sample_2 6.2863913906285365e-08 9.9999999999999995e-07 PASS
+RESULT impulse_sample_epoch_2 0 0 PASS
+TIMING 24h_LEO_J2 analytic_before_ms=1.8862791699999999 finite_difference_ms=6.4343591700000005 analytic_after_ms=1.8419279200000001 speedup=3.4517176834187078 repetitions=100 nominal_plus_perturbed=13 sink=330373.94021344016
+PASS HPOP variational cases=24 failures=0
+✔ HPOP variational equations: independent Kepler STM, J2, covariance and timing (8598.431167ms)
+PASS reject nonfinite epoch at zero duration
+PASS reject nonfinite duration
+PASS reject nonfinite state at zero duration
+PASS reject invalid control at zero duration
+PASS reject nonfinite epoch at zero duration
+PASS reject nonfinite duration
+PASS reject nonfinite state at zero duration
+PASS reject invalid control at zero duration
+PASS refuse unsupported FD dispatcher without silent RKF78 fallback
+PASS Cowell finite difference dispatches Cash-Karp
+PASS reject legacy RK4 incomplete backward integration
+PASS unsupported force derivative fails
+PASS weather epoch restored after force derivative failure
+PASS finite difference exhaustion cannot report success
+PASS weather epoch restored after finite difference failure
+PASS reject invalid burn before sorting
+PASS HPOP variational controls cases=16 failures=0
+✔ STM controls reject invalid input, preserve dispatch and restore context (7298.987333ms)
+PASS WASM Kepler STM cases=4 max_relative_error=8.561445106097466e-15 tolerance=1e-9
+✔ WASM STM agrees with independent published-form Kepler oracle (45.955ms)
+PASS WASM covariance samples RTN-impulse DE440-drag-SRP
+✔ WASM covariance, cumulative samples, impulse chain and kernel force STM (57.714625ms)
+✔ WASM invalid STM controls return named errors and recover (31.898333ms)
+ℹ tests 53
+ℹ suites 0
+ℹ pass 53
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8734.2865

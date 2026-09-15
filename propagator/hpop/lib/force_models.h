@@ -780,6 +780,10 @@ struct ForceModelSet {
 
     // Current space weather
     SpaceWeatherData weather;
+    // Typed PRW separates the TDB dynamics clock from UTC weather metadata.
+    // Defaults retain the diagnostic API's established epoch convention.
+    bool explicitEpochContract{false};
+    double integrationEpochTDB{0};
 
     // Current Sun position (computed internally if not provided)
     Vec3 sunPosition;

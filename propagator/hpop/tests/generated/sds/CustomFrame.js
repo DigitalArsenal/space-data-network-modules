@@ -1,0 +1,21 @@
+export var CustomFrame = /*#__PURE__*/ function(CustomFrame) {
+    CustomFrame[CustomFrame["ECEF"] = 0] = "ECEF";
+    CustomFrame[CustomFrame["TEME"] = 1] = "TEME";
+    CustomFrame[CustomFrame["TEMEOFEPOCH"] = 2] = "TEMEOFEPOCH";
+    CustomFrame[CustomFrame["ENU"] = 3] = "ENU";
+    CustomFrame[CustomFrame["NED"] = 4] = "NED";
+    CustomFrame[CustomFrame["NEU"] = 5] = "NEU";
+    CustomFrame[CustomFrame["RIC"] = 6] = "RIC";
+    CustomFrame[CustomFrame["RTN"] = 7] = "RTN";
+    CustomFrame[CustomFrame["TVN"] = 8] = "TVN";
+    CustomFrame[CustomFrame["VVLH"] = 9] = "VVLH";
+    CustomFrame[CustomFrame["QSW"] = 10] = "QSW";
+    CustomFrame[CustomFrame["LTP"] = 11] = "LTP";
+    CustomFrame[CustomFrame["LVLH"] = 12] = "LVLH";
+    CustomFrame[CustomFrame["PNE"] = 13] = "PNE";
+    CustomFrame[CustomFrame["BRF"] = 14] = "BRF";
+    CustomFrame[CustomFrame["RSW"] = 15] = "RSW";
+    CustomFrame[CustomFrame["TNW"] = 16] = "TNW";
+    CustomFrame[CustomFrame["UVW"] = 17] = "UVW";
+    return CustomFrame;
+}({});

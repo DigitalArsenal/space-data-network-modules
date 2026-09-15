@@ -1,6 +1,7 @@
 #include "force_partials.h"
 #include "astrodynamics.h"
 #include "environment_models.h"
+#include "time_convert.h"
 
 #include <algorithm>
 #include <cmath>
@@ -227,12 +228,14 @@ V cannonball(const V& r,const Vec3& sun,const SRPForceConfig& c) {
 
 double density(const Vec3& r,double jd,const ForceModelSet& f) {
     const double alt=r.magnitude()-RE_EARTH;
+    const double atmosphereJD=f.explicitEpochContract
+        ? timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(jd))) : jd;
     switch(f.dragModel){
         case DragModelType::Exponential:return alt>2500 ? 0 : exponentialAtmosphereDensity(std::max(0.0,alt));
         case DragModelType::HarrisPriester:{const auto sun=getSunPosition(jd);return computeHarrisPriester(r,sun.valid?sun.position:Vec3(1,0,0),f.harrisPriesterExponent).density;}
         case DragModelType::NRLMSISE00:{
             AtmosphereConfig c;c.model=AtmosphereModelType::NRLMSISE00;c.includeWinds=f.drag.includeWinds;c.coRotatingAtmosphere=f.drag.coRotatingAtmosphere;c.diurnalVariation=f.nrlmsise00.diurnalVariation;c.geomagneticEffects=f.nrlmsise00.geomagneticActivity;c.minAltitude=f.drag.minAltitude;c.maxAltitude=f.drag.maxAltitude;
-            return computeNRLMSISE00(r,jd,f.weather,c).density;
+            return computeNRLMSISE00(r,atmosphereJD,f.weather,c).density;
         }
         case DragModelType::USSA1976:
             if(alt<f.drag.minAltitude || alt>f.drag.maxAltitude)return 0;
@@ -241,12 +244,12 @@ double density(const Vec3& r,double jd,const ForceModelSet& f) {
             switch(f.drag.model){
                 case DragModelType::Exponential:return exponentialAtmosphereDensity(alt);
                 case DragModelType::USSA1976:return computeUSSA1976(alt).density;
-                case DragModelType::JB2008:return computeJB2008(r,jd,f.weather).density;
-                case DragModelType::DTM2020:return computeDTM2020(r,jd,f.weather).density;
-                default:{AtmosphereConfig c;c.minAltitude=f.drag.minAltitude;c.maxAltitude=f.drag.maxAltitude;c.coRotatingAtmosphere=f.drag.coRotatingAtmosphere;c.includeWinds=f.drag.includeWinds;return computeNRLMSISE00(r,jd,f.weather,c).density;}
+                case DragModelType::JB2008:return computeJB2008(r,atmosphereJD,f.weather).density;
+                case DragModelType::DTM2020:return computeDTM2020(r,atmosphereJD,f.weather).density;
+                default:{AtmosphereConfig c;c.minAltitude=f.drag.minAltitude;c.maxAltitude=f.drag.maxAltitude;c.coRotatingAtmosphere=f.drag.coRotatingAtmosphere;c.includeWinds=f.drag.includeWinds;return computeNRLMSISE00(r,atmosphereJD,f.weather,c).density;}
             }
-        case DragModelType::JB2008:return computeJB2008(r,jd,f.weather).density;
-        case DragModelType::DTM2020:return computeDTM2020(r,jd,f.weather).density;
+        case DragModelType::JB2008:return computeJB2008(r,atmosphereJD,f.weather).density;
+        case DragModelType::DTM2020:return computeDTM2020(r,atmosphereJD,f.weather).density;
     }
     return 0;
 }

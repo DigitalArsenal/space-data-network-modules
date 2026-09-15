@@ -1,0 +1,17 @@
+✔ canonical browser and isomorphic artifacts are identical (2.13275ms)
+✔ diagnostic browser factory loads same bytes and safely initializes allocation (16.095875ms)
+✔ artifact passes standards-aware SDK compliance (30.950834ms)
+✔ all method ports use the ratified canonical PRW identity (0.265334ms)
+✔ PLG codec round-trips every declared method and port (3.090042ms)
+✔ standalone artifact has canonical exports and only WASI imports (1.813792ms)
+✔ embedded PLG matches authored manifest encoding (5.397792ms)
+✔ typed version request works through SDK browser command surface (16.97025ms)
+✔ typed version request works through SDK native WasmEdge surface (61.73ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1168.858666

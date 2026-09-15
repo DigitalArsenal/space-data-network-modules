@@ -1,0 +1,19 @@
+
+> @orbpro/plugin-hpop@1.0.0 check:compliance
+> node check-compliance.mjs
+
+{
+  "ok": true,
+  "standards": "1.220.0",
+  "errors": 0,
+  "warnings": 10,
+  "checks": [
+    "manifest",
+    "artifact"
+  ],
+  "plgRoundTrip": true,
+  "issues": [],
+  "warningCodes": [
+    "no-aligned-peer"
+  ]
+}

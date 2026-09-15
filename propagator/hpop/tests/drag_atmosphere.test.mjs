@@ -1,3 +1,4 @@
+import { invokeTypedRequest as invokeJsonRequest } from './lib/prwCodec.mjs';
 /**
  * HPOP atmosphere + drag tests against PUBLISHED reference values only.
  *
@@ -22,8 +23,7 @@ import test from "node:test";
 import {
   STANDALONE_RUNTIME_KINDS,
   createStandaloneHarnessOrSkip,
-  invokeJsonRequest,
-} from "../../../tests/lib/isomorphicHarness.mjs";
+} from "space-data-module-sdk/testing/isomorphic";
 
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 
@@ -49,7 +49,7 @@ function semiMajorAxisKm(positionKm, velocityKmS) {
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   test(`NRLMSISE-00 canonical test vectors reproduce on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, ISOMORPHIC_WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, ISOMORPHIC_WASM_PATH, t, {enableThreads:true});
     if (!harness) {
       return;
     }
@@ -107,7 +107,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`US76 path returns published Table I values on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, ISOMORPHIC_WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, ISOMORPHIC_WASM_PATH, t, {enableThreads:true});
     if (!harness) {
       return;
     }
@@ -134,7 +134,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`NRLMSISE-00 density at 400 km stays in published bounds on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, ISOMORPHIC_WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, ISOMORPHIC_WASM_PATH, t, {enableThreads:true});
     if (!harness) {
       return;
     }
@@ -167,7 +167,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`drag-enabled propagation decays an ISS-like orbit plausibly on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, ISOMORPHIC_WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, ISOMORPHIC_WASM_PATH, t, {enableThreads:true});
     if (!harness) {
       return;
     }

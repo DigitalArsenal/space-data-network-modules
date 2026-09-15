@@ -1,0 +1,50 @@
+import { CelestialFrameWrapper, CelestialFrameWrapperT } from './CelestialFrameWrapper.js';
+import { CustomFrameWrapper, CustomFrameWrapperT } from './CustomFrameWrapper.js';
+import { OrbitFrameWrapper, OrbitFrameWrapperT } from './OrbitFrameWrapper.js';
+import { RFMCoordinateSystemWrapper, RFMCoordinateSystemWrapperT } from './RFMCoordinateSystemWrapper.js';
+import { SpacecraftFrameWrapper, SpacecraftFrameWrapperT } from './SpacecraftFrameWrapper.js';
+export var RFMUnion = /*#__PURE__*/ function(RFMUnion) {
+    RFMUnion[RFMUnion["NONE"] = 0] = "NONE";
+    RFMUnion[RFMUnion["CelestialFrameWrapper"] = 1] = "CelestialFrameWrapper";
+    RFMUnion[RFMUnion["SpacecraftFrameWrapper"] = 2] = "SpacecraftFrameWrapper";
+    RFMUnion[RFMUnion["OrbitFrameWrapper"] = 3] = "OrbitFrameWrapper";
+    RFMUnion[RFMUnion["CustomFrameWrapper"] = 4] = "CustomFrameWrapper";
+    RFMUnion[RFMUnion["RFMCoordinateSystemWrapper"] = 5] = "RFMCoordinateSystemWrapper";
+    return RFMUnion;
+}({});
+export function unionToRfmunion(type, accessor) {
+    switch(RFMUnion[type]){
+        case 'NONE':
+            return null;
+        case 'CelestialFrameWrapper':
+            return accessor(new CelestialFrameWrapper());
+        case 'SpacecraftFrameWrapper':
+            return accessor(new SpacecraftFrameWrapper());
+        case 'OrbitFrameWrapper':
+            return accessor(new OrbitFrameWrapper());
+        case 'CustomFrameWrapper':
+            return accessor(new CustomFrameWrapper());
+        case 'RFMCoordinateSystemWrapper':
+            return accessor(new RFMCoordinateSystemWrapper());
+        default:
+            return null;
+    }
+}
+export function unionListToRfmunion(type, accessor, index) {
+    switch(RFMUnion[type]){
+        case 'NONE':
+            return null;
+        case 'CelestialFrameWrapper':
+            return accessor(index, new CelestialFrameWrapper());
+        case 'SpacecraftFrameWrapper':
+            return accessor(index, new SpacecraftFrameWrapper());
+        case 'OrbitFrameWrapper':
+            return accessor(index, new OrbitFrameWrapper());
+        case 'CustomFrameWrapper':
+            return accessor(index, new CustomFrameWrapper());
+        case 'RFMCoordinateSystemWrapper':
+            return accessor(index, new RFMCoordinateSystemWrapper());
+        default:
+            return null;
+    }
+}

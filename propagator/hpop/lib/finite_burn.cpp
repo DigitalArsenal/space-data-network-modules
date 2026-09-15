@@ -58,6 +58,15 @@ bool direction(const FiniteBurn& b, double t, const Vec3& r, const Vec3& v,
     }
     return true;
 }
+double throttleAt(const FiniteBurn& burn,double t,double held) {
+    if(!burn.linearThrottle||burn.throttle.empty())return held;
+    if(t<=burn.throttle.front().seconds)return burn.throttle.front().throttle;
+    for(size_t i=1;i<burn.throttle.size();++i)if(t<burn.throttle[i].seconds) {
+        const auto& a=burn.throttle[i-1];const auto& b=burn.throttle[i];
+        return a.throttle+(b.throttle-a.throttle)*(t-a.seconds)/(b.seconds-a.seconds);
+    }
+    return burn.throttle.back().throttle;
+}
 void derivative(double t,const double* y,double* f,void* opaque) {
     auto& c=*static_cast<Context*>(opaque);std::fill(f,f+N,0.0);
     if(c.error)return;
@@ -80,13 +89,15 @@ void derivative(double t,const double* y,double* f,void* opaque) {
         const auto other=ForceModel::ComputeAccelerationPartials(r,v,jd,independent,c.density);
         for(int i=0;i<3;++i)A[i+3][6]=-(component(a.acceleration,i)-component(other.acceleration,i))/mass;
     }
-    for(size_t k=0;k<c.burns.size();++k) if(c.status[k]==1&&c.throttle[k]>0) {
-        const auto& b=c.burns[k];Vec3 u,du[6];
+    for(size_t k=0;k<c.burns.size();++k) if(c.status[k]==1) {
+        const auto& b=c.burns[k];const double throttle=throttleAt(b,t,c.throttle[k]);
+        if(throttle<=0)continue;
+        Vec3 u,du[6];
         if(!direction(b,t,r,v,u,du)){c.error="Singular finite-burn direction or orbital frame.";return;}
         const bool acceleration=b.accelerationKmS2>0;
         const double thrust=acceleration?1000*mass*b.accelerationKmS2:b.thrustNewtons;
-        const double mag=thrust*c.throttle[k]/(1000*mass);
-        const double flow=thrust*c.throttle[k]/(b.ispSeconds*g0);
+        const double mag=thrust*throttle/(1000*mass);
+        const double flow=thrust*throttle/(b.ispSeconds*g0);
         f[6]-=flow;
         for(int i=0;i<3;++i) {
             f[i+3]+=mag*component(u,i);
@@ -199,12 +210,13 @@ FiniteBurnResult PropagateFiniteBurns(const StateVector& initial,double mass,dou
         for(const auto& p:b.throttle){if(!std::isfinite(p.seconds+p.throttle)||p.seconds<0||p.seconds<=last||p.throttle<0||p.throttle>1)
             return fail("Throttle times must be strictly increasing, nonnegative; throttle must be in [0,1].");last=p.seconds;}
         for(const auto& e:{b.startEvent,b.stopEvent})if(e.kind<BurnEventKind::None||e.kind>BurnEventKind::Mass||
-            !std::isfinite(e.goal)||e.direction< -1||e.direction>1)return fail("Invalid finite-burn event condition.");
+            !std::isfinite(e.goal)||!std::isfinite(e.goalTolerance)||e.goalTolerance<0||e.direction< -1||e.direction>1)return fail("Invalid finite-burn event condition.");
     }
     auto kicks=impulses;std::stable_sort(kicks.begin(),kicks.end(),[](const auto&a,const auto&b){return a.epoch<b.epoch;});
     for(const auto& b:kicks)if(!std::isfinite(b.epoch)||!finite(b.deltaV))return fail("Invalid impulsive maneuver.");
     Context c{forces,burns,density,initial.epoch,std::vector<int>(burns.size()),std::vector<double>(burns.size(),1)};
-    c.forces.weather.epoch=initial.epoch;
+    if(c.forces.explicitEpochContract)c.forces.integrationEpochTDB=initial.epoch;
+    else c.forces.weather.epoch=initial.epoch;
     double y[N]{},next[N],error[N];
     for(int j=0;j<3;++j){y[j]=component(initial.position,j);y[j+3]=component(initial.velocity,j);}y[6]=mass;
     for(int j=0;j<7;++j)y[7+j*7+j]=1;
@@ -280,6 +292,10 @@ FiniteBurnResult PropagateFiniteBurns(const StateVector& initial,double mass,dou
                 if(c.error)return false;*value=eventValue(e,local);return std::isfinite(*value);};
             if(endpointRoot)root=t+h;
             else if(!sdn::events::brentRoot(evaluate,t,t+h,a,b,eventTolerance,100,&root,&residual,&iterations))return fail("Finite-burn event refinement failed.");
+            if(e.goalTolerance>0) {
+                if(!evaluate(root,&residual)||std::abs(residual)>e.goalTolerance)
+                    return fail("ROOT_REFINEMENT_FAILED: PCE goal tolerance was not attained.");
+            }
             if(eventIndex>=0&&std::abs(root-eventTime)<=eventTolerance)return fail("Simultaneous state-triggered burn edges have ambiguous ordering.");
             if(eventIndex<0||root<eventTime){eventTime=root;eventIndex=int(k);selected=e;}
         }

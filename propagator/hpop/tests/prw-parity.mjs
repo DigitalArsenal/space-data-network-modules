@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { normalizeParityFixture,runParityHarness,formatParityReport } from 'space-data-module-sdk/testing';
+import { cases } from './prw-contract-fixture.mjs';
+const plan=await normalizeParityFixture({name:'TMPL lane13 PRW malformed classifications',threadCounts:[1,2,4,8],cases});
+const report=await runParityHarness({wasmPath:fileURLToPath(new URL('../dist/isomorphic/module.wasm',import.meta.url)),plan,timeoutMs:60000,log:console.log});
+console.log(formatParityReport(report));
+fs.mkdirSync(new URL('./evidence/lane13/',import.meta.url),{recursive:true});
+fs.writeFileSync(new URL('./evidence/lane13/prw-parity.json',import.meta.url),JSON.stringify(report,null,2)+'\n');
+assert.equal(report.ok,true,JSON.stringify(report.failures));
