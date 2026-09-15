@@ -1,0 +1,15 @@
+browser: socrates-workers-2 / workers 2
+{
+  "moduleSha256": "7ed526ea5b52954dedf4d49d76be1685bb2419631e7b7f5fe74cb33fc335a747",
+  "oracle": "CelesTrak SOCRATES Plus, 2026-03-10 committed snapshot; https://celestrak.org/SOCRATES/",
+  "frame": "TEME",
+  "timeScale": "UTC",
+  "tolerances": {
+    "tcaSeconds": 0.01,
+    "missMetres": 5,
+    "speedMetresPerSecond": 5
+  },
+  "toleranceRationale": "Proposal section8, tests/lib/caParityTolerances.mjs: NLRV timing, range quantization, speed regression.",
+  "ok": false,
+  "error": "Error: undefined at undefined:undefined"
+}

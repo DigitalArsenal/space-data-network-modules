@@ -67,11 +67,24 @@ npm run check:compliance
 npm run test:runtime-parity
 ```
 
-The last command attempts the same primary bytes in browser, native WasmEdge and
-Docker WasmEdge with worker counts 1/2/4/8. SDK 0.8.18 currently has command-host
-failures for wasi-threads; these gates remain failing rather than being replaced
-with another runtime. Browser direct-invoke numerical evidence and the actual
-failing gate results are in the [handoff](../../docs/tmpl-lane-14-conjunction-cqr-handoff.md).
+The last command checks the same primary bytes in real Chrome, native WasmEdge
+and Docker WasmEdge with worker counts 1/2/4/8. The browser serves the installed
+SDK worker chain under COOP/COEP. The installed stock WasmEdge CLIs lack the
+`wasi.thread-spawn` import, so verification builds a small WasmEdge C API host
+and supplies it through SDK launch plans. This host only provides threading
+and transport; calculations remain in the primary WASM artifact. Host build
+outputs are ignored under `.sdk-build/`.
+
+Measured results, source references, and limitations are in the
+[handoff](../../docs/tmpl-lane-14-conjunction-cqr-handoff.md). The eight large
+dataset checks require the ignored files documented below; checked-in snapshots
+run without those files.
+
+Catalog results emit at most 128 events per frame. Continue an identical request
+until `FINAL_CHUNK` is true, preserving its input `FRAME_ID`. Concurrent drains
+must use distinct input frame IDs because SDK 0.8.18 does not expose the PIV
+trace ID to guest continuation state. Failed pairs are counted, and the final
+response reports `incomplete-screening` when any evaluation failed.
 
 Authoritative numerical tests include the committed CelesTrak SOCRATES snapshot,
 closed-form constant-velocity encounters, the Gaussian/Rayleigh probability

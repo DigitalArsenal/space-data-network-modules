@@ -14,10 +14,13 @@ const sdkSource = path.resolve(sdkTesting, '..');
 const { resolveChromeBinary } = await import(path.join(sdkTesting, 'parityLanes.js'));
 
 export async function runThreadedBrowserLane(context) {
+  const factoryImport = context.publicWrapper
+    ? `import { createConjunctionAssessmentPlugin as createHarness } from ${JSON.stringify(path.join(root, 'index.js'))};`
+    : `import { createBrowserModuleHarness as createHarness } from 'space-data-module-sdk/host/browser-module';`;
   const source = `
-    import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
+    ${factoryImport}
     import { setBrowserWasiThreadWorkerBase } from ${JSON.stringify(path.join(sdkSource, 'host/wasiThreadHost.js'))};
-    setBrowserWasiThreadWorkerBase('/sdk/host/');
+    ${context.publicWrapper ? '' : "setBrowserWasiThreadWorkerBase('/sdk/host/');"}
     let spawnCount = 0;
     const NativeWorker = globalThis.Worker;
     globalThis.Worker = class extends NativeWorker {
@@ -26,8 +29,9 @@ export async function runThreadedBrowserLane(context) {
     self.onmessage = async ({ data }) => {
       let harness, stdout = new Uint8Array(), exitClass = 'ok', exitDetail = null;
       try {
-        harness = await createBrowserModuleHarness({ wasmSource: data.wasmBytes, surface: 'command',
+        harness = await createHarness({ wasmSource: data.wasmBytes, wasmBinary: data.wasmBytes, surface: 'command',
           args: ['module.wasm', ...data.args], env: data.env,
+          wasiThreadWorkerBaseUrl: '/sdk/host/',
           enableBrowserWasiThreads: true, maxThreads: data.caseId.startsWith('socrates') && data.threadCount > 1 ? data.threadCount * 2 : 0 });
         stdout = await harness.invokeRaw(data.stdinBytes);
       } catch (error) {
@@ -96,7 +100,11 @@ export async function runThreadedBrowserLane(context) {
   const timeout = setTimeout(() => rejectDone(Error(`Browser parity timed out after ${context.timeoutMs}ms`)), context.timeoutMs);
   try { return (await done).map(run => ({ ...run, stdout: new Uint8Array(Buffer.from(run.stdoutBase64, 'base64')), stderr: new Uint8Array() })); }
   finally {
-    clearTimeout(timeout); chrome.removeAllListeners('exit'); chrome.kill('SIGKILL'); server.close();
-    fs.rmSync(profile, { recursive: true, force: true });
+    clearTimeout(timeout); chrome.removeAllListeners('exit');
+    if (chrome.pid && chrome.exitCode === null && chrome.signalCode === null) {
+      await new Promise(resolve => { chrome.once('exit', resolve); chrome.kill('SIGKILL'); });
+    }
+    server.close();
+    try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }); } catch { /* Temporary-profile cleanup must not mask the runtime result. */ }
   }
 }

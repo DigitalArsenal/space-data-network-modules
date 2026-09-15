@@ -1,4 +1,8 @@
-import crypto from "node:crypto";
+// Signing is a Node-only convenience; browser WASM loading must not eagerly
+// resolve a Node built-in merely because it shares this public entrypoint.
+const crypto = typeof process !== "undefined" && process.versions?.node
+  ? (await import("node:crypto")).default
+  : null;
 
 import {
   decodePlgManifest,
@@ -45,6 +49,9 @@ function requireNonEmptyString(value, fieldName) {
 }
 
 function normalizeCdmPayload(cdmPayload) {
+  if (!crypto) {
+    throw new Error("CDM signing and verification require the Node.js entrypoint.");
+  }
   if (cdmPayload instanceof Uint8Array) {
     return Buffer.from(cdmPayload.buffer, cdmPayload.byteOffset, cdmPayload.byteLength);
   }
@@ -423,11 +430,18 @@ export async function loadConjunctionAssessmentPlugin(options = {}) {
   }
 
   const wasmBytes = await resolveConjunctionWasmBytes(options);
+  // SDK 0.8.18 drops the per-harness worker base while constructing its inner
+  // context. Its public browser setter remains the supported bundled-host path.
+  if (options.wasiThreadWorkerBaseUrl != null &&
+      !(typeof process !== "undefined" && process.versions?.node)) {
+    const { setBrowserWasiThreadWorkerBase } = await import("space-data-module-sdk");
+    setBrowserWasiThreadWorkerBase(options.wasiThreadWorkerBaseUrl);
+  }
   const harness = await createBrowserModuleHarness({
     wasmSource: wasmBytes,
     surface: options.surface ?? "direct",
-    enableThreads: options.enableThreads ?? true,
-    threadCount: options.threadCount,
+    enableBrowserWasiThreads: options.enableBrowserWasiThreads ?? options.enableThreads ?? true,
+    maxThreads: options.maxThreads ?? options.threadCount,
     wasiThreadWorkerBaseUrl: options.wasiThreadWorkerBaseUrl,
     args: options.args,
     env: options.env,
