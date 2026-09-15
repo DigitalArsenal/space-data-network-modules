@@ -1,0 +1,2 @@
+parity PASS fixture=TMPL lane13 canonical PRW finite burns artifact module=7305c5ef6db04cfb lanes=[browser(180 runs, 2241ms), wasmedge(180 runs, 14570ms), docker-wasmedge(180 runs, 35582ms)] comparisons=1035
+  45 case(s) byte-identical across 3 lane(s).

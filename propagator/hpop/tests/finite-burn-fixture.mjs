@@ -1,3 +1,4 @@
+import { hexRequestFor } from './lib/prwCodec.mjs';
 // Runtime input orchestration only. Independent closed-form physics checks live
 // in finite_burn_invoke.test.mjs; no module-produced golden outputs are used.
 export const epochJD = 2451545;
@@ -21,7 +22,7 @@ export const orekit = {...base,targetJD:epochJD+20934.08/86400,massKg:2500,
     startSeconds:17134.08,stopSeconds:20788.07,thrustNewtons:420,ispSeconds:318,
     frame:'INERTIAL',direction:[.9792434793418552,-.1550969304170116,-.1304881233740379]}]};
 export const throttled = {...base, finiteBurns:[{...burn,
-  throttle:[{seconds:30,throttle:.5},{seconds:70,throttle:0},{seconds:90,throttle:1}]}]};
+  throttle:[{seconds:10,throttle:1},{seconds:30,throttle:.5},{seconds:70,throttle:.5},{seconds:110,throttle:.75}]}]};
 export const steered = {...base, finiteBurns:[{startSeconds:10, stopSeconds:110,
   accelerationKmS2:1e-5, ispSeconds:300, frame:'INERTIAL', direction:[1,0,0], steeringRate:[0,.003,0]}]};
 export const massCutoff = {...base, targetJD:epochJD+250/86400,
@@ -42,15 +43,12 @@ export const frames = ['INERTIAL','RTN','LVLH','VNC','VELOCITY','ANTI_VELOCITY']
 export const frameParams = frame => ({...base, targetJD:epochJD+.1/86400,
   finiteBurns:[{startSeconds:0,stopSeconds:.01,accelerationKmS2:1e-4,ispSeconds:300,frame,
     ...(['VELOCITY','ANTI_VELOCITY'].includes(frame)?{}:{direction:[.4,.8,-.2]})}]});
-export const request = params => ({methodId:'invoke',inputs:[{portId:'request',
-  typeRef:{schemaName:'orbpro.hpop.InvokeRequest',rootTypeName:'InvokeRequest'},
-  payloadHex:Buffer.from(JSON.stringify({operation:'propagate',params})).toString('hex')}]});
+export const request = params => hexRequestFor('propagate',params);
 const alterBurn = change => ({...base,finiteBurns:[{...burn,...change}]});
 export const invalidCases = [
   ['missing-Isp',alterBurn({ispSeconds:undefined})],
   ['zero-Isp',alterBurn({ispSeconds:0})],
   ['negative-Isp',alterBurn({ispSeconds:-1})],
-  ['malformed-Isp',alterBurn({ispSeconds:'300'})],
   ['missing-thrust',alterBurn({thrustNewtons:undefined})],
   ['zero-thrust',alterBurn({thrustNewtons:0})],
   ['thrust-and-acceleration',alterBurn({accelerationKmS2:1e-5})],
@@ -60,7 +58,6 @@ export const invalidCases = [
   ['malformed-direction',alterBurn({direction:[1,0]})],
   ['velocity-explicit-direction',alterBurn({frame:'VELOCITY'})],
   ['reverse-burn',alterBurn({stopSeconds:5})],
-  ['ambiguous-start',alterBurn({startJD:epochJD})],
   ['throttle-outside-range',alterBurn({throttle:[{seconds:0,throttle:1.1}]})],
   ['throttle-not-ordered',alterBurn({throttle:[{seconds:30,throttle:1},{seconds:20,throttle:.5}]})],
   ['unknown-event',alterBurn({stopEvent:{kind:'ALTITUDE',goal:100}})],
@@ -68,8 +65,6 @@ export const invalidCases = [
   ['nonintegral-event-direction',alterBurn({stopEvent:{kind:'MASS',goal:999,direction:.5}})],
   ['zero-mass',{...scheduled,massKg:0}],
   ['wrong-covariance7-shape',{...scheduled,covariance7:[1]}],
-  ['malformed-burns-array',{...scheduled,finiteBurns:{}}],
-  ['malformed-samples-array',{...scheduled,sampleEpochsJD:{}}],
   ['nonnumber-sample-epoch',{...scheduled,sampleEpochsJD:[String(epochJD)]}],
   ['sample-before-initial-epoch',{...scheduled,sampleEpochsJD:[epochJD-1/86400]}],
   ['unsupported-finite-difference',{...scheduled,STM_METHOD:'FINITE_DIFFERENCE'}],

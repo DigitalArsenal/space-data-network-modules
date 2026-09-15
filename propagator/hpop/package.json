@@ -5,15 +5,18 @@
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
-    "test": "node --test tests/sdk_compat.test.mjs tests/direct-entry.test.mjs tests/tudat_wasm_derived.test.mjs tests/drag_atmosphere.test.mjs tests/batch_all_positions.test.mjs tests/path_state_vectors.test.mjs tests/force_partials.test.mjs tests/variational.test.mjs tests/variational_controls.test.mjs tests/variational_invoke.test.mjs tests/finite_burn.test.mjs tests/finite_burn_invoke.test.mjs",
+    "test": "node --test tests/sdk_compat.test.mjs tests/direct-entry.test.mjs tests/tudat_wasm_derived.test.mjs tests/drag_atmosphere.test.mjs tests/batch_all_positions.test.mjs tests/path_state_vectors.test.mjs tests/force_partials.test.mjs tests/variational.test.mjs tests/variational_controls.test.mjs tests/variational_invoke.test.mjs tests/finite_burn.test.mjs tests/finite_burn_invoke.test.mjs tests/prw_contract.test.mjs tests/prw_resident.test.mjs tests/kernel_invoke.test.mjs tests/de440_force.test.mjs",
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs",
     "test:tudat": "node --test tests/tudat_wasm_derived.test.mjs",
     "test:stm": "node --test tests/force_partials.test.mjs tests/variational.test.mjs tests/variational_controls.test.mjs tests/variational_invoke.test.mjs",
     "test:stm-parity": "node tests/variational-parity.mjs",
     "bench:stm": "node tests/variational-benchmark.mjs",
-    "check:sdk-build": "node tests/sdk-build-preflight.mjs",
+    "check:sdk-build": "node build.mjs",
     "test:finite": "node --test tests/finite_burn.test.mjs tests/finite_burn_invoke.test.mjs",
-    "test:finite-parity": "node tests/finite-burn-parity.mjs"
+    "test:finite-parity": "node tests/finite-burn-parity.mjs",
+    "build": "node build.mjs",
+    "check:compliance": "node check-compliance.mjs",
+    "generate:bindings": "node generate-sds-bindings.mjs"
   },
   "main": "index.js",
   "exports": {
@@ -26,10 +29,11 @@
     "index.js"
   ],
   "devDependencies": {
+    "esbuild": "0.28.0",
     "flatbuffers": "^25.9.23",
     "flatc-wasm": "^26.1.32",
-    "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk",
-    "spacedatastandards.org": "^1.195.0"
+    "space-data-module-sdk": "0.8.18",
+    "spacedatastandards.org": "1.220.0"
   },
   "keywords": [
     "orbpro",

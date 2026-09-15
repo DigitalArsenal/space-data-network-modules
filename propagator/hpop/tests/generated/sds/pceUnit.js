@@ -1,0 +1,27 @@
+export var pceUnit = /*#__PURE__*/ function(pceUnit) {
+    pceUnit[pceUnit["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+    pceUnit[pceUnit["DIMENSIONLESS"] = 1] = "DIMENSIONLESS";
+    pceUnit[pceUnit["METRE"] = 2] = "METRE";
+    pceUnit[pceUnit["METRE_PER_SECOND"] = 3] = "METRE_PER_SECOND";
+    pceUnit[pceUnit["METRE_PER_SECOND_SQUARED"] = 4] = "METRE_PER_SECOND_SQUARED";
+    pceUnit[pceUnit["METRE_SQUARED"] = 5] = "METRE_SQUARED";
+    pceUnit[pceUnit["METRE_SQUARED_PER_SECOND"] = 6] = "METRE_SQUARED_PER_SECOND";
+    pceUnit[pceUnit["METRE_SQUARED_PER_SECOND_SQUARED"] = 7] = "METRE_SQUARED_PER_SECOND_SQUARED";
+    pceUnit[pceUnit["METRE_CUBED"] = 8] = "METRE_CUBED";
+    pceUnit[pceUnit["RADIAN"] = 9] = "RADIAN";
+    pceUnit[pceUnit["RADIAN_PER_SECOND"] = 10] = "RADIAN_PER_SECOND";
+    pceUnit[pceUnit["SECOND"] = 11] = "SECOND";
+    pceUnit[pceUnit["DAY"] = 12] = "DAY";
+    pceUnit[pceUnit["KILOGRAM"] = 13] = "KILOGRAM";
+    pceUnit[pceUnit["KILOGRAM_PER_SECOND"] = 14] = "KILOGRAM_PER_SECOND";
+    pceUnit[pceUnit["KILOGRAM_PER_METRE_CUBED"] = 15] = "KILOGRAM_PER_METRE_CUBED";
+    pceUnit[pceUnit["KILOGRAM_METRE_SQUARED"] = 16] = "KILOGRAM_METRE_SQUARED";
+    pceUnit[pceUnit["NEWTON"] = 17] = "NEWTON";
+    pceUnit[pceUnit["NEWTON_METRE"] = 18] = "NEWTON_METRE";
+    pceUnit[pceUnit["WATT"] = 19] = "WATT";
+    pceUnit[pceUnit["PASCAL"] = 20] = "PASCAL";
+    pceUnit[pceUnit["KELVIN"] = 21] = "KELVIN";
+    pceUnit[pceUnit["METRE_SQUARED_PER_KILOGRAM"] = 22] = "METRE_SQUARED_PER_KILOGRAM";
+    pceUnit[pceUnit["PROVIDER_DEFINED"] = 100] = "PROVIDER_DEFINED";
+    return pceUnit;
+}({});

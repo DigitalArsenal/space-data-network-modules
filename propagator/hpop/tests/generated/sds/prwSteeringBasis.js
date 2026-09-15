@@ -1,0 +1,9 @@
+export var prwSteeringBasis = /*#__PURE__*/ function(prwSteeringBasis) {
+    prwSteeringBasis[prwSteeringBasis["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+    prwSteeringBasis[prwSteeringBasis["INTEGRATION_FRAME"] = 1] = "INTEGRATION_FRAME";
+    prwSteeringBasis[prwSteeringBasis["RTN_AXES"] = 2] = "RTN_AXES";
+    prwSteeringBasis[prwSteeringBasis["VNC_AXES"] = 3] = "VNC_AXES";
+    prwSteeringBasis[prwSteeringBasis["ALONG_VELOCITY"] = 4] = "ALONG_VELOCITY";
+    prwSteeringBasis[prwSteeringBasis["OPPOSITE_VELOCITY"] = 5] = "OPPOSITE_VELOCITY";
+    return prwSteeringBasis;
+}({});

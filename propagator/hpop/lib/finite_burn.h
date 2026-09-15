@@ -12,6 +12,9 @@ struct BurnEvent {
     BurnEventKind kind = BurnEventKind::None;
     double goal = 0;
     int direction = 0;
+    // Positive for a PRW/PCE SI goal tolerance converted to these km/kg units.
+    // Zero retains the established diagnostic time-refinement contract.
+    double goalTolerance = 0;
 };
 struct ThrottlePoint { double seconds = 0, throttle = 1; };
 struct FiniteBurn {
@@ -24,6 +27,8 @@ struct FiniteBurn {
     Vec3 direction{1,0,0}, steeringRate{0,0,0};
     // Zero-order hold; default 1 before the first point. Range [0,1].
     std::vector<ThrottlePoint> throttle;
+    // PRW requires piecewise-linear throttle; legacy diagnostics use hold.
+    bool linearThrottle = false;
 };
 struct FiniteBurnSummary {
     double deltaVKmS = 0, propellantKg = 0;

@@ -1,0 +1,22 @@
+export var timingStandard = /*#__PURE__*/ function(timingStandard) {
+    timingStandard[timingStandard["GMST"] = 0] = "GMST";
+    timingStandard[timingStandard["GPS"] = 1] = "GPS";
+    timingStandard[timingStandard["MET"] = 2] = "MET";
+    timingStandard[timingStandard["MRT"] = 3] = "MRT";
+    timingStandard[timingStandard["SCLK"] = 4] = "SCLK";
+    timingStandard[timingStandard["TAI"] = 5] = "TAI";
+    timingStandard[timingStandard["TCB"] = 6] = "TCB";
+    timingStandard[timingStandard["TDB"] = 7] = "TDB";
+    timingStandard[timingStandard["TCG"] = 8] = "TCG";
+    timingStandard[timingStandard["TT"] = 9] = "TT";
+    timingStandard[timingStandard["UT1"] = 10] = "UT1";
+    timingStandard[timingStandard["UTC"] = 11] = "UTC";
+    timingStandard[timingStandard["GLONASS"] = 12] = "GLONASS";
+    timingStandard[timingStandard["GST"] = 13] = "GST";
+    timingStandard[timingStandard["QZSS"] = 14] = "QZSS";
+    timingStandard[timingStandard["BDT"] = 15] = "BDT";
+    timingStandard[timingStandard["NAVIC"] = 16] = "NAVIC";
+    timingStandard[timingStandard["SBAS"] = 17] = "SBAS";
+    timingStandard[timingStandard["A1"] = 18] = "A1";
+    return timingStandard;
+}({});

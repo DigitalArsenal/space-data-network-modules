@@ -1,0 +1,2 @@
+parity PASS fixture=TMPL lane13 canonical PRW variational artifact module=7305c5ef6db04cfb lanes=[browser(40 runs, 1336ms), wasmedge(40 runs, 7488ms), docker-wasmedge(40 runs, 13093ms)] comparisons=230
+  10 case(s) byte-identical across 3 lane(s).
