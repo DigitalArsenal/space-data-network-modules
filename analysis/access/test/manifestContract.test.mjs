@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { fileURLToPath, URL } from "node:url";
 
-import * as flatbuffers from "../../../../../ancillary-packages/space-data-module-sdk/src/vendor/flatbuffers/flatbuffers.js";
+import * as flatbuffers from "flatbuffers";
 import { createAccessAnalyzer } from "../index.js";
 import { validatePluginArtifact } from "space-data-module-sdk/compliance";
 import {
@@ -14,18 +14,15 @@ import {
   InvokeSurface,
   PluginFamily,
 } from "space-data-module-sdk/manifest";
-import {
-  ACW,
-  ACWT,
-  ACWElevationMaskPointT,
-  ACWGroundStationT,
-  ACWRefractionModelT,
-  ACWRequestT,
-  ACWStateSampleT,
-  acwOperationCode,
-  acwRefractionModelKind,
-  acwResultStatus,
-} from "../../../../spacedatastandards.org/lib/js/ACW/main.js";
+import { ACW, ACWT } from "spacedatastandards.org/lib/js/ACW/ACW.js";
+import { ACWElevationMaskPointT } from "spacedatastandards.org/lib/js/ACW/ACWElevationMaskPoint.js";
+import { ACWGroundStationT } from "spacedatastandards.org/lib/js/ACW/ACWGroundStation.js";
+import { ACWRefractionModelT } from "spacedatastandards.org/lib/js/ACW/ACWRefractionModel.js";
+import { ACWRequestT } from "spacedatastandards.org/lib/js/ACW/ACWRequest.js";
+import { ACWStateSampleT } from "spacedatastandards.org/lib/js/ACW/ACWStateSample.js";
+import { acwOperationCode } from "spacedatastandards.org/lib/js/ACW/acwOperationCode.js";
+import { acwRefractionModelKind } from "spacedatastandards.org/lib/js/ACW/acwRefractionModelKind.js";
+import { acwResultStatus } from "spacedatastandards.org/lib/js/ACW/acwResultStatus.js";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL(
@@ -188,7 +185,7 @@ test("Access analyzer exposes the expected manifest metadata", async function ()
       "dist/isomorphic/module.wasm",
     );
     assert.equal(analyzer.manifest.buildArtifacts[0].target, "browser,wasmedge");
-    assert.deepEqual(analyzer.manifest.invokeSurfaces, [InvokeSurface.DIRECT]);
+    assert.deepEqual(analyzer.manifest.invokeSurfaces, [InvokeSurface.DIRECT, InvokeSurface.COMMAND]);
     assert.deepEqual(analyzer.manifest.runtimeTargets, ["browser", "wasmedge"]);
     assert.equal(analyzer.metadata.id, "com.orbpro.access");
     assert.equal(analyzer.metadata.name, "Access Analysis");
@@ -271,8 +268,8 @@ test("Access stream invoke returns a decoded SDK response envelope", async () =>
     });
 
     assert.equal(response.statusCode, 400);
-    assert.equal(response.errorCode, "missing-access-request");
-    assert.match(response.errorMessage, /ACW request frame/);
+    assert.equal(response.errorCode, "missing-required-input");
+    assert.equal(response.errorMessage, "Missing required input port: request");
     assert.deepEqual(response.outputs, []);
   } finally {
     analyzer.destroy();

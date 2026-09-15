@@ -17,11 +17,17 @@
   ],
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
-    "build": "node build.js",
-    "test": "node --test test/*.test.mjs",
-    "test:sdk-compat": "node --test test/manifestContract.test.mjs"
+    "build": "node build.mjs",
+    "test": "node --test test/accessAnalyzer.test.mjs tests/*.test.mjs",
+    "test:sdk-compat": "node --test tests/sdk_compat.test.mjs",
+    "check:compliance": "node check-compliance.mjs",
+    "test:parity": "node tests/parity.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "^0.8.4"
+    "esbuild": "0.28.2",
+    "flatbuffers": "25.9.23",
+    "flatc-wasm": "26.1.32",
+    "space-data-module-sdk": "0.8.18",
+    "spacedatastandards.org": "1.217.0"
   }
 }
