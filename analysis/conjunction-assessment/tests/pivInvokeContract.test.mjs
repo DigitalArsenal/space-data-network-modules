@@ -4,19 +4,16 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import * as flatbuffers from "../../../../spacedatastandards.org/node_modules/flatbuffers/mjs/flatbuffers.js";
-import {
-  bufferMutability,
-  bufferOwnership,
-  FlatBufferTypeRefT,
-  payloadWireFormat,
-  PIV,
-  PIVRequestT,
-  PIVResponseT,
-  PIVT,
-  pivStatus,
-  TABT,
-} from "../../../../spacedatastandards.org/lib/js/PIV/main.js";
+import * as flatbuffers from "flatbuffers";
+import { bufferMutability } from "spacedatastandards.org/lib/js/PIV/bufferMutability.js";
+import { bufferOwnership } from "spacedatastandards.org/lib/js/PIV/bufferOwnership.js";
+import { FlatBufferTypeRefT } from "spacedatastandards.org/lib/js/PIV/FlatBufferTypeRef.js";
+import { payloadWireFormat } from "spacedatastandards.org/lib/js/PIV/payloadWireFormat.js";
+import { PIV, PIVT } from "spacedatastandards.org/lib/js/PIV/PIV.js";
+import { PIVRequestT } from "spacedatastandards.org/lib/js/PIV/PIVRequest.js";
+import { PIVResponseT } from "spacedatastandards.org/lib/js/PIV/PIVResponse.js";
+import { pivStatus } from "spacedatastandards.org/lib/js/PIV/pivStatus.js";
+import { TABT } from "spacedatastandards.org/lib/js/PIV/TAB.js";
 
 const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();

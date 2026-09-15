@@ -18,7 +18,10 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
+
+import { createRequire } from "node:module";
+import * as flatbuffers from "flatbuffers";
 
 import { FlatcRunner } from "flatc-wasm";
 
@@ -26,8 +29,7 @@ import { relVelStratum } from "./caParityTolerances.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, "..", "..");
-const MAIN_PACKAGES_ROOT = path.resolve(PACKAGE_ROOT, "..", "..", "..");
-const SDS_ROOT = path.join(MAIN_PACKAGES_ROOT, "spacedatastandards.org");
+const SDS_ROOT = path.dirname(createRequire(import.meta.url).resolve("spacedatastandards.org/package.json"));
 const SINGLETHREAD_WASM_PATH = path.join(
   PACKAGE_ROOT,
   "dist",
@@ -35,24 +37,14 @@ const SINGLETHREAD_WASM_PATH = path.join(
   "module.wasm",
 );
 
-// PIV codec + flatbuffers are loaded from the sibling spacedatastandards.org
-// checkout (same source pivInvokeContract.test.mjs uses). Dynamic import keeps
-// the relative-depth math out of static specifiers.
-const flatbuffers = await import(
-  pathToFileURL(
-    path.join(SDS_ROOT, "node_modules", "flatbuffers", "mjs", "flatbuffers.js"),
-  ).href
-);
-const {
-  bufferMutability,
-  bufferOwnership,
-  FlatBufferTypeRefT,
-  payloadWireFormat,
-  PIV,
-  PIVRequestT,
-  PIVT,
-  TABT,
-} = await import(pathToFileURL(path.join(SDS_ROOT, "lib", "js", "PIV", "main.js")).href);
+// Resolve published SDS bindings independently of checkout layout.
+import { bufferMutability } from "spacedatastandards.org/lib/js/PIV/bufferMutability.js";
+import { bufferOwnership } from "spacedatastandards.org/lib/js/PIV/bufferOwnership.js";
+import { FlatBufferTypeRefT } from "spacedatastandards.org/lib/js/PIV/FlatBufferTypeRef.js";
+import { payloadWireFormat } from "spacedatastandards.org/lib/js/PIV/payloadWireFormat.js";
+import { PIV, PIVT } from "spacedatastandards.org/lib/js/PIV/PIV.js";
+import { PIVRequestT } from "spacedatastandards.org/lib/js/PIV/PIVRequest.js";
+import { TABT } from "spacedatastandards.org/lib/js/PIV/TAB.js";
 
 const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
