@@ -1,167 +1,214 @@
 # TMPL parity lane 14 — conjunction CQR handoff
 
-Status: implementation and verification in progress. This file is finalized with
-measured gate results before the lane commit.
-
 ## Scope and lineage
 
+Implementation of proposal §6.3: C1a records, C1b sources, W1 serialization,
+B1c canonical threading/build, and verification. Design authority is
+`modules-lane-11/docs/tmpl-lane-11-proposal.md`, §§1–5, 6.3–6.4, 7 and 8.
+This is a contract migration, not a claim of full TMPL capability parity.
+
 - Worktree: `modules-14-conjunction-cqr`; branch: `tmpl/14-conjunction-cqr`.
-- Fresh fetched base: `ee14a6836727d4aedc8693477fcd6c3f2bb45090`.
-- Design: coordinator-provided `modules-lane-11/docs/tmpl-lane-11-proposal.md`,
-  sections 1–5, 6.3–6.4, 7 and 8.
+- Recovered first-pass state checkpointed and pushed as `be357c7` before further
+  implementation. Fetched `origin/main` at
+  `5cbedd3c33225d1dd83fdf8b17a28cb8491cdf3f` was merged into the lane as `0c5cfb4`.
 - Root and module pin published npm `spacedatastandards.org` **1.220.0** exactly;
-  module SDK **0.8.18**. Locks updated; module installed with `npm ci`.
-- No schema is authored in this lane. C++ bindings regenerate from the installed
-  published npm package, with a recorded schema closure and source hashes.
+  module SDK **0.8.18**. Module dependencies installed with `npm ci`.
+- Bindings regenerate only from installed published SDS IDL. No local schema
+  contract was authored. Generated C++ headers record their complete schema
+  closure and hashes in `src/cpp/generated/sds/provenance.json`.
+- No canonical checkout source edits, package publication, deployment, credential
+  access, or merge into main. The worktree remains available to the coordinator.
 
-## Changes
+## What changed
 
-### CQR records, sources and serialization
+### Published records and source selection
 
-The manifest advertises all 19 methods: the twelve prior declared methods,
-six resident index methods, and a CQR-only version query. All variable-length
-payloads use canonical FlatBuffers with matching PIV/TAB metadata. CQR replaces
-private conjunction records and raw CDM text ports; standalone CDM, CSM and OMM
-ports retain their SDS identities. CDM KVN/XML text lives in CQRNativeDocument.
-The SDK generates the PIV bridge, entrypoints and embedded manifest.
+The manifest advertises all **19** supported methods, including six resident
+methods and a CQR-only version query. The retired JSON `invoke` method and private
+conjunction schemas/headers/ABI implementation are removed. SDK code owns PIV/TAB,
+allocation, manifest accessors, and command framing.
 
-OMM/TLE SGP4 sources and native OEM/PPE tracks carry explicit Earth frame and UTC
-time metadata. Source queries remain host-resolved provenance. Catalog OMM input
-is decoded one verified record per frame. The numerical implementation, source
-interpolation, propagation, frame/time interpretation and probability calculations
-remain C++/WASM.
+| Methods | Input | Output |
+| --- | --- | --- |
+| `assess_conjunction` | CQR.PAIR_REQUEST | CQR.EVENT_RESULT |
+| `emit_cdm`, `emit_csm` | CQR.PAIR_REQUEST | CDM / CSM root |
+| `find_tca` | CQR.PAIR_REQUEST | CQR.TCA_RESULT |
+| `alfano_max_probability` | CQR.ALFANO_REQUEST | CQR.ALFANO_RESULT |
+| `compute_pc` | CQR.PROBABILITY_REQUEST | CQR.PROBABILITY_RESULT |
+| `compute_pc_from_cdm` | CDM root | CQR.PROBABILITY_RESULT |
+| `parse_cdm_kvn/xml` | CQR.NATIVE_DOCUMENT on original port | CDM root |
+| `write_cdm_kvn/xml` | CDM root | CQR.NATIVE_DOCUMENT on original port |
+| `screen_catalog` | CQR.CATALOG_REQUEST + individual OMM frames | Chunked CQR.CATALOG_RESULT |
+| Three `prepare_*_screening_index` methods | CQR.INDEX_REQUEST | CQR.INDEX_RESULT |
+| `screen_window`, `screen_segment_window` | CQR.WINDOW_REQUEST | Chunked CQR.CATALOG_RESULT |
+| `destroy_screening_index` | CQR.DESTROY_REQUEST | Empty successful PIV response |
+| `version` | CQR.VERSION_QUERY | CQR.VERSION_RESULT |
 
-### Canonical threading and failures
+All variable-length payloads use genuine canonical FlatBuffers, with matching
+TYPE_REF/TAB metadata and exact SDS root identities. False aligned-binary peers
+and raw-text ports are gone. CDM external KVN/XML bytes use the typed native
+record. Optional CDM ports remain advertised but are not populated with invented
+messages; callers request the supported `emit_cdm` method explicitly.
 
-`node build.mjs` calls the public SDK compiler with
-`threadModel: "emscripten-pthreads"` and
-`runtimeTargets: ["browser", "wasmedge"]`. The historical thread-model label
-selects `wasm32-wasip1-threads -pthread`. The primary path is
-`dist/isomorphic/module.wasm`; no Emscripten artifact is hand-linked or renamed.
+OMM/TLE explicitly select the SGP4 TEME/UTC provider. OEM compact/verbose tracks
+and Cartesian Chebyshev PPE support other providers without SGP4. Frames and
+coverage are validated before evaluation; source queries are host-resolved
+provenance. Every catalog frame is verified and consumed. Missing OMM OBJECT_ID
+falls back to its nonzero NORAD ID; missing both identities is rejected.
 
-The SDK disables C++ exceptions. Validation and numerical failures therefore use
-explicit per-worker error status. Failed refinement/assessment pairs increment
-`FAILED_PAIRS`; coarse propagation failures become evaluation failures. A failed
-screening cannot report a silent successful subset. Thread-local error storage is
-trivial fixed storage, requiring no unavailable TLS destructor runtime. Shared
-SGP4 cache initialization is synchronized, and SDP4's mutable resonance integrator
-is copied per evaluation so worker order cannot mutate shared numerical state.
+Physics, propagation, interpolation, probability, time parsing, and frame
+interpretation remain in C++/WASM. Host JavaScript only transports/encodes data,
+loads the runtime, and compares measured outputs with independent references.
 
-## Evidence
+### Threading, deterministic results, and failure accounting
 
-Primary canonical SDK build passes. The first primary artifact was 874,030 bytes;
-final build size and SHA256 are recorded after integrated fixes. Standards-aware
-manifest validation: **0 errors** (baseline 84), **40** audited warnings for
-canonical variable-length records without invented aligned peers.
+`node build.mjs` calls `compileModuleFromSource(...)` with
+`threadModel: "emscripten-pthreads"` and manifest targets
+`["browser", "wasmedge"]`. That SDK vocabulary selects
+`clang --target=wasm32-wasip1-threads -pthread`. The primary artifact imports
+`wasi.thread-spawn`, exports `wasi_thread_start`, and has shared memory/atomics
+with **no Emscripten worker hooks**. It is never hand-linked/renamed from an
+Emscripten browser artifact.
 
-The browser-direct primary-artifact SOCRATES/PIV gate passes **7/7**. Snapshot
-oracle: CelesTrak SOCRATES Plus, captured **2026-03-10**, committed under
-`analysis/conjunction-assessment/tests/fixtures/socrates/`. [SOCRATES methodology](https://celestrak.org/SOCRATES/)
-and [Vallado et al., AIAA 2006-6753](https://celestrak.org/publications/AIAA/2006-6753/)
-provide the source/model context; the committed snapshot is the numerical oracle.
-TEME/UTC comparison, unchanged tolerances: **0.010 s / 5 m / 5 m/s**.
+The public SDK compiler hook follows HPOP's constructor-lifetime pattern:
+initialization once per resident instance, static destruction deferred to host
+instance teardown. The SDK still drives compilation/linking and validates the
+artifact. Unlike HPOP, conjunction retains the SDK's no-exception profile and
+uses explicit worker-local failure status. Malformed UTC/TLE inputs and
+unrepresentable Julian-date resolutions fail explicitly before numerical loops.
+
+SGP4 shared cache initialization is synchronized; mutable SDP4 resonance state
+is copied per evaluation. Results use deterministic TCA/object ordering and
+64-bit counts. Elapsed timings remain host diagnostics. Resident primary
+selection includes primary–primary pairs as well as primary–secondary pairs.
+
+Each response emits at most one bounded event chunk and respects positive PIV
+output caps. Continuations retain exact request identity, sequence and final
+markers. Failed pair evaluations and worker serialization failures contribute to
+FAILED_PAIRS; the final response reports `incomplete-screening`, retaining the
+valid results and failure counts instead of silently presenting a complete run.
+
+## Artifact and completion evidence
+
+Final primary path: `analysis/conjunction-assessment/dist/isomorphic/module.wasm`.
+Size: **892,091 bytes**. SHA256:
+`7ed526ea5b52954dedf4d49d76be1685bb2419631e7b7f5fe74cb33fc335a747`.
+Compiler, initialization support, schema and artifact hashes are recorded in
+[build provenance](../analysis/conjunction-assessment/dist/build-provenance.json).
+
+Commands run in the module directory with `PATH="$HOME/.wasmedge/bin:$PATH"`.
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| `node build.mjs` | PASS, canonical SDK artifact validation | [build-final.log](evidence/tmpl-lane-14/build-final.log) |
+| `node --test tests/sdk_compat.test.mjs` | **10 passed, 0 failed, 0 skipped** (baseline 1 failure) | [sdk-compat-final.log](evidence/tmpl-lane-14/sdk-compat-final.log) |
+| `npm test` | **63 passed, 0 failed, 8 dataset skips** | [npm-test-final.log](evidence/tmpl-lane-14/npm-test-final.log) |
+| `npm run check:compliance` | **0 standards-aware/artifact errors** (baseline 84), PLG round-trip PASS | [compliance-final.log](evidence/tmpl-lane-14/compliance-final.log) |
+| Three-runtime command matrix | Final native/container sweep in progress | [parity-final.log](evidence/tmpl-lane-14/parity-final.log) |
+
+The **40 distinct `no-aligned-peer` warnings** are audited variable-length
+record sites. Both manifest and artifact checks repeat them. They are not
+suppressed, and no fake fixed layout or catalog exception was added.
+
+### Numerical and streaming outcomes
+
+SOCRATES oracle: CelesTrak's committed **2026-03-10** snapshot in
+`tests/fixtures/socrates/`. Source/model context:
+[SOCRATES Plus](https://celestrak.org/SOCRATES/) and
+[Vallado et al., AIAA 2006-6753](https://celestrak.org/publications/AIAA/2006-6753/).
+Comparisons use TEME/UTC with unchanged bounds **0.010 s / 5 m / 5 m/s**.
 
 | Pair | TCA error (s) | Miss error (m) | Speed error (m/s) |
 | --- | ---: | ---: | ---: |
-| 61721–67298 | 0.00072 | 4.178 | 0.100 |
-| 47935–49179 | 0.00032 | 0.303 | 0.304 |
-| 48282–58288 | 0.00028 | 0.131 | 0.479 |
+| 61721–67298 | 0.000724 | 4.177554 | 0.100 |
+| 47935–49179 | 0.000322 | 0.303 | 0.304 |
+| 48282–58288 | 0.000282 | 0.131 | 0.478708 |
 
-All three events found; no extras. See
-[evidence/browser-focused.log](evidence/tmpl-lane-14/browser-focused.log).
+All three events are found with zero extras. The final runtime receipt records
+unrounded values and per-runtime hashes.
 
-Remaining final gates: full module suite, SDK compatibility, artifact compliance,
-and browser/native/container command parity.
+Other measured results:
 
-### Resume checkpoints (2026-09-15)
+- Centered isotropic covariance Pc: **0.00498752080731768**, absolute bound
+  **1e-12**, LAAS_2015 actual algorithm. Oracle is the
+  [NIST Rayleigh CDF](https://www.itl.nist.gov/div898/software/dataplot/refman2/auxillar/raycdf.htm),
+  with radius 10 m and sigma 100 m; this is not a maximum-Pc comparison.
+- Independent linear encounter through compact OEM, verbose OEM and PPE:
+  **10 s TCA, 100 m miss, 100 m/s speed**, retained bounds
+  **0.01 s / 0.001 m / 0.001 m/s** in GCRF/UTC.
+- Resident sampled prepare/screen/destroy/stale-handle rejection passes in
+  browser, native WasmEdge and Docker WasmEdge. Four sources/two primaries
+  produce **five** eligible pairs, including their primary–primary pair.
+- **136** valid events drain as **128 + 8**, cap 1, sequences 0/1. Adding a
+  finite but overflowing source produces **153 attempted / 17 failed** pairs,
+  retaining those 136 events with explicit final failure status.
+- The 1,200-object input consumes all records and accounts for **719,400** pairs
+  with zero failed pairs and bounded output. Native interpretation took about
+  **44.2 s**. The old machine-specific 8 s assertion was replaced with computable
+  counts/output limits as requested; no numerical tolerance was widened.
+- Checked-in Aerospace real-window suite: **6/6**, **21/21** recalled,
+  max miss error **2.5440 m** within its existing 5 m regression envelope;
+  four hard anchors remain below **0.1 m**. The fixture explicitly preserves
+  its pre-migration millisecond input timestamps. The general parser preserves
+  full source precision. A full-microsecond diagnostic gave max **0.7159 m**,
+  but one old anchor moved to **0.206667 m**; that diagnostic does not replace
+  the unchanged-input regression gate or establish new accuracy claims.
 
-The recovered implementation was checkpointed and pushed as `be357c7`, then
-merged with fetched `origin/main` (HPOP PRW included) as `0c5cfb4`. Subsequent
-WIP commits preserve every significant verification/fix step on the lane branch.
+## Faithful profile limits and remaining debt
 
-- Canonical SDK command/reactor initialization is now guarded once per instance,
-  with C++ static destruction deferred to host instance teardown. The public
-  compiler hook follows the HPOP build pattern while retaining real
-  `emscripten-pthreads`/wasi-threads and SDK-generated ABI code.
-- Strict UTC syntax/calendar and TLE domain validation now return explicit
-  errors, including recovery to a subsequent valid invocation.
-- OEM/PPE resident primary selection includes primary–primary pairs. Four
-  sources with two primaries produce five eligible pairs, matching the existing
-  native index semantics.
-- Capped streaming evidence: 136 valid events drain as 128 + 8; an added
-  overflowing source yields 153 attempted pairs, 17 failed pairs, and an
-  `incomplete-screening` status on the final drain. Worker-local serialization
-  errors also contribute to failure accounting.
-- Aerospace checked-in real-window gate: **6/6**, **21/21** recalled. The
-  regression gate explicitly preserves its original millisecond input epochs;
-  original microsecond strings are never attached to different numeric times.
-  The general parser preserves source precision. Full-precision diagnostic
-  maximum miss error was 0.7159 m; one old 10 cm anchor moves to 0.206667 m, so
-  that diagnostic is not substituted for the unchanged-input regression gate.
-- Standards-aware manifest and artifact validation plus PLG round-trip:
-  **0 errors**, **40 distinct `no-aligned-peer` warnings**, repeated by both
-  checks. These are the intentional canonical variable-length record sites.
-
-The installed WasmEdge CLIs do not supply `wasi.thread-spawn`; a verification
-host using the WasmEdge C API is being completed. Browser verification explicitly
-serves the installed SDK's worker dependency chain under COOP/COEP. No alternate
-guest artifact or JS physics is introduced to satisfy the runtime matrix.
-
-An early native C++ diagnostic compiled without exceptions and screened the
-six-object SOCRATES snapshot. All worker counts 1/2/4/8 found three events with
-zero failed pairs and identical numerical outputs. This is diagnostic evidence;
-it does not replace the primary WASM and three-runtime gates below.
-
-## Contract limitations and remaining debt
-
-- Published OCM 1.220.0 has state samples and time metadata but no trajectory
-  reference frame or state-unit declaration. The adapter rejects this source
-  with an explicit unsupported-source error instead of inventing those fields.
-  OEM/PPE provide the faithful typed sampled/polynomial path.
-- Published CQR represents optional scalar presence using explicit `HAS_*`
-  booleans and uses `QUERY_SELECTION` for resolved query provenance; the consumer
-  follows those released bindings rather than the proposal's draft spellings.
-- OEM covariance interpolation is not implemented. PPE requires Cartesian
-  Chebyshev records with explicit velocity coefficients and contiguous coverage.
-  Sampled resident indexes use exact Hermite evaluation; non-mean PPE indexes
-  use polynomial-only evaluation. Unsupported exact-polish/provider combinations
-  and nonzero guest progress cadence fail explicitly.
-- Earth-fixed and cross-frame evaluation require verified FRM/EOP input not
-  available through this module profile. Such requests fail explicitly. Existing
-  SGP4 sample-helper output was ECEF while the old JSON adapter ignored its frame;
-  it is no longer relabeled as an inertial track.
-- Large Aerospace and full-catalog SOCRATES datasets are absent from the
-  documented canonical ignored `tests/data/` layout. Their skipped tests are
-  reported separately from checked-in SOCRATES snapshot acceptance.
-- SOCRATES maximum-Pc comparisons remain advisory. They are not independent
-  covariance probability certification. The centered isotropic probability
-  test uses the analytical Gaussian/Rayleigh integral.
-- SDK 0.8.18 exposes TAB `FRAME_ID` to guest input-frame identity, but not the
-  top-level PIV trace ID. Concurrent draining requests must use distinct input
-  `FRAME_ID` values; a repeated identity must finish draining before reuse.
-  SDK responses preserve the caller's PIV trace. The two window methods have
-  separate continuation state.
+- Published **OCM 1.220.0** lacks trajectory reference-frame and state-unit
+  declarations. It is rejected explicitly; OEM/PPE provide the typed track
+  path. No downstream IDL or invented metadata was added.
+- Released CQR uses `HAS_*` presence booleans and `QUERY_SELECTION` provenance;
+  the implementation follows the published bindings rather than draft spelling.
+- OEM covariance interpolation is unsupported. PPE requires Cartesian
+  Chebyshev records, explicit velocity coefficients and contiguous coverage.
+  Sample indexes use exact Hermite evaluation; non-mean PPE indexes require
+  POLYNOMIAL_ONLY. Unsupported polish/provider/control choices fail explicitly.
+- Earth-fixed/cross-frame transforms need a verified FRM/EOP provider outside
+  this module profile. ECEF source data is never relabeled as inertial data.
+- SDK 0.8.18 exposes TAB FRAME_ID to guest request identity, but not top-level
+  PIV trace ID. Concurrent draining streams must use distinct input FRAME_ID
+  values; an identity must finish draining before reuse. PIV responses echo
+  caller traces, and window methods maintain separate continuation state.
+- Installed stock WasmEdge CLIs lack the `wasi.thread-spawn` host import.
+  Verification supplies a module-local WasmEdge C API host through SDK
+  launch plans, implementing the standard
+  [instance-per-thread contract](https://github.com/WebAssembly/wasi-threads#detailed-design-discussion).
+  Browser verification serves the installed SDK worker chain in an isolated
+  owner worker. This host support does not change guest bytes or physics;
+  adopting it in the shared SDK is upstream debt.
+- The eight large Aerospace/full-catalog SOCRATES checks still skip because
+  the documented ignored `tests/data/` directories contain no datasets in
+  either this worktree or the canonical data location. Skip criteria were not
+  changed. Checked-in SOCRATES/Aerospace snapshots do run.
+- SOCRATES maximum-Pc comparisons remain advisory and do not constitute
+  independent covariance probability certification.
 
 ## Bounded improvement review
 
-Baseline: execute the specified CQR migration, canonical build and listed gates.
-Scores are ordered impact / deployability / fail-closed safety / lineage clarity.
+Question: What's the best next safe and deployable and accretive improvement
+you could make to this plan/artifact right now, and if none exists return
+NO_BETTER_OPTION?
+
+Scores: objective impact / deployability / fail-closed safety / lineage clarity.
 
 | Wave | Candidate | Scores | Decision |
 | --- | --- | --- | --- |
-| Baseline | Literal transport/build migration | 8 / 8 / 8 / 9 = 33 | Initial baseline |
-| 1 | Explicit worker failure accounting and deterministic shared-state handling | 9 / 9 / 10 / 10 = 38 | Selected; required to preserve truthful screening under wasi-threads |
-| 1 | Introduce new OCM metadata outside published SDS | 7 / 0 / 2 / 0 = 9 | Rejected; outside canonical schema ownership |
-| 1 | Expand to new frame/EOP physics | 6 / 3 / 7 / 6 = 22 | Rejected; outside bounded migration and available contracts |
-| 1 | Retain alternate JSON artifact for recovery | 2 / 4 / 2 / 2 = 10 | Rejected; violates advertised typed contract |
-| 1 | Add unrelated physics capability | 2 / 2 / 5 / 4 = 13 | Rejected; outside section 6.3 |
-| 2 | Further additions beyond required gates | 8 / 8 / 9 / 9 = 34 | Rejected; no improvement over selected baseline |
+| Baseline | Literal transport/build migration | 8 / 8 / 8 / 9 = 33 | Initial |
+| 1 | Explicit worker failure accounting and deterministic state | 9 / 9 / 10 / 10 = 38 | Selected |
+| 1 | Add local OCM metadata | 7 / 0 / 2 / 0 = 9 | Rejected: violates SDS ownership |
+| 1 | New frame/EOP physics | 6 / 3 / 7 / 6 = 22 | Rejected: outside scope |
+| 1 | Alternate JSON recovery artifact | 2 / 4 / 2 / 2 = 10 | Rejected: violates typed contract |
+| 1 | Unrelated physics features | 2 / 2 / 5 / 4 = 13 | Rejected: outside §6.3 |
+| 2 | Further scope additions | 8 / 8 / 9 / 9 = 34 | Rejected: no improvement over selected baseline |
 
-Stop reason: `NO_BETTER_OPTION`. Selected improvement: explicit failure status
-and deterministic numerical worker state, verified with the prescribed gates.
+Stop: `NO_BETTER_OPTION`. Selected improvement: explicit failure accounting and
+deterministic worker state, with source, resident-pair and drain verification.
 
 ## Delivery
 
-Commit uses the owner-supplied graph generation and lane override, with the
-requested co-author trailer. Push only `origin tmpl/14-conjunction-cqr`; retain
-the worktree. No main merge, package publication, deployment or credential access.
+Commits use the owner-supplied GRAPH_PROTOCOL_GENERATION and GRAPH_GUARD_OVERRIDE
+and `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`. WIP checkpoints
+are pushed after meaningful steps. Push only `origin tmpl/14-conjunction-cqr`;
+the coordinator owns landing. Keep the worktree; do not merge into main.

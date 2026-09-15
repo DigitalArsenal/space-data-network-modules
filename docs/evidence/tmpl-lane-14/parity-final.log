@@ -42,3 +42,4 @@ browser: legacy-json-method / workers 1
 browser: legacy-json-method / workers 2
 browser: legacy-json-method / workers 4
 browser: legacy-json-method / workers 8
+wasmedge: socrates-workers-1 / workers 1

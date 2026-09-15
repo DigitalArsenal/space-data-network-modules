@@ -17,6 +17,7 @@ typedef struct {
   WasmEdge_ConfigureContext *config;
   WasmEdge_ASTModuleContext *ast;
   WasmEdge_StoreContext *store;
+  WasmEdge_ExecutorContext *executor;
   WasmEdge_MemoryInstanceContext *memory;
   WasmEdge_ModuleInstanceContext *wasi;
   pthread_mutex_t lock;
@@ -79,7 +80,10 @@ static WasmEdge_Result spawn_thread(void *data, const WasmEdge_CallingFrameConte
   if (!t) return WasmEdge_Result_Success;
   t->host = h;
   t->arg = (uint32_t)WasmEdge_ValueGetI32(args[0]);
-  t->executor = WasmEdge_ExecutorCreate(h->config, NULL);
+  /* WasmEdge 0.16.4 keeps the atomic waiter map on Executor, while execution
+   * stacks are thread_local (include/executor/executor.h). All instances must
+   * share this executor so an atomic notify can wake another thread's wait. */
+  t->executor = h->executor;
   pthread_mutex_lock(&h->lock);
   WasmEdge_Result result = WasmEdge_ExecutorInstantiate(t->executor, &t->module, h->store, h->ast);
   bool ready = WasmEdge_ResultOK(result) && t->module && h->next_tid < (1U << 29);
@@ -91,7 +95,6 @@ static WasmEdge_Result spawn_thread(void *data, const WasmEdge_CallingFrameConte
   pthread_mutex_unlock(&h->lock);
   if (!ready) {
     if (t->module) WasmEdge_ModuleInstanceDelete(t->module);
-    WasmEdge_ExecutorDelete(t->executor);
     free(t);
   } else results[0] = WasmEdge_ValueGenI32(t->tid);
   return WasmEdge_Result_Success;
@@ -154,7 +157,6 @@ static void reap_threads(Host *h) {
       Thread *next = t->next;
       pthread_join(t->thread, NULL);
       WasmEdge_ModuleInstanceDelete(t->module);
-      WasmEdge_ExecutorDelete(t->executor);
       free(t);
       t = next;
     }
@@ -209,6 +211,7 @@ int main(int argc, char **argv) {
   WasmEdge_LoaderContext *loader = WasmEdge_LoaderCreate(h.config);
   WasmEdge_ValidatorContext *validator = WasmEdge_ValidatorCreate(h.config);
   WasmEdge_ExecutorContext *executor = WasmEdge_ExecutorCreate(h.config, NULL);
+  h.executor = executor;
   check("parse", WasmEdge_LoaderParseFromFile(loader, &h.ast, argv[file]));
   check("validate", WasmEdge_ValidatorValidate(validator, h.ast));
   const char **guest_argv = calloc((size_t)(argc - file), sizeof(*guest_argv));

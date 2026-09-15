@@ -31,6 +31,7 @@ export function wasmedgeParityLane(runtime) {
       const version = await execute(await wasiThreadsLaunchPlan(runtime, {wasmPath,hostArgs:['--version']}), new Uint8Array(), context.timeoutMs);
       assertWasmEdgeVersionMatchesPin(new TextDecoder().decode(version.stdout), context.pin, `${runtime} standard WASI threads host`);
       for (const c of context.plan.cases) for (const threadCount of c.threadCounts) {
+        context.log(`${runtime}: ${c.id} / workers ${threadCount}`);
         const hostArgs = ['--enable-threads', ...Object.entries({...c.env,[context.plan.threadEnvVar]:String(threadCount)}).flatMap(([name,value])=>['--env',`${name}=${value}`])];
         const outcome = await execute(await wasiThreadsLaunchPlan(runtime,{wasmPath,hostArgs,args:c.args}),c.stdinBytes,context.timeoutMs);
         const stderr = new TextDecoder().decode(outcome.stderr);
