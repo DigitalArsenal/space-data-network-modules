@@ -56,14 +56,15 @@ std::string epoch_text(double relative, const wire::EstimationEpoch& reference) 
 }
 
 core::Observation observation_from_wire(const wire::EstimationObservation& source,
-                                        const wire::EstimationEpoch& reference) {
+                                        const wire::EstimationEpoch& reference,
+                                        bool strict = false) {
   core::Observation out;
   out.epoch_seconds = relative_seconds(source.epoch(), reference);
   out.kind = static_cast<core::MeasurementKind>(source.kind());
-  out.value_count = std::min<std::uint8_t>(source.value_count(), 4);
+  out.value_count = strict ? source.value_count() : std::min<std::uint8_t>(source.value_count(), 4);
   for (int i = 0; i < 4; ++i) {
     out.value[i] = source.value()->Get(i);
-    out.sigma[i] = source.sigma()->Get(i) > 0.0 ? source.sigma()->Get(i) : 1.0;
+    out.sigma[i] = strict || source.sigma()->Get(i) > 0.0 ? source.sigma()->Get(i) : 1.0;
   }
   out.station_position_m = {source.station_position_m()->Get(0),
                             source.station_position_m()->Get(1),
@@ -569,7 +570,14 @@ extern "C" int run_estimation(void) {
   if (request->observations() != nullptr) {
     observations.reserve(request->observations()->size());
     for (const wire::EstimationObservation* source : *request->observations()) {
-      if (source != nullptr) observations.push_back(observation_from_wire(*source, request->config()->initial_epoch()));
+      // Validate the fixed storage bound before error-model loops use count.
+      if (source != nullptr && source->value_count() > 4 &&
+          request->config()->estimator() != wire::EstimatorKind::BATCH_WEIGHTED_LEAST_SQUARES) {
+        return fail("bad-estimation-request", "observation value_count exceeds the four-lane wire storage");
+      }
+      if (source != nullptr) observations.push_back(observation_from_wire(*source,
+          request->config()->initial_epoch(),
+          request->config()->estimator() != wire::EstimatorKind::BATCH_WEIGHTED_LEAST_SQUARES));
     }
   }
   append_tdm_observations(input("tracking_data"), request->config()->initial_epoch(), &observations);

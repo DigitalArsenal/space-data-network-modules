@@ -830,6 +830,22 @@ FilterResult sequential_filter(const FilterConfig& config,
                                bool smooth) {
   FilterResult result{};
   if (observations.empty() || observations.size() != samples.size()) return result;
+  if (config.estimator != EstimatorKind::EXTENDED_KALMAN_FILTER &&
+      config.estimator != EstimatorKind::EXTENDED_KALMAN_FILTER_WITH_RTS &&
+      config.estimator != EstimatorKind::UNSCENTED_KALMAN_FILTER) return result;
+  if (!std::isfinite(config.initial.epoch_seconds) ||
+      !std::isfinite(config.sigma_edit_threshold) || config.sigma_edit_threshold <= 0.0 ||
+      !covariance_is_symmetric_positive_definite(config.initial_covariance)) return result;
+  for (double value : config.initial.value) if (!std::isfinite(value)) return result;
+  for (double value : config.acceleration_psd) {
+    if (!std::isfinite(value) || value < 0.0) return result;
+  }
+  if (config.process_noise != ProcessNoiseKind::NONE &&
+      config.process_noise != ProcessNoiseKind::STATE_NOISE_COMPENSATION &&
+      config.process_noise != ProcessNoiseKind::DYNAMIC_MODEL_COMPENSATION) return result;
+  if (config.process_noise == ProcessNoiseKind::DYNAMIC_MODEL_COMPENSATION &&
+      (!std::isfinite(config.dmc_correlation_time_seconds) ||
+       config.dmc_correlation_time_seconds <= 0.0)) return result;
   CartesianState current = config.initial;
   Matrix6 covariance = config.initial_covariance;
   double previous_epoch = config.initial.epoch_seconds;
@@ -837,6 +853,15 @@ FilterResult sequential_filter(const FilterConfig& config,
   Matrix6 previous_cumulative_stm = identity6();
 
   for (std::size_t index = 0; index < observations.size(); ++index) {
+    const Observation& observation = observations[index];
+    if (!std::isfinite(observation.epoch_seconds) ||
+        observation.epoch_seconds < previous_epoch ||
+        !std::isfinite(samples[index].state.epoch_seconds) ||
+        std::abs(samples[index].state.epoch_seconds - observation.epoch_seconds) > 1.0e-8 ||
+        static_cast<unsigned>(observation.kind) >
+            static_cast<unsigned>(MeasurementKind::FREQUENCY_DIFFERENCE_OF_ARRIVAL)) return result;
+    for (double value : samples[index].state.value) if (!std::isfinite(value)) return result;
+    for (double value : samples[index].stm) if (!std::isfinite(value)) return result;
     Matrix6 inverse_previous_stm{};
     if (!invert6(previous_cumulative_stm, &inverse_previous_stm)) return result;
     const Matrix6 phi = multiply(samples[index].stm, inverse_previous_stm);
@@ -848,13 +873,24 @@ FilterResult sequential_filter(const FilterConfig& config,
     Matrix6 predicted_covariance = add_matrix(
         multiply(multiply(phi, covariance), transpose(phi)), process_noise(config, std::abs(dt)));
     predicted_covariance = symmetrize(predicted_covariance);
+    if (!covariance_is_symmetric_positive_definite(predicted_covariance)) return result;
     const MeasurementPrediction central = predict_measurement(observations[index], predicted);
+    if (central.count == 0 || central.count != observation.value_count) return result;
+    for (int component = 0; component < central.count; ++component) {
+      if (!std::isfinite(observation.value[component]) ||
+          !std::isfinite(observation.sigma[component]) || observation.sigma[component] <= 0.0 ||
+          !std::isfinite(central.value[component])) return result;
+      for (double value : central.jacobian[component]) if (!std::isfinite(value)) return result;
+    }
     CartesianState updated = predicted;
     Matrix6 updated_covariance = predicted_covariance;
     double total_nis = 0.0;
     bool accepted = true;
 
     if (config.estimator == EstimatorKind::UNSCENTED_KALMAN_FILTER) {
+      // Legacy measurement-only unscented update. The fixed $EST port supplies
+      // nominal states/STMs, not nonlinear propagated sigma points. This is
+      // NOT a validated nonlinear-dynamics UKF; see README's contract hold.
       constexpr int count = 13;
       constexpr double alpha = 1.0;
       constexpr double lambda = alpha * alpha * 6.0 - 6.0;
@@ -911,16 +947,24 @@ FilterResult sequential_filter(const FilterConfig& config,
     } else {
       for (int component = 0; component < central.count; ++component) {
         const Vector6& h = central.jacobian[component];
-        const Vector6 ph = mat_vec(predicted_covariance, h);
+        // Condition each component on the preceding components of this same
+        // observation. With diagonal R and H held at the predicted state this
+        // is algebraically the joint Kalman update (including off-diagonal P).
+        // Reusing P-minus and the unconditioned residual double-counts data.
+        const Vector6 ph = mat_vec(updated_covariance, h);
         double innovation_variance = observations[index].sigma[component] *
                                      observations[index].sigma[component];
         for (int i = 0; i < 6; ++i) innovation_variance += h[i] * ph[i];
-        const double innovation = residual_component(observations[index].kind, component,
+        double innovation = residual_component(observations[index].kind, component,
                                                      observations[index].value[component],
                                                      central.value[component]);
-        const double nis = innovation * innovation / std::max(innovation_variance, kTiny);
+        for (int i = 0; i < 6; ++i) innovation -= h[i] * (updated.value[i] - predicted.value[i]);
+        if (!(innovation_variance > 0.0) || !std::isfinite(innovation_variance)) return result;
+        const double nis = innovation * innovation / innovation_variance;
         total_nis += nis;
-        if (std::sqrt(nis) > config.sigma_edit_threshold) { accepted = false; break; }
+        // Finish the temporary vector update to report the full joint NIS.
+        // A failed conditional sigma edit rolls back the whole observation.
+        if (std::sqrt(nis) > config.sigma_edit_threshold) accepted = false;
         Vector6 gain{};
         for (int i = 0; i < 6; ++i) gain[i] = ph[i] / innovation_variance;
         for (int i = 0; i < 6; ++i) updated.value[i] += gain[i] * innovation;
@@ -943,6 +987,9 @@ FilterResult sequential_filter(const FilterConfig& config,
       updated_covariance = predicted_covariance;
       result.rejected_indices.push_back(index);
     }
+    for (double value : updated.value) if (!std::isfinite(value)) return result;
+    if (!std::isfinite(total_nis) ||
+        !covariance_is_symmetric_positive_definite(symmetrize(updated_covariance))) return result;
     updated.epoch_seconds = observations[index].epoch_seconds;
     FilterEpoch epoch{};
     epoch.filtered = updated;
