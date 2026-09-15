@@ -50,7 +50,8 @@ const axisEngine = (await fs.readFile(axisEnginePath, "utf8")).replace(
   /extern "C" \{\n#include "erfa\.h"\n#include "erfam\.h"\n\}\n/,
   "// ERFA declarations are amalgamated ahead of this header by build.mjs.\n",
 );
-const implementationSource = await fs.readFile(sourcePath, "utf8");
+const implementationSource = (await fs.readFile(sourcePath, "utf8")).replace('#include "eop_table.hpp"', await fs.readFile(path.join(packageRoot, "src/eop_table.hpp"), "utf8"));
+process.env.SPACE_DATA_STANDARDS_ROOT ??= path.join(packageRoot, "node_modules/spacedatastandards.org");
 
 const sourceCode = [
   rfmHeader,
