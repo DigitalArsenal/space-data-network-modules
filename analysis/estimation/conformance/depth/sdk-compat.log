@@ -1,0 +1,10 @@
+✔ estimation manifest passes SDK standards validation (21.711875ms)
+✔ built estimation artifact passes SDK validation and exports canonical ABI (5.744875ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 517.12875

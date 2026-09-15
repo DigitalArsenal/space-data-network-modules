@@ -1,0 +1,39 @@
+✔ WASM linear PV, receiver clock/pseudorange, and gated adaptive R (35.732916ms)
+PASS WASM Orekit kind=1 position_max_m=1.862645149230957e-8 velocity_max_mps=2.4556356947869062e-11 covariance_max_SI=3.801403636316536e-12 rounds=10 provider_samples=10
+PASS WASM Orekit kind=2 position_max_m=1.7229467630386353e-8 velocity_max_mps=2.091837814077735e-11 covariance_max_SI=9.605102491150319e-9 rounds=10 provider_samples=130
+✔ WASM nonlinear EKF/UKF port replay agrees with independent Orekit (25.91225ms)
+PASS WASM Gaussian state/covariance/NIS max_error=4.285460875053104e-13 tolerance=2e-12
+✔ WASM correlated vector matches exact Gaussian posterior and joint NIS (41.007ms)
+✔ WASM validates observations and sample epochs; editing rejects whole vector (9.919833ms)
+PASS WASM Hipparchus smoother state_max_error=4.996003610813204e-13 covariance_max_error=4.977728298993789e-13 tolerance=2e-12
+✔ WASM EKF/RTS matches 50 published Hipparchus smoother epochs (65.752333ms)
+PASS WASM asynchronous fusion position_error_m=6.4288833939235035 three_sigma_RSS_m=49.6068143940923
+✔ WASM asynchronous radar and co-orbiting range fusion follows independent circular truth (52.5295ms)
+✔ estimation manifest passes SDK standards validation (23.633041ms)
+✔ built estimation artifact passes SDK validation and exports canonical ABI (5.607667ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1085.700167
+BATCH_AUTHORITY {"position_error_m":8.3266726846886741e-17,"covariance_max_error":4.4408920985006262e-16,"sigma_rss_m":3.0165022317720425,"sigma_rss_relative_error":0,"rms":0.82702739962342908,"rms_relative_error":1.3424259282469662e-16,"iterations":3}
+PASS correlated Gaussian state/covariance/NIS max_error=1.1102230246251565e-16 tolerance=2e-14
+PASS malformed sequential requests cases=16
+PASS Hipparchus 4.0.3 CV smoother kind=3 epochs=50 state_max_error=2.0261570199409107e-15 covariance_max_error=5.2041704279304213e-17 tolerance=1e-12
+PASS Hipparchus 4.0.3 CV smoother kind=2 epochs=50 state_max_error=1.1102230246251565e-15 covariance_max_error=1.9081958235744878e-16 tolerance=1e-12
+PASS nonlinear asynchronous fusion kind=1 runs=500 observations=40 dimensions=53 ANEES=6.0606949133425125 NIS_per_dof=1.0015870253270314 filter_position_RMSE_m=26.79089938766964 smoother_position_RMSE_m=10.848264824935328
+PASS nonlinear asynchronous fusion kind=2 runs=500 observations=40 dimensions=53 ANEES=6.0607138187205525 NIS_per_dof=1.0015870153542406 filter_position_RMSE_m=26.790908248599195 smoother_position_RMSE_m=10.848257928968168
+PASS sequential validation failures=0
+
+PASS Wan-Merwe quadratic transform alpha=1 error=1.7763568394002505e-15 recentered_calls=26
+PASS Wan-Merwe quadratic transform alpha=0.5 error=0 recentered_calls=26
+PASS six-lane PV and eight-state clock Gaussian conditioning error<1e-12
+PASS Mehra scalar covariance matching qscale=2.25; sigma-gated R scale=10.111111111111111 capped rejection; defaults off
+OREKIT kind=1 position_max_m=1.862645149230957e-08 velocity_max_mps=2.4556356947869062e-11 covariance_max_SI=3.7978509226377355e-12
+OREKIT kind=2 position_max_m=1.6763806343078613e-08 velocity_max_mps=2.0008883439004421e-11 covariance_max_SI=9.6109786795750551e-09
+PASS estimation depth failures=0
+
+PASS refreshed authoritative conformance evidence for 2589309c8e7b6260118b8233cecfb8d94f6c781497a2808e09635feb90e21e5f

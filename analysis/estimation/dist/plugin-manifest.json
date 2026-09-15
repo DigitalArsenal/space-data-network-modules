@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.analysis.estimation",
   "name": "Measurement-based Orbit Estimation",
   "version": "0.1.0",
-  "description": "Six-state nominal-trajectory EKF and RTS with correlated-vector updates validated against exact Gaussian conditioning, Hipparchus 4.0.3 constant-velocity smoother data, and circular-orbit asynchronous fusion consistency tests. Legacy measurement-only UKF is not validated for nonlinear propagation. Batch WLS, simulation, media and IOD retain their existing authority tests.",
+  "description": "C++ six/eight-state EKF, nonlinear Wan-Merwe UKF and linear KF with RTS, optional innovation-matched Q scaling, sigma-gated R inflation, PV and receiver-clock pseudorange. Module-local Estimation.fbs extension v1 preserves all legacy structs and field IDs; adds optional SequentialOptions, ExtendedObservation, ExtendedFilterEpoch and inverted PropagationQuery/Answer tables. SDS ODR/OCM retain six-state orbit projections; linear KF uses their unspecified estimator category. Validated against Orekit 13.1, Hipparchus 4.0.3, analytic Gaussian cases and nonlinear multi-sensor Monte Carlo.",
   "pluginFamily": "analysis",
   "threadModel": "wasi-sequential",
   "sequentialJustification": {
@@ -23,7 +23,7 @@
           "acceptedTypeSets": [{
             "setId": "estimation-request",
             "allowedTypes": [{"schemaName": "Estimation.fbs", "fileIdentifier": "$EST", "rootTypeName": "EstimationEnvelope"}],
-            "description": "Fixed-layout estimation configuration and observations."
+            "description": "Legacy configuration/observations plus optional module-local sequential and GNSS extensions."
           }],
           "minStreams": 1,
           "maxStreams": 1,
@@ -40,7 +40,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The pluggable propagator port response; no provider name appears in this contract."
+          "description": "Legacy cumulative state/STM samples. For nonlinear replay, this port may contain an empty envelope; answers accompany the unchanged request."
         },
         {
           "portId": "tracking_data",

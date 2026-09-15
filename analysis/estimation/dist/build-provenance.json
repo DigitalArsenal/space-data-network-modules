@@ -2,6 +2,11 @@
   "spacedatastandards": "1.203.0",
   "moduleSdk": "0.8.17",
   "family": "estimation",
+  "invokeContract": {
+    "path": "schemas/Estimation.fbs",
+    "extension": 1,
+    "sha256": "08efb240a304635b6c86fe5ad1aa88eeefc0c5f9a1387ac921e32430e1e33d88"
+  },
   "propagatorContract": [
     "plugin_propagate",
     "plugin_compute_stm"

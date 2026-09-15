@@ -1,0 +1,50 @@
+
+> @digitalarsenal/sdn-module-analysis-estimation@0.1.0 pretest
+> node tests/build-provider.mjs
+
+PASS built independent C++ WASM two-body test provider
+
+> @digitalarsenal/sdn-module-analysis-estimation@0.1.0 test
+> node --test tests/*.test.mjs
+
+✔ published estimation conformance evidence passes every required tier (4.213542ms)
+✔ WASM linear PV, receiver clock/pseudorange, and gated adaptive R (39.49575ms)
+PASS WASM Orekit kind=1 position_max_m=1.862645149230957e-8 velocity_max_mps=2.4556356947869062e-11 covariance_max_SI=3.801403636316536e-12 rounds=10 provider_samples=10
+PASS WASM Orekit kind=2 position_max_m=1.7229467630386353e-8 velocity_max_mps=2.091837814077735e-11 covariance_max_SI=9.605102491150319e-9 rounds=10 provider_samples=130
+✔ WASM nonlinear EKF/UKF port replay agrees with independent Orekit (27.765125ms)
+PASS Wan-Merwe quadratic transform alpha=1 error=1.7763568394002505e-15 recentered_calls=26
+PASS Wan-Merwe quadratic transform alpha=0.5 error=0 recentered_calls=26
+PASS six-lane PV and eight-state clock Gaussian conditioning error<1e-12
+PASS Mehra scalar covariance matching qscale=2.25; sigma-gated R scale=10.111111111111111 capped rejection; defaults off
+OREKIT kind=1 position_max_m=1.862645149230957e-08 velocity_max_mps=2.4556356947869062e-11 covariance_max_SI=3.7978509226377355e-12
+OREKIT kind=2 position_max_m=1.6763806343078613e-08 velocity_max_mps=2.0008883439004421e-11 covariance_max_SI=9.6109786795750551e-09
+PASS estimation depth failures=0
+✔ nonlinear UKF, linear/PV/clock, adaptive noise, Orekit EKF/UKF authority (1775.782834ms)
+PASS WASM Gaussian state/covariance/NIS max_error=4.285460875053104e-13 tolerance=2e-12
+✔ WASM correlated vector matches exact Gaussian posterior and joint NIS (44.28475ms)
+✔ WASM validates observations and sample epochs; editing rejects whole vector (10.649833ms)
+PASS WASM Hipparchus smoother state_max_error=4.996003610813204e-13 covariance_max_error=4.977728298993789e-13 tolerance=2e-12
+✔ WASM EKF/RTS matches 50 published Hipparchus smoother epochs (65.723083ms)
+PASS WASM asynchronous fusion position_error_m=6.4288833939235035 three_sigma_RSS_m=49.6068143940923
+✔ WASM asynchronous radar and co-orbiting range fusion follows independent circular truth (53.078125ms)
+✔ native estimation conformance (1638.590583ms)
+✔ module-local contract preserves every old struct, enum ordinal and table field prefix (1.029042ms)
+✔ estimation manifest passes SDK standards validation (16.826625ms)
+✔ built estimation artifact passes SDK validation and exports canonical ABI (9.222375ms)
+BATCH_AUTHORITY {"position_error_m":8.3266726846886741e-17,"covariance_max_error":4.4408920985006262e-16,"sigma_rss_m":3.0165022317720425,"sigma_rss_relative_error":0,"rms":0.82702739962342908,"rms_relative_error":1.3424259282469662e-16,"iterations":3}
+PASS correlated Gaussian state/covariance/NIS max_error=1.1102230246251565e-16 tolerance=2e-14
+PASS malformed sequential requests cases=16
+PASS Hipparchus 4.0.3 CV smoother kind=3 epochs=50 state_max_error=2.0261570199409107e-15 covariance_max_error=5.2041704279304213e-17 tolerance=1e-12
+PASS Hipparchus 4.0.3 CV smoother kind=2 epochs=50 state_max_error=1.1102230246251565e-15 covariance_max_error=1.9081958235744878e-16 tolerance=1e-12
+PASS nonlinear asynchronous fusion kind=1 runs=500 observations=40 dimensions=53 ANEES=6.0606949133425125 NIS_per_dof=1.0015870253270314 filter_position_RMSE_m=26.79089938766964 smoother_position_RMSE_m=10.848264824935328
+PASS nonlinear asynchronous fusion kind=2 runs=500 observations=40 dimensions=53 ANEES=6.0607138187205525 NIS_per_dof=1.0015870153542406 filter_position_RMSE_m=26.790908248599195 smoother_position_RMSE_m=10.848257928968168
+PASS sequential validation failures=0
+✔ sequential Gaussian authority, published smoother, and asynchronous consistency (2420.855209ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2508.200417
