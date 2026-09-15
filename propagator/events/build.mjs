@@ -48,12 +48,19 @@ const schemaHeaders = ORDERED_FAMILIES.map((family, index) =>
 // them, and this build FAILS if they are absent rather than falling back to a
 // smaller vocabulary.
 const erfa = await composeErfaTranslationUnit();
+// The shared axis engine includes the IAU body models. The SDK compiles this
+// amalgamation outside the source tree, so place that dependency before its
+// consumer just as foundation/frames/build.mjs does.
+const bodyModels = await fs.readFile(
+  path.join(packageRoot, "..", "..", "foundation", "frames", "src", "iau_body_models.hpp"),
+  "utf8",
+);
 const axisEngine = (
   await fs.readFile(
     path.join(packageRoot, "..", "..", "foundation", "frames", "src", "axis_engine.hpp"),
     "utf8",
   )
-).replace(
+).replace('#include "iau_body_models.hpp"', "").replace(
   /extern "C" \{\n#include "erfa\.h"\n#include "erfam\.h"\n\}\n/,
   "// ERFA declarations are amalgamated ahead of this header by build.mjs.\n",
 );
@@ -78,6 +85,7 @@ const sourceCode = [
   ...schemaHeaders,
   ...kernelHeaders,
   erfa.source,
+  bodyModels,
   axisEngine,
   stateRepresentations,
   rosterHeader,
