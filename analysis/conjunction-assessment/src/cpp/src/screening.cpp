@@ -1,3 +1,4 @@
+#include "conjunction/error_status.h"
 /**
  * High-Performance Conjunction Screening Engine
  *
@@ -55,7 +56,7 @@ public:
           generation_(0)
     {
         if (participant_count == 0) {
-            throw std::invalid_argument("ReusableBarrier requires participants");
+            set_error("ReusableBarrier requires participants"); return;
         }
     }
 
@@ -308,7 +309,7 @@ double resident_polynomial_distance_at_jd(
     StateVector state2 = {};
     if (!evaluate_resident_polynomial_state(resident_index, obj1_index, jd, state1) ||
         !evaluate_resident_polynomial_state(resident_index, obj2_index, jd, state2)) {
-        throw std::runtime_error("Polynomial trajectory coverage is incomplete for the requested TCA refinement window.");
+        set_error("Polynomial trajectory coverage is incomplete for the requested TCA refinement window."); return std::numeric_limits<double>::quiet_NaN();
     }
 
     const double dx = state1.x - state2.x;
@@ -484,7 +485,7 @@ ConjunctionEvent assess_conjunction_polynomial(
 
     if (!evaluate_resident_polynomial_state(resident_index, obj1_index, event.tca_jd, event.state1) ||
         !evaluate_resident_polynomial_state(resident_index, obj2_index, event.tca_jd, event.state2)) {
-        throw std::runtime_error("Polynomial trajectory coverage is incomplete at the solved TCA.");
+        set_error("Polynomial trajectory coverage is incomplete at the solved TCA."); return {};
     }
 
     const double dx = event.state1.x - event.state2.x;
@@ -583,7 +584,7 @@ ConjunctionEvent refine_coarse_hit(
     if (window.duration_days() <= 0.0) {
         if (resident_index != nullptr &&
             resident_index->screening_mode !=
-                orbpro::conjunction::ConjunctionScreeningMode::exact_only) {
+                ScreeningMode::exact_only) {
             auto event = assess_conjunction_polynomial(
                 *resident_index,
                 hit.obj1_index,
@@ -594,7 +595,7 @@ ConjunctionEvent refine_coarse_hit(
                 radius_m,
                 radius_m);
             if (resident_index->screening_mode ==
-                orbpro::conjunction::ConjunctionScreeningMode::polynomial_plus_exact_polish) {
+                ScreeningMode::polynomial_plus_exact_polish) {
                 return assess_conjunction_in_window_near_hint(
                     obj1,
                     obj2,
@@ -617,7 +618,7 @@ ConjunctionEvent refine_coarse_hit(
 
     if (resident_index != nullptr &&
         resident_index->screening_mode !=
-            orbpro::conjunction::ConjunctionScreeningMode::exact_only) {
+            ScreeningMode::exact_only) {
         auto event = assess_conjunction_polynomial(
             *resident_index,
             hit.obj1_index,
@@ -628,7 +629,7 @@ ConjunctionEvent refine_coarse_hit(
             radius_m,
             radius_m);
         if (resident_index->screening_mode ==
-            orbpro::conjunction::ConjunctionScreeningMode::polynomial_plus_exact_polish) {
+            ScreeningMode::polynomial_plus_exact_polish) {
             return assess_conjunction_in_window_near_hint(
                 obj1,
                 obj2,
@@ -677,6 +678,7 @@ std::optional<ConjunctionEvent> refine_coarse_hit_if_within_threshold(
                 solution.tca_jd,
                 radius_m,
                 radius_m);
+            if (has_error()) return std::nullopt;
             if (!is_conjunction_within_threshold(event.min_range_km, config.threshold_km)) {
                 return std::nullopt;
             }
@@ -686,7 +688,7 @@ std::optional<ConjunctionEvent> refine_coarse_hit_if_within_threshold(
     if (window.duration_days() <= 0.0) {
         if (resident_index != nullptr &&
             resident_index->screening_mode !=
-                orbpro::conjunction::ConjunctionScreeningMode::exact_only) {
+                ScreeningMode::exact_only) {
             auto event = assess_conjunction_polynomial(
                 *resident_index,
                 hit.obj1_index,
@@ -700,7 +702,7 @@ std::optional<ConjunctionEvent> refine_coarse_hit_if_within_threshold(
                 return std::nullopt;
             }
             if (resident_index->screening_mode ==
-                orbpro::conjunction::ConjunctionScreeningMode::polynomial_plus_exact_polish) {
+                ScreeningMode::polynomial_plus_exact_polish) {
                 auto polished_event = assess_conjunction_in_window_near_hint(
                     obj1,
                     obj2,
@@ -727,7 +729,7 @@ std::optional<ConjunctionEvent> refine_coarse_hit_if_within_threshold(
 
     if (resident_index != nullptr &&
         resident_index->screening_mode !=
-            orbpro::conjunction::ConjunctionScreeningMode::exact_only) {
+            ScreeningMode::exact_only) {
         auto event = assess_conjunction_polynomial(
             *resident_index,
             hit.obj1_index,
@@ -741,7 +743,7 @@ std::optional<ConjunctionEvent> refine_coarse_hit_if_within_threshold(
             return std::nullopt;
         }
         if (resident_index->screening_mode ==
-            orbpro::conjunction::ConjunctionScreeningMode::polynomial_plus_exact_polish) {
+            ScreeningMode::polynomial_plus_exact_polish) {
             auto polished_event = assess_conjunction_in_window_near_hint(
                 obj1,
                 obj2,
@@ -984,6 +986,7 @@ ScreeningThreadWork process_time_steps(
     int thread_id, int total_threads)
 {
     ScreeningThreadWork work;
+    clear_error();
     if (valid_pairs.empty()) {
         return work;
     }
@@ -1026,15 +1029,14 @@ ScreeningThreadWork process_time_steps(
         secondary_points.reserve(secondary_ids.size());
 
         for (uint32_t secondary_id : secondary_ids) {
-            try {
+            {
                 const auto state = propagate_sgp4(tles[secondary_id], jd);
+                if (has_error()) { work.error = error_message(); clear_error(); return work; }
                 const KDPoint point{state.x, state.y, state.z, secondary_id, static_cast<uint32_t>(step)};
                 cached_points[secondary_id] = point;
                 has_state[secondary_id] = 1;
                 secondary_points.push_back(point);
                 work.propagations++;
-            } catch (...) {
-                has_state[secondary_id] = 0;
             }
         }
 
@@ -1052,8 +1054,9 @@ ScreeningThreadWork process_time_steps(
 
             for (uint32_t primary_id : primary_ids) {
                 if (!has_state[primary_id]) {
-                    try {
+                    {
                         const auto state = propagate_sgp4(tles[primary_id], jd);
+                if (has_error()) { work.error = error_message(); clear_error(); return work; }
                         cached_points[primary_id] = {
                             state.x,
                             state.y,
@@ -1063,8 +1066,6 @@ ScreeningThreadWork process_time_steps(
                         };
                         has_state[primary_id] = 1;
                         work.propagations++;
-                    } catch (...) {
-                        continue;
                     }
                 }
 
@@ -1102,8 +1103,9 @@ ScreeningThreadWork process_time_steps(
         } else {
             for (uint32_t primary_id : primary_ids) {
                 if (!has_state[primary_id]) {
-                    try {
+                    {
                         const auto state = propagate_sgp4(tles[primary_id], jd);
+                if (has_error()) { work.error = error_message(); clear_error(); return work; }
                         cached_points[primary_id] = {
                             state.x,
                             state.y,
@@ -1113,8 +1115,6 @@ ScreeningThreadWork process_time_steps(
                         };
                         has_state[primary_id] = 1;
                         work.propagations++;
-                    } catch (...) {
-                        continue;
                     }
                 }
 
@@ -1176,6 +1176,7 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
     stats.conjunctions_found = 0;
     stats.propagations = 0;
     stats.elapsed_ms = 0.0;
+    stats.failed_pairs = 0;
 
     double start_jd = config.start_jd;
     double end_jd = start_jd + config.duration_days;
@@ -1218,6 +1219,7 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
     // Merge coarse-hit aggregates from all threads.
     std::map<uint64_t, CoarseHitRecord> unique_pairs;
     for (const auto& tw : thread_results) {
+        if (!tw.error.empty()) { set_error(tw.error); return {}; }
         stats.propagations += tw.propagations;
         for (const auto& hit : tw.coarse_hits) {
             const uint64_t key = coarse_hit_key(hit.obj1_index, hit.obj2_index);
@@ -1239,12 +1241,13 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
     // Step 4: Fine TCA refinement for each candidate pair
     std::vector<ConjunctionEvent> events;
     std::vector<ExactSolvedHit> solved_hits;
+    std::atomic<uint64_t> failed_pairs{0};
     std::vector<std::pair<uint64_t, CoarseHitRecord>> pair_list(
         unique_pairs.begin(), unique_pairs.end());
     const double radius_m = config.combined_radius_m / 2.0;
 #ifdef CONJUNCTION_SINGLE_THREAD
     for (const auto& [key, hit] : pair_list) {
-        try {
+        {
             auto solved = solve_coarse_hit_if_within_threshold_exact(
                 tles[hit.obj1_index],
                 tles[hit.obj2_index],
@@ -1254,15 +1257,16 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
                 start_jd,
                 end_jd,
                 config);
+                if (has_error()) { ++failed_pairs; clear_error(); continue; }
             if (solved.has_value()) {
                 solved_hits.push_back(std::move(*solved));
             }
-        } catch (...) {}
+        }
     }
 #else
     if (num_threads <= 1) {
         for (const auto& [key, hit] : pair_list) {
-            try {
+            {
                 auto solved = solve_coarse_hit_if_within_threshold_exact(
                     tles[hit.obj1_index],
                     tles[hit.obj2_index],
@@ -1272,10 +1276,11 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
                     start_jd,
                     end_jd,
                     config);
+                if (has_error()) { ++failed_pairs; clear_error(); continue; }
                 if (solved.has_value()) {
                     solved_hits.push_back(std::move(*solved));
                 }
-            } catch (...) {}
+            }
         }
     } else {
         std::mutex solved_hits_mutex;
@@ -1285,7 +1290,7 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
             std::vector<ExactSolvedHit> local_solved_hits;
             for (size_t i = from; i < to; i++) {
                 const auto& [key, hit] = pair_list[i];
-                try {
+                {
                     auto solved = solve_coarse_hit_if_within_threshold_exact(
                         tles[hit.obj1_index],
                         tles[hit.obj2_index],
@@ -1295,10 +1300,11 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
                         start_jd,
                         end_jd,
                         config);
+                if (has_error()) { ++failed_pairs; clear_error(); continue; }
                     if (solved.has_value()) {
                         local_solved_hits.push_back(std::move(*solved));
                     }
-                } catch (...) {}
+                }
             }
 
             std::lock_guard<std::mutex> lock(solved_hits_mutex);
@@ -1323,19 +1329,21 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
 
     events.reserve(solved_hits.size());
     for (const auto& solved : solved_hits) {
-        try {
+        {
             auto event = assess_conjunction_at_tca(
                 tles[solved.obj1_index],
                 tles[solved.obj2_index],
                 solved.tca_jd,
                 radius_m,
                 radius_m);
+                if (has_error()) { ++failed_pairs; clear_error(); continue; }
             if (is_conjunction_within_threshold(event.min_range_km, config.threshold_km)) {
                 events.push_back(std::move(event));
             }
-        } catch (...) {}
+        }
     }
 
+    stats.failed_pairs = failed_pairs.load();
     stats.tca_refined = pair_list.size();
     stats.conjunctions_found = events.size();
 
@@ -1369,6 +1377,7 @@ ScreeningThreadWork process_time_steps_implicit(
     const ResidentScreeningIndex* resident_index)
 {
     ScreeningThreadWork work;
+    clear_error();
     const size_t n = tles.size();
     if (n < 2) {
         return work;
@@ -1558,12 +1567,12 @@ ScreeningThreadWork process_time_steps_implicit(
         std::fill(has_state.begin(), has_state.end(), 0);
 
         for (uint32_t obj_id : active_ids) {
-            try {
+            {
                 StateVector state = {};
                 const bool requires_resident_polynomial =
                     resident_index != nullptr &&
                     resident_index->screening_mode !=
-                        orbpro::conjunction::ConjunctionScreeningMode::exact_only;
+                        ScreeningMode::exact_only;
                 bool has_polynomial_state =
                     requires_resident_polynomial &&
                     evaluate_resident_polynomial_state(
@@ -1574,10 +1583,16 @@ ScreeningThreadWork process_time_steps_implicit(
                         state);
                 if (!has_polynomial_state) {
                     if (requires_resident_polynomial) {
-                        continue;
+                        work.error = "Polynomial trajectory coverage is incomplete during coarse screening";
+                        return work;
                     }
                     state = propagate_sgp4(tles[obj_id], jd);
+                if (has_error()) { work.error = error_message(); clear_error(); return work; }
                     work.propagations++;
+                }
+                if (!std::isfinite(state.x) || !std::isfinite(state.y) || !std::isfinite(state.z) ||
+                    !std::isfinite(state.vx) || !std::isfinite(state.vy) || !std::isfinite(state.vz)) {
+                    work.error = "Non-finite coarse screening state"; return work;
                 }
                 const KDPoint point = {
                     state.x, state.y, state.z,
@@ -1586,7 +1601,7 @@ ScreeningThreadWork process_time_steps_implicit(
                 cached_points[obj_id] = point;
                 has_state[obj_id] = 1;
                 points.push_back(point);
-            } catch (...) {}
+            }
         }
 
         if (points.size() < 2) {
@@ -1963,6 +1978,7 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
         }
         result.coarse_hits.reserve(result.coarse_hits.size() + incoming_hits);
         for (const auto& tw : thread_results) {
+            if (!tw.error.empty()) { set_error(tw.error); return; }
             stats.propagations += tw.propagations;
             for (const auto& hit : tw.coarse_hits) {
                 const uint64_t key = coarse_hit_key(hit.obj1_index, hit.obj2_index);
@@ -2010,29 +2026,16 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
     } else if (num_batches <= 1) {
         // Single batch — simple create/join, no barriers needed.
         std::vector<std::thread> threads;
-        std::exception_ptr thread_exception = nullptr;
-        std::mutex thread_exception_mutex;
-        auto capture_thread_exception = [&]() {
-            std::lock_guard<std::mutex> lock(thread_exception_mutex);
-            if (thread_exception == nullptr) {
-                thread_exception = std::current_exception();
-            }
-        };
         for (int t = 0; t < num_threads; t++) {
             threads.emplace_back([&, t]() {
-                try {
+                {
                     thread_results[t] = process_time_steps_implicit(
                         config, tles, perigee_km, apogee_km, is_primary, participates,
                         start_jd, end_jd, config.coarse_step_sec, t, num_threads, resident_index);
-                } catch (...) {
-                    capture_thread_exception();
                 }
             });
         }
         for (auto& t : threads) t.join();
-        if (thread_exception != nullptr) {
-            std::rethrow_exception(thread_exception);
-        }
         merge_thread_results();
         if (progress) progress(0.7, "Screening complete...");
     } else {
@@ -2102,25 +2105,26 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
     const auto require_full_size =
         [expected_size = tles.size()](const auto& values, const char* name) {
             if (values.size() != expected_size) {
-                throw std::invalid_argument(
+                set_error(
                     std::string("screen_precomputed_tles_implicit: ") +
                     name +
-                    " must be exactly tles.size()");
+                    " must be exactly tles.size()"); return;
                 }
         };
     const auto require_optional_size =
         [expected_size = tles.size()](const auto& values, const char* name) {
             if (!values.empty() && values.size() != expected_size) {
-                throw std::invalid_argument(
+                set_error(
                     std::string("screen_precomputed_tles_implicit: ") +
                     name +
-                    " must be empty or exactly tles.size()");
+                    " must be empty or exactly tles.size()"); return;
             }
         };
     require_full_size(perigee_km, "perigee_km");
     require_full_size(apogee_km, "apogee_km");
     require_optional_size(is_primary, "is_primary");
     require_optional_size(participates, "participates");
+    if (has_error()) return {};
     auto t_start = std::chrono::high_resolution_clock::now();
     auto window_result = collect_precomputed_tles_implicit_window(
         tles,
@@ -2131,6 +2135,7 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
         config,
         progress,
         resident_index);
+    if (has_error()) return {};
     stats = window_result.stats;
     stats.total_objects = tles.size();
 
@@ -2141,12 +2146,13 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
 
     std::vector<ConjunctionEvent> events;
     std::vector<ExactSolvedHit> solved_hits;
+    std::atomic<uint64_t> failed_pairs{0};
     std::vector<std::pair<uint64_t, CoarseHitRecord>> pair_list(
         window_result.coarse_hits.begin(), window_result.coarse_hits.end());
     const bool use_exact_solution_path =
         resident_index == nullptr ||
         resident_index->screening_mode ==
-            orbpro::conjunction::ConjunctionScreeningMode::exact_only;
+            ScreeningMode::exact_only;
     const double radius_m = config.combined_radius_m / 2.0;
 
     {
@@ -2190,22 +2196,24 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
                     const size_t to = std::min(from + chunk, b_end);
                     for (size_t i = from; i < to; i++) {
                         const auto& [key, hit] = pair_list[i];
-                        try {
+                        {
                             if (use_exact_solution_path) {
                                 auto solved = solve_coarse_hit_if_within_threshold_exact(
                                     tles[hit.obj1_index], tles[hit.obj2_index],
                                     hit.obj1_index, hit.obj2_index,
                                     hit, start_jd, end_jd, config);
+                if (has_error()) { ++failed_pairs; clear_error(); continue; }
                                 if (solved.has_value())
                                     thread_solved[t].push_back(std::move(*solved));
                             } else {
                                 auto event = refine_coarse_hit_if_within_threshold(
                                     tles[hit.obj1_index], tles[hit.obj2_index],
                                     hit, start_jd, end_jd, config, resident_index);
+                                if (has_error()) { ++failed_pairs; clear_error(); continue; }
                                 if (event.has_value())
                                     thread_events[t].push_back(std::move(*event));
                             }
-                        } catch (...) {}
+                        }
                     }
                     refine_barrier.wait();
                 }
@@ -2243,20 +2251,22 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
         // Single-threaded refinement with progress.
         size_t refine_index = 0;
         for (const auto& [key, hit] : pair_list) {
-            try {
+            {
                 if (use_exact_solution_path) {
                     auto solved = solve_coarse_hit_if_within_threshold_exact(
                         tles[hit.obj1_index], tles[hit.obj2_index],
                         hit.obj1_index, hit.obj2_index,
                         hit, start_jd, end_jd, config);
+                if (has_error()) { ++failed_pairs; clear_error(); continue; }
                     if (solved.has_value()) solved_hits.push_back(std::move(*solved));
                 } else {
                     auto event = refine_coarse_hit_if_within_threshold(
                         tles[hit.obj1_index], tles[hit.obj2_index],
                         hit, start_jd, end_jd, config, resident_index);
+                                if (has_error()) { ++failed_pairs; clear_error(); continue; }
                     if (event.has_value()) events.push_back(std::move(*event));
                 }
-            } catch (...) {}
+            }
             ++refine_index;
             if (progress && refine_total > 0 &&
                 (refine_index % 100 == 0 || refine_index == refine_total)) {
@@ -2271,20 +2281,22 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
     if (use_exact_solution_path) {
         events.reserve(events.size() + solved_hits.size());
         for (const auto& solved : solved_hits) {
-            try {
+            {
                 auto event = assess_conjunction_at_tca(
                     tles[solved.obj1_index],
                     tles[solved.obj2_index],
                     solved.tca_jd,
                     radius_m,
                     radius_m);
+                if (has_error()) { ++failed_pairs; clear_error(); continue; }
                 if (is_conjunction_within_threshold(event.min_range_km, config.threshold_km)) {
                     events.push_back(std::move(event));
                 }
-            } catch (...) {}
+            }
         }
     }
 
+    stats.failed_pairs = failed_pairs.load();
     stats.tca_refined = pair_list.size();
     stats.conjunctions_found = events.size();
 
@@ -2316,25 +2328,26 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
     const auto require_full_size =
         [expected_size = tles.size()](const auto& values, const char* name) {
             if (values.size() != expected_size) {
-                throw std::invalid_argument(
+                set_error(
                     std::string("screen_precomputed_tles_implicit: ") +
                     name +
-                    " must be exactly tles.size()");
+                    " must be exactly tles.size()"); return;
             }
         };
     const auto require_optional_size =
         [expected_size = tles.size()](const auto& values, const char* name) {
             if (!values.empty() && values.size() != expected_size) {
-                throw std::invalid_argument(
+                set_error(
                     std::string("screen_precomputed_tles_implicit: ") +
                     name +
-                    " must be empty or exactly tles.size()");
+                    " must be empty or exactly tles.size()"); return;
             }
         };
     require_full_size(perigee_km, "perigee_km");
     require_full_size(apogee_km, "apogee_km");
     require_optional_size(is_primary, "is_primary");
     require_optional_size(participates, "participates");
+    if (has_error()) return {};
     const double step_sec = std::max(1.0, config.coarse_step_sec);
     const double step_days = step_sec / 86400.0;
     const double start_jd = config.start_jd;
@@ -2379,7 +2392,7 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
         };
     const auto refine_and_store_hit =
         [&](const CoarseHitRecord& hit) {
-            try {
+            {
                 auto event = refine_coarse_hit_if_within_threshold(
                     tles[hit.obj1_index],
                     tles[hit.obj2_index],
@@ -2388,11 +2401,12 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
                     end_jd,
                     config,
                     resident_index);
+                if (has_error()) { ++stats.failed_pairs; clear_error(); return; }
                 stats.tca_refined += 1;
                 if (event.has_value()) {
                     events.push_back(std::move(*event));
                 }
-            } catch (...) {}
+            }
         };
 
     for (int chunk_start_step = 0; chunk_start_step <= total_steps;
@@ -2421,6 +2435,7 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
             nullptr,
             resident_index);
 
+        if (has_error()) return {};
         for (const auto& [key, hit] : chunk_result.coarse_hits) {
             auto global_hit = globalize_hit(hit, chunk_start_step);
             auto& aggregate = carry_hits[key];
@@ -2500,12 +2515,9 @@ std::vector<ConjunctionEvent> ConjunctionScreener::screen(
         perigee_km.reserve(catalog.size());
         apogee_km.reserve(catalog.size());
         for (const auto& gp : catalog) {
-            try {
+            {
                 tles.push_back(gp_to_tle(gp));
-            } catch (...) {
-                TLE dummy;
-                dummy.norad_cat_id = gp.norad_cat_id;
-                tles.push_back(dummy);
+                if (has_error()) return {};
             }
             perigee_km.push_back(static_cast<float>(gp.perigee_km));
             apogee_km.push_back(static_cast<float>(gp.apogee_km));
@@ -2595,12 +2607,9 @@ std::vector<ConjunctionEvent> ConjunctionScreener::screen(
     std::vector<TLE> tles;
     tles.reserve(catalog.size());
     for (const auto& gp : catalog) {
-        try {
+        {
             tles.push_back(gp_to_tle(gp));
-        } catch (...) {
-            TLE dummy;
-            dummy.norad_cat_id = gp.norad_cat_id;
-            tles.push_back(dummy);
+                if (has_error()) return {};
         }
     }
 

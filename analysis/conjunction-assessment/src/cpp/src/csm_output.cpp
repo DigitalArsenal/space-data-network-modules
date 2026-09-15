@@ -3,7 +3,7 @@
 #ifdef SING
 #undef SING
 #endif
-#include "conjunction/standards/CSM/main_generated.h"
+#include "CSM_generated.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -50,7 +50,7 @@ int32_t conjunction_to_csm(
     uint8_t* output,
     uint32_t output_capacity)
 {
-    try {
+    if (!output || output_capacity == 0u) return -2;
         flatbuffers::FlatBufferBuilder builder(1024);
 
         const auto object_1 = build_csm_cat(builder, event.obj1);
@@ -77,9 +77,6 @@ int32_t conjunction_to_csm(
         }
         std::memcpy(output, buffer, size);
         return static_cast<int32_t>(size);
-    } catch (const std::exception&) {
-        return -1;
-    }
 }
 
 } // namespace conjunction

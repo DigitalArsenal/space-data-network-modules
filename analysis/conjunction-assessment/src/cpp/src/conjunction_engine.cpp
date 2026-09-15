@@ -1,3 +1,5 @@
+#include "conjunction/error_status.h"
+#include <limits>
 /**
  * Conjunction Assessment Engine (v2) — Propagator-agnostic implementation
  *
@@ -237,12 +239,12 @@ static double distance_at(const EphemerisSource& o1, const EphemerisSource& o2, 
     auto s1 = o1.state_at(jd);
     auto s2 = o2.state_at(jd);
     if (!state_is_finite(s1) || !state_is_finite(s2)) {
-        throw std::runtime_error("Non-finite propagated state.");
+        set_error("Non-finite propagated state."); return std::numeric_limits<double>::quiet_NaN();
     }
     double dx = s1.x - s2.x, dy = s1.y - s2.y, dz = s1.z - s2.z;
     const double distance = std::sqrt(dx*dx + dy*dy + dz*dz);
     if (!std::isfinite(distance)) {
-        throw std::runtime_error("Non-finite propagated distance.");
+        set_error("Non-finite propagated distance."); return std::numeric_limits<double>::quiet_NaN();
     }
     return distance;
 }
@@ -251,7 +253,7 @@ static double distance_at(const EphemerisSource& o1, const EphemerisSource& o2, 
 
 double ConjunctionEngine::find_tca(
     const EphemerisSource& obj1, const EphemerisSource& obj2,
-    double start_jd, double duration_days, double coarse_step_sec) const
+    double start_jd, double duration_days, double coarse_step_sec, double fine_tol_sec) const
 {
     double end_jd = start_jd + duration_days;
     double step = coarse_step_sec / 86400.0;
@@ -266,8 +268,9 @@ double ConjunctionEngine::find_tca(
     double end_dist = 1e18;
 
     for (double jd = start_jd; jd <= end_jd; jd += step) {
-        try {
+        {
             double d = distance_at(obj1, obj2, jd);
+            if (has_error()) return std::numeric_limits<double>::quiet_NaN();
             if (jd == start_jd) {
                 start_dist = d;
             }
@@ -280,7 +283,7 @@ double ConjunctionEngine::find_tca(
             prev_d = curr_d;
             curr_d = d;
             prev_jd = jd;
-        } catch (...) {}
+        }
     }
 
     if (std::isfinite(start_dist)) {
@@ -295,7 +298,7 @@ double ConjunctionEngine::find_tca(
               [](const Minimum& a, const Minimum& b) { return a.dist < b.dist; });
 
     if (minima.empty()) {
-        throw std::runtime_error("No finite propagated states were available in the screening window.");
+        set_error("No finite propagated states were available in the screening window."); return std::numeric_limits<double>::quiet_NaN();
     }
 
     int n_refine = std::min(static_cast<int>(minima.size()), 30);
@@ -315,34 +318,38 @@ double ConjunctionEngine::find_tca(
         double subscan_start = std::max(start_jd, center - subscan_window);
         double subscan_stop = std::min(end_jd, center + subscan_window);
 
-        for (double jd = subscan_start; jd <= subscan_stop + subscan_step * 0.5; jd += subscan_step) {
-            try {
+        for (double sample_jd = subscan_start; sample_jd <= subscan_stop + subscan_step * 0.5; sample_jd += subscan_step) {
+            {
+                const double jd = std::min(sample_jd, subscan_stop);
                 double d = distance_at(obj1, obj2, jd);
+            if (has_error()) return std::numeric_limits<double>::quiet_NaN();
                 if (d < sub_best_d) { sub_best_d = d; sub_best_jd = jd; }
-            } catch (...) {}
+            }
         }
 
         // Golden section refinement ±1s
         double a = std::max(start_jd, sub_best_jd - 1.0/86400.0);
         double b = std::min(end_jd, sub_best_jd + 1.0/86400.0);
-        double tol = 0.001 / 86400.0;
+        double tol = fine_tol_sec / 86400.0;
         const double phi = (std::sqrt(5.0) - 1.0) / 2.0;
 
-        while ((b - a) > tol) {
+        for (unsigned iteration = 0; (b - a) > tol && iteration < 128; ++iteration) {
             double c = b - phi * (b - a);
             double d = a + phi * (b - a);
-            try {
+            {
                 double fc = distance_at(obj1, obj2, c);
                 double fd = distance_at(obj1, obj2, d);
+            if (has_error()) return std::numeric_limits<double>::quiet_NaN();
                 if (fc < fd) b = d; else a = c;
-            } catch (...) { break; }
+            }
         }
 
         double refined_jd = (a + b) / 2.0;
-        try {
+        {
             double d = distance_at(obj1, obj2, refined_jd);
+            if (has_error()) return std::numeric_limits<double>::quiet_NaN();
             if (d < best_dist) { best_dist = d; best_jd = refined_jd; }
-        } catch (...) {}
+        }
     }
 
     return best_jd;
@@ -409,7 +416,8 @@ BPlaneGeometry ConjunctionEngine::build_bplane(
 ConjunctionEvent2 ConjunctionEngine::assess(
     const EphemerisSource& obj1, const EphemerisSource& obj2,
     double start_jd, double duration_days,
-    const Covariance3x3* cov1, const Covariance3x3* cov2) const
+    const Covariance3x3* cov1, const Covariance3x3* cov2,
+    double coarse_step_sec, double fine_tol_sec) const
 {
     ConjunctionEvent2 event;
 
@@ -422,14 +430,15 @@ ConjunctionEvent2 ConjunctionEngine::assess(
     event.obj2_norad = obj2.norad_id();
 
     // Find TCA
-    event.tca_jd = find_tca(obj1, obj2, start_jd, duration_days);
+    event.tca_jd = find_tca(obj1, obj2, start_jd, duration_days, coarse_step_sec, fine_tol_sec);
+    if (has_error()) return {};
     event.tca_iso = jd_to_iso(event.tca_jd);
 
     // Get states at TCA
     event.state1 = obj1.state_at(event.tca_jd);
     event.state2 = obj2.state_at(event.tca_jd);
     if (!state_is_finite(event.state1) || !state_is_finite(event.state2)) {
-        throw std::runtime_error("Invalid propagated state at TCA.");
+        set_error("Invalid propagated state at TCA."); return {};
     }
 
     // Geometry
@@ -443,7 +452,7 @@ ConjunctionEvent2 ConjunctionEngine::assess(
     double dvz = event.state1.vz - event.state2.vz;
     event.relative_speed_kms = std::sqrt(dvx*dvx + dvy*dvy + dvz*dvz);
     if (!std::isfinite(event.miss_distance_km) || !std::isfinite(event.relative_speed_kms)) {
-        throw std::runtime_error("Invalid conjunction geometry at TCA.");
+        set_error("Invalid conjunction geometry at TCA."); return {};
     }
 
     // RTN
@@ -541,12 +550,13 @@ std::vector<ConjunctionEvent2> ConjunctionEngine::screen(
             if (primary->norad_id() != 0 && primary->norad_id() == secondary->norad_id())
                 continue;
 
-            try {
+            {
                 auto event = assess(*primary, *secondary, start_jd, duration_days);
+                if (has_error()) return {};
                 if (event.miss_distance_km <= threshold_km) {
                     events.push_back(event);
                 }
-            } catch (...) {}
+            }
         }
     }
 

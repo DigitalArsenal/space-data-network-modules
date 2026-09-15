@@ -1,2897 +1,1688 @@
+// Public conjunction contract: published SDS CQR records on the SDK invoke ABI.
+// The SDK owns PIV/TAB framing, manifest embedding, memory and runtime
+// entrypoints.
 #include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cctype>
+#include <array>
+#include <cmath>
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
-#include <memory>
-#include <thread>
-#include <stdexcept>
-#include <string>
-#include <string_view>
-#include <utility>
-#include <vector>
-
 #include <flatbuffers/flatbuffers.h>
-
+#include <limits>
+#include <map>
+#include <memory>
+#include <string>
+#include <tuple>
+#include <vector>
+#ifdef SING
+#undef SING
+#endif
+#ifdef DOMAIN
+#undef DOMAIN
+#endif
+#include "CQR_generated.h"
+#include "space_data_module_invoke.h"
+extern "C" int32_t plugin_set_output_stream_frame(uint32_t, uint64_t, int32_t);
 #include "conjunction/conjunction_assessment.h"
 #include "conjunction/conjunction_engine.h"
 #include "conjunction/ephemeris_source.h"
-#include "conjunction/generated/all_generated.h"
+#include "conjunction/error_status.h"
 #include "conjunction/gp_json.h"
-#include "conjunction/pc_method.h"
 #include "conjunction/resident_screening_index.h"
 #include "conjunction/screening.h"
-#include "conjunction/screening_internal.h"
-#include "OMM_generated.h"
-#include "PIV_generated.h"
-#include "TypedArenaBuffer_generated.h"
-#include "orbpro/generated/PropagatorTrajectorySegments_generated.h"
-#include "orbpro/generated/StateVector_generated.h"
-#include "space_data_module_invoke.h"
+#include <atomic>
+#include <thread>
 
-extern "C" int invoke(void);
-extern "C" int32_t plugin_push_output_typed(
-  const char *port_id,
-  const char *schema_name,
-  const char *file_identifier,
-  uint32_t wire_format,
-  const char *root_type_name,
-  uint16_t fixed_string_length,
-  uint32_t byte_length,
-  uint16_t required_alignment,
-  const uint8_t *payload_ptr,
-  uint32_t payload_length
-);
-
-namespace {
-
-struct PortRequirement {
-  const char *port_id;
-  bool required;
-};
-
-struct MethodDescriptor {
-  const char *method_id;
-  int (*handler)(void);
-  const PortRequirement *input_ports;
-  size_t input_port_count;
-  const char *const *output_ports;
-  size_t output_port_count;
-  bool raw_shortcut_allowed;
-  const char *raw_input_port_id;
-  const char *raw_output_port_id;
-};
-
-struct InputFrameOwned {
-  plugin_input_frame_t view{};
-  std::string port_id{};
-  std::string schema_name{};
-  std::string file_identifier{};
-  std::string root_type_name{};
-  std::vector<uint8_t> payload{};
-};
-
-struct OutputFrameOwned {
-  std::string port_id{};
-  std::string schema_name{};
-  std::string file_identifier{};
-  std::string root_type_name{};
-  uint32_t wire_format = 0;
-  uint16_t fixed_string_length = 0;
-  uint32_t byte_length = 0;
-  uint16_t required_alignment = 0;
-  uint16_t alignment = 8;
-  uint32_t generation = 0;
-  uint64_t trace_id = 0;
-  uint32_t stream_id = 0;
-  uint64_t sequence = 0;
-  bool end_of_stream = false;
-  std::vector<uint8_t> payload{};
-};
-
-struct InvokeContext {
-  const MethodDescriptor *method = nullptr;
-  std::vector<InputFrameOwned> inputs{};
-  std::vector<OutputFrameOwned> outputs{};
-  uint64_t trace_id = 0;
-  uint32_t backlog_remaining = 0;
-  bool yielded = false;
-  int32_t status_code = 0;
-  std::string error_code{};
-  std::string error_message{};
-};
-
-static const PortRequirement kMethod_invoke_input_ports[] = {
-  { "request", true },
-};
-static const PortRequirement kMethod_pair_request_input_ports[] = {
-  { "request", true },
-};
-static const PortRequirement kMethod_cdm_input_ports[] = {
-  { "cdm", true },
-};
-static const PortRequirement kMethod_kvn_input_ports[] = {
-  { "kvn", true },
-};
-static const PortRequirement kMethod_xml_input_ports[] = {
-  { "xml", true },
-};
-static const PortRequirement kMethod_screen_catalog_input_ports[] = {
-  { "request", true },
-  { "catalog", false },
-};
-static const PortRequirement kMethod_prepare_screening_index_input_ports[] = {
-  { "request", true },
-  { "sources", true },
-};
-static const PortRequirement kMethod_prepare_segment_screening_index_input_ports[] = {
-  { "request", true },
-  { "sources", true },
-  { "segments", true },
-};
-static const PortRequirement kMethod_prepare_sample_screening_index_input_ports[] = {
-  { "request", true },
-  { "sources", true },
-  { "samples", true },
-};
-static const PortRequirement kMethod_destroy_screening_index_input_ports[] = {
-  { "request", true },
-};
-static const PortRequirement kMethod_screen_window_input_ports[] = {
-  { "request", true },
-};
-static const char *kMethod_invoke_output_ports[] = {
-  "response",
-};
-static const char *kMethod_result_output_ports[] = {
-  "result",
-};
-static const char *kMethod_screen_catalog_output_ports[] = {
-  "result",
-  "cdm",
-};
-static const char *kMethod_cdm_output_ports[] = {
-  "cdm",
-};
-static const char *kMethod_csm_output_ports[] = {
-  "csm",
-};
-static const char *kMethod_kvn_output_ports[] = {
-  "kvn",
-};
-static const char *kMethod_xml_output_ports[] = {
-  "xml",
-};
-
-static int HandleAssessConjunction(void);
-static int HandleEmitCdm(void);
-static int HandleEmitCsm(void);
-static int HandleFindTca(void);
-static int HandleAlfanoMaxProbability(void);
-static int HandleComputePc(void);
-static int HandleComputePcFromCdm(void);
-static int HandleParseCdmKvn(void);
-static int HandleWriteCdmKvn(void);
-static int HandleParseCdmXml(void);
-static int HandleWriteCdmXml(void);
-static int HandleScreenCatalog(void);
-static int HandlePrepareScreeningIndex(void);
-static int HandlePrepareSegmentScreeningIndex(void);
-static int HandlePrepareSampleScreeningIndex(void);
-static int HandleDestroyScreeningIndex(void);
-static int HandleScreenWindow(void);
-static int HandleScreenSegmentWindow(void);
-
-static const MethodDescriptor kMethodTable[] = {
-  {
-    "invoke",
-    &invoke,
-    kMethod_invoke_input_ports,
-    1u,
-    kMethod_invoke_output_ports,
-    1u,
-    false,
-    "request",
-    "response"
-  },
-  {
-    "assess_conjunction",
-    &HandleAssessConjunction,
-    kMethod_pair_request_input_ports,
-    1u,
-    kMethod_result_output_ports,
-    1u,
-    false,
-    nullptr,
-    nullptr
-  },
-  {
-    "emit_cdm",
-    &HandleEmitCdm,
-    kMethod_pair_request_input_ports,
-    1u,
-    kMethod_cdm_output_ports,
-    1u,
-    false,
-    nullptr,
-    nullptr
-  },
-  {
-    "emit_csm",
-    &HandleEmitCsm,
-    kMethod_pair_request_input_ports,
-    1u,
-    kMethod_csm_output_ports,
-    1u,
-    false,
-    nullptr,
-    nullptr
-  },
-  {
-    "find_tca",
-    &HandleFindTca,
-    kMethod_pair_request_input_ports,
-    1u,
-    kMethod_result_output_ports,
-    1u,
-    false,
-    nullptr,
-    nullptr
-  },
-  {
-    "alfano_max_probability",
-    &HandleAlfanoMaxProbability,
-    kMethod_pair_request_input_ports,
-    1u,
-    kMethod_result_output_ports,
-    1u,
-    false,
-    nullptr,
-    nullptr
-  },
-  {
-    "compute_pc",
-    &HandleComputePc,
-    kMethod_pair_request_input_ports,
-    1u,
-    kMethod_result_output_ports,
-    1u,
-    false,
-    nullptr,
-    nullptr
-  },
-  {
-    "compute_pc_from_cdm",
-    &HandleComputePcFromCdm,
-    kMethod_cdm_input_ports,
-    1u,
-    kMethod_result_output_ports,
-    1u,
-    false,
-    nullptr,
-    nullptr
-  },
-  {
-    "parse_cdm_kvn",
-    &HandleParseCdmKvn,
-    kMethod_kvn_input_ports,
-    1u,
-    kMethod_cdm_output_ports,
-    1u,
-    false,
-    nullptr,
-    nullptr
-  },
-  {
-    "write_cdm_kvn",
-    &HandleWriteCdmKvn,
-    kMethod_cdm_input_ports,
-    1u,
-    kMethod_kvn_output_ports,
-    1u,
-    false,
-    nullptr,
-    nullptr
-  },
-  {
-    "parse_cdm_xml",
-    &HandleParseCdmXml,
-    kMethod_xml_input_ports,
-    1u,
-    kMethod_cdm_output_ports,
-    1u,
-    false,
-    nullptr,
-    nullptr
-  },
-  {
-    "write_cdm_xml",
-    &HandleWriteCdmXml,
-    kMethod_cdm_input_ports,
-    1u,
-    kMethod_xml_output_ports,
-    1u,
-    false,
-    nullptr,
-    nullptr
-  },
-  {
-    "screen_catalog",
-    &HandleScreenCatalog,
-    kMethod_screen_catalog_input_ports,
-    2u,
-    kMethod_screen_catalog_output_ports,
-    2u,
-    false,
-    nullptr,
-    nullptr
-  },
-  {
-    "prepare_screening_index",
-    &HandlePrepareScreeningIndex,
-    kMethod_prepare_screening_index_input_ports,
-    2u,
-    kMethod_result_output_ports,
-    1u,
-    false,
-    nullptr,
-    nullptr
-  },
-  {
-    "prepare_segment_screening_index",
-    &HandlePrepareSegmentScreeningIndex,
-    kMethod_prepare_segment_screening_index_input_ports,
-    3u,
-    kMethod_result_output_ports,
-    1u,
-    false,
-    nullptr,
-    nullptr
-  },
-  {
-    "prepare_sample_screening_index",
-    &HandlePrepareSampleScreeningIndex,
-    kMethod_prepare_sample_screening_index_input_ports,
-    3u,
-    kMethod_result_output_ports,
-    1u,
-    false,
-    nullptr,
-    nullptr
-  },
-  {
-    "destroy_screening_index",
-    &HandleDestroyScreeningIndex,
-    kMethod_destroy_screening_index_input_ports,
-    1u,
-    nullptr,
-    0u,
-    false,
-    nullptr,
-    nullptr
-  },
-  {
-    "screen_window",
-    &HandleScreenWindow,
-    kMethod_screen_window_input_ports,
-    1u,
-    kMethod_result_output_ports,
-    1u,
-    false,
-    nullptr,
-    nullptr
-  },
-  {
-    "screen_segment_window",
-    &HandleScreenSegmentWindow,
-    kMethod_screen_window_input_ports,
-    1u,
-    kMethod_result_output_ports,
-    1u,
-    false,
-    nullptr,
-    nullptr
-  },
-};
-
-static InvokeContext g_invoke_context;
-
-static uintptr_t PtrFromU32(uint32_t value) {
-  return static_cast<uintptr_t>(value);
+namespace ca_cqr {
+using namespace conjunction;
+constexpr size_t kEventsPerChunk = 128;
+constexpr size_t kMaximumPendingEvents = 16384;
+constexpr size_t kMaximumPendingStreams = 8;
+constexpr size_t kMaximumRetainedRequestBytes = 32 * 1024 * 1024;
+constexpr size_t kMaximumDocumentBytes = 16 * 1024 * 1024;
+std::string text(const flatbuffers::String *s) {
+  return s ? s->str() : std::string();
 }
-
-static uint8_t *MutablePtr(uint32_t value) {
-  return reinterpret_cast<uint8_t *>(PtrFromU32(value));
-}
-
-static const uint8_t *ConstPtr(uint32_t value) {
-  return reinterpret_cast<const uint8_t *>(PtrFromU32(value));
-}
-
-static uint32_t *MutableU32Ptr(uint32_t value) {
-  return reinterpret_cast<uint32_t *>(PtrFromU32(value));
-}
-
-static const MethodDescriptor *FindMethod(std::string_view method_id) {
-  for (const auto &method : kMethodTable) {
-    if (method_id == method.method_id) {
-      return &method;
-    }
-  }
-  return nullptr;
-}
-
-static bool MethodDeclaresOutputPort(const MethodDescriptor *method, const char *port_id) {
-  if (!method || !port_id || !port_id[0]) {
-    return false;
-  }
-  for (size_t index = 0; index < method->output_port_count; index += 1) {
-    if (std::strcmp(method->output_ports[index], port_id) == 0) {
-      return true;
-    }
-  }
+bool error(const char *code, const std::string &detail) {
+  plugin_set_error(code, detail.c_str());
   return false;
 }
-
-static void ResetInvokeContext(const MethodDescriptor *method) {
-  g_invoke_context = InvokeContext{};
-  g_invoke_context.method = method;
+bool isFinite(double x) { return std::isfinite(x); }
+bool positive(double x) { return isFinite(x) && x > 0; }
+// Midpoint +/- duration and directly parsed endpoint may differ by up to two
+// binary64 representable Julian dates (about 80 microseconds near 2026).
+double epochRounding(double jd) {
+  return 2 * (std::nextafter(jd, std::numeric_limits<double>::infinity()) - jd);
 }
-
-static std::string StringValue(const ::flatbuffers::String *value) {
-  return value ? value->str() : std::string();
+const plugin_input_frame_t *input(const char *port, uint32_t ordinal = 0) {
+  auto i = plugin_find_input_index(port, ordinal);
+  return i < 0 ? nullptr : plugin_get_input_frame(i);
 }
-
-static void SetError(const char *code, const std::string &message) {
-  g_invoke_context.error_code = code ? code : "invoke-error";
-  g_invoke_context.error_message = message;
-}
-
-static std::string ReadCString(const char *value) {
-  return value ? std::string(value) : std::string();
-}
-
-static uint32_t AlignOffset(uint32_t offset, uint32_t alignment) {
-  if (alignment <= 1u) {
-    return offset;
+template <class T>
+const T *decode(const plugin_input_frame_t *f, const char *id) {
+  if (!f || !f->payload || f->payload_length < 8) {
+    error("invalid-request-frame",
+          "Missing or empty canonical FlatBuffer input.");
+    return nullptr;
   }
-  const uint32_t remainder = offset % alignment;
-  return remainder == 0u ? offset : offset + alignment - remainder;
+  flatbuffers::Verifier v(f->payload, f->payload_length);
+  if (!v.VerifyBuffer<T>(id)) {
+    error("invalid-request-frame",
+          "Published SDS FlatBuffer verification failed.");
+    return nullptr;
+  }
+  return flatbuffers::GetRoot<T>(f->payload);
 }
-
-static bool ResolvePivPayload(
-  const PIVRequest *request,
-  const TAB *frame,
-  const uint8_t **payload_out,
-  uint32_t *payload_size_out
-) {
-  if (!payload_out || !payload_size_out) {
+const CQR *request(const char *port = "request") {
+  conjunction::clear_error();
+  auto q = decode<CQR>(input(port), "$CQR");
+  if (!q)
+    return nullptr;
+  unsigned n =
+      !!q->PAIR_REQUEST() + !!q->CATALOG_REQUEST() +
+      !!q->PROBABILITY_REQUEST() + !!q->PROBABILITY_RESULT() +
+      !!q->ALFANO_REQUEST() + !!q->ALFANO_RESULT() + !!q->EVENT_RESULT() +
+      !!q->TCA_RESULT() + !!q->CATALOG_RESULT() + !!q->NATIVE_DOCUMENT() +
+      !!q->INDEX_REQUEST() + !!q->INDEX_RESULT() + !!q->WINDOW_REQUEST() +
+      !!q->DESTROY_REQUEST() + q->VERSION_QUERY() + !!q->VERSION_RESULT();
+  if (n != 1) {
+    error("invalid-request-arm",
+          "CQR must contain exactly one payload arm matching METHOD_ID.");
+    return nullptr;
+  }
+  return q;
+}
+bool pushBytes(const char *port, const char *schema, const char *id,
+               const char *root, const uint8_t *p, size_t n) {
+  return plugin_push_output_ex(port, schema, id, 0, root, 0, 0, p,
+                               static_cast<uint32_t>(n)) >= 0;
+}
+bool push(CQRT &q, const char *port = "result", uint64_t sequence = 0,
+          bool final = true) {
+  if (conjunction::has_error())
+    return error("evaluation-failed", conjunction::error_message());
+  flatbuffers::FlatBufferBuilder b(2048);
+  auto root = CQR::Pack(b, &q);
+  FinishCQRBuffer(b, root);
+  int i = plugin_push_output_ex(port, "CQR.fbs", "$CQR", 0, "CQR", 0, 0,
+                                b.GetBufferPointer(), b.GetSize());
+  if (i < 0)
     return false;
-  }
-  *payload_out = nullptr;
-  *payload_size_out = 0u;
-  if (!request || !frame) {
-    return false;
-  }
-
-  const uint32_t payload_size = frame->SIZE();
-  const uint32_t payload_offset = frame->OFFSET();
-  const auto *arena = request->PAYLOAD_ARENA();
-  if (payload_size == 0u) {
-    *payload_size_out = 0u;
-    return true;
-  }
-  if (arena && arena->size() > 0u) {
-    const uint64_t end_offset =
-      static_cast<uint64_t>(payload_offset) + static_cast<uint64_t>(payload_size);
-    if (end_offset > arena->size()) {
-      SetError("invalid-request-frame", "PIV input frame payload range exceeds request payload arena.");
-      return false;
-    }
-    *payload_out = arena->Data() + payload_offset;
-    *payload_size_out = payload_size;
-    return true;
-  }
-
-  const uintptr_t pointer = static_cast<uintptr_t>(payload_offset);
-  if (pointer == 0u) {
-    SetError("invalid-request-frame", "PIV input frame uses an external payload pointer of zero.");
-    return false;
-  }
-  *payload_out = reinterpret_cast<const uint8_t *>(pointer);
-  *payload_size_out = payload_size;
+  plugin_set_output_stream_frame(i, sequence, final ? 1 : 0);
   return true;
 }
-
-static bool LoadInputsFromPivRequest(const PIVRequest *request) {
-  g_invoke_context.inputs.clear();
-  const auto *frames = request ? request->INPUTS() : nullptr;
-  if (!frames) {
-    return true;
+std::unique_ptr<TIMInstantT> instant(double jd) {
+  auto t = std::make_unique<TIMInstantT>();
+  t->TIME_SYSTEM = timingStandard::UTC;
+  t->EPOCH_FORMAT = timEpochRepresentation::JULIAN_DATE;
+  t->JULIAN_DATE = jd;
+  return t;
+}
+bool epoch(const TIMInstant *t, double &jd) {
+  if (!t || t->TIME_SYSTEM() != timingStandard::UTC)
+    return error("unsupported-time-system",
+                 "Conjunction screening requires explicit UTC; resolve other "
+                 "time systems through TIM first.");
+  switch (t->EPOCH_FORMAT()) {
+  case timEpochRepresentation::JULIAN_DATE:
+    jd = t->JULIAN_DATE();
+    break;
+  case timEpochRepresentation::MODIFIED_JULIAN_DATE:
+    jd = t->JULIAN_DATE() + 2400000.5;
+    break;
+  case timEpochRepresentation::UNIX_SECONDS:
+    jd = 2440587.5 + t->SECONDS() / 86400.0;
+    break;
+  case timEpochRepresentation::ISO8601:
+    if (text(t->ISO8601()).empty())
+      return error("invalid-epoch", "UTC ISO8601 epoch is empty.");
+    jd = iso_to_jd(text(t->ISO8601()));
+    break;
+  default:
+    return error("unsupported-epoch-format",
+                 "Unsupported UTC epoch representation.");
   }
-  g_invoke_context.inputs.reserve(frames->size());
-
-  for (::flatbuffers::uoffset_t index = 0; index < frames->size(); index += 1) {
-    const TAB *frame = frames->Get(index);
-    if (!frame) {
-      continue;
-    }
-
-    const uint8_t *payload_ptr = nullptr;
-    uint32_t payload_size = 0;
-    if (!ResolvePivPayload(request, frame, &payload_ptr, &payload_size)) {
-      return false;
-    }
-
-    g_invoke_context.inputs.emplace_back();
-    auto &owned = g_invoke_context.inputs.back();
-    owned = InputFrameOwned{};
-    owned.port_id = StringValue(frame->PORT_ID());
-    const FlatBufferTypeRef *type_ref = frame->TYPE_REF();
-    if (type_ref) {
-      owned.schema_name = StringValue(type_ref->SCHEMA_NAME());
-      owned.file_identifier = StringValue(type_ref->FILE_IDENTIFIER());
-      owned.root_type_name = StringValue(type_ref->ROOT_TYPE());
-    }
-    if (payload_ptr && payload_size > 0u) {
-      owned.payload.insert(owned.payload.end(), payload_ptr, payload_ptr + payload_size);
-    }
-
-    owned.view.port_id = owned.port_id.empty() ? nullptr : owned.port_id.c_str();
-    owned.view.schema_name = owned.schema_name.empty() ? nullptr : owned.schema_name.c_str();
-    owned.view.file_identifier = owned.file_identifier.empty() ? nullptr : owned.file_identifier.c_str();
-    owned.view.wire_format = static_cast<uint32_t>(frame->WIRE_FORMAT());
-    owned.view.root_type_name = owned.root_type_name.empty() ? nullptr : owned.root_type_name.c_str();
-    owned.view.fixed_string_length = 0;
-    owned.view.byte_length = payload_size;
-    owned.view.required_alignment = static_cast<uint16_t>(frame->ALIGNMENT());
-    owned.view.alignment = static_cast<uint16_t>(frame->ALIGNMENT());
-    owned.view.size = payload_size;
-    owned.view.generation = 0;
-    owned.view.trace_id = frame->FRAME_ID();
-    owned.view.stream_id = 0;
-    owned.view.sequence = 0;
-    owned.view.end_of_stream = 1;
-    owned.view.payload = owned.payload.empty() ? nullptr : owned.payload.data();
-    owned.view.payload_length = static_cast<uint32_t>(owned.payload.size());
+  jd += t->SUBSECOND_NANOS() / 86400000000000.0;
+  return (isFinite(jd) && jd > 0) ||
+         error("invalid-epoch", "Epoch must be finite and positive.");
+}
+const char *algorithm(cqrProbabilityAlgorithm a) {
+  switch (a) {
+  case cqrProbabilityAlgorithm::FOSTER:
+    return "foster";
+  case cqrProbabilityAlgorithm::PATERA:
+    return "patera";
+  case cqrProbabilityAlgorithm::ALFANO_MAXIMUM:
+    return "alfano";
+  case cqrProbabilityAlgorithm::CHAN:
+    return "chan";
+  case cqrProbabilityAlgorithm::ALFRIEND_1999:
+    return "alfriend1999";
+  case cqrProbabilityAlgorithm::ALFRIEND_1999_MAXIMUM:
+    return "alfriend1999max";
+  case cqrProbabilityAlgorithm::ALFANO_2005:
+    return "alfano2005";
+  case cqrProbabilityAlgorithm::LAAS_2015:
+    return "laas2015";
+  case cqrProbabilityAlgorithm::ALFRIEND_2D:
+    return "alfriend";
+  default:
+    error("unsupported-algorithm",
+          "Probability algorithm is unspecified or unsupported.");
+    return nullptr;
   }
-
+}
+cqrProbabilityAlgorithm algorithmEnum(const std::string &name) {
+  for (int i = 1; i <= 9; ++i) {
+    auto a = static_cast<cqrProbabilityAlgorithm>(i);
+    auto p = create_pc_method(algorithm(a));
+    if (p->name() == name)
+      return a;
+  }
+  return cqrProbabilityAlgorithm::UNSPECIFIED;
+}
+bool controls(const CQRScreeningControls *c, ScreeningConfig &o) {
+  if (!c || !epoch(c->START_EPOCH(), o.start_jd))
+    return false;
+  if (!positive(c->DURATION_SECONDS()) || !positive(c->THRESHOLD_M()) ||
+      !positive(c->COARSE_STEP_SECONDS()) ||
+      !positive(c->REFINEMENT_TOLERANCE_SECONDS()) ||
+      !positive(c->COMBINED_RADIUS_M()) || c->REQUESTED_WORKERS() < 1 ||
+      c->REQUESTED_WORKERS() > 64)
+    return error("invalid-controls",
+                 "Duration, threshold, resolution and radius must be positive; "
+                 "requested workers must be 1..64.");
+  if (!algorithm(c->ALGORITHM()))
+    return false;
+  if (c->HAS_PROGRESS_INTERVAL_SECONDS() &&
+      (!isFinite(c->PROGRESS_INTERVAL_SECONDS()) ||
+       c->PROGRESS_INTERVAL_SECONDS() != 0))
+    return error(
+        "invalid-controls",
+        "Nonzero guest progress cadence is unsupported; use host diagnostics.");
+  o.duration_days = c->DURATION_SECONDS() / 86400.;
+  o.threshold_km = c->THRESHOLD_M() / 1000.;
+  o.coarse_step_sec = c->COARSE_STEP_SECONDS();
+  o.fine_tol_sec = c->REFINEMENT_TOLERANCE_SECONDS();
+  o.combined_radius_m = c->COMBINED_RADIUS_M();
+  o.num_threads = c->REQUESTED_WORKERS();
+  const double end_jd = o.start_jd + o.duration_days;
+  if (!isFinite(end_jd) || end_jd <= o.start_jd ||
+      o.start_jd + o.coarse_step_sec / 86400. <= o.start_jd ||
+      end_jd + o.coarse_step_sec / 86400. <= end_jd ||
+      o.fine_tol_sec / 86400. <
+          std::nextafter(end_jd, std::numeric_limits<double>::infinity()) - end_jd)
+    return error("unsupported-resolution",
+                 "The requested UTC interval or resolution cannot be represented "
+                 "by the Julian-date evaluation clock.");
+  o.use_kdtree = c->USE_KD_TREE();
+  o.use_dynamic_window = c->USE_DYNAMIC_WINDOW();
+  o.use_perigee_filter = c->USE_PERIGEE_FILTER();
+  o.progress_interval_sec = 0;
   return true;
 }
-
-static bool ValidateRequiredInputs(const MethodDescriptor *method) {
-  if (!method) {
-    return false;
+// No frame is inferred from a label. Earth common-frame evaluation needs no
+// transform; unsupported transforms fail before any relative geometry is used.
+int frame(const RFMCoordinateSystem *f) {
+  if (!f || !f->ORIGIN() ||
+      f->ORIGIN()->KIND() != rfmOriginKind::CELESTIAL_BODY ||
+      f->ORIGIN()->CELESTIAL_BODY_ID() != 399) {
+    error("unsupported-frame",
+          "An explicit Earth-centred RFM origin (NAIF 399) is required.");
+    return 0;
   }
-  for (size_t port_index = 0; port_index < method->input_port_count; port_index += 1) {
-    const auto &port = method->input_ports[port_index];
-    if (!port.required) {
-      continue;
+  switch (f->AXIS_TYPE()) {
+  case rfmAxisType::TRUE_EQUATOR_MEAN_EQUINOX_OF_DATE:
+    return 1;
+  case rfmAxisType::ICRF:
+    return 2;
+  case rfmAxisType::MEAN_EQUATOR_EQUINOX_J2000:
+    return 3;
+  default:
+    error("unsupported-frame",
+          "Frame conversion requires a verified external FRM/EOP provider; "
+          "supplied frame is unsupported.");
+    return 0;
+  }
+}
+int sourceFrame(const RFM *f, const std::string &center) {
+  if (center != "EARTH" && center != "Earth") {
+    error("unsupported-frame",
+          "OEM/PPE CENTER_NAME must explicitly identify EARTH.");
+    return 0;
+  }
+  if (!f) {
+    error("unsupported-frame", "Missing source reference frame.");
+    return 0;
+  }
+  if (auto w = f->REFERENCE_FRAME_as_RFMCoordinateSystemWrapper())
+    return frame(w->COORDINATE_SYSTEM());
+  if (auto w = f->REFERENCE_FRAME_as_CelestialFrameWrapper()) {
+    switch (w->frame()) {
+    case CelestialFrame::TEMEOFDATE:
+      return 1;
+    case CelestialFrame::GCRF:
+    case CelestialFrame::ICRF:
+      return 2;
+    case CelestialFrame::J2000:
+    case CelestialFrame::EME2000:
+      return 3;
+    default:
+      break;
     }
-    bool present = false;
-    for (const auto &frame : g_invoke_context.inputs) {
-      if (frame.port_id == port.port_id) {
-        present = true;
-        break;
+  }
+  error("unsupported-frame",
+        "Source frame requires an unsupported transform or EOP realization.");
+  return 0;
+}
+bool gpRecord(const OMM *r, GPElement &gp, bool require_frame = true) {
+  if (!r)
+    return error("invalid-source", "Missing OMM record.");
+  if (r->TIME_SYSTEM() != timingStandard::UTC ||
+      r->MEAN_ELEMENT_THEORY() != meanElementSource::SGP4)
+    return error("unsupported-source",
+                 "OMM provider supports SGP4 mean elements in UTC only.");
+  if (require_frame &&
+      sourceFrame(r->REFERENCE_FRAME(), text(r->CENTER_NAME())) != 1)
+    return error("unsupported-frame",
+                 "SGP4 OMM must explicitly declare Earth TEME.");
+  gp.object_name = text(r->OBJECT_NAME());
+  gp.object_id = text(r->OBJECT_ID());
+  gp.epoch_iso = text(r->EPOCH());
+  if (gp.epoch_iso.empty())
+    return error("invalid-source", "OMM epoch required.");
+  gp.epoch_jd = iso_to_jd(gp.epoch_iso);
+  gp.mean_motion = r->MEAN_MOTION();
+  gp.eccentricity = r->ECCENTRICITY();
+  gp.inclination = r->INCLINATION();
+  gp.ra_of_asc_node = r->RA_OF_ASC_NODE();
+  gp.arg_of_pericenter = r->ARG_OF_PERICENTER();
+  gp.mean_anomaly = r->MEAN_ANOMALY();
+  gp.ephemeris_type = static_cast<int>(r->EPHEMERIS_TYPE());
+  auto cl = text(r->CLASSIFICATION_TYPE());
+  gp.classification_type = cl.empty() ? 'U' : cl[0];
+  gp.norad_cat_id = r->NORAD_CAT_ID();
+  gp.element_set_no = r->ELEMENT_SET_NO();
+  gp.rev_at_epoch = r->REV_AT_EPOCH();
+  gp.bstar = r->BSTAR();
+  gp.mean_motion_dot = r->MEAN_MOTION_DOT();
+  gp.mean_motion_ddot = r->MEAN_MOTION_DDOT();
+  for (double x : {gp.epoch_jd, gp.mean_motion, gp.eccentricity, gp.inclination,
+                   gp.ra_of_asc_node, gp.arg_of_pericenter, gp.mean_anomaly,
+                   gp.bstar, gp.mean_motion_dot, gp.mean_motion_ddot})
+    if (!isFinite(x))
+      return error("invalid-source", "OMM elements must be finite.");
+  if (!positive(gp.epoch_jd) || !positive(gp.mean_motion) ||
+      gp.eccentricity < 0 || gp.eccentricity >= 1 || gp.inclination < 0 ||
+      gp.inclination > 180)
+    return error("invalid-source",
+                 "OMM orbital elements are outside SGP4 bounds.");
+  compute_derived(gp);
+  return true;
+}
+GPElement tleGp(const TLE &t) {
+  GPElement g;
+  g.object_name = t.name;
+  g.object_id = t.object_id;
+  g.epoch_jd = t.epoch_jd;
+  g.epoch_iso = jd_to_iso(t.epoch_jd);
+  g.mean_motion = t.mean_motion;
+  g.eccentricity = t.eccentricity;
+  g.inclination = t.inclination;
+  g.ra_of_asc_node = t.raan;
+  g.arg_of_pericenter = t.arg_perigee;
+  g.mean_anomaly = t.mean_anomaly;
+  g.norad_cat_id = t.norad_cat_id;
+  g.bstar = t.bstar;
+  compute_derived(g);
+  return g;
+}
+struct PolynomialRecord {
+  double mid = 0, half = 0;
+  std::array<std::vector<double>, 6> c;
+};
+class PolynomialSource final : public EphemerisSource {
+public:
+  std::vector<PolynomialRecord> records;
+  std::string id, name;
+  int norad = 0;
+  conjunction::StateVector state_at(double jd) const override {
+    for (auto &r : records)
+      if (jd >= r.mid - r.half / 86400. - epochRounding(jd) &&
+          jd <= r.mid + r.half / 86400. + epochRounding(jd)) {
+        double v[6] = {};
+        double x = std::clamp((jd - r.mid) * 86400. / r.half, -1.0, 1.0);
+        for (size_t k = 0; k < 6; ++k) {
+          double b1 = 0, b2 = 0;
+          for (size_t i = r.c[k].size(); i-- > 1;) {
+            double b = 2 * x * b1 - b2 + r.c[k][i];
+            b2 = b1;
+            b1 = b;
+          }
+          v[k] = x * b1 - b2 + r.c[k][0];
+        }
+        return {jd, v[0], v[1], v[2], v[3], v[4], v[5]};
       }
-    }
-    if (!present) {
-      SetError(
-        "missing-required-input",
-        std::string("Missing required input port: ") + port.port_id
-      );
-      return false;
-    }
+    double n = std::numeric_limits<double>::quiet_NaN();
+    return {jd, n, n, n, n, n, n};
+  }
+  double epoch_jd() const override { return valid_start_jd(); }
+  double valid_start_jd() const override {
+    return records.empty()
+               ? 0
+               : records.front().mid - records.front().half / 86400.;
+  }
+  double valid_end_jd() const override {
+    return records.empty() ? 0
+                           : records.back().mid + records.back().half / 86400.;
+  }
+  std::string object_id() const override { return id; }
+  std::string object_name() const override { return name; }
+  int norad_id() const override { return norad; }
+};
+struct Source {
+  std::shared_ptr<EphemerisSource> provider;
+  GPElement gp;
+  TLE tle;
+  bool mean = false;
+  int axes = 0;
+  uint32_t handle = 0;
+  std::vector<EphemerisPoint> samples;
+  std::shared_ptr<PolynomialSource> polynomial;
+};
+bool points(const OEM *r, Source &o) {
+  if (!r || !r->EPHEMERIS_DATA_BLOCK() ||
+      r->EPHEMERIS_DATA_BLOCK()->size() == 0)
+    return error("invalid-source", "OEM needs ephemeris blocks.");
+  for (auto b : *r->EPHEMERIS_DATA_BLOCK()) {
+    if (!b || b->TIME_SYSTEM() != timingStandard::UTC)
+      return error("unsupported-time-system",
+                   "OEM tracks must explicitly use UTC.");
+    int f = sourceFrame(b->REFERENCE_FRAME(), text(b->CENTER_NAME()));
+    if (!f || (o.axes && o.axes != f))
+      return error("unsupported-frame",
+                   "All OEM blocks must share one explicit frame.");
+    o.axes = f;
+    auto interpolation = text(b->INTERPOLATION());
+    if ((!interpolation.empty() && interpolation != "Hermite" &&
+         interpolation != "HERMITE") ||
+        (b->INTERPOLATION_DEGREE() != 0 && b->INTERPOLATION_DEGREE() != 3))
+      return error(
+          "unsupported-interpolation",
+          "The sampled OEM adapter implements cubic Hermite interpolation.");
+    if (b->COVARIANCE_MATRIX_LINES() && b->COVARIANCE_MATRIX_LINES()->size())
+      return error("unsupported-covariance",
+                   "OEM covariance interpolation is not implemented; use "
+                   "compute_pc with supplied encounter-plane covariance.");
+    if (b->STEP_SIZE() > 0) {
+      auto d = b->EPHEMERIS_DATA();
+      auto n = b->STATE_VECTOR_SIZE();
+      if (!d || (n != 6 && n != 9) || d->size() % n ||
+          text(b->START_TIME()).empty())
+        return error("invalid-source", "Invalid OEM compact state grid.");
+      double start = iso_to_jd(text(b->START_TIME()));
+      for (size_t i = 0; i < d->size(); i += n)
+        o.samples.push_back({start + (i / n) * b->STEP_SIZE() / 86400.,
+                             d->Get(i), d->Get(i + 1), d->Get(i + 2),
+                             d->Get(i + 3), d->Get(i + 4), d->Get(i + 5)});
+    } else if (auto lines = b->EPHEMERIS_DATA_LINES())
+      for (auto p : *lines) {
+        if (!p || text(p->EPOCH()).empty())
+          return error("invalid-source", "OEM state epoch required.");
+        o.samples.push_back({iso_to_jd(text(p->EPOCH())), p->X(), p->Y(),
+                             p->Z(), p->X_DOT(), p->Y_DOT(), p->Z_DOT()});
+      }
+  }
+  if (o.samples.size() < 2)
+    return error("invalid-source", "OEM needs at least two finite samples.");
+  double previous = 0;
+  for (auto &p : o.samples) {
+    for (double x : {p.jd, p.x, p.y, p.z, p.vx, p.vy, p.vz})
+      if (!isFinite(x))
+        return error("invalid-source", "OEM sample components must be finite.");
+    if (p.jd <= previous)
+      return error("invalid-source", "OEM epochs must be strictly increasing.");
+    previous = p.jd;
   }
   return true;
 }
-
-static pivStatus PivStatusForContext() {
-  if (!g_invoke_context.error_code.empty() || !g_invoke_context.error_message.empty()) {
-    return pivStatus::FAILED;
-  }
-  if (g_invoke_context.status_code != 0) {
-    return pivStatus::FAILED;
-  }
-  if (g_invoke_context.yielded || g_invoke_context.backlog_remaining > 0u) {
-    return pivStatus::YIELDED;
-  }
-  return pivStatus::OK;
-}
-
-static std::vector<uint8_t> SerializePivResponse() {
-  ::flatbuffers::FlatBufferBuilder builder(1024);
-  std::vector<uint8_t> payload_arena;
-  std::vector<::flatbuffers::Offset<TAB>> outputs;
-  payload_arena.reserve(1024);
-  outputs.reserve(g_invoke_context.outputs.size());
-
-  for (const auto &output : g_invoke_context.outputs) {
-    const uint32_t alignment = std::max<uint32_t>(
-      1u,
-      output.required_alignment > 0u ? output.required_alignment : output.alignment
-    );
-    const uint32_t aligned_offset = AlignOffset(
-      static_cast<uint32_t>(payload_arena.size()),
-      alignment
-    );
-    payload_arena.resize(aligned_offset, 0);
-    if (!output.payload.empty()) {
-      payload_arena.insert(
-        payload_arena.end(),
-        output.payload.begin(),
-        output.payload.end()
-      );
-    }
-
-    const auto type_ref = CreateFlatBufferTypeRefDirect(
-      builder,
-      output.schema_name.empty() ? nullptr : output.schema_name.c_str(),
-      output.file_identifier.empty() ? nullptr : output.file_identifier.c_str(),
-      nullptr,
-      output.root_type_name.empty() ? nullptr : output.root_type_name.c_str()
-    );
-    outputs.push_back(CreateTABDirect(
-      builder,
-      aligned_offset,
-      static_cast<uint32_t>(output.payload.size()),
-      alignment,
-      static_cast<payloadWireFormat>(output.wire_format),
-      type_ref,
-      bufferMutability::IMMUTABLE,
-      bufferOwnership::HOST_OWNED,
-      output.trace_id,
-      output.port_id.empty() ? nullptr : output.port_id.c_str()
-    ));
-  }
-
-  const auto response = CreatePIVResponseDirect(
-    builder,
-    g_invoke_context.status_code,
-    PivStatusForContext(),
-    g_invoke_context.yielded,
-    g_invoke_context.backlog_remaining,
-    outputs.empty() ? nullptr : &outputs,
-    payload_arena.empty() ? nullptr : &payload_arena,
-    g_invoke_context.error_code.empty() ? nullptr : g_invoke_context.error_code.c_str(),
-    g_invoke_context.error_message.empty() ? nullptr : g_invoke_context.error_message.c_str(),
-    g_invoke_context.trace_id
-  );
-  const auto envelope = CreatePIV(builder, 0, response);
-  FinishPIVBuffer(builder, envelope);
-  return std::vector<uint8_t>(
-    builder.GetBufferPointer(),
-    builder.GetBufferPointer() + builder.GetSize()
-  );
-}
-
-static std::vector<uint8_t> SerializePivErrorResponse(
-  int32_t status_code,
-  pivStatus status,
-  const char *error_code,
-  const std::string &error_message,
-  uint64_t trace_id = 0
-) {
-  ResetInvokeContext(nullptr);
-  g_invoke_context.trace_id = trace_id;
-  g_invoke_context.status_code = status_code;
-  g_invoke_context.error_code = error_code ? error_code : "invoke-error";
-  g_invoke_context.error_message = error_message;
-  if (status == pivStatus::NOT_FOUND) {
-    g_invoke_context.error_code = error_code ? error_code : "unknown-method";
-  }
-  ::flatbuffers::FlatBufferBuilder builder(512);
-  const auto response = CreatePIVResponseDirect(
-    builder,
-    status_code,
-    status,
-    false,
-    0,
-    nullptr,
-    nullptr,
-    g_invoke_context.error_code.c_str(),
-    g_invoke_context.error_message.c_str(),
-    trace_id
-  );
-  const auto envelope = CreatePIV(builder, 0, response);
-  FinishPIVBuffer(builder, envelope);
-  return std::vector<uint8_t>(
-    builder.GetBufferPointer(),
-    builder.GetBufferPointer() + builder.GetSize()
-  );
-}
-
-static std::vector<uint8_t> DispatchPivRequest(
-  const PIVRequest *request,
-  bool *runtime_error
-) {
-  if (!request) {
-    if (runtime_error) {
-      *runtime_error = true;
-    }
-    return SerializePivErrorResponse(400, pivStatus::FAILED, "invalid-request", "PIV envelope does not contain a request.");
-  }
-
-  const std::string method_id = StringValue(request->METHOD_ID());
-  const auto *method = FindMethod(method_id);
-  if (!method) {
-    if (runtime_error) {
-      *runtime_error = true;
-    }
-    return SerializePivErrorResponse(
-      404,
-      pivStatus::NOT_FOUND,
-      "unknown-method",
-      std::string("Unknown method: ") + method_id,
-      request->TRACE_ID()
-    );
-  }
-
-  ResetInvokeContext(method);
-  g_invoke_context.trace_id = request->TRACE_ID();
-  if (!LoadInputsFromPivRequest(request) || !ValidateRequiredInputs(method)) {
-    if (runtime_error) {
-      *runtime_error = true;
-    }
-    if (g_invoke_context.status_code == 0) {
-      g_invoke_context.status_code = 400;
-    }
-    return SerializePivResponse();
-  }
-
-  g_invoke_context.status_code = method->handler ? method->handler() : -1;
-  return SerializePivResponse();
-}
-
-static std::vector<uint8_t> DispatchRequestBytes(
-  const uint8_t *request_bytes,
-  size_t request_len,
-  bool *runtime_error
-) {
-  if (!request_bytes || request_len == 0u) {
-    if (runtime_error) {
-      *runtime_error = true;
-    }
-    return SerializePivErrorResponse(400, pivStatus::FAILED, "invalid-request", "Invoke request bytes are empty.");
-  }
-
-  if (request_len >= 8u && PIVBufferHasIdentifier(request_bytes)) {
-    ::flatbuffers::Verifier piv_verifier(request_bytes, request_len);
-    if (!VerifyPIVBuffer(piv_verifier)) {
-      if (runtime_error) {
-        *runtime_error = true;
-      }
-      return SerializePivErrorResponse(400, pivStatus::FAILED, "invalid-request", "PIV request FlatBuffer verification failed.");
-    }
-    const auto *envelope = GetPIV(request_bytes);
-    if (!envelope || !envelope->REQUEST()) {
-      if (runtime_error) {
-        *runtime_error = true;
-      }
-      return SerializePivErrorResponse(400, pivStatus::FAILED, "invalid-request", "PIV envelope does not contain a request.");
-    }
-    return DispatchPivRequest(envelope->REQUEST(), runtime_error);
-  }
-
-  if (runtime_error) {
-    *runtime_error = true;
-  }
-  return SerializePivErrorResponse(
-    400,
-    pivStatus::FAILED,
-    "invalid-request",
-    "Invoke request must be an SDS PIV envelope."
-  );
-}
-
-static bool ReadAllStdin(std::vector<uint8_t> *bytes_out) {
-  if (!bytes_out) {
+bool polynomial(const PPE *p, Source &o) {
+  if (!p || p->TIME_SYSTEM() != timingStandard::UTC)
+    return error("unsupported-time-system",
+                 "PPE adapter requires UTC coefficients.");
+  if (p->DEFAULT_BASIS_TYPE() != polynomialBasisType::CHEBYSHEV)
+    return error("unsupported-polynomial",
+                 "PPE default basis must be CHEBYSHEV.");
+  o.axes = sourceFrame(p->REFERENCE_FRAME(), text(p->CENTER_NAME()));
+  if (!o.axes)
     return false;
-  }
-  bytes_out->clear();
-
-  uint8_t buffer[4096];
-  while (true) {
-    const size_t read_count = std::fread(buffer, 1, sizeof(buffer), stdin);
-    if (read_count > 0u) {
-      bytes_out->insert(bytes_out->end(), buffer, buffer + read_count);
+  if (!p->POSITION_RECORDS() || !p->POSITION_RECORDS()->size() ||
+      (p->ORBITAL_ELEMENT_RECORDS() && p->ORBITAL_ELEMENT_RECORDS()->size()))
+    return error("unsupported-source",
+                 "PPE needs Cartesian position records only.");
+  o.polynomial = std::make_shared<PolynomialSource>();
+  double last = -std::numeric_limits<double>::infinity();
+  for (auto r : *p->POSITION_RECORDS()) {
+    if (!r || r->BASIS_TYPE() != polynomialBasisType::CHEBYSHEV ||
+        !r->HAS_VELOCITY_COEFFICIENTS() || !positive(r->EPOCH_HALF_SPAN()) ||
+        !r->NUM_COEFFICIENTS())
+      return error("unsupported-polynomial",
+                   "PPE requires Chebyshev position and explicit velocity "
+                   "coefficients.");
+    PolynomialRecord rec;
+    rec.mid = iso_to_jd(text(r->EPOCH_MID()));
+    rec.half = r->EPOCH_HALF_SPAN();
+    double start = rec.mid - rec.half / 86400.;
+    if (!isFinite(rec.mid) || start < last - 1e-9 ||
+        (!o.polynomial->records.empty() && start > last + 1e-9))
+      return error("invalid-coverage",
+                   "PPE intervals must be ordered and contiguous.");
+    last = rec.mid + rec.half / 86400.;
+    std::array<const flatbuffers::Vector<double> *, 6> vectors = {
+        r->POS_COEFF_X(), r->POS_COEFF_Y(), r->POS_COEFF_Z(),
+        r->VEL_COEFF_X(), r->VEL_COEFF_Y(), r->VEL_COEFF_Z()};
+    for (size_t k = 0; k < 6; ++k) {
+      auto v = vectors[k];
+      if (!v || v->size() != r->NUM_COEFFICIENTS())
+        return error("invalid-polynomial", "PPE coefficient length mismatch.");
+      for (auto x : *v) {
+        if (!isFinite(x))
+          return error("invalid-polynomial",
+                       "PPE coefficients must be finite.");
+        rec.c[k].push_back(x);
+      }
     }
-    if (read_count < sizeof(buffer)) {
-      if (std::ferror(stdin)) {
+    o.polynomial->records.push_back(std::move(rec));
+  }
+  return true;
+}
+bool source(const CQRObjectSource *r, Source &o) {
+  if (!r || text(r->OBJECT_ID()).empty())
+    return error("invalid-source", "CQR source requires object identity.");
+  unsigned n = !!r->MEAN_ELEMENTS() + !!r->TLE_LINES() + !!r->EPHEMERIS() +
+               !!r->COMPREHENSIVE_ORBIT() + !!r->POLYNOMIAL_EPHEMERIS();
+  if (n != 1)
+    return error("invalid-source-arm",
+                 "One scientific source arm is required; arbitrary external "
+                 "handles cannot be resolved by this instance.");
+  o.handle = r->SOURCE_HANDLE();
+  if (r->MEAN_ELEMENTS() || r->TLE_LINES()) {
+    auto port = text(r->PROPAGATOR_PORT_ID());
+    if (port != "sgp4")
+      return error("unsupported-propagator",
+                   "Mean elements require explicit PROPAGATOR_PORT_ID=sgp4; "
+                   "host-resolved OEM/PPE supports other providers.");
+    if (r->MEAN_ELEMENTS()) {
+      if (!gpRecord(r->MEAN_ELEMENTS(), o.gp))
         return false;
-      }
-      break;
+      o.tle = gp_to_tle(o.gp);
+      if (has_error())
+        return error("invalid-source", error_message());
+    } else {
+      auto t = r->TLE_LINES();
+      if (text(t->LINE1()).size() < 69 || text(t->LINE2()).size() < 69)
+        return error("invalid-source",
+                     "TLE requires two complete native lines.");
+      o.tle = parse_tle(text(t->NAME()), text(t->LINE1()), text(t->LINE2()));
+      if (has_error())
+        return error("invalid-source", error_message());
+      o.gp = tleGp(o.tle);
     }
+    o.gp.object_id = text(r->OBJECT_ID());
+    o.tle.object_id = o.gp.object_id;
+    if (!text(r->OBJECT_NAME()).empty()) {
+      o.gp.object_name = text(r->OBJECT_NAME());
+      o.tle.name = o.gp.object_name;
+    }
+    o.mean = true;
+    o.axes = 1;
+    o.provider = std::make_shared<GPEphemerisSource>(o.gp);
+  } else if (r->EPHEMERIS()) {
+    if (!points(r->EPHEMERIS(), o))
+      return false;
+    o.provider = std::make_shared<OEMEphemerisSource>(
+        o.samples, text(r->OBJECT_NAME()), text(r->OBJECT_ID()),
+        r->NORAD_CATALOG_ID());
+  } else if (r->POLYNOMIAL_EPHEMERIS()) {
+    if (!polynomial(r->POLYNOMIAL_EPHEMERIS(), o))
+      return false;
+    o.polynomial->name = text(r->OBJECT_NAME());
+    o.polynomial->id = text(r->OBJECT_ID());
+    o.polynomial->norad = r->NORAD_CATALOG_ID();
+    o.provider = o.polynomial;
+  } else
+    return error("unsupported-source",
+                 "Published OCM Cartesian state data does not declare a frame "
+                 "or state units; supply a host-resolved OEM/PPE record.");
+  if (r->SOURCE_EPOCH()) {
+    double declared = 0;
+    if (!epoch(r->SOURCE_EPOCH(), declared))
+      return false;
+    if (std::abs(declared - o.provider->epoch_jd()) > 1e-9)
+      return error("source-epoch-mismatch",
+                   "SOURCE_EPOCH disagrees with scientific source.");
   }
   return true;
 }
-
-static bool WriteAllStdout(const uint8_t *bytes, size_t length) {
-  if (!bytes && length > 0u) {
-    return false;
-  }
-  if (length == 0u) {
-    return std::fflush(stdout) == 0;
-  }
-  return std::fwrite(bytes, 1, length, stdout) == length && std::fflush(stdout) == 0;
-}
-
-static constexpr uint16_t kAlignedBinaryAlignment = 8;
-
-static const InputFrameOwned *FindInputFrame(const char *port_id, uint32_t ordinal = 0u) {
-  if (!port_id || !port_id[0]) {
-    return nullptr;
-  }
-  uint32_t seen = 0u;
-  for (const auto &frame : g_invoke_context.inputs) {
-    if (frame.port_id != port_id) {
-      continue;
-    }
-    if (seen == ordinal) {
-      return &frame;
-    }
-    seen += 1u;
-  }
-  return nullptr;
-}
-
-template <typename Table>
-static const Table *DecodeFlatbufferInput(
-  const InputFrameOwned *frame,
-  const char *port_id,
-  const char *expected_file_identifier,
-  const char *friendly_name
-) {
-  if (!frame) {
-    SetError(
-      "missing-required-input",
-      std::string("Missing required input port: ") + (port_id ? port_id : "<unknown>")
-    );
-    return nullptr;
-  }
-  if (frame->payload.empty()) {
-    SetError(
-      "invalid-request-frame",
-      std::string(friendly_name ? friendly_name : "input payload") + " is empty."
-    );
-    return nullptr;
-  }
-  if (expected_file_identifier &&
-      expected_file_identifier[0] &&
-      !frame->file_identifier.empty() &&
-      frame->file_identifier != expected_file_identifier) {
-    SetError(
-      "invalid-request-frame",
-      std::string(friendly_name ? friendly_name : "input payload") +
-        " expected file identifier " + expected_file_identifier +
-        " but received " + frame->file_identifier + "."
-    );
-    return nullptr;
-  }
-
-  ::flatbuffers::Verifier verifier(frame->payload.data(), frame->payload.size());
-  if (!verifier.template VerifyBuffer<Table>(expected_file_identifier)) {
-    SetError(
-      "invalid-request-frame",
-      std::string("FlatBuffer verification failed for ") +
-        (friendly_name ? friendly_name : "input payload") + "."
-    );
-    return nullptr;
-  }
-  return ::flatbuffers::GetRoot<Table>(frame->payload.data());
-}
-
-static bool PushAlignedBinaryOutput(
-  const char *port_id,
-  const char *schema_name,
-  const char *file_identifier,
-  const char *root_type_name,
-  const ::flatbuffers::FlatBufferBuilder &builder
-) {
-  return plugin_push_output_typed(
-           port_id,
-           schema_name,
-           file_identifier,
-           static_cast<uint32_t>(orbpro::stream::PayloadWireFormat_AlignedBinary),
-           root_type_name,
-           0,
-           static_cast<uint32_t>(builder.GetSize()),
-           kAlignedBinaryAlignment,
-           builder.GetBufferPointer(),
-           static_cast<uint32_t>(builder.GetSize())
-         ) >= 0;
-}
-
-static conjunction::TLE DecodeTleRecord(const orbpro::conjunction::TleRecord *record) {
-  return conjunction::parse_tle(
-    record && record->name() ? record->name()->str() : std::string(),
-    record && record->line1() ? record->line1()->str() : std::string(),
-    record && record->line2() ? record->line2()->str() : std::string()
-  );
-}
-
-static std::shared_ptr<conjunction::EphemerisSource> DecodePropagatedTrack(
-  const orbpro::conjunction::PropagatedTrack *track
-) {
-  if (!track || !track->samples()) {
-    return nullptr;
-  }
-
-  std::vector<conjunction::EphemerisPoint> points;
-  points.reserve(track->samples()->size());
-  for (const auto *sample : *track->samples()) {
-    if (!sample) {
-      continue;
-    }
-    points.push_back(
-      conjunction::EphemerisPoint{
-        sample->jd(),
-        sample->xKm(),
-        sample->yKm(),
-        sample->zKm(),
-        sample->vxKmS(),
-        sample->vyKmS(),
-        sample->vzKmS(),
-      }
-    );
-  }
-  if (points.size() < 2u) {
-    return nullptr;
-  }
-
-  return std::make_shared<conjunction::OEMEphemerisSource>(
-    std::move(points),
-    track->objectName() ? track->objectName()->str() : std::string(),
-    track->objectId() ? track->objectId()->str() : std::string(),
-    track->noradCatId()
-  );
-}
-
-static std::string ReadFlatbufferString(const ::flatbuffers::String *value) {
-  return value ? value->str() : std::string();
-}
-
-static conjunction::GPElement DecodeGpRecord(const orbpro::conjunction::GpRecord *record) {
-  if (!record) {
-    throw std::runtime_error("Conjunction screen_catalog request is missing a GP record.");
-  }
-
-  conjunction::GPElement gp{};
-  gp.object_name = ReadFlatbufferString(record->objectName());
-  gp.object_id = ReadFlatbufferString(record->objectId());
-  gp.epoch_iso = ReadFlatbufferString(record->epoch());
-  gp.epoch_jd = gp.epoch_iso.empty() ? 0.0 : conjunction::iso_to_jd(gp.epoch_iso);
-  gp.mean_motion = record->meanMotion();
-  gp.eccentricity = record->eccentricity();
-  gp.inclination = record->inclination();
-  gp.ra_of_asc_node = record->raOfAscNode();
-  gp.arg_of_pericenter = record->argOfPericenter();
-  gp.mean_anomaly = record->meanAnomaly();
-  gp.ephemeris_type = record->ephemerisType();
-  const auto classification = ReadFlatbufferString(record->classificationType());
-  gp.classification_type = classification.empty() ? 'U' : classification.front();
-  gp.norad_cat_id = record->noradCatId();
-  gp.element_set_no = record->elementSetNo();
-  gp.rev_at_epoch = record->revAtEpoch();
-  gp.bstar = record->bstar();
-  gp.mean_motion_dot = record->meanMotionDot();
-  gp.mean_motion_ddot = record->meanMotionDdot();
-  conjunction::compute_derived(gp);
-  return gp;
-}
-
-static conjunction::GPElement DecodeTleRecordAsGp(
-  const orbpro::conjunction::TleRecord *record
-) {
-  const auto tle = DecodeTleRecord(record);
-  conjunction::GPElement gp{};
-  gp.object_name = tle.name;
-  gp.epoch_jd = tle.epoch_jd;
-  gp.epoch_iso = tle.epoch_jd > 0.0 ? conjunction::jd_to_iso(tle.epoch_jd) : std::string();
-  gp.mean_motion = tle.mean_motion;
-  gp.eccentricity = tle.eccentricity;
-  gp.inclination = tle.inclination;
-  gp.ra_of_asc_node = tle.raan;
-  gp.arg_of_pericenter = tle.arg_perigee;
-  gp.mean_anomaly = tle.mean_anomaly;
-  gp.ephemeris_type = 0;
-  gp.classification_type =
-    (tle.line1.size() > 7 && std::isspace(static_cast<unsigned char>(tle.line1[7])) == 0)
-      ? tle.line1[7]
-      : 'U';
-  gp.norad_cat_id = tle.norad_cat_id;
-  gp.bstar = tle.bstar;
-  conjunction::compute_derived(gp);
-  return gp;
-}
-
-static conjunction::GPElement DecodeOmmRecord(const OMM *record) {
-  if (!record) {
-    throw std::runtime_error("Conjunction screen_catalog request is missing an OMM record.");
-  }
-
-  conjunction::GPElement gp{};
-  gp.object_name = ReadFlatbufferString(record->OBJECT_NAME());
-  gp.object_id = ReadFlatbufferString(record->OBJECT_ID());
-  gp.epoch_iso = ReadFlatbufferString(record->EPOCH());
-  gp.epoch_jd = gp.epoch_iso.empty() ? 0.0 : conjunction::iso_to_jd(gp.epoch_iso);
-  gp.mean_motion = record->MEAN_MOTION();
-  gp.eccentricity = record->ECCENTRICITY();
-  gp.inclination = record->INCLINATION();
-  gp.ra_of_asc_node = record->RA_OF_ASC_NODE();
-  gp.arg_of_pericenter = record->ARG_OF_PERICENTER();
-  gp.mean_anomaly = record->MEAN_ANOMALY();
-  gp.ephemeris_type = static_cast<int>(record->EPHEMERIS_TYPE());
-  const auto classification = ReadFlatbufferString(record->CLASSIFICATION_TYPE());
-  gp.classification_type = classification.empty() ? 'U' : classification.front();
-  gp.norad_cat_id = static_cast<int>(record->NORAD_CAT_ID());
-  gp.element_set_no = static_cast<int>(record->ELEMENT_SET_NO());
-  gp.rev_at_epoch = static_cast<int>(record->REV_AT_EPOCH());
-  gp.bstar = record->BSTAR();
-  gp.mean_motion_dot = record->MEAN_MOTION_DOT();
-  gp.mean_motion_ddot = record->MEAN_MOTION_DDOT();
-  conjunction::compute_derived(gp);
-  return gp;
-}
-
-static bool AppendOmmPayload(
-  const uint8_t *payload,
-  size_t payload_size,
-  std::vector<conjunction::GPElement> *catalog
-) {
-  if (!payload || payload_size == 0u || !catalog) {
-    return false;
-  }
-
-  uint32_t declared_size = 0u;
-  if (payload_size >= sizeof(declared_size)) {
-    std::memcpy(&declared_size, payload, sizeof(declared_size));
-  }
-
-  if (declared_size == payload_size - sizeof(declared_size) &&
-      payload_size >= (sizeof(flatbuffers::uoffset_t) * 2u) + flatbuffers::kFileIdentifierLength) {
-    const uint8_t *inner_payload = payload + sizeof(declared_size);
-    const size_t inner_size = payload_size - sizeof(declared_size);
-    ::flatbuffers::Verifier inner_verifier(inner_payload, inner_size);
-    if (OMMBufferHasIdentifier(inner_payload) && VerifyOMMBuffer(inner_verifier)) {
-      catalog->push_back(DecodeOmmRecord(GetOMM(inner_payload)));
-      return true;
-    }
-  }
-
-  if (payload_size >= sizeof(flatbuffers::uoffset_t) + flatbuffers::kFileIdentifierLength &&
-      OMMBufferHasIdentifier(payload)) {
-    ::flatbuffers::Verifier verifier(payload, payload_size);
-    if (VerifyOMMBuffer(verifier)) {
-      catalog->push_back(DecodeOmmRecord(GetOMM(payload)));
-      return true;
-    }
-  }
-
-  return false;
-}
-
-static uint32_t ReadUint32LengthPrefix(const uint8_t *bytes, bool big_endian) {
-  if (big_endian) {
-    return (static_cast<uint32_t>(bytes[0]) << 24u) |
-           (static_cast<uint32_t>(bytes[1]) << 16u) |
-           (static_cast<uint32_t>(bytes[2]) << 8u) |
-           static_cast<uint32_t>(bytes[3]);
-  }
-  return static_cast<uint32_t>(bytes[0]) |
-         (static_cast<uint32_t>(bytes[1]) << 8u) |
-         (static_cast<uint32_t>(bytes[2]) << 16u) |
-         (static_cast<uint32_t>(bytes[3]) << 24u);
-}
-
-static bool DecodeOmmLengthPrefixedStream(
-  const uint8_t *bytes,
-  size_t size,
-  bool big_endian,
-  std::vector<conjunction::GPElement> *catalog
-) {
-  if (!bytes || size == 0u || !catalog) {
-    return false;
-  }
-
-  std::vector<conjunction::GPElement> decoded;
-  size_t offset = 0u;
-  while (offset + sizeof(uint32_t) <= size) {
-    const uint32_t payload_size =
-      ReadUint32LengthPrefix(bytes + offset, big_endian);
-    offset += sizeof(uint32_t);
-    if (payload_size == 0u || offset + payload_size > size) {
-      return false;
-    }
-    if (!AppendOmmPayload(bytes + offset, payload_size, &decoded)) {
-      return false;
-    }
-    offset += payload_size;
-  }
-
-  if (offset != size || decoded.empty()) {
-    return false;
-  }
-
-  catalog->swap(decoded);
+bool window(const Source &s, const ScreeningConfig &c, int f) {
+  if (s.axes != f)
+    return error("frame-mismatch",
+                 "Scientific sources must already use the declared evaluation "
+                 "frame; use FRM/EOP before invoking.");
+  double a = s.provider->valid_start_jd(), b = s.provider->valid_end_jd();
+  if ((a && c.start_jd < a - epochRounding(a)) ||
+      (b && c.start_jd + c.duration_days > b + epochRounding(b)))
+    return error(
+        "invalid-coverage",
+        "Source does not cover the complete requested UTC screening window.");
   return true;
 }
-
-static bool DecodeOmmCatalogFrame(
-  const InputFrameOwned *frame,
-  std::vector<conjunction::GPElement> *catalog
-) {
-  if (!frame || frame->payload.empty() || !catalog) {
-    SetError("missing-catalog-input", "screen_catalog direct catalog mode requires a catalog input frame.");
-    return false;
+std::unique_ptr<CQRProbabilityResultT>
+probability(const PcResult &p, cqrProbabilityAlgorithm a,
+            cqrUncertaintyOrigin origin) {
+  auto o = std::make_unique<CQRProbabilityResultT>();
+  if (!p.method.empty()) {
+    const auto actual = algorithmEnum(p.method);
+    if (actual == cqrProbabilityAlgorithm::UNSPECIFIED)
+      set_error("Probability evaluator returned an unregistered algorithm.");
+    else
+      a = actual;
   }
-
-  const auto *bytes = frame->payload.data();
-  const size_t size = frame->payload.size();
-  catalog->clear();
-
-  if (AppendOmmPayload(bytes, size, catalog)) {
-    return true;
-  }
-
-  if (DecodeOmmLengthPrefixedStream(bytes, size, false, catalog) ||
-      DecodeOmmLengthPrefixedStream(bytes, size, true, catalog)) {
-    return true;
-  }
-
-  SetError(
-    "invalid-catalog-frame",
-    "screen_catalog catalog frame did not contain OMM payloads in single-buffer, uint32le stream, or uint32be SDN data API stream format."
-  );
-  return false;
+  o->ALGORITHM = a;
+  o->CONVERGED = p.converged;
+  o->ITERATIONS = std::max(0, p.iterations);
+  o->UNCERTAINTY_SOURCE = origin;
+  bool maximum = a == cqrProbabilityAlgorithm::ALFANO_MAXIMUM ||
+                 a == cqrProbabilityAlgorithm::ALFRIEND_1999_MAXIMUM;
+  o->PROBABILITY = maximum ? 0 : p.probability;
+  o->MAXIMUM_PROBABILITY = p.max_probability;
+  o->HAS_MAXIMUM_PROBABILITY = true;
+  o->MAHALANOBIS_SQUARED = p.mahalanobis_2d * p.mahalanobis_2d;
+  o->HAS_MAHALANOBIS_SQUARED = !maximum;
+  if (maximum)
+    o->UNCERTAINTY_SOURCE = cqrUncertaintyOrigin::MAXIMUM_PROBABILITY_ONLY;
+  if (!isFinite(o->PROBABILITY) || o->PROBABILITY < 0 || o->PROBABILITY > 1 ||
+      !isFinite(o->MAXIMUM_PROBABILITY) || o->MAXIMUM_PROBABILITY < 0 ||
+      o->MAXIMUM_PROBABILITY > 1)
+    set_error("Probability evaluator returned an invalid probability.");
+  return o;
 }
-
-static void AppendGpRecords(
-  std::vector<conjunction::GPElement> *target,
-  const flatbuffers::Vector<flatbuffers::Offset<orbpro::conjunction::GpRecord>> *records
-) {
-  if (!target || !records) {
-    return;
-  }
-  target->reserve(target->size() + records->size());
-  for (const auto *record : *records) {
-    target->push_back(DecodeGpRecord(record));
-  }
+std::unique_ptr<FRMVector3T> vec(double x, double y, double z) {
+  auto v = std::make_unique<FRMVector3T>();
+  v->X = x;
+  v->Y = y;
+  v->Z = z;
+  return v;
 }
-
-static void AppendTleRecordsAsGps(
-  std::vector<conjunction::GPElement> *target,
-  const flatbuffers::Vector<flatbuffers::Offset<orbpro::conjunction::TleRecord>> *records
-) {
-  if (!target || !records) {
-    return;
-  }
-  target->reserve(target->size() + records->size());
-  for (const auto *record : *records) {
-    target->push_back(DecodeTleRecordAsGp(record));
-  }
+std::unique_ptr<PRWResidentStateT> state(const conjunction::StateVector &v,
+                                         double jd, const std::string &id,
+                                         uint32_t norad, int axes) {
+  auto r = std::make_unique<PRWResidentStateT>();
+  r->OBJECT_ID = id;
+  r->CATALOG_NUMBER = norad;
+  r->STATE = std::make_unique<FRMStateVectorT>();
+  r->STATE->REPRESENTATION = frmStateRepresentation::CARTESIAN;
+  r->STATE->POSITION = vec(v.x * 1000., v.y * 1000., v.z * 1000.);
+  r->STATE->VELOCITY = vec(v.vx * 1000., v.vy * 1000., v.vz * 1000.);
+  r->STATE->EPOCH = jd_to_iso(jd);
+  r->STATE->EPOCH_TIME_SYSTEM = "UTC";
+  r->STATE->COORDINATE_SYSTEM_NAME = axes == 1   ? "TEME"
+                                     : axes == 2 ? "GCRF"
+                                                 : "EME2000";
+  r->COORDINATE_SYSTEM = std::make_unique<RFMCoordinateSystemT>();
+  r->COORDINATE_SYSTEM->NAME = r->STATE->COORDINATE_SYSTEM_NAME;
+  r->COORDINATE_SYSTEM->AXIS_TYPE =
+      axes == 1   ? rfmAxisType::TRUE_EQUATOR_MEAN_EQUINOX_OF_DATE
+      : axes == 2 ? rfmAxisType::ICRF
+                  : rfmAxisType::MEAN_EQUATOR_EQUINOX_J2000;
+  r->COORDINATE_SYSTEM->ORIGIN = std::make_unique<RFMOriginT>();
+  r->COORDINATE_SYSTEM->ORIGIN->KIND = rfmOriginKind::CELESTIAL_BODY;
+  r->COORDINATE_SYSTEM->ORIGIN->CELESTIAL_BODY_ID = 399;
+  r->COORDINATE_SYSTEM->EPOCH = r->STATE->EPOCH;
+  r->COORDINATE_SYSTEM->EPOCH_TIME_SYSTEM = "UTC";
+  return r;
 }
-
-static void AppendTrackSources(
-  std::vector<std::shared_ptr<conjunction::EphemerisSource>> *target,
-  const flatbuffers::Vector<flatbuffers::Offset<orbpro::conjunction::PropagatedTrack>> *tracks
-) {
-  if (!target || !tracks) {
-    return;
-  }
-  target->reserve(target->size() + tracks->size());
-  for (const auto *track : *tracks) {
-    auto source = DecodePropagatedTrack(track);
-    if (source) {
-      target->push_back(std::move(source));
-    }
-  }
+std::unique_ptr<CQREventT> event(const ConjunctionEvent &e, int axes = 1) {
+  auto o = std::make_unique<CQREventT>();
+  o->PRIMARY_ID = e.obj1.object_id.empty() ? std::to_string(e.obj1.norad_cat_id)
+                                           : e.obj1.object_id;
+  o->SECONDARY_ID = e.obj2.object_id.empty()
+                        ? std::to_string(e.obj2.norad_cat_id)
+                        : e.obj2.object_id;
+  o->PRIMARY_NAME = e.obj1.name;
+  o->SECONDARY_NAME = e.obj2.name;
+  o->PRIMARY_NORAD_ID = e.obj1.norad_cat_id;
+  o->SECONDARY_NORAD_ID = e.obj2.norad_cat_id;
+  o->TCA = instant(e.tca_jd);
+  o->MISS_DISTANCE_M = e.min_range_km * 1000.;
+  o->RELATIVE_SPEED_M_S = e.rel_speed_kms * 1000.;
+  PcResult p;
+  p.max_probability = e.max_probability;
+  p.converged = true;
+  o->PROBABILITY = probability(p, cqrProbabilityAlgorithm::ALFANO_MAXIMUM,
+                               cqrUncertaintyOrigin::MAXIMUM_PROBABILITY_ONLY);
+  o->DILUTION_THRESHOLD_M = e.dilution_threshold_km * 1000.;
+  o->HAS_DILUTION_THRESHOLD_M = true;
+  o->RELATIVE_POSITION_RTN =
+      vec(e.rel_pos_r * 1000., e.rel_pos_t * 1000., e.rel_pos_n * 1000.);
+  o->RELATIVE_VELOCITY_RTN =
+      vec(e.rel_vel_r * 1000., e.rel_vel_t * 1000., e.rel_vel_n * 1000.);
+  o->PRIMARY_SIGMA_RTN_M = vec(e.cov_r1, e.cov_t1, e.cov_n1);
+  o->SECONDARY_SIGMA_RTN_M = vec(e.cov_r2, e.cov_t2, e.cov_n2);
+  o->PRIMARY_DAYS_SINCE_EPOCH = e.dse1;
+  o->SECONDARY_DAYS_SINCE_EPOCH = e.dse2;
+  o->HAS_PRIMARY_DAYS_SINCE_EPOCH = o->HAS_SECONDARY_DAYS_SINCE_EPOCH = true;
+  o->PRIMARY_STATE =
+      state(e.state1, e.tca_jd, o->PRIMARY_ID, o->PRIMARY_NORAD_ID, axes);
+  o->SECONDARY_STATE =
+      state(e.state2, e.tca_jd, o->SECONDARY_ID, o->SECONDARY_NORAD_ID, axes);
+  return o;
 }
-
-static void AppendGpSources(
-  std::vector<std::shared_ptr<conjunction::EphemerisSource>> *target,
-  const std::vector<conjunction::GPElement> &records
-) {
-  if (!target) {
-    return;
-  }
-  target->reserve(target->size() + records.size());
-  for (const auto &record : records) {
-    target->push_back(std::make_shared<conjunction::GPEphemerisSource>(record));
-  }
+std::unique_ptr<CQREventT> event(const ConjunctionEvent2 &e,
+                                 cqrProbabilityAlgorithm a, int axes = 1) {
+  ConjunctionEvent l;
+  l.obj1.name = e.obj1_name;
+  l.obj1.object_id = e.obj1_id;
+  l.obj1.norad_cat_id = e.obj1_norad;
+  l.obj2.name = e.obj2_name;
+  l.obj2.object_id = e.obj2_id;
+  l.obj2.norad_cat_id = e.obj2_norad;
+  l.tca_jd = e.tca_jd;
+  l.state1 = e.state1;
+  l.state2 = e.state2;
+  l.min_range_km = e.miss_distance_km;
+  l.rel_speed_kms = e.relative_speed_kms;
+  l.rel_pos_r = e.rel_r;
+  l.rel_pos_t = e.rel_t;
+  l.rel_pos_n = e.rel_n;
+  l.rel_vel_r = e.rel_vr;
+  l.rel_vel_t = e.rel_vt;
+  l.rel_vel_n = e.rel_vn;
+  l.dse1 = e.dse1;
+  l.dse2 = e.dse2;
+  auto o = event(l, axes);
+  o->HAS_DILUTION_THRESHOLD_M = false;
+  o->PROBABILITY =
+      probability(e.pc, a, cqrUncertaintyOrigin::SYNTHESIZED_COVARIANCE);
+  o->PRIMARY_SIGMA_RTN_M.reset();
+  o->SECONDARY_SIGMA_RTN_M.reset();
+  o->MAHALANOBIS_3D_SQUARED = e.mahalanobis_3d * e.mahalanobis_3d;
+  o->HAS_MAHALANOBIS_3D_SQUARED = true;
+  o->COMBINED_RADIUS_M = e.combined_radius_km * 1000.;
+  o->HAS_COMBINED_RADIUS_M = true;
+  return o;
 }
-
-static void AppendOrderedCatalogRange(
-  std::vector<conjunction::GPElement> *target,
-  const std::vector<conjunction::GPElement> &catalog,
-  const flatbuffers::Vector<uint32_t> *ordered_indices,
-  uint32_t start,
-  uint32_t end
-) {
-  if (!target || !ordered_indices || catalog.empty()) {
-    return;
-  }
-  const uint32_t clamped_start = std::min<uint32_t>(start, ordered_indices->size());
-  const uint32_t clamped_end = std::max<uint32_t>(
-    clamped_start,
-    std::min<uint32_t>(end, ordered_indices->size())
-  );
-  target->reserve(target->size() + (clamped_end - clamped_start));
-  for (uint32_t order_index = clamped_start; order_index < clamped_end; order_index += 1u) {
-    const uint32_t catalog_index = ordered_indices->Get(order_index);
-    if (catalog_index < catalog.size()) {
-      target->push_back(catalog[catalog_index]);
-    }
-  }
+std::unique_ptr<CQRScreeningStatisticsT> statistics(const ScreeningStats &s) {
+  auto o = std::make_unique<CQRScreeningStatisticsT>();
+  o->TOTAL_OBJECTS = s.total_objects;
+  o->PAIRS_SCREENED = s.pairs_screened;
+  o->PAIRS_PREFILTERED = s.pairs_prefiltered;
+  o->KD_TREE_CANDIDATES = s.kdtree_candidates;
+  o->TCA_REFINED = s.tca_refined;
+  o->CONJUNCTIONS_FOUND = s.conjunctions_found;
+  o->PROPAGATIONS = s.propagations;
+  o->FAILED_PAIRS = s.failed_pairs;
+  return o;
 }
-
-static conjunction::ScreeningConfig DecodeScreeningConfig(
-  const orbpro::conjunction::ConjunctionScreenCatalogRequest *request
-) {
-  conjunction::ScreeningConfig config{};
-  config.start_jd = request->startJd();
-  config.duration_days = request->durationDays();
-  config.threshold_km = request->thresholdKm();
-  config.coarse_step_sec = request->coarseStepSec();
-  config.fine_tol_sec = request->fineTolSec();
-  config.combined_radius_m = request->combinedRadiusM();
-  config.num_threads = std::max(1, request->numThreads());
-  config.use_kdtree = request->useKdTree();
-  config.use_dynamic_window = request->useDynamicWindow();
-  config.use_perigee_filter = request->usePerigeeFilter();
-  return config;
+struct PendingCatalog {
+  std::vector<std::unique_ptr<CQREventT>> events;
+  ScreeningStats stats;
+  size_t offset = 0;
+  std::string request_bytes;
+};
+std::map<std::string, PendingCatalog> pending;
+std::string pendingKey(const std::string &method) {
+  std::string key = method;
+  auto f = input("request");
+  if (f) {
+    key.append(reinterpret_cast<const char *>(&f->trace_id),
+               sizeof(f->trace_id));
+    key.append(reinterpret_cast<const char *>(&f->stream_id),
+               sizeof(f->stream_id));
+  }
+  return key;
 }
-
-static void ScreenEphemerisSourceRange(
-  const std::vector<std::shared_ptr<conjunction::EphemerisSource>> &primaries,
-  const std::vector<std::shared_ptr<conjunction::EphemerisSource>> &secondaries,
-  const conjunction::ScreeningConfig &config,
-  std::atomic<size_t> *next_primary_index,
-  std::vector<conjunction::ConjunctionEvent2> *events_out,
-  uint64_t *pairs_screened_out
-) {
-  conjunction::ConjunctionEngine engine;
-  std::vector<conjunction::ConjunctionEvent2> local_events;
-  uint64_t local_pairs_screened = 0u;
-
-  while (true) {
-    const size_t primary_index = next_primary_index->fetch_add(1u, std::memory_order_relaxed);
-    if (primary_index >= primaries.size()) {
-      break;
-    }
-    const auto &primary = primaries[primary_index];
-    if (!primary) {
+std::string requestKey() {
+  std::string key;
+  for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
+    auto f = plugin_get_input_frame(i);
+    if (!f)
       continue;
-    }
-
-    if (secondaries.empty()) {
-      for (size_t secondary_index = primary_index + 1u;
-           secondary_index < primaries.size();
-           secondary_index += 1u) {
-        const auto &secondary = primaries[secondary_index];
-        if (!secondary) {
-          continue;
-        }
-        local_pairs_screened += 1u;
-        try {
-          const auto event = engine.assess(
-            *primary,
-            *secondary,
-            config.start_jd,
-            config.duration_days
-          );
-          if (conjunction::is_conjunction_within_threshold(
-                event.miss_distance_km,
-                config.threshold_km)) {
-            local_events.push_back(event);
-          }
-        } catch (...) {
-        }
-      }
-    } else {
-      for (const auto &secondary : secondaries) {
-        if (!secondary) {
-          continue;
-        }
-        if (primary->norad_id() != 0 && primary->norad_id() == secondary->norad_id()) {
-          continue;
-        }
-        local_pairs_screened += 1u;
-        try {
-          const auto event = engine.assess(
-            *primary,
-            *secondary,
-            config.start_jd,
-            config.duration_days
-          );
-          if (conjunction::is_conjunction_within_threshold(
-                event.miss_distance_km,
-                config.threshold_km)) {
-            local_events.push_back(event);
-          }
-        } catch (...) {
-        }
-      }
-    }
+    if (f->port_id)
+      key.append(f->port_id);
+    key.push_back('\0');
+    uint32_t n = f->payload_length;
+    key.append(reinterpret_cast<const char *>(&n), sizeof(n));
+    if (n)
+      key.append(reinterpret_cast<const char *>(f->payload), n);
   }
-
-  if (events_out) {
-    *events_out = std::move(local_events);
+  return key;
+}
+bool emitPending(const std::string &method) {
+  auto it = pending.find(pendingKey(method));
+  if (it == pending.end())
+    return false;
+  auto &p = it->second;
+  size_t count = p.events.size(), start = p.offset;
+  CQRT q;
+  q.CATALOG_RESULT = std::make_unique<CQRCatalogResultT>();
+  auto &r = *q.CATALOG_RESULT;
+  r.OBJECTS_PARSED = p.stats.total_objects;
+  r.CONJUNCTIONS_FOUND = count;
+  r.STATISTICS = statistics(p.stats);
+  r.EVENT_OFFSET = start;
+  r.FINAL_CHUNK = start + kEventsPerChunk >= count;
+  for (size_t i = start; i < std::min(start + kEventsPerChunk, count); ++i)
+    r.EVENTS.push_back(std::make_unique<CQREventT>(*p.events[i]));
+  bool final = r.FINAL_CHUNK;
+  bool failed = p.stats.failed_pairs > 0;
+  if (!push(q, "result", start / kEventsPerChunk, final))
+    return false;
+  for (size_t i = start; i < start + r.EVENTS.size(); ++i)
+    p.events[i].reset();
+  p.offset += r.EVENTS.size();
+  if (final)
+    pending.erase(it);
+  else {
+    plugin_set_yielded(1);
+    plugin_set_backlog_remaining(static_cast<uint32_t>(
+        (count - p.offset + kEventsPerChunk - 1) / kEventsPerChunk));
   }
-  if (pairs_screened_out) {
-    *pairs_screened_out = local_pairs_screened;
+  if (final && failed)
+    return error("incomplete-screening",
+                 "One or more pair evaluations failed; FAILED_PAIRS reports "
+                 "the incomplete result.");
+  return true;
+}
+bool hasPending(const std::string &method) {
+  auto it = pending.find(pendingKey(method));
+  if (it == pending.end())
+    return false;
+  if (it->second.request_bytes == requestKey())
+    return true;
+  set_error("A previous screening stream must be drained before reusing its "
+            "trace/stream identity for another request.");
+  return true;
+}
+bool catalogOutput(std::vector<std::unique_ptr<CQREventT>> events,
+                   const ScreeningStats &s, const std::string &method) {
+  size_t retainedEvents = events.size();
+  size_t retainedRequestBytes = 0;
+  for (const auto &entry : pending) {
+    retainedEvents += entry.second.events.size() - entry.second.offset;
+    retainedRequestBytes += entry.second.request_bytes.size();
   }
+  std::string identity = requestKey();
+  if (pending.size() >= kMaximumPendingStreams ||
+      retainedEvents > kMaximumPendingEvents ||
+      retainedRequestBytes + identity.size() > kMaximumRetainedRequestBytes)
+    return error("output-staging-limit",
+                 "Bounded output staging capacity exceeded; drain existing "
+                 "streams or request a smaller screening window.");
+  std::stable_sort(events.begin(), events.end(), [](auto &a, auto &b) {
+    return std::tie(a->TCA->JULIAN_DATE, a->PRIMARY_ID, a->SECONDARY_ID) <
+           std::tie(b->TCA->JULIAN_DATE, b->PRIMARY_ID, b->SECONDARY_ID);
+  });
+  PendingCatalog p;
+  p.events = std::move(events);
+  p.stats = s;
+  p.request_bytes = std::move(identity);
+  pending[pendingKey(method)] = std::move(p);
+  return emitPending(method);
+}
+bool catalogOutput(const std::vector<ConjunctionEvent> &e,
+                   const ScreeningStats &s, const std::string &method) {
+  std::vector<std::unique_ptr<CQREventT>> out;
+  for (auto &x : e)
+    out.push_back(event(x));
+  return catalogOutput(std::move(out), s, method);
 }
 
-static std::vector<conjunction::ConjunctionEvent2> ScreenEphemerisSources(
-  const std::vector<std::shared_ptr<conjunction::EphemerisSource>> &primaries,
-  const std::vector<std::shared_ptr<conjunction::EphemerisSource>> &secondaries,
-  const conjunction::ScreeningConfig &config,
-  conjunction::ScreeningStats *stats_out
-) {
-  const auto start_time = std::chrono::high_resolution_clock::now();
-  std::vector<conjunction::ConjunctionEvent2> events;
-  uint64_t pairs_screened = 0u;
-
-  const size_t schedulable_primary_count = primaries.size();
-  if (schedulable_primary_count > 0u) {
-    const int requested_threads = std::max(1, config.num_threads);
-    const int worker_count =
-#ifdef CONJUNCTION_SINGLE_THREAD
-      1;
-#else
-      std::max(
-        1,
-        std::min(
-          requested_threads,
-          static_cast<int>(schedulable_primary_count)
-        )
-      );
-#endif
-    std::atomic<size_t> next_primary_index{0u};
-    std::vector<std::vector<conjunction::ConjunctionEvent2>> thread_events(worker_count);
-    std::vector<uint64_t> thread_pair_counts(worker_count, 0u);
-
-#ifdef CONJUNCTION_SINGLE_THREAD
-    ScreenEphemerisSourceRange(
-      primaries,
-      secondaries,
-      config,
-      &next_primary_index,
-      &thread_events[0],
-      &thread_pair_counts[0]
-    );
-#else
-    if (worker_count <= 1) {
-      ScreenEphemerisSourceRange(
-        primaries,
-        secondaries,
-        config,
-        &next_primary_index,
-        &thread_events[0],
-        &thread_pair_counts[0]
-      );
-    } else {
-      std::vector<std::thread> threads;
-      threads.reserve(static_cast<size_t>(worker_count));
-      for (int worker_index = 0; worker_index < worker_count; worker_index += 1) {
-        threads.emplace_back([&, worker_index]() {
-          ScreenEphemerisSourceRange(
-            primaries,
-            secondaries,
-            config,
-            &next_primary_index,
-            &thread_events[worker_index],
-            &thread_pair_counts[worker_index]
-          );
-        });
-      }
-      for (auto &thread : threads) {
-        thread.join();
-      }
-    }
-#endif
-
-    size_t event_count = 0u;
-    for (int worker_index = 0; worker_index < worker_count; worker_index += 1) {
-      pairs_screened += thread_pair_counts[worker_index];
-      event_count += thread_events[worker_index].size();
-    }
-    events.reserve(event_count);
-    for (auto &worker_events : thread_events) {
-      events.insert(
-        events.end(),
-        std::make_move_iterator(worker_events.begin()),
-        std::make_move_iterator(worker_events.end())
-      );
-    }
-  }
-
-  std::sort(
-    events.begin(),
-    events.end(),
-    [](const conjunction::ConjunctionEvent2 &left,
-       const conjunction::ConjunctionEvent2 &right) {
-      return left.pc.max_probability > right.pc.max_probability;
-    }
-  );
-
-  if (stats_out) {
-    const auto end_time = std::chrono::high_resolution_clock::now();
-    stats_out->total_objects = primaries.size() + secondaries.size();
-    stats_out->pairs_screened = pairs_screened;
-    stats_out->pairs_prefiltered = 0u;
-    stats_out->kdtree_candidates = pairs_screened;
-    stats_out->tca_refined = pairs_screened;
-    stats_out->conjunctions_found = events.size();
-    stats_out->propagations = 0u;
-    stats_out->elapsed_ms =
-      std::chrono::duration<double, std::milli>(end_time - start_time).count();
-  }
-
-  return events;
+bool pair(const CQRPairRequest *p, Source &a, Source &b, ScreeningConfig &c) {
+  if (!p)
+    return error("invalid-request-arm", "Method requires CQR.PAIR_REQUEST.");
+  if (!controls(p->CONTROLS(), c) || !positive(p->PRIMARY_RADIUS_M()) ||
+      !positive(p->SECONDARY_RADIUS_M()))
+    return error("invalid-controls", "Pair radii and controls must be valid.");
+  if (std::abs(p->PRIMARY_RADIUS_M() + p->SECONDARY_RADIUS_M() -
+               c.combined_radius_m) > 1e-9)
+    return error("inconsistent-radii",
+                 "Combined radius must equal the sum of the pair radii.");
+  int f = frame(p->EVALUATION_FRAME());
+  return f && source(p->PRIMARY(), a) && source(p->SECONDARY(), b) &&
+         window(a, c, f) && window(b, c, f);
 }
+} // namespace ca_cqr
 
-static std::unique_ptr<orbpro::conjunction::ConjunctionEventT> ToFlatbufferEvent(
-  const conjunction::ConjunctionEvent &event
-) {
-  auto output = std::make_unique<orbpro::conjunction::ConjunctionEventT>();
-  output->obj1Name = event.obj1.name;
-  output->obj1Id =
-    event.obj1.norad_cat_id > 0 ? std::to_string(event.obj1.norad_cat_id) : std::string();
-  output->obj1Norad = event.obj1.norad_cat_id;
-  output->obj2Name = event.obj2.name;
-  output->obj2Id =
-    event.obj2.norad_cat_id > 0 ? std::to_string(event.obj2.norad_cat_id) : std::string();
-  output->obj2Norad = event.obj2.norad_cat_id;
-  output->tcaJd = event.tca_jd;
-  output->tcaIso = event.tca_iso.empty() ? conjunction::jd_to_iso(event.tca_jd) : event.tca_iso;
-  output->minRangeKm = event.min_range_km;
-  output->relSpeedKms = event.rel_speed_kms;
-  output->maxProbability = event.max_probability;
-  output->dilutionThresholdKm = event.dilution_threshold_km;
-  output->probabilityMethod = event.probability_method;
-  output->relPosR = event.rel_pos_r;
-  output->relPosT = event.rel_pos_t;
-  output->relPosN = event.rel_pos_n;
-  output->relVelR = event.rel_vel_r;
-  output->relVelT = event.rel_vel_t;
-  output->relVelN = event.rel_vel_n;
-  output->covR1 = event.cov_r1;
-  output->covT1 = event.cov_t1;
-  output->covN1 = event.cov_n1;
-  output->covR2 = event.cov_r2;
-  output->covT2 = event.cov_t2;
-  output->covN2 = event.cov_n2;
-  output->dse1 = event.dse1;
-  output->dse2 = event.dse2;
-  return output;
-}
-
-static std::unique_ptr<orbpro::conjunction::ConjunctionEventT> ToFlatbufferEvent(
-  const conjunction::ConjunctionEvent2 &event
-) {
-  auto output = std::make_unique<orbpro::conjunction::ConjunctionEventT>();
-  output->obj1Name = event.obj1_name;
-  output->obj1Id = event.obj1_id;
-  output->obj1Norad = event.obj1_norad;
-  output->obj2Name = event.obj2_name;
-  output->obj2Id = event.obj2_id;
-  output->obj2Norad = event.obj2_norad;
-  output->tcaJd = event.tca_jd;
-  output->tcaIso = event.tca_iso.empty() ? conjunction::jd_to_iso(event.tca_jd) : event.tca_iso;
-  output->minRangeKm = event.miss_distance_km;
-  output->relSpeedKms = event.relative_speed_kms;
-  output->maxProbability = event.pc.max_probability;
-  output->dilutionThresholdKm = 0.0;
-  output->probabilityMethod = event.pc.method;
-  output->relPosR = event.rel_r;
-  output->relPosT = event.rel_t;
-  output->relPosN = event.rel_n;
-  output->relVelR = event.rel_vr;
-  output->relVelT = event.rel_vt;
-  output->relVelN = event.rel_vn;
-  output->covR1 = std::sqrt(std::max(0.0, event.cov1.data[0])) * 1000.0;
-  output->covT1 = std::sqrt(std::max(0.0, event.cov1.data[4])) * 1000.0;
-  output->covN1 = std::sqrt(std::max(0.0, event.cov1.data[8])) * 1000.0;
-  output->covR2 = std::sqrt(std::max(0.0, event.cov2.data[0])) * 1000.0;
-  output->covT2 = std::sqrt(std::max(0.0, event.cov2.data[4])) * 1000.0;
-  output->covN2 = std::sqrt(std::max(0.0, event.cov2.data[8])) * 1000.0;
-  output->dse1 = event.dse1;
-  output->dse2 = event.dse2;
-  return output;
-}
-
-static conjunction::ConjunctionEvent ToLegacyConjunctionEvent(
-  const conjunction::ConjunctionEvent2 &event
-) {
-  conjunction::ConjunctionEvent legacy{};
-  legacy.obj1.name = event.obj1_name;
-  legacy.obj1.object_id = event.obj1_id;
-  legacy.obj1.norad_cat_id = event.obj1_norad;
-  legacy.obj2.name = event.obj2_name;
-  legacy.obj2.object_id = event.obj2_id;
-  legacy.obj2.norad_cat_id = event.obj2_norad;
-  legacy.tca_jd = event.tca_jd;
-  legacy.tca_iso = event.tca_iso.empty() ? conjunction::jd_to_iso(event.tca_jd) : event.tca_iso;
-  legacy.state1 = event.state1;
-  legacy.state2 = event.state2;
-  legacy.min_range_km = event.miss_distance_km;
-  legacy.rel_speed_kms = event.relative_speed_kms;
-  legacy.max_probability = event.pc.max_probability;
-  legacy.probability_method = event.pc.method;
-  legacy.rel_pos_r = event.rel_r;
-  legacy.rel_pos_t = event.rel_t;
-  legacy.rel_pos_n = event.rel_n;
-  legacy.rel_vel_r = event.rel_vr;
-  legacy.rel_vel_t = event.rel_vt;
-  legacy.rel_vel_n = event.rel_vn;
-  legacy.cov_r1 = std::sqrt(std::max(0.0, event.cov1.data[0])) * 1000.0;
-  legacy.cov_t1 = std::sqrt(std::max(0.0, event.cov1.data[4])) * 1000.0;
-  legacy.cov_n1 = std::sqrt(std::max(0.0, event.cov1.data[8])) * 1000.0;
-  legacy.cov_r2 = std::sqrt(std::max(0.0, event.cov2.data[0])) * 1000.0;
-  legacy.cov_t2 = std::sqrt(std::max(0.0, event.cov2.data[4])) * 1000.0;
-  legacy.cov_n2 = std::sqrt(std::max(0.0, event.cov2.data[8])) * 1000.0;
-  legacy.dse1 = event.dse1;
-  legacy.dse2 = event.dse2;
-  return legacy;
-}
-
-static std::unique_ptr<orbpro::conjunction::ScreeningStatsT> ToFlatbufferStats(
-  const conjunction::ScreeningStats &stats
-) {
-  auto output = std::make_unique<orbpro::conjunction::ScreeningStatsT>();
-  output->totalObjects = static_cast<uint32_t>(stats.total_objects);
-  output->pairsScreened = static_cast<uint32_t>(stats.pairs_screened);
-  output->pairsPrefiltered = static_cast<uint32_t>(stats.pairs_prefiltered);
-  output->kdtreeCandidates = static_cast<uint32_t>(stats.kdtree_candidates);
-  output->tcaRefined = static_cast<uint32_t>(stats.tca_refined);
-  output->conjunctionsFound = static_cast<uint32_t>(stats.conjunctions_found);
-  output->propagations = static_cast<uint32_t>(stats.propagations);
-  output->elapsedMs = stats.elapsed_ms;
-  return output;
-}
-
-static ::flatbuffers::FlatBufferBuilder BuildEventPayload(
-  const conjunction::ConjunctionEvent &event
-) {
-  ::flatbuffers::FlatBufferBuilder builder(1024);
-  const auto event_offset = orbpro::conjunction::ConjunctionEvent::Pack(
-    builder,
-    ToFlatbufferEvent(event).get()
-  );
-  builder.Finish(event_offset, "CAEV");
-  return builder;
-}
-
-static ::flatbuffers::FlatBufferBuilder BuildEventPayload(
-  const conjunction::ConjunctionEvent2 &event
-) {
-  ::flatbuffers::FlatBufferBuilder builder(1024);
-  const auto event_offset = orbpro::conjunction::ConjunctionEvent::Pack(
-    builder,
-    ToFlatbufferEvent(event).get()
-  );
-  builder.Finish(event_offset, "CAEV");
-  return builder;
-}
-
-static ::flatbuffers::FlatBufferBuilder BuildFindTcaPayload(double tca_jd, const std::string &tca_iso) {
-  ::flatbuffers::FlatBufferBuilder builder(256);
-  const auto root = orbpro::conjunction::CreateConjunctionFindTcaResultDirect(
-    builder,
-    tca_jd,
-    tca_iso.c_str()
-  );
-  builder.Finish(root, "CATR");
-  return builder;
-}
-
-static ::flatbuffers::FlatBufferBuilder BuildAlfanoPayload(const conjunction::ProbResult &result) {
-  ::flatbuffers::FlatBufferBuilder builder(256);
-  const auto root = orbpro::conjunction::CreateConjunctionAlfanoResult(
-    builder,
-    result.max_probability,
-    result.dilution_threshold_km,
-    result.sigma_star_km
-  );
-  builder.Finish(root, "CAAL");
-  return builder;
-}
-
-static ::flatbuffers::FlatBufferBuilder BuildPcPayload(const conjunction::PcResult &result) {
-  ::flatbuffers::FlatBufferBuilder builder(256);
-  const auto method = builder.CreateString(result.method);
-  const auto root = orbpro::conjunction::CreateConjunctionPcResult(
-    builder,
-    result.probability,
-    method,
-    result.converged,
-    result.iterations,
-    result.max_probability,
-    result.mahalanobis_2d
-  );
-  builder.Finish(root, "CAPC");
-  return builder;
-}
-
-static ::flatbuffers::FlatBufferBuilder BuildPrepareScreeningIndexPayload(
-  const conjunction::ResidentScreeningIndexBuildResult &result
-) {
-  ::flatbuffers::FlatBufferBuilder builder(256);
-  const auto root = orbpro::conjunction::CreateConjunctionPrepareScreeningIndexResult(
-    builder,
-    result.screening_index_handle,
-    result.source_count,
-    result.candidate_pair_count
-  );
-  builder.Finish(root, "CSPR");
-  return builder;
-}
-
-static ::flatbuffers::FlatBufferBuilder BuildScreenCatalogResultPayload(
-  uint32_t objects_parsed,
-  const std::vector<conjunction::ConjunctionEvent> &events,
-  const conjunction::ScreeningStats &stats
-) {
-  orbpro::conjunction::ConjunctionScreenCatalogResultT result{};
-  result.objectsParsed = objects_parsed;
-  result.conjunctionsFound = static_cast<uint32_t>(events.size());
-  result.stats = ToFlatbufferStats(stats);
-  result.conjunctions.reserve(events.size());
-  for (const auto &event : events) {
-    result.conjunctions.emplace_back(ToFlatbufferEvent(event));
-  }
-
-  ::flatbuffers::FlatBufferBuilder builder(4096);
-  const auto root = orbpro::conjunction::ConjunctionScreenCatalogResult::Pack(
-    builder,
-    &result
-  );
-  builder.Finish(root, "CASS");
-  return builder;
-}
-
-static ::flatbuffers::FlatBufferBuilder BuildScreenCatalogResultPayload(
-  uint32_t objects_parsed,
-  const std::vector<conjunction::ConjunctionEvent2> &events,
-  const conjunction::ScreeningStats &stats
-) {
-  orbpro::conjunction::ConjunctionScreenCatalogResultT result{};
-  result.objectsParsed = objects_parsed;
-  result.conjunctionsFound = static_cast<uint32_t>(events.size());
-  result.stats = ToFlatbufferStats(stats);
-  result.conjunctions.reserve(events.size());
-  for (const auto &event : events) {
-    result.conjunctions.emplace_back(ToFlatbufferEvent(event));
-  }
-
-  ::flatbuffers::FlatBufferBuilder builder(4096);
-  const auto root = orbpro::conjunction::ConjunctionScreenCatalogResult::Pack(
-    builder,
-    &result
-  );
-  builder.Finish(root, "CASS");
-  return builder;
-}
-
-static const orbpro::conjunction::ConjunctionPairRequest *DecodePairRequest(void) {
-  return DecodeFlatbufferInput<orbpro::conjunction::ConjunctionPairRequest>(
-    FindInputFrame("request"),
-    "request",
-    "CAPQ",
-    "ConjunctionPairRequest"
-  );
-}
-
-static int HandleAssessConjunction(void) {
-  try {
-    const auto *request = DecodePairRequest();
-    if (!request) {
-      return 400;
-    }
-
-    if (request->primaryTrack() && request->secondaryTrack()) {
-      auto primary = DecodePropagatedTrack(request->primaryTrack());
-      auto secondary = DecodePropagatedTrack(request->secondaryTrack());
-      if (!primary || !secondary) {
-        SetError("invalid-track", "Propagated conjunction requests require at least two samples per track.");
-        return 400;
-      }
-
-      conjunction::ConjunctionEngine engine;
-      engine.set_pc_method("alfano");
-      engine.set_combined_radius_m(request->radius1M(), request->radius2M());
-      const auto event = engine.assess(
-        *primary,
-        *secondary,
-        request->startJd(),
-        request->durationDays()
-      );
-
-      const auto payload = BuildEventPayload(event);
-      if (!PushAlignedBinaryOutput(
-            "result",
-            "orbpro.conjunction.ConjunctionEvent",
-            "CAEV",
-            "ConjunctionEvent",
-            payload
-          )) {
-        SetError("output-failed", "Failed to push conjunction event output.");
-        return 500;
-      }
-      return 0;
-    }
-
-    const auto event = conjunction::assess_conjunction(
-      DecodeTleRecord(request->tle1()),
-      DecodeTleRecord(request->tle2()),
-      request->startJd(),
-      request->durationDays(),
-      request->radius1M(),
-      request->radius2M()
-    );
-    const auto payload = BuildEventPayload(event);
-    if (!PushAlignedBinaryOutput(
-          "result",
-          "orbpro.conjunction.ConjunctionEvent",
-          "CAEV",
-          "ConjunctionEvent",
-          payload
-        )) {
-      SetError("output-failed", "Failed to push conjunction event output.");
-      return 500;
-    }
-    return 0;
-  } catch (const std::exception &ex) {
-    SetError("assess-conjunction-failed", ex.what());
-    return 500;
-  }
-}
-
-static int HandleEmitCdm(void) {
-  try {
-    const auto *request = DecodePairRequest();
-    if (!request) {
-      return 400;
-    }
-    conjunction::ConjunctionEvent event{};
-    if (request->primaryTrack() || request->secondaryTrack()) {
-      if (!request->primaryTrack() || !request->secondaryTrack()) {
-        SetError("invalid-track", "emit_cdm requires both primaryTrack and secondaryTrack when using propagated tracks.");
-        return 400;
-      }
-      auto primary = DecodePropagatedTrack(request->primaryTrack());
-      auto secondary = DecodePropagatedTrack(request->secondaryTrack());
-      if (!primary || !secondary) {
-        SetError("invalid-track", "Propagated CDM requests require at least two samples per track.");
-        return 400;
-      }
-
-      conjunction::ConjunctionEngine engine;
-      engine.set_pc_method("alfano");
-      engine.set_combined_radius_m(request->radius1M(), request->radius2M());
-      event = ToLegacyConjunctionEvent(engine.assess(
-        *primary,
-        *secondary,
-        request->startJd(),
-        request->durationDays()
-      ));
-    } else {
-      event = conjunction::assess_conjunction(
-        DecodeTleRecord(request->tle1()),
-        DecodeTleRecord(request->tle2()),
-        request->startJd(),
-        request->durationDays(),
-        request->radius1M(),
-        request->radius2M()
-      );
-    }
-
-    std::vector<uint8_t> payload(4096u);
-    int32_t written = conjunction::conjunction_to_cdm(
-      event,
-      payload.data(),
-      static_cast<uint32_t>(payload.size())
-    );
-    while (written == -2) {
-      payload.resize(payload.size() * 2u);
-      written = conjunction::conjunction_to_cdm(
-        event,
-        payload.data(),
-        static_cast<uint32_t>(payload.size())
-      );
-    }
-    if (written < 0) {
-      SetError("emit-cdm-failed", "Failed to serialize conjunction event as CDM.");
-      return 500;
-    }
-    payload.resize(static_cast<size_t>(written));
-
-    if (plugin_push_output_typed(
-          "cdm",
-          "CDM.fbs",
-          "$CDM",
-          static_cast<uint32_t>(orbpro::stream::PayloadWireFormat_AlignedBinary),
-          "CDM",
-          0,
-          static_cast<uint32_t>(payload.size()),
-          kAlignedBinaryAlignment,
-          payload.data(),
-          static_cast<uint32_t>(payload.size())
-        ) < 0) {
-      SetError("output-failed", "Failed to push CDM output.");
-      return 500;
-    }
-    return 0;
-  } catch (const std::exception &ex) {
-    SetError("emit-cdm-failed", ex.what());
-    return 500;
-  }
-}
-
-static int HandleEmitCsm(void) {
-  try {
-    const auto *request = DecodePairRequest();
-    if (!request) {
-      return 400;
-    }
-    conjunction::ConjunctionEvent event{};
-    if (request->primaryTrack() || request->secondaryTrack()) {
-      if (!request->primaryTrack() || !request->secondaryTrack()) {
-        SetError("invalid-track", "emit_csm requires both primaryTrack and secondaryTrack when using propagated tracks.");
-        return 400;
-      }
-      auto primary = DecodePropagatedTrack(request->primaryTrack());
-      auto secondary = DecodePropagatedTrack(request->secondaryTrack());
-      if (!primary || !secondary) {
-        SetError("invalid-track", "Propagated CSM requests require at least two samples per track.");
-        return 400;
-      }
-
-      conjunction::ConjunctionEngine engine;
-      engine.set_pc_method("alfano");
-      engine.set_combined_radius_m(request->radius1M(), request->radius2M());
-      event = ToLegacyConjunctionEvent(engine.assess(
-        *primary,
-        *secondary,
-        request->startJd(),
-        request->durationDays()
-      ));
-    } else {
-      event = conjunction::assess_conjunction(
-        DecodeTleRecord(request->tle1()),
-        DecodeTleRecord(request->tle2()),
-        request->startJd(),
-        request->durationDays(),
-        request->radius1M(),
-        request->radius2M()
-      );
-    }
-
-    std::vector<uint8_t> payload(4096u);
-    int32_t written = conjunction::conjunction_to_csm(
-      event,
-      payload.data(),
-      static_cast<uint32_t>(payload.size())
-    );
-    while (written == -2) {
-      payload.resize(payload.size() * 2u);
-      written = conjunction::conjunction_to_csm(
-        event,
-        payload.data(),
-        static_cast<uint32_t>(payload.size())
-      );
-    }
-    if (written < 0) {
-      SetError("emit-csm-failed", "Failed to serialize conjunction event as CSM.");
-      return 500;
-    }
-    payload.resize(static_cast<size_t>(written));
-
-    if (plugin_push_output_typed(
-          "csm",
-          "CSM.fbs",
-          "$CSM",
-          static_cast<uint32_t>(orbpro::stream::PayloadWireFormat_AlignedBinary),
-          "CSM",
-          0,
-          static_cast<uint32_t>(payload.size()),
-          kAlignedBinaryAlignment,
-          payload.data(),
-          static_cast<uint32_t>(payload.size())
-        ) < 0) {
-      SetError("output-failed", "Failed to push CSM output.");
-      return 500;
-    }
-    return 0;
-  } catch (const std::exception &ex) {
-    SetError("emit-csm-failed", ex.what());
-    return 500;
-  }
-}
-
-static int HandleFindTca(void) {
-  try {
-    const auto *request = DecodePairRequest();
-    if (!request) {
-      return 400;
-    }
-
-    double tca_jd = 0.0;
-    if (request->primaryTrack() && request->secondaryTrack()) {
-      auto primary = DecodePropagatedTrack(request->primaryTrack());
-      auto secondary = DecodePropagatedTrack(request->secondaryTrack());
-      if (!primary || !secondary) {
-        SetError("invalid-track", "Propagated conjunction requests require at least two samples per track.");
-        return 400;
-      }
-      conjunction::ConjunctionEngine engine;
-      tca_jd = engine.find_tca(
-        *primary,
-        *secondary,
-        request->startJd(),
-        request->durationDays(),
-        request->coarseStepSec()
-      );
-    } else {
-      tca_jd = conjunction::find_tca(
-        DecodeTleRecord(request->tle1()),
-        DecodeTleRecord(request->tle2()),
-        request->startJd(),
-        request->durationDays(),
-        request->coarseStepSec(),
-        request->fineTolSec()
-      );
-    }
-
-    const auto payload = BuildFindTcaPayload(tca_jd, conjunction::jd_to_iso(tca_jd));
-    if (!PushAlignedBinaryOutput(
-          "result",
-          "orbpro.conjunction.ConjunctionFindTcaResult",
-          "CATR",
-          "ConjunctionFindTcaResult",
-          payload
-        )) {
-      SetError("output-failed", "Failed to push find_tca output.");
-      return 500;
-    }
-    return 0;
-  } catch (const std::exception &ex) {
-    SetError("find-tca-failed", ex.what());
-    return 500;
-  }
-}
-
-static int HandleAlfanoMaxProbability(void) {
-  try {
-    const auto *request = DecodeFlatbufferInput<orbpro::conjunction::ConjunctionAlfanoRequest>(
-      FindInputFrame("request"),
-      "request",
-      "CAAR",
-      "ConjunctionAlfanoRequest"
-    );
-    if (!request) {
-      return 400;
-    }
-
-    const auto result = conjunction::alfano_max_probability(
-      request->missDistanceKm(),
-      request->combinedRadiusKm()
-    );
-    const auto payload = BuildAlfanoPayload(result);
-    if (!PushAlignedBinaryOutput(
-          "result",
-          "orbpro.conjunction.ConjunctionAlfanoResult",
-          "CAAL",
-          "ConjunctionAlfanoResult",
-          payload
-        )) {
-      SetError("output-failed", "Failed to push alfano_max_probability output.");
-      return 500;
-    }
-    return 0;
-  } catch (const std::exception &ex) {
-    SetError("alfano-max-probability-failed", ex.what());
-    return 500;
-  }
-}
-
-static int HandleComputePc(void) {
-  try {
-    const auto *request = DecodeFlatbufferInput<orbpro::conjunction::ConjunctionPcRequest>(
-      FindInputFrame("request"),
-      "request",
-      "CAPR",
-      "ConjunctionPcRequest"
-    );
-    if (!request || !request->bplane()) {
-      SetError("invalid-request-frame", "ConjunctionPcRequest requires a B-plane geometry payload.");
-      return 400;
-    }
-
-    conjunction::BPlaneGeometry bplane{};
-    bplane.xi = request->bplane()->xi();
-    bplane.zeta = request->bplane()->zeta();
-    bplane.sigma_xx = request->bplane()->sigmaXx();
-    bplane.sigma_xz = request->bplane()->sigmaXz();
-    bplane.sigma_zz = request->bplane()->sigmaZz();
-    bplane.combined_radius = request->bplane()->combinedRadius();
-
-    const auto method_name =
-      request->method() ? request->method()->str() : std::string("foster");
-    auto method = conjunction::create_pc_method(method_name);
-    const auto result = method->compute(bplane);
-    const auto payload = BuildPcPayload(result);
-    if (!PushAlignedBinaryOutput(
-          "result",
-          "orbpro.conjunction.ConjunctionPcResult",
-          "CAPC",
-          "ConjunctionPcResult",
-          payload
-        )) {
-      SetError("output-failed", "Failed to push compute_pc output.");
-      return 500;
-    }
-    return 0;
-  } catch (const std::exception &ex) {
-    SetError("compute-pc-failed", ex.what());
-    return 500;
-  }
-}
-
-static int HandleComputePcFromCdm(void) {
-  try {
-    const auto *frame = FindInputFrame("cdm");
-    if (!frame || frame->payload.empty()) {
-      SetError("invalid-cdm-frame", "CDM input frame is missing or empty.");
-      return 400;
-    }
-
-    const auto result = conjunction::compute_pc_from_cdm(
-      frame->payload.data(),
-      static_cast<uint32_t>(frame->payload.size())
-    );
-    const auto payload = BuildPcPayload(result);
-    if (!PushAlignedBinaryOutput(
-          "result",
-          "orbpro.conjunction.ConjunctionPcResult",
-          "CAPC",
-          "ConjunctionPcResult",
-          payload
-        )) {
-      SetError("output-failed", "Failed to push compute_pc_from_cdm output.");
-      return 500;
-    }
-    return 0;
-  } catch (const std::invalid_argument &ex) {
-    SetError("invalid-cdm-frame", ex.what());
+extern "C" int compute_pc() {
+  using namespace ca_cqr;
+  auto q = request();
+  if (!q || !q->PROBABILITY_REQUEST())
+    return error("invalid-request-arm",
+                 "compute_pc requires PROBABILITY_REQUEST."),
+           400;
+  auto p = q->PROBABILITY_REQUEST();
+  auto g = p->GEOMETRY();
+  auto name = algorithm(p->ALGORITHM());
+  if (!g || !name)
     return 400;
-  } catch (const std::exception &ex) {
-    SetError("compute-pc-from-cdm-failed", ex.what());
-    return 500;
-  }
+  for (double x :
+       {g->XI_M(), g->ZETA_M(), g->VARIANCE_XI_M2(), g->COVARIANCE_XI_ZETA_M2(),
+        g->VARIANCE_ZETA_M2(), g->COMBINED_RADIUS_M()})
+    if (!isFinite(x))
+      return error("invalid-geometry",
+                   "All plane geometry values must be finite."),
+             400;
+  if (!positive(g->COMBINED_RADIUS_M()) || !positive(g->VARIANCE_XI_M2()) ||
+      !positive(g->VARIANCE_ZETA_M2()) ||
+      std::abs(g->COVARIANCE_XI_ZETA_M2() / std::sqrt(g->VARIANCE_XI_M2()) /
+               std::sqrt(g->VARIANCE_ZETA_M2())) >= 1.0)
+    return error("invalid-covariance",
+                 "Encounter-plane covariance must be positive definite and "
+                 "radius positive."),
+           400;
+  BPlaneGeometry bp;
+  bp.xi = g->XI_M() / 1000.;
+  bp.zeta = g->ZETA_M() / 1000.;
+  bp.sigma_xx = g->VARIANCE_XI_M2() / 1e6;
+  bp.sigma_xz = g->COVARIANCE_XI_ZETA_M2() / 1e6;
+  bp.sigma_zz = g->VARIANCE_ZETA_M2() / 1e6;
+  bp.combined_radius = g->COMBINED_RADIUS_M() / 1000.;
+  auto evaluator = create_pc_method(name);
+  auto value = evaluator->compute(bp);
+  if (value.method != evaluator->name())
+    return error("unsupported-probability-range",
+                 "Requested covariance algorithm cannot evaluate this geometry "
+                 "without changing algorithms."),
+           422;
+  CQRT out;
+  out.PROBABILITY_RESULT = probability(
+      value, p->ALGORITHM(), cqrUncertaintyOrigin::SUPPLIED_COVARIANCE);
+  return push(out) ? 0 : 500;
+}
+extern "C" int alfano_max_probability() {
+  using namespace ca_cqr;
+  auto q = request();
+  if (!q || !q->ALFANO_REQUEST())
+    return error("invalid-request-arm",
+                 "alfano_max_probability requires ALFANO_REQUEST."),
+           400;
+  auto p = q->ALFANO_REQUEST();
+  if (!isFinite(p->MISS_DISTANCE_M()) || p->MISS_DISTANCE_M() < 0 ||
+      !positive(p->COMBINED_RADIUS_M()))
+    return error("invalid-geometry",
+                 "Miss distance must be nonnegative and radius positive."),
+           400;
+  auto v = conjunction::alfano_max_probability(p->MISS_DISTANCE_M() / 1000.,
+                                               p->COMBINED_RADIUS_M() / 1000.);
+  CQRT out;
+  out.ALFANO_RESULT = std::make_unique<CQRAlfanoResultT>();
+  out.ALFANO_RESULT->MAXIMUM_PROBABILITY = v.max_probability;
+  out.ALFANO_RESULT->DILUTION_THRESHOLD_M = v.dilution_threshold_km * 1000.;
+  out.ALFANO_RESULT->SIGMA_STAR_M = v.sigma_star_km * 1000.;
+  return push(out) ? 0 : 500;
+}
+extern "C" int compute_pc_from_cdm() {
+  using namespace ca_cqr;
+  conjunction::clear_error();
+  auto f = input("cdm");
+  if (!decode<CDM>(f, "$CDM"))
+    return 400;
+  auto p = conjunction::compute_pc_from_cdm(f->payload, f->payload_length);
+  auto a = algorithmEnum(p.method);
+  if (a == cqrProbabilityAlgorithm::UNSPECIFIED)
+    return error("unsupported-algorithm",
+                 "CDM names an unsupported probability algorithm."),
+           400;
+  CQRT q;
+  q.PROBABILITY_RESULT =
+      probability(p, a, cqrUncertaintyOrigin::SUPPLIED_COVARIANCE);
+  return push(q) ? 0 : 500;
 }
 
-static int HandleParseCdmKvn(void) {
-  try {
-    const auto *frame = FindInputFrame("kvn");
-    if (!frame || frame->payload.empty()) {
-      SetError("invalid-kvn-frame", "CDM KVN input frame is missing or empty.");
-      return 400;
-    }
-
-    std::vector<uint8_t> payload(8192u);
-    int32_t written = conjunction::cdm_kvn_to_sds(
-      reinterpret_cast<const char *>(frame->payload.data()),
-      static_cast<uint32_t>(frame->payload.size()),
-      payload.data(),
-      static_cast<uint32_t>(payload.size())
-    );
-    while (written == -2) {
-      payload.resize(payload.size() * 2u);
-      written = conjunction::cdm_kvn_to_sds(
-        reinterpret_cast<const char *>(frame->payload.data()),
-        static_cast<uint32_t>(frame->payload.size()),
-        payload.data(),
-        static_cast<uint32_t>(payload.size())
-      );
-    }
-    if (written < 0) {
-      SetError("invalid-kvn-frame", "Failed to parse CDM KVN input.");
-      return 400;
-    }
-    payload.resize(static_cast<size_t>(written));
-
-    if (plugin_push_output_typed(
-          "cdm",
-          "CDM.fbs",
-          "$CDM",
-          static_cast<uint32_t>(orbpro::stream::PayloadWireFormat_AlignedBinary),
-          "CDM",
-          0,
-          static_cast<uint32_t>(payload.size()),
-          kAlignedBinaryAlignment,
-          payload.data(),
-          static_cast<uint32_t>(payload.size())
-        ) < 0) {
-      SetError("output-failed", "Failed to push parsed CDM output.");
-      return 500;
-    }
-    return 0;
-  } catch (const std::exception &ex) {
-    SetError("parse-cdm-kvn-failed", ex.what());
-    return 500;
+extern "C" int find_tca() {
+  using namespace ca_cqr;
+  auto q = request();
+  Source a, b;
+  ScreeningConfig c;
+  if (!q || !pair(q->PAIR_REQUEST(), a, b, c))
+    return 400;
+  double t = 0;
+  if (a.mean && b.mean)
+    t = conjunction::find_tca(a.tle, b.tle, c.start_jd, c.duration_days,
+                              c.coarse_step_sec, c.fine_tol_sec);
+  else {
+    ConjunctionEngine e;
+    t = e.find_tca(*a.provider, *b.provider, c.start_jd, c.duration_days,
+                   c.coarse_step_sec, c.fine_tol_sec);
   }
+  if (!isFinite(t))
+    return error("pair-evaluation-failed",
+                 "TCA solver did not produce a finite result."),
+           422;
+  CQRT out;
+  out.TCA_RESULT = instant(t);
+  return push(out) ? 0 : 500;
+}
+extern "C" int assess_conjunction() {
+  using namespace ca_cqr;
+  auto q = request();
+  Source a, b;
+  ScreeningConfig c;
+  if (!q || !pair(q->PAIR_REQUEST(), a, b, c))
+    return 400;
+  CQRT out;
+  auto alg = q->PAIR_REQUEST()->CONTROLS()->ALGORITHM();
+  if (a.mean && b.mean && alg == cqrProbabilityAlgorithm::ALFANO_MAXIMUM) {
+    double t = conjunction::find_tca(a.tle, b.tle, c.start_jd, c.duration_days,
+                                     c.coarse_step_sec, c.fine_tol_sec);
+    out.EVENT_RESULT = event(assess_conjunction_at_tca(
+        a.tle, b.tle, t, q->PAIR_REQUEST()->PRIMARY_RADIUS_M(),
+        q->PAIR_REQUEST()->SECONDARY_RADIUS_M()));
+  } else {
+    ConjunctionEngine e;
+    e.set_pc_method(algorithm(alg));
+    e.set_combined_radius_m(q->PAIR_REQUEST()->PRIMARY_RADIUS_M(),
+                            q->PAIR_REQUEST()->SECONDARY_RADIUS_M());
+    out.EVENT_RESULT =
+        event(e.assess(*a.provider, *b.provider, c.start_jd, c.duration_days,
+                       nullptr, nullptr, c.coarse_step_sec, c.fine_tol_sec),
+              alg, a.axes);
+  }
+  if (!isFinite(out.EVENT_RESULT->MISS_DISTANCE_M) ||
+      !isFinite(out.EVENT_RESULT->TCA->JULIAN_DATE))
+    return error("pair-evaluation-failed",
+                 "Pair assessment produced nonfinite geometry."),
+           422;
+  return push(out) ? 0 : 500;
 }
 
-static int HandleWriteCdmKvn(void) {
-  try {
-    const auto *frame = FindInputFrame("cdm");
-    if (!frame || frame->payload.empty()) {
-      SetError("invalid-cdm-frame", "CDM input frame is missing or empty.");
-      return 400;
-    }
-
-    std::vector<char> payload(8192u);
-    int32_t written = conjunction::cdm_sds_to_kvn(
-      frame->payload.data(),
-      static_cast<uint32_t>(frame->payload.size()),
-      payload.data(),
-      static_cast<uint32_t>(payload.size())
-    );
-    while (written == -2) {
-      payload.resize(payload.size() * 2u);
-      written = conjunction::cdm_sds_to_kvn(
-        frame->payload.data(),
-        static_cast<uint32_t>(frame->payload.size()),
-        payload.data(),
-        static_cast<uint32_t>(payload.size())
-      );
-    }
-    if (written < 0) {
-      SetError("invalid-cdm-frame", "Failed to write CDM KVN output.");
-      return 400;
-    }
-    payload.resize(static_cast<size_t>(written));
-
-    if (plugin_push_output_typed(
-          "kvn",
-          "text/plain",
-          "",
-          static_cast<uint32_t>(orbpro::stream::PayloadWireFormat_Flatbuffer),
-          "CdmKvnText",
-          0,
-          static_cast<uint32_t>(payload.size()),
-          1,
-          reinterpret_cast<const uint8_t *>(payload.data()),
-          static_cast<uint32_t>(payload.size())
-        ) < 0) {
-      SetError("output-failed", "Failed to push CDM KVN output.");
-      return 500;
-    }
-    return 0;
-  } catch (const std::exception &ex) {
-    SetError("write-cdm-kvn-failed", ex.what());
-    return 500;
+namespace ca_cqr {
+bool document(bool xml, bool write) {
+  conjunction::clear_error();
+  const char *port = xml ? "xml" : "kvn";
+  const plugin_input_frame_t *f = nullptr;
+  const CQRNativeDocument *d = nullptr;
+  if (write) {
+    f = input("cdm");
+    if (!decode<CDM>(f, "$CDM"))
+      return false;
+  } else {
+    auto q = request(port);
+    if (!q || !(d = q->NATIVE_DOCUMENT()))
+      return error("invalid-request-arm",
+                   "Native CDM parser requires CQR.NATIVE_DOCUMENT.");
+    auto expected = xml ? cqrDocumentSyntax::CCSDS_CDM_XML
+                        : cqrDocumentSyntax::CCSDS_CDM_KVN;
+    if (d->SERIALIZATION() != expected || !d->CONTENT() ||
+        !d->CONTENT()->size() || d->CONTENT()->size() > kMaximumDocumentBytes)
+      return error(
+          "invalid-native-document",
+          "CDM document syntax/content is missing, wrong or oversized.");
+    auto bytes = d->CONTENT();
+    if (bytes->size() >= 3 && bytes->Get(0) == 0xef && bytes->Get(1) == 0xbb &&
+        bytes->Get(2) == 0xbf)
+      return error("invalid-native-document", "UTF-8 BOM is not allowed.");
+    std::string content(reinterpret_cast<const char *>(bytes->Data()),
+                        bytes->size());
+    if (content.find('\0') != std::string::npos)
+      return error("invalid-native-document",
+                   "CDM text cannot contain embedded NUL.");
+    // Require a CDM document discriminator before invoking the CCSDS parser.
+    if ((xml && content.find("<cdm") == std::string::npos) ||
+        (!xml && content.find("CCSDS_CDM_VERS") == std::string::npos))
+      return error(
+          "invalid-native-document",
+          "Content is not a CCSDS CDM document of the declared syntax.");
   }
-}
-
-static int HandleParseCdmXml(void) {
-  try {
-    const auto *frame = FindInputFrame("xml");
-    if (!frame || frame->payload.empty()) {
-      SetError("invalid-xml-frame", "CDM XML input frame is missing or empty.");
-      return 400;
-    }
-
-    std::vector<uint8_t> payload(8192u);
-    int32_t written = conjunction::cdm_xml_to_sds(
-      reinterpret_cast<const char *>(frame->payload.data()),
-      static_cast<uint32_t>(frame->payload.size()),
-      payload.data(),
-      static_cast<uint32_t>(payload.size())
-    );
-    while (written == -2) {
-      payload.resize(payload.size() * 2u);
-      written = conjunction::cdm_xml_to_sds(
-        reinterpret_cast<const char *>(frame->payload.data()),
-        static_cast<uint32_t>(frame->payload.size()),
-        payload.data(),
-        static_cast<uint32_t>(payload.size())
-      );
-    }
-    if (written < 0) {
-      SetError("invalid-xml-frame", "Failed to parse CDM XML input.");
-      return 400;
-    }
-    payload.resize(static_cast<size_t>(written));
-
-    if (plugin_push_output_typed(
-          "cdm",
-          "CDM.fbs",
-          "$CDM",
-          static_cast<uint32_t>(orbpro::stream::PayloadWireFormat_AlignedBinary),
-          "CDM",
-          0,
-          static_cast<uint32_t>(payload.size()),
-          kAlignedBinaryAlignment,
-          payload.data(),
-          static_cast<uint32_t>(payload.size())
-        ) < 0) {
-      SetError("output-failed", "Failed to push parsed CDM output.");
-      return 500;
-    }
-    return 0;
-  } catch (const std::exception &ex) {
-    SetError("parse-cdm-xml-failed", ex.what());
-    return 500;
+  std::vector<uint8_t> data(8192);
+  int n = -2;
+  while (n == -2 && data.size() <= kMaximumDocumentBytes) {
+    if (write)
+      n = xml ? cdm_sds_to_xml(f->payload, f->payload_length,
+                               reinterpret_cast<char *>(data.data()),
+                               data.size())
+              : cdm_sds_to_kvn(f->payload, f->payload_length,
+                               reinterpret_cast<char *>(data.data()),
+                               data.size());
+    else
+      n = xml ? cdm_xml_to_sds(
+                    reinterpret_cast<const char *>(d->CONTENT()->Data()),
+                    d->CONTENT()->size(), data.data(), data.size())
+              : cdm_kvn_to_sds(
+                    reinterpret_cast<const char *>(d->CONTENT()->Data()),
+                    d->CONTENT()->size(), data.data(), data.size());
+    if (n == -2)
+      data.resize(data.size() * 2);
   }
+  if (n < 0 || has_error())
+    return error(
+        "invalid-native-document",
+        has_error()
+            ? error_message()
+            : "CDM conversion failed or exceeds bounded document size.");
+  data.resize(n);
+  if (!write)
+    return pushBytes("cdm", "CDM.fbs", "$CDM", "CDM", data.data(), data.size());
+  CQRT q;
+  q.NATIVE_DOCUMENT = std::make_unique<CQRNativeDocumentT>();
+  q.NATIVE_DOCUMENT->SERIALIZATION =
+      xml ? cqrDocumentSyntax::CCSDS_CDM_XML : cqrDocumentSyntax::CCSDS_CDM_KVN;
+  q.NATIVE_DOCUMENT->CONTENT = std::move(data);
+  return push(q, port);
 }
-
-static int HandleWriteCdmXml(void) {
-  try {
-    const auto *frame = FindInputFrame("cdm");
-    if (!frame || frame->payload.empty()) {
-      SetError("invalid-cdm-frame", "CDM input frame is missing or empty.");
-      return 400;
-    }
-
-    std::vector<char> payload(8192u);
-    int32_t written = conjunction::cdm_sds_to_xml(
-      frame->payload.data(),
-      static_cast<uint32_t>(frame->payload.size()),
-      payload.data(),
-      static_cast<uint32_t>(payload.size())
-    );
-    while (written == -2) {
-      payload.resize(payload.size() * 2u);
-      written = conjunction::cdm_sds_to_xml(
-        frame->payload.data(),
-        static_cast<uint32_t>(frame->payload.size()),
-        payload.data(),
-        static_cast<uint32_t>(payload.size())
-      );
-    }
-    if (written < 0) {
-      SetError("invalid-cdm-frame", "Failed to write CDM XML output.");
-      return 400;
-    }
-    payload.resize(static_cast<size_t>(written));
-
-    if (plugin_push_output_typed(
-          "xml",
-          "text/xml",
-          "",
-          static_cast<uint32_t>(orbpro::stream::PayloadWireFormat_Flatbuffer),
-          "CdmXmlText",
-          0,
-          static_cast<uint32_t>(payload.size()),
-          1,
-          reinterpret_cast<const uint8_t *>(payload.data()),
-          static_cast<uint32_t>(payload.size())
-        ) < 0) {
-      SetError("output-failed", "Failed to push CDM XML output.");
-      return 500;
-    }
-    return 0;
-  } catch (const std::exception &ex) {
-    SetError("write-cdm-xml-failed", ex.what());
-    return 500;
+ConjunctionEvent legacy(const ConjunctionEvent2 &e) {
+  ConjunctionEvent l;
+  l.obj1.name = e.obj1_name;
+  l.obj1.object_id = e.obj1_id;
+  l.obj1.norad_cat_id = e.obj1_norad;
+  l.obj2.name = e.obj2_name;
+  l.obj2.object_id = e.obj2_id;
+  l.obj2.norad_cat_id = e.obj2_norad;
+  l.tca_jd = e.tca_jd;
+  l.tca_iso = e.tca_iso;
+  l.state1 = e.state1;
+  l.state2 = e.state2;
+  l.min_range_km = e.miss_distance_km;
+  l.rel_speed_kms = e.relative_speed_kms;
+  l.max_probability = e.pc.max_probability;
+  l.probability_method = e.pc.method;
+  l.rel_pos_r = e.rel_r;
+  l.rel_pos_t = e.rel_t;
+  l.rel_pos_n = e.rel_n;
+  l.rel_vel_r = e.rel_vr;
+  l.rel_vel_t = e.rel_vt;
+  l.rel_vel_n = e.rel_vn;
+  l.dse1 = e.dse1;
+  l.dse2 = e.dse2;
+  auto c1 = covariance_inertial_to_rtn(e.cov1, e.state1),
+       c2 = covariance_inertial_to_rtn(e.cov2, e.state2);
+  l.cov_r1 = std::sqrt(std::max(0., c1.data[0])) * 1000.;
+  l.cov_t1 = std::sqrt(std::max(0., c1.data[4])) * 1000.;
+  l.cov_n1 = std::sqrt(std::max(0., c1.data[8])) * 1000.;
+  l.cov_r2 = std::sqrt(std::max(0., c2.data[0])) * 1000.;
+  l.cov_t2 = std::sqrt(std::max(0., c2.data[4])) * 1000.;
+  l.cov_n2 = std::sqrt(std::max(0., c2.data[8])) * 1000.;
+  return l;
+}
+bool emit(bool csm) {
+  auto q = request();
+  Source a, b;
+  ScreeningConfig c;
+  if (!q || !pair(q->PAIR_REQUEST(), a, b, c))
+    return false;
+  auto p = q->PAIR_REQUEST();
+  auto alg = p->CONTROLS()->ALGORITHM();
+  ConjunctionEvent e;
+  if (a.mean && b.mean && alg == cqrProbabilityAlgorithm::ALFANO_MAXIMUM) {
+    double t = conjunction::find_tca(a.tle, b.tle, c.start_jd, c.duration_days,
+                                     c.coarse_step_sec, c.fine_tol_sec);
+    e = assess_conjunction_at_tca(a.tle, b.tle, t, p->PRIMARY_RADIUS_M(),
+                                  p->SECONDARY_RADIUS_M());
+  } else {
+    ConjunctionEngine engine;
+    engine.set_pc_method(algorithm(alg));
+    engine.set_combined_radius_m(p->PRIMARY_RADIUS_M(),
+                                 p->SECONDARY_RADIUS_M());
+    e = legacy(engine.assess(*a.provider, *b.provider, c.start_jd,
+                             c.duration_days, nullptr, nullptr,
+                             c.coarse_step_sec, c.fine_tol_sec));
   }
+  if (has_error())
+    return error("pair-evaluation-failed", error_message());
+  std::vector<uint8_t> data(8192);
+  int n = -2;
+  while (n == -2 && data.size() <= kMaximumDocumentBytes) {
+    n = csm ? conjunction_to_csm(e, data.data(), data.size())
+            : conjunction_to_cdm(e, data.data(), data.size(),
+                                 a.axes == 1   ? "TEME"
+                                 : a.axes == 2 ? "GCRF"
+                                               : "EME2000");
+    if (n == -2)
+      data.resize(data.size() * 2);
+  }
+  if (n < 0)
+    return error("serialization-failed",
+                 "Unable to serialize conjunction message.");
+  return pushBytes(csm ? "csm" : "cdm", csm ? "CSM.fbs" : "CDM.fbs",
+                   csm ? "$CSM" : "$CDM", csm ? "CSM" : "CDM", data.data(), n);
 }
-
-static int HandleScreenCatalog(void) {
-  try {
-    const auto *request = DecodeFlatbufferInput<orbpro::conjunction::ConjunctionScreenCatalogRequest>(
-      FindInputFrame("request"),
-      "request",
-      "CASQ",
-      "ConjunctionScreenCatalogRequest"
-    );
-    if (!request) {
-      return 400;
-    }
-
-    std::vector<conjunction::GPElement> primary_gps;
-    std::vector<conjunction::GPElement> secondary_gps;
-    std::vector<std::shared_ptr<conjunction::EphemerisSource>> primary_sources;
-    std::vector<std::shared_ptr<conjunction::EphemerisSource>> secondary_sources;
-    uint32_t objects_parsed = 0u;
-
-    const auto *catalog_frame = FindInputFrame("catalog");
-    if (catalog_frame && !catalog_frame->payload.empty()) {
-      std::vector<conjunction::GPElement> catalog;
-      if (!DecodeOmmCatalogFrame(catalog_frame, &catalog)) {
-        return 400;
+// Providers execute physics in C++; each worker writes private results. Merge
+// order and statistics are independent of worker scheduling.
+bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
+                   const ScreeningConfig &c, cqrProbabilityAlgorithm alg,
+                   ScreeningStats &stats,
+                   std::vector<std::unique_ptr<CQREventT>> &events,
+                   const std::vector<uint32_t> *primary_handles = nullptr) {
+  stats.total_objects = p.size() + s.size();
+  if (p.empty())
+    return error("invalid-catalog", "At least one primary source is required.");
+  bool means =
+      std::all_of(p.begin(), p.end(), [](auto &x) { return x.mean; }) &&
+      std::all_of(s.begin(), s.end(), [](auto &x) { return x.mean; });
+  if (means && !primary_handles && alg == cqrProbabilityAlgorithm::ALFANO_MAXIMUM) {
+    std::vector<GPElement> a, b;
+    for (auto &x : p)
+      a.push_back(x.gp);
+    for (auto &x : s)
+      b.push_back(x.gp);
+    ConjunctionScreener screener(c);
+    auto results = b.empty() ? screener.screen(a) : screener.screen(a, b);
+    stats = screener.stats();
+    if (has_error())
+      return error("screening-failed", error_message());
+    for (auto &e : results)
+      events.push_back(event(e));
+    return true;
+  }
+  struct Worker {
+    std::vector<std::unique_ptr<CQREventT>> events;
+    uint64_t pairs = 0, failed = 0;
+  };
+  unsigned workers = std::min<size_t>(c.num_threads, p.size());
+  std::vector<bool> primary(p.size(), true);
+  if (primary_handles && !primary_handles->empty())
+    for (size_t i = 0; i < p.size(); ++i)
+      primary[i] = std::find(primary_handles->begin(), primary_handles->end(),
+                            p[i].handle) != primary_handles->end();
+  std::vector<Worker> work(workers);
+  std::vector<std::thread> threads;
+  auto run = [&](unsigned worker) {
+    clear_error();
+    ConjunctionEngine e;
+    e.set_pc_method(algorithm(alg));
+    e.set_combined_radius_m(c.combined_radius_m / 2., c.combined_radius_m / 2.);
+    auto &w = work[worker];
+    for (size_t i = worker; i < p.size(); i += workers) {
+      size_t end = s.empty() ? p.size() : s.size();
+      for (size_t j = s.empty() ? i + 1 : 0; j < end; ++j) {
+        // Resident selection means every unordered pair with at least one
+        // primary, including pairs where both objects are selected primaries.
+        if (primary_handles && s.empty() && !primary[i] && !primary[j])
+          continue;
+        auto &b = s.empty() ? p[j] : s[j];
+        if (p[i].provider->object_id() == b.provider->object_id())
+          continue;
+        ++w.pairs;
+        clear_error();
+        auto result =
+            e.assess(*p[i].provider, *b.provider, c.start_jd, c.duration_days,
+                     nullptr, nullptr, c.coarse_step_sec, c.fine_tol_sec);
+        if (has_error() || !isFinite(result.miss_distance_km) ||
+            !isFinite(result.tca_jd)) {
+          ++w.failed;
+          clear_error();
+          continue;
+        }
+        if (result.miss_distance_km <= c.threshold_km) {
+          auto output = event(result, alg, p[i].axes);
+          // Serialization also validates probability metadata. A worker-local
+          // failure must not disappear when the next pair clears its status.
+          if (has_error()) {
+            ++w.failed;
+            clear_error();
+            continue;
+          }
+          w.events.push_back(std::move(output));
+        }
       }
-      objects_parsed = static_cast<uint32_t>(catalog.size());
+    }
+  };
+  for (unsigned t = 1; t < workers; ++t)
+    threads.emplace_back(run, t);
+  run(0);
+  for (auto &t : threads)
+    t.join();
+  for (auto &w : work) {
+    stats.pairs_screened += w.pairs;
+    stats.failed_pairs += w.failed;
+    for (auto &e : w.events)
+      events.push_back(std::move(e));
+  }
+  stats.tca_refined = stats.pairs_screened - stats.failed_pairs;
+  stats.conjunctions_found = events.size();
+  return true;
+}
+} // namespace ca_cqr
+extern "C" int parse_cdm_kvn() {
+  return ca_cqr::document(false, false) ? 0 : 400;
+}
+extern "C" int parse_cdm_xml() {
+  return ca_cqr::document(true, false) ? 0 : 400;
+}
+extern "C" int write_cdm_kvn() {
+  return ca_cqr::document(false, true) ? 0 : 400;
+}
+extern "C" int write_cdm_xml() {
+  return ca_cqr::document(true, true) ? 0 : 400;
+}
+extern "C" int emit_cdm() { return ca_cqr::emit(false) ? 0 : 400; }
+extern "C" int emit_csm() { return ca_cqr::emit(true) ? 0 : 400; }
+extern "C" int version() {
+  using namespace ca_cqr;
+  auto q = request();
+  if (!q || !q->VERSION_QUERY())
+    return error("invalid-request-arm", "version requires VERSION_QUERY."), 400;
+  CQRT out;
+  out.VERSION_RESULT = std::make_unique<CQRVersionResultT>();
+  out.VERSION_RESULT->VERSION = "0.2.0";
+  return push(out) ? 0 : 500;
+}
 
-      const auto *ordered_indices = request->orderedCatalogIndices();
-      if (ordered_indices && ordered_indices->size() > 0u) {
-        const uint32_t order_count = ordered_indices->size();
-        const uint32_t start = std::min<uint32_t>(request->startOrderIndex(), order_count);
-        const uint32_t requested_end =
-          request->endOrderIndex() > start ? request->endOrderIndex() : order_count;
-        const uint32_t end = std::min<uint32_t>(requested_end, order_count);
-        AppendOrderedCatalogRange(&primary_gps, catalog, ordered_indices, start, end);
-        const bool has_secondary_range =
-          request->secondaryEndOrderIndex() > request->secondaryStartOrderIndex();
-        const uint32_t secondary_start = has_secondary_range
-          ? std::min<uint32_t>(request->secondaryStartOrderIndex(), order_count)
-          : std::min<uint32_t>(start + 1u, order_count);
-        const uint32_t secondary_requested_end = has_secondary_range
-          ? request->secondaryEndOrderIndex()
-          : order_count;
-        const uint32_t secondary_end = std::min<uint32_t>(
-          std::max<uint32_t>(secondary_start, secondary_requested_end),
-          order_count
-        );
-        AppendOrderedCatalogRange(&secondary_gps, catalog, ordered_indices, secondary_start, secondary_end);
-      } else {
-        primary_gps = catalog;
+extern "C" int screen_catalog() {
+  using namespace ca_cqr;
+  auto q = request();
+  if (!q || !q->CATALOG_REQUEST())
+    return error("invalid-request-arm",
+                 "screen_catalog requires CATALOG_REQUEST."),
+           400;
+  if (hasPending("screen_catalog"))
+    return emitPending("screen_catalog") ? 0 : 422;
+  auto r = q->CATALOG_REQUEST();
+  ScreeningConfig c;
+  if (!controls(r->CONTROLS(), c))
+    return 400;
+  int f = frame(r->EVALUATION_FRAME());
+  if (!f)
+    return 400;
+  std::vector<Source> p, s;
+  auto append = [&](const auto *values, std::vector<Source> &target) {
+    if (values)
+      for (auto x : *values) {
+        Source v;
+        if (!source(x, v) || !window(v, c, f))
+          return false;
+        target.push_back(std::move(v));
       }
-    } else {
-      const uint32_t primary_count =
-        (request->primaryGps() ? request->primaryGps()->size() : 0u) +
-        (request->primaryTles() ? request->primaryTles()->size() : 0u) +
-        (request->primaryTracks() ? request->primaryTracks()->size() : 0u);
-      const uint32_t secondary_count =
-        (request->secondaryGps() ? request->secondaryGps()->size() : 0u) +
-        (request->secondaryTles() ? request->secondaryTles()->size() : 0u) +
-        (request->secondaryTracks() ? request->secondaryTracks()->size() : 0u);
-      objects_parsed = primary_count + secondary_count;
-
-      AppendGpRecords(&primary_gps, request->primaryGps());
-      AppendGpRecords(&secondary_gps, request->secondaryGps());
-      AppendTleRecordsAsGps(&primary_gps, request->primaryTles());
-      AppendTleRecordsAsGps(&secondary_gps, request->secondaryTles());
-      AppendTrackSources(&primary_sources, request->primaryTracks());
-      AppendTrackSources(&secondary_sources, request->secondaryTracks());
-
-      if (primary_count == 0u && (!secondary_gps.empty() || !secondary_sources.empty())) {
-        primary_gps = secondary_gps;
-        secondary_gps.clear();
-        primary_sources = std::move(secondary_sources);
-        secondary_sources.clear();
+    return true;
+  };
+  std::vector<Source> catalog;
+  for (uint32_t i = 0; auto in = input("catalog", i); ++i) {
+    auto omm = decode<OMM>(in, "$OMM");
+    Source v;
+    if (!gpRecord(omm, v.gp))
+      return 400;
+    // OMM's international designator is optional. Preserve a distinct object
+    // identity for generic provider screening when only a catalog ID is known.
+    if (v.gp.object_id.empty()) {
+      if (v.gp.norad_cat_id <= 0)
+        return error("invalid-source", "Catalog OMM needs OBJECT_ID or a positive NORAD_CAT_ID."), 400;
+      v.gp.object_id = std::to_string(v.gp.norad_cat_id);
+    }
+    v.tle = gp_to_tle(v.gp);
+    v.mean = true;
+    v.axes = 1;
+    v.provider = std::make_shared<GPEphemerisSource>(v.gp);
+    if (!window(v, c, f))
+      return 400;
+    catalog.push_back(std::move(v));
+  }
+  if (!catalog.empty()) {
+    if ((r->PRIMARIES() && r->PRIMARIES()->size()) ||
+        (r->SECONDARIES() && r->SECONDARIES()->size()))
+      return error("ambiguous-catalog",
+                   "Supply inline sources or catalog port frames, not both."),
+             400;
+    std::vector<uint32_t> order;
+    if (r->ORDERED_CATALOG_INDICES())
+      for (auto i : *r->ORDERED_CATALOG_INDICES()) {
+        if (i >= catalog.size())
+          return error("invalid-catalog-index",
+                       "Ordered catalog index is out of range."),
+                 400;
+        order.push_back(i);
       }
+    else
+      for (uint32_t i = 0; i < catalog.size(); ++i)
+        order.push_back(i);
+    size_t a = r->HAS_START_ORDER_INDEX() ? r->START_ORDER_INDEX() : 0,
+           b = r->HAS_END_ORDER_INDEX() ? r->END_ORDER_INDEX() : order.size();
+    if (a > b || b > order.size())
+      return error("invalid-catalog-range", "Primary order range is invalid."),
+             400;
+    for (size_t i = a; i < b; ++i)
+      p.push_back(catalog[order[i]]);
+    if (r->HAS_SECONDARY_START_ORDER_INDEX() ||
+        r->HAS_SECONDARY_END_ORDER_INDEX()) {
+      size_t x = r->HAS_SECONDARY_START_ORDER_INDEX()
+                     ? r->SECONDARY_START_ORDER_INDEX()
+                     : 0,
+             y = r->HAS_SECONDARY_END_ORDER_INDEX()
+                     ? r->SECONDARY_END_ORDER_INDEX()
+                     : order.size();
+      if (x > y || y > order.size())
+        return error("invalid-catalog-range",
+                     "Secondary order range is invalid."),
+               400;
+      for (size_t i = x; i < y; ++i)
+        s.push_back(catalog[order[i]]);
     }
-
-    if (objects_parsed == 0u) {
-      SetError("invalid-request-frame", "screen_catalog requires at least one OMM, GP, or TLE object.");
+  } else {
+    if (r->ORDERED_CATALOG_INDICES() || r->HAS_START_ORDER_INDEX() ||
+        r->HAS_END_ORDER_INDEX() || r->HAS_SECONDARY_START_ORDER_INDEX() ||
+        r->HAS_SECONDARY_END_ORDER_INDEX())
+      return error("invalid-catalog-order",
+                   "Catalog ranges require catalog port frames."),
+             400;
+    if (!append(r->PRIMARIES(), p) || !append(r->SECONDARIES(), s))
       return 400;
-    }
-
-    conjunction::ScreeningStats stats{};
-    const auto config = DecodeScreeningConfig(request);
-    if (!primary_sources.empty() || !secondary_sources.empty()) {
-      AppendGpSources(&primary_sources, primary_gps);
-      AppendGpSources(&secondary_sources, secondary_gps);
-      std::vector<conjunction::ConjunctionEvent2> source_events;
-      if (primary_sources.size() > 1u || (!primary_sources.empty() && !secondary_sources.empty())) {
-        source_events = ScreenEphemerisSources(primary_sources, secondary_sources, config, &stats);
-      }
-      stats.total_objects = objects_parsed;
-      stats.conjunctions_found = source_events.size();
-      const auto payload = BuildScreenCatalogResultPayload(objects_parsed, source_events, stats);
-      if (!PushAlignedBinaryOutput(
-            "result",
-            "orbpro.conjunction.ConjunctionScreenCatalogResult",
-            "CASS",
-            "ConjunctionScreenCatalogResult",
-            payload
-          )) {
-        SetError("output-failed", "Failed to push screen_catalog result.");
-        return 500;
-      }
-      return 0;
-    }
-
-    std::vector<conjunction::ConjunctionEvent> events;
-    if (primary_gps.size() > 1u || (!primary_gps.empty() && !secondary_gps.empty())) {
-      conjunction::ConjunctionScreener screener(config);
-      events = secondary_gps.empty()
-        ? screener.screen(primary_gps)
-        : screener.screen(primary_gps, secondary_gps);
-      stats = screener.stats();
-    }
-    stats.total_objects = objects_parsed;
-    stats.conjunctions_found = events.size();
-
-    const auto payload = BuildScreenCatalogResultPayload(objects_parsed, events, stats);
-    if (!PushAlignedBinaryOutput(
-          "result",
-          "orbpro.conjunction.ConjunctionScreenCatalogResult",
-          "CASS",
-          "ConjunctionScreenCatalogResult",
-          payload
-        )) {
-      SetError("output-failed", "Failed to push screen_catalog result.");
-      return 500;
-    }
-    return 0;
-  } catch (const std::exception &ex) {
-    SetError("screen-catalog-failed", ex.what());
-    return 500;
   }
+  ScreeningStats stats;
+  std::vector<std::unique_ptr<CQREventT>> events;
+  if (!screenSources(p, s, c, r->CONTROLS()->ALGORITHM(), stats, events))
+    return 422;
+  return catalogOutput(std::move(events), stats, "screen_catalog") ? 0 : 422;
 }
 
-static int HandlePrepareScreeningIndex(void) {
-  try {
-    const auto *request = DecodeFlatbufferInput<orbpro::conjunction::ConjunctionPrepareScreeningIndexRequest>(
-      FindInputFrame("request"),
-      "request",
-      "CSPI",
-      "ConjunctionPrepareScreeningIndexRequest"
-    );
-    const auto *descriptions = DecodeFlatbufferInput<orbpro::propagator::PropagatorDescribeSourcesBatchResult>(
-      FindInputFrame("sources"),
-      "sources",
-      nullptr,
-      "PropagatorDescribeSourcesBatchResult"
-    );
-    if (!request || !descriptions) {
-      return 400;
-    }
-
-    std::vector<uint32_t> primary_source_handles;
-    if (request->sourceHandles()) {
-      primary_source_handles.assign(
-        request->sourceHandles()->begin(),
-        request->sourceHandles()->end()
-      );
-    }
-
-    const auto result = conjunction::prepare_resident_screening_index(
-      request->catalogHandle(),
-      primary_source_handles,
-      descriptions
-    );
-    const auto payload = BuildPrepareScreeningIndexPayload(result);
-    if (!PushAlignedBinaryOutput(
-          "result",
-          "orbpro.conjunction.ConjunctionPrepareScreeningIndexResult",
-          "CSPR",
-          "ConjunctionPrepareScreeningIndexResult",
-          payload
-        )) {
-      SetError("output-failed", "Failed to push prepare_screening_index output.");
-      return 500;
-    }
-    return 0;
-  } catch (const std::exception &ex) {
-    SetError("prepare-screening-index-failed", ex.what());
-    return 500;
-  }
+namespace ca_cqr {
+struct Index {
+  std::unique_ptr<PRWInstanceT> instance;
+  std::vector<Source> sources;
+  std::vector<uint32_t> primaries;
+  uint32_t native_handle = 0;
+  int axes = 0;
+};
+std::map<uint32_t, Index> indexes;
+uint32_t next_index = 1;
+bool identity(const PRWInstance *i) {
+  return (i && !text(i->MODULE_ID()).empty() &&
+          !text(i->INSTANCE_ID()).empty()) ||
+         error("invalid-instance", "Resident operation requires a named module "
+                                   "and instance identity.");
 }
-
-static int HandlePrepareSegmentScreeningIndex(void) {
-  try {
-    const auto *request = DecodeFlatbufferInput<orbpro::conjunction::ConjunctionPrepareSegmentScreeningIndexRequest>(
-      FindInputFrame("request"),
-      "request",
-      "CSSI",
-      "ConjunctionPrepareSegmentScreeningIndexRequest"
-    );
-    const auto *descriptions = DecodeFlatbufferInput<orbpro::propagator::PropagatorDescribeSourcesBatchResult>(
-      FindInputFrame("sources"),
-      "sources",
-      nullptr,
-      "PropagatorDescribeSourcesBatchResult"
-    );
-    const auto *segments = DecodeFlatbufferInput<orbpro::propagator::PropagatorDescribeTrajectorySegmentsResult>(
-      FindInputFrame("segments"),
-      "segments",
-      nullptr,
-      "PropagatorDescribeTrajectorySegmentsResult"
-    );
-    if (!request || !descriptions || !segments) {
-      return 400;
-    }
-
-    std::vector<uint32_t> primary_source_handles;
-    if (request->primarySourceHandles()) {
-      primary_source_handles.assign(
-        request->primarySourceHandles()->begin(),
-        request->primarySourceHandles()->end()
-      );
-    }
-
-    const auto result = conjunction::prepare_resident_segment_screening_index(
-      request->catalogHandle(),
-      request->segmentSetHandle(),
-      primary_source_handles,
-      request->screeningMode(),
-      descriptions,
-      segments
-    );
-    const auto payload = BuildPrepareScreeningIndexPayload(result);
-    if (!PushAlignedBinaryOutput(
-          "result",
-          "orbpro.conjunction.ConjunctionPrepareScreeningIndexResult",
-          "CSPR",
-          "ConjunctionPrepareScreeningIndexResult",
-          payload
-        )) {
-      SetError("output-failed", "Failed to push prepare_segment_screening_index output.");
-      return 500;
-    }
-    return 0;
-  } catch (const std::exception &ex) {
-    SetError("prepare-segment-screening-index-failed", ex.what());
-    return 500;
-  }
+bool matches(const PRWInstance *a, const PRWInstanceT &b) {
+  return a && text(a->MODULE_ID()) == b.MODULE_ID &&
+         text(a->INSTANCE_ID()) == b.INSTANCE_ID &&
+         a->GENERATION() == b.GENERATION;
 }
-
-static int HandlePrepareSampleScreeningIndex(void) {
-  try {
-    const auto *request = DecodeFlatbufferInput<orbpro::conjunction::ConjunctionPrepareSampleScreeningIndexRequest>(
-      FindInputFrame("request"),
-      "request",
-      "CSSM",
-      "ConjunctionPrepareSampleScreeningIndexRequest"
-    );
-    const auto *descriptions = DecodeFlatbufferInput<orbpro::propagator::PropagatorDescribeSourcesBatchResult>(
-      FindInputFrame("sources"),
-      "sources",
-      nullptr,
-      "PropagatorDescribeSourcesBatchResult"
-    );
-    const auto *samples = DecodeFlatbufferInput<orbpro::propagator::PropagatorSampleTrajectoryStatesResult>(
-      FindInputFrame("samples"),
-      "samples",
-      nullptr,
-      "PropagatorSampleTrajectoryStatesResult"
-    );
-    if (!request || !descriptions || !samples) {
-      return 400;
-    }
-
-    std::vector<uint32_t> primary_source_handles;
-    if (request->primarySourceHandles()) {
-      primary_source_handles.assign(
-        request->primarySourceHandles()->begin(),
-        request->primarySourceHandles()->end()
-      );
-    }
-
-    const auto result = conjunction::prepare_resident_sample_screening_index(
-      request->catalogHandle(),
-      primary_source_handles,
-      request->screeningMode(),
-      descriptions,
-      samples
-    );
-    const auto payload = BuildPrepareScreeningIndexPayload(result);
-    if (!PushAlignedBinaryOutput(
-          "result",
-          "orbpro.conjunction.ConjunctionPrepareScreeningIndexResult",
-          "CSPR",
-          "ConjunctionPrepareScreeningIndexResult",
-          payload
-        )) {
-      SetError("output-failed", "Failed to push prepare_sample_screening_index output.");
-      return 500;
-    }
-    return 0;
-  } catch (const std::exception &ex) {
-    SetError("prepare-sample-screening-index-failed", ex.what());
-    return 500;
-  }
-}
-
-static int HandleDestroyScreeningIndex(void) {
-  try {
-    const auto *request = DecodeFlatbufferInput<orbpro::conjunction::ConjunctionDestroyScreeningIndexRequest>(
-      FindInputFrame("request"),
-      "request",
-      "CSDI",
-      "ConjunctionDestroyScreeningIndexRequest"
-    );
-    if (!request) {
-      return 400;
-    }
-    if (!conjunction::destroy_resident_screening_index(request->screeningIndexHandle())) {
-      SetError("unknown-screening-index", "unknown screeningIndexHandle");
-      return 404;
-    }
-    return 0;
-  } catch (const std::exception &ex) {
-    SetError("destroy-screening-index-failed", ex.what());
-    return 500;
-  }
-}
-
-static int HandleResidentScreenWindow(bool segment_window) {
-  (void)segment_window;
-  try {
-    const auto *request = DecodeFlatbufferInput<orbpro::conjunction::ConjunctionScreenWindowRequest>(
-      FindInputFrame("request"),
-      "request",
-      "CSWN",
-      "ConjunctionScreenWindowRequest"
-    );
-    if (!request) {
-      return 400;
-    }
-
-    const auto *resident_index =
-      conjunction::find_resident_screening_index(request->screeningIndexHandle());
-    if (!resident_index) {
-      SetError("unknown-screening-index", "unknown screeningIndexHandle");
-      return 404;
-    }
-
-    conjunction::ScreeningConfig config{};
-    config.start_jd = request->startJd();
-    config.duration_days = request->durationDays();
-    config.threshold_km = request->thresholdKm();
-    config.num_threads = request->numThreads();
-    config.coarse_step_sec = request->coarseStepSec();
-    config.fine_tol_sec = request->fineTolSec();
-    config.combined_radius_m = request->combinedRadiusM();
-    config.progress_interval_sec = request->progressIntervalSec();
-
-    conjunction::ScreeningStats stats{};
-    const auto events = conjunction::screen_resident_index_window(
-      *resident_index,
-      config,
-      stats
-    );
-    const auto payload = BuildScreenCatalogResultPayload(
-      resident_index->tles.size(),
-      events,
-      stats
-    );
-    if (!PushAlignedBinaryOutput(
-          "result",
-          "orbpro.conjunction.ConjunctionScreenCatalogResult",
-          "CASS",
-          "ConjunctionScreenCatalogResult",
-          payload
-        )) {
-      SetError("output-failed", "Failed to push resident screening result.");
-      return 500;
-    }
-    return 0;
-  } catch (const std::exception &ex) {
-    SetError("screen-window-failed", ex.what());
-    return 500;
-  }
-}
-
-static int HandleScreenWindow(void) {
-  return HandleResidentScreenWindow(false);
-}
-
-static int HandleScreenSegmentWindow(void) {
-  return HandleResidentScreenWindow(true);
-}
-
-}  // namespace
-
-extern "C" uint32_t plugin_get_input_count(void) {
-  return static_cast<uint32_t>(g_invoke_context.inputs.size());
-}
-
-extern "C" const plugin_input_frame_t *plugin_get_input_frame(uint32_t index) {
-  if (index >= g_invoke_context.inputs.size()) {
+Index *index(uint32_t h, const PRWInstance *i) {
+  auto it = indexes.find(h);
+  if (it == indexes.end() || !matches(i, *it->second.instance)) {
+    error("invalid-index-handle",
+          "Unknown index or stale instance generation.");
     return nullptr;
   }
-  return &g_invoke_context.inputs[index].view;
+  return &it->second;
 }
-
-extern "C" int32_t plugin_find_input_index(const char *port_id, uint32_t ordinal) {
-  if (!port_id || !port_id[0]) {
-    return -1;
-  }
-  uint32_t seen = 0;
-  for (size_t index = 0; index < g_invoke_context.inputs.size(); index += 1) {
-    if (g_invoke_context.inputs[index].port_id != port_id) {
+bool prepare(cqrIndexRepresentation expected) {
+  auto q = request();
+  if (!q || !q->INDEX_REQUEST())
+    return error("invalid-request-arm",
+                 "Resident preparation requires INDEX_REQUEST.");
+  auto r = q->INDEX_REQUEST();
+  if (!identity(r->INSTANCE()) || r->INDEX_CONTENT() != expected)
+    return error("invalid-index-representation",
+                 "INDEX_CONTENT must match the resident method.");
+  if (r->REFINEMENT_MODE() < cqrRefinementStrategy::EXACT_ONLY ||
+      r->REFINEMENT_MODE() >
+          cqrRefinementStrategy::POLYNOMIAL_WITH_EXACT_POLISH)
+    return error("unsupported-refinement",
+                 "An explicit refinement strategy is required.");
+  if (!r->SOURCES() || !r->SOURCES()->size())
+    return error("invalid-source", "Resident preparation needs typed SOURCES.");
+  Index result;
+  result.instance.reset(r->INSTANCE()->UnPack());
+  std::vector<ResidentSourceDescription> descriptions;
+  std::vector<uint32_t> selected;
+  if (r->SOURCE_HANDLES())
+    selected.assign(r->SOURCE_HANDLES()->begin(), r->SOURCE_HANDLES()->end());
+  for (auto s : *r->SOURCES()) {
+    if (!s)
+      return error("invalid-source", "Null resident source.");
+    if (!selected.empty() && std::find(selected.begin(), selected.end(),
+                                       s->SOURCE_HANDLE()) == selected.end())
       continue;
+    Source v;
+    if (!source(s, v))
+      return false;
+    if (!v.handle)
+      return error("invalid-source-handle",
+                   "Resident source handles must be nonzero.");
+    for (auto &prev : result.sources)
+      if (prev.handle == v.handle)
+        return error("invalid-source-handle",
+                     "Resident source handles must be unique.");
+    if (result.axes && result.axes != v.axes)
+      return error("frame-mismatch",
+                   "Resident sources must share an explicit frame.");
+    result.axes = v.axes;
+    descriptions.push_back({v.handle, v.gp});
+    result.sources.push_back(std::move(v));
+  }
+  if (result.sources.empty())
+    return error("invalid-source-selection", "Source selection is empty.");
+  for (auto h : selected) {
+    bool found = false;
+    for (auto &s : result.sources)
+      found |= s.handle == h;
+    if (!found)
+      return error("invalid-source-selection",
+                   "Requested source handle is absent.");
+  }
+  if (r->PRIMARY_SOURCE_HANDLES())
+    result.primaries.assign(r->PRIMARY_SOURCE_HANDLES()->begin(),
+                            r->PRIMARY_SOURCE_HANDLES()->end());
+  for (auto h : result.primaries) {
+    bool found = false;
+    for (auto &s : result.sources)
+      found |= s.handle == h;
+    if (!found)
+      return error("invalid-source-selection",
+                   "Primary source handle is absent.");
+  }
+  bool all_mean = std::all_of(result.sources.begin(), result.sources.end(),
+                              [](auto &s) { return s.mean; });
+  if (expected == cqrIndexRepresentation::SOURCE_DESCRIPTIONS) {
+    if (r->REFINEMENT_MODE() != cqrRefinementStrategy::EXACT_ONLY)
+      return error("unsupported-refinement",
+                   "Source-description indexes require EXACT_ONLY.");
+    if (all_mean) {
+      auto built = prepare_resident_screening_index(
+          r->CATALOG_HANDLE(), result.primaries, descriptions);
+      if (has_error())
+        return error("index-preparation-failed", error_message());
+      result.native_handle = built.screening_index_handle;
     }
-    if (seen == ordinal) {
-      return static_cast<int32_t>(index);
-    }
-    seen += 1;
-  }
-  return -1;
-}
-
-extern "C" void plugin_reset_output_state(void) {
-  g_invoke_context.outputs.clear();
-  g_invoke_context.backlog_remaining = 0;
-  g_invoke_context.yielded = false;
-  g_invoke_context.error_code.clear();
-  g_invoke_context.error_message.clear();
-}
-
-extern "C" int32_t plugin_push_output(
-  const char *port_id,
-  const char *schema_name,
-  const char *file_identifier,
-  const uint8_t *payload_ptr,
-  uint32_t payload_length
-) {
-  return plugin_push_output_ex(
-    port_id,
-    schema_name,
-    file_identifier,
-    static_cast<uint32_t>(orbpro::stream::PayloadWireFormat_Flatbuffer),
-    nullptr,
-    0,
-    0,
-    payload_ptr,
-    payload_length
-  );
-}
-
-extern "C" int32_t plugin_push_output_typed(
-  const char *port_id,
-  const char *schema_name,
-  const char *file_identifier,
-  uint32_t wire_format,
-  const char *root_type_name,
-  uint16_t fixed_string_length,
-  uint32_t byte_length,
-  uint16_t required_alignment,
-  const uint8_t *payload_ptr,
-  uint32_t payload_length
-) {
-  if (!port_id || !port_id[0]) {
-    SetError("invalid-output-port", "Output frames must declare a non-empty port id.");
-    return -1;
-  }
-  if (!MethodDeclaresOutputPort(g_invoke_context.method, port_id)) {
-    SetError(
-      "unknown-output-port",
-      std::string("Output port is not declared on the active method: ") + port_id
-    );
-    return -1;
-  }
-
-  OutputFrameOwned frame{};
-  frame.port_id = ReadCString(port_id);
-  frame.schema_name = ReadCString(schema_name);
-  frame.file_identifier = ReadCString(file_identifier);
-  frame.root_type_name = ReadCString(root_type_name);
-  frame.wire_format = wire_format;
-  frame.fixed_string_length = fixed_string_length;
-  frame.byte_length = byte_length > 0u ? byte_length : payload_length;
-  frame.required_alignment = required_alignment;
-  frame.alignment = required_alignment > 0 ? required_alignment : 8;
-  if (payload_ptr && payload_length > 0u) {
-    frame.payload.insert(frame.payload.end(), payload_ptr, payload_ptr + payload_length);
-  }
-
-  g_invoke_context.outputs.emplace_back(std::move(frame));
-  return static_cast<int32_t>(g_invoke_context.outputs.size() - 1u);
-}
-
-extern "C" int32_t plugin_push_output_ex(
-  const char *port_id,
-  const char *schema_name,
-  const char *file_identifier,
-  uint32_t wire_format,
-  const char *root_type_name,
-  uint16_t fixed_string_length,
-  uint16_t required_alignment,
-  const uint8_t *payload_ptr,
-  uint32_t payload_length
-) {
-  return plugin_push_output_typed(
-    port_id,
-    schema_name,
-    file_identifier,
-    wire_format,
-    root_type_name,
-    fixed_string_length,
-    payload_length,
-    required_alignment,
-    payload_ptr,
-    payload_length
-  );
-}
-
-extern "C" void plugin_set_yielded(int32_t yielded) {
-  g_invoke_context.yielded = yielded != 0;
-}
-
-extern "C" void plugin_set_backlog_remaining(uint32_t backlog_remaining) {
-  g_invoke_context.backlog_remaining = backlog_remaining;
-}
-
-extern "C" void plugin_set_error(const char *error_code, const char *error_message) {
-  g_invoke_context.error_code = error_code ? error_code : "";
-  g_invoke_context.error_message = error_message ? error_message : "";
-}
-
-extern "C" uint32_t plugin_alloc(uint32_t size) {
-  const auto allocation_size = size > 0u ? size : 1u;
-  void *ptr = std::malloc(allocation_size);
-  return ptr ? static_cast<uint32_t>(reinterpret_cast<uintptr_t>(ptr)) : 0u;
-}
-
-extern "C" void plugin_free(uint32_t ptr, uint32_t size) {
-  (void)size;
-  if (ptr != 0u) {
-    std::free(reinterpret_cast<void *>(PtrFromU32(ptr)));
-  }
-}
-
-extern "C" uint32_t plugin_invoke_stream(
-  uint32_t request_ptr,
-  uint32_t request_len,
-  uint32_t response_len_out_ptr
-) {
-  if (response_len_out_ptr != 0u) {
-    *MutableU32Ptr(response_len_out_ptr) = 0u;
-  }
-
-  bool runtime_error = false;
-  const auto response_bytes = DispatchRequestBytes(
-    ConstPtr(request_ptr),
-    static_cast<size_t>(request_len),
-    &runtime_error
-  );
-
-  const uint32_t response_ptr = plugin_alloc(static_cast<uint32_t>(response_bytes.size()));
-  if (response_ptr == 0u) {
-    return 0u;
-  }
-  if (!response_bytes.empty()) {
-    std::memcpy(MutablePtr(response_ptr), response_bytes.data(), response_bytes.size());
-  }
-  if (response_len_out_ptr != 0u) {
-    *MutableU32Ptr(response_len_out_ptr) = static_cast<uint32_t>(response_bytes.size());
-  }
-  return response_ptr;
-}
-
-int main(int argc, char **argv) {
-  const char *shortcut_method = nullptr;
-  for (int index = 1; index < argc; index += 1) {
-    if (std::strcmp(argv[index], "--method") == 0) {
-      if (index + 1 >= argc) {
-        std::fprintf(stderr, "--method requires a method id argument.\n");
-        return 64;
+  } else if (expected == cqrIndexRepresentation::SAMPLED_STATES) {
+    for (auto &s : result.sources)
+      if (s.samples.empty())
+        return error(
+            "invalid-source",
+            "SAMPLED_STATES requires OEM sampled ephemeris for every source.");
+    if (r->REFINEMENT_MODE() != cqrRefinementStrategy::EXACT_ONLY)
+      return error("unsupported-refinement",
+                   "Sampled OEM indexes currently evaluate Hermite tracks with "
+                   "EXACT_ONLY; no polynomial quality bound is inferred.");
+  } else {
+    std::vector<ResidentTrajectorySegment> segments;
+    if (auto segment_result = r->SEGMENTS()) {
+      if (!matches(segment_result->INSTANCE(), *result.instance) ||
+          segment_result->SEGMENT_SET_HANDLE() != r->SEGMENT_SET_HANDLE() ||
+          segment_result->SOURCE_OFFSET() != 0 ||
+          !segment_result->FINAL_CHUNK())
+        return error("invalid-segment-set",
+                     "SEGMENTS must be a complete matching instance and "
+                     "segment-set record.");
+      if (!segment_result->SOURCES())
+        return error("invalid-segment-set", "SEGMENTS contains no sources.");
+      for (auto entry : *segment_result->SOURCES()) {
+        if (!entry)
+          return error("invalid-segment-set", "Null trajectory source.");
+        auto found = std::find_if(
+            result.sources.begin(), result.sources.end(),
+            [&](auto &s) { return s.handle == entry->SOURCE_HANDLE(); });
+        if (found == result.sources.end())
+          return error("invalid-segment-set",
+                       "PPE source handle is absent from typed sources.");
+        Source p;
+        if (!polynomial(entry->EPHEMERIS(), p))
+          return false;
+        if (p.axes != found->axes)
+          return error("frame-mismatch",
+                       "PPE and exact source frames disagree.");
+        p.polynomial->id = found->provider->object_id();
+        p.polynomial->name = found->provider->object_name();
+        p.polynomial->norad = found->provider->norad_id();
+        found->polynomial = p.polynomial;
       }
-      shortcut_method = argv[++index];
-      continue;
     }
-    std::fprintf(stderr, "Unknown argument: %s\n", argv[index]);
-    return 64;
+    for (auto &s : result.sources) {
+      if (!s.polynomial)
+        return error("invalid-segment-set",
+                     "Every resident source requires PPE segments.");
+      for (auto &p : s.polynomial->records) {
+        if (all_mean) {
+          if (p.c[0].size() > RESIDENT_CHEBYSHEV_COEFFICIENT_COUNT)
+            return error(
+                "unsupported-polynomial",
+                "Exact-polish resident kernel supports degree at most 12.");
+          ResidentTrajectorySegment out;
+          out.source_handle = s.handle;
+          out.start_jd = p.mid - p.half / 86400.;
+          out.end_jd = p.mid + p.half / 86400.;
+          out.degree = p.c[0].size() - 1;
+          out.reference_frame = 2;
+          std::array<std::array<double, 13> *, 6> dst = {
+              &out.x_coefficients,  &out.y_coefficients,  &out.z_coefficients,
+              &out.vx_coefficients, &out.vy_coefficients, &out.vz_coefficients};
+          for (size_t k = 0; k < 6; ++k)
+            std::copy(p.c[k].begin(), p.c[k].end(), dst[k]->begin());
+          segments.push_back(out);
+        }
+      }
+    }
+    if (all_mean) {
+      ScreeningMode mode =
+          r->REFINEMENT_MODE() == cqrRefinementStrategy::EXACT_ONLY
+              ? ScreeningMode::exact_only
+          : r->REFINEMENT_MODE() == cqrRefinementStrategy::POLYNOMIAL_ONLY
+              ? ScreeningMode::polynomial_only
+              : ScreeningMode::polynomial_plus_exact_polish;
+      auto built = prepare_resident_segment_screening_index(
+          r->CATALOG_HANDLE(), r->SEGMENT_SET_HANDLE(), result.primaries, mode,
+          descriptions, segments);
+      if (has_error())
+        return error("index-preparation-failed", error_message());
+      result.native_handle = built.screening_index_handle;
+    } else {
+      if (r->REFINEMENT_MODE() != cqrRefinementStrategy::POLYNOMIAL_ONLY)
+        return error("unsupported-refinement",
+                     "Non-mean PPE sources require POLYNOMIAL_ONLY; exact "
+                     "polish requires an independently supplied provider.");
+      for (auto &s : result.sources) {
+        s.provider = s.polynomial;
+        s.mean = false;
+      }
+    }
   }
-
-  std::vector<uint8_t> stdin_bytes;
-  if (!ReadAllStdin(&stdin_bytes)) {
-    std::fprintf(stderr, "Failed to read stdin.\n");
-    return 74;
+  // A new generation invalidates prior handles in the same named instance.
+  for (auto it = indexes.begin(); it != indexes.end();) {
+    auto &old = *it->second.instance;
+    if (old.MODULE_ID == result.instance->MODULE_ID &&
+        old.INSTANCE_ID == result.instance->INSTANCE_ID &&
+        old.GENERATION != result.instance->GENERATION) {
+      if (it->second.native_handle)
+        destroy_resident_screening_index(it->second.native_handle);
+      it = indexes.erase(it);
+    } else
+      ++it;
   }
-
-  if (shortcut_method) {
-    std::fprintf(
-      stderr,
-      "--method raw shortcut mode was removed; pass an SDS PIV envelope on stdin.\n"
-    );
-    return 64;
+  uint32_t h = next_index++;
+  if (!h)
+    return error("index-capacity", "Resident index handle space exhausted.");
+  uint64_t n = result.sources.size(), pairs = n * (n - 1) / 2;
+  if (!result.primaries.empty()) {
+    uint64_t secondary_count = 0;
+    for (const auto &s : result.sources)
+      if (std::find(result.primaries.begin(), result.primaries.end(), s.handle) ==
+          result.primaries.end())
+        ++secondary_count;
+    if (secondary_count > 1)
+      pairs -= secondary_count * (secondary_count - 1) / 2;
   }
-
-  bool runtime_error = false;
-  const auto response_bytes = DispatchRequestBytes(
-    stdin_bytes.empty() ? nullptr : stdin_bytes.data(),
-    stdin_bytes.size(),
-    &runtime_error
-  );
-  if (!WriteAllStdout(
-        response_bytes.empty() ? nullptr : response_bytes.data(),
-        response_bytes.size()
-      )) {
-    std::fprintf(stderr, "Failed to write stdout.\n");
-    return 74;
+  if (result.native_handle) {
+    auto i = find_resident_screening_index(result.native_handle);
+    if (i)
+      pairs = i->candidate_pair_count;
   }
-  return runtime_error ? 1 : 0;
+  CQRT out;
+  out.INDEX_RESULT = std::make_unique<CQRIndexResultT>();
+  out.INDEX_RESULT->INSTANCE = std::make_unique<PRWInstanceT>(*result.instance);
+  out.INDEX_RESULT->SCREENING_INDEX_HANDLE = h;
+  out.INDEX_RESULT->SOURCE_COUNT = n;
+  out.INDEX_RESULT->CANDIDATE_PAIR_COUNT = pairs;
+  indexes.emplace(h, std::move(result));
+  return push(out);
+}
+bool screenWindow(const char *method) {
+  auto q = request();
+  if (!q || !q->WINDOW_REQUEST())
+    return error("invalid-request-arm",
+                 "Resident screening requires WINDOW_REQUEST.");
+  if (hasPending(method))
+    return emitPending(method);
+  auto r = q->WINDOW_REQUEST();
+  auto i = index(r->SCREENING_INDEX_HANDLE(), r->INSTANCE());
+  if (!i)
+    return false;
+  ScreeningConfig c;
+  if (!controls(r->CONTROLS(), c))
+    return false;
+  int f = frame(r->EVALUATION_FRAME());
+  if (!f || f != i->axes)
+    return error("frame-mismatch",
+                 "Window evaluation frame differs from the resident index.");
+  for (auto &s : i->sources)
+    if (!window(s, c, f))
+      return false;
+  if (i->native_handle) {
+    if (r->CONTROLS()->ALGORITHM() != cqrProbabilityAlgorithm::ALFANO_MAXIMUM)
+      return error(
+          "unsupported-algorithm",
+          "Optimized resident GP index currently uses ALFANO_MAXIMUM.");
+    auto native = find_resident_screening_index(i->native_handle);
+    if (!native)
+      return error("invalid-index-handle", "Resident native index is absent.");
+    ScreeningStats stats;
+    auto events = screen_resident_index_window(*native, c, stats);
+    if (has_error())
+      return error("screening-failed", error_message());
+    return catalogOutput(events, stats, method);
+  }
+  ScreeningStats stats;
+  std::vector<std::unique_ptr<CQREventT>> events;
+  if (!screenSources(i->sources, {}, c, r->CONTROLS()->ALGORITHM(), stats, events,
+                     &i->primaries))
+    return false;
+  return catalogOutput(std::move(events), stats, method);
+}
+} // namespace ca_cqr
+extern "C" int prepare_screening_index() {
+  return ca_cqr::prepare(cqrIndexRepresentation::SOURCE_DESCRIPTIONS) ? 0 : 400;
+}
+extern "C" int prepare_segment_screening_index() {
+  return ca_cqr::prepare(cqrIndexRepresentation::POLYNOMIAL_SEGMENTS) ? 0 : 400;
+}
+extern "C" int prepare_sample_screening_index() {
+  return ca_cqr::prepare(cqrIndexRepresentation::SAMPLED_STATES) ? 0 : 400;
+}
+extern "C" int screen_window() { return ca_cqr::screenWindow("screen_window") ? 0 : 422; }
+extern "C" int screen_segment_window() {
+  return ca_cqr::screenWindow("screen_segment_window") ? 0 : 422;
+}
+extern "C" int destroy_screening_index() {
+  using namespace ca_cqr;
+  auto q = request();
+  if (!q || !q->DESTROY_REQUEST())
+    return error("invalid-request-arm",
+                 "destroy_screening_index requires DESTROY_REQUEST."),
+           400;
+  auto r = q->DESTROY_REQUEST();
+  auto i = index(r->SCREENING_INDEX_HANDLE(), r->INSTANCE());
+  if (!i)
+    return 400;
+  if (i->native_handle && !destroy_resident_screening_index(i->native_handle))
+    return error("invalid-index-handle", "Native index destruction failed."),
+           400;
+  indexes.erase(r->SCREENING_INDEX_HANDLE());
+  return 0;
 }

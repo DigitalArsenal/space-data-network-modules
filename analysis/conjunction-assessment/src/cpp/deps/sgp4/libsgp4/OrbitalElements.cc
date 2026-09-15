@@ -1,3 +1,4 @@
+#include "conjunction/error_status.h"
 /*
  * Copyright 2013 Daniel Warner <contact@danrw.com>
  *
@@ -24,6 +25,7 @@ namespace libsgp4
 
 OrbitalElements::OrbitalElements(const Tle& tle)
 {
+    if (conjunction::has_error()) return;
     /*
      * extract and format tle data
      */

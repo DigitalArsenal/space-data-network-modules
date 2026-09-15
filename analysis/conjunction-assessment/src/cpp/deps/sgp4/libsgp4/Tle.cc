@@ -1,3 +1,4 @@
+#include "conjunction/error_status.h"
 /*
  * Copyright 2013 Daniel Warner <contact@danrw.com>
  *
@@ -18,6 +19,7 @@
 #include "Tle.h"
 
 #include <cctype>
+#include <cmath>
 #include <locale>
 
 namespace libsgp4
@@ -93,7 +95,7 @@ namespace
         }
         else
         {
-            throw TleException("Invalid Alpha-5 character");
+            conjunction::set_error("Invalid Alpha-5 character"); return false;
         }
 
         unsigned int suffix = 0;
@@ -102,7 +104,7 @@ namespace
             const unsigned char ch = static_cast<unsigned char>(str[index]);
             if (!isdigit(ch))
             {
-                throw TleException("Invalid Alpha-5 digit");
+                conjunction::set_error("Invalid Alpha-5 digit"); return false;
             }
             suffix = (suffix * 10U) + static_cast<unsigned int>(ch - '0');
         }
@@ -118,37 +120,40 @@ namespace
  */
 void Tle::Initialize()
 {
+    if (conjunction::has_error()) return;
     if (!IsValidLineLength(line_one_))
     {
-        throw TleException("Invalid length for line one");
+        conjunction::set_error("Invalid length for line one"); return;
     }
 
     if (!IsValidLineLength(line_two_))
     {
-        throw TleException("Invalid length for line two");
+        conjunction::set_error("Invalid length for line two"); return;
     }
 
     if (line_one_[0] != '1')
     {
-        throw TleException("Invalid line beginning for line one");
+        conjunction::set_error("Invalid line beginning for line one"); return;
     }
         
     if (line_two_[0] != '2')
     {
-        throw TleException("Invalid line beginning for line two");
+        conjunction::set_error("Invalid line beginning for line two"); return;
     }
 
-    unsigned int sat_number_1;
-    unsigned int sat_number_2;
+    unsigned int sat_number_1 = 0;
+    unsigned int sat_number_2 = 0;
 
     ExtractInteger(line_one_.substr(TLE1_COL_NORADNUM,
                 TLE1_LEN_NORADNUM), sat_number_1);
+    if (conjunction::has_error()) return;
     ExtractInteger(line_two_.substr(TLE2_COL_NORADNUM,
                 TLE2_LEN_NORADNUM), sat_number_2);
+    if (conjunction::has_error()) return;
 
     if (sat_number_1 != sat_number_2)
     {
-        throw TleException("Satellite numbers do not match");
+        conjunction::set_error("Satellite numbers do not match"); return;
     }
 
     norad_number_ = sat_number_1;
@@ -166,32 +171,44 @@ void Tle::Initialize()
 
     ExtractInteger(line_one_.substr(TLE1_COL_EPOCH_A,
                 TLE1_LEN_EPOCH_A), year);
+    if (conjunction::has_error()) return;
     ExtractDouble(line_one_.substr(TLE1_COL_EPOCH_B,
                 TLE1_LEN_EPOCH_B), 4, day);
+    if (conjunction::has_error()) return;
     ExtractDouble(line_one_.substr(TLE1_COL_MEANMOTIONDT2,
                 TLE1_LEN_MEANMOTIONDT2), 2, mean_motion_dt2_);
+    if (conjunction::has_error()) return;
     ExtractExponential(line_one_.substr(TLE1_COL_MEANMOTIONDDT6,
                 TLE1_LEN_MEANMOTIONDDT6), mean_motion_ddt6_);
+    if (conjunction::has_error()) return;
     ExtractExponential(line_one_.substr(TLE1_COL_BSTAR,
                 TLE1_LEN_BSTAR), bstar_);
+    if (conjunction::has_error()) return;
 
     /*
      * line 2
      */
     ExtractDouble(line_two_.substr(TLE2_COL_INCLINATION,
                 TLE2_LEN_INCLINATION), 4, inclination_);
+    if (conjunction::has_error()) return;
     ExtractDouble(line_two_.substr(TLE2_COL_RAASCENDNODE,
                 TLE2_LEN_RAASCENDNODE), 4, right_ascending_node_);
+    if (conjunction::has_error()) return;
     ExtractDouble(line_two_.substr(TLE2_COL_ECCENTRICITY,
                 TLE2_LEN_ECCENTRICITY), -1, eccentricity_);
+    if (conjunction::has_error()) return;
     ExtractDouble(line_two_.substr(TLE2_COL_ARGPERIGEE,
                 TLE2_LEN_ARGPERIGEE), 4, argument_perigee_);
+    if (conjunction::has_error()) return;
     ExtractDouble(line_two_.substr(TLE2_COL_MEANANOMALY,
                 TLE2_LEN_MEANANOMALY), 4, mean_anomaly_);
+    if (conjunction::has_error()) return;
     ExtractDouble(line_two_.substr(TLE2_COL_MEANMOTION,
                 TLE2_LEN_MEANMOTION), 3, mean_motion_);
+    if (conjunction::has_error()) return;
     ExtractInteger(line_two_.substr(TLE2_COL_REVATEPOCH,
                 TLE2_LEN_REVATEPOCH), orbit_number_);
+    if (conjunction::has_error()) return;
     
     if (year < 57)
     {
@@ -200,6 +217,24 @@ void Tle::Initialize()
     else
     {
         year += 1900;
+    }
+
+    // Native TLE day zero names the preceding December 31 (Kelso's TLE
+    // format FAQ, https://celestrak.org/columns/v04n03/). Reject other
+    // out-of-calendar days before constructing the propagation epoch.
+    const bool leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    if (!std::isfinite(day) || day < 0.0 || day >= (leap ? 367.0 : 366.0))
+    {
+        conjunction::set_error("Invalid TLE epoch day"); return;
+    }
+    if (!std::isfinite(inclination_) || inclination_ < 0.0 || inclination_ > 180.0 ||
+        !std::isfinite(right_ascending_node_) || right_ascending_node_ < 0.0 || right_ascending_node_ >= 360.0 ||
+        !std::isfinite(argument_perigee_) || argument_perigee_ < 0.0 || argument_perigee_ >= 360.0 ||
+        !std::isfinite(mean_anomaly_) || mean_anomaly_ < 0.0 || mean_anomaly_ >= 360.0 ||
+        !std::isfinite(eccentricity_) || eccentricity_ < 0.0 || eccentricity_ >= 1.0 ||
+        !std::isfinite(mean_motion_) || mean_motion_ <= 0.0)
+    {
+        conjunction::set_error("TLE orbital elements are outside SGP4 bounds"); return;
     }
 
     epoch_ = DateTime(year, day);
@@ -223,11 +258,14 @@ bool Tle::IsValidLineLength(const std::string& str)
  */
 void Tle::ExtractInteger(const std::string& str, unsigned int& val)
 {
+    val = 0;
+    if (conjunction::has_error()) return;
     if (TryExtractAlpha5Integer(str, val))
     {
         return;
     }
 
+    if (conjunction::has_error()) return;
     bool found_digit = false;
     unsigned int temp = 0;
 
@@ -240,11 +278,11 @@ void Tle::ExtractInteger(const std::string& str, unsigned int& val)
         }
         else if (found_digit)
         {
-            throw TleException("Unexpected non digit");
+            conjunction::set_error("Unexpected non digit"); return;
         }
         else if (i != ' ')
         {
-            throw TleException("Invalid character");
+            conjunction::set_error("Invalid character"); return;
         }
     }
 
@@ -267,6 +305,8 @@ void Tle::ExtractInteger(const std::string& str, unsigned int& val)
  */
 void Tle::ExtractDouble(const std::string& str, int point_pos, double& val)
 {
+    val = 0.0;
+    if (conjunction::has_error()) return;
     std::string temp;
     bool found_digit = false;
 
@@ -300,11 +340,11 @@ void Tle::ExtractDouble(const std::string& str, int point_pos, double& val)
                 }
                 else if (found_digit)
                 {
-                    throw TleException("Unexpected non digit");
+                    conjunction::set_error("Unexpected non digit"); return;
                 }
                 else if (*i != ' ')
                 {
-                    throw TleException("Invalid character");
+                    conjunction::set_error("Invalid character"); return;
                 }
             }
         }
@@ -330,7 +370,7 @@ void Tle::ExtractDouble(const std::string& str, int point_pos, double& val)
             }
             else
             {
-                throw TleException("Failed to find decimal point");
+                conjunction::set_error("Failed to find decimal point"); return;
             }
         }
         /*
@@ -356,14 +396,14 @@ void Tle::ExtractDouble(const std::string& str, int point_pos, double& val)
             }
             else
             {
-                throw TleException("Invalid digit");
+                conjunction::set_error("Invalid digit"); return;
             }
         }
     }
 
     if (!Util::FromString<double>(temp, val))
     {
-        throw TleException("Failed to convert value to double");
+        conjunction::set_error("Failed to convert value to double"); return;
     }
 }
 
@@ -375,6 +415,8 @@ void Tle::ExtractDouble(const std::string& str, int point_pos, double& val)
  */
 void Tle::ExtractExponential(const std::string& str, double& val)
 {
+    val = 0.0;
+    if (conjunction::has_error()) return;
     std::string temp;
 
     for (std::string::const_iterator i = str.begin(); i != str.end(); ++i)
@@ -392,7 +434,7 @@ void Tle::ExtractExponential(const std::string& str, double& val)
             }
             else
             {
-                throw TleException("Invalid sign");
+                conjunction::set_error("Invalid sign"); return;
             }
         }
         else if (i == str.end() - 2)
@@ -404,7 +446,7 @@ void Tle::ExtractExponential(const std::string& str, double& val)
             }
             else
             {
-                throw TleException("Invalid exponential sign");
+                conjunction::set_error("Invalid exponential sign"); return;
             }
         }
         else
@@ -415,14 +457,14 @@ void Tle::ExtractExponential(const std::string& str, double& val)
             }
             else
             {
-                throw TleException("Invalid digit");
+                conjunction::set_error("Invalid digit"); return;
             }
         }
     }
 
     if (!Util::FromString<double>(temp, val))
     {
-        throw TleException("Failed to convert value to double");
+        conjunction::set_error("Failed to convert value to double"); return;
     }
 }
 

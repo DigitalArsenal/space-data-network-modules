@@ -1,0 +1,40 @@
+browser: socrates-workers-2 / workers 2
+{
+  "moduleSha256": "7ed526ea5b52954dedf4d49d76be1685bb2419631e7b7f5fe74cb33fc335a747",
+  "oracle": "CelesTrak SOCRATES Plus, 2026-03-10 committed snapshot; https://celestrak.org/SOCRATES/",
+  "frame": "TEME",
+  "timeScale": "UTC",
+  "tolerances": {
+    "tcaSeconds": 0.01,
+    "missMetres": 5,
+    "speedMetresPerSecond": 5
+  },
+  "toleranceRationale": "Proposal section8, tests/lib/caParityTolerances.mjs: NLRV timing, range quantization, speed regression.",
+  "exitClass": "ok",
+  "exitDetail": null,
+  "spawnCount": 4,
+  "deltas": [
+    {
+      "pair": "61721-67298",
+      "tcaDeltaSec": 0.0007241964340209961,
+      "missDeltaM": 4.177554292834001,
+      "relSpeedDeltaMS": 0.10029608228734332,
+      "pcRatio": 1
+    },
+    {
+      "pair": "47935-49179",
+      "tcaDeltaSec": 0.0003218650817871094,
+      "missDeltaM": 0.303122606974,
+      "relSpeedDeltaMS": 0.3038180323962081,
+      "pcRatio": 1.8590564676499581
+    },
+    {
+      "pair": "48282-58288",
+      "tcaDeltaSec": 0.0002816319465637207,
+      "missDeltaM": 0.13058791488199972,
+      "relSpeedDeltaMS": 0.4787075052021805,
+      "pcRatio": 1.730766895061497
+    }
+  ],
+  "ok": true
+}

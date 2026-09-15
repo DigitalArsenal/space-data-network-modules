@@ -1,0 +1,153 @@
+
+> test
+> node --test tests/buildTreeHygiene.test.mjs tests/sdk_compat.test.mjs tests/direct-entry.test.mjs tests/sourceSelectionContract.test.mjs tests/signedCdmOutput.test.mjs tests/ocmOemTrackAdapter.test.mjs tests/celestrakFetchCache.test.mjs tests/archiveStreamingSmoke.test.mjs tests/pivInvokeContract.test.mjs tests/wasmedgeStandaloneHarness.test.mjs tests/sdnDataApiStream.test.mjs tests/socratesReplayHarness.test.mjs tests/aerospaceDatasetValidation.test.mjs tests/aerospaceReplayHarness.test.mjs tests/socratesScreenCatalogParity.test.mjs tests/aerospaceScreenCatalogParity.test.mjs tests/aerospaceRealWindowParity.test.mjs tests/cqrAuthoritative.test.mjs tests/cqrStreaming.test.mjs
+
+﹣ Aerospace extracted dataset inventory matches the published guide constraints (2.036125ms) # Place the extracted Aerospace dataset under tests/data/aerospace-ivv or override with AEROSPACE_IVV_EXTRACTED_ROOT.
+Expected layout:
+- docs/Conjunction_Screening_Testset_Users_Guide.txt
+- csv/IVV_Releasable_Dataset_Spherical_DefaultHBR.csv
+- csv/IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv
+- csv/AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv
+- ocm/AerospaceIVVDataset_20251009/...
+﹣ Aerospace answer-key filenames resolve to valid extracted OCM files (1.313875ms) # Place the extracted Aerospace dataset under tests/data/aerospace-ivv or override with AEROSPACE_IVV_EXTRACTED_ROOT.
+Expected layout:
+- docs/Conjunction_Screening_Testset_Users_Guide.txt
+- csv/IVV_Releasable_Dataset_Spherical_DefaultHBR.csv
+- csv/IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv
+- csv/AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv
+- ocm/AerospaceIVVDataset_20251009/...
+✔ Aerospace real-window: summary (measured deltas vs CSieve for the coordinator) (0.779666ms)
+ℹ fixture=aerospace-real-window (AerospaceIVVDataset_20251009a; preserved pre-migration millisecond input epochs) events=21 recalled=21 missing=0 anchors=4
+ℹ FINDING F1 miss-vs-CSieve on real 65s OCM: min=0.0003m median=0.3354m max=2.5440m (analytic ≤10cm bound met only near ephemeris nodes; anchors below)
+ℹ   4208-41347 [NLRV] dTCA=0.6437ms dMiss=2.5440m dRelSpeed=0.0215m/s
+ℹ   9848-14965 [NLRV] dTCA=1.2070ms dMiss=0.0962m dRelSpeed=0.0267m/s
+ℹ   9903-26069 [NLRV] dTCA=0.2816ms dMiss=0.8186m dRelSpeed=0.0506m/s
+ℹ   32464-55953 [NLRV] dTCA=0.6437ms dMiss=0.1463m dRelSpeed=0.0115m/s
+ℹ   38264-62254 [NLRV] ANCHOR dTCA=0.6437ms dMiss=0.0618m dRelSpeed=0.0130m/s
+ℹ   39417-56347 [NLRV] dTCA=0.6437ms dMiss=0.4299m dRelSpeed=0.0804m/s
+ℹ   39919-53223 [NLRV] dTCA=0.2816ms dMiss=0.2034m dRelSpeed=0.0255m/s
+ℹ   40044-45024 [NLRV] ANCHOR dTCA=0.6437ms dMiss=0.0284m dRelSpeed=0.0955m/s
+ℹ   41158-60626 [NLRV] dTCA=0.6437ms dMiss=0.5323m dRelSpeed=0.0388m/s
+ℹ   41915-59172 [NLRV] dTCA=0.6437ms dMiss=1.3652m dRelSpeed=0.0754m/s
+ℹ   43255-60849 [NLRV] ANCHOR dTCA=0.2816ms dMiss=0.0003m dRelSpeed=0.0349m/s
+ℹ   45411-60094 [NLRV] dTCA=0.6437ms dMiss=1.7781m dRelSpeed=0.0081m/s
+ℹ   47401-95025 [NLRV] ANCHOR dTCA=0.2816ms dMiss=0.0174m dRelSpeed=0.0104m/s
+ℹ   49071-49072 [VLRV] dTCA=1462.7963ms dMiss=0.0515m dRelSpeed=0.0006m/s
+ℹ   53079-56112 [NLRV] dTCA=0.5633ms dMiss=1.0527m dRelSpeed=0.0451m/s
+ℹ   56155-56156 [VLRV] dTCA=8103.3558ms dMiss=1.1485m dRelSpeed=0.0073m/s
+ℹ   58199-58201 [VLRV] dTCA=294.4663ms dMiss=0.0894m dRelSpeed=0.0002m/s
+ℹ   58265-60603 [NLRV] dTCA=0.6437ms dMiss=0.6750m dRelSpeed=0.0021m/s
+ℹ   58410-60263 [NLRV] dTCA=0.2816ms dMiss=0.3354m dRelSpeed=0.0772m/s
+ℹ   59458-62021 [NLRV] dTCA=0.6437ms dMiss=0.2557m dRelSpeed=0.0043m/s
+ℹ   60085-90124 [NLRV] dTCA=0.6437ms dMiss=0.3839m dRelSpeed=2.7764m/s
+✔ Aerospace real-window: event-set full recall [HARD] (0.0725ms)
+✔ Aerospace real-window: NLRV TCA within config bound [HARD] (0.098792ms)
+ℹ   49071-49072 [VLRV] TCA advisory dTCA=1462.796ms (flat-minimum)
+ℹ   56155-56156 [VLRV] TCA advisory dTCA=8103.356ms (flat-minimum)
+ℹ   58199-58201 [VLRV] TCA advisory dTCA=294.466ms (flat-minimum)
+✔ Aerospace real-window: parity anchors reproduce CSieve within ≤10cm [HARD] (0.068459ms)
+✔ Aerospace real-window: all-events miss within real-OCM regression envelope [FINDING F1] (0.067084ms)
+✔ Aerospace real-window: Pc report-only (CSieve uses a different Alfano variant — not gated) (0.061958ms)
+ℹ Pc not gated vs CSieve. our maxProbability: 4208-41347=1.342e-9 9848-14965=1.333e-9 9903-26069=2.258e-9 32464-55953=1.048e-9 38264-62254=1.8156e-8 39417-56347=5.733e-9 39919-53223=1.812e-9 40044-45024=5.162e-9 41158-60626=1.348e-9 41915-59172=1.283e-9 43255-60849=1.275e-9 45411-60094=2.678e-9 47401-95025=3.735e-9 49071-49072=3.50615e-7 53079-56112=1.169e-9 56155-56156=0.000001157639 58199-58201=3.58936e-7 58265-60603=3.283e-9 58410-60263=1.23e-9 59458-62021=1.2892e-8 60085-90124=1.572e-9
+﹣ Aerospace OCM basename index resolves answer-key files across extracted subtrees (6.700125ms) # Place the extracted Aerospace dataset under tests/data/aerospace-ivv or override with AEROSPACE_IVV_EXTRACTED_ROOT.
+Expected layout:
+- docs/Conjunction_Screening_Testset_Users_Guide.txt
+- csv/IVV_Releasable_Dataset_Spherical_DefaultHBR.csv
+- csv/IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv
+- csv/AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv
+- ocm/AerospaceIVVDataset_20251009/...
+﹣ track-mode replay reproduces the first 100 Aerospace spherical answer-key rows through the local conjunction package (269.293625ms) # Place the extracted Aerospace dataset under tests/data/aerospace-ivv or override with AEROSPACE_IVV_EXTRACTED_ROOT.
+Expected layout:
+- docs/Conjunction_Screening_Testset_Users_Guide.txt
+- csv/IVV_Releasable_Dataset_Spherical_DefaultHBR.csv
+- csv/IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv
+- csv/AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv
+- ocm/AerospaceIVVDataset_20251009/...
+﹣ track-mode replay keeps a known close-pair Aerospace row within the measured replay envelope (16.409833ms) # Place the extracted Aerospace dataset under tests/data/aerospace-ivv or override with AEROSPACE_IVV_EXTRACTED_ROOT.
+Expected layout:
+- docs/Conjunction_Screening_Testset_Users_Guide.txt
+- csv/IVV_Releasable_Dataset_Spherical_DefaultHBR.csv
+- csv/IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv
+- csv/AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv
+- ocm/AerospaceIVVDataset_20251009/...
+✔ Aerospace: parity summary (mode + measured deltas for the coordinator) (0.817708ms)
+ℹ mode=synthetic tracks=10 objectsParsed=10 refEvents=4 found=4 matched=4 missing=0 extra=0 thr=10km HBR=0.5m
+ℹ SYNTHETIC fixture (analytic answer key) — real 21.74GB CSieve dataset is OWNER-ASSIST; see docs/aerospace-ivv-acquisition.md
+ℹ pair 90001-90002 [NLRV] dTCA=0.000241s dMiss=0.0141m dRelSpeed=0.0000m/s
+ℹ pair 90003-90004 [NLRV] dTCA=0.000241s dMiss=0.0044m dRelSpeed=0.0000m/s
+ℹ pair 90005-90006 [LRV] dTCA=0.000241s dMiss=0.0000m dRelSpeed=0.0000m/s
+ℹ pair 90007-90008 [VLRV] dTCA=0.000241s dMiss=0.0000m dRelSpeed=0.0000m/s
+✔ Aerospace: event set — full answer-key recall (+ precision on synthetic control) (0.083125ms)
+✔ Aerospace: TCA within rel-vel-stratified tolerance [NLRV gated] (0.076625ms)
+ℹ pair 90005-90006 [LRV] TCA advisory dTCA=0.00024139881134033203s (flat-minimum regime)
+ℹ pair 90007-90008 [VLRV] TCA advisory dTCA=0.00024139881134033203s (flat-minimum regime)
+✔ Aerospace: miss distance within ≤10cm bound [independent-parity: full precision] (0.211416ms)
+✔ Aerospace: Pc report-only (CSieve uses a different Alfano variant — not gated) (0.529875ms)
+ℹ Pc not gated vs CSieve (User's Guide + AMOS 2025). our maxProbability values: 90001-90002=0.000001471518 90003-90004=4.0875e-8 90005-90006=5.74812e-7 90007-90008=1.43703e-7
+﹣ answer key CSV streams directly from .csv.gz without extraction (2.488041ms) # Aerospace archive root not found. Put archives under tests/data/aerospace-archives or set CONJUNCTION_ASSESSMENT_ARCHIVE_ROOT.
+﹣ tar.gz streaming yields valid OCM entries that appear in the answer key (0.493167ms) # Aerospace archive root not found. Put archives under tests/data/aerospace-archives or set CONJUNCTION_ASSESSMENT_ARCHIVE_ROOT.
+﹣ SOCRATES catalog CSV streams and resolves to per-pair GP records on disk (1.196833ms) # Local SOCRATES root not found. Put catalog files under tests/data or set CONJUNCTION_ASSESSMENT_SOCRATES_ROOT.
+✔ CMake build-* scratch trees are never tracked (17.37625ms)
+✔ future CMake build-* scratch trees are ignored (12.066375ms)
+✔ CelesTrak fetch cache reuses cached responses before network fetch (47.506875ms)
+✔ CelesTrak fetch cache supports explicit force refresh (22.765542ms)
+✔ CQR Laas 2015 Pc reproduces the centered isotropic Gaussian disk integral (248.99825ms)
+✔ CQR rejects singular encounter covariance and the retired JSON method (42.344833ms)
+✔ CQR compact sources reproduce the independent linear encounter without SGP4 (69.500416ms)
+✔ CQR verbose sources reproduce the independent linear encounter without SGP4 (66.941917ms)
+✔ CQR PPE sources reproduce the independent linear encounter without SGP4 (69.599583ms)
+✔ CQR rejects malformed or unsupported UTC dates before evaluating a source (362.920916ms)
+✔ CQR accepts leap-day and CCSDS no-Z UTC sources without changing the linear encounter (131.545083ms)
+✔ CQR rejects out-of-range TLE epoch days without a numerical result (50.247333ms)
+✔ CQR browser sampled resident index preserves the linear encounter and invalidates destroyed handles (67.113083ms)
+✔ CQR wasmedge sampled resident index preserves the linear encounter and invalidates destroyed handles (85.0885ms)
+✔ CQR docker-wasmedge sampled resident index preserves the linear encounter and invalidates destroyed handles (16871.847583ms)
+✔ CQR rejects time controls below the binary64 Julian-date resolution (170.607791ms)
+✔ CQR direct OMM sources use distinct catalog identities when international designators are absent (88.780625ms)
+✔ CQR sampled primary selection includes primary-primary pairs and excludes secondary-secondary pairs (52.947541ms)
+✔ CQR drains bounded deterministic chunks with a cap of one and reports failed evaluations (235.513041ms)
+✔ conjunction-assessment direct entry loads the shipped pthread wasm module (56.122083ms)
+✔ OCM/OEM adapters retain canonical records without JS time or frame conversion (118.690666ms)
+✔ conjunction plugin_invoke_stream accepts and rejects SDS PIV envelopes (78.371042ms)
+✔ build publishes canonical browser and isomorphic artifact paths (0.811667ms)
+✔ built artifact passes SDK compliance checks (19.289ms)
+✔ manifest declares CDM import probability command surface (0.56525ms)
+✔ manifest declares CSM summary command surface (0.214416ms)
+✔ manifest declares Orekit CDM KVN parser/writer command surfaces (2.48175ms)
+✔ manifest declares Orekit CDM XML parser/writer command surfaces (0.380208ms)
+✔ primary artifact exposes canonical wasi-threads imports and exports (5.64625ms)
+✔ built artifact loads through the SDK WasmEdge pthread runner (150.172208ms)
+✔ primary artifact executes through the SDK browser WASI harness (37.33725ms)
+✔ hosted-runtime example is wired to the screen catalog command surface (0.780792ms)
+✔ screen_catalog accepts SDN data API uint32be OMM FlatBuffer streams (219.5465ms)
+✔ screen_catalog accepts SDN data API uint32be streams of size-prefixed OMM records (93.915125ms)
+✔ screen_catalog keeps direct SDN catalog screening bounded for larger streams (44633.8845ms)
+✔ screen_catalog rejects mixed frames instead of silently relabeling a secondary track (65.699083ms)
+✔ signed CDM output binds CDM bytes and publication metadata (4.345083ms)
+✔ WasmEdge conjunction replay stays within the public SOCRATES tolerance envelope for the vendored close pairs (1040.038333ms)
+✔ SOCRATES: parity summary (measured deltas for the coordinator) (0.8095ms)
+ℹ catalog=6 objectsParsed=6 found=3 matched=3 missing=0 extra=0 window=[2461108.348,+7.78d] thr=5km
+ℹ pair 61721-67298 [NLRV] dTCA=0.00072s dMiss=4.178m dRelSpeed=0.100m/s PcRatio=1.000 (our=0.005822km ref=0.01km)
+ℹ pair 47935-49179 [NLRV] dTCA=0.00032s dMiss=0.303m dRelSpeed=0.304m/s PcRatio=1.859 (our=0.014303km ref=0.014km)
+ℹ pair 48282-58288 [NLRV] dTCA=0.00028s dMiss=0.131m dRelSpeed=0.479m/s PcRatio=1.731 (our=0.013869km ref=0.014km)
+✔ SOCRATES: event set — full reference recall, no spurious events [independent-parity + regression-guard] (0.084708ms)
+✔ SOCRATES: TCA within rel-vel-stratified tolerance [independent-parity] (0.062375ms)
+✔ SOCRATES: miss distance within SOCRATES bound [regression-guard: CSV range quantized] (0.054417ms)
+✔ SOCRATES: relative speed within bound (0.064833ms)
+✔ SOCRATES: Pc advisory — same-family, recorded not gated [same-family-advisory] (0.065208ms)
+✔ screen catalog request schema accepts every CA selected source kind (135.617583ms)
+✔ CA selected source normalization accepts supported host source descriptors (1.157708ms)
+✔ CA selected source normalization rejects unsupported or incomplete descriptors (0.270458ms)
+✔ conjunction WasmEdge harness accepts canonical OMM sources for the known close pair (497.786042ms)
+✔ emit_cdm accepts canonical OMM-backed conjunction requests (354.527083ms)
+✔ emit_csm accepts canonical OMM-backed conjunction requests (282.261042ms)
+✔ CDM KVN command surface round-trips the Orekit CDMExample1 fixture (134.412791ms)
+✔ CDM XML command surface round-trips the Orekit CDMExample1 fixture (137.442917ms)
+ℹ tests 71
+ℹ suites 0
+ℹ pass 63
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 8
+ℹ todo 0
+ℹ duration_ms 46106.832083

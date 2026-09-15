@@ -1,3 +1,4 @@
+#include "conjunction/error_status.h"
 /*
  * Copyright 2013 Daniel Warner <contact@danrw.com>
  *
@@ -23,11 +24,17 @@
 #include "DecayedException.h"
 
 #include <cmath>
+#include <limits>
 #include <iomanip>
 #include <cstring>
 
 namespace libsgp4
 {
+static Eci invalid_position() {
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    return Eci(DateTime(), Vector(nan, nan, nan), Vector(nan, nan, nan));
+}
+
 
 void SGP4::SetTle(const Tle& tle)
 {
@@ -41,6 +48,7 @@ void SGP4::SetTle(const Tle& tle)
 
 void SGP4::Initialise()
 {
+    if (conjunction::has_error()) return;
     /*
      * reset all constants etc
      */
@@ -51,12 +59,12 @@ void SGP4::Initialise()
      */
     if (elements_.Eccentricity() < 0.0 || elements_.Eccentricity() > 0.999)
     {
-        throw SatelliteException("Eccentricity out of range");
+        conjunction::set_error("Eccentricity out of range"); return;
     }
 
     if (elements_.Inclination() < 0.0 || elements_.Inclination() > kPI)
     {
-        throw SatelliteException("Inclination out of range");
+        conjunction::set_error("Inclination out of range"); return;
     }
 
     RecomputeConstants(elements_.Inclination(),
@@ -218,6 +226,7 @@ Eci SGP4::FindPosition(const DateTime& dt) const
 
 Eci SGP4::FindPosition(double tsince) const
 {
+    if (conjunction::has_error()) return invalid_position();
     if (use_deep_space_)
     {
         return FindPositionSDP4(tsince);
@@ -274,7 +283,7 @@ Eci SGP4::FindPositionSDP4(double tsince) const
 
     if (xn <= 0.0)
     {
-        throw SatelliteException("Error: (xn <= 0.0)");
+        conjunction::set_error("Error: (xn <= 0.0)"); return invalid_position();
     }
 
     a = pow(kXKE / xn, kTWOTHIRD) * tempa * tempa;
@@ -308,7 +317,7 @@ Eci SGP4::FindPositionSDP4(double tsince) const
      */
     if (e <= -0.001)
     {
-        throw SatelliteException("Error: (e <= -0.001)");
+        conjunction::set_error("Error: (e <= -0.001)"); return invalid_position();
     }
     else if (e < 1.0e-6)
     {
@@ -449,7 +458,7 @@ Eci SGP4::FindPositionSGP4(double tsince) const
      */
     if (e <= -0.001)
     {
-        throw SatelliteException("Error: (e <= -0.001)");
+        conjunction::set_error("Error: (e <= -0.001)"); return invalid_position();
     }
     else if (e < 1.0e-6)
     {
@@ -511,7 +520,7 @@ Eci SGP4::CalculateFinalPositionVelocity(
 
     if (elsq >= 1.0)
     {
-        throw SatelliteException("Error: (elsq >= 1.0)");
+        conjunction::set_error("Error: (elsq >= 1.0)"); return invalid_position();
     }
 
     /*
@@ -592,7 +601,7 @@ Eci SGP4::CalculateFinalPositionVelocity(
 
     if (pl < 0.0)
     {
-        throw SatelliteException("Error: (pl < 0.0)");
+        conjunction::set_error("Error: (pl < 0.0)"); return invalid_position();
     }
 
     const double r = a * (1.0 - ecose);
@@ -654,10 +663,7 @@ Eci SGP4::CalculateFinalPositionVelocity(
 
     if (rk < 1.0)
     {
-        throw DecayedException(
-                dt,
-                position,
-                velocity);
+        conjunction::set_error("Satellite has decayed"); return invalid_position();
     }
 
     return Eci(dt, position, velocity);

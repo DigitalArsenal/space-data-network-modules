@@ -1,0 +1,33 @@
+✔ CQR Laas 2015 Pc reproduces the centered isotropic Gaussian disk integral (99.104583ms)
+✔ CQR rejects singular encounter covariance and the retired JSON method (13.724917ms)
+✔ CQR compact sources reproduce the independent linear encounter without SGP4 (27.350292ms)
+✔ CQR verbose sources reproduce the independent linear encounter without SGP4 (22.751125ms)
+✔ CQR PPE sources reproduce the independent linear encounter without SGP4 (22.35875ms)
+✖ CQR rejects malformed or unsupported UTC dates before evaluating a source (12.670916ms)
+✔ CQR accepts leap-day and CCSDS no-Z UTC sources without changing the linear encounter (40.190875ms)
+✔ CQR rejects out-of-range TLE epoch days without a numerical result (12.995167ms)
+✔ CQR sampled resident index preserves the linear encounter and invalidates destroyed handles (56.888291ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 8
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1271.698417
+
+✖ failing tests:
+
+test at tests/cqrAuthoritative.test.mjs:77:1
+✖ CQR rejects malformed or unsupported UTC dates before evaluating a source (12.670916ms)
+  AssertionError [ERR_ASSERTION]: Unsupported source epoch was accepted: 2026-02-31T00:00:00Z
+      at TestContext.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/tests/cqrAuthoritative.test.mjs:87:12)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:777:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }

@@ -16,6 +16,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import assert from "node:assert/strict";
+import { encodePluginManifest, decodePluginManifest } from "space-data-module-sdk/manifest";
 
 import {
   validateArtifactWithStandards,
@@ -25,6 +27,8 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const packageRoot = path.resolve(__dirname, "..");
+const standardsRoot = path.join(packageRoot, "node_modules", "spacedatastandards.org");
+process.env.SPACE_DATA_STANDARDS_ROOT = standardsRoot;
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const wasmPath = path.join(
   packageRoot,
@@ -55,6 +59,7 @@ async function main() {
 
   const manifestReport = await validateManifestWithStandards(manifest, {
     sourceName: manifestPath,
+    standardsRoot,
   });
   printIssues(manifestReport);
   if (!manifestReport.ok) {
@@ -64,16 +69,31 @@ async function main() {
 
   await fs.access(wasmPath).catch(() => {
     throw new Error(
-      `Compiled WASM artifact missing at ${wasmPath}. Run \`./build.sh\` first.`,
+      `Compiled WASM artifact missing at ${wasmPath}. Run \`node build.mjs\` first.`,
     );
   });
 
   const artifactReport = await validateArtifactWithStandards({
     manifest,
+    standardsRoot,
     wasmPath,
     sourceName: wasmPath,
   });
   printIssues(artifactReport);
+  const bytes = encodePluginManifest(manifest);
+  assert.deepEqual(encodePluginManifest(decodePluginManifest(bytes)), bytes,
+    "PLG encode/decode must preserve the canonical bytes");
+  const issues = [manifestReport, artifactReport].flatMap(report => report.issues ?? []);
+  // Both checks repeat the same port warnings under different source paths.
+  const warnings = [...new Map(issues.filter(issue => issue.severity === "warning")
+    .map(issue => [`${issue.code}:${issue.location?.replace(/^.*(?=\.methods\[)/, 'manifest')}`, issue])).values()];
+  console.log(JSON.stringify({
+    standards: "1.220.0",
+    errors: issues.filter(issue => issue.severity === "error").length,
+    warnings: warnings.length,
+    warningCodes: [...new Set(warnings.map(issue => issue.code))],
+    plgRoundTrip: true,
+  }, null, 2));
   if (!artifactReport.ok) {
     process.exitCode = 1;
   }

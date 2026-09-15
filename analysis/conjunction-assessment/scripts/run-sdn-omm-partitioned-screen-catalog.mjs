@@ -18,7 +18,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { FlatcRunner } from "flatc-wasm";
 import { loadModule } from "space-data-module-sdk/host/isomorphic";
-import { buildWasmEdgeEmscriptenPthreadRunner } from "space-data-module-sdk/testing";
+import { encodeCqr, decodeCqr, catalogRequest, catalogInReferenceUnits } from "../tests/lib/cqr.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, "..");
@@ -31,34 +31,6 @@ const DEFAULT_WASM_PATH = path.join(
 
 function readText(relativePath) {
   return fs.readFileSync(path.join(PACKAGE_ROOT, relativePath), "utf8");
-}
-
-function conjunctionRequestSchema() {
-  return {
-    entry: "/schemas/ConjunctionScreenCatalogRequest.fbs",
-    files: {
-      "/schemas/ConjunctionScreenCatalogRequest.fbs": readText(
-        "schemas/ConjunctionScreenCatalogRequest.fbs",
-      ),
-      "/schemas/ConjunctionCommon.fbs": readText(
-        "schemas/ConjunctionCommon.fbs",
-      ),
-    },
-  };
-}
-
-function screenCatalogResultSchema() {
-  return {
-    entry: "/schemas/ConjunctionScreenCatalogResult.fbs",
-    files: {
-      "/schemas/ConjunctionScreenCatalogResult.fbs": readText(
-        "schemas/ConjunctionScreenCatalogResult.fbs",
-      ),
-      "/schemas/ConjunctionCommon.fbs": readText(
-        "schemas/ConjunctionCommon.fbs",
-      ),
-    },
-  };
 }
 
 function parseArgs(argv) {
@@ -254,9 +226,7 @@ function createScreenCatalogRequest(flatc, options, range, orderedCatalogIndices
     range.primaryEndOrderIndex ?? (Array.isArray(range) ? range[1] : range.endOrderIndex);
   const secondaryStartOrderIndex = range.secondaryStartOrderIndex ?? 0;
   const secondaryEndOrderIndex = range.secondaryEndOrderIndex ?? 0;
-  return flatc.generateBinary(
-    conjunctionRequestSchema(),
-    JSON.stringify({
+  return encodeCqr(flatc, catalogRequest({
       selectedSources: [
         {
           sourceKind: "OMM",
@@ -286,7 +256,6 @@ function createScreenCatalogRequest(flatc, options, range, orderedCatalogIndices
       secondaryStartOrderIndex,
       secondaryEndOrderIndex,
     }),
-    { sizePrefix: false },
   );
 }
 
@@ -1588,17 +1557,6 @@ async function writePartitionCheckpoint(checkpointDir, partition) {
   await rename(temporaryPath, finalPath);
 }
 
-async function maybeBuildRunner() {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "sdn-omm-ca-runner-"));
-  const outputPath = path.join(tempDir, "wasmedge-pthread-runner");
-  const runnerBinary = await buildWasmEdgeEmscriptenPthreadRunner({ outputPath });
-  return {
-    runnerBinary,
-    async cleanup() {
-      await rm(tempDir, { recursive: true, force: true });
-    },
-  };
-}
 
 export async function runPartitionedSdnOmmCatalog(options) {
   if (!options.catalog) {
@@ -1696,14 +1654,11 @@ export async function runPartitionedSdnOmmCatalog(options) {
   let harness = null;
   try {
     if (workPlan.pendingRanges.length > 0) {
-      builtRunner = options.wasmEdgeRunnerBinary ? null : await maybeBuildRunner();
       harness = await loadModule({
         wasmSource: options.wasm,
         runtimeKind: "wasmedge",
         enableThreads: true,
         wasmEdgeBinary: options.wasmEdgeBinary,
-        wasmEdgeRunnerBinary:
-          options.wasmEdgeRunnerBinary ?? builtRunner?.runnerBinary,
         cwd: PACKAGE_ROOT,
       });
     }
@@ -1750,8 +1705,12 @@ export async function runPartitionedSdnOmmCatalog(options) {
             harness.invoke({
               methodId: "screen_catalog",
               inputs: [
-                { portId: "request", payload: requestPayload },
-                { portId: "catalog", payload: partitionCatalog.payload },
+                { portId: "request", payload: requestPayload, typeRef: { schemaName: "CQR.fbs", fileIdentifier: "$CQR", rootTypeName: "CQR", wireFormat: "flatbuffer" } },
+                ...readUint32beFrameRanges(partitionCatalog.payload).map(({ start, end }) => {
+                  let payload = partitionCatalog.payload.subarray(start + 4, end);
+                  if (String.fromCharCode(...payload.subarray(8, 12)) === "$OMM") payload = payload.subarray(4);
+                  return { portId: "catalog", payload, typeRef: { schemaName: "OMM.fbs", fileIdentifier: "$OMM", rootTypeName: "OMM", wireFormat: "flatbuffer" } };
+                }),
               ],
             }),
           options.partitionTimeoutMs,
@@ -1774,13 +1733,7 @@ export async function runPartitionedSdnOmmCatalog(options) {
       );
       const decoded =
         resultFrame?.payload instanceof Uint8Array
-          ? JSON.parse(
-              flatc.generateJSON(
-                screenCatalogResultSchema(),
-                { path: "/result.bin", data: resultFrame.payload },
-                { defaultsJson: true },
-              ),
-            )
+          ? catalogInReferenceUnits(decodeCqr(flatc, resultFrame.payload).CATALOG_RESULT)
           : null;
 
       const partition = {

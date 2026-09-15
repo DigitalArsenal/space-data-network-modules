@@ -7,10 +7,14 @@
 
 #include "conjunction/conjunction_assessment.h"
 #include "conjunction/conjunction_engine.h"
+#include "conjunction/error_status.h"
 #ifdef SING
 #undef SING
 #endif
-#include "conjunction/standards/CDM/main_generated.h"
+#ifdef DOMAIN
+#undef DOMAIN
+#endif
+#include "CDM_generated.h"
 #include "flatbuffers/flatbuffers.h"
 
 #include <iostream>
@@ -39,7 +43,7 @@ void test_single_cdm_output() {
     event.obj2.name = "COSMOS 2251 DEB";
     event.obj2.norad_cat_id = 34567;
 
-    event.tca_jd = 2460784.5;
+    event.tca_jd = 2460750.0;
     event.tca_iso = "2025-03-15T12:00:00.000Z";
     event.min_range_km = 0.234;
     event.rel_speed_kms = 14.7;
@@ -80,7 +84,7 @@ void test_single_cdm_output() {
 
     if (cdm) {
         CHECK(cdm->CCSDS_CDM_VERS() == 1.0, "CCSDS version = 1.0");
-        CHECK(std::string(cdm->ORIGINATOR()->c_str()) == "LOBSTERNAUT-CA", "Originator correct");
+        CHECK(std::string(cdm->ORIGINATOR()->c_str()) == "conjunction-assessment", "Originator correct");
 
         CHECK(cdm->TCA() != nullptr, "TCA string present");
         if (cdm->TCA()) {
@@ -108,9 +112,8 @@ void test_single_cdm_output() {
             CHECK(cdm->OBJECT2()->OBJECT()->NORAD_CAT_ID() == 34567, "Object 2 NORAD ID");
         }
 
-        // Check screening volume
-        CHECK(cdm->SCREEN_VOLUME_SHAPE() == screeningVolumeShape::ELLIPSOID, "Screening volume shape = ELLIPSOID");
-        CHECK(std::abs(cdm->SCREEN_VOLUME_X() - 5.0) < 0.01, "Screening volume X = 5 km");
+        CHECK(cdm->CREATION_DATE()->str() == event.tca_iso, "Deterministic creation date uses the event epoch");
+        CHECK(cdm->SCREEN_VOLUME_X() == 0.0, "No screening volume invented from a pair event");
     }
 
     std::cout << "    CDM size: " << written << " bytes" << std::endl;
@@ -196,24 +199,21 @@ void test_cdm_import_pc() {
     event.obj1.norad_cat_id = 11111;
     event.obj2.name = "SECONDARY";
     event.obj2.norad_cat_id = 22222;
-    event.tca_jd = 2460784.5;
+    event.tca_jd = 2460750.0;
     event.tca_iso = "2025-03-15T12:00:00.000Z";
-    event.min_range_km = 0.042;
-    event.rel_speed_kms = 13.2;
-    event.rel_pos_r = 0.03;
-    event.rel_pos_t = -0.02;
-    event.rel_pos_n = 0.021;
-    event.rel_vel_r = -1.4;
-    event.rel_vel_t = 12.3;
-    event.rel_vel_n = 4.5;
+    // Independent centered isotropic Gaussian disk integral (Rayleigh CDF):
+    // https://www.itl.nist.gov/div898/software/dataplot/refman2/auxillar/raycdf.htm
+    // TEME km, km/s; UTC event epoch above (integration is epoch invariant).
+    // Two isotropic 70.710678 m covariances sum to sigma=100 m; radius=10 m.
+    // Opposite along-track velocities give a nondegenerate encounter plane.
+    event.state1 = StateVector{event.tca_jd,7000,0,0,0,7.5,0};
+    event.state2 = StateVector{event.tca_jd,7000,0,0,0,-7.5,0};
+    event.min_range_km = 0.0;
+    event.rel_speed_kms = 15.0;
     event.max_probability = 0.0;
-    event.probability_method = "FOSTER-2D";
-    event.cov_r1 = 120.0;
-    event.cov_t1 = 250.0;
-    event.cov_n1 = 90.0;
-    event.cov_r2 = 80.0;
-    event.cov_t2 = 210.0;
-    event.cov_n2 = 70.0;
+    event.probability_method = "LAAS-2015";
+    event.cov_r1 = event.cov_t1 = event.cov_n1 = 100.0 / std::sqrt(2.0);
+    event.cov_r2 = event.cov_t2 = event.cov_n2 = 100.0 / std::sqrt(2.0);
 
     uint8_t buffer[16384];
     int32_t written = conjunction_to_cdm(event, buffer, sizeof(buffer));
@@ -221,33 +221,15 @@ void test_cdm_import_pc() {
 
     const auto imported = compute_pc_from_cdm(buffer, static_cast<uint32_t>(written), "", 0.01);
 
-    StateVector state1{0.0, event.rel_pos_r, event.rel_pos_t, event.rel_pos_n,
-                       event.rel_vel_r, event.rel_vel_t, event.rel_vel_n};
-    StateVector state2{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    Covariance3x3 cov1 = Covariance3x3::from_rtn_diagonal(
-        event.cov_r1 / 1000.0,
-        event.cov_t1 / 1000.0,
-        event.cov_n1 / 1000.0);
-    Covariance3x3 cov2 = Covariance3x3::from_rtn_diagonal(
-        event.cov_r2 / 1000.0,
-        event.cov_t2 / 1000.0,
-        event.cov_n2 / 1000.0);
-
-    ConjunctionEngine engine;
-    engine.set_pc_method("FOSTER-2D");
-    const auto expected = engine.compute_pc(state1, state2, cov1, cov2, 0.01).pc;
-
-    CHECK(imported.method == "FOSTER-2D", "Imported CDM uses CDM probability method");
-    CHECK(std::abs(imported.probability - expected.probability) < 1e-15,
-          "Imported CDM Pc matches direct engine computation");
-
-    bool rejected = false;
-    try {
-        (void)compute_pc_from_cdm(buffer, 8, "FOSTER-2D", 0.01);
-    } catch (const std::exception&) {
-        rejected = true;
-    }
-    CHECK(rejected, "Truncated CDM input is rejected");
+    const double expected = 1.0 - std::exp(-0.01 * 0.01 / (2.0 * 0.1 * 0.1));
+    CHECK(imported.method == "LAAS-2015", "Imported CDM uses covariance probability algorithm");
+    // Smooth Gaussian integral; 1e-12 absolute error is the ratified migration bound.
+    CHECK(!has_error() && std::abs(imported.probability - expected) < 1e-12,
+          "Imported CDM Pc agrees with independent Gaussian disk integral to 1e-12");
+    clear_error();
+    (void)compute_pc_from_cdm(buffer, 8, "LAAS-2015", 0.01);
+    CHECK(has_error(), "Truncated CDM input returns explicit failure status");
+    clear_error();
 }
 
 void test_orekit_cdm_example1_kvn_roundtrip() {
@@ -567,7 +549,7 @@ id="CCSDS_CDM_VERS" version="1.0">
                   "Orekit XML object 1 name preserved");
             CHECK(cat->OBJECT_ID() && cat->OBJECT_ID()->str() == "1997-030E",
                   "Orekit XML object 1 international designator preserved");
-            CHECK(cat->OBJECT_TYPE() == objectType::PAYLOAD, "Orekit XML object 1 type preserved");
+            CHECK(cat->OBJECT_TYPE() == spaceObjectClass::PAYLOAD, "Orekit XML object 1 type preserved");
             CHECK(cat->MANEUVERABLE(), "Orekit XML object 1 maneuverable flag preserved");
             CHECK(std::abs(object->X() - 2570.097065) < 1e-12,
                   "Orekit XML object 1 X preserved in kilometers");
@@ -586,7 +568,7 @@ id="CCSDS_CDM_VERS" version="1.0">
             CHECK(cat->NORAD_CAT_ID() == 30337, "Orekit XML object 2 designator maps to NORAD id");
             CHECK(cat->OBJECT_NAME() && cat->OBJECT_NAME()->str() == "FENGYUN 1C DEB",
                   "Orekit XML object 2 name preserved");
-            CHECK(cat->OBJECT_TYPE() == objectType::DEBRIS, "Orekit XML object 2 type preserved");
+            CHECK(cat->OBJECT_TYPE() == spaceObjectClass::DEBRIS, "Orekit XML object 2 type preserved");
             CHECK(!cat->MANEUVERABLE(), "Orekit XML object 2 maneuverable flag preserved");
             CHECK(std::abs(object->COVARIANCE()->Get(0) - 1.337e-3) < 1e-14,
                   "Orekit XML object 2 CR_R converted from m^2 to km^2");

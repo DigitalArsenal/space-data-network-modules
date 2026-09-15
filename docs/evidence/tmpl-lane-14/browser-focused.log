@@ -1,0 +1,19 @@
+✔ conjunction plugin_invoke_stream accepts and rejects SDS PIV envelopes (57.933792ms)
+✔ SOCRATES: parity summary (measured deltas for the coordinator) (0.774042ms)
+ℹ catalog=6 objectsParsed=6 found=3 matched=3 missing=0 extra=0 window=[2461108.348,+7.78d] thr=5km
+ℹ pair 61721-67298 [NLRV] dTCA=0.00072s dMiss=4.178m dRelSpeed=0.100m/s PcRatio=1.000 (our=0.005822km ref=0.01km)
+ℹ pair 47935-49179 [NLRV] dTCA=0.00032s dMiss=0.303m dRelSpeed=0.304m/s PcRatio=1.859 (our=0.014303km ref=0.014km)
+ℹ pair 48282-58288 [NLRV] dTCA=0.00028s dMiss=0.131m dRelSpeed=0.479m/s PcRatio=1.731 (our=0.013869km ref=0.014km)
+✔ SOCRATES: event set — full reference recall, no spurious events [independent-parity + regression-guard] (0.081209ms)
+✔ SOCRATES: TCA within rel-vel-stratified tolerance [independent-parity] (0.067333ms)
+✔ SOCRATES: miss distance within SOCRATES bound [regression-guard: CSV range quantized] (0.052375ms)
+✔ SOCRATES: relative speed within bound (0.060542ms)
+✔ SOCRATES: Pc advisory — same-family, recorded not gated [same-family-advisory] (0.06275ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1375.111541

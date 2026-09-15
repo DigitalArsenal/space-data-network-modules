@@ -171,11 +171,16 @@ export function isoToJulianDate(isoString) {
     rawIso.length > 0 && !ISO_TIMEZONE_PATTERN.test(rawIso)
       ? `${rawIso}Z`
       : rawIso;
-  const unixMillis = Date.parse(normalizedIso);
+  // Date.parse truncates the published Aerospace microseconds to milliseconds.
+  // Keep the fractional second when expressing the fixture's UTC timestamp as
+  // a Julian date, including when a requested window touches a coverage edge.
+  // This is timestamp representation only; the guest interprets source epochs.
+  const fractional = normalizedIso.match(/^(.*T\d{2}:\d{2}:\d{2})\.(\d+)(Z|[+-]\d{2}:\d{2})$/i);
+  const unixMillis = Date.parse(fractional ? `${fractional[1]}${fractional[3]}` : normalizedIso);
   if (!Number.isFinite(unixMillis)) {
     return Number.NaN;
   }
-  return unixMillis / 86400000 + 2440587.5;
+  return (unixMillis / 1000 + (fractional ? Number(`0.${fractional[2]}`) : 0)) / 86400 + 2440587.5;
 }
 
 export function parseAerospaceOcmText(text, options = {}) {

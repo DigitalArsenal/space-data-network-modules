@@ -156,6 +156,7 @@ export async function createLocalSgp4Plugin() {
       }
 
       return {
+        referenceFrame: "ECEF",
         object_name: objectName ?? gpRecord.OBJECT_NAME ?? null,
         object_id: objectId ?? gpRecord.OBJECT_ID ?? null,
         norad_cat_id: Number(gpRecord.NORAD_CAT_ID ?? 0),

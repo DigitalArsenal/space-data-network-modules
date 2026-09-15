@@ -1,0 +1,18 @@
+✔ build publishes canonical browser and isomorphic artifact paths (0.774417ms)
+✔ built artifact passes SDK compliance checks (10.847209ms)
+✔ manifest declares CDM import probability command surface (0.268708ms)
+✔ manifest declares CSM summary command surface (0.142459ms)
+✔ manifest declares Orekit CDM KVN parser/writer command surfaces (0.138583ms)
+✔ manifest declares Orekit CDM XML parser/writer command surfaces (0.138416ms)
+✔ primary artifact exposes canonical wasi-threads imports and exports (1.496666ms)
+✔ built artifact loads through the SDK WasmEdge pthread runner (90.109792ms)
+✔ primary artifact executes through the SDK browser WASI harness (28.48025ms)
+✔ hosted-runtime example is wired to the screen catalog command surface (0.340125ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 644.620667

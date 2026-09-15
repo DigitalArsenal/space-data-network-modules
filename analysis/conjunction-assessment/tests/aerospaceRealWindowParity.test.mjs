@@ -51,7 +51,7 @@ import {
   isoToJd,
   loadRawConjunctionModule,
   runScreenCatalog,
-  singlethreadArtifactExists,
+  primaryArtifactExists,
 } from "./lib/screenCatalogParityHarness.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -60,7 +60,7 @@ const OCM_DIR = path.join(FIXTURE_DIR, "ocm");
 const ANSWER_KEY = path.join(FIXTURE_DIR, "answer_key_spherical.csv");
 const T = CA_PARITY_TOLERANCES;
 const CFG = T.screening.aerospaceSpherical;
-const ARTIFACT = singlethreadArtifactExists();
+const ARTIFACT = primaryArtifactExists();
 
 // FINDING F1 regression envelope (NOT a tolerance-config value; see header).
 // Real 65 s-OCM-vs-CSieve miss deltas in this window measured max 2.544 m
@@ -69,12 +69,11 @@ const ARTIFACT = singlethreadArtifactExists();
 // claim the released OCM sampling cannot support.
 const REAL_OCM_MISS_ENVELOPE_M = 5.0;
 
-// TRAJ_REF_FRAME -> module enum. EME2000/J2000/GCRF are inertial ~= ICRF
-// (<~20 mas frame bias, shared by both objects => relative geometry invariant).
+// Preserve the declared axes; EME2000/J2000 and GCRF remain distinct.
 function mapFrame(f) {
   const s = String(f || "").toUpperCase();
-  if (["ICRF", "TEME", "ECEF", "ECI"].includes(s)) return s;
-  return "ICRF";
+  if (["GCRF", "ICRF", "EME2000", "J2000", "TEME", "ECEF"].includes(s)) return s;
+  throw new Error(`Unsupported source frame: ${f}`);
 }
 
 function csvRowsSync(csvPath) {
@@ -91,11 +90,19 @@ function csvRowsSync(csvPath) {
 function trackFromOcm(ocm, fallbackNorad) {
   const samples = (ocm.primaryTrajectory?.samples ?? [])
     .filter((s) => s.positionKm && s.velocityKmS)
-    .map((s) => ({
-      jd: s.epochJD,
+    .map((s) => {
+      // This pre-migration regression fixture transported Date.parse epochs,
+      // which truncate microseconds to milliseconds. Preserve those exact
+      // input times while moving to CQR, and declare the same quantized epoch
+      // in OEM. The general source parser preserves full input precision.
+      // Do not mix an original microsecond ISO label with a millisecond JD.
+      const epochMilliseconds = Date.parse(s.epoch.endsWith('Z') ? s.epoch : `${s.epoch}Z`);
+      return {
+      EPOCH: new Date(epochMilliseconds).toISOString(),
+      jd: epochMilliseconds / 86400000 + 2440587.5,
       xKm: s.positionKm.x, yKm: s.positionKm.y, zKm: s.positionKm.z,
       vxKmS: s.velocityKmS.x, vyKmS: s.velocityKmS.y, vzKmS: s.velocityKmS.z,
-    }));
+    }; });
   const norad = Number(ocm.objectDesignator) || Number(fallbackNorad) || 0;
   return {
     sourcePluginId: "aerospace-ivv-real", sourceHandle: 0,
@@ -125,10 +132,13 @@ if (ARTIFACT) {
     const tcaJd = Number(r.jdate);
     const t1 = trackFromOcm(loadOcm(String(r.obj1_filename)), r.obj1);
     const t2 = trackFromOcm(loadOcm(String(r.obj2_filename)), r.obj2);
+    const startJd = Math.max(tcaJd - 240 / 86400, t1.samples[0].jd, t2.samples[0].jd);
+    const stopJd = Math.min(tcaJd + 240 / 86400, t1.samples.at(-1).jd, t2.samples.at(-1).jd);
+    assert.ok(startJd < tcaJd && stopJd > tcaJd, "Source coverage brackets the authoritative TCA");
     const requestBinary = buildScreenCatalogRequest(flatc, {
       sourceKind: "OCM", schemaName: "OCM/main.fbs", fileIdentifier: "$OCM",
       primaryTracks: [t1, t2],
-      startJd: tcaJd - 240 / 86400, durationDays: 480 / 86400,
+      startJd, durationDays: stopJd - startJd,
       thresholdKm: CFG.thresholdKm, combinedRadiusM: CFG.combinedRadiusM,
       coarseStepSec: CFG.coarseStepSec, fineTolSec: CFG.fineTolSec,
       usePerigeeFilter: false,
@@ -149,7 +159,7 @@ if (ARTIFACT) {
 
 function requireCtx(t) {
   if (!ARTIFACT) {
-    t.skip("dist/isomorphic-singlethread/module.wasm missing — build conjunction-assessment before the Aerospace real-window gate.");
+    t.skip("dist/isomorphic/module.wasm missing — build conjunction-assessment before the Aerospace real-window gate.");
     return null;
   }
   return ctx;
@@ -158,7 +168,7 @@ function requireCtx(t) {
 test("Aerospace real-window: summary (measured deltas vs CSieve for the coordinator)", (t) => {
   const c = requireCtx(t);
   if (!c) return;
-  t.diagnostic(`fixture=aerospace-real-window (AerospaceIVVDataset_20251009a) events=${c.rows.length} recalled=${c.matched.length} missing=${c.missing.length} anchors=${c.matched.filter((m) => m.parityAnchor).length}`);
+  t.diagnostic(`fixture=aerospace-real-window (AerospaceIVVDataset_20251009a; preserved pre-migration millisecond input epochs) events=${c.rows.length} recalled=${c.matched.length} missing=${c.missing.length} anchors=${c.matched.filter((m) => m.parityAnchor).length}`);
   const misses = c.matched.map((m) => m.deltas.missDeltaM).sort((a, b) => a - b);
   t.diagnostic(`FINDING F1 miss-vs-CSieve on real 65s OCM: min=${misses[0].toFixed(4)}m median=${misses[misses.length >> 1].toFixed(4)}m max=${misses[misses.length - 1].toFixed(4)}m (analytic ≤10cm bound met only near ephemeris nodes; anchors below)`);
   for (const m of c.matched) {

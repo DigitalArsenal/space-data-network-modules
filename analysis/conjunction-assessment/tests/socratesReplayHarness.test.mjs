@@ -7,11 +7,7 @@ import {
   invokeConjunctionJson,
   conjunctionArtifactExists,
 } from "./lib/conjunctionCommandHarness.mjs";
-import {
-  createLocalSgp4Plugin,
-  sampleTrackWindowFromReference,
-  sgp4ArtifactExists,
-} from "./lib/sgp4TrackHarness.mjs";
+import { gpSource } from "./lib/cqr.mjs";
 import { buildThreadedWasmEdgeRunner } from "./lib/wasmedgePthreadRunner.mjs";
 
 const SOCRATES_REFERENCE_PATH = new URL(
@@ -44,10 +40,6 @@ test("WasmEdge conjunction replay stays within the public SOCRATES tolerance env
     t.skip("Build conjunction-assessment before running the SOCRATES replay test.");
     return;
   }
-  if (!sgp4ArtifactExists()) {
-    t.skip("Build the local SGP4 plugin before running the SOCRATES replay test.");
-    return;
-  }
   const runnerBinary = await buildThreadedWasmEdgeRunner(
     t,
     "conjunction-socrates-replay-runner-",
@@ -67,14 +59,9 @@ test("WasmEdge conjunction replay stays within the public SOCRATES tolerance env
   });
 
   for (const reference of referenceRows) {
-    const sgp4 = await createLocalSgp4Plugin();
-    try {
+      try {
       const gpRecords = loadGpFixture(reference.gp_file);
-      const [primaryTrack, secondaryTrack] = await sampleTrackWindowFromReference(
-        sgp4,
-        gpRecords,
-        reference,
-      );
+      const [primaryTrack, secondaryTrack] = gpRecords.map(gpSource);
       const expectedTcaJd = Date.parse(reference.tca) / 86400000 + 2440587.5;
       const { response, json } = await invokeConjunctionJson(harness, {
         operation: "assessTracks",
@@ -101,23 +88,21 @@ test("WasmEdge conjunction replay stays within the public SOCRATES tolerance env
       );
 
       assert.ok(
-        tcaDeltaSec <= 60,
-        `${reference.gp_file}: TCA delta ${tcaDeltaSec}s exceeded 60s`,
+        tcaDeltaSec <= 0.01,
+        `${reference.gp_file}: TCA delta ${tcaDeltaSec}s exceeded 0.01s`,
       );
       assert.ok(
-        rangeDeltaKm <= 0.5,
-        `${reference.gp_file}: range delta ${rangeDeltaKm} km exceeded 0.5 km`,
+        rangeDeltaKm <= 0.005,
+        `${reference.gp_file}: range delta ${rangeDeltaKm} km exceeded 0.005 km`,
       );
       assert.ok(
-        speedDeltaKmS <= 0.5,
-        `${reference.gp_file}: speed delta ${speedDeltaKmS} km/s exceeded 0.5 km/s`,
+        speedDeltaKmS <= 0.005,
+        `${reference.gp_file}: speed delta ${speedDeltaKmS} km/s exceeded 0.005 km/s`,
       );
       assert.ok(
         maxProbRatio <= 100,
         `${reference.gp_file}: probability ratio ${maxProbRatio} exceeded 100`,
       );
-    } finally {
-      sgp4.destroy();
-    }
+    } finally {}
   }
 });

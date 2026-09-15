@@ -1,0 +1,61 @@
+file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/tests/lib/screenCatalogParityHarness.mjs:223
+    throw new Error(
+          ^
+
+Error: screen_catalog failed (status 400): Source does not cover the complete requested UTC screening window.
+    at runScreenCatalog (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/tests/lib/screenCatalogParityHarness.mjs:223:11)
+    at file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/tests/aerospaceRealWindowParity.test.mjs:140:21
+
+Node.js v25.4.0
+✖ tests/aerospaceRealWindowParity.test.mjs (794.337417ms)
+✔ Aerospace: parity summary (mode + measured deltas for the coordinator) (0.748375ms)
+ℹ mode=synthetic tracks=10 objectsParsed=10 refEvents=4 found=4 matched=4 missing=0 extra=0 thr=10km HBR=0.5m
+ℹ SYNTHETIC fixture (analytic answer key) — real 21.74GB CSieve dataset is OWNER-ASSIST; see docs/aerospace-ivv-acquisition.md
+ℹ pair 90001-90002 [NLRV] dTCA=0.000241s dMiss=0.0141m dRelSpeed=0.0000m/s
+ℹ pair 90003-90004 [NLRV] dTCA=0.000241s dMiss=0.0044m dRelSpeed=0.0000m/s
+ℹ pair 90005-90006 [LRV] dTCA=0.000241s dMiss=0.0000m dRelSpeed=0.0000m/s
+ℹ pair 90007-90008 [VLRV] dTCA=0.000241s dMiss=0.0000m dRelSpeed=0.0000m/s
+✔ Aerospace: event set — full answer-key recall (+ precision on synthetic control) (0.09125ms)
+✔ Aerospace: TCA within rel-vel-stratified tolerance [NLRV gated] (0.064542ms)
+ℹ pair 90005-90006 [LRV] TCA advisory dTCA=0.00024139881134033203s (flat-minimum regime)
+ℹ pair 90007-90008 [VLRV] TCA advisory dTCA=0.00024139881134033203s (flat-minimum regime)
+✔ Aerospace: miss distance within ≤10cm bound [independent-parity: full precision] (0.054084ms)
+✔ Aerospace: Pc report-only (CSieve uses a different Alfano variant — not gated) (0.060375ms)
+ℹ Pc not gated vs CSieve (User's Guide + AMOS 2025). our maxProbability values: 90001-90002=0.000001471518 90003-90004=4.0875e-8 90005-90006=5.74812e-7 90007-90008=1.43703e-7
+✔ CQR Laas 2015 Pc reproduces the centered isotropic Gaussian disk integral (97.02975ms)
+✔ CQR rejects singular encounter covariance and the retired JSON method (14.090417ms)
+✔ CQR compact sources reproduce the independent linear encounter without SGP4 (27.853958ms)
+✔ CQR verbose sources reproduce the independent linear encounter without SGP4 (23.085792ms)
+✖ CQR PPE sources reproduce the independent linear encounter without SGP4 (12.846709ms)
+✔ CQR sampled resident index preserves the linear encounter and invalidates destroyed handles (58.940708ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 10
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 800.307875
+
+✖ failing tests:
+
+test at tests/aerospaceRealWindowParity.test.mjs:1:1
+✖ tests/aerospaceRealWindowParity.test.mjs (794.337417ms)
+  'test failed'
+
+test at tests/cqrAuthoritative.test.mjs:59:49
+✖ CQR PPE sources reproduce the independent linear encounter without SGP4 (12.846709ms)
+  AssertionError [ERR_ASSERTION]: Source does not cover the complete requested UTC screening window.
+  
+  400 !== 0
+  
+      at TestContext.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/tests/cqrAuthoritative.test.mjs:66:10)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:777:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 400,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

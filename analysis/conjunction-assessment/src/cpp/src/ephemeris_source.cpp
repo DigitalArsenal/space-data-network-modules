@@ -1,3 +1,4 @@
+#include "conjunction/error_status.h"
 /**
  * EphemerisSource — OEM interpolation implementation
  */
@@ -12,8 +13,8 @@ namespace conjunction {
 
 namespace {
 
-constexpr double EARTH_RADIUS_KM = 6378.137;
-constexpr double MU_EARTH_KM3_S2 = 398600.4418;
+constexpr double EPHEMERIS_EARTH_RADIUS_KM = 6378.137;
+constexpr double EPHEMERIS_MU_EARTH_KM3_S2 = 398600.4418;
 constexpr double TWO_PI = 2.0 * M_PI;
 constexpr double SECONDS_PER_DAY = 86400.0;
 
@@ -28,7 +29,7 @@ double semi_major_axis_from_mean_motion(double mean_motion_rev_day) {
     const double mean_motion_rad_sec =
         mean_motion_rev_day * TWO_PI / SECONDS_PER_DAY;
     return std::cbrt(
-        MU_EARTH_KM3_S2 / (mean_motion_rad_sec * mean_motion_rad_sec));
+        EPHEMERIS_MU_EARTH_KM3_S2 / (mean_motion_rad_sec * mean_motion_rad_sec));
 }
 
 RtnCovarianceSigmas estimate_tle_rtn_covariance_sigmas(
@@ -45,12 +46,12 @@ RtnCovarianceSigmas estimate_tle_rtn_covariance_sigmas(
             ? semi_major_axis_km
             : semi_major_axis_from_mean_motion(mean_motion_rev_day);
     if (!std::isfinite(resolved_semi_major_axis_km) ||
-        resolved_semi_major_axis_km <= EARTH_RADIUS_KM) {
+        resolved_semi_major_axis_km <= EPHEMERIS_EARTH_RADIUS_KM) {
         return sigmas;
     }
 
     const double altitude_km =
-        std::max(0.0, resolved_semi_major_axis_km - EARTH_RADIUS_KM);
+        std::max(0.0, resolved_semi_major_axis_km - EPHEMERIS_EARTH_RADIUS_KM);
     const double regime_scale =
         std::sqrt(std::max(0.25, 1.0 + altitude_km / 500.0));
     const double shape_scale =
@@ -95,7 +96,7 @@ RtnCovarianceSigmas estimate_tle_rtn_covariance_sigmas(
 
 StateVector OEMEphemerisSource::state_at(double jd) const {
     if (points_.empty()) {
-        throw std::runtime_error("Empty ephemeris");
+        set_error("Empty ephemeris"); return {};
     }
 
     // Clamp to valid range (extrapolate to nearest point)

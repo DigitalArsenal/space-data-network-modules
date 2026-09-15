@@ -55,7 +55,7 @@ import {
   isoToJd,
   loadRawConjunctionModule,
   runScreenCatalog,
-  singlethreadArtifactExists,
+  primaryArtifactExists,
 } from "./lib/screenCatalogParityHarness.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -64,12 +64,13 @@ const T = CA_PARITY_TOLERANCES;
 const CFG = T.screening.aerospaceSpherical;
 const REAL_LIMIT = Number(process.env.AEROSPACE_PARITY_LIMIT ?? 150);
 
-const ARTIFACT = singlethreadArtifactExists();
+const ARTIFACT = primaryArtifactExists();
 
 function trackFromAerospaceOcm(ocm, fallbackNorad) {
   const samples = (ocm.primaryTrajectory?.samples ?? [])
     .filter((s) => s.positionKm && s.velocityKmS)
     .map((s) => ({
+      EPOCH: s.epoch,
       jd: s.epochJD,
       xKm: s.positionKm.x,
       yKm: s.positionKm.y,
@@ -85,7 +86,7 @@ function trackFromAerospaceOcm(ocm, fallbackNorad) {
     objectName: ocm.objectName || `OBJ-${norad}`,
     objectId: ocm.objectId || "",
     noradCatId: norad,
-    referenceFrame: ocm.referenceFrame || "ICRF",
+    referenceFrame: ocm.referenceFrame,
     samples,
   };
 }
@@ -127,8 +128,10 @@ function loadSynthetic() {
     pc: r.prob === "NULL" || r.prob == null ? null : Number(r.prob),
     stratum: r.stratum,
   }));
-  const startJd = isoToJd(CFG.windowStartIso) - 0.01;
-  const durationDays = 0.02;
+  // The native fixture covers ten minutes; do not request extrapolation.
+  const startJd = Math.max(...tracks.map(t => t.samples[0].jd));
+  const stopJd = Math.min(...tracks.map(t => t.samples.at(-1).jd));
+  const durationDays = stopJd - startJd;
   return { mode: "synthetic", tracks, referenceEvents, startJd, durationDays };
 }
 
@@ -204,7 +207,7 @@ if (ARTIFACT) {
 function requireCtx(t) {
   if (!ARTIFACT) {
     t.skip(
-      "dist/isomorphic-singlethread/module.wasm missing — build conjunction-assessment before the Aerospace parity gate.",
+      "dist/isomorphic/module.wasm missing — build conjunction-assessment before the Aerospace parity gate.",
     );
     return null;
   }

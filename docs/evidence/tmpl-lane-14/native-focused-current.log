@@ -1,0 +1,24 @@
+✔ screen_catalog accepts SDN data API uint32be OMM FlatBuffer streams (395.020541ms)
+✔ screen_catalog accepts SDN data API uint32be streams of size-prefixed OMM records (82.390208ms)
+✖ screen_catalog keeps direct SDN catalog screening bounded for larger streams (30001.699916ms)
+✔ screen_catalog rejects mixed frames instead of silently relabeling a secondary track (67.576209ms)
+✔ WasmEdge conjunction replay stays within the public SOCRATES tolerance envelope for the vendored close pairs (1151.793042ms)
+✔ conjunction WasmEdge harness accepts canonical OMM sources for the known close pair (617.195792ms)
+✔ emit_cdm accepts canonical OMM-backed conjunction requests (337.304ms)
+✔ emit_csm accepts canonical OMM-backed conjunction requests (279.111875ms)
+✔ CDM KVN command surface round-trips the Orekit CDMExample1 fixture (130.349792ms)
+✔ CDM XML command surface round-trips the Orekit CDMExample1 fixture (134.248667ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 1
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 48046.476333
+
+✖ failing tests:
+
+test at tests/sdnDataApiStream.test.mjs:199:1
+✖ screen_catalog keeps direct SDN catalog screening bounded for larger streams (30001.699916ms)
+  'test timed out after 30000ms'

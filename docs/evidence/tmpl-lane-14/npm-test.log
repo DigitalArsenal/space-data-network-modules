@@ -1,0 +1,291 @@
+
+> test
+> node --test tests/buildTreeHygiene.test.mjs tests/sdk_compat.test.mjs tests/direct-entry.test.mjs tests/sourceSelectionContract.test.mjs tests/signedCdmOutput.test.mjs tests/ocmOemTrackAdapter.test.mjs tests/celestrakFetchCache.test.mjs tests/archiveStreamingSmoke.test.mjs tests/pivInvokeContract.test.mjs tests/wasmedgeStandaloneHarness.test.mjs tests/sdnDataApiStream.test.mjs tests/socratesReplayHarness.test.mjs tests/aerospaceDatasetValidation.test.mjs tests/aerospaceReplayHarness.test.mjs tests/socratesScreenCatalogParity.test.mjs tests/aerospaceScreenCatalogParity.test.mjs tests/aerospaceRealWindowParity.test.mjs tests/cqrAuthoritative.test.mjs
+
+﹣ Aerospace extracted dataset inventory matches the published guide constraints (1.812625ms) # Place the extracted Aerospace dataset under tests/data/aerospace-ivv or override with AEROSPACE_IVV_EXTRACTED_ROOT.
+Expected layout:
+- docs/Conjunction_Screening_Testset_Users_Guide.txt
+- csv/IVV_Releasable_Dataset_Spherical_DefaultHBR.csv
+- csv/IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv
+- csv/AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv
+- ocm/AerospaceIVVDataset_20251009/...
+﹣ Aerospace answer-key filenames resolve to valid extracted OCM files (0.466542ms) # Place the extracted Aerospace dataset under tests/data/aerospace-ivv or override with AEROSPACE_IVV_EXTRACTED_ROOT.
+Expected layout:
+- docs/Conjunction_Screening_Testset_Users_Guide.txt
+- csv/IVV_Releasable_Dataset_Spherical_DefaultHBR.csv
+- csv/IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv
+- csv/AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv
+- ocm/AerospaceIVVDataset_20251009/...
+file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/tests/lib/screenCatalogParityHarness.mjs:223
+    throw new Error(
+          ^
+
+Error: screen_catalog failed (status 400): Source does not cover the complete requested UTC screening window.
+    at runScreenCatalog (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/tests/lib/screenCatalogParityHarness.mjs:223:11)
+    at file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/tests/aerospaceRealWindowParity.test.mjs:137:21
+
+Node.js v25.4.0
+✖ tests/aerospaceRealWindowParity.test.mjs (1241.063416ms)
+﹣ Aerospace OCM basename index resolves answer-key files across extracted subtrees (2.598291ms) # Place the extracted Aerospace dataset under tests/data/aerospace-ivv or override with AEROSPACE_IVV_EXTRACTED_ROOT.
+Expected layout:
+- docs/Conjunction_Screening_Testset_Users_Guide.txt
+- csv/IVV_Releasable_Dataset_Spherical_DefaultHBR.csv
+- csv/IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv
+- csv/AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv
+- ocm/AerospaceIVVDataset_20251009/...
+﹣ track-mode replay reproduces the first 100 Aerospace spherical answer-key rows through the local conjunction package (21.408958ms) # Place the extracted Aerospace dataset under tests/data/aerospace-ivv or override with AEROSPACE_IVV_EXTRACTED_ROOT.
+Expected layout:
+- docs/Conjunction_Screening_Testset_Users_Guide.txt
+- csv/IVV_Releasable_Dataset_Spherical_DefaultHBR.csv
+- csv/IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv
+- csv/AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv
+- ocm/AerospaceIVVDataset_20251009/...
+﹣ track-mode replay keeps a known close-pair Aerospace row within the measured replay envelope (20.120792ms) # Place the extracted Aerospace dataset under tests/data/aerospace-ivv or override with AEROSPACE_IVV_EXTRACTED_ROOT.
+Expected layout:
+- docs/Conjunction_Screening_Testset_Users_Guide.txt
+- csv/IVV_Releasable_Dataset_Spherical_DefaultHBR.csv
+- csv/IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv
+- csv/AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv
+- ocm/AerospaceIVVDataset_20251009/...
+file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/tests/lib/screenCatalogParityHarness.mjs:223
+    throw new Error(
+          ^
+
+Error: screen_catalog failed (status 400): Source does not cover the complete requested UTC screening window.
+    at runScreenCatalog (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/tests/lib/screenCatalogParityHarness.mjs:223:11)
+    at file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/tests/aerospaceScreenCatalogParity.test.mjs:200:19
+
+Node.js v25.4.0
+✖ tests/aerospaceScreenCatalogParity.test.mjs (985.94625ms)
+﹣ answer key CSV streams directly from .csv.gz without extraction (2.422125ms) # Aerospace archive root not found. Put archives under tests/data/aerospace-archives or set CONJUNCTION_ASSESSMENT_ARCHIVE_ROOT.
+﹣ tar.gz streaming yields valid OCM entries that appear in the answer key (0.492ms) # Aerospace archive root not found. Put archives under tests/data/aerospace-archives or set CONJUNCTION_ASSESSMENT_ARCHIVE_ROOT.
+﹣ SOCRATES catalog CSV streams and resolves to per-pair GP records on disk (0.989708ms) # Local SOCRATES root not found. Put catalog files under tests/data or set CONJUNCTION_ASSESSMENT_SOCRATES_ROOT.
+✔ CMake build-* scratch trees are never tracked (12.48175ms)
+✔ future CMake build-* scratch trees are ignored (11.232125ms)
+✔ CelesTrak fetch cache reuses cached responses before network fetch (12.88875ms)
+✔ CelesTrak fetch cache supports explicit force refresh (4.004125ms)
+✖ CQR Foster Pc reproduces the centered isotropic Gaussian disk integral (144.783416ms)
+✖ CQR rejects singular encounter covariance and the retired JSON method (49.913458ms)
+✖ CQR compact sources reproduce the independent linear encounter without SGP4 (53.398334ms)
+✖ CQR verbose sources reproduce the independent linear encounter without SGP4 (50.474208ms)
+✖ CQR PPE sources reproduce the independent linear encounter without SGP4 (51.028667ms)
+✔ CQR sampled resident index preserves the linear encounter and invalidates destroyed handles (74.775375ms)
+✔ conjunction-assessment direct entry loads the shipped pthread wasm module (36.184583ms)
+✔ OCM/OEM adapters retain canonical records without JS time or frame conversion (88.412375ms)
+✔ conjunction plugin_invoke_stream accepts and rejects SDS PIV envelopes (67.737583ms)
+✔ build publishes canonical browser and isomorphic artifact paths (0.811625ms)
+✔ built artifact passes SDK compliance checks (15.660584ms)
+✔ manifest declares CDM import probability command surface (0.311166ms)
+✔ manifest declares CSM summary command surface (0.1555ms)
+✔ manifest declares Orekit CDM KVN parser/writer command surfaces (0.15075ms)
+✔ manifest declares Orekit CDM XML parser/writer command surfaces (0.146708ms)
+✔ primary artifact exposes canonical wasi-threads imports and exports (2.052334ms)
+✖ built artifact loads through the SDK WasmEdge pthread runner (85.314125ms)
+✖ primary artifact executes through the SDK browser WASI harness (19.625583ms)
+✔ hosted-runtime example is wired to the screen catalog command surface (0.913ms)
+✖ screen_catalog accepts SDN data API uint32be OMM FlatBuffer streams (157.168416ms)
+✖ screen_catalog accepts SDN data API uint32be streams of size-prefixed OMM records (86.430959ms)
+✖ screen_catalog keeps direct SDN catalog screening bounded for larger streams (1372.862417ms)
+✖ screen_catalog rejects mixed frames instead of silently relabeling a secondary track (75.134625ms)
+✔ signed CDM output binds CDM bytes and publication metadata (2.763208ms)
+✖ WasmEdge conjunction replay stays within the public SOCRATES tolerance envelope for the vendored close pairs (158.926875ms)
+✔ SOCRATES: parity summary (measured deltas for the coordinator) (0.734875ms)
+ℹ catalog=6 objectsParsed=6 found=3 matched=3 missing=0 extra=0 window=[2461108.348,+7.78d] thr=5km
+ℹ pair 61721-67298 [NLRV] dTCA=0.00072s dMiss=4.178m dRelSpeed=0.100m/s PcRatio=1.000 (our=0.005822km ref=0.01km)
+ℹ pair 47935-49179 [NLRV] dTCA=0.00032s dMiss=0.303m dRelSpeed=0.304m/s PcRatio=1.859 (our=0.014303km ref=0.014km)
+ℹ pair 48282-58288 [NLRV] dTCA=0.00028s dMiss=0.131m dRelSpeed=0.479m/s PcRatio=1.731 (our=0.013869km ref=0.014km)
+✔ SOCRATES: event set — full reference recall, no spurious events [independent-parity + regression-guard] (0.080667ms)
+✔ SOCRATES: TCA within rel-vel-stratified tolerance [independent-parity] (0.061292ms)
+✔ SOCRATES: miss distance within SOCRATES bound [regression-guard: CSV range quantized] (0.049833ms)
+✔ SOCRATES: relative speed within bound (0.058166ms)
+✔ SOCRATES: Pc advisory — same-family, recorded not gated [same-family-advisory] (0.061042ms)
+✔ screen catalog request schema accepts every CA selected source kind (80.531584ms)
+✔ CA selected source normalization accepts supported host source descriptors (1.047166ms)
+✔ CA selected source normalization rejects unsupported or incomplete descriptors (0.261ms)
+✖ conjunction WasmEdge harness accepts canonical OMM sources for the known close pair (161.143333ms)
+✖ emit_cdm accepts canonical OMM-backed conjunction requests (82.598083ms)
+✖ emit_csm accepts canonical OMM-backed conjunction requests (80.466125ms)
+✖ CDM KVN command surface round-trips the Orekit CDMExample1 fixture (79.178041ms)
+✖ CDM XML command surface round-trips the Orekit CDMExample1 fixture (72.248333ms)
+ℹ tests 53
+ℹ suites 0
+ℹ pass 26
+ℹ fail 19
+ℹ cancelled 0
+ℹ skipped 8
+ℹ todo 0
+ℹ duration_ms 2573.295084
+
+✖ failing tests:
+
+test at tests/aerospaceRealWindowParity.test.mjs:1:1
+✖ tests/aerospaceRealWindowParity.test.mjs (1241.063416ms)
+  'test failed'
+
+test at tests/aerospaceScreenCatalogParity.test.mjs:1:1
+✖ tests/aerospaceScreenCatalogParity.test.mjs (985.94625ms)
+  'test failed'
+
+test at tests/cqrAuthoritative.test.mjs:14:1
+✖ CQR Foster Pc reproduces the centered isotropic Gaussian disk integral (144.783416ms)
+  Error: WasmEdge command harness exited with code 1.
+      at formatFailure (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:121:56)
+      at ChildProcess.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:141:13)
+      at ChildProcess.emit (node:events:508:20)
+      at maybeClose (node:internal/child_process:1084:16)
+      at Socket.<anonymous> (node:internal/child_process:456:11)
+      at Socket.emit (node:events:508:20)
+      at Pipe.<anonymous> (node:net:346:12)
+
+test at tests/cqrAuthoritative.test.mjs:27:1
+✖ CQR rejects singular encounter covariance and the retired JSON method (49.913458ms)
+  Error: WasmEdge command harness exited with code 1.
+      at formatFailure (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:121:56)
+      at ChildProcess.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:141:13)
+      at ChildProcess.emit (node:events:508:20)
+      at maybeClose (node:internal/child_process:1084:16)
+      at Socket.<anonymous> (node:internal/child_process:456:11)
+      at Socket.emit (node:events:508:20)
+      at Pipe.<anonymous> (node:net:346:12)
+
+test at tests/cqrAuthoritative.test.mjs:59:49
+✖ CQR compact sources reproduce the independent linear encounter without SGP4 (53.398334ms)
+  Error: WasmEdge command harness exited with code 1.
+      at formatFailure (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:121:56)
+      at ChildProcess.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:141:13)
+      at ChildProcess.emit (node:events:508:20)
+      at maybeClose (node:internal/child_process:1084:16)
+      at Socket.<anonymous> (node:internal/child_process:456:11)
+      at Socket.emit (node:events:508:20)
+      at Pipe.<anonymous> (node:net:346:12)
+
+test at tests/cqrAuthoritative.test.mjs:59:49
+✖ CQR verbose sources reproduce the independent linear encounter without SGP4 (50.474208ms)
+  Error: WasmEdge command harness exited with code 1.
+      at formatFailure (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:121:56)
+      at ChildProcess.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:141:13)
+      at ChildProcess.emit (node:events:508:20)
+      at maybeClose (node:internal/child_process:1084:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+
+test at tests/cqrAuthoritative.test.mjs:59:49
+✖ CQR PPE sources reproduce the independent linear encounter without SGP4 (51.028667ms)
+  Error: WasmEdge command harness exited with code 1.
+      at formatFailure (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:121:56)
+      at ChildProcess.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:141:13)
+      at ChildProcess.emit (node:events:508:20)
+      at maybeClose (node:internal/child_process:1084:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+
+test at tests/sdk_compat.test.mjs:171:1
+✖ built artifact loads through the SDK WasmEdge pthread runner (85.314125ms)
+  Error: WasmEdge command harness exited with code 1.
+      at formatFailure (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:121:56)
+      at ChildProcess.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:141:13)
+      at ChildProcess.emit (node:events:508:20)
+      at maybeClose (node:internal/child_process:1084:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+
+test at tests/sdk_compat.test.mjs:194:1
+✖ primary artifact executes through the SDK browser WASI harness (19.625583ms)
+  Error [RuntimeError]: unreachable
+      at wasm://wasm/00367866:wasm-function[16]:0x1fab
+      at invokeCommandRaw (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/browserModuleHarness.js:831:7)
+      at async Object.invoke (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/browserModuleHarness.js:877:27)
+      at async TestContext.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/tests/sdk_compat.test.mjs:197:28)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:777:7)
+
+test at tests/sdnDataApiStream.test.mjs:111:1
+✖ screen_catalog accepts SDN data API uint32be OMM FlatBuffer streams (157.168416ms)
+  Error: WasmEdge command harness exited with code 1.
+      at formatFailure (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:121:56)
+      at ChildProcess.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:141:13)
+      at ChildProcess.emit (node:events:508:20)
+      at maybeClose (node:internal/child_process:1084:16)
+      at Socket.<anonymous> (node:internal/child_process:456:11)
+      at Socket.emit (node:events:508:20)
+      at Pipe.<anonymous> (node:net:346:12)
+
+test at tests/sdnDataApiStream.test.mjs:155:1
+✖ screen_catalog accepts SDN data API uint32be streams of size-prefixed OMM records (86.430959ms)
+  Error: WasmEdge command harness exited with code 1.
+      at formatFailure (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:121:56)
+      at ChildProcess.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:141:13)
+      at ChildProcess.emit (node:events:508:20)
+      at maybeClose (node:internal/child_process:1084:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+
+test at tests/sdnDataApiStream.test.mjs:199:1
+✖ screen_catalog keeps direct SDN catalog screening bounded for larger streams (1372.862417ms)
+  Error: write EPIPE
+      at WriteWrap.onWriteComplete [as oncomplete] (node:internal/stream_base_commons:87:19) {
+    errno: -32,
+    code: 'EPIPE',
+    syscall: 'write'
+  }
+
+test at tests/sdnDataApiStream.test.mjs:260:1
+✖ screen_catalog rejects mixed frames instead of silently relabeling a secondary track (75.134625ms)
+  Error: WasmEdge command harness exited with code 1.
+      at formatFailure (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:121:56)
+      at ChildProcess.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:141:13)
+      at ChildProcess.emit (node:events:508:20)
+      at maybeClose (node:internal/child_process:1084:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+
+test at tests/socratesReplayHarness.test.mjs:38:1
+✖ WasmEdge conjunction replay stays within the public SOCRATES tolerance envelope for the vendored close pairs (158.926875ms)
+  Error: WasmEdge command harness exited with code 1.
+      at formatFailure (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:121:56)
+      at ChildProcess.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:141:13)
+      at ChildProcess.emit (node:events:508:20)
+      at maybeClose (node:internal/child_process:1084:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+
+test at tests/wasmedgeStandaloneHarness.test.mjs:167:1
+✖ conjunction WasmEdge harness accepts canonical OMM sources for the known close pair (161.143333ms)
+  Error: WasmEdge command harness exited with code 1.
+      at formatFailure (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:121:56)
+      at ChildProcess.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:141:13)
+      at ChildProcess.emit (node:events:508:20)
+      at maybeClose (node:internal/child_process:1084:16)
+      at Socket.<anonymous> (node:internal/child_process:456:11)
+      at Socket.emit (node:events:508:20)
+      at Pipe.<anonymous> (node:net:346:12)
+
+test at tests/wasmedgeStandaloneHarness.test.mjs:211:1
+✖ emit_cdm accepts canonical OMM-backed conjunction requests (82.598083ms)
+  Error: WasmEdge command harness exited with code 1.
+      at formatFailure (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:121:56)
+      at ChildProcess.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:141:13)
+      at ChildProcess.emit (node:events:508:20)
+      at maybeClose (node:internal/child_process:1084:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+
+test at tests/wasmedgeStandaloneHarness.test.mjs:285:1
+✖ emit_csm accepts canonical OMM-backed conjunction requests (80.466125ms)
+  Error: WasmEdge command harness exited with code 1.
+      at formatFailure (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:121:56)
+      at ChildProcess.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:141:13)
+      at ChildProcess.emit (node:events:508:20)
+      at maybeClose (node:internal/child_process:1084:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+
+test at tests/wasmedgeStandaloneHarness.test.mjs:333:1
+✖ CDM KVN command surface round-trips the Orekit CDMExample1 fixture (79.178041ms)
+  Error: WasmEdge command harness exited with code 1.
+      at formatFailure (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:121:56)
+      at ChildProcess.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:141:13)
+      at ChildProcess.emit (node:events:508:20)
+      at maybeClose (node:internal/child_process:1084:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+
+test at tests/wasmedgeStandaloneHarness.test.mjs:376:1
+✖ CDM XML command surface round-trips the Orekit CDMExample1 fixture (72.248333ms)
+  Error: WasmEdge command harness exited with code 1.
+      at formatFailure (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:121:56)
+      at ChildProcess.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:141:13)
+      at ChildProcess.emit (node:events:508:20)
+      at maybeClose (node:internal/child_process:1084:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:304:5)

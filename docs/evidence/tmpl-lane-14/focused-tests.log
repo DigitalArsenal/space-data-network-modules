@@ -1,0 +1,99 @@
+✖ conjunction plugin_invoke_stream accepts and rejects SDS PIV envelopes (46.551583ms)
+✔ build publishes canonical browser and isomorphic artifact paths (0.7725ms)
+✖ built artifact passes SDK compliance checks (1.989875ms)
+✔ manifest declares CDM import probability command surface (0.163041ms)
+✔ manifest declares CSM summary command surface (0.125125ms)
+✔ manifest declares Orekit CDM KVN parser/writer command surfaces (0.136959ms)
+✔ manifest declares Orekit CDM XML parser/writer command surfaces (0.13525ms)
+✔ primary artifact exposes canonical wasi-threads imports and exports (3.296791ms)
+✖ built artifact loads through the SDK WasmEdge pthread runner (73.907833ms)
+✖ primary artifact executes through the SDK browser WASI harness (16.950666ms)
+✔ hosted-runtime example is wired to the screen catalog command surface (0.8285ms)
+file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/tests/lib/screenCatalogParityHarness.mjs:221
+    throw new Error(
+          ^
+
+Error: screen_catalog failed (status 400): Input frame type is not accepted by port: request
+    at runScreenCatalog (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/tests/lib/screenCatalogParityHarness.mjs:221:11)
+    at file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/tests/socratesScreenCatalogParity.test.mjs:102:19
+
+Node.js v25.4.0
+✖ tests/socratesScreenCatalogParity.test.mjs (557.228625ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 7
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 600.889708
+
+✖ failing tests:
+
+test at tests/pivInvokeContract.test.mjs:171:1
+✖ conjunction plugin_invoke_stream accepts and rejects SDS PIV envelopes (46.551583ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  400 !== 0
+  
+      at TestContext.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/tests/pivInvokeContract.test.mjs:188:10)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 400,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/sdk_compat.test.mjs:56:1
+✖ built artifact passes SDK compliance checks (1.989875ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + []
+  - [
+  -   {
+  -     minVersion: '1.0.0',
+  -     pluginId: 'com.orbpro.sgp4'
+  -   }
+  - ]
+  
+      at TestContext.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/tests/sdk_compat.test.mjs:58:10)
+      at Test.runInAsyncScope (node:async_hooks:213:14)
+      at Test.run (node:internal/test_runner/test:1095:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:777:18)
+      at Test.postRun (node:internal/test_runner/test:1224:19)
+      at Test.run (node:internal/test_runner/test:1152:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ { pluginId: 'com.orbpro.sgp4', minVersion: '1.0.0' } ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/sdk_compat.test.mjs:175:1
+✖ built artifact loads through the SDK WasmEdge pthread runner (73.907833ms)
+  Error: WasmEdge command harness exited with code 1.
+      at formatFailure (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:121:56)
+      at ChildProcess.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:141:13)
+      at ChildProcess.emit (node:events:508:20)
+      at maybeClose (node:internal/child_process:1084:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+
+test at tests/sdk_compat.test.mjs:198:1
+✖ primary artifact executes through the SDK browser WASI harness (16.950666ms)
+  Error [RuntimeError]: unreachable
+      at wasm://wasm/003558ba:wasm-function[16]:0x1f77
+      at invokeCommandRaw (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/browserModuleHarness.js:831:7)
+      at async Object.invoke (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/browserModuleHarness.js:877:27)
+      at async TestContext.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/tests/sdk_compat.test.mjs:201:28)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:777:7)
+
+test at tests/socratesScreenCatalogParity.test.mjs:1:1
+✖ tests/socratesScreenCatalogParity.test.mjs (557.228625ms)
+  'test failed'

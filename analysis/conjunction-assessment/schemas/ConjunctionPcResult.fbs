@@ -1,6 +1,0 @@
-include "ConjunctionCommon.fbs";
-
-namespace orbpro.conjunction;
-
-root_type ConjunctionPcResult;
-file_identifier "CAPS";

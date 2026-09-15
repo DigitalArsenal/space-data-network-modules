@@ -1,7 +1,6 @@
+#include "conjunction/error_status.h"
 #include "conjunction/resident_screening_index.h"
 #include "conjunction/sgp4_propagator.h"
-#include "orbpro/generated/PropagatorTrajectorySegments_generated.h"
-#include "orbpro/generated/StateVector_generated.h"
 
 #include <algorithm>
 #include <atomic>
@@ -43,39 +42,6 @@ double compute_conservative_speed_bound_km_s(const GPElement& gp) {
     return vis_viva_term > 0.0 ? std::sqrt(vis_viva_term) : 0.0;
 }
 
-GPElement decode_source_description(
-    const orbpro::propagator::PropagatorSourceDescription& source) {
-    GPElement gp;
-    gp.object_name =
-        source.objectName() != nullptr ? source.objectName()->str() : std::string();
-    gp.object_id =
-        source.objectId() != nullptr ? source.objectId()->str() : std::string();
-    gp.epoch_jd = source.epochJd();
-    gp.epoch_iso = gp.epoch_jd > 0.0 ? jd_to_iso(gp.epoch_jd) : std::string();
-    gp.mean_motion = source.meanMotionRevPerDay();
-    gp.eccentricity = source.eccentricity();
-    gp.inclination = source.inclinationDeg();
-    gp.ra_of_asc_node = source.raOfAscNodeDeg();
-    gp.arg_of_pericenter = source.argOfPericenterDeg();
-    gp.mean_anomaly = source.meanAnomalyDeg();
-    gp.ephemeris_type = source.ephemerisType();
-    const std::string classification =
-        source.classificationType() != nullptr
-            ? source.classificationType()->str()
-            : std::string("U");
-    gp.classification_type = classification.empty() ? 'U' : classification.front();
-    gp.norad_cat_id = static_cast<int>(source.noradCatId());
-    gp.element_set_no = static_cast<int>(source.elementSetNo());
-    gp.rev_at_epoch = static_cast<int>(source.revAtEpoch());
-    gp.bstar = source.bstar();
-    gp.mean_motion_dot = source.meanMotionDotRevPerDay2();
-    gp.mean_motion_ddot = source.meanMotionDdotRevPerDay3();
-    compute_derived(gp);
-    gp.perigee_km = source.perigeeKm() > 0.0 ? source.perigeeKm() : gp.perigee_km;
-    gp.apogee_km = source.apogeeKm() > 0.0 ? source.apogeeKm() : gp.apogee_km;
-    return gp;
-}
-
 void chebyshev_fit(
     const std::array<double, CHEBY_NPTS>& values,
     std::array<double, RESIDENT_CHEBYSHEV_COEFFICIENT_COUNT>& coefficients_out) {
@@ -96,55 +62,21 @@ void chebyshev_fit(
     coefficients_out[CHEBY_N] *= 0.5;
 }
 
-void copy_coefficients(
-    const flatbuffers::Vector<double>* values,
-    std::array<double, RESIDENT_CHEBYSHEV_COEFFICIENT_COUNT>& coefficients_out) {
-    coefficients_out.fill(0.0);
-    if (values == nullptr) {
-        return;
-    }
-    const size_t count = std::min(
-        static_cast<size_t>(values->size()),
-        RESIDENT_CHEBYSHEV_COEFFICIENT_COUNT);
-    for (size_t index = 0; index < count; index++) {
-        coefficients_out[index] = values->Get(index);
-    }
-}
-
-ResidentTrajectorySegment decode_trajectory_segment(
-    const orbpro::propagator::PropagatorTrajectorySegment& segment) {
-    ResidentTrajectorySegment decoded;
-    decoded.source_handle = segment.sourceHandle();
-    decoded.start_jd = segment.startJd();
-    decoded.end_jd = segment.endJd();
-    decoded.degree = segment.degree();
-    decoded.reference_frame = static_cast<uint8_t>(segment.referenceFrame());
-    copy_coefficients(segment.xCoefficients(), decoded.x_coefficients);
-    copy_coefficients(segment.yCoefficients(), decoded.y_coefficients);
-    copy_coefficients(segment.zCoefficients(), decoded.z_coefficients);
-    copy_coefficients(segment.vxCoefficients(), decoded.vx_coefficients);
-    copy_coefficients(segment.vyCoefficients(), decoded.vy_coefficients);
-    copy_coefficients(segment.vzCoefficients(), decoded.vz_coefficients);
-    decoded.max_position_error_km = segment.maxPositionErrorKm();
-    decoded.max_velocity_error_km_s = segment.maxVelocityErrorKmS();
-    return decoded;
-}
-
 ResidentTrajectorySegment build_sampled_resident_segment(
     uint32_t source_handle,
     double start_jd,
     double end_jd,
-    orbpro::propagator::ReferenceFrame reference_frame,
-    const std::array<orbpro::propagator::StateVector, CHEBY_NPTS>& samples) {
+    uint8_t reference_frame,
+    const std::array<StateVector, CHEBY_NPTS>& samples) {
     std::array<double, CHEBY_NPTS> component_samples[6];
     for (size_t sample_index = 0; sample_index < CHEBY_NPTS; sample_index++) {
         const auto& sample = samples[sample_index];
-        component_samples[0][sample_index] = sample.position().x();
-        component_samples[1][sample_index] = sample.position().y();
-        component_samples[2][sample_index] = sample.position().z();
-        component_samples[3][sample_index] = sample.velocity().x();
-        component_samples[4][sample_index] = sample.velocity().y();
-        component_samples[5][sample_index] = sample.velocity().z();
+        component_samples[0][sample_index] = sample.x;
+        component_samples[1][sample_index] = sample.y;
+        component_samples[2][sample_index] = sample.z;
+        component_samples[3][sample_index] = sample.vx;
+        component_samples[4][sample_index] = sample.vy;
+        component_samples[5][sample_index] = sample.vz;
     }
 
     ResidentTrajectorySegment segment = {};
@@ -247,12 +179,12 @@ ResidentScreeningIndexBuildResult build_resident_screening_index(
     uint32_t catalog_handle,
     uint32_t segment_set_handle,
     const std::vector<uint32_t>& primary_source_handles,
-    orbpro::conjunction::ConjunctionScreeningMode screening_mode,
-    const orbpro::propagator::PropagatorDescribeSourcesBatchResult* descriptions,
-    const orbpro::propagator::PropagatorDescribeTrajectorySegmentsResult* segments) {
-    if (descriptions == nullptr || descriptions->sources() == nullptr) {
-        throw std::runtime_error(
-            "prepare_screening_index requires PropagatorDescribeSourcesBatchResult source metadata.");
+    ScreeningMode screening_mode,
+    const std::vector<ResidentSourceDescription>& descriptions,
+    const std::vector<ResidentTrajectorySegment>& segments) {
+    if (descriptions.empty()) {
+        set_error(
+            "prepare_screening_index requires typed source metadata."); return {};
     }
 
     ResidentScreeningIndex index;
@@ -261,21 +193,21 @@ ResidentScreeningIndexBuildResult build_resident_screening_index(
     index.segment_set_handle = segment_set_handle;
     index.screening_mode = screening_mode;
 
-    const auto source_count = descriptions->sources()->size();
+    const auto source_count = descriptions.size();
     const bool require_segment_coverage =
-        segments != nullptr &&
-        screening_mode != orbpro::conjunction::ConjunctionScreeningMode::exact_only;
+        !segments.empty() &&
+        screening_mode != ScreeningMode::exact_only;
     std::unordered_set<uint32_t> covered_source_handles;
-    if (segments != nullptr && segments->segments() != nullptr) {
-        covered_source_handles.reserve(segments->segments()->size());
-        for (flatbuffers::uoffset_t segment_index = 0;
-             segment_index < segments->segments()->size();
+    if (!segments.empty()) {
+        covered_source_handles.reserve(segments.size());
+        for (size_t segment_index = 0;
+             segment_index < segments.size();
              segment_index++) {
-            const auto* segment = segments->segments()->Get(segment_index);
+            const auto* segment = &segments.at(segment_index);
             if (segment == nullptr) {
                 continue;
             }
-            covered_source_handles.insert(segment->sourceHandle());
+            covered_source_handles.insert(segment->source_handle);
         }
     }
     index.source_handles.reserve(source_count);
@@ -286,50 +218,52 @@ ResidentScreeningIndexBuildResult build_resident_screening_index(
 
     std::unordered_map<uint32_t, uint32_t> source_handle_to_index;
 
-    for (flatbuffers::uoffset_t source_index = 0;
+    for (size_t source_index = 0;
          source_index < source_count;
          source_index++) {
-        const auto* source = descriptions->sources()->Get(source_index);
+        const auto* source = &descriptions.at(source_index);
         if (source == nullptr) {
             continue;
         }
-        if (source->sourceKind() != orbpro::propagator::PropagatorSourceKind_SGP4) {
-            throw std::runtime_error(
-                "prepare_screening_index currently supports only SGP4 resident sources.");
-        }
+
         if (
             require_segment_coverage &&
-            covered_source_handles.find(source->sourceHandle()) ==
+            covered_source_handles.find(source->source_handle) ==
                 covered_source_handles.end()) {
-            continue;
+            set_error("Selected source has no polynomial coverage"); return {};
         }
 
-        GPElement gp = decode_source_description(*source);
-        index.source_handles.push_back(source->sourceHandle());
+        GPElement gp = source->gp;
+        compute_derived(gp);
+        if (source->source_handle == 0 || source_handle_to_index.count(source->source_handle)) {
+            set_error("Resident source handles must be unique and nonzero"); return {};
+        }
+        index.source_handles.push_back(source->source_handle);
         index.perigee_km.push_back(static_cast<float>(gp.perigee_km));
         index.apogee_km.push_back(static_cast<float>(gp.apogee_km));
         index.max_speed_km_s.push_back(
             static_cast<float>(compute_conservative_speed_bound_km_s(gp)));
         index.tles.push_back(gp_to_tle(gp));
-        source_handle_to_index[source->sourceHandle()] =
+        if (has_error()) return {};
+        source_handle_to_index[source->source_handle] =
             static_cast<uint32_t>(index.tles.size() - 1);
     }
     index.trajectory_segments.resize(index.source_handles.size());
 
-    if (segments != nullptr && segments->segments() != nullptr) {
-        for (flatbuffers::uoffset_t segment_index = 0;
-             segment_index < segments->segments()->size();
+    if (!segments.empty()) {
+        for (size_t segment_index = 0;
+             segment_index < segments.size();
              segment_index++) {
-            const auto* segment = segments->segments()->Get(segment_index);
+            const auto* segment = &segments.at(segment_index);
             if (segment == nullptr) {
                 continue;
             }
-            const auto found = source_handle_to_index.find(segment->sourceHandle());
+            const auto found = source_handle_to_index.find(segment->source_handle);
             if (found == source_handle_to_index.end()) {
                 continue;
             }
             index.trajectory_segments[found->second].push_back(
-                decode_trajectory_segment(*segment));
+                *segment);
         }
     }
 
@@ -339,8 +273,12 @@ ResidentScreeningIndexBuildResult build_resident_screening_index(
     std::unordered_set<uint32_t> primary_handle_set(
         primary_source_handles.begin(),
         primary_source_handles.end());
-    const bool all_primary =
-        primary_handle_set.empty() || primary_handle_set.size() >= n;
+    for (uint32_t primary : primary_handle_set) {
+        if (!source_handle_to_index.count(primary)) {
+            set_error("Unknown primary source handle"); return {};
+        }
+    }
+    const bool all_primary = primary_handle_set.empty() || primary_handle_set.size() == n;
 
     if (!all_primary) {
         index.is_primary.resize(n, 0);
@@ -389,26 +327,26 @@ ResidentScreeningIndexBuildResult build_resident_screening_index(
 ResidentScreeningIndexBuildResult prepare_resident_screening_index(
     uint32_t catalog_handle,
     const std::vector<uint32_t>& primary_source_handles,
-    const orbpro::propagator::PropagatorDescribeSourcesBatchResult* descriptions) {
+    const std::vector<ResidentSourceDescription>& descriptions) {
     return build_resident_screening_index(
         catalog_handle,
         0,
         primary_source_handles,
-        orbpro::conjunction::ConjunctionScreeningMode::exact_only,
+        ScreeningMode::exact_only,
         descriptions,
-        nullptr);
+        {});
 }
 
 ResidentScreeningIndexBuildResult prepare_resident_segment_screening_index(
     uint32_t catalog_handle,
     uint32_t segment_set_handle,
     const std::vector<uint32_t>& primary_source_handles,
-    orbpro::conjunction::ConjunctionScreeningMode screening_mode,
-    const orbpro::propagator::PropagatorDescribeSourcesBatchResult* descriptions,
-    const orbpro::propagator::PropagatorDescribeTrajectorySegmentsResult* segments) {
-    if (segments == nullptr) {
-        throw std::runtime_error(
-            "prepare_segment_screening_index requires PropagatorDescribeTrajectorySegmentsResult segment metadata.");
+    ScreeningMode screening_mode,
+    const std::vector<ResidentSourceDescription>& descriptions,
+    const std::vector<ResidentTrajectorySegment>& segments) {
+    if (segments.empty()) {
+        set_error(
+            "prepare_segment_screening_index requires typed polynomial segments."); return {};
     }
     return build_resident_screening_index(
         catalog_handle,
@@ -422,41 +360,39 @@ ResidentScreeningIndexBuildResult prepare_resident_segment_screening_index(
 ResidentScreeningIndexBuildResult prepare_resident_sample_screening_index(
     uint32_t catalog_handle,
     const std::vector<uint32_t>& primary_source_handles,
-    orbpro::conjunction::ConjunctionScreeningMode screening_mode,
-    const orbpro::propagator::PropagatorDescribeSourcesBatchResult* descriptions,
-    const orbpro::propagator::PropagatorSampleTrajectoryStatesResult* samples) {
-    if (screening_mode == orbpro::conjunction::ConjunctionScreeningMode::exact_only) {
+    ScreeningMode screening_mode,
+    const std::vector<ResidentSourceDescription>& descriptions,
+    const ResidentSampleGrid& samples) {
+    if (screening_mode == ScreeningMode::exact_only) {
         return prepare_resident_screening_index(
             catalog_handle,
             primary_source_handles,
             descriptions);
     }
     if (
-        samples == nullptr ||
-        samples->sourceHandles() == nullptr ||
-        samples->states() == nullptr) {
-        throw std::runtime_error(
-            "prepare_sample_screening_index requires PropagatorSampleTrajectoryStatesResult sample metadata.");
+        samples.source_handles.empty() || samples.states.empty()) {
+        set_error(
+            "prepare_sample_screening_index requires typed samples."); return {};
     }
 
-    const auto* sample_handles = samples->sourceHandles();
-    const auto* sample_states = samples->states();
-    const auto* sample_jds = samples->sampleJds();
+    const auto* sample_handles = &samples.source_handles;
+    const auto* sample_states = &samples.states;
+    const auto* sample_jds = &samples.sample_jds;
     const size_t sample_count =
         sample_jds != nullptr ? sample_jds->size() : 0;
     if (sample_count == 0 || sample_count % CHEBY_NPTS != 0) {
-        throw std::runtime_error(
-            "prepare_sample_screening_index requires sampled states in 13-sample Chebyshev chunks.");
+        set_error(
+            "prepare_sample_screening_index requires sampled states in 13-sample Chebyshev chunks."); return {};
     }
     if (sample_states->size() != sample_handles->size() * sample_count) {
-        throw std::runtime_error(
-            "prepare_sample_screening_index received a malformed sampled state grid.");
+        set_error(
+            "prepare_sample_screening_index received a malformed sampled state grid."); return {};
     }
     const size_t segment_count = sample_count / CHEBY_NPTS;
     double max_half_sample_gap_sec = 0.0;
     for (size_t sample_index = 1; sample_index < sample_count; sample_index++) {
         const double sample_gap_days =
-            sample_jds->Get(sample_index) - sample_jds->Get(sample_index - 1);
+            sample_jds->at(sample_index) - sample_jds->at(sample_index - 1);
         max_half_sample_gap_sec = std::max(
             max_half_sample_gap_sec,
             std::max(0.0, sample_gap_days) * 86400.0 * 0.5);
@@ -470,19 +406,16 @@ ResidentScreeningIndexBuildResult prepare_resident_sample_screening_index(
 
     std::unordered_set<uint32_t> covered_source_handles;
     covered_source_handles.reserve(sample_handles->size());
-    for (flatbuffers::uoffset_t handle_index = 0;
+    for (size_t handle_index = 0;
          handle_index < sample_handles->size();
          handle_index++) {
-        covered_source_handles.insert(sample_handles->Get(handle_index));
+        covered_source_handles.insert(sample_handles->at(handle_index));
     }
 
-    const auto source_count =
-        descriptions != nullptr && descriptions->sources() != nullptr
-            ? descriptions->sources()->size()
-            : 0;
+    const auto source_count = descriptions.size();
     if (source_count == 0) {
-        throw std::runtime_error(
-            "prepare_sample_screening_index requires PropagatorDescribeSourcesBatchResult source metadata.");
+        set_error(
+            "prepare_sample_screening_index requires typed source metadata."); return {};
     }
 
     index.source_handles.reserve(source_count);
@@ -494,31 +427,33 @@ ResidentScreeningIndexBuildResult prepare_resident_sample_screening_index(
     conservative_motion_margin_km.reserve(source_count);
 
     std::unordered_map<uint32_t, uint32_t> source_handle_to_index;
-    for (flatbuffers::uoffset_t source_index = 0;
+    for (size_t source_index = 0;
          source_index < source_count;
          source_index++) {
-        const auto* source = descriptions->sources()->Get(source_index);
+        const auto* source = &descriptions.at(source_index);
         if (source == nullptr) {
             continue;
         }
-        if (source->sourceKind() != orbpro::propagator::PropagatorSourceKind_SGP4) {
-            throw std::runtime_error(
-                "prepare_sample_screening_index currently supports only SGP4 resident sources.");
-        }
+
         if (
-            covered_source_handles.find(source->sourceHandle()) ==
+            covered_source_handles.find(source->source_handle) ==
             covered_source_handles.end()) {
             continue;
         }
 
-        GPElement gp = decode_source_description(*source);
-        index.source_handles.push_back(source->sourceHandle());
+        GPElement gp = source->gp;
+        compute_derived(gp);
+        if (source->source_handle == 0 || source_handle_to_index.count(source->source_handle)) {
+            set_error("Resident source handles must be unique and nonzero"); return {};
+        }
+        index.source_handles.push_back(source->source_handle);
         index.perigee_km.push_back(static_cast<float>(gp.perigee_km));
         index.apogee_km.push_back(static_cast<float>(gp.apogee_km));
         index.max_speed_km_s.push_back(0.0f);
         index.tles.push_back(gp_to_tle(gp));
+        if (has_error()) return {};
         conservative_motion_margin_km.push_back(0.0f);
-        source_handle_to_index[source->sourceHandle()] =
+        source_handle_to_index[source->source_handle] =
             static_cast<uint32_t>(index.tles.size() - 1);
     }
     index.trajectory_segments.resize(index.source_handles.size());
@@ -542,10 +477,10 @@ ResidentScreeningIndexBuildResult prepare_resident_sample_screening_index(
         std::numeric_limits<float>::lowest());
     index.sample_motion_margin_km = std::move(conservative_motion_margin_km);
 
-    for (flatbuffers::uoffset_t handle_index = 0;
+    for (size_t handle_index = 0;
          handle_index < sample_handles->size();
          handle_index++) {
-        const uint32_t source_handle = sample_handles->Get(handle_index);
+        const uint32_t source_handle = sample_handles->at(handle_index);
         const auto found = source_handle_to_index.find(source_handle);
         if (found == source_handle_to_index.end()) {
             continue;
@@ -555,22 +490,22 @@ ResidentScreeningIndexBuildResult prepare_resident_sample_screening_index(
             static_cast<size_t>(handle_index) * sample_count;
         for (size_t segment_index = 0; segment_index < segment_count; segment_index++) {
             const size_t segment_sample_offset = segment_index * CHEBY_NPTS;
-            std::array<orbpro::propagator::StateVector, CHEBY_NPTS> source_samples = {};
-            double segment_start_jd = sample_jds->Get(segment_sample_offset);
+            std::array<StateVector, CHEBY_NPTS> source_samples = {};
+            double segment_start_jd = sample_jds->at(segment_sample_offset);
             double segment_end_jd = segment_start_jd;
             for (size_t sample_index = 0; sample_index < CHEBY_NPTS; sample_index++) {
                 const double sample_jd =
-                    sample_jds->Get(segment_sample_offset + sample_index);
+                    sample_jds->at(segment_sample_offset + sample_index);
                 segment_start_jd = std::min(segment_start_jd, sample_jd);
                 segment_end_jd = std::max(segment_end_jd, sample_jd);
                 source_samples[sample_index] =
-                    *sample_states->Get(
+                    sample_states->at(
                         base_index + segment_sample_offset + sample_index);
                 const auto& sample_state = source_samples[sample_index];
                 const double sample_speed_km_s = std::sqrt(
-                    sample_state.velocity().x() * sample_state.velocity().x() +
-                    sample_state.velocity().y() * sample_state.velocity().y() +
-                    sample_state.velocity().z() * sample_state.velocity().z());
+                    sample_state.vx * sample_state.vx +
+                    sample_state.vy * sample_state.vy +
+                    sample_state.vz * sample_state.vz);
                 if (std::isfinite(sample_speed_km_s)) {
                     index.max_speed_km_s[found->second] = std::max(
                         index.max_speed_km_s[found->second],
@@ -578,29 +513,29 @@ ResidentScreeningIndexBuildResult prepare_resident_sample_screening_index(
                 }
                 index.sample_min_x_km[found->second] = std::min(
                     index.sample_min_x_km[found->second],
-                    static_cast<float>(sample_state.position().x()));
+                    static_cast<float>(sample_state.x));
                 index.sample_max_x_km[found->second] = std::max(
                     index.sample_max_x_km[found->second],
-                    static_cast<float>(sample_state.position().x()));
+                    static_cast<float>(sample_state.x));
                 index.sample_min_y_km[found->second] = std::min(
                     index.sample_min_y_km[found->second],
-                    static_cast<float>(sample_state.position().y()));
+                    static_cast<float>(sample_state.y));
                 index.sample_max_y_km[found->second] = std::max(
                     index.sample_max_y_km[found->second],
-                    static_cast<float>(sample_state.position().y()));
+                    static_cast<float>(sample_state.y));
                 index.sample_min_z_km[found->second] = std::min(
                     index.sample_min_z_km[found->second],
-                    static_cast<float>(sample_state.position().z()));
+                    static_cast<float>(sample_state.z));
                 index.sample_max_z_km[found->second] = std::max(
                     index.sample_max_z_km[found->second],
-                    static_cast<float>(sample_state.position().z()));
+                    static_cast<float>(sample_state.z));
             }
             index.trajectory_segments[found->second].push_back(
                 build_sampled_resident_segment(
                     source_handle,
                     segment_start_jd,
                     segment_end_jd,
-                    samples->referenceFrame(),
+                    samples.reference_frame,
                     source_samples));
         }
     }
@@ -616,8 +551,12 @@ ResidentScreeningIndexBuildResult prepare_resident_sample_screening_index(
     std::unordered_set<uint32_t> primary_handle_set(
         primary_source_handles.begin(),
         primary_source_handles.end());
-    const bool all_primary =
-        primary_handle_set.empty() || primary_handle_set.size() >= n;
+    for (uint32_t primary : primary_handle_set) {
+        if (!source_handle_to_index.count(primary)) {
+            set_error("Unknown primary source handle"); return {};
+        }
+    }
+    const bool all_primary = primary_handle_set.empty() || primary_handle_set.size() == n;
     if (!all_primary) {
         index.is_primary.resize(n, 0);
         for (uint32_t handle : primary_handle_set) {

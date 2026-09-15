@@ -15,28 +15,19 @@ import { PIVResponseT } from "spacedatastandards.org/lib/js/PIV/PIVResponse.js";
 import { pivStatus } from "spacedatastandards.org/lib/js/PIV/pivStatus.js";
 import { TABT } from "spacedatastandards.org/lib/js/PIV/TAB.js";
 
+import { initCqrFlatc, encodeCqr, decodeCqr } from "./lib/cqr.mjs";
+const flatc = await initCqrFlatc();
+import { loadRawConjunctionModule as loadSdkModule } from "./lib/screenCatalogParityHarness.mjs";
 const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
 
 async function loadRawConjunctionModule() {
-  const wasmBinary = await readFile(
-    new URL("../dist/isomorphic-singlethread/module.wasm", import.meta.url),
-  );
-  const imports = {
-    wasi_snapshot_preview1: new Proxy(
-      {},
-      {
-        get: () => () => 0,
-      },
-    ),
-  };
-  const { instance } = await WebAssembly.instantiate(wasmBinary, imports);
-  instance.exports.__wasm_call_ctors?.();
+  const exports = await loadSdkModule();
   return {
-    memory: instance.exports.memory,
-    pluginAlloc: instance.exports.plugin_alloc,
-    pluginFree: instance.exports.plugin_free,
-    pluginInvokeStream: instance.exports.plugin_invoke_stream,
+    memory: exports.memory,
+    pluginAlloc: exports.plugin_alloc,
+    pluginFree: exports.plugin_free,
+    pluginInvokeStream: exports.plugin_invoke_stream,
   };
 }
 
@@ -184,12 +175,14 @@ test("conjunction plugin_invoke_stream accepts and rejects SDS PIV envelopes", a
   const valid = invokePivBytes(
     module,
     encodePivInvokeRequest({
-      methodId: "invoke",
+      methodId: "version",
       inputs: [
         {
           portId: "request",
-          bytes: textEncoder.encode(JSON.stringify({ operation: "version" })),
-          schemaName: "application/json",
+          bytes: encodeCqr(flatc, { VERSION_QUERY: true }),
+          schemaName: "CQR.fbs",
+          fileIdentifier: "$CQR",
+          rootTypeName: "CQR",
         },
       ],
     }),
@@ -197,13 +190,13 @@ test("conjunction plugin_invoke_stream accepts and rejects SDS PIV envelopes", a
   assert.equal(valid.RESPONSE.STATUS_CODE, 0);
   assert.equal(valid.RESPONSE.STATUS, pivStatus.OK);
   assert.equal(valid.RESPONSE.OUTPUTS.length, 1);
-  assert.equal(valid.RESPONSE.OUTPUTS[0].PORT_ID, "response");
+  assert.equal(valid.RESPONSE.OUTPUTS[0].PORT_ID, "result");
   const output = valid.RESPONSE.OUTPUTS[0];
   const payload = valid.RESPONSE.PAYLOAD_ARENA.slice(
     output.OFFSET,
     output.OFFSET + output.SIZE,
   );
-  assert.equal(JSON.parse(textDecoder.decode(new Uint8Array(payload))).version, "0.2.0");
+  assert.equal(decodeCqr(flatc, new Uint8Array(payload)).VERSION_RESULT.VERSION, "0.2.0");
 
   assertFailedPiv(
     invokePivBytes(module, encodePivEnvelope(new PIVT(null, new PIVResponseT()))),

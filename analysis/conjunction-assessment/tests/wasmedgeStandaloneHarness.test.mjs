@@ -4,17 +4,14 @@ import fs from "node:fs";
 import test from "node:test";
 
 import { FlatcRunner } from "flatc-wasm";
+import { encodeCqr, decodeCqr, pairRequest } from "./lib/cqr.mjs";
 
 import {
   conjunctionArtifactExists,
   createConjunctionCommandHarness,
   invokeConjunctionJson,
 } from "./lib/conjunctionCommandHarness.mjs";
-import {
-  createLocalSgp4Plugin,
-  sampleTrackWindowFromReference,
-  sgp4ArtifactExists,
-} from "./lib/sgp4TrackHarness.mjs";
+import { gpSource } from "./lib/cqr.mjs";
 import { buildThreadedWasmEdgeRunner } from "./lib/wasmedgePthreadRunner.mjs";
 import { signCdmOutput, verifySignedCdmOutput } from "../index.js";
 
@@ -167,41 +164,9 @@ function readText(path) {
   return fs.readFileSync(new URL(path, import.meta.url), "utf8");
 }
 
-function conjunctionPairRequestSchema() {
-  return {
-    entry: "/schemas/ConjunctionPairRequest.fbs",
-    files: {
-      "/schemas/ConjunctionPairRequest.fbs": readText(
-        "../schemas/ConjunctionPairRequest.fbs",
-      ),
-      "/schemas/ConjunctionCommon.fbs": readText(
-        "../schemas/ConjunctionCommon.fbs",
-      ),
-    },
-  };
-}
-
-function conjunctionPcResultSchema() {
-  return {
-    entry: "/schemas/ConjunctionPcResult.fbs",
-    files: {
-      "/schemas/ConjunctionPcResult.fbs": readText(
-        "../schemas/ConjunctionPcResult.fbs",
-      ),
-      "/schemas/ConjunctionCommon.fbs": readText(
-        "../schemas/ConjunctionCommon.fbs",
-      ),
-    },
-  };
-}
-
-test("conjunction WasmEdge harness accepts SGP4-sampled tracks for the known close pair", async (t) => {
+test("conjunction WasmEdge harness accepts canonical OMM sources for the known close pair", async (t) => {
   if (!conjunctionArtifactExists()) {
     t.skip("Build conjunction-assessment before running the WasmEdge harness test.");
-    return;
-  }
-  if (!sgp4ArtifactExists()) {
-    t.skip("Build the local SGP4 plugin before running the WasmEdge harness test.");
     return;
   }
   const runnerBinary = await buildThreadedWasmEdgeRunner(
@@ -218,18 +183,12 @@ test("conjunction WasmEdge harness accepts SGP4-sampled tracks for the known clo
   const harness = await createConjunctionCommandHarness({
     wasmEdgeRunnerBinary: runnerBinary,
   });
-  const sgp4 = await createLocalSgp4Plugin();
 
   t.after(async () => {
-    sgp4.destroy();
     await harness.destroy();
   });
 
-  const [primaryTrack, secondaryTrack] = await sampleTrackWindowFromReference(
-    sgp4,
-    gpRecords,
-    reference,
-  );
+  const [primaryTrack, secondaryTrack] = gpRecords.map(gpSource);
 
   const { response, json } = await invokeConjunctionJson(harness, {
     operation: "assessTracks",
@@ -249,13 +208,9 @@ test("conjunction WasmEdge harness accepts SGP4-sampled tracks for the known clo
   assert.equal(json?.obj2_norad, 67298);
 });
 
-test("emit_cdm accepts SGP4-sampled track-backed conjunction requests", async (t) => {
+test("emit_cdm accepts canonical OMM-backed conjunction requests", async (t) => {
   if (!conjunctionArtifactExists()) {
     t.skip("Build conjunction-assessment before running the WasmEdge harness test.");
-    return;
-  }
-  if (!sgp4ArtifactExists()) {
-    t.skip("Build the local SGP4 plugin before running the WasmEdge harness test.");
     return;
   }
   const runnerBinary = await buildThreadedWasmEdgeRunner(
@@ -272,23 +227,15 @@ test("emit_cdm accepts SGP4-sampled track-backed conjunction requests", async (t
   const harness = await createConjunctionCommandHarness({
     wasmEdgeRunnerBinary: runnerBinary,
   });
-  const sgp4 = await createLocalSgp4Plugin();
 
   t.after(async () => {
-    sgp4.destroy();
     await harness.destroy();
   });
 
-  const [primaryTrack, secondaryTrack] = await sampleTrackWindowFromReference(
-    sgp4,
-    gpRecords,
-    reference,
-  );
+  const [primaryTrack, secondaryTrack] = gpRecords.map(gpSource);
   const tcaHintJd = Date.parse(reference.tca) / 86400000 + 2440587.5;
   const flatc = await FlatcRunner.init();
-  const requestPayload = flatc.generateBinary(
-    conjunctionPairRequestSchema(),
-    JSON.stringify({
+  const requestPayload = encodeCqr(flatc, pairRequest({
       primaryTrack,
       secondaryTrack,
       startJd: tcaHintJd - 0.1 / 24,
@@ -296,7 +243,6 @@ test("emit_cdm accepts SGP4-sampled track-backed conjunction requests", async (t
       radius1M: 5,
       radius2M: 5,
     }),
-    { sizePrefix: false },
   );
 
   const response = await harness.invoke({
@@ -331,24 +277,14 @@ test("emit_cdm accepts SGP4-sampled track-backed conjunction requests", async (t
   assert.equal(pcResponse.statusCode, 0, pcResponse.errorMessage);
   const pcResult = pcResponse.outputs?.find((frame) => frame.portId === "result");
   assert.ok(pcResult?.payload instanceof Uint8Array, "Pc result payload is emitted");
-  const decodedPc = JSON.parse(
-    flatc.generateJSON(
-      conjunctionPcResultSchema(),
-      { path: "/pc-result.bin", data: pcResult.payload },
-      { defaultsJson: true },
-    ),
-  );
-  assert.equal(decodedPc.method, "ALFANO-MAXPROB");
-  assert.ok(Number.isFinite(decodedPc.probability));
+  const decodedPc = decodeCqr(flatc, pcResult.payload).PROBABILITY_RESULT;
+  assert.ok(decodedPc.ALGORITHM !== "UNSPECIFIED");
+  assert.ok(Number.isFinite(decodedPc.PROBABILITY));
 });
 
-test("emit_csm accepts SGP4-sampled track-backed conjunction requests", async (t) => {
+test("emit_csm accepts canonical OMM-backed conjunction requests", async (t) => {
   if (!conjunctionArtifactExists()) {
     t.skip("Build conjunction-assessment before running the WasmEdge harness test.");
-    return;
-  }
-  if (!sgp4ArtifactExists()) {
-    t.skip("Build the local SGP4 plugin before running the WasmEdge harness test.");
     return;
   }
   const runnerBinary = await buildThreadedWasmEdgeRunner(
@@ -365,23 +301,15 @@ test("emit_csm accepts SGP4-sampled track-backed conjunction requests", async (t
   const harness = await createConjunctionCommandHarness({
     wasmEdgeRunnerBinary: runnerBinary,
   });
-  const sgp4 = await createLocalSgp4Plugin();
 
   t.after(async () => {
-    sgp4.destroy();
     await harness.destroy();
   });
 
-  const [primaryTrack, secondaryTrack] = await sampleTrackWindowFromReference(
-    sgp4,
-    gpRecords,
-    reference,
-  );
+  const [primaryTrack, secondaryTrack] = gpRecords.map(gpSource);
   const tcaHintJd = Date.parse(reference.tca) / 86400000 + 2440587.5;
   const flatc = await FlatcRunner.init();
-  const requestPayload = flatc.generateBinary(
-    conjunctionPairRequestSchema(),
-    JSON.stringify({
+  const requestPayload = encodeCqr(flatc, pairRequest({
       primaryTrack,
       secondaryTrack,
       startJd: tcaHintJd - 0.1 / 24,
@@ -389,7 +317,6 @@ test("emit_csm accepts SGP4-sampled track-backed conjunction requests", async (t
       radius1M: 5,
       radius2M: 5,
     }),
-    { sizePrefix: false },
   );
 
   const response = await harness.invoke({
@@ -425,7 +352,7 @@ test("CDM KVN command surface round-trips the Orekit CDMExample1 fixture", async
 
   const parseResponse = await harness.invoke({
     methodId: "parse_cdm_kvn",
-    inputs: [{ portId: "kvn", payload: new TextEncoder().encode(OREKIT_CDM_EXAMPLE1_KVN) }],
+    inputs: [{ portId: "kvn", payload: encodeCqr(await FlatcRunner.init(), { NATIVE_DOCUMENT: { SERIALIZATION: "CCSDS_CDM_KVN", CONTENT: Array.from(new TextEncoder().encode(OREKIT_CDM_EXAMPLE1_KVN)) } }) }],
   });
   assert.equal(parseResponse.statusCode, 0, parseResponse.errorMessage);
   const cdm = parseResponse.outputs?.find((frame) => frame.portId === "cdm");
@@ -439,7 +366,7 @@ test("CDM KVN command surface round-trips the Orekit CDMExample1 fixture", async
   assert.equal(writeResponse.statusCode, 0, writeResponse.errorMessage);
   const kvn = writeResponse.outputs?.find((frame) => frame.portId === "kvn");
   assert.ok(kvn?.payload instanceof Uint8Array, "KVN payload is emitted");
-  const roundtripText = new TextDecoder().decode(kvn.payload);
+  const roundtripText = new TextDecoder().decode(new Uint8Array(decodeCqr(await FlatcRunner.init(), kvn.payload).NATIVE_DOCUMENT.CONTENT));
   assert.match(roundtripText, /MESSAGE_ID\s*=\s*201113719185/);
   assert.match(roundtripText, /MISS_DISTANCE\s*=\s*715(?:\\.0+)?\s+\[m\]/);
   assert.match(roundtripText, /OBJECT\s*=\s*OBJECT1/);
@@ -468,7 +395,7 @@ test("CDM XML command surface round-trips the Orekit CDMExample1 fixture", async
 
   const parseResponse = await harness.invoke({
     methodId: "parse_cdm_xml",
-    inputs: [{ portId: "xml", payload: new TextEncoder().encode(OREKIT_CDM_EXAMPLE1_XML) }],
+    inputs: [{ portId: "xml", payload: encodeCqr(await FlatcRunner.init(), { NATIVE_DOCUMENT: { SERIALIZATION: "CCSDS_CDM_XML", CONTENT: Array.from(new TextEncoder().encode(OREKIT_CDM_EXAMPLE1_XML)) } }) }],
   });
   assert.equal(parseResponse.statusCode, 0, parseResponse.errorMessage);
   const cdm = parseResponse.outputs?.find((frame) => frame.portId === "cdm");
@@ -482,7 +409,7 @@ test("CDM XML command surface round-trips the Orekit CDMExample1 fixture", async
   assert.equal(writeResponse.statusCode, 0, writeResponse.errorMessage);
   const xml = writeResponse.outputs?.find((frame) => frame.portId === "xml");
   assert.ok(xml?.payload instanceof Uint8Array, "XML payload is emitted");
-  const roundtripText = new TextDecoder().decode(xml.payload);
+  const roundtripText = new TextDecoder().decode(new Uint8Array(decodeCqr(await FlatcRunner.init(), xml.payload).NATIVE_DOCUMENT.CONTENT));
   assert.match(roundtripText, /<MESSAGE_ID>20111371985<\/MESSAGE_ID>/);
   assert.match(roundtripText, /<MISS_DISTANCE units="m">715<\/MISS_DISTANCE>/);
   assert.match(roundtripText, /<RELATIVE_SPEED units="m\/s">14762<\/RELATIVE_SPEED>/);

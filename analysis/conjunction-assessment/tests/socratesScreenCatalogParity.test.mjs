@@ -30,18 +30,17 @@ import {
   buildScreenCatalogRequest,
   compareToReference,
   initFlatc,
-  invokeJsonOperation,
   isoToJd,
   loadRawConjunctionModule,
   runScreenCatalog,
-  singlethreadArtifactExists,
+  primaryArtifactExists,
 } from "./lib/screenCatalogParityHarness.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_DIR = path.join(__dirname, "fixtures", "socrates");
 const T = CA_PARITY_TOLERANCES;
 
-const ARTIFACT = singlethreadArtifactExists();
+const ARTIFACT = primaryArtifactExists();
 
 function loadReferenceWindow() {
   const reference = JSON.parse(
@@ -109,7 +108,7 @@ if (ARTIFACT) {
 function requireCtx(t) {
   if (!ARTIFACT) {
     t.skip(
-      "dist/isomorphic-singlethread/module.wasm missing — build conjunction-assessment before the SOCRATES parity gate.",
+      "dist/isomorphic/module.wasm missing — build conjunction-assessment before the SOCRATES parity gate.",
     );
     return null;
   }
