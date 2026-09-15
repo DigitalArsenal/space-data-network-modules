@@ -1,0 +1,130 @@
+TAP version 13
+# Subtest: build publishes canonical isomorphic artifact path
+ok 1 - build publishes canonical isomorphic artifact path
+  ---
+  duration_ms: 0.910041
+  type: 'test'
+  ...
+# Subtest: built artifact passes SDK compliance checks
+ok 2 - built artifact passes SDK compliance checks
+  ---
+  duration_ms: 31.304625
+  type: 'test'
+  ...
+# Subtest: built artifact exposes the standalone isomorphic surface
+ok 3 - built artifact exposes the standalone isomorphic surface
+  ---
+  duration_ms: 1.575916
+  type: 'test'
+  ...
+# Subtest: built artifact loads through the SDK browser harness and fails closed
+ok 4 - built artifact loads through the SDK browser harness and fails closed
+  ---
+  duration_ms: 6.992083
+  type: 'test'
+  ...
+# Subtest: built artifact loads through the WasmEdge server path when available
+not ok 5 - built artifact loads through the WasmEdge server path when available
+  ---
+  duration_ms: 208.965833
+  type: 'test'
+  location: '/Users/tj/software/worktrees/modules-python-astro-baseline/analysis/lambert-izzo/tests/sdk-compat.test.mjs:251:1'
+  failureType: 'testCodeFailure'
+  error: 'WasmEdge command harness exited with code 1.'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    formatFailure (file:///private/tmp/lane09-js-validation/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:121:56)
+    ChildProcess.<anonymous> (file:///private/tmp/lane09-js-validation/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:141:13)
+    ChildProcess.emit (node:events:508:20)
+    maybeClose (node:internal/child_process:1084:16)
+    Socket.<anonymous> (node:internal/child_process:456:11)
+    Socket.emit (node:events:508:20)
+    Pipe.<anonymous> (node:net:346:12)
+  ...
+# Subtest: built artifact returns a typed LMO error for invalid time of flight
+ok 6 - built artifact returns a typed LMO error for invalid time of flight
+  ---
+  duration_ms: 3.302584
+  type: 'test'
+  ...
+# Subtest: built artifact fails closed when the LMS request frame is missing
+ok 7 - built artifact fails closed when the LMS request frame is missing
+  ---
+  duration_ms: 1.602041
+  type: 'test'
+  ...
+# Subtest: built artifact returns a typed LMO error for non-finite input
+ok 8 - built artifact returns a typed LMO error for non-finite input
+  ---
+  duration_ms: 1.138084
+  type: 'test'
+  ...
+# Subtest: built artifact returns a typed LMO error for zero initial position vector
+ok 9 - built artifact returns a typed LMO error for zero initial position vector
+  ---
+  duration_ms: 1.009167
+  type: 'test'
+  ...
+# Subtest: built artifact returns a typed LMO error for invalid gravitational parameter
+ok 10 - built artifact returns a typed LMO error for invalid gravitational parameter
+  ---
+  duration_ms: 1.111458
+  type: 'test'
+  ...
+# Subtest: built artifact returns a typed LMO error for impossible revolution budget
+ok 11 - built artifact returns a typed LMO error for impossible revolution budget
+  ---
+  duration_ms: 1.169917
+  type: 'test'
+  ...
+# Subtest: built artifact returns a typed LMO error for collinear transfer geometry
+ok 12 - built artifact returns a typed LMO error for collinear transfer geometry
+  ---
+  duration_ms: 1.25425
+  type: 'test'
+  ...
+# Subtest: built artifact solves the closed-form circular quarter-orbit benchmark
+ok 13 - built artifact solves the closed-form circular quarter-orbit benchmark
+  ---
+  duration_ms: 1.974167
+  type: 'test'
+  ...
+# Subtest: built artifact returns deterministic circular benchmark output in browser and WasmEdge
+not ok 14 - built artifact returns deterministic circular benchmark output in browser and WasmEdge
+  ---
+  duration_ms: 37.785167
+  type: 'test'
+  location: '/Users/tj/software/worktrees/modules-python-astro-baseline/analysis/lambert-izzo/tests/sdk-compat.test.mjs:421:1'
+  failureType: 'testCodeFailure'
+  error: 'WasmEdge command harness exited with code 1.'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    formatFailure (file:///private/tmp/lane09-js-validation/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:121:56)
+    ChildProcess.<anonymous> (file:///private/tmp/lane09-js-validation/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:141:13)
+    ChildProcess.emit (node:events:508:20)
+    maybeClose (node:internal/child_process:1084:16)
+    Socket.<anonymous> (node:internal/child_process:456:11)
+    Socket.emit (node:events:508:20)
+    Pipe.<anonymous> (node:net:346:12)
+  ...
+# Subtest: built artifact solves the closed-form circular long-way benchmark
+ok 15 - built artifact solves the closed-form circular long-way benchmark
+  ---
+  duration_ms: 1.93925
+  type: 'test'
+  ...
+# Subtest: built artifact returns both branches of an upstream multi-revolution case
+ok 16 - built artifact returns both branches of an upstream multi-revolution case
+  ---
+  duration_ms: 1.505542
+  type: 'test'
+  ...
+1..16
+# tests 16
+# suites 0
+# pass 14
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 858.653375

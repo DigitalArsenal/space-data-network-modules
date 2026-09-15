@@ -1,0 +1,14 @@
+file:///private/tmp/lane09-js-validation/node_modules/space-data-module-sdk/src/compiler/compileModule.js:1043
+    throw new Error(`Compilation failed with ${command} (wasi-threads): ${detail}`);
+          ^
+
+Error: Compilation failed with wasm32-wasi-clang++ (wasi-threads): /var/folders/t7/fmn19zvs3h5968_nc0484bz00000gn/T/space-data-module-sdk-compile-AkRRMc/module.cpp:72881:10: fatal error: 'iau_body_models.hpp' file not found
+ 72881 | #include "iau_body_models.hpp"
+       |          ^~~~~~~~~~~~~~~~~~~~~
+1 error generated.
+    at runWasiCompiler (file:///private/tmp/lane09-js-validation/node_modules/space-data-module-sdk/src/compiler/compileModule.js:1043:11)
+    at async compileWithWasiThreads (file:///private/tmp/lane09-js-validation/node_modules/space-data-module-sdk/src/compiler/compileModule.js:1101:5)
+    at async compileModuleFromSource (file:///private/tmp/lane09-js-validation/node_modules/space-data-module-sdk/src/compiler/compileModule.js:1269:18)
+    at async file:///Users/tj/software/worktrees/modules-python-astro-baseline/propagator/events/build.mjs:94:21
+
+Node.js v25.4.0

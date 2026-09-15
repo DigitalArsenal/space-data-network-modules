@@ -1,0 +1,201 @@
+Generated plugin_manifest_bytes.h (9540 bytes)
+Configuring Emscripten browser pthread build...
+emcmake: cmake -S /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/conjunction-assessment/src/cpp -B /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/conjunction-assessment/src/cpp/build-browser -DCMAKE_BUILD_TYPE=Release -DCONJUNCTION_ENABLE_PTHREADS=ON -DCONJUNCTION_EMSCRIPTEN_BROWSER_ADAPTER=ON -DFLATBUFFERS_INCLUDE_DIR=/Users/tj/software/spacedatanetwork-stack/repos/main-packages/flatbuffers/include -DCMAKE_TOOLCHAIN_FILE=/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake -DCMAKE_CROSSCOMPILING_EMULATOR=/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/node/22.16.0_64bit/bin/node in directory /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/conjunction-assessment
+-- Configuring done (0.5s)
+-- Generating done (0.5s)
+-- Build files have been written to: /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/conjunction-assessment/src/cpp/build-browser
+
+Building browser adapter...
+[  8%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/Eci.cc.o
+[  8%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/DateTime.cc.o
+[ 11%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/CoordTopocentric.cc.o
+[ 25%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/DecayedException.cc.o
+[ 42%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/OrbitalElements.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/SGP4.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/CoordGeodetic.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/SolarPosition.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/Observer.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/TimeSpan.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/SatelliteException.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/Tle.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/Vector.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/Globals.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/Util.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/TleException.cc.o
+[ 48%] Linking CXX static library libsgp4_lib.a
+[ 48%] Built target sgp4_lib
+[ 57%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/gp_json.cpp.o
+[ 57%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/conjunction_assessment.cpp.o
+[ 57%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/resident_screening_index.cpp.o
+[ 77%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/screening.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/cdm_output.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/sgp4_propagator.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/plugin_runtime.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/kdtree.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/conjunction_engine.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/screening_internal.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/ephemeris_source.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/pc_method.cpp.o
+[ 88%] Linking CXX static library libconjunction_assessment.a
+[ 88%] Built target conjunction_assessment
+[ 97%] Building CXX object CMakeFiles/conjunction_assessment_wasm.dir/src/plugin_entrypoints.cpp.o
+[ 97%] Building CXX object CMakeFiles/conjunction_assessment_wasm.dir/wasm_api.cpp.o
+[ 97%] Building CXX object CMakeFiles/conjunction_assessment_wasm.dir/src/plugin_invoke_bridge.cpp.o
+[100%] Linking CXX executable conjunction_assessment_wasm.js
+cache:INFO: generating system asset: sysroot/lib/wasm32-emscripten/lto/crtbegin-mt.o... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/crtbegin-mt.o" for subsequent builds)
+system_libs:INFO: compiled 1 inputs in 0.28s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libGL-mt-getprocaddr.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libGL-mt-getprocaddr.a" for subsequent builds)
+system_libs:INFO: compiled 4 inputs in 0.40s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libnoexit.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libnoexit.a" for subsequent builds)
+system_libs:INFO: compiled 1 inputs in 0.18s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libc-mt.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libc-mt.a" for subsequent builds)
+system_libs:INFO: compiled 1134 inputs in 5.94s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libemmalloc-mt.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libemmalloc-mt.a" for subsequent builds)
+system_libs:INFO: compiled 2 inputs in 0.28s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libcompiler_rt-legacysjlj-mt.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libcompiler_rt-legacysjlj-mt.a" for subsequent builds)
+system_libs:INFO: compiled 184 inputs in 1.55s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libc++-mt-legacyexcept.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libc++-mt-legacyexcept.a" for subsequent builds)
+system_libs:INFO: compiled 57 inputs in 2.80s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libc++abi-mt-legacyexcept.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libc++abi-mt-legacyexcept.a" for subsequent builds)
+system_libs:INFO: compiled 19 inputs in 0.95s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libunwind-mt-legacyexcept.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libunwind-mt-legacyexcept.a" for subsequent builds)
+system_libs:INFO: compiled 1 inputs in 0.21s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libsockets-mt.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libsockets-mt.a" for subsequent builds)
+system_libs:INFO: compiled 27 inputs in 0.44s
+cache:INFO:  - ok
+[100%] Built target conjunction_assessment_wasm
+Embedded sds.manifest in /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/conjunction-assessment/dist/browser/module.wasm
+
+Configuring Emscripten pthread WasmEdge SDK build...
+emcmake: cmake -S /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/conjunction-assessment/src/cpp -B /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/conjunction-assessment/src/cpp/build-isomorphic -DCMAKE_BUILD_TYPE=Release -DCONJUNCTION_ENABLE_PTHREADS=ON -DCONJUNCTION_EMSCRIPTEN_BROWSER_ADAPTER=OFF -DFLATBUFFERS_INCLUDE_DIR=/Users/tj/software/spacedatanetwork-stack/repos/main-packages/flatbuffers/include -DCMAKE_TOOLCHAIN_FILE=/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake -DCMAKE_CROSSCOMPILING_EMULATOR=/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/node/22.16.0_64bit/bin/node in directory /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/conjunction-assessment
+-- Configuring done (0.6s)
+-- Generating done (0.5s)
+-- Build files have been written to: /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/conjunction-assessment/src/cpp/build-isomorphic
+
+Building standalone SDK artifact...
+[ 40%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/Observer.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/SolarPosition.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/TleException.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/DateTime.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/DecayedException.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/SatelliteException.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/Eci.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/Tle.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/CoordGeodetic.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/Globals.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/OrbitalElements.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/Vector.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/Util.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/SGP4.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/CoordTopocentric.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/TimeSpan.cc.o
+[ 48%] Linking CXX static library libsgp4_lib.a
+[ 48%] Built target sgp4_lib
+[ 82%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/gp_json.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/conjunction_engine.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/conjunction_assessment.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/pc_method.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/sgp4_propagator.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/cdm_output.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/screening_internal.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/resident_screening_index.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/screening.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/kdtree.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/plugin_runtime.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/ephemeris_source.cpp.o
+[ 88%] Linking CXX static library libconjunction_assessment.a
+[ 88%] Built target conjunction_assessment
+[ 97%] Building CXX object CMakeFiles/conjunction_assessment_wasm.dir/src/plugin_invoke_bridge.cpp.o
+[ 97%] Building CXX object CMakeFiles/conjunction_assessment_wasm.dir/src/plugin_entrypoints.cpp.o
+[ 97%] Building CXX object CMakeFiles/conjunction_assessment_wasm.dir/wasm_api.cpp.o
+[100%] Linking CXX executable conjunction_assessment_wasm.wasm
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libcompiler_rt-mt.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libcompiler_rt-mt.a" for subsequent builds)
+system_libs:INFO: compiled 184 inputs in 1.67s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libc++-mt-noexcept.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libc++-mt-noexcept.a" for subsequent builds)
+system_libs:INFO: compiled 57 inputs in 2.03s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libc++abi-mt-noexcept.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libc++abi-mt-noexcept.a" for subsequent builds)
+system_libs:INFO: compiled 17 inputs in 0.87s
+cache:INFO:  - ok
+[100%] Built target conjunction_assessment_wasm
+Embedded sds.manifest in /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/conjunction-assessment/dist/isomorphic/module.wasm
+
+Configuring Emscripten single-thread SDK build...
+emcmake: cmake -S /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/conjunction-assessment/src/cpp -B /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread -DCMAKE_BUILD_TYPE=Release -DCONJUNCTION_ENABLE_PTHREADS=OFF -DCONJUNCTION_EMSCRIPTEN_BROWSER_ADAPTER=OFF -DFLATBUFFERS_INCLUDE_DIR=/Users/tj/software/spacedatanetwork-stack/repos/main-packages/flatbuffers/include -DCMAKE_TOOLCHAIN_FILE=/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake -DCMAKE_CROSSCOMPILING_EMULATOR=/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/node/22.16.0_64bit/bin/node in directory /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/conjunction-assessment
+-- Configuring done (0.5s)
+-- Generating done (0.6s)
+-- Build files have been written to: /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/conjunction-assessment/src/cpp/build-isomorphic-singlethread
+
+Building single-thread SDK artifact...
+[ 42%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/Globals.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/TimeSpan.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/DecayedException.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/DateTime.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/TleException.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/Observer.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/Eci.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/SGP4.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/CoordGeodetic.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/Tle.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/Vector.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/CoordTopocentric.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/SatelliteException.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/Util.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/SolarPosition.cc.o
+[ 45%] Building CXX object CMakeFiles/sgp4_lib.dir/deps/sgp4/libsgp4/OrbitalElements.cc.o
+[ 48%] Linking CXX static library libsgp4_lib.a
+[ 48%] Built target sgp4_lib
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/gp_json.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/sgp4_propagator.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/cdm_output.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/resident_screening_index.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/screening.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/csm_output.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/conjunction_engine.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/conjunction_assessment.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/ephemeris_source.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/plugin_runtime.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/kdtree.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/screening_internal.cpp.o
+[ 85%] Building CXX object CMakeFiles/conjunction_assessment.dir/src/pc_method.cpp.o
+[ 88%] Linking CXX static library libconjunction_assessment.a
+[ 88%] Built target conjunction_assessment
+[ 97%] Building CXX object CMakeFiles/conjunction_assessment_wasm.dir/src/plugin_entrypoints.cpp.o
+[ 97%] Building CXX object CMakeFiles/conjunction_assessment_wasm.dir/src/plugin_invoke_bridge.cpp.o
+[ 97%] Building CXX object CMakeFiles/conjunction_assessment_wasm.dir/wasm_api.cpp.o
+[100%] Linking CXX executable conjunction_assessment_wasm.wasm
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libstandalonewasm.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libstandalonewasm.a" for subsequent builds)
+system_libs:INFO: compiled 14 inputs in 0.32s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libcompiler_rt-legacysjlj.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libcompiler_rt-legacysjlj.a" for subsequent builds)
+system_libs:INFO: compiled 184 inputs in 1.60s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libc++-legacyexcept.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libc++-legacyexcept.a" for subsequent builds)
+system_libs:INFO: compiled 57 inputs in 2.21s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libc++abi-legacyexcept.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libc++abi-legacyexcept.a" for subsequent builds)
+system_libs:INFO: compiled 19 inputs in 0.83s
+cache:INFO:  - ok
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/lto/libunwind-legacyexcept.a... (this will be cached in "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto/libunwind-legacyexcept.a" for subsequent builds)
+system_libs:INFO: compiled 1 inputs in 0.18s
+cache:INFO:  - ok
+[100%] Built target conjunction_assessment_wasm
+Embedded sds.manifest in /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/conjunction-assessment/dist/isomorphic-singlethread/module.wasm
+
+=== Build Complete ===
+-rw-r--r--  1 tj  staff    28K Sep 15 10:49 /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/conjunction-assessment/dist/browser/module.js
+-rwxr-xr-x  1 tj  staff   845K Sep 15 10:49 /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/conjunction-assessment/dist/browser/module.wasm
+-rwxr-xr-x  1 tj  staff   829K Sep 15 10:50 /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/conjunction-assessment/dist/isomorphic-singlethread/module.wasm
+-rwxr-xr-x  1 tj  staff   784K Sep 15 10:50 /Users/tj/software/worktrees/modules-python-astro-baseline/analysis/conjunction-assessment/dist/isomorphic/module.wasm

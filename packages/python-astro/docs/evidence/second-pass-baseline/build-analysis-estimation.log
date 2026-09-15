@@ -1,0 +1,36 @@
+
+warning:
+  /sdk/Propagator.fbs:339: 15: warning: field names should be lowercase snake_case, got: catalogHandle
+/sdk/Propagator.fbs:340: 15: warning: field names should be lowercase snake_case, got: sourceHandles
+/sdk/Propagator.fbs:344: 14: warning: field names should be lowercase snake_case, got: sourceHandle
+/sdk/Propagator.fbs:345: 12: warning: field names should be lowercase snake_case, got: sourceKind
+/sdk/Propagator.fbs:346: 12: warning: field names should be lowercase snake_case, got: objectName
+/sdk/Propagator.fbs:347: 10: warning: field names should be lowercase snake_case, got: objectId
+/sdk/Propagator.fbs:348: 12: warning: field names should be lowercase snake_case, got: noradCatId
+/sdk/Propagator.fbs:349: 9: warning: field names should be lowercase snake_case, got: epochJd
+/sdk/Propagator.fbs:350: 21: warning: field names should be lowercase snake_case, got: meanMotionRevPerDay
+/sdk/Propagator.fbs:352: 16: warning: field names should be lowercase snake_case, got: inclinationDeg
+/sdk/Propagator.fbs:353: 16: warning: field names should be lowercase snake_case, got: raOfAscNodeDeg
+/sdk/Propagator.fbs:354: 20: warning: field names should be lowercase snake_case, got: argOfPericenterDeg
+/sdk/Propagator.fbs:355: 16: warning: field names should be lowercase snake_case, got: meanAnomalyDeg
+/sdk/Propagator.fbs:356: 15: warning: field names should be lowercase snake_case, got: ephemerisType
+/sdk/Propagator.fbs:357: 20: warning: field names should be lowercase snake_case, got: classificationType
+/sdk/Propagator.fbs:358: 14: warning: field names should be lowercase snake_case, got: elementSetNo
+/sdk/Propagator.fbs:359: 12: warning: field names should be lowercase snake_case, got: revAtEpoch
+/sdk/Propagator.fbs:361: 25: warning: field names should be lowercase snake_case, got: meanMotionDotRevPerDay2
+/sdk/Propagator.fbs:362: 26: warning: field names should be lowercase snake_case, got: meanMotionDdotRevPerDay3
+/sdk/Propagator.fbs:363: 11: warning: field names should be lowercase snake_case, got: perigeeKm
+/sdk/Propagator.fbs:364: 10: warning: field names should be lowercase snake_case, got: apogeeKm
+/sdk/Propagator.fbs:368: 15: warning: field names should be lowercase snake_case, got: catalogHandle
+/sdk/Propagator.fbs:373: 15: warning: field names should be lowercase snake_case, got: catalogHandle
+/sdk/Propagator.fbs:374: 15: warning: field names should be lowercase snake_case, got: sourceHandles
+/sdk/Propagator.fbs:375: 9: warning: field names should be lowercase snake_case, got: startJd
+/sdk/Propagator.fbs:376: 14: warning: field names should be lowercase snake_case, got: durationDays
+/sdk/Propagator.fbs:381: 15: warning: field names should be lowercase snake_case, got: catalogHandle
+/sdk/Propagator.fbs:382: 9: warning: field names should be lowercase snake_case, got: startJd
+/sdk/Propagator.fbs:383: 14: warning: field names should be lowercase snake_case, got: durationDays
+/sdk/Propagator.fbs:384: 11: warning: field names should be lowercase snake_case, got: sampleJds
+/sdk/Propagator.fbs:385: 15: warning: field names should be lowercase snake_case, got: sourceHandles
+/sdk/Propagator.fbs:386: 16: warning: field names should be lowercase snake_case, got: referenceFrame
+
+Built dist/isomorphic/module.wasm against spacedatastandards.org@1.217.0+1789398499674

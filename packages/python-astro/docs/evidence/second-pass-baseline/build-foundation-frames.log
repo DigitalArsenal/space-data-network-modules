@@ -1,0 +1,11 @@
+shared:INFO: [32m(Emscripten: Running sanity checks)[0m
+cache:INFO: [32mgenerating system library: sysroot/lib/wasm32-emscripten/libstandalonewasm-memgrow.a... (this will be cached in "/emscripten/cache/sysroot/lib/wasm32-emscripten/libstandalonewasm-memgrow.a" for subsequent builds)[0m
+system_libs:INFO: [32mcompiled 20 inputs[0m
+cache:INFO: [32m - ok[0m
+{
+  "artifactPath": "/Users/tj/software/worktrees/modules-python-astro-baseline/foundation/frames/dist/isomorphic/module.wasm",
+  "keyId": "sdm-dev-test-2026",
+  "publicKeyHex": "cf4625795484d8efe18860141cfdeaaaed7bbee9209488405b6ddeac7543fe78",
+  "canonicalModuleHashHex": "3b0bfe5bae6eb0082b5316bf61a41d3cf41240e5d436c33f8d6f3a5c5a9ebd14"
+}
+Built dist/isomorphic/module.wasm against spacedatastandards.org@1.217.0+1789398499674 with 248 vendored ERFA sources

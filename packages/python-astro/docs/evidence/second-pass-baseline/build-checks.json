@@ -1,0 +1,405 @@
+{
+  "source_revision": "e4612363998bd1c732aaab2b242de0015104f096",
+  "environment": {
+    "SPACE_DATA_STANDARDS_ROOT": "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/spacedatastandards.org",
+    "SDN_FLATBUFFERS_INCLUDE_DIR": "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/flatbuffers/include"
+  },
+  "checks": [
+    {
+      "module": "propagator/hpop",
+      "command": [
+        "bash",
+        "build.sh"
+      ],
+      "exit_code": 0,
+      "log": "build-propagator-hpop.log",
+      "artifact_before": "be374f69201c17187c413c7ac0846b5387a5b90c762b8ade74df32ffe8b2306c",
+      "artifact_after": "be374f69201c17187c413c7ac0846b5387a5b90c762b8ade74df32ffe8b2306c",
+      "failing_test_names": []
+    },
+    {
+      "module": "propagator/hpop",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk_compat.test.mjs"
+      ],
+      "exit_code": 1,
+      "log": "postbuild-propagator-hpop.log",
+      "summary": [
+        "# tests 10",
+        "# pass 9",
+        "# fail 1",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "failing_test_names": [
+        "built artifact passes SDK compliance checks"
+      ]
+    },
+    {
+      "module": "analysis/conjunction-assessment",
+      "command": [
+        "bash",
+        "build.sh"
+      ],
+      "exit_code": 0,
+      "log": "build-analysis-conjunction-assessment.log",
+      "artifact_before": "acfedd6de4baaaae7d9265f7be992f2fe522afaa6f5dc739a20fbe2b6206fc72",
+      "artifact_after": "a37bcabf05ba57ab3033ea4a260cc6746698f522bceeac0b348c65266f3ed1df",
+      "failing_test_names": []
+    },
+    {
+      "module": "analysis/conjunction-assessment",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk_compat.test.mjs"
+      ],
+      "exit_code": 1,
+      "log": "postbuild-analysis-conjunction-assessment.log",
+      "summary": [
+        "# tests 10",
+        "# pass 9",
+        "# fail 1",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "failing_test_names": [
+        "built artifact passes SDK compliance checks"
+      ]
+    },
+    {
+      "module": "analysis/lambert-izzo",
+      "command": [
+        "node",
+        "build.mjs"
+      ],
+      "exit_code": 0,
+      "log": "build-analysis-lambert-izzo.log",
+      "artifact_before": "cbb256c91ed03c6623db0974476bfc26c2feaca586a45408a85bb84eb303b242",
+      "artifact_after": "cbb256c91ed03c6623db0974476bfc26c2feaca586a45408a85bb84eb303b242",
+      "failing_test_names": []
+    },
+    {
+      "module": "analysis/lambert-izzo",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk-compat.test.mjs"
+      ],
+      "exit_code": 1,
+      "log": "postbuild-analysis-lambert-izzo.log",
+      "summary": [
+        "# tests 16",
+        "# pass 14",
+        "# fail 2",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "failing_test_names": [
+        "built artifact loads through the WasmEdge server path when available",
+        "built artifact returns deterministic circular benchmark output in browser and WasmEdge"
+      ]
+    },
+    {
+      "module": "propagator/sgp4",
+      "command": [
+        "bash",
+        "build.sh"
+      ],
+      "exit_code": 0,
+      "log": "build-propagator-sgp4.log",
+      "artifact_before": "debb82d251cfe441e01e1f70f9d735b8878bb820bc48720fff1416ee129647e6",
+      "artifact_after": "debb82d251cfe441e01e1f70f9d735b8878bb820bc48720fff1416ee129647e6",
+      "failing_test_names": []
+    },
+    {
+      "module": "propagator/sgp4",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk_compat.test.mjs"
+      ],
+      "exit_code": 1,
+      "log": "postbuild-propagator-sgp4.log",
+      "summary": [
+        "# tests 1",
+        "# pass 0",
+        "# fail 1",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "failing_test_names": [
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "module": "analysis/estimation",
+      "command": [
+        "node",
+        "build.mjs"
+      ],
+      "exit_code": 0,
+      "log": "build-analysis-estimation.log",
+      "artifact_before": "42d10718037289a1e53d70755ee2374cf450e54fee96313be04c55828582cc16",
+      "artifact_after": "42d10718037289a1e53d70755ee2374cf450e54fee96313be04c55828582cc16",
+      "failing_test_names": []
+    },
+    {
+      "module": "analysis/estimation",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/conformance.test.mjs"
+      ],
+      "exit_code": 0,
+      "log": "postbuild-analysis-estimation.log",
+      "summary": [
+        "# tests 1",
+        "# pass 1",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "failing_test_names": []
+    },
+    {
+      "module": "propagator/events",
+      "command": [
+        "node",
+        "build.mjs"
+      ],
+      "exit_code": 1,
+      "log": "build-propagator-events.log",
+      "artifact_before": "c6f2cf1845099d89dddaec7f9ca14621a1617e1814b3d850753a77d02e327a87",
+      "artifact_after": null,
+      "failing_test_names": []
+    },
+    {
+      "module": "foundation/time",
+      "command": [
+        "node",
+        "build.mjs"
+      ],
+      "exit_code": 0,
+      "log": "build-foundation-time.log",
+      "artifact_before": "8f06eec747d0001f2bf7a241402603830b0ffcb882ba054b8eb3d95be93b5eec",
+      "artifact_after": "8f06eec747d0001f2bf7a241402603830b0ffcb882ba054b8eb3d95be93b5eec",
+      "failing_test_names": []
+    },
+    {
+      "module": "foundation/time",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk_compat.test.mjs"
+      ],
+      "exit_code": 0,
+      "log": "postbuild-foundation-time.log",
+      "summary": [
+        "# tests 4",
+        "# pass 4",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "failing_test_names": []
+    },
+    {
+      "module": "foundation/frames",
+      "command": [
+        "node",
+        "build.mjs"
+      ],
+      "exit_code": 0,
+      "log": "build-foundation-frames.log",
+      "artifact_before": "ee436101fea73bc8ea432aaf3b442935321efcfd22c81b3d8c66f857b62bcb55",
+      "artifact_after": "25e61665169dbbcfbe3f294c21181766582f12a799e67c09a406e610ea7261f0",
+      "failing_test_names": []
+    },
+    {
+      "module": "foundation/frames",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk_compat.test.mjs"
+      ],
+      "exit_code": 0,
+      "log": "postbuild-foundation-frames.log",
+      "summary": [
+        "# tests 5",
+        "# pass 5",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "failing_test_names": []
+    },
+    {
+      "module": "analysis/access",
+      "command": [
+        "node",
+        "build.js",
+        "--force"
+      ],
+      "exit_code": 0,
+      "log": "build-analysis-access.log",
+      "environment": {
+        "ORBPRO_ROOT": "/Users/tj/software/worktrees/modules-python-astro-baseline/analysis/access/node_modules/.orbpro-build",
+        "ORBPRO_WASM_BUILD_BACKEND": "local-emsdk",
+        "EM_CACHE": "/Users/tj/software/worktrees/modules-python-astro-baseline/analysis/access/.emcache",
+        "FLATBUFFERS_INCLUDE_DIR": "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/flatbuffers/include",
+        "SPACE_DATA_STANDARDS_ROOT": "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/spacedatastandards.org"
+      },
+      "artifact_before": "98315481714d59fb2ba03cc032b6ca7764a32b3847c59cd0eaac5675cd73401a",
+      "artifact_after": "7e5116d4f6000b3cee7a460f40824b2f68f5f71daf38a06164c727122573829a",
+      "failing_test_names": []
+    },
+    {
+      "module": "analysis/access",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "test/manifestContract.test.mjs"
+      ],
+      "exit_code": 1,
+      "summary": [
+        "# tests 1",
+        "# pass 0",
+        "# fail 1",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "postbuild-analysis-access.log",
+      "failing_test_names": [
+        "test/manifestContract.test.mjs"
+      ]
+    },
+    {
+      "module": "analysis/access",
+      "command": [
+        "node",
+        "--loader",
+        "./node_modules/baseline-import-loader.mjs",
+        "--test",
+        "--test-reporter=tap",
+        "test/manifestContract.test.mjs"
+      ],
+      "exit_code": 1,
+      "summary": [
+        "# tests 1",
+        "# pass 0",
+        "# fail 1",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "layout-adapted-analysis-access.log",
+      "failing_test_names": [
+        "test/manifestContract.test.mjs"
+      ]
+    },
+    {
+      "module": "propagator/sgp4",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk_compat.test.mjs"
+      ],
+      "exit_code": 0,
+      "summary": [
+        "# tests 7",
+        "# pass 7",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "postbuild-published-sds-propagator-sgp4.log",
+      "note": "published JS SDS 1.202.0 for generated lib/js; test file unmodified",
+      "failing_test_names": []
+    },
+    {
+      "module": "analysis/access",
+      "command": [
+        "node",
+        "--loader",
+        "./node_modules/baseline-import-loader.mjs",
+        "--test",
+        "--test-reporter=tap",
+        "test/manifestContract.test.mjs"
+      ],
+      "exit_code": 0,
+      "summary": [
+        "# tests 5",
+        "# pass 5",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "layout-adapted-published-sds-analysis-access.log",
+      "note": "published JS SDS 1.202.0 for generated lib/js; test file unmodified",
+      "failing_test_names": []
+    },
+    {
+      "module": "propagator/events",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tests/sdk_compat.test.mjs"
+      ],
+      "exit_code": 0,
+      "summary": [
+        "# tests 2",
+        "# pass 2",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0"
+      ],
+      "log": "committed-propagator-events.log",
+      "note": "committed artifact restored after failed build",
+      "failing_test_names": []
+    }
+  ],
+  "purpose": "Private clean-main build and SDK baseline. Rebuilt differing artifacts are NOT distributed by Python lane.",
+  "sdk": "space-data-module-sdk@0.8.18",
+  "build_schema_sds": "canonical 1.217.0+1789398499674, git b76da41467e260c83b3432ba7f34a1eb05cc7ac7",
+  "test_js_sds": "published 1.202.0",
+  "wasmedge": "0.16.4",
+  "common_build_environment": {
+    "SPACE_DATA_STANDARDS_ROOT": "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/spacedatastandards.org",
+    "SDN_FLATBUFFERS_INCLUDE_DIR": "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/flatbuffers/include",
+    "FLATBUFFERS_INCLUDE_DIR": "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/flatbuffers/include",
+    "SDN_LOCAL_EMSDK_DIR": "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk",
+    "EM_CACHE": "<baseline>/<module>/.emcache",
+    "PATH": "$HOME/.wasmedge/bin:$PATH"
+  },
+  "signing_disclosure": "foundation/frames node build.mjs automatically invoked scripts/sign-module-artifact.mjs and loaded the repository dev-test key via an existing stack-layout symlink, despite unset SDM_MODULE_SIGNING_KEYPAIR_PATH. No key contents were printed or copied; only public metadata appears in the build log. No further signing was performed.",
+  "new_main_build_failure": {
+    "module": "propagator/events",
+    "error": "fatal error: 'iau_body_models.hpp' file not found",
+    "cause": "events build.mjs reads frames/axis_engine.hpp but does not amalgamate the new lane08 iau_body_models.hpp include.",
+    "committed_artifact_sdk_result": "2 pass / 0 fail"
+  },
+  "published_sds_followup": {
+    "version": "1.217.0",
+    "schema_files": 248,
+    "differs_from_canonical": [
+      "schema/RFM/main.fbs"
+    ],
+    "used_for_tests": false
+  },
+  "build_schema_worktree_changes_observed": [
+    "schema/RFM/main.fbs",
+    "lib/py/RFM/rfmAxisType.py"
+  ]
+}

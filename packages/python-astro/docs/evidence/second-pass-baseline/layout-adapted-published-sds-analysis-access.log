@@ -1,0 +1,43 @@
+TAP version 13
+# (node:29258) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+# --import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./node_modules/baseline-import-loader.mjs", pathToFileURL("./")); register("./node_modules/baseline-import-loader.mjs", pathToFileURL("./"));'
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: Access analyzer exposes the expected manifest metadata
+ok 1 - Access analyzer exposes the expected manifest metadata
+  ---
+  duration_ms: 14.66175
+  type: 'test'
+  ...
+# Subtest: Access isomorphic artifact passes SDK compliance checks
+ok 2 - Access isomorphic artifact passes SDK compliance checks
+  ---
+  duration_ms: 6.142666
+  type: 'test'
+  ...
+# Subtest: Access stream invoke returns a decoded SDK response envelope
+ok 3 - Access stream invoke returns a decoded SDK response envelope
+  ---
+  duration_ms: 3.6345
+  type: 'test'
+  ...
+# Subtest: Access stream invoke computes access windows from an SDS ACW FlatBuffer request
+ok 4 - Access stream invoke computes access windows from an SDS ACW FlatBuffer request
+  ---
+  duration_ms: 4.757
+  type: 'test'
+  ...
+# Subtest: Access stream invoke applies ACW elevation mask and refraction request fields
+ok 5 - Access stream invoke applies ACW elevation mask and refraction request fields
+  ---
+  duration_ms: 2.749666
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2029.8365

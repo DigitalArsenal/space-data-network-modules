@@ -1,0 +1,86 @@
+[
+  {
+    "module": "analysis/conjunction-assessment",
+    "changed_sections": [
+      {
+        "main": {
+          "name": "10",
+          "offset": 4054,
+          "size": 732750,
+          "sha256": "dcc0d7b572788e2780ef046b543bc9670728db86b20c489aaf959786c5f66777"
+        },
+        "rebuilt": {
+          "name": "10",
+          "offset": 4054,
+          "size": 732750,
+          "sha256": "1be6d4f306c36c8e13bbd4abb593d9e6f1050c28ca85423b858eca156359fbca"
+        }
+      },
+      {
+        "main": {
+          "name": "11",
+          "offset": 736808,
+          "size": 56541,
+          "sha256": "547723139ac0d63d70a4cc5f17e8b86fe9438468986faf1e8f45634f14d93b97"
+        },
+        "rebuilt": {
+          "name": "11",
+          "offset": 736808,
+          "size": 56541,
+          "sha256": "ff8a09f8a9e0d907c1f39988039f773504aaca8fcdb23deeed0ab708b7e5af20"
+        }
+      },
+      {
+        "main": {
+          "name": "custom:sds.manifest",
+          "offset": 793353,
+          "size": 9553,
+          "sha256": "ddcd7841b5486ca6b94534dff1feb6d864bcb5d70a4b2a882a009ece5c3c2bdd"
+        },
+        "rebuilt": {
+          "name": "custom:sds.manifest",
+          "offset": 793353,
+          "size": 9553,
+          "sha256": "724d4f1dd55db384129178a581e72891ab9c7ec63298ab27726e3d713b96aa89"
+        }
+      }
+    ],
+    "main_sections": 12,
+    "rebuilt_sections": 12
+  },
+  {
+    "module": "analysis/access",
+    "changed_sections": [
+      {
+        "main": {
+          "name": "10",
+          "offset": 1916,
+          "size": 101920,
+          "sha256": "4d78af3363bb52d909759ae15715fe5747b0dfa9ee864b6ce8431641e7a86287"
+        },
+        "rebuilt": {
+          "name": "10",
+          "offset": 1916,
+          "size": 101920,
+          "sha256": "3d4fa2f2be2b6f71628602501407d38f681c8aee74ae9844f1391e1f1e7b1e3f"
+        }
+      },
+      {
+        "main": {
+          "name": "11",
+          "offset": 103840,
+          "size": 8373,
+          "sha256": "066b18f47bf6116eadd02cfd1219dc4c76b709d504ea377160e61de37623e898"
+        },
+        "rebuilt": {
+          "name": "11",
+          "offset": 103840,
+          "size": 8581,
+          "sha256": "a1c5a03ebd8ab9620893a101226ff1e729753f1916f61431d8c9701082a6c33a"
+        }
+      }
+    ],
+    "main_sections": 10,
+    "rebuilt_sections": 10
+  }
+]
