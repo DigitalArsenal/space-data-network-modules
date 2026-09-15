@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 import { FlatcRunner } from "flatc-wasm";
+import { publishedSchema, encodeCqr, decodeCqr, catalogRequest, catalogInReferenceUnits } from "./lib/cqr.mjs";
 
 import {
   conjunctionArtifactExists,
@@ -10,59 +11,15 @@ import {
 } from "./lib/conjunctionCommandHarness.mjs";
 import { buildThreadedWasmEdgeRunner } from "./lib/wasmedgePthreadRunner.mjs";
 
-function readText(path) {
-  return fs.readFileSync(new URL(path, import.meta.url), "utf8");
-}
-
-function readSdsSchemaText(path) {
-  const roots = [
-    "../../../../spacedatastandards.org/schema/",
-    "../node_modules/spacedatastandards.org/schema/",
-  ];
-  let lastError = null;
-  for (const root of roots) {
-    try {
-      return fs.readFileSync(new URL(`${root}${path}`, import.meta.url), "utf8");
-    } catch (error) {
-      if (error?.code !== "ENOENT") {
-        throw error;
-      }
-      lastError = error;
-    }
-  }
-  throw lastError;
-}
-
-function conjunctionRequestSchema() {
-  return {
-    entry: "/schemas/ConjunctionScreenCatalogRequest.fbs",
-    files: {
-      "/schemas/ConjunctionScreenCatalogRequest.fbs": readText(
-        "../schemas/ConjunctionScreenCatalogRequest.fbs",
-      ),
-      "/schemas/ConjunctionCommon.fbs": readText(
-        "../schemas/ConjunctionCommon.fbs",
-      ),
-    },
-  };
-}
-
-function ommSchema() {
-  return {
-    entry: "/sds/OMM/main.fbs",
-    files: {
-      "/sds/OMM/main.fbs": readSdsSchemaText("OMM/main.fbs"),
-      "/sds/RFM/main.fbs": readSdsSchemaText("RFM/main.fbs"),
-      "/sds/TIM/main.fbs": readSdsSchemaText("TIM/main.fbs"),
-      "/sds/MET/main.fbs": readSdsSchemaText("MET/main.fbs"),
-    },
-  };
-}
+const ommSchema = () => publishedSchema('OMM');
 
 function createOmmRecord(flatc, noradCatId, options = {}) {
   return flatc.generateBinary(
     ommSchema(),
     JSON.stringify({
+      CENTER_NAME: "EARTH",
+      REFERENCE_FRAME: { REFERENCE_FRAME_type: "CelestialFrameWrapper", REFERENCE_FRAME: { frame: "TEMEOFDATE" } },
+      TIME_SYSTEM: "UTC",
       OBJECT_NAME: `TEST-${noradCatId}`,
       OBJECT_ID: `2026-001${noradCatId}`,
       EPOCH: "2026-03-09T00:00:00.000000",
@@ -86,9 +43,7 @@ function createOmmRecord(flatc, noradCatId, options = {}) {
 }
 
 function createScreenCatalogRequest(flatc, overrides = {}) {
-  return flatc.generateBinary(
-    conjunctionRequestSchema(),
-    JSON.stringify({
+  return encodeCqr(flatc, catalogRequest({
       selectedSources: [
         {
           sourceKind: "OMM",
@@ -98,8 +53,8 @@ function createScreenCatalogRequest(flatc, overrides = {}) {
           fileIdentifier: "$OMM",
         },
       ],
-      startJd: 2460743.5,
-      durationDays: 0.01,
+      startJd: 2461108.5,
+      durationDays: 1 / 864001,
       thresholdKm: 15.0,
       numThreads: 1,
       coarseStepSec: 300.0,
@@ -107,22 +62,7 @@ function createScreenCatalogRequest(flatc, overrides = {}) {
       combinedRadiusM: 10.0,
       ...overrides,
     }),
-    { sizePrefix: false },
   );
-}
-
-function screenCatalogResultSchema() {
-  return {
-    entry: "/schemas/ConjunctionScreenCatalogResult.fbs",
-    files: {
-      "/schemas/ConjunctionScreenCatalogResult.fbs": readText(
-        "../schemas/ConjunctionScreenCatalogResult.fbs",
-      ),
-      "/schemas/ConjunctionCommon.fbs": readText(
-        "../schemas/ConjunctionCommon.fbs",
-      ),
-    },
-  };
 }
 
 function encodeUint32beFramedStream(records) {
@@ -137,6 +77,19 @@ function encodeUint32beFramedStream(records) {
     offset += record.length;
   }
   return stream;
+}
+
+// SDN API framing is a host concern. CQR's catalog port receives one verified
+// unprefixed OMM record per PIV frame, preserving reception order.
+function catalogFrames(stream) {
+  const frames = [];
+  for (let at = 0; at < stream.length;) {
+    const size = new DataView(stream.buffer, stream.byteOffset).getUint32(at, false); at += 4;
+    let payload = stream.subarray(at, at + size); at += size;
+    if (String.fromCharCode(...payload.subarray(8,12)) === '$OMM') payload = payload.subarray(4);
+    frames.push({ portId: 'catalog', payload });
+  }
+  return frames;
 }
 
 async function invokeWithTimeout(promise, timeoutMs, label) {
@@ -186,7 +139,7 @@ test("screen_catalog accepts SDN data API uint32be OMM FlatBuffer streams", asyn
       methodId: "screen_catalog",
       inputs: [
         { portId: "request", payload: requestPayload },
-        { portId: "catalog", payload: catalogPayload },
+        ...catalogFrames(catalogPayload),
       ],
     }),
     10000,
@@ -230,7 +183,7 @@ test("screen_catalog accepts SDN data API uint32be streams of size-prefixed OMM 
       methodId: "screen_catalog",
       inputs: [
         { portId: "request", payload: requestPayload },
-        { portId: "catalog", payload: catalogPayload },
+        ...catalogFrames(catalogPayload),
       ],
     }),
     10000,
@@ -261,7 +214,7 @@ test(
 
     const flatc = await FlatcRunner.init();
     const requestPayload = createScreenCatalogRequest(flatc, {
-      durationDays: 0.0,
+      durationDays: 1 / 86400,
       coarseStepSec: 600.0,
       numThreads: 1,
       usePerigeeFilter: false,
@@ -287,7 +240,7 @@ test(
       methodId: "screen_catalog",
       inputs: [
         { portId: "request", payload: requestPayload },
-        { portId: "catalog", payload: catalogPayload },
+        ...catalogFrames(catalogPayload),
       ],
     });
     const invokeElapsedMs = performance.now() - invokeStartedAt;
@@ -299,18 +252,12 @@ test(
     );
     const result = response.outputs?.find((frame) => frame.portId === "result");
     assert.ok(result?.payload instanceof Uint8Array, "result payload is emitted");
-    const decoded = JSON.parse(
-      flatc.generateJSON(
-        screenCatalogResultSchema(),
-        { path: "/result.bin", data: result.payload },
-        { defaultsJson: true },
-      ),
-    );
+    const decoded = catalogInReferenceUnits(decodeCqr(flatc, result.payload).CATALOG_RESULT);
     assert.equal(decoded.objectsParsed, 1200);
   },
 );
 
-test("screen_catalog accepts mixed primary GP and secondary track source families", async (t) => {
+test("screen_catalog rejects mixed frames instead of silently relabeling a secondary track", async (t) => {
   if (!conjunctionArtifactExists()) {
     t.skip("Build conjunction-assessment before running the mixed source screen_catalog test.");
     return;
@@ -392,7 +339,7 @@ test("screen_catalog accepts mixed primary GP and secondary track source familie
         ],
       },
     ],
-    durationDays: 0.0,
+    durationDays: 1 / 86400,
     coarseStepSec: 600.0,
   });
   const harness = await createConjunctionCommandHarness({
@@ -407,16 +354,6 @@ test("screen_catalog accepts mixed primary GP and secondary track source familie
     inputs: [{ portId: "request", payload: requestPayload }],
   });
 
-  assert.equal(response.statusCode, 0, response.errorMessage);
-  const result = response.outputs?.find((frame) => frame.portId === "result");
-  assert.ok(result?.payload instanceof Uint8Array, "result payload is emitted");
-  const decoded = JSON.parse(
-    flatc.generateJSON(
-      screenCatalogResultSchema(),
-      { path: "/result.bin", data: result.payload },
-      { defaultsJson: true },
-    ),
-  );
-  assert.equal(decoded.objectsParsed, 2);
-  assert.equal(decoded.stats.totalObjects, 2);
+  assert.notEqual(response.statusCode, 0);
+  assert.ok(response.errorMessage);
 });

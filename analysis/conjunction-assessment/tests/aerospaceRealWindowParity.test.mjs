@@ -51,7 +51,7 @@ import {
   isoToJd,
   loadRawConjunctionModule,
   runScreenCatalog,
-  singlethreadArtifactExists,
+  primaryArtifactExists,
 } from "./lib/screenCatalogParityHarness.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -60,7 +60,7 @@ const OCM_DIR = path.join(FIXTURE_DIR, "ocm");
 const ANSWER_KEY = path.join(FIXTURE_DIR, "answer_key_spherical.csv");
 const T = CA_PARITY_TOLERANCES;
 const CFG = T.screening.aerospaceSpherical;
-const ARTIFACT = singlethreadArtifactExists();
+const ARTIFACT = primaryArtifactExists();
 
 // FINDING F1 regression envelope (NOT a tolerance-config value; see header).
 // Real 65 s-OCM-vs-CSieve miss deltas in this window measured max 2.544 m
@@ -73,8 +73,8 @@ const REAL_OCM_MISS_ENVELOPE_M = 5.0;
 // (<~20 mas frame bias, shared by both objects => relative geometry invariant).
 function mapFrame(f) {
   const s = String(f || "").toUpperCase();
-  if (["ICRF", "TEME", "ECEF", "ECI"].includes(s)) return s;
-  return "ICRF";
+  if (["GCRF", "ICRF", "EME2000", "J2000", "TEME", "ECEF"].includes(s)) return s;
+  throw new Error(`Unsupported source frame: ${f}`);
 }
 
 function csvRowsSync(csvPath) {
@@ -92,6 +92,7 @@ function trackFromOcm(ocm, fallbackNorad) {
   const samples = (ocm.primaryTrajectory?.samples ?? [])
     .filter((s) => s.positionKm && s.velocityKmS)
     .map((s) => ({
+      EPOCH: s.epoch,
       jd: s.epochJD,
       xKm: s.positionKm.x, yKm: s.positionKm.y, zKm: s.positionKm.z,
       vxKmS: s.velocityKmS.x, vyKmS: s.velocityKmS.y, vzKmS: s.velocityKmS.z,
@@ -125,10 +126,13 @@ if (ARTIFACT) {
     const tcaJd = Number(r.jdate);
     const t1 = trackFromOcm(loadOcm(String(r.obj1_filename)), r.obj1);
     const t2 = trackFromOcm(loadOcm(String(r.obj2_filename)), r.obj2);
+    const startJd = Math.max(tcaJd - 240 / 86400, t1.samples[0].jd, t2.samples[0].jd);
+    const stopJd = Math.min(tcaJd + 240 / 86400, t1.samples.at(-1).jd, t2.samples.at(-1).jd);
+    assert.ok(startJd < tcaJd && stopJd > tcaJd, "Source coverage brackets the authoritative TCA");
     const requestBinary = buildScreenCatalogRequest(flatc, {
       sourceKind: "OCM", schemaName: "OCM/main.fbs", fileIdentifier: "$OCM",
       primaryTracks: [t1, t2],
-      startJd: tcaJd - 240 / 86400, durationDays: 480 / 86400,
+      startJd, durationDays: stopJd - startJd,
       thresholdKm: CFG.thresholdKm, combinedRadiusM: CFG.combinedRadiusM,
       coarseStepSec: CFG.coarseStepSec, fineTolSec: CFG.fineTolSec,
       usePerigeeFilter: false,
@@ -149,7 +153,7 @@ if (ARTIFACT) {
 
 function requireCtx(t) {
   if (!ARTIFACT) {
-    t.skip("dist/isomorphic-singlethread/module.wasm missing — build conjunction-assessment before the Aerospace real-window gate.");
+    t.skip("dist/isomorphic/module.wasm missing — build conjunction-assessment before the Aerospace real-window gate.");
     return null;
   }
   return ctx;

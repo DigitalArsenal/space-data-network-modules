@@ -9,7 +9,7 @@
 #ifdef SING
 #undef SING
 #endif
-#include "conjunction/standards/CSM/main_generated.h"
+#include "CSM_generated.h"
 #include "flatbuffers/flatbuffers.h"
 
 #include <cmath>

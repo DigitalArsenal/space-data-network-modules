@@ -539,45 +539,16 @@ test("partitioned runner provenance hashes and Ed25519 signatures are determinis
   assert.equal(signed.resultSignature.algorithm, "Ed25519");
 });
 
-function readText(relativePath) {
-  return readFile(new URL(relativePath, import.meta.url), "utf8");
-}
-
-async function readSdsSchemaText(path) {
-  const roots = [
-    "../../../../spacedatastandards.org/schema/",
-    "../node_modules/spacedatastandards.org/schema/",
-  ];
-  let lastError = null;
-  for (const root of roots) {
-    try {
-      return await readFile(new URL(`${root}${path}`, import.meta.url), "utf8");
-    } catch (error) {
-      if (error?.code !== "ENOENT") {
-        throw error;
-      }
-      lastError = error;
-    }
-  }
-  throw lastError;
-}
-
-async function ommSchema() {
-  return {
-    entry: "/sds/OMM/main.fbs",
-    files: {
-      "/sds/OMM/main.fbs": await readSdsSchemaText("OMM/main.fbs"),
-      "/sds/RFM/main.fbs": await readSdsSchemaText("RFM/main.fbs"),
-      "/sds/TIM/main.fbs": await readSdsSchemaText("TIM/main.fbs"),
-      "/sds/MET/main.fbs": await readSdsSchemaText("MET/main.fbs"),
-    },
-  };
-}
+import { publishedSchema } from "./lib/cqr.mjs";
+const ommSchema = async () => publishedSchema("OMM");
 
 async function createOmmRecord(flatc, schema, noradCatId) {
   return flatc.generateBinary(
     schema,
     JSON.stringify({
+      CENTER_NAME: "EARTH",
+      REFERENCE_FRAME: { REFERENCE_FRAME_type: "CelestialFrameWrapper", REFERENCE_FRAME: { frame: "TEMEOFDATE" } },
+      TIME_SYSTEM: "UTC",
       OBJECT_NAME: `PARTITION-${noradCatId}`,
       OBJECT_ID: `2026-002${noradCatId}`,
       EPOCH: "2026-03-09T00:00:00.000000",
@@ -934,11 +905,11 @@ test(
       "--partition-size",
       "2",
       "--duration-days",
-      "0",
+      "0.000011574074074074073",
+      "--start-jd",
+      "2461108.5",
       "--coarse-step-sec",
       "600",
-      "--wasmedge-runner-binary",
-      runnerBinary,
       "--source-pnm-cid",
       "bafybeipnmfixture",
       "--signing-private-key",
@@ -1024,11 +995,11 @@ test(
       "--catalog-block-size",
       "2",
       "--duration-days",
-      "0",
+      "0.000011574074074074073",
+      "--start-jd",
+      "2461108.5",
       "--coarse-step-sec",
       "600",
-      "--wasmedge-runner-binary",
-      runnerBinary,
       "--output",
       outputPath,
     ]);
@@ -1076,11 +1047,11 @@ test(
       "--block-pair-secondary-end-order-index",
       "4",
       "--duration-days",
-      "0",
+      "0.000011574074074074073",
+      "--start-jd",
+      "2461108.5",
       "--coarse-step-sec",
       "600",
-      "--wasmedge-runner-binary",
-      runnerBinary,
       "--output",
       explicitOutputPath,
     ]);

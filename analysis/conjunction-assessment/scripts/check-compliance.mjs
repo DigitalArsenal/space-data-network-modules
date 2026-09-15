@@ -25,6 +25,7 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const packageRoot = path.resolve(__dirname, "..");
+process.env.SPACE_DATA_STANDARDS_ROOT = path.join(packageRoot, "node_modules", "spacedatastandards.org");
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const wasmPath = path.join(
   packageRoot,
@@ -64,7 +65,7 @@ async function main() {
 
   await fs.access(wasmPath).catch(() => {
     throw new Error(
-      `Compiled WASM artifact missing at ${wasmPath}. Run \`./build.sh\` first.`,
+      `Compiled WASM artifact missing at ${wasmPath}. Run \`node build.mjs\` first.`,
     );
   });
 

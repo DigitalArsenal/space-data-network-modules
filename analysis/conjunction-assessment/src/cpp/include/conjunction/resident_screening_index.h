@@ -2,7 +2,6 @@
 #define CONJUNCTION_RESIDENT_SCREENING_INDEX_H
 
 #include "conjunction/gp_json.h"
-#include "conjunction/generated/ConjunctionCommon_generated.h"
 #include "conjunction/screening.h"
 
 #include <array>
@@ -11,15 +10,27 @@
 #include <utility>
 #include <vector>
 
-namespace orbpro {
-namespace propagator {
-struct PropagatorDescribeSourcesBatchResult;
-struct PropagatorDescribeTrajectorySegmentsResult;
-struct PropagatorSampleTrajectoryStatesResult;
-} // namespace propagator
-}
-
 namespace conjunction {
+
+// Internal numerical representation; wire enums are decoded by the CQR adapter.
+enum class ScreeningMode : uint8_t {
+    exact_only = 0, polynomial_only = 1, polynomial_plus_exact_polish = 2
+};
+
+struct ResidentSourceDescription {
+    uint32_t source_handle = 0;
+    GPElement gp;
+};
+
+// States use km/km/s and UTC Julian dates after canonical source decoding.
+// Layout is source-major, then sample. Each chunk contains 13 Chebyshev nodes.
+struct ResidentSampleGrid {
+    std::vector<uint32_t> source_handles;
+    std::vector<double> sample_jds;
+    std::vector<StateVector> states;
+    uint8_t reference_frame = 0;
+};
+
 
 static constexpr size_t RESIDENT_CHEBYSHEV_COEFFICIENT_COUNT = 13;
 
@@ -56,8 +67,8 @@ struct ResidentScreeningIndex {
     uint64_t total_pair_count = 0;
     uint64_t candidate_pair_count = 0;
     uint64_t pairs_prefiltered = 0;
-    orbpro::conjunction::ConjunctionScreeningMode screening_mode =
-        orbpro::conjunction::ConjunctionScreeningMode::exact_only;
+    ScreeningMode screening_mode =
+        ScreeningMode::exact_only;
 
     std::vector<uint32_t> source_handles;
     std::vector<TLE> tles;
@@ -96,22 +107,22 @@ struct ResidentScreeningIndexBuildResult {
 ResidentScreeningIndexBuildResult prepare_resident_screening_index(
     uint32_t catalog_handle,
     const std::vector<uint32_t>& primary_source_handles,
-    const orbpro::propagator::PropagatorDescribeSourcesBatchResult* descriptions);
+    const std::vector<ResidentSourceDescription>& descriptions);
 
 ResidentScreeningIndexBuildResult prepare_resident_segment_screening_index(
     uint32_t catalog_handle,
     uint32_t segment_set_handle,
     const std::vector<uint32_t>& primary_source_handles,
-    orbpro::conjunction::ConjunctionScreeningMode screening_mode,
-    const orbpro::propagator::PropagatorDescribeSourcesBatchResult* descriptions,
-    const orbpro::propagator::PropagatorDescribeTrajectorySegmentsResult* segments);
+    ScreeningMode screening_mode,
+    const std::vector<ResidentSourceDescription>& descriptions,
+    const std::vector<ResidentTrajectorySegment>& segments);
 
 ResidentScreeningIndexBuildResult prepare_resident_sample_screening_index(
     uint32_t catalog_handle,
     const std::vector<uint32_t>& primary_source_handles,
-    orbpro::conjunction::ConjunctionScreeningMode screening_mode,
-    const orbpro::propagator::PropagatorDescribeSourcesBatchResult* descriptions,
-    const orbpro::propagator::PropagatorSampleTrajectoryStatesResult* samples);
+    ScreeningMode screening_mode,
+    const std::vector<ResidentSourceDescription>& descriptions,
+    const ResidentSampleGrid& samples);
 
 const ResidentScreeningIndex* find_resident_screening_index(
     uint32_t screening_index_handle);

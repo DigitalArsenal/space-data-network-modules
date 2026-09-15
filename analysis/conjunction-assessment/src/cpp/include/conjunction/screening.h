@@ -18,10 +18,10 @@
  *   - Candidate pairs merged with mutex-free per-thread collection
  *   - TCA refinement parallelized per candidate pair
  *
- * For WASM (Emscripten):
- *   - -s USE_PTHREADS=1
- *   - -s PTHREAD_POOL_SIZE=navigator.hardwareConcurrency
- *   - -s SHARED_MEMORY=1
+ * For WASM (SDK wasi-threads):
+ *   - wasm32-wasip1-threads -pthread
+ *   - wasi.thread-spawn and wasi_thread_start
+ *   - shared memory and atomics
  *   - SharedArrayBuffer required in browser (COOP/COEP headers)
  */
 
@@ -71,10 +71,12 @@ struct ScreeningStats {
     uint64_t tca_refined = 0;        // Pairs with TCA refinement
     uint64_t conjunctions_found = 0; // Final confirmed conjunctions
     uint64_t propagations = 0;       // Total SGP4 propagations
+    uint64_t failed_pairs = 0;       // Failed refinement/assessment evaluations
     double elapsed_ms = 0.0;         // Wall clock time
 };
 
 struct ScreeningThreadWork {
+    std::string error;
     std::vector<CoarseHitRecord> coarse_hits;
     std::vector<CandidatePair> candidates;
     uint64_t propagations = 0;

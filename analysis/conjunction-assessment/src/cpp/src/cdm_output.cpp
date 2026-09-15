@@ -2,7 +2,7 @@
  * CDM FlatBuffers Output — Serialize ConjunctionEvent to CCSDS CDM
  *
  * Uses spacedatastandards.org CDM schema with $CDM file identifier.
- * Output is aligned FlatBuffers binary suitable for SDN wire format.
+ * Output is canonical variable-size FlatBuffers binary for SDS transport.
  */
 
 #include "conjunction/conjunction_assessment.h"
@@ -10,7 +10,11 @@
 #ifdef SING
 #undef SING
 #endif
-#include "conjunction/standards/CDM/main_generated.h"
+#ifdef DOMAIN
+#undef DOMAIN
+#endif
+#include "CDM_generated.h"
+#include "conjunction/error_status.h"
 #include "flatbuffers/flatbuffers.h"
 
 #include <algorithm>
@@ -37,8 +41,8 @@ struct ParsedCdmObject {
     std::string object_id;
     std::string ephemeris_name;
     std::string ref_frame;
-    objectType object_type = objectType::UNKNOWN;
-    covarianceMethod covariance_method = covarianceMethod::CALCULATED;
+    spaceObjectClass object_type = spaceObjectClass::UNKNOWN;
+    covarianceAlgorithm covariance_method = covarianceAlgorithm::CALCULATED;
     bool maneuverable = false;
     double x = 0.0;
     double y = 0.0;
@@ -249,8 +253,9 @@ static bool find_xml_value(const std::string& text, const std::string& tag, XmlV
 static double parse_double_value(const std::string& value, const std::string& key) {
     char* end = nullptr;
     const double parsed = std::strtod(value.c_str(), &end);
-    if (end == value.c_str()) {
-        throw std::invalid_argument("Unable to parse numeric CDM KVN field: " + key);
+    if (end == value.c_str() || *end != '\0' || !std::isfinite(parsed)) {
+        set_error("Unable to parse numeric CDM field: " + key);
+        return 0.0;
     }
     return parsed;
 }
@@ -284,18 +289,18 @@ static bool parse_yes(const std::string& value) {
     return normalized == "YES" || normalized == "Y" || normalized == "TRUE";
 }
 
-static objectType parse_object_type(const std::string& value) {
+static spaceObjectClass parse_object_type(const std::string& value) {
     const auto normalized = upper(trim(value));
     if (normalized == "PAYLOAD") {
-        return objectType::PAYLOAD;
+        return spaceObjectClass::PAYLOAD;
     }
     if (normalized == "ROCKET_BODY" || normalized == "ROCKET BODY") {
-        return objectType::ROCKET_BODY;
+        return spaceObjectClass::ROCKET_BODY;
     }
     if (normalized == "DEBRIS") {
-        return objectType::DEBRIS;
+        return spaceObjectClass::DEBRIS;
     }
-    return objectType::UNKNOWN;
+    return spaceObjectClass::UNKNOWN;
 }
 
 static uint32_t parse_designator_as_norad(const std::string& designator) {
@@ -334,7 +339,7 @@ static void parse_xml_object_field(ParsedCdmObject* object, const std::string& k
     } else if (key == "EPHEMERIS_NAME") {
         object->ephemeris_name = entry.value;
     } else if (key == "COVARIANCE_METHOD") {
-        object->covariance_method = covarianceMethod::CALCULATED;
+        object->covariance_method = covarianceAlgorithm::CALCULATED;
     } else if (key == "MANEUVERABLE") {
         object->maneuverable = parse_yes(entry.value);
     } else if (key == "REF_FRAME") {
@@ -387,7 +392,8 @@ static void derive_relative_state(ParsedCdm* parsed) {
 
 static ParsedCdm parse_cdm_kvn(const char* kvn_text, uint32_t kvn_text_size) {
     if (!kvn_text || kvn_text_size == 0u) {
-        throw std::invalid_argument("CDM KVN input is empty.");
+        set_error("CDM KVN input is empty.");
+        return {};
     }
 
     ParsedCdm parsed{};
@@ -429,7 +435,7 @@ static ParsedCdm parse_cdm_kvn(const char* kvn_text, uint32_t kvn_text_size) {
             } else if (entry.key == "EPHEMERIS_NAME") {
                 current_object->ephemeris_name = entry.value;
             } else if (entry.key == "COVARIANCE_METHOD") {
-                current_object->covariance_method = covarianceMethod::CALCULATED;
+                current_object->covariance_method = covarianceAlgorithm::CALCULATED;
             } else if (entry.key == "MANEUVERABLE") {
                 current_object->maneuverable = parse_yes(entry.value);
             } else if (entry.key == "REF_FRAME") {
@@ -499,7 +505,8 @@ static ParsedCdm parse_cdm_kvn(const char* kvn_text, uint32_t kvn_text_size) {
     }
 
     if (!parsed.has_object[0] || !parsed.has_object[1]) {
-        throw std::invalid_argument("CDM KVN requires OBJECT1 and OBJECT2 blocks.");
+        set_error("CDM KVN requires OBJECT1 and OBJECT2 blocks.");
+        return {};
     }
     derive_relative_state(&parsed);
     return parsed;
@@ -507,7 +514,8 @@ static ParsedCdm parse_cdm_kvn(const char* kvn_text, uint32_t kvn_text_size) {
 
 static ParsedCdm parse_cdm_xml(const char* xml_text, uint32_t xml_text_size) {
     if (!xml_text || xml_text_size == 0u) {
-        throw std::invalid_argument("CDM XML input is empty.");
+        set_error("CDM XML input is empty.");
+        return {};
     }
 
     const std::string text(xml_text, xml_text + xml_text_size);
@@ -636,7 +644,8 @@ static ParsedCdm parse_cdm_xml(const char* xml_text, uint32_t xml_text_size) {
     }
 
     if (!parsed.has_object[0] || !parsed.has_object[1]) {
-        throw std::invalid_argument("CDM XML requires OBJECT1 and OBJECT2 segments.");
+        set_error("CDM XML requires OBJECT1 and OBJECT2 segments.");
+        return {};
     }
     derive_relative_state(&parsed);
     return parsed;
@@ -829,13 +838,13 @@ static void append_xml_element(
     out << '>' << xml_escape(value) << "</" << key << ">\n";
 }
 
-static std::string object_type_to_xml(objectType type) {
+static std::string object_type_to_xml(spaceObjectClass type) {
     switch (type) {
-        case objectType::PAYLOAD:
+        case spaceObjectClass::PAYLOAD:
             return "PAYLOAD";
-        case objectType::ROCKET_BODY:
+        case spaceObjectClass::ROCKET_BODY:
             return "ROCKET_BODY";
-        case objectType::DEBRIS:
+        case spaceObjectClass::DEBRIS:
             return "DEBRIS";
         default:
             return std::string();
@@ -933,19 +942,10 @@ static void append_xml_object(std::ostringstream& out, const CDMObject* object, 
 
 } // namespace
 
-static std::string now_iso() {
-    time_t now = time(nullptr);
-    struct tm* gmt = gmtime(&now);
-    char buf[64];
-    snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02dZ",
-             gmt->tm_year + 1900, gmt->tm_mon + 1, gmt->tm_mday,
-             gmt->tm_hour, gmt->tm_min, gmt->tm_sec);
-    return buf;
-}
-
 static Covariance3x3 covariance_from_cdm_object(const CDMObject* object) {
     if (!object || !object->COVARIANCE() || object->COVARIANCE()->size() < 6) {
-        throw std::invalid_argument("CDM object covariance must contain at least the 3x3 position block.");
+        set_error("CDM object covariance must contain at least the 3x3 position block.");
+        return {};
     }
 
     const auto* covariance = object->COVARIANCE();
@@ -986,29 +986,16 @@ static StateVector state_from_cdm_object(const CDMObject* object) {
 }
 
 static std::string cdm_object_reference_frame_name(const CDMObject* object) {
-    if (!object || !object->REFERENCE_FRAME() || !object->REFERENCE_FRAME()->NAME()) {
-        return std::string();
+    if (!object || !object->REFERENCE_FRAME()) return {};
+    const auto* frame = object->REFERENCE_FRAME();
+    if (frame->NAME() && !frame->NAME()->str().empty()) return upper(frame->NAME()->str());
+    const auto* celestial = frame->REFERENCE_FRAME_as_CelestialFrameWrapper();
+    if (celestial) {
+        if (celestial->frame() == CelestialFrame::GCRF) return "GCRF";
+        if (celestial->frame() == CelestialFrame::EME2000) return "EME2000";
+        if (celestial->frame() == CelestialFrame::TEMEOFDATE) return "TEME";
     }
-    return object->REFERENCE_FRAME()->NAME()->str();
-}
-
-static bool cdm_object_uses_earth_fixed_frame(const CDMObject* object) {
-    const auto frame = upper(cdm_object_reference_frame_name(object));
-    return frame.find("ITRF") != std::string::npos ||
-           frame.find("EFG") != std::string::npos ||
-           frame.find("FIXED") != std::string::npos ||
-           frame.find("WGS84") != std::string::npos;
-}
-
-static void apply_earth_fixed_velocity_correction(StateVector* state) {
-    if (!state) {
-        return;
-    }
-    constexpr double earth_rotation_rad_per_sec = 7.2921150e-5;
-    const double correction_x = -earth_rotation_rad_per_sec * state->y;
-    const double correction_y = earth_rotation_rad_per_sec * state->x;
-    state->vx += correction_x;
-    state->vy += correction_y;
+    return {};
 }
 
 // ── Build CDMObject for one conjunction participant ──
@@ -1019,25 +1006,18 @@ static flatbuffers::Offset<CDMObject> build_cdm_object(
     const StateVector& state,
     const ConjunctionEvent& event,
     int obj_num,
-    double cov_r, double cov_t, double cov_n) {
+    double cov_r, double cov_t, double cov_n,
+    const std::string& reference_frame) {
 
-    // RTN position/velocity relative to TCA
-    double pos_r, pos_t, pos_n, vel_r, vel_t, vel_n;
-    if (obj_num == 1) {
-        pos_r = event.rel_pos_r; pos_t = event.rel_pos_t; pos_n = event.rel_pos_n;
-        vel_r = event.rel_vel_r; vel_t = event.rel_vel_t; vel_n = event.rel_vel_n;
-    } else {
-        pos_r = 0; pos_t = 0; pos_n = 0;  // Object 2 is at origin in relative frame
-        vel_r = 0; vel_t = 0; vel_n = 0;
-    }
-
+    // CDM object states are absolute in the explicitly selected evaluation frame.
+    // The root relative-state fields separately carry encounter RTN geometry.
     // Build CAT (catalog) object
     auto obj_name = builder.CreateString(tle.name);
-    auto obj_id = builder.CreateString(
-        std::to_string(tle.norad_cat_id > 0 ? tle.norad_cat_id : 0));
+    auto obj_id = builder.CreateString(tle.object_id);
 
     CATBuilder cat_builder(builder);
     cat_builder.add_OBJECT_NAME(obj_name);
+    cat_builder.add_OBJECT_ID(obj_id);
     cat_builder.add_NORAD_CAT_ID(tle.norad_cat_id);
     auto cat = cat_builder.Finish();
 
@@ -1053,21 +1033,24 @@ static flatbuffers::Offset<CDMObject> build_cdm_object(
 
     auto cov_vec = builder.CreateVector(cov_data);
 
-    auto comment = builder.CreateString("SGP4 propagation");
-    auto gravity = builder.CreateString("SGP4/SDP4");
-    auto atm = builder.CreateString("None");
+    auto comment = builder.CreateString("Conjunction assessment; diagonal RTN uncertainty model");
+    const auto frame_kind = reference_frame == "TEME" ? CelestialFrame::TEMEOFDATE :
+        reference_frame == "EME2000" ? CelestialFrame::EME2000 : CelestialFrame::GCRF;
+    const auto axes = CreateCelestialFrameWrapper(builder, frame_kind);
+    const auto frame_name = builder.CreateString(reference_frame);
+    const auto frame = CreateRFM(builder, RFMUnion::CelestialFrameWrapper, axes.Union(), 0, frame_name);
 
     CDMObjectBuilder obj_builder(builder);
     obj_builder.add_COMMENT(comment);
     obj_builder.add_OBJECT(cat);
-    obj_builder.add_GRAVITY_MODEL(gravity);
-    obj_builder.add_ATMOSPHERIC_MODEL(atm);
-    obj_builder.add_X(pos_r);
-    obj_builder.add_Y(pos_t);
-    obj_builder.add_Z(pos_n);
-    obj_builder.add_X_DOT(vel_r);
-    obj_builder.add_Y_DOT(vel_t);
-    obj_builder.add_Z_DOT(vel_n);
+    obj_builder.add_REFERENCE_FRAME(frame);
+    obj_builder.add_COVARIANCE_METHOD(covarianceAlgorithm::DEFAULT);
+    obj_builder.add_X(state.x);
+    obj_builder.add_Y(state.y);
+    obj_builder.add_Z(state.z);
+    obj_builder.add_X_DOT(state.vx);
+    obj_builder.add_Y_DOT(state.vy);
+    obj_builder.add_Z_DOT(state.vz);
     obj_builder.add_COVARIANCE(cov_vec);
 
     return obj_builder.Finish();
@@ -1077,13 +1060,19 @@ static flatbuffers::Offset<CDMObject> build_cdm_object(
 
 int32_t conjunction_to_cdm(
     const ConjunctionEvent& event,
-    uint8_t* output, uint32_t output_capacity) {
+    uint8_t* output, uint32_t output_capacity,
+    const std::string& reference_frame) {
 
+    if (!output || output_capacity == 0u) return -2;
+    if (reference_frame != "TEME" && reference_frame != "GCRF" && reference_frame != "EME2000") {
+        set_error("Unsupported CDM evaluation frame");
+        return -1;
+    }
     flatbuffers::FlatBufferBuilder builder(4096);
 
     // Header strings
-    auto creation_date = builder.CreateString(now_iso());
-    auto originator = builder.CreateString("LOBSTERNAUT-CA");
+    auto creation_date = builder.CreateString(event.tca_iso.empty() ? jd_to_iso(event.tca_jd) : event.tca_iso);
+    auto originator = builder.CreateString("conjunction-assessment");
     auto message_id = builder.CreateString(
         "CDM-" + std::to_string(event.obj1.norad_cat_id) + "-" +
         std::to_string(event.obj2.norad_cat_id));
@@ -1091,15 +1080,11 @@ int32_t conjunction_to_cdm(
         event.tca_iso.empty() ? jd_to_iso(event.tca_jd) : event.tca_iso);
     auto prob_method = builder.CreateString(event.probability_method);
 
-    // Screen period
-    auto screen_start = builder.CreateString(jd_to_iso(event.tca_jd - 3.5));
-    auto screen_stop = builder.CreateString(jd_to_iso(event.tca_jd + 3.5));
-
     // Build object entries
     auto obj1 = build_cdm_object(builder, event.obj1, event.state1, event,
-                                  1, event.cov_r1, event.cov_t1, event.cov_n1);
+                                  1, event.cov_r1, event.cov_t1, event.cov_n1, reference_frame);
     auto obj2 = build_cdm_object(builder, event.obj2, event.state2, event,
-                                  2, event.cov_r2, event.cov_t2, event.cov_n2);
+                                  2, event.cov_r2, event.cov_t2, event.cov_n2, reference_frame);
 
     // Build CDM
     CDMBuilder cdm_builder(builder);
@@ -1116,12 +1101,6 @@ int32_t conjunction_to_cdm(
     cdm_builder.add_RELATIVE_VELOCITY_R(event.rel_vel_r);
     cdm_builder.add_RELATIVE_VELOCITY_T(event.rel_vel_t);
     cdm_builder.add_RELATIVE_VELOCITY_N(event.rel_vel_n);
-    cdm_builder.add_START_SCREEN_PERIOD(screen_start);
-    cdm_builder.add_STOP_SCREEN_PERIOD(screen_stop);
-    cdm_builder.add_SCREEN_VOLUME_SHAPE(screeningVolumeShape::ELLIPSOID);
-    cdm_builder.add_SCREEN_VOLUME_X(DEFAULT_THRESHOLD_KM);
-    cdm_builder.add_SCREEN_VOLUME_Y(DEFAULT_THRESHOLD_KM);
-    cdm_builder.add_SCREEN_VOLUME_Z(DEFAULT_THRESHOLD_KM);
     cdm_builder.add_COLLISION_PROBABILITY(event.max_probability);
     cdm_builder.add_COLLISION_PROBABILITY_METHOD(prob_method);
     cdm_builder.add_OBJECT1(obj1);
@@ -1170,48 +1149,44 @@ int32_t conjunctions_to_cdm_batch(
 int32_t cdm_kvn_to_sds(
     const char* kvn_text, uint32_t kvn_text_size,
     uint8_t* output, uint32_t output_capacity) {
+    clear_error();
 
-    try {
         if (!output || output_capacity == 0u) {
             return -2;
         }
         const auto parsed = parse_cdm_kvn(kvn_text, kvn_text_size);
+        if (has_error()) return -1;
         const auto bytes = build_cdm_flatbuffer_from_parsed(parsed);
         if (bytes.size() > output_capacity) {
             return -2;
         }
         std::memcpy(output, bytes.data(), bytes.size());
         return static_cast<int32_t>(bytes.size());
-    } catch (...) {
-        return -1;
-    }
 }
 
 int32_t cdm_xml_to_sds(
     const char* xml_text, uint32_t xml_text_size,
     uint8_t* output, uint32_t output_capacity) {
+    clear_error();
 
-    try {
         if (!output || output_capacity == 0u) {
             return -2;
         }
         const auto parsed = parse_cdm_xml(xml_text, xml_text_size);
+        if (has_error()) return -1;
         const auto bytes = build_cdm_flatbuffer_from_parsed(parsed);
         if (bytes.size() > output_capacity) {
             return -2;
         }
         std::memcpy(output, bytes.data(), bytes.size());
         return static_cast<int32_t>(bytes.size());
-    } catch (...) {
-        return -1;
-    }
 }
 
 int32_t cdm_sds_to_kvn(
     const uint8_t* cdm_buffer, uint32_t cdm_buffer_size,
     char* output, uint32_t output_capacity) {
+    clear_error();
 
-    try {
         if (!output || output_capacity == 0u) {
             return -2;
         }
@@ -1285,16 +1260,13 @@ int32_t cdm_sds_to_kvn(
         }
         std::memcpy(output, text.data(), text.size());
         return static_cast<int32_t>(text.size());
-    } catch (...) {
-        return -1;
-    }
 }
 
 int32_t cdm_sds_to_xml(
     const uint8_t* cdm_buffer, uint32_t cdm_buffer_size,
     char* output, uint32_t output_capacity) {
+    clear_error();
 
-    try {
         if (!output || output_capacity == 0u) {
             return -2;
         }
@@ -1388,9 +1360,6 @@ int32_t cdm_sds_to_xml(
         }
         std::memcpy(output, text.data(), text.size());
         return static_cast<int32_t>(text.size());
-    } catch (...) {
-        return -1;
-    }
 }
 
 PcResult compute_pc_from_cdm(
@@ -1399,49 +1368,46 @@ PcResult compute_pc_from_cdm(
     double combined_radius_km) {
 
     if (!cdm_buffer || cdm_buffer_size == 0) {
-        throw std::invalid_argument("CDM input buffer is empty.");
+        set_error("CDM input buffer is empty.");
+        return {};
     }
 
     flatbuffers::Verifier verifier(cdm_buffer, cdm_buffer_size);
     if (!VerifyCDMBuffer(verifier)) {
-        throw std::invalid_argument("CDM FlatBuffer verification failed.");
+        set_error("CDM FlatBuffer verification failed.");
+        return {};
     }
 
     const CDM* cdm = GetCDM(cdm_buffer);
     if (!cdm) {
-        throw std::invalid_argument("CDM root is missing.");
+        set_error("CDM root is missing.");
+        return {};
     }
     if (!cdm->OBJECT1() || !cdm->OBJECT2()) {
-        throw std::invalid_argument("CDM input requires both object blocks.");
+        set_error("CDM input requires both object blocks.");
+        return {};
     }
 
     StateVector state1{};
     StateVector state2{};
     Covariance3x3 cov1 = covariance_from_cdm_object(cdm->OBJECT1());
     Covariance3x3 cov2 = covariance_from_cdm_object(cdm->OBJECT2());
+    if (has_error()) return {};
     if (cdm_object_has_cartesian_state(cdm->OBJECT1()) &&
         cdm_object_has_cartesian_state(cdm->OBJECT2())) {
         state1 = state_from_cdm_object(cdm->OBJECT1());
         state2 = state_from_cdm_object(cdm->OBJECT2());
-        if (cdm_object_uses_earth_fixed_frame(cdm->OBJECT1())) {
-            apply_earth_fixed_velocity_correction(&state1);
-        }
-        if (cdm_object_uses_earth_fixed_frame(cdm->OBJECT2())) {
-            apply_earth_fixed_velocity_correction(&state2);
+        const auto frame1 = cdm_object_reference_frame_name(cdm->OBJECT1());
+        const auto frame2 = cdm_object_reference_frame_name(cdm->OBJECT2());
+        if (frame1 != frame2 || (frame1 != "TEME" && frame1 != "GCRF" && frame1 != "EME2000")) {
+            set_error("CDM probability requires matching explicit TEME, GCRF or EME2000 frames; Earth-fixed conversion requires EOP data.");
+            return {};
         }
         cov1 = covariance_rtn_to_inertial(cov1, state1);
         cov2 = covariance_rtn_to_inertial(cov2, state2);
     } else {
-        state1 = StateVector{
-            0.0,
-            cdm->RELATIVE_POSITION_R(),
-            cdm->RELATIVE_POSITION_T(),
-            cdm->RELATIVE_POSITION_N(),
-            cdm->RELATIVE_VELOCITY_R(),
-            cdm->RELATIVE_VELOCITY_T(),
-            cdm->RELATIVE_VELOCITY_N()
-        };
-        state2 = StateVector{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+        set_error("CDM probability requires both absolute object states to orient their RTN covariances.");
+        return {};
     }
 
     std::string method = method_override;

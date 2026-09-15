@@ -3,8 +3,8 @@
 // =============================================================================
 //
 // Drives the conjunction-assessment module's FlatBuffer `screen_catalog`
-// methodId directly against the checked-in singlethread WASM
-// (dist/isomorphic-singlethread/module.wasm) via a raw WebAssembly instance +
+// methodId directly against the primary canonical WASM
+// (dist/isomorphic/module.wasm) via the SDK browser harness +
 // SDS PIV envelope — NO WasmEdge, NO network. This is the CI-viable path: the
 // same raw plugin_invoke_stream ABI the passing pivInvokeContract.test.mjs uses.
 //
@@ -24,16 +24,18 @@ import { createRequire } from "node:module";
 import * as flatbuffers from "flatbuffers";
 
 import { FlatcRunner } from "flatc-wasm";
+import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
+import { cqrSchema, publishedSchema, encodeCqr, decodeCqr, catalogRequest, catalogInReferenceUnits } from './cqr.mjs';
 import { relVelStratum } from "./caParityTolerances.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, "..", "..");
 const SDS_ROOT = path.dirname(createRequire(import.meta.url).resolve("spacedatastandards.org/package.json"));
-const SINGLETHREAD_WASM_PATH = path.join(
+const PRIMARY_WASM_PATH = path.join(
   PACKAGE_ROOT,
   "dist",
-  "isomorphic-singlethread",
+  "isomorphic",
   "module.wasm",
 );
 
@@ -51,18 +53,14 @@ const textEncoder = new TextEncoder();
 
 // --- artifact / module load -------------------------------------------------
 
-export function singlethreadArtifactExists() {
-  return fs.existsSync(SINGLETHREAD_WASM_PATH);
+export function primaryArtifactExists() {
+  return fs.existsSync(PRIMARY_WASM_PATH);
 }
 
 export async function loadRawConjunctionModule() {
-  const wasmBinary = await fs.promises.readFile(SINGLETHREAD_WASM_PATH);
-  const imports = {
-    wasi_snapshot_preview1: new Proxy({}, { get: () => () => 0 }),
-  };
-  const { instance } = await WebAssembly.instantiate(wasmBinary, imports);
-  instance.exports.__wasm_call_ctors?.();
-  return instance.exports;
+  const wasmBinary = await fs.promises.readFile(PRIMARY_WASM_PATH);
+  const harness = await createBrowserModuleHarness({ wasmSource: wasmBinary, surface: 'direct', enableThreads: true });
+  return { ...(harness.instance?.exports ?? harness.exports), memory: harness.memory, destroy: harness.destroy };
 }
 
 export async function initFlatc() {
@@ -78,39 +76,9 @@ function readSdsSchema(rel) {
   return fs.readFileSync(path.join(SDS_ROOT, "schema", rel), "utf8");
 }
 
-function screenCatalogRequestSchema() {
-  return {
-    entry: "/schemas/ConjunctionScreenCatalogRequest.fbs",
-    files: {
-      "/schemas/ConjunctionScreenCatalogRequest.fbs": readText(
-        "schemas/ConjunctionScreenCatalogRequest.fbs",
-      ),
-      "/schemas/ConjunctionCommon.fbs": readText("schemas/ConjunctionCommon.fbs"),
-    },
-  };
-}
-function screenCatalogResultSchema() {
-  return {
-    entry: "/schemas/ConjunctionScreenCatalogResult.fbs",
-    files: {
-      "/schemas/ConjunctionScreenCatalogResult.fbs": readText(
-        "schemas/ConjunctionScreenCatalogResult.fbs",
-      ),
-      "/schemas/ConjunctionCommon.fbs": readText("schemas/ConjunctionCommon.fbs"),
-    },
-  };
-}
-function ommSchema() {
-  return {
-    entry: "/sds/OMM/main.fbs",
-    files: {
-      "/sds/OMM/main.fbs": readSdsSchema("OMM/main.fbs"),
-      "/sds/RFM/main.fbs": readSdsSchema("RFM/main.fbs"),
-      "/sds/TIM/main.fbs": readSdsSchema("TIM/main.fbs"),
-      "/sds/MET/main.fbs": readSdsSchema("MET/main.fbs"),
-    },
-  };
-}
+const screenCatalogRequestSchema = cqrSchema;
+const screenCatalogResultSchema = cqrSchema;
+const ommSchema = () => publishedSchema('OMM');
 
 // --- OMM catalog (SGP4 mean-element) builder --------------------------------
 
@@ -120,6 +88,9 @@ export function ommRecordFromGp(flatc, gp) {
   return flatc.generateBinary(
     ommSchema(),
     JSON.stringify({
+      CENTER_NAME: "EARTH",
+      REFERENCE_FRAME: { REFERENCE_FRAME_type: "CelestialFrameWrapper", REFERENCE_FRAME: { frame: "TEMEOFDATE" } },
+      TIME_SYSTEM: "UTC",
       OBJECT_NAME: gp.OBJECT_NAME ?? `NORAD-${gp.NORAD_CAT_ID}`,
       OBJECT_ID: gp.OBJECT_ID ?? "",
       EPOCH: gp.EPOCH,
@@ -158,50 +129,13 @@ export function frameUint32beStream(records) {
 }
 
 export function buildOmmCatalogFrame(flatc, gpRecords) {
-  return frameUint32beStream(gpRecords.map((gp) => ommRecordFromGp(flatc, gp)));
+  return gpRecords.map((gp) => ommRecordFromGp(flatc, gp));
 }
 
 // --- screen_catalog request builder ----------------------------------------
 
 export function buildScreenCatalogRequest(flatc, options = {}) {
-  const payload = {
-    selectedSources: options.selectedSources ?? [
-      {
-        sourceKind: options.sourceKind ?? "OMM",
-        sourceId: options.sourceId ?? "a2.8b-parity",
-        providerId: options.providerId ?? "parity-harness",
-        schemaName: options.schemaName ?? "OMM/main.fbs",
-        fileIdentifier: options.fileIdentifier ?? "$OMM",
-      },
-    ],
-    startJd: options.startJd,
-    durationDays: options.durationDays,
-    thresholdKm: options.thresholdKm,
-    numThreads: options.numThreads ?? 1,
-    coarseStepSec: options.coarseStepSec ?? 60.0,
-    fineTolSec: options.fineTolSec ?? 0.001,
-    combinedRadiusM: options.combinedRadiusM ?? 10.0,
-    useKdTree: options.useKdTree ?? true,
-    useDynamicWindow: options.useDynamicWindow ?? true,
-    usePerigeeFilter: options.usePerigeeFilter ?? true,
-  };
-  if (Array.isArray(options.primaryTracks)) {
-    payload.primaryTracks = options.primaryTracks;
-  }
-  if (Array.isArray(options.secondaryTracks)) {
-    payload.secondaryTracks = options.secondaryTracks;
-  }
-  if (Array.isArray(options.primaryGps)) {
-    payload.primaryGps = options.primaryGps;
-  }
-  if (Array.isArray(options.secondaryGps)) {
-    payload.secondaryGps = options.secondaryGps;
-  }
-  return flatc.generateBinary(
-    screenCatalogRequestSchema(),
-    JSON.stringify(payload),
-    { sizePrefix: false },
-  );
+  return encodeCqr(flatc, catalogRequest(options));
 }
 
 // --- raw PIV invoke ---------------------------------------------------------
@@ -219,7 +153,9 @@ function encodeInvoke(methodId, inputs) {
     const offset = alignOffset(arena.length, alignment);
     while (arena.length < offset) arena.push(0);
     for (const byte of payload) arena.push(byte);
-    const typeRef = new FlatBufferTypeRefT(input.schemaName ?? null, null, null, null);
+    const id = String.fromCharCode(...payload.subarray(4,8));
+    const code = id.startsWith("$") ? id.slice(1) : null;
+    const typeRef = new FlatBufferTypeRefT(input.schemaName ?? (code ? `${code}.fbs` : null), code ? id : null, null, code);
     const frame = new TABT(
       offset,
       payload.length,
@@ -280,7 +216,7 @@ export function invokeRaw(exports, methodId, inputs) {
 export function runScreenCatalog(exports, flatc, { requestBinary, catalogBinary }) {
   const inputs = [{ portId: "request", bytes: requestBinary }];
   if (catalogBinary) {
-    inputs.push({ portId: "catalog", bytes: catalogBinary });
+    for (const bytes of Array.isArray(catalogBinary) ? catalogBinary : [catalogBinary]) inputs.push({ portId: "catalog", bytes });
   }
   const response = invokeRaw(exports, "screen_catalog", inputs);
   if (response.statusCode !== 0) {
@@ -292,30 +228,7 @@ export function runScreenCatalog(exports, flatc, { requestBinary, catalogBinary 
   if (!result?.payload?.byteLength) {
     throw new Error("screen_catalog returned no result payload.");
   }
-  return JSON.parse(
-    flatc.generateJSON(
-      screenCatalogResultSchema(),
-      { path: "/result.bin", data: result.payload },
-      { defaultsJson: true },
-    ),
-  );
-}
-
-// --- JSON operation path (version probe etc.) -------------------------------
-
-export function invokeJsonOperation(exports, operation, params = {}) {
-  const response = invokeRaw(exports, "invoke", [
-    {
-      portId: "request",
-      bytes: textEncoder.encode(JSON.stringify({ operation, params })),
-      schemaName: "application/json",
-    },
-  ]);
-  const out = response.outputs.find((o) => o.portId === "response");
-  return {
-    statusCode: response.statusCode,
-    json: out ? JSON.parse(textDecoder.decode(out.payload)) : null,
-  };
+  return catalogInReferenceUnits(decodeCqr(flatc, result.payload).CATALOG_RESULT);
 }
 
 // --- comparison / stratification -------------------------------------------
@@ -395,4 +308,4 @@ export function compareToReference(decoded, referenceEvents) {
   };
 }
 
-export { PACKAGE_ROOT, SDS_ROOT, SINGLETHREAD_WASM_PATH };
+export { PACKAGE_ROOT, SDS_ROOT, PRIMARY_WASM_PATH };

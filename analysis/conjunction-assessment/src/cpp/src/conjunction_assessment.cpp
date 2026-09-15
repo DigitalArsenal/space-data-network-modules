@@ -1,3 +1,4 @@
+#include "conjunction/error_status.h"
 /**
  * Conjunction Assessment Engine Implementation
  *
@@ -49,17 +50,20 @@ std::mutex g_sgp4_cache_mutex;
 std::shared_ptr<const Sgp4PropagationCache> get_or_create_sgp4_cache(
     const conjunction::TLE& tle)
 {
-    if (tle.cache) {
-        return tle.cache;
-    }
+    auto cached = std::atomic_load(&tle.cache);
+    if (cached) return cached;
 
 #ifndef CONJUNCTION_SINGLE_THREAD
     std::lock_guard<std::mutex> lock(g_sgp4_cache_mutex);
 #endif
-    if (!tle.cache) {
-        tle.cache = std::make_shared<Sgp4PropagationCache>(tle);
+    cached = std::atomic_load(&tle.cache);
+    if (!cached) {
+        std::shared_ptr<const Sgp4PropagationCache> candidate = std::make_shared<Sgp4PropagationCache>(tle);
+        if (has_error()) return nullptr;
+        std::atomic_store(&tle.cache, candidate);
+        cached = std::move(candidate);
     }
-    return tle.cache;
+    return cached;
 }
 
 } // namespace
@@ -81,6 +85,7 @@ double epoch_to_jd(int year, double day_of_year) {
 }
 
 std::string jd_to_iso(double jd) {
+    if (!std::isfinite(jd)) { set_error("Non-finite epoch"); return {}; }
     // JD → calendar date
     double z = std::floor(jd + 0.5);
     double f = (jd + 0.5) - z;
@@ -120,7 +125,11 @@ std::string jd_to_iso(double jd) {
 double iso_to_jd(const std::string& iso) {
     int year, month, day, hour, minute;
     double second;
-    sscanf(iso.c_str(), "%d-%d-%dT%d:%d:%lf", &year, &month, &day, &hour, &minute, &second);
+    if (sscanf(iso.c_str(), "%d-%d-%dT%d:%d:%lf", &year, &month, &day, &hour, &minute, &second) != 6 ||
+        month < 1 || month > 12 || day < 1 || day > 31 || hour < 0 || hour > 23 ||
+        minute < 0 || minute > 59 || !std::isfinite(second) || second < 0 || second >= 60) {
+        set_error("Invalid UTC epoch"); return std::numeric_limits<double>::quiet_NaN();
+    }
 
     int a = (14 - month) / 12;
     int y = year + 4800 - a;
@@ -181,8 +190,9 @@ TLE parse_tle(const std::string& name, const std::string& line1, const std::stri
     tle.line2 = normalize_tle_line(line2);
 
     // Use dnwrnr Tle parser for the heavy lifting
-    try {
+    {
         libsgp4::Tle sgp4_tle(name, tle.line1, tle.line2);
+        if (has_error()) return {};
         tle.norad_cat_id = sgp4_tle.NoradNumber();
         tle.inclination = sgp4_tle.Inclination(true);   // degrees
         tle.raan = sgp4_tle.RightAscendingNode(true);
@@ -195,8 +205,6 @@ TLE parse_tle(const std::string& name, const std::string& line1, const std::stri
         // Compute epoch JD
         auto epoch = sgp4_tle.Epoch();
         tle.epoch_jd = epoch.ToJulian();
-    } catch (const std::exception& e) {
-        throw std::runtime_error("TLE parse error: " + std::string(e.what()));
     }
 
     return tle;
@@ -225,18 +233,16 @@ std::vector<TLE> parse_tle_file(const std::string& data) {
     for (size_t i = 0; i + 2 < lines.size(); ) {
         if (lines[i + 1].size() > 1 && lines[i + 1][0] == '1' &&
             lines[i + 2].size() > 1 && lines[i + 2][0] == '2') {
-            try {
+            {
                 tles.push_back(parse_tle(lines[i], lines[i + 1], lines[i + 2]));
-            } catch (...) {
-                // Skip malformed TLEs
             }
             i += 3;
         } else if (lines[i].size() > 1 && lines[i][0] == '1' &&
                    lines[i + 1].size() > 1 && lines[i + 1][0] == '2') {
             // 2-line format (no name)
-            try {
+            {
                 tles.push_back(parse_tle("", lines[i], lines[i + 1]));
-            } catch (...) {}
+            }
             i += 2;
         } else {
             i++;
@@ -256,15 +262,28 @@ StateVector propagate_sgp4(const TLE& tle, double target_jd) {
     const double nan = std::numeric_limits<double>::quiet_NaN();
     sv.x = sv.y = sv.z = nan;
     sv.vx = sv.vy = sv.vz = nan;
+    if (!std::isfinite(target_jd)) { set_error("Non-finite propagation epoch"); return sv; }
+    if (has_error()) return sv;
 
-    try {
+    {
         const auto cache = get_or_create_sgp4_cache(tle);
+        if (has_error() || !cache) return sv;
 
         // Propagate using elapsed minutes from the TLE epoch. This avoids
         // reconstructing a DateTime from fractional-day pieces, which can
         // trip libsgp4 validity assertions for finely refined TCA sample times.
         const double minutes_since_epoch = (target_jd - tle.epoch_jd) * 1440.0;
-        libsgp4::Eci eci = cache->sgp4.FindPosition(minutes_since_epoch);
+        // SDP4 has mutable resonance integrator state. A per-evaluation copy
+        // starts from the same initialized state regardless of worker ordering.
+        const auto position = [&]() {
+            if (tle.mean_motion <= 1440.0 / 225.0) {
+                auto deep_space = cache->sgp4;
+                return deep_space.FindPosition(minutes_since_epoch);
+            }
+            return cache->sgp4.FindPosition(minutes_since_epoch);
+        };
+        libsgp4::Eci eci = position();
+        if (has_error()) return sv;
 
         sv.x = eci.Position().x;
         sv.y = eci.Position().y;
@@ -276,12 +295,10 @@ StateVector propagate_sgp4(const TLE& tle, double target_jd) {
         const double radius_km =
             std::sqrt(sv.x * sv.x + sv.y * sv.y + sv.z * sv.z);
         if (!std::isfinite(radius_km) || radius_km < EARTH_RADIUS_KM) {
+            set_error("Non-finite or decayed SGP4 state");
             sv.x = sv.y = sv.z = nan;
             sv.vx = sv.vy = sv.vz = nan;
         }
-    } catch (const std::exception&) {
-        sv.x = sv.y = sv.z = nan;
-        sv.vx = sv.vy = sv.vz = nan;
     }
     return sv;
 }
@@ -366,6 +383,7 @@ void inertial_to_rtn(const StateVector& ref, const StateVector& target,
 static double distance_at_jd(const TLE& tle1, const TLE& tle2, double jd) {
     auto s1 = propagate_sgp4(tle1, jd);
     auto s2 = propagate_sgp4(tle2, jd);
+    if (has_error()) return std::numeric_limits<double>::quiet_NaN();
     double dx = s1.x - s2.x;
     double dy = s1.y - s2.y;
     double dz = s1.z - s2.z;
@@ -386,8 +404,9 @@ static std::vector<std::pair<double, double>> find_all_minima(
     double end_dist = 1e18;
 
     for (double jd = start_jd; jd <= end_jd; jd += step) {
-        try {
+        {
             double d = distance_at_jd(tle1, tle2, jd);
+            if (has_error()) return {};
             if (jd == start_jd) {
                 start_dist = d;
             }
@@ -403,7 +422,7 @@ static std::vector<std::pair<double, double>> find_all_minima(
             prev_d = curr_d;
             curr_d = d;
             prev_jd = jd;
-        } catch (...) {}
+        }
     }
 
     if (std::isfinite(start_dist)) {
@@ -430,13 +449,14 @@ static double refine_minimum(const TLE& tle1, const TLE& tle2,
         double c = b - phi * (b - a);
         double d_val = a + phi * (b - a);
 
-        try {
+        {
             double fc = distance_at_jd(tle1, tle2, c);
             double fd = distance_at_jd(tle1, tle2, d_val);
+            if (has_error()) return std::numeric_limits<double>::quiet_NaN();
 
             if (fc < fd) b = d_val;
             else a = c;
-        } catch (...) { break; }
+        }
     }
 
     return (a + b) / 2.0;
@@ -461,6 +481,7 @@ static ConjunctionEvent build_conjunction_event(
 
     event.state1 = propagate_sgp4(tle1, event.tca_jd);
     event.state2 = propagate_sgp4(tle2, event.tca_jd);
+    if (has_error()) return {};
 
     double dx = event.state1.x - event.state2.x;
     double dy = event.state1.y - event.state2.y;
@@ -531,12 +552,14 @@ double find_tca(const TLE& tle1, const TLE& tle2,
     // 10s step misses these entirely as local minima.
     auto minima = find_all_minima(tle1, tle2, start_jd, end_jd, 5.0);
 
+    if (has_error()) return std::numeric_limits<double>::quiet_NaN();
     if (minima.empty()) {
         minima = find_all_minima(tle1, tle2, start_jd, end_jd, coarse_step_sec);
     }
 
     if (minima.empty()) {
-        return start_jd;
+        set_error("No finite states in TCA search");
+        return std::numeric_limits<double>::quiet_NaN();
     }
 
     // Step 2: Sort by coarse distance, take top candidates for refinement
@@ -573,13 +596,14 @@ double find_tca(const TLE& tle1, const TLE& tle2,
         for (double jd = subscan_start;
              jd <= subscan_stop + subscan_step * 0.5;
              jd += subscan_step) {
-            try {
+            {
                 double d = distance_at_jd(tle1, tle2, jd);
+            if (has_error()) return std::numeric_limits<double>::quiet_NaN();
                 if (d < subscan_best_dist) {
                     subscan_best_dist = d;
                     subscan_best_jd = jd;
                 }
-            } catch (...) {}
+            }
         }
 
         // Phase 2: Golden section from the sub-second best position (±1s window)
@@ -587,13 +611,14 @@ double find_tca(const TLE& tle1, const TLE& tle2,
                                            subscan_best_jd,
                                            1.0 / 86400.0, // ±1 second
                                            fine_tol_sec);
-        try {
+        {
             double d = distance_at_jd(tle1, tle2, refined_jd);
+            if (has_error()) return std::numeric_limits<double>::quiet_NaN();
             if (d < best_dist) {
                 best_dist = d;
                 best_jd = refined_jd;
             }
-        } catch (...) {}
+        }
     }
 
     return best_jd;
@@ -886,13 +911,12 @@ std::vector<ConjunctionEvent> screen_conjunctions(
         for (const auto& secondary : secondary_tles) {
             if (primary.norad_cat_id == secondary.norad_cat_id) continue;
 
-            try {
+            {
                 auto event = assess_conjunction(primary, secondary, start_jd, duration_days);
+                if (has_error()) return {};
                 if (event.min_range_km <= threshold_km) {
                     events.push_back(event);
                 }
-            } catch (...) {
-                // SGP4 error, skip this pair
             }
         }
     }

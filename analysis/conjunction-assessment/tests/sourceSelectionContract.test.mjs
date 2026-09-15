@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 import { FlatcRunner } from "flatc-wasm";
+import { encodeCqr, catalogRequest } from "./lib/cqr.mjs";
 
 import {
   CA_SOURCE_KINDS,
@@ -13,26 +14,10 @@ function readText(path) {
   return fs.readFileSync(new URL(path, import.meta.url), "utf8");
 }
 
-function conjunctionRequestSchema() {
-  return {
-    entry: "/schemas/ConjunctionScreenCatalogRequest.fbs",
-    files: {
-      "/schemas/ConjunctionScreenCatalogRequest.fbs": readText(
-        "../schemas/ConjunctionScreenCatalogRequest.fbs",
-      ),
-      "/schemas/ConjunctionCommon.fbs": readText(
-        "../schemas/ConjunctionCommon.fbs",
-      ),
-    },
-  };
-}
-
 test("screen catalog request schema accepts every CA selected source kind", async () => {
   const flatc = await FlatcRunner.init();
 
-  const payload = flatc.generateBinary(
-    conjunctionRequestSchema(),
-    JSON.stringify({
+  const payload = encodeCqr(flatc, catalogRequest({
       selectedSources: [
         { sourceKind: "OMM", schemaName: "OMM/main.fbs", fileIdentifier: "$OMM" },
         { sourceKind: "OCM", schemaName: "OCM/main.fbs", fileIdentifier: "$OCM" },
@@ -52,7 +37,6 @@ test("screen catalog request schema accepts every CA selected source kind", asyn
       startJd: 2460743.5,
       durationDays: 0.01,
     }),
-    { sizePrefix: false },
   );
 
   assert.ok(payload instanceof Uint8Array);

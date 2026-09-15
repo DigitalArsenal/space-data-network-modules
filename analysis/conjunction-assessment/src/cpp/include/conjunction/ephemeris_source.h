@@ -71,7 +71,7 @@ public:
     }
 
     double epoch_jd() const override { return tle_.epoch_jd; }
-    std::string object_id() const override { return std::to_string(tle_.norad_cat_id); }
+    std::string object_id() const override { return tle_.object_id.empty() ? std::to_string(tle_.norad_cat_id) : tle_.object_id; }
     std::string object_name() const override { return tle_.name; }
     int norad_id() const override { return tle_.norad_cat_id; }
     bool covariance_rtn_sigma_at(
@@ -92,7 +92,7 @@ public:
     }
 
     double epoch_jd() const override { return gp_.epoch_jd; }
-    std::string object_id() const override { return std::to_string(gp_.norad_cat_id); }
+    std::string object_id() const override { return gp_.object_id.empty() ? std::to_string(gp_.norad_cat_id) : gp_.object_id; }
     std::string object_name() const override { return gp_.object_name; }
     int norad_id() const override { return gp_.norad_cat_id; }
     bool covariance_rtn_sigma_at(

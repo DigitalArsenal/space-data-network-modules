@@ -174,7 +174,8 @@ void inertial_to_rtn(const StateVector& ref, const StateVector& target,
 /// Returns bytes written (>=0 success), -2 buffer too small, -1 error
 int32_t conjunction_to_cdm(
     const ConjunctionEvent& event,
-    uint8_t* output, uint32_t output_capacity);
+    uint8_t* output, uint32_t output_capacity,
+    const std::string& reference_frame = "TEME");
 
 /// Serialize a conjunction event to SDS CSM FlatBuffers binary ($CSM identifier)
 /// Returns bytes written (>=0 success), -2 buffer too small, -1 error

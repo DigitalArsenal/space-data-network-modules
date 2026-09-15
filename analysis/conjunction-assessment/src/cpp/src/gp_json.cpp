@@ -12,7 +12,10 @@
 #include "conjunction/gp_json.h"
 #include <cmath>
 #include <sstream>
-#include <stdexcept>
+#include <cstdlib>
+#include <cerrno>
+#include <limits>
+#include "conjunction/error_status.h"
 #include <algorithm>
 #include <cstring>
 
@@ -81,11 +84,14 @@ static double json_number(const std::string& obj, const std::string& key, double
 
     if (numstr.empty()) return def;
 
-    try {
-        return std::stod(numstr);
-    } catch (...) {
+    char* end = nullptr;
+    errno = 0;
+    const double value = std::strtod(numstr.c_str(), &end);
+    if (end == numstr.c_str() || *end != '\0' || errno == ERANGE || !std::isfinite(value)) {
+        set_error("Invalid GP numeric field: " + key);
         return def;
     }
+    return value;
 }
 
 /// Extract an integer value
@@ -186,11 +192,8 @@ std::vector<GPElement> parse_gp_json(const std::string& json) {
     elements.reserve(objects.size());
 
     for (const auto& obj : objects) {
-        try {
-            elements.push_back(parse_gp_object(obj));
-        } catch (...) {
-            // Skip malformed entries
-        }
+        elements.push_back(parse_gp_object(obj));
+        if (has_error()) return {};
     }
 
     return elements;
@@ -261,18 +264,32 @@ std::vector<GPElement> parse_gp_csv(const std::string& csv) {
 
         auto fields = split_csv_line(line);
 
-        try {
+        {
             GPElement gp;
             auto safe_get = [&fields](int idx) -> std::string {
                 return (idx >= 0 && idx < (int)fields.size()) ? fields[idx] : "";
             };
             auto safe_dbl = [&fields](int idx, double def = 0.0) -> double {
                 if (idx < 0 || idx >= (int)fields.size() || fields[idx].empty()) return def;
-                return std::stod(fields[idx]);
+                char* end = nullptr;
+                errno = 0;
+                const double value = std::strtod(fields[idx].c_str(), &end);
+                if (end == fields[idx].c_str() || *end != '\0' || errno == ERANGE || !std::isfinite(value)) {
+                    set_error("Invalid GP CSV numeric field");
+                    return def;
+                }
+                return value;
             };
             auto safe_int = [&fields](int idx, int def = 0) -> int {
                 if (idx < 0 || idx >= (int)fields.size() || fields[idx].empty()) return def;
-                return std::stoi(fields[idx]);
+                char* end = nullptr;
+                errno = 0;
+                const long value = std::strtol(fields[idx].c_str(), &end, 10);
+                if (end == fields[idx].c_str() || *end != '\0' || errno == ERANGE || value < std::numeric_limits<int>::min() || value > std::numeric_limits<int>::max()) {
+                    set_error("Invalid GP CSV integer field");
+                    return def;
+                }
+                return static_cast<int>(value);
             };
 
             gp.object_name = safe_get(i_name);
@@ -298,9 +315,8 @@ std::vector<GPElement> parse_gp_csv(const std::string& csv) {
             gp.epoch_jd = iso_epoch_to_jd(gp.epoch_iso);
             compute_derived(gp);
 
+            if (has_error()) return {};
             elements.push_back(gp);
-        } catch (...) {
-            // Skip malformed rows
         }
     }
 
