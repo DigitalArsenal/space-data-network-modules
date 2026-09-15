@@ -40,7 +40,7 @@ export async function runThreadedBrowserLane(context) {
       } finally { harness?.destroy(); }
       self.postMessage({ exitClass, exitDetail, stdout, spawnCount, hardwareConcurrency: navigator.hardwareConcurrency });
     };`;
-  const bundle = await build({ stdin: { contents: source, resolveDir: root, sourcefile: 'cqr-parity-worker.mjs' }, bundle: true, write: false, format: 'esm', platform: 'browser', target: 'chrome110', external: ['node:*', 'hd-wallet-wasm'], logLevel: 'silent' });
+  const bundle = await build({ stdin: { contents: source, resolveDir: root, sourcefile: 'cqr-parity-worker.mjs' }, bundle: true, write: false, format: 'esm', platform: 'browser', target: 'chrome110', external: ['node:*'], logLevel: 'silent' });
   const plan = context.plan.cases.flatMap(c => c.threadCounts.map(threadCount => ({ caseId: c.id, threadCount, args: c.args, env: { ...c.env, [context.plan.threadEnvVar]: String(threadCount) }, stdinBase64: Buffer.from(c.stdinBytes).toString('base64') })));
   let resolveDone, rejectDone;
   const done = new Promise((resolve, reject) => { resolveDone = resolve; rejectDone = reject; });

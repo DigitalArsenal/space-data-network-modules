@@ -35,7 +35,7 @@ explicitly. Unsupported providers, frame conversions and controls also fail
 explicitly. See the [lane handoff](../../docs/tmpl-lane-14-conjunction-cqr-handoff.md)
 for the exact supported profile and remaining work.
 
-`signCdmOutput(...)` remains a host utility for signing emitted CDM bytes and
+`signCdmOutput(...)` remains a Node.js host utility for signing emitted CDM bytes and
 provenance. It does not perform conjunction calculations.
 
 ## Build and runtime contract
@@ -57,6 +57,14 @@ exports include `plugin_alloc`, `plugin_free`, `plugin_invoke_stream`,
 `plugin_get_manifest_flatbuffer` and `plugin_get_manifest_flatbuffer_size`.
 Bindings regenerate from the installed published SDS package during every build;
 `dist/build-provenance.json` records source/schema hashes and thread features.
+
+In browsers, run the module inside an owner Worker on a cross-origin isolated
+page so synchronous WASM atomic waits are available. Bundled hosts should serve
+the installed SDK worker dependency chain and pass its directory through
+`wasiThreadWorkerBaseUrl`. The public loader enables browser WASI threads by
+default and accepts `maxThreads` for the SDK worker pool. The executable
+`scripts/verify-cqr-browser-wrapper.mjs` demonstrates that public loading path
+against the checked-in SOCRATES snapshot.
 
 ## Verification
 

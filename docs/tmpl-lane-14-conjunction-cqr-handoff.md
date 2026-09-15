@@ -59,6 +59,10 @@ falls back to its nonzero NORAD ID; missing both identities is rejected.
 Physics, propagation, interpolation, probability, time parsing, and frame
 interpretation remain in C++/WASM. Host JavaScript only transports/encodes data,
 loads the runtime, and compares measured outputs with independent references.
+The public browser entrypoint loads without resolving Node-only signing code
+and forwards the SDK's browser thread enablement and pool-size options. Bundled
+hosts can set `wasiThreadWorkerBaseUrl`; SDK 0.8.18 requires its public global
+worker-base setter because its inner harness drops the per-instance base.
 
 ### Threading, deterministic results, and failure accounting
 
@@ -104,7 +108,19 @@ Commands run in the module directory with `PATH="$HOME/.wasmedge/bin:$PATH"`.
 | `node --test tests/sdk_compat.test.mjs` | **10 passed, 0 failed, 0 skipped** (baseline 1 failure) | [sdk-compat-final.log](evidence/tmpl-lane-14/sdk-compat-final.log) |
 | `npm test` | **63 passed, 0 failed, 8 dataset skips** | [npm-test-final.log](evidence/tmpl-lane-14/npm-test-final.log) |
 | `npm run check:compliance` | **0 standards-aware/artifact errors** (baseline 84), PLG round-trip PASS | [compliance-final.log](evidence/tmpl-lane-14/compliance-final.log) |
-| Three-runtime command matrix | Final native/container sweep in progress | [parity-final.log](evidence/tmpl-lane-14/parity-final.log) |
+| Public native entrypoint and CDM signing | **2 passed, 0 failed**, including actual Pc invocation | [direct-entry-final.log](evidence/tmpl-lane-14/direct-entry-final.log) |
+| Public browser entrypoint | **PASS** in real Chrome, two-worker SOCRATES request, **4 real guest spawns** across phases | [browser-wrapper.json](evidence/tmpl-lane-14/browser-wrapper.json) |
+| Three-runtime command matrix | **132 runs, 217 comparisons, 0 failures**; browser/WasmEdge/Docker at workers **1/2/4/8** | [runtime receipt](evidence/tmpl-lane-14/cqr-runtime-parity.json), [parity-final.log](evidence/tmpl-lane-14/parity-final.log) |
+
+All three lanes execute the primary artifact hash above. Each lane completes
+44 runs covering 14 cases. The **12 SOCRATES runs have byte-identical PIV
+output**, SHA256
+`102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9`.
+Requested worker counts 1/2/4/8 produce **0/4/8/14 actual guest spawns** in each
+runtime across the screening phases. The matrix also checks converged Pc and
+the specified malformed-input/error outcomes. Files named `*-current.log`
+and earlier bring-up logs retain diagnostic history; the table identifies the
+final acceptance evidence.
 
 The **40 distinct `no-aligned-peer` warnings** are audited variable-length
 record sites. Both manifest and artifact checks repeat them. They are not
@@ -124,8 +140,10 @@ Comparisons use TEME/UTC with unchanged bounds **0.010 s / 5 m / 5 m/s**.
 | 47935–49179 | 0.000322 | 0.303 | 0.304 |
 | 48282–58288 | 0.000282 | 0.131 | 0.478708 |
 
-All three events are found with zero extras. The final runtime receipt records
-unrounded values and per-runtime hashes.
+All three events are found with zero extras in every required runtime/worker
+combination. Maximum errors are **0.000724196434 s / 4.177554293 m /
+0.478707505 m/s**. The runtime receipt records unrounded values and per-runtime
+hashes.
 
 Other measured results:
 
@@ -175,6 +193,8 @@ Other measured results:
   Verification supplies a module-local WasmEdge C API host through SDK
   launch plans, implementing the standard
   [instance-per-thread contract](https://github.com/WebAssembly/wasi-threads#detailed-design-discussion).
+  Native threads share the WasmEdge executor so its atomic wait/notify queue is
+  shared; each thread still owns its execution stack and guest instance.
   Browser verification serves the installed SDK worker chain in an isolated
   owner worker. This host support does not change guest bytes or physics;
   adopting it in the shared SDK is upstream debt.

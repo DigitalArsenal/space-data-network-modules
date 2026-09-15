@@ -1,25 +1,25 @@
 {
-  "ok": false,
+  "ok": true,
   "fixture": "CQR-SDS-1.220.0",
   "wasmPath": "/Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/dist/isomorphic/module.wasm",
-  "artifactSha256": "ad7413859d2a9e2360b5517298f50049196187d617c3fa0ebca785db57330919",
-  "moduleSha256": "ad7413859d2a9e2360b5517298f50049196187d617c3fa0ebca785db57330919",
+  "artifactSha256": "7ed526ea5b52954dedf4d49d76be1685bb2419631e7b7f5fe74cb33fc335a747",
+  "moduleSha256": "7ed526ea5b52954dedf4d49d76be1685bb2419631e7b7f5fe74cb33fc335a747",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 44,
-      "durationMs": 7264
+      "durationMs": 7406
     },
     {
       "lane": "wasmedge",
       "runs": 44,
-      "durationMs": 36
+      "durationMs": 154583
     },
     {
       "lane": "docker-wasmedge",
       "runs": 44,
-      "durationMs": 18593
+      "durationMs": 207064
     }
   ],
   "cases": [
@@ -38,453 +38,8 @@
     "invalid-source-date",
     "legacy-json-method"
   ],
-  "comparisons": 65,
-  "failures": [
-    {
-      "caseId": "socrates-workers-1",
-      "kind": "harness-failure",
-      "message": "wasmedge@t1: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "socrates-workers-1",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t1: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "socrates-workers-2",
-      "kind": "harness-failure",
-      "message": "wasmedge@t2: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "socrates-workers-2",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t2: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "socrates-workers-4",
-      "kind": "harness-failure",
-      "message": "wasmedge@t4: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "socrates-workers-4",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t4: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "socrates-workers-8",
-      "kind": "harness-failure",
-      "message": "wasmedge@t8: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "socrates-workers-8",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t8: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "centered-isotropic-pc",
-      "kind": "harness-failure",
-      "message": "wasmedge@t1: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "centered-isotropic-pc",
-      "kind": "harness-failure",
-      "message": "wasmedge@t2: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "centered-isotropic-pc",
-      "kind": "harness-failure",
-      "message": "wasmedge@t4: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "centered-isotropic-pc",
-      "kind": "harness-failure",
-      "message": "wasmedge@t8: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "centered-isotropic-pc",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t1: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "centered-isotropic-pc",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t2: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "centered-isotropic-pc",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t4: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "centered-isotropic-pc",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t8: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "singular-covariance",
-      "kind": "harness-failure",
-      "message": "wasmedge@t1: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "singular-covariance",
-      "kind": "harness-failure",
-      "message": "wasmedge@t2: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "singular-covariance",
-      "kind": "harness-failure",
-      "message": "wasmedge@t4: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "singular-covariance",
-      "kind": "harness-failure",
-      "message": "wasmedge@t8: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "singular-covariance",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t1: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "singular-covariance",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t2: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "singular-covariance",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t4: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "singular-covariance",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t8: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "empty-piv",
-      "kind": "harness-failure",
-      "message": "wasmedge@t1: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "empty-piv",
-      "kind": "harness-failure",
-      "message": "wasmedge@t2: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "empty-piv",
-      "kind": "harness-failure",
-      "message": "wasmedge@t4: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "empty-piv",
-      "kind": "harness-failure",
-      "message": "wasmedge@t8: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "empty-piv",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t1: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "empty-piv",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t2: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "empty-piv",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t4: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "empty-piv",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t8: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "truncated-piv",
-      "kind": "harness-failure",
-      "message": "wasmedge@t1: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "truncated-piv",
-      "kind": "harness-failure",
-      "message": "wasmedge@t2: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "truncated-piv",
-      "kind": "harness-failure",
-      "message": "wasmedge@t4: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "truncated-piv",
-      "kind": "harness-failure",
-      "message": "wasmedge@t8: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "truncated-piv",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t1: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "truncated-piv",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t2: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "truncated-piv",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t4: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "truncated-piv",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t8: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "empty-cqr",
-      "kind": "harness-failure",
-      "message": "wasmedge@t1: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "empty-cqr",
-      "kind": "harness-failure",
-      "message": "wasmedge@t2: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "empty-cqr",
-      "kind": "harness-failure",
-      "message": "wasmedge@t4: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "empty-cqr",
-      "kind": "harness-failure",
-      "message": "wasmedge@t8: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "empty-cqr",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t1: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "empty-cqr",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t2: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "empty-cqr",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t4: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "empty-cqr",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t8: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "ambiguous-cqr",
-      "kind": "harness-failure",
-      "message": "wasmedge@t1: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "ambiguous-cqr",
-      "kind": "harness-failure",
-      "message": "wasmedge@t2: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "ambiguous-cqr",
-      "kind": "harness-failure",
-      "message": "wasmedge@t4: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "ambiguous-cqr",
-      "kind": "harness-failure",
-      "message": "wasmedge@t8: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "ambiguous-cqr",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t1: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "ambiguous-cqr",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t2: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "ambiguous-cqr",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t4: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "ambiguous-cqr",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t8: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "wrong-cqr-arm",
-      "kind": "harness-failure",
-      "message": "wasmedge@t1: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "wrong-cqr-arm",
-      "kind": "harness-failure",
-      "message": "wasmedge@t2: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "wrong-cqr-arm",
-      "kind": "harness-failure",
-      "message": "wasmedge@t4: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "wrong-cqr-arm",
-      "kind": "harness-failure",
-      "message": "wasmedge@t8: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "wrong-cqr-arm",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t1: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "wrong-cqr-arm",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t2: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "wrong-cqr-arm",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t4: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "wrong-cqr-arm",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t8: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "truncated-cqr",
-      "kind": "harness-failure",
-      "message": "wasmedge@t1: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "truncated-cqr",
-      "kind": "harness-failure",
-      "message": "wasmedge@t2: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "truncated-cqr",
-      "kind": "harness-failure",
-      "message": "wasmedge@t4: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "truncated-cqr",
-      "kind": "harness-failure",
-      "message": "wasmedge@t8: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "truncated-cqr",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t1: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "truncated-cqr",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t2: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "truncated-cqr",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t4: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "truncated-cqr",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t8: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "invalid-source-date",
-      "kind": "harness-failure",
-      "message": "wasmedge@t1: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "invalid-source-date",
-      "kind": "harness-failure",
-      "message": "wasmedge@t2: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "invalid-source-date",
-      "kind": "harness-failure",
-      "message": "wasmedge@t4: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "invalid-source-date",
-      "kind": "harness-failure",
-      "message": "wasmedge@t8: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "invalid-source-date",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t1: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "invalid-source-date",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t2: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "invalid-source-date",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t4: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "invalid-source-date",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t8: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "legacy-json-method",
-      "kind": "harness-failure",
-      "message": "wasmedge@t1: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "legacy-json-method",
-      "kind": "harness-failure",
-      "message": "wasmedge@t2: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "legacy-json-method",
-      "kind": "harness-failure",
-      "message": "wasmedge@t4: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "legacy-json-method",
-      "kind": "harness-failure",
-      "message": "wasmedge@t8: PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "legacy-json-method",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t1: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "legacy-json-method",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t2: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "legacy-json-method",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t4: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "caseId": "legacy-json-method",
-      "kind": "harness-failure",
-      "message": "docker-wasmedge@t8: PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
-    },
-    {
-      "kind": "acceptance",
-      "message": "required scientific runs: Every required worker/runtime scientific run must complete\n\n4 !== 12\n"
-    }
-  ],
+  "comparisons": 217,
+  "failures": [],
   "runs": [
     {
       "lane": "browser",
@@ -886,793 +441,793 @@
       "lane": "wasmedge",
       "caseId": "socrates-workers-1",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "stdoutLength": 3192
     },
     {
       "lane": "wasmedge",
       "caseId": "socrates-workers-2",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "stdoutLength": 3192
     },
     {
       "lane": "wasmedge",
       "caseId": "socrates-workers-4",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "stdoutLength": 3192
     },
     {
       "lane": "wasmedge",
       "caseId": "socrates-workers-8",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "stdoutLength": 3192
     },
     {
       "lane": "wasmedge",
       "caseId": "centered-isotropic-pc",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "01ca14d4fcc5af35ec5a2fa42953a40749f7d757ac84b0a0dffc38d3c41dfc33",
+      "stdoutLength": 272
     },
     {
       "lane": "wasmedge",
       "caseId": "centered-isotropic-pc",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "01ca14d4fcc5af35ec5a2fa42953a40749f7d757ac84b0a0dffc38d3c41dfc33",
+      "stdoutLength": 272
     },
     {
       "lane": "wasmedge",
       "caseId": "centered-isotropic-pc",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "01ca14d4fcc5af35ec5a2fa42953a40749f7d757ac84b0a0dffc38d3c41dfc33",
+      "stdoutLength": 272
     },
     {
       "lane": "wasmedge",
       "caseId": "centered-isotropic-pc",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "01ca14d4fcc5af35ec5a2fa42953a40749f7d757ac84b0a0dffc38d3c41dfc33",
+      "stdoutLength": 272
     },
     {
       "lane": "wasmedge",
       "caseId": "singular-covariance",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "19ecf4327b984eb076ccc26fefbab6428d5f67313f7cd3dccf82a3d773825274",
+      "stdoutLength": 184
     },
     {
       "lane": "wasmedge",
       "caseId": "singular-covariance",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "19ecf4327b984eb076ccc26fefbab6428d5f67313f7cd3dccf82a3d773825274",
+      "stdoutLength": 184
     },
     {
       "lane": "wasmedge",
       "caseId": "singular-covariance",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "19ecf4327b984eb076ccc26fefbab6428d5f67313f7cd3dccf82a3d773825274",
+      "stdoutLength": 184
     },
     {
       "lane": "wasmedge",
       "caseId": "singular-covariance",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "19ecf4327b984eb076ccc26fefbab6428d5f67313f7cd3dccf82a3d773825274",
+      "stdoutLength": 184
     },
     {
       "lane": "wasmedge",
       "caseId": "empty-piv",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
+      "stdoutLength": 136
     },
     {
       "lane": "wasmedge",
       "caseId": "empty-piv",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
+      "stdoutLength": 136
     },
     {
       "lane": "wasmedge",
       "caseId": "empty-piv",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
+      "stdoutLength": 136
     },
     {
       "lane": "wasmedge",
       "caseId": "empty-piv",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
+      "stdoutLength": 136
     },
     {
       "lane": "wasmedge",
       "caseId": "truncated-piv",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "9416247a87bff550d0a9b28a3d034a257fb65f75c1f94bf06ee07e450b7d9b4a",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "truncated-piv",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "9416247a87bff550d0a9b28a3d034a257fb65f75c1f94bf06ee07e450b7d9b4a",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "truncated-piv",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "9416247a87bff550d0a9b28a3d034a257fb65f75c1f94bf06ee07e450b7d9b4a",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "truncated-piv",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "9416247a87bff550d0a9b28a3d034a257fb65f75c1f94bf06ee07e450b7d9b4a",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "empty-cqr",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "empty-cqr",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "empty-cqr",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "empty-cqr",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "ambiguous-cqr",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "ambiguous-cqr",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "ambiguous-cqr",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "ambiguous-cqr",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "wrong-cqr-arm",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "wrong-cqr-arm",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "wrong-cqr-arm",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "wrong-cqr-arm",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "truncated-cqr",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "truncated-cqr",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "truncated-cqr",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "truncated-cqr",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "wasmedge",
       "caseId": "invalid-source-date",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "6d5543b46d14e970fba16526cf37a01a5f41a2745f8a05a91f92c472e7591377",
+      "stdoutLength": 136
     },
     {
       "lane": "wasmedge",
       "caseId": "invalid-source-date",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "6d5543b46d14e970fba16526cf37a01a5f41a2745f8a05a91f92c472e7591377",
+      "stdoutLength": 136
     },
     {
       "lane": "wasmedge",
       "caseId": "invalid-source-date",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "6d5543b46d14e970fba16526cf37a01a5f41a2745f8a05a91f92c472e7591377",
+      "stdoutLength": 136
     },
     {
       "lane": "wasmedge",
       "caseId": "invalid-source-date",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "6d5543b46d14e970fba16526cf37a01a5f41a2745f8a05a91f92c472e7591377",
+      "stdoutLength": 136
     },
     {
       "lane": "wasmedge",
       "caseId": "legacy-json-method",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "670c758c87f0b3fed7d89ea430b1d3be17f39364d766d1c0f3dfb5fe9fef7bfe",
+      "stdoutLength": 128
     },
     {
       "lane": "wasmedge",
       "caseId": "legacy-json-method",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "670c758c87f0b3fed7d89ea430b1d3be17f39364d766d1c0f3dfb5fe9fef7bfe",
+      "stdoutLength": 128
     },
     {
       "lane": "wasmedge",
       "caseId": "legacy-json-method",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "670c758c87f0b3fed7d89ea430b1d3be17f39364d766d1c0f3dfb5fe9fef7bfe",
+      "stdoutLength": 128
     },
     {
       "lane": "wasmedge",
       "caseId": "legacy-json-method",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "670c758c87f0b3fed7d89ea430b1d3be17f39364d766d1c0f3dfb5fe9fef7bfe",
+      "stdoutLength": 128
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "socrates-workers-1",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "stdoutLength": 3192
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "socrates-workers-2",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "stdoutLength": 3192
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "socrates-workers-4",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "stdoutLength": 3192
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "socrates-workers-8",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "stdoutLength": 3192
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "centered-isotropic-pc",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "01ca14d4fcc5af35ec5a2fa42953a40749f7d757ac84b0a0dffc38d3c41dfc33",
+      "stdoutLength": 272
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "centered-isotropic-pc",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "01ca14d4fcc5af35ec5a2fa42953a40749f7d757ac84b0a0dffc38d3c41dfc33",
+      "stdoutLength": 272
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "centered-isotropic-pc",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "01ca14d4fcc5af35ec5a2fa42953a40749f7d757ac84b0a0dffc38d3c41dfc33",
+      "stdoutLength": 272
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "centered-isotropic-pc",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "01ca14d4fcc5af35ec5a2fa42953a40749f7d757ac84b0a0dffc38d3c41dfc33",
+      "stdoutLength": 272
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "singular-covariance",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "19ecf4327b984eb076ccc26fefbab6428d5f67313f7cd3dccf82a3d773825274",
+      "stdoutLength": 184
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "singular-covariance",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "19ecf4327b984eb076ccc26fefbab6428d5f67313f7cd3dccf82a3d773825274",
+      "stdoutLength": 184
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "singular-covariance",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "19ecf4327b984eb076ccc26fefbab6428d5f67313f7cd3dccf82a3d773825274",
+      "stdoutLength": 184
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "singular-covariance",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "19ecf4327b984eb076ccc26fefbab6428d5f67313f7cd3dccf82a3d773825274",
+      "stdoutLength": 184
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "empty-piv",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
+      "stdoutLength": 136
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "empty-piv",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
+      "stdoutLength": 136
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "empty-piv",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
+      "stdoutLength": 136
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "empty-piv",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "d7044b88769783badcc29621555924c5490798efc924508aa52c45199995ae2f",
+      "stdoutLength": 136
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "truncated-piv",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "9416247a87bff550d0a9b28a3d034a257fb65f75c1f94bf06ee07e450b7d9b4a",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "truncated-piv",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "9416247a87bff550d0a9b28a3d034a257fb65f75c1f94bf06ee07e450b7d9b4a",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "truncated-piv",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "9416247a87bff550d0a9b28a3d034a257fb65f75c1f94bf06ee07e450b7d9b4a",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "truncated-piv",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "9416247a87bff550d0a9b28a3d034a257fb65f75c1f94bf06ee07e450b7d9b4a",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "empty-cqr",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "empty-cqr",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "empty-cqr",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "empty-cqr",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "ambiguous-cqr",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "ambiguous-cqr",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "ambiguous-cqr",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "ambiguous-cqr",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "wrong-cqr-arm",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "wrong-cqr-arm",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "wrong-cqr-arm",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "wrong-cqr-arm",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "truncated-cqr",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "truncated-cqr",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "truncated-cqr",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "truncated-cqr",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "invalid-source-date",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "6d5543b46d14e970fba16526cf37a01a5f41a2745f8a05a91f92c472e7591377",
+      "stdoutLength": 136
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "invalid-source-date",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "6d5543b46d14e970fba16526cf37a01a5f41a2745f8a05a91f92c472e7591377",
+      "stdoutLength": 136
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "invalid-source-date",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "6d5543b46d14e970fba16526cf37a01a5f41a2745f8a05a91f92c472e7591377",
+      "stdoutLength": 136
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "invalid-source-date",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "6d5543b46d14e970fba16526cf37a01a5f41a2745f8a05a91f92c472e7591377",
+      "stdoutLength": 136
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "legacy-json-method",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "670c758c87f0b3fed7d89ea430b1d3be17f39364d766d1c0f3dfb5fe9fef7bfe",
+      "stdoutLength": 128
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "legacy-json-method",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "670c758c87f0b3fed7d89ea430b1d3be17f39364d766d1c0f3dfb5fe9fef7bfe",
+      "stdoutLength": 128
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "legacy-json-method",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "670c758c87f0b3fed7d89ea430b1d3be17f39364d766d1c0f3dfb5fe9fef7bfe",
+      "stdoutLength": 128
     },
     {
       "lane": "docker-wasmedge",
       "caseId": "legacy-json-method",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "PARITY PIN-DRIFT (docker-wasmedge standard WASI threads host): could not parse a WasmEdge version from: \u0010\u0000\u0000\u0000$PIV\b\u0000\b\u0000\u0000\u0000\u0004\u0000\b\u0000\u0000\u0000\u0018\u0000\u0000\u0000\u0014\u0000\u001c\u0000\u0004\u0000\b\u0000\u0000\u0000\u0000\u0000\f\u0000\u0010\u0000\u0014\u0000\u0018\u0000\u0014\u0000\u0000\u0000�\u0001\u0000\u0000\u0003\u0000\u0000\u0000L\u0000\u0000\u0000D\u0000\u0000\u0000,\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u001f\u0000\u0000\u0000Invoke request bytes are empty.\u0000\u000f\u0000\u0000\u0000invalid-request\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "670c758c87f0b3fed7d89ea430b1d3be17f39364d766d1c0f3dfb5fe9fef7bfe",
+      "stdoutLength": 128
     }
   ],
   "classifications": [
@@ -2091,6 +1646,838 @@
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
       "stderr": ""
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "socrates-workers-1",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "socrates-workers-2",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=4\n",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "socrates-workers-4",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=8\n",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "socrates-workers-8",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=14\n",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "singular-covariance",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-covariance"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "singular-covariance",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-covariance"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "singular-covariance",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-covariance"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "singular-covariance",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-covariance"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-piv",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-piv",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-piv",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-piv",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-cqr",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-cqr",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-cqr",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-cqr",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ambiguous-cqr",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ambiguous-cqr",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ambiguous-cqr",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ambiguous-cqr",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-cqr",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-cqr",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-cqr",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-cqr",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "invalid-source-date",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-source"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "invalid-source-date",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-source"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "invalid-source-date",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-source"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "invalid-source-date",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-source"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "legacy-json-method",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "legacy-json-method",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "legacy-json-method",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "legacy-json-method",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "socrates-workers-1",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "socrates-workers-2",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=4\n",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "socrates-workers-4",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=8\n",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "socrates-workers-8",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=14\n",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "singular-covariance",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-covariance"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "singular-covariance",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-covariance"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "singular-covariance",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-covariance"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "singular-covariance",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-covariance"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-piv",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-piv",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-piv",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-piv",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-cqr",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-cqr",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-cqr",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-cqr",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "ambiguous-cqr",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "ambiguous-cqr",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "ambiguous-cqr",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "ambiguous-cqr",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-cqr",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-cqr",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-cqr",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-cqr",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "invalid-source-date",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-source"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "invalid-source-date",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-source"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "invalid-source-date",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-source"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "invalid-source-date",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "wasi-thread-spawn count=0\n",
+      "statusCode": 400,
+      "errorCode": "invalid-source"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "legacy-json-method",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "legacy-json-method",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "legacy-json-method",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "legacy-json-method",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "wasi-thread-spawn count=0\n"
     }
   ],
   "threadEvidence": [
@@ -2117,6 +2504,46 @@
       "workers": 8,
       "spawnCount": 14,
       "hardwareConcurrency": 28
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 1,
+      "spawnCount": 0
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 2,
+      "spawnCount": 4
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 4,
+      "spawnCount": 8
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 8,
+      "spawnCount": 14
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 1,
+      "spawnCount": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 2,
+      "spawnCount": 4
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 4,
+      "spawnCount": 8
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 8,
+      "spawnCount": 14
     }
   ],
   "provenance": {
@@ -2232,6 +2659,230 @@
     },
     {
       "lane": "browser",
+      "workers": 8,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 1,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 2,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 4,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 8,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 1,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 2,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 4,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "docker-wasmedge",
       "workers": 8,
       "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
       "deltas": [

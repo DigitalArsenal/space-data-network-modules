@@ -89,3 +89,452 @@ wasmedge: legacy-json-method / workers 8
 docker-wasmedge: socrates-workers-1 / workers 1
 docker-wasmedge: socrates-workers-2 / workers 2
 docker-wasmedge: socrates-workers-4 / workers 4
+docker-wasmedge: socrates-workers-8 / workers 8
+docker-wasmedge: centered-isotropic-pc / workers 1
+docker-wasmedge: centered-isotropic-pc / workers 2
+docker-wasmedge: centered-isotropic-pc / workers 4
+docker-wasmedge: centered-isotropic-pc / workers 8
+docker-wasmedge: singular-covariance / workers 1
+docker-wasmedge: singular-covariance / workers 2
+docker-wasmedge: singular-covariance / workers 4
+docker-wasmedge: singular-covariance / workers 8
+docker-wasmedge: empty-piv / workers 1
+docker-wasmedge: empty-piv / workers 2
+docker-wasmedge: empty-piv / workers 4
+docker-wasmedge: empty-piv / workers 8
+docker-wasmedge: truncated-piv / workers 1
+docker-wasmedge: truncated-piv / workers 2
+docker-wasmedge: truncated-piv / workers 4
+docker-wasmedge: truncated-piv / workers 8
+docker-wasmedge: empty-cqr / workers 1
+docker-wasmedge: empty-cqr / workers 2
+docker-wasmedge: empty-cqr / workers 4
+docker-wasmedge: empty-cqr / workers 8
+docker-wasmedge: ambiguous-cqr / workers 1
+docker-wasmedge: ambiguous-cqr / workers 2
+docker-wasmedge: ambiguous-cqr / workers 4
+docker-wasmedge: ambiguous-cqr / workers 8
+docker-wasmedge: wrong-cqr-arm / workers 1
+docker-wasmedge: wrong-cqr-arm / workers 2
+docker-wasmedge: wrong-cqr-arm / workers 4
+docker-wasmedge: wrong-cqr-arm / workers 8
+docker-wasmedge: truncated-cqr / workers 1
+docker-wasmedge: truncated-cqr / workers 2
+docker-wasmedge: truncated-cqr / workers 4
+docker-wasmedge: truncated-cqr / workers 8
+docker-wasmedge: invalid-source-date / workers 1
+docker-wasmedge: invalid-source-date / workers 2
+docker-wasmedge: invalid-source-date / workers 4
+docker-wasmedge: invalid-source-date / workers 8
+docker-wasmedge: legacy-json-method / workers 1
+docker-wasmedge: legacy-json-method / workers 2
+docker-wasmedge: legacy-json-method / workers 4
+docker-wasmedge: legacy-json-method / workers 8
+parity PASS fixture=CQR-SDS-1.220.0 module=7ed526ea5b52954d lanes=[browser(44 runs, 7406ms), wasmedge(44 runs, 154583ms), docker-wasmedge(44 runs, 207064ms)] comparisons=217
+  14 case(s) byte-identical across 3 lane(s).
+{
+  "numerical": [
+    {
+      "lane": "browser",
+      "workers": 1,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "browser",
+      "workers": 2,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "browser",
+      "workers": 4,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "browser",
+      "workers": 8,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 1,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 2,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 4,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 8,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 1,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 2,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 4,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 8,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    }
+  ],
+  "threadEvidence": [
+    {
+      "lane": "browser",
+      "workers": 1,
+      "spawnCount": 0,
+      "hardwareConcurrency": 28
+    },
+    {
+      "lane": "browser",
+      "workers": 2,
+      "spawnCount": 4,
+      "hardwareConcurrency": 28
+    },
+    {
+      "lane": "browser",
+      "workers": 4,
+      "spawnCount": 8,
+      "hardwareConcurrency": 28
+    },
+    {
+      "lane": "browser",
+      "workers": 8,
+      "spawnCount": 14,
+      "hardwareConcurrency": 28
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 1,
+      "spawnCount": 0
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 2,
+      "spawnCount": 4
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 4,
+      "spawnCount": 8
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 8,
+      "spawnCount": 14
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 1,
+      "spawnCount": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 2,
+      "spawnCount": 4
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 4,
+      "spawnCount": 8
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 8,
+      "spawnCount": 14
+    }
+  ]
+}
