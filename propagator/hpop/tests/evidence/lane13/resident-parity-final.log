@@ -1,0 +1,4 @@
+resident stateful browser: 20 responses
+resident stateful wasmedge: 20 responses
+resident stateful docker-wasmedge: 20 responses
+PASS persistent resident parity: 20 requests x 3 runtimes, exact bytes/classifications; SHA256=7305c5ef6db04cfb5babc4f2c5f87b17b1e5901e4c14bd25cf9ca7b14b7b48b1

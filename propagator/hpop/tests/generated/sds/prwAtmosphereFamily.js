@@ -1,0 +1,8 @@
+export var prwAtmosphereFamily = /*#__PURE__*/ function(prwAtmosphereFamily) {
+    prwAtmosphereFamily[prwAtmosphereFamily["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+    prwAtmosphereFamily[prwAtmosphereFamily["NRLMSISE00"] = 1] = "NRLMSISE00";
+    prwAtmosphereFamily[prwAtmosphereFamily["EXPONENTIAL"] = 2] = "EXPONENTIAL";
+    prwAtmosphereFamily[prwAtmosphereFamily["USSA1976"] = 3] = "USSA1976";
+    prwAtmosphereFamily[prwAtmosphereFamily["HARRIS_PRIESTER"] = 4] = "HARRIS_PRIESTER";
+    return prwAtmosphereFamily;
+}({});

@@ -11,6 +11,9 @@
 // PropagatedPositionProperty can swap propagator backends transparently.
 // =============================================================================
 
+#include "cpp/include/hpop/prw_resident.h"
+#include "cpp/include/hpop/prw_codec.h"
+
 #include "../lib/astrodynamics_types.h"
 #include "../lib/astrodynamics.h"
 #include "../lib/integrators.h"
@@ -61,6 +64,8 @@ static std::string g_predictionDetail;
 
 // Incremented on any config change to invalidate per-entity caches.
 static uint32_t g_configVersion = 0;
+// Catalog replacement invalidates portable handles even through diagnostic APIs.
+static uint64_t g_catalogRevision = 0;
 
 // =============================================================================
 // Per-Entity Chebyshev Ephemeris
@@ -977,6 +982,7 @@ extern "C" {
 
 /// Initialize the HPOP module with default configuration.
 int plugin_init() {
+    ++g_catalogRevision;
     g_integratorConfig.method = IntegrationMethod::RK78;
     g_integratorConfig.initialStep = 60.0;
     g_integratorConfig.minStep = 0.01;
@@ -1033,6 +1039,7 @@ int plugin_init() {
 /// Analogous to SGP4's plugin_init_omm.
 /// Returns entity count on success.
 int plugin_init_states(double* statesPtr, int count) {
+    ++g_catalogRevision;
     // Free existing ephemeris/burn/arc memory before reinitializing
     for (int i = 0; i < g_entityCount; i++) {
         g_entities[i].ephemeris.destroy();
@@ -1063,7 +1070,7 @@ int plugin_init_states(double* statesPtr, int count) {
         entity.initialState.velocity.y = s[5];
         entity.initialState.velocity.z = s[6];
 
-        // A zero seed denotes an invalid/decayed catalogue row, not an orbit.
+        // A zero seed denotes an invalid/decayed catalog row, not an orbit.
         // Preserve its index but never integrate it or derive orbital elements.
         entity.valid = s[0] > 0.0 && (s[1] != 0.0 || s[2] != 0.0 || s[3] != 0.0);
         entity.orbitalPeriodMin = 0.0;
@@ -1447,6 +1454,7 @@ void plugin_set_ephemeris_retention(double behindDays) {
 /// Enable/disable per-entity segment-grid stagger (default: disabled).
 /// Must be set before an entity's first coverage build to take effect.
 void plugin_set_grid_stagger(int enabled) {
+    if (g_gridStagger != (enabled != 0)) ++g_catalogRevision;
     g_gridStagger = enabled != 0;
 }
 
@@ -2276,6 +2284,7 @@ int plugin_get_acceleration_breakdown_v2(double jd, double* outPtr, int len) {
 /// Replaces any existing burns. Builds arc structure for arc-aware propagation.
 void plugin_set_burns(int entityIndex, double* burnsPtr, int count) {
     if (entityIndex < 0 || entityIndex >= g_entityCount || count <= 0) return;
+    ++g_catalogRevision;
     HPOPEntity& entity = g_entities[entityIndex];
 
     // Free existing burns/arcs
@@ -2337,6 +2346,7 @@ void plugin_set_burns(int entityIndex, double* burnsPtr, int count) {
 /// Clear all burns for an entity, reverting to single-arc propagation.
 void plugin_clear_burns(int entityIndex) {
     if (entityIndex < 0 || entityIndex >= g_entityCount) return;
+    ++g_catalogRevision;
     HPOPEntity& entity = g_entities[entityIndex];
 
     if (entity.arcs) {
@@ -2965,6 +2975,7 @@ uint8_t* plugin_stream_invoke(
 // -----------------------------------------------------------------------------
 
 void plugin_destroy() {
+    ++g_catalogRevision;
     // Free ephemeris/burn/arc memory and clear entities
     for (int i = 0; i < g_entityCount; i++) {
         g_entities[i].ephemeris.destroy();
@@ -3000,3 +3011,364 @@ void plugin_destroy() {
 }
 
 } // extern "C"
+
+// =============================================================================
+// Canonical SDS 1.220 PRW resident adapters
+// =============================================================================
+// The legacy C diagnostics above remain available for historical numerical
+// evidence. Public PIV methods enter here and use the same C++ state/cache
+// implementation directly, never the private StreamInvoke memory-pointer wire.
+#include <limits>
+#include <unordered_set>
+
+namespace hpop {
+namespace {
+struct ResidentIdentity {
+    uint32_t handle;
+    uint32_t catalogNumber;
+    std::string objectId;
+    bool valid;
+};
+struct PortableSegmentSet {
+    uint64_t generation;
+    uint32_t configVersion;
+    double startTdbJD;
+    double endTdbJD;
+    std::vector<uint32_t> handles;
+};
+struct ResidentContinuation {
+    std::string method;
+    std::vector<uint8_t> request;
+    size_t offset = 0;
+};
+static std::unique_ptr<PRWInstanceT> prwInstance;
+static std::vector<ResidentIdentity> prwIdentities;
+static std::unordered_map<uint32_t, size_t> prwSlots;
+static std::unordered_map<std::string, uint64_t> prwSeenGenerations;
+static std::unordered_map<uint32_t, PortableSegmentSet> prwSegmentSets;
+static uint32_t prwNextSegmentSet = 1;
+static uint32_t prwConfigVersion = 0;
+static uint64_t prwCatalogRevision = 0;
+static ResidentContinuation prwContinuation;
+
+bool residentFailure(std::string& error, const char* classification, const char* detail) {
+    error = std::string(classification) + ": " + detail;
+    return false;
+}
+bool sameInstance(const PRWInstance* instance, std::string& error) {
+    if (!instance || !instance->MODULE_ID() || !instance->INSTANCE_ID() ||
+        instance->MODULE_ID()->str() != "com.orbpro.hpop" || instance->INSTANCE_ID()->str().empty())
+        return residentFailure(error, "invalid-instance", "Explicit HPOP module and host instance identity required.");
+    if (!prwInstance || !g_initialized || g_configVersion != prwConfigVersion ||
+        g_catalogRevision != prwCatalogRevision ||
+        instance->MODULE_ID()->str() != prwInstance->MODULE_ID ||
+        instance->INSTANCE_ID()->str() != prwInstance->INSTANCE_ID ||
+        instance->GENERATION() != prwInstance->GENERATION)
+        return residentFailure(error, "stale-instance", "Instance or generation does not identify the current resident catalog.");
+    return true;
+}
+std::vector<uint8_t> residentBytes(const PRWT& root) {
+    flatbuffers::FlatBufferBuilder builder;
+    const auto value = PRW::Pack(builder, &root);
+    FinishSizePrefixedPRWBuffer(builder, value);
+    return {builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize()};
+}
+bool finiteSegment(const ChebyshevSegment& segment) {
+    const double* axes[] = {segment.cx, segment.cy, segment.cz,
+                            segment.cvx, segment.cvy, segment.cvz};
+    for (const auto* axis : axes)
+        for (int i = 0; i < CHEBY_NPTS; ++i)
+            if (!std::isfinite(axis[i])) return false;
+    return std::isfinite(segment.startJD) && std::isfinite(segment.endJD) &&
+           segment.endJD > segment.startJD;
+}
+std::unique_ptr<PRWFitQualityT> unmeasuredQuality() {
+    auto result = std::make_unique<PRWFitQualityT>();
+    result->EVIDENCE_KIND = prwQualityEvidence::UNMEASURED;
+    return result;
+}
+bool selectResidentHandles(const flatbuffers::Vector<uint32_t>* handles,
+                           std::vector<uint32_t>& selected, std::string& error) {
+    if (handles && handles->size()) selected.assign(handles->begin(), handles->end());
+    else for (const auto& identity : prwIdentities) selected.push_back(identity.handle);
+    if (selected.empty()) return residentFailure(error, "invalid-state", "Resident catalog is empty.");
+    std::unordered_set<uint32_t> seen;
+    for (const auto handle : selected) {
+        const auto slot = prwSlots.find(handle);
+        if (slot == prwSlots.end()) return residentFailure(error, "unknown-entity", "Unknown resident entity handle.");
+        if (!seen.insert(handle).second) return residentFailure(error, "invalid-request", "Duplicate resident entity handle.");
+        if (!prwIdentities[slot->second].valid || !g_entities[slot->second].valid)
+            return residentFailure(error, "invalid-state", "Selected resident state has VALID=false.");
+    }
+    return true;
+}
+size_t continuationOffset(const std::string& method, const uint8_t* data, size_t size) {
+    if (prwContinuation.method != method || prwContinuation.request.size() != size ||
+        !std::equal(prwContinuation.request.begin(), prwContinuation.request.end(), data)) {
+        prwContinuation.method = method;
+        prwContinuation.request.assign(data, data + size);
+        prwContinuation.offset = 0;
+    }
+    return prwContinuation.offset;
+}
+void setContinuation(size_t next, size_t total, uint64_t& backlog, bool& yielded) {
+    backlog = total - next;
+    yielded = backlog != 0;
+    if (yielded) prwContinuation.offset = next;
+    else prwContinuation = {};
+}
+
+bool ingestPortable(const std::vector<std::pair<const uint8_t*, size_t>>& inputs,
+                    std::string& error) {
+    if (inputs.empty() || inputs.size() > 1024)
+        return residentFailure(error, "invalid-request", "ingest_state requires 1..1024 state frames.");
+    std::unique_ptr<PRWInstanceT> incomingInstance;
+    std::vector<ResidentIdentity> identities;
+    std::unordered_map<uint32_t, size_t> slots;
+    std::vector<double> states;
+    states.reserve(inputs.size() * 7);
+    // Validate the entire replacement before touching the resident catalog.
+    for (const auto& input : inputs) {
+        const PRW* root = nullptr;
+        if (!verifyPrw(input.first, input.second, root, error)) return false;
+        const auto* record = root->RESIDENT_STATE();
+        if (!record) return residentFailure(error, "method-arm-mismatch", "ingest_state requires RESIDENT_STATE.");
+        const auto* instance = record->INSTANCE();
+        if (!instance || !instance->MODULE_ID() || !instance->INSTANCE_ID() ||
+            instance->MODULE_ID()->str() != "com.orbpro.hpop" || instance->INSTANCE_ID()->str().empty())
+            return residentFailure(error, "invalid-instance", "Each resident state requires explicit HPOP instance identity.");
+        if (!incomingInstance) incomingInstance.reset(instance->UnPack());
+        if (incomingInstance->MODULE_ID != instance->MODULE_ID()->str() ||
+            incomingInstance->INSTANCE_ID != instance->INSTANCE_ID()->str() ||
+            incomingInstance->GENERATION != instance->GENERATION())
+            return residentFailure(error, "invalid-instance", "Ingest frames must share one instance and generation.");
+        if (record->COVARIANCE() || record->HAS_MASS_KG() || record->MASS_KG() != 0 ||
+            record->DRAG_AREA_OVER_MASS_M2_KG() != 0 || record->SRP_AREA_OVER_MASS_M2_KG() != 0 ||
+            record->HAS_DRAG_AREA_OVER_MASS_M2_KG() || record->HAS_SRP_AREA_OVER_MASS_M2_KG())
+            return residentFailure(error, "unsupported-configuration", "Resident catalog does not propagate covariance, mass, or per-object force coefficients; use EXECUTION_REQUEST.");
+        if (!slots.emplace(record->ENTITY_HANDLE(), identities.size()).second)
+            return residentFailure(error, "invalid-request", "Ingest entity handles must be unique.");
+        astro::StateVector state;
+        if (!decodeResidentState(record, state, error)) return false;
+        if (record->STATE()->GRAVITATIONAL_PARAMETER() != 0)
+            return residentFailure(error, "unsupported-configuration", "Resident ingest cannot select a per-object gravitational parameter.");
+        const double radius = vecNorm(state.position);
+        if (record->VALID() && (!(radius > 0) || !std::isfinite(radius)))
+            return residentFailure(error, "invalid-state", "A valid resident state requires finite nonzero position magnitude.");
+        states.insert(states.end(), {state.epoch, state.position.x, state.position.y,
+            state.position.z, state.velocity.x, state.velocity.y, state.velocity.z});
+        identities.push_back({record->ENTITY_HANDLE(), record->CATALOG_NUMBER(),
+            record->OBJECT_ID() ? record->OBJECT_ID()->str() : std::string(), record->VALID()});
+    }
+    const std::string instanceKey = incomingInstance->MODULE_ID + "/" + incomingInstance->INSTANCE_ID;
+    const auto seen = prwSeenGenerations.find(instanceKey);
+    if (seen != prwSeenGenerations.end() && incomingInstance->GENERATION <= seen->second)
+        return residentFailure(error, "stale-instance", "Reingest requires a strictly greater host generation.");
+    if (!g_initialized && plugin_init() != 0)
+        return residentFailure(error, "initialization-failed", "HPOP initialization failed.");
+    if (plugin_init_states(states.data(), static_cast<int>(identities.size())) != static_cast<int>(identities.size()))
+        return residentFailure(error, "initialization-failed", "HPOP resident initialization failed.");
+    for (size_t i = 0; i < identities.size(); ++i) {
+        g_entities[i].valid = identities[i].valid;
+        g_entityCatalogNumbers[i] = identities[i].catalogNumber;
+    }
+    prwSeenGenerations[instanceKey] = incomingInstance->GENERATION;
+    prwInstance = std::move(incomingInstance);
+    prwIdentities = std::move(identities);
+    prwSlots = std::move(slots);
+    prwConfigVersion = g_configVersion;
+    prwCatalogRevision = g_catalogRevision;
+    prwSegmentSets.clear();
+    prwContinuation = {};
+    return true;
+}
+
+bool propagatePortable(const PRWResidentRequest* request, const uint8_t* data, size_t size,
+                       uint32_t outputCap, std::vector<std::vector<uint8_t>>& outputs,
+                       uint64_t& backlog, bool& yielded, std::string& error) {
+    if (!sameInstance(request->INSTANCE(), error)) return false;
+    double targetTdb, targetUtc;
+    coords::Frame targetFrame;
+    if (!decodeEpoch(request->TARGET_EPOCH(), targetTdb, targetUtc, error) ||
+        !decodeFrame(request->TARGET_COORDINATE_SYSTEM(), targetFrame, error)) return false;
+    if (targetFrame != coords::Frame::GCRF)
+        return residentFailure(error, "unsupported-configuration", "Resident output requires an Earth-centered GCRF coordinate system.");
+    std::vector<uint32_t> selected;
+    if (!selectResidentHandles(request->ENTITY_HANDLES(), selected, error)) return false;
+    if (request->MAXIMUM_COUNT() && selected.size() > request->MAXIMUM_COUNT()) selected.resize(request->MAXIMUM_COUNT());
+    const size_t offset = continuationOffset("propagate_state", data, size);
+    const size_t stop = std::min(selected.size(), offset + static_cast<size_t>(outputCap ? outputCap : 1));
+    for (size_t i = offset; i < stop; ++i) {
+        const auto slot = prwSlots.at(selected[i]);
+        // Preserve the supplied state exactly at its seed epoch; do not replace
+        // it with a fitted polynomial evaluation on the zero-duration path.
+        const auto& initial = g_entities[slot].initialState;
+        auto state = targetTdb == initial.epoch ? initial : propagateEntity(static_cast<int>(slot), targetTdb);
+        if (!std::isfinite(state.position.x) || !std::isfinite(state.position.y) || !std::isfinite(state.position.z) ||
+            !std::isfinite(state.velocity.x) || !std::isfinite(state.velocity.y) || !std::isfinite(state.velocity.z))
+            return residentFailure(error, "propagation-failed", "Resident propagation produced a non-finite state.");
+        auto frame = makeFrame("GCRF", rfmAxisType::ICRF, 399);
+        PRWT result;
+        result.RESIDENT_STATE = makeState(state, *frame);
+        result.RESIDENT_STATE->INSTANCE = std::make_unique<PRWInstanceT>(*prwInstance);
+        result.RESIDENT_STATE->ENTITY_HANDLE = prwIdentities[slot].handle;
+        result.RESIDENT_STATE->CATALOG_NUMBER = prwIdentities[slot].catalogNumber;
+        result.RESIDENT_STATE->OBJECT_ID = prwIdentities[slot].objectId;
+        result.RESIDENT_STATE->VALID = true;
+        outputs.push_back(residentBytes(result));
+    }
+    setContinuation(stop, selected.size(), backlog, yielded);
+    return true;
+}
+
+bool preparePortable(const PRWPrepareRequest* request, std::vector<std::vector<uint8_t>>& outputs,
+                     std::string& error) {
+    if (!sameInstance(request->INSTANCE(), error)) return false;
+    if (request->CATALOG_HANDLE() != 0)
+        return residentFailure(error, "unsupported-configuration", "Only catalog handle 0 (the current resident instance) is supported.");
+    const auto profile = request->PROFILE() ? request->PROFILE()->str() : std::string();
+    if (!profile.empty() && profile != "conjunction-screening" && profile != "default")
+        return residentFailure(error, "unsupported-configuration", "Unknown trajectory profile.");
+    double startTdb, startUtc;
+    if (!decodeEpoch(request->START_EPOCH(), startTdb, startUtc, error)) return false;
+    const double duration = request->DURATION_SECONDS();
+    if (!std::isfinite(duration) || duration < 0 || duration > (CHEBY_MAX_SEGMENTS - 2) * CHEBY_SEG_SEC)
+        return residentFailure(error, "invalid-window", "Trajectory duration exceeds finite non-negative resident cache coverage.");
+    std::vector<uint32_t> selected;
+    if (!selectResidentHandles(request->SOURCE_HANDLES(), selected, error)) return false;
+    const double endTdb = startTdb + duration / DAY_SEC;
+    for (const auto handle : selected) {
+        auto& entity = g_entities[prwSlots.at(handle)];
+        if (entity.arcCount)
+            return residentFailure(error, "unsupported-configuration", "Arc-mutated diagnostic catalogs cannot export portable segments.");
+        ensureChebyshevEphemeris(entity, startTdb);
+        ensureChebyshevEphemeris(entity, endTdb);
+        int first = -1, last = -1;
+        if (!lookupCoveredSegment(entity.ephemeris, startTdb, first) ||
+            !lookupCoveredSegment(entity.ephemeris, endTdb, last))
+            return residentFailure(error, "coverage-incomplete", "Resident cache does not cover the requested interval.");
+        for (int i = first; i <= last; ++i)
+            if (!finiteSegment(entity.ephemeris.segments[i]))
+                return residentFailure(error, "propagation-failed", "Trajectory fitting produced non-finite coefficients.");
+    }
+    if (prwNextSegmentSet == 0)
+        return residentFailure(error, "handle-exhausted", "Resident segment handle space exhausted; create a new module instance.");
+    const uint32_t handle = prwNextSegmentSet++;
+    prwSegmentSets.emplace(handle, PortableSegmentSet{prwInstance->GENERATION, g_configVersion, startTdb, endTdb, selected});
+    prwContinuation = {};
+    PRWT result;
+    result.PREPARE_RESULT = std::make_unique<PRWPrepareResultT>();
+    result.PREPARE_RESULT->INSTANCE = std::make_unique<PRWInstanceT>(*prwInstance);
+    result.PREPARE_RESULT->SEGMENT_SET_HANDLE = handle;
+    result.PREPARE_RESULT->COVERAGE_COMPLETE = true;
+    result.PREPARE_RESULT->QUALITY = unmeasuredQuality();
+    outputs.push_back(residentBytes(result));
+    return true;
+}
+
+bool describePortable(const PRWDescribeRequest* request, const uint8_t* data, size_t size,
+                      uint32_t outputCap, std::vector<std::vector<uint8_t>>& outputs,
+                      uint64_t& backlog, bool& yielded, std::string& error) {
+    if (!sameInstance(request->INSTANCE(), error)) return false;
+    const auto entry = prwSegmentSets.find(request->SEGMENT_SET_HANDLE());
+    if (entry == prwSegmentSets.end() || entry->second.generation != prwInstance->GENERATION ||
+        entry->second.configVersion != g_configVersion)
+        return residentFailure(error, "stale-handle", "Unknown or invalidated trajectory segment handle.");
+    const auto& prepared = entry->second;
+    std::vector<uint32_t> selected;
+    if (request->SOURCE_HANDLES() && request->SOURCE_HANDLES()->size()) {
+        selected.assign(request->SOURCE_HANDLES()->begin(), request->SOURCE_HANDLES()->end());
+        std::unordered_set<uint32_t> seen;
+        for (const auto handle : selected) {
+            if (std::find(prepared.handles.begin(), prepared.handles.end(), handle) == prepared.handles.end())
+                return residentFailure(error, "unknown-entity", "Source does not belong to the prepared segment set.");
+            if (!seen.insert(handle).second)
+                return residentFailure(error, "invalid-request", "Duplicate trajectory source handle.");
+        }
+    } else selected = prepared.handles;
+    const size_t offset = continuationOffset("describe_trajectory_segments", data, size);
+    const size_t stop = std::min(selected.size(), offset + static_cast<size_t>(outputCap ? outputCap : 1));
+    for (size_t i = offset; i < stop; ++i) {
+        const auto slot = prwSlots.at(selected[i]);
+        auto& entity = g_entities[slot];
+        // Cache movement after prepare may prune a window. Restore it through
+        // the same C++ fitter, and fail rather than exporting partial coverage.
+        ensureChebyshevEphemeris(entity, prepared.startTdbJD);
+        ensureChebyshevEphemeris(entity, prepared.endTdbJD);
+        int first = -1, last = -1;
+        if (!lookupCoveredSegment(entity.ephemeris, prepared.startTdbJD, first) ||
+            !lookupCoveredSegment(entity.ephemeris, prepared.endTdbJD, last))
+            return residentFailure(error, "coverage-incomplete", "Prepared trajectory coverage is unavailable.");
+        auto source = std::make_unique<PRWTrajectorySourceT>();
+        source->SOURCE_HANDLE = selected[i];
+        source->OBJECT_ID = prwIdentities[slot].objectId;
+        source->EPHEMERIS = std::make_unique<PPET>();
+        auto& ephemeris = *source->EPHEMERIS;
+        ephemeris.CENTER_NAME = "EARTH";
+        ephemeris.TIME_SYSTEM = timingStandard::TDB;
+        ephemeris.REFERENCE_FRAME = std::make_unique<RFMT>();
+        ephemeris.REFERENCE_FRAME->NAME = "GCRF";
+        RFMCoordinateSystemWrapperT frameWrapper;
+        frameWrapper.COORDINATE_SYSTEM = makeFrame("GCRF", rfmAxisType::ICRF, 399);
+        ephemeris.REFERENCE_FRAME->REFERENCE_FRAME.Set(std::move(frameWrapper));
+        ephemeris.EPHEMERIS_SOURCE = "com.orbpro.hpop@1.0.0";
+        ephemeris.NOMINAL_SEGMENT_SPAN = CHEBY_SEG_SEC;
+        ephemeris.NOMINAL_NUM_COEFFICIENTS = CHEBY_NPTS;
+        ephemeris.COMMENT.push_back("Fit quality is UNMEASURED. PRW.SEGMENT_QUALITY availability flags are authoritative; omitted PPE residual scalars do not assert zero error.");
+        for (int n = first; n <= last; ++n) {
+            const auto& segment = entity.ephemeris.segments[n];
+            if (!finiteSegment(segment))
+                return residentFailure(error, "propagation-failed", "Trajectory fitting produced non-finite coefficients.");
+            auto record = std::make_unique<PPEPositionRecordT>();
+            record->EPOCH_MID = formatEpoch(segment.midJD);
+            record->EPOCH_HALF_SPAN = segment.halfSpanDays * DAY_SEC;
+            record->NUM_COEFFICIENTS = CHEBY_NPTS;
+            record->HAS_VELOCITY_COEFFICIENTS = true;
+            record->POS_COEFF_X.assign(segment.cx, segment.cx + CHEBY_NPTS);
+            record->POS_COEFF_Y.assign(segment.cy, segment.cy + CHEBY_NPTS);
+            record->POS_COEFF_Z.assign(segment.cz, segment.cz + CHEBY_NPTS);
+            record->VEL_COEFF_X.assign(segment.cvx, segment.cvx + CHEBY_NPTS);
+            record->VEL_COEFF_Y.assign(segment.cvy, segment.cvy + CHEBY_NPTS);
+            record->VEL_COEFF_Z.assign(segment.cvz, segment.cvz + CHEBY_NPTS);
+            ephemeris.POSITION_RECORDS.push_back(std::move(record));
+            source->SEGMENT_QUALITY.push_back(unmeasuredQuality());
+        }
+        ephemeris.START_TIME = formatEpoch(entity.ephemeris.segments[first].startJD);
+        ephemeris.STOP_TIME = formatEpoch(entity.ephemeris.segments[last].endJD);
+        PRWT result;
+        result.DESCRIBE_RESULT = std::make_unique<PRWDescribeResultT>();
+        result.DESCRIBE_RESULT->INSTANCE = std::make_unique<PRWInstanceT>(*prwInstance);
+        result.DESCRIBE_RESULT->SEGMENT_SET_HANDLE = request->SEGMENT_SET_HANDLE();
+        result.DESCRIBE_RESULT->SOURCE_OFFSET = i;
+        result.DESCRIBE_RESULT->FINAL_CHUNK = i + 1 == selected.size();
+        result.DESCRIBE_RESULT->SOURCES.push_back(std::move(source));
+        outputs.push_back(residentBytes(result));
+    }
+    setContinuation(stop, selected.size(), backlog, yielded);
+    return true;
+}
+} // namespace
+
+bool processPrwResident(const std::string& methodId,
+    const std::vector<std::pair<const uint8_t*, size_t>>& inputs, uint32_t outputCap,
+    std::vector<std::vector<uint8_t>>& outputs, uint64_t& backlog, bool& yielded,
+    std::string& error) {
+    outputs.clear();
+    backlog = 0;
+    yielded = false;
+    if (methodId == "ingest_state") return ingestPortable(inputs, error);
+    if (inputs.size() != 1)
+        return residentFailure(error, "invalid-request", "Resident query requires exactly one PRW frame.");
+    const PRW* root = nullptr;
+    if (!verifyPrw(inputs[0].first, inputs[0].second, root, error)) return false;
+    if (methodId == "propagate_state" && root->RESIDENT_REQUEST())
+        return propagatePortable(root->RESIDENT_REQUEST(), inputs[0].first, inputs[0].second,
+            outputCap, outputs, backlog, yielded, error);
+    if (methodId == "prepare_trajectory_segments" && root->PREPARE_REQUEST())
+        return preparePortable(root->PREPARE_REQUEST(), outputs, error);
+    if (methodId == "describe_trajectory_segments" && root->DESCRIBE_REQUEST())
+        return describePortable(root->DESCRIBE_REQUEST(), inputs[0].first, inputs[0].second,
+            outputCap, outputs, backlog, yielded, error);
+    return residentFailure(error, "method-arm-mismatch", "Method does not match the sole PRW payload arm.");
+}
+} // namespace hpop

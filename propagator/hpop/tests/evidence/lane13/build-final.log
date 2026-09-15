@@ -1,0 +1,4 @@
+Generated RFM, FRM, TIM, PCE, IDM, PLD, LCC, CAT, PPE, NCD, PRW object bindings from published spacedatastandards.org@1.220.0
+(node:55448) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Built 1014366 bytes; canonical SDK artifact validation passed.

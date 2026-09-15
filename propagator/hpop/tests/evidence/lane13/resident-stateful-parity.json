@@ -1,0 +1,197 @@
+{
+  "wasmSha256": "7305c5ef6db04cfb5babc4f2c5f87b17b1e5901e4c14bd25cf9ca7b14b7b48b1",
+  "wasmBytes": 1014366,
+  "wasmedgeVersion": "0.16.4",
+  "dockerImage": "space-data-module-sdk/parity-wasmedge:0.16.4",
+  "runtimeInstances": "One persistent direct instance per group",
+  "groups": 2,
+  "requests": 20,
+  "runtimes": [
+    "real Chrome/V8",
+    "native WasmEdge",
+    "container WasmEdge"
+  ],
+  "steps": [
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "ingest-two",
+      "responseSha256": "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "bytes": 60,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "state-chunk-0",
+      "responseSha256": "cc1896ed8b0dec2f7145c0ae5f47e47964ebd5c88839ef2f648105fb0592e891",
+      "bytes": 592,
+      "errorCode": null,
+      "yielded": true,
+      "backlogRemaining": "1"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "state-chunk-1",
+      "responseSha256": "023a3f4b108eaa7340a0fe4708585ff9b71e370212bfa04562491efc1f06db0d",
+      "bytes": 584,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "prepare",
+      "responseSha256": "990cbadd95e968183ddd2dcc8d94a13a4052eed11d66a107b326cd769443aac3",
+      "bytes": 352,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "ppe-chunk-0",
+      "responseSha256": "0967b1d6950689c4b23f1c77c2b9765b1d69cd4355970567bbc3a2f5d135b8fa",
+      "bytes": 2448,
+      "errorCode": null,
+      "yielded": true,
+      "backlogRemaining": "1"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "ppe-chunk-1",
+      "responseSha256": "65e89b08dfb310fbcc9290b09503ffb39629196e2f93cc87841682da0fe36912",
+      "bytes": 2440,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "duplicate",
+      "responseSha256": "efe95d71c621dd65563388c4ccae1b74bed971c798c448c0984e69ae27fab5f3",
+      "bytes": 156,
+      "errorCode": "invalid-request",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "unknown",
+      "responseSha256": "5992fc31495c84595ad08a6204ea4d692e22aade932a002db86d6d28f9ec5732",
+      "bytes": 152,
+      "errorCode": "unknown-entity",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "wrong-arm",
+      "responseSha256": "e66fe571092b52a87978fbc60cc4cab7f445003b2f68d7ed0d2814cfbcb63189",
+      "bytes": 180,
+      "errorCode": "method-arm-mismatch",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "new-generation",
+      "responseSha256": "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "bytes": 60,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "stale-generation",
+      "responseSha256": "26f8479e20cb6322538d513ac462135d5f931005c9d35edda65e1fd05dff7c80",
+      "bytes": 192,
+      "errorCode": "stale-instance",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "stale-segment",
+      "responseSha256": "0536b04a6fe1293e65e3f9a8c2c5d519ffc71957b13c47c2cecbd49ee01f7c3c",
+      "bytes": 168,
+      "errorCode": "stale-handle",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-continuation-and-generation",
+      "label": "new-state",
+      "responseSha256": "3847847d1269f311413220ae36952981369c2d9e0113b2697b44d2fa0ca33a3a",
+      "bytes": 584,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-atomic-rejection",
+      "label": "ingest",
+      "responseSha256": "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "bytes": 60,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-atomic-rejection",
+      "label": "unsupported-covariance",
+      "responseSha256": "349950caf86a52dd4a0fd93c41465edba127dafea263b8e05a2ea9e377c27ecc",
+      "bytes": 256,
+      "errorCode": "unsupported-configuration",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-atomic-rejection",
+      "label": "old-generation-survives",
+      "responseSha256": "a28285b17f854f7ea548ea50ea686d7f18904e92aa6fb6bd37f8016089c0b353",
+      "bytes": 584,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-atomic-rejection",
+      "label": "unsupported-mass",
+      "responseSha256": "349950caf86a52dd4a0fd93c41465edba127dafea263b8e05a2ea9e377c27ecc",
+      "bytes": 256,
+      "errorCode": "unsupported-configuration",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-atomic-rejection",
+      "label": "repeated-generation",
+      "responseSha256": "b39757fc9f675a4a61caa5e845794ddb38d88760df0d8d37f42b736128c5a8c1",
+      "bytes": 176,
+      "errorCode": "stale-instance",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-atomic-rejection",
+      "label": "invalid-flag",
+      "responseSha256": "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "bytes": 60,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "resident-atomic-rejection",
+      "label": "invalid-selection",
+      "responseSha256": "bcff6cb812a9366a60948b0b7deaf99e7b0752a16eec2345e219f6f18cf2e4b9",
+      "bytes": 160,
+      "errorCode": "invalid-state",
+      "yielded": false,
+      "backlogRemaining": "0"
+    }
+  ],
+  "ok": true
+}

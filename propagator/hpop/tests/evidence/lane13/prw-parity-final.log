@@ -1,0 +1,2 @@
+parity PASS fixture=TMPL lane13 PRW malformed classifications module=7305c5ef6db04cfb lanes=[browser(72 runs, 1515ms), wasmedge(72 runs, 3327ms), docker-wasmedge(72 runs, 12706ms)] comparisons=381
+  18 case(s) byte-identical across 3 lane(s).

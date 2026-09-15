@@ -4,31 +4,18 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
-import * as flatbuffers from 'flatbuffers';
+import { TYPE, requestFor, decodeResult, nativeInput, operationPayload } from './lib/prwCodec.mjs';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
-import { NCD } from 'spacedatastandards.org/lib/js/NCD/NCD.js';
-import { ncdContainerFormat } from 'spacedatastandards.org/lib/js/NCD/ncdContainerFormat.js';
 
 const fixtureRoot = new URL('../../../files/orbit-products/tests/fixtures/de440/', import.meta.url);
 const kernel = fs.readFileSync(new URL('de440-2026.bsp', fixtureRoot));
 const refs = fs.readFileSync(new URL('cspice-de440.csv', fixtureRoot), 'utf8').trim().split(/\r?\n/).slice(1)
   .map(line => line.split(',').map(Number)).filter(row => row[2] === 2461041.5 && row[1] === 399 && row[0] !== 399);
 const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json', import.meta.url)));
-const ncdType = {schemaName:'NCD.fbs', fileIdentifier:'$NCD', rootTypeName:'NCD'};
-function kernelFrame() {
-  const b = new flatbuffers.Builder(128);
-  NCD.startNCD(b);
-  NCD.addFormat(b, ncdContainerFormat.SPK_DAF);
-  NCD.addSourceByteLength(b, BigInt(kernel.length));
-  NCD.finishSizePrefixedNCDBuffer(b, NCD.endNCD(b));
-  return Buffer.concat([b.asUint8Array(), kernel]);
-}
-const payload = kernelFrame();
-const query = (params, withKernel = true) => ({methodId:'invoke',inputs:[
-  {portId:'request',typeRef:{schemaName:'orbpro.hpop.InvokeRequest',rootTypeName:'InvokeRequest'},payload:Buffer.from(JSON.stringify({operation:'ephemeris',params}))},
-  ...(withKernel ? [{portId:'kernel',typeRef:ncdType,payload}] : [])
-]});
-const decode = response => JSON.parse(new TextDecoder().decode(response.outputs.find(out => out.portId === 'response').payload));
+const payload=nativeInput(kernel);
+const ncdType=TYPE;
+const query=(params,withKernel=true)=>requestFor('ephemeris',params,withKernel?kernel:undefined);
+const decode=decodeResult;
 
 test('HPOP WASM kernel invoke matches independent CSPICE DE440 vectors, with source and fail-closed coverage', async t => {
   const h = await createBrowserModuleHarness({wasmSource:fs.readFileSync(new URL('../dist/isomorphic/module.wasm',import.meta.url)),manifest,surface:'command'});
@@ -39,7 +26,7 @@ test('HPOP WASM kernel invoke matches independent CSPICE DE440 vectors, with sou
     assert.equal(response.statusCode,0,response.errorMessage);
     const actual = decode(response);
     assert.equal(actual.ephemerisSource,'JPL_SPK');
-    assert.equal(actual.frame,'ICRF/J2000');
+    assert.equal(actual.frame,`ICRF/NAIF-${center}`);
     // km and km/s in J2000 at JD TDB; 1 millimetre and 1 micrometre/s
     // bounds protect same-kernel interpolation from numerical regressions.
     const dp=Math.hypot(...actual.position.map((x,i)=>x-state[i]));
@@ -64,7 +51,7 @@ test('HPOP propagation reports explicit Analytical fallback after a kernel invoc
   t.after(()=>h.destroy());
   const params={epochJD:2461041.5,targetJD:2461041.5+60/86400,position:[7000,0,0],velocity:[0,7.5,1],forces:{j2:false,thirdBody:true,srp:true}};
   const invoke=async(source,withKernel)=>h.invoke({methodId:'invoke',inputs:[
-    {portId:'request',typeRef:{schemaName:'orbpro.hpop.InvokeRequest',rootTypeName:'InvokeRequest'},payload:Buffer.from(JSON.stringify({operation:'propagate',params:{...params,...(source?{ephemerisSource:source}:{})}}))},
+    {portId:'request',typeRef:TYPE,payload:operationPayload('propagate',{...params,...(source?{ephemerisSource:source}:{})},withKernel)},
     ...(withKernel?[{portId:'kernel',typeRef:ncdType,payload}]:[])
   ]});
   const de=await invoke('',true),fallback=await invoke('',false),explicit=await invoke('Analytical',true);
@@ -74,7 +61,7 @@ test('HPOP propagation reports explicit Analytical fallback after a kernel invoc
   assert.deepEqual(decode(explicit),decode(fallback));
   assert.notDeepEqual(decode(de).position,decode(fallback).position,'kernel must change force propagation');
   const uncovered=await h.invoke({methodId:'invoke',inputs:[
-    {portId:'request',typeRef:{schemaName:'orbpro.hpop.InvokeRequest',rootTypeName:'InvokeRequest'},payload:Buffer.from(JSON.stringify({operation:'propagate',params:{...params,targetJD:2451545}}))},
+    {portId:'request',typeRef:TYPE,payload:operationPayload('propagate',{...params,targetJD:2451545},true)},
     {portId:'kernel',typeRef:ncdType,payload}
   ]});
   assert.notEqual(uncovered.statusCode,0);

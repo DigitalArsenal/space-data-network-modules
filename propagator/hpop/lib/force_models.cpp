@@ -8,6 +8,7 @@
 #include "environment_models.h"
 #include "astrodynamics.h"
 #include "atmosphere.h"
+#include "time_convert.h"
 #include <cmath>
 #include <algorithm>
 
@@ -1681,9 +1682,11 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double
     // functions they reach carry their own "simplified stand-in, not the
     // published model" banner at their definitions.
     if (forceSet.useDrag) {
+        const double atmosphereJD = forceSet.explicitEpochContract
+            ? timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(jd))) : jd;
         switch (forceSet.dragModel) {
             case DragModelType::NRLMSISE00:
-                totalAcc += NRLMSISE00(position, velocity, jd, forceSet.weather,
+                totalAcc += NRLMSISE00(position, velocity, atmosphereJD, forceSet.weather,
                                        forceSet.drag, forceSet.nrlmsise00);
                 break;
             case DragModelType::HarrisPriester:
@@ -1691,15 +1694,15 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double
                                            forceSet.harrisPriesterExponent);
                 break;
             case DragModelType::USSA1976:
-                totalAcc += AtmosphericDrag(position, velocity, jd,
+                totalAcc += AtmosphericDrag(position, velocity, atmosphereJD,
                                             forceSet.weather, forceSet.drag);
                 break;
             case DragModelType::JB2008:
-                totalAcc += JB2008(position, velocity, jd, forceSet.weather,
+                totalAcc += JB2008(position, velocity, atmosphereJD, forceSet.weather,
                                    forceSet.drag, forceSet.jb2008);
                 break;
             case DragModelType::DTM2020:
-                totalAcc += DTM2020(position, velocity, jd, forceSet.weather,
+                totalAcc += DTM2020(position, velocity, atmosphereJD, forceSet.weather,
                                     forceSet.drag, forceSet.dtm2020);
                 break;
             case DragModelType::Exponential:
@@ -1768,7 +1771,7 @@ void ForceModelDerivative(double t, const double* y, double* dydt, void* params)
     Vec3 velocity(y[3], y[4], y[5]);
 
     // Convert time offset to JD
-    double jd = forceSet->weather.epoch + t / 86400.0;
+    double jd = (forceSet->explicitEpochContract ? forceSet->integrationEpochTDB : forceSet->weather.epoch) + t / 86400.0;
 
     Vec3 acc = ComputeTotalAcceleration(position, velocity, jd, *forceSet);
 

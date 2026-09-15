@@ -1,0 +1,17 @@
+PRW resident runtime=wasmedge wasm_sha256=7305c5ef6db04cfb5babc4f2c5f87b17b1e5901e4c14bd25cf9ca7b14b7b48b1
+✔ PRW resident retains SI state and host handles at the initial TDB epoch (410.798458ms)
+✔ PRW resident UTC clock is converted inside WASM before TDB integration (46.851958ms)
+✔ PRW replacement is atomic and rejects stale generations and unsupported controls (119.143417ms)
+✔ PRW resident rejects unsupported axes, wrong arms and invalid selected states (49.686542ms)
+✔ PRW resident preserves requested ordering and validates duplicates (48.579333ms)
+﹣ PRW resident invalidates diagnostic configuration and burn mutations (0.083792ms) # SDK process harness intentionally exposes only public PIV methods, not diagnostic C exports
+PASS PRW resident SI/UTC-generation/PPE: 2 sources, 13 coefficients per axis, quality UNMEASURED, 1-source chunks
+✔ PRW trajectory exports nested PPE, honest quality, and bounded source chunks (190.3ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 1291.380334

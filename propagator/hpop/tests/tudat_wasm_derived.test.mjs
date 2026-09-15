@@ -1,3 +1,4 @@
+import { invokeTypedRequest as invokeJsonRequest } from './lib/prwCodec.mjs';
 /**
  * Derived from Tudat WASM propagation tests:
  * https://github.com/DigitalArsenal/tudat-wasm/blob/c998d24001af69e60f07cc6a29ddf64c422dd9de/tests/wasm/test_propagation_node.cjs
@@ -22,8 +23,7 @@ import test from "node:test";
 import {
   STANDALONE_RUNTIME_KINDS,
   createStandaloneHarnessOrSkip,
-  invokeJsonRequest,
-} from "../../../tests/lib/isomorphicHarness.mjs";
+} from "space-data-module-sdk/testing/isomorphic";
 
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const TUDAT_REFERENCE_PATH = new URL("./fixtures/tudat.reference.json", import.meta.url);
@@ -144,7 +144,7 @@ function assertNearTudatSample(result, sample, positionToleranceKm, velocityTole
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   test(`tudat two-body samples match the copied state history on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, ISOMORPHIC_WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, ISOMORPHIC_WASM_PATH, t, {enableThreads:true});
     if (!harness) {
       return;
     }
@@ -198,7 +198,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   test(`tudat high-fidelity samples stay within the copied perturbation envelope on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, ISOMORPHIC_WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, ISOMORPHIC_WASM_PATH, t, {enableThreads:true});
     if (!harness) {
       return;
     }
@@ -220,7 +220,9 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
         j3: false,
         j4: false,
         maxDegree: 8,
-        maxOrder: 8,
+        // The reference enables only J2: explicit zonal order avoids the
+        // ignored legacy tesseral control (PRW rejects it without EOP).
+        maxOrder: 0,
         thirdBody: true,
         sun: true,
         moon: false,

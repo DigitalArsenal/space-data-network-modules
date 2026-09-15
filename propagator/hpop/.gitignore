@@ -1,7 +1,11 @@
 node_modules/
+.sdk-build/
 .build/
 *.log
 src/cpp/build/
 src/cpp/build-wasm/
 src/cpp/build-wasi/
 deps/emsdk/
+
+# Auditable numerical and runtime receipts are part of the lane handoff.
+!tests/evidence/lane13/*.log

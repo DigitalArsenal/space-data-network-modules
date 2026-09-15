@@ -15,7 +15,7 @@ Implements a high-fidelity numerical orbit propagator accounting for full geopot
 | `DTM2020` | **Simplified approximation only** — mimics the DTM2020 F30/Hp temperature response. NOT the published DTM2020 spherical-harmonic model. |
 | `GOST2004` / `HarrisPriester` | Enum placeholders; dispatch falls through to `NRLMSISE00`. |
 
-The JSON `atmosphere` operation exposes only the honestly-implemented models
+The typed PRW `ATMOSPHERE_REQUEST` operation exposes only the implemented models
 (`NRLMSISE00`, `USSA1976`, `EXPONENTIAL`).
 
 ## Installation
@@ -31,7 +31,8 @@ This package is intended to be used within an OrbPro workspace or alongside the 
 Build the canonical browser/WasmEdge artifact with the repo-local toolchain:
 
 ```bash
-bash build.sh
+npm ci
+PATH="$HOME/.wasmedge/bin:$PATH" node build.mjs
 ```
 
 Artifacts:
@@ -39,6 +40,81 @@ Artifacts:
 - `dist/isomorphic/module.wasm`
 - `dist/browser/module.js`
 - `dist/browser/module.wasm`
+
+## Portable PRW contract (SDS 1.220.0)
+
+Every advertised method consumes size-prefixed `$PRW` records through the SDK
+PIV/TAB invoke envelope. The module builds through `compileModuleFromSource` for
+`wasm32-wasip1-threads`, `threadModel: "wasi-sequential"`: one resident instance
+performs ordered catalog/cache mutations and one invocation at a time. The
+artifact uses shared memory; browser hosts need cross-origin isolation.
+
+| Method | Request arm | Response arm |
+| --- | --- | --- |
+| `invoke` | `EXECUTION_REQUEST`, `EPHEMERIS_REQUEST`, `ATMOSPHERE_REQUEST`, or `VERSION_QUERY` | Matching result arm |
+| `ingest_state` | `RESIDENT_STATE` (1–1024 input records) | No scientific output |
+| `propagate_state` | `RESIDENT_REQUEST` | `RESIDENT_STATE` |
+| `prepare_trajectory_segments` | `PREPARE_REQUEST` | `PREPARE_RESULT` |
+| `describe_trajectory_segments` | `DESCRIBE_REQUEST` | `DESCRIBE_RESULT` containing PPE |
+
+Each PRW record must populate exactly one payload arm. A supplied `invoke.kernel`
+contains `NATIVE_INPUT`, including the NCD descriptor and checked SPK bytes.
+Public ports do not accept the historical JSON or private pointer envelopes.
+
+### Resident states and handles
+
+Use the SDK **direct** invoke surface with a persistent instance for resident
+methods. The SDK command test harness creates an instance per invocation and
+therefore does not retain a catalog between calls.
+
+`ingest_state` atomically replaces the catalog. Every record supplies the same
+`PRWInstance`: `MODULE_ID="com.orbpro.hpop"`, a nonempty host-assigned unique
+`INSTANCE_ID`, and `GENERATION`. Reingest of a previously seen instance identity
+requires a strictly larger generation. `ENTITY_HANDLE` values are supplied by
+the caller and must be unique; output preserves handles, object IDs, and catalog
+numbers. Handles are instance-scoped and must not be persisted as object identity.
+The host must choose a new instance ID after replacing the actual WASM instance.
+Configuration changes, diagnostic catalog replacement, and burn/cache-grid
+mutations invalidate portable queries until a new generation is ingested.
+
+PRW state position and velocity use SI metres and metres/second. Input must be
+Cartesian FRM state with explicit ISO epoch, `UTC` or `TDB`, and a resolving RFM
+coordinate-system name. Integration and cached polynomials use TDB; C++ converts
+UTC internally. This profile accepts Earth-centered (NAIF 399) ICRF axes and
+reports them as **GCRF**. Other origins and axes fail. Earth-fixed/TEME requests
+fail with `eop-data-required` because the PRW invocation does not supply the
+required authoritative Earth-orientation data. There is no silent frame fallback.
+
+Resident per-object covariance, dynamical mass, gravity overrides, and drag/SRP
+area-over-mass controls fail with `unsupported-configuration`; use the execution
+request for supported rich dynamics. `VALID=false` is retained on ingest and
+fails with `invalid-state` when selected for propagation or trajectory export.
+Empty selection means all rows; duplicate and unknown handles fail explicitly.
+`MAXIMUM_COUNT` limits the requested prefix while preserving its order.
+
+### Trajectory export and continuation
+
+The supported profiles are empty/default and `conjunction-screening`.
+`CATALOG_HANDLE=0` selects the current resident catalog; other values fail.
+The finite nonnegative preparation duration is limited to 2046 ten-minute cache
+segments (1,227,600 seconds). Preparation reports complete interval coverage
+separately from fit quality. Segment handles never wrap or reset on reingest.
+
+PPE contains the original 13 coefficients per axis, explicit velocity arrays,
+Chebyshev basis, midpoint and half-span, Earth GCRF, TDB epochs, and the existing
+PPE km/km/s units. `PRWFitQuality.EVIDENCE_KIND=UNMEASURED`, with both bound
+availability flags false. No zero-error certification is claimed. Published PPE
+residual scalars have no availability flag: they are omitted and accompanied by
+a comment directing consumers to PRW quality; their decoded default zero must
+not be interpreted as a measurement.
+
+Each resident batch chunk returns one state; each describe chunk returns one
+whole source (never part of a coefficient vector), with `SOURCE_OFFSET` and
+`FINAL_CHUNK`. A response with `YIELDED=true` and positive `BACKLOG_REMAINING`
+requires resubmitting the same PRW request bytes to obtain the next chunk.
+One ordered continuation is active per module instance; a different request
+restarts selection. This conservative chunk size respects positive output caps
+although SDK 0.8.18 does not expose a guest output-cap accessor.
 
 ## Usage
 
@@ -80,9 +156,8 @@ npm test
 That covers:
 
 - SDK artifact compliance and harness loading in `tests/sdk_compat.test.mjs`
-- Resident-state binary stream method declarations in `tests/sdk_compat.test.mjs`
-- Inter-module aligned-binary `PropagatorState` handoff from SGP4 to HPOP in
-  `tests/intermodule_sgp4_import.test.mjs`
+- PRW resident SI/UTC, handle invalidation, bounded chunks, and PPE quality in
+  `tests/prw_resident.test.mjs`
 - Tudat-derived propagation regressions in `tests/tudat_wasm_derived.test.mjs`
 - Stored Tudat reference vectors in `tests/fixtures/tudat.reference.json`
 
@@ -92,7 +167,7 @@ The Tudat-derived cases are copied from:
   `https://github.com/DigitalArsenal/tudat-wasm/blob/c998d24001af69e60f07cc6a29ddf64c422dd9de/tests/wasm/test_propagation_node.cjs`
 
 The local test preserves the same orbital scenarios and pass/fail thresholds,
-adapted to this package's JSON command ABI and run through both the SDK browser
+adapted to this package's typed PRW command ABI and run through both the SDK browser
 and WasmEdge harnesses. The checked-in fixture captures the sampled Tudat state
 histories used by the package-local suite, so ordinary verification does not
 need a live `../tudat-wasm` checkout.

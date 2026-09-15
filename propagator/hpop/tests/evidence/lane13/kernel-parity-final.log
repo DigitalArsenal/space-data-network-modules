@@ -1,0 +1,2 @@
+parity PASS fixture=TMPL lane13 canonical PRW DE440 artifact module=7305c5ef6db04cfb lanes=[browser(24 runs, 1205ms), wasmedge(24 runs, 2169ms), docker-wasmedge(24 runs, 5203ms)] comparisons=138
+  6 case(s) byte-identical across 3 lane(s).
