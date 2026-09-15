@@ -92,6 +92,17 @@
  *   parse   : job+response -> "cnp_meta"    (storage.ingest_with_source meta)
  *                             "cnp_records" (size-prefixed $CNP stream)
  *                             "raw"         (decoded payload, for archiving)
+ *                             "unchanged"   ONLY on HTTP 304: one JSON notice
+ *                             {"status":304,"unchanged":true,"source_name",
+ *                             "source_url","dataset_id"}; no meta/records/raw
+ *                             frames are emitted.
+ *
+ * HTTP 304 IS NOT A FETCH FAILURE. The host presents the ETag / Last-Modified
+ * it recorded from the previous 2xx for this URL (sdn-server
+ * internal/modulert/caps/http_validators.go), so an unchanged document answers
+ * 304 with no body. Treating that as a failed fetch is what made this lane
+ * refuse with status 400 every day on host-02 while the source was healthy;
+ * the contract is data-source/celestrak-parser's, mirrored exactly.
  */
 
 #include <cstdint>
@@ -1044,11 +1055,17 @@ struct FetchContext {
     std::string archive_source;
     std::string archive_name;
     std::string reconcile;
+    std::string dataset_id;
     std::string etag;
     std::string last_modified;
     std::string content_type;
     std::string response_date;
     long status = 0;
+    // HTTP 304 Not Modified: the host sent the validators it recorded from
+    // the previous pull (If-None-Match / If-Modified-Since) and the origin
+    // answered that nothing changed. No body, no batch — the parser emits one
+    // "unchanged" notice and no record ports.
+    bool not_modified = false;
     std::vector<uint8_t> body;
     std::string batch_id;
 };
@@ -1069,6 +1086,7 @@ bool load_fetch_context(FetchContext* ctx) {
     json_string_field(job_json, "archive_source", &ctx->archive_source);
     json_string_field(job_json, "archive_name", &ctx->archive_name);
     json_string_field(job_json, "reconcile", &ctx->reconcile);
+    json_string_field(job_json, "dataset_id", &ctx->dataset_id);
     if (ctx->provider_id.empty()) ctx->provider_id = kDefaultProviderID;
     if (ctx->source_name.empty()) {
         plugin_set_error("missing-source-name", "job must carry source_name.");
@@ -1081,7 +1099,7 @@ bool load_fetch_context(FetchContext* ctx) {
         return false;
     }
     ctx->status = static_cast<long>(status);
-    if (ctx->status != 200) {
+    if (ctx->status != 200 && ctx->status != 304) {
         char msg[96];
         std::snprintf(msg, sizeof(msg), "source fetch returned HTTP status %ld", ctx->status);
         plugin_set_error("fetch-failed", msg);
@@ -1096,6 +1114,13 @@ bool load_fetch_context(FetchContext* ctx) {
     if (ctx->content_type.empty()) json_string_field(headers, "Content-Type", &ctx->content_type);
     json_string_field(headers, "date", &ctx->response_date);
     if (ctx->response_date.empty()) json_string_field(headers, "Date", &ctx->response_date);
+
+    if (ctx->status == 304) {
+        // Nothing changed upstream: no body is expected and no batch exists.
+        ctx->not_modified = true;
+        ctx->body.clear();
+        return true;
+    }
 
     std::string body_b64;
     if (!json_string_field(response_json, "bodyB64", &body_b64) || body_b64.empty()) {
@@ -1175,6 +1200,19 @@ std::string build_ingest_meta(const FetchContext& ctx, const std::string& proven
                           provenance_json.size()) +
             "\"}}";
     return meta;
+}
+
+// HTTP 304: one notice frame on the "unchanged" port, nothing on the record
+// ports. The ingest node never becomes ready (its required meta/records ports
+// stay empty), so nothing is stored and no batch is announced; the notice
+// reaches the flow's egress sink so the operator can see the pull happened and
+// found nothing new. Byte-for-byte the celestrak-parser notice.
+int emit_unchanged(const FetchContext& ctx) {
+    const std::string notice = std::string("{\"status\":304,\"unchanged\":true") +
+                               ",\"source_name\":\"" + json_escape(ctx.source_name) + "\"" +
+                               ",\"source_url\":\"" + json_escape(ctx.source_url) + "\"" +
+                               ",\"dataset_id\":\"" + json_escape(ctx.dataset_id) + "\"}";
+    return push_json("unchanged", notice) < 0 ? 500 : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -1301,6 +1339,7 @@ int parse(void) {
 
     FetchContext ctx;
     if (!load_fetch_context(&ctx)) return 400;
+    if (ctx.not_modified) return emit_unchanged(ctx);
 
     const std::string body(reinterpret_cast<const char*>(ctx.body.data()), ctx.body.size());
     const std::vector<std::string> rows = json_array_elements(body);

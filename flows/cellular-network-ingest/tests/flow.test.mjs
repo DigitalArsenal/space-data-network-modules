@@ -113,7 +113,18 @@ function sizePrefixedStream(buffers) {
   return out;
 }
 
-function createHostStub({ config = {}, body = BODY, ingestResult, store = createStore() } = {}) {
+function createHostStub({
+  config = {},
+  body = BODY,
+  ingestResult,
+  store = createStore(),
+  // HTTP 304: the Go host presents the ETag / Last-Modified it recorded from
+  // the last 2xx for this URL (internal/modulert/caps/http_validators.go) and
+  // the origin answers "not modified" with NO BODY AT ALL. The host cap turns
+  // that into {status:304, headers, body:""} — caps/http.go returns before it
+  // ever reads a body.
+  notModified = false,
+} = {}) {
   const calls = [];
   const memoryRef = { memory: null };
   let response = new Uint8Array(0);
@@ -133,6 +144,18 @@ function createHostStub({ config = {}, body = BODY, ingestResult, store = create
         }
 
         if (operation === "http.request") {
+          if (notModified && String(meta.method ?? "GET").toUpperCase() === "GET") {
+            response = encodeHostcallEnvelope({
+              ok: true,
+              result: {
+                status: 304,
+                headers: { Etag: 'W/"bulk-export-v7"' },
+                body: "",
+                body_encoding: "utf8",
+              },
+            });
+            return 0;
+          }
           const range = meta.headers?.Range ?? meta.headers?.range;
           if (!range) {
             response = encodeHostcallEnvelope({
@@ -239,7 +262,11 @@ function createHostStub({ config = {}, body = BODY, ingestResult, store = create
   return { calls, imports, memoryRef, store };
 }
 
-async function runFlowOnce(stub) {
+// `capture` receives the NODE RUN DIGEST the Go runner reads after a timer
+// tick — sdn-server internal/flowrt/cronmount.go readNodeRunDigest /
+// retrievalDiagnosis — so a test can assert the verdict the ledger will record
+// rather than a proxy for it.
+async function runFlowOnce(stub, capture) {
   const host = await createFlowRuntimeHost({
     wasmSource: new Uint8Array(fs.readFileSync(fileURLToPath(FLOW_WASM))),
     extraImports: stub.imports,
@@ -258,8 +285,24 @@ async function runFlowOnce(stub) {
       return { statusCode: 0 };
     },
   });
+  if (capture) {
+    capture.digest = FLOW_NODE_IDS.map((nodeId, index) => {
+      const state = host.getNodeState(index);
+      return {
+        nodeId,
+        invocations: Number(state.invocationCount),
+        lastStatus: Number(state.lastStatus),
+      };
+    });
+  }
   return emitted;
 }
+
+// Node INDEX -> nodeId, straight off the compiled flow: the runtime's node
+// states are indexed in declaration order.
+const FLOW_NODE_IDS = JSON.parse(
+  fs.readFileSync(fileURLToPath(new URL("../dist/flow.json", import.meta.url)), "utf8"),
+).nodes.map((n) => n.nodeId);
 
 const httpCalls = (stub) => stub.calls.filter((c) => c.operation === "http.request");
 const ingestCalls = (stub) =>
@@ -676,4 +719,73 @@ test("PINNED DEFECT: a chunk cut mid-row also stores its partial tail row", asyn
     260,
     "the resumed fetch re-reads the straddling row from its start — no data is lost",
   );
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HTTP 304 NOT MODIFIED IS A SUCCESSFUL RUN WITH NOTHING NEW.
+//
+// The node sends If-None-Match / If-Modified-Since on every retrieval lane from
+// the validators in its source-metrics ledger, so an unchanged bulk export
+// answers 304 with no body. `parse` skips the non-2xx response, `deconflict`
+// emits an EMPTY record stream, and `ingest_meta` refused that with
+// "missing-records-frame" status 400 — which failed this lane on host-02 every
+// single day while archive.org was perfectly healthy:
+//
+//   run completed but landed no batch; node(s) refused:
+//   meta (com.digitalarsenal.data-source.cell-tower-ingest:ingest_meta) status 400
+//
+// The verdict asserted here is the RUNNER'S OWN, computed exactly as
+// sdn-server internal/flowrt/cronmount.go retrievalDiagnosis computes it from
+// the node digest: a node that ran and returned non-zero is a REFUSAL. No node
+// may refuse a 304.
+// ═══════════════════════════════════════════════════════════════════════════
+test("HTTP 304: no node refuses, nothing is stored, and the mark does not move", async () => {
+  const store = createStore();
+  const capture = {};
+  const stub = createHostStub({
+    config: { cell_ingest_url: SOURCE_URL, cell_ingest_chunk_bytes: 65536 },
+    store,
+    notModified: true,
+  });
+  const emitted = await runFlowOnce(stub, capture);
+
+  const refused = capture.digest.filter((n) => n.invocations > 0 && n.lastStatus !== 0);
+  assert.deepEqual(refused, [], "a 304 is not a failed fetch: no node may return non-zero");
+
+  // The fetch really happened — this is "asked and nothing changed", never
+  // "never asked".
+  assert.equal(httpCalls(stub).length, 1, "the chunk was still requested");
+
+  assert.deepEqual(ingestCalls(stub), [], "no batch may be stored for a 304");
+  assert.deepEqual(writeCalls(stub), [], "the resume mark must not move past bytes never read");
+  assert.deepEqual(store.marks, []);
+
+  const notice = emitted
+    .map((t) => { try { return JSON.parse(t); } catch { return null; } })
+    .find((v) => v && v.unchanged === true);
+  assert.ok(notice, "the unchanged notice reaches the egress sink");
+  assert.equal(notice.status, 304);
+  assert.equal(notice.source_url, SOURCE_URL);
+  assert.equal(notice.source_name, "cell-tower-bulk");
+});
+
+// The next tick after a 304 must re-ask for the SAME chunk: nothing new was
+// read, so there is nothing to resume past. A mark advanced over an unread
+// chunk is the silent-gap failure the durable mark exists to prevent.
+test("HTTP 304: the following run re-asks for the same chunk", async () => {
+  const store = createStore();
+  const config = { cell_ingest_url: SOURCE_URL, cell_ingest_chunk_bytes: 256 };
+
+  const first = createHostStub({ config, store, notModified: true });
+  await runFlowOnce(first);
+  assert.equal(startOfRange(httpCalls(first)[0]), 0);
+
+  const second = createHostStub({ config, store });
+  await runFlowOnce(second);
+  assert.equal(
+    startOfRange(httpCalls(second)[0]),
+    0,
+    "a 304 leaves the mark where it was, so the next tick re-reads the same range",
+  );
+  assert.equal(ingestCalls(second).length, 1, "and the changed body then lands normally");
 });

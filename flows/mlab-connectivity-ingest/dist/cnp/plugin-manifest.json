@@ -3,7 +3,7 @@
   "name": "M-Lab Starlink Connectivity Ingest Flow",
   "version": "0.1.0",
   "pluginFamily": "flow",
-  "description": "Per-provider ingest flow, constellation network performance: a cron TIMER tick enters at mlab-starlink-connectivity:request, which emits ONE whole-file hostcap/http-request GET of the M-Lab statistics-pipeline per-ASN export (https://statistics.measurementlab.net/v0/asn/14593/<YEAR>/histogram_daily_stats.json) carrying an identifying User-Agent and no credentials of any kind — this lane is HTTPS only, never BigQuery. mlab-starlink-connectivity:parse joins that job with the response, collapses the eight per-date log-bucket rows into one aggregate per UTC day and emits a size-prefixed $CNP record stream (batch = sha256 of the payload; Mbps and ms verbatim, never converted; distribution statistics only, never an invented scalar; REGION omitted because the per-ASN export carries no geographic key), and hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op. M-Lab test data is CC0: every CNPMetric provenance carries LICENSE CC0-1.0, M-Lab's own citation in ATTRIBUTION and NON_COMMERCIAL_ONLY false, which is what keeps a future CC BY-NC cross-check legally separable. Results land on the egress sink. All decisions live in-wasm; the host supplies only the http and storage connectors.",
+  "description": "Per-provider ingest flow, constellation network performance: a cron TIMER tick enters at mlab-starlink-connectivity:request, which emits ONE whole-file hostcap/http-request GET of the M-Lab statistics-pipeline per-ASN export (https://statistics.measurementlab.net/v0/asn/14593/<YEAR>/histogram_daily_stats.json) carrying an identifying User-Agent and no credentials of any kind — this lane is HTTPS only, never BigQuery. mlab-starlink-connectivity:parse joins that job with the response, collapses the eight per-date log-bucket rows into one aggregate per UTC day and emits a size-prefixed $CNP record stream (batch = sha256 of the payload; Mbps and ms verbatim, never converted; distribution statistics only, never an invented scalar; REGION omitted because the per-ASN export carries no geographic key), and hostcap/storage-ingest persists it through the policy-mediated storage.ingest_with_source cap op. M-Lab test data is CC0: every CNPMetric provenance carries LICENSE CC0-1.0, M-Lab's own citation in ATTRIBUTION and NON_COMMERCIAL_ONLY false, which is what keeps a future CC BY-NC cross-check legally separable. Results land on the egress sink. HTTP 304 Not Modified is a successful run with nothing new, not a failed fetch: the host presents the ETag / Last-Modified it recorded from the last 2xx for this URL, and when M-Lab answers 304 the parse node emits one notice on its 'unchanged' port straight to the egress sink and no meta/records/raw frames, so storage-ingest never fires and no batch is stored or announced. Same contract as the celestrak ingest flows. All decisions live in-wasm; the host supplies only the http and storage connectors.",
   "capabilities": [
     "http",
     "storage_ingest"
@@ -32,7 +32,7 @@
       "direction": "bidirectional",
       "capability": "http",
       "resource": "https://*",
-      "description": "Outbound HTTP through the host http.request hostcall. Go server host: 4 MiB response cap, 30 s default timeout. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
+      "description": "Outbound HTTP through the host http.request hostcall. Go server host: 100 MiB response ceiling lowered per request by max_bytes (exceeding the effective bound is an error, never a truncation), 30 s default timeout, per-destination egress pacing. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
       "properties": {
         "hostOps": [
           "http.request"
@@ -279,6 +279,21 @@
       "edgeId": "ingest-cnp-egress",
       "fromNodeId": "ingest_cnp",
       "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "parse-unchanged-egress",
+      "fromNodeId": "parse",
+      "fromPortId": "unchanged",
       "toNodeId": "egress",
       "toPortId": "result",
       "contract": {

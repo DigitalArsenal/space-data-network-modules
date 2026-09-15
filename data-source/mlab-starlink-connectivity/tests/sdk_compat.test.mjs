@@ -655,6 +655,42 @@ test("parse: non-200 upstream fails closed (nothing emitted)", async (t) => {
   assert.equal(response.outputs.length, 0);
 });
 
+// HTTP 304 Not Modified: the host presented the ETag / Last-Modified it
+// recorded from the last 2xx for this URL (sdn-server
+// internal/modulert/caps/http_validators.go) and M-Lab confirmed the export is
+// current. No batch exists, so no record port may fire — only the single
+// "unchanged" notice, and the invocation SUCCEEDS. Refusing this run with
+// status 400 is what failed the com.digitalarsenal.flows.mlab-connectivity-ingest
+// lane on host-02 every day while the source was healthy.
+test("parse answers HTTP 304 with one unchanged notice and zero record frames", async (t) => {
+  const job = { ...JOB, dataset_id: "mlab-asn14593-2024" };
+  const harness = await createHarness(t);
+  const response = await harness.invoke({
+    methodId: "parse",
+    inputs: [
+      jsonInput("job", job),
+      jsonInput("response", {
+        status: 304,
+        headers: { Etag: 'W/"x"', "Last-Modified": "Thu, 28 Mar 2024 00:00:00 GMT" },
+        bodyB64: "",
+      }),
+    ],
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.equal(response.outputs.length, 1, "exactly one frame");
+  const outputs = outputsByPort(response);
+  for (const port of ["cnp_meta", "cnp_records", "raw"]) {
+    assert.equal(outputs.has(port), false, `${port} must stay silent`);
+  }
+  assert.deepEqual(jsonFrame(outputs, "unchanged"), {
+    status: 304,
+    unchanged: true,
+    source_name: job.source_name,
+    source_url: job.source_url,
+    dataset_id: job.dataset_id,
+  });
+});
+
 test("parse: an empty export fails closed rather than storing an empty batch", async (t) => {
   const response = await runParse(t, Buffer.from("[]"));
   assert.notEqual(response.statusCode, 0);

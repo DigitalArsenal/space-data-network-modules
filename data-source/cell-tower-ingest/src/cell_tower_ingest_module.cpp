@@ -18,6 +18,7 @@
  *   mark_query      tick                     -> query           (read the resume mark)
  *   ingest_plan     tick + mark?             -> request, job    (ONE ranged chunk)
  *   ingest_meta     job + records            -> meta, records   (storage-ingest input)
+ *                                            -> unchanged       (ONLY on HTTP 304)
  *   publish_request result + meta            -> request?, mark  (publish + advance)
  *
  * WHY THE FETCH IS CHUNKED, AND WHY THE CHUNK SIZE IS NOT A FREE PARAMETER.
@@ -51,6 +52,21 @@
  * the very box this flow targets. `storage.write` is schema-typed and would
  * require inventing an SDS record for a bookkeeping row, which is Themis's call
  * and not this flow's to make.
+ *
+ * HTTP 304 NOT MODIFIED IS A SUCCESSFUL RUN WITH NOTHING NEW, NOT A FAILED
+ * FETCH. The host presents the ETag / Last-Modified it recorded from the last
+ * 2xx for a URL (sdn-server internal/modulert/caps/http_validators.go), so an
+ * unchanged bulk export answers 304 with no body at all. `cell-tower-source`'s
+ * `parse` skips a non-2xx response, `deconflict` then emits an EMPTY record
+ * stream, and `ingest_meta` refused that with `missing-records-frame` status
+ * 400 — which failed `com.digitalarsenal.flows.cellular-network-ingest` every
+ * day on host-02 while archive.org was perfectly healthy.
+ *
+ * The contract is `data-source/celestrak-parser`'s, mirrored exactly: one
+ * notice on the `unchanged` port and NOTHING on meta/records, so
+ * hostcap/storage-ingest never becomes ready, no batch is stored or announced,
+ * and the resume mark does not move — nothing new was read, so there is
+ * nothing to resume past, and the next tick re-asks for the same chunk.
  *
  * So `publish_request` EMITS the advanced mark on its own port — correct, tested
  * and ready — and the flow currently lands it on egress rather than in a store.
@@ -1234,6 +1250,24 @@ bool parse_index(const std::string& text, long* out) {
     return true;
 }
 
+// HTTP 304: one notice frame on the "unchanged" port, nothing on meta or
+// records. hostcap/storage-ingest never becomes ready (its required meta and
+// records ports stay empty), so nothing is stored and no batch is announced;
+// the notice reaches the flow's egress sink so the operator can see the pull
+// happened and found nothing new. Byte-for-byte the celestrak-parser notice.
+int emit_unchanged(const std::string& job, const std::string& config) {
+    std::string source_url;
+    std::string dataset_id;
+    json_string_field(job, "source_url", &source_url);
+    json_string_field(job, "dataset_id", &dataset_id);
+    const std::string notice =
+        std::string("{\"status\":304,\"unchanged\":true") + ",\"source_name\":\"" +
+        json_escape(config_string(config, "cell_ingest_source_name", "cell-tower-bulk")) + "\"" +
+        ",\"source_url\":\"" + json_escape(source_url) + "\"" + ",\"dataset_id\":\"" +
+        json_escape(dataset_id) + "\"}";
+    return push_json("unchanged", notice) < 0 ? 500 : 0;
+}
+
 }  // namespace
 
 extern "C" {
@@ -1958,6 +1992,17 @@ int ingest_meta(void) {
         plugin_set_error("missing-job-frame", "ingest_meta requires the run-contract job frame.");
         return 400;
     }
+
+    // Read before the records check: on a 304 there IS no chunk, deconflict's
+    // record stream is empty by construction, and refusing it as a missing
+    // frame is exactly the bug (see the 304 note in the file header). The
+    // status gate is the celestrak parser's: 200 and 304 are both successful
+    // fetches; everything else is still somebody else's error to report.
+    const std::string response = input_text("response");
+    if (static_cast<long>(json_number_or(response, "status", 0)) == 304) {
+        return emit_unchanged(job, load_config());
+    }
+
     const plugin_input_frame_t* records = frame_for("records");
     if (!records || !records->payload) {
         plugin_set_error("missing-records-frame",
@@ -1989,7 +2034,6 @@ int ingest_meta(void) {
     const std::string decision_raw = input_text("decision");
 
     long total_bytes = 0;
-    const std::string response = input_text("response");
     if (!response.empty()) {
         std::string headers;
         const size_t h = response.find("\"headers\"");

@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.data-source.mlab-starlink-connectivity",
   "name": "M-Lab Starlink Connectivity Source Nodes",
   "version": "0.1.0",
-  "description": "M-Lab NDT statistics pipeline -> SDS $CNP constellation-network-performance records. Two pure flow nodes: `request` turns a cron timer tick into ONE whole-file hostcap/http-request GET of https://statistics.measurementlab.net/v0/asn/<ASN>/<YEAR>/histogram_daily_stats.json (anonymous HTTPS, no BigQuery, no auth) plus the parser attribution job; `parse` joins that job with the http response, collapses the eight per-date log-bucket rows into one aggregate per UTC day and emits a size-prefixed $CNP record stream for hostcap/storage-ingest. Starlink IS the client-ASN key: the upstream query groups by client.Network.ASNumber and AS14593 is SPACEX-STARLINK, so no constellation is ever inferred from a throughput number. A quantity exists only as a CNPMetric with UNITS and PROVENANCE, and CNPMetric has no scalar VALUE: throughput publishes six CNPStatistic entries (MINIMUM, PERCENTILE 25, MEDIAN, MEAN, PERCENTILE 75, MAXIMUM) in Mbps verbatim and minimum-RTT publishes exactly one MEDIAN in ms. REGION is omitted entirely because the per-ASN export carries no geographic key. M-Lab test data is CC0, so every metric carries LICENSE CC0-1.0, M-Lab's own citation in ATTRIBUTION and NON_COMMERCIAL_ONLY false. No capabilities: this node performs no I/O — http and storage are the generic hostcap connector nodes.",
+  "description": "M-Lab NDT statistics pipeline -> SDS $CNP constellation-network-performance records. Two pure flow nodes: `request` turns a cron timer tick into ONE whole-file hostcap/http-request GET of https://statistics.measurementlab.net/v0/asn/<ASN>/<YEAR>/histogram_daily_stats.json (anonymous HTTPS, no BigQuery, no auth) plus the parser attribution job; `parse` joins that job with the http response, collapses the eight per-date log-bucket rows into one aggregate per UTC day and emits a size-prefixed $CNP record stream for hostcap/storage-ingest. Starlink IS the client-ASN key: the upstream query groups by client.Network.ASNumber and AS14593 is SPACEX-STARLINK, so no constellation is ever inferred from a throughput number. A quantity exists only as a CNPMetric with UNITS and PROVENANCE, and CNPMetric has no scalar VALUE: throughput publishes six CNPStatistic entries (MINIMUM, PERCENTILE 25, MEDIAN, MEAN, PERCENTILE 75, MAXIMUM) in Mbps verbatim and minimum-RTT publishes exactly one MEDIAN in ms. REGION is omitted entirely because the per-ASN export carries no geographic key. M-Lab test data is CC0, so every metric carries LICENSE CC0-1.0, M-Lab's own citation in ATTRIBUTION and NON_COMMERCIAL_ONLY false. No capabilities: this node performs no I/O — http and storage are the generic hostcap connector nodes. HTTP 304 Not Modified is accepted on the parse node: the method emits a single notice on its 'unchanged' port and nothing else, so no batch is stored or announced.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": [
@@ -102,7 +102,7 @@
     {
       "methodId": "parse",
       "displayName": "Parse M-Lab Per-ASN Statistics into $CNP",
-      "description": "Collapses the eight per-date log-bucket rows of the M-Lab per-ASN export into one $CNP aggregate per UTC day (WINDOW_START inclusive, WINDOW_STOP exclusive, AGGREGATION_PERIOD DAY) and emits a size-prefixed $CNP record stream plus the storage.ingest_with_source meta and the raw payload for archiving. Throughput stays in Mbps and RTT in ms — units are never silently converted — and the histogram columns and geometric means are recorded as unencoded in the batch provenance rather than forced into a CNPStatistic that would mean something else. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames.",
+      "description": "Collapses the eight per-date log-bucket rows of the M-Lab per-ASN export into one $CNP aggregate per UTC day (WINDOW_START inclusive, WINDOW_STOP exclusive, AGGREGATION_PERIOD DAY) and emits a size-prefixed $CNP record stream plus the storage.ingest_with_source meta and the raw payload for archiving. Throughput stays in Mbps and RTT in ms — units are never silently converted — and the histogram columns and geometric means are recorded as unencoded in the batch provenance rather than forced into a CNPStatistic that would mean something else. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames. HTTP 304 Not Modified is accepted, never treated as a failed fetch: the host presents the ETag / Last-Modified it recorded from the previous 2xx for this URL, so an unchanged export answers 304 with no body. The method then emits a single notice on its 'unchanged' port and nothing else, so no batch is stored or announced.",
       "inputPorts": [
         {
           "portId": "job",
@@ -218,6 +218,29 @@
           "maxStreams": 1,
           "required": true,
           "description": "Raw fetched payload."
+        },
+        {
+          "portId": "unchanged",
+          "acceptedTypeSets": [
+            {
+              "setId": "mlab-unchanged-notice-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "HTTP 304 notice {status:304,unchanged:true,source_name,source_url,dataset_id} produced when the origin confirms the previously fetched document is current; delivered to the flow's egress sink, never persisted as a record."
+              },
+              "description": "UTF-8 JSON {\"status\":304,\"unchanged\":true,\"source_name\",\"source_url\",\"dataset_id\"}."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Emitted ONLY when the fetch answered HTTP 304 Not Modified (the host sent the recorded ETag / Last-Modified validators): one notice frame and no meta/records/raw frames, so the ingest node never becomes ready and nothing is stored or announced."
         }
       ],
       "maxBatch": 1,

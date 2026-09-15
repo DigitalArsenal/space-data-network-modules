@@ -5,7 +5,7 @@
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
   "nodes": 5,
-  "edges": 7,
+  "edges": 8,
   "triggers": 1,
   "capabilities": [
     "http",
@@ -17,31 +17,36 @@
       "nodeId": "req",
       "pluginId": "com.digitalarsenal.data-source.mlab-starlink-connectivity",
       "methodId": "request",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "http",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "methodId": "request",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "parse",
       "pluginId": "com.digitalarsenal.data-source.mlab-starlink-connectivity",
       "methodId": "parse",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "ingest_cnp",
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
       "methodId": "ingest",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "egress",
       "pluginId": "sdn.flow.egress",
       "methodId": "emit",
-      "dispatchModel": "host"
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
     }
   ],
   "dependencies": [
@@ -50,7 +55,7 @@
       "dependencyId": "com.digitalarsenal.data-source.mlab-starlink-connectivity",
       "pluginId": "com.digitalarsenal.data-source.mlab-starlink-connectivity",
       "version": "0.1.0",
-      "sha256": "44155bd4d5d63f669498d97e97bfafa4cfccc8a8d1b59edd016a011aa93422bb",
+      "sha256": "fde722ab67e08eda0e425f734c3c58aade92ed9d4257debce84fa3b39b617059",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -65,13 +70,13 @@
       "dependencyId": "com.digitalarsenal.hostcap.http-request",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "version": "0.1.0",
-      "sha256": "f4077d1660745473b49d0accde178d0573c2bd1b4b69439da5b741ba14667adb",
+      "sha256": "da255ce8bf0029a39f58cdc381e7812f0dd3fa9c8a2d2136da1698356e9f522d",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
-      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_",
       "methodSymbols": {
-        "request": "sdm_guest_636f6d2e6469676974616c61_request"
+        "request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_request"
       }
     },
     {
@@ -79,13 +84,13 @@
       "dependencyId": "com.digitalarsenal.hostcap.storage-ingest",
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
       "version": "0.1.0",
-      "sha256": "bc808cd24571bf26758f68446eb8b6701cd2550d8e8a867fb430e579c0b61783",
+      "sha256": "c8d55314b14880723da95996a7dc2f089a4452a21551bb171e456cf936a18104",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
-      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_",
       "methodSymbols": {
-        "ingest": "sdm_guest_636f6d2e6469676974616c61_ingest"
+        "ingest": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_ingest"
       }
     }
   ]
