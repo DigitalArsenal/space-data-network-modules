@@ -1760,6 +1760,42 @@ uint8_t* access_compute_access_windows_with_elevation_mask(
   return copyAccessWindowRecordsToOutput(windows, outWindowCount);
 }
 
+// Legacy geometry API uses the same C++ frame, mask, and refraction functions
+// as ACW; JS only copies this fixed-size result record.
+ORBPRO_EXPORT
+int32_t access_compute_geometry(
+    const StateRecord* state, uint32_t stationIndex, double minElevation,
+    const ElevationMaskPointRecord* maskPoints, uint32_t maskCount,
+    const RefractionModelRecord* refractionInput, double* output) {
+  if (!g_initialized || !state || !output || stationIndex >= g_ground_stations.size()) return 1;
+  const auto& station = g_ground_stations[stationIndex];
+  const auto origin = geodeticToEcef(station.latitude_rad, station.longitude_rad, station.altitude_m);
+  const auto geometry = computeAccessGeometryRad(origin, geodeticEast(station.longitude_rad),
+      geodeticNorth(station.latitude_rad, station.longitude_rad),
+      geodeticUp(station.latitude_rad, station.longitude_rad), *state);
+  const Vec3 los{state->x - origin.x, state->y - origin.y, state->z - origin.z};
+  const double range = std::sqrt(dot(los, los));
+  const double elevation = range > 0 ? geometry.elevation_rad : -kPi / 2;
+  double threshold = isFinite(minElevation) ? minElevation : station.min_elevation_rad;
+  if (maskCount) {
+    ElevationMaskTable mask{};
+    if (!maskPoints || !normalizeElevationMask(maskPoints, maskCount, &mask)) return 2;
+    threshold = evaluateElevationMask(mask, geometry.azimuth_rad);
+  }
+  RefractionModelRecord refraction{};
+  const RefractionModelRecord* model = nullptr;
+  if (refractionInput) {
+    refraction = *refractionInput;
+    if (!prepareRefractionModel(&refraction)) return 3;
+    model = &refraction;
+  }
+  const double correction = computeRefractionRad(elevation, model);
+  const double values[]{range, elevation, geometry.azimuth_rad, los.x, los.y, los.z,
+      threshold, correction, elevation + correction, elevation + correction >= threshold ? 1.0 : 0.0};
+  std::memcpy(output, values, sizeof(values));
+  return 0;
+}
+
 ORBPRO_EXPORT
 uint8_t* access_compute_access_windows_with_effects(
     const uint8_t* stateBytes,

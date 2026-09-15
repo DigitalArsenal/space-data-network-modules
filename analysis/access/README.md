@@ -4,7 +4,8 @@ The canonical build uses SDK `compileModuleFromSource` and its
 `wasi-sequential` profile. The module processes ordered trajectory samples and
 exports both direct PIV and command invocation. One byte-identical WASM file is
 used in Chrome/V8, native WasmEdge, and container WasmEdge. Browser JS adapts
-legacy C export names and memory views; the existing C++ evaluator computes ACW.
+legacy C export names and memory views; C++ computes ACW, geometry, elevation
+masks, and refraction for both the SDK method and retained helper APIs.
 
 ```sh
 npm ci --ignore-scripts

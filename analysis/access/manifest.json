@@ -9,7 +9,7 @@
   "wasmModule": {
     "file": "access.wasm",
     "loader": "access.mjs",
-    "hash": "405c3e212e8a38bcb202deee17fb8fa31e0c0d02770391613a1d243842ca876d",
+    "hash": "668daf02e5e1373342144ddaa5e38391f4c966eda41b03a1153b0ca014211aea",
     "exports": [
       "_start",
       "plugin_init",
@@ -23,6 +23,7 @@
       "access_get_ground_station_blackout_record",
       "access_compute_access_windows",
       "access_compute_access_windows_with_elevation_mask",
+      "access_compute_geometry",
       "access_compute_access_windows_with_effects",
       "access_schedule_contacts",
       "compute_access_windows",

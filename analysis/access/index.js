@@ -20,8 +20,6 @@ const SCHEDULE_WINDOW_RECORD_SIZE = 40;
 const SCHEDULE_RESULT_RECORD_SIZE = 24;
 const ELEVATION_MASK_POINT_RECORD_SIZE = 16;
 const REFRACTION_MODEL_RECORD_SIZE = 48;
-const WGS84_A = 6378137.0;
-const WGS84_E2 = 6.6943799901413165e-3;
 const TEXT_ENCODER =
   typeof TextEncoder !== "undefined" ? new TextEncoder() : null;
 const TEXT_DECODER =
@@ -29,39 +27,14 @@ const TEXT_DECODER =
 const TWO_PI = 2.0 * Math.PI;
 const OREKIT_STANDARD_REFRACTION_DEFAULT_PRESSURE_PA = 101000.0;
 const OREKIT_STANDARD_REFRACTION_DEFAULT_TEMPERATURE_K = 283.0;
-const OREKIT_STANDARD_REFRACTION_MIN_ELEVATION_DEG = -2.0;
-const OREKIT_STANDARD_REFRACTION_MAX_ELEVATION_DEG = 89.89;
 const REFRACTION_MODEL_KIND_EARTH_STANDARD_ATMOSPHERE = 1;
 const REFRACTION_MODEL_KIND_ITU_R_P834 = 2;
 const OREKIT_ITURP834_KM_TO_M = 1000.0;
-const OREKIT_ITURP834_INV_DEG_TO_INV_RAD = 180.0 / Math.PI;
 const OREKIT_ITURP834_EARTH_RAY_M = 6370.0 * OREKIT_ITURP834_KM_TO_M;
-const OREKIT_ITURP834_TAU_ZERO_COEFFICIENTS = [
-  OREKIT_ITURP834_INV_DEG_TO_INV_RAD * 1.728,
-  OREKIT_ITURP834_INV_DEG_TO_INV_RAD * 0.5411,
-  OREKIT_ITURP834_INV_DEG_TO_INV_RAD * 0.03723,
-  (OREKIT_ITURP834_INV_DEG_TO_INV_RAD * 0.1815) /
-    OREKIT_ITURP834_KM_TO_M,
-  (OREKIT_ITURP834_INV_DEG_TO_INV_RAD * 0.06272) /
-    OREKIT_ITURP834_KM_TO_M,
-  (OREKIT_ITURP834_INV_DEG_TO_INV_RAD * 0.01138) /
-    OREKIT_ITURP834_KM_TO_M,
-  (OREKIT_ITURP834_INV_DEG_TO_INV_RAD * 0.01727) /
-    (OREKIT_ITURP834_KM_TO_M * OREKIT_ITURP834_KM_TO_M),
-  (OREKIT_ITURP834_INV_DEG_TO_INV_RAD * 0.008288) /
-    (OREKIT_ITURP834_KM_TO_M * OREKIT_ITURP834_KM_TO_M),
-];
+
 
 function degreesToRadians(value) {
   return (value * Math.PI) / 180.0;
-}
-
-function radiansToDegrees(value) {
-  return (value * 180.0) / Math.PI;
-}
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
 }
 
 function normalizeAzimuthRad(value) {
@@ -387,44 +360,6 @@ function encodeElevationMaskPointRecords(points = []) {
   return bytes;
 }
 
-function evaluateElevationMask(points, azimuthRad) {
-  if (!Array.isArray(points) || points.length === 0) {
-    return Number.NaN;
-  }
-
-  const normalizedAzimuth = normalizeAzimuthRad(azimuthRad);
-  const extended = [
-    {
-      azimuthRad: points.at(-1).azimuthRad - TWO_PI,
-      elevationRad: points.at(-1).elevationRad,
-    },
-    ...points,
-    {
-      azimuthRad: points[0].azimuthRad + TWO_PI,
-      elevationRad: points[0].elevationRad,
-    },
-  ];
-
-  for (let index = 1; index < extended.length; index += 1) {
-    const end = extended[index];
-    if (normalizedAzimuth <= end.azimuthRad) {
-      const start = extended[index - 1];
-      const span = end.azimuthRad - start.azimuthRad;
-      if (Math.abs(span) < 1.0e-15) {
-        return end.elevationRad;
-      }
-      return (
-        start.elevationRad +
-        ((normalizedAzimuth - start.azimuthRad) *
-          (end.elevationRad - start.elevationRad)) /
-          span
-      );
-    }
-  }
-
-  return extended.at(-1).elevationRad;
-}
-
 function normalizeRefractionModelOption(options = {}, station = null) {
   const source =
     options.refractionModel ??
@@ -513,20 +448,14 @@ function normalizeRefractionModelOption(options = {}, station = null) {
       );
     }
 
-    const elevationStarRad =
-      computeIturp834AtmosphericRefractionElevationStarRad(stationAltitudeM);
-    const refractionStarRad = computeIturp834TauZeroRad(
-      elevationStarRad,
-      stationAltitudeM,
-    );
     return {
       type: "itu-r-p834",
       modelKind: REFRACTION_MODEL_KIND_ITU_R_P834,
       pressurePa: OREKIT_STANDARD_REFRACTION_DEFAULT_PRESSURE_PA,
       temperatureK: OREKIT_STANDARD_REFRACTION_DEFAULT_TEMPERATURE_K,
       stationAltitudeM,
-      elevationStarRad,
-      refractionStarRad,
+      elevationStarRad: 0.0,
+      refractionStarRad: 0.0,
     };
   }
 
@@ -544,107 +473,6 @@ function encodeRefractionModelRecord(model) {
   view.setUint32(40, model.modelKind, true);
   view.setUint32(44, 0, true);
   return bytes;
-}
-
-function computeEarthStandardAtmosphereRefractionRad(elevationRad, model) {
-  if (!model) {
-    return 0.0;
-  }
-
-  const elevationDeg = radiansToDegrees(elevationRad);
-  if (
-    elevationDeg <= OREKIT_STANDARD_REFRACTION_MIN_ELEVATION_DEG ||
-    elevationDeg >= OREKIT_STANDARD_REFRACTION_MAX_ELEVATION_DEG
-  ) {
-    return 0.0;
-  }
-
-  const refractionArgumentDeg = elevationDeg + 10.3 / (elevationDeg + 5.11);
-  const refractionDeg =
-    1.02 / Math.tan(degreesToRadians(refractionArgumentDeg)) / 60.0;
-  const correctionFactor =
-    (model.pressurePa / OREKIT_STANDARD_REFRACTION_DEFAULT_PRESSURE_PA) *
-    (OREKIT_STANDARD_REFRACTION_DEFAULT_TEMPERATURE_K / model.temperatureK);
-  return degreesToRadians(correctionFactor * refractionDeg);
-}
-
-function computeIturp834TauZeroRad(elevationRad, altitudeM) {
-  const coefficients = OREKIT_ITURP834_TAU_ZERO_COEFFICIENTS;
-  const elevationDeg = radiansToDegrees(elevationRad);
-  const tmp0 =
-    coefficients[0] +
-    (coefficients[1] + coefficients[2] * elevationDeg) * elevationDeg;
-  const tmp1 =
-    altitudeM *
-    (coefficients[3] +
-      (coefficients[4] + coefficients[5] * elevationDeg) * elevationDeg);
-  const tmp2 =
-    altitudeM *
-    altitudeM *
-    (coefficients[6] + coefficients[7] * elevationDeg);
-  return 1.0 / (tmp0 + tmp1 + tmp2);
-}
-
-function computeIturp834AtmosphericRefractionElevationStarRad(altitudeM) {
-  let lower = -Math.PI / 30.0;
-  let upper = Math.PI / 4.0;
-  const inverseGoldenRatio = (Math.sqrt(5.0) - 1.0) / 2.0;
-  const objective = (elevationRad) =>
-    elevationRad + computeIturp834TauZeroRad(elevationRad, altitudeM);
-  let left = upper - inverseGoldenRatio * (upper - lower);
-  let right = lower + inverseGoldenRatio * (upper - lower);
-  let leftValue = objective(left);
-  let rightValue = objective(right);
-
-  for (
-    let iteration = 0;
-    iteration < 200 && Math.abs(upper - lower) > 1.0e-12;
-    iteration += 1
-  ) {
-    if (leftValue < rightValue) {
-      upper = right;
-      right = left;
-      rightValue = leftValue;
-      left = upper - inverseGoldenRatio * (upper - lower);
-      leftValue = objective(left);
-    } else {
-      lower = left;
-      left = right;
-      leftValue = rightValue;
-      right = lower + inverseGoldenRatio * (upper - lower);
-      rightValue = objective(right);
-    }
-  }
-
-  return (lower + upper) / 2.0;
-}
-
-function computeIturp834AtmosphericRefractionRad(elevationRad, model) {
-  if (
-    !model ||
-    !Number.isFinite(elevationRad) ||
-    !Number.isFinite(model.stationAltitudeM)
-  ) {
-    return 0.0;
-  }
-
-  if (elevationRad < model.elevationStarRad) {
-    return model.refractionStarRad;
-  }
-  return computeIturp834TauZeroRad(elevationRad, model.stationAltitudeM);
-}
-
-function computeRefractionRad(elevationRad, model) {
-  if (!model) {
-    return 0.0;
-  }
-  if (model.type === "earth-standard-atmosphere") {
-    return computeEarthStandardAtmosphereRefractionRad(elevationRad, model);
-  }
-  if (model.type === "itu-r-p834") {
-    return computeIturp834AtmosphericRefractionRad(elevationRad, model);
-  }
-  return 0.0;
 }
 
 function decodeAccessWindowRecords(bytes, stationId, options = {}) {
@@ -774,91 +602,6 @@ function decodeScheduledContactRecords(bytes, bySortIndex) {
     });
   }
   return scheduled;
-}
-
-function geodeticToEcef(latitudeRad, longitudeRad, altitudeM) {
-  const sinLat = Math.sin(latitudeRad);
-  const cosLat = Math.cos(latitudeRad);
-  const sinLon = Math.sin(longitudeRad);
-  const cosLon = Math.cos(longitudeRad);
-  const primeVertical = WGS84_A / Math.sqrt(1.0 - WGS84_E2 * sinLat * sinLat);
-  return {
-    x: (primeVertical + altitudeM) * cosLat * cosLon,
-    y: (primeVertical + altitudeM) * cosLat * sinLon,
-    z: (primeVertical * (1.0 - WGS84_E2) + altitudeM) * sinLat,
-  };
-}
-
-function computeEnuAxes(latitudeRad, longitudeRad) {
-  const sinLat = Math.sin(latitudeRad);
-  const cosLat = Math.cos(latitudeRad);
-  const sinLon = Math.sin(longitudeRad);
-  const cosLon = Math.cos(longitudeRad);
-  return {
-    east: { x: -sinLon, y: cosLon, z: 0.0 },
-    north: {
-      x: -sinLat * cosLon,
-      y: -sinLat * sinLon,
-      z: cosLat,
-    },
-    up: {
-      x: cosLat * cosLon,
-      y: cosLat * sinLon,
-      z: sinLat,
-    },
-  };
-}
-
-function dot(left, right) {
-  return left.x * right.x + left.y * right.y + left.z * right.z;
-}
-
-function magnitude(vector) {
-  return Math.hypot(vector.x, vector.y, vector.z);
-}
-
-function subtract(left, right) {
-  return {
-    x: left.x - right.x,
-    y: left.y - right.y,
-    z: left.z - right.z,
-  };
-}
-
-function computeAccessGeometryFromState(state, station) {
-  const stationEcef = geodeticToEcef(
-    station.latitudeRad,
-    station.longitudeRad,
-    station.altitudeM,
-  );
-  const axes = computeEnuAxes(station.latitudeRad, station.longitudeRad);
-  const rangeVector = subtract(state, stationEcef);
-  const rangeM = magnitude(rangeVector);
-  if (!(rangeM > 0.0)) {
-    return {
-      stationId: station.id,
-      rangeM: 0.0,
-      elevationRad: -Math.PI * 0.5,
-      azimuthRad: 0.0,
-      lineOfSightVector: rangeVector,
-      visible: false,
-    };
-  }
-
-  const east = dot(rangeVector, axes.east);
-  const north = dot(rangeVector, axes.north);
-  const up = dot(rangeVector, axes.up);
-  const elevationRad = Math.asin(clamp(up / rangeM, -1.0, 1.0));
-  const azimuthRad = normalizeAzimuthRad(Math.atan2(east, north));
-
-  return {
-    stationId: station.id,
-    rangeM,
-    elevationRad,
-    azimuthRad,
-    lineOfSightVector: rangeVector,
-    visible: elevationRad >= station.minElevationRad,
-  };
 }
 
 function attachEmbeddedManifestMetadata(module) {
@@ -1211,34 +954,36 @@ export async function createAccessAnalyzer(options = {}) {
   }
 
   function computeAccessGeometry(state, stationId, analysisOptions = {}) {
-    const normalizedState = normalizeState(state);
     const stations = listGroundStations();
     const stationIndex = resolveGroundStationIndex(stationId, stations);
     const station = stations[stationIndex];
-    const geometry = computeAccessGeometryFromState(normalizedState, station);
-    const elevationMask = normalizeElevationMaskOption(analysisOptions);
-    const refractionModel = normalizeRefractionModelOption(
-      analysisOptions,
-      station,
-    );
-    const minElevationRad = normalizeMinElevationOption(analysisOptions);
-    const thresholdElevation = elevationMask
-      ? evaluateElevationMask(elevationMask, geometry.azimuthRad)
-      : Number.isFinite(minElevationRad)
-        ? minElevationRad
-        : station.minElevationRad;
-    const refractionRad = computeRefractionRad(
-      geometry.elevationRad,
-      refractionModel,
-    );
-    const apparentElevationRad = geometry.elevationRad + refractionRad;
-    return {
-      ...geometry,
-      minElevationRad: thresholdElevation,
-      refractionRad,
-      apparentElevationRad,
-      visible: apparentElevationRad >= thresholdElevation,
+    const mask = normalizeElevationMaskOption(analysisOptions);
+    const refraction = normalizeRefractionModelOption(analysisOptions, station);
+    const pointers = [];
+    const allocate = (bytes) => {
+      const pointer = writeBytesToModule(module, bytes);
+      pointers.push(pointer);
+      return pointer;
     };
+    try {
+      const statePointer = allocate(encodeStateRecords([state]).bytes);
+      const maskPointer = mask ? allocate(encodeElevationMaskPointRecords(mask)) : 0;
+      const refractionPointer = refraction ? allocate(encodeRefractionModelRecord(refraction)) : 0;
+      const resultPointer = allocate(new Uint8Array(80));
+      const status = module._access_compute_geometry(
+        statePointer, stationIndex, normalizeMinElevationOption(analysisOptions),
+        maskPointer, mask?.length ?? 0, refractionPointer, resultPointer,
+      );
+      if (status !== 0) throw new Error(`Native access geometry failed: ${status}`);
+      const values = new Float64Array(module.HEAPU8.buffer, resultPointer, 10);
+      return {
+        stationId: station.id, rangeM: values[0], elevationRad: values[1], azimuthRad: values[2],
+        lineOfSightVector: { x: values[3], y: values[4], z: values[5] },
+        minElevationRad: values[6], refractionRad: values[7], apparentElevationRad: values[8], visible: values[9] !== 0,
+      };
+    } finally {
+      for (const pointer of pointers) module._free(pointer);
+    }
   }
 
   function predictAos(states = [], stationId, analysisOptions = {}) {
