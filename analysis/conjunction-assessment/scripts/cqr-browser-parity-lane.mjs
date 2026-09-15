@@ -15,7 +15,8 @@ const { resolveChromeBinary } = await import(path.join(sdkTesting, 'parityLanes.
 
 export async function runThreadedBrowserLane(context) {
   const source = `
-    import { createBrowserModuleHarness, setBrowserWasiThreadWorkerBase } from 'space-data-module-sdk';
+    import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
+    import { setBrowserWasiThreadWorkerBase } from ${JSON.stringify(path.join(sdkSource, 'host/wasiThreadHost.js'))};
     setBrowserWasiThreadWorkerBase('/sdk/host/');
     let spawnCount = 0;
     const NativeWorker = globalThis.Worker;
@@ -27,7 +28,7 @@ export async function runThreadedBrowserLane(context) {
       try {
         harness = await createBrowserModuleHarness({ wasmSource: data.wasmBytes, surface: 'command',
           args: ['module.wasm', ...data.args], env: data.env,
-          enableBrowserWasiThreads: true, maxThreads: 64 });
+          enableBrowserWasiThreads: true, maxThreads: data.caseId.startsWith('socrates') && data.threadCount > 1 ? data.threadCount * 2 : 0 });
         stdout = await harness.invokeRaw(data.stdinBytes);
       } catch (error) {
         exitClass = error.name === 'WasiExitError' ? 'guest-error' : 'trap';
@@ -48,10 +49,11 @@ export async function runThreadedBrowserLane(context) {
       const runs = [];
       for (const c of plan) {
         document.getElementById('status').textContent = c.caseId + ' / workers ' + c.threadCount;
+        await fetch('/progress',{method:'POST',body:c.caseId + ' / workers ' + c.threadCount});
         const worker = new Worker('/case-worker.js', {type:'module'});
         try {
           const run = await new Promise((resolve,reject) => {
-            worker.onmessage = e => resolve(e.data); worker.onerror = e => reject(Error(e.message));
+            worker.onmessage = e => resolve(e.data); worker.onerror = e => reject(Error(e.message + ' at ' + e.filename + ':' + e.lineno));
             worker.postMessage({...c, wasmBytes, stdinBytes: Uint8Array.from(atob(c.stdinBase64),x=>x.charCodeAt(0))});
           });
           runs.push({...run, caseId:c.caseId, threadCount:c.threadCount, stdoutBase64:btoa(String.fromCharCode(...run.stdout)), stdout:undefined});
@@ -62,6 +64,11 @@ export async function runThreadedBrowserLane(context) {
   </script>`;
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
+    if (req.method === 'POST' && url.pathname === '/progress') {
+      const chunks = []; req.on('data', c => chunks.push(c)); req.on('end', () => {
+        context.log('browser: ' + Buffer.concat(chunks).toString()); res.writeHead(200, headers); res.end('ok');
+      }); return;
+    }
     if (req.method === 'POST' && url.pathname === '/done') {
       const chunks = []; req.on('data', c => chunks.push(c)); req.on('end', () => {
         res.writeHead(200, headers); res.end('ok');

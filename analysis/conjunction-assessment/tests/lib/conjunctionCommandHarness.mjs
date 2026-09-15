@@ -3,8 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadModule } from "space-data-module-sdk/host/isomorphic";
-import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
-import { buildNativeWasiThreadsRunner } from './wasmedgeWasiThreadsRunner.mjs';
+import { createBrowserModuleHarness, createModuleHarness } from "space-data-module-sdk/testing";
+import { buildNativeWasiThreadsRunner, wasiThreadsLaunchPlan } from './wasmedgeWasiThreadsRunner.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, "..", "..");
@@ -25,7 +25,7 @@ export function conjunctionArtifactExists() {
 
 export async function createConjunctionCommandHarness(options = {}) {
   const runtimeKind = options.runtimeKind ?? process.env.CQR_TEST_RUNTIME ?? "wasmedge";
-  const harness = runtimeKind === "browser" ? await createBrowserModuleHarness({ wasmSource: fs.readFileSync(options.wasmSource ?? ISOMORPHIC_WASM_PATH), surface: "direct", enableThreads: true }) : await loadModule({
+  const harness = runtimeKind === "browser" ? await createBrowserModuleHarness({ wasmSource: fs.readFileSync(options.wasmSource ?? ISOMORPHIC_WASM_PATH), surface: "direct", enableThreads: true }) : options.surface === 'direct' || runtimeKind === 'docker-wasmedge' ? await createModuleHarness({ runtime: { kind: 'wasmedge', launchPlan: await wasiThreadsLaunchPlan(runtimeKind, { wasmPath: options.wasmSource ?? ISOMORPHIC_WASM_PATH, args: ['--serve-plugin-invoke'] }) } }) : await loadModule({
     wasmSource: options.wasmSource ?? ISOMORPHIC_WASM_PATH,
     runtimeKind,
     enableThreads: options.enableThreads ?? true,

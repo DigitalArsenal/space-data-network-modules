@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import test from 'node:test';
 import { createConjunctionCommandHarness } from './lib/conjunctionCommandHarness.mjs';
-import { initCqrFlatc, encodeCqr, decodeCqr, earthFrame, screeningControls } from './lib/cqr.mjs';
+import { initCqrFlatc, encodeCqr, decodeCqr, earthFrame, screeningControls, gpRecord, publishedSchema } from './lib/cqr.mjs';
 
 // Independent rectilinear family in Earth-centered GCRF, UTC 2026-03-09:
 // object i has x=7000+0.1*i km, y=-i+(7.5+0.1*i)*t km.
@@ -30,6 +31,65 @@ function verifyEvent(event) {
   assert.ok(Math.abs(event.MISS_DISTANCE_M - 100 * spacing) <= .001);
   assert.ok(Math.abs(event.RELATIVE_SPEED_M_S - 100 * spacing) <= .005);
 }
+
+test('CQR rejects time controls below the binary64 Julian-date resolution', async (t) => {
+  const flatc = await initCqrFlatc();
+  const harness = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
+  t.after(() => harness.destroy());
+  // IEEE 754 binary64 has 53 significant binary digits; a Julian date near
+  // 2461108.5 has ULP 2^-31 day (~40.23 microseconds). A 1 ns step/duration
+  // cannot advance that clock and a 1 ns refinement tolerance is unattainable.
+  // https://doi.org/10.1109/IEEESTD.2019.8766229 (binary64 format, §3.6).
+  for (const field of ['COARSE_STEP_SECONDS', 'DURATION_SECONDS', 'REFINEMENT_TOLERANCE_SECONDS']) {
+    const request = { CATALOG_REQUEST: { PRIMARIES: [linearSource(0), linearSource(1)],
+      CONTROLS: { ...controls(), [field]: 1e-9 }, EVALUATION_FRAME: earthFrame('GCRF') } };
+    const response = await harness.invoke({ methodId: 'screen_catalog', inputs: [{ portId: 'request', payload: encodeCqr(flatc, request) }] });
+    assert.notEqual(response.statusCode, 0, `${field} was accepted`);
+    assert.equal(response.errorCode, 'unsupported-resolution');
+    assert.equal(response.outputs.length, 0);
+  }
+});
+
+test('CQR direct OMM sources use distinct catalog identities when international designators are absent', async (t) => {
+  const flatc = await initCqrFlatc();
+  const harness = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
+  t.after(() => harness.destroy());
+  // CelesTrak SOCRATES Plus snapshot, captured 2026-03-10, same authoritative
+  // 47935–49179 pair and TEME/UTC gates as proposal §8: .010 s / 5 m / 5 m/s.
+  // https://celestrak.org/SOCRATES/ and the checked-in reference.top3.json.
+  const records = JSON.parse(fs.readFileSync(new URL('./fixtures/socrates/gp_47935,49179.json', import.meta.url), 'utf8'));
+  const reference = JSON.parse(fs.readFileSync(new URL('./fixtures/socrates/reference.top3.json', import.meta.url), 'utf8')).conjunctions.find(row => row.obj1_norad === 47935);
+  const referenceJd = Date.parse(reference.tca) / 86400000 + 2440587.5;
+  const request = encodeCqr(flatc, { CATALOG_REQUEST: {
+    CONTROLS: { ...screeningControls({ startJd: referenceJd - 60 / 86400, durationSeconds: 120, coarseStepSec: 1 }), ALGORITHM: 'LAAS_2015' },
+    EVALUATION_FRAME: earthFrame('TEME'),
+  } });
+  const encodeOmm = source => {
+    const record = gpRecord(source);
+    delete record.OBJECT_ID;
+    return flatc.generateBinary(publishedSchema('OMM'), JSON.stringify(record), { sizePrefix: false });
+  };
+  const response = await harness.invoke({ methodId: 'screen_catalog', inputs: [
+    { portId: 'request', payload: request }, ...records.map(record => ({ portId: 'catalog', payload: encodeOmm(record) })),
+  ] });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const result = decodeCqr(flatc, response.outputs[0].payload).CATALOG_RESULT;
+  assert.equal(result.STATISTICS.PAIRS_SCREENED, 1);
+  assert.equal(result.STATISTICS.FAILED_PAIRS, 0);
+  assert.equal(result.EVENTS.length, 1);
+  const event = result.EVENTS[0];
+  assert.equal(event.PRIMARY_ID, '47935');
+  assert.equal(event.SECONDARY_ID, '49179');
+  assert.ok(Math.abs(event.TCA.JULIAN_DATE - referenceJd) * 86400 <= .010);
+  assert.ok(Math.abs(event.MISS_DISTANCE_M - reference.min_range_km * 1000) <= 5);
+  assert.ok(Math.abs(event.RELATIVE_SPEED_M_S - reference.rel_speed_kms * 1000) <= 5);
+  const invalid = await harness.invoke({ methodId: 'screen_catalog', inputs: [
+    { portId: 'request', payload: request }, { portId: 'catalog', payload: encodeOmm({ ...records[0], NORAD_CAT_ID: 0 }) },
+  ] });
+  assert.notEqual(invalid.statusCode, 0);
+  assert.equal(invalid.errorCode, 'invalid-source');
+  assert.equal(invalid.outputs.length, 0);
+});
 
 test('CQR sampled primary selection includes primary-primary pairs and excludes secondary-secondary pairs', async (t) => {
   const flatc = await initCqrFlatc();

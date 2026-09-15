@@ -1,18 +1,275 @@
-node:internal/modules/run_main:107
-    triggerUncaughtException(
-    ^
+parity FAIL fixture=CQR-SDS-1.220.0 module=ad7413859d2a9e23 lanes=[browser(44 runs, 14013ms), wasmedge(44 runs, 1479ms), docker-wasmedge(44 runs, 9027ms)] comparisons=153
+  PARITY FAIL case=socrates-workers-1 kind=expectation: wasmedge@t1: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=socrates-workers-1 kind=class-divergence: browser@t1 class "ok" vs wasmedge@t1 class "guest-error" (exit=1)
+  PARITY FAIL case=socrates-workers-1 kind=expectation: docker-wasmedge@t1: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=socrates-workers-1 kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t1 class "guest-error" (exit=1)
+  PARITY FAIL case=socrates-workers-2 kind=expectation: wasmedge@t2: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=socrates-workers-2 kind=class-divergence: browser@t2 class "ok" vs wasmedge@t2 class "guest-error" (exit=1)
+  PARITY FAIL case=socrates-workers-2 kind=expectation: docker-wasmedge@t2: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=socrates-workers-2 kind=class-divergence: browser@t2 class "ok" vs docker-wasmedge@t2 class "guest-error" (exit=1)
+  PARITY FAIL case=socrates-workers-4 kind=expectation: wasmedge@t4: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=socrates-workers-4 kind=class-divergence: browser@t4 class "ok" vs wasmedge@t4 class "guest-error" (exit=1)
+  PARITY FAIL case=socrates-workers-4 kind=expectation: docker-wasmedge@t4: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=socrates-workers-4 kind=class-divergence: browser@t4 class "ok" vs docker-wasmedge@t4 class "guest-error" (exit=1)
+  PARITY FAIL case=socrates-workers-8 kind=expectation: wasmedge@t8: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=socrates-workers-8 kind=class-divergence: browser@t8 class "ok" vs wasmedge@t8 class "guest-error" (exit=1)
+  PARITY FAIL case=socrates-workers-8 kind=expectation: docker-wasmedge@t8: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=socrates-workers-8 kind=class-divergence: browser@t8 class "ok" vs docker-wasmedge@t8 class "guest-error" (exit=1)
+  PARITY FAIL case=centered-isotropic-pc kind=expectation: wasmedge@t1: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=centered-isotropic-pc kind=class-divergence: browser@t1 class "ok" vs wasmedge@t1 class "guest-error" (exit=1)
+  PARITY FAIL case=centered-isotropic-pc kind=expectation: wasmedge@t2: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=centered-isotropic-pc kind=class-divergence: browser@t1 class "ok" vs wasmedge@t2 class "guest-error" (exit=1)
+  PARITY FAIL case=centered-isotropic-pc kind=expectation: wasmedge@t4: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=centered-isotropic-pc kind=class-divergence: browser@t1 class "ok" vs wasmedge@t4 class "guest-error" (exit=1)
+  PARITY FAIL case=centered-isotropic-pc kind=expectation: wasmedge@t8: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=centered-isotropic-pc kind=class-divergence: browser@t1 class "ok" vs wasmedge@t8 class "guest-error" (exit=1)
+  PARITY FAIL case=centered-isotropic-pc kind=expectation: docker-wasmedge@t1: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=centered-isotropic-pc kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t1 class "guest-error" (exit=1)
+  PARITY FAIL case=centered-isotropic-pc kind=expectation: docker-wasmedge@t2: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=centered-isotropic-pc kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t2 class "guest-error" (exit=1)
+  PARITY FAIL case=centered-isotropic-pc kind=expectation: docker-wasmedge@t4: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=centered-isotropic-pc kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t4 class "guest-error" (exit=1)
+  PARITY FAIL case=centered-isotropic-pc kind=expectation: docker-wasmedge@t8: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=centered-isotropic-pc kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t8 class "guest-error" (exit=1)
+  PARITY FAIL case=singular-covariance kind=expectation: wasmedge@t1: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=singular-covariance kind=class-divergence: browser@t1 class "ok" vs wasmedge@t1 class "guest-error" (exit=1)
+  PARITY FAIL case=singular-covariance kind=expectation: wasmedge@t2: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=singular-covariance kind=class-divergence: browser@t1 class "ok" vs wasmedge@t2 class "guest-error" (exit=1)
+  PARITY FAIL case=singular-covariance kind=expectation: wasmedge@t4: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=singular-covariance kind=class-divergence: browser@t1 class "ok" vs wasmedge@t4 class "guest-error" (exit=1)
+  PARITY FAIL case=singular-covariance kind=expectation: wasmedge@t8: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=singular-covariance kind=class-divergence: browser@t1 class "ok" vs wasmedge@t8 class "guest-error" (exit=1)
+  PARITY FAIL case=singular-covariance kind=expectation: docker-wasmedge@t1: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=singular-covariance kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t1 class "guest-error" (exit=1)
+  PARITY FAIL case=singular-covariance kind=expectation: docker-wasmedge@t2: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=singular-covariance kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t2 class "guest-error" (exit=1)
+  PARITY FAIL case=singular-covariance kind=expectation: docker-wasmedge@t4: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=singular-covariance kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t4 class "guest-error" (exit=1)
+  PARITY FAIL case=singular-covariance kind=expectation: docker-wasmedge@t8: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=singular-covariance kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t8 class "guest-error" (exit=1)
+  PARITY FAIL case=empty-cqr kind=expectation: wasmedge@t1: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=empty-cqr kind=class-divergence: browser@t1 class "ok" vs wasmedge@t1 class "guest-error" (exit=1)
+  PARITY FAIL case=empty-cqr kind=expectation: wasmedge@t2: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=empty-cqr kind=class-divergence: browser@t1 class "ok" vs wasmedge@t2 class "guest-error" (exit=1)
+  PARITY FAIL case=empty-cqr kind=expectation: wasmedge@t4: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=empty-cqr kind=class-divergence: browser@t1 class "ok" vs wasmedge@t4 class "guest-error" (exit=1)
+  PARITY FAIL case=empty-cqr kind=expectation: wasmedge@t8: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=empty-cqr kind=class-divergence: browser@t1 class "ok" vs wasmedge@t8 class "guest-error" (exit=1)
+  PARITY FAIL case=empty-cqr kind=expectation: docker-wasmedge@t1: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=empty-cqr kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t1 class "guest-error" (exit=1)
+  PARITY FAIL case=empty-cqr kind=expectation: docker-wasmedge@t2: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=empty-cqr kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t2 class "guest-error" (exit=1)
+  PARITY FAIL case=empty-cqr kind=expectation: docker-wasmedge@t4: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=empty-cqr kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t4 class "guest-error" (exit=1)
+  PARITY FAIL case=empty-cqr kind=expectation: docker-wasmedge@t8: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=empty-cqr kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t8 class "guest-error" (exit=1)
+  PARITY FAIL case=ambiguous-cqr kind=expectation: wasmedge@t1: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=ambiguous-cqr kind=class-divergence: browser@t1 class "ok" vs wasmedge@t1 class "guest-error" (exit=1)
+  PARITY FAIL case=ambiguous-cqr kind=expectation: wasmedge@t2: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=ambiguous-cqr kind=class-divergence: browser@t1 class "ok" vs wasmedge@t2 class "guest-error" (exit=1)
+  PARITY FAIL case=ambiguous-cqr kind=expectation: wasmedge@t4: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=ambiguous-cqr kind=class-divergence: browser@t1 class "ok" vs wasmedge@t4 class "guest-error" (exit=1)
+  PARITY FAIL case=ambiguous-cqr kind=expectation: wasmedge@t8: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=ambiguous-cqr kind=class-divergence: browser@t1 class "ok" vs wasmedge@t8 class "guest-error" (exit=1)
+  PARITY FAIL case=ambiguous-cqr kind=expectation: docker-wasmedge@t1: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=ambiguous-cqr kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t1 class "guest-error" (exit=1)
+  PARITY FAIL case=ambiguous-cqr kind=expectation: docker-wasmedge@t2: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=ambiguous-cqr kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t2 class "guest-error" (exit=1)
+  PARITY FAIL case=ambiguous-cqr kind=expectation: docker-wasmedge@t4: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=ambiguous-cqr kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t4 class "guest-error" (exit=1)
+  PARITY FAIL case=ambiguous-cqr kind=expectation: docker-wasmedge@t8: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=ambiguous-cqr kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t8 class "guest-error" (exit=1)
+  PARITY FAIL case=wrong-cqr-arm kind=expectation: wasmedge@t1: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=wrong-cqr-arm kind=class-divergence: browser@t1 class "ok" vs wasmedge@t1 class "guest-error" (exit=1)
+  PARITY FAIL case=wrong-cqr-arm kind=expectation: wasmedge@t2: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=wrong-cqr-arm kind=class-divergence: browser@t1 class "ok" vs wasmedge@t2 class "guest-error" (exit=1)
+  PARITY FAIL case=wrong-cqr-arm kind=expectation: wasmedge@t4: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=wrong-cqr-arm kind=class-divergence: browser@t1 class "ok" vs wasmedge@t4 class "guest-error" (exit=1)
+  PARITY FAIL case=wrong-cqr-arm kind=expectation: wasmedge@t8: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=wrong-cqr-arm kind=class-divergence: browser@t1 class "ok" vs wasmedge@t8 class "guest-error" (exit=1)
+  PARITY FAIL case=wrong-cqr-arm kind=expectation: docker-wasmedge@t1: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=wrong-cqr-arm kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t1 class "guest-error" (exit=1)
+  PARITY FAIL case=wrong-cqr-arm kind=expectation: docker-wasmedge@t2: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=wrong-cqr-arm kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t2 class "guest-error" (exit=1)
+  PARITY FAIL case=wrong-cqr-arm kind=expectation: docker-wasmedge@t4: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=wrong-cqr-arm kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t4 class "guest-error" (exit=1)
+  PARITY FAIL case=wrong-cqr-arm kind=expectation: docker-wasmedge@t8: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=wrong-cqr-arm kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t8 class "guest-error" (exit=1)
+  PARITY FAIL case=truncated-cqr kind=expectation: wasmedge@t1: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=truncated-cqr kind=class-divergence: browser@t1 class "ok" vs wasmedge@t1 class "guest-error" (exit=1)
+  PARITY FAIL case=truncated-cqr kind=expectation: wasmedge@t2: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=truncated-cqr kind=class-divergence: browser@t1 class "ok" vs wasmedge@t2 class "guest-error" (exit=1)
+  PARITY FAIL case=truncated-cqr kind=expectation: wasmedge@t4: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=truncated-cqr kind=class-divergence: browser@t1 class "ok" vs wasmedge@t4 class "guest-error" (exit=1)
+  PARITY FAIL case=truncated-cqr kind=expectation: wasmedge@t8: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=truncated-cqr kind=class-divergence: browser@t1 class "ok" vs wasmedge@t8 class "guest-error" (exit=1)
+  PARITY FAIL case=truncated-cqr kind=expectation: docker-wasmedge@t1: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=truncated-cqr kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t1 class "guest-error" (exit=1)
+  PARITY FAIL case=truncated-cqr kind=expectation: docker-wasmedge@t2: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=truncated-cqr kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t2 class "guest-error" (exit=1)
+  PARITY FAIL case=truncated-cqr kind=expectation: docker-wasmedge@t4: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=truncated-cqr kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t4 class "guest-error" (exit=1)
+  PARITY FAIL case=truncated-cqr kind=expectation: docker-wasmedge@t8: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=truncated-cqr kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t8 class "guest-error" (exit=1)
+  PARITY FAIL case=invalid-source-date kind=expectation: wasmedge@t1: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=invalid-source-date kind=class-divergence: browser@t1 class "ok" vs wasmedge@t1 class "guest-error" (exit=1)
+  PARITY FAIL case=invalid-source-date kind=expectation: wasmedge@t2: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=invalid-source-date kind=class-divergence: browser@t1 class "ok" vs wasmedge@t2 class "guest-error" (exit=1)
+  PARITY FAIL case=invalid-source-date kind=expectation: wasmedge@t4: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=invalid-source-date kind=class-divergence: browser@t1 class "ok" vs wasmedge@t4 class "guest-error" (exit=1)
+  PARITY FAIL case=invalid-source-date kind=expectation: wasmedge@t8: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=invalid-source-date kind=class-divergence: browser@t1 class "ok" vs wasmedge@t8 class "guest-error" (exit=1)
+  PARITY FAIL case=invalid-source-date kind=expectation: docker-wasmedge@t1: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=invalid-source-date kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t1 class "guest-error" (exit=1)
+  PARITY FAIL case=invalid-source-date kind=expectation: docker-wasmedge@t2: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=invalid-source-date kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t2 class "guest-error" (exit=1)
+  PARITY FAIL case=invalid-source-date kind=expectation: docker-wasmedge@t4: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=invalid-source-date kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t4 class "guest-error" (exit=1)
+  PARITY FAIL case=invalid-source-date kind=expectation: docker-wasmedge@t8: expected class "ok", got "guest-error" (exit=1)
+  PARITY FAIL case=invalid-source-date kind=class-divergence: browser@t1 class "ok" vs docker-wasmedge@t8 class "guest-error" (exit=1)
+  PARITY FAIL case=- kind=acceptance: required scientific runs: Every required worker/runtime scientific run must complete
 
-AssertionError [ERR_ASSERTION]: Every required worker/runtime scientific run must complete
+4 !== 12
 
-0 !== 12
-
-    at file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/scripts/verify-cqr-runtime-parity.mjs:57:8 {
-  generatedMessage: false,
-  code: 'ERR_ASSERTION',
-  actual: 0,
-  expected: 12,
-  operator: 'strictEqual',
-  diff: 'simple'
+{
+  "numerical": [
+    {
+      "lane": "browser",
+      "workers": 1,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "browser",
+      "workers": 2,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "browser",
+      "workers": 4,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "browser",
+      "workers": 8,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    }
+  ],
+  "threadEvidence": [
+    {
+      "lane": "browser",
+      "workers": 1,
+      "spawnCount": 0,
+      "hardwareConcurrency": 28
+    },
+    {
+      "lane": "browser",
+      "workers": 2,
+      "spawnCount": 4,
+      "hardwareConcurrency": 28
+    },
+    {
+      "lane": "browser",
+      "workers": 4,
+      "spawnCount": 8,
+      "hardwareConcurrency": 28
+    },
+    {
+      "lane": "browser",
+      "workers": 8,
+      "spawnCount": 14,
+      "hardwareConcurrency": 28
+    }
+  ]
 }
-
-Node.js v25.4.0

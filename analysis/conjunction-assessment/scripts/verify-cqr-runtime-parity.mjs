@@ -13,6 +13,7 @@ import { initCqrFlatc, encodeCqr, decodeCqr, catalogRequest, gpRecord, published
 import { compareToReference, isoToJd } from '../tests/lib/screenCatalogParityHarness.mjs';
 import { CA_PARITY_TOLERANCES as T } from '../tests/lib/caParityTolerances.mjs';
 import { runThreadedBrowserLane } from './cqr-browser-parity-lane.mjs';
+import { wasmedgeParityLane } from './cqr-wasmedge-parity-lane.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const flatc = await initCqrFlatc();
 const refs = JSON.parse(fs.readFileSync(path.join(root,'tests/fixtures/socrates/reference.top3.json'))).conjunctions;
@@ -32,7 +33,7 @@ cases.push({id:'truncated-piv',threadCounts:[1,2,4,8],stdinHex:'0800000024504956
 // The retired JSON method is rejected by the SDK method registry.
 const invalidCqr = new Set(['singular-covariance','empty-cqr','ambiguous-cqr','wrong-cqr-arm','truncated-cqr','invalid-source-date']);
 const cqrCase=(id,record)=>({id,threadCounts:[1,2,4,8],request:{methodId:'compute_pc',inputs:[{portId:'request',payload:encodeCqr(flatc,record)}]}});
-cases.push(cqrCase('empty-cqr',{}),cqrCase('ambiguous-cqr',{VERSION_QUERY:true,PROBABILITY_REQUEST:{}}),cqrCase('wrong-cqr-arm',{VERSION_QUERY:true}));
+cases.push(cqrCase('empty-cqr',{}),cqrCase('ambiguous-cqr',{VERSION_QUERY:true,PROBABILITY_REQUEST:{GEOMETRY:{VARIANCE_XI_M2:1,VARIANCE_ZETA_M2:1}}}),cqrCase('wrong-cqr-arm',{VERSION_QUERY:true}));
 const truncated=cqrCase('truncated-cqr',{VERSION_QUERY:true});
 truncated.request.inputs[0].payload=truncated.request.inputs[0].payload.slice(0,13);
 cases.push(truncated);
@@ -44,10 +45,8 @@ for(const c of cases)c.expect=['empty-piv','truncated-piv','legacy-json-method']
 const plan=await normalizeParityFixture({name:'CQR-SDS-1.220.0',cases});
 // The SDK report intentionally summarizes bytes, so observe actual lane runs
 // before reporting to validate independent physical outcomes as well as parity.
-const sdkRoot=path.dirname(fileURLToPath(import.meta.resolve('space-data-module-sdk/testing')));
-const {defaultParityLaneRunners}=await import(path.join(sdkRoot,'parityLanes.js'));
 const observed=[]; const laneRunners={};
-for(const [name,runner] of Object.entries({...defaultParityLaneRunners,browser:runThreadedBrowserLane})) laneRunners[name]=async c=>{const runs=await runner(c); observed.push(...runs.map(r=>({...r,lane:name})));return runs;};
+for(const [name,runner] of Object.entries({browser:runThreadedBrowserLane,wasmedge:wasmedgeParityLane('wasmedge'),'docker-wasmedge':wasmedgeParityLane('docker-wasmedge')})) laneRunners[name]=async c=>{const runs=await runner(c); observed.push(...runs.map(r=>({...r,lane:name})));return runs;};
 const report=await runParityHarness({wasmPath:path.join(root,'dist/isomorphic/module.wasm'),plan,laneRunners,timeoutMs:120000,log:console.log});
 const evidence=path.resolve(root,'../../docs/evidence/tmpl-lane-14');
 fs.mkdirSync(evidence,{recursive:true});
@@ -83,10 +82,8 @@ for(const run of observed){
   assert.equal(cmp.counts.missingCount,0);assert.equal(cmp.counts.extraCount,0);assert.equal(result.CATALOG_RESULT.STATISTICS.FAILED_PAIRS,0);
   for(const m of cmp.matched){assert.ok(m.deltas.tcaDeltaSec<=T.tca.NLRV.hardFailSec);assert.ok(m.deltas.missDeltaM<=T.missDistance.socratesHardFailM);assert.ok(m.deltas.relSpeedDeltaMS<=T.relSpeed.hardFailMS);}
   numerical.push({lane:run.lane,workers:run.threadCount,sha256:createHash('sha256').update(run.stdout).digest('hex'),deltas:cmp.matched.map(m=>({pair:m.key,...m.deltas}))});
-  if(run.lane==='browser'){
-    report.threadEvidence.push({lane:run.lane,workers:run.threadCount,spawnCount:run.spawnCount,hardwareConcurrency:run.hardwareConcurrency});
-    if(run.threadCount>1)assert.ok(run.spawnCount>=run.threadCount,'Required real guest worker spawns were not observed');
-  }
+  report.threadEvidence.push({lane:run.lane,workers:run.threadCount,spawnCount:run.spawnCount,hardwareConcurrency:run.hardwareConcurrency});
+  if(run.threadCount>1)assert.ok(run.spawnCount>=run.threadCount,'Required real guest worker spawns were not observed');
   });
 }
 check('required scientific runs',()=>assert.equal(numerical.length,12,'Every required worker/runtime scientific run must complete'));

@@ -26,7 +26,7 @@ test('CQR Laas 2015 Pc reproduces the centered isotropic Gaussian disk integral'
 
 test('CQR rejects singular encounter covariance and the retired JSON method', async (t) => {
   const flatc = await initCqrFlatc();
-  const harness = await createConjunctionCommandHarness();
+  const harness = await createConjunctionCommandHarness({ surface: 'direct' });
   t.after(() => harness.destroy());
   const payload = encodeCqr(flatc, { PROBABILITY_REQUEST: { GEOMETRY: { VARIANCE_XI_M2: 1, VARIANCE_ZETA_M2: 1, COVARIANCE_XI_ZETA_M2: 1, COMBINED_RADIUS_M: 10 }, ALGORITHM: 'LAAS_2015' } });
   for (const request of [{ methodId: 'compute_pc', inputs: [{ portId: 'request', payload }] }, { methodId: 'invoke', inputs: [{ portId: 'request', payload: new TextEncoder().encode('{"operation":"version"}') }] }]) {
@@ -132,12 +132,12 @@ test('CQR rejects out-of-range TLE epoch days without a numerical result', async
   assert.equal(response.outputs.length, 0);
 });
 
-test('CQR sampled resident index preserves the linear encounter and invalidates destroyed handles', async (t) => {
+for (const runtimeKind of ['browser', 'wasmedge', 'docker-wasmedge']) test(`CQR ${runtimeKind} sampled resident index preserves the linear encounter and invalidates destroyed handles`, async (t) => {
   const { screeningControls, earthFrame } = await import('./lib/cqr.mjs');
   const flatc = await initCqrFlatc();
   // Resident state requires a persistent direct instance. The command host
   // deliberately runs one fresh guest per invoke.
-  const harness = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
+  const harness = await createConjunctionCommandHarness({ runtimeKind, surface: 'direct' });
   t.after(() => harness.destroy());
   const INSTANCE = { MODULE_ID: 'conjunction-assessment', INSTANCE_ID: 'linear-resident', GENERATION: 1 };
   const invoke = async (methodId, record) => harness.invoke({methodId,inputs:[{portId:'request',payload:encodeCqr(flatc,record)}]});

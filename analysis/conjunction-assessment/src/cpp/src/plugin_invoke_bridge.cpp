@@ -205,6 +205,15 @@ bool controls(const CQRScreeningControls *c, ScreeningConfig &o) {
   o.fine_tol_sec = c->REFINEMENT_TOLERANCE_SECONDS();
   o.combined_radius_m = c->COMBINED_RADIUS_M();
   o.num_threads = c->REQUESTED_WORKERS();
+  const double end_jd = o.start_jd + o.duration_days;
+  if (!isFinite(end_jd) || end_jd <= o.start_jd ||
+      o.start_jd + o.coarse_step_sec / 86400. <= o.start_jd ||
+      end_jd + o.coarse_step_sec / 86400. <= end_jd ||
+      o.fine_tol_sec / 86400. <
+          std::nextafter(end_jd, std::numeric_limits<double>::infinity()) - end_jd)
+    return error("unsupported-resolution",
+                 "The requested UTC interval or resolution cannot be represented "
+                 "by the Julian-date evaluation clock.");
   o.use_kdtree = c->USE_KD_TREE();
   o.use_dynamic_window = c->USE_DYNAMIC_WINDOW();
   o.use_perigee_filter = c->USE_PERIGEE_FILTER();
@@ -1292,6 +1301,13 @@ extern "C" int screen_catalog() {
     Source v;
     if (!gpRecord(omm, v.gp))
       return 400;
+    // OMM's international designator is optional. Preserve a distinct object
+    // identity for generic provider screening when only a catalog ID is known.
+    if (v.gp.object_id.empty()) {
+      if (v.gp.norad_cat_id <= 0)
+        return error("invalid-source", "Catalog OMM needs OBJECT_ID or a positive NORAD_CAT_ID."), 400;
+      v.gp.object_id = std::to_string(v.gp.norad_cat_id);
+    }
     v.tle = gp_to_tle(v.gp);
     v.mean = true;
     v.axes = 1;

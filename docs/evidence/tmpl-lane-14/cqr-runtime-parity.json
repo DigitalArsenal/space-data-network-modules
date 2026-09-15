@@ -8,18 +8,18 @@
   "lanes": [
     {
       "lane": "browser",
-      "runs": 20,
-      "durationMs": 871
+      "runs": 44,
+      "durationMs": 14013
     },
     {
       "lane": "wasmedge",
-      "runs": 20,
-      "durationMs": 681
+      "runs": 44,
+      "durationMs": 1479
     },
     {
       "lane": "docker-wasmedge",
-      "runs": 20,
-      "durationMs": 4736
+      "runs": 44,
+      "durationMs": 9027
     }
   ],
   "cases": [
@@ -30,109 +30,659 @@
     "centered-isotropic-pc",
     "singular-covariance",
     "empty-piv",
-    "truncated-piv"
+    "truncated-piv",
+    "empty-cqr",
+    "ambiguous-cqr",
+    "wrong-cqr-arm",
+    "truncated-cqr",
+    "invalid-source-date",
+    "legacy-json-method"
   ],
-  "comparisons": 40,
+  "comparisons": 153,
   "failures": [
     {
       "caseId": "socrates-workers-1",
-      "kind": "harness-failure",
-      "message": "browser@t1: Error"
+      "kind": "expectation",
+      "message": "wasmedge@t1: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "socrates-workers-1",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "socrates-workers-1",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t1: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "socrates-workers-1",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "socrates-workers-2",
-      "kind": "harness-failure",
-      "message": "browser@t2: Error"
+      "kind": "expectation",
+      "message": "wasmedge@t2: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "socrates-workers-2",
+      "kind": "class-divergence",
+      "message": "browser@t2 class \"ok\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "socrates-workers-2",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t2: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "socrates-workers-2",
+      "kind": "class-divergence",
+      "message": "browser@t2 class \"ok\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "socrates-workers-4",
-      "kind": "harness-failure",
-      "message": "browser@t4: Error"
+      "kind": "expectation",
+      "message": "wasmedge@t4: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "socrates-workers-4",
+      "kind": "class-divergence",
+      "message": "browser@t4 class \"ok\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "socrates-workers-4",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t4: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "socrates-workers-4",
+      "kind": "class-divergence",
+      "message": "browser@t4 class \"ok\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "socrates-workers-8",
-      "kind": "harness-failure",
-      "message": "browser@t8: Error"
+      "kind": "expectation",
+      "message": "wasmedge@t8: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "socrates-workers-8",
+      "kind": "class-divergence",
+      "message": "browser@t8 class \"ok\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "socrates-workers-8",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t8: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "socrates-workers-8",
+      "kind": "class-divergence",
+      "message": "browser@t8 class \"ok\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "centered-isotropic-pc",
-      "kind": "harness-failure",
-      "message": "browser@t1: Error"
+      "kind": "expectation",
+      "message": "wasmedge@t1: expected class \"ok\", got \"guest-error\" (exit=1)"
     },
     {
       "caseId": "centered-isotropic-pc",
-      "kind": "harness-failure",
-      "message": "browser@t2: Error"
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "centered-isotropic-pc",
-      "kind": "harness-failure",
-      "message": "browser@t4: Error"
+      "kind": "expectation",
+      "message": "wasmedge@t2: expected class \"ok\", got \"guest-error\" (exit=1)"
     },
     {
       "caseId": "centered-isotropic-pc",
-      "kind": "harness-failure",
-      "message": "browser@t8: Error"
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "expectation",
+      "message": "wasmedge@t4: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "expectation",
+      "message": "wasmedge@t8: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t1: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t2: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t4: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t8: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "singular-covariance",
-      "kind": "harness-failure",
-      "message": "browser@t1: Error"
+      "kind": "expectation",
+      "message": "wasmedge@t1: expected class \"ok\", got \"guest-error\" (exit=1)"
     },
     {
       "caseId": "singular-covariance",
-      "kind": "harness-failure",
-      "message": "browser@t2: Error"
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "singular-covariance",
-      "kind": "harness-failure",
-      "message": "browser@t4: Error"
+      "kind": "expectation",
+      "message": "wasmedge@t2: expected class \"ok\", got \"guest-error\" (exit=1)"
     },
     {
       "caseId": "singular-covariance",
-      "kind": "harness-failure",
-      "message": "browser@t8: Error"
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
     },
     {
-      "caseId": "empty-piv",
-      "kind": "harness-failure",
-      "message": "browser@t1: Error"
+      "caseId": "singular-covariance",
+      "kind": "expectation",
+      "message": "wasmedge@t4: expected class \"ok\", got \"guest-error\" (exit=1)"
     },
     {
-      "caseId": "empty-piv",
-      "kind": "harness-failure",
-      "message": "browser@t2: Error"
+      "caseId": "singular-covariance",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
     },
     {
-      "caseId": "empty-piv",
-      "kind": "harness-failure",
-      "message": "browser@t4: Error"
+      "caseId": "singular-covariance",
+      "kind": "expectation",
+      "message": "wasmedge@t8: expected class \"ok\", got \"guest-error\" (exit=1)"
     },
     {
-      "caseId": "empty-piv",
-      "kind": "harness-failure",
-      "message": "browser@t8: Error"
+      "caseId": "singular-covariance",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
     },
     {
-      "caseId": "truncated-piv",
-      "kind": "harness-failure",
-      "message": "browser@t1: Error"
+      "caseId": "singular-covariance",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t1: expected class \"ok\", got \"guest-error\" (exit=1)"
     },
     {
-      "caseId": "truncated-piv",
-      "kind": "harness-failure",
-      "message": "browser@t2: Error"
+      "caseId": "singular-covariance",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
     },
     {
-      "caseId": "truncated-piv",
-      "kind": "harness-failure",
-      "message": "browser@t4: Error"
+      "caseId": "singular-covariance",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t2: expected class \"ok\", got \"guest-error\" (exit=1)"
     },
     {
-      "caseId": "truncated-piv",
-      "kind": "harness-failure",
-      "message": "browser@t8: Error"
+      "caseId": "singular-covariance",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "singular-covariance",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t4: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "singular-covariance",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "singular-covariance",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t8: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "singular-covariance",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-cqr",
+      "kind": "expectation",
+      "message": "wasmedge@t1: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-cqr",
+      "kind": "expectation",
+      "message": "wasmedge@t2: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-cqr",
+      "kind": "expectation",
+      "message": "wasmedge@t4: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-cqr",
+      "kind": "expectation",
+      "message": "wasmedge@t8: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-cqr",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t1: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-cqr",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t2: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-cqr",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t4: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-cqr",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t8: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "ambiguous-cqr",
+      "kind": "expectation",
+      "message": "wasmedge@t1: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "ambiguous-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "ambiguous-cqr",
+      "kind": "expectation",
+      "message": "wasmedge@t2: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "ambiguous-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "ambiguous-cqr",
+      "kind": "expectation",
+      "message": "wasmedge@t4: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "ambiguous-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "ambiguous-cqr",
+      "kind": "expectation",
+      "message": "wasmedge@t8: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "ambiguous-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "ambiguous-cqr",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t1: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "ambiguous-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "ambiguous-cqr",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t2: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "ambiguous-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "ambiguous-cqr",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t4: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "ambiguous-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "ambiguous-cqr",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t8: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "ambiguous-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "wrong-cqr-arm",
+      "kind": "expectation",
+      "message": "wasmedge@t1: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "wrong-cqr-arm",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "wrong-cqr-arm",
+      "kind": "expectation",
+      "message": "wasmedge@t2: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "wrong-cqr-arm",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "wrong-cqr-arm",
+      "kind": "expectation",
+      "message": "wasmedge@t4: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "wrong-cqr-arm",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "wrong-cqr-arm",
+      "kind": "expectation",
+      "message": "wasmedge@t8: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "wrong-cqr-arm",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "wrong-cqr-arm",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t1: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "wrong-cqr-arm",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "wrong-cqr-arm",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t2: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "wrong-cqr-arm",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "wrong-cqr-arm",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t4: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "wrong-cqr-arm",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "wrong-cqr-arm",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t8: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "wrong-cqr-arm",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-cqr",
+      "kind": "expectation",
+      "message": "wasmedge@t1: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-cqr",
+      "kind": "expectation",
+      "message": "wasmedge@t2: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-cqr",
+      "kind": "expectation",
+      "message": "wasmedge@t4: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-cqr",
+      "kind": "expectation",
+      "message": "wasmedge@t8: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-cqr",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t1: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-cqr",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t2: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-cqr",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t4: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-cqr",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t8: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-cqr",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "invalid-source-date",
+      "kind": "expectation",
+      "message": "wasmedge@t1: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "invalid-source-date",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "invalid-source-date",
+      "kind": "expectation",
+      "message": "wasmedge@t2: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "invalid-source-date",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "invalid-source-date",
+      "kind": "expectation",
+      "message": "wasmedge@t4: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "invalid-source-date",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "invalid-source-date",
+      "kind": "expectation",
+      "message": "wasmedge@t8: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "invalid-source-date",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "invalid-source-date",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t1: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "invalid-source-date",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "invalid-source-date",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t2: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "invalid-source-date",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "invalid-source-date",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t4: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "invalid-source-date",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "invalid-source-date",
+      "kind": "expectation",
+      "message": "docker-wasmedge@t8: expected class \"ok\", got \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "invalid-source-date",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "kind": "acceptance",
+      "message": "required scientific runs: Every required worker/runtime scientific run must complete\n\n4 !== 12\n"
     }
   ],
   "runs": [
@@ -140,116 +690,116 @@
       "lane": "browser",
       "caseId": "socrates-workers-1",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "stdoutLength": 3192
     },
     {
       "lane": "browser",
       "caseId": "socrates-workers-2",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "stdoutLength": 3192
     },
     {
       "lane": "browser",
       "caseId": "socrates-workers-4",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "stdoutLength": 3192
     },
     {
       "lane": "browser",
       "caseId": "socrates-workers-8",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "stdoutLength": 3192
     },
     {
       "lane": "browser",
       "caseId": "centered-isotropic-pc",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "01ca14d4fcc5af35ec5a2fa42953a40749f7d757ac84b0a0dffc38d3c41dfc33",
+      "stdoutLength": 272
     },
     {
       "lane": "browser",
       "caseId": "centered-isotropic-pc",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "01ca14d4fcc5af35ec5a2fa42953a40749f7d757ac84b0a0dffc38d3c41dfc33",
+      "stdoutLength": 272
     },
     {
       "lane": "browser",
       "caseId": "centered-isotropic-pc",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "01ca14d4fcc5af35ec5a2fa42953a40749f7d757ac84b0a0dffc38d3c41dfc33",
+      "stdoutLength": 272
     },
     {
       "lane": "browser",
       "caseId": "centered-isotropic-pc",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "01ca14d4fcc5af35ec5a2fa42953a40749f7d757ac84b0a0dffc38d3c41dfc33",
+      "stdoutLength": 272
     },
     {
       "lane": "browser",
       "caseId": "singular-covariance",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "19ecf4327b984eb076ccc26fefbab6428d5f67313f7cd3dccf82a3d773825274",
+      "stdoutLength": 184
     },
     {
       "lane": "browser",
       "caseId": "singular-covariance",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "19ecf4327b984eb076ccc26fefbab6428d5f67313f7cd3dccf82a3d773825274",
+      "stdoutLength": 184
     },
     {
       "lane": "browser",
       "caseId": "singular-covariance",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "19ecf4327b984eb076ccc26fefbab6428d5f67313f7cd3dccf82a3d773825274",
+      "stdoutLength": 184
     },
     {
       "lane": "browser",
       "caseId": "singular-covariance",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "19ecf4327b984eb076ccc26fefbab6428d5f67313f7cd3dccf82a3d773825274",
+      "stdoutLength": 184
     },
     {
       "lane": "browser",
       "caseId": "empty-piv",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
       "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "stdoutLength": 0
     },
@@ -257,8 +807,8 @@
       "lane": "browser",
       "caseId": "empty-piv",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
       "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "stdoutLength": 0
     },
@@ -266,8 +816,8 @@
       "lane": "browser",
       "caseId": "empty-piv",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
       "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "stdoutLength": 0
     },
@@ -275,8 +825,8 @@
       "lane": "browser",
       "caseId": "empty-piv",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
       "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "stdoutLength": 0
     },
@@ -284,8 +834,8 @@
       "lane": "browser",
       "caseId": "truncated-piv",
       "threadCount": 1,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
       "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "stdoutLength": 0
     },
@@ -293,8 +843,8 @@
       "lane": "browser",
       "caseId": "truncated-piv",
       "threadCount": 2,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
       "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "stdoutLength": 0
     },
@@ -302,8 +852,8 @@
       "lane": "browser",
       "caseId": "truncated-piv",
       "threadCount": 4,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
       "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "stdoutLength": 0
     },
@@ -311,8 +861,224 @@
       "lane": "browser",
       "caseId": "truncated-piv",
       "threadCount": 8,
-      "exitClass": "harness-failure",
-      "exitDetail": "Error",
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-cqr",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-cqr",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-cqr",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-cqr",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
+    },
+    {
+      "lane": "browser",
+      "caseId": "ambiguous-cqr",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
+    },
+    {
+      "lane": "browser",
+      "caseId": "ambiguous-cqr",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
+    },
+    {
+      "lane": "browser",
+      "caseId": "ambiguous-cqr",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
+    },
+    {
+      "lane": "browser",
+      "caseId": "ambiguous-cqr",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
+    },
+    {
+      "lane": "browser",
+      "caseId": "wrong-cqr-arm",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
+    },
+    {
+      "lane": "browser",
+      "caseId": "wrong-cqr-arm",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
+    },
+    {
+      "lane": "browser",
+      "caseId": "wrong-cqr-arm",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
+    },
+    {
+      "lane": "browser",
+      "caseId": "wrong-cqr-arm",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-cqr",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-cqr",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-cqr",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-cqr",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "ec94bd4d699d9305107281631b6b96c906c4917733f4109c8255310a38e8ad12",
+      "stdoutLength": 152
+    },
+    {
+      "lane": "browser",
+      "caseId": "invalid-source-date",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "6d5543b46d14e970fba16526cf37a01a5f41a2745f8a05a91f92c472e7591377",
+      "stdoutLength": 136
+    },
+    {
+      "lane": "browser",
+      "caseId": "invalid-source-date",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "6d5543b46d14e970fba16526cf37a01a5f41a2745f8a05a91f92c472e7591377",
+      "stdoutLength": 136
+    },
+    {
+      "lane": "browser",
+      "caseId": "invalid-source-date",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "6d5543b46d14e970fba16526cf37a01a5f41a2745f8a05a91f92c472e7591377",
+      "stdoutLength": 136
+    },
+    {
+      "lane": "browser",
+      "caseId": "invalid-source-date",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "6d5543b46d14e970fba16526cf37a01a5f41a2745f8a05a91f92c472e7591377",
+      "stdoutLength": 136
+    },
+    {
+      "lane": "browser",
+      "caseId": "legacy-json-method",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "legacy-json-method",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "legacy-json-method",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "legacy-json-method",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
       "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "stdoutLength": 0
     },
@@ -497,6 +1263,222 @@
       "stdoutLength": 0
     },
     {
+      "lane": "wasmedge",
+      "caseId": "empty-cqr",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-cqr",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-cqr",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-cqr",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ambiguous-cqr",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ambiguous-cqr",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ambiguous-cqr",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ambiguous-cqr",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-cqr",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-cqr",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-cqr",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-cqr",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "invalid-source-date",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "invalid-source-date",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "invalid-source-date",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "invalid-source-date",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "legacy-json-method",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "legacy-json-method",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "legacy-json-method",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "legacy-json-method",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
       "lane": "docker-wasmedge",
       "caseId": "socrates-workers-1",
       "threadCount": 1,
@@ -670,6 +1652,222 @@
     {
       "lane": "docker-wasmedge",
       "caseId": "truncated-piv",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-cqr",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-cqr",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-cqr",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-cqr",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "ambiguous-cqr",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "ambiguous-cqr",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "ambiguous-cqr",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "ambiguous-cqr",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-cqr",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-cqr",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-cqr",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-cqr",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "invalid-source-date",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "invalid-source-date",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "invalid-source-date",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "invalid-source-date",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "legacy-json-method",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "legacy-json-method",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "legacy-json-method",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "legacy-json-method",
       "threadCount": 8,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
@@ -679,12 +1877,428 @@
   ],
   "classifications": [
     {
+      "lane": "browser",
+      "caseId": "socrates-workers-1",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "browser",
+      "caseId": "socrates-workers-2",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "browser",
+      "caseId": "socrates-workers-4",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "browser",
+      "caseId": "socrates-workers-8",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "browser",
+      "caseId": "centered-isotropic-pc",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "browser",
+      "caseId": "centered-isotropic-pc",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "browser",
+      "caseId": "centered-isotropic-pc",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "browser",
+      "caseId": "centered-isotropic-pc",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 0,
+      "errorCode": null
+    },
+    {
+      "lane": "browser",
+      "caseId": "singular-covariance",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-covariance"
+    },
+    {
+      "lane": "browser",
+      "caseId": "singular-covariance",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-covariance"
+    },
+    {
+      "lane": "browser",
+      "caseId": "singular-covariance",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-covariance"
+    },
+    {
+      "lane": "browser",
+      "caseId": "singular-covariance",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-covariance"
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-piv",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": ""
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-piv",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": ""
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-piv",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": ""
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-piv",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": ""
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-piv",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": ""
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-piv",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": ""
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-piv",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": ""
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-piv",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": ""
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-cqr",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-cqr",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-cqr",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-cqr",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "browser",
+      "caseId": "ambiguous-cqr",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "browser",
+      "caseId": "ambiguous-cqr",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "browser",
+      "caseId": "ambiguous-cqr",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "browser",
+      "caseId": "ambiguous-cqr",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "browser",
+      "caseId": "wrong-cqr-arm",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "browser",
+      "caseId": "wrong-cqr-arm",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "browser",
+      "caseId": "wrong-cqr-arm",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "browser",
+      "caseId": "wrong-cqr-arm",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-cqr",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-cqr",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-cqr",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-cqr",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-request-arm"
+    },
+    {
+      "lane": "browser",
+      "caseId": "invalid-source-date",
+      "workers": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-source"
+    },
+    {
+      "lane": "browser",
+      "caseId": "invalid-source-date",
+      "workers": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-source"
+    },
+    {
+      "lane": "browser",
+      "caseId": "invalid-source-date",
+      "workers": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-source"
+    },
+    {
+      "lane": "browser",
+      "caseId": "invalid-source-date",
+      "workers": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stderr": "",
+      "statusCode": 400,
+      "errorCode": "invalid-source"
+    },
+    {
+      "lane": "browser",
+      "caseId": "legacy-json-method",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": ""
+    },
+    {
+      "lane": "browser",
+      "caseId": "legacy-json-method",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": ""
+    },
+    {
+      "lane": "browser",
+      "caseId": "legacy-json-method",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": ""
+    },
+    {
+      "lane": "browser",
+      "caseId": "legacy-json-method",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": ""
+    },
+    {
       "lane": "wasmedge",
       "caseId": "socrates-workers-1",
       "workers": 1,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:48.475] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.476] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.476] [error]     At AST node: import description\n[2026-09-15 15:32:48.476] [error]     At AST node: import section\n[2026-09-15 15:32:48.476] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.159] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.160] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.160] [error]     At AST node: import description\n[2026-09-15 15:34:10.160] [error]     At AST node: import section\n[2026-09-15 15:34:10.160] [error]     At AST node: module"
     },
     {
       "lane": "wasmedge",
@@ -692,7 +2306,7 @@
       "workers": 2,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:48.508] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.508] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.508] [error]     At AST node: import description\n[2026-09-15 15:32:48.508] [error]     At AST node: import section\n[2026-09-15 15:32:48.508] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.194] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.195] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.195] [error]     At AST node: import description\n[2026-09-15 15:34:10.195] [error]     At AST node: import section\n[2026-09-15 15:34:10.195] [error]     At AST node: module"
     },
     {
       "lane": "wasmedge",
@@ -700,7 +2314,7 @@
       "workers": 4,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:48.539] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.540] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.540] [error]     At AST node: import description\n[2026-09-15 15:32:48.540] [error]     At AST node: import section\n[2026-09-15 15:32:48.540] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.226] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.227] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.227] [error]     At AST node: import description\n[2026-09-15 15:34:10.227] [error]     At AST node: import section\n[2026-09-15 15:34:10.227] [error]     At AST node: module"
     },
     {
       "lane": "wasmedge",
@@ -708,7 +2322,7 @@
       "workers": 8,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:48.571] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.571] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.571] [error]     At AST node: import description\n[2026-09-15 15:32:48.571] [error]     At AST node: import section\n[2026-09-15 15:32:48.571] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.259] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.260] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.260] [error]     At AST node: import description\n[2026-09-15 15:34:10.260] [error]     At AST node: import section\n[2026-09-15 15:34:10.260] [error]     At AST node: module"
     },
     {
       "lane": "wasmedge",
@@ -716,7 +2330,7 @@
       "workers": 1,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:48.604] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.605] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.605] [error]     At AST node: import description\n[2026-09-15 15:32:48.605] [error]     At AST node: import section\n[2026-09-15 15:32:48.605] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.291] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.292] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.292] [error]     At AST node: import description\n[2026-09-15 15:34:10.292] [error]     At AST node: import section\n[2026-09-15 15:34:10.292] [error]     At AST node: module"
     },
     {
       "lane": "wasmedge",
@@ -724,7 +2338,7 @@
       "workers": 2,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:48.638] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.639] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.639] [error]     At AST node: import description\n[2026-09-15 15:32:48.639] [error]     At AST node: import section\n[2026-09-15 15:32:48.639] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.325] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.325] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.325] [error]     At AST node: import description\n[2026-09-15 15:34:10.325] [error]     At AST node: import section\n[2026-09-15 15:34:10.325] [error]     At AST node: module"
     },
     {
       "lane": "wasmedge",
@@ -732,7 +2346,7 @@
       "workers": 4,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:48.671] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.671] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.671] [error]     At AST node: import description\n[2026-09-15 15:32:48.671] [error]     At AST node: import section\n[2026-09-15 15:32:48.671] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.359] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.359] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.359] [error]     At AST node: import description\n[2026-09-15 15:34:10.359] [error]     At AST node: import section\n[2026-09-15 15:34:10.359] [error]     At AST node: module"
     },
     {
       "lane": "wasmedge",
@@ -740,7 +2354,7 @@
       "workers": 8,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:48.705] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.706] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.706] [error]     At AST node: import description\n[2026-09-15 15:32:48.706] [error]     At AST node: import section\n[2026-09-15 15:32:48.706] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.393] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.394] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.394] [error]     At AST node: import description\n[2026-09-15 15:34:10.394] [error]     At AST node: import section\n[2026-09-15 15:34:10.394] [error]     At AST node: module"
     },
     {
       "lane": "wasmedge",
@@ -748,7 +2362,7 @@
       "workers": 1,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:48.737] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.738] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.738] [error]     At AST node: import description\n[2026-09-15 15:32:48.738] [error]     At AST node: import section\n[2026-09-15 15:32:48.738] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.427] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.428] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.428] [error]     At AST node: import description\n[2026-09-15 15:34:10.428] [error]     At AST node: import section\n[2026-09-15 15:34:10.428] [error]     At AST node: module"
     },
     {
       "lane": "wasmedge",
@@ -756,7 +2370,7 @@
       "workers": 2,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:48.769] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.770] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.770] [error]     At AST node: import description\n[2026-09-15 15:32:48.770] [error]     At AST node: import section\n[2026-09-15 15:32:48.770] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.462] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.462] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.462] [error]     At AST node: import description\n[2026-09-15 15:34:10.462] [error]     At AST node: import section\n[2026-09-15 15:34:10.462] [error]     At AST node: module"
     },
     {
       "lane": "wasmedge",
@@ -764,7 +2378,7 @@
       "workers": 4,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:48.803] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.804] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.804] [error]     At AST node: import description\n[2026-09-15 15:32:48.804] [error]     At AST node: import section\n[2026-09-15 15:32:48.804] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.496] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.496] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.496] [error]     At AST node: import description\n[2026-09-15 15:34:10.496] [error]     At AST node: import section\n[2026-09-15 15:34:10.496] [error]     At AST node: module"
     },
     {
       "lane": "wasmedge",
@@ -772,7 +2386,7 @@
       "workers": 8,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:48.835] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.835] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.835] [error]     At AST node: import description\n[2026-09-15 15:32:48.835] [error]     At AST node: import section\n[2026-09-15 15:32:48.835] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.529] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.529] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.529] [error]     At AST node: import description\n[2026-09-15 15:34:10.529] [error]     At AST node: import section\n[2026-09-15 15:34:10.529] [error]     At AST node: module"
     },
     {
       "lane": "wasmedge",
@@ -780,7 +2394,7 @@
       "workers": 1,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:48.866] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.866] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.866] [error]     At AST node: import description\n[2026-09-15 15:32:48.866] [error]     At AST node: import section\n[2026-09-15 15:32:48.866] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.560] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.561] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.561] [error]     At AST node: import description\n[2026-09-15 15:34:10.561] [error]     At AST node: import section\n[2026-09-15 15:34:10.561] [error]     At AST node: module"
     },
     {
       "lane": "wasmedge",
@@ -788,7 +2402,7 @@
       "workers": 2,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:48.899] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.900] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.900] [error]     At AST node: import description\n[2026-09-15 15:32:48.900] [error]     At AST node: import section\n[2026-09-15 15:32:48.900] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.591] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.592] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.592] [error]     At AST node: import description\n[2026-09-15 15:34:10.592] [error]     At AST node: import section\n[2026-09-15 15:34:10.592] [error]     At AST node: module"
     },
     {
       "lane": "wasmedge",
@@ -796,7 +2410,7 @@
       "workers": 4,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:48.931] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.932] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.932] [error]     At AST node: import description\n[2026-09-15 15:32:48.932] [error]     At AST node: import section\n[2026-09-15 15:32:48.932] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.624] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.624] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.624] [error]     At AST node: import description\n[2026-09-15 15:34:10.624] [error]     At AST node: import section\n[2026-09-15 15:34:10.624] [error]     At AST node: module"
     },
     {
       "lane": "wasmedge",
@@ -804,7 +2418,7 @@
       "workers": 8,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:48.966] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.967] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.967] [error]     At AST node: import description\n[2026-09-15 15:32:48.967] [error]     At AST node: import section\n[2026-09-15 15:32:48.967] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.656] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.657] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.657] [error]     At AST node: import description\n[2026-09-15 15:34:10.657] [error]     At AST node: import section\n[2026-09-15 15:34:10.657] [error]     At AST node: module"
     },
     {
       "lane": "wasmedge",
@@ -812,7 +2426,7 @@
       "workers": 1,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:48.999] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:49.000] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:49.000] [error]     At AST node: import description\n[2026-09-15 15:32:49.000] [error]     At AST node: import section\n[2026-09-15 15:32:49.000] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.689] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.690] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.690] [error]     At AST node: import description\n[2026-09-15 15:34:10.690] [error]     At AST node: import section\n[2026-09-15 15:34:10.690] [error]     At AST node: module"
     },
     {
       "lane": "wasmedge",
@@ -820,7 +2434,7 @@
       "workers": 2,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:49.032] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:49.033] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:49.033] [error]     At AST node: import description\n[2026-09-15 15:32:49.033] [error]     At AST node: import section\n[2026-09-15 15:32:49.033] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.723] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.724] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.724] [error]     At AST node: import description\n[2026-09-15 15:34:10.724] [error]     At AST node: import section\n[2026-09-15 15:34:10.724] [error]     At AST node: module"
     },
     {
       "lane": "wasmedge",
@@ -828,7 +2442,7 @@
       "workers": 4,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:49.067] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:49.068] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:49.068] [error]     At AST node: import description\n[2026-09-15 15:32:49.068] [error]     At AST node: import section\n[2026-09-15 15:32:49.068] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.756] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.756] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.756] [error]     At AST node: import description\n[2026-09-15 15:34:10.756] [error]     At AST node: import section\n[2026-09-15 15:34:10.756] [error]     At AST node: module"
     },
     {
       "lane": "wasmedge",
@@ -836,7 +2450,199 @@
       "workers": 8,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 15:32:49.099] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:49.100] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:49.100] [error]     At AST node: import description\n[2026-09-15 15:32:49.100] [error]     At AST node: import section\n[2026-09-15 15:32:49.100] [error]     At AST node: module"
+      "stderr": "[2026-09-15 15:34:10.787] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.788] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.788] [error]     At AST node: import description\n[2026-09-15 15:34:10.788] [error]     At AST node: import section\n[2026-09-15 15:34:10.788] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-cqr",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:10.820] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.820] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.820] [error]     At AST node: import description\n[2026-09-15 15:34:10.820] [error]     At AST node: import section\n[2026-09-15 15:34:10.820] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-cqr",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:10.852] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.853] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.853] [error]     At AST node: import description\n[2026-09-15 15:34:10.853] [error]     At AST node: import section\n[2026-09-15 15:34:10.853] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-cqr",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:10.884] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.885] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.885] [error]     At AST node: import description\n[2026-09-15 15:34:10.885] [error]     At AST node: import section\n[2026-09-15 15:34:10.885] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-cqr",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:10.916] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.917] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.917] [error]     At AST node: import description\n[2026-09-15 15:34:10.917] [error]     At AST node: import section\n[2026-09-15 15:34:10.917] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ambiguous-cqr",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:10.949] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.949] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.949] [error]     At AST node: import description\n[2026-09-15 15:34:10.949] [error]     At AST node: import section\n[2026-09-15 15:34:10.949] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ambiguous-cqr",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:10.982] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:10.983] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:10.983] [error]     At AST node: import description\n[2026-09-15 15:34:10.983] [error]     At AST node: import section\n[2026-09-15 15:34:10.983] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ambiguous-cqr",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:11.014] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:11.015] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:11.015] [error]     At AST node: import description\n[2026-09-15 15:34:11.015] [error]     At AST node: import section\n[2026-09-15 15:34:11.015] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "ambiguous-cqr",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:11.048] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:11.049] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:11.049] [error]     At AST node: import description\n[2026-09-15 15:34:11.049] [error]     At AST node: import section\n[2026-09-15 15:34:11.049] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:11.086] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:11.086] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:11.086] [error]     At AST node: import description\n[2026-09-15 15:34:11.086] [error]     At AST node: import section\n[2026-09-15 15:34:11.086] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:11.119] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:11.121] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:11.121] [error]     At AST node: import description\n[2026-09-15 15:34:11.121] [error]     At AST node: import section\n[2026-09-15 15:34:11.121] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:11.151] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:11.152] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:11.152] [error]     At AST node: import description\n[2026-09-15 15:34:11.152] [error]     At AST node: import section\n[2026-09-15 15:34:11.152] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:11.184] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:11.185] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:11.185] [error]     At AST node: import description\n[2026-09-15 15:34:11.185] [error]     At AST node: import section\n[2026-09-15 15:34:11.185] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-cqr",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:11.220] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:11.221] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:11.221] [error]     At AST node: import description\n[2026-09-15 15:34:11.221] [error]     At AST node: import section\n[2026-09-15 15:34:11.221] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-cqr",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:11.254] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:11.255] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:11.255] [error]     At AST node: import description\n[2026-09-15 15:34:11.255] [error]     At AST node: import section\n[2026-09-15 15:34:11.255] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-cqr",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:11.287] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:11.288] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:11.288] [error]     At AST node: import description\n[2026-09-15 15:34:11.288] [error]     At AST node: import section\n[2026-09-15 15:34:11.288] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-cqr",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:11.322] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:11.322] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:11.322] [error]     At AST node: import description\n[2026-09-15 15:34:11.323] [error]     At AST node: import section\n[2026-09-15 15:34:11.323] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "invalid-source-date",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:11.355] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:11.356] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:11.356] [error]     At AST node: import description\n[2026-09-15 15:34:11.356] [error]     At AST node: import section\n[2026-09-15 15:34:11.356] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "invalid-source-date",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:11.388] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:11.389] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:11.389] [error]     At AST node: import description\n[2026-09-15 15:34:11.389] [error]     At AST node: import section\n[2026-09-15 15:34:11.389] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "invalid-source-date",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:11.421] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:11.422] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:11.422] [error]     At AST node: import description\n[2026-09-15 15:34:11.422] [error]     At AST node: import section\n[2026-09-15 15:34:11.422] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "invalid-source-date",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:11.454] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:11.455] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:11.455] [error]     At AST node: import description\n[2026-09-15 15:34:11.455] [error]     At AST node: import section\n[2026-09-15 15:34:11.455] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "legacy-json-method",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:11.487] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:11.488] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:11.488] [error]     At AST node: import description\n[2026-09-15 15:34:11.488] [error]     At AST node: import section\n[2026-09-15 15:34:11.488] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "legacy-json-method",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:11.519] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:11.520] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:11.520] [error]     At AST node: import description\n[2026-09-15 15:34:11.520] [error]     At AST node: import section\n[2026-09-15 15:34:11.520] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "legacy-json-method",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:11.552] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:11.552] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:11.552] [error]     At AST node: import description\n[2026-09-15 15:34:11.552] [error]     At AST node: import section\n[2026-09-15 15:34:11.552] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "legacy-json-method",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:34:11.583] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:34:11.583] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:34:11.583] [error]     At AST node: import description\n[2026-09-15 15:34:11.583] [error]     At AST node: import section\n[2026-09-15 15:34:11.583] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -844,7 +2650,7 @@
       "workers": 1,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:49.569] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:49.569] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:49.569] [error]     At AST node: import description\n[2026-09-15 19:32:49.569] [error]     At AST node: import section\n[2026-09-15 19:32:49.569] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:12.151] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:12.151] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:12.151] [error]     At AST node: import description\n[2026-09-15 19:34:12.151] [error]     At AST node: import section\n[2026-09-15 19:34:12.151] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -852,7 +2658,7 @@
       "workers": 2,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:49.821] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:49.821] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:49.821] [error]     At AST node: import description\n[2026-09-15 19:32:49.821] [error]     At AST node: import section\n[2026-09-15 19:32:49.821] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:12.371] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:12.371] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:12.371] [error]     At AST node: import description\n[2026-09-15 19:34:12.371] [error]     At AST node: import section\n[2026-09-15 19:34:12.371] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -860,7 +2666,7 @@
       "workers": 4,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:50.088] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:50.088] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:50.088] [error]     At AST node: import description\n[2026-09-15 19:32:50.088] [error]     At AST node: import section\n[2026-09-15 19:32:50.088] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:12.539] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:12.540] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:12.540] [error]     At AST node: import description\n[2026-09-15 19:34:12.540] [error]     At AST node: import section\n[2026-09-15 19:34:12.540] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -868,7 +2674,7 @@
       "workers": 8,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:50.339] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:50.339] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:50.339] [error]     At AST node: import description\n[2026-09-15 19:32:50.339] [error]     At AST node: import section\n[2026-09-15 19:32:50.339] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:12.691] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:12.691] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:12.691] [error]     At AST node: import description\n[2026-09-15 19:34:12.691] [error]     At AST node: import section\n[2026-09-15 19:34:12.691] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -876,7 +2682,7 @@
       "workers": 1,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:50.560] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:50.560] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:50.560] [error]     At AST node: import description\n[2026-09-15 19:32:50.560] [error]     At AST node: import section\n[2026-09-15 19:32:50.560] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:12.893] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:12.893] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:12.893] [error]     At AST node: import description\n[2026-09-15 19:34:12.893] [error]     At AST node: import section\n[2026-09-15 19:34:12.893] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -884,7 +2690,7 @@
       "workers": 2,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:50.773] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:50.773] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:50.773] [error]     At AST node: import description\n[2026-09-15 19:32:50.773] [error]     At AST node: import section\n[2026-09-15 19:32:50.773] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:13.075] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:13.075] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:13.075] [error]     At AST node: import description\n[2026-09-15 19:34:13.075] [error]     At AST node: import section\n[2026-09-15 19:34:13.075] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -892,7 +2698,7 @@
       "workers": 4,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:51.044] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:51.044] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:51.044] [error]     At AST node: import description\n[2026-09-15 19:32:51.044] [error]     At AST node: import section\n[2026-09-15 19:32:51.044] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:13.252] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:13.252] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:13.252] [error]     At AST node: import description\n[2026-09-15 19:34:13.252] [error]     At AST node: import section\n[2026-09-15 19:34:13.252] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -900,7 +2706,7 @@
       "workers": 8,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:51.268] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:51.269] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:51.269] [error]     At AST node: import description\n[2026-09-15 19:32:51.269] [error]     At AST node: import section\n[2026-09-15 19:32:51.269] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:13.513] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:13.513] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:13.513] [error]     At AST node: import description\n[2026-09-15 19:34:13.513] [error]     At AST node: import section\n[2026-09-15 19:34:13.513] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -908,7 +2714,7 @@
       "workers": 1,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:51.508] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:51.508] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:51.508] [error]     At AST node: import description\n[2026-09-15 19:32:51.508] [error]     At AST node: import section\n[2026-09-15 19:32:51.508] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:13.717] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:13.717] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:13.717] [error]     At AST node: import description\n[2026-09-15 19:34:13.717] [error]     At AST node: import section\n[2026-09-15 19:34:13.717] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -916,7 +2722,7 @@
       "workers": 2,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:51.709] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:51.709] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:51.709] [error]     At AST node: import description\n[2026-09-15 19:32:51.709] [error]     At AST node: import section\n[2026-09-15 19:32:51.709] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:13.893] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:13.893] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:13.893] [error]     At AST node: import description\n[2026-09-15 19:34:13.893] [error]     At AST node: import section\n[2026-09-15 19:34:13.893] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -924,7 +2730,7 @@
       "workers": 4,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:51.871] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:51.871] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:51.871] [error]     At AST node: import description\n[2026-09-15 19:32:51.871] [error]     At AST node: import section\n[2026-09-15 19:32:51.871] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:14.088] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:14.088] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:14.088] [error]     At AST node: import description\n[2026-09-15 19:34:14.088] [error]     At AST node: import section\n[2026-09-15 19:34:14.088] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -932,7 +2738,7 @@
       "workers": 8,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:52.036] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:52.036] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:52.036] [error]     At AST node: import description\n[2026-09-15 19:32:52.036] [error]     At AST node: import section\n[2026-09-15 19:32:52.036] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:14.260] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:14.260] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:14.260] [error]     At AST node: import description\n[2026-09-15 19:34:14.260] [error]     At AST node: import section\n[2026-09-15 19:34:14.260] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -940,7 +2746,7 @@
       "workers": 1,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:52.250] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:52.250] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:52.250] [error]     At AST node: import description\n[2026-09-15 19:32:52.250] [error]     At AST node: import section\n[2026-09-15 19:32:52.250] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:14.447] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:14.447] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:14.447] [error]     At AST node: import description\n[2026-09-15 19:34:14.447] [error]     At AST node: import section\n[2026-09-15 19:34:14.447] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -948,7 +2754,7 @@
       "workers": 2,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:52.441] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:52.441] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:52.441] [error]     At AST node: import description\n[2026-09-15 19:32:52.441] [error]     At AST node: import section\n[2026-09-15 19:32:52.441] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:14.622] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:14.622] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:14.622] [error]     At AST node: import description\n[2026-09-15 19:34:14.622] [error]     At AST node: import section\n[2026-09-15 19:34:14.622] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -956,7 +2762,7 @@
       "workers": 4,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:52.653] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:52.653] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:52.653] [error]     At AST node: import description\n[2026-09-15 19:32:52.653] [error]     At AST node: import section\n[2026-09-15 19:32:52.653] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:14.813] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:14.813] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:14.813] [error]     At AST node: import description\n[2026-09-15 19:34:14.813] [error]     At AST node: import section\n[2026-09-15 19:34:14.813] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -964,7 +2770,7 @@
       "workers": 8,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:52.839] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:52.840] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:52.840] [error]     At AST node: import description\n[2026-09-15 19:32:52.840] [error]     At AST node: import section\n[2026-09-15 19:32:52.840] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:15.012] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:15.012] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:15.012] [error]     At AST node: import description\n[2026-09-15 19:34:15.012] [error]     At AST node: import section\n[2026-09-15 19:34:15.012] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -972,7 +2778,7 @@
       "workers": 1,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:53.021] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:53.021] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:53.021] [error]     At AST node: import description\n[2026-09-15 19:32:53.021] [error]     At AST node: import section\n[2026-09-15 19:32:53.021] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:15.244] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:15.244] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:15.244] [error]     At AST node: import description\n[2026-09-15 19:34:15.244] [error]     At AST node: import section\n[2026-09-15 19:34:15.244] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -980,7 +2786,7 @@
       "workers": 2,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:53.204] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:53.205] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:53.205] [error]     At AST node: import description\n[2026-09-15 19:32:53.205] [error]     At AST node: import section\n[2026-09-15 19:32:53.205] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:15.439] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:15.439] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:15.439] [error]     At AST node: import description\n[2026-09-15 19:34:15.439] [error]     At AST node: import section\n[2026-09-15 19:34:15.439] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -988,7 +2794,7 @@
       "workers": 4,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:53.461] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:53.461] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:53.461] [error]     At AST node: import description\n[2026-09-15 19:32:53.461] [error]     At AST node: import section\n[2026-09-15 19:32:53.461] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:15.630] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:15.630] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:15.630] [error]     At AST node: import description\n[2026-09-15 19:34:15.630] [error]     At AST node: import section\n[2026-09-15 19:34:15.630] [error]     At AST node: module"
     },
     {
       "lane": "docker-wasmedge",
@@ -996,7 +2802,365 @@
       "workers": 8,
       "exitClass": "guest-error",
       "exitDetail": "exit=1",
-      "stderr": "[2026-09-15 19:32:53.805] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:53.805] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:53.805] [error]     At AST node: import description\n[2026-09-15 19:32:53.805] [error]     At AST node: import section\n[2026-09-15 19:32:53.805] [error]     At AST node: module"
+      "stderr": "[2026-09-15 19:34:15.851] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:15.851] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:15.851] [error]     At AST node: import description\n[2026-09-15 19:34:15.851] [error]     At AST node: import section\n[2026-09-15 19:34:15.851] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-cqr",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:16.047] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:16.047] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:16.047] [error]     At AST node: import description\n[2026-09-15 19:34:16.047] [error]     At AST node: import section\n[2026-09-15 19:34:16.047] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-cqr",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:16.255] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:16.255] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:16.255] [error]     At AST node: import description\n[2026-09-15 19:34:16.255] [error]     At AST node: import section\n[2026-09-15 19:34:16.255] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-cqr",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:16.441] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:16.441] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:16.441] [error]     At AST node: import description\n[2026-09-15 19:34:16.441] [error]     At AST node: import section\n[2026-09-15 19:34:16.441] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-cqr",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:16.640] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:16.640] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:16.640] [error]     At AST node: import description\n[2026-09-15 19:34:16.640] [error]     At AST node: import section\n[2026-09-15 19:34:16.640] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "ambiguous-cqr",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:16.802] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:16.802] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:16.802] [error]     At AST node: import description\n[2026-09-15 19:34:16.802] [error]     At AST node: import section\n[2026-09-15 19:34:16.802] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "ambiguous-cqr",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:16.990] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:16.990] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:16.990] [error]     At AST node: import description\n[2026-09-15 19:34:16.990] [error]     At AST node: import section\n[2026-09-15 19:34:16.990] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "ambiguous-cqr",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:17.175] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:17.175] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:17.175] [error]     At AST node: import description\n[2026-09-15 19:34:17.175] [error]     At AST node: import section\n[2026-09-15 19:34:17.175] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "ambiguous-cqr",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:17.426] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:17.427] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:17.427] [error]     At AST node: import description\n[2026-09-15 19:34:17.427] [error]     At AST node: import section\n[2026-09-15 19:34:17.427] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:17.623] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:17.623] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:17.623] [error]     At AST node: import description\n[2026-09-15 19:34:17.623] [error]     At AST node: import section\n[2026-09-15 19:34:17.623] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:17.825] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:17.826] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:17.826] [error]     At AST node: import description\n[2026-09-15 19:34:17.826] [error]     At AST node: import section\n[2026-09-15 19:34:17.826] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:18.056] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:18.056] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:18.056] [error]     At AST node: import description\n[2026-09-15 19:34:18.056] [error]     At AST node: import section\n[2026-09-15 19:34:18.056] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "wrong-cqr-arm",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:18.237] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:18.237] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:18.237] [error]     At AST node: import description\n[2026-09-15 19:34:18.237] [error]     At AST node: import section\n[2026-09-15 19:34:18.237] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-cqr",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:18.416] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:18.416] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:18.416] [error]     At AST node: import description\n[2026-09-15 19:34:18.416] [error]     At AST node: import section\n[2026-09-15 19:34:18.416] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-cqr",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:18.611] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:18.611] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:18.611] [error]     At AST node: import description\n[2026-09-15 19:34:18.611] [error]     At AST node: import section\n[2026-09-15 19:34:18.611] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-cqr",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:18.787] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:18.787] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:18.787] [error]     At AST node: import description\n[2026-09-15 19:34:18.787] [error]     At AST node: import section\n[2026-09-15 19:34:18.787] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-cqr",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:18.972] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:18.972] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:18.972] [error]     At AST node: import description\n[2026-09-15 19:34:18.972] [error]     At AST node: import section\n[2026-09-15 19:34:18.972] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "invalid-source-date",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:19.285] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:19.285] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:19.285] [error]     At AST node: import description\n[2026-09-15 19:34:19.285] [error]     At AST node: import section\n[2026-09-15 19:34:19.285] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "invalid-source-date",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:19.476] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:19.476] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:19.476] [error]     At AST node: import description\n[2026-09-15 19:34:19.476] [error]     At AST node: import section\n[2026-09-15 19:34:19.476] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "invalid-source-date",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:19.672] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:19.673] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:19.673] [error]     At AST node: import description\n[2026-09-15 19:34:19.673] [error]     At AST node: import section\n[2026-09-15 19:34:19.673] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "invalid-source-date",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:19.857] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:19.858] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:19.858] [error]     At AST node: import description\n[2026-09-15 19:34:19.858] [error]     At AST node: import section\n[2026-09-15 19:34:19.858] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "legacy-json-method",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:20.034] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:20.034] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:20.034] [error]     At AST node: import description\n[2026-09-15 19:34:20.034] [error]     At AST node: import section\n[2026-09-15 19:34:20.034] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "legacy-json-method",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:20.197] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:20.197] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:20.197] [error]     At AST node: import description\n[2026-09-15 19:34:20.197] [error]     At AST node: import section\n[2026-09-15 19:34:20.197] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "legacy-json-method",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:20.379] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:20.379] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:20.379] [error]     At AST node: import description\n[2026-09-15 19:34:20.379] [error]     At AST node: import section\n[2026-09-15 19:34:20.379] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "legacy-json-method",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:34:20.561] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:34:20.561] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:34:20.561] [error]     At AST node: import description\n[2026-09-15 19:34:20.561] [error]     At AST node: import section\n[2026-09-15 19:34:20.561] [error]     At AST node: module"
+    }
+  ],
+  "threadEvidence": [
+    {
+      "lane": "browser",
+      "workers": 1,
+      "spawnCount": 0,
+      "hardwareConcurrency": 28
+    },
+    {
+      "lane": "browser",
+      "workers": 2,
+      "spawnCount": 4,
+      "hardwareConcurrency": 28
+    },
+    {
+      "lane": "browser",
+      "workers": 4,
+      "spawnCount": 8,
+      "hardwareConcurrency": 28
+    },
+    {
+      "lane": "browser",
+      "workers": 8,
+      "spawnCount": 14,
+      "hardwareConcurrency": 28
+    }
+  ],
+  "provenance": {
+    "sds": "spacedatastandards.org@1.220.0",
+    "sdk": "space-data-module-sdk@0.8.18",
+    "snapshot": "CelesTrak SOCRATES Plus, 2026-03-10; https://celestrak.org/SOCRATES/",
+    "snapshotSha256": "0934ed5e46f16e600300d96ab66240ca708cb83dd78bd8c38e740882cb318b73",
+    "frame": "TEME",
+    "timeScale": "UTC",
+    "tolerances": {
+      "tcaSeconds": 0.01,
+      "missMetres": 5,
+      "speedMetresPerSecond": 5
+    },
+    "toleranceRationale": "Proposal section 8; NLRV TCA bound, CSV range quantization, retained speed regression bound; tests/lib/caParityTolerances.mjs.",
+    "probability": {
+      "source": "NIST Rayleigh CDF https://www.itl.nist.gov/div898/software/dataplot/refman2/auxillar/raycdf.htm",
+      "formula": "1-exp(-R^2/(2*sigma^2))",
+      "radiusM": 10,
+      "sigmaM": 100,
+      "expected": 0.00498752080731768,
+      "absoluteTolerance": 1e-12,
+      "frame": "Arbitrary orthonormal encounter axes",
+      "epoch": "Not applicable",
+      "toleranceRationale": "Smooth centered Gaussian disk integral and deterministic converged quadrature; actual Pc rather than maximum-probability bound."
+    },
+    "invalidInput": "Published SDS 1.220.0 CQR root and SDK 0.8.18 PIV verifier: exactly one arm, correct method/arm mapping, valid calendar epochs, positive-definite encounter covariance."
+  },
+  "numerical": [
+    {
+      "lane": "browser",
+      "workers": 1,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "browser",
+      "workers": 2,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "browser",
+      "workers": 4,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
+    },
+    {
+      "lane": "browser",
+      "workers": 8,
+      "sha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "deltas": [
+        {
+          "pair": "61721-67298",
+          "tcaDeltaSec": 0.0007241964340209961,
+          "missDeltaM": 4.177554292834001,
+          "relSpeedDeltaMS": 0.10029608228734332,
+          "pcRatio": 1
+        },
+        {
+          "pair": "47935-49179",
+          "tcaDeltaSec": 0.0003218650817871094,
+          "missDeltaM": 0.303122606974,
+          "relSpeedDeltaMS": 0.3038180323962081,
+          "pcRatio": 1.8590564676499581
+        },
+        {
+          "pair": "48282-58288",
+          "tcaDeltaSec": 0.0002816319465637207,
+          "missDeltaM": 0.13058791488199972,
+          "relSpeedDeltaMS": 0.4787075052021805,
+          "pcRatio": 1.730766895061497
+        }
+      ]
     }
   ]
 }

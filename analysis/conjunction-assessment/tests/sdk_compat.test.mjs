@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import test from "node:test";
 import { fileURLToPath, URL } from "node:url";
 
@@ -14,16 +11,13 @@ import {
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
-const BROWSER_MODULE_PATH = new URL("../dist/browser/module.js", import.meta.url);
-const BROWSER_WASM_PATH = new URL("../dist/browser/module.wasm", import.meta.url);
 const FLOW_EXAMPLE_PATH = new URL(
   "../tests/fixtures/hosted-runtime/conjunction.single-plugin.flow.json",
   import.meta.url,
 );
 import { initCqrFlatc, encodeCqr, decodeCqr } from "./lib/cqr.mjs";
+import { buildNativeWasiThreadsRunner } from "./lib/wasmedgeWasiThreadsRunner.mjs";
 const flatc = await initCqrFlatc();
-const textDecoder = new TextDecoder();
-const textEncoder = new TextEncoder();
 
 function createVersionInvokeRequest() {
   return {
@@ -175,6 +169,9 @@ test("built artifact loads through the SDK WasmEdge pthread runner", async (t) =
       wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
       runtimeKind: "wasmedge",
       enableThreads: true,
+      // SDK 0.8.18's raw CLI launcher needs the standard wasi.thread-spawn
+      // verification host; encoding, command ABI and artifact stay SDK-owned.
+      wasmEdgeBinary: await buildNativeWasiThreadsRunner(),
     });
   } catch (error) {
     if (/spawn wasmedge ENOENT|command not found|Failed to launch/i.test(String(error))) {

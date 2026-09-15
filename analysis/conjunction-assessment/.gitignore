@@ -7,5 +7,6 @@ src/cpp/build-wasm/
 src/cpp/build-wasi/
 deps/emsdk/
 .private/
+.sdk-build/
 tests/data/*
 !tests/data/README.md

@@ -1,0 +1,19 @@
+✔ CQR Laas 2015 Pc reproduces the centered isotropic Gaussian disk integral (397.60725ms)
+✔ CQR rejects singular encounter covariance and the retired JSON method (37.271625ms)
+✔ CQR compact sources reproduce the independent linear encounter without SGP4 (62.832583ms)
+✔ CQR verbose sources reproduce the independent linear encounter without SGP4 (61.984542ms)
+✔ CQR PPE sources reproduce the independent linear encounter without SGP4 (64.19775ms)
+✔ CQR rejects malformed or unsupported UTC dates before evaluating a source (310.777875ms)
+✔ CQR accepts leap-day and CCSDS no-Z UTC sources without changing the linear encounter (113.200875ms)
+✔ CQR rejects out-of-range TLE epoch days without a numerical result (46.173709ms)
+✔ CQR browser sampled resident index preserves the linear encounter and invalidates destroyed handles (64.22125ms)
+✔ CQR wasmedge sampled resident index preserves the linear encounter and invalidates destroyed handles (85.933458ms)
+✔ CQR docker-wasmedge sampled resident index preserves the linear encounter and invalidates destroyed handles (12906.46575ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 14623.777042

@@ -86,6 +86,10 @@ try {
     wasmSha256:createHash('sha256').update(result.wasmBytes).digest('hex'),
     threadFeatures:result.threadFeatures,
     initialization:'Once per resident instance; static destruction deferred to instance teardown',
+    compilerVersion:execFileSync(compiler, ['--version'], {encoding:'utf8'}).trim(),
+    buildSupportSha256:Object.fromEntries(await Promise.all(
+      ['build-driver.mjs','src/cpp/src/cqr_initialization.cpp'].map(async file =>
+        [file,createHash('sha256').update(await fs.readFile(path.join(packageRoot,file))).digest('hex')]))),
   },null,2)+'\n');
   console.log(`Built dist/isomorphic/module.wasm (${result.wasmBytes.length} bytes), SDS ${version}; SDK validation PASS`);
 } finally { await cleanupCompilation(result); }

@@ -57,12 +57,13 @@ export async function buildDockerWasiThreadsRunner() {
 
 export async function wasiThreadsLaunchPlan(runtime, options = {}) {
   const wasmPath = options.wasmPath ?? path.join(packageDir, 'dist/isomorphic/module.wasm');
-  if (runtime === 'wasmedge') return { command: await buildNativeWasiThreadsRunner(), args: [wasmPath, ...(options.args ?? [])], cwd: packageDir, env: process.env };
+  const hostArgs = Object.entries(options.guestEnv ?? {}).flatMap(([key, value]) => ['--env', `${key}=${value}`]);
+  if (runtime === 'wasmedge') return { command: await buildNativeWasiThreadsRunner(), args: [...hostArgs, wasmPath, ...(options.args ?? [])], cwd: packageDir, env: process.env };
   if (runtime === 'docker-wasmedge') {
     const { image } = await buildDockerWasiThreadsRunner();
     const relative = path.relative(packageDir, wasmPath);
     if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Docker verification artifact must be inside the package.');
-    return { command: 'docker', args: ['run', '--rm', '--init', '-i', '--entrypoint', '/work/.sdk-build/wasmedge-wasi-threads-runner-linux', '-v', `${packageDir}:/work`, '-w', '/work', image, relative, ...(options.args ?? [])], cwd: packageDir, env: process.env };
+    return { command: 'docker', args: ['run', '--rm', '--init', '-i', '--entrypoint', '/work/.sdk-build/wasmedge-wasi-threads-runner-linux', '-v', `${packageDir}:/work`, '-w', '/work', image, ...hostArgs, relative, ...(options.args ?? [])], cwd: packageDir, env: process.env };
   }
   throw new Error(`Unsupported WASI threads host runtime: ${runtime}`);
 }

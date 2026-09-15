@@ -17,10 +17,12 @@ typedef struct {
   WasmEdge_ASTModuleContext *ast;
   WasmEdge_StoreContext *store;
   WasmEdge_MemoryInstanceContext *memory;
+  WasmEdge_ModuleInstanceContext *wasi;
   pthread_mutex_t lock;
   uint32_t next_tid, spawn_count;
   Thread *threads;
 } Host;
+static Host *process_host;
 struct Thread {
   Host *host;
   WasmEdge_ExecutorContext *executor;
@@ -31,6 +33,15 @@ struct Thread {
 };
 
 static void check(const char *step, WasmEdge_Result result) {
+  if (WasmEdge_ResultGetCode(result) == WasmEdge_ErrCode_Terminated) {
+    /* ResultOK includes Terminate. proc_exit from any guest thread must end
+     * the process, including threads blocked on a guest atomic wait. */
+    if (process_host) {
+      fprintf(stderr, "wasi-thread-spawn count=%u\n", process_host->spawn_count);
+      exit((int)WasmEdge_ModuleInstanceWASIGetExitCode(process_host->wasi));
+    }
+    exit(1);
+  }
   if (!WasmEdge_ResultOK(result)) {
     fprintf(stderr, "%s: %s (0x%x)\n", step,
             WasmEdge_ResultGetMessage(result), WasmEdge_ResultGetCode(result));
@@ -178,10 +189,18 @@ static void serve(Host *h, WasmEdge_ExecutorContext *e, WasmEdge_ModuleInstanceC
 int main(int argc, char **argv) {
   int file = 1;
   if (argc > 1 && !strcmp(argv[1], "--version")) { printf("WasmEdge wasi-threads host %s\n", WasmEdge_VersionGet()); return 0; }
-  if (argc > 1 && !strcmp(argv[1], "--enable-threads")) ++file;
+  const char **guest_env = calloc((size_t)argc, sizeof(*guest_env));
+  uint32_t env_count = 0;
+  while (file < argc && argv[file][0] == '-') {
+    if (!strcmp(argv[file], "--enable-threads")) ++file;
+    else if (!strcmp(argv[file], "--env") && file + 1 < argc && strchr(argv[file + 1], '=')) {
+      guest_env[env_count++] = argv[file + 1]; file += 2;
+    } else { fprintf(stderr, "Unsupported host option: %s\n", argv[file]); return 2; }
+  }
   if (argc <= file) { fprintf(stderr, "usage: %s [--enable-threads] module.wasm [--serve-plugin-invoke]\n", argv[0]); return 2; }
   bool resident = argc > file + 1 && !strcmp(argv[file + 1], "--serve-plugin-invoke");
   Host h = {.config = WasmEdge_ConfigureCreate(), .store = WasmEdge_StoreCreate(), .next_tid = 1};
+  process_host = &h;
   pthread_mutex_init(&h.lock, NULL);
   WasmEdge_ConfigureAddProposal(h.config, WasmEdge_Proposal_Threads);
   WasmEdge_LoaderContext *loader = WasmEdge_LoaderCreate(h.config);
@@ -189,7 +208,14 @@ int main(int argc, char **argv) {
   WasmEdge_ExecutorContext *executor = WasmEdge_ExecutorCreate(h.config, NULL);
   check("parse", WasmEdge_LoaderParseFromFile(loader, &h.ast, argv[file]));
   check("validate", WasmEdge_ValidatorValidate(validator, h.ast));
-  WasmEdge_ModuleInstanceContext *wasi = WasmEdge_ModuleInstanceCreateWASI((const char *const *)(argv + file), (uint32_t)(argc - file), NULL, 0, NULL, 0);
+  const char **guest_argv = calloc((size_t)(argc - file), sizeof(*guest_argv));
+  if (!guest_argv || !guest_env) exit(1);
+  guest_argv[0] = "module.wasm";
+  for (int i = file + 1; i < argc; ++i) guest_argv[i - file] = argv[i];
+  WasmEdge_ModuleInstanceContext *wasi = WasmEdge_ModuleInstanceCreateWASI(guest_argv, (uint32_t)(argc - file), guest_env, env_count, NULL, 0);
+  h.wasi = wasi;
+  free(guest_env);
+  free(guest_argv);
   check("WASI registration", WasmEdge_ExecutorRegisterImport(executor, h.store, wasi));
   WasmEdge_ModuleInstanceContext *env = new_module("env");
   add_memory(&h, env);
