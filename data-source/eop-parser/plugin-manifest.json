@@ -104,9 +104,9 @@
               "description": "Size-prefixed SDS EOP record stream."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
+          "required": false,
           "description": "Size-prefixed SDS EOP record stream."
         },
         {
@@ -127,9 +127,9 @@
               }
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
+          "required": false,
           "description": "Source URL, series name, format and SHA-256 attribution."
         },
         {
@@ -250,9 +250,9 @@
               "description": "Size-prefixed SDS EOP record stream."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
+          "required": false,
           "description": "Size-prefixed SDS EOP record stream."
         },
         {
@@ -273,9 +273,9 @@
               }
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
+          "required": false,
           "description": "Source URL, series name, format and SHA-256 attribution."
         },
         {
@@ -396,9 +396,9 @@
               "description": "Size-prefixed SDS EOP record stream."
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
+          "required": false,
           "description": "Size-prefixed SDS EOP record stream."
         },
         {
@@ -419,9 +419,9 @@
               }
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
+          "required": false,
           "description": "Source URL, series name, format and SHA-256 attribution."
         },
         {

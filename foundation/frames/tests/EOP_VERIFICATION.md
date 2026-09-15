@@ -11,6 +11,8 @@ The coordinator owns landing this branch.
 - SDK-built pure C++ request/parser pair for finals2000A, modern IERS C04,
   and the named Paris Observatory legacy C04-format product. Host-owned HTTP,
   scheduling, storage and publication; binary SDS record streams.
+- HTTP 304 is an explicit unchanged-only success; record and metadata outputs
+  are optional in the embedded manifest.
 - Fixed-column parsing, radians/seconds conversion, observed/predicted flags,
   optional values, formal uncertainties, double/float copies, source hash/CID.
 - Existing FRM EOP port extended to a bounded ordered table or record stream.
@@ -97,11 +99,11 @@ PATH=/Users/tj/.wasmedge/bin:$PATH SDN_RUN_EOP_PARITY=1 node --test --test-concu
 ```
 
 ```text
-parity PASS fixture=eop-parser module=9a83d7a679045dfa lanes=[browser(8 runs, 1575ms), wasmedge(8 runs, 301ms), docker-wasmedge(8 runs, 5006ms)] comparisons=40
+parity PASS fixture=eop-parser module=e44af220b6ffab85 lanes=[browser(8 runs, 1505ms), wasmedge(8 runs, 302ms), docker-wasmedge(8 runs, 4245ms)] comparisons=40
   8 case(s) byte-identical across 3 lane(s).
-parity PASS fixture=eop-request module=339d7ca16f3c9319 lanes=[browser(3 runs, 1172ms), wasmedge(3 runs, 106ms), docker-wasmedge(3 runs, 2351ms)] comparisons=15
+parity PASS fixture=eop-request module=339d7ca16f3c9319 lanes=[browser(3 runs, 984ms), wasmedge(3 runs, 100ms), docker-wasmedge(3 runs, 2439ms)] comparisons=15
   3 case(s) byte-identical across 3 lane(s).
-parity PASS fixture=frames-eop module=76c676bb52847638 lanes=[browser(3 runs, 1368ms), wasmedge(3 runs, 170ms), docker-wasmedge(3 runs, 2310ms)] comparisons=15
+parity PASS fixture=frames-eop module=76c676bb52847638 lanes=[browser(3 runs, 1417ms), wasmedge(3 runs, 167ms), docker-wasmedge(3 runs, 2372ms)] comparisons=15
   3 case(s) byte-identical across 3 lane(s).
 74 checks, 0 failures
 ℹ tests 45
@@ -142,7 +144,7 @@ whitespace deliberately.
 
 ```text
 339d7ca16f3c9319ecf9e4e082a7e72bad87cce760df8a56e39b9c97bf5a7382  data-source/eop-request/dist/isomorphic/module.wasm
-9a83d7a679045dfac6319195f91f78e612e5bad554aa13c40bad8ba06a67cb4c  data-source/eop-parser/dist/isomorphic/module.wasm
+e44af220b6ffab85d7f8ed8610c6ca7ce84d4d4c99ee6fb126bd48f3321c4a5a  data-source/eop-parser/dist/isomorphic/module.wasm
 f1d8401bdbc4b57ed094e617f2dc2a43e432a6a20d7731fe9eaa525c85399fbf  foundation/frames/dist/isomorphic/module.wasm
 ```
 
