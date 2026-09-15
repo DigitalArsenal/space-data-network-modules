@@ -1,0 +1,23 @@
+RESULT Sun 2.7745692215067836e-22 1e-18 PASS
+RESULT Moon 3.1515065703092862e-24 1e-18 PASS
+RESULT Mercury 1.8717589098414146e-28 1e-18 PASS
+RESULT Venus 4.6966503963072539e-28 1e-18 PASS
+RESULT Mars 2.9039174767017646e-30 1e-18 PASS
+RESULT Jupiter 1.3640258749650362e-25 1e-18 PASS
+RESULT Saturn 3.9453885613479032e-27 1e-18 PASS
+RESULT Uranus 4.1977529063185979e-28 1e-18 PASS
+RESULT Neptune 1.2470088261128012e-30 1e-18 PASS
+RESULT SRP_kernel_sun 0 1e-18 PASS
+PASS DE440 force cases=10 failures=0
+✔ HPOP third-body and SRP forces consume authoritative DE440 vectors (12751.413583ms)
+PASS HPOP WASM CSPICE states=12 position_error_km=1.4901161193847656e-8 velocity_error_km_s=1.7763568394002505e-15
+✔ HPOP WASM kernel invoke matches independent CSPICE DE440 vectors, with source and fail-closed coverage (87.684417ms)
+✔ HPOP propagation reports explicit Analytical fallback after a kernel invocation (37.42425ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12840.358791

@@ -181,7 +181,7 @@ export function createAccessPluginManifest() {
       ),
     ],
     1,
-    [InvokeSurface.DIRECT],
+    [InvokeSurface.DIRECT, InvokeSurface.COMMAND],
     ["browser", "wasmedge"],
   );
 }

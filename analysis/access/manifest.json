@@ -9,8 +9,9 @@
   "wasmModule": {
     "file": "access.wasm",
     "loader": "access.mjs",
-    "hash": "98315481714d59fb2ba03cc032b6ca7764a32b3847c59cd0eaac5675cd73401a",
+    "hash": "668daf02e5e1373342144ddaa5e38391f4c966eda41b03a1153b0ca014211aea",
     "exports": [
+      "_start",
       "plugin_init",
       "plugin_destroy",
       "access_reset_ground_stations",
@@ -22,32 +23,22 @@
       "access_get_ground_station_blackout_record",
       "access_compute_access_windows",
       "access_compute_access_windows_with_elevation_mask",
+      "access_compute_geometry",
       "access_compute_access_windows_with_effects",
       "access_schedule_contacts",
-      "plugin_alloc",
-      "plugin_free",
+      "compute_access_windows",
       "plugin_get_manifest_flatbuffer",
       "plugin_get_manifest_flatbuffer_size",
-      "plugin_invoke_stream",
-      "access_plugin_manifest_bytes",
-      "access_plugin_manifest_size",
-      "malloc",
-      "free"
+      "plugin_alloc",
+      "plugin_free",
+      "plugin_invoke_stream"
     ]
   },
   "embeddedManifest": {
-    "file": "plugin-manifest.fb",
-    "fileIdentifier": "PMAN",
-    "bytesSymbol": "access_plugin_manifest_bytes",
-    "sizeSymbol": "access_plugin_manifest_size"
-  },
-  "publication": {
-    "envelope": "sds-rec",
-    "payloadFile": "access.wasm",
-    "recordCollectionFile": "access.publication-records.fb",
-    "recordTypes": [
-      "PNM"
-    ],
-    "payloadEncrypted": false
+    "file": "isomorphic/module.wasm",
+    "fileIdentifier": "$PLG",
+    "bytesSymbol": "plugin_get_manifest_flatbuffer",
+    "sizeSymbol": "plugin_get_manifest_flatbuffer_size",
+    "section": "sds.manifest"
   }
 }

@@ -1,4 +1,4 @@
-#include "orbpro_plugin.h"
+#include "access_abi.h"
 
 #include <algorithm>
 #include <array>
@@ -1330,59 +1330,9 @@ std::vector<uint8_t> serializeInvokeSuccessWithAcwPayload(
   return serializePivResponse(0, nullptr, "", &payload, traceId);
 }
 
-std::vector<uint8_t> dispatchInvokeRequest(
-    const uint8_t* requestBytes,
-    size_t requestLen) {
-  if (requestBytes == nullptr || requestLen == 0u) {
-    return serializeInvokeResponse(
-        400,
-        "invalid-request",
-        "Invoke request bytes are empty.");
-  }
-
-  if (requestLen < 8u || !PIVBufferHasIdentifier(requestBytes)) {
-    return serializeInvokeResponse(
-        400,
-        "invalid-request",
-        "Invoke request must be an SDS PIV envelope.");
-  }
-
-  ::flatbuffers::Verifier verifier(requestBytes, requestLen);
-  if (!VerifyPIVBuffer(verifier)) {
-    return serializeInvokeResponse(
-        400,
-        "invalid-request",
-        "SDS PIV invoke envelope verification failed.");
-  }
-
-  const auto* pivEnvelope = GetPIV(requestBytes);
-  const auto* request = pivEnvelope != nullptr ? pivEnvelope->REQUEST() : nullptr;
-  if (request == nullptr) {
-    return serializeInvokeResponse(
-        400,
-        "invalid-request",
-        "SDS PIV invoke envelope must carry REQUEST.");
-  }
-  const uint64_t pivTraceId = request->TRACE_ID();
-  const std::string methodId = flatbufferString(request->METHOD_ID());
-  if (methodId != kComputeAccessWindowsMethod) {
-    return serializeInvokeResponse(
-        404,
-        "unknown-method",
-        std::string("Unknown method: ") + methodId,
-        pivTraceId);
-  }
-
-  AcwInputFrame inputFrame{};
+std::vector<uint8_t> dispatchAcwInput(
+    const AcwInputFrame& inputFrame, uint64_t pivTraceId) {
   std::string errorMessage;
-  if (!findAcwInputFrame(*request, &inputFrame, &errorMessage)) {
-    return serializeInvokeResponse(
-        400,
-        "missing-access-request",
-        errorMessage,
-        pivTraceId);
-  }
-
   ::flatbuffers::Verifier acwVerifier(inputFrame.payload, inputFrame.size);
   if (!VerifyACWBuffer(acwVerifier)) {
     return serializeInvokeResponse(
@@ -1528,6 +1478,62 @@ std::vector<uint8_t> dispatchInvokeRequest(
       allWindows,
       traceId);
   return serializeInvokeSuccessWithAcwPayload(payload, pivTraceId);
+}
+
+std::vector<uint8_t> dispatchInvokeRequest(
+    const uint8_t* requestBytes,
+    size_t requestLen) {
+  if (requestBytes == nullptr || requestLen == 0u) {
+    return serializeInvokeResponse(
+        400,
+        "invalid-request",
+        "Invoke request bytes are empty.");
+  }
+
+  if (requestLen < 8u || !PIVBufferHasIdentifier(requestBytes)) {
+    return serializeInvokeResponse(
+        400,
+        "invalid-request",
+        "Invoke request must be an SDS PIV envelope.");
+  }
+
+  ::flatbuffers::Verifier verifier(requestBytes, requestLen);
+  if (!VerifyPIVBuffer(verifier)) {
+    return serializeInvokeResponse(
+        400,
+        "invalid-request",
+        "SDS PIV invoke envelope verification failed.");
+  }
+
+  const auto* pivEnvelope = GetPIV(requestBytes);
+  const auto* request = pivEnvelope != nullptr ? pivEnvelope->REQUEST() : nullptr;
+  if (request == nullptr) {
+    return serializeInvokeResponse(
+        400,
+        "invalid-request",
+        "SDS PIV invoke envelope must carry REQUEST.");
+  }
+  const uint64_t pivTraceId = request->TRACE_ID();
+  const std::string methodId = flatbufferString(request->METHOD_ID());
+  if (methodId != kComputeAccessWindowsMethod) {
+    return serializeInvokeResponse(
+        404,
+        "unknown-method",
+        std::string("Unknown method: ") + methodId,
+        pivTraceId);
+  }
+
+  AcwInputFrame inputFrame{};
+  std::string errorMessage;
+  if (!findAcwInputFrame(*request, &inputFrame, &errorMessage)) {
+    return serializeInvokeResponse(
+        400,
+        "missing-access-request",
+        errorMessage,
+        pivTraceId);
+  }
+
+  return dispatchAcwInput(inputFrame, pivTraceId);
 }
 
 }  // namespace
@@ -1754,6 +1760,42 @@ uint8_t* access_compute_access_windows_with_elevation_mask(
   return copyAccessWindowRecordsToOutput(windows, outWindowCount);
 }
 
+// Legacy geometry API uses the same C++ frame, mask, and refraction functions
+// as ACW; JS only copies this fixed-size result record.
+ORBPRO_EXPORT
+int32_t access_compute_geometry(
+    const StateRecord* state, uint32_t stationIndex, double minElevation,
+    const ElevationMaskPointRecord* maskPoints, uint32_t maskCount,
+    const RefractionModelRecord* refractionInput, double* output) {
+  if (!g_initialized || !state || !output || stationIndex >= g_ground_stations.size()) return 1;
+  const auto& station = g_ground_stations[stationIndex];
+  const auto origin = geodeticToEcef(station.latitude_rad, station.longitude_rad, station.altitude_m);
+  const auto geometry = computeAccessGeometryRad(origin, geodeticEast(station.longitude_rad),
+      geodeticNorth(station.latitude_rad, station.longitude_rad),
+      geodeticUp(station.latitude_rad, station.longitude_rad), *state);
+  const Vec3 los{state->x - origin.x, state->y - origin.y, state->z - origin.z};
+  const double range = std::sqrt(dot(los, los));
+  const double elevation = range > 0 ? geometry.elevation_rad : -kPi / 2;
+  double threshold = isFinite(minElevation) ? minElevation : station.min_elevation_rad;
+  if (maskCount) {
+    ElevationMaskTable mask{};
+    if (!maskPoints || !normalizeElevationMask(maskPoints, maskCount, &mask)) return 2;
+    threshold = evaluateElevationMask(mask, geometry.azimuth_rad);
+  }
+  RefractionModelRecord refraction{};
+  const RefractionModelRecord* model = nullptr;
+  if (refractionInput) {
+    refraction = *refractionInput;
+    if (!prepareRefractionModel(&refraction)) return 3;
+    model = &refraction;
+  }
+  const double correction = computeRefractionRad(elevation, model);
+  const double values[]{range, elevation, geometry.azimuth_rad, los.x, los.y, los.z,
+      threshold, correction, elevation + correction, elevation + correction >= threshold ? 1.0 : 0.0};
+  std::memcpy(output, values, sizeof(values));
+  return 0;
+}
+
 ORBPRO_EXPORT
 uint8_t* access_compute_access_windows_with_effects(
     const uint8_t* stateBytes,
@@ -1854,6 +1896,7 @@ uint8_t* access_schedule_contacts(
   return outBytes;
 }
 
+#ifndef ACCESS_SDK_BUILD
 ORBPRO_EXPORT
 const uint8_t* plugin_get_manifest_flatbuffer(void) {
   return access_plugin_manifest_bytes();
@@ -1909,5 +1952,7 @@ uint32_t plugin_invoke_stream(
   }
   return responsePtr;
 }
+
+#endif  // ACCESS_SDK_BUILD
 
 }  // extern "C"

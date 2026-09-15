@@ -1,0 +1,2 @@
+parity PASS fixture=TMPL lane01 HPOP diagnostic CMake artifact module=be374f69201c1718 lanes=[browser(6 runs, 8722ms), wasmedge(6 runs, 380ms), docker-wasmedge(6 runs, 14896ms)] comparisons=30
+  6 case(s) byte-identical across 3 lane(s).

@@ -1,0 +1,150 @@
+{
+  "ok": true,
+  "sourceName": "manifest",
+  "manifest": {
+    "pluginId": "com.orbpro.access",
+    "name": "Access Analysis",
+    "version": "1.0.0",
+    "pluginFamily": "analysis",
+    "capabilities": [],
+    "externalInterfaces": [],
+    "invokeSurfaces": [
+      "direct"
+    ],
+    "runtimeTargets": [
+      "browser",
+      "wasmedge"
+    ],
+    "methods": [
+      {
+        "methodId": "compute_access_windows",
+        "displayName": "Compute Access Windows",
+        "inputPorts": [
+          {
+            "portId": "request",
+            "acceptedTypeSets": [
+              {
+                "setId": "analysis.access-window-request",
+                "allowedTypes": [
+                  {
+                    "schemaName": "ACW.fbs",
+                    "fileIdentifier": "$ACW",
+                    "rootTypeName": "ACW",
+                    "wireFormat": "flatbuffer"
+                  },
+                  {
+                    "schemaName": "ACW.fbs",
+                    "fileIdentifier": "$ACW",
+                    "rootTypeName": "ACW",
+                    "wireFormat": "aligned-binary",
+                    "requiredAlignment": 8
+                  }
+                ],
+                "description": "SDS ACW request envelope as FlatBuffer or aligned-binary frames."
+              }
+            ],
+            "minStreams": 1,
+            "maxStreams": 65535,
+            "required": true,
+            "description": "SDS ACW access-window analysis requests."
+          }
+        ],
+        "outputPorts": [
+          {
+            "portId": "results",
+            "acceptedTypeSets": [
+              {
+                "setId": "analysis.access-window-result",
+                "allowedTypes": [
+                  {
+                    "schemaName": "ACW.fbs",
+                    "fileIdentifier": "$ACW",
+                    "rootTypeName": "ACW",
+                    "wireFormat": "flatbuffer"
+                  },
+                  {
+                    "schemaName": "ACW.fbs",
+                    "fileIdentifier": "$ACW",
+                    "rootTypeName": "ACW",
+                    "wireFormat": "aligned-binary",
+                    "requiredAlignment": 8
+                  }
+                ],
+                "description": "SDS ACW result envelope as FlatBuffer or aligned-binary frames."
+              }
+            ],
+            "minStreams": 1,
+            "maxStreams": 65535,
+            "required": true,
+            "description": "SDS ACW access-window analysis results."
+          }
+        ],
+        "maxBatch": 1,
+        "drainPolicy": "drain-until-yield",
+        "description": "Computes access windows for an asset, target, and time span."
+      }
+    ],
+    "timers": [],
+    "protocols": [],
+    "schemasUsed": [
+      {
+        "schemaName": "ACW.fbs",
+        "fileIdentifier": "$ACW",
+        "rootTypeName": "ACW",
+        "wireFormat": "flatbuffer"
+      }
+    ],
+    "buildArtifacts": [
+      {
+        "artifactId": "access-runtime",
+        "kind": "wasm",
+        "path": "dist/isomorphic/module.wasm",
+        "target": "browser,wasmedge"
+      }
+    ],
+    "abiVersion": 1
+  },
+  "issues": [],
+  "errors": [],
+  "warnings": [],
+  "checkedArtifact": true,
+  "exportNames": [
+    "__cxa_is_pointer_type",
+    "__errno_location",
+    "__indirect_function_table",
+    "__wasm_call_ctors",
+    "access_add_ground_station",
+    "access_compute_access_windows",
+    "access_compute_access_windows_with_effects",
+    "access_compute_access_windows_with_elevation_mask",
+    "access_get_ground_station_blackout_count",
+    "access_get_ground_station_blackout_record",
+    "access_get_ground_station_count",
+    "access_get_ground_station_record",
+    "access_plugin_manifest_bytes",
+    "access_plugin_manifest_size",
+    "access_reset_ground_stations",
+    "access_schedule_contacts",
+    "access_set_ground_station_blackouts",
+    "dynCall_jiji",
+    "emscripten_stack_get_base",
+    "emscripten_stack_get_current",
+    "emscripten_stack_get_end",
+    "emscripten_stack_get_free",
+    "emscripten_stack_init",
+    "fflush",
+    "free",
+    "malloc",
+    "memory",
+    "plugin_alloc",
+    "plugin_destroy",
+    "plugin_free",
+    "plugin_get_manifest_flatbuffer",
+    "plugin_get_manifest_flatbuffer_size",
+    "plugin_init",
+    "plugin_invoke_stream",
+    "stackAlloc",
+    "stackRestore",
+    "stackSave"
+  ]
+}
