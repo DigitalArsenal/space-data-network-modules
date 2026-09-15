@@ -30,7 +30,7 @@ const standardsRoot = path.join(
 const outDir = path.join(packageRoot, "src", "generated", "sds");
 
 // Families this module references directly, plus their transitive includes.
-export const SCHEMA_FAMILIES = ["RFM", "FRM", "PCE", "EVL", "EOP", "TIM", "IDM", "PLD", "LCC", "CAT", "PPE", "OEM", "NCD"];
+export const SCHEMA_FAMILIES = ["RFM", "FRM", "PCE", "EVL", "EOP", "TIM", "IDM", "PLD", "LCC", "CAT", "PPE", "OEM", "NCD", "ACW"];
 
 function schemaIncludeFamilies(schemaPath) {
   const includes = [];
@@ -108,8 +108,9 @@ export async function generateSdsHeaders() {
     const includeFamilies = schemaIncludeFamilies(schemaPath);
     const rc = flatc.callMain([
       "--cpp",
-      "--cpp-std",
-      "c++17",
+      // ACW is consumed by the shared access evaluator, whose canonical
+      // bindings use flatc's unscoped enums. The other families use C++17.
+      ...(family === "ACW" ? [] : ["--cpp-std", "c++17"]),
       "--gen-object-api",
       "--preserve-case",
       "--no-warnings",

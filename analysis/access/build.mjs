@@ -26,6 +26,9 @@ await fs.writeFile(path.join(root, "src/generated/ACW_generated.h"), header);
 const implementation = (await read("src/access_plugin.cpp"))
   .replace('#include "access_abi.h"', await read("src/access_abi.h"))
   .replace('#include "ACW_generated.h"', header)
+  .replace('#include "../../../propagator/events/src/event_locator.hpp"', await read("../../propagator/events/src/event_locator.hpp"))
+  .replace('#include "constraint_engine.cpp.inc"', await read("src/constraint_engine.cpp.inc"))
+  .replace('#include "constraint_polynomials.hpp"', await read("src/constraint_polynomials.hpp"))
   .replace(/ORBPRO_EXPORT\s+([\w:* ]+)\s+(\w+)\(/g,
     (_, type, name) => `__attribute__((export_name("${name}"))) ${type} ${name}(`);
 const sourceCode = "#define ACCESS_SDK_BUILD 1\n" + implementation + "\n" + await read("src/sdk_entrypoint.cpp.inc");

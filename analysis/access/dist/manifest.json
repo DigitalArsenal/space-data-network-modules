@@ -9,7 +9,7 @@
   "wasmModule": {
     "file": "access.wasm",
     "loader": "access.mjs",
-    "hash": "668daf02e5e1373342144ddaa5e38391f4c966eda41b03a1153b0ca014211aea",
+    "hash": "1277308cfb5abafcccc7b6d61dc0ce24085a7c36960229d0013698583007b42e",
     "exports": [
       "_start",
       "plugin_init",

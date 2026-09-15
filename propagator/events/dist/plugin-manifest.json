@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.propagator.events",
   "name": "Event Locator",
   "version": "0.1.0",
-  "description": "Locates events on a supplied trajectory as roots of a continuous event function: eclipse umbra, penumbra and antumbra, station contact with light-time correction, body intrusion into a conic field of view, apsides, node crossings and a stopping condition on any named catalog parameter. One bracketing scan and one Brent refinement serve every class, so the located epoch does not depend on the scan step. The trajectory arrives as a port; this module carries no propagator.",
+  "description": "Locates events on a supplied trajectory as roots of a continuous event function: eclipse umbra, penumbra and antumbra, station contact with light-time correction, body intrusion into a conic field of view, apsides, node crossings and a stopping condition on any named catalog parameter. One bracketing scan and one Brent refinement serve every class, so the located epoch does not depend on the scan step. The trajectory arrives as a port; this module carries no propagator. Locates composed access-constraint windows from SDS ACW requests through the shared C++ access evaluator.",
   "pluginFamily": "propagator",
   "capabilities": [],
   "externalInterfaces": [],
@@ -304,6 +304,69 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot",
       "description": "Propagates along the supplied trajectory until a named parameter attains its goal, refining the stop epoch on the continuous condition function so the answer does not depend on the scan step. A goal that is never attained is reported as GOAL_NOT_ATTAINED, never as a silent stop at the end of the interval."
+    },
+    {
+      "methodId": "locate_access_windows",
+      "displayName": "Locate Access Constraint Windows",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-acw-access-constraints",
+              "allowedTypes": [
+                {
+                  "schemaName": "ACW.fbs",
+                  "fileIdentifier": "$ACW",
+                  "rootTypeName": "ACW"
+                },
+                {
+                  "schemaName": "ACW.fbs",
+                  "fileIdentifier": "$ACW",
+                  "rootTypeName": "ACW",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS ACW constraint composition, Earth-fixed target and observer states in metres, TT Julian dates, Sun/Moon states and edge-refinement tolerance."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "results",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-acw-access-constraints",
+              "allowedTypes": [
+                {
+                  "schemaName": "ACW.fbs",
+                  "fileIdentifier": "$ACW",
+                  "rootTypeName": "ACW"
+                },
+                {
+                  "schemaName": "ACW.fbs",
+                  "fileIdentifier": "$ACW",
+                  "rootTypeName": "ACW",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "SDS ACW windows with limiting-constraint attribution and range extrema."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Locate access intervals for nested AND/OR constraints over ground sites and moving observers using the same compiled C++ evaluator as analysis/access. Continuous mode refines bracketed edges; discrete mode reports sample edges."
     }
   ],
   "schemasUsed": [
@@ -341,6 +404,11 @@
       "schemaName": "NCD.fbs",
       "fileIdentifier": "$NCD",
       "rootTypeName": "NCD"
+    },
+    {
+      "schemaName": "ACW.fbs",
+      "fileIdentifier": "$ACW",
+      "rootTypeName": "ACW"
     }
   ],
   "buildArtifacts": [

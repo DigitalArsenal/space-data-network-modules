@@ -1,0 +1,339 @@
+{
+  "case": "Orekit 13.1.2 GroundAtNightDetectorTest.testMidLatitudeCivilNoRefraction",
+  "sourceUrl": "https://raw.githubusercontent.com/CS-SI/Orekit/13.1.2/src/test/java/org/orekit/propagation/events/GroundAtNightDetectorTest.java",
+  "sourceLines": "45-50 and 87-115",
+  "epochUtc": "2003-02-14T14:02:03.000Z",
+  "durationSeconds": 86400,
+  "station": {
+    "latitudeDeg": 43,
+    "longitudeDeg": 0,
+    "altitudeM": 0,
+    "ellipsoid": "WGS84"
+  },
+  "frame": "Orekit FramesFactory.getITRF(IERSConventions.IERS_2010, true), regular-data at tag13.1.2",
+  "positionUnits": "metres",
+  "sampleOffsetUnits": "TT seconds since epochJulianDateTT",
+  "sunExclusionThresholdRad": 1.6755160819145563,
+  "geometryEquivalence": "The synthetic target is fixed one million metres along the ground station geodetic zenith. Its observer-to-target direction is therefore exactly the zenith. Angular separation from the observer-to-Sun direction is pi/2 minus solar elevation. SUN_EXCLUSION >=96 degrees therefore exactly reproduces the published civil-night condition solar elevation<=-6 degrees, with no refraction. This is a test of SUN_EXCLUSION; no generic ground-night constraint is claimed.",
+  "publishedExpectedDurationSeconds": 45037.367,
+  "sourceToleranceSeconds": 0.001,
+  "acwToleranceSeconds": 0.1,
+  "acwToleranceRationale": "The requested 0.1-second accuracy conservatively includes the published one-millisecond reference rounding, linear interpolation of independent one-second Sun samples within five seconds of each edge, a one-millisecond root tolerance, and single-double Julian-Date quantization. Hourly samples elsewhere retain complete one-day coverage.",
+  "externalOrekitPublishedDurationErrorSeconds": -0.00038096374919405207,
+  "sampleDescription": "sunSamples rows are [TT seconds since epoch,Earth-fixed x m,y m,z m]. Generated using Orekit13.1.2 CelestialBodyFactory.getSun() with the same DE405 and IERS test data as the upstream test; hourly samples plus one-second samples bracketing the two independently detected edges. The target is fixed at targetPositionM over the complete day.",
+  "generation": {
+    "command": "mvn -q dependency:copy-dependencies -DoutputDirectory=lib; java -cp \"lib/*\" OrekitNightReference.java > night-samples.json 2> night-validation.txt",
+    "mavenDependency": "org.orekit:orekit:13.1.2",
+    "sourceGenerator": "OrekitNightReference.java",
+    "dataAndJarHashManifest": "orekit-elevation.json:provenance and generation.runtimeJarHashes",
+    "orekitTreeSha": "1841b163be0c2cdeb8b69f3ee1dd4f46e3cb3797",
+    "sourceGeneratorSha256": "5814f697de9edb254ff08724ef227f4e0e33b4c5aa81f63a01a39e3f077f8edb"
+  },
+  "epochJulianDateTT": 2452685.0854998147,
+  "externalOrekitEdgesSeconds": [
+    14190.238699253248,
+    59227.6053182895
+  ],
+  "externalOrekitDurationSeconds": 45037.36661903625,
+  "targetPositionM": [
+    5403307.01151139,
+    0.0,
+    5009500.119259472
+  ],
+  "sunSamples": [
+    [
+      0,
+      128286221383.0217,
+      -65244684873.475494,
+      -33313676935.455227
+    ],
+    [
+      3600,
+      107034733605.9848,
+      -96231431078.19978,
+      -33278432174.25804
+    ],
+    [
+      7200,
+      78485372487.96663,
+      -120663445949.79259,
+      -33243165850.736034
+    ],
+    [
+      10800,
+      44583001285.306564,
+      -136874668310.44196,
+      -33207874064.032528
+    ],
+    [
+      14185,
+      9884289043.492172,
+      -143621573229.7975,
+      -33174663738.302254
+    ],
+    [
+      14186,
+      9873844456.598526,
+      -143622294271.85065,
+      -33174653923.277348
+    ],
+    [
+      14187,
+      9863399817.10431,
+      -143623014554.34247,
+      -33174644108.25002
+    ],
+    [
+      14188,
+      9852955125.066345,
+      -143623734077.2691,
+      -33174634293.220257
+    ],
+    [
+      14189,
+      9842510380.539993,
+      -143624452840.62677,
+      -33174624478.1881
+    ],
+    [
+      14190,
+      9832065583.579346,
+      -143625170844.41162,
+      -33174614663.153515
+    ],
+    [
+      14191,
+      9821620734.240128,
+      -143625888088.61984,
+      -33174604848.116516
+    ],
+    [
+      14192,
+      9811175832.578094,
+      -143626604573.24744,
+      -33174595033.077076
+    ],
+    [
+      14193,
+      9800730878.646988,
+      -143627320298.29086,
+      -33174585218.035217
+    ],
+    [
+      14194,
+      9790285872.503647,
+      -143628035263.74622,
+      -33174575402.990955
+    ],
+    [
+      14195,
+      9779840814.202698,
+      -143628749469.60962,
+      -33174565587.94428
+    ],
+    [
+      14196,
+      9769395703.799316,
+      -143629462915.8772,
+      -33174555772.895153
+    ],
+    [
+      14400,
+      7637583055.836884,
+      -143759117643.21045,
+      -33172553452.19184
+    ],
+    [
+      18000,
+      -29833210208.210297,
+      -140846348455.28748,
+      -33137201423.34047
+    ],
+    [
+      21600,
+      -65275566240.48512,
+      -128333598699.99608,
+      -33101816334.45793
+    ],
+    [
+      25200,
+      -96273587271.10135,
+      -107072435307.00894,
+      -33066397605.495094
+    ],
+    [
+      28800,
+      -120713968200.93236,
+      -78510800914.53632,
+      -33030945761.003773
+    ],
+    [
+      32400,
+      -136930072954.16115,
+      -44594405741.7831,
+      -32995462396.38646
+    ],
+    [
+      36000,
+      -143815586430.66864,
+      -7634179988.894791,
+      -32959950071.02025
+    ],
+    [
+      39600,
+      -140899991795.97736,
+      29851183727.86949,
+      -32924412135.425724
+    ],
+    [
+      43200,
+      -128380723682.71304,
+      65306869374.59427,
+      -32888852504.161655
+    ],
+    [
+      46800,
+      -107109800032.74623,
+      96316061425.79366,
+      -32853275390.647053
+    ],
+    [
+      50400,
+      -78535837623.89503,
+      120764686222.77115,
+      -32817685021.22941
+    ],
+    [
+      54000,
+      -44605397381.05043,
+      136985541200.91974,
+      -32782085348.09057
+    ],
+    [
+      57600,
+      -7630378074.045532,
+      143871985767.6512,
+      -32746479780.643475
+    ],
+    [
+      59222,
+      9354558392.284042,
+      143774389271.21957,
+      -32730436304.946224
+    ],
+    [
+      59223,
+      9365014428.302094,
+      143773711174.0951,
+      -32730426413.61662
+    ],
+    [
+      59224,
+      9375470415.167252,
+      143773032316.55154,
+      -32730416522.286777
+    ],
+    [
+      59225,
+      9385926352.824966,
+      143772352698.59256,
+      -32730406630.956825
+    ],
+    [
+      59226,
+      9396382241.218689,
+      143771672320.22165,
+      -32730396739.626633
+    ],
+    [
+      59227,
+      9406838080.293701,
+      143770991181.4424,
+      -32730386848.296295
+    ],
+    [
+      59228,
+      9417293869.99527,
+      143770309282.25836,
+      -32730376956.96578
+    ],
+    [
+      59229,
+      9427749610.266983,
+      143769626622.6732,
+      -32730367065.635082
+    ],
+    [
+      59230,
+      9438205301.054184,
+      143768943202.6904,
+      -32730357174.30424
+    ],
+    [
+      59231,
+      9448660942.30194,
+      143768259022.31354,
+      -32730347282.97318
+    ],
+    [
+      59232,
+      9459116533.953506,
+      143767574081.54633,
+      -32730337391.641956
+    ],
+    [
+      59233,
+      9469572075.956055,
+      143766888380.3922,
+      -32730327500.310562
+    ],
+    [
+      61200,
+      29869508037.337814,
+      140953440894.62106,
+      -32710870953.763805
+    ],
+    [
+      64800,
+      65338444486.282135,
+      128427546468.61931,
+      -32675260548.698406
+    ],
+    [
+      68400,
+      96358703434.8479,
+      107146778854.1002,
+      -32639649178.913876
+    ],
+    [
+      72000,
+      120815449845.50404,
+      78560434706.94577,
+      -32604036348.726185
+    ],
+    [
+      75600,
+      137040923088.29817,
+      44615929330.52794,
+      -32568420487.59435
+    ],
+    [
+      79200,
+      143928166164.25073,
+      7626131419.986473,
+      -32532799057.79741
+    ],
+    [
+      82800,
+      141006546973.95203,
+      -29888228177.08795,
+      -32497168728.206543
+    ],
+    [
+      86400,
+      128473919190.80884,
+      -65370335946.50714,
+      -32461525602.346413
+    ]
+  ]
+}

@@ -880,11 +880,14 @@ extern "C" int locate_events(void) {
   };
 
   if (intervalShaped) {
+    // Eclipse g is negative inside; contact and intrusion g are positive.
+    const auto entryDirection = request->LOCATOR_CLASS() == evlLocatorClass::ECLIPSE
+        ? ev::Direction::DECREASING : ev::Direction::INCREASING;
     for (int32_t i = 0; i < count; ++i) {
-      if (events[i].direction != ev::Direction::DECREASING) continue;  // entry
+      if (events[i].direction != entryDirection) continue;
       int32_t exitIndex = -1;
       for (int32_t j = i + 1; j < count; ++j) {
-        if (events[j].direction == ev::Direction::INCREASING) {
+        if (events[j].direction != entryDirection) {
           exitIndex = j;
           break;
         }
@@ -1231,4 +1234,26 @@ extern "C" int propagate_to_condition(void) {
     return 1;
   }
   return 0;
+}
+
+// ACW 1.219.0 is the ratified access-constraint vocabulary. Compile the same
+// evaluator as analysis/access: no second physics implementation, custom wire,
+// implicit ephemeris model, or reinterpretation of ACW's Earth-fixed/TT units.
+extern "C" int locate_access_windows(void) {
+  const auto* frame = find_frame("request");
+  if (frame == nullptr) {
+    plugin_set_error("missing-access-request", "ACW request frame is required.");
+    return 400;
+  }
+  const auto bytes = sdn_acw::dispatchAcwInput({frame->payload, frame->payload_length}, 0);
+  const auto* response = GetPIV(bytes.data())->RESPONSE();
+  if (response->STATUS_CODE() != 0) {
+    plugin_set_error(response->ERROR_CODE()->c_str(), response->ERROR_MESSAGE()->c_str());
+    return response->STATUS_CODE();
+  }
+  const auto* arena = response->PAYLOAD_ARENA();
+  const auto* output = response->OUTPUTS()->Get(0);
+  return plugin_push_output_typed(
+      "results", "ACW.fbs", "$ACW", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
+      "ACW", 0, 0, 0, arena->data() + output->OFFSET(), output->SIZE());
 }

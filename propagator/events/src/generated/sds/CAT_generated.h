@@ -256,6 +256,8 @@ struct CATT : public ::flatbuffers::NativeTable {
   massCategory MASS_TYPE = massCategory::DRY;
   std::vector<std::unique_ptr<PLDT>> PAYLOADS{};
   std::string BUS_ID{};
+  std::string CATALOG_URI{};
+  std::string CATALOG_OBJECT_ID{};
   CATT() = default;
   CATT(const CATT &o);
   CATT(CATT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -291,7 +293,9 @@ struct CAT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_MASS = 44,
     VT_MASS_TYPE = 46,
     VT_PAYLOADS = 48,
-    VT_BUS_ID = 50
+    VT_BUS_ID = 50,
+    VT_CATALOG_URI = 52,
+    VT_CATALOG_OBJECT_ID = 54
   };
   /// Satellite Name(s)
   const ::flatbuffers::String *OBJECT_NAME() const {
@@ -392,6 +396,24 @@ struct CAT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *BUS_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_BUS_ID);
   }
+  /// Absolute URI identifying the original catalog's object-ID namespace.
+  /// This is an identifier, not an instruction to fetch a resource. Use with
+  /// CATALOG_OBJECT_ID only when both fields are present. Preserve the pair
+  /// through replicas and derived catalogs; it does not assert a NORAD or
+  /// COSPAR association. If the authority can reassign an object ID, this URI
+  /// must identify its immutable edition or assignment interval, rather than
+  /// the unversioned catalog. Stable IDs may use a persistent catalog URI.
+  const ::flatbuffers::String *CATALOG_URI() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_CATALOG_URI);
+  }
+  /// Exact, opaque object identifier assigned by CATALOG_URI's authority.
+  /// Preserve case, Unicode and leading zeros. Numeric-looking native IDs
+  /// are not NORAD_CAT_ID values. Neither a matching name nor a native ID
+  /// in a different namespace establishes that two records describe the same
+  /// physical object. Publication provenance retains source and edition data.
+  const ::flatbuffers::String *CATALOG_OBJECT_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_CATALOG_OBJECT_ID);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -429,6 +451,10 @@ struct CAT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyVectorOfTables(PAYLOADS()) &&
            VerifyOffset(verifier, VT_BUS_ID) &&
            verifier.VerifyString(BUS_ID()) &&
+           VerifyOffset(verifier, VT_CATALOG_URI) &&
+           verifier.VerifyString(CATALOG_URI()) &&
+           VerifyOffset(verifier, VT_CATALOG_OBJECT_ID) &&
+           verifier.VerifyString(CATALOG_OBJECT_ID()) &&
            verifier.EndTable();
   }
   CATT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -512,6 +538,12 @@ struct CATBuilder {
   void add_BUS_ID(::flatbuffers::Offset<::flatbuffers::String> BUS_ID) {
     fbb_.AddOffset(CAT::VT_BUS_ID, BUS_ID);
   }
+  void add_CATALOG_URI(::flatbuffers::Offset<::flatbuffers::String> CATALOG_URI) {
+    fbb_.AddOffset(CAT::VT_CATALOG_URI, CATALOG_URI);
+  }
+  void add_CATALOG_OBJECT_ID(::flatbuffers::Offset<::flatbuffers::String> CATALOG_OBJECT_ID) {
+    fbb_.AddOffset(CAT::VT_CATALOG_OBJECT_ID, CATALOG_OBJECT_ID);
+  }
   explicit CATBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -548,7 +580,9 @@ inline ::flatbuffers::Offset<CAT> CreateCAT(
     double MASS = 0.0,
     massCategory MASS_TYPE = massCategory::DRY,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PLD>>> PAYLOADS = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> BUS_ID = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> BUS_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> CATALOG_URI = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> CATALOG_OBJECT_ID = 0) {
   CATBuilder builder_(_fbb);
   builder_.add_MASS(MASS);
   builder_.add_SIZE(SIZE);
@@ -557,6 +591,8 @@ inline ::flatbuffers::Offset<CAT> CreateCAT(
   builder_.add_APOGEE(APOGEE);
   builder_.add_INCLINATION(INCLINATION);
   builder_.add_PERIOD(PERIOD);
+  builder_.add_CATALOG_OBJECT_ID(CATALOG_OBJECT_ID);
+  builder_.add_CATALOG_URI(CATALOG_URI);
   builder_.add_BUS_ID(BUS_ID);
   builder_.add_PAYLOADS(PAYLOADS);
   builder_.add_DEPLOYMENT_DATE(DEPLOYMENT_DATE);
@@ -607,7 +643,9 @@ inline ::flatbuffers::Offset<CAT> CreateCATDirect(
     double MASS = 0.0,
     massCategory MASS_TYPE = massCategory::DRY,
     const std::vector<::flatbuffers::Offset<PLD>> *PAYLOADS = nullptr,
-    const char *BUS_ID = nullptr) {
+    const char *BUS_ID = nullptr,
+    const char *CATALOG_URI = nullptr,
+    const char *CATALOG_OBJECT_ID = nullptr) {
   auto OBJECT_NAME__ = OBJECT_NAME ? _fbb.CreateString(OBJECT_NAME) : 0;
   auto OBJECT_ID__ = OBJECT_ID ? _fbb.CreateString(OBJECT_ID) : 0;
   auto LAUNCH_DATE__ = LAUNCH_DATE ? _fbb.CreateString(LAUNCH_DATE) : 0;
@@ -617,6 +655,8 @@ inline ::flatbuffers::Offset<CAT> CreateCATDirect(
   auto DEPLOYMENT_DATE__ = DEPLOYMENT_DATE ? _fbb.CreateString(DEPLOYMENT_DATE) : 0;
   auto PAYLOADS__ = PAYLOADS ? _fbb.CreateVector<::flatbuffers::Offset<PLD>>(*PAYLOADS) : 0;
   auto BUS_ID__ = BUS_ID ? _fbb.CreateString(BUS_ID) : 0;
+  auto CATALOG_URI__ = CATALOG_URI ? _fbb.CreateString(CATALOG_URI) : 0;
+  auto CATALOG_OBJECT_ID__ = CATALOG_OBJECT_ID ? _fbb.CreateString(CATALOG_OBJECT_ID) : 0;
   return CreateCAT(
       _fbb,
       OBJECT_NAME__,
@@ -642,7 +682,9 @@ inline ::flatbuffers::Offset<CAT> CreateCATDirect(
       MASS,
       MASS_TYPE,
       PAYLOADS__,
-      BUS_ID__);
+      BUS_ID__,
+      CATALOG_URI__,
+      CATALOG_OBJECT_ID__);
 }
 
 ::flatbuffers::Offset<CAT> CreateCAT(::flatbuffers::FlatBufferBuilder &_fbb, const CATT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -670,7 +712,9 @@ inline CATT::CATT(const CATT &o)
         SIZE(o.SIZE),
         MASS(o.MASS),
         MASS_TYPE(o.MASS_TYPE),
-        BUS_ID(o.BUS_ID) {
+        BUS_ID(o.BUS_ID),
+        CATALOG_URI(o.CATALOG_URI),
+        CATALOG_OBJECT_ID(o.CATALOG_OBJECT_ID) {
   PAYLOADS.reserve(o.PAYLOADS.size());
   for (const auto &PAYLOADS_ : o.PAYLOADS) { PAYLOADS.emplace_back((PAYLOADS_) ? new PLDT(*PAYLOADS_) : nullptr); }
 }
@@ -700,6 +744,8 @@ inline CATT &CATT::operator=(CATT o) FLATBUFFERS_NOEXCEPT {
   std::swap(MASS_TYPE, o.MASS_TYPE);
   std::swap(PAYLOADS, o.PAYLOADS);
   std::swap(BUS_ID, o.BUS_ID);
+  std::swap(CATALOG_URI, o.CATALOG_URI);
+  std::swap(CATALOG_OBJECT_ID, o.CATALOG_OBJECT_ID);
   return *this;
 }
 
@@ -736,6 +782,8 @@ inline void CAT::UnPackTo(CATT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = MASS_TYPE(); _o->MASS_TYPE = _e; }
   { auto _e = PAYLOADS(); if (_e) { _o->PAYLOADS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->PAYLOADS[_i]) { _e->Get(_i)->UnPackTo(_o->PAYLOADS[_i].get(), _resolver); } else { _o->PAYLOADS[_i] = std::unique_ptr<PLDT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->PAYLOADS.resize(0); } }
   { auto _e = BUS_ID(); if (_e) _o->BUS_ID = _e->str(); }
+  { auto _e = CATALOG_URI(); if (_e) _o->CATALOG_URI = _e->str(); }
+  { auto _e = CATALOG_OBJECT_ID(); if (_e) _o->CATALOG_OBJECT_ID = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<CAT> CreateCAT(::flatbuffers::FlatBufferBuilder &_fbb, const CATT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -770,6 +818,8 @@ inline ::flatbuffers::Offset<CAT> CAT::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _MASS_TYPE = _o->MASS_TYPE;
   auto _PAYLOADS = _o->PAYLOADS.size() ? _fbb.CreateVector<::flatbuffers::Offset<PLD>> (_o->PAYLOADS.size(), [](size_t i, _VectorArgs *__va) { return CreatePLD(*__va->__fbb, __va->__o->PAYLOADS[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _BUS_ID = _o->BUS_ID.empty() ? 0 : _fbb.CreateString(_o->BUS_ID);
+  auto _CATALOG_URI = _o->CATALOG_URI.empty() ? 0 : _fbb.CreateString(_o->CATALOG_URI);
+  auto _CATALOG_OBJECT_ID = _o->CATALOG_OBJECT_ID.empty() ? 0 : _fbb.CreateString(_o->CATALOG_OBJECT_ID);
   return CreateCAT(
       _fbb,
       _OBJECT_NAME,
@@ -795,7 +845,9 @@ inline ::flatbuffers::Offset<CAT> CAT::Pack(::flatbuffers::FlatBufferBuilder &_f
       _MASS,
       _MASS_TYPE,
       _PAYLOADS,
-      _BUS_ID);
+      _BUS_ID,
+      _CATALOG_URI,
+      _CATALOG_OBJECT_ID);
 }
 
 inline const CAT *GetCAT(const void *buf) {

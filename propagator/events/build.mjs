@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 
 import { generateSdsHeaders } from "./generate-sds-headers.mjs";
+import { createAccessEvaluatorSource } from "../../analysis/access/build-source.mjs";
 import { composeErfaTranslationUnit } from "../../foundation/frames/erfa-amalgamation.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
@@ -93,6 +94,7 @@ const sourceCode = [
   crosswalkHeader,
   eventLocator,
   ephemerisSource,
+  await createAccessEvaluatorSource({ acwHeader: headers.ACW }),
   implementationSource,
 ].join("\n\n");
 

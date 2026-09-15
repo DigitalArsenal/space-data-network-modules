@@ -4,14 +4,16 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { normalizeParityFixture, runParityHarness, formatParityReport } from 'space-data-module-sdk/testing';
 import { eclipseRequest, kernelFrame } from './kernel-fixture.mjs';
+import { accessCases, encodeAccessRequest } from './access-fixture.mjs';
 
 const requests = [
+  ...accessCases().map(({id, request}) => [`acw-${id}`, encodeAccessRequest(request)]),
   ['de440-eclipse', eclipseRequest({kernel: kernelFrame()})],
   ['analytical-eclipse', eclipseRequest()],
   ['de440-out-of-coverage', eclipseRequest({kernel: kernelFrame(), start: '2030-01-02T00:00:00Z'})],
   ['bad-kernel-hash', eclipseRequest({kernel: kernelFrame(undefined, '0'.repeat(64))})],
 ];
-const plan = await normalizeParityFixture({ name: 'TMPL lane01 events', cases: requests.map(([id, request]) => ({
+const plan = await normalizeParityFixture({ name: 'TMPL lane06 events and access constraints', cases: requests.map(([id, request]) => ({
   id, request: { ...request, inputs: request.inputs.map(({payload, ...rest}) => ({...rest, payloadHex: Buffer.from(payload).toString('hex')})) },
 })) });
 const report = await runParityHarness({ wasmPath: fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url)),
