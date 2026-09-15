@@ -684,9 +684,19 @@ enum class JPLDEVersion : uint8_t {
     Analytical  ///< Simplified analytical approximations
 };
 
+// Actual state provenance. JPL_SPK is the honest default for an arbitrary
+// caller-provided kernel: the DAF header does not identify its DE release.
+namespace Ephemeris {
+enum class EphemerisSource {
+    Analytical, JPL_DE440, JPL_DE441, INPOP21a, EPM2021, MarsHighFidelity,
+    JPL_DE430, JPL_SPK
+};
+}
+
 /// Ephemeris state for a celestial body
 struct EphemerisState {
     CelestialBody body;
+    Ephemeris::EphemerisSource source{Ephemeris::EphemerisSource::Analytical};
     Vec3 position;          ///< Position (km, J2000 ecliptic or ICRF)
     Vec3 velocity;          ///< Velocity (km/s)
     double epoch{0};        ///< Julian date (TDB)

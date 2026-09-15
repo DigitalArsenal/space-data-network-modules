@@ -81,6 +81,102 @@ async function harness() {
 }
 
 const ready = fs.existsSync(WASM_PATH) && fs.existsSync(path.join(ARC, "ephemeris.oem"));
+const DE440_EXCERPT = path.join(packageRoot, "tests", "fixtures", "de440", "de440-2026.bsp");
+
+function outputDescriptor(result) {
+  const frame = result.outputs.find((o) => o.portId === "descriptor");
+  assert.ok(frame, "no descriptor output");
+  return NCD.getSizePrefixedRootAsNCD(new flatbuffers.ByteBuffer(new Uint8Array(frame.payload)));
+}
+
+// Prepend a valid cubic type-2 record to the existing type-13 container. This
+// fixture tests metadata/state routing; it does not supply numeric references.
+function mixedChebyshevAndDiscreteKernel() {
+  const original = fs.readFileSync(path.join(ARC, "ephemeris.bsp"));
+  assert.equal(original.toString("ascii", 88, 96), "LTL-IEEE");
+  const summary = (original.readInt32LE(76) - 1) * 1024;
+  assert.equal(original.readDoubleLE(summary + 16), 1);
+  const bytes = Buffer.alloc(original.length + 1024);
+  original.copy(bytes);
+  original.copy(bytes, summary + 64, summary + 24, summary + 64);
+  original.copy(bytes, summary + 1024 + 40, summary + 1024, summary + 1024 + 40);
+  bytes.writeDoubleLE(2, summary + 16);
+  const first = original.readDoubleLE(summary + 24);
+  const last = original.readDoubleLE(summary + 32);
+  const startWord = original.length / 8 + 1;
+  const record = [(first + last) / 2, (last - first) / 2,
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+    first, last - first, 14, 1];
+  record.forEach((v, i) => bytes.writeDoubleLE(v, original.length + i * 8));
+  [10, 0, 1, 2, startWord, startWord + record.length - 1].forEach((v, i) =>
+    bytes.writeInt32LE(v, summary + 40 + i * 4));
+  bytes.writeInt32LE(startWord + record.length, 84);
+  bytes.fill(32, summary + 1024, summary + 1024 + 40);
+  bytes.write("CUBIC CHEBYSHEV METADATA FIXTURE", summary + 1024, "ascii");
+  return bytes;
+}
+
+test("DE440 metadata is described without materializing coefficient records", {
+  skip: !ready || !fs.existsSync(DE440_EXCERPT),
+}, async () => {
+  const h = await harness();
+  try {
+    const bytes = fs.readFileSync(DE440_EXCERPT);
+    const inputs = [{ portId: "container", typeRef: NCD_TYPE,
+      payload: buildFrame(bytes, ncdContainerFormat.SPK_DAF) }];
+    const described = await h.invoke({ methodId: "describe_container", inputs });
+    assert.equal(described.statusCode, 0, described.errorMessage);
+    assert.equal(described.outputs.length, 1, "describe must emit only metadata");
+    const ncd = outputDescriptor(described);
+    assert.equal(ncd.FORMAT(), ncdContainerFormat.SPK_DAF);
+    assert.equal(ncd.NATIVE_TIME_SYSTEM(), "TDB");
+    assert.equal(ncd.NATIVE_FRAME_NAME(), "J2000");
+    assert.equal(ncd.SOURCE_SHA256(), sha256Hex(bytes));
+    assert.equal(ncd.segmentsLength(), 14);
+    for (let i = 0; i < ncd.segmentsLength(); ++i) {
+      const segment = ncd.SEGMENTS(i);
+      assert.equal(segment.SEGMENT_TYPE(), 2);
+      assert.ok(segment.POLYNOMIAL_DEGREE() >= 1);
+      assert.equal(segment.FRAME_NAIF_ID(), 1);
+    }
+    const read = await h.invoke({ methodId: "read_container", inputs });
+    assert.equal(read.statusCode, 400);
+    assert.equal(read.errorCode, "unsupported-spk-materialization");
+    assert.match(read.errorMessage, /Chebyshev coefficients/);
+    assert.match(read.errorMessage, /HPOP kernel input/);
+  } finally {
+    await h.destroy?.();
+  }
+});
+
+test("mixed SPK retains discrete states and per-segment polynomial degrees", { skip: !ready }, async () => {
+  const h = await harness();
+  try {
+    const bytes = mixedChebyshevAndDiscreteKernel();
+    const inputs = [{ portId: "container", typeRef: NCD_TYPE,
+      payload: buildFrame(bytes, ncdContainerFormat.SPK_DAF) }];
+    for (const methodId of ["read_container", "describe_container"]) {
+      const result = await h.invoke({ methodId, inputs });
+      assert.equal(result.statusCode, 0, result.errorMessage);
+      const ncd = outputDescriptor(result);
+      assert.equal(ncd.segmentsLength(), 2);
+      assert.equal(ncd.SEGMENTS(0).SEGMENT_TYPE(), 2);
+      assert.equal(ncd.SEGMENTS(0).POLYNOMIAL_DEGREE(), 3);
+      assert.equal(ncd.SEGMENTS(1).SEGMENT_TYPE(), 13);
+      assert.equal(ncd.SEGMENTS(1).POLYNOMIAL_DEGREE(), 7);
+      if (methodId === "read_container") {
+        const frame = result.outputs.find((o) => o.portId === "ephemeris");
+        assert.ok(frame);
+        const oem = OEM.getSizePrefixedRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(frame.payload)));
+        assert.equal(oem.ephemerisDataBlockLength(), 1);
+        const block = oem.EPHEMERIS_DATA_BLOCK(0);
+        assert.equal(block.ephemerisDataLength() / block.STATE_VECTOR_SIZE(), 121);
+      }
+    }
+  } finally {
+    await h.destroy?.();
+  }
+});
 
 test("read_container returns states and a descriptor for all four containers", { skip: !ready }, async () => {
   const h = await harness();

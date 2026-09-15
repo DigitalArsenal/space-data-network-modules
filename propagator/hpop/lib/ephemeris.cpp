@@ -6,7 +6,7 @@
 #include "ephemeris.h"
 #include <algorithm>
 #include <cmath>
-#include <fstream>
+#include "../../../files/orbit-products/src/spk_kernel.hpp"
 
 namespace astro {
 
@@ -269,7 +269,14 @@ Mat3 rotationZ(double angle) {
 
 namespace Ephemeris {
 
+namespace { int naifId(Body body); }
+
 BodyState getBodyState(Body body, double jdTDB, Body centerBody) {
+    if (selectedEphemerisSource() != EphemerisSource::Analytical) {
+        BodyState state = getKernelState(naifId(body), naifId(centerBody), jdTDB);
+        state.body = body;
+        return state;
+    }
     BodyState state;
     state.epoch = jdTDB;
     state.body = body;
@@ -344,6 +351,11 @@ BodyState getBodyState(Body body, double jdTDB, Body centerBody) {
 }
 
 Vec3 getSunPosition(double jdTDB) {
+    if (selectedEphemerisSource() != EphemerisSource::Analytical) {
+        const auto state = getKernelState(10, 399, jdTDB);
+        if (!state.valid) return Vec3{};
+        return state.position;
+    }
     // VSOP87 simplified - compute Earth heliocentric position, then negate
     // This gives geocentric Sun position
 
@@ -403,6 +415,11 @@ Vec3 getSunPosition(double jdTDB) {
 }
 
 Vec3 getMoonPosition(double jdTDB) {
+    if (selectedEphemerisSource() != EphemerisSource::Analytical) {
+        const auto state = getKernelState(301, 399, jdTDB);
+        if (!state.valid) return Vec3{};
+        return state.position;
+    }
     // ELP2000 simplified (Meeus, Astronomical Algorithms)
 
     double T = RefFrame::julianCenturiesFromJ2000(jdTDB);
@@ -530,6 +547,11 @@ Vec3 getMoonPosition(double jdTDB) {
 }
 
 Vec3 getPlanetPosition(Body body, double jdTDB) {
+    if (selectedEphemerisSource() != EphemerisSource::Analytical) {
+        const auto state = getKernelState(naifId(body), 10, jdTDB);
+        if (!state.valid) return Vec3{};
+        return state.position;
+    }
     int planetIdx = static_cast<int>(body) - 1;
     if (body == Body::Earth) planetIdx = 2; // EMB index
 
@@ -1099,101 +1121,118 @@ Vec3 equatorialToEcliptic(const Vec3& posEquatorial) {
 namespace Ephemeris {
 
 namespace {
-    // Ephemeris loading state
-    struct EphemerisState {
-        bool loaded{false};
-        double jdStart{0.0};
-        double jdEnd{0.0};
-        EphemerisSource source{EphemerisSource::Analytical};
-    };
+    spk::Kernel kernel;
+    EphemerisSource kernelSource = EphemerisSource::JPL_SPK;
+    EphemerisSource activeSource = EphemerisSource::Analytical;
+    std::string lastKernelError;
 
-    EphemerisState ephemerisStates[6] = {};  // One per EphemerisSource enum value
+    int naifId(Body body) {
+        switch (body) {
+            case Body::Sun: return 10;
+            case Body::Moon: return 301;
+            case Body::Earth: return 399;
+            case Body::EarthMoonBarycenter: return 3;
+            case Body::SolarSystemBarycenter: return 0;
+            case Body::Mercury: return 1;
+            case Body::Venus: return 2;
+            case Body::Mars: return 4;
+            case Body::Jupiter: return 5;
+            case Body::Saturn: return 6;
+            case Body::Uranus: return 7;
+            case Body::Neptune: return 8;
+            case Body::Pluto: return 9;
+        }
+        return -1;
+    }
 }
 
-bool loadEphemerisFile(const std::string& filename, EphemerisSource source) {
-    // SPK/BSP file loader stub
-    // In a full implementation, this would parse JPL SPK binary format
-    // For now, mark as loaded and use analytical fallback
-    int idx = static_cast<int>(source);
-    if (idx < 0 || idx >= 6) return false;
-
-    std::ifstream file(filename, std::ios::binary);
-    if (!file.is_open()) return false;
-
-    // Read SPK header to verify and get time range
-    char magic[8];
-    file.read(magic, 8);
-
-    // Set coverage based on source type
-    ephemerisStates[idx].loaded = true;
-    ephemerisStates[idx].source = source;
-
+const char* ephemerisSourceName(EphemerisSource source) {
     switch (source) {
-        case EphemerisSource::JPL_DE440:
-            ephemerisStates[idx].jdStart = 2287184.5;  // 1549-Dec-21
-            ephemerisStates[idx].jdEnd = 2688976.5;    // 2650-Jan-25
-            break;
-        case EphemerisSource::JPL_DE441:
-            ephemerisStates[idx].jdStart = -3027215.5;  // -13200
-            ephemerisStates[idx].jdEnd = 8000000.5;     // +17191
-            break;
-        case EphemerisSource::INPOP21a:
-            ephemerisStates[idx].jdStart = 2378496.5;   // 1800
-            ephemerisStates[idx].jdEnd = 2524593.5;     // 2200
-            break;
-        case EphemerisSource::EPM2021:
-            ephemerisStates[idx].jdStart = 2378496.5;   // 1800
-            ephemerisStates[idx].jdEnd = 2524593.5;     // 2200
-            break;
-        default:
-            break;
+        case EphemerisSource::Analytical: return "Analytical";
+        case EphemerisSource::JPL_DE430: return "JPL_DE430";
+        case EphemerisSource::JPL_DE440: return "JPL_DE440";
+        case EphemerisSource::JPL_DE441: return "JPL_DE441";
+        case EphemerisSource::JPL_SPK: return "JPL_SPK";
+        case EphemerisSource::INPOP21a: return "INPOP21a";
+        case EphemerisSource::EPM2021: return "EPM2021";
+        case EphemerisSource::MarsHighFidelity: return "MarsHighFidelity";
     }
+    return "Unknown";
+}
+const std::string& ephemerisError() { return lastKernelError; }
+EphemerisSource selectedEphemerisSource() { return activeSource; }
+
+void clearEphemerisBuffer() {
+    kernel = spk::Kernel{};
+    activeSource = EphemerisSource::Analytical;
+    lastKernelError.clear();
+}
+
+bool loadEphemerisBuffer(const uint8_t* bytes, size_t length, EphemerisSource source) {
+    clearEphemerisBuffer();
+    if (source != EphemerisSource::JPL_SPK && source != EphemerisSource::JPL_DE430 &&
+        source != EphemerisSource::JPL_DE440 && source != EphemerisSource::JPL_DE441) {
+        lastKernelError = "Only JPL SPK source labels are supported for buffer input.";
+        return false;
+    }
+    const auto status = kernel.load(bytes, length);
+    if (status != ephem::Status::Ok) {
+        lastKernelError = std::string("SPK load failed: ") + ephem::status_name(status);
+        return false;
+    }
+    kernelSource = activeSource = source;
     return true;
+}
+
+bool selectEphemerisSource(EphemerisSource source) {
+    if (source != EphemerisSource::Analytical &&
+        (!kernel.loaded() || source != kernelSource)) return false;
+    activeSource = source;
+    return true;
+}
+
+bool loadEphemerisFile(const std::string&, EphemerisSource) {
+    lastKernelError = "Filesystem ephemeris loading is unsupported; provide kernel input bytes.";
+    return false;
 }
 
 bool isEphemerisLoaded(EphemerisSource source) {
-    int idx = static_cast<int>(source);
-    return (idx >= 0 && idx < 6) ? ephemerisStates[idx].loaded : false;
+    return kernel.loaded() && source == kernelSource;
 }
 
 bool getEphemerisRange(EphemerisSource source, double& jdStart, double& jdEnd) {
-    int idx = static_cast<int>(source);
-    if (idx < 0 || idx >= 6 || !ephemerisStates[idx].loaded) return false;
-    jdStart = ephemerisStates[idx].jdStart;
-    jdEnd = ephemerisStates[idx].jdEnd;
+    if (!isEphemerisLoaded(source)) return false;
+    jdStart = kernel.start_jd();
+    jdEnd = kernel.end_jd();
     return true;
 }
 
-// All ephemeris functions fall back to analytical when binary data not loaded
+BodyState getKernelState(int target, int center, double jdTDB) {
+    BodyState result;
+    result.epoch = jdTDB;
+    result.source = kernelSource;
+    ephem::StateRow state;
+    const auto status = kernel.state(target, center, jdTDB, &state);
+    if (status != ephem::Status::Ok) {
+        lastKernelError = "SPK state " + std::to_string(target) + " relative to " +
+            std::to_string(center) + ": " + ephem::status_name(status);
+        return result;
+    }
+    result.position = Vec3(state.pos[0], state.pos[1], state.pos[2]);
+    result.velocity = Vec3(state.vel[0], state.vel[1], state.vel[2]);
+    result.valid = true;
+    return result;
+}
 
+// Unsupported named providers fail explicitly; callers choose Analytical themselves.
 BodyState getBodyStateDE441(Body body, double jdTDB, Body centerBody) {
-    // DE441 extends DE440 to cover -13200 to +17191
-    // When loaded, would use Chebyshev polynomial interpolation from SPK data
-    // Fallback to analytical
-    if (isEphemerisLoaded(EphemerisSource::JPL_DE441)) {
-        // Would interpolate from loaded coefficients here
-        // For now, use analytical with a note about extended time range
-    }
-    return getBodyState(body, jdTDB, centerBody);
+    if (!isEphemerisLoaded(EphemerisSource::JPL_DE441)) return BodyState{};
+    BodyState state = getKernelState(naifId(body), naifId(centerBody), jdTDB);
+    state.body = body;
+    return state;
 }
-
-BodyState getBodyStateINPOP21a(Body body, double jdTDB, Body centerBody) {
-    // INPOP21a (Institut de mécanique céleste et de calcul des éphémérides)
-    // Uses slightly different reference frame and mass parameters
-    if (isEphemerisLoaded(EphemerisSource::INPOP21a)) {
-        // Would interpolate from loaded INPOP coefficients
-    }
-    return getBodyState(body, jdTDB, centerBody);
-}
-
-BodyState getBodyStateEPM2021(Body body, double jdTDB, Body centerBody) {
-    // EPM2021 (Institute of Applied Astronomy, Russian Academy of Sciences)
-    // Independent development, different observational data weighting
-    if (isEphemerisLoaded(EphemerisSource::EPM2021)) {
-        // Would interpolate from loaded EPM coefficients
-    }
-    return getBodyState(body, jdTDB, centerBody);
-}
+BodyState getBodyStateINPOP21a(Body, double, Body) { return BodyState{}; }
+BodyState getBodyStateEPM2021(Body, double, Body) { return BodyState{}; }
 
 BodyState getMarsHighFidelity(double jdTDB) {
     // Mars high-fidelity model includes:
