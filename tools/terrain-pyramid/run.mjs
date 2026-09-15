@@ -1681,6 +1681,21 @@ async function main() {
   // the regional proof), they are consumed by exactly one reader, and burying
   // a machine-read list inside an operator-read summary is how the count came
   // to be kept while the addresses were dropped.
+  // The verifier reads these lines as a sorted, unique level/y/x sequence (the
+  // same order the global shard merge emits). A single lane appends them in
+  // CUT order, and with region priorities that order is not sorted (a z13
+  // region cut before a z9 one; measured on the Bangkok proving region,
+  // 2026-09-14), so the lane sorts its own file before the receipt is taken.
+  if (fs.existsSync(oceanSkipLog)) {
+    const width = 12;
+    const keyOf = (line) => {
+      const [level, x, y] = line.split("/").map(Number);
+      return `${String(level).padStart(width, "0")}|${String(y).padStart(width, "0")}|${String(x).padStart(width, "0")}`;
+    };
+    const lines = fs.readFileSync(oceanSkipLog, "utf8").split("\n").filter((line) => line.length > 0);
+    const unique = [...new Set(lines)].sort((a, b) => (keyOf(a) < keyOf(b) ? -1 : keyOf(a) > keyOf(b) ? 1 : 0));
+    fs.writeFileSync(oceanSkipLog, unique.length ? `${unique.join("\n")}\n` : "");
+  }
   const oceanArtifact = await summarizeOceanLines(oceanSkipLog);
   const oceanSkipped = {
     generatedAt: summary.generatedAt,

@@ -1,0 +1,38 @@
+{
+  "//": "BANGKOK PROVING REGION (owner 2026-09-14, terrain option 2: Copernicus GLO-30 instead of the SRTM-derived Terrarium cache; the Suvarnabhumi runways rippled \u00b13 m in Terrarium). Same lane and lattice rules as liguria-z11; z8\u2013z11 over the 1\u00b0 cell N13 E100 and z12\u2013z13 over the airport quarter.",
+  "out": "tools/terrain-pyramid/out/bangkok",
+  "flow_config": {
+    "dataset_id": "copernicus-glo30-quantized-mesh",
+    "tileset_id": "spaceaware-terrain",
+    "dataset_epoch": "2023-04-01T00:00:00.000Z",
+    "retrieved_at": "2026-09-14T00:00:00.000Z",
+    "provider_id": "copernicus",
+    "source_name": "copernicus-glo30",
+    "grid_size": 65,
+    "max_grid_size": 361,
+    "min_level": 8,
+    "max_level": 13,
+    "timeout_ms": 120000,
+    "regions": [
+      {
+        "name": "bangkok-z11",
+        "west": 100,
+        "south": 13,
+        "east": 101,
+        "north": 14,
+        "max_level": 11,
+        "priority": 10
+      },
+      {
+        "name": "suvarnabhumi-z13",
+        "west": 100.5,
+        "south": 13.5,
+        "east": 101,
+        "north": 14,
+        "max_level": 13,
+        "priority": 20
+      }
+    ]
+  },
+  "// max_grid_size": "361, ruled by the coordinator on 2026-08-27 (resolution 2) and MEASURED rather than defaulted. At z11 a GLO-30 tile edge carries ~316 one-arcsecond posts (the run reports it per level as sourcePostsPerTileEdge), so a 361-post lattice resolves the source there and 217 under-resolved it by 1.46x; at z10 the source carries 633 and neither lattice resolves it. That ratio no longer decides what the ACCURACY figure means \u2014 the encoder measures every record against the source posts themselves (resolution 1) whatever the lattice does \u2014 but it decides what the density ladder can BUY: the divisors of 360 give the ladder 5, 6, 7, 9, 10, 11, 13, 16, 19, 21, 25, 31, 37, 41, 46, 61, 73, 91, 121, 181, 361, so a tile that needs a little more than 73 posts can buy 91 instead of jumping to 109 and past the byte bound. The A/B half is kept at regions/liguria-z11-lattice217.json: build it into its own --out and compare the two verify reports."
+}
