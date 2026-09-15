@@ -7,11 +7,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { normalizeParityFixture, runParityHarness } from 'space-data-module-sdk/testing';
+import { normalizeParityFixture, runParityHarness, formatParityReport } from 'space-data-module-sdk/testing';
 import { decodePluginInvokeResponse } from 'space-data-module-sdk/invoke';
 import { initCqrFlatc, encodeCqr, decodeCqr, catalogRequest, gpRecord, publishedSchema, catalogInReferenceUnits } from '../tests/lib/cqr.mjs';
 import { compareToReference, isoToJd } from '../tests/lib/screenCatalogParityHarness.mjs';
 import { CA_PARITY_TOLERANCES as T } from '../tests/lib/caParityTolerances.mjs';
+import { runThreadedBrowserLane } from './cqr-browser-parity-lane.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const flatc = await initCqrFlatc();
 const refs = JSON.parse(fs.readFileSync(path.join(root,'tests/fixtures/socrates/reference.top3.json'))).conjunctions;
@@ -27,34 +28,72 @@ cases.push({id:'centered-isotropic-pc',threadCounts:[1,2,4,8],request:{methodId:
 cases.push({id:'singular-covariance',threadCounts:[1,2,4,8],request:{methodId:'compute_pc',inputs:[{portId:'request',payload:encodeCqr(flatc,{PROBABILITY_REQUEST:{GEOMETRY:{VARIANCE_XI_M2:1,VARIANCE_ZETA_M2:1,COVARIANCE_XI_ZETA_M2:1,COMBINED_RADIUS_M:10}}})}]}});
 cases.push({id:'empty-piv',threadCounts:[1,2,4,8],stdinHex:''});
 cases.push({id:'truncated-piv',threadCounts:[1,2,4,8],stdinHex:'0800000024504956'});
+// Wire outcomes are grounded in the published CQR root and SDK PIV verifier.
+// The retired JSON method is rejected by the SDK method registry.
+const invalidCqr = new Set(['singular-covariance','empty-cqr','ambiguous-cqr','wrong-cqr-arm','truncated-cqr','invalid-source-date']);
+const cqrCase=(id,record)=>({id,threadCounts:[1,2,4,8],request:{methodId:'compute_pc',inputs:[{portId:'request',payload:encodeCqr(flatc,record)}]}});
+cases.push(cqrCase('empty-cqr',{}),cqrCase('ambiguous-cqr',{VERSION_QUERY:true,PROBABILITY_REQUEST:{}}),cqrCase('wrong-cqr-arm',{VERSION_QUERY:true}));
+const truncated=cqrCase('truncated-cqr',{VERSION_QUERY:true});
+truncated.request.inputs[0].payload=truncated.request.inputs[0].payload.slice(0,13);
+cases.push(truncated);
+const badDate=catalogRequest({startJd,durationDays,numThreads:1,primaryGps:[{...objects[0],EPOCH:'2026-02-30T12:00:00Z'}],secondaryGps:[objects[1]]});
+cases.push({id:'invalid-source-date',threadCounts:[1,2,4,8],request:{methodId:'screen_catalog',inputs:[{portId:'request',payload:encodeCqr(flatc,badDate)}]}});
 for (const c of cases) if(c.request) for (const input of c.request.inputs) { const id=String.fromCharCode(...input.payload.subarray(4,8)); input.typeRef={schemaName:`${id.slice(1)}.fbs`,fileIdentifier:id,rootTypeName:id.slice(1),wireFormat:'flatbuffer'}; }
+cases.push({id:'legacy-json-method',threadCounts:[1,2,4,8],request:{methodId:'invoke',inputs:[{portId:'request',payload:new TextEncoder().encode('{"operation":"version"}')} ]}});
+for(const c of cases)c.expect=['empty-piv','truncated-piv','legacy-json-method'].includes(c.id)?'guest-error':'ok';
 const plan=await normalizeParityFixture({name:'CQR-SDS-1.220.0',cases});
 // The SDK report intentionally summarizes bytes, so observe actual lane runs
 // before reporting to validate independent physical outcomes as well as parity.
 const sdkRoot=path.dirname(fileURLToPath(import.meta.resolve('space-data-module-sdk/testing')));
 const {defaultParityLaneRunners}=await import(path.join(sdkRoot,'parityLanes.js'));
 const observed=[]; const laneRunners={};
-for(const [name,runner] of Object.entries(defaultParityLaneRunners)) laneRunners[name]=async c=>{const runs=await runner(c); observed.push(...runs.map(r=>({...r,lane:name})));return runs;};
+for(const [name,runner] of Object.entries({...defaultParityLaneRunners,browser:runThreadedBrowserLane})) laneRunners[name]=async c=>{const runs=await runner(c); observed.push(...runs.map(r=>({...r,lane:name})));return runs;};
 const report=await runParityHarness({wasmPath:path.join(root,'dist/isomorphic/module.wasm'),plan,laneRunners,timeoutMs:120000,log:console.log});
-fs.mkdirSync(path.join(root,'artifacts'),{recursive:true});
-fs.writeFileSync(path.join(root,'artifacts/cqr-runtime-parity.json'),JSON.stringify(report,null,2)+'\n');
+const evidence=path.resolve(root,'../../docs/evidence/tmpl-lane-14');
+fs.mkdirSync(evidence,{recursive:true});
+report.classifications=[];
+report.threadEvidence=[];
+report.provenance={
+  sds:'spacedatastandards.org@1.220.0',sdk:'space-data-module-sdk@0.8.18',
+  snapshot:'CelesTrak SOCRATES Plus, 2026-03-10; https://celestrak.org/SOCRATES/',
+  snapshotSha256:createHash('sha256').update(fs.readFileSync(path.join(root,'tests/fixtures/socrates/reference.top3.json'))).digest('hex'),
+  frame:'TEME',timeScale:'UTC',
+  tolerances:{tcaSeconds:T.tca.NLRV.hardFailSec,missMetres:T.missDistance.socratesHardFailM,speedMetresPerSecond:T.relSpeed.hardFailMS},
+  toleranceRationale:'Proposal section 8; NLRV TCA bound, CSV range quantization, retained speed regression bound; tests/lib/caParityTolerances.mjs.',
+  probability:{source:'NIST Rayleigh CDF https://www.itl.nist.gov/div898/software/dataplot/refman2/auxillar/raycdf.htm',formula:'1-exp(-R^2/(2*sigma^2))',radiusM:10,sigmaM:100,expected:.00498752080731768,absoluteTolerance:1e-12,frame:'Arbitrary orthonormal encounter axes',epoch:'Not applicable',toleranceRationale:'Smooth centered Gaussian disk integral and deterministic converged quadrature; actual Pc rather than maximum-probability bound.'},
+  invalidInput:'Published SDS 1.220.0 CQR root and SDK 0.8.18 PIV verifier: exactly one arm, correct method/arm mapping, valid calendar epochs, positive-definite encounter covariance.',
+};
 const numerical=[];
+const acceptance=[];
+const check=(label,fn)=>{try{fn();}catch(error){acceptance.push({kind:'acceptance',message:`${label}: ${error.message}`});}};
 for(const run of observed){
+  const classification={lane:run.lane,caseId:run.caseId,workers:run.threadCount,exitClass:run.exitClass,exitDetail:run.exitDetail,stderr:new TextDecoder().decode(run.stderr??[]).slice(-2000)};
+  report.classifications.push(classification);
+  // SDK parity checks the explicit expected exit class for every case, including
+  // malformed PIV input whose nonzero command exit has no browser stdout.
   if(run.exitClass!=='ok')continue;
+  check(`${run.lane}/${run.caseId}/${run.threadCount}`,()=>{
   const response=decodePluginInvokeResponse(run.stdout);
-  if(['singular-covariance','empty-piv','truncated-piv'].includes(run.caseId)){assert.notEqual(response.statusCode,0);continue;}
+  classification.statusCode=response.statusCode;classification.errorCode=response.errorCode;
+  if(invalidCqr.has(run.caseId)){assert.notEqual(response.statusCode,0);assert.equal(response.outputs.length,0);return;}
   assert.equal(response.statusCode,0,response.errorMessage);
   const result=decodeCqr(flatc,response.outputs[0].payload);
-  if(run.caseId==='centered-isotropic-pc'){const p=result.PROBABILITY_RESULT;assert.equal(p.ALGORITHM,'LAAS_2015');assert.equal(p.CONVERGED,true);assert.ok(Math.abs(p.PROBABILITY-.00498752080731768)<=1e-12);continue;}
+  if(run.caseId==='centered-isotropic-pc'){const p=result.PROBABILITY_RESULT;assert.equal(p.ALGORITHM,'LAAS_2015');assert.equal(p.CONVERGED,true);assert.ok(Math.abs(p.PROBABILITY-.00498752080731768)<=1e-12);return;}
   const cmp=compareToReference(catalogInReferenceUnits(result.CATALOG_RESULT),referenceEvents);
   assert.equal(cmp.counts.missingCount,0);assert.equal(cmp.counts.extraCount,0);assert.equal(result.CATALOG_RESULT.STATISTICS.FAILED_PAIRS,0);
-  for(const m of cmp.matched){assert.ok(m.deltas.tcaDeltaSec<=.010);assert.ok(m.deltas.missDeltaM<=5);assert.ok(m.deltas.relSpeedDeltaMS<=5);}
+  for(const m of cmp.matched){assert.ok(m.deltas.tcaDeltaSec<=T.tca.NLRV.hardFailSec);assert.ok(m.deltas.missDeltaM<=T.missDistance.socratesHardFailM);assert.ok(m.deltas.relSpeedDeltaMS<=T.relSpeed.hardFailMS);}
   numerical.push({lane:run.lane,workers:run.threadCount,sha256:createHash('sha256').update(run.stdout).digest('hex'),deltas:cmp.matched.map(m=>({pair:m.key,...m.deltas}))});
+  if(run.lane==='browser'){
+    report.threadEvidence.push({lane:run.lane,workers:run.threadCount,spawnCount:run.spawnCount,hardwareConcurrency:run.hardwareConcurrency});
+    if(run.threadCount>1)assert.ok(run.spawnCount>=run.threadCount,'Required real guest worker spawns were not observed');
+  }
+  });
 }
-assert.equal(numerical.length,12,'Every required worker/runtime scientific run must complete');
-assert.equal(new Set(numerical.map(n=>n.sha256)).size,1,'screen_catalog bytes differ across worker counts or lanes');
+check('required scientific runs',()=>assert.equal(numerical.length,12,'Every required worker/runtime scientific run must complete'));
+check('scientific worker/runtime bytes',()=>assert.equal(new Set(numerical.map(n=>n.sha256)).size,1));
 report.numerical=numerical;
-fs.mkdirSync(path.join(root,'artifacts'),{recursive:true});
-fs.writeFileSync(path.join(root,'artifacts/cqr-runtime-parity.json'),JSON.stringify(report,null,2)+'\n');
-console.log(JSON.stringify(report,null,2));
+report.failures.push(...acceptance);report.ok&&=acceptance.length===0;
+fs.writeFileSync(path.join(evidence,'cqr-runtime-parity.json'),JSON.stringify(report,null,2)+'\n');
+console.log(formatParityReport(report));
+console.log(JSON.stringify({numerical,threadEvidence:report.threadEvidence},null,2));
 if(!report.ok)process.exitCode=1;

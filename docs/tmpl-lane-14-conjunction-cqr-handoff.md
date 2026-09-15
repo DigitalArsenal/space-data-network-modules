@@ -73,6 +73,40 @@ All three events found; no extras. See
 Remaining final gates: full module suite, SDK compatibility, artifact compliance,
 and browser/native/container command parity.
 
+### Resume checkpoints (2026-09-15)
+
+The recovered implementation was checkpointed and pushed as `be357c7`, then
+merged with fetched `origin/main` (HPOP PRW included) as `0c5cfb4`. Subsequent
+WIP commits preserve every significant verification/fix step on the lane branch.
+
+- Canonical SDK command/reactor initialization is now guarded once per instance,
+  with C++ static destruction deferred to host instance teardown. The public
+  compiler hook follows the HPOP build pattern while retaining real
+  `emscripten-pthreads`/wasi-threads and SDK-generated ABI code.
+- Strict UTC syntax/calendar and TLE domain validation now return explicit
+  errors, including recovery to a subsequent valid invocation.
+- OEM/PPE resident primary selection includes primary–primary pairs. Four
+  sources with two primaries produce five eligible pairs, matching the existing
+  native index semantics.
+- Capped streaming evidence: 136 valid events drain as 128 + 8; an added
+  overflowing source yields 153 attempted pairs, 17 failed pairs, and an
+  `incomplete-screening` status on the final drain. Worker-local serialization
+  errors also contribute to failure accounting.
+- Aerospace checked-in real-window gate: **6/6**, **21/21** recalled. The
+  regression gate explicitly preserves its original millisecond input epochs;
+  original microsecond strings are never attached to different numeric times.
+  The general parser preserves source precision. Full-precision diagnostic
+  maximum miss error was 0.7159 m; one old 10 cm anchor moves to 0.206667 m, so
+  that diagnostic is not substituted for the unchanged-input regression gate.
+- Standards-aware manifest and artifact validation plus PLG round-trip:
+  **0 errors**, **40 distinct `no-aligned-peer` warnings**, repeated by both
+  checks. These are the intentional canonical variable-length record sites.
+
+The installed WasmEdge CLIs do not supply `wasi.thread-spawn`; a verification
+host using the WasmEdge C API is being completed. Browser verification explicitly
+serves the installed SDK's worker dependency chain under COOP/COEP. No alternate
+guest artifact or JS physics is introduced to satisfy the runtime matrix.
+
 An early native C++ diagnostic compiled without exceptions and screened the
 six-object SOCRATES snapshot. All worker counts 1/2/4/8 found three events with
 zero failed pairs and identical numerical outputs. This is diagnostic evidence;
@@ -102,6 +136,11 @@ it does not replace the primary WASM and three-runtime gates below.
 - SOCRATES maximum-Pc comparisons remain advisory. They are not independent
   covariance probability certification. The centered isotropic probability
   test uses the analytical Gaussian/Rayleigh integral.
+- SDK 0.8.18 exposes TAB `FRAME_ID` to guest input-frame identity, but not the
+  top-level PIV trace ID. Concurrent draining requests must use distinct input
+  `FRAME_ID` values; a repeated identity must finish draining before reuse.
+  SDK responses preserve the caller's PIV trace. The two window methods have
+  separate continuation state.
 
 ## Bounded improvement review
 

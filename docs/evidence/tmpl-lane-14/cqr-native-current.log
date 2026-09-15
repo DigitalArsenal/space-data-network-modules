@@ -1,0 +1,28 @@
+✔ CQR Laas 2015 Pc reproduces the centered isotropic Gaussian disk integral (147.234708ms)
+✖ CQR rejects singular encounter covariance and the retired JSON method (103.334167ms)
+✔ CQR compact sources reproduce the independent linear encounter without SGP4 (74.362875ms)
+✔ CQR verbose sources reproduce the independent linear encounter without SGP4 (73.373125ms)
+✔ CQR PPE sources reproduce the independent linear encounter without SGP4 (76.676167ms)
+✔ CQR rejects malformed or unsupported UTC dates before evaluating a source (349.1795ms)
+✔ CQR accepts leap-day and CCSDS no-Z UTC sources without changing the linear encounter (126.709083ms)
+✔ CQR rejects out-of-range TLE epoch days without a numerical result (52.999958ms)
+✔ CQR sampled resident index preserves the linear encounter and invalidates destroyed handles (66.723667ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 8
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1647.393083
+
+✖ failing tests:
+
+test at tests/cqrAuthoritative.test.mjs:27:1
+✖ CQR rejects singular encounter covariance and the retired JSON method (103.334167ms)
+  Error: WasmEdge command harness exited with code 1.
+      at formatFailure (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:121:56)
+      at ChildProcess.<anonymous> (file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/host/isomorphicLoader.js:141:13)
+      at ChildProcess.emit (node:events:508:20)
+      at maybeClose (node:internal/child_process:1084:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:304:5)

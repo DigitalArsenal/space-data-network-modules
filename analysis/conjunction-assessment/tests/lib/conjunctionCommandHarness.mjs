@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { loadModule } from "space-data-module-sdk/host/isomorphic";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
+import { buildNativeWasiThreadsRunner } from './wasmedgeWasiThreadsRunner.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, "..", "..");
@@ -28,7 +29,7 @@ export async function createConjunctionCommandHarness(options = {}) {
     wasmSource: options.wasmSource ?? ISOMORPHIC_WASM_PATH,
     runtimeKind,
     enableThreads: options.enableThreads ?? true,
-    wasmEdgeBinary: options.wasmEdgeBinary,
+    wasmEdgeBinary: options.wasmEdgeBinary ?? await buildNativeWasiThreadsRunner(),
     cwd: options.cwd ?? PACKAGE_ROOT,
     env: options.env,
   });

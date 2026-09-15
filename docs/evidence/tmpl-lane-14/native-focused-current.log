@@ -1,0 +1,2 @@
+✔ screen_catalog accepts SDN data API uint32be OMM FlatBuffer streams (395.020541ms)
+✔ screen_catalog accepts SDN data API uint32be streams of size-prefixed OMM records (82.390208ms)

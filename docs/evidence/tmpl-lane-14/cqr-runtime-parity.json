@@ -1,0 +1,1002 @@
+{
+  "ok": false,
+  "fixture": "CQR-SDS-1.220.0",
+  "wasmPath": "/Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/dist/isomorphic/module.wasm",
+  "artifactSha256": "ad7413859d2a9e2360b5517298f50049196187d617c3fa0ebca785db57330919",
+  "moduleSha256": "ad7413859d2a9e2360b5517298f50049196187d617c3fa0ebca785db57330919",
+  "pin": "0.16.4",
+  "lanes": [
+    {
+      "lane": "browser",
+      "runs": 20,
+      "durationMs": 871
+    },
+    {
+      "lane": "wasmedge",
+      "runs": 20,
+      "durationMs": 681
+    },
+    {
+      "lane": "docker-wasmedge",
+      "runs": 20,
+      "durationMs": 4736
+    }
+  ],
+  "cases": [
+    "socrates-workers-1",
+    "socrates-workers-2",
+    "socrates-workers-4",
+    "socrates-workers-8",
+    "centered-isotropic-pc",
+    "singular-covariance",
+    "empty-piv",
+    "truncated-piv"
+  ],
+  "comparisons": 40,
+  "failures": [
+    {
+      "caseId": "socrates-workers-1",
+      "kind": "harness-failure",
+      "message": "browser@t1: Error"
+    },
+    {
+      "caseId": "socrates-workers-2",
+      "kind": "harness-failure",
+      "message": "browser@t2: Error"
+    },
+    {
+      "caseId": "socrates-workers-4",
+      "kind": "harness-failure",
+      "message": "browser@t4: Error"
+    },
+    {
+      "caseId": "socrates-workers-8",
+      "kind": "harness-failure",
+      "message": "browser@t8: Error"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "harness-failure",
+      "message": "browser@t1: Error"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "harness-failure",
+      "message": "browser@t2: Error"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "harness-failure",
+      "message": "browser@t4: Error"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "harness-failure",
+      "message": "browser@t8: Error"
+    },
+    {
+      "caseId": "singular-covariance",
+      "kind": "harness-failure",
+      "message": "browser@t1: Error"
+    },
+    {
+      "caseId": "singular-covariance",
+      "kind": "harness-failure",
+      "message": "browser@t2: Error"
+    },
+    {
+      "caseId": "singular-covariance",
+      "kind": "harness-failure",
+      "message": "browser@t4: Error"
+    },
+    {
+      "caseId": "singular-covariance",
+      "kind": "harness-failure",
+      "message": "browser@t8: Error"
+    },
+    {
+      "caseId": "empty-piv",
+      "kind": "harness-failure",
+      "message": "browser@t1: Error"
+    },
+    {
+      "caseId": "empty-piv",
+      "kind": "harness-failure",
+      "message": "browser@t2: Error"
+    },
+    {
+      "caseId": "empty-piv",
+      "kind": "harness-failure",
+      "message": "browser@t4: Error"
+    },
+    {
+      "caseId": "empty-piv",
+      "kind": "harness-failure",
+      "message": "browser@t8: Error"
+    },
+    {
+      "caseId": "truncated-piv",
+      "kind": "harness-failure",
+      "message": "browser@t1: Error"
+    },
+    {
+      "caseId": "truncated-piv",
+      "kind": "harness-failure",
+      "message": "browser@t2: Error"
+    },
+    {
+      "caseId": "truncated-piv",
+      "kind": "harness-failure",
+      "message": "browser@t4: Error"
+    },
+    {
+      "caseId": "truncated-piv",
+      "kind": "harness-failure",
+      "message": "browser@t8: Error"
+    }
+  ],
+  "runs": [
+    {
+      "lane": "browser",
+      "caseId": "socrates-workers-1",
+      "threadCount": 1,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "socrates-workers-2",
+      "threadCount": 2,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "socrates-workers-4",
+      "threadCount": 4,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "socrates-workers-8",
+      "threadCount": 8,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 1,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 2,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 4,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 8,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "singular-covariance",
+      "threadCount": 1,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "singular-covariance",
+      "threadCount": 2,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "singular-covariance",
+      "threadCount": 4,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "singular-covariance",
+      "threadCount": 8,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-piv",
+      "threadCount": 1,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-piv",
+      "threadCount": 2,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-piv",
+      "threadCount": 4,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-piv",
+      "threadCount": 8,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-piv",
+      "threadCount": 1,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-piv",
+      "threadCount": 2,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-piv",
+      "threadCount": 4,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-piv",
+      "threadCount": 8,
+      "exitClass": "harness-failure",
+      "exitDetail": "Error",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "socrates-workers-1",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "socrates-workers-2",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "socrates-workers-4",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "socrates-workers-8",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "singular-covariance",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "singular-covariance",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "singular-covariance",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "singular-covariance",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-piv",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-piv",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-piv",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-piv",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "socrates-workers-1",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "socrates-workers-2",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "socrates-workers-4",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "socrates-workers-8",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "singular-covariance",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "singular-covariance",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "singular-covariance",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "singular-covariance",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-piv",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-piv",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-piv",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-piv",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    }
+  ],
+  "classifications": [
+    {
+      "lane": "wasmedge",
+      "caseId": "socrates-workers-1",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:48.475] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.476] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.476] [error]     At AST node: import description\n[2026-09-15 15:32:48.476] [error]     At AST node: import section\n[2026-09-15 15:32:48.476] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "socrates-workers-2",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:48.508] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.508] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.508] [error]     At AST node: import description\n[2026-09-15 15:32:48.508] [error]     At AST node: import section\n[2026-09-15 15:32:48.508] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "socrates-workers-4",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:48.539] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.540] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.540] [error]     At AST node: import description\n[2026-09-15 15:32:48.540] [error]     At AST node: import section\n[2026-09-15 15:32:48.540] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "socrates-workers-8",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:48.571] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.571] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.571] [error]     At AST node: import description\n[2026-09-15 15:32:48.571] [error]     At AST node: import section\n[2026-09-15 15:32:48.571] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:48.604] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.605] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.605] [error]     At AST node: import description\n[2026-09-15 15:32:48.605] [error]     At AST node: import section\n[2026-09-15 15:32:48.605] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:48.638] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.639] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.639] [error]     At AST node: import description\n[2026-09-15 15:32:48.639] [error]     At AST node: import section\n[2026-09-15 15:32:48.639] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:48.671] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.671] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.671] [error]     At AST node: import description\n[2026-09-15 15:32:48.671] [error]     At AST node: import section\n[2026-09-15 15:32:48.671] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:48.705] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.706] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.706] [error]     At AST node: import description\n[2026-09-15 15:32:48.706] [error]     At AST node: import section\n[2026-09-15 15:32:48.706] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "singular-covariance",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:48.737] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.738] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.738] [error]     At AST node: import description\n[2026-09-15 15:32:48.738] [error]     At AST node: import section\n[2026-09-15 15:32:48.738] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "singular-covariance",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:48.769] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.770] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.770] [error]     At AST node: import description\n[2026-09-15 15:32:48.770] [error]     At AST node: import section\n[2026-09-15 15:32:48.770] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "singular-covariance",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:48.803] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.804] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.804] [error]     At AST node: import description\n[2026-09-15 15:32:48.804] [error]     At AST node: import section\n[2026-09-15 15:32:48.804] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "singular-covariance",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:48.835] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.835] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.835] [error]     At AST node: import description\n[2026-09-15 15:32:48.835] [error]     At AST node: import section\n[2026-09-15 15:32:48.835] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-piv",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:48.866] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.866] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.866] [error]     At AST node: import description\n[2026-09-15 15:32:48.866] [error]     At AST node: import section\n[2026-09-15 15:32:48.866] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-piv",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:48.899] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.900] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.900] [error]     At AST node: import description\n[2026-09-15 15:32:48.900] [error]     At AST node: import section\n[2026-09-15 15:32:48.900] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-piv",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:48.931] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.932] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.932] [error]     At AST node: import description\n[2026-09-15 15:32:48.932] [error]     At AST node: import section\n[2026-09-15 15:32:48.932] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-piv",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:48.966] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:48.967] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:48.967] [error]     At AST node: import description\n[2026-09-15 15:32:48.967] [error]     At AST node: import section\n[2026-09-15 15:32:48.967] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:48.999] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:49.000] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:49.000] [error]     At AST node: import description\n[2026-09-15 15:32:49.000] [error]     At AST node: import section\n[2026-09-15 15:32:49.000] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:49.032] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:49.033] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:49.033] [error]     At AST node: import description\n[2026-09-15 15:32:49.033] [error]     At AST node: import section\n[2026-09-15 15:32:49.033] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:49.067] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:49.068] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:49.068] [error]     At AST node: import description\n[2026-09-15 15:32:49.068] [error]     At AST node: import section\n[2026-09-15 15:32:49.068] [error]     At AST node: module"
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 15:32:49.099] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 15:32:49.100] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 15:32:49.100] [error]     At AST node: import description\n[2026-09-15 15:32:49.100] [error]     At AST node: import section\n[2026-09-15 15:32:49.100] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "socrates-workers-1",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:49.569] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:49.569] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:49.569] [error]     At AST node: import description\n[2026-09-15 19:32:49.569] [error]     At AST node: import section\n[2026-09-15 19:32:49.569] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "socrates-workers-2",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:49.821] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:49.821] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:49.821] [error]     At AST node: import description\n[2026-09-15 19:32:49.821] [error]     At AST node: import section\n[2026-09-15 19:32:49.821] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "socrates-workers-4",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:50.088] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:50.088] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:50.088] [error]     At AST node: import description\n[2026-09-15 19:32:50.088] [error]     At AST node: import section\n[2026-09-15 19:32:50.088] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "socrates-workers-8",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:50.339] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:50.339] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:50.339] [error]     At AST node: import description\n[2026-09-15 19:32:50.339] [error]     At AST node: import section\n[2026-09-15 19:32:50.339] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:50.560] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:50.560] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:50.560] [error]     At AST node: import description\n[2026-09-15 19:32:50.560] [error]     At AST node: import section\n[2026-09-15 19:32:50.560] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:50.773] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:50.773] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:50.773] [error]     At AST node: import description\n[2026-09-15 19:32:50.773] [error]     At AST node: import section\n[2026-09-15 19:32:50.773] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:51.044] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:51.044] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:51.044] [error]     At AST node: import description\n[2026-09-15 19:32:51.044] [error]     At AST node: import section\n[2026-09-15 19:32:51.044] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:51.268] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:51.269] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:51.269] [error]     At AST node: import description\n[2026-09-15 19:32:51.269] [error]     At AST node: import section\n[2026-09-15 19:32:51.269] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "singular-covariance",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:51.508] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:51.508] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:51.508] [error]     At AST node: import description\n[2026-09-15 19:32:51.508] [error]     At AST node: import section\n[2026-09-15 19:32:51.508] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "singular-covariance",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:51.709] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:51.709] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:51.709] [error]     At AST node: import description\n[2026-09-15 19:32:51.709] [error]     At AST node: import section\n[2026-09-15 19:32:51.709] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "singular-covariance",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:51.871] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:51.871] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:51.871] [error]     At AST node: import description\n[2026-09-15 19:32:51.871] [error]     At AST node: import section\n[2026-09-15 19:32:51.871] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "singular-covariance",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:52.036] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:52.036] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:52.036] [error]     At AST node: import description\n[2026-09-15 19:32:52.036] [error]     At AST node: import section\n[2026-09-15 19:32:52.036] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-piv",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:52.250] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:52.250] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:52.250] [error]     At AST node: import description\n[2026-09-15 19:32:52.250] [error]     At AST node: import section\n[2026-09-15 19:32:52.250] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-piv",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:52.441] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:52.441] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:52.441] [error]     At AST node: import description\n[2026-09-15 19:32:52.441] [error]     At AST node: import section\n[2026-09-15 19:32:52.441] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-piv",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:52.653] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:52.653] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:52.653] [error]     At AST node: import description\n[2026-09-15 19:32:52.653] [error]     At AST node: import section\n[2026-09-15 19:32:52.653] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-piv",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:52.839] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:52.840] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:52.840] [error]     At AST node: import description\n[2026-09-15 19:32:52.840] [error]     At AST node: import section\n[2026-09-15 19:32:52.840] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv",
+      "workers": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:53.021] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:53.021] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:53.021] [error]     At AST node: import description\n[2026-09-15 19:32:53.021] [error]     At AST node: import section\n[2026-09-15 19:32:53.021] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv",
+      "workers": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:53.204] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:53.205] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:53.205] [error]     At AST node: import description\n[2026-09-15 19:32:53.205] [error]     At AST node: import section\n[2026-09-15 19:32:53.205] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv",
+      "workers": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:53.461] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:53.461] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:53.461] [error]     At AST node: import description\n[2026-09-15 19:32:53.461] [error]     At AST node: import section\n[2026-09-15 19:32:53.461] [error]     At AST node: module"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv",
+      "workers": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stderr": "[2026-09-15 19:32:53.805] [error] instantiation failed: unknown import, Code: 0x302\n[2026-09-15 19:32:53.805] [error]     When linking module: \"wasi\" , function name: \"thread-spawn\"\n[2026-09-15 19:32:53.805] [error]     At AST node: import description\n[2026-09-15 19:32:53.805] [error]     At AST node: import section\n[2026-09-15 19:32:53.805] [error]     At AST node: module"
+    }
+  ]
+}

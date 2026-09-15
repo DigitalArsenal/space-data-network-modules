@@ -1,0 +1,18 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Every required worker/runtime scientific run must complete
+
+0 !== 12
+
+    at file:///Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/scripts/verify-cqr-runtime-parity.mjs:57:8 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 0,
+  expected: 12,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v25.4.0

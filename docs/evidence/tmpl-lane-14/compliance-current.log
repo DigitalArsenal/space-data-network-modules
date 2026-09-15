@@ -7,7 +7,7 @@
 {
   "standards": "1.220.0",
   "errors": 0,
-  "warnings": 80,
+  "warnings": 40,
   "warningCodes": [
     "no-aligned-peer"
   ],
