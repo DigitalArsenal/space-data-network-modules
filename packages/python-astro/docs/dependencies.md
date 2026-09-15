@@ -1,71 +1,70 @@
-# Python dependency gate — 2026-09-15
+# Python dependencies and ABI limits — second pass, 2026-09-15
 
-This audit distinguishes missing **published Python bindings** from missing
-ratified schemas. Existing module sources already use the required standards;
-this lane does not create, regenerate, or patch their bindings.
+The coordinator resolved the first-pass dependency blockers: this package embeds
+**WasmEdge 0.16.4 through its C API using ctypes**, and vendors immutable generated
+**SDS 1.217.0** output. It depends on neither the empty PyPI `wasmedge` package nor
+the stale PyPI SDS wheels. `dependency-audit.json` records that historical audit.
 
-## WasmEdge
+## Native runtime
 
-[PyPI wasmedge 0.0.1](https://pypi.org/project/wasmedge/0.0.1/) describes itself
-as an empty package. Its sole 991-byte source archive was uploaded
-2021-05-13. Its `wasmedge/__init__.py` contains a print statement and no runtime
-API. There are no wheels or load/invoke/memory APIs to implement this lane against.
-The [official Python SDK documentation](https://wasmedge.org/docs/embed/python/intro/)
-says work in progress; the [WasmEdge roadmap](https://github.com/WasmEdge/WasmEdge/blob/master/docs/ROADMAP.md)
-lists it under the inactive roadmap. The [draft Python SDK PR #633](https://github.com/WasmEdge/WasmEdge/pull/633)
-is not a released dependency. The C API, command runner and JS SDK are different
-integration surfaces and do not make the requested Python SDK available.
+Search order is `WASMEDGE_LIB`, `~/.wasmedge/lib`, then system library discovery.
+An explicitly selected library must work; a broken override is not ignored.
+The runtime checks the library version against 0.16.4. Install it using the SDN
+repository's `scripts/install-wasmedge.sh`, or point `WASMEDGE_LIB` at the matching
+`.dylib`, `.so`, or `.dll`. The wheel does not bundle the native runtime. Python dependencies are NumPy,
+FlatBuffers25.12.19, and cryptography46.0.4. The REC generated union imports
+FlatbuffersEncryption/KMF, so cryptography is required even when only importing
+that union; the package declares it explicitly.
 
-## Space Data Standards
+The host mirrors the SDK C API runner and binary PIV/TAB codec. It initializes
+WASI with no preopened directories and no inherited environment; invokes
+`_initialize` when present; otherwise uses the guest constructors. Payloads stay
+binary and aligned. Size prefixes delimit stream frames; the PIV envelope holds
+TAB descriptors pointing into its payload arena. `runtime.frame_stream` and
+`runtime.unframe_stream` implement the size-prefix boundary when needed.
 
-Both published wheels were downloaded and checked against PyPI SHA-256:
+Access's committed artifact imports Emscripten's legalized five-argument
+`fd_seek`; the host mirrors the SDK stdio shim's ESPIPE/BADF behavior. Conjunction
+imports Emscripten pthread functions and shared memory. The pinned artifact's
+`establishStackSpace` reads pthread stack offsets **48/52**, while the installed
+SDK legacy runner's constants are **52/56**. Python follows the artifact ABI;
+its test performs a real two-worker conjunction screen (three guest threads).
+These offsets are artifact-specific and must be revalidated when repinning.
 
-| Version | Upload time (UTC) | Finding |
-| --- | --- | --- |
-| [23.3.3.0.3.7](https://pypi.org/project/spacedatastandards.org/23.3.3.0.3.7/) | 2026-03-19 21:34:06 | PyPI default/highest version; old binding surface |
-| [1.99.0](https://pypi.org/project/spacedatastandards.org/1.99.0/) | 2026-05-06 19:35:54 | Chronologically newer, still behind modules using SDS 1.199–1.203 |
+WASI `thread-spawn` is implemented, but none of these nine artifacts imports it;
+that callback has no execution evidence in this lane. Linux and Windows runtime
+execution remain untested. macOS arm64 with Python 3.14 is verified.
 
-These wheels **do contain FlatBuffers-generated Python**, under top-level names
-such as `from OMM.OMM import OMM`. They do not contain a
-`spacedatastandards` Python namespace. Installing the package without an exact
-version selects the older `23.3.3.0.3.7` version series.
+## Generated bindings
 
-| Wrapper | Missing or unusable published Python surface |
-| --- | --- |
-| SGP4 | No `orbpro.propagator.PropagatorBatchRequest`, `orbpro.plugins.PropagatorState` or query types; `REC.REC` imports missing `Record` |
-| HPOP | No `orbpro.hpop.InvokeRequest/InvokeResponse`, resident state/request or trajectory segment types |
-| Estimation | No `orbpro.estimation.EstimationEnvelope/EstimationRequest/EstimationResult`, MEM, ODR or TRH |
-| Conjunction | No legacy `orbpro.conjunction` request/result types; `CDM.CDM` imports missing `CDMObject` |
-| Access | No ACW bindings |
-| Events | No EVL, PCE or FRM; EOP is stale and RFM import fails |
-| Lambert | 1.99.0 contains LMS/LMO, but `LMO.LMO` imports missing `lambertSolutionBranch`; default release lacks both |
-| Time | TIM has only TIME_SYSTEM; lacks INSTANT, CONVERSION_REQUEST, CONVERSION_RESULT and associated tables |
-| Frames | No FRM; `RFM.RFM` imports missing `CelestialFrameWrapper`; EOP lacks high-precision fields and other current metadata |
+See [sds-generation.md](sds-generation.md). The package uses immutable Git
+`b76da41467e260c83b3432ba7f34a1eb05cc7ac7:lib/py`, even if another lane is
+regenerating files in the canonical checkout. Full source manifest:
+`2040dce21fb7725099876b50b19c5fb37e4b6b403c48ac54a83b90e46077653a`.
+All 4,505 source files are hashed; required families and their import closure
+are vendored under a private namespace. Generated imports are rewritten only by
+`scripts/vendor_sds.py`. Module `.fbs` schemas are compiled with pinned
+`flatc-wasm@26.1.32`; schema/compiler/artifact hashes are in `bindings.lock.json`.
 
-Isolated imports with the published FlatBuffers runtime confirmed that
-`OMM.OMM`, `TIM.TIM`, `EOP.EOP`, and 1.99.0 `LMS.LMS` import successfully.
-The failed imports above were observed directly; file presence alone is not
-evidence of a usable generated binding.
+All vendored modules import and all audited cross-module symbols resolve.
+**No missing-symbol expected-failure test is needed:** no such generator defect
+was observed. Unknown imports fail vendoring instead of being skipped.
 
-`scripts/audit_published_dependencies.py` reproduces the archive hashes, member
-presence, missing TIM/EOP fields and problematic bare imports without installing
-or executing the downloaded packages. Its checked result is
-`docs/dependency-audit.json`. The audit script's success means the evidence was
-reproduced, not that these dependencies satisfy Lane 09.
+## Remaining upstream contracts
 
-## Required unblock
+- HPOP's manifest names `orbpro.hpop.InvokeRequest/InvokeResponse`, but no such
+  `.fbs` source exists. Its shipped C++ command path consumes JSON inside PIV/TAB.
+  The Python `hpop` wrapper mirrors that actual contract, with NumPy marshalling;
+  all integration and force evaluation remain C++ WASM. This is an existing
+  payload exception, not a newly invented FlatBuffer schema.
+- HPOP trajectory-segment generated C++ lacks its `.fbs` source in this checkout.
+  Additional resident trajectory-segment Python wrappers are not implemented.
+- Current SDK and legacy SGP4 schemas both define incompatible `StateVector`
+  types. Legacy SGP4 bindings use `.invoke.legacy.orbpro`, never an alias that
+  overwrites `.invoke.orbpro`.
+- Module-declared SDS pins are mixed, not uniformly 1.217.0. Both those pins and
+  the coordinator-selected immutable Python binding revision are recorded in
+  the binding lock. No module manifest or SDS schema is changed by this lane.
 
-1. Supply a released, supported Python WasmEdge SDK with module loading,
-   linear-memory access, export invocation, WASI and the required thread/host
-   imports, plus supported native runtime versions/platforms.
-2. Publish complete, importable Python bindings for the schemas already consumed
-   by the modules, including legacy types or their ratified replacements. Fix
-   generated cross-table Python imports upstream. Do not invent local schemas.
-3. Implement wrappers and NumPy marshalling against those published APIs; extract
-   the existing authoritative test vectors into shared fixtures without changing
-   the expected numbers. Run numerical tests through Python and the same bytes
-   in browser/V8, native WasmEdge and container WasmEdge.
-
-The artifact-only prerelease intentionally has no `Requires-Dist: wasmedge` or
-stale SDS dependency. Installing a known placeholder would give a misleading
-impression that runtime dependencies had been satisfied.
+The complete lane remains short of a clean isomorphism/build gate because of
+pre-existing module and harness failures listed in [verification.md](verification.md).

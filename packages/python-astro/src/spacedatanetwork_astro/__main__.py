@@ -1,4 +1,4 @@
-"""Inspect the artifact distribution without claiming runtime availability."""
+"""Inspect the pinned artifact set and native runtime."""
 import argparse
 import json
 
@@ -6,15 +6,19 @@ from . import __version__, get_artifact, list_artifacts
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Pinned SDN WASM artifact distribution (execution blocked)")
+    parser = argparse.ArgumentParser(description="SDN astrodynamics through WasmEdge")
     parser.add_argument("command", choices=("list", "verify", "doctor"))
     args = parser.parse_args()
     if args.command == "doctor":
-        print("BLOCKED: this prerelease provides artifact access only.")
-        print("PyPI wasmedge==0.0.1 is an empty package, not a Python SDK.")
-        print("Published SDS Python bindings lack required schemas and legacy OrbPro types.")
-        print("See README.md and docs/dependencies.md. No Python physics or runtime fallback is provided.")
-        return 2
+        from .runtime import Module
+        try:
+            with Module("foundation/time"):
+                pass
+        except RuntimeError as error:
+            print(f"FAIL: {error}")
+            return 2
+        print("PASS: WasmEdge 0.16.4 C API loaded the pinned foundation/time artifact")
+        return 0
     if args.command == "list":
         print(json.dumps({"version": __version__, "modules": [
             {"id": identifier, "sha256": get_artifact(identifier).sha256}

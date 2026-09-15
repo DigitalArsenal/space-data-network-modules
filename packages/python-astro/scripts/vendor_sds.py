@@ -138,7 +138,7 @@ for (const group of config.groups) {
     flatc.FS.mkdir('/schemas'); flatc.FS.mkdir('/out');
     for (const [name, body] of Object.entries(group.files)) flatc.FS.writeFile('/schemas/'+name, body);
     const status = flatc.callMain(['--python','--gen-object-api','-I','/schemas','-o','/out','/schemas/'+entry]);
-    if (status !== 0) throw new Error('flatc failed: '+group.id+'/'+entry+' status '+status+'\n'+messages.join('\n')); 
+    if (status !== 0) throw new Error('flatc failed: '+group.id+'/'+entry+' status '+status+'\n'+messages.join('\n'));
     function read(dir, prefix='') {
       for (const name of flatc.FS.readdir(dir).filter(n=>n!=='.'&&n!=='..').sort()) {
         const full=dir+'/'+name, rel=prefix+name;
