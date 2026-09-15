@@ -16,6 +16,7 @@
 
 #include "ACW_generated.h"
 #include "sds/PIV/main_generated.h"
+#include "../../../propagator/events/src/event_locator.hpp"
 
 namespace {
 
@@ -957,6 +958,14 @@ struct AcwInputFrame {
 struct AcwWindowWithStation {
   std::string station_id;
   AccessWindowRecord window;
+  std::string observer_id;
+  int32_t start_constraint = -1;
+  int32_t end_constraint = -1;
+  std::string start_label;
+  std::string end_label;
+  double min_range = 0;
+  double max_range = 0;
+  bool refined = false;
 };
 
 bool findAcwInputFrame(
@@ -1212,7 +1221,9 @@ std::vector<uint8_t> serializeAcwResultPayload(
     acwResultStatus status,
     const std::vector<AcwWindowWithStation>& windows,
     const std::string& traceId,
-    const char* errorMessage = nullptr) {
+    const char* errorMessage = nullptr,
+    acwEvaluationMode mode = acwEvaluationMode_DISCRETE,
+    const std::vector<std::string>& labels = {}) {
   ::flatbuffers::FlatBufferBuilder builder(1024);
   std::vector<::flatbuffers::Offset<ACWAccessWindow>> windowOffsets;
   windowOffsets.reserve(windows.size());
@@ -1223,7 +1234,10 @@ std::vector<uint8_t> serializeAcwResultPayload(
         entry.window.start_julian_date,
         entry.window.end_julian_date,
         entry.window.max_elevation_rad,
-        entry.window.sample_count));
+        entry.window.sample_count,
+        entry.observer_id.c_str(), entry.start_constraint, entry.end_constraint,
+        entry.start_label.c_str(), entry.end_label.c_str(),
+        entry.min_range, entry.max_range, entry.refined));
   }
 
   const auto windowsVector = builder.CreateVector(windowOffsets);
@@ -1234,12 +1248,15 @@ std::vector<uint8_t> serializeAcwResultPayload(
   const auto traceIdOffset =
       !traceId.empty() ? builder.CreateString(traceId)
                        : ::flatbuffers::Offset<::flatbuffers::String>();
+  std::vector<::flatbuffers::Offset<::flatbuffers::String>> labelOffsets;
+  for (const auto& label : labels) labelOffsets.push_back(builder.CreateString(label));
+  const auto labelsVector = builder.CreateVector(labelOffsets);
   const auto result = CreateACWResult(
       builder,
       status,
       errorMessageOffset,
       windowsVector,
-      traceIdOffset);
+      traceIdOffset, mode, labelsVector);
   const auto envelope = CreateACW(builder, 0, result);
   FinishACWBuffer(builder, envelope);
   return std::vector<uint8_t>(
@@ -1330,6 +1347,8 @@ std::vector<uint8_t> serializeInvokeSuccessWithAcwPayload(
   return serializePivResponse(0, nullptr, "", &payload, traceId);
 }
 
+#include "constraint_engine.cpp.inc"
+
 std::vector<uint8_t> dispatchAcwInput(
     const AcwInputFrame& inputFrame, uint64_t pivTraceId) {
   std::string errorMessage;
@@ -1361,6 +1380,10 @@ std::vector<uint8_t> dispatchAcwInput(
         traceId,
         "ACW operation is not supported by analysis/access.");
     return serializeInvokeSuccessWithAcwPayload(payload, pivTraceId);
+  }
+
+  if (acwRequest->CONSTRAINTS() != nullptr) {
+    return dispatchConstrainedAccess(*acwRequest, pivTraceId);
   }
 
   std::vector<StateRecord> states;
