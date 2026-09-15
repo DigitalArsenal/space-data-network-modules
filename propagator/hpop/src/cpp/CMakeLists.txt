@@ -60,6 +60,7 @@ add_library(
     "${HPOP_LIB_DIR}/astrodynamics.cpp"
     "${HPOP_LIB_DIR}/integrators.cpp"
     "${HPOP_LIB_DIR}/variational.cpp"
+    "${HPOP_LIB_DIR}/finite_burn.cpp"
     "${HPOP_LIB_DIR}/force_partials.cpp"
     "${HPOP_LIB_DIR}/coords.cpp"
     "${HPOP_LIB_DIR}/atmosphere_plugin.cpp"

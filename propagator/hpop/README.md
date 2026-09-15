@@ -254,9 +254,11 @@ selected branch derivative; a discontinuous threshold has no classical
 Jacobian at the boundary. Inline tesseral gravity refuses its exact polar
 coordinate singularity.
 
-Analytic STM explicitly refuses albedo, thermal reradiation, tides, empirical
-accelerations, finite thrust, non-cannonball SRP and atmosphere winds. Select the
-finite-difference path for those forces. Cd/Cr are configurable force inputs;
+The six-state analytic STM explicitly refuses albedo, thermal reradiation,
+tides, empirical accelerations, the legacy fixed-mass finite-thrust force,
+non-cannonball SRP and atmosphere winds. Select the finite-difference path for
+those legacy forces. Mass-aware finite burns use the seven-state path below.
+Cd/Cr are configurable force inputs;
 there is no existing parameter-sensitivity matrix plumbing, and this lane does
 not add Cd/Cr sensitivity columns.
 
@@ -270,3 +272,147 @@ have no entity burn list; scheduled burn STM jumps are on the invoke surface.
 The committed artifact is a diagnostic build using the existing local-emSDK
 CMake path. It does not meet the SDK-build/publication gate. See the lane 03
 handoff for the exact preflight, compliance and tri-runtime results.
+
+## Finite burns with propagated mass (TMPL lane 04)
+
+The existing JSON `invoke` / `propagate` operation accepts `finiteBurns` and
+integrates `[x,y,z,vx,vy,vz,massKg]`, its 7×7 STM, and per-burn accumulated
+delta-v and propellant in C++ WASM. This extends the legacy request control
+surface; it introduces no SDS schema or resident-state burn contract.
+
+```json
+{
+  "operation": "propagate",
+  "params": {
+    "epochJD": 2451545.0,
+    "targetJD": 2451545.01,
+    "position": [7000, 0, 0],
+    "velocity": [0, 7.546053290107542, 0],
+    "massKg": 1000,
+    "STM_METHOD": "ANALYTIC",
+    "forces": {"gravityMode": "POINT_MASS", "j2": false},
+    "integrator": {
+      "method": "RKF78", "initialStep": 10, "minStep": 0.0001,
+      "maxStep": 30, "absTolerance": 1e-11, "relTolerance": 1e-11
+    },
+    "finiteBurns": [{
+      "startSeconds": 60,
+      "stopSeconds": 360,
+      "thrustNewtons": 20,
+      "ispSeconds": 300,
+      "frame": "VELOCITY",
+      "throttle": [
+        {"seconds": 60, "throttle": 1},
+        {"seconds": 180, "throttle": 0.5}
+      ]
+    }]
+  }
+}
+```
+
+### Burn controls
+
+- Supply at most 16 burns. Each requires exactly one positive `thrustNewtons`
+  (N) or `accelerationKmS2` (km/s²), and positive `ispSeconds` (s). Throttle
+  multiplies that magnitude. Thrust mode applies `a = T/(1000 m)` in km/s²
+  and `dm/dt = -T/(Isp g0)` in kg/s, with standard gravity `g0 = 9.80665 m/s²`.
+  Acceleration mode varies thrust with the current mass to maintain the chosen
+  acceleration, so its mass decays exponentially at constant throttle.
+- Initial mass uses top-level `massKg`, otherwise the existing `forces.massKg`
+  / `forces.mass` or `spacecraft.massKg` / `spacecraft.mass` selection, default
+  1000 kg. Mass must remain positive. Drag and cannonball SRP use the current
+  propagated mass as well.
+- `startSeconds` and `stopSeconds` are offsets from the original `epochJD`.
+  Alternatively, use `startJD` / `stopJD` (`startEpochJD` / `stopEpochJD` aliases)
+  in **JD TDB**. Specify only one time representation for each edge. Scheduled
+  windows require `0 <= startSeconds < stopSeconds`; overlapping burns add
+  their accelerations and mass flows. Propagation is forward only.
+- `frame` defaults to `INERTIAL`. `direction` defaults to `[1,0,0]` and is
+  normalized. The supported bases are:
+
+  | Frame | Components of `direction` |
+  | --- | --- |
+  | `INERTIAL` | Fixed GCRF Cartesian axes. |
+  | `RTN`, `LVLH` | Radial `r/|r|`, transverse `N×R`, normal `(r×v)/|r×v|`. `LVLH` is explicitly an RTN alias here. |
+  | `VNC` | Velocity `v/|v|`, normal `(r×v)/|r×v|`, co-normal `V×N`. |
+  | `VELOCITY` | Along instantaneous velocity. No `direction` or `steeringRate` field. |
+  | `ANTI_VELOCITY` | Opposite instantaneous velocity. No `direction` or `steeringRate` field. |
+
+- Optional `steeringRate: [dx,dy,dz]` has units s⁻¹ for a dimensionless
+  `direction`: the selected-frame vector is
+  `normalize(direction + steeringRate * secondsFromEpochJD)`. Its clock stays
+  anchored to the original epoch for event starts and intermediate samples.
+  Steered vectors that cross zero and singular orbital bases return errors.
+- Optional `throttle` is a zero-order-hold table of `{seconds, throttle}`.
+  Times are nonnegative, strictly increasing offsets from the original epoch,
+  and throttle lies in `[0,1]`. Throttle is 1 before the first entry, and the
+  last value remains in effect afterward. A value of 0 provides a duty-cycle
+  coast interval. Every scheduled start, stop, impulse, and throttle change
+  forces an integrator step boundary, including edges shorter than `minStep`.
+
+### Event starts and stops
+
+Use `startEvent` or `stopEvent` with
+`{"kind":"MASS","goal":999,"direction":-1}`, for example, to stop as mass
+decreases through 999 kg. Supported event kinds and goal units are `RADIUS`
+(km), `SPEED` (km/s), `RADIAL_VELOCITY` (km/s), `NODE` (GCRF z in km), and
+`MASS` (kg). `direction` is -1 for decreasing, 0 for either direction (default),
+and +1 for increasing. A root at the initial search state is excluded.
+
+When an event is supplied, its scheduled start and stop times bound the search
+window. Omitted start time defaults to the original epoch only with
+`startEvent`; omitted stop time defaults to `targetJD` only with `stopEvent`.
+A stop time always shuts off the burn even if its stop event has not occurred.
+A start event that never crosses inside the window leaves the burn unstarted.
+The core reuses `propagator/events` stopping functions and Brent root refinement
+at a 1 ns time tolerance; it integrates to each located edge before changing
+the force. Events require a sign-changing root within an accepted step:
+choose `maxStep` shorter than the separation between crossings. Tangencies
+and multiple crossings inside one step are not guaranteed to be found.
+
+### Results and STM
+
+`finiteBurns` requests the coupled analytic STM even when `includeSTM` is
+omitted. `STM_METHOD: "FINITE_DIFFERENCE"` is rejected for finite burns.
+Supported integrators are RK4, RKF45, RKF78, RK78, and COWELL; adaptive methods
+share stage evaluations and error control across state, mass, STM, and burn
+integrals. Finite-burn RKF78/RK78 also compare a full step with two half steps:
+their inherited embedded estimate can vanish for purely time-dependent
+thrust even when quadrature error remains. RK4 uses its requested fixed step.
+Existing `DENSITY_GRADIENT` choices remain available.
+
+- `massKg` is the final mass. `stm7` contains 49 row-major entries for
+  `[x,y,z,vx,vy,vz,massKg]`; its entries carry output-variable units divided by
+  input-variable units. `stm` retains the upper-left 6×6 block for Cartesian
+  perturbations with known initial mass.
+- `covariance` retains the existing 36-entry Cartesian covariance contract,
+  treating initial mass as exact. Optional `covariance7` accepts 49 row-major
+  entries including mass variance and cross-covariances, and returns
+  `Phi7 * P0 * Phi7^T`. Both inputs can be supplied independently. No process
+  noise is added. Supply `finiteBurns: []` for seven-state coasting propagation.
+- `burnSummary` preserves input burn order and reports `index`, `deltaVKmS`
+  (the accumulated integral of that burn's acceleration magnitude),
+  `propellantKg`, `started`, `stopped`, and actual `startSeconds` / `stopSeconds`
+  and `startEpochJD` / `stopEpochJD`. Times are null until the corresponding
+  transition occurs. `startByEvent` / `stopByEvent` distinguish located events
+  from scheduled edges, including a stop at the end of an event search window.
+  Delta-v is the thrust integral, not the final velocity
+  difference, which also includes gravity and other forces.
+- Each entry in `samples` includes the same mass, STM, covariance, and burn
+  summary fields. Samples are independently integrated from `epochJD`; all
+  STMs, propellant totals, and delta-v totals are cumulative from that epoch.
+- The analytic derivatives include thrust's inverse-mass dependence, normalized
+  steering, moving RTN/VNC/velocity bases, acceleration-mode mass flow, and the
+  mass dependence of drag/SRP. Event transitions apply saltation matrices to
+  account for a perturbation changing the crossing time. A grazing event,
+  whose crossing-time derivative is singular, fails explicitly if detected.
+  Simultaneous state-triggered edges are rejected because their ordering is
+  ambiguous. A located event within 1 ns of a scheduled start, stop, throttle
+  change, impulse, or requested output epoch is also rejected: perturbations
+  can change the transition order, so a unique classical STM is not assured
+  there. Request a sample after the event to obtain its cumulative STM.
+  Existing `maneuvers` can be combined with finite burns; the impulse STM jump extends
+  to 7×7 and leaves mass unchanged.
+
+This lane retains the diagnostic build and existing SDK manifest limitations
+described above; the new controls do not change the SDK acceptance status.
