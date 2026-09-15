@@ -1,3 +1,4 @@
+#include "rk_augmented.h"
 // integrators.cpp - Phase 11.1.1 Numerical Integrators Implementation
 // =============================================================================
 // Phase 11: Astrodynamics Framework (Basilisk + TudatPy Port)
@@ -95,41 +96,10 @@ const double amCoeffs[8][8] = {
 // =============================================================================
 
 StepResult RK4(const std::array<double, 6>& state, double t, double h,
-               DerivativeFunc deriv, void* params) {
+                 DerivativeFunc deriv, void* params) {
     StepResult result;
-    constexpr int N = 6;
-    double k1[N], k2[N], k3[N], k4[N];
-    double ytmp[N];
-
-    // Stage 1: k1 = f(t, y)
-    deriv(t, state.data(), k1, params);
-
-    // Stage 2: k2 = f(t + h/2, y + h/2 * k1)
-    for (int i = 0; i < N; i++)
-        ytmp[i] = state[i] + 0.5 * h * k1[i];
-    deriv(t + 0.5*h, ytmp, k2, params);
-
-    // Stage 3: k3 = f(t + h/2, y + h/2 * k2)
-    for (int i = 0; i < N; i++)
-        ytmp[i] = state[i] + 0.5 * h * k2[i];
-    deriv(t + 0.5*h, ytmp, k3, params);
-
-    // Stage 4: k4 = f(t + h, y + h * k3)
-    for (int i = 0; i < N; i++)
-        ytmp[i] = state[i] + h * k3[i];
-    deriv(t + h, ytmp, k4, params);
-
-    // Combine: y(t+h) = y + h/6 * (k1 + 2*k2 + 2*k3 + k4)
-    for (int i = 0; i < N; i++) {
-        result.state[i] = state[i] + h * (k1[i] + 2.0*k2[i] + 2.0*k3[i] + k4[i]) / 6.0;
-        result.error[i] = h * h * h * h * h * 1e-10;  // O(h^5) local truncation error
-    }
-
-    result.time = t + h;
-    result.stepUsed = h;
-    result.accepted = true;
-    result.evaluations = 4;
-
+    rk_detail::rk4Step<6>(t,h,state.data(),result.state.data(),result.error.data(),deriv,params);
+    result.time=t+h; result.stepUsed=h; result.accepted=true; result.evaluations=4;
     return result;
 }
 
@@ -238,73 +208,11 @@ StateVector RK4(const StateVector& initialState, double dt, double h,
 // preferred for its slightly better error estimation properties.
 // Reference: Cash, J.R. & Karp, A.H. (1990), ACM TOMS, 16(3), 201-222.
 
-// Cash-Karp coefficients
-namespace rkf45c {
-    constexpr double c2 = 1.0/5.0, c3 = 3.0/10.0, c4 = 3.0/5.0, c5 = 1.0, c6 = 7.0/8.0;
-    constexpr double a21 = 1.0/5.0;
-    constexpr double a31 = 3.0/40.0, a32 = 9.0/40.0;
-    constexpr double a41 = 3.0/10.0, a42 = -9.0/10.0, a43 = 6.0/5.0;
-    constexpr double a51 = -11.0/54.0, a52 = 5.0/2.0, a53 = -70.0/27.0, a54 = 35.0/27.0;
-    constexpr double a61 = 1631.0/55296.0, a62 = 175.0/512.0, a63 = 575.0/13824.0;
-    constexpr double a64 = 44275.0/110592.0, a65 = 253.0/4096.0;
-    constexpr double b5_1 = 37.0/378.0, b5_3 = 250.0/621.0, b5_4 = 125.0/594.0, b5_6 = 512.0/1771.0;
-    constexpr double b4_1 = 2825.0/27648.0, b4_3 = 18575.0/48384.0, b4_4 = 13525.0/55296.0;
-    constexpr double b4_5 = 277.0/14336.0, b4_6 = 1.0/4.0;
-}
-
 StepResult RKF45(const std::array<double, 6>& state, double t, double h,
                  DerivativeFunc deriv, void* params) {
     StepResult result;
-    constexpr int N = 6;
-    double k1[N], k2[N], k3[N], k4[N], k5[N], k6[N];
-    double ytmp[N];
-
-    using namespace rkf45c;
-
-    // Stage 1
-    deriv(t, state.data(), k1, params);
-
-    // Stage 2
-    for (int i = 0; i < N; i++)
-        ytmp[i] = state[i] + h * a21 * k1[i];
-    deriv(t + c2*h, ytmp, k2, params);
-
-    // Stage 3
-    for (int i = 0; i < N; i++)
-        ytmp[i] = state[i] + h * (a31*k1[i] + a32*k2[i]);
-    deriv(t + c3*h, ytmp, k3, params);
-
-    // Stage 4
-    for (int i = 0; i < N; i++)
-        ytmp[i] = state[i] + h * (a41*k1[i] + a42*k2[i] + a43*k3[i]);
-    deriv(t + c4*h, ytmp, k4, params);
-
-    // Stage 5
-    for (int i = 0; i < N; i++)
-        ytmp[i] = state[i] + h * (a51*k1[i] + a52*k2[i] + a53*k3[i] + a54*k4[i]);
-    deriv(t + c5*h, ytmp, k5, params);
-
-    // Stage 6
-    for (int i = 0; i < N; i++)
-        ytmp[i] = state[i] + h * (a61*k1[i] + a62*k2[i] + a63*k3[i] + a64*k4[i] + a65*k5[i]);
-    deriv(t + c6*h, ytmp, k6, params);
-
-    // 5th order solution
-    for (int i = 0; i < N; i++) {
-        result.state[i] = state[i] + h * (b5_1*k1[i] + b5_3*k3[i] + b5_4*k4[i] + b5_6*k6[i]);
-    }
-
-    // Error estimate
-    for (int i = 0; i < N; i++) {
-        double y4 = state[i] + h * (b4_1*k1[i] + b4_3*k3[i] + b4_4*k4[i] + b4_5*k5[i] + b4_6*k6[i]);
-        result.error[i] = std::abs(result.state[i] - y4);
-    }
-
-    result.time = t + h;
-    result.stepUsed = h;
-    result.accepted = true;
-    result.evaluations = 6;
-
+    rk_detail::cashKarpStep<6>(t,h,state.data(),result.state.data(),result.error.data(),deriv,params);
+    result.time=t+h; result.stepUsed=h; result.accepted=true; result.evaluations=6;
     return result;
 }
 

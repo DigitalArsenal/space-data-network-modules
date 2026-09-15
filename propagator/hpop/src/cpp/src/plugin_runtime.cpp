@@ -3,6 +3,7 @@
 #include "astrodynamics.h"
 #include "astrodynamics_types.h"
 #include "integrators.h"
+#include "variational.h"
 #include "force_models.h"
 #include "coords.h"
 #include "ephemeris.h"
@@ -13,6 +14,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -64,6 +66,7 @@ astro::IntegrationMethod parse_integration_method(const std::string& raw_name) {
     if (name == "RK78") {
         return astro::IntegrationMethod::RK78;
     }
+    if (name == "RKDP87") return astro::IntegrationMethod::RKDP87;
     if (name == "ABM") {
         return astro::IntegrationMethod::ABM;
     }
@@ -115,7 +118,11 @@ void configure_integrator(
         config.relTolerance = tolerance;
     }
     if (integrator.contains("maxSteps")) {
-        config.maxSteps = integrator.at("maxSteps").get<uint32_t>();
+        const auto& value=integrator.at("maxSteps");
+        if(!value.is_number_integer()||value.get<double>()<1||
+           value.get<double>()>std::numeric_limits<uint32_t>::max()/10)
+            throw std::runtime_error("maxSteps must be an integer between 1 and 429496729.");
+        config.maxSteps = value.get<uint32_t>();
     }
 }
 
@@ -190,6 +197,21 @@ void configure_force_models(
     forces.sphericalHarmonics.includeJ2 = use_j2;
     forces.sphericalHarmonics.includeJ3 = use_j3;
     forces.sphericalHarmonics.includeJ4 = use_j4;
+    forces.sphericalHarmonics.mu = forces.mu;
+    if (requested.contains("higherZonals"))
+        forces.sphericalHarmonics.includeHigherZonals = requested.at("higherZonals").get<bool>();
+    if(requested.value("higherZonals",false)) forces.useSphericalHarmonics=true;
+    if (requested.contains("gravityMode")) {
+        const std::string mode=requested.at("gravityMode").get<std::string>();
+        if(mode=="POINT_MASS") forces.gravityMode=ForceModel::GravityMode::PointMass;
+        else if(mode=="J2") forces.gravityMode=ForceModel::GravityMode::J2Only;
+        else if(mode=="J2_J4") forces.gravityMode=ForceModel::GravityMode::J2J4;
+        else if(mode=="SPHERICAL_HARMONICS") forces.gravityMode=ForceModel::GravityMode::SphericalHarmonics;
+        else if(mode=="EGM2008") forces.gravityMode=ForceModel::GravityMode::EGM2008;
+        else throw std::runtime_error("Unknown gravityMode: "+mode);
+    }
+    if(requested.contains("maxDegree")) forces.egm2008.truncationDegree=requested.at("maxDegree").get<uint16_t>();
+    if(requested.contains("maxOrder")) forces.egm2008.truncationOrder=requested.at("maxOrder").get<uint16_t>();
     if (requested.contains("maxDegree")) {
         forces.sphericalHarmonics.maxDegree =
             requested.at("maxDegree").get<uint16_t>();
@@ -226,6 +248,15 @@ void configure_force_models(
     forces.drag.mass = mass;
     forces.drag.area = area;
     forces.drag.Cd = read_optional_double(requested, "cd", "Cd", forces.drag.Cd);
+    if(requested.contains("dragModel")) {
+        const std::string model=requested.at("dragModel").get<std::string>();
+        if(model=="NRLMSISE00")forces.dragModel=ForceModel::DragModelType::NRLMSISE00;
+        else if(model=="EXPONENTIAL")forces.dragModel=ForceModel::DragModelType::Exponential;
+        else if(model=="USSA1976")forces.dragModel=ForceModel::DragModelType::USSA1976;
+        else if(model=="HARRIS_PRIESTER")forces.dragModel=ForceModel::DragModelType::HarrisPriester;
+        else throw std::runtime_error("Unknown supported dragModel: "+model);
+        forces.drag.model=forces.dragModel;
+    }
 }
 
 void configure_weather(
@@ -244,7 +275,7 @@ void configure_weather(
     forces.weather.Kp = read_optional_double(weather, "Kp", "kp", forces.weather.Kp);
 }
 
-std::string propagate_json(const json& params) {
+std::string propagate_json(const json& params, std::string& operation_error) {
     using namespace astro;
 
     // Parse initial state
@@ -292,6 +323,77 @@ std::string propagate_json(const json& params) {
     }
 
     const double dt_sec = (target_jd - epoch_jd) * 86400.0;
+    // State-only requests retain their existing cost. A requested STM or
+    // covariance defaults to the coupled analytical variational equations.
+    const bool with_stm=params.value("includeSTM",false)||params.contains("STM_METHOD")||
+        params.contains("covariance")||params.contains("sampleEpochsJD")||params.contains("maneuvers");
+    if(with_stm) {
+        const std::string method_name=params.value("STM_METHOD",std::string("ANALYTIC"));
+        Integrator::STMMethod method;
+        if(method_name=="ANALYTIC")method=Integrator::STMMethod::Analytic;
+        else if(method_name=="FINITE_DIFFERENCE")method=Integrator::STMMethod::FiniteDifference;
+        else throw std::runtime_error("STM_METHOD must be ANALYTIC or FINITE_DIFFERENCE.");
+        const std::string density_name=params.value("DENSITY_GRADIENT",std::string("NEGLECTED"));
+        ForceModel::DensityGradient density;
+        if(density_name=="NEGLECTED")density=ForceModel::DensityGradient::Neglected;
+        else if(density_name=="FINITE_DIFFERENCE")density=ForceModel::DensityGradient::FiniteDifference;
+        else throw std::runtime_error("DENSITY_GRADIENT must be NEGLECTED or FINITE_DIFFERENCE.");
+        std::vector<ForceModel::ImpulsiveManeuverDef> burns;
+        if(params.contains("maneuvers")) for(const auto& item:params.at("maneuvers")) {
+            ForceModel::ImpulsiveManeuverDef burn;
+            burn.epoch=item.at("epochJD").get<double>();
+            const auto& dv=item.at("deltaV");
+            if(dv.size()!=3)throw std::runtime_error("Maneuver deltaV must contain three km/s components.");
+            burn.deltaV=Vec3(dv.at(0).get<double>(),dv.at(1).get<double>(),dv.at(2).get<double>());
+            const auto frame=item.value("frame",std::string("INERTIAL"));
+            if(frame!="INERTIAL"&&frame!="RTN")throw std::runtime_error("Maneuver frame must be INERTIAL or RTN.");
+            burn.inRTN=frame=="RTN"; burns.push_back(burn);
+        }
+        Mat6 covariance{};
+        const bool has_covariance=params.contains("covariance");
+        if(has_covariance) {
+            const auto& input=params.at("covariance");
+            if(input.size()!=36)throw std::runtime_error("covariance must be a row-major array of 36 km/km-s entries.");
+            for(int i=0;i<6;++i)for(int j=0;j<6;++j) {
+                covariance.m[i][j]=input.at(i*6+j).get<double>();
+                if(!std::isfinite(covariance.m[i][j]))throw std::runtime_error("covariance must be finite.");
+            }
+        }
+        auto flat=[](const Mat6& m) {
+            json a=json::array();for(int i=0;i<6;++i)for(int j=0;j<6;++j)a.push_back(m.m[i][j]);return a;
+        };
+        auto evaluate=[&](double jd) {
+            if(!std::isfinite(jd))throw std::runtime_error("Sample epoch must be finite.");
+            auto result=Integrator::PropagateWithSTM(sv,(jd-epoch_jd)*86400.0,config,forces,method,density,burns);
+            if(!result.success) {
+                operation_error=result.errorMessage;
+                return json::object();
+            }
+            json value={{"epochJD",jd},
+                {"position",{result.finalState.position.x,result.finalState.position.y,result.finalState.position.z}},
+                {"velocity",{result.finalState.velocity.x,result.finalState.velocity.y,result.finalState.velocity.z}},
+                {"stm",flat(result.stm)},{"integrationSteps",result.steps},{"integrationRejections",result.rejections}};
+            if(has_covariance)value["covariance"]=flat(Integrator::TransportCovariance(result.stm,covariance));
+            return value;
+        };
+        json output=evaluate(target_jd);
+        if(!operation_error.empty())return "{}";
+        output["STM_METHOD"]=method_name;output["DENSITY_GRADIENT"]=density_name;
+        output["propagatedDeltaSeconds"]=dt_sec;output["epochTimeScale"]="TDB";
+        output["frame"]="GCRF";output["positionUnits"]="km";output["velocityUnits"]="km/s";
+        output["ephemerisSource"]=Ephemeris::ephemerisSourceName(Ephemeris::selectedEphemerisSource());
+        if(params.contains("sampleEpochsJD")) {
+            if(params.at("sampleEpochsJD").size()>10000)throw std::runtime_error("At most 10000 STM samples per invocation.");
+            output["samples"]=json::array();
+            // Each STM is cumulative from epochJD, as estimation expects.
+            for(const auto& epoch:params.at("sampleEpochsJD")) {
+                auto sample=evaluate(epoch.get<double>());
+                if(!operation_error.empty())return "{}";
+                output["samples"].push_back(std::move(sample));
+            }
+        }
+        return output.dump();
+    }
     if (std::abs(dt_sec) < 1e-12) {
         return json({
             {"epochJD", target_jd},
@@ -307,10 +409,9 @@ std::string propagate_json(const json& params) {
     const auto result = Integrator::PropagateWithResult(sv, dt_sec, config, forces);
     if (!Ephemeris::ephemerisError().empty()) return "{}";
     if (!result.success) {
-        throw std::runtime_error(
-            result.errorMessage.empty()
-                ? "Integration failed to reach target epoch."
-                : result.errorMessage);
+        operation_error = result.errorMessage.empty()
+            ? "Integration failed to reach target epoch." : result.errorMessage;
+        return "{}";
     }
 
     json output = {
@@ -434,12 +535,12 @@ std::string atmosphere_json(const json& params) {
     }).dump();
 }
 
-std::string dispatch_operation(const std::string& operation, const json& params) {
+std::string dispatch_operation(const std::string& operation, const json& params, std::string& operation_error) {
     if (operation == "version") {
         return json({{"version", version()}, {"plugin", "hpop-propagator"}}).dump();
     }
     if (operation == "propagate") {
-        return propagate_json(params);
+        return propagate_json(params, operation_error);
     }
     if (operation == "ephemeris") {
         using namespace astro::Ephemeris;
@@ -483,10 +584,16 @@ PluginInvokeResult invoke_json_request(std::string_view request_json) {
             return make_error_result("epoch-time-scale", "JSON propagation epochs must be JD TDB.");
         if (operation == "ephemeris" && selectedEphemerisSource() == EphemerisSource::Analytical)
             return make_error_result("missing-kernel", "NAIF ephemeris query requires a kernel input.");
+        // Expected integration failures travel as statuses. In particular, do
+        // not throw while a VariationalResult is alive: WasmEdge 0.16.4 can
+        // corrupt destructor pointers during native-Wasm exception unwinding.
+        std::string operation_error;
+        auto output = dispatch_operation(operation, params, operation_error);
+        if (!ephemerisError().empty()) return make_error_result("ephemeris-failed", ephemerisError());
+        if (!operation_error.empty()) return make_error_result("invoke-failed", operation_error);
         PluginInvokeResult result{};
         result.ok = true;
-        result.json = dispatch_operation(operation, params);
-        if (!ephemerisError().empty()) return make_error_result("ephemeris-failed", ephemerisError());
+        result.json = std::move(output);
         return result;
     } catch (const std::exception& ex) {
         return make_error_result("invoke-failed", ex.what());

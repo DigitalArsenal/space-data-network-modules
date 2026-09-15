@@ -163,3 +163,110 @@ and generates its own invoke bridge, while HPOP uses multiple translation units
 and a legacy native bridge/browser ABI. SDK compliance also rejects pre-existing
 legacy request/response types with missing canonical file identifiers. This lane
 does not invent replacements for those unratified contracts.
+
+## Analytical state transition matrix (TMPL lane 03)
+
+The existing `invoke` / `propagate` operation can integrate the Cartesian state
+and its 6×6 state transition matrix (STM) as one 42-component system. The STM is
+`∂x(target)/∂x(epochJD)`, in row-major order for `[x,y,z,vx,vy,vz]`.
+All calculations execute in C++ WASM. Example request body:
+
+```json
+{
+  "operation": "propagate",
+  "params": {
+    "epochJD": 2451545.0,
+    "targetJD": 2451545.01,
+    "position": [7000, 0, 0],
+    "velocity": [0, 7.5, 1],
+    "includeSTM": true,
+    "STM_METHOD": "ANALYTIC",
+    "DENSITY_GRADIENT": "FINITE_DIFFERENCE",
+    "forces": {"gravityMode": "J2"},
+    "integrator": {
+      "method": "RKF78", "initialStep": 20, "minStep": 0.001,
+      "maxStep": 60, "absTolerance": 1e-12, "relTolerance": 1e-12
+    }
+  }
+}
+```
+
+- `includeSTM: true` requests `stm`. `STM_METHOD`, `covariance`,
+  `sampleEpochsJD`, or `maneuvers` also request it. State-only requests retain
+  their existing behavior. The default STM method is `ANALYTIC`;
+  `FINITE_DIFFERENCE` retains central differences of twelve perturbed
+  trajectories plus the nominal trajectory.
+- The state uses GCRF km and km/s, epochs are JD TDB. The STM's position/position
+  and velocity/velocity blocks are dimensionless, position/velocity is seconds,
+  and velocity/position is inverse seconds. The existing gravity evaluator's
+  coordinate conventions are unchanged; this does not add an Earth-fixed
+  rotation to its tesseral harmonics.
+- `covariance` is 36 row-major entries in the same Cartesian units. The returned
+  covariance is `Phi * P0 * Phi^T`, with no added process noise.
+- `sampleEpochsJD` returns `samples[]` containing position, velocity, `stm`, and
+  optionally covariance. Every sample STM refers to the original `epochJD`.
+  Samples are independently propagated from that epoch. The caller may pack
+  these arrays into estimation's existing propagator-sample input; no new SDS
+  schema or automatic estimation flow is introduced.
+- `maneuvers` contains `{epochJD, deltaV: [dx,dy,dz], frame: "INERTIAL"|"RTN"}`;
+  delta-v uses km/s. Integration stops at each burn. At a burn epoch the output
+  is post-burn. Start-epoch burns are excluded, so supply an already post-burn
+  initial state. Inertial jumps have identity Jacobians; RTN jumps differentiate
+  the moving basis and left-multiply the cumulative STM. Backward propagation
+  with scheduled impulses is explicitly unsupported.
+- `DENSITY_GRADIENT` defaults to `NEGLECTED`. `FINITE_DIFFERENCE` differences only
+  scalar density at ±1 m; drag velocity and co-rotation partials remain analytic.
+  Ignoring density's gradient is a configurable linearization approximation,
+  not a claim that density is spatially constant.
+- Analytic integration supports RK4, RKF45 (the existing Cash–Karp pair), RKF78,
+  RK78, and COWELL (Cash–Karp). Adaptive state and STM share stages, error
+  tolerances, accepted steps and rejected steps. STM errors are scaled using
+  `D^-1 Phi D` with initial position/velocity magnitudes. Unmet tolerance at
+  `minStep` returns an error. RK4 remains fixed-step. The finite-difference
+  invoke path additionally supports RKDP87 and BS; other result dispatchers
+  are refused explicitly.
+- `forces.gravityMode`: `POINT_MASS`, `J2`, `J2_J4`, `SPHERICAL_HARMONICS`, or
+  `EGM2008`. Existing low-degree flags remain available; `higherZonals` controls
+  the built-in J5/J6 pair. `maxDegree` and `maxOrder` select harmonic truncation.
+  `forces.dragModel` accepts `NRLMSISE00`, `EXPONENTIAL`, `USSA1976`, or
+  `HARRIS_PRIESTER`. Sun/Moon/planet positions use lane 01's scoped kernel port
+  when supplied; missing kernels retain the explicitly reported Analytical
+  fallback.
+
+### Coverage and limits
+
+The force Jacobian uses forward analytical chain-rule differentiation, with no
+whole-force differencing in `ANALYTIC` mode. It includes point mass, J2–J6,
+inline spherical harmonics/custom fields, full loaded and embedded EGM
+Cunningham/Pines recursion, nine third-body point masses, atmospheric drag,
+cannonball SRP and its conical shadow, relativistic terms and supported
+registered contributions. There is **no additional STM harmonic truncation**;
+the existing embedded EGM field remains degree 70. Loaded-field degree 80 is
+also covered by a Jacobian regression.
+
+The following existing force semantics are preserved: cannonball SRP always
+selects the existing conical/linear-penumbra function; EGM low-degree coefficient
+gates are not applied by its force evaluator; and the loaded/EGM recursion has
+an existing low-order column-coverage defect (for example, order zero omits
+required x/y zonal recurrence terms). These are force-model limitations, not
+additional derivative truncations. Piecewise shadow/density boundaries use the
+selected branch derivative; a discontinuous threshold has no classical
+Jacobian at the boundary. Inline tesseral gravity refuses its exact polar
+coordinate singularity.
+
+Analytic STM explicitly refuses albedo, thermal reradiation, tides, empirical
+accelerations, finite thrust, non-cannonball SRP and atmosphere winds. Select the
+finite-difference path for those forces. Cd/Cr are configurable force inputs;
+there is no existing parameter-sensitivity matrix plumbing, and this lane does
+not add Cd/Cr sensitivity columns.
+
+The legacy working-state exports `plugin_compute_stm` and
+`plugin_propagate_covariance` now default to analytic propagation.
+`plugin_set_stm_method(method, densityGradient)` selects 0=analytic/neglected,
+1=finite-difference for each respective argument. These working-state methods
+have no entity burn list; scheduled burn STM jumps are on the invoke surface.
+
+**SDK acceptance remains blocked by pre-existing legacy manifest identities.**
+The committed artifact is a diagnostic build using the existing local-emSDK
+CMake path. It does not meet the SDK-build/publication gate. See the lane 03
+handoff for the exact preflight, compliance and tri-runtime results.
