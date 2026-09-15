@@ -1,5 +1,9 @@
 # Lane 05 authoritative numerical cases
 
+Second-pass nonlinear UKF, Orekit orbital comparisons, GNSS and adaptive-noise
+authorities are documented in [DEPTH.md](DEPTH.md). Its nonlinear Monte Carlo
+protocol supersedes the first-pass affine description below.
+
 These are test-only providers and references. Production physics remains in
 C++ WASM. No filter output is used to manufacture expected values. Epochs are
 elapsed seconds with JD 2451545 **TAI** as the invoke label (the current report

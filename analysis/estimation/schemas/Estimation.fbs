@@ -1,0 +1,314 @@
+include "Propagator.fbs";
+
+namespace orbpro.estimation;
+
+// Estimation family ABI. This schema is the single source of truth for the
+// fixed-layout C boundary and the request/result wire. Propagation is an
+// inverted port protocol: the guest emits state/STM requests and consumes the
+// supplied Propagator.fbs answers. It imports no provider-specific function.
+
+enum EstimatorKind : ubyte (abi, abi_c_name: "OrbProEstimatorKind", abi_c_prefix: "ORBPRO_ESTIMATOR_") {
+  BATCH_WEIGHTED_LEAST_SQUARES = 0,
+  EXTENDED_KALMAN_FILTER = 1,
+  UNSCENTED_KALMAN_FILTER = 2,
+  EXTENDED_KALMAN_FILTER_WITH_RTS = 3,
+  LINEAR_KALMAN_FILTER = 4
+}
+
+enum MeasurementKind : ushort (abi, abi_c_name: "OrbProMeasurementKind", abi_c_prefix: "ORBPRO_MEASUREMENT_") {
+  RANGE = 0,
+  RANGE_RATE = 1,
+  DOPPLER = 2,
+  AZIMUTH_ELEVATION = 3,
+  X_EAST_Y_NORTH = 4,
+  X_SOUTH_Y_EAST = 5,
+  RIGHT_ASCENSION_DECLINATION = 6,
+  POSITION_VECTOR = 7,
+  SEQUENTIAL_RANGE = 8,
+  PSEUDONOISE_RANGE = 9,
+  TIME_CORRELATED_PHASE = 10,
+  RELAY_RANGE = 11,
+  RELAY_DOPPLER = 12,
+  RELAY_DIFFERENCED_DOPPLER = 13,
+  BISTATIC_RANGE = 14,
+  SKIN_RANGE = 15,
+  CROSSLINK_RANGE = 16,
+  CROSSLINK_RANGE_RATE = 17,
+  LASER_RANGE = 18,
+  TIME_DIFFERENCE_OF_ARRIVAL = 19,
+  FREQUENCY_DIFFERENCE_OF_ARRIVAL = 20,
+  POSITION_VELOCITY = 21,
+  PSEUDORANGE = 22,
+  LINEAR = 23
+}
+
+enum ProcessNoiseKind : ubyte (abi, abi_c_name: "OrbProProcessNoiseKind", abi_c_prefix: "ORBPRO_PROCESS_NOISE_") {
+  NONE = 0,
+  STATE_NOISE_COMPENSATION = 1,
+  DYNAMIC_MODEL_COMPENSATION = 2
+}
+
+enum TroposphereKind : ubyte (abi, abi_c_name: "OrbProTroposphereKind", abi_c_prefix: "ORBPRO_TROPOSPHERE_") {
+  NONE = 0,
+  HOPFIELD_SAASTAMOINEN = 1,
+  MARINI = 2
+}
+
+enum IonosphereKind : ubyte (abi, abi_c_name: "OrbProIonosphereKind", abi_c_prefix: "ORBPRO_IONOSPHERE_") {
+  NONE = 0,
+  TOTAL_ELECTRON_CONTENT = 1,
+  REFERENCE_PROFILE = 2
+}
+
+enum InitialOrbitKind : ubyte (abi, abi_c_name: "OrbProInitialOrbitKind", abi_c_prefix: "ORBPRO_IOD_") {
+  GAUSS = 0,
+  LAPLACE = 1,
+  GIBBS = 2,
+  HERRICK_GIBBS = 3
+}
+
+enum EstimationStatus : int (abi, abi_c_name: "OrbProEstimationStatus", abi_c_prefix: "ORBPRO_ESTIMATION_") {
+  INTERNAL = -20,
+  PROPAGATOR_PROTOCOL = -19,
+  BUFFER_TOO_SMALL = -18,
+  NOT_CONVERGED = -5,
+  BAD_INPUT = -4,
+  NULL_OUTPUT = -3,
+  NOT_CONFIGURED = -1,
+  OK = 0,
+  NEEDS_PROPAGATION = 1
+}
+
+struct EstimationEpoch (abi, abi_c_name: "OrbProEstimationEpoch", abi_c_helper_prefix: "orbpro_estimation_epoch_") {
+  jd_day:double;
+  seconds:double;
+}
+
+/// One observation in SI units. The first value_count lanes of value and
+/// sigma are meaningful. station_position_m is in the request frame.
+struct EstimationObservation (abi, abi_c_name: "OrbProEstimationObservation", abi_c_helper_prefix: "orbpro_estimation_observation_") {
+  epoch:EstimationEpoch;
+  value:[double:4];
+  sigma:[double:4];
+  station_position_m:[double:3];
+  station_velocity_mps:[double:3];
+  station_east:[double:3];
+  station_north:[double:3];
+  station_up:[double:3];
+  remote_position_m:[double:3];
+  remote_velocity_mps:[double:3];
+  frequency_hz:double;
+  transmitter_delay_seconds:double;
+  receiver_delay_seconds:double;
+  transponder_delay_seconds:double;
+  elevation_rad:double;
+  station_latitude_rad:double;
+  station_height_m:double;
+  pressure_hpa:double;
+  temperature_k:double;
+  relative_humidity:double;
+  wavelength_m:double;
+  total_electron_content:double;
+  total_electron_content_rate_per_second:double;
+  turnaround_numerator:uint;
+  turnaround_denominator:uint;
+  kind:MeasurementKind;
+  value_count:ubyte;
+  flags:ubyte;
+  transmitter_index:uint;
+  receiver_index:uint;
+}
+
+struct EstimationErrorModel (abi, abi_c_name: "OrbProEstimationErrorModel", abi_c_helper_prefix: "orbpro_estimation_error_model_") {
+  noise_sigma:double;
+  bias:double;
+  bias_sigma:double;
+  correlation_time_seconds:double;
+  minimum_value:double;
+  maximum_value:double;
+  sigma_edit_threshold:double;
+  random_seed:ulong;
+  measurement_kind:MeasurementKind;
+  troposphere:TroposphereKind;
+  ionosphere:IonosphereKind;
+  flags:ubyte;
+}
+
+/// Fixed configuration copied byte-for-byte in every runtime. initial_state
+/// is Cartesian [x,y,z,vx,vy,vz] in metres and metres per second; covariance
+/// is row-major 6 by 6 in matching SI units.
+struct EstimationConfig (abi, abi_c_name: "OrbProEstimationConfig", abi_c_helper_prefix: "orbpro_estimation_config_") {
+  initial_epoch:EstimationEpoch;
+  initial_state:[double:6];
+  initial_covariance:[double:36];
+  process_noise_spectral_density:[double:6];
+  state_convergence_tolerance:double;
+  rms_convergence_tolerance:double;
+  sigma_edit_threshold:double;
+  dynamic_model_correlation_time_seconds:double;
+  maximum_iterations:uint;
+  reference_frame:orbpro.propagator.ReferenceFrame;
+  estimator:EstimatorKind;
+  process_noise:ProcessNoiseKind;
+  flags:ushort;
+}
+
+struct EstimationState (abi, abi_c_name: "OrbProEstimationState", abi_c_helper_prefix: "orbpro_estimation_state_") {
+  epoch:EstimationEpoch;
+  state:[double:6];
+  covariance:[double:36];
+  residual_rms:double;
+  recovered_noise_sigma:double;
+  iteration_count:uint;
+  accepted_count:uint;
+  rejected_count:uint;
+  reference_frame:orbpro.propagator.ReferenceFrame;
+  converged:ubyte;
+  smoothed:ubyte;
+  estimator:EstimatorKind;
+}
+
+struct FilterEpoch (abi, abi_c_name: "OrbProFilterEpoch", abi_c_helper_prefix: "orbpro_filter_epoch_") {
+  epoch:EstimationEpoch;
+  filtered_state:[double:6];
+  filtered_covariance:[double:36];
+  smoothed_state:[double:6];
+  smoothed_covariance:[double:36];
+  normalized_innovation_squared:double;
+}
+
+/// State and state-transition matrix supplied by the propagator port. The STM
+/// maps deviations at the estimator epoch to this sample epoch.
+struct EstimationPropagatorSample (abi, abi_c_name: "OrbProEstimationPropagatorSample", abi_c_helper_prefix: "orbpro_estimation_propagator_sample_") {
+  epoch:EstimationEpoch;
+  state:[double:6];
+  stm:[double:36];
+}
+
+struct InitialOrbitRequest (abi, abi_c_name: "OrbProInitialOrbitRequest", abi_c_helper_prefix: "orbpro_initial_orbit_request_") {
+  // Three inertial position vectors for Gibbs and Herrick-Gibbs.
+  positions_m:[double:9];
+  // Three observer positions followed by the three topocentric angle pairs
+  // used by Gauss and Laplace. The method selects which input set is read.
+  observer_positions_m:[double:9];
+  right_ascensions_rad:[double:3];
+  declinations_rad:[double:3];
+  epochs:EstimationEpoch;
+  interval_12_seconds:double;
+  interval_23_seconds:double;
+  gravitational_parameter_m3_s2:double;
+  method:InitialOrbitKind;
+}
+
+struct InitialOrbitResult (abi, abi_c_name: "OrbProInitialOrbitResult", abi_c_helper_prefix: "orbpro_initial_orbit_result_") {
+  epoch:EstimationEpoch;
+  state:[double:6];
+  iterations:uint;
+  reference_frame:orbpro.propagator.ReferenceFrame;
+  status:EstimationStatus;
+}
+
+/// Request/result wire. observations are decoded from $TDM/$CRD before they
+/// cross this family boundary; their source record identifiers remain on the
+/// request for a complete provenance trail.
+table EstimationRequest {
+  config:EstimationConfig;
+  observations:[EstimationObservation];
+  error_models:[EstimationErrorModel];
+  source_record_ids:[string];
+  propagator_port_id:string (required);
+  propagator_capability:string (required);
+  trace_id:string;
+  options:SequentialOptions;
+  extended_observations:[ExtendedObservation];
+}
+
+table EstimationResult {
+  status:EstimationStatus = OK;
+  estimate:EstimationState;
+  filter_history:[FilterEpoch];
+  residuals:[double];
+  /// Row-major 6x6 covariance blocks, one per batch iteration, in iteration
+  /// order. Empty for sequential estimators.
+  iteration_covariances:[double];
+  rejected_observation_indices:[uint];
+  odr_record:[ubyte];
+  ocm_record:[ubyte];
+  error_message:string;
+  trace_id:string;
+  extended_history:[ExtendedFilterEpoch];
+  propagation_requests:[PropagationQuery];
+}
+
+table EstimationEnvelope {
+  request:EstimationRequest;
+  result:EstimationResult;
+  propagator_samples:[EstimationPropagatorSample];
+  simulated_observations:[EstimationObservation];
+  initial_orbit_request:InitialOrbitRequest;
+  initial_orbit_result:InitialOrbitResult;
+  propagation_answers:[PropagationAnswer];
+}
+
+root_type EstimationEnvelope;
+file_identifier "$EST";
+
+// Module-local append-only extension v1. All legacy structs remain byte-exact.
+table SequentialOptions {
+  ukf_alpha:double = 1;
+  ukf_beta:double = 2;
+  ukf_kappa:double = 0;
+  nonlinear_propagation:bool = false;
+  smooth:bool = false;
+  adaptive_process_noise:bool = false;
+  inflate_measurement_noise:bool = false;
+  adaptation_rate:double = 0.05;
+  minimum_process_scale:double = 0.01;
+  maximum_process_scale:double = 100;
+  maximum_measurement_scale:double = 100;
+  estimate_clock:bool = false;
+  initial_clock_bias_m:double = 0;
+  initial_clock_drift_mps:double = 0;
+  // Required 8x8 row-major covariance when estimate_clock=true; includes orbit.
+  initial_covariance8:[double];
+  clock_bias_psd:double = 0;
+  clock_drift_psd:double = 0;
+}
+
+table ExtendedObservation {
+  observation:EstimationObservation (required);
+  // Exactly value_count lanes (1..6); replaces the legacy four-lane arrays.
+  values:[double] (required);
+  sigmas:[double] (required);
+  // LINEAR only: row-major value_count x state_dimension, y = H x + offset.
+  linear_matrix:[double];
+  linear_offset:[double];
+  satellite_clock_bias_m:double = 0;
+}
+
+table ExtendedFilterEpoch {
+  epoch:EstimationEpoch;
+  state_dimension:ubyte = 6;
+  filtered_state:[double];
+  filtered_covariance:[double];
+  smoothed_state:[double];
+  smoothed_covariance:[double];
+  normalized_innovation_squared:double;
+  accepted:bool;
+  process_noise_scale:double = 1;
+  measurement_noise_scale:double = 1;
+}
+
+// Inverted propagator port. Replay the unchanged request plus all answers.
+// A query's STM is relative to its seed epoch, not the original filter epoch.
+// Caller routes queries to its selected C++ WASM provider, then echoes each
+// query verbatim with the provider sample. No host physics is required.
+table PropagationQuery {
+  sequence:uint;
+  seed:EstimationState (required);
+  target_epoch:EstimationEpoch (required);
+}
+table PropagationAnswer {
+  query:PropagationQuery (required);
+  sample:EstimationPropagatorSample (required);
+}

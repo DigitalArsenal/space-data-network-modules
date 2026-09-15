@@ -13,26 +13,27 @@ const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
 const artifactHash=hash(fs.readFileSync(path.join(root,'dist/isomorphic/module.wasm')));
 const parity=read('conformance/lane05-parity.json');
 assert.equal(parity.ok,true);assert.equal(parity.artifactSha256,artifactHash);
-assert.equal(parity.lanes.length,3);assert.equal(parity.runs.length,84);
-execFileSync(process.execPath,['--test','tests/invoke.test.mjs','tests/sdk_compat.test.mjs'],{cwd:root,stdio:'inherit'});
+assert.equal(parity.lanes.length,3);assert.ok(parity.runs.length>=192);
+assert.ok(parity.runs.some(r=>r.caseId==='nonlinear-kind-2-complete'));
+execFileSync(process.execPath,['--test','tests/invoke.test.mjs','tests/depth-invoke.test.mjs','tests/sdk_compat.test.mjs'],{cwd:root,stdio:'inherit'});
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'estimation-receipt-'));
-let native,seq;
+let native,seq,depth;
 try {
- for(const [name,args] of [['native_conformance',[]],['sequential_validation',['tests/fixtures/hipparchus-cv-smoother.txt']]]) {
+ for(const [name,args] of [['native_conformance',[]],['sequential_validation',['tests/fixtures/hipparchus-cv-smoother.txt']],['depth_validation',['tests/fixtures/orekit-pv-reference.txt']]]) {
   const binary=path.join(tmp,name);
   execFileSync(process.env.CXX||'c++',['-std=c++17','-O2','-Wall','-Wextra','-Werror','-Isrc','src/estimation.cpp',`tests/${name}.cpp`,'-o',binary],{cwd:root,stdio:'inherit'});
   const output=execFileSync(binary,args,{cwd:root,encoding:'utf8'});
-  if(name==='native_conformance')native=JSON.parse(output);else seq=output;
+  if(name==='native_conformance')native=JSON.parse(output);else if(name==='sequential_validation')seq=output;else depth=output;
  }
 }finally{fs.rmSync(tmp,{recursive:true,force:true});}
-console.log(seq);
+console.log(seq);console.log(depth);
 const batch=JSON.parse(seq.split('\n').find(l=>l.startsWith('BATCH_AUTHORITY ')).slice(16));
 const evidence=read('conformance/estimation-evidence.json');
 evidence.artifact.sha256=artifactHash;
-evidence.authority.nativeExecutable='tests/native_conformance.cpp + tests/sequential_validation.cpp';
-evidence.authority.runtimeExecutable='tests/parity.mjs + tests/invoke.test.mjs';
+evidence.authority.nativeExecutable='tests/native_conformance.cpp + tests/sequential_validation.cpp + tests/depth_validation.cpp';
+evidence.authority.runtimeExecutable='tests/parity.mjs + tests/invoke.test.mjs + tests/depth-invoke.test.mjs';
 evidence.authority.batchReference='Exact Gaussian conditioning fractions in tests/fixtures/README.md; edited set from legacy native_conformance';
-evidence.authority.scope='SDK legacy tiers do not validate a nonlinear-dynamics UKF. See README contract hold and lane05-parity.json.';
+evidence.authority.scope='Legacy SDK tiers plus nonlinear Orekit EKF/UKF port replay, GNSS/linear/adaptive cases and 500-run nonlinear radar/crosslink consistency. See tests/fixtures/DEPTH.md.';
 const runs=parity.runs.filter(r=>r.caseId==='correlated-vector');
 const digest=(lane,n)=>{const r=runs.find(r=>r.lane===lane&&r.threadCount===n);assert.equal(r.exitClass,'ok');return r.stdoutSha256;};
 evidence.runtime={digestEncoding:'SDK command stdout including invoke result bytes',browser:{outputSha256:digest('browser',1)},wasmedge:{version:parity.pin,outputSha256:digest('wasmedge',1)},container:{version:parity.pin,outputSha256:digest('docker-wasmedge',1)},threads:Object.fromEntries([1,2,4,8].map(n=>[n,digest('wasmedge',n)]))};
@@ -43,6 +44,6 @@ Object.assign(evidence.media,{hopfieldSaastamoinenMaxRelativeError:native.orekit
 Object.assign(evidence.iod,{gaussMaxErrorSi:native.vallado_gauss_max_error_si,laplaceMaxErrorSi:native.vallado_laplace_max_error_si,gibbsMaxErrorMps:native.vallado_gibbs_max_error_mps,herrickGibbsMaxErrorMps:native.vallado_herrick_max_error_mps});
 Object.assign(evidence.simulator,{stateInsideThreeSigmaFraction:native.simulator_coverage,recoveredNoiseSigma:native.recovered_noise_sigma,recoveredNoiseSigmaRelativeError:Math.abs(native.recovered_noise_sigma-2)/2});
 evidence.invariants.residualOrthogonalityMax=native.residual_orthogonality;
-evidence.lane05={nativeSourceSha256:hash(fs.readFileSync(path.join(root,'tests/sequential_validation.cpp'))),receipt:seq,parityReceipt:'conformance/lane05-parity.json'};
+evidence.lane05={nativeSourceSha256:hash(fs.readFileSync(path.join(root,'tests/sequential_validation.cpp'))),receipt:seq,depthReceipt:depth,parityReceipt:'conformance/lane05-parity.json'};
 fs.writeFileSync(path.join(root,'conformance/estimation-evidence.json'),JSON.stringify(evidence,null,2)+'\n');
 console.log('PASS refreshed authoritative conformance evidence for '+artifactHash);

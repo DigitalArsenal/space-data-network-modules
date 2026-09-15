@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
+import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -31,6 +32,8 @@ async function generateSdkHeaders() {
     if (!name.endsWith(".fbs")) continue;
     flatc.FS.writeFile(`/sdk/${name}`, await fs.readFile(path.join(schemasRoot, name)));
   }
+  flatc.FS.writeFile("/sdk/Estimation.fbs", await fs.readFile(path.join(packageRoot, "schemas", "Estimation.fbs")));
+  await fs.mkdir(path.join(packageRoot, "src", "generated", "invoke"), { recursive: true });
   const headers = [];
   for (const name of ["BaseTypes", "Propagator", "Estimation"]) {
     const rc = flatc.callMain([
@@ -38,7 +41,9 @@ async function generateSdkHeaders() {
       "-o", "/out", `/sdk/${name}.fbs`,
     ]);
     if (rc !== 0) throw new Error(`flatc failed for SDK ${name}.fbs`);
-    headers.push(flatc.FS.readFile(`/out/${name}_generated.h`, { encoding: "utf8" }));
+    const header = flatc.FS.readFile(`/out/${name}_generated.h`, { encoding: "utf8" });
+    await fs.writeFile(path.join(packageRoot, "src", "generated", "invoke", `${name}_generated.h`), header);
+    headers.push(header);
   }
   return headers;
 }
@@ -79,7 +84,7 @@ const compilation = await compileModuleFromSource({
     // refreshed. Register only identities present in the exact pinned schema
     // trees, and only when the published catalogs have not learned them yet.
     for (const entry of [
-      { schemaCode: "ESTIMATION", schemaName: "Estimation.fbs", fileIdentifier: "$EST", rootTypeName: "EstimationEnvelope", source: "module-sdk-pinned-schema" },
+      { schemaCode: "ESTIMATION", schemaName: "Estimation.fbs", fileIdentifier: "$EST", rootTypeName: "EstimationEnvelope", source: "module-local-append-only-schema" },
       { schemaCode: "MEM", schemaName: "MEM.fbs", fileIdentifier: "$MEM", rootTypeName: "MEM", source: "sds-pinned-schema" },
       { schemaCode: "ODR", schemaName: "ODR.fbs", fileIdentifier: "$ODR", rootTypeName: "ODR", source: "sds-pinned-schema" },
       { schemaCode: "TRH", schemaName: "TRH.fbs", fileIdentifier: "$TRH", rootTypeName: "TRH", source: "sds-pinned-schema" },
@@ -99,6 +104,7 @@ fsSync.writeFileSync(path.join(packageRoot, "dist", "build-provenance.json"), `$
   spacedatastandards: sdsVersion,
   moduleSdk: JSON.parse(await fs.readFile(path.join(sdkRoot, "package.json"), "utf8")).version,
   family: "estimation",
+  invokeContract: {path: "schemas/Estimation.fbs", extension: 1, sha256: crypto.createHash("sha256").update(await fs.readFile(path.join(packageRoot, "schemas", "Estimation.fbs"))).digest("hex")},
   propagatorContract: ["plugin_propagate", "plugin_compute_stm"],
   threadModel: manifest.threadModel,
 }, null, 2)}\n`);

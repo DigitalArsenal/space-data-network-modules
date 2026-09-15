@@ -18,7 +18,9 @@
   "scripts": {
     "build": "node build.mjs",
     "test:native": "node tests/native.test.mjs",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "test:provider": "node tests/build-provider.mjs",
+    "pretest": "node tests/build-provider.mjs"
   },
   "devDependencies": {
     "esbuild": "0.25.12",

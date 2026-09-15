@@ -1,0 +1,4 @@
+PASS WASM Orekit kind=1 position_max_m=1.862645149230957e-8 velocity_max_mps=2.4556356947869062e-11 covariance_max_SI=3.801403636316536e-12 rounds=10 provider_samples=10
+PASS WASM Orekit kind=2 position_max_m=1.7229467630386353e-8 velocity_max_mps=2.091837814077735e-11 covariance_max_SI=9.605102491150319e-9 rounds=10 provider_samples=130
+parity PASS fixture=TMPL lane05 estimation module=2589309c8e7b6260 lanes=[browser(68 runs, 1771ms), wasmedge(68 runs, 2053ms), docker-wasmedge(68 runs, 43597ms)] comparisons=391
+  17 case(s) byte-identical across 3 lane(s).

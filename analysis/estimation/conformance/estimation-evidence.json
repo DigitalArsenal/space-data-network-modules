@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "family": "estimation",
   "artifact": {
-    "sha256": "a4f45c1095ac91c15aa3c17742bbf4da94cc503a03de8fbf66f88fbc0ab51573",
+    "sha256": "2589309c8e7b6260118b8233cecfb8d94f6c781497a2808e09635feb90e21e5f",
     "moduleSdk": "0.8.17",
     "spacedatastandards": "1.203.0"
   },
@@ -10,29 +10,29 @@
     "orekitCommit": "cc18cc16de92ef36159114113cfbb042ae88d0db",
     "valladopyCommit": "2f3d1600c0f8fd0ebc2f149d8195f06f79d3f579",
     "ituRecommendation": "P.531-14 Table 3",
-    "nativeExecutable": "tests/native_conformance.cpp + tests/sequential_validation.cpp",
-    "runtimeExecutable": "tests/parity.mjs + tests/invoke.test.mjs",
+    "nativeExecutable": "tests/native_conformance.cpp + tests/sequential_validation.cpp + tests/depth_validation.cpp",
+    "runtimeExecutable": "tests/parity.mjs + tests/invoke.test.mjs + tests/depth-invoke.test.mjs",
     "batchReference": "Exact Gaussian conditioning fractions in tests/fixtures/README.md; edited set from legacy native_conformance",
-    "scope": "SDK legacy tiers do not validate a nonlinear-dynamics UKF. See README contract hold and lane05-parity.json."
+    "scope": "Legacy SDK tiers plus nonlinear Orekit EKF/UKF port replay, GNSS/linear/adaptive cases and 500-run nonlinear radar/crosslink consistency. See tests/fixtures/DEPTH.md."
   },
   "runtime": {
     "digestEncoding": "SDK command stdout including invoke result bytes",
     "browser": {
-      "outputSha256": "1cbe9090057762020384dd7a432be6ee70c78898f4d5233f6c16ed5622a160e4"
+      "outputSha256": "b2266a5d69567a03ba5a72c8daae468ae012966ddb464de3ec48ee6c6eab2586"
     },
     "wasmedge": {
       "version": "0.16.4",
-      "outputSha256": "1cbe9090057762020384dd7a432be6ee70c78898f4d5233f6c16ed5622a160e4"
+      "outputSha256": "b2266a5d69567a03ba5a72c8daae468ae012966ddb464de3ec48ee6c6eab2586"
     },
     "container": {
       "version": "0.16.4",
-      "outputSha256": "1cbe9090057762020384dd7a432be6ee70c78898f4d5233f6c16ed5622a160e4"
+      "outputSha256": "b2266a5d69567a03ba5a72c8daae468ae012966ddb464de3ec48ee6c6eab2586"
     },
     "threads": {
-      "1": "1cbe9090057762020384dd7a432be6ee70c78898f4d5233f6c16ed5622a160e4",
-      "2": "1cbe9090057762020384dd7a432be6ee70c78898f4d5233f6c16ed5622a160e4",
-      "4": "1cbe9090057762020384dd7a432be6ee70c78898f4d5233f6c16ed5622a160e4",
-      "8": "1cbe9090057762020384dd7a432be6ee70c78898f4d5233f6c16ed5622a160e4"
+      "1": "b2266a5d69567a03ba5a72c8daae468ae012966ddb464de3ec48ee6c6eab2586",
+      "2": "b2266a5d69567a03ba5a72c8daae468ae012966ddb464de3ec48ee6c6eab2586",
+      "4": "b2266a5d69567a03ba5a72c8daae468ae012966ddb464de3ec48ee6c6eab2586",
+      "8": "b2266a5d69567a03ba5a72c8daae468ae012966ddb464de3ec48ee6c6eab2586"
     }
   },
   "batch": {
@@ -53,16 +53,16 @@
     "iterationCovariancesSpd": true
   },
   "filter": {
-    "positionErrorM": 0.0002935848964649959,
-    "smootherPositionErrorM": 0.0002935848964649959,
+    "positionErrorM": 0.0002935857146901065,
+    "smootherPositionErrorM": 0.0002935857146901065,
     "smootherCovarianceMonotone": true,
     "neesRuns": 100,
-    "neesMean": 6.354437320331965,
+    "neesMean": 6.354437320468807,
     "nees95Lower": 5.3402,
     "nees95Upper": 6.6977,
-    "sncCovarianceGrowthRatio": 2.2526389167762844,
-    "dmcCovarianceGrowthRatio": 2.416015841319024,
-    "ekfUkfCovarianceDifference": 5.377911635544919e-9
+    "sncCovarianceGrowthRatio": 2.2526389167764123,
+    "dmcCovarianceGrowthRatio": 2.4160158413191604,
+    "ekfUkfCovarianceDifference": 6.599655511227065e-09
   },
   "measurements": {
     "implementedKinds": 21,
@@ -78,14 +78,14 @@
     "relayDifferencedDopplerHz": -183121.28877484563
   },
   "media": {
-    "hopfieldSaastamoinenMaxRelativeError": 5.001316318408154e-8,
-    "mariniMaxRelativeError": 1.7722328975526321e-7,
+    "hopfieldSaastamoinenMaxRelativeError": 5.001316318408154e-08,
+    "mariniMaxRelativeError": 1.7722328975526321e-07,
     "p531Table3RangeM": 40.322085601,
     "p531PublishedPrecisionError": 0
   },
   "iod": {
-    "gaussMaxErrorSi": 5.494803190231323e-8,
-    "laplaceMaxErrorSi": 3.725290298461914e-9,
+    "gaussMaxErrorSi": 5.494803190231323e-08,
+    "laplaceMaxErrorSi": 3.725290298461914e-09,
     "gibbsMaxErrorMps": 9.094947017729282e-13,
     "herrickGibbsMaxErrorMps": 6.821210263296962e-12,
     "gaussPrintedPrecisionError": 0,
@@ -103,12 +103,13 @@
   "invariants": {
     "covarianceSymmetric": true,
     "covariancePositiveDefinite": true,
-    "residualOrthogonalityMax": 4.37052531253459e-7,
+    "residualOrthogonalityMax": 4.37052531253459e-07,
     "actualOcmCovariance": true
   },
   "lane05": {
-    "nativeSourceSha256": "67b7a86337f0d08387843f8707f9ea8312bcb02d30aae89c456c5f90ac2fbdce",
-    "receipt": "BATCH_AUTHORITY {\"position_error_m\":8.3266726846886741e-17,\"covariance_max_error\":4.4408920985006262e-16,\"sigma_rss_m\":3.0165022317720425,\"sigma_rss_relative_error\":0,\"rms\":0.82702739962342908,\"rms_relative_error\":1.3424259282469662e-16,\"iterations\":3}\nPASS correlated Gaussian state/covariance/NIS max_error=2.7755575615628914e-16 tolerance=2e-14\nPASS malformed sequential requests cases=16\nPASS Hipparchus 4.0.3 CV smoother kind=3 epochs=50 state_max_error=1.8873791418627661e-15 covariance_max_error=2.4633073358870661e-16 tolerance=1e-12\nPASS Hipparchus 4.0.3 CV smoother kind=2 epochs=50 state_max_error=2.6090241078691179e-15 covariance_max_error=1.9081958235744878e-16 tolerance=1e-12\nPASS asynchronous circular-orbit fusion runs=500 observations=40 dimensions=53 ANEES=6.060694900206741 NIS_per_dof=1.0015870288622697 filter_position_RMSE_m=26.790899471004533 smoother_position_RMSE_m=10.848264806123717\nPASS sequential validation failures=0\n",
+    "nativeSourceSha256": "c2a396111d12da3afe5ca73d6985968b917bc5d673c71798997e66e649c9ae02",
+    "receipt": "BATCH_AUTHORITY {\"position_error_m\":8.3266726846886741e-17,\"covariance_max_error\":4.4408920985006262e-16,\"sigma_rss_m\":3.0165022317720425,\"sigma_rss_relative_error\":0,\"rms\":0.82702739962342908,\"rms_relative_error\":1.3424259282469662e-16,\"iterations\":3}\nPASS correlated Gaussian state/covariance/NIS max_error=1.1102230246251565e-16 tolerance=2e-14\nPASS malformed sequential requests cases=16\nPASS Hipparchus 4.0.3 CV smoother kind=3 epochs=50 state_max_error=2.0261570199409107e-15 covariance_max_error=5.2041704279304213e-17 tolerance=1e-12\nPASS Hipparchus 4.0.3 CV smoother kind=2 epochs=50 state_max_error=1.1102230246251565e-15 covariance_max_error=1.9081958235744878e-16 tolerance=1e-12\nPASS nonlinear asynchronous fusion kind=1 runs=500 observations=40 dimensions=53 ANEES=6.0606949133425125 NIS_per_dof=1.0015870253270314 filter_position_RMSE_m=26.79089938766964 smoother_position_RMSE_m=10.848264824935328\nPASS nonlinear asynchronous fusion kind=2 runs=500 observations=40 dimensions=53 ANEES=6.0607138187205525 NIS_per_dof=1.0015870153542406 filter_position_RMSE_m=26.790908248599195 smoother_position_RMSE_m=10.848257928968168\nPASS sequential validation failures=0\n",
+    "depthReceipt": "PASS Wan-Merwe quadratic transform alpha=1 error=1.7763568394002505e-15 recentered_calls=26\nPASS Wan-Merwe quadratic transform alpha=0.5 error=0 recentered_calls=26\nPASS six-lane PV and eight-state clock Gaussian conditioning error<1e-12\nPASS Mehra scalar covariance matching qscale=2.25; sigma-gated R scale=10.111111111111111 capped rejection; defaults off\nOREKIT kind=1 position_max_m=1.862645149230957e-08 velocity_max_mps=2.4556356947869062e-11 covariance_max_SI=3.7978509226377355e-12\nOREKIT kind=2 position_max_m=1.6763806343078613e-08 velocity_max_mps=2.0008883439004421e-11 covariance_max_SI=9.6109786795750551e-09\nPASS estimation depth failures=0\n",
     "parityReceipt": "conformance/lane05-parity.json"
   }
 }
