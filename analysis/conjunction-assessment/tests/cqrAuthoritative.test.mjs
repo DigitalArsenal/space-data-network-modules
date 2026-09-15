@@ -28,7 +28,7 @@ test('CQR rejects singular encounter covariance and the retired JSON method', as
   const flatc = await initCqrFlatc();
   const harness = await createConjunctionCommandHarness();
   t.after(() => harness.destroy());
-  const payload = encodeCqr(flatc, { PROBABILITY_REQUEST: { GEOMETRY: { VARIANCE_XI_M2: 1, VARIANCE_ZETA_M2: 1, COVARIANCE_XI_ZETA_M2: 1, COMBINED_RADIUS_M: 10 } } });
+  const payload = encodeCqr(flatc, { PROBABILITY_REQUEST: { GEOMETRY: { VARIANCE_XI_M2: 1, VARIANCE_ZETA_M2: 1, COVARIANCE_XI_ZETA_M2: 1, COMBINED_RADIUS_M: 10 }, ALGORITHM: 'LAAS_2015' } });
   for (const request of [{ methodId: 'compute_pc', inputs: [{ portId: 'request', payload }] }, { methodId: 'invoke', inputs: [{ portId: 'request', payload: new TextEncoder().encode('{"operation":"version"}') }] }]) {
     const response = await harness.invoke(request);
     assert.notEqual(response.statusCode, 0);
@@ -68,6 +68,68 @@ for (const kind of ['compact','verbose','PPE']) test(`CQR ${kind} sources reprod
   assert.ok(Math.abs((event.TCA.JULIAN_DATE-2461108.5)*86400-10)<=.01);
   assert.ok(Math.abs(event.MISS_DISTANCE_M-100)<=.001,`miss=${event.MISS_DISTANCE_M}`);
   assert.ok(Math.abs(event.RELATIVE_SPEED_M_S-100)<=.001,`speed=${event.RELATIVE_SPEED_M_S}`);
+});
+
+// Gregorian calendar restrictions: RFC 3339 §5.7 and Appendix C,
+// https://www.rfc-editor.org/rfc/rfc3339#section-5.7 . CQR's source metadata
+// explicitly selects UTC, so this implementation accepts CCSDS no-Z UTC text
+// but rejects offset clocks and leap seconds it cannot interpret correctly.
+test('CQR rejects malformed or unsupported UTC dates before evaluating a source', async (t) => {
+  const { pairRequest, earthFrame, screeningControls } = await import('./lib/cqr.mjs');
+  const flatc = await initCqrFlatc();
+  const harness = await createConjunctionCommandHarness();
+  t.after(() => harness.destroy());
+  for (const epoch of ['2026-02-31T00:00:00Z', '2026-02-29T00:00:00Z', '2026-03-09T00:00:00Zgarbage', '2026-03-09T00:00:00+01:00', '999999999999-03-09T00:00:00Z', '2026-03-09T00:00:60Z']) {
+    const primary = linearSource('A', 'verbose');
+    primary.EPHEMERIS.EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES[0].EPOCH = epoch;
+    const record = pairRequest({ PRIMARY: primary, SECONDARY: linearSource('B', 'verbose', true), EVALUATION_FRAME: earthFrame('GCRF'), CONTROLS: screeningControls({ startJd: 2461108.5, durationSeconds: 20, coarseStepSec: 1 }) });
+    const response = await harness.invoke({ methodId: 'assess_conjunction', inputs: [{ portId: 'request', payload: encodeCqr(flatc, record) }] });
+    assert.notEqual(response.statusCode, 0, `Unsupported source epoch was accepted: ${epoch}`);
+    assert.equal(response.errorCode, 'invalid-source', `Wrong error classification: ${epoch}`);
+    assert.equal(response.outputs.length, 0, `Invalid epoch emitted a scientific result: ${epoch}`);
+  }
+  const valid = pairRequest({ PRIMARY: linearSource('A', 'verbose'), SECONDARY: linearSource('B', 'verbose', true), EVALUATION_FRAME: earthFrame('GCRF'), startJd: 2461108.5, durationSeconds: 20, coarseStepSec: 1 });
+  const recovered = await harness.invoke({ methodId: 'assess_conjunction', inputs: [{ portId: 'request', payload: encodeCqr(flatc, valid) }] });
+  assert.equal(recovered.statusCode, 0, recovered.errorMessage);
+});
+
+test('CQR accepts leap-day and CCSDS no-Z UTC sources without changing the linear encounter', async (t) => {
+  const { pairRequest, earthFrame, screeningControls } = await import('./lib/cqr.mjs');
+  const flatc = await initCqrFlatc();
+  const harness = await createConjunctionCommandHarness();
+  t.after(() => harness.destroy());
+  for (const date of ['2024-02-29', '2026-03-09']) {
+    const suffix = date === '2024-02-29' ? 'Z' : '';
+    const sources = [linearSource('A', 'verbose'), linearSource('B', 'verbose', true)];
+    for (const source of sources) {
+      const block = source.EPHEMERIS.EPHEMERIS_DATA_BLOCK[0];
+      block.START_TIME = block.EPHEMERIS_DATA_LINES[0].EPOCH = `${date}T00:00:00${suffix}`;
+      block.STOP_TIME = block.EPHEMERIS_DATA_LINES[1].EPOCH = `${date}T00:00:20${suffix}`;
+    }
+    const controls = screeningControls({ durationSeconds: 20, coarseStepSec: 1, START_EPOCH: { TIME_SYSTEM: 'UTC', EPOCH_FORMAT: 'ISO8601', ISO8601: `${date}T00:00:00${suffix}` } });
+    const record = pairRequest({ PRIMARY: sources[0], SECONDARY: sources[1], EVALUATION_FRAME: earthFrame('GCRF'), CONTROLS: controls });
+    const response = await harness.invoke({ methodId: 'assess_conjunction', inputs: [{ portId: 'request', payload: encodeCqr(flatc, record) }] });
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    const event = decodeCqr(flatc, response.outputs[0].payload).EVENT_RESULT;
+    assert.ok(Math.abs(event.MISS_DISTANCE_M - 100) <= .001, `miss=${event.MISS_DISTANCE_M}`);
+    assert.ok(Math.abs(event.RELATIVE_SPEED_M_S - 100) <= .001, `speed=${event.RELATIVE_SPEED_M_S}`);
+  }
+});
+
+// CelesTrak's TLE definition places UTC day-of-year in columns 21–32:
+// https://celestrak.org/columns/v04n03/ . Day 999 cannot denote a calendar day.
+// This is a syntax/range rejection; no numerical orbit oracle is claimed.
+test('CQR rejects out-of-range TLE epoch days without a numerical result', async (t) => {
+  const { tleSource } = await import('./lib/cqr.mjs');
+  const flatc = await initCqrFlatc();
+  const harness = await createConjunctionCommandHarness();
+  t.after(() => harness.destroy());
+  const record = { INDEX_REQUEST: { INSTANCE: { MODULE_ID: 'conjunction-assessment', INSTANCE_ID: 'malformed-tle', GENERATION: 1 }, INDEX_CONTENT: 'SOURCE_DESCRIPTIONS', REFINEMENT_MODE: 'EXACT_ONLY', SOURCES: [{ ...tleSource({ name: 'INVALID-EPOCH', line1: '1 25544U 98067A   24999.00000000  .00016717  00000-0  10270-3 0  9001', line2: '2 25544  51.6400 100.0000 0001500  80.0000 280.0000 15.49000000000017' }), SOURCE_HANDLE: 1 }] } };
+  const response = await harness.invoke({ methodId: 'prepare_screening_index', inputs: [{ portId: 'request', payload: encodeCqr(flatc, record) }] });
+  assert.notEqual(response.statusCode, 0);
+  assert.equal(response.errorCode, 'invalid-source');
+  assert.match(response.errorMessage, /Invalid TLE epoch day/);
+  assert.equal(response.outputs.length, 0);
 });
 
 test('CQR sampled resident index preserves the linear encounter and invalidates destroyed handles', async (t) => {

@@ -2,24 +2,24 @@
   "ok": false,
   "fixture": "CQR-SDS-1.220.0",
   "wasmPath": "/Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/dist/isomorphic/module.wasm",
-  "artifactSha256": "6f1fa9aa0145ae59144e4e6c20b48a3874c75acfa9216f18b73d6505feb65b32",
-  "moduleSha256": "6f1fa9aa0145ae59144e4e6c20b48a3874c75acfa9216f18b73d6505feb65b32",
+  "artifactSha256": "da87abec043a8f06464b534d18e6535aa76093fb7c68e7e807126e0ee7de1f5d",
+  "moduleSha256": "da87abec043a8f06464b534d18e6535aa76093fb7c68e7e807126e0ee7de1f5d",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 20,
-      "durationMs": 1456
+      "durationMs": 2074
     },
     {
       "lane": "wasmedge",
       "runs": 20,
-      "durationMs": 746
+      "durationMs": 647
     },
     {
       "lane": "docker-wasmedge",
       "runs": 20,
-      "durationMs": 4198
+      "durationMs": 3422
     }
   ],
   "cases": [
@@ -32,17 +32,17 @@
     "empty-piv",
     "truncated-piv"
   ],
-  "comparisons": 60,
+  "comparisons": 66,
   "failures": [
     {
       "caseId": "socrates-workers-1",
       "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
+      "message": "browser@t1 class \"ok\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "socrates-workers-1",
       "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "socrates-workers-2",
@@ -77,162 +77,82 @@
     {
       "caseId": "centered-isotropic-pc",
       "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
+      "message": "browser@t1 class \"ok\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "centered-isotropic-pc",
       "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
+      "message": "browser@t1 class \"ok\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "centered-isotropic-pc",
       "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
+      "message": "browser@t1 class \"ok\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "centered-isotropic-pc",
       "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
+      "message": "browser@t1 class \"ok\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "centered-isotropic-pc",
       "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "centered-isotropic-pc",
       "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "centered-isotropic-pc",
       "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "centered-isotropic-pc",
       "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "singular-covariance",
       "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
+      "message": "browser@t1 class \"ok\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "singular-covariance",
       "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
+      "message": "browser@t1 class \"ok\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "singular-covariance",
       "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
+      "message": "browser@t1 class \"ok\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "singular-covariance",
       "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
+      "message": "browser@t1 class \"ok\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "singular-covariance",
       "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "singular-covariance",
       "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "singular-covariance",
       "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
     },
     {
       "caseId": "singular-covariance",
       "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
-    },
-    {
-      "caseId": "empty-piv",
-      "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
-    },
-    {
-      "caseId": "empty-piv",
-      "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
-    },
-    {
-      "caseId": "empty-piv",
-      "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
-    },
-    {
-      "caseId": "empty-piv",
-      "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
-    },
-    {
-      "caseId": "empty-piv",
-      "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
-    },
-    {
-      "caseId": "empty-piv",
-      "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
-    },
-    {
-      "caseId": "empty-piv",
-      "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
-    },
-    {
-      "caseId": "empty-piv",
-      "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
-    },
-    {
-      "caseId": "truncated-piv",
-      "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
-    },
-    {
-      "caseId": "truncated-piv",
-      "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
-    },
-    {
-      "caseId": "truncated-piv",
-      "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
-    },
-    {
-      "caseId": "truncated-piv",
-      "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
-    },
-    {
-      "caseId": "truncated-piv",
-      "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
-    },
-    {
-      "caseId": "truncated-piv",
-      "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
-    },
-    {
-      "caseId": "truncated-piv",
-      "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
-    },
-    {
-      "caseId": "truncated-piv",
-      "kind": "class-divergence",
-      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
+      "message": "browser@t1 class \"ok\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
     }
   ],
   "runs": [
@@ -240,10 +160,10 @@
       "lane": "browser",
       "caseId": "socrates-workers-1",
       "threadCount": 1,
-      "exitClass": "trap",
-      "exitDetail": "RuntimeError: unreachable",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "102c4565135bfc0782ada60053a802b51ec8273c090d74303c10cc4f080d55f9",
+      "stdoutLength": 3192
     },
     {
       "lane": "browser",
@@ -276,80 +196,80 @@
       "lane": "browser",
       "caseId": "centered-isotropic-pc",
       "threadCount": 1,
-      "exitClass": "trap",
-      "exitDetail": "RuntimeError: unreachable",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "01ca14d4fcc5af35ec5a2fa42953a40749f7d757ac84b0a0dffc38d3c41dfc33",
+      "stdoutLength": 272
     },
     {
       "lane": "browser",
       "caseId": "centered-isotropic-pc",
       "threadCount": 2,
-      "exitClass": "trap",
-      "exitDetail": "RuntimeError: unreachable",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "01ca14d4fcc5af35ec5a2fa42953a40749f7d757ac84b0a0dffc38d3c41dfc33",
+      "stdoutLength": 272
     },
     {
       "lane": "browser",
       "caseId": "centered-isotropic-pc",
       "threadCount": 4,
-      "exitClass": "trap",
-      "exitDetail": "RuntimeError: unreachable",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "01ca14d4fcc5af35ec5a2fa42953a40749f7d757ac84b0a0dffc38d3c41dfc33",
+      "stdoutLength": 272
     },
     {
       "lane": "browser",
       "caseId": "centered-isotropic-pc",
       "threadCount": 8,
-      "exitClass": "trap",
-      "exitDetail": "RuntimeError: unreachable",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "01ca14d4fcc5af35ec5a2fa42953a40749f7d757ac84b0a0dffc38d3c41dfc33",
+      "stdoutLength": 272
     },
     {
       "lane": "browser",
       "caseId": "singular-covariance",
       "threadCount": 1,
-      "exitClass": "trap",
-      "exitDetail": "RuntimeError: unreachable",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "19ecf4327b984eb076ccc26fefbab6428d5f67313f7cd3dccf82a3d773825274",
+      "stdoutLength": 184
     },
     {
       "lane": "browser",
       "caseId": "singular-covariance",
       "threadCount": 2,
-      "exitClass": "trap",
-      "exitDetail": "RuntimeError: unreachable",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "19ecf4327b984eb076ccc26fefbab6428d5f67313f7cd3dccf82a3d773825274",
+      "stdoutLength": 184
     },
     {
       "lane": "browser",
       "caseId": "singular-covariance",
       "threadCount": 4,
-      "exitClass": "trap",
-      "exitDetail": "RuntimeError: unreachable",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "19ecf4327b984eb076ccc26fefbab6428d5f67313f7cd3dccf82a3d773825274",
+      "stdoutLength": 184
     },
     {
       "lane": "browser",
       "caseId": "singular-covariance",
       "threadCount": 8,
-      "exitClass": "trap",
-      "exitDetail": "RuntimeError: unreachable",
-      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdoutLength": 0
+      "exitClass": "ok",
+      "exitDetail": null,
+      "stdoutSha256": "19ecf4327b984eb076ccc26fefbab6428d5f67313f7cd3dccf82a3d773825274",
+      "stdoutLength": 184
     },
     {
       "lane": "browser",
       "caseId": "empty-piv",
       "threadCount": 1,
-      "exitClass": "trap",
-      "exitDetail": "RuntimeError: unreachable",
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
       "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "stdoutLength": 0
     },
@@ -357,8 +277,8 @@
       "lane": "browser",
       "caseId": "empty-piv",
       "threadCount": 2,
-      "exitClass": "trap",
-      "exitDetail": "RuntimeError: unreachable",
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
       "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "stdoutLength": 0
     },
@@ -366,8 +286,8 @@
       "lane": "browser",
       "caseId": "empty-piv",
       "threadCount": 4,
-      "exitClass": "trap",
-      "exitDetail": "RuntimeError: unreachable",
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
       "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "stdoutLength": 0
     },
@@ -375,8 +295,8 @@
       "lane": "browser",
       "caseId": "empty-piv",
       "threadCount": 8,
-      "exitClass": "trap",
-      "exitDetail": "RuntimeError: unreachable",
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
       "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "stdoutLength": 0
     },
@@ -384,8 +304,8 @@
       "lane": "browser",
       "caseId": "truncated-piv",
       "threadCount": 1,
-      "exitClass": "trap",
-      "exitDetail": "RuntimeError: unreachable",
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
       "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "stdoutLength": 0
     },
@@ -393,8 +313,8 @@
       "lane": "browser",
       "caseId": "truncated-piv",
       "threadCount": 2,
-      "exitClass": "trap",
-      "exitDetail": "RuntimeError: unreachable",
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
       "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "stdoutLength": 0
     },
@@ -402,8 +322,8 @@
       "lane": "browser",
       "caseId": "truncated-piv",
       "threadCount": 4,
-      "exitClass": "trap",
-      "exitDetail": "RuntimeError: unreachable",
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
       "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "stdoutLength": 0
     },
@@ -411,8 +331,8 @@
       "lane": "browser",
       "caseId": "truncated-piv",
       "threadCount": 8,
-      "exitClass": "trap",
-      "exitDetail": "RuntimeError: unreachable",
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
       "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "stdoutLength": 0
     },

@@ -4,3 +4,12 @@
 
 [compliance] ok: /Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/plugin-manifest.json
 [compliance] ok: /Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/dist/isomorphic/module.wasm
+{
+  "standards": "1.220.0",
+  "errors": 0,
+  "warnings": 80,
+  "warningCodes": [
+    "no-aligned-peer"
+  ],
+  "plgRoundTrip": true
+}

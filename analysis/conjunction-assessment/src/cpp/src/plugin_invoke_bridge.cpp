@@ -1142,14 +1142,15 @@ bool emit(bool csm) {
 bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
                    const ScreeningConfig &c, cqrProbabilityAlgorithm alg,
                    ScreeningStats &stats,
-                   std::vector<std::unique_ptr<CQREventT>> &events) {
+                   std::vector<std::unique_ptr<CQREventT>> &events,
+                   const std::vector<uint32_t> *primary_handles = nullptr) {
   stats.total_objects = p.size() + s.size();
   if (p.empty())
     return error("invalid-catalog", "At least one primary source is required.");
   bool means =
       std::all_of(p.begin(), p.end(), [](auto &x) { return x.mean; }) &&
       std::all_of(s.begin(), s.end(), [](auto &x) { return x.mean; });
-  if (means && alg == cqrProbabilityAlgorithm::ALFANO_MAXIMUM) {
+  if (means && !primary_handles && alg == cqrProbabilityAlgorithm::ALFANO_MAXIMUM) {
     std::vector<GPElement> a, b;
     for (auto &x : p)
       a.push_back(x.gp);
@@ -1169,6 +1170,11 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
     uint64_t pairs = 0, failed = 0;
   };
   unsigned workers = std::min<size_t>(c.num_threads, p.size());
+  std::vector<bool> primary(p.size(), true);
+  if (primary_handles && !primary_handles->empty())
+    for (size_t i = 0; i < p.size(); ++i)
+      primary[i] = std::find(primary_handles->begin(), primary_handles->end(),
+                            p[i].handle) != primary_handles->end();
   std::vector<Worker> work(workers);
   std::vector<std::thread> threads;
   auto run = [&](unsigned worker) {
@@ -1180,6 +1186,10 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
     for (size_t i = worker; i < p.size(); i += workers) {
       size_t end = s.empty() ? p.size() : s.size();
       for (size_t j = s.empty() ? i + 1 : 0; j < end; ++j) {
+        // Resident selection means every unordered pair with at least one
+        // primary, including pairs where both objects are selected primaries.
+        if (primary_handles && s.empty() && !primary[i] && !primary[j])
+          continue;
         auto &b = s.empty() ? p[j] : s[j];
         if (p[i].provider->object_id() == b.provider->object_id())
           continue;
@@ -1194,8 +1204,17 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
           clear_error();
           continue;
         }
-        if (result.miss_distance_km <= c.threshold_km)
-          w.events.push_back(event(result, alg, p[i].axes));
+        if (result.miss_distance_km <= c.threshold_km) {
+          auto output = event(result, alg, p[i].axes);
+          // Serialization also validates probability metadata. A worker-local
+          // failure must not disappear when the next pair clears its status.
+          if (has_error()) {
+            ++w.failed;
+            clear_error();
+            continue;
+          }
+          w.events.push_back(std::move(output));
+        }
       }
     }
   };
@@ -1555,6 +1574,15 @@ bool prepare(cqrIndexRepresentation expected) {
   if (!h)
     return error("index-capacity", "Resident index handle space exhausted.");
   uint64_t n = result.sources.size(), pairs = n * (n - 1) / 2;
+  if (!result.primaries.empty()) {
+    uint64_t secondary_count = 0;
+    for (const auto &s : result.sources)
+      if (std::find(result.primaries.begin(), result.primaries.end(), s.handle) ==
+          result.primaries.end())
+        ++secondary_count;
+    if (secondary_count > 1)
+      pairs -= secondary_count * (secondary_count - 1) / 2;
+  }
   if (result.native_handle) {
     auto i = find_resident_screening_index(result.native_handle);
     if (i)
@@ -1569,13 +1597,13 @@ bool prepare(cqrIndexRepresentation expected) {
   indexes.emplace(h, std::move(result));
   return push(out);
 }
-bool screenWindow() {
+bool screenWindow(const char *method) {
   auto q = request();
   if (!q || !q->WINDOW_REQUEST())
     return error("invalid-request-arm",
                  "Resident screening requires WINDOW_REQUEST.");
-  if (hasPending("screen_window"))
-    return emitPending("screen_window");
+  if (hasPending(method))
+    return emitPending(method);
   auto r = q->WINDOW_REQUEST();
   auto i = index(r->SCREENING_INDEX_HANDLE(), r->INSTANCE());
   if (!i)
@@ -1602,24 +1630,14 @@ bool screenWindow() {
     auto events = screen_resident_index_window(*native, c, stats);
     if (has_error())
       return error("screening-failed", error_message());
-    return catalogOutput(events, stats, "screen_window");
-  }
-  std::vector<Source> p, s;
-  if (i->primaries.empty())
-    p = i->sources;
-  else {
-    for (auto &v : i->sources)
-      if (std::find(i->primaries.begin(), i->primaries.end(), v.handle) !=
-          i->primaries.end())
-        p.push_back(v);
-      else
-        s.push_back(v);
+    return catalogOutput(events, stats, method);
   }
   ScreeningStats stats;
   std::vector<std::unique_ptr<CQREventT>> events;
-  if (!screenSources(p, s, c, r->CONTROLS()->ALGORITHM(), stats, events))
+  if (!screenSources(i->sources, {}, c, r->CONTROLS()->ALGORITHM(), stats, events,
+                     &i->primaries))
     return false;
-  return catalogOutput(std::move(events), stats, "screen_window");
+  return catalogOutput(std::move(events), stats, method);
 }
 } // namespace ca_cqr
 extern "C" int prepare_screening_index() {
@@ -1631,9 +1649,9 @@ extern "C" int prepare_segment_screening_index() {
 extern "C" int prepare_sample_screening_index() {
   return ca_cqr::prepare(cqrIndexRepresentation::SAMPLED_STATES) ? 0 : 400;
 }
-extern "C" int screen_window() { return ca_cqr::screenWindow() ? 0 : 422; }
+extern "C" int screen_window() { return ca_cqr::screenWindow("screen_window") ? 0 : 422; }
 extern "C" int screen_segment_window() {
-  return ca_cqr::screenWindow() ? 0 : 422;
+  return ca_cqr::screenWindow("screen_segment_window") ? 0 : 422;
 }
 extern "C" int destroy_screening_index() {
   using namespace ca_cqr;

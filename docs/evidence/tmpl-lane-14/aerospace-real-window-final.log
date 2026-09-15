@@ -1,0 +1,41 @@
+✔ Aerospace real-window: summary (measured deltas vs CSieve for the coordinator) (0.86225ms)
+ℹ fixture=aerospace-real-window (AerospaceIVVDataset_20251009a; preserved pre-migration millisecond input epochs) events=21 recalled=21 missing=0 anchors=4
+ℹ FINDING F1 miss-vs-CSieve on real 65s OCM: min=0.0003m median=0.3354m max=2.5440m (analytic ≤10cm bound met only near ephemeris nodes; anchors below)
+ℹ   4208-41347 [NLRV] dTCA=0.6437ms dMiss=2.5440m dRelSpeed=0.0215m/s
+ℹ   9848-14965 [NLRV] dTCA=1.2070ms dMiss=0.0962m dRelSpeed=0.0267m/s
+ℹ   9903-26069 [NLRV] dTCA=0.2816ms dMiss=0.8186m dRelSpeed=0.0506m/s
+ℹ   32464-55953 [NLRV] dTCA=0.6437ms dMiss=0.1463m dRelSpeed=0.0115m/s
+ℹ   38264-62254 [NLRV] ANCHOR dTCA=0.6437ms dMiss=0.0618m dRelSpeed=0.0130m/s
+ℹ   39417-56347 [NLRV] dTCA=0.6437ms dMiss=0.4299m dRelSpeed=0.0804m/s
+ℹ   39919-53223 [NLRV] dTCA=0.2816ms dMiss=0.2034m dRelSpeed=0.0255m/s
+ℹ   40044-45024 [NLRV] ANCHOR dTCA=0.6437ms dMiss=0.0284m dRelSpeed=0.0955m/s
+ℹ   41158-60626 [NLRV] dTCA=0.6437ms dMiss=0.5323m dRelSpeed=0.0388m/s
+ℹ   41915-59172 [NLRV] dTCA=0.6437ms dMiss=1.3652m dRelSpeed=0.0754m/s
+ℹ   43255-60849 [NLRV] ANCHOR dTCA=0.2816ms dMiss=0.0003m dRelSpeed=0.0349m/s
+ℹ   45411-60094 [NLRV] dTCA=0.6437ms dMiss=1.7781m dRelSpeed=0.0081m/s
+ℹ   47401-95025 [NLRV] ANCHOR dTCA=0.2816ms dMiss=0.0174m dRelSpeed=0.0104m/s
+ℹ   49071-49072 [VLRV] dTCA=1462.7963ms dMiss=0.0515m dRelSpeed=0.0006m/s
+ℹ   53079-56112 [NLRV] dTCA=0.5633ms dMiss=1.0527m dRelSpeed=0.0451m/s
+ℹ   56155-56156 [VLRV] dTCA=8103.3558ms dMiss=1.1485m dRelSpeed=0.0073m/s
+ℹ   58199-58201 [VLRV] dTCA=294.4663ms dMiss=0.0894m dRelSpeed=0.0002m/s
+ℹ   58265-60603 [NLRV] dTCA=0.6437ms dMiss=0.6750m dRelSpeed=0.0021m/s
+ℹ   58410-60263 [NLRV] dTCA=0.2816ms dMiss=0.3354m dRelSpeed=0.0772m/s
+ℹ   59458-62021 [NLRV] dTCA=0.6437ms dMiss=0.2557m dRelSpeed=0.0043m/s
+ℹ   60085-90124 [NLRV] dTCA=0.6437ms dMiss=0.3839m dRelSpeed=2.7764m/s
+✔ Aerospace real-window: event-set full recall [HARD] (0.078375ms)
+✔ Aerospace real-window: NLRV TCA within config bound [HARD] (0.087458ms)
+ℹ   49071-49072 [VLRV] TCA advisory dTCA=1462.796ms (flat-minimum)
+ℹ   56155-56156 [VLRV] TCA advisory dTCA=8103.356ms (flat-minimum)
+ℹ   58199-58201 [VLRV] TCA advisory dTCA=294.466ms (flat-minimum)
+✔ Aerospace real-window: parity anchors reproduce CSieve within ≤10cm [HARD] (0.073ms)
+✔ Aerospace real-window: all-events miss within real-OCM regression envelope [FINDING F1] (0.073625ms)
+✔ Aerospace real-window: Pc report-only (CSieve uses a different Alfano variant — not gated) (0.056583ms)
+ℹ Pc not gated vs CSieve. our maxProbability: 4208-41347=1.342e-9 9848-14965=1.333e-9 9903-26069=2.258e-9 32464-55953=1.048e-9 38264-62254=1.8156e-8 39417-56347=5.733e-9 39919-53223=1.812e-9 40044-45024=5.162e-9 41158-60626=1.348e-9 41915-59172=1.283e-9 43255-60849=1.275e-9 45411-60094=2.678e-9 47401-95025=3.735e-9 49071-49072=3.50615e-7 53079-56112=1.169e-9 56155-56156=0.000001157639 58199-58201=3.58936e-7 58265-60603=3.283e-9 58410-60263=1.23e-9 59458-62021=1.2892e-8 60085-90124=1.572e-9
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1061.372666

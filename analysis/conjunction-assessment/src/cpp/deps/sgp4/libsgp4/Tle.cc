@@ -19,6 +19,7 @@
 #include "Tle.h"
 
 #include <cctype>
+#include <cmath>
 #include <locale>
 
 namespace libsgp4
@@ -216,6 +217,24 @@ void Tle::Initialize()
     else
     {
         year += 1900;
+    }
+
+    // Native TLE day zero names the preceding December 31 (Kelso's TLE
+    // format FAQ, https://celestrak.org/columns/v04n03/). Reject other
+    // out-of-calendar days before constructing the propagation epoch.
+    const bool leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    if (!std::isfinite(day) || day < 0.0 || day >= (leap ? 367.0 : 366.0))
+    {
+        conjunction::set_error("Invalid TLE epoch day"); return;
+    }
+    if (!std::isfinite(inclination_) || inclination_ < 0.0 || inclination_ > 180.0 ||
+        !std::isfinite(right_ascending_node_) || right_ascending_node_ < 0.0 || right_ascending_node_ >= 360.0 ||
+        !std::isfinite(argument_perigee_) || argument_perigee_ < 0.0 || argument_perigee_ >= 360.0 ||
+        !std::isfinite(mean_anomaly_) || mean_anomaly_ < 0.0 || mean_anomaly_ >= 360.0 ||
+        !std::isfinite(eccentricity_) || eccentricity_ < 0.0 || eccentricity_ >= 1.0 ||
+        !std::isfinite(mean_motion_) || mean_motion_ <= 0.0)
+    {
+        conjunction::set_error("TLE orbital elements are outside SGP4 bounds"); return;
     }
 
     epoch_ = DateTime(year, day);

@@ -123,13 +123,46 @@ std::string jd_to_iso(double jd) {
 }
 
 double iso_to_jd(const std::string& iso) {
-    int year, month, day, hour, minute;
-    double second;
-    if (sscanf(iso.c_str(), "%d-%d-%dT%d:%d:%lf", &year, &month, &day, &hour, &minute, &second) != 6 ||
-        month < 1 || month > 12 || day < 1 || day > 31 || hour < 0 || hour > 23 ||
-        minute < 0 || minute > 59 || !std::isfinite(second) || second < 0 || second >= 60) {
+    // CCSDS calendar timestamps use an explicit UTC field in the enclosing
+    // record, so the terminal Z may be absent. Do not accept another timezone,
+    // trailing text, or scanf's permissive numeric forms as if they were UTC.
+    auto invalid = []() {
         set_error("Invalid UTC epoch"); return std::numeric_limits<double>::quiet_NaN();
+    };
+    if (iso.size() < 19 || iso[4] != '-' || iso[7] != '-' ||
+        iso[10] != 'T' || iso[13] != ':' || iso[16] != ':')
+        return invalid();
+    auto digits = [&](size_t start, size_t count) {
+        int value = 0;
+        for (size_t i = start; i < start + count; ++i) {
+            if (iso[i] < '0' || iso[i] > '9') return -1;
+            value = value * 10 + iso[i] - '0';
+        }
+        return value;
+    };
+    const int year = digits(0, 4), month = digits(5, 2), day = digits(8, 2);
+    const int hour = digits(11, 2), minute = digits(14, 2), seconds = digits(17, 2);
+    static constexpr int month_days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    const bool leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    if (year < 1 || month < 1 || month > 12 || day < 1 ||
+        day > month_days[month - 1] + (month == 2 && leap ? 1 : 0) ||
+        hour < 0 || hour > 23 || minute < 0 || minute > 59 ||
+        seconds < 0 || seconds >= 60)
+        return invalid();
+    double second = seconds;
+    size_t cursor = 19;
+    if (cursor < iso.size() && iso[cursor] == '.') {
+        ++cursor;
+        const size_t fraction_start = cursor;
+        double place = 0.1;
+        while (cursor < iso.size() && iso[cursor] >= '0' && iso[cursor] <= '9') {
+            second += (iso[cursor++] - '0') * place;
+            place *= 0.1;
+        }
+        if (cursor == fraction_start) return invalid();
     }
+    if (cursor < iso.size() && iso[cursor] == 'Z') ++cursor;
+    if (cursor != iso.size() || second >= 60) return invalid();
 
     int a = (14 - month) / 12;
     int y = year + 4800 - a;
@@ -142,7 +175,7 @@ double iso_to_jd(const std::string& iso) {
 // TLE Parsing (wraps dnwrnr/sgp4)
 // ============================================================================
 
-/// Normalize a TLE line to valid format (exactly 69 chars)
+/// Strip record-delimiter whitespace without altering TLE field values.
 static std::string normalize_tle_line(const std::string& line) {
     std::string l = line;
     // Trim trailing whitespace/CR
@@ -153,33 +186,6 @@ static std::string normalize_tle_line(const std::string& line) {
     while (start < l.size() && (l[start] == ' ' || l[start] == '\t'))
         start++;
     if (start > 0) l = l.substr(start);
-    // Handle 70-char lines from CelesTrak
-    // Some TLEs have 8-digit eccentricity (non-standard) making line 70 chars.
-    // The standard eccentricity field is 7 digits at columns 26-32.
-    // If line is 70 chars, check for 8-digit eccentricity and truncate to 7.
-    if (l.length() == 70 && l[0] == '2') {
-        // Check if cols 26-33 are all digits (8-digit eccentricity)
-        bool all_digits = true;
-        for (int k = 26; k < 34 && k < (int)l.length(); k++) {
-            if (!std::isdigit(l[k])) { all_digits = false; break; }
-        }
-        if (all_digits) {
-            // Remove the last digit of the eccentricity field (col 33)
-            l.erase(33, 1);
-        } else {
-            // Try removing a trailing space in the rev number area
-            size_t pos = l.rfind("  ");
-            if (pos >= 60) l.erase(pos, 1);
-        }
-    }
-    if (l.length() == 70 && l[0] == '1') {
-        size_t pos = l.rfind("  ");
-        if (pos >= 60) l.erase(pos, 1);
-    }
-    // Pad to 69 chars if too short
-    if (l.length() < 69) l.resize(69, ' ');
-    // Truncate if still too long
-    if (l.length() > 69) l = l.substr(0, 69);
     return l;
 }
 
