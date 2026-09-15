@@ -15,8 +15,9 @@ Implementation commits:
 
 - `6e763d2a38dc328a207296e3cef61342ce7f4f86` — SDK Access build, adapters, artifacts, tests.
 - `3c76d39043f890765d7439ffab2fc39c60d75bcd` — portable Conjunction fixture dependencies/imports.
+- `08430f8265e47bf6bab959951d0b809654646931` — route retained Access geometry/refraction helpers through C++.
 
-The following receipt commit contains this report, reproductions, logs, and
+Receipt commits contain this report, reproductions, logs, and
 [exact changed-file inventory](evidence/tmpl-lane-10/files.txt). The final response
 identifies that commit. Push only: the coordinator owns integration. No stack pin
 or main-branch merge is included; retain the unlanded worktree.
@@ -39,7 +40,10 @@ or main-branch merge is included; retain the unlanded worktree.
 4. The original C++ ACW evaluator is shared with a small SDK method adapter.
    SDK code owns PIV validation, command framing, allocation, and manifest
    exports. Browser JS only maps the existing C functions and memory views.
-   The six before/after ACW payloads match exactly.
+   Legacy `computeAccessGeometry`, mask evaluation, and refraction helpers now
+   call the same C++ functions; their duplicate JS physics was removed. The
+   existing Orekit geometry/refraction tests now exercise WASM too. The six
+   before/after ACW payloads match exactly.
 5. Obsolete PMAN sidecars, build-cache hash, and the old artifact's publication
    record were removed. Legacy metadata now points to the embedded `$PLG`.
    The build is unsigned and reads no signing key.
@@ -234,7 +238,7 @@ node --test propagator/hpop/tests/kernel_invoke.test.mjs propagator/hpop/tests/d
 ```
 ```text
 standards reproduction: HPOP 27 errors; conjunction 84 errors; access 0 errors (exit 1)
-parity PASS fixture=lane10 access Orekit and command errors module=405c3e212e8a38bc lanes=[browser(36 runs), wasmedge(36 runs), docker-wasmedge(36 runs)] comparisons=174
+parity PASS fixture=lane10 access Orekit and command errors module=668daf02e5e13733 lanes=[browser(36 runs), wasmedge(36 runs), docker-wasmedge(36 runs)] comparisons=174
   9 case(s) byte-identical across 3 lane(s).
 parity PASS fixture=TMPL lane01 HPOP diagnostic CMake artifact module=be374f69201c1718 comparisons=30
   6 case(s) byte-identical across 3 lane(s).
@@ -276,7 +280,7 @@ PASS: 6 identical ACW payloads on identical inputs
 Artifact SHA256:
 ```text
 98315481714d59fb2ba03cc032b6ca7764a32b3847c59cd0eaac5675cd73401a  Access before
-405c3e212e8a38bcb202deee17fb8fa31e0c0d02770391613a1d243842ca876d  Access after
+668daf02e5e1373342144ddaa5e38391f4c966eda41b03a1153b0ca014211aea  Access after
 be374f69201c17187c413c7ac0846b5387a5b90c762b8ade74df32ffe8b2306c  HPOP unchanged
 acfedd6de4baaaae7d9265f7be992f2fe522afaa6f5dc739a20fbe2b6206fc72  Conjunction unchanged
 ```
@@ -296,11 +300,12 @@ acfedd6de4baaaae7d9265f7be992f2fe522afaa6f5dc739a20fbe2b6206fc72  Conjunction un
    publication sidecar; no signing/deployment was performed.
 5. `git diff --check` passed. Changes are confined to this private worktree's
    Access module, Conjunction package/tests, and lane-10 reports. HPOP files were
-   not edited. Canonical checkouts and other lane directories were not edited.
+   not edited. Canonical component checkouts and other lane directories were not edited.
 
 Graph claim attempt returned `no such task: tmpl-lane-10`. Each commit used the
 explicitly authorized override, which the hook logged against an unrelated
-currently selected claim:
+currently selected claim. One transient `ROOT_OPERATION_ACTIVE` pre-commit
+admission refusal was retried after the other root operation completed:
 ```sh
 GRAPH_PROTOCOL_GENERATION="main:65bfe5c174aebde03cb6c0dab819ce4c4011ec9f"
 GRAPH_GUARD_OVERRIDE="TMPL parity lane 10 (owner goal 2026-09-15)"

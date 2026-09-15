@@ -16,6 +16,7 @@ analysis/access/dist/plugin-manifest-exports.cpp
 analysis/access/dist/plugin-manifest.fb
 analysis/access/dist/plugin-manifest.js
 analysis/access/dist/plugin-manifest.json
+analysis/access/index.js
 analysis/access/manifest.js
 analysis/access/manifest.json
 analysis/access/package-lock.json

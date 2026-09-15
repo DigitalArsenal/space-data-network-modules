@@ -1,9 +1,9 @@
-✔ Access analyzer exposes the expected manifest metadata (12.357167ms)
-✔ Access isomorphic artifact passes SDK compliance checks (8.4195ms)
-✔ Access stream invoke returns a decoded SDK response envelope (3.093333ms)
-✔ Access stream invoke computes access windows from an SDS ACW FlatBuffer request (4.062875ms)
-✔ Access stream invoke applies ACW elevation mask and refraction request fields (1.615708ms)
-✔ canonical SDK artifact and browser adapter use identical standalone bytes (12.979083ms)
+✔ Access analyzer exposes the expected manifest metadata (14.067417ms)
+✔ Access isomorphic artifact passes SDK compliance checks (8.965875ms)
+✔ Access stream invoke returns a decoded SDK response envelope (3.367167ms)
+✔ Access stream invoke computes access windows from an SDS ACW FlatBuffer request (3.967667ms)
+✔ Access stream invoke applies ACW elevation mask and refraction request fields (2.09475ms)
+✔ canonical SDK artifact and browser adapter use identical standalone bytes (13.66375ms)
 ℹ tests 6
 ℹ suites 0
 ℹ pass 6
@@ -11,4 +11,4 @@
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 537.212417
+ℹ duration_ms 581.03625
