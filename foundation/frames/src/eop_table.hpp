@@ -35,12 +35,15 @@ ax::EarthOrientation eop_values(const EOP* row) {
   e.lengthOfDay = eop_hp(row, EOP::VT_LENGTH_OF_DAY_CORRECTION_SECONDS_HP,
                          row->LENGTH_OF_DAY_CORRECTION_SECONDS_HP(),
                          row->LENGTH_OF_DAY_CORRECTION_SECONDS());
+  e.dPsi = row->NUTATION_DPSI_RADIANS();
+  e.dEpsilon = row->NUTATION_DEPS_RADIANS();
   return e;
 }
 bool valid_eop(const ax::EarthOrientation& e) {
   return std::isfinite(e.xPole) && std::isfinite(e.yPole) &&
          std::isfinite(e.dut1) && std::isfinite(e.dX) && std::isfinite(e.dY) &&
-         std::isfinite(e.lengthOfDay);
+         std::isfinite(e.lengthOfDay) && std::isfinite(e.dPsi) &&
+         std::isfinite(e.dEpsilon);
 }
 bool add_eop(const uint8_t* bytes, size_t size, std::vector<EopSample>& rows) {
   if (size < 8 || rows.size() >= 366) return false;
@@ -99,7 +102,7 @@ std::string read_eop_table(double utc1, double utc2, ax::EarthOrientation* out,
   if (first->IAU_CONVENTION() != iauPrecessionNutationModel::UNSPECIFIED &&
       first->IAU_CONVENTION() != iauPrecessionNutationModel::IAU_2000A &&
       first->IAU_CONVENTION() != iauPrecessionNutationModel::IAU_2006)
-    return "Unsupported EOP IAU convention for the 2006/2000A frame chain.";
+    return "Unsupported EOP IAU convention; use IAU_2000A or IAU_2006.";
   const double mjd = (utc1 - 2400000.5) + utc2;
   // A single row preserves the established caller-supplied instantaneous EOP
   // contract.
@@ -150,6 +153,8 @@ std::string read_eop_table(double utc1, double utc2, ax::EarthOrientation* out,
       out->dX = lerp(a.value.dX, b.value.dX);
       out->dY = lerp(a.value.dY, b.value.dY);
       out->lengthOfDay = lerp(a.value.lengthOfDay, b.value.lengthOfDay);
+      out->dPsi = lerp(a.value.dPsi, b.value.dPsi);
+      out->dEpsilon = lerp(a.value.dEpsilon, b.value.dEpsilon);
     }
   }
   *provenance = first;

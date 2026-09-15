@@ -406,8 +406,10 @@ inline Mat3 gcrfToTod2003(const Epoch& epoch) {
   return detail::fromErfa(r);
 }
 
-/// IERS-2003 equinox chain, SOFA cookbook 5.4, including observed dX/dY.
-inline Mat3 gcrfToItrf2003(const Epoch& epoch, const EarthOrientation& eop) {
+/// Corrected IERS-2003 true-of-date axes, SOFA cookbook 5.4.
+/// dX/dY refer to IAU2000A, not the default IAU2006 model.
+inline Mat3 gcrfToTod2003(const Epoch& epoch, const EarthOrientation& eop,
+                         double* correctedDpsi = nullptr) {
   Mat3 np = gcrfToTod2003(epoch);
   double dpsi, deps, dpsipr, depspr;
   eraNut00a(epoch.tt1, epoch.tt2, &dpsi, &deps);
@@ -421,6 +423,16 @@ inline Mat3 gcrfToItrf2003(const Epoch& epoch, const EarthOrientation& eop) {
   eraBp00(epoch.tt1, epoch.tt2, bias, prec, bp);
   eraNumat(epsa, dpsi, deps, nut);
   eraRxr(nut, bp, np.m);
+  if (correctedDpsi) *correctedDpsi = dpsi;
+  return np;
+}
+
+/// IERS-2003 equinox chain, SOFA cookbook 5.4, including observed dX/dY.
+inline Mat3 gcrfToItrf2003(const Epoch& epoch, const EarthOrientation& eop) {
+  double dpsi, dpsipr, depspr;
+  Mat3 np = gcrfToTod2003(epoch, eop, &dpsi);
+  eraPr00(epoch.tt1, epoch.tt2, &dpsipr, &depspr);
+  const double epsa = eraObl80(epoch.tt1, epoch.tt2) + depspr;
   const double gast = eraGmst00(epoch.ut11, epoch.ut12, epoch.tt1, epoch.tt2) +
       eraEe00(epoch.tt1, epoch.tt2, epsa, dpsi);
   double pom[3][3], c2t[3][3];

@@ -274,6 +274,7 @@ bool pcpf_to_lla(
 struct EvaluationContext {
   ax::Epoch epoch;
   ax::EarthOrientation eop;
+  ax::EarthOrientation eop2003;
   bool eopSupplied = false;
   const char* eopDataSetEpoch = nullptr;
   const char* eopDataSetCid = nullptr;
@@ -284,6 +285,7 @@ struct EvaluationContext {
   const char* objectId = nullptr;
   ax::Vec3 objectPositionRoot;
   ax::Vec3 objectVelocityRoot;
+  double objectMu = bodyGm(kRootBodyId, nullptr);
 };
 
 /// A coordinate system reduced to numbers: how to rotate the root axes into it,
@@ -348,7 +350,12 @@ bool axis_type_needs_eop(rfmAxisType type, int bodyId) {
   switch (type) {
     case rfmAxisType::BODY_FIXED:
     case rfmAxisType::TOPOCENTRIC:
+    case rfmAxisType::TOPOCENTRIC_EAST_NORTH_UP:
+    case rfmAxisType::TOPOCENTRIC_NORTH_EAST_DOWN:
+    case rfmAxisType::TOPOCENTRIC_SOUTH_EAST_ZENITH:
       return bodyId == kRootBodyId;
+    case rfmAxisType::TRUE_OF_DATE_EQUATOR_IERS1996:
+    case rfmAxisType::TRUE_OF_DATE_EQUATOR_IERS2003:
     case rfmAxisType::SOLAR_MAGNETOSPHERIC:
       return true;
     default:
@@ -418,6 +425,12 @@ bool epoch_only_rotation(rfmAxisType type, int axisBodyId, const EvaluationConte
     case rfmAxisType::TRUE_OF_DATE_EQUATOR_FK5:
       *out = ax::gcrfToTodFk5(epoch);
       return true;
+    case rfmAxisType::TRUE_OF_DATE_EQUATOR_IERS1996:
+      *out = ax::gcrfToTod1996(epoch, context.eop);
+      return true;
+    case rfmAxisType::TRUE_OF_DATE_EQUATOR_IERS2003:
+      *out = ax::gcrfToTod2003(epoch, context.eop2003);
+      return true;
     case rfmAxisType::SOLAR_ECLIPTIC_MAGNETOSPHERIC:
       *out = ax::gcrfToGse(epoch);
       return true;
@@ -452,7 +465,10 @@ bool epoch_only_rotation(rfmAxisType type, int axisBodyId, const EvaluationConte
       const ax::Vec3 spinAxis{bodyInertial.m[2][0], bodyInertial.m[2][1], bodyInertial.m[2][2]};
       return ax::bodySpinSunTriad(spinAxis, ax::sunDirectionGcrf(epoch), out);
     }
-    case rfmAxisType::TOPOCENTRIC: {
+    case rfmAxisType::TOPOCENTRIC:
+    case rfmAxisType::TOPOCENTRIC_EAST_NORTH_UP:
+    case rfmAxisType::TOPOCENTRIC_NORTH_EAST_DOWN:
+    case rfmAxisType::TOPOCENTRIC_SOUTH_EAST_ZENITH: {
       if (system == nullptr || system->ORIGIN() == nullptr) {
         return false;
       }
@@ -462,7 +478,13 @@ bool epoch_only_rotation(rfmAxisType type, int axisBodyId, const EvaluationConte
                                system, epoch, &bodyRotation)) return false;
       const double latitude = origin->SITE_LATITUDE() * (ERFA_DPI / 180.0);
       const double longitude = origin->SITE_LONGITUDE() * (ERFA_DPI / 180.0);
-      *out = ax::multiply(ax::topocentricFromBodyFixed(latitude, longitude), bodyRotation);
+      const ax::AxisType localType =
+          type == rfmAxisType::TOPOCENTRIC_NORTH_EAST_DOWN ? ax::AxisType::NED :
+          type == rfmAxisType::TOPOCENTRIC_SOUTH_EAST_ZENITH ? ax::AxisType::SEZ :
+          ax::AxisType::ENU;
+      ax::Mat3 local;
+      if (!ax::topocentricFromBodyFixed(localType, latitude, longitude, &local)) return false;
+      *out = ax::multiply(local, bodyRotation);
       return true;
     }
     default:
@@ -591,6 +613,19 @@ bool resolve_system(const RFMCoordinateSystem* system, const EvaluationContext& 
   const int axisBodyId =
       system->AXIS_REFERENCE_BODY_ID() == 0 ? kRootBodyId : system->AXIS_REFERENCE_BODY_ID();
   const RFMOrigin* originForEop = system->ORIGIN();
+  const bool namedLocal = axisType == rfmAxisType::TOPOCENTRIC_EAST_NORTH_UP ||
+      axisType == rfmAxisType::TOPOCENTRIC_NORTH_EAST_DOWN ||
+      axisType == rfmAxisType::TOPOCENTRIC_SOUTH_EAST_ZENITH;
+  if (namedLocal && (!originForEop || originForEop->KIND() != rfmOriginKind::GROUND_SITE ||
+      (originForEop->SITE_BODY_ID() == 0 ? kRootBodyId : originForEop->SITE_BODY_ID()) != axisBodyId ||
+      !std::isfinite(originForEop->SITE_LATITUDE()) ||
+      std::fabs(originForEop->SITE_LATITUDE()) > 90.0 ||
+      !std::isfinite(originForEop->SITE_LONGITUDE()) ||
+      !std::isfinite(originForEop->SITE_ALTITUDE()))) {
+    *status = frmResultStatus::INVALID_INPUT;
+    *message = "Named topocentric axes require a valid GROUND_SITE on the axis reference body.";
+    return false;
+  }
   const bool earthSiteOrigin = originForEop != nullptr &&
       originForEop->KIND() == rfmOriginKind::GROUND_SITE &&
       (originForEop->SITE_BODY_ID() == 0 || originForEop->SITE_BODY_ID() == kRootBodyId);
@@ -616,6 +651,53 @@ bool resolve_system(const RFMCoordinateSystem* system, const EvaluationContext& 
     out->rotation = withRate.rotation;
     out->rotationRate = withRate.rate;
     out->angularVelocityRoot = withRate.angularVelocitySource;
+  } else if (axisType == rfmAxisType::ORBITAL_VELOCITY_NORMAL_CONORMAL ||
+             axisType == rfmAxisType::ORBITAL_RADIAL_TRANSVERSE_NORMAL ||
+             axisType == rfmAxisType::ORBITAL_LOCAL_VERTICAL_LOCAL_HORIZONTAL) {
+    // The object_state port carries an instantaneous Earth-centred ICRF state.
+    // The named axes belong to that object, whose translation stays independent.
+    const RFMOrigin* origin = system->ORIGIN();
+    if (!origin || origin->KIND() != rfmOriginKind::SPACE_OBJECT ||
+        !context.haveObjectState || axisBodyId != kRootBodyId ||
+        (context.objectId && origin->OBJECT_ID() &&
+         std::strcmp(context.objectId, origin->OBJECT_ID()->c_str()) != 0) ||
+        !is_finite(to_vec3(context.objectPositionRoot)) ||
+        !is_finite(to_vec3(context.objectVelocityRoot)) ||
+        !(context.objectMu > 0.0) || !std::isfinite(context.objectMu)) {
+      *status = frmResultStatus::INVALID_INPUT;
+      *message = "Named orbital axes require a SPACE_OBJECT origin and its finite Earth-centred ICRF object_state with positive GM.";
+      return false;
+    }
+    const ax::Vec3 r = context.objectPositionRoot, v = context.objectVelocityRoot;
+    ax::Mat3 basis;
+    const bool vnc = axisType == rfmAxisType::ORBITAL_VELOCITY_NORMAL_CONORMAL;
+    if (!ax::orbitalFrame(vnc ? ax::AxisType::VNC : ax::AxisType::OBJECT_REFERENCED,
+                          r, v, &basis)) {
+      *status = frmResultStatus::SINGULAR_ELEMENT_SET;
+      *message = "The referenced object's geometry does not define orbital axes.";
+      return false;
+    }
+    const ax::Vec3 x{basis.m[0][0], basis.m[0][1], basis.m[0][2]};
+    const ax::Vec3 y{basis.m[1][0], basis.m[1][1], basis.m[1][2]};
+    const ax::Vec3 z{basis.m[2][0], basis.m[2][1], basis.m[2][2]};
+    // SDS 1.219 VNC fixes X=velocity, Z=normal: internal VNC uses Y=normal.
+    out->rotation = vnc ? ax::fromRows(x, ax::scale(z, -1.0), y) :
+        axisType == rfmAxisType::ORBITAL_LOCAL_VERTICAL_LOCAL_HORIZONTAL ?
+            ax::fromRows(y, ax::scale(z, -1.0), ax::scale(x, -1.0)) : basis;
+    // No acceleration is carried on FRMStateVector. Rates assume central force:
+    // RTN/LVLH rotate at h/r^2; velocity-aligned axes at mu*h/(r^3*v^2).
+    const double radius = ax::norm(r), speed = ax::norm(v);
+    const double factor = vnc ? context.objectMu / (radius * radius * radius * speed * speed) :
+        1.0 / (radius * radius);
+    out->angularVelocityRoot = ax::scale(ax::cross(r, v), factor);
+    // Passive rotation: each row's derivative is omega cross row.
+    for (int i = 0; i < 3; ++i) {
+      const ax::Vec3 row{out->rotation.m[i][0], out->rotation.m[i][1], out->rotation.m[i][2]};
+      const ax::Vec3 rate = ax::cross(out->angularVelocityRoot, row);
+      out->rotationRate.m[i][0] = rate.x;
+      out->rotationRate.m[i][1] = rate.y;
+      out->rotationRate.m[i][2] = rate.z;
+    }
   } else if (axisType == rfmAxisType::OBJECT_REFERENCED) {
     // Axes built from a referenced object's own geometry. Their angular
     // velocity is EXACT for the data available: with position and velocity but
@@ -1353,6 +1435,8 @@ void read_object_state(EvaluationContext* context) {
                                  state->POSITION()->Z()};
   context->objectVelocityRoot = {state->VELOCITY()->X(), state->VELOCITY()->Y(),
                                  state->VELOCITY()->Z()};
+  if (state->GRAVITATIONAL_PARAMETER() != 0.0)
+    context->objectMu = state->GRAVITATIONAL_PARAMETER();
   if (request->SOURCE_COORDINATE_SYSTEM() != nullptr &&
       request->SOURCE_COORDINATE_SYSTEM()->ORIGIN() != nullptr &&
       request->SOURCE_COORDINATE_SYSTEM()->ORIGIN()->OBJECT_ID() != nullptr) {
@@ -1447,14 +1531,21 @@ extern "C" int transform_frame_position(void) {
            {}},
           trace_id);
     }
-    if (eopProvenance && eopProvenance->IAU_CONVENTION() == iauPrecessionNutationModel::IAU_2000A) {
+    context.eop2003 = context.eop;
+    if (eopProvenance) {
       // Preserve the observed CIP when moving offsets from IAU 2000A to 2006/2000A.
       // SOFA Earth Attitude cookbook section 5.1 footnote 2.
       double x00,y00,s00,x06,y06;
       eraXys00a(context.epoch.tt1,context.epoch.tt2,&x00,&y00,&s00);
       eraXy06(context.epoch.tt1,context.epoch.tt2,&x06,&y06);
-      context.eop.dX += x00-x06;
-      context.eop.dY += y00-y06;
+      if (eopProvenance->IAU_CONVENTION() == iauPrecessionNutationModel::IAU_2000A) {
+        context.eop.dX += x00-x06;
+        context.eop.dY += y00-y06;
+      } else {
+        // IAU_2006 (and established UNSPECIFIED default) -> IAU2000A.
+        context.eop2003.dX += x06-x00;
+        context.eop2003.dY += y06-y00;
+      }
     }
   }
 
