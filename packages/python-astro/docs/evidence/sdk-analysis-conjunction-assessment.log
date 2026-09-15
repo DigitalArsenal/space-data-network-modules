@@ -1,0 +1,435 @@
+TAP version 13
+# Subtest: build publishes canonical browser and isomorphic artifact paths
+ok 1 - build publishes canonical browser and isomorphic artifact paths
+  ---
+  duration_ms: 1.733583
+  type: 'test'
+  ...
+# Subtest: built artifact passes SDK compliance checks
+not ok 2 - built artifact passes SDK compliance checks
+  ---
+  duration_ms: 17.242417
+  type: 'test'
+  location: '/Users/tj/software/worktrees/modules-python-astro/analysis/conjunction-assessment/tests/sdk_compat.test.mjs:83:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    [
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[0].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[0].inputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[0].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[0].outputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[0].outputPorts[1].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[0].outputPorts[1].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[1].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[1].inputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[1].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[1].outputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[2].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[2].outputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[3].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[3].outputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[4].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[4].outputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[5].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[5].inputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[5].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[5].outputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[6].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[6].inputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[6].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[6].outputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-file-identifier",
+        "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+        "location": "manifest.methods[7].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[7].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "warning",
+        "code": "no-aligned-peer",
+        "message": "Canonical FlatBuffer allowed type declares no aligned-binary peer, so this port never takes the shared-arena zero-copy route. That is correct for a variable-length record; declare the peer (with its exact byteLength) only if the record has a FIXED aligned layout.",
+        "location": "manifest.methods[7].inputPorts[0].acceptedTypeSets[0].allowedTypes[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[7].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[7].outputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[8].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[8].inputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-file-identifier",
+        "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+        "location": "manifest.methods[8].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[8].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "warning",
+        "code": "no-aligned-peer",
+        "message": "Canonical FlatBuffer allowed type declares no aligned-binary peer, so this port never takes the shared-arena zero-copy route. That is correct for a variable-length record; declare the peer (with its exact byteLength) only if the record has a FIXED aligned layout.",
+        "location": "manifest.methods[8].outputPorts[0].acceptedTypeSets[0].allowedTypes[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-file-identifier",
+        "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+        "location": "manifest.methods[9].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[9].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "warning",
+        "code": "no-aligned-peer",
+        "message": "Canonical FlatBuffer allowed type declares no aligned-binary peer, so this port never takes the shared-arena zero-copy route. That is correct for a variable-length record; declare the peer (with its exact byteLength) only if the record has a FIXED aligned layout.",
+        "location": "manifest.methods[9].inputPorts[0].acceptedTypeSets[0].allowedTypes[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[9].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[9].outputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[10].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[10].inputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-file-identifier",
+        "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+        "location": "manifest.methods[10].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[10].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "warning",
+        "code": "no-aligned-peer",
+        "message": "Canonical FlatBuffer allowed type declares no aligned-binary peer, so this port never takes the shared-arena zero-copy route. That is correct for a variable-length record; declare the peer (with its exact byteLength) only if the record has a FIXED aligned layout.",
+        "location": "manifest.methods[10].outputPorts[0].acceptedTypeSets[0].allowedTypes[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[11].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[11].inputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[11].inputPorts[1].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[11].inputPorts[1].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[11].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[11].outputPorts[0].acceptedTypeSets[0]"
+      },
+      {
+        "severity": "error",
+        "code": "missing-canonical-root-type-name",
+        "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+        "location": "manifest.methods[11].outputPorts[1].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+      },
+      {
+        "severity": "error",
+        "code": "paired-type-identity-mismatch",
+        "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+        "location": "manifest.methods[11].outputPorts[1].acceptedTypeSets[0]"
+      }
+    ]
+
+    false !== true
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/tj/software/worktrees/modules-python-astro/analysis/conjunction-assessment/tests/sdk_compat.test.mjs:95:10)
+    async Test.run (node:internal/test_runner/test:1102:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:777:7)
+  ...
+# Subtest: manifest declares CDM import probability command surface
+ok 3 - manifest declares CDM import probability command surface
+  ---
+  duration_ms: 0.660583
+  type: 'test'
+  ...
+# Subtest: manifest declares CSM summary command surface
+ok 4 - manifest declares CSM summary command surface
+  ---
+  duration_ms: 0.1435
+  type: 'test'
+  ...
+# Subtest: manifest declares Orekit CDM KVN parser/writer command surfaces
+ok 5 - manifest declares Orekit CDM KVN parser/writer command surfaces
+  ---
+  duration_ms: 0.142375
+  type: 'test'
+  ...
+# Subtest: manifest declares Orekit CDM XML parser/writer command surfaces
+ok 6 - manifest declares Orekit CDM XML parser/writer command surfaces
+  ---
+  duration_ms: 0.145333
+  type: 'test'
+  ...
+# Subtest: built artifact exposes the WasmEdge Emscripten pthread surface
+ok 7 - built artifact exposes the WasmEdge Emscripten pthread surface
+  ---
+  duration_ms: 4.47175
+  type: 'test'
+  ...
+# Subtest: built artifact loads through the SDK WasmEdge pthread runner
+ok 8 - built artifact loads through the SDK WasmEdge pthread runner
+  ---
+  duration_ms: 629.106167
+  type: 'test'
+  ...
+# Subtest: pthread isomorphic artifact is not routed through the browser WASI harness
+ok 9 - pthread isomorphic artifact is not routed through the browser WASI harness
+  ---
+  duration_ms: 2.63575
+  type: 'test'
+  ...
+# Subtest: hosted-runtime example is wired to the screen catalog command surface
+ok 10 - hosted-runtime example is wired to the screen catalog command surface
+  ---
+  duration_ms: 1.009042
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 9
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1110.34025

@@ -1,0 +1,16 @@
+TAP version 13
+# Subtest: published estimation conformance evidence passes every required tier
+ok 1 - published estimation conformance evidence passes every required tier
+  ---
+  duration_ms: 5.102375
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 125.396542

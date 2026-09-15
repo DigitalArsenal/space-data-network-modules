@@ -1,0 +1,40 @@
+TAP version 13
+# Subtest: foundation/frames artifact passes SDK compliance
+ok 1 - foundation/frames artifact passes SDK compliance
+  ---
+  duration_ms: 32.746166
+  type: 'test'
+  ...
+# Subtest: foundation/frames artifact is standalone WASI with canonical exports
+ok 2 - foundation/frames artifact is standalone WASI with canonical exports
+  ---
+  duration_ms: 2.50125
+  type: 'test'
+  ...
+# Subtest: foundation/frames artifact loads in the browser harness
+ok 3 - foundation/frames artifact loads in the browser harness
+  ---
+  duration_ms: 3.019417
+  type: 'test'
+  ...
+# Subtest: foundation/frames artifact loads in WasmEdge when available
+ok 4 - foundation/frames artifact loads in WasmEdge when available
+  ---
+  duration_ms: 25.796083
+  type: 'test'
+  ...
+# Subtest: foundation/frames artifact is signed, and the signature covers exactly what every runtime executes
+ok 5 - foundation/frames artifact is signed, and the signature covers exactly what every runtime executes
+  ---
+  duration_ms: 44.703042
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 597.110583
