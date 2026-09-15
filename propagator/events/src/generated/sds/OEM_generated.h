@@ -46,6 +46,16 @@ struct ephemerisDataLineT : public ::flatbuffers::NativeTable {
   double X_DDOT = 0.0;
   double Y_DDOT = 0.0;
   double Z_DDOT = 0.0;
+  double CLOCK_BIAS_MICROSECONDS = 0.0;
+  double CLOCK_RATE_MICROSECONDS_PER_SECOND = 0.0;
+  double CLOCK_BIAS_SIGMA_PICOSECONDS = 0.0;
+  double CLOCK_RATE_SIGMA_PICOSECONDS_PER_SECOND = 0.0;
+  int8_t X_SIGMA_EXPONENT = 0;
+  int8_t Y_SIGMA_EXPONENT = 0;
+  int8_t Z_SIGMA_EXPONENT = 0;
+  int8_t X_DOT_SIGMA_EXPONENT = 0;
+  int8_t Y_DOT_SIGMA_EXPONENT = 0;
+  int8_t Z_DOT_SIGMA_EXPONENT = 0;
 };
 
 /// A single ephemeris data line (for non-uniform time steps only)
@@ -65,7 +75,17 @@ struct ephemerisDataLine FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
     VT_Z_DOT = 16,
     VT_X_DDOT = 18,
     VT_Y_DDOT = 20,
-    VT_Z_DDOT = 22
+    VT_Z_DDOT = 22,
+    VT_CLOCK_BIAS_MICROSECONDS = 24,
+    VT_CLOCK_RATE_MICROSECONDS_PER_SECOND = 26,
+    VT_CLOCK_BIAS_SIGMA_PICOSECONDS = 28,
+    VT_CLOCK_RATE_SIGMA_PICOSECONDS_PER_SECOND = 30,
+    VT_X_SIGMA_EXPONENT = 32,
+    VT_Y_SIGMA_EXPONENT = 34,
+    VT_Z_SIGMA_EXPONENT = 36,
+    VT_X_DOT_SIGMA_EXPONENT = 38,
+    VT_Y_DOT_SIGMA_EXPONENT = 40,
+    VT_Z_DOT_SIGMA_EXPONENT = 42
   };
   /// Epoch time, in ISO 8601 UTC format (required for non-uniform steps)
   const ::flatbuffers::String *EPOCH() const {
@@ -107,6 +127,51 @@ struct ephemerisDataLine FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
   double Z_DDOT() const {
     return GetField<double>(VT_Z_DDOT, 0.0);
   }
+  /// Satellite clock bias (offset), microseconds. SP3 position-record clock
+  /// column. The SP3 bad/absent sentinel 999999.999999 is NOT stored; omit the
+  /// field instead.
+  double CLOCK_BIAS_MICROSECONDS() const {
+    return GetField<double>(VT_CLOCK_BIAS_MICROSECONDS, 0.0);
+  }
+  /// Satellite clock rate of change, 1e-4 microseconds per second. SP3
+  /// velocity-record clock-rate column. Sentinel 999999.999999 is not stored.
+  double CLOCK_RATE_MICROSECONDS_PER_SECOND() const {
+    return GetField<double>(VT_CLOCK_RATE_MICROSECONDS_PER_SECOND, 0.0);
+  }
+  /// Standard deviation of CLOCK_BIAS_MICROSECONDS, picoseconds.
+  double CLOCK_BIAS_SIGMA_PICOSECONDS() const {
+    return GetField<double>(VT_CLOCK_BIAS_SIGMA_PICOSECONDS, 0.0);
+  }
+  /// Standard deviation of CLOCK_RATE_MICROSECONDS_PER_SECOND,
+  /// 1e-4 picoseconds per second.
+  double CLOCK_RATE_SIGMA_PICOSECONDS_PER_SECOND() const {
+    return GetField<double>(VT_CLOCK_RATE_SIGMA_PICOSECONDS_PER_SECOND, 0.0);
+  }
+  /// Per-coordinate position standard-deviation EXPONENTS, SP3 base**n form:
+  /// sigma = POS_VEL_BASE**n, with the position base from the SP3 header and
+  /// the result in mm. These are the raw SP3 exponent columns, kept as
+  /// exponents so an SP3 round-trip is exact; a consumer that wants a linear
+  /// sigma raises the header base to this power.
+  int8_t X_SIGMA_EXPONENT() const {
+    return GetField<int8_t>(VT_X_SIGMA_EXPONENT, 0);
+  }
+  int8_t Y_SIGMA_EXPONENT() const {
+    return GetField<int8_t>(VT_Y_SIGMA_EXPONENT, 0);
+  }
+  int8_t Z_SIGMA_EXPONENT() const {
+    return GetField<int8_t>(VT_Z_SIGMA_EXPONENT, 0);
+  }
+  /// Per-coordinate velocity standard-deviation exponents, result in
+  /// 1e-4 mm/s. Same base**n rule.
+  int8_t X_DOT_SIGMA_EXPONENT() const {
+    return GetField<int8_t>(VT_X_DOT_SIGMA_EXPONENT, 0);
+  }
+  int8_t Y_DOT_SIGMA_EXPONENT() const {
+    return GetField<int8_t>(VT_Y_DOT_SIGMA_EXPONENT, 0);
+  }
+  int8_t Z_DOT_SIGMA_EXPONENT() const {
+    return GetField<int8_t>(VT_Z_DOT_SIGMA_EXPONENT, 0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -121,6 +186,16 @@ struct ephemerisDataLine FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
            VerifyField<double>(verifier, VT_X_DDOT, 8) &&
            VerifyField<double>(verifier, VT_Y_DDOT, 8) &&
            VerifyField<double>(verifier, VT_Z_DDOT, 8) &&
+           VerifyField<double>(verifier, VT_CLOCK_BIAS_MICROSECONDS, 8) &&
+           VerifyField<double>(verifier, VT_CLOCK_RATE_MICROSECONDS_PER_SECOND, 8) &&
+           VerifyField<double>(verifier, VT_CLOCK_BIAS_SIGMA_PICOSECONDS, 8) &&
+           VerifyField<double>(verifier, VT_CLOCK_RATE_SIGMA_PICOSECONDS_PER_SECOND, 8) &&
+           VerifyField<int8_t>(verifier, VT_X_SIGMA_EXPONENT, 1) &&
+           VerifyField<int8_t>(verifier, VT_Y_SIGMA_EXPONENT, 1) &&
+           VerifyField<int8_t>(verifier, VT_Z_SIGMA_EXPONENT, 1) &&
+           VerifyField<int8_t>(verifier, VT_X_DOT_SIGMA_EXPONENT, 1) &&
+           VerifyField<int8_t>(verifier, VT_Y_DOT_SIGMA_EXPONENT, 1) &&
+           VerifyField<int8_t>(verifier, VT_Z_DOT_SIGMA_EXPONENT, 1) &&
            verifier.EndTable();
   }
   ephemerisDataLineT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -162,6 +237,36 @@ struct ephemerisDataLineBuilder {
   void add_Z_DDOT(double Z_DDOT) {
     fbb_.AddElement<double>(ephemerisDataLine::VT_Z_DDOT, Z_DDOT, 0.0);
   }
+  void add_CLOCK_BIAS_MICROSECONDS(double CLOCK_BIAS_MICROSECONDS) {
+    fbb_.AddElement<double>(ephemerisDataLine::VT_CLOCK_BIAS_MICROSECONDS, CLOCK_BIAS_MICROSECONDS, 0.0);
+  }
+  void add_CLOCK_RATE_MICROSECONDS_PER_SECOND(double CLOCK_RATE_MICROSECONDS_PER_SECOND) {
+    fbb_.AddElement<double>(ephemerisDataLine::VT_CLOCK_RATE_MICROSECONDS_PER_SECOND, CLOCK_RATE_MICROSECONDS_PER_SECOND, 0.0);
+  }
+  void add_CLOCK_BIAS_SIGMA_PICOSECONDS(double CLOCK_BIAS_SIGMA_PICOSECONDS) {
+    fbb_.AddElement<double>(ephemerisDataLine::VT_CLOCK_BIAS_SIGMA_PICOSECONDS, CLOCK_BIAS_SIGMA_PICOSECONDS, 0.0);
+  }
+  void add_CLOCK_RATE_SIGMA_PICOSECONDS_PER_SECOND(double CLOCK_RATE_SIGMA_PICOSECONDS_PER_SECOND) {
+    fbb_.AddElement<double>(ephemerisDataLine::VT_CLOCK_RATE_SIGMA_PICOSECONDS_PER_SECOND, CLOCK_RATE_SIGMA_PICOSECONDS_PER_SECOND, 0.0);
+  }
+  void add_X_SIGMA_EXPONENT(int8_t X_SIGMA_EXPONENT) {
+    fbb_.AddElement<int8_t>(ephemerisDataLine::VT_X_SIGMA_EXPONENT, X_SIGMA_EXPONENT, 0);
+  }
+  void add_Y_SIGMA_EXPONENT(int8_t Y_SIGMA_EXPONENT) {
+    fbb_.AddElement<int8_t>(ephemerisDataLine::VT_Y_SIGMA_EXPONENT, Y_SIGMA_EXPONENT, 0);
+  }
+  void add_Z_SIGMA_EXPONENT(int8_t Z_SIGMA_EXPONENT) {
+    fbb_.AddElement<int8_t>(ephemerisDataLine::VT_Z_SIGMA_EXPONENT, Z_SIGMA_EXPONENT, 0);
+  }
+  void add_X_DOT_SIGMA_EXPONENT(int8_t X_DOT_SIGMA_EXPONENT) {
+    fbb_.AddElement<int8_t>(ephemerisDataLine::VT_X_DOT_SIGMA_EXPONENT, X_DOT_SIGMA_EXPONENT, 0);
+  }
+  void add_Y_DOT_SIGMA_EXPONENT(int8_t Y_DOT_SIGMA_EXPONENT) {
+    fbb_.AddElement<int8_t>(ephemerisDataLine::VT_Y_DOT_SIGMA_EXPONENT, Y_DOT_SIGMA_EXPONENT, 0);
+  }
+  void add_Z_DOT_SIGMA_EXPONENT(int8_t Z_DOT_SIGMA_EXPONENT) {
+    fbb_.AddElement<int8_t>(ephemerisDataLine::VT_Z_DOT_SIGMA_EXPONENT, Z_DOT_SIGMA_EXPONENT, 0);
+  }
   explicit ephemerisDataLineBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -184,8 +289,22 @@ inline ::flatbuffers::Offset<ephemerisDataLine> CreateephemerisDataLine(
     double Z_DOT = 0.0,
     double X_DDOT = 0.0,
     double Y_DDOT = 0.0,
-    double Z_DDOT = 0.0) {
+    double Z_DDOT = 0.0,
+    double CLOCK_BIAS_MICROSECONDS = 0.0,
+    double CLOCK_RATE_MICROSECONDS_PER_SECOND = 0.0,
+    double CLOCK_BIAS_SIGMA_PICOSECONDS = 0.0,
+    double CLOCK_RATE_SIGMA_PICOSECONDS_PER_SECOND = 0.0,
+    int8_t X_SIGMA_EXPONENT = 0,
+    int8_t Y_SIGMA_EXPONENT = 0,
+    int8_t Z_SIGMA_EXPONENT = 0,
+    int8_t X_DOT_SIGMA_EXPONENT = 0,
+    int8_t Y_DOT_SIGMA_EXPONENT = 0,
+    int8_t Z_DOT_SIGMA_EXPONENT = 0) {
   ephemerisDataLineBuilder builder_(_fbb);
+  builder_.add_CLOCK_RATE_SIGMA_PICOSECONDS_PER_SECOND(CLOCK_RATE_SIGMA_PICOSECONDS_PER_SECOND);
+  builder_.add_CLOCK_BIAS_SIGMA_PICOSECONDS(CLOCK_BIAS_SIGMA_PICOSECONDS);
+  builder_.add_CLOCK_RATE_MICROSECONDS_PER_SECOND(CLOCK_RATE_MICROSECONDS_PER_SECOND);
+  builder_.add_CLOCK_BIAS_MICROSECONDS(CLOCK_BIAS_MICROSECONDS);
   builder_.add_Z_DDOT(Z_DDOT);
   builder_.add_Y_DDOT(Y_DDOT);
   builder_.add_X_DDOT(X_DDOT);
@@ -196,6 +315,12 @@ inline ::flatbuffers::Offset<ephemerisDataLine> CreateephemerisDataLine(
   builder_.add_Y(Y);
   builder_.add_X(X);
   builder_.add_EPOCH(EPOCH);
+  builder_.add_Z_DOT_SIGMA_EXPONENT(Z_DOT_SIGMA_EXPONENT);
+  builder_.add_Y_DOT_SIGMA_EXPONENT(Y_DOT_SIGMA_EXPONENT);
+  builder_.add_X_DOT_SIGMA_EXPONENT(X_DOT_SIGMA_EXPONENT);
+  builder_.add_Z_SIGMA_EXPONENT(Z_SIGMA_EXPONENT);
+  builder_.add_Y_SIGMA_EXPONENT(Y_SIGMA_EXPONENT);
+  builder_.add_X_SIGMA_EXPONENT(X_SIGMA_EXPONENT);
   return builder_.Finish();
 }
 
@@ -215,7 +340,17 @@ inline ::flatbuffers::Offset<ephemerisDataLine> CreateephemerisDataLineDirect(
     double Z_DOT = 0.0,
     double X_DDOT = 0.0,
     double Y_DDOT = 0.0,
-    double Z_DDOT = 0.0) {
+    double Z_DDOT = 0.0,
+    double CLOCK_BIAS_MICROSECONDS = 0.0,
+    double CLOCK_RATE_MICROSECONDS_PER_SECOND = 0.0,
+    double CLOCK_BIAS_SIGMA_PICOSECONDS = 0.0,
+    double CLOCK_RATE_SIGMA_PICOSECONDS_PER_SECOND = 0.0,
+    int8_t X_SIGMA_EXPONENT = 0,
+    int8_t Y_SIGMA_EXPONENT = 0,
+    int8_t Z_SIGMA_EXPONENT = 0,
+    int8_t X_DOT_SIGMA_EXPONENT = 0,
+    int8_t Y_DOT_SIGMA_EXPONENT = 0,
+    int8_t Z_DOT_SIGMA_EXPONENT = 0) {
   auto EPOCH__ = EPOCH ? _fbb.CreateString(EPOCH) : 0;
   return CreateephemerisDataLine(
       _fbb,
@@ -228,7 +363,17 @@ inline ::flatbuffers::Offset<ephemerisDataLine> CreateephemerisDataLineDirect(
       Z_DOT,
       X_DDOT,
       Y_DDOT,
-      Z_DDOT);
+      Z_DDOT,
+      CLOCK_BIAS_MICROSECONDS,
+      CLOCK_RATE_MICROSECONDS_PER_SECOND,
+      CLOCK_BIAS_SIGMA_PICOSECONDS,
+      CLOCK_RATE_SIGMA_PICOSECONDS_PER_SECOND,
+      X_SIGMA_EXPONENT,
+      Y_SIGMA_EXPONENT,
+      Z_SIGMA_EXPONENT,
+      X_DOT_SIGMA_EXPONENT,
+      Y_DOT_SIGMA_EXPONENT,
+      Z_DOT_SIGMA_EXPONENT);
 }
 
 ::flatbuffers::Offset<ephemerisDataLine> CreateephemerisDataLine(::flatbuffers::FlatBufferBuilder &_fbb, const ephemerisDataLineT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -619,6 +764,8 @@ struct ephemerisDataBlockT : public ::flatbuffers::NativeTable {
   std::vector<std::unique_ptr<ephemerisDataLineT>> EPHEMERIS_DATA_LINES{};
   std::vector<std::unique_ptr<covarianceMatrixLineT>> COVARIANCE_MATRIX_LINES{};
   std::vector<std::unique_ptr<PPEPositionRecordT>> POLYNOMIAL_POSITION_RECORDS{};
+  int32_t OBJECT_NAIF_ID = 0;
+  int32_t CENTER_NAIF_ID = 0;
   ephemerisDataBlockT() = default;
   ephemerisDataBlockT(const ephemerisDataBlockT &o);
   ephemerisDataBlockT(ephemerisDataBlockT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -649,7 +796,9 @@ struct ephemerisDataBlock FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
     VT_EPHEMERIS_DATA = 34,
     VT_EPHEMERIS_DATA_LINES = 36,
     VT_COVARIANCE_MATRIX_LINES = 38,
-    VT_POLYNOMIAL_POSITION_RECORDS = 40
+    VT_POLYNOMIAL_POSITION_RECORDS = 40,
+    VT_OBJECT_NAIF_ID = 42,
+    VT_CENTER_NAIF_ID = 44
   };
   /// Plain-Text Comment
   const ::flatbuffers::String *COMMENT() const {
@@ -746,6 +895,15 @@ struct ephemerisDataBlock FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
   const ::flatbuffers::Vector<::flatbuffers::Offset<PPEPositionRecord>> *POLYNOMIAL_POSITION_RECORDS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PPEPositionRecord>> *>(VT_POLYNOMIAL_POSITION_RECORDS);
   }
+  /// NAIF integer code of the ephemeris target (SPK segment target).
+  int32_t OBJECT_NAIF_ID() const {
+    return GetField<int32_t>(VT_OBJECT_NAIF_ID, 0);
+  }
+  /// NAIF integer code of the ephemeris centre, matching CENTER_NAME
+  /// (SPK segment centre).
+  int32_t CENTER_NAIF_ID() const {
+    return GetField<int32_t>(VT_CENTER_NAIF_ID, 0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -786,6 +944,8 @@ struct ephemerisDataBlock FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
            VerifyOffset(verifier, VT_POLYNOMIAL_POSITION_RECORDS) &&
            verifier.VerifyVector(POLYNOMIAL_POSITION_RECORDS()) &&
            verifier.VerifyVectorOfTables(POLYNOMIAL_POSITION_RECORDS()) &&
+           VerifyField<int32_t>(verifier, VT_OBJECT_NAIF_ID, 4) &&
+           VerifyField<int32_t>(verifier, VT_CENTER_NAIF_ID, 4) &&
            verifier.EndTable();
   }
   ephemerisDataBlockT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -854,6 +1014,12 @@ struct ephemerisDataBlockBuilder {
   void add_POLYNOMIAL_POSITION_RECORDS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PPEPositionRecord>>> POLYNOMIAL_POSITION_RECORDS) {
     fbb_.AddOffset(ephemerisDataBlock::VT_POLYNOMIAL_POSITION_RECORDS, POLYNOMIAL_POSITION_RECORDS);
   }
+  void add_OBJECT_NAIF_ID(int32_t OBJECT_NAIF_ID) {
+    fbb_.AddElement<int32_t>(ephemerisDataBlock::VT_OBJECT_NAIF_ID, OBJECT_NAIF_ID, 0);
+  }
+  void add_CENTER_NAIF_ID(int32_t CENTER_NAIF_ID) {
+    fbb_.AddElement<int32_t>(ephemerisDataBlock::VT_CENTER_NAIF_ID, CENTER_NAIF_ID, 0);
+  }
   explicit ephemerisDataBlockBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -885,9 +1051,13 @@ inline ::flatbuffers::Offset<ephemerisDataBlock> CreateephemerisDataBlock(
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> EPHEMERIS_DATA = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ephemerisDataLine>>> EPHEMERIS_DATA_LINES = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<covarianceMatrixLine>>> COVARIANCE_MATRIX_LINES = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PPEPositionRecord>>> POLYNOMIAL_POSITION_RECORDS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PPEPositionRecord>>> POLYNOMIAL_POSITION_RECORDS = 0,
+    int32_t OBJECT_NAIF_ID = 0,
+    int32_t CENTER_NAIF_ID = 0) {
   ephemerisDataBlockBuilder builder_(_fbb);
   builder_.add_STEP_SIZE(STEP_SIZE);
+  builder_.add_CENTER_NAIF_ID(CENTER_NAIF_ID);
+  builder_.add_OBJECT_NAIF_ID(OBJECT_NAIF_ID);
   builder_.add_POLYNOMIAL_POSITION_RECORDS(POLYNOMIAL_POSITION_RECORDS);
   builder_.add_COVARIANCE_MATRIX_LINES(COVARIANCE_MATRIX_LINES);
   builder_.add_EPHEMERIS_DATA_LINES(EPHEMERIS_DATA_LINES);
@@ -934,7 +1104,9 @@ inline ::flatbuffers::Offset<ephemerisDataBlock> CreateephemerisDataBlockDirect(
     const std::vector<double> *EPHEMERIS_DATA = nullptr,
     const std::vector<::flatbuffers::Offset<ephemerisDataLine>> *EPHEMERIS_DATA_LINES = nullptr,
     const std::vector<::flatbuffers::Offset<covarianceMatrixLine>> *COVARIANCE_MATRIX_LINES = nullptr,
-    const std::vector<::flatbuffers::Offset<PPEPositionRecord>> *POLYNOMIAL_POSITION_RECORDS = nullptr) {
+    const std::vector<::flatbuffers::Offset<PPEPositionRecord>> *POLYNOMIAL_POSITION_RECORDS = nullptr,
+    int32_t OBJECT_NAIF_ID = 0,
+    int32_t CENTER_NAIF_ID = 0) {
   auto COMMENT__ = COMMENT ? _fbb.CreateString(COMMENT) : 0;
   auto CENTER_NAME__ = CENTER_NAME ? _fbb.CreateString(CENTER_NAME) : 0;
   auto REFERENCE_FRAME_EPOCH__ = REFERENCE_FRAME_EPOCH ? _fbb.CreateString(REFERENCE_FRAME_EPOCH) : 0;
@@ -967,7 +1139,9 @@ inline ::flatbuffers::Offset<ephemerisDataBlock> CreateephemerisDataBlockDirect(
       EPHEMERIS_DATA__,
       EPHEMERIS_DATA_LINES__,
       COVARIANCE_MATRIX_LINES__,
-      POLYNOMIAL_POSITION_RECORDS__);
+      POLYNOMIAL_POSITION_RECORDS__,
+      OBJECT_NAIF_ID,
+      CENTER_NAIF_ID);
 }
 
 ::flatbuffers::Offset<ephemerisDataBlock> CreateephemerisDataBlock(::flatbuffers::FlatBufferBuilder &_fbb, const ephemerisDataBlockT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1130,6 +1304,16 @@ inline void ephemerisDataLine::UnPackTo(ephemerisDataLineT *_o, const ::flatbuff
   { auto _e = X_DDOT(); _o->X_DDOT = _e; }
   { auto _e = Y_DDOT(); _o->Y_DDOT = _e; }
   { auto _e = Z_DDOT(); _o->Z_DDOT = _e; }
+  { auto _e = CLOCK_BIAS_MICROSECONDS(); _o->CLOCK_BIAS_MICROSECONDS = _e; }
+  { auto _e = CLOCK_RATE_MICROSECONDS_PER_SECOND(); _o->CLOCK_RATE_MICROSECONDS_PER_SECOND = _e; }
+  { auto _e = CLOCK_BIAS_SIGMA_PICOSECONDS(); _o->CLOCK_BIAS_SIGMA_PICOSECONDS = _e; }
+  { auto _e = CLOCK_RATE_SIGMA_PICOSECONDS_PER_SECOND(); _o->CLOCK_RATE_SIGMA_PICOSECONDS_PER_SECOND = _e; }
+  { auto _e = X_SIGMA_EXPONENT(); _o->X_SIGMA_EXPONENT = _e; }
+  { auto _e = Y_SIGMA_EXPONENT(); _o->Y_SIGMA_EXPONENT = _e; }
+  { auto _e = Z_SIGMA_EXPONENT(); _o->Z_SIGMA_EXPONENT = _e; }
+  { auto _e = X_DOT_SIGMA_EXPONENT(); _o->X_DOT_SIGMA_EXPONENT = _e; }
+  { auto _e = Y_DOT_SIGMA_EXPONENT(); _o->Y_DOT_SIGMA_EXPONENT = _e; }
+  { auto _e = Z_DOT_SIGMA_EXPONENT(); _o->Z_DOT_SIGMA_EXPONENT = _e; }
 }
 
 inline ::flatbuffers::Offset<ephemerisDataLine> CreateephemerisDataLine(::flatbuffers::FlatBufferBuilder &_fbb, const ephemerisDataLineT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1150,6 +1334,16 @@ inline ::flatbuffers::Offset<ephemerisDataLine> ephemerisDataLine::Pack(::flatbu
   auto _X_DDOT = _o->X_DDOT;
   auto _Y_DDOT = _o->Y_DDOT;
   auto _Z_DDOT = _o->Z_DDOT;
+  auto _CLOCK_BIAS_MICROSECONDS = _o->CLOCK_BIAS_MICROSECONDS;
+  auto _CLOCK_RATE_MICROSECONDS_PER_SECOND = _o->CLOCK_RATE_MICROSECONDS_PER_SECOND;
+  auto _CLOCK_BIAS_SIGMA_PICOSECONDS = _o->CLOCK_BIAS_SIGMA_PICOSECONDS;
+  auto _CLOCK_RATE_SIGMA_PICOSECONDS_PER_SECOND = _o->CLOCK_RATE_SIGMA_PICOSECONDS_PER_SECOND;
+  auto _X_SIGMA_EXPONENT = _o->X_SIGMA_EXPONENT;
+  auto _Y_SIGMA_EXPONENT = _o->Y_SIGMA_EXPONENT;
+  auto _Z_SIGMA_EXPONENT = _o->Z_SIGMA_EXPONENT;
+  auto _X_DOT_SIGMA_EXPONENT = _o->X_DOT_SIGMA_EXPONENT;
+  auto _Y_DOT_SIGMA_EXPONENT = _o->Y_DOT_SIGMA_EXPONENT;
+  auto _Z_DOT_SIGMA_EXPONENT = _o->Z_DOT_SIGMA_EXPONENT;
   return CreateephemerisDataLine(
       _fbb,
       _EPOCH,
@@ -1161,7 +1355,17 @@ inline ::flatbuffers::Offset<ephemerisDataLine> ephemerisDataLine::Pack(::flatbu
       _Z_DOT,
       _X_DDOT,
       _Y_DDOT,
-      _Z_DDOT);
+      _Z_DDOT,
+      _CLOCK_BIAS_MICROSECONDS,
+      _CLOCK_RATE_MICROSECONDS_PER_SECOND,
+      _CLOCK_BIAS_SIGMA_PICOSECONDS,
+      _CLOCK_RATE_SIGMA_PICOSECONDS_PER_SECOND,
+      _X_SIGMA_EXPONENT,
+      _Y_SIGMA_EXPONENT,
+      _Z_SIGMA_EXPONENT,
+      _X_DOT_SIGMA_EXPONENT,
+      _Y_DOT_SIGMA_EXPONENT,
+      _Z_DOT_SIGMA_EXPONENT);
 }
 
 inline covarianceMatrixLineT *covarianceMatrixLine::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -1269,7 +1473,9 @@ inline ephemerisDataBlockT::ephemerisDataBlockT(const ephemerisDataBlockT &o)
         INTERPOLATION_DEGREE(o.INTERPOLATION_DEGREE),
         STEP_SIZE(o.STEP_SIZE),
         STATE_VECTOR_SIZE(o.STATE_VECTOR_SIZE),
-        EPHEMERIS_DATA(o.EPHEMERIS_DATA) {
+        EPHEMERIS_DATA(o.EPHEMERIS_DATA),
+        OBJECT_NAIF_ID(o.OBJECT_NAIF_ID),
+        CENTER_NAIF_ID(o.CENTER_NAIF_ID) {
   EPHEMERIS_DATA_LINES.reserve(o.EPHEMERIS_DATA_LINES.size());
   for (const auto &EPHEMERIS_DATA_LINES_ : o.EPHEMERIS_DATA_LINES) { EPHEMERIS_DATA_LINES.emplace_back((EPHEMERIS_DATA_LINES_) ? new ephemerisDataLineT(*EPHEMERIS_DATA_LINES_) : nullptr); }
   COVARIANCE_MATRIX_LINES.reserve(o.COVARIANCE_MATRIX_LINES.size());
@@ -1298,6 +1504,8 @@ inline ephemerisDataBlockT &ephemerisDataBlockT::operator=(ephemerisDataBlockT o
   std::swap(EPHEMERIS_DATA_LINES, o.EPHEMERIS_DATA_LINES);
   std::swap(COVARIANCE_MATRIX_LINES, o.COVARIANCE_MATRIX_LINES);
   std::swap(POLYNOMIAL_POSITION_RECORDS, o.POLYNOMIAL_POSITION_RECORDS);
+  std::swap(OBJECT_NAIF_ID, o.OBJECT_NAIF_ID);
+  std::swap(CENTER_NAIF_ID, o.CENTER_NAIF_ID);
   return *this;
 }
 
@@ -1329,6 +1537,8 @@ inline void ephemerisDataBlock::UnPackTo(ephemerisDataBlockT *_o, const ::flatbu
   { auto _e = EPHEMERIS_DATA_LINES(); if (_e) { _o->EPHEMERIS_DATA_LINES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->EPHEMERIS_DATA_LINES[_i]) { _e->Get(_i)->UnPackTo(_o->EPHEMERIS_DATA_LINES[_i].get(), _resolver); } else { _o->EPHEMERIS_DATA_LINES[_i] = std::unique_ptr<ephemerisDataLineT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->EPHEMERIS_DATA_LINES.resize(0); } }
   { auto _e = COVARIANCE_MATRIX_LINES(); if (_e) { _o->COVARIANCE_MATRIX_LINES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->COVARIANCE_MATRIX_LINES[_i]) { _e->Get(_i)->UnPackTo(_o->COVARIANCE_MATRIX_LINES[_i].get(), _resolver); } else { _o->COVARIANCE_MATRIX_LINES[_i] = std::unique_ptr<covarianceMatrixLineT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->COVARIANCE_MATRIX_LINES.resize(0); } }
   { auto _e = POLYNOMIAL_POSITION_RECORDS(); if (_e) { _o->POLYNOMIAL_POSITION_RECORDS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->POLYNOMIAL_POSITION_RECORDS[_i]) { _e->Get(_i)->UnPackTo(_o->POLYNOMIAL_POSITION_RECORDS[_i].get(), _resolver); } else { _o->POLYNOMIAL_POSITION_RECORDS[_i] = std::unique_ptr<PPEPositionRecordT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->POLYNOMIAL_POSITION_RECORDS.resize(0); } }
+  { auto _e = OBJECT_NAIF_ID(); _o->OBJECT_NAIF_ID = _e; }
+  { auto _e = CENTER_NAIF_ID(); _o->CENTER_NAIF_ID = _e; }
 }
 
 inline ::flatbuffers::Offset<ephemerisDataBlock> CreateephemerisDataBlock(::flatbuffers::FlatBufferBuilder &_fbb, const ephemerisDataBlockT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1358,6 +1568,8 @@ inline ::flatbuffers::Offset<ephemerisDataBlock> ephemerisDataBlock::Pack(::flat
   auto _EPHEMERIS_DATA_LINES = _o->EPHEMERIS_DATA_LINES.size() ? _fbb.CreateVector<::flatbuffers::Offset<ephemerisDataLine>> (_o->EPHEMERIS_DATA_LINES.size(), [](size_t i, _VectorArgs *__va) { return CreateephemerisDataLine(*__va->__fbb, __va->__o->EPHEMERIS_DATA_LINES[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _COVARIANCE_MATRIX_LINES = _o->COVARIANCE_MATRIX_LINES.size() ? _fbb.CreateVector<::flatbuffers::Offset<covarianceMatrixLine>> (_o->COVARIANCE_MATRIX_LINES.size(), [](size_t i, _VectorArgs *__va) { return CreatecovarianceMatrixLine(*__va->__fbb, __va->__o->COVARIANCE_MATRIX_LINES[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _POLYNOMIAL_POSITION_RECORDS = _o->POLYNOMIAL_POSITION_RECORDS.size() ? _fbb.CreateVector<::flatbuffers::Offset<PPEPositionRecord>> (_o->POLYNOMIAL_POSITION_RECORDS.size(), [](size_t i, _VectorArgs *__va) { return CreatePPEPositionRecord(*__va->__fbb, __va->__o->POLYNOMIAL_POSITION_RECORDS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _OBJECT_NAIF_ID = _o->OBJECT_NAIF_ID;
+  auto _CENTER_NAIF_ID = _o->CENTER_NAIF_ID;
   return CreateephemerisDataBlock(
       _fbb,
       _COMMENT,
@@ -1378,7 +1590,9 @@ inline ::flatbuffers::Offset<ephemerisDataBlock> ephemerisDataBlock::Pack(::flat
       _EPHEMERIS_DATA,
       _EPHEMERIS_DATA_LINES,
       _COVARIANCE_MATRIX_LINES,
-      _POLYNOMIAL_POSITION_RECORDS);
+      _POLYNOMIAL_POSITION_RECORDS,
+      _OBJECT_NAIF_ID,
+      _CENTER_NAIF_ID);
 }
 
 inline OEMT::OEMT(const OEMT &o)

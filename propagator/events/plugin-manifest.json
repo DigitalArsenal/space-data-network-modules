@@ -99,6 +99,32 @@
           "maxStreams": 1,
           "required": false,
           "description": "Earth-orientation row for the scan interval. A ground site on the Earth, or any body-fixed parameter, is refused without one rather than placed against assumed zeros."
+        },
+        {
+          "portId": "kernel",
+          "acceptedTypeSets": [
+            {
+              "setId": "spk-kernel",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional geometric J2000 SPK: [u32le n][$NCD][kernel bytes], FORMAT=SPK_DAF. Absent selects Analytical ERFA. Supplied kernels must cover every requested body epoch; no silent fallback."
         }
       ],
       "outputPorts": [
@@ -128,6 +154,32 @@
           "maxStreams": 1,
           "required": false,
           "description": "Every located event, with its entry and exit epochs and its duration."
+        },
+        {
+          "portId": "ephemeris_source",
+          "acceptedTypeSets": [
+            {
+              "setId": "spk-kernel",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Source receipt: verified size-prefixed NCD descriptor of the SPK used for body states. Absent for Analytical ERFA or locators that do not evaluate body ephemerides."
         }
       ],
       "maxBatch": 1,
@@ -284,6 +336,11 @@
       "schemaName": "EOP.fbs",
       "fileIdentifier": "$EOP",
       "rootTypeName": "EOP"
+    },
+    {
+      "schemaName": "NCD.fbs",
+      "fileIdentifier": "$NCD",
+      "rootTypeName": "NCD"
     }
   ],
   "buildArtifacts": [

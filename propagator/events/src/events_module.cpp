@@ -202,11 +202,16 @@ bool read_ephemeris(const char* portId, double referenceUtc1, double referenceUt
 
 // ---------------------------------------------------------------------------
 // The body-position port, over the SAME ERFA chain the frames and parameter
-// modules use. The Sun and the Moon come out of the vendored series rather than
-// out of a second ephemeris the caller has to supply and keep consistent.
+// modules use. An optional SPK kernel supplies geometric J2000 states; without
+// it the explicitly selected Analytical source is the vendored ERFA series.
 // ---------------------------------------------------------------------------
 
+enum class EphemerisSource { Analytical, SpkKernel };
+
 struct BodyContext {
+  EphemerisSource source = EphemerisSource::Analytical;
+  const spk::Kernel* kernel = nullptr;
+  bool kernelUsed = false;
   double referenceUtc1 = 0.0;
   double referenceUtc2 = 0.0;
   ax::EarthOrientation earthOrientation;
@@ -215,7 +220,7 @@ struct BodyContext {
 
 int32_t erfa_body_position(void* context, int32_t bodyId, double secondsFromEpoch,
                            double position[3]) {
-  const BodyContext* bodies = static_cast<const BodyContext*>(context);
+  BodyContext* bodies = static_cast<BodyContext*>(context);
   if (bodies == nullptr || position == nullptr) return 1;
   const double days = secondsFromEpoch / 86400.0;
   int year = 0, month = 0, day = 0;
@@ -233,6 +238,20 @@ int32_t erfa_body_position(void* context, int32_t bodyId, double secondsFromEpoc
     position[0] = 0.0;
     position[1] = 0.0;
     position[2] = 0.0;
+    return 0;
+  }
+  if (bodies->source == EphemerisSource::SpkKernel) {
+    // ERFA/SOFA Dtdb: Fairhead-Bretagnon geocentric TDB-TT (seconds).
+    // u=v=0 removes topocentric terms; preserve two-part TT through ET.
+    // https://www.iausofa.org/2023-10-11c#documentation
+    const double tdbMinusTt = eraDtdb(epoch.tt1, epoch.tt2, 0.0, 0.0, 0.0, 0.0);
+    const double et = ((epoch.tt1 - 2451545.0) + epoch.tt2) * 86400.0 + tdbMinusTt;
+    ephem::StateRow state;
+    if (!bodies->kernel || bodies->kernel->state_et(bodyId, bodies->centralBodyId, et,
+                                                   &state) != ephem::Status::Ok)
+      return 1; // A supplied kernel never silently becomes an analytic series.
+    for (int i = 0; i < 3; ++i) position[i] = state.pos[i] * 1000.0;
+    bodies->kernelUsed = true;
     return 0;
   }
   double pvh[2][3];
@@ -538,6 +557,30 @@ extern "C" int locate_events(void) {
   bodies.referenceUtc2 = startUtc2;
   bodies.earthOrientation = earthOrientation;
   bodies.centralBodyId = centralBodyId;
+
+  ephem::KernelFrame kernelFrame;
+  spk::Kernel kernel;
+  if (const auto* input = find_frame("kernel")) {
+    // A kernel is ICRF/J2000. Refuse differently labelled trajectory samples
+    // instead of silently treating TEME/body-fixed axes or TDB text as UTC.
+    const auto* trajectory = GetOEM(find_frame("ephemeris")->payload);
+    for (const auto* block : *trajectory->EPHEMERIS_DATA_BLOCK()) {
+      const auto* rfm = block->REFERENCE_FRAME();
+      const auto* axes = rfm ? rfm->REFERENCE_FRAME_as_CelestialFrameWrapper() : nullptr;
+      if (block->TIME_SYSTEM() != timingStandard::UTC || !axes ||
+          (axes->frame() != CelestialFrame::ICRF && axes->frame() != CelestialFrame::J2000 &&
+           axes->frame() != CelestialFrame::GCRF) || block->CENTER_NAIF_ID() != centralBodyId)
+        return refuse(evlResultStatus::INVALID_INPUT,
+          "Kernel mode requires OEM TIME_SYSTEM=UTC, ICRF/J2000/GCRF axes and matching CENTER_NAIF_ID.");
+    }
+    const char* error = nullptr;
+    if (!ephem::decode_kernel_frame(input->payload, input->payload_length, &kernelFrame, &error))
+      return refuse(evlResultStatus::INVALID_INPUT, error);
+    if (kernel.load(kernelFrame.body, kernelFrame.body_length) != ephem::Status::Ok)
+      return refuse(evlResultStatus::INVALID_INPUT, "Invalid SPK kernel.");
+    bodies.source = EphemerisSource::SpkKernel;
+    bodies.kernel = &kernel;
+  }
 
   ev::ScanRequest scan;
   scan.startSeconds = 0.0;
@@ -883,6 +926,19 @@ extern "C" int locate_events(void) {
       event.add_EPOCH_TIME_SYSTEM(scaleOffset);
       event.add_EXTREMUM_VALUE(events[i].residual);
       encoded.push_back(event.Finish());
+    }
+  }
+
+  // The optional source receipt is the exact verified descriptor of the kernel
+  // that produced body states. No receipt means Analytical (or no body lookup).
+  if (bodies.kernelUsed) {
+    const int32_t pushed = plugin_push_output_ex("ephemeris_source", "NCD.fbs", "$NCD",
+        PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "NCD", 0, 8,
+        kernelFrame.descriptor_bytes.data(),
+        static_cast<uint32_t>(kernelFrame.descriptor_bytes.size()));
+    if (pushed < 0) {
+      plugin_set_error("source-receipt-failed", "Could not emit the ephemeris source descriptor.");
+      return 5;
     }
   }
 
