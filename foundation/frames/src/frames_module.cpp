@@ -344,10 +344,11 @@ bool parse_iso_utc(const char* text, int* year, int* month, int* day, int* hour,
   return true;
 }
 
-bool axis_type_needs_eop(rfmAxisType type) {
+bool axis_type_needs_eop(rfmAxisType type, int bodyId) {
   switch (type) {
     case rfmAxisType::BODY_FIXED:
     case rfmAxisType::TOPOCENTRIC:
+      return bodyId == kRootBodyId;
     case rfmAxisType::SOLAR_MAGNETOSPHERIC:
       return true;
     default:
@@ -386,7 +387,6 @@ ax::Vec3 read_axis_vector(const ::flatbuffers::Vector<double>* values, bool* ok)
 bool epoch_only_rotation(rfmAxisType type, int axisBodyId, const EvaluationContext& context,
                          const RFMCoordinateSystem* system, const ax::Epoch& epoch,
                          ax::Mat3* out) {
-  ax::RotationElements elements;
   switch (type) {
     case rfmAxisType::ICRF:
       *out = ax::identity();
@@ -432,25 +432,23 @@ bool epoch_only_rotation(rfmAxisType type, int axisBodyId, const EvaluationConte
         *out = ax::gcrfToItrf(epoch, context.eop);
         return true;
       }
-      if (!ax::rotationElementsForBody(axisBodyId, &elements)) {
-        return false;
-      }
-      *out = ax::icrfToBodyFixed(epoch, elements);
-      return true;
+      return ax::icrfToBodyFixed(epoch, axisBodyId, out);
     case rfmAxisType::BODY_INERTIAL:
     case rfmAxisType::BODY_EQUATOR:
-      if (!ax::rotationElementsForBody(axisBodyId, &elements)) {
-        return false;
+      // Earth keeps its legacy mean pole; non-Earth bodies use the same
+      // full pole model as BODY_FIXED (including periodic pole terms).
+      if (axisBodyId == kRootBodyId) {
+        ax::RotationElements earth;
+        ax::rotationElementsForBody(axisBodyId, &earth);
+        *out = ax::icrfToBodyInertial(epoch, earth);
+        return true;
       }
-      *out = ax::icrfToBodyInertial(epoch, elements);
-      return true;
+      return ax::icrfToBodyFixed(epoch, axisBodyId, out, true);
     case rfmAxisType::BODY_SPIN_SUN: {
-      if (!ax::rotationElementsForBody(axisBodyId, &elements)) {
-        return false;
-      }
-      // The spin axis is the third row of the body-inertial rotation carried
-      // back into the root axes.
-      const ax::Mat3 bodyInertial = ax::icrfToBodyInertial(epoch, elements);
+      ax::Mat3 bodyInertial;
+      if (!epoch_only_rotation(rfmAxisType::BODY_INERTIAL, axisBodyId, context,
+                               system, epoch, &bodyInertial)) return false;
+      // The spin axis is the third row of the body-inertial rotation.
       const ax::Vec3 spinAxis{bodyInertial.m[2][0], bodyInertial.m[2][1], bodyInertial.m[2][2]};
       return ax::bodySpinSunTriad(spinAxis, ax::sunDirectionGcrf(epoch), out);
     }
@@ -459,17 +457,9 @@ bool epoch_only_rotation(rfmAxisType type, int axisBodyId, const EvaluationConte
         return false;
       }
       const RFMOrigin* origin = system->ORIGIN();
-      const ax::Mat3 bodyFixed = (axisBodyId == kRootBodyId)
-          ? ax::gcrfToItrf(epoch, context.eop)
-          : ax::identity();
-      if (axisBodyId != kRootBodyId) {
-        if (!ax::rotationElementsForBody(axisBodyId, &elements)) {
-          return false;
-        }
-      }
-      const ax::Mat3 bodyRotation = (axisBodyId == kRootBodyId)
-          ? bodyFixed
-          : ax::icrfToBodyFixed(epoch, elements);
+      ax::Mat3 bodyRotation;
+      if (!epoch_only_rotation(rfmAxisType::BODY_FIXED, axisBodyId, context,
+                               system, epoch, &bodyRotation)) return false;
       const double latitude = origin->SITE_LATITUDE() * (ERFA_DPI / 180.0);
       const double longitude = origin->SITE_LONGITUDE() * (ERFA_DPI / 180.0);
       *out = ax::multiply(ax::topocentricFromBodyFixed(latitude, longitude), bodyRotation);
@@ -600,8 +590,11 @@ bool resolve_system(const RFMCoordinateSystem* system, const EvaluationContext& 
   const rfmAxisType axisType = system->AXIS_TYPE();
   const int axisBodyId =
       system->AXIS_REFERENCE_BODY_ID() == 0 ? kRootBodyId : system->AXIS_REFERENCE_BODY_ID();
-  out->needsEop = axis_type_needs_eop(axisType) ||
-      (axisType == rfmAxisType::BODY_FIXED && axisBodyId == kRootBodyId);
+  const RFMOrigin* originForEop = system->ORIGIN();
+  const bool earthSiteOrigin = originForEop != nullptr &&
+      originForEop->KIND() == rfmOriginKind::GROUND_SITE &&
+      (originForEop->SITE_BODY_ID() == 0 || originForEop->SITE_BODY_ID() == kRootBodyId);
+  out->needsEop = axis_type_needs_eop(axisType, axisBodyId) || earthSiteOrigin;
   if (out->needsEop && !context.eopSupplied) {
     *status = frmResultStatus::MISSING_EOP_DATA;
     *message =

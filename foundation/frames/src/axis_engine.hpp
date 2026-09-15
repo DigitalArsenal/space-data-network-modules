@@ -2,21 +2,11 @@
 //
 // GMAT-parity program item 8 (graph/tasks/gmat-08-frames-and-state-representations.md).
 //
-// ONE chain, not four. The task's finding is that frames are scattered across
-// four incompatible enums and two different precession/nutation routes: the
-// HPOP `coords.cpp` path is IAU-76/FK5 with a truncated 4-term nutation series,
-// `higherpop/frames.hpp` is IAU-2006/2000A over vendored ERFA, and the engine
-// carries its own XYS chain for display. This header makes the IAU-2006/2000A
-// route THE route for every axis type, by delegating the astronomy to the same
-// vendored ERFA (higherpop/third_party/erfa, BSD-3, derived with permission
-// from IAU SOFA) that `higherpop/frames.hpp` already uses.
-//
-// That delegation is why the acceptance number "agrees with higherpop's ERFA
-// chain to <= 1e-14" is met by construction rather than by a second
-// implementation racing the first: there is only one series evaluation in the
-// tree and both callers reach it. The IAU-76/FK5 route is retained under the
-// explicitly named legacy axis types (`MOD_FK5`, `TOD_FK5`) so the OD path's
-// answer stays reproducible instead of becoming an undocumented second answer.
+// Astronomy delegates to the vendored ERFA (BSD-3, derived from IAU SOFA).
+// IAU-2006/2000A remains the default Earth chain; explicitly selected 1996
+// (IAU-76/80 with observed corrections) and 2003 (IAU-2000A) conventions are
+// available for reproducing older products. See ../docs/reference-frames.md.
+// Internal AxisType values are NOT SDS wire enum values.
 //
 // UNITS: positions metres, velocities metres/second, angles radians, times as
 // two-part Julian dates (TT for the celestial side, UT1 for Earth rotation),
@@ -33,6 +23,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include "iau_body_models.hpp"
 
 extern "C" {
 #include "erfa.h"
@@ -43,9 +34,9 @@ namespace sdn {
 namespace frames {
 
 // ---------------------------------------------------------------------------
-// Axis vocabulary. Mirrors SDS `rfmAxisType` (Themis consult 2026-08-29,
-// additive to $RFM, no new standard code) plus the two explicitly named legacy
-// FK5 members the acceptance requires be retained rather than left implicit.
+// Internal axis vocabulary. Values are not SDS rfmAxisType wire values.
+// Some names have no rfmAxisType equivalent; see docs/reference-frames.md.
+// Legacy FK5 members are retained for reproducibility.
 // Append-only; never reorder.
 // ---------------------------------------------------------------------------
 enum class AxisType : uint8_t {
@@ -74,9 +65,24 @@ enum class AxisType : uint8_t {
   MOD_FK5 = 19,
   TOD_FK5 = 20,
   ITRF = 21,      ///< Earth-fixed; BODY_FIXED about Earth, named for the classical usage
+  // These two select celestial-to-terrestrial CONVENTIONS, not a rotation
+  // between two physically different inertial GCRFs. Use celestialToItrf.
+  GCRF_1996 = 22,
+  GCRF_2003 = 23,
+  VNC = 24,      ///< x=v/|v|, y=(r cross v)/|r cross v|, z=x cross y
+  SEZ = 25,      ///< south, east, zenith
+  ENU = 26,      ///< east, north, up (same as historical TOPOCENTRIC)
+  NED = 27,      ///< north, east, down
+  IAU_MOON = 28,
+  IAU_MARS = 29,
+  IAU_VENUS = 30,
+  IAU_MERCURY = 31,
+  IAU_JUPITER = 32,
+  IAU_SATURN = 33,
+  IAU_SUN = 34,
 };
 
-constexpr int kAxisTypeCount = 22;
+constexpr int kAxisTypeCount = 35;
 
 // ---------------------------------------------------------------------------
 // Small linear algebra. Row-major 3x3.
@@ -178,9 +184,13 @@ struct EarthOrientation {
   double dut1 = 0.0;         ///< UT1 - UTC, seconds
   double xPole = 0.0;        ///< polar motion x, RADIANS
   double yPole = 0.0;        ///< polar motion y, RADIANS
-  double dX = 0.0;           ///< CIP offset dX to IAU-2006/2000A, RADIANS
+  double dX = 0.0;           ///< CIP offset dX to the selected IAU model, RADIANS
   double dY = 0.0;           ///< CIP offset dY, RADIANS
   double lengthOfDay = 0.0;  ///< excess length of day, seconds
+  // TOTAL observed offsets to IAU-1980. Includes precession-rate/frame errors:
+  // never add a second nominal rate correction to an observed IERS offset.
+  double dPsi = 0.0;          ///< longitude nutation correction, radians (1996)
+  double dEpsilon = 0.0;      ///< obliquity nutation correction, radians (1996)
 };
 
 /// Two-part Julian dates for the scales the chain needs.
@@ -341,6 +351,96 @@ inline Mat3 gcrfToTodFk5(const Epoch& epoch) {
   return detail::fromErfa(rnpb);
 }
 
+// --- IERS Conventions 1996 and 2003 ----------------------------------------
+
+/// TN21 ch.5, p.25: nominal secular corrections to the IAU-1976 precession
+/// rates, delta psi_A=-0.2957 and delta omega_A=-0.0227 arcsec/Julian century.
+/// This is ONLY the secular part, not the full Herring 1996 nutation theory.
+/// These are corrections relative to the FIXED J2000 ecliptic, not the
+/// observed nutation offsets in the moving ecliptic of date. Do not substitute
+/// them directly for EarthOrientation::dPsi/dEpsilon or add them to those
+/// total observed offsets. Exposed for callers implementing the TN21 theory.
+inline void iers1996PrecessionRateCorrections(const Epoch& epoch,
+                                              double* deltaPsiA, double* deltaOmegaA) {
+  const double t = ((epoch.tt1 - ERFA_DJ00) + epoch.tt2) / ERFA_DJC;
+  if (deltaPsiA) *deltaPsiA = -0.2957 * t * ERFA_DAS2R;
+  if (deltaOmegaA) *deltaOmegaA = -0.0227 * t * ERFA_DAS2R;
+}
+
+/// Corrected IAU-76/80 celestial -> true equator/equinox of date.
+/// TN21 ch.5 pp.21-25 and SOFA Earth Attitude cookbook 5.2. With measured
+/// dPsi/dEpsilon, the celestial input is the realized GCRF; without them it
+/// is the uncorrected FK5 dynamical J2000 system. No extra frame bias is added.
+inline Mat3 gcrfToTod1996(const Epoch& epoch, const EarthOrientation& eop) {
+  double p[3][3], n[3][3], np[3][3], dpsi, deps;
+  eraPmat76(epoch.tt1, epoch.tt2, p);
+  eraNut80(epoch.tt1, epoch.tt2, &dpsi, &deps);
+  eraNumat(eraObl80(epoch.tt1, epoch.tt2), dpsi + eop.dPsi,
+           deps + eop.dEpsilon, n);
+  eraRxr(n, p, np);
+  return detail::fromErfa(np);
+}
+
+/// IERS-1996 equinox chain: W R3(GMST82 + EqEq94 + dPsi cos(eps80)) N P.
+/// EqEq94 includes +0.00264 sin(Omega)+0.000063 sin(2 Omega) arcsec,
+/// adopted by IERS1996 from IAU1994. Following SOFA Eqeq94, those terms are
+/// proleptic (also used before their 1997-01-01 operational introduction).
+/// Polar motion uses s'=0 in this route.
+inline Mat3 gcrfToItrf1996(const Epoch& epoch, const EarthOrientation& eop) {
+  Mat3 np = gcrfToTod1996(epoch, eop);
+  const double gast = eraGmst82(epoch.ut11, epoch.ut12) +
+      eraEqeq94(epoch.tt1, epoch.tt2) +
+      eop.dPsi * std::cos(eraObl80(epoch.tt1, epoch.tt2));
+  double pom[3][3], c2t[3][3];
+  eraPom00(eop.xPole, eop.yPole, 0.0, pom);
+  eraC2teqx(np.m, gast, pom, c2t);
+  return detail::fromErfa(c2t);
+}
+
+/// IAU-2000A bias/precession/nutation (TN32), distinctly selectable from 2006.
+/// eraPnm00a uses Lieske precession WITH IAU-2000 rate corrections and frame
+/// bias; calling it unmodified IAU-1976 precession would be misleading.
+inline Mat3 gcrfToTod2003(const Epoch& epoch) {
+  double r[3][3];
+  eraPnm00a(epoch.tt1, epoch.tt2, r);
+  return detail::fromErfa(r);
+}
+
+/// IERS-2003 equinox chain, SOFA cookbook 5.4, including observed dX/dY.
+inline Mat3 gcrfToItrf2003(const Epoch& epoch, const EarthOrientation& eop) {
+  Mat3 np = gcrfToTod2003(epoch);
+  double dpsi, deps, dpsipr, depspr;
+  eraNut00a(epoch.tt1, epoch.tt2, &dpsi, &deps);
+  eraPr00(epoch.tt1, epoch.tt2, &dpsipr, &depspr);
+  const double epsa = eraObl80(epoch.tt1, epoch.tt2) + depspr;
+  // Linearized CIP-offset conversion specified by cookbook 5.4.
+  const Vec3 correction = apply(np, Vec3{eop.dX, eop.dY, 0.0});
+  dpsi += correction.x / std::sin(epsa);
+  deps += correction.y;
+  double bias[3][3], prec[3][3], bp[3][3], nut[3][3];
+  eraBp00(epoch.tt1, epoch.tt2, bias, prec, bp);
+  eraNumat(epsa, dpsi, deps, nut);
+  eraRxr(nut, bp, np.m);
+  const double gast = eraGmst00(epoch.ut11, epoch.ut12, epoch.tt1, epoch.tt2) +
+      eraEe00(epoch.tt1, epoch.tt2, epsa, dpsi);
+  double pom[3][3], c2t[3][3];
+  eraPom00(eop.xPole, eop.yPole, eraSp00(epoch.tt1, epoch.tt2), pom);
+  eraC2teqx(np.m, gast, pom, c2t);
+  return detail::fromErfa(c2t);
+}
+
+/// Select the Earth-orientation convention without changing the default.
+inline bool celestialToItrf(AxisType convention, const Epoch& epoch,
+                            const EarthOrientation& eop, Mat3* out) {
+  if (!out) return false;
+  switch (convention) {
+    case AxisType::ICRF: *out = gcrfToItrf(epoch, eop); return true;
+    case AxisType::GCRF_1996: *out = gcrfToItrf1996(epoch, eop); return true;
+    case AxisType::GCRF_2003: *out = gcrfToItrf2003(epoch, eop); return true;
+    default: return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Sun and Moon directions, from ERFA's own ephemerides — no SPICE kernel and
 // no external file. `eraEpv00` is the Earth's heliocentric position/velocity
@@ -450,6 +550,18 @@ inline bool radialTransverseNormal(const Vec3& position, const Vec3& velocity, M
   return true;
 }
 
+/// Velocity-normal-conormal. For eccentric orbits conormal is not radial.
+inline bool velocityNormalConormal(const Vec3& position, const Vec3& velocity, Mat3* out) {
+  if (!out || !std::isfinite(norm(position)) || !std::isfinite(norm(velocity))) return false;
+  return triadFromPrimarySecondary(velocity, cross(position, velocity), out);
+}
+
+inline bool orbitalFrame(AxisType type, const Vec3& position, const Vec3& velocity, Mat3* out) {
+  if (type == AxisType::VNC) return velocityNormalConormal(position, velocity, out);
+  if (type == AxisType::OBJECT_REFERENCED) return radialTransverseNormal(position, velocity, out);
+  return false;
+}
+
 /// General ObjectReferenced axes: the caller names which orbital direction is
 /// the primary axis and which is the constraint. This subsumes RTN, LVLH, VVLH
 /// and GMAT's ObjectReferenced without a second triad derivation.
@@ -495,6 +607,25 @@ inline Mat3 topocentricFromBodyFixed(double geodeticLatitude, double eastLongitu
   const Vec3 north = {-sinLat * cosLon, -sinLat * sinLon, cosLat};
   const Vec3 up = {cosLat * cosLon, cosLat * sinLon, sinLat};
   return fromRows(east, north, up);
+}
+
+/// Named local horizon frames; latitude is geodetic, longitude is east,
+/// both in radians. These are rotations only; site translation is separate.
+inline bool topocentricFromBodyFixed(AxisType type, double latitude, double longitude,
+                                     Mat3* out) {
+  if (!out || !std::isfinite(latitude) || !std::isfinite(longitude) ||
+      std::fabs(latitude) > ERFA_DPI / 2.0) return false;
+  const Mat3 enu = topocentricFromBodyFixed(latitude, longitude);
+  const Vec3 e{enu.m[0][0], enu.m[0][1], enu.m[0][2]};
+  const Vec3 n{enu.m[1][0], enu.m[1][1], enu.m[1][2]};
+  const Vec3 u{enu.m[2][0], enu.m[2][1], enu.m[2][2]};
+  switch (type) {
+    case AxisType::TOPOCENTRIC:
+    case AxisType::ENU: *out = enu; return true;
+    case AxisType::SEZ: *out = fromRows(scale(n, -1.0), e, u); return true;
+    case AxisType::NED: *out = fromRows(n, e, scale(u, -1.0)); return true;
+    default: return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -739,14 +870,12 @@ inline bool librationPointFromPrimary(const Vec3& separation, const Vec3& separa
 // the published numbers for the bodies it serves, so they live here, in one
 // table, cited — never re-typed at each call site.
 //
-// Source: Archinal et al., "Report of the IAU Working Group on Cartographic
-// Coordinates and Rotational Elements: 2015", Celest. Mech. Dyn. Astr. 130:22
-// (2018), Tables 1 and 2. Angles converted from degrees to radians here.
-//
-// The Moon's entry is the report's MEAN elements (the E1..E13 libration series
-// is a further additive correction and is NOT applied); Mars and Earth are the
-// report's linear terms. Every consumer that needs the libration terms passes
-// its own RotationElements rather than editing this table.
+// Legacy MEAN-ELEMENT API, preserved for source compatibility. Mars/Sun:
+// WGCCRE2015 Table1; Moon/Earth: older WGCCRE elements retained in NAIF PCK
+// (neither is tabulated by the 2015 report). Angles converted to radians.
+// The Moon's E1..E13 terms and Mars periodic terms are NOT applied here.
+// Production built-ins use icrfToIauBodyFixed and iau_body_models.hpp below,
+// which include the full series and explicitly use TDB.
 // ---------------------------------------------------------------------------
 
 /// Ephemeris body codes used by the origin/axis resolution.
@@ -755,6 +884,10 @@ enum class BodyId : int {
   EARTH = 399,
   MOON = 301,
   MARS = 499,
+  MERCURY = 199,
+  VENUS = 299,
+  JUPITER = 599,
+  SATURN = 699,
   EARTH_MOON_BARYCENTRE = 3,
 };
 
@@ -800,26 +933,53 @@ inline bool rotationElementsForBody(int bodyId, RotationElements* out) {
   }
 }
 
+/// Full WGCCRE/NAIF orientation, including periodic terms. Unlike the legacy
+/// RotationElements helper above, the built-in series is evaluated in TDB.
+inline bool icrfToIauBodyFixed(double tdb1, double tdb2, int bodyId, Mat3* out,
+                               bool inertial = false) {
+  if (!out) return false;
+  double alpha, delta, w;
+  if (!iau2015::orientation(bodyId, (tdb1 - ERFA_DJ00) + tdb2, &alpha, &delta, &w)) return false;
+  double r[3][3];
+  eraIr(r);
+  eraRz(ERFA_DPI / 2.0 + alpha, r);
+  eraRx(ERFA_DPI / 2.0 - delta, r);
+  eraRz(inertial ? 0.0 : w, r);
+  *out = detail::fromErfa(r);
+  return true;
+}
+
+/// TT -> geocentric TDB (ERFA Fairhead-Bretagnon); no topocentric term.
+inline bool icrfToBodyFixed(const Epoch& epoch, int bodyId, Mat3* out, bool inertial = false) {
+  const double dtr = eraDtdb(epoch.tt1, epoch.tt2, 0.0, 0.0, 0.0, 0.0);
+  return icrfToIauBodyFixed(epoch.tt1, epoch.tt2 + dtr / ERFA_DAYSEC, bodyId, out, inertial);
+}
+
+inline bool icrfToBodyFixed(AxisType type, const Epoch& epoch, Mat3* out) {
+  int id;
+  switch (type) {
+    case AxisType::IAU_MOON: id = 301; break;
+    case AxisType::IAU_MARS: id = 499; break;
+    case AxisType::IAU_VENUS: id = 299; break;
+    case AxisType::IAU_MERCURY: id = 199; break;
+    case AxisType::IAU_JUPITER: id = 599; break;
+    case AxisType::IAU_SATURN: id = 699; break;
+    case AxisType::IAU_SUN: id = 10; break;
+    default: return false;
+  }
+  return icrfToBodyFixed(epoch, id, out);
+}
+
 // ---------------------------------------------------------------------------
 // Angular RATES.
 //
-// The acceptance asks for the angular rate of every axis set, not only its
-// orientation. Two of the twenty-two chains have a closed-form rate (Earth
-// rotation, body rotation); the rest are compositions of ERFA series, solar and
-// lunar ephemerides and orbit-derived triads whose analytic derivative would be
-// a second, separately-wrong implementation of the same thing.
-//
-// So the rate is taken the one way that is uniform, exact to the arithmetic and
-// impossible to get out of step with the orientation it differentiates: a
-// central difference of the SAME orientation function.
-//
-// ERROR BUDGET, stated rather than assumed. For a rotation whose fastest term
-// is Earth rotation (omega = 7.292e-5 rad/s) the central difference truncation
-// error is (omega^3 h^2)/6. At h = 1 s that is 6.5e-14 * 1/6 ~ 1e-14 rad/s, and
-// round-off in the differenced matrix is ~2 eps / h ~ 4e-16. h = 1 s therefore
-// sits near the minimum of the combined error and meets the 1e-14 rad/s bar;
-// `angularRateStepSeconds` exposes it so a caller measuring a faster frame can
-// shorten it.
+// Rates differentiate the same orientation function, so periodic body terms
+// and all Earth conventions remain consistent with the returned orientation.
+// A central difference has truncation O(omega^3 h^2 / 6), plus rounding in
+// the evaluated series and angle reductions. With h=1s the pure Earth-spin
+// truncation is about6.5e-14 rad/s; Jupiter's faster spin gives about9e-13.
+// The default is1s. A caller needing a tighter rate budget must choose and
+// verify a step for its specific frame/epoch, including evaluation roundoff.
 // ---------------------------------------------------------------------------
 
 constexpr double kDefaultAngularRateStepSeconds = 1.0;
