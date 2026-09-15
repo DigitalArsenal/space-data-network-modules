@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
+#include <iomanip>
 #include <vector>
 
 using namespace sdn::estimation;
@@ -695,7 +696,7 @@ int main() {
       fit.covariance[0] + fit.covariance[7] + fit.covariance[14]);
   const double truth_position_norm = std::hypot(
       std::hypot(truth.value[0], truth.value[1]), truth.value[2]);
-  std::cout << "{\"batch_position_error_m\":" << batch_position_error
+  std::cout << std::setprecision(17) << "{\"batch_position_error_m\":" << batch_position_error
             << ",\"batch_position_relative_error\":"
             << batch_position_error / truth_position_norm
             << ",\"batch_rms\":" << fit.residual_rms

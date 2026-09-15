@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.analysis.estimation",
   "name": "Measurement-based Orbit Estimation",
   "version": "0.1.0",
-  "description": "Batch weighted least squares, covariance-form sequential filtering and smoothing, measurement simulation, media corrections and initial orbit determination over a caller-supplied propagator port.",
+  "description": "Six-state nominal-trajectory EKF and RTS with correlated-vector updates validated against exact Gaussian conditioning, Hipparchus 4.0.3 constant-velocity smoother data, and circular-orbit asynchronous fusion consistency tests. Legacy measurement-only UKF is not validated for nonlinear propagation. Batch WLS, simulation, media and IOD retain their existing authority tests.",
   "pluginFamily": "analysis",
   "threadModel": "wasi-sequential",
   "sequentialJustification": {
@@ -103,7 +103,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Runs batch WLS, EKF, UKF or EKF plus RTS using states and STMs from the propagator port."
+      "description": "Runs six-state batch WLS, nominal-trajectory EKF or EKF/RTS from caller-supplied cumulative STMs. UKF selects a legacy measurement-only unscented update, not a nonlinear-dynamics UKF. No linear-KF selector, adaptive-noise controls or GNSS PVT/clock states exist in the pinned contract."
     },
     {
       "methodId": "simulate_tracking",
