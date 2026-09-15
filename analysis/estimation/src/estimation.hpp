@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -46,6 +47,9 @@ enum class MeasurementKind : std::uint16_t {
   LASER_RANGE = 18,
   TIME_DIFFERENCE_OF_ARRIVAL = 19,
   FREQUENCY_DIFFERENCE_OF_ARRIVAL = 20,
+  POSITION_VELOCITY = 21,
+  PSEUDORANGE = 22,
+  LINEAR = 23,
 };
 
 enum class TroposphereModel : std::uint8_t {
@@ -65,6 +69,7 @@ enum class EstimatorKind : std::uint8_t {
   EXTENDED_KALMAN_FILTER = 1,
   UNSCENTED_KALMAN_FILTER = 2,
   EXTENDED_KALMAN_FILTER_WITH_RTS = 3,
+  LINEAR_KALMAN_FILTER = 4,
 };
 
 enum class ProcessNoiseKind : std::uint8_t {
@@ -99,8 +104,8 @@ struct Observation {
   double epoch_seconds{0.0};
   MeasurementKind kind{MeasurementKind::RANGE};
   std::uint8_t value_count{1};
-  std::array<double, 4> value{};
-  std::array<double, 4> sigma{{1.0, 1.0, 1.0, 1.0}};
+  std::array<double, 6> value{};
+  std::array<double, 6> sigma{{1.0, 1.0, 1.0, 1.0, 1.0, 1.0}};
   Vec3 station_position_m{};
   Vec3 station_velocity_mps{};
   Vec3 station_east{};
@@ -116,6 +121,9 @@ struct Observation {
   bool apply_sagnac{true};
   std::uint32_t transmitter_index{0};
   std::uint32_t receiver_index{0};
+  std::vector<double> linear_matrix;
+  std::vector<double> linear_offset;
+  double satellite_clock_bias_m{0};
 };
 
 struct PropagatorSample {
@@ -125,8 +133,8 @@ struct PropagatorSample {
 
 struct MeasurementPrediction {
   std::uint8_t count{0};
-  std::array<double, 4> value{};
-  std::array<Vector6, 4> jacobian{};
+  std::array<double, 6> value{};
+  std::array<Vector6, 6> jacobian{};
   double geometric_range_m{0.0};
   double light_time_m{0.0};
   double sagnac_m{0.0};
@@ -174,6 +182,11 @@ struct BatchResult {
   bool converged{false};
 };
 
+using Vector8 = std::array<double, 8>;
+using Matrix8 = std::array<double, 64>;
+using PropagatorPort =
+    std::function<bool(const CartesianState &, double, PropagatorSample *)>;
+
 struct FilterConfig {
   CartesianState initial{};
   Matrix6 initial_covariance{};
@@ -182,6 +195,16 @@ struct FilterConfig {
   std::array<double, 3> acceleration_psd{{0.0, 0.0, 0.0}};
   double dmc_correlation_time_seconds{3600.0};
   double sigma_edit_threshold{3.0};
+  double ukf_alpha{1}, ukf_beta{2}, ukf_kappa{0};
+  PropagatorPort propagator;
+  bool adaptive_process_noise{false}, inflate_measurement_noise{false};
+  double adaptation_rate{0.05}, minimum_process_scale{0.01},
+      maximum_process_scale{100};
+  double maximum_measurement_scale{100};
+  bool estimate_clock{false};
+  double initial_clock_bias_m{0}, initial_clock_drift_mps{0};
+  Matrix8 initial_covariance8{};
+  double clock_bias_psd{0}, clock_drift_psd{0};
 };
 
 struct FilterEpoch {
@@ -194,6 +217,9 @@ struct FilterEpoch {
   Matrix6 transition{};
   double normalized_innovation_squared{0.0};
   bool accepted{false};
+  Vector8 filtered_extended{}, smoothed_extended{};
+  Matrix8 filtered_covariance_extended{}, smoothed_covariance_extended{};
+  double process_noise_scale{1}, measurement_noise_scale{1};
 };
 
 struct FilterResult {
@@ -223,39 +249,40 @@ Vec3 cross(Vec3 a, Vec3 b);
 double norm(Vec3 a);
 
 Matrix6 identity6();
-bool invert6(const Matrix6& input, Matrix6* inverse);
-bool covariance_is_symmetric_positive_definite(const Matrix6& covariance,
+bool invert6(const Matrix6 &input, Matrix6 *inverse);
+bool covariance_is_symmetric_positive_definite(const Matrix6 &covariance,
                                                double tolerance = 1.0e-12);
 
-double saastamoinen_hopfield_delay_m(const MediaEnvironment& environment);
-double marini_murray_delay_m(const MediaEnvironment& environment);
-double ionosphere_group_delay_m(const MediaEnvironment& environment);
-double ionosphere_group_delay_rate_mps(const MediaEnvironment& environment);
+double saastamoinen_hopfield_delay_m(const MediaEnvironment &environment);
+double marini_murray_delay_m(const MediaEnvironment &environment);
+double ionosphere_group_delay_m(const MediaEnvironment &environment);
+double ionosphere_group_delay_rate_mps(const MediaEnvironment &environment);
 
-MeasurementPrediction predict_measurement(const Observation& observation,
-                                          const CartesianState& state);
+MeasurementPrediction predict_measurement(const Observation &observation,
+                                          const CartesianState &state);
 
-BatchResult batch_weighted_least_squares(const BatchConfig& config,
-                                         const std::vector<Observation>& observations,
-                                         const std::vector<PropagatorSample>& samples);
+BatchResult
+batch_weighted_least_squares(const BatchConfig &config,
+                             const std::vector<Observation> &observations,
+                             const std::vector<PropagatorSample> &samples);
 
-FilterResult sequential_filter(const FilterConfig& config,
-                               const std::vector<Observation>& observations,
-                               const std::vector<PropagatorSample>& samples,
+FilterResult sequential_filter(const FilterConfig &config,
+                               const std::vector<Observation> &observations,
+                               const std::vector<PropagatorSample> &samples,
                                bool smooth);
 
-std::vector<Observation> simulate_measurements(
-    const std::vector<Observation>& templates,
-    const std::vector<PropagatorSample>& truth_samples,
-    const std::vector<ErrorModel>& error_models);
+std::vector<Observation>
+simulate_measurements(const std::vector<Observation> &templates,
+                      const std::vector<PropagatorSample> &truth_samples,
+                      const std::vector<ErrorModel> &error_models);
 
-IodResult gauss_iod(const std::array<AnglesObservation, 3>& observations,
+IodResult gauss_iod(const std::array<AnglesObservation, 3> &observations,
                     double gravitational_parameter_m3_s2);
-IodResult laplace_iod(const std::array<AnglesObservation, 3>& observations,
+IodResult laplace_iod(const std::array<AnglesObservation, 3> &observations,
                       double gravitational_parameter_m3_s2);
-IodResult gibbs_iod(const std::array<CartesianState, 3>& positions,
+IodResult gibbs_iod(const std::array<CartesianState, 3> &positions,
                     double gravitational_parameter_m3_s2);
-IodResult herrick_gibbs_iod(const std::array<CartesianState, 3>& positions,
+IodResult herrick_gibbs_iod(const std::array<CartesianState, 3> &positions,
                             double gravitational_parameter_m3_s2);
 
-}  // namespace sdn::estimation
+} // namespace sdn::estimation

@@ -1,6 +1,7 @@
 // Independent numerical validation. Full sources, units, frames, epochs and
 // tolerance rationales are in fixtures/README.md. No module-generated goldens.
 #include "estimation.hpp"
+#include "two_body_provider.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -188,11 +189,13 @@ void asynchronous_fusion() {
     }
     out<<"],\"observations\":[";
     for(std::size_t k=0;k<templates.size();++k){if(k)out<<",";const auto& o=templates[k];
-      out<<"{\"t\":"<<o.epoch_seconds<<",\"kind\":"<<static_cast<int>(o.kind)<<",\"value_count\":"<<static_cast<int>(o.value_count)<<",\"value\":";array(o.value);
-      out<<",\"sigma\":";array(o.sigma);out<<",\"station_position_m\":";vec(o.station_position_m);out<<",\"station_velocity_mps\":";vec(o.station_velocity_mps);out<<"}";
+      out<<"{\"t\":"<<o.epoch_seconds<<",\"kind\":"<<static_cast<int>(o.kind)<<",\"value_count\":"<<static_cast<int>(o.value_count)<<",\"value\":";array(std::array<double,4>{o.value[0],o.value[1],o.value[2],o.value[3]});
+      out<<",\"sigma\":";array(std::array<double,4>{o.sigma[0],o.sigma[1],o.sigma[2],o.sigma[3]});out<<",\"station_position_m\":";vec(o.station_position_m);out<<",\"station_velocity_mps\":";vec(o.station_velocity_mps);out<<"}";
     }
     out<<"]}\n";
   }
+  for(auto estimator:{EstimatorKind::EXTENDED_KALMAN_FILTER,EstimatorKind::UNSCENTED_KALMAN_FILTER}) {
+  c.estimator=estimator;c.propagator=test_provider::two_body;
   std::mt19937_64 rng(0x15e57);std::normal_distribution<double> gaussian;
   constexpr int runs=500;double sum_nees=0,sum_nis=0,filtered_squared=0,smoothed_squared=0;
   for(int run=0;run<runs;++run) {
@@ -215,8 +218,9 @@ void asynchronous_fusion() {
   // Conservative outward rounding of scipy.stats.chi2.ppf([.005,.995], dof).
   assert(anees>5.60846959 && anees<6.40655574);assert(nis>.97776439 && nis<1.02251913);
   assert(smoothed_squared<=filtered_squared);
-  std::cout<<"PASS asynchronous circular-orbit fusion runs="<<runs<<" observations="<<samples.size()<<" dimensions="<<dimensions<<" ANEES="<<anees<<" NIS_per_dof="<<nis
+  std::cout<<"PASS nonlinear asynchronous fusion kind="<<static_cast<int>(estimator)<<" runs="<<runs<<" observations="<<samples.size()<<" dimensions="<<dimensions<<" ANEES="<<anees<<" NIS_per_dof="<<nis
     <<" filter_position_RMSE_m="<<std::sqrt(filtered_squared/(runs*samples.size()))<<" smoother_position_RMSE_m="<<std::sqrt(smoothed_squared/(runs*samples.size()))<<"\n";
+  }
 }
 }
 int main(int argc,char** argv) {

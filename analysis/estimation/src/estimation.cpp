@@ -29,15 +29,6 @@ Vector6 mat_vec(const Matrix6& matrix, const Vector6& vector) {
   return result;
 }
 
-Matrix6 transpose(const Matrix6& matrix) {
-  Matrix6 result{};
-  for (int row = 0; row < 6; ++row) {
-    for (int column = 0; column < 6; ++column) {
-      at(result, row, column) = at(matrix, column, row);
-    }
-  }
-  return result;
-}
 
 Matrix6 multiply(const Matrix6& left, const Matrix6& right) {
   Matrix6 result{};
@@ -51,17 +42,7 @@ Matrix6 multiply(const Matrix6& left, const Matrix6& right) {
   return result;
 }
 
-Matrix6 add_matrix(const Matrix6& left, const Matrix6& right) {
-  Matrix6 result{};
-  for (int i = 0; i < 36; ++i) result[i] = left[i] + right[i];
-  return result;
-}
 
-Matrix6 subtract_matrix(const Matrix6& left, const Matrix6& right) {
-  Matrix6 result{};
-  for (int i = 0; i < 36; ++i) result[i] = left[i] - right[i];
-  return result;
-}
 
 Matrix6 symmetrize(const Matrix6& input) {
   Matrix6 result = input;
@@ -467,6 +448,20 @@ double ionosphere_group_delay_rate_mps(const MediaEnvironment& environment) {
 MeasurementPrediction predict_measurement(const Observation& observation,
                                           const CartesianState& state) {
   MeasurementPrediction prediction{};
+  if (observation.kind == MeasurementKind::POSITION_VELOCITY) {
+    prediction.count = 6;
+    for (int i=0;i<6;++i) { prediction.value[i]=state.value[i]; prediction.jacobian[i][i]=1; }
+    return prediction;
+  }
+  if (observation.kind == MeasurementKind::PSEUDORANGE) {
+    // Corrected transmitter coordinates must already be in the reception frame.
+    if (observation.apply_light_time || observation.apply_sagnac) return prediction;
+    Observation range_observation = observation;
+    range_observation.kind = MeasurementKind::RANGE;
+    prediction = predict_measurement(range_observation, state);
+    prediction.value[0] -= observation.satellite_clock_bias_m;
+    return prediction;
+  }
   const Vec3 r = position(state);
   const Vec3 v = velocity(state);
   const Vec3 relative = subtract(r, observation.station_position_m);
@@ -824,223 +819,573 @@ BatchResult batch_weighted_least_squares(const BatchConfig& config,
   return result;
 }
 
-FilterResult sequential_filter(const FilterConfig& config,
-                               const std::vector<Observation>& observations,
-                               const std::vector<PropagatorSample>& samples,
+namespace {
+// Fixed capacity, active dimension 6 or 8. The stride is always eight.
+using V = Vector8;
+using M = Matrix8;
+M tr8(const M &a, int n) {
+  M b{};
+  for (int i = 0; i < n; ++i)
+    for (int j = 0; j < n; ++j)
+      b[8 * i + j] = a[8 * j + i];
+  return b;
+}
+M mul8(const M &a, const M &b, int n) {
+  M c{};
+  for (int i = 0; i < n; ++i)
+    for (int j = 0; j < n; ++j)
+      for (int k = 0; k < n; ++k)
+        c[8 * i + j] += a[8 * i + k] * b[8 * k + j];
+  return c;
+}
+M sym8(M a, int n) {
+  for (int i = 0; i < n; ++i)
+    for (int j = 0; j < i; ++j)
+      a[8 * i + j] = a[8 * j + i] = .5 * (a[8 * i + j] + a[8 * j + i]);
+  return a;
+}
+bool chol8(const M &a, M *l, int n) {
+  l->fill(0);
+  for (int i = 0; i < n; ++i)
+    for (int j = 0; j <= i; ++j) {
+      if (!std::isfinite(a[8 * i + j]) || !std::isfinite(a[8 * j + i]) ||
+          std::abs(a[8 * i + j] - a[8 * j + i]) >
+              1e-10 * std::max(1.0, std::sqrt(
+                                        std::abs(a[8 * i + i] * a[8 * j + j]))))
+        return false;
+      double v = a[8 * i + j];
+      for (int k = 0; k < j; ++k)
+        v -= (*l)[8 * i + k] * (*l)[8 * j + k];
+      if (i == j) {
+        if (!(v > 0) || !std::isfinite(v))
+          return false;
+        (*l)[8 * i + j] = std::sqrt(v);
+      } else
+        (*l)[8 * i + j] = v / (*l)[8 * j + j];
+    }
+  return true;
+}
+bool inv8(const M &a, M *inverse, int n) {
+  M l{};
+  if (!chol8(a, &l, n))
+    return false;
+  inverse->fill(0);
+  for (int col = 0; col < n; ++col) {
+    V y{}, x{};
+    for (int i = 0; i < n; ++i) {
+      double v = i == col ? 1 : 0;
+      for (int k = 0; k < i; ++k)
+        v -= l[8 * i + k] * y[k];
+      y[i] = v / l[8 * i + i];
+    }
+    for (int i = n; i-- > 0;) {
+      double v = y[i];
+      for (int k = i + 1; k < n; ++k)
+        v -= l[8 * k + i] * x[k];
+      x[i] = v / l[8 * i + i];
+    }
+    for (int i = 0; i < n; ++i)
+      (*inverse)[8 * i + col] = x[i];
+  }
+  return true;
+}
+M expand6(const Matrix6 &a) {
+  M b{};
+  for (int i = 0; i < 6; ++i)
+    for (int j = 0; j < 6; ++j)
+      b[8 * i + j] = a[6 * i + j];
+  return b;
+}
+CartesianState cartesian(const V &x, double t) {
+  CartesianState s{};
+  s.epoch_seconds = t;
+  std::copy_n(x.begin(), 6, s.value.begin());
+  return s;
+}
+struct SigmaCloud {
+  std::array<V, 17> points{};
+  int count;
+  double wm0, wc0, wi;
+};
+bool cloud(const V &x, const M &p, int n, const FilterConfig &c,
+           SigmaCloud *out) {
+  const double scale = c.ukf_alpha * c.ukf_alpha * (n + c.ukf_kappa);
+  if (!(scale > 1e-12) || !std::isfinite(scale))
+    return false;
+  M l{};
+  if (!chol8(p, &l, n))
+    return false;
+  out->count = 2 * n + 1;
+  out->wm0 = 1 - n / scale;
+  out->wc0 = out->wm0 + 1 - c.ukf_alpha * c.ukf_alpha + c.ukf_beta;
+  out->wi = .5 / scale;
+  out->points[0] = x;
+  for (int j = 0; j < n; ++j) {
+    out->points[1 + j] = out->points[1 + n + j] = x;
+    for (int i = 0; i < n; ++i) {
+      const double d = std::sqrt(scale) * l[8 * i + j];
+      out->points[1 + j][i] += d;
+      out->points[1 + n + j][i] -= d;
+    }
+  }
+  return true;
+}
+// Full measurement model including module-local linear and receiver-clock
+// lanes.
+bool measurement(const Observation &o, const V &x, int n, V *y, M *h) {
+  y->fill(0);
+  h->fill(0);
+  if (o.kind == MeasurementKind::LINEAR) {
+    if (o.linear_matrix.size() != static_cast<std::size_t>(o.value_count * n) ||
+        o.linear_offset.size() != o.value_count)
+      return false;
+    for (int i = 0; i < o.value_count; ++i) {
+      (*y)[i] = o.linear_offset[i];
+      for (int j = 0; j < n; ++j) {
+        double v = o.linear_matrix[i * n + j];
+        (*h)[8 * i + j] = v;
+        (*y)[i] += v * x[j];
+      }
+    }
+  } else {
+    auto prediction = predict_measurement(o, cartesian(x, o.epoch_seconds));
+    if (prediction.count != o.value_count)
+      return false;
+    for (int i = 0; i < o.value_count; ++i) {
+      (*y)[i] = prediction.value[i];
+      for (int j = 0; j < 6; ++j)
+        (*h)[8 * i + j] = prediction.jacobian[i][j];
+    }
+    if (o.kind == MeasurementKind::PSEUDORANGE && n == 8) {
+      (*y)[0] += x[6];
+      (*h)[6] = 1;
+    }
+  }
+  for (int i = 0; i < o.value_count; ++i) {
+    if (!std::isfinite((*y)[i]))
+      return false;
+    for (int j = 0; j < n; ++j)
+      if (!std::isfinite((*h)[8 * i + j]))
+        return false;
+  }
+  return true;
+}
+} // namespace
+
+FilterResult sequential_filter(const FilterConfig &config,
+                               const std::vector<Observation> &observations,
+                               const std::vector<PropagatorSample> &samples,
                                bool smooth) {
   FilterResult result{};
-  if (observations.empty() || observations.size() != samples.size()) return result;
-  if (config.estimator != EstimatorKind::EXTENDED_KALMAN_FILTER &&
-      config.estimator != EstimatorKind::EXTENDED_KALMAN_FILTER_WITH_RTS &&
-      config.estimator != EstimatorKind::UNSCENTED_KALMAN_FILTER) return result;
+  const int n = config.estimate_clock ? 8 : 6;
+  const bool ukf = config.estimator == EstimatorKind::UNSCENTED_KALMAN_FILTER;
+  const bool linear = config.estimator == EstimatorKind::LINEAR_KALMAN_FILTER;
+  if (observations.empty() ||
+      (!config.propagator && samples.size() != observations.size()) ||
+      (config.estimator != EstimatorKind::EXTENDED_KALMAN_FILTER &&
+       config.estimator != EstimatorKind::EXTENDED_KALMAN_FILTER_WITH_RTS &&
+       !ukf && !linear) ||
+      (linear && config.propagator))
+    return result;
   if (!std::isfinite(config.initial.epoch_seconds) ||
-      !std::isfinite(config.sigma_edit_threshold) || config.sigma_edit_threshold <= 0.0 ||
-      !covariance_is_symmetric_positive_definite(config.initial_covariance)) return result;
-  for (double value : config.initial.value) if (!std::isfinite(value)) return result;
-  for (double value : config.acceleration_psd) {
-    if (!std::isfinite(value) || value < 0.0) return result;
-  }
+      !std::isfinite(config.sigma_edit_threshold) ||
+      config.sigma_edit_threshold <= 0 || !std::isfinite(config.ukf_alpha) ||
+      config.ukf_alpha <= 0 || !std::isfinite(config.ukf_beta) ||
+      config.ukf_beta < 0 || !std::isfinite(config.ukf_kappa) ||
+      n + config.ukf_kappa <= 0 || !std::isfinite(config.adaptation_rate) ||
+      config.adaptation_rate <= 0 || config.adaptation_rate > 1 ||
+      !std::isfinite(config.minimum_process_scale) ||
+      config.minimum_process_scale <= 0 || config.minimum_process_scale > 1 ||
+      !std::isfinite(config.maximum_process_scale) ||
+      config.maximum_process_scale < 1 ||
+      !std::isfinite(config.maximum_measurement_scale) ||
+      config.maximum_measurement_scale < 1)
+    return result;
+  for (double v : config.acceleration_psd)
+    if (!std::isfinite(v) || v < 0)
+      return result;
+  for (double v : {config.clock_bias_psd, config.clock_drift_psd})
+    if (!std::isfinite(v) || v < 0)
+      return result;
   if (config.process_noise != ProcessNoiseKind::NONE &&
       config.process_noise != ProcessNoiseKind::STATE_NOISE_COMPENSATION &&
-      config.process_noise != ProcessNoiseKind::DYNAMIC_MODEL_COMPENSATION) return result;
+      config.process_noise != ProcessNoiseKind::DYNAMIC_MODEL_COMPENSATION)
+    return result;
   if (config.process_noise == ProcessNoiseKind::DYNAMIC_MODEL_COMPENSATION &&
       (!std::isfinite(config.dmc_correlation_time_seconds) ||
-       config.dmc_correlation_time_seconds <= 0.0)) return result;
-  CartesianState current = config.initial;
-  Matrix6 covariance = config.initial_covariance;
-  double previous_epoch = config.initial.epoch_seconds;
+       config.dmc_correlation_time_seconds <= 0))
+    return result;
+  V x{};
+  std::copy(config.initial.value.begin(), config.initial.value.end(),
+            x.begin());
+  if (n == 8) {
+    x[6] = config.initial_clock_bias_m;
+    x[7] = config.initial_clock_drift_mps;
+  }
+  for (double v : x)
+    if (!std::isfinite(v))
+      return result;
+  M p = n == 8 ? config.initial_covariance8
+               : expand6(config.initial_covariance),
+    scratch{};
+  if (!chol8(p, &scratch, n))
+    return result;
   CartesianState previous_nominal = config.initial;
-  Matrix6 previous_cumulative_stm = identity6();
-
+  Matrix6 previous_stm = identity6();
+  double previous_epoch = config.initial.epoch_seconds, qscale = 1;
+  std::vector<M> predictions, crosses;
+  std::vector<V> predicted_states;
   for (std::size_t index = 0; index < observations.size(); ++index) {
-    const Observation& observation = observations[index];
-    if (!std::isfinite(observation.epoch_seconds) ||
-        observation.epoch_seconds < previous_epoch ||
-        !std::isfinite(samples[index].state.epoch_seconds) ||
-        std::abs(samples[index].state.epoch_seconds - observation.epoch_seconds) > 1.0e-8 ||
-        static_cast<unsigned>(observation.kind) >
-            static_cast<unsigned>(MeasurementKind::FREQUENCY_DIFFERENCE_OF_ARRIVAL)) return result;
-    for (double value : samples[index].state.value) if (!std::isfinite(value)) return result;
-    for (double value : samples[index].stm) if (!std::isfinite(value)) return result;
-    Matrix6 inverse_previous_stm{};
-    if (!invert6(previous_cumulative_stm, &inverse_previous_stm)) return result;
-    const Matrix6 phi = multiply(samples[index].stm, inverse_previous_stm);
-    const double dt = observations[index].epoch_seconds - previous_epoch;
-    CartesianState predicted = samples[index].state;
-    const Vector6 nominal_delta = state_delta(current, previous_nominal);
-    const Vector6 propagated_delta = mat_vec(phi, nominal_delta);
-    for (int i = 0; i < 6; ++i) predicted.value[i] += propagated_delta[i];
-    Matrix6 predicted_covariance = add_matrix(
-        multiply(multiply(phi, covariance), transpose(phi)), process_noise(config, std::abs(dt)));
-    predicted_covariance = symmetrize(predicted_covariance);
-    if (!covariance_is_symmetric_positive_definite(predicted_covariance)) return result;
-    const MeasurementPrediction central = predict_measurement(observations[index], predicted);
-    if (central.count == 0 || central.count != observation.value_count) return result;
-    for (int component = 0; component < central.count; ++component) {
-      if (!std::isfinite(observation.value[component]) ||
-          !std::isfinite(observation.sigma[component]) || observation.sigma[component] <= 0.0 ||
-          !std::isfinite(central.value[component])) return result;
-      for (double value : central.jacobian[component]) if (!std::isfinite(value)) return result;
+    const auto &o = observations[index];
+    const int m = o.value_count;
+    if (!std::isfinite(o.epoch_seconds) || o.epoch_seconds < previous_epoch ||
+        m < 1 || m > 6 ||
+        static_cast<unsigned>(o.kind) >
+            static_cast<unsigned>(MeasurementKind::LINEAR))
+      return result;
+    if (linear && o.kind != MeasurementKind::LINEAR &&
+        o.kind != MeasurementKind::POSITION_VECTOR &&
+        o.kind != MeasurementKind::POSITION_VELOCITY)
+      return result;
+    for (int j = 0; j < m; ++j)
+      if (!std::isfinite(o.value[j]) || !std::isfinite(o.sigma[j]) ||
+          o.sigma[j] <= 0)
+        return result;
+    const double dt = o.epoch_seconds - previous_epoch;
+    M phi{};
+    for (int i = 0; i < n; ++i)
+      phi[8 * i + i] = 1;
+    if (n == 8)
+      phi[6 * 8 + 7] = dt;
+    PropagatorSample nominal{};
+    if (!config.propagator) {
+      nominal = samples[index];
+      Matrix6 inv_previous{}, inv_current{};
+      if (!std::isfinite(nominal.state.epoch_seconds) ||
+          std::abs(nominal.state.epoch_seconds - o.epoch_seconds) > 1e-8 ||
+          !invert6(previous_stm, &inv_previous) ||
+          !invert6(nominal.stm, &inv_current))
+        return result;
+      for (double v : nominal.state.value)
+        if (!std::isfinite(v))
+          return result;
+      for (double v : nominal.stm)
+        if (!std::isfinite(v))
+          return result;
+      const auto f = multiply(nominal.stm, inv_previous);
+      for (int i = 0; i < 6; ++i)
+        for (int j = 0; j < 6; ++j)
+          phi[8 * i + j] = f[6 * i + j];
     }
-    CartesianState updated = predicted;
-    Matrix6 updated_covariance = predicted_covariance;
-    double total_nis = 0.0;
-    bool accepted = true;
-
-    if (config.estimator == EstimatorKind::UNSCENTED_KALMAN_FILTER) {
-      // Legacy measurement-only unscented update. The fixed $EST port supplies
-      // nominal states/STMs, not nonlinear propagated sigma points. This is
-      // NOT a validated nonlinear-dynamics UKF; see README's contract hold.
-      constexpr int count = 13;
-      constexpr double alpha = 1.0;
-      constexpr double lambda = alpha * alpha * 6.0 - 6.0;
-      constexpr double wm0 = lambda / (6.0 + lambda);
-      constexpr double wc0 = wm0 + (1.0 - alpha * alpha + 2.0);
-      constexpr double wi = 1.0 / (2.0 * (6.0 + lambda));
-      const double gamma = std::sqrt(6.0 + lambda);
-      for (int component = 0; component < central.count; ++component) {
-        Matrix6 lower{};
-        if (!cholesky6(updated_covariance, &lower)) return result;
-        std::array<CartesianState, count> sigma_states{};
-        sigma_states[0] = updated;
-        for (int column = 0; column < 6; ++column) {
-          sigma_states[1 + column] = updated;
-          sigma_states[7 + column] = updated;
-          for (int row = 0; row < 6; ++row) {
-            sigma_states[1 + column].value[row] += gamma * at(lower, row, column);
-            sigma_states[7 + column].value[row] -= gamma * at(lower, row, column);
+    auto propagate = [&](const V &seed, V *dest, M *transition) {
+      *dest = seed;
+      PropagatorSample answer{};
+      if (config.propagator) {
+        if (dt == 0) {
+          answer.state = cartesian(seed, o.epoch_seconds);
+          answer.stm = identity6();
+        } else if (!config.propagator(cartesian(seed, previous_epoch),
+                                      o.epoch_seconds, &answer))
+          return false;
+        if (!std::isfinite(answer.state.epoch_seconds) ||
+            std::abs(answer.state.epoch_seconds - o.epoch_seconds) > 1e-8)
+          return false;
+        for (double v : answer.state.value)
+          if (!std::isfinite(v))
+            return false;
+        for (double v : answer.stm)
+          if (!std::isfinite(v))
+            return false;
+        for (int i = 0; i < 6; ++i) {
+          (*dest)[i] = answer.state.value[i];
+          if (transition)
+            for (int j = 0; j < 6; ++j)
+              (*transition)[8 * i + j] = answer.stm[6 * i + j];
+        }
+      } else
+        for (int i = 0; i < 6; ++i) {
+          (*dest)[i] = nominal.state.value[i];
+          for (int j = 0; j < 6; ++j)
+            (*dest)[i] +=
+                phi[8 * i + j] * (seed[j] - previous_nominal.value[j]);
+        }
+      if (n == 8)
+        (*dest)[6] = seed[6] + dt * seed[7];
+      return true;
+    };
+    V xp{};
+    M pp{}, cross{};
+    if (ukf && dt != 0) {
+      SigmaCloud sc{};
+      if (!cloud(x, p, n, config, &sc))
+        return result;
+      std::array<V, 17> propagated{};
+      bool ready = true;
+      // Request the entire cloud in one port round-trip.
+      for (int k = 0; k < sc.count; ++k)
+        if (!propagate(sc.points[k], &propagated[k], k == 0 ? &phi : nullptr))
+          ready = false;
+      if (!ready)
+        return result;
+      xp = propagated[0];
+      for (int k = 1; k < sc.count; ++k)
+        for (int i = 0; i < n; ++i)
+          xp[i] += sc.wi * (propagated[k][i] - propagated[0][i]);
+      for (int k = 0; k < sc.count; ++k) {
+        double w = k == 0 ? sc.wc0 : sc.wi;
+        for (int i = 0; i < n; ++i)
+          for (int j = 0; j < n; ++j) {
+            pp[8 * i + j] +=
+                w * (propagated[k][i] - xp[i]) * (propagated[k][j] - xp[j]);
+            cross[8 * i + j] +=
+                w * (sc.points[k][i] - x[i]) * (propagated[k][j] - xp[j]);
           }
-        }
-        std::array<std::array<double, 4>, count> y{};
-        for (int point = 0; point < count; ++point) {
-          y[point] = predict_measurement(observations[index], sigma_states[point]).value;
-        }
-        double mean = wm0 * y[0][component];
-        for (int point = 1; point < count; ++point) mean += wi * y[point][component];
-        double variance = observations[index].sigma[component] * observations[index].sigma[component];
-        Vector6 cross_covariance{};
-        for (int point = 0; point < count; ++point) {
-          const double weight = point == 0 ? wc0 : wi;
-          const double dy = residual_component(observations[index].kind, component,
-                                               y[point][component], mean);
-          variance += weight * dy * dy;
-          for (int row = 0; row < 6; ++row) {
-            cross_covariance[row] += weight *
-                (sigma_states[point].value[row] - updated.value[row]) * dy;
-          }
-        }
-        const double innovation = residual_component(observations[index].kind, component,
-                                                     observations[index].value[component], mean);
-        const double nis = innovation * innovation / std::max(variance, kTiny);
-        total_nis += nis;
-        if (std::sqrt(nis) > config.sigma_edit_threshold) { accepted = false; break; }
-        Vector6 gain{};
-        for (int row = 0; row < 6; ++row) gain[row] = cross_covariance[row] / variance;
-        for (int row = 0; row < 6; ++row) updated.value[row] += gain[row] * innovation;
-        for (int row = 0; row < 6; ++row) {
-          for (int column = 0; column < 6; ++column) {
-            at(updated_covariance, row, column) -= gain[row] * variance * gain[column];
-          }
-        }
-        updated_covariance = symmetrize(updated_covariance);
       }
     } else {
-      for (int component = 0; component < central.count; ++component) {
-        const Vector6& h = central.jacobian[component];
-        // Condition each component on the preceding components of this same
-        // observation. With diagonal R and H held at the predicted state this
-        // is algebraically the joint Kalman update (including off-diagonal P).
-        // Reusing P-minus and the unconditioned residual double-counts data.
-        const Vector6 ph = mat_vec(updated_covariance, h);
-        double innovation_variance = observations[index].sigma[component] *
-                                     observations[index].sigma[component];
-        for (int i = 0; i < 6; ++i) innovation_variance += h[i] * ph[i];
-        double innovation = residual_component(observations[index].kind, component,
-                                                     observations[index].value[component],
-                                                     central.value[component]);
-        for (int i = 0; i < 6; ++i) innovation -= h[i] * (updated.value[i] - predicted.value[i]);
-        if (!(innovation_variance > 0.0) || !std::isfinite(innovation_variance)) return result;
-        const double nis = innovation * innovation / innovation_variance;
-        total_nis += nis;
-        // Finish the temporary vector update to report the full joint NIS.
-        // A failed conditional sigma edit rolls back the whole observation.
-        if (std::sqrt(nis) > config.sigma_edit_threshold) accepted = false;
-        Vector6 gain{};
-        for (int i = 0; i < 6; ++i) gain[i] = ph[i] / innovation_variance;
-        for (int i = 0; i < 6; ++i) updated.value[i] += gain[i] * innovation;
-        Matrix6 ikh = identity6();
-        for (int row = 0; row < 6; ++row) {
-          for (int column = 0; column < 6; ++column) at(ikh, row, column) -= gain[row] * h[column];
+      if (!propagate(x, &xp, &phi))
+        return result;
+      cross = mul8(p, tr8(phi, n), n);
+      pp = mul8(phi, cross, n);
+    }
+    M q = expand6(process_noise(config, dt));
+    if (n == 8) {
+      q[54] = config.clock_bias_psd * dt +
+              config.clock_drift_psd * dt * dt * dt / 3;
+      q[55] = q[62] = config.clock_drift_psd * dt * dt / 2;
+      q[63] = config.clock_drift_psd * dt;
+    }
+    for (int i = 0; i < 64; ++i)
+      pp[i] += qscale * q[i];
+    pp = sym8(pp, n);
+    if (!chol8(pp, &scratch, n))
+      return result;
+    V mean{};
+    M h{}, s{}, cxy{};
+    if (!measurement(o, xp, n, &mean, &h))
+      return result;
+    if (ukf) {
+      SigmaCloud sc{};
+      if (!cloud(xp, pp, n, config, &sc))
+        return result;
+      std::array<V, 17> ys{};
+      for (int k = 0; k < sc.count; ++k) {
+        M ignored{};
+        if (!measurement(o, sc.points[k], n, &ys[k], &ignored))
+          return result;
+      }
+      mean = ys[0];
+      // Local angular differences keep a cloud straddling 0/2pi continuous.
+      for (int k = 1; k < sc.count; ++k)
+        for (int i = 0; i < m; ++i)
+          mean[i] += sc.wi * residual_component(o.kind, i, ys[k][i], ys[0][i]);
+      for (int k = 0; k < sc.count; ++k) {
+        const double w = k == 0 ? sc.wc0 : sc.wi;
+        V dy{};
+        for (int i = 0; i < m; ++i)
+          dy[i] = residual_component(o.kind, i, ys[k][i], mean[i]);
+        for (int i = 0; i < m; ++i)
+          for (int j = 0; j < m; ++j)
+            s[8 * i + j] += w * dy[i] * dy[j];
+        for (int i = 0; i < n; ++i)
+          for (int j = 0; j < m; ++j)
+            cxy[8 * i + j] += w * (sc.points[k][i] - xp[i]) * dy[j];
+      }
+    } else {
+      for (int i = 0; i < n; ++i)
+        for (int j = 0; j < m; ++j)
+          for (int k = 0; k < n; ++k)
+            cxy[8 * i + j] += pp[8 * i + k] * h[8 * j + k];
+      for (int i = 0; i < m; ++i)
+        for (int j = 0; j < m; ++j)
+          for (int k = 0; k < n; ++k)
+            s[8 * i + j] += h[8 * i + k] * cxy[8 * k + j];
+    }
+    V innovation{};
+    for (int i = 0; i < m; ++i)
+      innovation[i] = residual_component(o.kind, i, o.value[i], mean[i]);
+    const M noiseless = s;
+    double rscale = 1, nis = 0;
+    bool accepted = true;
+    M inverse{};
+    // Sigma edit is applied to the conditional (whitened) vector innovations.
+    auto innovation_stats = [&](double scale, double *maximum) {
+      s = noiseless;
+      for (int i = 0; i < m; ++i)
+        s[8 * i + i] += scale * o.sigma[i] * o.sigma[i];
+      s = sym8(s, m);
+      M l{};
+      if (!chol8(s, &l, m) || !inv8(s, &inverse, m))
+        return false;
+      V whitened{};
+      nis = 0;
+      *maximum = 0;
+      for (int i = 0; i < m; ++i) {
+        double v = innovation[i];
+        for (int j = 0; j < i; ++j)
+          v -= l[8 * i + j] * whitened[j];
+        whitened[i] = v / l[8 * i + i];
+        nis += whitened[i] * whitened[i];
+        *maximum = std::max(*maximum, std::abs(whitened[i]));
+      }
+      return std::isfinite(nis);
+    };
+    double max_sigma = 0;
+    if (!innovation_stats(1, &max_sigma))
+      return result;
+    if (max_sigma > config.sigma_edit_threshold &&
+        config.inflate_measurement_noise) {
+      // Increase only R, never P or the observation. Bisection finds the least
+      // inflation passing the existing gate, subject to the caller's cap.
+      double low = 1, high = config.maximum_measurement_scale;
+      if (!innovation_stats(high, &max_sigma))
+        return result;
+      if (max_sigma <= config.sigma_edit_threshold) {
+        for (int k = 0; k < 40; ++k) {
+          double mid = (low + high) / 2;
+          if (!innovation_stats(mid, &max_sigma))
+            return result;
+          if (max_sigma > config.sigma_edit_threshold)
+            low = mid;
+          else
+            high = mid;
         }
-        const Matrix6 joseph_left = multiply(multiply(ikh, updated_covariance), transpose(ikh));
-        Matrix6 joseph_noise{};
-        const double variance = observations[index].sigma[component] * observations[index].sigma[component];
-        for (int row = 0; row < 6; ++row) {
-          for (int column = 0; column < 6; ++column) at(joseph_noise, row, column) = gain[row] * variance * gain[column];
+      }
+      rscale = high;
+      if (!innovation_stats(rscale, &max_sigma))
+        return result;
+    }
+    accepted = max_sigma <= config.sigma_edit_threshold;
+    V updated = xp;
+    M updated_p = pp;
+    if (accepted) {
+      M gain{};
+      for (int i = 0; i < n; ++i)
+        for (int j = 0; j < m; ++j)
+          for (int k = 0; k < m; ++k)
+            gain[8 * i + j] += cxy[8 * i + k] * inverse[8 * k + j];
+      for (int i = 0; i < n; ++i)
+        for (int j = 0; j < m; ++j)
+          updated[i] += gain[8 * i + j] * innovation[j];
+      if (ukf) {
+        for (int i = 0; i < n; ++i)
+          for (int j = 0; j < n; ++j)
+            for (int k = 0; k < m; ++k)
+              updated_p[8 * i + j] -= gain[8 * i + k] * cxy[8 * j + k];
+      } else {
+        M ikh{};
+        for (int i = 0; i < n; ++i) {
+          ikh[8 * i + i] = 1;
+          for (int j = 0; j < n; ++j)
+            for (int k = 0; k < m; ++k)
+              ikh[8 * i + j] -= gain[8 * i + k] * h[8 * k + j];
         }
-        updated_covariance = add_matrix(joseph_left, joseph_noise);
+        updated_p = mul8(mul8(ikh, pp, n), tr8(ikh, n), n);
+        for (int i = 0; i < n; ++i)
+          for (int j = 0; j < n; ++j)
+            for (int k = 0; k < m; ++k)
+              updated_p[8 * i + j] += gain[8 * i + k] * rscale * o.sigma[k] *
+                                      o.sigma[k] * gain[8 * j + k];
+      }
+    } else
+      result.rejected_indices.push_back(index);
+    updated_p = sym8(updated_p, n);
+    if (!chol8(updated_p, &scratch, n))
+      return result;
+    for (double v : updated)
+      if (!std::isfinite(v))
+        return result;
+    FilterEpoch e{};
+    e.filtered = cartesian(updated, o.epoch_seconds);
+    e.predicted = cartesian(xp, o.epoch_seconds);
+    e.smoothed = e.filtered;
+    e.filtered_extended = e.smoothed_extended = updated;
+    e.filtered_covariance_extended = e.smoothed_covariance_extended = updated_p;
+    for (int i = 0; i < 6; ++i)
+      for (int j = 0; j < 6; ++j) {
+        e.filtered_covariance[6 * i + j] = e.smoothed_covariance[6 * i + j] =
+            updated_p[8 * i + j];
+        e.predicted_covariance[6 * i + j] = pp[8 * i + j];
+        e.transition[6 * i + j] = phi[8 * i + j];
+      }
+    e.normalized_innovation_squared = nis;
+    e.accepted = accepted;
+    e.process_noise_scale = qscale;
+    e.measurement_noise_scale = rscale;
+    result.epochs.push_back(e);
+    predictions.push_back(pp);
+    predicted_states.push_back(xp);
+    crosses.push_back(cross);
+    // Mehra-style innovation covariance matching, restricted to one positive
+    // scale of the supplied Q. Whiten each measurement by its declared R.
+    // E[nu nu' - S] = (q_true-q_used) H Q_base H'. Exclude edited/inflated
+    // data.
+    if (config.adaptive_process_noise && accepted && rscale == 1) {
+      double mismatch = 0, sensitivity = 0;
+      for (int i = 0; i < m; ++i) {
+        const double r = o.sigma[i] * o.sigma[i];
+        mismatch +=
+            (innovation[i] * innovation[i] - noiseless[8 * i + i] - r) / r;
+        for (int j = 0; j < n; ++j)
+          for (int k = 0; k < n; ++k)
+            sensitivity += h[8 * i + j] * q[8 * j + k] * h[8 * i + k] / r;
+      }
+      if (sensitivity > 1e-15) {
+        const double target = std::clamp(qscale + mismatch / sensitivity,
+                                         config.minimum_process_scale,
+                                         config.maximum_process_scale);
+        qscale = (1 - config.adaptation_rate) * qscale +
+                 config.adaptation_rate * target;
       }
     }
-
-    if (!accepted) {
-      updated = predicted;
-      updated_covariance = predicted_covariance;
-      result.rejected_indices.push_back(index);
-    }
-    for (double value : updated.value) if (!std::isfinite(value)) return result;
-    if (!std::isfinite(total_nis) ||
-        !covariance_is_symmetric_positive_definite(symmetrize(updated_covariance))) return result;
-    updated.epoch_seconds = observations[index].epoch_seconds;
-    FilterEpoch epoch{};
-    epoch.filtered = updated;
-    epoch.filtered_covariance = symmetrize(updated_covariance);
-    epoch.predicted = predicted;
-    epoch.predicted_covariance = predicted_covariance;
-    epoch.smoothed = updated;
-    epoch.smoothed_covariance = epoch.filtered_covariance;
-    epoch.transition = phi;
-    epoch.normalized_innovation_squared = total_nis;
-    epoch.accepted = accepted;
-    result.epochs.push_back(epoch);
-    current = updated;
-    covariance = epoch.filtered_covariance;
-    previous_epoch = observations[index].epoch_seconds;
-    previous_nominal = samples[index].state;
-    previous_cumulative_stm = samples[index].stm;
-  }
-
-  if (smooth && result.epochs.size() > 1) {
-    for (std::size_t reverse = result.epochs.size() - 1; reverse-- > 0;) {
-      FilterEpoch& current_epoch = result.epochs[reverse];
-      const FilterEpoch& next_epoch = result.epochs[reverse + 1];
-      Matrix6 inverse_prediction{};
-      if (!invert6(next_epoch.predicted_covariance, &inverse_prediction)) return result;
-      const Matrix6 gain = multiply(multiply(current_epoch.filtered_covariance,
-                                             transpose(next_epoch.transition)), inverse_prediction);
-      const Vector6 delta = state_delta(next_epoch.smoothed, next_epoch.predicted);
-      const Vector6 correction = mat_vec(gain, delta);
-      current_epoch.smoothed = current_epoch.filtered;
-      for (int i = 0; i < 6; ++i) current_epoch.smoothed.value[i] += correction[i];
-      current_epoch.smoothed_covariance = symmetrize(add_matrix(
-          current_epoch.filtered_covariance,
-          multiply(multiply(gain,
-                            subtract_matrix(next_epoch.smoothed_covariance,
-                                            next_epoch.predicted_covariance)),
-                   transpose(gain))));
+    x = updated;
+    p = updated_p;
+    previous_epoch = o.epoch_seconds;
+    if (!config.propagator) {
+      previous_nominal = nominal.state;
+      previous_stm = nominal.stm;
     }
   }
+  if (smooth)
+    for (std::size_t i = result.epochs.size() - 1; i-- > 0;) {
+      auto &e = result.epochs[i];
+      const auto &next = result.epochs[i + 1];
+      M inv{};
+      if (!inv8(predictions[i + 1], &inv, n))
+        return result;
+      const M gain = mul8(crosses[i + 1], inv, n);
+      for (int j = 0; j < n; ++j)
+        for (int k = 0; k < n; ++k)
+          e.smoothed_extended[j] +=
+              gain[8 * j + k] *
+              (next.smoothed_extended[k] - predicted_states[i + 1][k]);
+      M delta{};
+      for (int j = 0; j < 64; ++j)
+        delta[j] = next.smoothed_covariance_extended[j] - predictions[i + 1][j];
+      const M correction = mul8(mul8(gain, delta, n), tr8(gain, n), n);
+      for (int j = 0; j < 64; ++j)
+        e.smoothed_covariance_extended[j] += correction[j];
+      e.smoothed_covariance_extended = sym8(e.smoothed_covariance_extended, n);
+      if (!chol8(e.smoothed_covariance_extended, &scratch, n))
+        return result;
+      e.smoothed = cartesian(e.smoothed_extended, e.filtered.epoch_seconds);
+      for (int j = 0; j < 6; ++j)
+        for (int k = 0; k < 6; ++k)
+          e.smoothed_covariance[6 * j + k] =
+              e.smoothed_covariance_extended[8 * j + k];
+    }
   result.valid = true;
   return result;
 }
 
-std::vector<Observation> simulate_measurements(
-    const std::vector<Observation>& templates,
-    const std::vector<PropagatorSample>& truth_samples,
-    const std::vector<ErrorModel>& error_models) {
+std::vector<Observation>
+simulate_measurements(const std::vector<Observation> &templates,
+                      const std::vector<PropagatorSample> &truth_samples,
+                      const std::vector<ErrorModel> &error_models) {
   std::vector<Observation> simulated = templates;
-  if (templates.size() != truth_samples.size()) return {};
+  if (templates.size() != truth_samples.size())
+    return {};
   for (std::size_t index = 0; index < simulated.size(); ++index) {
-    const ErrorModel* model = nullptr;
+    const ErrorModel *model = nullptr;
     for (const ErrorModel& candidate : error_models) {
       if (candidate.kind == simulated[index].kind) { model = &candidate; break; }
     }

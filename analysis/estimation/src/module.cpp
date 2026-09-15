@@ -448,7 +448,7 @@ std::string linked_ocm_id(const core::CartesianState& state, const char* trace) 
 std::vector<std::uint8_t> make_ocm(const core::CartesianState& estimate,
                                    const core::Matrix6& covariance,
                                    const std::vector<double>& residuals,
-                                   double rms, bool sequential) {
+                                   double rms, bool sequential, wire::EstimatorKind estimator) {
   OCMT record;
   record.TRAJ_TYPE = trajectoryType::CARTESIAN_PV;
   record.TRAJ_TYPE_DESCRIPTION = sequential ? "FILTERED_ESTIMATE" : "BATCH_ESTIMATE";
@@ -465,7 +465,10 @@ std::vector<std::uint8_t> make_ocm(const core::CartesianState& estimate,
   record.ORBIT_DETERMINATION->OD_EST_PARAMETERS = {"CARTESIAN_X", "CARTESIAN_Y", "CARTESIAN_Z", "CARTESIAN_VX", "CARTESIAN_VY", "CARTESIAN_VZ"};
   record.ORBIT_DETERMINATION->OD_RESIDUAL_RMS = rms;
   record.ORBIT_DETERMINATION->OD_RESIDUALS_SERIES = residuals;
-  record.ORBIT_DETERMINATION->OD_ESTIMATOR = sequential ? estimatorCategory::ExtendedKalman : estimatorCategory::BatchLeastSquares;
+  record.ORBIT_DETERMINATION->OD_ESTIMATOR = estimator == wire::EstimatorKind::LINEAR_KALMAN_FILTER ? estimatorCategory::Unknown :
+      estimator == wire::EstimatorKind::UNSCENTED_KALMAN_FILTER ? estimatorCategory::UnscentedKalman :
+      sequential ? estimatorCategory::ExtendedKalman : estimatorCategory::BatchLeastSquares;
+  if (estimator == wire::EstimatorKind::LINEAR_KALMAN_FILTER) record.ORBIT_DETERMINATION->OD_ALGORITHM = "LINEAR_KALMAN_FILTER";
   ::flatbuffers::FlatBufferBuilder builder(2048);
   const auto root = CreateOCM(builder, &record);
   FinishOCMBuffer(builder, root);
@@ -485,7 +488,9 @@ std::vector<std::uint8_t> make_odr(const wire::EstimationRequest* request,
   report.STATE_COVARIANCE.assign(covariance.begin(), covariance.end());
   report.ESTIMATED_EPOCH_STATE = frm_state(estimate, request->config()->initial_epoch());
   report.CONFIGURATION = std::make_unique<ODRSolverConfigurationT>();
-  report.CONFIGURATION->ESTIMATOR = static_cast<odrEstimatorKind>(static_cast<int>(request->config()->estimator()) + 1);
+  report.CONFIGURATION->ESTIMATOR = request->config()->estimator() == wire::EstimatorKind::LINEAR_KALMAN_FILTER
+      ? odrEstimatorKind::UNSPECIFIED
+      : static_cast<odrEstimatorKind>(static_cast<int>(request->config()->estimator()) + 1);
   report.CONFIGURATION->MAXIMUM_ITERATIONS = request->config()->maximum_iterations();
   report.CONFIGURATION->STATE_CONVERGENCE_TOLERANCE = request->config()->state_convergence_tolerance();
   report.CONFIGURATION->RMS_CONVERGENCE_TOLERANCE = request->config()->rms_convergence_tolerance();
@@ -502,7 +507,9 @@ std::vector<std::uint8_t> make_odr(const wire::EstimationRequest* request,
     parameter->DISPOSITION = odrParameterDisposition::ESTIMATED;
     parameter->A_PRIORI_VALUE = request->config()->initial_state()->Get(component);
     parameter->A_PRIORI_SIGMA = std::sqrt(std::max(
-        request->config()->initial_covariance()->Get(component * 6 + component), 0.0));
+        request->options() && request->options()->estimate_clock()
+            ? request->options()->initial_covariance8()->Get(component * 8 + component)
+            : request->config()->initial_covariance()->Get(component * 6 + component), 0.0));
     parameter->FINAL_VALUE = estimate.value[component];
     parameter->FINAL_SIGMA = std::sqrt(std::max(covariance[component * 6 + component], 0.0));
     parameter->UNIT = component < 3 ? pceUnit::METRE : pceUnit::METRE_PER_SECOND;
@@ -580,6 +587,23 @@ extern "C" int run_estimation(void) {
           request->config()->estimator() != wire::EstimatorKind::BATCH_WEIGHTED_LEAST_SQUARES));
     }
   }
+  if (request->extended_observations() != nullptr) {
+    if (!observations.empty() || request->config()->estimator() == wire::EstimatorKind::BATCH_WEIGHTED_LEAST_SQUARES)
+      return fail("bad-estimation-request", "extended observations are sequential-only and replace legacy observations");
+    for (const auto* source : *request->extended_observations()) {
+      if (!source || !source->observation() || !source->values() || !source->sigmas())
+        return fail("bad-estimation-request", "extended observation is incomplete");
+      const auto count = source->observation()->value_count();
+      if (count < 1 || count > 6 || source->values()->size() != count || source->sigmas()->size() != count)
+        return fail("bad-estimation-request", "extended observation must have 1..6 matching value/sigma lanes");
+      auto o = observation_from_wire(*source->observation(), request->config()->initial_epoch(), true);
+      for (unsigned i=0;i<count;++i) {o.value[i]=source->values()->Get(i);o.sigma[i]=source->sigmas()->Get(i);}
+      if (source->linear_matrix()) o.linear_matrix.assign(source->linear_matrix()->begin(), source->linear_matrix()->end());
+      if (source->linear_offset()) o.linear_offset.assign(source->linear_offset()->begin(), source->linear_offset()->end());
+      o.satellite_clock_bias_m=source->satellite_clock_bias_m();
+      observations.push_back(o);
+    }
+  }
   append_tdm_observations(input("tracking_data"), request->config()->initial_epoch(), &observations);
   if (!apply_crd_station(input("laser_tracking"), &observations)) {
     return fail("bad-crd", "laser_tracking must be a valid $CRD station-coordinate record");
@@ -594,8 +618,9 @@ extern "C" int run_estimation(void) {
   }
 
   std::vector<core::PropagatorSample> samples;
-  if (!decode_samples(input("propagator_samples"), request->config()->initial_epoch(), &samples) ||
-      samples.size() != observations.size()) {
+  const bool nonlinear = request->options() && request->options()->nonlinear_propagation();
+  if (!nonlinear && (!decode_samples(input("propagator_samples"), request->config()->initial_epoch(), &samples) ||
+      samples.size() != observations.size())) {
     return fail("propagator-protocol", "propagator_samples must contain one caller-produced state and STM for every observation");
   }
 
@@ -615,6 +640,7 @@ extern "C" int run_estimation(void) {
   double recovered_sigma = 0.0;
   std::uint32_t iteration_count = 0;
 
+  if (batch_mode && request->options()) return fail("bad-estimation-request", "sequential options cannot be used in batch mode");
   if (batch_mode) {
     core::BatchConfig config;
     config.a_priori = estimate;
@@ -636,8 +662,59 @@ extern "C" int run_estimation(void) {
     for (int i = 0; i < 3; ++i) config.acceleration_psd[i] = request->config()->process_noise_spectral_density()->Get(i);
     config.dmc_correlation_time_seconds = request->config()->dynamic_model_correlation_time_seconds();
     config.sigma_edit_threshold = request->config()->sigma_edit_threshold();
-    const bool smooth = request->config()->estimator() == wire::EstimatorKind::EXTENDED_KALMAN_FILTER_WITH_RTS;
+    if (const auto* options=request->options()) {
+      config.ukf_alpha=options->ukf_alpha();config.ukf_beta=options->ukf_beta();config.ukf_kappa=options->ukf_kappa();
+      config.adaptive_process_noise=options->adaptive_process_noise();config.inflate_measurement_noise=options->inflate_measurement_noise();
+      config.adaptation_rate=options->adaptation_rate();config.minimum_process_scale=options->minimum_process_scale();config.maximum_process_scale=options->maximum_process_scale();
+      config.maximum_measurement_scale=options->maximum_measurement_scale();config.estimate_clock=options->estimate_clock();
+      config.initial_clock_bias_m=options->initial_clock_bias_m();config.initial_clock_drift_mps=options->initial_clock_drift_mps();
+      config.clock_bias_psd=options->clock_bias_psd();config.clock_drift_psd=options->clock_drift_psd();
+      if (config.estimate_clock) {
+        if (!options->initial_covariance8() || options->initial_covariance8()->size()!=64)
+          return fail("bad-estimation-request", "clock estimation requires a row-major 8x8 initial covariance");
+        std::copy(options->initial_covariance8()->begin(), options->initial_covariance8()->end(), config.initial_covariance8.begin());
+      }
+    }
+    const bool smooth = request->config()->estimator() == wire::EstimatorKind::EXTENDED_KALMAN_FILTER_WITH_RTS || (request->options() && request->options()->smooth());
+    std::vector<std::unique_ptr<wire::PropagationQueryT>> pending;
+    const auto* answers=envelope->propagation_answers();
+    std::size_t sequence=0;bool protocol_error=false;
+    if (nonlinear) config.propagator=[&](const core::CartesianState& seed,double target,core::PropagatorSample* sample) {
+      const auto id=sequence++;
+      const auto seed_epoch=absolute_epoch(seed.epoch_seconds,request->config()->initial_epoch());
+      const auto target_epoch=absolute_epoch(target,request->config()->initial_epoch());
+      core::Matrix6 empty{};
+      const wire::EstimationState seed_wire(seed_epoch,
+        ::flatbuffers::span<const double,6>(seed.value.data(),6),
+        ::flatbuffers::span<const double,36>(empty.data(),36),0,0,0,0,0,request->config()->reference_frame(),0,0,request->config()->estimator());
+      if (answers && id<answers->size()) {
+        const auto* answer=answers->Get(id);const auto* query=answer?answer->query():nullptr;
+        if (!query || !query->seed() || !query->target_epoch() || !answer->sample() || query->sequence()!=id ||
+            query->seed()->reference_frame()!=request->config()->reference_frame() ||
+            query->seed()->epoch().jd_day()!=seed_epoch.jd_day() || query->seed()->epoch().seconds()!=seed_epoch.seconds() ||
+            query->target_epoch()->jd_day()!=target_epoch.jd_day() || query->target_epoch()->seconds()!=target_epoch.seconds()) {
+          protocol_error=true;return false;
+        }
+        for(int i=0;i<6;++i) if(query->seed()->state()->Get(i)!=seed.value[i]) {protocol_error=true;return false;}
+        sample->state.epoch_seconds=relative_seconds(answer->sample()->epoch(),request->config()->initial_epoch());
+        for(int i=0;i<6;++i)sample->state.value[i]=answer->sample()->state()->Get(i);
+        for(int i=0;i<36;++i)sample->stm[i]=answer->sample()->stm()->Get(i);
+        return true;
+      }
+      auto query=std::make_unique<wire::PropagationQueryT>();query->sequence=static_cast<uint32_t>(id);
+      query->seed=std::make_unique<wire::EstimationState>(seed_wire);
+      query->target_epoch=std::make_unique<wire::EstimationEpoch>(target_epoch);
+      pending.push_back(std::move(query));return false;
+    };
     filter = core::sequential_filter(config, observations, samples, smooth);
+    if(protocol_error || (answers && answers->size()>sequence)) return fail("propagator-protocol", "propagator answers do not match the exact seed, epoch, frame and sequence");
+    if(!pending.empty()) {
+      wire::EstimationEnvelopeT reply;reply.result=std::make_unique<wire::EstimationResultT>();
+      reply.result->status=wire::EstimationStatus::NEEDS_PROPAGATION;reply.result->propagation_requests=std::move(pending);
+      ::flatbuffers::FlatBufferBuilder b;wire::FinishEstimationEnvelopeBuffer(b,wire::EstimationEnvelope::Pack(b,&reply));
+      std::vector<uint8_t> bytes(b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());
+      return push("result","Estimation.fbs","$EST",bytes)<0?fail("emit-failed","cannot emit propagation query"):0;
+    }
     if (!filter.valid || filter.epochs.empty()) return fail("filter-failed", "sequential filter did not produce a valid covariance history");
     const core::FilterEpoch& final = filter.epochs.back();
     estimate = smooth ? final.smoothed : final.filtered;
@@ -656,7 +733,7 @@ extern "C" int run_estimation(void) {
 
   const char* trace = request->trace_id() == nullptr ? nullptr : request->trace_id()->c_str();
   const std::string ocm_id = linked_ocm_id(estimate, trace);
-  const std::vector<std::uint8_t> ocm = make_ocm(estimate, covariance, residuals, rms, !batch_mode);
+  const std::vector<std::uint8_t> ocm = make_ocm(estimate, covariance, residuals, rms, !batch_mode, request->config()->estimator());
   const std::vector<std::uint8_t> odr = make_odr(request, estimate, covariance,
                                                  batch_mode ? &batch : nullptr,
                                                  batch_mode ? nullptr : &filter, ocm_id);
@@ -666,17 +743,30 @@ extern "C" int run_estimation(void) {
       ::flatbuffers::span<const double, 36>(covariance.data(), 36), rms, recovered_sigma,
       iteration_count, static_cast<std::uint32_t>(observations.size() - rejected.size()),
       static_cast<std::uint32_t>(rejected.size()), request->config()->reference_frame(),
-      converged ? 1 : 0, request->config()->estimator() == wire::EstimatorKind::EXTENDED_KALMAN_FILTER_WITH_RTS ? 1 : 0,
+      converged ? 1 : 0, (request->config()->estimator() == wire::EstimatorKind::EXTENDED_KALMAN_FILTER_WITH_RTS || (request->options() && request->options()->smooth())) ? 1 : 0,
       request->config()->estimator());
   std::vector<double> iteration_covariances;
   for (const core::Matrix6& value : batch.iteration_covariances) {
     iteration_covariances.insert(iteration_covariances.end(), value.begin(), value.end());
   }
   ::flatbuffers::FlatBufferBuilder builder(8192);
+  std::vector<::flatbuffers::Offset<wire::ExtendedFilterEpoch>> extended_history;
+  if (!batch_mode && request->options()) {
+    const int n=request->options()->estimate_clock()?8:6;
+    for(const auto& e:filter.epochs) {
+      wire::ExtendedFilterEpochT row;row.epoch=std::make_unique<wire::EstimationEpoch>(absolute_epoch(e.filtered.epoch_seconds,request->config()->initial_epoch()));
+      row.state_dimension=n;row.filtered_state.assign(e.filtered_extended.begin(),e.filtered_extended.begin()+n);
+      row.smoothed_state.assign(e.smoothed_extended.begin(),e.smoothed_extended.begin()+n);
+      for(int i=0;i<n;++i)for(int j=0;j<n;++j){row.filtered_covariance.push_back(e.filtered_covariance_extended[8*i+j]);row.smoothed_covariance.push_back(e.smoothed_covariance_extended[8*i+j]);}
+      row.normalized_innovation_squared=e.normalized_innovation_squared;row.accepted=e.accepted;
+      row.process_noise_scale=e.process_noise_scale;row.measurement_noise_scale=e.measurement_noise_scale;
+      extended_history.push_back(wire::ExtendedFilterEpoch::Pack(builder,&row));
+    }
+  }
   const auto result = wire::CreateEstimationResultDirect(builder,
       converged ? wire::EstimationStatus::OK : wire::EstimationStatus::NOT_CONVERGED,
       &state, &wire_history, &residuals, &iteration_covariances, &rejected,
-      &odr, &ocm, nullptr, trace);
+      &odr, &ocm, nullptr, trace, &extended_history);
   const auto root = wire::CreateEstimationEnvelope(builder, 0, result);
   wire::FinishEstimationEnvelopeBuffer(builder, root);
   const std::vector<std::uint8_t> response(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
@@ -693,6 +783,10 @@ extern "C" int simulate_tracking(void) {
   const wire::EstimationRequest* request = nullptr;
   const wire::EstimationEnvelope* envelope = nullptr;
   if (!decode_request(input("request"), &request, &envelope)) return fail("bad-simulation-request", "simulation requires a valid $EST request");
+  if (request->options() || request->extended_observations()) return fail("bad-simulation-request", "extended records are supported by run_estimation only");
+  if (request->observations()) for(const auto* o:*request->observations()) {
+    if(o && (o->value_count()>4 || static_cast<unsigned>(o->kind())>20)) return fail("bad-simulation-request", "simulation supports the legacy measurement kinds and four-lane records");
+  }
   std::vector<core::Observation> templates;
   if (request->observations() != nullptr) for (const wire::EstimationObservation* source : *request->observations()) if (source != nullptr) templates.push_back(observation_from_wire(*source, request->config()->initial_epoch()));
   if (!apply_crd_station(input("laser_tracking"), &templates)) return fail("bad-crd", "laser_tracking must be a valid $CRD station-coordinate record");

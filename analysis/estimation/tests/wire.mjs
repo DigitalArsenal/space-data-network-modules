@@ -1,5 +1,5 @@
-// Test-only ABI codec: generate binary/JSON with the exact pinned SDK schema.
-// No hand-maintained offsets, generated bindings, or physics in JavaScript.
+// Test-only ABI codec generated from the module-local append-only schema.
+// No hand-maintained offsets or physics in JavaScript.
 import fs from 'node:fs';
 import createFlatc from 'flatc-wasm/module';
 const flatc=await createFlatc();
@@ -7,6 +7,7 @@ flatc.FS.mkdir('/schema');flatc.FS.mkdir('/out');
 for(const name of fs.readdirSync(new URL('../node_modules/space-data-module-sdk/schemas/orbpro/',import.meta.url))) {
   if(name.endsWith('.fbs'))flatc.FS.writeFile(`/schema/${name}`,fs.readFileSync(new URL(`../node_modules/space-data-module-sdk/schemas/orbpro/${name}`,import.meta.url)));
 }
+flatc.FS.writeFile("/schema/Estimation.fbs", fs.readFileSync(new URL("../schemas/Estimation.fbs", import.meta.url)));
 function compile(args) {
   const rc=flatc.callMain(['--no-warnings','--strict-json','--defaults-json','-I','/schema','-o','/out',...args]);
   if(rc!==0)throw new Error(`flatc exit ${rc}`);
@@ -28,3 +29,22 @@ export function invocation(config,observations,samples) {
     {portId:'propagator_samples',typeRef,payload:encode({propagator_samples:samples})}
   ]};
 }
+
+// Generated object API preserves every double bit during propagator replay.
+// flatc JSON is retained above only for human-readable fixture conveniences.
+import os from 'node:os';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {build} from 'esbuild';
+import {Builder,ByteBuffer} from 'flatbuffers';
+const temp=fs.mkdtempSync(path.join(os.tmpdir(),'estimation-codec-'));
+let objectApi;
+try {
+ compile(['--ts','--gen-object-api','--gen-all','/schema/Estimation.fbs']);
+ function copy(dir,out) {fs.mkdirSync(out,{recursive:true});for(const name of flatc.FS.readdir(dir)){if(name==='.'||name==='..')continue;const source=`${dir}/${name}`;if(flatc.FS.isDir(flatc.FS.stat(source).mode))copy(source,path.join(out,name));else if(name.endsWith('.ts'))fs.writeFileSync(path.join(out,name),flatc.FS.readFile(source));}}
+ copy('/out',temp);
+ const result=await build({entryPoints:[path.join(temp,'orbpro/estimation/estimation-envelope.ts')],bundle:true,write:false,format:'esm',platform:'node',nodePaths:[fileURLToPath(new URL('../node_modules',import.meta.url))]});
+ objectApi=await import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].contents).toString('base64')}`);
+} finally {fs.rmSync(temp,{recursive:true,force:true});}
+export function unpack(bytes) {return objectApi.EstimationEnvelope.getRootAsEstimationEnvelope(new ByteBuffer(bytes)).unpack();}
+export function pack(object) {const b=new Builder();b.finish(object.pack(b),'$EST');return b.asUint8Array();}
