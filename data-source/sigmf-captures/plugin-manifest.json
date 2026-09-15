@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.data-source.sigmf-captures",
   "name": "SigMF Raw-IQ Capture Source Nodes",
   "version": "0.1.0",
-  "description": "Public raw-IQ archives -> SDS $IQC pointer records. Two pure flow nodes: `request` turns a cron timer tick into ONE bulk hostcap/http-request GET of the configured archive's metadata index (default IQEngine: https://www.iqengine.org/api/datasources/local/local/meta, anonymous, no token, ~31 MB, 36,636 SigMF documents) plus the parser attribution job naming the source adapter; `parse` joins that job with the response, decodes each SigMF document and emits a size-prefixed $IQC record stream for hostcap/storage-ingest. $IQC IS A POINTER RECORD: it carries where the samples are (PAYLOADS[].URL), what they hash to (BYTE_SHA512 from SigMF core:sha512) and nothing else — CUSTODY stays UPSTREAM_ONLY and no payload is ever mirrored. SigMF publishes HERTZ, so SAMPLE_RATE_HZ / CENTER_FREQ_HZ / FREQ_*_EDGE_HZ carry the value unconverted ($RFB's MHz convention is deliberately NOT adopted) and DATATYPE is the SigMF token verbatim. GEOLOCATION is omitted entirely when the source published no position, and a transposed lat/lon is refused rather than swapped. LICENCE IS PER RECORDING: core:license rides verbatim and an absent one means UNKNOWN TERMS, never public domain. The source-adapter registry ships exactly one adapter, the one whose anonymous read surface was verified live; a stub adapter that fabricates data is forbidden and an unknown adapter id fails closed. No capabilities: this node performs no I/O — http and storage are the generic hostcap connector nodes.",
+  "description": "Public raw-IQ archives -> SDS $IQC pointer records. Two pure flow nodes: `request` turns a cron timer tick into ONE bulk hostcap/http-request GET of the configured archive's metadata index (default IQEngine: https://www.iqengine.org/api/datasources/local/local/meta, anonymous, no token, ~31 MB, 36,636 SigMF documents) plus the parser attribution job naming the source adapter; `parse` joins that job with the response, decodes each SigMF document and emits a size-prefixed $IQC record stream for hostcap/storage-ingest. $IQC IS A POINTER RECORD: it carries where the samples are (PAYLOADS[].URL), what they hash to (BYTE_SHA512 from SigMF core:sha512) and nothing else — CUSTODY stays UPSTREAM_ONLY and no payload is ever mirrored. SigMF publishes HERTZ, so SAMPLE_RATE_HZ / CENTER_FREQ_HZ / FREQ_*_EDGE_HZ carry the value unconverted ($RFB's MHz convention is deliberately NOT adopted) and DATATYPE is the SigMF token verbatim. GEOLOCATION is omitted entirely when the source published no position, and a transposed lat/lon is refused rather than swapped. LICENCE IS PER RECORDING: core:license rides verbatim and an absent one means UNKNOWN TERMS, never public domain. The source-adapter registry ships exactly one adapter, the one whose anonymous read surface was verified live; a stub adapter that fabricates data is forbidden and an unknown adapter id fails closed. No capabilities: this node performs no I/O — http and storage are the generic hostcap connector nodes. HTTP 304 Not Modified is accepted, never treated as a failed fetch: the parse method emits a single notice on its 'unchanged' port and nothing else, so no batch is stored or announced.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "invokeSurfaces": [
@@ -102,7 +102,7 @@
     {
       "methodId": "parse",
       "displayName": "Parse Archive SigMF Metadata into $IQC",
-      "description": "Decodes each SigMF document in the archive metadata index into an $IQC pointer record (Hz unconverted, DATATYPE verbatim, SEGMENTS/ANNOTATIONS/EXTENSIONS carried, GEOLOCATION omitted when unpublished or out of WGS-84 range, licence per recording, PAYLOADS pointing upstream with CUSTODY UPSTREAM_ONLY) plus the storage.ingest_with_source meta and the raw payload for archiving. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames.",
+      "description": "Decodes each SigMF document in the archive metadata index into an $IQC pointer record (Hz unconverted, DATATYPE verbatim, SEGMENTS/ANNOTATIONS/EXTENSIONS carried, GEOLOCATION omitted when unpublished or out of WGS-84 range, licence per recording, PAYLOADS pointing upstream with CUSTODY UPSTREAM_ONLY) plus the storage.ingest_with_source meta and the raw payload for archiving. BATCHING: every input port here is single-stream BY CONTRACT and that is now ENFORCED IN CODE, not merely declared. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime - space_data_module_runtime_begin_node_invocation pops the node whole queue port-blind up to the drain budget (64) - so a node that read ordinal 0 of a port and returned used to destroy every other frame it was handed there, with nothing re-delivering them and nothing logging the loss (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is now refused with error code \"batched-input-frames\", naming the port and the count. See graph task modules-guest-nodes-drop-batched-frames. HTTP 304 Not Modified is accepted: the host presents the ETag / Last-Modified it recorded from the last 2xx for this URL, so an unchanged document answers 304 with no body. The method then emits a single notice on its 'unchanged' port and nothing else, so no batch is stored or announced. Same contract as data-source/celestrak-parser.",
       "inputPorts": [
         {
           "portId": "job",
@@ -218,6 +218,29 @@
           "maxStreams": 1,
           "required": true,
           "description": "Raw fetched payload."
+        },
+        {
+          "portId": "unchanged",
+          "acceptedTypeSets": [
+            {
+              "setId": "sigmf-unchanged-notice-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "HTTP 304 notice {status:304,unchanged:true,source_name,source_url,dataset_id} produced when the origin confirms the previously fetched archive metadata index is current; an intra-flow control frame, never persisted as a record."
+              },
+              "description": "UTF-8 JSON {\"status\":304,\"unchanged\":true,\"source_name\",\"source_url\",\"dataset_id\"}."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Emitted ONLY when the fetch answered HTTP 304 Not Modified (the host sent the recorded ETag / Last-Modified validators): one notice frame and no meta/records/raw frames, so the ingest node never becomes ready and nothing is stored or announced."
         }
       ],
       "maxBatch": 1,

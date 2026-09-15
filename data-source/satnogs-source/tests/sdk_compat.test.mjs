@@ -460,7 +460,38 @@ test("parse: non-200 upstream fails closed (nothing emitted)", async (t) => {
   assert.equal(response.outputs.length, 0);
 });
 
-test("parse: a 304 / empty table fails closed rather than storing an empty batch", async (t) => {
+// HTTP 304 Not Modified: the host presented the ETag / Last-Modified it
+// recorded from the last 2xx for this URL (sdn-server
+// internal/modulert/caps/http_validators.go) and the origin confirmed the
+// document is current. No batch exists, so no record port may fire — only the
+// single "unchanged" notice, and the invocation SUCCEEDS. Same contract as
+// data-source/celestrak-parser.
+test("parse answers HTTP 304 with one unchanged notice and zero record frames", async (t) => {
+  const job = { ...JOB, dataset_id: "satnogs-transmitters" };
+  const harness = await createHarness(t);
+  const response = await harness.invoke({
+    methodId: "parse",
+    inputs: [
+      jsonInput("job", job),
+      jsonInput("response", { status: 304, headers: { Etag: 'W/"x"' }, bodyB64: "" }),
+    ],
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  assert.equal(response.outputs.length, 1, "exactly one frame");
+  const outputs = outputsByPort(response);
+  for (const port of ["rfb_meta", "rfb_records", "raw"]) {
+    assert.equal(outputs.has(port), false, `${port} must stay silent`);
+  }
+  assert.deepEqual(jsonFrame(outputs, "unchanged"), {
+    status: 304,
+    unchanged: true,
+    source_name: job.source_name,
+    source_url: job.source_url,
+    dataset_id: job.dataset_id,
+  });
+});
+
+test("parse: an empty table fails closed rather than storing an empty batch", async (t) => {
   const response = await runParse(t, Buffer.from("[]"));
   assert.notEqual(response.statusCode, 0);
   assert.equal(response.outputs.length, 0);

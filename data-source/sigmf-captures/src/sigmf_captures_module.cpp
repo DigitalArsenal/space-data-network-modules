@@ -1305,11 +1305,17 @@ struct FetchContext {
     std::string base_url;
     std::string account;
     std::string container;
+    std::string dataset_id;
     std::string etag;
     std::string last_modified;
     std::string content_type;
     std::string response_date;
     long status = 0;
+    // HTTP 304 Not Modified: the host sent the validators it recorded from
+    // the previous pull (If-None-Match / If-Modified-Since) and the origin
+    // answered that nothing changed. No body, no batch — the parser emits one
+    // "unchanged" notice and no record ports.
+    bool not_modified = false;
     std::vector<uint8_t> body;
     std::string batch_id;
 };
@@ -1331,6 +1337,7 @@ bool load_fetch_context(FetchContext* ctx) {
     json_string_field(job_json, "archive_source", &ctx->archive_source);
     json_string_field(job_json, "archive_name", &ctx->archive_name);
     json_string_field(job_json, "reconcile", &ctx->reconcile);
+    json_string_field(job_json, "dataset_id", &ctx->dataset_id);
     json_string_field(job_json, "base_url", &ctx->base_url);
     json_string_field(job_json, "account", &ctx->account);
     json_string_field(job_json, "container", &ctx->container);
@@ -1350,7 +1357,7 @@ bool load_fetch_context(FetchContext* ctx) {
         return false;
     }
     ctx->status = static_cast<long>(status);
-    if (ctx->status != 200) {
+    if (ctx->status != 200 && ctx->status != 304) {
         char msg[96];
         std::snprintf(msg, sizeof(msg), "source fetch returned HTTP status %ld", ctx->status);
         plugin_set_error("fetch-failed", msg);
@@ -1365,6 +1372,13 @@ bool load_fetch_context(FetchContext* ctx) {
     if (ctx->content_type.empty()) json_string_field(headers, "Content-Type", &ctx->content_type);
     json_string_field(headers, "date", &ctx->response_date);
     if (ctx->response_date.empty()) json_string_field(headers, "Date", &ctx->response_date);
+
+    if (ctx->status == 304) {
+        // Nothing changed upstream: no body is expected and no batch exists.
+        ctx->not_modified = true;
+        ctx->body.clear();
+        return true;
+    }
 
     std::string body_b64;
     if (!json_string_field(response_json, "bodyB64", &body_b64) || body_b64.empty()) {
@@ -1496,6 +1510,19 @@ bool find_batched_input_port(char* message, size_t message_len) {
     return false;
 }
 
+// HTTP 304: one notice frame on the "unchanged" port, nothing on the record
+// ports. The ingest node never becomes ready (its required meta/records ports
+// stay empty), so nothing is stored and no batch is announced. Byte-for-byte
+// the celestrak-parser notice; mirrored here so every fleet retrieval lane
+// answers a conditional GET the same way.
+int emit_unchanged(const FetchContext& ctx) {
+    const std::string notice = std::string("{\"status\":304,\"unchanged\":true") +
+                               ",\"source_name\":\"" + json_escape(ctx.source_name) + "\"" +
+                               ",\"source_url\":\"" + json_escape(ctx.source_url) + "\"" +
+                               ",\"dataset_id\":\"" + json_escape(ctx.dataset_id) + "\"}";
+    return push_json("unchanged", notice) < 0 ? 500 : 0;
+}
+
 }  // namespace
 
 extern "C" {
@@ -1576,6 +1603,7 @@ int parse(void) {
 
     FetchContext ctx;
     if (!load_fetch_context(&ctx)) return 400;
+    if (ctx.not_modified) return emit_unchanged(ctx);
 
     const SourceAdapter* adapter = lookup_adapter(ctx.adapter);
     if (!adapter) {
