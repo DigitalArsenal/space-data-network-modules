@@ -1,0 +1,101 @@
+{
+  "source_file": "de440s.bsp",
+  "source_sha256": "c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2",
+  "output": "de440-2026.bsp",
+  "sha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+  "size_bytes": 114688,
+  "epoch_scale": "TDB",
+  "start_jd": 2461041.5,
+  "end_jd": 2461406.5,
+  "tool": "CSPICE_N0067",
+  "spiceypy": "8.0.0",
+  "procedure": "spksub_c copies only the records needed for each original segment; it does not refit or compute coefficients.",
+  "source_url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp",
+  "tool_documentation": "https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/spksub_c.html",
+  "segments": [
+    {
+      "target": 1,
+      "center": 0,
+      "frame": 1,
+      "type": 2
+    },
+    {
+      "target": 2,
+      "center": 0,
+      "frame": 1,
+      "type": 2
+    },
+    {
+      "target": 3,
+      "center": 0,
+      "frame": 1,
+      "type": 2
+    },
+    {
+      "target": 4,
+      "center": 0,
+      "frame": 1,
+      "type": 2
+    },
+    {
+      "target": 5,
+      "center": 0,
+      "frame": 1,
+      "type": 2
+    },
+    {
+      "target": 6,
+      "center": 0,
+      "frame": 1,
+      "type": 2
+    },
+    {
+      "target": 7,
+      "center": 0,
+      "frame": 1,
+      "type": 2
+    },
+    {
+      "target": 8,
+      "center": 0,
+      "frame": 1,
+      "type": 2
+    },
+    {
+      "target": 9,
+      "center": 0,
+      "frame": 1,
+      "type": 2
+    },
+    {
+      "target": 10,
+      "center": 0,
+      "frame": 1,
+      "type": 2
+    },
+    {
+      "target": 301,
+      "center": 3,
+      "frame": 1,
+      "type": 2
+    },
+    {
+      "target": 399,
+      "center": 3,
+      "frame": 1,
+      "type": 2
+    },
+    {
+      "target": 199,
+      "center": 1,
+      "frame": 1,
+      "type": 2
+    },
+    {
+      "target": 299,
+      "center": 2,
+      "frame": 1,
+      "type": 2
+    }
+  ]
+}

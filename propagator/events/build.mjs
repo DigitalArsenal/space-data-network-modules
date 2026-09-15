@@ -35,7 +35,7 @@ const stripIncludes = (source) =>
 // transitively. They are emitted in dependency order and their cross-family
 // include lines removed, because a single translation unit resolves by ORDER.
 const ORDERED_FAMILIES = [
-  "RFM", "FRM", "PCE", "EVL", "EOP", "TIM", "IDM", "PLD", "LCC", "CAT", "PPE", "OEM",
+  "RFM", "FRM", "PCE", "EVL", "EOP", "TIM", "IDM", "PLD", "LCC", "CAT", "PPE", "OEM", "NCD",
 ];
 const schemaHeaders = ORDERED_FAMILIES.map((family, index) =>
   index === 0 ? headers[family] : stripIncludes(headers[family]),
@@ -68,8 +68,15 @@ const eventLocator = await read(packageRoot, "src", "event_locator.hpp");
 const ephemerisSource = await read(packageRoot, "src", "ephemeris_source.hpp");
 const implementationSource = await read(packageRoot, "src", "events_module.cpp");
 
+const kernelHeaders = await Promise.all(
+  ["sha256.hpp", "ephemeris_series.hpp", "daf.hpp", "spk_read.hpp", "spk_kernel.hpp", "kernel_frame.hpp"]
+    .map(async (name) => (await read(packageRoot, "..", "..", "files", "orbit-products", "src", name))
+      .replace(/^#include "(?:[^"/]+\.hpp|NCD_generated\.h)"\s*$/gm, "")),
+);
+
 const sourceCode = [
   ...schemaHeaders,
+  ...kernelHeaders,
   erfa.source,
   axisEngine,
   stateRepresentations,

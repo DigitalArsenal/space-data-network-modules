@@ -201,11 +201,17 @@ if (!compilation.report?.ok) {
  * strips the publication trailer before compiling — so signed and unsigned
  * bytes execute identically and nothing here can move a numeric result.
  */
-execFileSync(
-  process.execPath,
-  [path.join(packageRoot, "..", "..", "scripts", "sign-module-artifact.mjs"), outputPath],
-  { stdio: "inherit" },
-);
+// Explicit local validation mode requires no signing credentials. Published
+// builds keep the existing mandatory signing behavior.
+if (process.argv.includes("--unsigned")) {
+  console.log("Unsigned local validation build (--unsigned); no signing key read.");
+} else {
+  execFileSync(
+    process.execPath,
+    [path.join(packageRoot, "..", "..", "scripts", "sign-module-artifact.mjs"), outputPath],
+    { stdio: "inherit" },
+  );
+}
 
 console.log(
   `Built ${path.relative(packageRoot, outputPath)} against ` +

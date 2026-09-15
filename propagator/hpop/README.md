@@ -100,3 +100,66 @@ need a live `../tudat-wasm` checkout.
 ## License
 
 UNLICENSED — Proprietary. All rights reserved by DigitalArsenal.io, Inc.
+
+## JPL kernel input (TMPL lane 01)
+
+The `invoke` method accepts an optional `kernel` input with canonical type
+`NCD.fbs` / `$NCD` / `NCD`. Its payload is the existing orbit-products container
+format: `[u32le descriptor_length][$NCD FlatBuffer][SPK bytes]`. Set the
+size-prefixed descriptor's `FORMAT` to `SPK_DAF` and `SOURCE_BYTE_LENGTH` to the
+kernel byte count; an optional `SOURCE_SHA256` is verified. No kernel is embedded
+in the module or opened through a guest filesystem. The module reads Chebyshev
+coefficients directly from immutable input bytes, retaining the view only for
+that invocation.
+
+For body states, send this JSON on the existing `request` port:
+
+```json
+{"operation":"ephemeris","params":{"target":301,"center":399,"epochTDBJD":2461041.5}}
+```
+
+The response contains `position` in km, `velocity` in km/s, `frame` equal to
+`ICRF/J2000`, and `ephemerisSource` equal to `JPL_SPK`. NAIF target/center IDs are
+accepted, including the Sun (10), Moon (301), Earth (399), EMB (3), planetary
+barycentres (1–9), and SSB (0). These are geometric states, with no light-time or
+aberration correction. The descriptor does not prove a DE release; use the
+pinned kernel hash for DE440 provenance rather than inferring a release from a
+DAF header.
+
+The same `kernel` port on `operation: "propagate"` selects kernel states for
+Sun/Moon/planet third-body forces and SRP. `epochJD` and `targetJD` for this JSON
+operation are **TDB Julian dates**, matching the numerical library's state
+contract; `epochTimeScale` is reported as `TDB`. Planet flags include
+`thirdBodyMercury`, `thirdBodyVenus`, `thirdBodyMars`, `thirdBodyJupiter`,
+`thirdBodySaturn`, `thirdBodyUranus`, and `thirdBodyNeptune`.
+
+Without a kernel, propagation explicitly reports `ephemerisSource:
+"Analytical"`. The caller can also request `params.ephemerisSource:
+"Analytical"` with a kernel present. An invalid kernel, missing body, unsupported
+selected segment, or uncovered epoch returns a named failure. It never silently
+substitutes analytic data. The existing resident catalogue/trajectory methods
+retain their current input contracts; the optional kernel port is scoped to
+`invoke`, avoiding reuse of cached trajectories across ephemeris providers.
+
+For native library callers, `Ephemeris::loadEphemerisBuffer(bytes, size, source)`
+attaches a borrowed view until `clearEphemerisBuffer()`. An optional DE430/440/441
+source label is supplied by the caller; both `BodyState` and `EphemerisState`
+report their source. `loadEphemerisFile` now returns false instead of claiming a
+file was loaded and returning analytic results. Unsupported INPOP/EPM named
+providers likewise return invalid states.
+
+The pinned downloader, CSPICE/Horizons sources, validation tolerances, and 2026
+analytic error comparison are documented in
+[`docs/de440-validation.md`](../../docs/de440-validation.md). Invoke and parity
+examples are in `tests/kernel_invoke.test.mjs` and `tests/kernel-parity.mjs`.
+
+### Build status of this lane
+
+The existing HPOP CMake/Emscripten build is retained for diagnostic validation;
+`-ffast-math` was removed so malformed-input finite checks keep their meaning.
+Migration to the SDK compiler is still required before claiming this HPOP
+artifact meets the SDK build law. The current SDK accepts one translation unit
+and generates its own invoke bridge, while HPOP uses multiple translation units
+and a legacy native bridge/browser ABI. SDK compliance also rejects pre-existing
+legacy request/response types with missing canonical file identifiers. This lane
+does not invent replacements for those unratified contracts.

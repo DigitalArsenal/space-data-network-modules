@@ -1,7 +1,7 @@
 /*
- * files/orbit-products — SPK segment evaluation for types 8, 9 and 13.
+ * files/orbit-products — SPK segment evaluation for types 2, 3, 8, 9 and 13.
  *
- * WHAT THIS IS NOT: a general SPK reader. Types 2/3 (Chebyshev), 5, 10 (TLE),
+ * WHAT THIS IS NOT: a general SPK reader. Types 5, 10 (TLE),
  * 14, 15, 17, 18, 20 and 21 are all real, all in the wild, and all refused here
  * by name with Status::UnsupportedVariant. A discrete-state reader that meets a
  * Chebyshev segment and interpolates its coefficients as if they were states
@@ -56,7 +56,7 @@ namespace spk {
 static constexpr int kMaxNodes = 32;
 
 /* Segment types this file evaluates. Everything else is a refusal. */
-inline bool is_supported_type(int32_t t) { return t == 8 || t == 9 || t == 13; }
+inline bool is_supported_type(int32_t t) { return t == 2 || t == 3 || t == 8 || t == 9 || t == 13; }
 
 inline int32_t segment_type(const daf::Summary& s) { return s.ic[3]; }
 inline int32_t segment_target(const daf::Summary& s) { return s.ic[0]; }
@@ -100,6 +100,77 @@ inline const char* builtin_frame_name(int32_t id) {
 namespace detail {
 
 inline double dabs(double v) { return v < 0.0 ? -v : v; }
+
+/* NAIF SPK Required Reading, "Type 2" and "Type 3":
+ * https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/spk.html
+ * A segment ends with INIT, INTLEN, RSIZE, N. Records contain MID, RADIUS,
+ * then three (type 2) or six (type 3) equal-length coefficient blocks. Type 2
+ * velocity differentiates position with respect to ephemeris seconds; type 3
+ * evaluates the independently stored velocity blocks. No coefficient array or
+ * decoded kernel is allocated: Clenshaw reads one double at a time. */
+inline ephem::Status evaluate_chebyshev(const daf::File& f, const daf::Summary& seg,
+                                         double et, ephem::StateRow* out) {
+    const size_t count = daf::File::segment_word_count(seg);
+    if (count < 9) return ephem::Status::Malformed;
+    double control[4];
+    if (!f.words(static_cast<size_t>(seg.ic[5]) - 3, 4, control)) {
+        return ephem::Status::Truncated;
+    }
+    for (double v : control) if (!ephem::is_finite(v)) return ephem::Status::Malformed;
+    const int components = segment_type(seg) == 2 ? 3 : 6;
+    if (control[1] <= 0.0 || control[2] < components + 2 || control[3] < 1.0 ||
+        control[2] > static_cast<double>(count - 4) ||
+        control[3] > static_cast<double>(count - 4)) return ephem::Status::Malformed;
+    const size_t record_size = static_cast<size_t>(control[2]);
+    const size_t records = static_cast<size_t>(control[3]);
+    if (control[2] != static_cast<double>(record_size) ||
+        control[3] != static_cast<double>(records) ||
+        (record_size - 2) % static_cast<size_t>(components) != 0 ||
+        records != (count - 4) / record_size || (count - 4) % record_size != 0) {
+        return ephem::Status::Malformed;
+    }
+    const double index = (et - control[0]) / control[1];
+    if (!ephem::is_finite(index) || index < 0.0 || index > static_cast<double>(records)) {
+        return ephem::Status::OutOfRange;
+    }
+    // SPKR02/SPKR03 select the next record at a shared endpoint, except that
+    // the segment's final endpoint belongs to its final record.
+    size_t record = static_cast<size_t>(index);
+    if (record == records) --record;
+    const size_t address = static_cast<size_t>(seg.ic[4]) + record * record_size;
+    double time[2];
+    if (!f.words(address, 2, time)) return ephem::Status::Truncated;
+    if (!ephem::is_finite(time[0]) || !ephem::is_finite(time[1]) || time[1] <= 0.0) {
+        return ephem::Status::Malformed;
+    }
+    const double x = (et - time[0]) / time[1];
+    if (!ephem::is_finite(x) || x < -1.0 || x > 1.0) return ephem::Status::Malformed;
+    const size_t coefficients = (record_size - 2) / static_cast<size_t>(components);
+    for (int component = 0; component < components; ++component) {
+        const size_t first = address + 2 + static_cast<size_t>(component) * coefficients;
+        double b1 = 0.0, b2 = 0.0, d1 = 0.0, d2 = 0.0;
+        for (size_t k = coefficients - 1; k > 0; --k) {
+            double c;
+            if (!f.word(first + k, &c)) return ephem::Status::Truncated;
+            if (!ephem::is_finite(c)) return ephem::Status::Malformed;
+            const double b = (2.0 * x * b1 - b2) + c;
+            const double d = 2.0 * b1 + 2.0 * x * d1 - d2;
+            b2 = b1; b1 = b;
+            d2 = d1; d1 = d;
+        }
+        double c0;
+        if (!f.word(first, &c0)) return ephem::Status::Truncated;
+        if (!ephem::is_finite(c0)) return ephem::Status::Malformed;
+        const double value = (x * b1 - b2) + c0;
+        if (component < 3) {
+            out->pos[component] = value;
+            if (components == 3) out->vel[component] = (b1 + x * d1 - d2) / time[1];
+        } else {
+            out->vel[component - 3] = value;
+        }
+    }
+    return ephem::row_is_finite(*out) ? ephem::Status::Ok : ephem::Status::Malformed;
+}
 
 /* Fortran NINT / f2c i_dnnt: round half AWAY FROM ZERO. Not lrint (which
  * rounds half to even) and not a C cast (which truncates). SPKR08 uses this to
@@ -344,6 +415,8 @@ inline ephem::Status evaluate(const daf::File& f, const daf::Summary& seg, doubl
     const int32_t type = segment_type(seg);
     if (!is_supported_type(type)) return ephem::Status::UnsupportedVariant;
     if (!ephem::is_finite(et)) return ephem::Status::Malformed;
+    if (!ephem::is_finite(seg.dc[0]) || !ephem::is_finite(seg.dc[1]) ||
+        seg.dc[0] > seg.dc[1]) return ephem::Status::Malformed;
     if (et < seg.dc[0] || et > seg.dc[1]) return ephem::Status::OutOfRange;
     if (seg.ic[4] < 1 || seg.ic[5] < seg.ic[4]) return ephem::Status::Malformed;
 
@@ -352,6 +425,8 @@ inline ephem::Status evaluate(const daf::File& f, const daf::Summary& seg, doubl
     *out = ephem::StateRow{};
     out->epoch = et;
     out->has_vel = true;
+
+    if (type == 2 || type == 3) return detail::evaluate_chebyshev(f, seg, et, out);
 
     double window_states[kMaxNodes * 6];
     double column[kMaxNodes];
@@ -480,6 +555,9 @@ inline ephem::Status to_series(const daf::File& f, const daf::Summary& seg, ephe
     if (out == nullptr) return ephem::Status::Malformed;
     const int32_t type = segment_type(seg);
     if (!is_supported_type(type)) return ephem::Status::UnsupportedVariant;
+    // Chebyshev coefficients are not stored state nodes. Call evaluate at
+    // explicit epochs; materialising them as rows would change the SPK rule.
+    if (type == 2 || type == 3) return ephem::Status::Unsupported;
     if (seg.ic[4] < 1 || seg.ic[5] < seg.ic[4]) return ephem::Status::Malformed;
 
     const size_t begin = static_cast<size_t>(seg.ic[4]);

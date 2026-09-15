@@ -1,0 +1,424 @@
+{
+  "source": {
+    "report": "Archinal et al., Report of the IAU Working Group on Cartographic Coordinates and Rotational Elements: 2015, CMDA 130:22 (2018), Table 1",
+    "report_url": "https://doi.org/10.1007/s10569-017-9805-5",
+    "lunar_model": "WGCCRE 2009, as retained by pck00011: the 2015 report no longer tabulates lunar rotational elements. IAU_MOON approximates the Mean Earth/Polar Axis frame, not the binary-PCK MOON_PA/MOON_ME models.",
+    "pck_documentation": "https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/pck.html#Orientation%20Models%20used%20by%20PCK%20Software"
+  },
+  "kernel": {
+    "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/pck00011.tpc",
+    "sha256": "3dff7b1dbeceaa01f25467767d3fa25816051c85d162d1edf04acb310ee28bb1"
+  },
+  "generator": {
+    "program": "generate_body_orientation_reference.py",
+    "spiceypy_version": "8.2.0",
+    "cspice_version": "CSPICE_N0067",
+    "method": "spice.pxform('J2000', frame, tdb_days_since_j2000 * 86400.0); only the hash-pinned PCK is loaded",
+    "independence": "Expected values come from NAIF CSPICE, never from the module or a port of its implementation."
+  },
+  "metadata": {
+    "units": "dimensionless direction cosines, flattened row-major 3x3 matrices",
+    "frame": "ICRF to the named IAU body-fixed axes; the text PCK uses SPICE's historical J2000 label for ICRF",
+    "time_scale": "TDB; epoch origin JD 2451545.0 TDB (2000-01-01 12:00:00 TDB); one day = 86400 TDB seconds",
+    "tolerance_kind": "maximum absolute matrix-element error",
+    "tolerance_rationale": "1e-12 at J2000 and for every lunar case resolves the periodic and lunar quadratic terms while allowing floating-point Euler evaluation. The other nonzero epochs allow 1e-11 because large prime-meridian angles (up to 2.4 million degrees) lose several 1e-12 in binary64 multiplication and reduction when algebraically equivalent implementations differ in operation order. These tolerances test agreement with the analytical PCK model; they do not assert physical orientation accuracy of 1e-12 radians."
+  },
+  "cases": [
+    {
+      "body_id": 10,
+      "frame": "IAU_SUN",
+      "tdb_days_since_j2000": 0.0,
+      "epoch_jd_tdb": 2451545.0,
+      "matrix_icrf_to_fixed": [
+        -0.15065803464584335,
+        0.8861935214116581,
+        0.4381360510214346,
+        -0.9809851065290284,
+        -0.1888678232151968,
+        0.0446896646013847,
+        0.12235349347232778,
+        -0.42307208364764326,
+        0.8977971010607901
+      ],
+      "tolerance": 1e-12
+    },
+    {
+      "body_id": 10,
+      "frame": "IAU_SUN",
+      "tdb_days_since_j2000": 2651.5,
+      "epoch_jd_tdb": 2454196.5,
+      "matrix_icrf_to_fixed": [
+        -0.02307501739665502,
+        -0.9055617833366172,
+        -0.4235863549883894,
+        0.9922183057207025,
+        0.031110586594394838,
+        -0.12056104343647475,
+        0.12235349347232778,
+        -0.42307208364764326,
+        0.8977971010607901
+      ],
+      "tolerance": 1e-11
+    },
+    {
+      "body_id": 10,
+      "frame": "IAU_SUN",
+      "tdb_days_since_j2000": -1000.0,
+      "epoch_jd_tdb": 2450545.0,
+      "matrix_icrf_to_fixed": [
+        0.6935541265211307,
+        -0.6106203284775895,
+        -0.382263636820758,
+        0.7099382340884512,
+        0.6694421756118765,
+        0.21871185905526253,
+        0.12235349347232778,
+        -0.42307208364764326,
+        0.8977971010607901
+      ],
+      "tolerance": 1e-11
+    },
+    {
+      "body_id": 199,
+      "frame": "IAU_MERCURY",
+      "tdb_days_since_j2000": 0.0,
+      "epoch_jd_tdb": 2451545.0,
+      "matrix_icrf_to_fixed": [
+        0.931502206299635,
+        -0.2714484328874466,
+        -0.24211441085127836,
+        0.3520706377964644,
+        0.8400875636377316,
+        0.41267317749377763,
+        0.09137781820826621,
+        -0.46964735036425953,
+        0.8781124419089662
+      ],
+      "tolerance": 1e-12
+    },
+    {
+      "body_id": 199,
+      "frame": "IAU_MERCURY",
+      "tdb_days_since_j2000": 2651.5,
+      "epoch_jd_tdb": 2454196.5,
+      "matrix_icrf_to_fixed": [
+        0.5633952441668013,
+        0.7514800353247657,
+        0.3433126204474857,
+        -0.8211207399390765,
+        0.4633578851380841,
+        0.33325695900050695,
+        0.09135934157016423,
+        -0.46965649871863907,
+        0.8781094714892985
+      ],
+      "tolerance": 1e-11
+    },
+    {
+      "body_id": 199,
+      "frame": "IAU_MERCURY",
+      "tdb_days_since_j2000": -1000.0,
+      "epoch_jd_tdb": 2450545.0,
+      "matrix_icrf_to_fixed": [
+        0.7715949025432582,
+        -0.5240472158554962,
+        -0.360577067938829,
+        0.629515787871698,
+        0.7104992067740641,
+        0.31448489628867865,
+        0.09138478642276932,
+        -0.4696438999151684,
+        0.8781135621791387
+      ],
+      "tolerance": 1e-11
+    },
+    {
+      "body_id": 299,
+      "frame": "IAU_VENUS",
+      "tdb_days_since_j2000": 0.0,
+      "epoch_jd_tdb": 2451545.0,
+      "matrix_icrf_to_fixed": [
+        -0.954821497429634,
+        0.2665104385944917,
+        0.13148419740182907,
+        -0.296591573568662,
+        -0.8824137725799873,
+        -0.36521140788482953,
+        0.018690814168902045,
+        -0.38770880836179883,
+        0.9215923900425705
+      ],
+      "tolerance": 1e-12
+    },
+    {
+      "body_id": 299,
+      "frame": "IAU_VENUS",
+      "tdb_days_since_j2000": 2651.5,
+      "epoch_jd_tdb": 2454196.5,
+      "matrix_icrf_to_fixed": [
+        -0.9662318573160933,
+        -0.2439321392996149,
+        -0.08302475127457967,
+        0.25699543064653135,
+        -0.888920126521718,
+        -0.379175892286702,
+        0.018690814168902045,
+        -0.38770880836179883,
+        0.9215923900425705
+      ],
+      "tolerance": 1e-11
+    },
+    {
+      "body_id": 299,
+      "frame": "IAU_VENUS",
+      "tdb_days_since_j2000": -1000.0,
+      "epoch_jd_tdb": 2450545.0,
+      "matrix_icrf_to_fixed": [
+        -0.9125842614113935,
+        -0.38318179978383043,
+        -0.14269433814502158,
+        0.4084612824857759,
+        -0.838363637232137,
+        -0.3609789363342087,
+        0.018690814168902045,
+        -0.38770880836179883,
+        0.9215923900425705
+      ],
+      "tolerance": 1e-11
+    },
+    {
+      "body_id": 301,
+      "frame": "IAU_MOON",
+      "tdb_days_since_j2000": 0.0,
+      "epoch_jd_tdb": 2451545.0,
+      "matrix_icrf_to_fixed": [
+        0.7842270520919169,
+        0.5578471124601639,
+        0.2716514860755947,
+        -0.6200619152508559,
+        0.7205566654668131,
+        0.31035675134719964,
+        -0.022608671404182493,
+        -0.4118309009426129,
+        0.9109797785934293
+      ],
+      "tolerance": 1e-12
+    },
+    {
+      "body_id": 301,
+      "frame": "IAU_MOON",
+      "tdb_days_since_j2000": 2651.5,
+      "epoch_jd_tdb": 2454196.5,
+      "matrix_icrf_to_fixed": [
+        0.5669612002511406,
+        0.7656824389295876,
+        0.30378512163143284,
+        -0.8237137586821979,
+        0.5237930715309865,
+        0.21710933184407558,
+        0.007116260776002428,
+        -0.3733245517387965,
+        0.9276735082460826
+      ],
+      "tolerance": 1e-12
+    },
+    {
+      "body_id": 301,
+      "frame": "IAU_MOON",
+      "tdb_days_since_j2000": -1000.0,
+      "epoch_jd_tdb": 2450545.0,
+      "matrix_icrf_to_fixed": [
+        -0.9993936207201722,
+        -0.03102270505944403,
+        -0.015810839149751035,
+        0.03479713482228601,
+        -0.9060879284526882,
+        -0.42165605097102066,
+        -0.0012450991864927045,
+        -0.4219505393800452,
+        0.9066179967576778
+      ],
+      "tolerance": 1e-12
+    },
+    {
+      "body_id": 301,
+      "frame": "IAU_MOON",
+      "tdb_days_since_j2000": 36525.0,
+      "epoch_jd_tdb": 2488070.0,
+      "matrix_icrf_to_fixed": [
+        0.964994863264806,
+        -0.24161916250496548,
+        -0.1020053635008348,
+        0.2622290069317081,
+        0.8956549677340869,
+        0.3592187727511773,
+        0.004567471526843046,
+        -0.37339303566570553,
+        0.9276619961603475
+      ],
+      "tolerance": 1e-12
+    },
+    {
+      "body_id": 499,
+      "frame": "IAU_MARS",
+      "tdb_days_since_j2000": 0.0,
+      "epoch_jd_tdb": 2451545.0,
+      "matrix_icrf_to_fixed": [
+        -0.7067364464274375,
+        -0.7065882946541797,
+        0.035448231956131226,
+        0.5490619907161185,
+        -0.5793961327942199,
+        -0.6023545896346731,
+        0.44615527077685685,
+        -0.40624266536246617,
+        0.7974411396443181
+      ],
+      "tolerance": 1e-12
+    },
+    {
+      "body_id": 499,
+      "frame": "IAU_MARS",
+      "tdb_days_since_j2000": 2651.5,
+      "epoch_jd_tdb": 2454196.5,
+      "matrix_icrf_to_fixed": [
+        0.8864096611872548,
+        0.3234887912444977,
+        -0.3311086143444014,
+        -0.12340474706954556,
+        0.8545416007906425,
+        0.5045095845659104,
+        0.4461492810199264,
+        -0.40634179511507285,
+        0.7973939832906083
+      ],
+      "tolerance": 1e-11
+    },
+    {
+      "body_id": 499,
+      "frame": "IAU_MARS",
+      "tdb_days_since_j2000": -1000.0,
+      "epoch_jd_tdb": 2450545.0,
+      "matrix_icrf_to_fixed": [
+        0.7407651368281878,
+        -0.33240463614642796,
+        -0.5837586572619519,
+        0.5022035445254303,
+        0.8511793123895326,
+        0.15259547184034197,
+        0.4461598501949837,
+        -0.40620307240153086,
+        0.797458746296977
+      ],
+      "tolerance": 1e-11
+    },
+    {
+      "body_id": 599,
+      "frame": "IAU_JUPITER",
+      "tdb_days_since_j2000": 0.0,
+      "epoch_jd_tdb": 2451545.0,
+      "matrix_icrf_to_fixed": [
+        0.22826533287608342,
+        -0.8802481155891952,
+        -0.4160026355789609,
+        0.9734895258323475,
+        0.19994923179133894,
+        0.11107856589263648,
+        -0.014597290902157951,
+        -0.4303295942736501,
+        0.9025537986129101
+      ],
+      "tolerance": 1e-12
+    },
+    {
+      "body_id": 599,
+      "frame": "IAU_JUPITER",
+      "tdb_days_since_j2000": 2651.5,
+      "epoch_jd_tdb": 2454196.5,
+      "matrix_icrf_to_fixed": [
+        -0.9864686315686847,
+        -0.14121655850324055,
+        -0.08329179152537966,
+        0.16329828183217981,
+        -0.8915622176431488,
+        -0.4224339986576463,
+        -0.01460513887864297,
+        -0.4303192950307146,
+        0.9025585821666117
+      ],
+      "tolerance": 1e-11
+    },
+    {
+      "body_id": 599,
+      "frame": "IAU_JUPITER",
+      "tdb_days_since_j2000": -1000.0,
+      "epoch_jd_tdb": 2450545.0,
+      "matrix_icrf_to_fixed": [
+        -0.6794114053308643,
+        -0.6579976891299397,
+        -0.32471400247910326,
+        0.7336123845867665,
+        -0.6179445275640785,
+        -0.282767448682705,
+        -0.014594913061001769,
+        -0.4303296433587478,
+        0.9025538136640245
+      ],
+      "tolerance": 1e-11
+    },
+    {
+      "body_id": 699,
+      "frame": "IAU_SATURN",
+      "tdb_days_since_j2000": 0.0,
+      "epoch_jd_tdb": 2451545.0,
+      "matrix_icrf_to_fixed": [
+        -0.9801892579246126,
+        0.18502086117224872,
+        0.07068450735682218,
+        -0.17866837423803855,
+        -0.9800019411711302,
+        0.08760027025045491,
+        0.08547883186107168,
+        0.07323575787752883,
+        0.9936447519469775
+      ],
+      "tolerance": 1e-12
+    },
+    {
+      "body_id": 699,
+      "frame": "IAU_SATURN",
+      "tdb_days_since_j2000": 2651.5,
+      "epoch_jd_tdb": 2454196.5,
+      "matrix_icrf_to_fixed": [
+        0.345678929706742,
+        0.9331668586367369,
+        -0.0985174679884005,
+        -0.9344507595112871,
+        0.35190372108789975,
+        0.05445685570493527,
+        0.08548599654668469,
+        0.07323513519161325,
+        0.9936441814693459
+      ],
+      "tolerance": 1e-11
+    },
+    {
+      "body_id": 699,
+      "frame": "IAU_SATURN",
+      "tdb_days_since_j2000": -1000.0,
+      "epoch_jd_tdb": 2450545.0,
+      "matrix_icrf_to_fixed": [
+        -0.10013545767877119,
+        0.9928767267384874,
+        -0.06456543670207769,
+        -0.9912954763114803,
+        -0.0939802899041023,
+        0.09220077957336531,
+        0.08547612976649352,
+        0.07323599258976327,
+        0.9936449670931432
+      ],
+      "tolerance": 1e-11
+    }
+  ]
+}

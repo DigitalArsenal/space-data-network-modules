@@ -125,7 +125,7 @@ int32_t decode_container_frame(const char* method, ContainerFrame* out) {
 
     const uint8_t* payload = frame->payload;
     const size_t payload_length = static_cast<size_t>(frame->payload_length);
-    if (payload_length < 8) {
+    if (payload_length < 12) {
         plugin_set_error("malformed-container-frame",
                          "The frame is too short to hold a size-prefixed $NCD descriptor.");
         return 400;
@@ -135,7 +135,8 @@ int32_t decode_container_frame(const char* method, ContainerFrame* out) {
     /* The prefix is the descriptor's length, so 4 + it is where the container
      * starts. A prefix that overruns the frame is a frame that is not what it
      * declares, and is refused before anything reads past it. */
-    if (static_cast<uint64_t>(descriptor_length) + 4u > payload_length) {
+    if (descriptor_length < 8 ||
+        static_cast<uint64_t>(descriptor_length) + 4u > payload_length) {
         plugin_set_error("malformed-container-frame",
                          "The $NCD size prefix overruns the frame; the descriptor and the "
                          "container bytes must arrive in one frame as "
@@ -275,7 +276,7 @@ struct Loaded {
 };
 
 ephem::Status load_native(const uint8_t* bytes, size_t len, ephem::Format requested,
-                          Loaded* out) {
+                          Loaded* out, bool materialize_states = true) {
     if (!bytes || !out || len == 0) return ephem::Status::Malformed;
 
     /* Detection uses containers.hpp's own predicates, in containers.hpp's own
@@ -297,7 +298,25 @@ ephem::Status load_native(const uint8_t* bytes, size_t len, ephem::Format reques
         case ephem::Format::SpkDaf: {
             const ephem::Status st = daf::read(bytes, len, &out->daf);
             if (st != ephem::Status::Ok) return st;
+            if ((out->daf.id_word != "DAF/SPK" && out->daf.id_word != "NAIF/DAF") ||
+                out->daf.nd != 2 || out->daf.ni != 6) return ephem::Status::UnsupportedVariant;
             for (const daf::Summary& seg : out->daf.summaries) {
+                if (!ephem::is_finite(seg.dc[0]) || !ephem::is_finite(seg.dc[1]) ||
+                    seg.dc[0] > seg.dc[1] || seg.ic[4] < 1 || seg.ic[5] < seg.ic[4])
+                    return ephem::Status::Malformed;
+                if (static_cast<size_t>(seg.ic[5]) > len / 8) return ephem::Status::Truncated;
+            }
+            // Describing a DE kernel needs summaries, not millions of decoded
+            // coefficients. This also describes supported and unsupported SPK
+            // segment types independently of state-materialization support.
+            if (!materialize_states) return ephem::Status::Ok;
+            bool has_chebyshev = false;
+            for (const daf::Summary& seg : out->daf.summaries) {
+                const int type = spk::segment_type(seg);
+                if (type == 2 || type == 3) {
+                    has_chebyshev = true;
+                    continue; // Coefficients are evaluated directly, never state rows.
+                }
                 ephem::Series s;
                 const ephem::Status ss = spk::to_series(out->daf, seg, &s);
                 /* A kernel may mix segment types. Skipping the ones we do not
@@ -309,7 +328,10 @@ ephem::Status load_native(const uint8_t* bytes, size_t len, ephem::Format reques
                 out->series.push_back(s);
                 out->flags.push_back(std::vector<sp3::RecordFlags>());
             }
-            return out->series.empty() ? ephem::Status::UnsupportedVariant : ephem::Status::Ok;
+            if (out->series.empty()) {
+                return has_chebyshev ? ephem::Status::Unsupported : ephem::Status::UnsupportedVariant;
+            }
+            return ephem::Status::Ok;
         }
         case ephem::Format::Sp3d: {
             const ephem::Status st =
@@ -728,6 +750,26 @@ void split_lines(const std::string& text, std::vector<std::string>* out) {
     }
 }
 
+// Read only the degree-bearing directory word, never coefficient/state arrays.
+// NAIF SPK Required Reading specifies RSIZE at end-1 for types 2/3, DEGREE
+// at end-1 for types 8/9, and window-size-minus-one there for type 13.
+// https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/spk.html
+uint32_t descriptor_polynomial_degree(const daf::File& file, const daf::Summary& seg) {
+    const int type = spk::segment_type(seg);
+    if (!spk::is_supported_type(type) || daf::File::segment_word_count(seg) < 2) return 0;
+    double raw = 0.0;
+    if (!file.word(static_cast<size_t>(seg.ic[5]) - 1, &raw) ||
+        !ephem::is_finite(raw) || raw < 0.0 || raw > 2147483647.0) return 0;
+    const uint32_t value = static_cast<uint32_t>(raw);
+    if (raw != static_cast<double>(value)) return 0;
+    if (type == 2 || type == 3) {
+        const uint32_t components = type == 2 ? 3 : 6;
+        if (value < components + 2 || (value - 2) % components != 0) return 0;
+        return (value - 2) / components - 1;
+    }
+    return type == 13 ? 2 * value + 1 : value;
+}
+
 void build_descriptor(const Loaded& loaded, const uint8_t* body, size_t body_length,
                       const NCD* incoming, NCDT* out) {
     out->FORMAT = ncd_format_for(loaded);
@@ -769,12 +811,21 @@ void build_descriptor(const Loaded& loaded, const uint8_t* body, size_t body_len
             split_lines(loaded.daf.comments, &out->COMMENT_AREA);
             if (!loaded.daf.summaries.empty()) {
                 out->NATIVE_FRAME_ID = spk::segment_frame(loaded.daf.summaries.front());
+                out->NATIVE_FRAME_NAME = spk::builtin_frame_name(out->NATIVE_FRAME_ID);
+                out->NATIVE_TIME_SYSTEM = "TDB";
+                double first = loaded.daf.summaries.front().dc[0];
+                double last = loaded.daf.summaries.front().dc[1];
+                for (const auto& seg : loaded.daf.summaries) {
+                    if (seg.dc[0] < first) first = seg.dc[0];
+                    if (seg.dc[1] > last) last = seg.dc[1];
+                }
+                out->START_TIME = ephem::oem::iso_from_seconds(first);
+                out->STOP_TIME = ephem::oem::iso_from_seconds(last);
             }
             /* EVERY segment, in file order, including the types this reader
              * does not evaluate: the descriptor describes the FILE, and a
              * segment list that silently omitted the segments we skipped would
              * make a rewrite drop them. */
-            size_t series_index = 0;
             for (const daf::Summary& seg : loaded.daf.summaries) {
                 std::unique_ptr<NCDSegmentDescriptorT> d(new NCDSegmentDescriptorT());
                 d->NAME = seg.name;
@@ -789,19 +840,7 @@ void build_descriptor(const Loaded& loaded, const uint8_t* body, size_t body_len
                 d->STOP_EPOCH = ephem::oem::iso_from_seconds(seg.dc[1]);
                 d->INITIAL_ADDRESS = static_cast<uint64_t>(seg.ic[4]);
                 d->FINAL_ADDRESS = static_cast<uint64_t>(seg.ic[5]);
-                /* The polynomial degree the segment REALISES — Lagrange degree
-                 * for types 8 and 9, 2w-1 for a type-13 Hermite window of w
-                 * states. It comes from the series this segment produced rather
-                 * than from the trailer word, because the trailer stores a
-                 * different quantity in the two families and reproducing that
-                 * asymmetry here would be a second place to get it backwards.
-                 * A segment we did not evaluate claims no degree. */
-                if (spk::is_supported_type(spk::segment_type(seg)) &&
-                    series_index < loaded.series.size()) {
-                    const int degree = loaded.series[series_index].interp_degree;
-                    if (degree > 0) d->POLYNOMIAL_DEGREE = static_cast<uint32_t>(degree);
-                    ++series_index;
-                }
+                d->POLYNOMIAL_DEGREE = descriptor_polynomial_degree(loaded.daf, seg);
                 out->SEGMENTS.push_back(std::move(d));
             }
             break;
@@ -955,7 +994,14 @@ int32_t load_from_frame(const char* method, ContainerFrame* frame, Loaded* loade
     }
 
     const ephem::Status st =
-        load_native(frame->body, frame->body_length, requested, loaded);
+        load_native(frame->body, frame->body_length, requested, loaded,
+                    std::strcmp(method, "describe_container") != 0);
+    if (st == ephem::Status::Unsupported && loaded->format == ephem::Format::SpkDaf) {
+        plugin_set_error("unsupported-spk-materialization",
+            "This kernel stores Chebyshev coefficients, not discrete state rows. "
+            "Use describe_container for metadata or the HPOP kernel input for body-state evaluation.");
+        return 400;
+    }
     if (st != ephem::Status::Ok) return fail_with_status(st, "The container could not be read");
     return 0;
 }

@@ -6,6 +6,7 @@
 // =============================================================================
 
 #include "astrodynamics.h"
+#include "ephemeris.h"
 #include "atmosphere.h"
 #include <cmath>
 #include <cstring>
@@ -4152,10 +4153,34 @@ Vec3 computeGravityAtDegree(
 // 8.6.2 Third Body Perturbations - JPL DE Ephemeris
 // =============================================================================
 
-// Simplified analytical ephemeris (mean elements approximation)
-// For production: would use SPICE or JPL DE binary files
+// The selected borrowed SPK buffer takes precedence over the retained
+// analytical mean-elements fallback. States report the actual provider.
+
+namespace {
+EphemerisState kernelLegacyState(CelestialBody body, int target, int center, double jd) {
+    const auto row = Ephemeris::getKernelState(target, center, jd);
+    EphemerisState state;
+    state.body = body;
+    state.epoch = jd;
+    state.position = row.position;
+    state.velocity = row.velocity;
+    state.source = row.source;
+    state.valid = row.valid;
+    return state;
+}
+int legacyNaifId(CelestialBody body) {
+    switch (body) {
+        case CelestialBody::Sun: return 10;
+        case CelestialBody::Moon: return 301;
+        case CelestialBody::Earth: return 399;
+        default: return static_cast<int>(body); // Planet barycentres 1..9, EMB 3.
+    }
+}
+}
 
 EphemerisState getSunPosition(double jd) {
+    if (Ephemeris::selectedEphemerisSource() != Ephemeris::EphemerisSource::Analytical)
+        return kernelLegacyState(CelestialBody::Sun, 10, 399, jd);
     EphemerisState state;
     state.body = CelestialBody::Sun;
     state.epoch = jd;
@@ -4208,6 +4233,8 @@ EphemerisState getSunPosition(double jd) {
 }
 
 EphemerisState getMoonPosition(double jd) {
+    if (Ephemeris::selectedEphemerisSource() != Ephemeris::EphemerisSource::Analytical)
+        return kernelLegacyState(CelestialBody::Moon, 301, 399, jd);
     EphemerisState state;
     state.body = CelestialBody::Moon;
     state.epoch = jd;
@@ -4289,6 +4316,9 @@ EphemerisState getMoonPosition(double jd) {
 }
 
 EphemerisState getPlanetPosition(CelestialBody body, double jd) {
+    if (Ephemeris::selectedEphemerisSource() != Ephemeris::EphemerisSource::Analytical) {
+        return kernelLegacyState(body, legacyNaifId(body), 10, jd);
+    }
     EphemerisState state;
     state.body = body;
     state.epoch = jd;
@@ -4422,6 +4452,12 @@ EphemerisState getPlanetPosition(CelestialBody body, double jd) {
 }
 
 EphemerisState getAnalyticalEphemeris(CelestialBody body, double jd) {
+    struct RestoreSource {
+        Ephemeris::EphemerisSource previous = Ephemeris::selectedEphemerisSource();
+        RestoreSource() { Ephemeris::selectEphemerisSource(Ephemeris::EphemerisSource::Analytical); }
+        ~RestoreSource() { Ephemeris::selectEphemerisSource(previous); }
+    } restore;
+
     switch (body) {
         case CelestialBody::Sun:
             return getSunPosition(jd);

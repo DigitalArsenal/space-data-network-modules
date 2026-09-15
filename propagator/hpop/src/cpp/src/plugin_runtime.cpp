@@ -5,6 +5,7 @@
 #include "integrators.h"
 #include "force_models.h"
 #include "coords.h"
+#include "ephemeris.h"
 
 #include <nlohmann/json.hpp>
 
@@ -204,6 +205,13 @@ void configure_force_models(
         read_optional_bool(requested, "thirdBodySun", "sun", forces.thirdBody.includeSun);
     forces.thirdBody.includeMoon =
         read_optional_bool(requested, "thirdBodyMoon", "moon", forces.thirdBody.includeMoon);
+    forces.thirdBody.includeMercury = read_optional_bool(requested, "thirdBodyMercury", "mercury", forces.thirdBody.includeMercury);
+    forces.thirdBody.includeVenus = read_optional_bool(requested, "thirdBodyVenus", "venus", forces.thirdBody.includeVenus);
+    forces.thirdBody.includeMars = read_optional_bool(requested, "thirdBodyMars", "mars", forces.thirdBody.includeMars);
+    forces.thirdBody.includeJupiter = read_optional_bool(requested, "thirdBodyJupiter", "jupiter", forces.thirdBody.includeJupiter);
+    forces.thirdBody.includeSaturn = read_optional_bool(requested, "thirdBodySaturn", "saturn", forces.thirdBody.includeSaturn);
+    forces.thirdBody.includeUranus = read_optional_bool(requested, "thirdBodyUranus", "uranus", forces.thirdBody.includeUranus);
+    forces.thirdBody.includeNeptune = read_optional_bool(requested, "thirdBodyNeptune", "neptune", forces.thirdBody.includeNeptune);
 
     forces.useSRP = read_optional_bool(requested, "srp", nullptr, forces.useSRP);
     forces.useDrag = read_optional_bool(requested, "drag", nullptr, forces.useDrag);
@@ -262,6 +270,27 @@ std::string propagate_json(const json& params) {
     configure_force_models(params, epoch_jd, forces);
     configure_weather(params, epoch_jd, forces);
 
+    // Check the requested force bodies at both ends before integration. A
+    // missing/out-of-coverage kernel must not integrate a partial force model.
+    if (Ephemeris::selectedEphemerisSource() != Ephemeris::EphemerisSource::Analytical) {
+        const auto& third = forces.thirdBody;
+        const std::pair<int, bool> bodies[] = {
+            {10, forces.useSRP || (forces.useThirdBody && third.includeSun)},
+            {301, forces.useThirdBody && third.includeMoon},
+            {1, forces.useThirdBody && third.includeMercury},
+            {2, forces.useThirdBody && third.includeVenus},
+            {4, forces.useThirdBody && third.includeMars},
+            {5, forces.useThirdBody && third.includeJupiter},
+            {6, forces.useThirdBody && third.includeSaturn},
+            {7, forces.useThirdBody && third.includeUranus},
+            {8, forces.useThirdBody && third.includeNeptune},
+        };
+        for (const auto& body : bodies) if (body.second) {
+            if (!Ephemeris::getKernelState(body.first, 399, epoch_jd).valid ||
+                !Ephemeris::getKernelState(body.first, 399, target_jd).valid) return "{}";
+        }
+    }
+
     const double dt_sec = (target_jd - epoch_jd) * 86400.0;
     if (std::abs(dt_sec) < 1e-12) {
         return json({
@@ -270,10 +299,13 @@ std::string propagate_json(const json& params) {
             {"velocity", {sv.velocity.x, sv.velocity.y, sv.velocity.z}},
             {"propagatedDeltaSeconds", 0.0},
             {"integrationSteps", 0},
+            {"ephemerisSource", Ephemeris::ephemerisSourceName(Ephemeris::selectedEphemerisSource())},
+            {"epochTimeScale", "TDB"},
         }).dump();
     }
 
     const auto result = Integrator::PropagateWithResult(sv, dt_sec, config, forces);
+    if (!Ephemeris::ephemerisError().empty()) return "{}";
     if (!result.success) {
         throw std::runtime_error(
             result.errorMessage.empty()
@@ -295,6 +327,8 @@ std::string propagate_json(const json& params) {
         }},
         {"propagatedDeltaSeconds", dt_sec},
         {"integrationSteps", result.steps},
+        {"ephemerisSource", Ephemeris::ephemerisSourceName(Ephemeris::selectedEphemerisSource())},
+        {"epochTimeScale", "TDB"},
     };
 
     return output.dump();
@@ -407,6 +441,21 @@ std::string dispatch_operation(const std::string& operation, const json& params)
     if (operation == "propagate") {
         return propagate_json(params);
     }
+    if (operation == "ephemeris") {
+        using namespace astro::Ephemeris;
+        const double jd = params.at("epochTDBJD").get<double>();
+        const int target = params.at("target").get<int>();
+        const int center = params.value("center", 399);
+
+        const auto state = getKernelState(target, center, jd);
+        if (!state.valid) return "{}"; // invoke reports ephemerisError as a named failure.
+        return json({{"epochTDBJD", jd}, {"target", target}, {"center", center},
+                     {"frame", "ICRF/J2000"}, {"positionUnits", "km"},
+                     {"velocityUnits", "km/s"},
+                     {"ephemerisSource", ephemerisSourceName(state.source)},
+                     {"position", {state.position.x, state.position.y, state.position.z}},
+                     {"velocity", {state.velocity.x, state.velocity.y, state.velocity.z}}}).dump();
+    }
     if (operation == "atmosphere") {
         return atmosphere_json(params);
     }
@@ -423,9 +472,21 @@ PluginInvokeResult invoke_json_request(std::string_view request_json) {
         const auto params =
             request.contains("params") ? request.at("params") : json::object();
 
+        using namespace astro::Ephemeris;
+        const auto source = params.value("ephemerisSource", "");
+        if (!source.empty()) {
+            if (source == "Analytical") selectEphemerisSource(EphemerisSource::Analytical);
+            else if (source != ephemerisSourceName(selectedEphemerisSource()))
+                return make_error_result("ephemeris-source", "Requested ephemeris source does not match the supplied kernel.");
+        }
+        if (operation == "propagate" && params.value("epochTimeScale", "TDB") != "TDB")
+            return make_error_result("epoch-time-scale", "JSON propagation epochs must be JD TDB.");
+        if (operation == "ephemeris" && selectedEphemerisSource() == EphemerisSource::Analytical)
+            return make_error_result("missing-kernel", "NAIF ephemeris query requires a kernel input.");
         PluginInvokeResult result{};
         result.ok = true;
         result.json = dispatch_operation(operation, params);
+        if (!ephemerisError().empty()) return make_error_result("ephemeris-failed", ephemerisError());
         return result;
     } catch (const std::exception& ex) {
         return make_error_result("invoke-failed", ex.what());
