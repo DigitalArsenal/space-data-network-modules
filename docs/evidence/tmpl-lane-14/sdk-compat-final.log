@@ -1,13 +1,13 @@
-✔ build publishes canonical browser and isomorphic artifact paths (2.110667ms)
-✔ built artifact passes SDK compliance checks (20.932209ms)
-✔ manifest declares CDM import probability command surface (0.693708ms)
-✔ manifest declares CSM summary command surface (0.560834ms)
-✔ manifest declares Orekit CDM KVN parser/writer command surfaces (0.175125ms)
-✔ manifest declares Orekit CDM XML parser/writer command surfaces (0.159ms)
-✔ primary artifact exposes canonical wasi-threads imports and exports (4.214291ms)
-✔ built artifact loads through the SDK WasmEdge pthread runner (306.970125ms)
-✔ primary artifact executes through the SDK browser WASI harness (32.823791ms)
-✔ hosted-runtime example is wired to the screen catalog command surface (0.381125ms)
+✔ build publishes canonical browser and isomorphic artifact paths (0.774291ms)
+✔ built artifact passes SDK compliance checks (11.266417ms)
+✔ manifest declares CDM import probability command surface (0.316334ms)
+✔ manifest declares CSM summary command surface (0.159708ms)
+✔ manifest declares Orekit CDM KVN parser/writer command surfaces (0.139167ms)
+✔ manifest declares Orekit CDM XML parser/writer command surfaces (0.138916ms)
+✔ primary artifact exposes canonical wasi-threads imports and exports (1.913333ms)
+✔ built artifact loads through the SDK WasmEdge pthread runner (101.43375ms)
+✔ primary artifact executes through the SDK browser WASI harness (31.389166ms)
+✔ hosted-runtime example is wired to the screen catalog command surface (0.434791ms)
 ℹ tests 10
 ℹ suites 0
 ℹ pass 10
@@ -15,4 +15,4 @@
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 1038.137334
+ℹ duration_ms 718.625583

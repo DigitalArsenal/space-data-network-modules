@@ -6,6 +6,7 @@
 #include <wasmedge/wasmedge.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,7 +20,8 @@ typedef struct {
   WasmEdge_MemoryInstanceContext *memory;
   WasmEdge_ModuleInstanceContext *wasi;
   pthread_mutex_t lock;
-  uint32_t next_tid, spawn_count;
+  uint32_t next_tid;
+  atomic_uint spawn_count;
   Thread *threads;
 } Host;
 static Host *process_host;
@@ -37,7 +39,7 @@ static void check(const char *step, WasmEdge_Result result) {
     /* ResultOK includes Terminate. proc_exit from any guest thread must end
      * the process, including threads blocked on a guest atomic wait. */
     if (process_host) {
-      fprintf(stderr, "wasi-thread-spawn count=%u\n", process_host->spawn_count);
+      fprintf(stderr, "wasi-thread-spawn count=%u\n", atomic_load(&process_host->spawn_count));
       exit((int)WasmEdge_ModuleInstanceWASIGetExitCode(process_host->wasi));
     }
     exit(1);
@@ -188,8 +190,9 @@ static void serve(Host *h, WasmEdge_ExecutorContext *e, WasmEdge_ModuleInstanceC
 }
 int main(int argc, char **argv) {
   int file = 1;
-  if (argc > 1 && !strcmp(argv[1], "--version")) { printf("WasmEdge wasi-threads host %s\n", WasmEdge_VersionGet()); return 0; }
+  if (argc > 1 && !strcmp(argv[1], "--version")) { printf("wasmedge version %s (wasi-threads verification host)\n", WasmEdge_VersionGet()); return 0; }
   const char **guest_env = calloc((size_t)argc, sizeof(*guest_env));
+  if (!guest_env) return 1;
   uint32_t env_count = 0;
   while (file < argc && argv[file][0] == '-') {
     if (!strcmp(argv[file], "--enable-threads")) ++file;
@@ -237,7 +240,7 @@ int main(int argc, char **argv) {
   } else call(executor, module, "_start", NULL, 0, NULL, 0);
   uint32_t exit_code = WasmEdge_ModuleInstanceWASIGetExitCode(wasi);
   reap_threads(&h);
-  fprintf(stderr, "wasi-thread-spawn count=%u\n", h.spawn_count);
+  fprintf(stderr, "wasi-thread-spawn count=%u\n", atomic_load(&h.spawn_count));
   WasmEdge_ModuleInstanceDelete(module); WasmEdge_StoreDelete(h.store);
   WasmEdge_ModuleInstanceDelete(threads); WasmEdge_ModuleInstanceDelete(env); WasmEdge_ModuleInstanceDelete(wasi);
   WasmEdge_ASTModuleDelete(h.ast); WasmEdge_ExecutorDelete(executor);

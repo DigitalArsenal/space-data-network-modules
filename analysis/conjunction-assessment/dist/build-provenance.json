@@ -35,8 +35,8 @@
     "browser",
     "wasmedge"
   ],
-  "sourceSha256": "855ea93247ccf3098f5c8967a999f874e9e0b2d9dacd746d533e78ecd4792466",
-  "wasmSha256": "ad7413859d2a9e2360b5517298f50049196187d617c3fa0ebca785db57330919",
+  "sourceSha256": "80241dbe9811b755ce0502392061e1bd081925922c73596fe38a949d530dad13",
+  "wasmSha256": "7ed526ea5b52954dedf4d49d76be1685bb2419631e7b7f5fe74cb33fc335a747",
   "threadFeatures": {
     "hasSharedMemory": true,
     "sharedMemory": {
@@ -81,5 +81,10 @@
     "emscriptenThreadHooks": [],
     "isIsomorphicPthreads": true
   },
-  "initialization": "Once per resident instance; static destruction deferred to instance teardown"
+  "initialization": "Once per resident instance; static destruction deferred to instance teardown",
+  "compilerVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project bbeae6932d653b8a71a3a985af0ccf97e13e2e08)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/bin",
+  "buildSupportSha256": {
+    "build-driver.mjs": "24043f1c1e42616f739e00eb28f1551827b096de21840d6c8c19420843698655",
+    "src/cpp/src/cqr_initialization.cpp": "63b7f3887d908b99b7b88b22e38583c7f2ae3cceb8cf99c1e990c63d5fab29be"
+  }
 }

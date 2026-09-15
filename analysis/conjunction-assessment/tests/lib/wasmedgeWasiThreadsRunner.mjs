@@ -44,11 +44,13 @@ export async function buildDockerWasiThreadsRunner() {
     const stampPath = `${output}.sha256`;
     const stamp = createHash('sha256').update(fs.readFileSync(source)).update(pin.dockerImage).digest('hex');
     if (!fs.existsSync(output) || !fs.existsSync(stampPath) || fs.readFileSync(stampPath, 'utf8') !== stamp) {
+      const temporaryOutput = `${output}.${process.pid}.tmp`;
       const script = 'apt-get update -qq && apt-get install -y -qq --no-install-recommends gcc libc6-dev >/dev/null && ' +
         'gcc "$1" -std=c11 -O2 -pthread -Wall -Wextra -Werror -I/opt/wasmedge/include ' +
         '-L/opt/wasmedge/lib64 -L/opt/wasmedge/lib -lwasmedge -Wl,-rpath,/opt/wasmedge/lib64 ' +
-        '-Wl,-rpath,/opt/wasmedge/lib -o .sdk-build/wasmedge-wasi-threads-runner-linux';
-      await execFile('docker', ['run', '--rm', '--entrypoint', '/bin/sh', '-v', `${packageDir}:/work`, '-w', '/work', pin.dockerImage, '-c', script, 'compile-wasi-threads-host', path.relative(packageDir, source)], { maxBuffer: 4 * 1024 * 1024 });
+        '-Wl,-rpath,/opt/wasmedge/lib -o "$2"';
+      await execFile('docker', ['run', '--rm', '--entrypoint', '/bin/sh', '-v', `${packageDir}:/work`, '-w', '/work', pin.dockerImage, '-c', script, 'compile-wasi-threads-host', path.relative(packageDir, source), path.relative(packageDir, temporaryOutput)], { maxBuffer: 4 * 1024 * 1024 });
+      fs.renameSync(temporaryOutput, output);
       fs.writeFileSync(stampPath, stamp);
     }
     return { image: pin.dockerImage, output };
@@ -57,7 +59,7 @@ export async function buildDockerWasiThreadsRunner() {
 
 export async function wasiThreadsLaunchPlan(runtime, options = {}) {
   const wasmPath = options.wasmPath ?? path.join(packageDir, 'dist/isomorphic/module.wasm');
-  const hostArgs = Object.entries(options.guestEnv ?? {}).flatMap(([key, value]) => ['--env', `${key}=${value}`]);
+  const hostArgs = [...(options.hostArgs ?? []), ...Object.entries(options.guestEnv ?? {}).flatMap(([key, value]) => ['--env', `${key}=${value}`])];
   if (runtime === 'wasmedge') return { command: await buildNativeWasiThreadsRunner(), args: [...hostArgs, wasmPath, ...(options.args ?? [])], cwd: packageDir, env: process.env };
   if (runtime === 'docker-wasmedge') {
     const { image } = await buildDockerWasiThreadsRunner();
