@@ -1,17 +1,23 @@
 {
   "pluginId": "com.orbpro.lambert-izzo",
   "name": "Izzo Lambert Solver",
-  "version": "0.1.0",
-  "description": "SDK-compliant wrapper plan for Izzo's revisited Lambert solver.",
+  "version": "0.2.0",
+  "description": "Izzo Lambert boundary-value solver and bounded departure-by-arrival delta-V grid search.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
-  "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "threadModel": "wasi-sequential",
   "sequentialJustification": {
     "kind": "caller-level-parallelism",
-    "detail": "One Lambert boundary-value problem is a bounded scalar solve. Independent transfer geometries are parallelized by the caller; this module owns no cross-call state or thread pool."
+    "detail": "A bounded sweep of at most 400 by 400 Lambert cells streams one departure row at a time. The caller can partition departure ranges across instances; the kernel holds one row and no cross-call state."
   },
   "methods": [
     {
@@ -64,6 +70,74 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot",
       "description": "Solves single- and multi-revolution Lambert boundary-value transfer cases with Izzo's revisited algorithm."
+    },
+    {
+      "methodId": "grid_search",
+      "displayName": "Lambert Delta-V Mesh",
+      "description": "Sweep sampled ephemerides and minimize total endpoint delta-V over directions and revolution branches. Emit one PCE per departure row and a best-cell PCE.",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "lambert-grid.request",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE"
+                }
+              ],
+              "description": "SDS parameter evaluation record with documented provider-defined grid parameters and SI units."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "mesh",
+          "acceptedTypeSets": [
+            {
+              "setId": "lambert-grid.mesh",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE"
+                }
+              ],
+              "description": "SDS parameter evaluation record with documented provider-defined grid parameters and SI units."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "best",
+          "acceptedTypeSets": [
+            {
+              "setId": "lambert-grid.best",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCE.fbs",
+                  "fileIdentifier": "$PCE",
+                  "rootTypeName": "PCE"
+                }
+              ],
+              "description": "SDS parameter evaluation record with documented provider-defined grid parameters and SI units."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
   ],
   "timers": [],
@@ -78,6 +152,11 @@
       "schemaName": "LMO.fbs",
       "fileIdentifier": "$LMO",
       "rootTypeName": "LMO"
+    },
+    {
+      "schemaName": "PCE.fbs",
+      "fileIdentifier": "$PCE",
+      "rootTypeName": "PCE"
     }
   ],
   "buildArtifacts": [

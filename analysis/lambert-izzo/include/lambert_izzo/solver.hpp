@@ -27,6 +27,9 @@ struct Request {
   double mu = 0.0;
   bool long_way = false;
   uint16_t max_revolutions = 0;
+  // Optional plane for exactly antipodal endpoints (e.g. Hohmann transfer).
+  // Zero preserves the original collinear refusal.
+  Vector3 antipodal_normal;
 };
 
 struct Solution {
@@ -255,8 +258,9 @@ inline bool reconstruct(const Request& request, double x, uint32_t iterations,
   double lambda =
       std::sqrt(std::max(0.0, 1.0 - chord_norm / semiperimeter));
 
-  Vector3 angular_momentum =
-      normalize(cross(normalize(request.r1), normalize(request.r2)));
+  Vector3 plane = cross(normalize(request.r1), normalize(request.r2));
+  if (norm(plane) == 0.0) plane = request.antipodal_normal;
+  Vector3 angular_momentum = normalize(plane);
   if (request.long_way) {
     lambda = -lambda;
     angular_momentum = scale(angular_momentum, -1.0);
@@ -296,7 +300,15 @@ inline Result solve(const Request& request) {
     result.status = Status::InvalidInput;
     return result;
   }
-  if (!(norm(cross(request.r1, request.r2)) > 0.0)) {
+  const bool antipodal_plane = finite(request.antipodal_normal) &&
+      norm(request.antipodal_normal) > 0.0 &&
+      request.r1.x * request.r2.x + request.r1.y * request.r2.y +
+          request.r1.z * request.r2.z < 0.0 &&
+      std::abs(request.r1.x * request.antipodal_normal.x +
+          request.r1.y * request.antipodal_normal.y +
+          request.r1.z * request.antipodal_normal.z) <=
+          1e-12 * norm(request.r1) * norm(request.antipodal_normal);
+  if (!(norm(cross(request.r1, request.r2)) > 0.0) && !antipodal_plane) {
     result.status = Status::DegenerateGeometry;
     return result;
   }

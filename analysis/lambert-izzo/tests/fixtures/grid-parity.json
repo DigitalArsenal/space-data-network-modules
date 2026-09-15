@@ -1,0 +1,116 @@
+{
+  "name": "lambert-grid",
+  "threadCounts": [
+    1
+  ],
+  "cases": [
+    {
+      "id": "hohmann",
+      "expect": "ok",
+      "request": {
+        "methodId": "grid_search",
+        "inputs": [
+          {
+            "portId": "request",
+            "typeRef": {
+              "schemaName": "PCE.fbs",
+              "fileIdentifier": "$PCE",
+              "rootTypeName": "PCE"
+            },
+            "payloadFile": "hohmann.pce"
+          }
+        ]
+      }
+    },
+    {
+      "id": "izzo-left",
+      "expect": "ok",
+      "request": {
+        "methodId": "grid_search",
+        "inputs": [
+          {
+            "portId": "request",
+            "typeRef": {
+              "schemaName": "PCE.fbs",
+              "fileIdentifier": "$PCE",
+              "rootTypeName": "PCE"
+            },
+            "payloadFile": "izzo-left.pce"
+          }
+        ]
+      }
+    },
+    {
+      "id": "izzo-right",
+      "expect": "ok",
+      "request": {
+        "methodId": "grid_search",
+        "inputs": [
+          {
+            "portId": "request",
+            "typeRef": {
+              "schemaName": "PCE.fbs",
+              "fileIdentifier": "$PCE",
+              "rootTypeName": "PCE"
+            },
+            "payloadFile": "izzo-right.pce"
+          }
+        ]
+      }
+    },
+    {
+      "id": "earth-mars",
+      "expect": "ok",
+      "request": {
+        "methodId": "grid_search",
+        "inputs": [
+          {
+            "portId": "request",
+            "typeRef": {
+              "schemaName": "PCE.fbs",
+              "fileIdentifier": "$PCE",
+              "rootTypeName": "PCE"
+            },
+            "payloadFile": "earth-mars.pce"
+          }
+        ]
+      }
+    },
+    {
+      "id": "max-grid",
+      "expect": "ok",
+      "request": {
+        "methodId": "grid_search",
+        "inputs": [
+          {
+            "portId": "request",
+            "typeRef": {
+              "schemaName": "PCE.fbs",
+              "fileIdentifier": "$PCE",
+              "rootTypeName": "PCE"
+            },
+            "payloadFile": "max-grid.pce"
+          }
+        ]
+      }
+    },
+    {
+      "id": "invalid-step",
+      "expect": "ok",
+      "request": {
+        "methodId": "grid_search",
+        "inputs": [
+          {
+            "portId": "request",
+            "typeRef": {
+              "schemaName": "PCE.fbs",
+              "fileIdentifier": "$PCE",
+              "rootTypeName": "PCE"
+            },
+            "payloadFile": "invalid-step.pce"
+          }
+        ]
+      }
+    }
+  ]
+}
