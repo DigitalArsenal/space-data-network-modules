@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "family": "estimation",
   "artifact": {
-    "sha256": "42d10718037289a1e53d70755ee2374cf450e54fee96313be04c55828582cc16",
+    "sha256": "a4f45c1095ac91c15aa3c17742bbf4da94cc503a03de8fbf66f88fbc0ab51573",
     "moduleSdk": "0.8.17",
     "spacedatastandards": "1.203.0"
   },
@@ -10,73 +10,84 @@
     "orekitCommit": "cc18cc16de92ef36159114113cfbb042ae88d0db",
     "valladopyCommit": "2f3d1600c0f8fd0ebc2f149d8195f06f79d3f579",
     "ituRecommendation": "P.531-14 Table 3",
-    "nativeExecutable": "tests/native_conformance.cpp",
-    "runtimeExecutable": "OrbPro packages/orbpro-integration/analysis.estimation/test/runtime-parity.mjs"
+    "nativeExecutable": "tests/native_conformance.cpp + tests/sequential_validation.cpp",
+    "runtimeExecutable": "tests/parity.mjs + tests/invoke.test.mjs",
+    "batchReference": "Exact Gaussian conditioning fractions in tests/fixtures/README.md; edited set from legacy native_conformance",
+    "scope": "SDK legacy tiers do not validate a nonlinear-dynamics UKF. See README contract hold and lane05-parity.json."
   },
   "runtime": {
+    "digestEncoding": "SDK command stdout including invoke result bytes",
     "browser": {
-      "outputSha256": "8cc58fbaa4d6d1c6392b5b0060f71c8de98534c4e4815f9f2a3739748f534700"
+      "outputSha256": "1cbe9090057762020384dd7a432be6ee70c78898f4d5233f6c16ed5622a160e4"
     },
     "wasmedge": {
       "version": "0.16.4",
-      "outputSha256": "8cc58fbaa4d6d1c6392b5b0060f71c8de98534c4e4815f9f2a3739748f534700"
+      "outputSha256": "1cbe9090057762020384dd7a432be6ee70c78898f4d5233f6c16ed5622a160e4"
+    },
+    "container": {
+      "version": "0.16.4",
+      "outputSha256": "1cbe9090057762020384dd7a432be6ee70c78898f4d5233f6c16ed5622a160e4"
     },
     "threads": {
-      "1": "8cc58fbaa4d6d1c6392b5b0060f71c8de98534c4e4815f9f2a3739748f534700",
-      "2": "8cc58fbaa4d6d1c6392b5b0060f71c8de98534c4e4815f9f2a3739748f534700",
-      "4": "8cc58fbaa4d6d1c6392b5b0060f71c8de98534c4e4815f9f2a3739748f534700",
-      "8": "8cc58fbaa4d6d1c6392b5b0060f71c8de98534c4e4815f9f2a3739748f534700"
+      "1": "1cbe9090057762020384dd7a432be6ee70c78898f4d5233f6c16ed5622a160e4",
+      "2": "1cbe9090057762020384dd7a432be6ee70c78898f4d5233f6c16ed5622a160e4",
+      "4": "1cbe9090057762020384dd7a432be6ee70c78898f4d5233f6c16ed5622a160e4",
+      "8": "1cbe9090057762020384dd7a432be6ee70c78898f4d5233f6c16ed5622a160e4"
     }
   },
   "batch": {
-    "positionAbsoluteErrorM": 0.00591284,
-    "positionRelativeError": 8.31805e-10,
-    "positionSigmaRssM": 1.00211,
+    "positionAbsoluteErrorM": 8.326672684688674e-17,
+    "positionRelativeError": 3.4196240087363065e-17,
+    "positionSigmaRssM": 3.0165022317720425,
     "covarianceRssRelativeError": 0,
-    "residualRms": 0.00146569,
-    "residualRmsRelativeError": 0,
-    "rejectedExpected": [7],
-    "rejectedActual": [7],
-    "iterationCount": 4,
-    "iterationCovarianceCount": 4,
+    "residualRms": 0.8270273996234291,
+    "residualRmsRelativeError": 1.3424259282469662e-16,
+    "rejectedExpected": [
+      7
+    ],
+    "rejectedActual": [
+      7
+    ],
+    "iterationCount": 3,
+    "iterationCovarianceCount": 3,
     "iterationCovariancesSpd": true
   },
   "filter": {
-    "positionErrorM": 0.059867,
-    "smootherPositionErrorM": 0.059867,
+    "positionErrorM": 0.0002935848964649959,
+    "smootherPositionErrorM": 0.0002935848964649959,
     "smootherCovarianceMonotone": true,
     "neesRuns": 100,
-    "neesMean": 6.35444,
+    "neesMean": 6.354437320331965,
     "nees95Lower": 5.3402,
     "nees95Upper": 6.6977,
-    "sncCovarianceGrowthRatio": 2.18563,
-    "dmcCovarianceGrowthRatio": 2.3456,
-    "ekfUkfCovarianceDifference": 0.0445414
+    "sncCovarianceGrowthRatio": 2.2526389167762844,
+    "dmcCovarianceGrowthRatio": 2.416015841319024,
+    "ekfUkfCovarianceDifference": 5.377911635544919e-9
   },
   "measurements": {
     "implementedKinds": 21,
-    "rangeMaxRelativeError": 5.89992e-16,
-    "rangeRateMaxRelativeError": 5.09182e-16,
-    "azElMaxRelativeError": 4.71653e-16,
+    "rangeMaxRelativeError": 5.899921125054214e-16,
+    "rangeRateMaxRelativeError": 5.091822945915816e-16,
+    "azElMaxRelativeError": 4.716529542382082e-16,
     "raDecMaxRelativeError": 0,
-    "lightTimeCorrectionM": -25.7134,
+    "lightTimeCorrectionM": -25.71339991153218,
     "lightTimeMagnitudeErrorM": 0,
-    "sagnacCorrectionM": 1.7045,
-    "sagnacMagnitudeErrorM": 1.11766e-10,
-    "dopplerHz": -3292,
-    "relayDifferencedDopplerHz": -183121
+    "sagnacCorrectionM": 1.7045022390130833,
+    "sagnacMagnitudeErrorM": 1.1176615188901451e-10,
+    "dopplerHz": -3291.9975219848393,
+    "relayDifferencedDopplerHz": -183121.28877484563
   },
   "media": {
-    "hopfieldSaastamoinenMaxRelativeError": 5.00132e-8,
-    "mariniMaxRelativeError": 1.77223e-7,
-    "p531Table3RangeM": 40.3221,
+    "hopfieldSaastamoinenMaxRelativeError": 5.001316318408154e-8,
+    "mariniMaxRelativeError": 1.7722328975526321e-7,
+    "p531Table3RangeM": 40.322085601,
     "p531PublishedPrecisionError": 0
   },
   "iod": {
-    "gaussMaxErrorSi": 5.4948e-8,
-    "laplaceMaxErrorSi": 3.72529e-9,
-    "gibbsMaxErrorMps": 9.09495e-13,
-    "herrickGibbsMaxErrorMps": 6.82121e-12,
+    "gaussMaxErrorSi": 5.494803190231323e-8,
+    "laplaceMaxErrorSi": 3.725290298461914e-9,
+    "gibbsMaxErrorMps": 9.094947017729282e-13,
+    "herrickGibbsMaxErrorMps": 6.821210263296962e-12,
     "gaussPrintedPrecisionError": 0,
     "laplacePrintedPrecisionError": 0,
     "gibbsPrintedPrecisionError": 0,
@@ -86,13 +97,18 @@
     "runs": 200,
     "stateInsideThreeSigmaFraction": 1,
     "injectedNoiseSigma": 2,
-    "recoveredNoiseSigma": 1.99364,
-    "recoveredNoiseSigmaRelativeError": 0.00318
+    "recoveredNoiseSigma": 1.9936415696493779,
+    "recoveredNoiseSigmaRelativeError": 0.0031792151753110565
   },
   "invariants": {
     "covarianceSymmetric": true,
     "covariancePositiveDefinite": true,
-    "residualOrthogonalityMax": 4.37053e-7,
+    "residualOrthogonalityMax": 4.37052531253459e-7,
     "actualOcmCovariance": true
+  },
+  "lane05": {
+    "nativeSourceSha256": "67b7a86337f0d08387843f8707f9ea8312bcb02d30aae89c456c5f90ac2fbdce",
+    "receipt": "BATCH_AUTHORITY {\"position_error_m\":8.3266726846886741e-17,\"covariance_max_error\":4.4408920985006262e-16,\"sigma_rss_m\":3.0165022317720425,\"sigma_rss_relative_error\":0,\"rms\":0.82702739962342908,\"rms_relative_error\":1.3424259282469662e-16,\"iterations\":3}\nPASS correlated Gaussian state/covariance/NIS max_error=2.7755575615628914e-16 tolerance=2e-14\nPASS malformed sequential requests cases=16\nPASS Hipparchus 4.0.3 CV smoother kind=3 epochs=50 state_max_error=1.8873791418627661e-15 covariance_max_error=2.4633073358870661e-16 tolerance=1e-12\nPASS Hipparchus 4.0.3 CV smoother kind=2 epochs=50 state_max_error=2.6090241078691179e-15 covariance_max_error=1.9081958235744878e-16 tolerance=1e-12\nPASS asynchronous circular-orbit fusion runs=500 observations=40 dimensions=53 ANEES=6.060694900206741 NIS_per_dof=1.0015870288622697 filter_position_RMSE_m=26.790899471004533 smoother_position_RMSE_m=10.848264806123717\nPASS sequential validation failures=0\n",
+    "parityReceipt": "conformance/lane05-parity.json"
   }
 }
