@@ -1,0 +1,30 @@
+{
+  "authority": "NASA/JPL NAIF CSPICE spkez_c evaluated on the published DE440s kernel",
+  "source_url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp",
+  "kernel_sha256": "c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2",
+  "cspice_version": "CSPICE_N0067",
+  "spiceypy_version": "8.0.0",
+  "generated_utc": "2026-09-15T14:31:52.477930+00:00",
+  "frame": "J2000 (DE440 is aligned to ICRF)",
+  "aberration_correction": "NONE (geometric)",
+  "units": [
+    "km",
+    "km/s"
+  ],
+  "epoch": "TDB Julian date; ET=(JD-2451545.0)*86400",
+  "coverage_et_seconds": [
+    -4734072000.0,
+    4735368000.0
+  ],
+  "rows": 238,
+  "tolerances": {
+    "position_km": 1e-06,
+    "velocity_km_s": 1e-09
+  },
+  "tolerance_rationale": "Same kernel and geometric frame: floating-point evaluation and barycentre summation only; absolute vector norms, not a model/observational accuracy claim.",
+  "documentation": [
+    "https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/spkez_c.html",
+    "https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/spk.html",
+    "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440_and_de441.pdf"
+  ]
+}

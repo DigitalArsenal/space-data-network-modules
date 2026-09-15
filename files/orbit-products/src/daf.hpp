@@ -103,8 +103,8 @@ struct File {
      * corrupt endAddr must be a refusal, not a heap read. */
     bool word(size_t address, double* out) const {
         if (address < 1 || out == nullptr || base == nullptr) return false;
+        if (address > len / 8) return false;
         const size_t offset = (address - 1) * 8;
-        if (offset + 8 > len) return false;
         *out = ephem::read_f64(base + offset, big_endian);
         return true;
     }
@@ -116,8 +116,8 @@ struct File {
         if (out == nullptr || base == nullptr) return false;
         if (count == 0) return true;
         if (first < 1) return false;
+        if (first > len / 8 || count > len / 8 - (first - 1)) return false;
         const size_t offset = (first - 1) * 8;
-        if (offset + count * 8 > len || offset + count * 8 < offset) return false;
         for (size_t i = 0; i < count; ++i) {
             out[i] = ephem::read_f64(base + offset + i * 8, big_endian);
         }
@@ -189,7 +189,8 @@ inline RawHeader parse_header(const uint8_t* b, bool big_endian) {
  * Parse the container. On Ok, `out->base` aliases `bytes` — the caller keeps
  * the buffer alive for as long as it evaluates segments.
  */
-inline ephem::Status read(const uint8_t* bytes, size_t len, File* out) {
+inline ephem::Status read(const uint8_t* bytes, size_t len, File* out,
+                          bool include_comments = true, size_t max_summaries = 65536) {
     if (out == nullptr || bytes == nullptr) return ephem::Status::Malformed;
     if (len < kRecordBytes) return ephem::Status::Truncated;
 
@@ -273,7 +274,7 @@ inline ephem::Status read(const uint8_t* bytes, size_t len, File* out) {
      * NUL ends a line and 0x04 ends the comment area; everything after that
      * 0x04 is blank fill. */
     bool saw_eot = false;
-    for (int32_t rec = 2; rec < out->fward && !saw_eot; ++rec) {
+    for (int32_t rec = 2; include_comments && rec < out->fward && !saw_eot; ++rec) {
         const size_t offset = static_cast<size_t>(rec - 1) * kRecordBytes;
         if (offset + kRecordBytes > len) return ephem::Status::Truncated;
         const uint8_t* p = bytes + offset;
@@ -319,6 +320,8 @@ inline ephem::Status read(const uint8_t* bytes, size_t len, File* out) {
             return ephem::Status::Malformed;
         }
         const size_t nsum = static_cast<size_t>(nsum_d);
+        if (nsum_d != static_cast<double>(nsum) ||
+            nsum > max_summaries - out->summaries.size()) return ephem::Status::Malformed;
 
         for (size_t i = 0; i < nsum; ++i) {
             Summary s;
@@ -338,6 +341,7 @@ inline ephem::Status read(const uint8_t* bytes, size_t len, File* out) {
             return ephem::Status::Malformed;
         }
         const int32_t next_rec = static_cast<int32_t>(next);
+        if (next != static_cast<double>(next_rec)) return ephem::Status::Malformed;
         if (next_rec == rec) return ephem::Status::Malformed;
         rec = next_rec;
     }
