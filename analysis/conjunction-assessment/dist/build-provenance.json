@@ -36,7 +36,7 @@
     "wasmedge"
   ],
   "sourceSha256": "919041a72dad9895886158061e2c2363130a4047f58a25349db29f838a682281",
-  "wasmSha256": "6f1fa9aa0145ae59144e4e6c20b48a3874c75acfa9216f18b73d6505feb65b32",
+  "wasmSha256": "da87abec043a8f06464b534d18e6535aa76093fb7c68e7e807126e0ee7de1f5d",
   "threadFeatures": {
     "hasSharedMemory": true,
     "sharedMemory": {
@@ -80,5 +80,6 @@
     "hasWasiThreadStartExport": true,
     "emscriptenThreadHooks": [],
     "isIsomorphicPthreads": true
-  }
+  },
+  "initialization": "Once per resident instance; static destruction deferred to instance teardown"
 }

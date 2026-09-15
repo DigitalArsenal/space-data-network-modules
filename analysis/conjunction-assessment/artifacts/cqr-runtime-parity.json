@@ -1,0 +1,780 @@
+{
+  "ok": false,
+  "fixture": "CQR-SDS-1.220.0",
+  "wasmPath": "/Users/tj/software/worktrees/modules-14-conjunction-cqr/analysis/conjunction-assessment/dist/isomorphic/module.wasm",
+  "artifactSha256": "6f1fa9aa0145ae59144e4e6c20b48a3874c75acfa9216f18b73d6505feb65b32",
+  "moduleSha256": "6f1fa9aa0145ae59144e4e6c20b48a3874c75acfa9216f18b73d6505feb65b32",
+  "pin": "0.16.4",
+  "lanes": [
+    {
+      "lane": "browser",
+      "runs": 20,
+      "durationMs": 1456
+    },
+    {
+      "lane": "wasmedge",
+      "runs": 20,
+      "durationMs": 746
+    },
+    {
+      "lane": "docker-wasmedge",
+      "runs": 20,
+      "durationMs": 4198
+    }
+  ],
+  "cases": [
+    "socrates-workers-1",
+    "socrates-workers-2",
+    "socrates-workers-4",
+    "socrates-workers-8",
+    "centered-isotropic-pc",
+    "singular-covariance",
+    "empty-piv",
+    "truncated-piv"
+  ],
+  "comparisons": 60,
+  "failures": [
+    {
+      "caseId": "socrates-workers-1",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "socrates-workers-1",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "socrates-workers-2",
+      "kind": "class-divergence",
+      "message": "browser@t2 class \"trap\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "socrates-workers-2",
+      "kind": "class-divergence",
+      "message": "browser@t2 class \"trap\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "socrates-workers-4",
+      "kind": "class-divergence",
+      "message": "browser@t4 class \"trap\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "socrates-workers-4",
+      "kind": "class-divergence",
+      "message": "browser@t4 class \"trap\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "socrates-workers-8",
+      "kind": "class-divergence",
+      "message": "browser@t8 class \"trap\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "socrates-workers-8",
+      "kind": "class-divergence",
+      "message": "browser@t8 class \"trap\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "centered-isotropic-pc",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "singular-covariance",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "singular-covariance",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "singular-covariance",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "singular-covariance",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "singular-covariance",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "singular-covariance",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "singular-covariance",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "singular-covariance",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-piv",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-piv",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-piv",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-piv",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-piv",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-piv",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-piv",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "empty-piv",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-piv",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-piv",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-piv",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-piv",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs wasmedge@t8 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-piv",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t1 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-piv",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t2 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-piv",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t4 class \"guest-error\" (exit=1)"
+    },
+    {
+      "caseId": "truncated-piv",
+      "kind": "class-divergence",
+      "message": "browser@t1 class \"trap\" vs docker-wasmedge@t8 class \"guest-error\" (exit=1)"
+    }
+  ],
+  "runs": [
+    {
+      "lane": "browser",
+      "caseId": "socrates-workers-1",
+      "threadCount": 1,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "socrates-workers-2",
+      "threadCount": 2,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "socrates-workers-4",
+      "threadCount": 4,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "socrates-workers-8",
+      "threadCount": 8,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 1,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 2,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 4,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 8,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "singular-covariance",
+      "threadCount": 1,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "singular-covariance",
+      "threadCount": 2,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "singular-covariance",
+      "threadCount": 4,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "singular-covariance",
+      "threadCount": 8,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-piv",
+      "threadCount": 1,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-piv",
+      "threadCount": 2,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-piv",
+      "threadCount": 4,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "empty-piv",
+      "threadCount": 8,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-piv",
+      "threadCount": 1,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-piv",
+      "threadCount": 2,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-piv",
+      "threadCount": 4,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "browser",
+      "caseId": "truncated-piv",
+      "threadCount": 8,
+      "exitClass": "trap",
+      "exitDetail": "RuntimeError: unreachable",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "socrates-workers-1",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "socrates-workers-2",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "socrates-workers-4",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "socrates-workers-8",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "singular-covariance",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "singular-covariance",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "singular-covariance",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "singular-covariance",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-piv",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-piv",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-piv",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "empty-piv",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "truncated-piv",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "socrates-workers-1",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "socrates-workers-2",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "socrates-workers-4",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "socrates-workers-8",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "centered-isotropic-pc",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "singular-covariance",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "singular-covariance",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "singular-covariance",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "singular-covariance",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-piv",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-piv",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-piv",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "empty-piv",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv",
+      "threadCount": 1,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv",
+      "threadCount": 2,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv",
+      "threadCount": 4,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "truncated-piv",
+      "threadCount": 8,
+      "exitClass": "guest-error",
+      "exitDetail": "exit=1",
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutLength": 0
+    }
+  ]
+}
