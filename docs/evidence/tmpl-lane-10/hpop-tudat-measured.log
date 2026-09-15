@@ -1,0 +1,42 @@
+MEASUREMENT {"timeSeconds":0,"positionError":9.094947017729282e-13,"velocityError":1.2560739669470201e-15,"positionToleranceKm":0.0005,"velocityToleranceKmPerSec":5e-7}
+MEASUREMENT {"timeSeconds":1170,"positionError":0.00008432447627523816,"velocityError":9.634182618982642e-8,"positionToleranceKm":0.0005,"velocityToleranceKmPerSec":5e-7}
+MEASUREMENT {"timeSeconds":2340,"positionError":0.00012146399564621574,"velocityError":1.2754624088988105e-7,"positionToleranceKm":0.0005,"velocityToleranceKmPerSec":5e-7}
+MEASUREMENT {"timeSeconds":3510,"positionError":0.000017303735634284286,"velocityError":2.155896080011226e-8,"positionToleranceKm":0.0005,"velocityToleranceKmPerSec":5e-7}
+MEASUREMENT {"timeSeconds":4680,"positionError":0.00008355611714600707,"velocityError":8.473357594903282e-8,"positionToleranceKm":0.0005,"velocityToleranceKmPerSec":5e-7}
+MEASUREMENT {"timeSeconds":5850,"positionError":0.00016767248213213478,"velocityError":1.8106498228867084e-7,"positionToleranceKm":0.0005,"velocityToleranceKmPerSec":5e-7}
+✔ tudat two-body samples match the copied state history on browser (75.2305ms)
+MEASUREMENT {"timeSeconds":0,"positionError":9.094947017729282e-13,"velocityError":1.2560739669470201e-15,"positionToleranceKm":0.0005,"velocityToleranceKmPerSec":5e-7}
+MEASUREMENT {"timeSeconds":1170,"positionError":0.00008432447627523816,"velocityError":9.634182618982642e-8,"positionToleranceKm":0.0005,"velocityToleranceKmPerSec":5e-7}
+MEASUREMENT {"timeSeconds":2340,"positionError":0.00012146399564621574,"velocityError":1.2754624088988105e-7,"positionToleranceKm":0.0005,"velocityToleranceKmPerSec":5e-7}
+MEASUREMENT {"timeSeconds":3510,"positionError":0.000017303735634284286,"velocityError":2.155896080011226e-8,"positionToleranceKm":0.0005,"velocityToleranceKmPerSec":5e-7}
+MEASUREMENT {"timeSeconds":4680,"positionError":0.00008355611714600707,"velocityError":8.473357594903282e-8,"positionToleranceKm":0.0005,"velocityToleranceKmPerSec":5e-7}
+MEASUREMENT {"timeSeconds":5850,"positionError":0.00016767248213213478,"velocityError":1.8106498228867084e-7,"positionToleranceKm":0.0005,"velocityToleranceKmPerSec":5e-7}
+✔ tudat two-body samples match the copied state history on wasmedge (259.86275ms)
+MEASUREMENT {"timeSeconds":0,"positionError":9.094947017729282e-13,"velocityError":1.2560739669470201e-15,"positionToleranceKm":60,"velocityToleranceKmPerSec":0.05}
+MEASUREMENT {"timeSeconds":730,"positionError":0.10642345026917611,"velocityError":0.00030193940074753166,"positionToleranceKm":60,"velocityToleranceKmPerSec":0.05}
+MEASUREMENT {"timeSeconds":1460,"positionError":0.3845052255809754,"velocityError":0.0004779860374377398,"positionToleranceKm":60,"velocityToleranceKmPerSec":0.05}
+MEASUREMENT {"timeSeconds":2190,"positionError":0.7816639716726572,"velocityError":0.0008946725547757152,"positionToleranceKm":60,"velocityToleranceKmPerSec":0.05}
+MEASUREMENT {"timeSeconds":2920,"positionError":1.3326407736160324,"velocityError":0.0014467397029002316,"positionToleranceKm":60,"velocityToleranceKmPerSec":0.05}
+MEASUREMENT {"timeSeconds":3650,"positionError":1.8736871825002832,"velocityError":0.0018686199152476114,"positionToleranceKm":60,"velocityToleranceKmPerSec":0.05}
+MEASUREMENT {"timeSeconds":4380,"positionError":2.2230315712957283,"velocityError":0.002104357781769517,"positionToleranceKm":60,"velocityToleranceKmPerSec":0.05}
+MEASUREMENT {"timeSeconds":5110,"positionError":2.282644259155471,"velocityError":0.002243594550117813,"positionToleranceKm":60,"velocityToleranceKmPerSec":0.05}
+MEASUREMENT {"timeSeconds":5830,"positionError":2.130038657384176,"velocityError":0.0022793698050217388,"positionToleranceKm":60,"velocityToleranceKmPerSec":0.05}
+✔ tudat high-fidelity samples stay within the copied perturbation envelope on browser (78.766833ms)
+MEASUREMENT {"timeSeconds":0,"positionError":9.094947017729282e-13,"velocityError":1.2560739669470201e-15,"positionToleranceKm":60,"velocityToleranceKmPerSec":0.05}
+MEASUREMENT {"timeSeconds":730,"positionError":0.10642345026917611,"velocityError":0.00030193940074753166,"positionToleranceKm":60,"velocityToleranceKmPerSec":0.05}
+MEASUREMENT {"timeSeconds":1460,"positionError":0.3845052255809754,"velocityError":0.0004779860374377398,"positionToleranceKm":60,"velocityToleranceKmPerSec":0.05}
+MEASUREMENT {"timeSeconds":2190,"positionError":0.7816639716726572,"velocityError":0.0008946725547757152,"positionToleranceKm":60,"velocityToleranceKmPerSec":0.05}
+MEASUREMENT {"timeSeconds":2920,"positionError":1.3326407736160324,"velocityError":0.0014467397029002316,"positionToleranceKm":60,"velocityToleranceKmPerSec":0.05}
+MEASUREMENT {"timeSeconds":3650,"positionError":1.8736871825002832,"velocityError":0.0018686199152476114,"positionToleranceKm":60,"velocityToleranceKmPerSec":0.05}
+MEASUREMENT {"timeSeconds":4380,"positionError":2.2230315712957283,"velocityError":0.002104357781769517,"positionToleranceKm":60,"velocityToleranceKmPerSec":0.05}
+MEASUREMENT {"timeSeconds":5110,"positionError":2.282644259155471,"velocityError":0.002243594550117813,"positionToleranceKm":60,"velocityToleranceKmPerSec":0.05}
+MEASUREMENT {"timeSeconds":5830,"positionError":2.130038657384176,"velocityError":0.0022793698050217388,"positionToleranceKm":60,"velocityToleranceKmPerSec":0.05}
+✔ tudat high-fidelity samples stay within the copied perturbation envelope on wasmedge (1000.294917ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1819.783083

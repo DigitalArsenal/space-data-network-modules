@@ -1,0 +1,35 @@
+node:internal/modules/esm/resolve:275
+    throw new ERR_MODULE_NOT_FOUND(
+          ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/Users/tj/software/worktrees/spacedatastandards.org/lib/js/ACW/main.js' imported from /Users/tj/software/worktrees/modules-lane-10/analysis/access/test/manifestContract.test.mjs
+    at finalizeResolution (node:internal/modules/esm/resolve:275:11)
+    at moduleResolve (node:internal/modules/esm/resolve:865:10)
+    at defaultResolve (node:internal/modules/esm/resolve:991:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:712:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:729:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:758:52)
+    at #resolve (node:internal/modules/esm/loader:694:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:614:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:160:33)
+    at ModuleJob.link (node:internal/modules/esm/module_job:245:17) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///Users/tj/software/worktrees/spacedatastandards.org/lib/js/ACW/main.js'
+}
+
+Node.js v25.4.0
+✖ analysis/access/test/manifestContract.test.mjs (353.074625ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 359.00575
+
+✖ failing tests:
+
+test at analysis/access/test/manifestContract.test.mjs:1:1
+✖ analysis/access/test/manifestContract.test.mjs (353.074625ms)
+  'test failed'

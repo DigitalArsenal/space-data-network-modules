@@ -1,0 +1,2 @@
+parity PASS fixture=sdk-command-parity module=be374f69201c1718 lanes=[browser(12 runs, 5439ms), wasmedge(12 runs, 510ms), docker-wasmedge(12 runs, 24379ms)] comparisons=36
+  3 case(s) byte-identical across 3 lane(s).

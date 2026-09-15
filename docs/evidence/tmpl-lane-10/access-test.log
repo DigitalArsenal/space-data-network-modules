@@ -1,0 +1,30 @@
+
+> test
+> node --test test/accessAnalyzer.test.mjs tests/*.test.mjs
+
+✔ Access analyzer loads a compiled WASM runtime and stores ground stations natively (52.105542ms)
+✔ Access analyzer matches Orekit TopocentricFrame inverse azimuth/elevation/range vectors (1.822333ms)
+✔ Access analyzer applies Orekit ElevationMask interpolation for azimuth-dependent visibility (1.507416ms)
+✔ Access analyzer applies Orekit EarthStandardAtmosphereRefraction to elevation switching (1.336041ms)
+✔ Access analyzer applies Orekit EarthStandardAtmosphereRefraction pressure and temperature setters (1.221959ms)
+✔ Access analyzer matches Orekit ITURP834AtmosphericRefraction source vectors (1.332333ms)
+✔ Access analyzer applies Orekit ITURP834AtmosphericRefraction to native elevation switching (0.917417ms)
+✔ Access analyzer computes a simple access window from pre-sampled ECEF states (0.916375ms)
+✔ Access analyzer schedules contacts greedily with per-station capacity and blackout clipping (8.80725ms)
+✔ Access analyzer predicts AOS and LOS from the next computed access window (1.920666ms)
+✔ primary SDK WASM ACW elevations match the six Orekit inverse-coordinate cases (35.95925ms)
+ℹ Orekit six cases: maximum elevation error=4.731326441742567e-12 rad; tolerance=1e-10 rad
+✔ Access analyzer exposes the expected manifest metadata (12.612333ms)
+✔ Access isomorphic artifact passes SDK compliance checks (8.936625ms)
+✔ Access stream invoke returns a decoded SDK response envelope (3.074208ms)
+✔ Access stream invoke computes access windows from an SDS ACW FlatBuffer request (4.318542ms)
+✔ Access stream invoke applies ACW elevation mask and refraction request fields (1.936875ms)
+✔ canonical SDK artifact and browser adapter use identical standalone bytes (13.6445ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 604.945167

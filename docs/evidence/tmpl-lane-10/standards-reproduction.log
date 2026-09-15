@@ -1,0 +1,1351 @@
+{
+  "module": "propagator/hpop",
+  "manifestErrors": [
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[0].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[0].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-aligned-file-identifier",
+      "message": "Aligned-binary allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0].allowedTypes[1].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-aligned-file-identifier",
+      "message": "Aligned-binary allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0].allowedTypes[1].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-aligned-file-identifier",
+      "message": "Aligned-binary allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0].allowedTypes[1].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from invoke.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.invoke.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from invoke.response does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.invoke.response"
+    },
+    {
+      "severity": "error",
+      "code": "standards-type-identity-mismatch",
+      "message": "Type reference from ingest_state.state mixes a known schemaName or exact four-byte fileIdentifier with a different standards entry.",
+      "location": "manifest.ingest_state.state"
+    },
+    {
+      "severity": "error",
+      "code": "standards-type-identity-mismatch",
+      "message": "Type reference from ingest_state.state mixes a known schemaName or exact four-byte fileIdentifier with a different standards entry.",
+      "location": "manifest.ingest_state.state"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from propagate_state.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.propagate_state.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from propagate_state.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.propagate_state.request"
+    },
+    {
+      "severity": "error",
+      "code": "standards-type-identity-mismatch",
+      "message": "Type reference from propagate_state.state mixes a known schemaName or exact four-byte fileIdentifier with a different standards entry.",
+      "location": "manifest.propagate_state.state"
+    },
+    {
+      "severity": "error",
+      "code": "standards-type-identity-mismatch",
+      "message": "Type reference from propagate_state.state mixes a known schemaName or exact four-byte fileIdentifier with a different standards entry.",
+      "location": "manifest.propagate_state.state"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from prepare_trajectory_segments.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.prepare_trajectory_segments.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from prepare_trajectory_segments.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.prepare_trajectory_segments.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from prepare_trajectory_segments.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.prepare_trajectory_segments.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from prepare_trajectory_segments.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.prepare_trajectory_segments.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from describe_trajectory_segments.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.describe_trajectory_segments.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from describe_trajectory_segments.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.describe_trajectory_segments.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from describe_trajectory_segments.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.describe_trajectory_segments.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from describe_trajectory_segments.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.describe_trajectory_segments.result"
+    }
+  ],
+  "artifactErrors": [
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[0].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[0].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-aligned-file-identifier",
+      "message": "Aligned-binary allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0].allowedTypes[1].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-aligned-file-identifier",
+      "message": "Aligned-binary allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0].allowedTypes[1].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-aligned-file-identifier",
+      "message": "Aligned-binary allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0].allowedTypes[1].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from invoke.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.invoke.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from invoke.response does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.invoke.response"
+    },
+    {
+      "severity": "error",
+      "code": "standards-type-identity-mismatch",
+      "message": "Type reference from ingest_state.state mixes a known schemaName or exact four-byte fileIdentifier with a different standards entry.",
+      "location": "manifest.ingest_state.state"
+    },
+    {
+      "severity": "error",
+      "code": "standards-type-identity-mismatch",
+      "message": "Type reference from ingest_state.state mixes a known schemaName or exact four-byte fileIdentifier with a different standards entry.",
+      "location": "manifest.ingest_state.state"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from propagate_state.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.propagate_state.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from propagate_state.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.propagate_state.request"
+    },
+    {
+      "severity": "error",
+      "code": "standards-type-identity-mismatch",
+      "message": "Type reference from propagate_state.state mixes a known schemaName or exact four-byte fileIdentifier with a different standards entry.",
+      "location": "manifest.propagate_state.state"
+    },
+    {
+      "severity": "error",
+      "code": "standards-type-identity-mismatch",
+      "message": "Type reference from propagate_state.state mixes a known schemaName or exact four-byte fileIdentifier with a different standards entry.",
+      "location": "manifest.propagate_state.state"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from prepare_trajectory_segments.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.prepare_trajectory_segments.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from prepare_trajectory_segments.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.prepare_trajectory_segments.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from prepare_trajectory_segments.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.prepare_trajectory_segments.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from prepare_trajectory_segments.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.prepare_trajectory_segments.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from describe_trajectory_segments.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.describe_trajectory_segments.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from describe_trajectory_segments.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.describe_trajectory_segments.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from describe_trajectory_segments.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.describe_trajectory_segments.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from describe_trajectory_segments.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.describe_trajectory_segments.result"
+    }
+  ]
+}
+{
+  "module": "analysis/conjunction-assessment",
+  "manifestErrors": [
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[0].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[0].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[0].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[0].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[0].outputPorts[1].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[0].outputPorts[1].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[1].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[1].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[1].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[1].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[2].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[2].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[3].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[3].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[4].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[4].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[5].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[5].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[5].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[5].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[6].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[6].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[6].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[6].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[7].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[7].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[7].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[7].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[8].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[8].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[8].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[8].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[9].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[9].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[9].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[9].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[10].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[10].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[10].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[10].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[11].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[11].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[11].inputPorts[1].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[11].inputPorts[1].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[11].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[11].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[11].outputPorts[1].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[11].outputPorts[1].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from assess_conjunction.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.assess_conjunction.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from assess_conjunction.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.assess_conjunction.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from assess_conjunction.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.assess_conjunction.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from assess_conjunction.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.assess_conjunction.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from emit_cdm.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.emit_cdm.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from emit_cdm.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.emit_cdm.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from emit_csm.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.emit_csm.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from emit_csm.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.emit_csm.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from find_tca.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.find_tca.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from find_tca.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.find_tca.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from find_tca.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.find_tca.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from find_tca.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.find_tca.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from alfano_max_probability.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.alfano_max_probability.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from alfano_max_probability.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.alfano_max_probability.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from alfano_max_probability.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.alfano_max_probability.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from alfano_max_probability.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.alfano_max_probability.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from compute_pc.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.compute_pc.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from compute_pc.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.compute_pc.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from compute_pc.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.compute_pc.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from compute_pc.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.compute_pc.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from compute_pc_from_cdm.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.compute_pc_from_cdm.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from compute_pc_from_cdm.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.compute_pc_from_cdm.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from parse_cdm_kvn.kvn does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.parse_cdm_kvn.kvn"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from write_cdm_kvn.kvn does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.write_cdm_kvn.kvn"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from parse_cdm_xml.xml does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.parse_cdm_xml.xml"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from write_cdm_xml.xml does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.write_cdm_xml.xml"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from screen_catalog.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.screen_catalog.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from screen_catalog.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.screen_catalog.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from screen_catalog.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.screen_catalog.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from screen_catalog.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.screen_catalog.result"
+    }
+  ],
+  "artifactErrors": [
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[0].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[0].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[0].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[0].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[0].outputPorts[1].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[0].outputPorts[1].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[1].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[1].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[1].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[1].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[2].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[2].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[3].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[3].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[4].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[4].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[5].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[5].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[5].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[5].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[6].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[6].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[6].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[6].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[7].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[7].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[7].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[7].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[8].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[8].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[8].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[8].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[9].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[9].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[9].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[9].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[10].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[10].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[10].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[10].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[11].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[11].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[11].inputPorts[1].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[11].inputPorts[1].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[11].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[11].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[11].outputPorts[1].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[11].outputPorts[1].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from assess_conjunction.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.assess_conjunction.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from assess_conjunction.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.assess_conjunction.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from assess_conjunction.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.assess_conjunction.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from assess_conjunction.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.assess_conjunction.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from emit_cdm.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.emit_cdm.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from emit_cdm.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.emit_cdm.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from emit_csm.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.emit_csm.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from emit_csm.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.emit_csm.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from find_tca.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.find_tca.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from find_tca.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.find_tca.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from find_tca.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.find_tca.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from find_tca.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.find_tca.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from alfano_max_probability.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.alfano_max_probability.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from alfano_max_probability.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.alfano_max_probability.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from alfano_max_probability.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.alfano_max_probability.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from alfano_max_probability.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.alfano_max_probability.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from compute_pc.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.compute_pc.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from compute_pc.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.compute_pc.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from compute_pc.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.compute_pc.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from compute_pc.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.compute_pc.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from compute_pc_from_cdm.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.compute_pc_from_cdm.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from compute_pc_from_cdm.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.compute_pc_from_cdm.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from parse_cdm_kvn.kvn does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.parse_cdm_kvn.kvn"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from write_cdm_kvn.kvn does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.write_cdm_kvn.kvn"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from parse_cdm_xml.xml does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.parse_cdm_xml.xml"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from write_cdm_xml.xml does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.write_cdm_xml.xml"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from screen_catalog.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.screen_catalog.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from screen_catalog.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.screen_catalog.request"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from screen_catalog.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.screen_catalog.result"
+    },
+    {
+      "severity": "error",
+      "code": "unresolved-standards-type",
+      "message": "Type reference from screen_catalog.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.",
+      "location": "manifest.screen_catalog.result"
+    }
+  ]
+}
+{
+  "module": "analysis/access",
+  "manifestErrors": [],
+  "artifactErrors": []
+}

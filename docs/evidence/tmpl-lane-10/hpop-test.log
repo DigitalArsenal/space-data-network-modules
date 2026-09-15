@@ -1,0 +1,144 @@
+
+> @orbpro/plugin-hpop@1.0.0 test
+> node --test tests/sdk_compat.test.mjs tests/direct-entry.test.mjs tests/tudat_wasm_derived.test.mjs tests/drag_atmosphere.test.mjs tests/batch_all_positions.test.mjs tests/path_state_vectors.test.mjs
+
+batch-vs-per-entity parity: 576 coordinate comparisons over 3 epochs x 64 entities, max |delta| = 0 m
+✔ batch propagate_all_positions matches per-entity plugin_propagate (72.468208ms)
+✔ batch propagate_all_positions honors max_count and empty state (16.760041ms)
+✔ E.6 batch-scale API: ensure/eval split, stagger, retention, ECEF seeding (165.231958ms)
+✔ hpop direct entry loads the shipped browser/isomorphic module (32.622125ms)
+✔ NRLMSISE-00 canonical test vectors reproduce on browser (54.035792ms)
+✔ US76 path returns published Table I values on browser (21.211292ms)
+✔ NRLMSISE-00 density at 400 km stays in published bounds on browser (13.1905ms)
+✔ drag-enabled propagation decays an ISS-like orbit plausibly on browser (55.403958ms)
+✔ NRLMSISE-00 canonical test vectors reproduce on wasmedge (142.542125ms)
+✔ US76 path returns published Table I values on wasmedge (104.615667ms)
+✔ NRLMSISE-00 density at 400 km stays in published bounds on wasmedge (59.185292ms)
+✔ drag-enabled propagation decays an ISS-like orbit plausibly on wasmedge (1941.321875ms)
+✔ HPOP native tracks preserve ECEF seed and match the single-state API (38.978916ms)
+✔ build publishes canonical browser and isomorphic artifact paths (0.863292ms)
+✔ browser module exposes a default factory for worker imports (1.090292ms)
+✔ browser module exports an explicit initializer so noInitialRun library loads can safely allocate after plugin_init (19.904ms)
+✖ built artifact passes SDK compliance checks (21.201125ms)
+✔ manifest declares HPOP resident-state binary methods (1.393416ms)
+✔ built artifact exposes the standalone isomorphic surface (1.7945ms)
+✔ built artifact embeds a non-empty manifest flatbuffer (0.906833ms)
+✔ built artifact loads through the SDK browser harness (50.190833ms)
+✔ built artifact loads through the WasmEdge server path (59.522375ms)
+✔ hosted-runtime example is wired to the canonical invoke contract (0.206083ms)
+✔ tudat two-body samples match the copied state history on browser (110.571459ms)
+✔ tudat two-body samples match the copied state history on wasmedge (311.569541ms)
+✔ tudat high-fidelity samples stay within the copied perturbation envelope on browser (71.358583ms)
+✔ tudat high-fidelity samples stay within the copied perturbation envelope on wasmedge (1012.273875ms)
+ℹ tests 27
+ℹ suites 0
+ℹ pass 26
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2904.401834
+
+✖ failing tests:
+
+test at tests/sdk_compat.test.mjs:244:1
+✖ built artifact passes SDK compliance checks (21.201125ms)
+  AssertionError [ERR_ASSERTION]: [
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[0].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "warning",
+      "code": "no-aligned-peer",
+      "message": "Canonical FlatBuffer allowed type declares no aligned-binary peer, so this port never takes the shared-arena zero-copy route. That is correct for a variable-length record; declare the peer (with its exact byteLength) only if the record has a FIXED aligned layout.",
+      "location": "manifest.methods[0].inputPorts[0].acceptedTypeSets[0].allowedTypes[0]"
+    },
+    {
+      "severity": "warning",
+      "code": "no-aligned-peer",
+      "message": "Canonical FlatBuffer allowed type declares no aligned-binary peer, so this port never takes the shared-arena zero-copy route. That is correct for a variable-length record; declare the peer (with its exact byteLength) only if the record has a FIXED aligned layout.",
+      "location": "manifest.methods[0].inputPorts[1].acceptedTypeSets[0].allowedTypes[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[0].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "warning",
+      "code": "no-aligned-peer",
+      "message": "Canonical FlatBuffer allowed type declares no aligned-binary peer, so this port never takes the shared-arena zero-copy route. That is correct for a variable-length record; declare the peer (with its exact byteLength) only if the record has a FIXED aligned layout.",
+      "location": "manifest.methods[0].outputPorts[0].acceptedTypeSets[0].allowedTypes[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-aligned-file-identifier",
+      "message": "Aligned-binary allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0].allowedTypes[1].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-aligned-file-identifier",
+      "message": "Aligned-binary allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0].allowedTypes[1].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-aligned-file-identifier",
+      "message": "Aligned-binary allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0].allowedTypes[1].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0]"
+    }
+  ]
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file:///Users/tj/software/worktrees/modules-lane-10/propagator/hpop/tests/sdk_compat.test.mjs:250:10)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:777:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

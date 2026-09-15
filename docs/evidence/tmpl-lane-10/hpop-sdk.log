@@ -1,0 +1,122 @@
+✔ build publishes canonical browser and isomorphic artifact paths (0.77ms)
+✔ browser module exposes a default factory for worker imports (1.248834ms)
+✔ browser module exports an explicit initializer so noInitialRun library loads can safely allocate after plugin_init (23.172667ms)
+✖ built artifact passes SDK compliance checks (9.64175ms)
+✔ manifest declares HPOP resident-state binary methods (1.555625ms)
+✔ built artifact exposes the standalone isomorphic surface (2.8675ms)
+✔ built artifact embeds a non-empty manifest flatbuffer (1.342875ms)
+✔ built artifact loads through the SDK browser harness (50.307125ms)
+✔ built artifact loads through the WasmEdge server path (49.268166ms)
+✔ hosted-runtime example is wired to the canonical invoke contract (0.324541ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 9
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 670.84725
+
+✖ failing tests:
+
+test at tests/sdk_compat.test.mjs:244:1
+✖ built artifact passes SDK compliance checks (9.64175ms)
+  AssertionError [ERR_ASSERTION]: [
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[0].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "warning",
+      "code": "no-aligned-peer",
+      "message": "Canonical FlatBuffer allowed type declares no aligned-binary peer, so this port never takes the shared-arena zero-copy route. That is correct for a variable-length record; declare the peer (with its exact byteLength) only if the record has a FIXED aligned layout.",
+      "location": "manifest.methods[0].inputPorts[0].acceptedTypeSets[0].allowedTypes[0]"
+    },
+    {
+      "severity": "warning",
+      "code": "no-aligned-peer",
+      "message": "Canonical FlatBuffer allowed type declares no aligned-binary peer, so this port never takes the shared-arena zero-copy route. That is correct for a variable-length record; declare the peer (with its exact byteLength) only if the record has a FIXED aligned layout.",
+      "location": "manifest.methods[0].inputPorts[1].acceptedTypeSets[0].allowedTypes[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[0].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "warning",
+      "code": "no-aligned-peer",
+      "message": "Canonical FlatBuffer allowed type declares no aligned-binary peer, so this port never takes the shared-arena zero-copy route. That is correct for a variable-length record; declare the peer (with its exact byteLength) only if the record has a FIXED aligned layout.",
+      "location": "manifest.methods[0].outputPorts[0].acceptedTypeSets[0].allowedTypes[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-aligned-file-identifier",
+      "message": "Aligned-binary allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0].allowedTypes[1].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-aligned-file-identifier",
+      "message": "Aligned-binary allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0].allowedTypes[1].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-aligned-file-identifier",
+      "message": "Aligned-binary allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0].allowedTypes[1].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0]"
+    }
+  ]
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file:///Users/tj/software/worktrees/modules-lane-10/propagator/hpop/tests/sdk_compat.test.mjs:250:10)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:777:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

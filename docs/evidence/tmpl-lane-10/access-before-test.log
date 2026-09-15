@@ -1,0 +1,49 @@
+
+> test
+> node --test test/*.test.mjs
+
+✔ Access analyzer loads a compiled WASM runtime and stores ground stations natively (9.020375ms)
+✔ Access analyzer matches Orekit TopocentricFrame inverse azimuth/elevation/range vectors (1.75475ms)
+✔ Access analyzer applies Orekit ElevationMask interpolation for azimuth-dependent visibility (7.541833ms)
+✔ Access analyzer applies Orekit EarthStandardAtmosphereRefraction to elevation switching (1.257ms)
+✔ Access analyzer applies Orekit EarthStandardAtmosphereRefraction pressure and temperature setters (1.324583ms)
+✔ Access analyzer matches Orekit ITURP834AtmosphericRefraction source vectors (4.328792ms)
+✔ Access analyzer applies Orekit ITURP834AtmosphericRefraction to native elevation switching (2.970583ms)
+✔ Access analyzer computes a simple access window from pre-sampled ECEF states (1.341959ms)
+✔ Access analyzer schedules contacts greedily with per-station capacity and blackout clipping (8.270209ms)
+✔ Access analyzer predicts AOS and LOS from the next computed access window (1.562958ms)
+node:internal/modules/esm/resolve:275
+    throw new ERR_MODULE_NOT_FOUND(
+          ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/private/tmp/ancillary-packages/space-data-module-sdk/src/vendor/flatbuffers/flatbuffers.js' imported from /private/tmp/tmpl-lane-10-baseline/access-checkout/analysis/access/test/manifestContract.test.mjs
+    at finalizeResolution (node:internal/modules/esm/resolve:275:11)
+    at moduleResolve (node:internal/modules/esm/resolve:865:10)
+    at defaultResolve (node:internal/modules/esm/resolve:991:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:712:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:729:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:758:52)
+    at #resolve (node:internal/modules/esm/loader:694:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:614:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:160:33)
+    at ModuleJob.link (node:internal/modules/esm/module_job:245:17) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///private/tmp/ancillary-packages/space-data-module-sdk/src/vendor/flatbuffers/flatbuffers.js'
+}
+
+Node.js v25.4.0
+✖ test/manifestContract.test.mjs (71.903375ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 10
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 422.528208
+
+✖ failing tests:
+
+test at test/manifestContract.test.mjs:1:1
+✖ test/manifestContract.test.mjs (71.903375ms)
+  'test failed'

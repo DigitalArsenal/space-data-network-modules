@@ -1,0 +1,626 @@
+
+> test
+> node --test tests/buildTreeHygiene.test.mjs tests/sdk_compat.test.mjs tests/direct-entry.test.mjs tests/sourceSelectionContract.test.mjs tests/signedCdmOutput.test.mjs tests/ocmOemTrackAdapter.test.mjs tests/celestrakFetchCache.test.mjs tests/archiveStreamingSmoke.test.mjs tests/pivInvokeContract.test.mjs tests/wasmedgeStandaloneHarness.test.mjs tests/sdnDataApiStream.test.mjs tests/socratesReplayHarness.test.mjs tests/aerospaceDatasetValidation.test.mjs tests/aerospaceReplayHarness.test.mjs tests/socratesScreenCatalogParity.test.mjs tests/aerospaceScreenCatalogParity.test.mjs tests/aerospaceRealWindowParity.test.mjs
+
+﹣ Aerospace extracted dataset inventory matches the published guide constraints (3.313125ms) # Place the extracted Aerospace dataset under tests/data/aerospace-ivv or override with AEROSPACE_IVV_EXTRACTED_ROOT.
+Expected layout:
+- docs/Conjunction_Screening_Testset_Users_Guide.txt
+- csv/IVV_Releasable_Dataset_Spherical_DefaultHBR.csv
+- csv/IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv
+- csv/AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv
+- ocm/AerospaceIVVDataset_20251009/...
+﹣ Aerospace answer-key filenames resolve to valid extracted OCM files (2.575333ms) # Place the extracted Aerospace dataset under tests/data/aerospace-ivv or override with AEROSPACE_IVV_EXTRACTED_ROOT.
+Expected layout:
+- docs/Conjunction_Screening_Testset_Users_Guide.txt
+- csv/IVV_Releasable_Dataset_Spherical_DefaultHBR.csv
+- csv/IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv
+- csv/AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv
+- ocm/AerospaceIVVDataset_20251009/...
+✔ Aerospace real-window: summary (measured deltas vs CSieve for the coordinator) (0.889584ms)
+ℹ fixture=aerospace-real-window (AerospaceIVVDataset_20251009a) events=21 recalled=21 missing=0 anchors=4
+ℹ FINDING F1 miss-vs-CSieve on real 65s OCM: min=0.0002m median=0.3354m max=2.5441m (analytic ≤10cm bound met only near ephemeris nodes; anchors below)
+ℹ   4208-41347 [NLRV] dTCA=0.5633ms dMiss=2.5441m dRelSpeed=0.0215m/s
+ℹ   9848-14965 [NLRV] dTCA=1.1265ms dMiss=0.0966m dRelSpeed=0.0267m/s
+ℹ   9903-26069 [NLRV] dTCA=0.5633ms dMiss=0.8187m dRelSpeed=0.0506m/s
+ℹ   32464-55953 [NLRV] dTCA=0.5633ms dMiss=0.1466m dRelSpeed=0.0115m/s
+ℹ   38264-62254 [NLRV] ANCHOR dTCA=0.5633ms dMiss=0.0612m dRelSpeed=0.0130m/s
+ℹ   39417-56347 [NLRV] dTCA=0.5633ms dMiss=0.4298m dRelSpeed=0.0804m/s
+ℹ   39919-53223 [NLRV] dTCA=0.0000ms dMiss=0.2031m dRelSpeed=0.0255m/s
+ℹ   40044-45024 [NLRV] ANCHOR dTCA=0.5633ms dMiss=0.0280m dRelSpeed=0.0955m/s
+ℹ   41158-60626 [NLRV] dTCA=0.5633ms dMiss=0.5320m dRelSpeed=0.0388m/s
+ℹ   41915-59172 [NLRV] dTCA=0.5633ms dMiss=1.3651m dRelSpeed=0.0754m/s
+ℹ   43255-60849 [NLRV] ANCHOR dTCA=0.5633ms dMiss=0.0002m dRelSpeed=0.0349m/s
+ℹ   45411-60094 [NLRV] dTCA=0.5633ms dMiss=1.7781m dRelSpeed=0.0081m/s
+ℹ   47401-95025 [NLRV] ANCHOR dTCA=0.0000ms dMiss=0.0163m dRelSpeed=0.0104m/s
+ℹ   49071-49072 [VLRV] dTCA=1462.1928ms dMiss=0.0515m dRelSpeed=0.0006m/s
+ℹ   53079-56112 [NLRV] dTCA=0.5633ms dMiss=1.0527m dRelSpeed=0.0451m/s
+ℹ   56155-56156 [VLRV] dTCA=8105.4881ms dMiss=1.1485m dRelSpeed=0.0073m/s
+ℹ   58199-58201 [VLRV] dTCA=294.2249ms dMiss=0.0894m dRelSpeed=0.0002m/s
+ℹ   58265-60603 [NLRV] dTCA=0.5633ms dMiss=0.6751m dRelSpeed=0.0021m/s
+ℹ   58410-60263 [NLRV] dTCA=0.5633ms dMiss=0.3354m dRelSpeed=0.0772m/s
+ℹ   59458-62021 [NLRV] dTCA=0.5633ms dMiss=0.2557m dRelSpeed=0.0043m/s
+ℹ   60085-90124 [NLRV] dTCA=0.9254ms dMiss=0.3846m dRelSpeed=2.7763m/s
+✔ Aerospace real-window: event-set full recall [HARD] (0.072792ms)
+✔ Aerospace real-window: NLRV TCA within config bound [HARD] (0.084459ms)
+ℹ   49071-49072 [VLRV] TCA advisory dTCA=1462.193ms (flat-minimum)
+ℹ   56155-56156 [VLRV] TCA advisory dTCA=8105.488ms (flat-minimum)
+ℹ   58199-58201 [VLRV] TCA advisory dTCA=294.225ms (flat-minimum)
+✔ Aerospace real-window: parity anchors reproduce CSieve within ≤10cm [HARD] (0.070666ms)
+✔ Aerospace real-window: all-events miss within real-OCM regression envelope [FINDING F1] (0.067833ms)
+✔ Aerospace real-window: Pc report-only (CSieve uses a different Alfano variant — not gated) (0.066958ms)
+ℹ Pc not gated vs CSieve. our maxProbability: 4208-41347=5.36705e-7 9848-14965=5.33151e-7 9903-26069=9.03269e-7 32464-55953=4.19141e-7 38264-62254=0.000007262378 39417-56347=0.000002293286 39919-53223=7.24812e-7 40044-45024=0.000002064627 41158-60626=5.39303e-7 41915-59172=5.13064e-7 43255-60849=5.0989e-7 45411-60094=0.000001071021 47401-95025=0.000001493883 49071-49072=0.000140245861 53079-56112=4.67417e-7 56155-56156=0.000463055505 58199-58201=0.00014357438 58265-60603=0.000001313327 58410-60263=4.92137e-7 59458-62021=0.000005156733 60085-90124=6.28967e-7
+﹣ Aerospace OCM basename index resolves answer-key files across extracted subtrees (2.6625ms) # Place the extracted Aerospace dataset under tests/data/aerospace-ivv or override with AEROSPACE_IVV_EXTRACTED_ROOT.
+Expected layout:
+- docs/Conjunction_Screening_Testset_Users_Guide.txt
+- csv/IVV_Releasable_Dataset_Spherical_DefaultHBR.csv
+- csv/IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv
+- csv/AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv
+- ocm/AerospaceIVVDataset_20251009/...
+﹣ track-mode replay reproduces the first 100 Aerospace spherical answer-key rows through the local conjunction package (17.354875ms) # Place the extracted Aerospace dataset under tests/data/aerospace-ivv or override with AEROSPACE_IVV_EXTRACTED_ROOT.
+Expected layout:
+- docs/Conjunction_Screening_Testset_Users_Guide.txt
+- csv/IVV_Releasable_Dataset_Spherical_DefaultHBR.csv
+- csv/IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv
+- csv/AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv
+- ocm/AerospaceIVVDataset_20251009/...
+﹣ track-mode replay keeps a known close-pair Aerospace row within the measured replay envelope (16.687416ms) # Place the extracted Aerospace dataset under tests/data/aerospace-ivv or override with AEROSPACE_IVV_EXTRACTED_ROOT.
+Expected layout:
+- docs/Conjunction_Screening_Testset_Users_Guide.txt
+- csv/IVV_Releasable_Dataset_Spherical_DefaultHBR.csv
+- csv/IVV_Releasable_Dataset_SFSH_DiscreteHBR.csv
+- csv/AerospaceIVVDataset_20251009a_Size_ScreeningVolumes.csv
+- ocm/AerospaceIVVDataset_20251009/...
+✔ Aerospace: parity summary (mode + measured deltas for the coordinator) (0.727291ms)
+ℹ mode=synthetic tracks=10 objectsParsed=10 refEvents=4 found=4 matched=4 missing=0 extra=0 thr=10km HBR=0.5m
+ℹ SYNTHETIC fixture (analytic answer key) — real 21.74GB CSieve dataset is OWNER-ASSIST; see docs/aerospace-ivv-acquisition.md
+ℹ pair 90001-90002 [NLRV] dTCA=0.000040s dMiss=0.0004m dRelSpeed=0.0000m/s
+ℹ pair 90003-90004 [NLRV] dTCA=0.000040s dMiss=0.0001m dRelSpeed=0.0000m/s
+ℹ pair 90005-90006 [LRV] dTCA=0.000040s dMiss=0.0000m dRelSpeed=0.0000m/s
+ℹ pair 90007-90008 [VLRV] dTCA=0.000040s dMiss=0.0000m dRelSpeed=0.0000m/s
+✔ Aerospace: event set — full answer-key recall (+ precision on synthetic control) (0.086584ms)
+✔ Aerospace: TCA within rel-vel-stratified tolerance [NLRV gated] (0.081209ms)
+ℹ pair 90005-90006 [LRV] TCA advisory dTCA=0.00004023313522338867s (flat-minimum regime)
+ℹ pair 90007-90008 [VLRV] TCA advisory dTCA=0.00004023313522338867s (flat-minimum regime)
+✔ Aerospace: miss distance within ≤10cm bound [independent-parity: full precision] (0.052375ms)
+✔ Aerospace: Pc report-only (CSieve uses a different Alfano variant — not gated) (0.059625ms)
+ℹ Pc not gated vs CSieve (User's Guide + AMOS 2025). our maxProbability values: 90001-90002=0.000588607106 90003-90004=0.000016350197 90005-90006=0.000229924651 90007-90008=0.000057481163
+﹣ answer key CSV streams directly from .csv.gz without extraction (2.368708ms) # Aerospace archive root not found. Put archives under tests/data/aerospace-archives or set CONJUNCTION_ASSESSMENT_ARCHIVE_ROOT.
+﹣ tar.gz streaming yields valid OCM entries that appear in the answer key (0.724292ms) # Aerospace archive root not found. Put archives under tests/data/aerospace-archives or set CONJUNCTION_ASSESSMENT_ARCHIVE_ROOT.
+﹣ SOCRATES catalog CSV streams and resolves to per-pair GP records on disk (1.326708ms) # Local SOCRATES root not found. Put catalog files under tests/data or set CONJUNCTION_ASSESSMENT_SOCRATES_ROOT.
+✔ CMake build-* scratch trees are never tracked (10.827333ms)
+✔ future CMake build-* scratch trees are ignored (11.390542ms)
+✔ CelesTrak fetch cache reuses cached responses before network fetch (32.909958ms)
+✔ CelesTrak fetch cache supports explicit force refresh (38.024917ms)
+✔ conjunction-assessment direct entry loads the shipped pthread wasm module (556.514458ms)
+✔ OCM and OEM source records adapt to propagated tracks (1.846708ms)
+✖ emit_cdm accepts an OCM/OEM-derived propagated-track request (638.232625ms)
+✔ conjunction plugin_invoke_stream accepts and rejects SDS PIV envelopes (14.830583ms)
+✔ build publishes canonical browser and isomorphic artifact paths (0.776416ms)
+✖ built artifact passes SDK compliance checks (18.9125ms)
+✔ manifest declares CDM import probability command surface (0.740584ms)
+✔ manifest declares CSM summary command surface (0.156917ms)
+✔ manifest declares Orekit CDM KVN parser/writer command surfaces (0.158542ms)
+✔ manifest declares Orekit CDM XML parser/writer command surfaces (0.156ms)
+✔ built artifact exposes the WasmEdge Emscripten pthread surface (4.636667ms)
+✔ built artifact loads through the SDK WasmEdge pthread runner (529.584125ms)
+✔ pthread isomorphic artifact is not routed through the browser WASI harness (3.094958ms)
+✔ hosted-runtime example is wired to the screen catalog command surface (0.375041ms)
+✖ screen_catalog accepts SDN data API uint32be OMM FlatBuffer streams (681.005833ms)
+✖ screen_catalog accepts SDN data API uint32be streams of size-prefixed OMM records (594.399792ms)
+✖ screen_catalog keeps direct SDN catalog screening bounded for larger streams (9034.374083ms)
+✖ screen_catalog accepts mixed primary GP and secondary track source families (562.181167ms)
+✔ signed CDM output binds CDM bytes and publication metadata (2.790041ms)
+✔ WasmEdge conjunction replay stays within the public SOCRATES tolerance envelope for the vendored close pairs (2982.743125ms)
+✔ SOCRATES: parity summary (measured deltas for the coordinator) (0.856916ms)
+ℹ catalog=6 objectsParsed=6 found=3 matched=3 missing=0 extra=0 window=[2461108.348,+7.78d] thr=5km
+ℹ pair 61721-67298 [NLRV] dTCA=0.00072s dMiss=4.178m dRelSpeed=0.100m/s PcRatio=1.000 (our=0.005822km ref=0.01km)
+ℹ pair 47935-49179 [NLRV] dTCA=0.00032s dMiss=0.303m dRelSpeed=0.304m/s PcRatio=1.859 (our=0.014303km ref=0.014km)
+ℹ pair 48282-58288 [NLRV] dTCA=0.00028s dMiss=0.131m dRelSpeed=0.479m/s PcRatio=1.731 (our=0.013869km ref=0.014km)
+✔ SOCRATES: event set — full reference recall, no spurious events [independent-parity + regression-guard] (0.089334ms)
+✔ SOCRATES: TCA within rel-vel-stratified tolerance [independent-parity] (0.063125ms)
+✔ SOCRATES: miss distance within SOCRATES bound [regression-guard: CSV range quantized] (0.051375ms)
+✔ SOCRATES: relative speed within bound (0.22275ms)
+✔ SOCRATES: Pc advisory — same-family, recorded not gated [same-family-advisory] (0.187791ms)
+✔ screen catalog request schema accepts every CA selected source kind (52.639ms)
+✔ CA selected source normalization accepts supported host source descriptors (1.043584ms)
+✔ CA selected source normalization rejects unsupported or incomplete descriptors (0.283083ms)
+✔ conjunction WasmEdge harness accepts SGP4-sampled tracks for the known close pair (1336.296542ms)
+✖ emit_cdm accepts SGP4-sampled track-backed conjunction requests (620.279208ms)
+✖ emit_csm accepts SGP4-sampled track-backed conjunction requests (528.886458ms)
+✖ CDM KVN command surface round-trips the Orekit CDMExample1 fixture (496.776ms)
+✖ CDM XML command surface round-trips the Orekit CDMExample1 fixture (577.676667ms)
+ℹ tests 57
+ℹ suites 0
+ℹ pass 39
+ℹ fail 10
+ℹ cancelled 0
+ℹ skipped 8
+ℹ todo 0
+ℹ duration_ms 11539.857583
+
+✖ failing tests:
+
+test at tests/ocmOemTrackAdapter.test.mjs:95:1
+✖ emit_cdm accepts an OCM/OEM-derived propagated-track request (638.232625ms)
+  Error: SDS PIV/TAB frame and typeRef wire formats disagree.
+      at validateDecodedFrameContract (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:841:11)
+      at decodeSdsTabFrame (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:904:3)
+      at decodeSdsArenaFrames (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:911:19)
+      at decodePluginInvokeResponse (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:1161:24)
+      at Object.invoke (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/testing/processInvoke.js:430:14)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/tests/ocmOemTrackAdapter.test.mjs:130:20)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:777:7)
+
+test at tests/sdk_compat.test.mjs:83:1
+✖ built artifact passes SDK compliance checks (18.9125ms)
+  AssertionError [ERR_ASSERTION]: [
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[0].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[0].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[0].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[0].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[0].outputPorts[1].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[0].outputPorts[1].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[1].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[1].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[1].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[1].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[2].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[2].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[2].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[3].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[3].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[3].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[4].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[4].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[4].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[5].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[5].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[5].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[5].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[6].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[6].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[6].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[6].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[7].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[7].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "warning",
+      "code": "no-aligned-peer",
+      "message": "Canonical FlatBuffer allowed type declares no aligned-binary peer, so this port never takes the shared-arena zero-copy route. That is correct for a variable-length record; declare the peer (with its exact byteLength) only if the record has a FIXED aligned layout.",
+      "location": "manifest.methods[7].inputPorts[0].acceptedTypeSets[0].allowedTypes[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[7].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[7].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[8].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[8].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[8].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[8].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "warning",
+      "code": "no-aligned-peer",
+      "message": "Canonical FlatBuffer allowed type declares no aligned-binary peer, so this port never takes the shared-arena zero-copy route. That is correct for a variable-length record; declare the peer (with its exact byteLength) only if the record has a FIXED aligned layout.",
+      "location": "manifest.methods[8].outputPorts[0].acceptedTypeSets[0].allowedTypes[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[9].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[9].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "warning",
+      "code": "no-aligned-peer",
+      "message": "Canonical FlatBuffer allowed type declares no aligned-binary peer, so this port never takes the shared-arena zero-copy route. That is correct for a variable-length record; declare the peer (with its exact byteLength) only if the record has a FIXED aligned layout.",
+      "location": "manifest.methods[9].inputPorts[0].acceptedTypeSets[0].allowedTypes[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[9].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[9].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[10].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[10].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-file-identifier",
+      "message": "Canonical FlatBuffer allowed types must declare fileIdentifier.",
+      "location": "manifest.methods[10].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[10].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "warning",
+      "code": "no-aligned-peer",
+      "message": "Canonical FlatBuffer allowed type declares no aligned-binary peer, so this port never takes the shared-arena zero-copy route. That is correct for a variable-length record; declare the peer (with its exact byteLength) only if the record has a FIXED aligned layout.",
+      "location": "manifest.methods[10].outputPorts[0].acceptedTypeSets[0].allowedTypes[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[11].inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[11].inputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[11].inputPorts[1].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[11].inputPorts[1].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[11].outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[11].outputPorts[0].acceptedTypeSets[0]"
+    },
+    {
+      "severity": "error",
+      "code": "missing-canonical-root-type-name",
+      "message": "Canonical FlatBuffer allowed types must declare rootTypeName.",
+      "location": "manifest.methods[11].outputPorts[1].acceptedTypeSets[0].allowedTypes[0].rootTypeName"
+    },
+    {
+      "severity": "error",
+      "code": "paired-type-identity-mismatch",
+      "message": "Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.",
+      "location": "manifest.methods[11].outputPorts[1].acceptedTypeSets[0]"
+    }
+  ]
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/tests/sdk_compat.test.mjs:95:10)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:777:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/sdnDataApiStream.test.mjs:158:1
+✖ screen_catalog accepts SDN data API uint32be OMM FlatBuffer streams (681.005833ms)
+  Error: SDS PIV/TAB frame and typeRef wire formats disagree.
+      at validateDecodedFrameContract (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:841:11)
+      at decodeSdsTabFrame (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:904:3)
+      at decodeSdsArenaFrames (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:911:19)
+      at decodePluginInvokeResponse (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:1161:24)
+      at Object.invoke (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/testing/processInvoke.js:430:14)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async invokeWithTimeout (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/tests/sdnDataApiStream.test.mjs:145:12)
+      at async TestContext.<anonymous> (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/tests/sdnDataApiStream.test.mjs:184:20)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3)
+
+test at tests/sdnDataApiStream.test.mjs:202:1
+✖ screen_catalog accepts SDN data API uint32be streams of size-prefixed OMM records (594.399792ms)
+  Error: SDS PIV/TAB frame and typeRef wire formats disagree.
+      at validateDecodedFrameContract (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:841:11)
+      at decodeSdsTabFrame (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:904:3)
+      at decodeSdsArenaFrames (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:911:19)
+      at decodePluginInvokeResponse (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:1161:24)
+      at Object.invoke (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/testing/processInvoke.js:430:14)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async invokeWithTimeout (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/tests/sdnDataApiStream.test.mjs:145:12)
+      at async TestContext.<anonymous> (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/tests/sdnDataApiStream.test.mjs:228:20)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:777:7)
+
+test at tests/sdnDataApiStream.test.mjs:246:1
+✖ screen_catalog keeps direct SDN catalog screening bounded for larger streams (9034.374083ms)
+  Error: SDS PIV/TAB frame and typeRef wire formats disagree.
+      at validateDecodedFrameContract (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:841:11)
+      at decodeSdsTabFrame (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:904:3)
+      at decodeSdsArenaFrames (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:911:19)
+      at decodePluginInvokeResponse (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:1161:24)
+      at Object.invoke (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/testing/processInvoke.js:430:14)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/tests/sdnDataApiStream.test.mjs:286:22)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:777:7)
+
+test at tests/sdnDataApiStream.test.mjs:313:1
+✖ screen_catalog accepts mixed primary GP and secondary track source families (562.181167ms)
+  Error: SDS PIV/TAB frame and typeRef wire formats disagree.
+      at validateDecodedFrameContract (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:841:11)
+      at decodeSdsTabFrame (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:904:3)
+      at decodeSdsArenaFrames (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:911:19)
+      at decodePluginInvokeResponse (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:1161:24)
+      at Object.invoke (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/testing/processInvoke.js:430:14)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/tests/sdnDataApiStream.test.mjs:405:20)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:777:7)
+
+test at tests/wasmedgeStandaloneHarness.test.mjs:252:1
+✖ emit_cdm accepts SGP4-sampled track-backed conjunction requests (620.279208ms)
+  Error: SDS PIV/TAB frame and typeRef wire formats disagree.
+      at validateDecodedFrameContract (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:841:11)
+      at decodeSdsTabFrame (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:904:3)
+      at decodeSdsArenaFrames (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:911:19)
+      at decodePluginInvokeResponse (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:1161:24)
+      at Object.invoke (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/testing/processInvoke.js:430:14)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/tests/wasmedgeStandaloneHarness.test.mjs:302:20)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:777:7)
+
+test at tests/wasmedgeStandaloneHarness.test.mjs:345:1
+✖ emit_csm accepts SGP4-sampled track-backed conjunction requests (528.886458ms)
+  Error: SDS PIV/TAB frame and typeRef wire formats disagree.
+      at validateDecodedFrameContract (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:841:11)
+      at decodeSdsTabFrame (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:904:3)
+      at decodeSdsArenaFrames (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:911:19)
+      at decodePluginInvokeResponse (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:1161:24)
+      at Object.invoke (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/testing/processInvoke.js:430:14)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/tests/wasmedgeStandaloneHarness.test.mjs:395:20)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:777:7)
+
+test at tests/wasmedgeStandaloneHarness.test.mjs:406:1
+✖ CDM KVN command surface round-trips the Orekit CDMExample1 fixture (496.776ms)
+  Error: SDS PIV/TAB frame and typeRef wire formats disagree.
+      at validateDecodedFrameContract (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:841:11)
+      at decodeSdsTabFrame (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:904:3)
+      at decodeSdsArenaFrames (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:911:19)
+      at decodePluginInvokeResponse (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:1161:24)
+      at Object.invoke (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/testing/processInvoke.js:430:14)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/tests/wasmedgeStandaloneHarness.test.mjs:426:25)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:777:7)
+
+test at tests/wasmedgeStandaloneHarness.test.mjs:449:1
+✖ CDM XML command surface round-trips the Orekit CDMExample1 fixture (577.676667ms)
+  Error: SDS PIV/TAB frame and typeRef wire formats disagree.
+      at validateDecodedFrameContract (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:841:11)
+      at decodeSdsTabFrame (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:904:3)
+      at decodeSdsArenaFrames (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:911:19)
+      at decodePluginInvokeResponse (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/invoke/codec.js:1161:24)
+      at Object.invoke (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/testing/processInvoke.js:430:14)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/tests/wasmedgeStandaloneHarness.test.mjs:469:25)
+      at async Test.run (node:internal/test_runner/test:1102:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:777:7)

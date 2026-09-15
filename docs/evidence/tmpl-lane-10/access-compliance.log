@@ -1,0 +1,5 @@
+
+> check:compliance
+> node check-compliance.mjs
+
+[compliance] PASS: access manifest and dist/isomorphic/module.wasm

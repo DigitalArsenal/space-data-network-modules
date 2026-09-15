@@ -1,0 +1,74 @@
+[
+  {
+    "module": "analysis/access",
+    "command": "node build.mjs",
+    "exitCode": 0,
+    "log": "access-build.log"
+  },
+  {
+    "module": "analysis/access",
+    "command": "node --test tests/sdk_compat.test.mjs",
+    "exitCode": 0,
+    "log": "access-sdk.log"
+  },
+  {
+    "module": "analysis/access",
+    "command": "npm test",
+    "exitCode": 0,
+    "log": "access-test.log"
+  },
+  {
+    "module": "analysis/access",
+    "command": "npm run check:compliance",
+    "exitCode": 0,
+    "log": "access-compliance.log"
+  },
+  {
+    "module": "analysis/access",
+    "command": "PATH=\"$HOME/.wasmedge/bin:$PATH\" node tests/parity.mjs",
+    "exitCode": 0,
+    "log": "access-parity.log"
+  },
+  {
+    "module": "propagator/hpop",
+    "command": "node build.mjs",
+    "exitCode": 1,
+    "log": "hpop-build.log"
+  },
+  {
+    "module": "propagator/hpop",
+    "command": "node --test tests/sdk_compat.test.mjs",
+    "exitCode": 1,
+    "log": "hpop-sdk.log"
+  },
+  {
+    "module": "propagator/hpop",
+    "command": "npm test",
+    "exitCode": 1,
+    "log": "hpop-test.log"
+  },
+  {
+    "module": "analysis/conjunction-assessment",
+    "command": "node build.mjs",
+    "exitCode": 1,
+    "log": "conjunction-build.log"
+  },
+  {
+    "module": "analysis/conjunction-assessment",
+    "command": "node --test tests/sdk_compat.test.mjs",
+    "exitCode": 1,
+    "log": "conjunction-sdk.log"
+  },
+  {
+    "module": "analysis/conjunction-assessment",
+    "command": "npm test",
+    "exitCode": 1,
+    "log": "conjunction-test.log"
+  },
+  {
+    "module": "analysis/conjunction-assessment",
+    "command": "npm run check:compliance",
+    "exitCode": 1,
+    "log": "conjunction-compliance.log"
+  }
+]

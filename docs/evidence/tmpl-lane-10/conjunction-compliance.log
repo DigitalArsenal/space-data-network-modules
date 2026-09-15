@@ -1,0 +1,93 @@
+
+> check:compliance
+> node scripts/check-compliance.mjs
+
+[compliance] failed: /Users/tj/software/worktrees/modules-lane-10/analysis/conjunction-assessment/plugin-manifest.json
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare fileIdentifier.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- warning: Canonical FlatBuffer allowed type declares no aligned-binary peer, so this port never takes the shared-arena zero-copy route. That is correct for a variable-length record; declare the peer (with its exact byteLength) only if the record has a FIXED aligned layout.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare fileIdentifier.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- warning: Canonical FlatBuffer allowed type declares no aligned-binary peer, so this port never takes the shared-arena zero-copy route. That is correct for a variable-length record; declare the peer (with its exact byteLength) only if the record has a FIXED aligned layout.
+- error: Canonical FlatBuffer allowed types must declare fileIdentifier.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- warning: Canonical FlatBuffer allowed type declares no aligned-binary peer, so this port never takes the shared-arena zero-copy route. That is correct for a variable-length record; declare the peer (with its exact byteLength) only if the record has a FIXED aligned layout.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare fileIdentifier.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- warning: Canonical FlatBuffer allowed type declares no aligned-binary peer, so this port never takes the shared-arena zero-copy route. That is correct for a variable-length record; declare the peer (with its exact byteLength) only if the record has a FIXED aligned layout.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Canonical FlatBuffer allowed types must declare rootTypeName.
+- error: Canonical FlatBuffer and aligned-binary peers must declare identical schemaName, fileIdentifier, rootTypeName, and schemaVersion/schemaHash when present.
+- error: Type reference from assess_conjunction.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from assess_conjunction.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from assess_conjunction.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from assess_conjunction.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from emit_cdm.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from emit_cdm.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from emit_csm.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from emit_csm.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from find_tca.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from find_tca.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from find_tca.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from find_tca.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from alfano_max_probability.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from alfano_max_probability.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from alfano_max_probability.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from alfano_max_probability.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from compute_pc.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from compute_pc.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from compute_pc.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from compute_pc.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from compute_pc_from_cdm.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from compute_pc_from_cdm.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from parse_cdm_kvn.kvn does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from write_cdm_kvn.kvn does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from parse_cdm_xml.xml does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from write_cdm_xml.xml does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from screen_catalog.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from screen_catalog.request does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from screen_catalog.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
+- error: Type reference from screen_catalog.result does not resolve to a known shared-module or `spacedatastandards.org` schema by its exact schemaName and fileIdentifier.
