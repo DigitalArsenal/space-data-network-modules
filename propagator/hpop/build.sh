@@ -59,6 +59,7 @@ ensure_emscripten() {
 
 ensure_emscripten
 
+node "$SCRIPT_DIR/generate-kernel-header.mjs"
 node "$SCRIPT_DIR/generate-manifest-header.mjs"
 
 rm -rf "$EMSCRIPTEN_BUILD_DIR"

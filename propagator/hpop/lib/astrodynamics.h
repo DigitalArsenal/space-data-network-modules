@@ -1106,7 +1106,9 @@ EphemerisState getSunPosition(double jd);
 /// @return Moon position and velocity
 EphemerisState getMoonPosition(double jd);
 
-/// Get planet position (heliocentric J2000)
+/// Get planet position (heliocentric J2000).
+/// Kernel states are equatorial J2000/ICRF. The retained Analytical provider
+/// uses ecliptic J2000; inspect EphemerisState::source before applying rotations.
 /// @param body Planet identifier
 /// @param jd Julian date (TDB)
 /// @return Planet position and velocity

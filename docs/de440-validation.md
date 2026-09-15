@@ -173,3 +173,53 @@ To regenerate the excerpt, explicitly remove only its existing file and run
 `extract_2026.py` in that environment. The script refuses to overwrite an
 existing excerpt. Review changed hashes and any new Horizons source labels;
 test execution never regenerates expected values or downloads mutable data.
+
+
+## HPOP force consumption
+
+A separate focused test verifies the actual `ForceModel::ThirdBody` routine
+for Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Uranus and Neptune at
+JD 2461041.5 TDB, with a satellite at `[7000, -1200, 900]` km in ICRF/J2000.
+Independent expected accelerations use the committed CSPICE geocentric
+positions and Newtonian differential gravity:
+
+`a = GM * ((R-r)/|R-r|^3 - R/|R|^3)`.
+
+Existing documented HPOP GM constants are explicit inputs to this force-path
+check; it does not assert that these legacy constants equal DE440's fitted
+GM values. The maximum measured acceleration error is
+**2.7745692215067836e-22 km/s²**, below the **1e-18 km/s²** absolute vector-norm
+bound allowing numerical cancellation and roundoff.
+
+The same harness enables only SRP in `ComputeTotalAcceleration`, with a
+satellite 7000 km from Earth toward the Sun, geometrically outside eclipse.
+Its independently calculated photon-momentum acceleration uses
+`F/c * (AU/d)^2 * Cr*A/m`, directed away from the Sun, with `Cr=1.5`,
+`A=10 m²`, and `m=1000 kg`. The constants are the
+[IAU 2015 B3 nominal irradiance of 1361 W/m²](https://iauarchive.eso.org/static/resolutions/IAU2015_English.pdf)
+and [IAU 2012 B2 astronomical unit of 149597870700 m](https://iau-a3.gitlab.io/res.html),
+with exact SI `c=299792458 m/s`. Measured error is **0 km/s²** against the same
+**1e-18 km/s²** bound. This confirms that the force integrator obtains its Sun
+vector through the loaded kernel, in addition to the direct-state checks.
+
+```sh
+node --test propagator/hpop/tests/de440_force.test.mjs
+```
+
+```text
+RESULT Sun 2.7745692215067836e-22 1e-18 PASS
+RESULT Moon 3.1515065703092862e-24 1e-18 PASS
+RESULT Mercury 1.8717589098414146e-28 1e-18 PASS
+RESULT Venus 4.6966503963072539e-28 1e-18 PASS
+RESULT Mars 2.9039174767017646e-30 1e-18 PASS
+RESULT Jupiter 1.3640258749650362e-25 1e-18 PASS
+RESULT Saturn 3.9453885613479032e-27 1e-18 PASS
+RESULT Uranus 4.1977529063185979e-28 1e-18 PASS
+RESULT Neptune 1.2470088261128012e-30 1e-18 PASS
+RESULT SRP_kernel_sun 0 1e-18 PASS
+PASS DE440 force cases=10 failures=0
+ℹ tests 1
+ℹ pass 1
+ℹ fail 0
+ℹ skipped 0
+```

@@ -1,4 +1,5 @@
 #include "hpop/plugin_runtime.h"
+#include "hpop/kernel_scope.h"
 
 #include "plugin_manifest_bytes.h"
 #include "space_data_module_invoke.h"
@@ -42,6 +43,8 @@ uint32_t plugin_get_manifest_flatbuffer_size(void) {
 EMSCRIPTEN_KEEPALIVE
 int invoke(void) {
     plugin_reset_output_state();
+    hpop::KernelScope kernel;
+    if (!kernel.ok) return 1;
 
     const auto* frame = find_request_frame();
     if (!frame || !frame->payload) {

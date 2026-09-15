@@ -53,6 +53,7 @@ struct BodyState {
     double epoch;               ///< Julian date (TDB)
     Body body{Body::Earth};     ///< Body identifier
     bool valid{false};          ///< True if state is valid
+    EphemerisSource source{EphemerisSource::Analytical}; ///< Actual provider
 
     BodyState() = default;
     BodyState(const Vec3& r, const Vec3& v, double jd, Body b = Body::Earth)
@@ -103,12 +104,12 @@ struct PlanetaryElements {
 // Ephemeris Functions
 // ---------------------------------------------------------------------------
 
-/// Get body state at a specific epoch (analytical approximation)
+/// Get body state at a TDB epoch from the selected kernel or Analytical provider
 /// @param body Celestial body identifier
 /// @param jdTDB Julian date in TDB time scale
 /// @param centerBody Center body for position reference (default: SSB)
 /// @return Body state with position and velocity
-/// @note Uses analytical approximations (VSOP87 simplified for planets, ELP2000 for Moon)
+/// @note A selected kernel takes precedence; Analytical is an explicit provider.
 BodyState getBodyState(Body body, double jdTDB,
                        Body centerBody = Body::SolarSystemBarycenter);
 
@@ -127,7 +128,7 @@ Vec3 getMoonPosition(double jdTDB);
 /// Get planet heliocentric position
 /// @param body Planet identifier (Mercury through Neptune)
 /// @param jdTDB Julian date in TDB time scale
-/// @return Planet position relative to Sun in ecliptic J2000 frame (km)
+/// @return Planet position relative to Sun in equatorial J2000/ICRF (km)
 Vec3 getPlanetPosition(Body body, double jdTDB);
 
 /// Get body physical constants
@@ -208,16 +209,6 @@ double solveKepler(double M, double e, double tolerance = 1e-12, int maxIter = 5
 // Additional Ephemeris Sources (Phase 12.8)
 // ---------------------------------------------------------------------------
 
-/// Ephemeris source type
-enum class EphemerisSource {
-    Analytical,         ///< Analytical approximation (default)
-    JPL_DE440,          ///< JPL DE440 (default high-fidelity)
-    JPL_DE441,          ///< JPL DE441 (long-term, -13200 to +17191)
-    INPOP21a,           ///< IMCCE INPOP21a planetary ephemeris
-    EPM2021,            ///< IAA RAS EPM2021 ephemeris
-    MarsHighFidelity    ///< Mars-specific high-fidelity model
-};
-
 /// JPL DE441 ephemeris (long-term, -13200 to +17191)
 BodyState getBodyStateDE441(Body body, double jdTDB,
                             Body centerBody = Body::SolarSystemBarycenter);
@@ -233,7 +224,20 @@ BodyState getBodyStateEPM2021(Body body, double jdTDB,
 /// Mars high-fidelity ephemeris (includes Phobos/Deimos perturbations)
 BodyState getMarsHighFidelity(double jdTDB);
 
-/// Load binary ephemeris data file (SPK/BSP format)
+/// Attach an immutable SPK buffer, retained by the caller until clearEphemerisBuffer.
+/// Copies only bounded metadata, never kernel coefficient arrays. Loading selects
+/// the source; an unavailable body/epoch fails, without a silent analytic fallback.
+/// A DE label is caller-supplied provenance, not inferred from a DAF header.
+bool loadEphemerisBuffer(const uint8_t* bytes, size_t length,
+                         EphemerisSource source = EphemerisSource::JPL_SPK);
+void clearEphemerisBuffer();
+bool selectEphemerisSource(EphemerisSource source);
+EphemerisSource selectedEphemerisSource();
+const char* ephemerisSourceName(EphemerisSource source);
+const std::string& ephemerisError();
+/// Query exact NAIF target/center IDs; ICRF/J2000 km, km/s at JD TDB.
+BodyState getKernelState(int target, int center, double jdTDB);
+/// Deprecated filesystem API: always fails; WASM accepts input buffers only.
 bool loadEphemerisFile(const std::string& filename, EphemerisSource source);
 
 /// Check if a specific ephemeris is loaded

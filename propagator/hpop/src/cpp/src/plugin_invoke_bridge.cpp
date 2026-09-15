@@ -83,6 +83,7 @@ struct InvokeContext {
 
 static const PortRequirement kMethod_invoke_input_ports[] = {
   { "request", true },
+  { "kernel", false },
 };
 static const char *kMethod_invoke_output_ports[] = {
   "response",
@@ -108,7 +109,7 @@ static const MethodDescriptor kMethodTable[] = {
     "invoke",
     &invoke,
     kMethod_invoke_input_ports,
-    1u,
+    2u,
     kMethod_invoke_output_ports,
     1u,
     false,
