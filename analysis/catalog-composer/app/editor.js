@@ -1,3 +1,4 @@
+import { setupMatching } from './matching.js';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
 import { callHost } from './bridge.js';
 import { sourceLanes, loadCatalog } from './catalog-data.js';
@@ -161,6 +162,7 @@ async function refreshSources() {
   catch (error) { status(error.message, true); }
   finally { discovering = false; renderLayers(); }
 }
+setupMatching({ getModule:()=>module, getRecipe:()=>recipe, changed, status });
 $('review-overlaps').onclick = () => { overlapsOnly = !overlapsOnly; $('review-overlaps').setAttribute('aria-pressed', String(overlapsOnly)); $('review-overlaps').textContent = overlapsOnly ? 'Show all objects' : 'Review overlaps'; page = 1; render(); };
 $('refresh-sources').onclick = () => refreshSources();
 $('add').onclick = () => { const source = available.find(l => l.id === $('source-picker').value); if (!source || recipe.layers.length >= 16) return; recipe.layers.push({ ...source }); changed(); renderLayers(); render(); };

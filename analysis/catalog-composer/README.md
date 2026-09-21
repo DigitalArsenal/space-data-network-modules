@@ -80,3 +80,64 @@ designator. Selecting overlapping sources highlights their shared objects;
 its orbital source independently. Global maximum state age has been removed.
 Providers without published membership remain visible as unavailable coverage;
 no other provider's catalog is silently used to infer their coverage.
+
+## Catalog matching review (0.1.6)
+
+`match_catalog` evaluates proposed provider-native associations independently of
+CAT layer selection. It **does not merge identities or publish an authoritative
+orbit**. The editor's **Match objects** dialog accepts two normalized binary OEM
+trajectories, provider/native IDs, a crosswalk evidence note, and four configurable
+thresholds. The downloaded review includes the policy, source-file SHA-256
+references, diagnostics and verdict. Thresholds persist with the catalog recipe;
+uploaded orbit bytes do not persist in configuration.
+
+The method accepts up to 64 OEM candidates and 4,096 proposed pairs, capped at
+128 MiB and four million sample evaluations. Each input is one size-prefixed
+canonical `$OEM`, one Earth-centered UTC uniform block, six components per state
+(km and km/s), at least five samples. The bound-Earth-satellite profile rejects
+positions within the polar Earth radius and nonnegative two-body orbital energy
+(using Earth mu 398600.4418 km³/s²); this is only a coarse physical sanity gate. Supported inertial frames are J2000,
+EME2000 and GCRF; two compared arcs must have exactly the same frame, START_TIME,
+STEP_SIZE and sample count. Unsupported layouts fail explicitly. The host flow
+must use its selected propagator and frame module to create this common grid;
+the matcher neither hardwires SGP4 nor interprets raw Vimpel elements.
+
+Control recipe (`recipe` port, JSON configuration, never observational data):
+
+```json
+{
+  "version": 1,
+  "candidates": [
+    {"id":"a","provider":"vimpel","nativeId":"example-a","recordId":"immutable-reference-a"},
+    {"id":"b","provider":"other","nativeId":"example-b","recordId":"immutable-reference-b"}
+  ],
+  "pairs": [{"left":"a","right":"b","evidence":{"source":"datefirst","recordId":"crosswalk-edition"}}],
+  "positionToleranceKm": 10,
+  "velocityToleranceKmS": 0.01,
+  "finiteDifferenceToleranceKmS": 0.001,
+  "minimumSpanSeconds": 3600
+}
+```
+
+These example thresholds require calibration for the sources and orbital regime;
+they are not validated identity probabilities. For each pair the matcher measures
+maximum position and velocity separation over the supplied arc. At interior
+samples it checks the fourth-order central derivative
+`(r[i-2] - 8*r[i-1] + 8*r[i+1] - r[i+2]) / (12*h)` against supplied velocity.
+Sampling too coarsely can fail this numerical check even with correct velocities;
+refine the upstream grid and compare convergence. It cannot establish absolute
+orbit accuracy, full dynamical validity, or covariance realism.
+
+Verdicts: `compatible` supports human review; `rejected` exceeds configured
+separation thresholds; `insufficient` lacks a common grid, enough arc, or a
+consistent finite-difference velocity; `ambiguous` has multiple passing native
+objects from the same other provider. Agreement with three distinct providers
+is not itself ambiguity. Crosswalk declarations remain evidence, not truth.
+
+Reference: Nicholas J. Baietto (2022), *Space Object Correlation Between the
+Space-Track and Vimpel Catalogs*, https://doi.org/10.25394/PGS.19658076.
+The thesis documents direct and observation-arc correlation and identifies a
+historical datefirst pairing discrepancy. It does not replace verification of
+the current provider format. Raw Vimpel normalization, automatic common-grid
+flow execution, crosswalk-file parsing, accepted identity persistence and live
+provider screening are **not implemented by this review method**.

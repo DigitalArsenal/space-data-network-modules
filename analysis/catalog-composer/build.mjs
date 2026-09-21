@@ -16,16 +16,22 @@ const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.j
 // Use the repository's pinned generated SDS headers, including CAT's actual
 // dependency graph. The SDK supplies matching FlatBuffers runtime headers.
 const headers = [];
-for (const code of ['IDM', 'PLD', 'LCC', 'CAT']) {
+const seen = new Set();
+async function addHeader(code) {
+  if (seen.has(code)) return;
+  seen.add(code);
   const header = await fs.readFile(path.join(repo, 'licensing/core/src/cpp/generated/sds', `${code}_generated.h`), 'utf8');
-  headers.push(header.replace(/^#include "(?:IDM|PLD|LCC)_generated.h"\s*$/gm, ''));
+  for (const match of header.matchAll(/^#include "([A-Za-z0-9_]+)_generated.h"/gm)) await addHeader(match[1]);
+  headers.push(header.replace(/^#include "[A-Za-z0-9_]+_generated.h"\s*$/gm, ''));
 }
+await addHeader('CAT');
+await addHeader('OEM');
 const json = await fs.readFile(path.join(repo, 'propagator/sgp4/src/cpp/include/nlohmann/json.hpp'), 'utf8');
 const implementation = await fs.readFile(path.join(root, 'src/catalog_composer.cpp'), 'utf8');
 const outputPath = path.join(root, 'dist/isomorphic/module.wasm');
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 const result = await compileModuleFromSource({
-  manifest, sourceCode: [...headers, json, implementation].join('\n\n'),
+  manifest, sourceCode: [...headers, json, implementation, await fs.readFile(path.join(root, 'src/catalog_match.cpp'), 'utf8')].join('\n\n'),
   language: 'c++', outputPath,
   // Composition is inherently sequential; still use the SDK's canonical
   // wasm32-wasip1-threads toolchain and identical bytes in every runtime.

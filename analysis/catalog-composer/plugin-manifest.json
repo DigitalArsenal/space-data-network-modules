@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.catalog-composer",
   "name": "Catalog Editor",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Compose immutable CAT snapshots with explicit source precedence, identifier conflict review and per-object orbital-state source selection.",
   "pluginFamily": "analysis",
   "capabilities": [],
@@ -108,6 +108,82 @@
         }
       ],
       "maxBatch": 17,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "match_catalog",
+      "displayName": "Check catalog matches",
+      "inputPorts": [
+        {
+          "portId": "recipe",
+          "acceptedTypeSets": [
+            {
+              "setId": "recipe-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Matching policy, provider-native identities, immutable input references and proposed crosswalk pairs.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Matching policy, provider-native identities, immutable input references and proposed crosswalk pairs. Control metadata only; no observations encoded here."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Matching policy, provider-native identities, immutable input references and proposed crosswalk pairs."
+        },
+        {
+          "portId": "ephemerides",
+          "acceptedTypeSets": [
+            {
+              "setId": "catalogs-v1",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ],
+              "description": "Canonical common-grid OEM trajectories; one size-prefixed record per candidate, uniform Earth-centered inertial UTC states."
+            }
+          ],
+          "minStreams": 2,
+          "maxStreams": 64,
+          "required": true,
+          "description": "Canonical common-grid OEM trajectories; one size-prefixed record per candidate, uniform Earth-centered inertial UTC states."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Composition decisions and source/frame provenance for the editor.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Composition decisions and source/frame provenance for the editor. Module configuration/decision metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Composition decisions and source/frame provenance for the editor."
+        }
+      ],
+      "maxBatch": 65,
       "drainPolicy": "single-shot"
     }
   ],

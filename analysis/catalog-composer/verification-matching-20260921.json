@@ -1,0 +1,44 @@
+{
+  "scope": "Catalog OEM trajectory review only; no live provider matching claim",
+  "artifactVersion": "0.1.6",
+  "artifactSha256": "5c4dbe85b32fd3032f468811716b5d6a53cfe812e34c18f8e90c24cd7d58c305",
+  "checks": [
+    {
+      "command": "npm test",
+      "exitCode": 0,
+      "passed": 33,
+      "skipped": 1,
+      "note": "Opt-in parity skipped here; explicitly exercised separately."
+    },
+    {
+      "command": "SDN_RUN_CATALOG_PARITY=1 node --test tests/parity.test.mjs",
+      "exitCode": 0,
+      "lanes": [
+        "Chromium",
+        "native WasmEdge",
+        "container WasmEdge"
+      ],
+      "cases": 3,
+      "comparisons": 15
+    },
+    {
+      "command": "headless Chrome local served bundled APP exercise",
+      "exitCode": 0,
+      "observed": [
+        "module ready",
+        "matching dialog rendered",
+        "two canonical OEM uploads",
+        "WASM compatible verdict",
+        "threshold configuration saved",
+        "review download enabled"
+      ]
+    }
+  ],
+  "remaining": [
+    "Raw Vimpel normalization and current-format confirmation",
+    "datefirst parser and candidate generation",
+    "automatic pluggable propagation/frame-normalization flow",
+    "identity acceptance persistence",
+    "live catalog-wide matching and deployment"
+  ]
+}
