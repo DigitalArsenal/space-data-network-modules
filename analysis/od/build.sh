@@ -98,8 +98,7 @@ import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 const root = process.argv[2];
 const require = createRequire(path.join(root, 'package.json'));
-const compiler = path.dirname(require.resolve('space-data-module-sdk/compiler'));
-const {getInvokeCppSchemaHeaders} = await import(pathToFileURL(path.join(compiler, 'flatcSupport.js')));
+const {getInvokeCppSchemaHeaders} = await import(pathToFileURL(require.resolve('space-data-module-sdk/compiler')));
 for (const [name, content] of Object.entries(await getInvokeCppSchemaHeaders())) {
     await fs.writeFile(path.join(root, 'src/cpp/generated', name), content);
 }
