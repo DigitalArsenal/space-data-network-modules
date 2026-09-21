@@ -506,10 +506,24 @@ test("exact release-signed Supplemental flow commits the Starlink catalog before
         requireSignature: true,
       },
       hostcallDispatch(operation, params) {
-        const recordedParams =
-          params?.records instanceof Uint8Array
-            ? { ...params, records: new Uint8Array(params.records) }
-            : structuredClone(params);
+        const recordedParams = structuredClone(params);
+        // structuredClone preserves SharedArrayBuffer backing storage. These
+        // guest-owned byte views must be copied before another invocation
+        // reuses the WASM request arena, including pubsub's `data` segment.
+        for (const key of ["records", "data"]) {
+          if (params?.[key] instanceof Uint8Array) {
+            recordedParams[key] = new Uint8Array(params[key]);
+          }
+        }
+        if (operation === "pubsub.publish") {
+          assert.ok(
+            [4, 8].some((offset) =>
+              new TextDecoder().decode(params.data.subarray(offset, offset + 4)) ===
+              `$${params.standard}`,
+            ),
+            "publication must provide the canonical record at the hostcall boundary",
+          );
+        }
         hostcalls.push({
           nodeId: descriptor.nodeId,
           operation,
