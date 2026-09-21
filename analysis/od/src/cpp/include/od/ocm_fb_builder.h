@@ -15,13 +15,10 @@
  * FinishSizePrefixedOCMBuffer — the exact aligned-binary payload the $PIV ABI
  * emits via plugin_push_output_ex(..., ALIGNED_BINARY, ...), same as $OMM.
  *
- * COVARIANCE NOTE: the current SGP4 differential-correction fitter (sgp4_fitter,
- * Levenberg-Marquardt/SVD) does not export its parameter covariance through the
- * flow ABI. Until it does, build_ocm_flatbuffer emits a DOCUMENTED FORMAL
- * PLACEHOLDER covariance — a 6x6 lower-triangular diagonal seeded from the
- * position-residual RMS (see the .cpp) — and marks the record so downstream
- * consumers can tell a formal-from-RMS covariance from a rigorously propagated
- * one. The STATE and OD_RESIDUALS are real fit outputs.
+ * Covariance is optional. Only finite, positive-definite full matrices from
+ * converged, observable fits are published, with frame/units/epoch metadata.
+ * These are formal unweighted fit covariances, not calibrated prediction
+ * uncertainties. Missing/invalid estimates remain absent; RMS is not a fallback.
  */
 
 #include <cstdint>
@@ -42,8 +39,7 @@ struct OCMInputs {
     bool has_state = false;
 
     // 6x6 lower-triangular covariance (21 doubles, row-major). When
-    // has_covariance is false the builder synthesizes a documented formal
-    // placeholder diagonal from rms_km (see the .cpp) — never leaves it empty.
+    // has_covariance is false, or validation fails, the output vector is absent.
     double covariance[21] = {0};
     bool has_covariance = false;
 

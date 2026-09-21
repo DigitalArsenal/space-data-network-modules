@@ -127,7 +127,7 @@ struct FitResult {
 
     // Fit-covariance outputs (populated only when FitterConfig::compute_covariance
     // is true AND the normal-equations solve is well-conditioned; otherwise
-    // has_state_covariance stays false and downstream falls back to a documented
+    // has_state_covariance stays false and downstream reports unavailable, without an
     // RMS-seeded placeholder). Units: km, km/s. state_covariance is the 6x6
     // covariance lower triangle, row-major (indices (0,0),(1,0),(1,1),(2,0),...).
     bool has_state_covariance = false;

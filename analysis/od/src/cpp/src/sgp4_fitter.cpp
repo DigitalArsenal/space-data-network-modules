@@ -20,6 +20,7 @@
  */
 
 #include "od/sgp4_fitter.h"
+#include "od/covariance_validation.h"
 #include "SGP4.h"
 
 #include <Eigen/Dense>
@@ -1087,13 +1088,18 @@ static bool compute_state_covariance_impl(
         for (size_t i = 0; i < M; i++) J(i, j) = (rp(static_cast<Eigen::Index>(i)) - rm(static_cast<Eigen::Index>(i))) / (2.0 * delta);
     }
 
+    for (Eigen::Index i = 0; i < residuals.size(); ++i)
+        if (!finite_covariance_value(residuals(i))) return false;
+    for (Eigen::Index i = 0; i < J.size(); ++i)
+        if (!finite_covariance_value(J.data()[i])) return false;
     Eigen::MatrixXd JtJ = J.transpose() * J;  // NPARAMS x NPARAMS
+    for (Eigen::Index i = 0; i < JtJ.size(); ++i)
+        if (!finite_covariance_value(JtJ.data()[i])) return false;
     Eigen::JacobiSVD<Eigen::MatrixXd> svd(JtJ, Eigen::ComputeThinU | Eigen::ComputeThinV);
     const Eigen::VectorXd& sv = svd.singularValues();
-    if (sv(0) <= 0.0) return false;
-    double tol = 1e-12 * sv(0) * static_cast<double>(NPARAMS);
+    if (!full_rank_normal_spectrum(sv.data(), NPARAMS)) return false;
     Eigen::MatrixXd Sinv = Eigen::MatrixXd::Zero(NPARAMS, NPARAMS);
-    for (int i = 0; i < NPARAMS; i++) if (sv(i) > tol) Sinv(i, i) = 1.0 / sv(i);
+    for (int i = 0; i < NPARAMS; i++) Sinv(i, i) = 1.0 / sv(i);
     Eigen::MatrixXd JtJ_inv = svd.matrixV() * Sinv * svd.matrixU().transpose();
 
     double dof = static_cast<double>(M) - static_cast<double>(NPARAMS);
@@ -1142,6 +1148,7 @@ static bool compute_state_covariance_impl(
     for (int k = 0; k < 6; k++)
         if (!(out_cov21[diag[k]] > 0.0)) return false;
 
+    if (!publishable_covariance(out_cov21)) return false;
     num_obs = static_cast<int>(M);
     return true;
 }

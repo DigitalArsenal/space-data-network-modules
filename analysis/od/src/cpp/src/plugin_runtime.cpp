@@ -364,7 +364,7 @@ PluginFitFBResult fit_ephemeris_fb(
         // Aligned-binary $OCM out (epoch STATE + 6x6 COVARIANCE + OD residual
         // summary) — the SAME fit. Covariance is the real normal-equations fit
         // covariance when the solve was well-conditioned; otherwise the builder
-        // emits its documented RMS-seeded formal placeholder. $OEM is never
+        // leaves covariance absent and labels it UNAVAILABLE. $OEM is never
         // persisted here; only these fitted result records leave the fit.
         {
             OCMInputs oc{};

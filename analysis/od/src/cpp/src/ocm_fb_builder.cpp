@@ -10,6 +10,7 @@
 // emits via plugin_push_output_ex(..., ALIGNED_BINARY, ...), same as $OMM/$OBD.
 
 #include "od/ocm_fb_builder.h"
+#include "od/covariance_validation.h"
 
 #include <cstdio>
 #include <string>
@@ -52,29 +53,15 @@ std::vector<uint8_t> build_ocm_flatbuffer(const OCMInputs& in,
                                           const std::string& creation_date) {
     const SGP4Elements* el = in.el;
 
-    // Resolve STATE + COVARIANCE. When the fitter supplied a real
-    // normal-equations covariance, use it; otherwise synthesize a DOCUMENTED
-    // formal placeholder — a 6x6 lower-triangular diagonal seeded from the
-    // position-residual RMS — and mark it (OD_COV_REDUCTION) so consumers can
-    // tell a formal-from-RMS covariance from a rigorously propagated one.
-    double state6[6];
-    double cov21[21];
-    const char* cov_reduction;
-    if (in.has_covariance) {
-        for (int i = 0; i < 6; i++) state6[i] = in.state_teme[i];
-        for (int i = 0; i < 21; i++) cov21[i] = in.covariance[i];
-        cov_reduction = "NORMAL_EQUATIONS";  // rigorous fit covariance
-    } else {
-        for (int i = 0; i < 6; i++) state6[i] = in.has_state ? in.state_teme[i] : 0.0;
-        for (int i = 0; i < 21; i++) cov21[i] = 0.0;
-        double pos_var = in.rms_km * in.rms_km;
-        if (pos_var <= 0.0) pos_var = 1.0;
-        double vel_var = pos_var * 1e-6;
-        const int diag[6] = {0, 2, 5, 9, 14, 20};  // (k,k) lower-tri row-major
-        for (int k = 0; k < 3; k++) cov21[diag[k]] = pos_var;
-        for (int k = 3; k < 6; k++) cov21[diag[k]] = vel_var;
-        cov_reduction = "RMS_PLACEHOLDER";  // formal-from-RMS, NOT propagated
-    }
+    // Never turn fit residual RMS into observational uncertainty or invent a
+    // zero epoch state. An unavailable covariance is an absent vector.
+    bool state_available = in.has_state && el && !el->epoch_iso.empty();
+    for (double value : in.state_teme)
+        state_available = state_available && finite_covariance_value(value);
+    const bool covariance_available = state_available && in.converged &&
+        in.has_covariance && publishable_covariance(in.covariance);
+    const char* cov_reduction = covariance_available
+        ? "FORMAL_UNWEIGHTED_NORMAL_EQUATIONS" : "UNAVAILABLE";
 
     flatbuffers::FlatBufferBuilder fbb(2048);
     using ::flatbuffers::Offset;
@@ -98,11 +85,18 @@ std::vector<uint8_t> build_ocm_flatbuffer(const OCMInputs& in,
     if (el && !el->object_id.empty()) intl_s = fbb.CreateString(el->object_id);
     if (el && el->norad_cat_id > 0) catname_s = fbb.CreateString(std::to_string(el->norad_cat_id));
     Offset<String> ts_s = fbb.CreateString("UTC");
+    Offset<String> epoch_s;
+    if (el && !el->epoch_iso.empty()) epoch_s = fbb.CreateString(el->epoch_iso);
     MetadataBuilder mb(fbb);
     mb.add_OBJECT_NAME(objname_s);
     mb.add_INTERNATIONAL_DESIGNATOR(intl_s);
     mb.add_CATALOG_NAME(catname_s);
     mb.add_TIME_SYSTEM(ts_s);
+    // STATE_DATA index zero is defined by METADATA.START_TIME in SDS OCM.
+    // Reuse the fit epoch for its single epoch state.
+    mb.add_START_TIME(epoch_s);
+    mb.add_STOP_TIME(epoch_s);
+    mb.add_EPOCH_TZERO(epoch_s);
     auto metadata = mb.Finish();
 
     // OrbitDetermination — method, epoch, obs count, residual summary, cov flag.
@@ -128,11 +122,15 @@ std::vector<uint8_t> build_ocm_flatbuffer(const OCMInputs& in,
     ob.add_OD_RESIDUALS(od_res_s);
     auto od = ob.Finish();
 
-    // STATE + COVARIANCE vectors (created before the OCM table builder opens).
-    std::vector<double> state_v(state6, state6 + 6);
-    std::vector<double> cov_v(cov21, cov21 + 21);
-    auto state_vec = fbb.CreateVector(state_v);
-    auto cov_vec = fbb.CreateVector(cov_v);
+    Offset<::flatbuffers::Vector<double>> state_vec, cov_vec;
+    if (state_available) state_vec = fbb.CreateVector(in.state_teme, 6);
+    if (covariance_available) cov_vec = fbb.CreateVector(in.covariance, 21);
+    std::vector<Offset<UserDefinedParameters>> annotations;
+    annotations.push_back(CreateUserDefinedParametersDirect(fbb, "STATE_REFERENCE_FRAME", "TEME"));
+    annotations.push_back(CreateUserDefinedParametersDirect(fbb, "STATE_UNITS", "km,km,km,km/s,km/s,km/s"));
+    annotations.push_back(CreateUserDefinedParametersDirect(fbb, "COVARIANCE_LAYOUT", "6x6 lower triangular, row-major; products of state units"));
+    annotations.push_back(CreateUserDefinedParametersDirect(fbb, "COVARIANCE_INTERPRETATION", "Formal fit uncertainty only; not calibrated prediction uncertainty"));
+    auto annotation_vec = fbb.CreateVector(annotations);
 
     OCMBuilder ocb(fbb);
     ocb.add_HEADER(header);
@@ -142,6 +140,7 @@ std::vector<uint8_t> build_ocm_flatbuffer(const OCMInputs& in,
     ocb.add_STATE_DATA(state_vec);
     ocb.add_COVARIANCE_DATA(cov_vec);
     ocb.add_ORBIT_DETERMINATION(od);
+    ocb.add_USER_DEFINED_PARAMETERS(annotation_vec);
     auto ocm = ocb.Finish();
 
     FinishSizePrefixedOCMBuffer(fbb, ocm);
