@@ -6,7 +6,14 @@
 
 namespace ephemeris {
 using Bytes=std::vector<uint8_t>;
-constexpr size_t hardMaxBytes=32*1024*1024, maxEnvelope=48*1024*1024;
+// A compiled provider may admit larger native containers. Runtime options can
+// only lower this ceiling; the generic public adapter keeps its 32 MiB limit.
+#ifndef EPHEMERIS_MAX_RESOURCE_BYTES
+#define EPHEMERIS_MAX_RESOURCE_BYTES (32*1024*1024)
+#endif
+constexpr size_t hardMaxBytes=EPHEMERIS_MAX_RESOURCE_BYTES;
+static_assert(hardMaxBytes>=1024 && hardMaxBytes<=96*1024*1024,"Invalid compiled resource ceiling");
+constexpr size_t maxEnvelope=hardMaxBytes+hardMaxBytes/2;
 #ifndef EPHEMERIS_MODULE_ID
 #define EPHEMERIS_MODULE_ID "com.digitalarsenal.data-source.ephemeris-source-host"
 #endif
