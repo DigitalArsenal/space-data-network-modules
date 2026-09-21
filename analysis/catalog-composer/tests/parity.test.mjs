@@ -18,7 +18,9 @@ test('one artifact produces identical output in Chromium, native WasmEdge and co
   // exits normally after writing it. sdk_compat separately asserts its status.
   const matchingRecipe=JSON.stringify({version:1,candidates:[{id:'a',provider:'a',nativeId:'1',recordId:'hash-a'},{id:'b',provider:'b',nativeId:'2',recordId:'hash-b'}],pairs:[{left:'a',right:'b'}],positionToleranceKm:1,velocityToleranceKmS:.01,finiteDifferenceToleranceKmS:1e-8,minimumSpanSeconds:8});
   const matchingRequest={methodId:'match_catalog',inputs:[{portId:'recipe',payloadUtf8:matchingRecipe,typeRef:{wireFormat:'aligned-binary',byteLength:new TextEncoder().encode(matchingRecipe).length,requiredAlignment:1}},...[oem(),oem()].map(payload=>({portId:'ephemerides',payload,typeRef:{schemaName:'OEM.fbs',fileIdentifier:'$OEM',rootTypeName:'OEM'}}))]};
-  const plan = await normalizeParityFixture({name:'catalog-composer',threadCounts:[1],cases:[{id:'circular-trajectory-match',request:matchingRequest,expect:'ok'},{id:'exact-id-override',request,expect:'ok'},{id:'malformed-recipe',request:invalid,expect:'ok'}]});
+  const endpointRequest=structuredClone(matchingRequest);
+  for(const input of endpointRequest.inputs.slice(1)) input.payload=oem({velocityErrors:{0:.02,8:.02}});
+  const plan = await normalizeParityFixture({name:'catalog-composer',threadCounts:[1],cases:[{id:'endpoint-velocity-error',request:endpointRequest,expect:'ok'},{id:'circular-trajectory-match',request:matchingRequest,expect:'ok'},{id:'exact-id-override',request,expect:'ok'},{id:'malformed-recipe',request:invalid,expect:'ok'}]});
   const report = await runParityHarness({wasmPath:fileURLToPath(new URL('../dist/isomorphic/module.wasm',import.meta.url)),plan,autoBuildDockerImage:false,timeoutMs:30000,log:message=>console.log(message)});
   console.log(formatParityReport(report));
   assert.equal(report.ok,true,formatParityReport(report));

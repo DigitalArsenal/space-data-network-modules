@@ -42,9 +42,22 @@ double distance(const Arc& a,const Arc& b,size_t i,size_t component) {
 }
 double velocityCheck(const Arc& a) {
   double worst=0,h=a.block->STEP_SIZE();
-  for(size_t i=2;i+2<a.count;++i) {
+  // Differentiate at every epoch, including the first/last two samples.
+  // Quartic Lagrange interpolation on five equally spaced points yields
+  // these fourth-order stencils (numerators; common denominator 12*h).
+  static constexpr double weights[5][5]={
+    {-25,48,-36,16,-3}, {-3,-10,18,-6,1},
+    {1,-8,0,8,-1}, {-1,6,-18,10,3}, {3,-16,36,-48,25}
+  };
+  for(size_t i=0;i<a.count;++i) {
+    const size_t begin=i<2?0:(i+2>=a.count?a.count-5:i-2);
+    const size_t stencil=i-begin;
     double sum=0; for(size_t j=0;j<3;++j) {
-      double fd=(a.states->Get((i-2)*6+j)-8*a.states->Get((i-1)*6+j)+8*a.states->Get((i+1)*6+j)-a.states->Get((i+2)*6+j))/(12*h);
+      // Subtract the evaluation position to reduce cancellation for large
+      // coordinates. Every stencil sums to zero.
+      double numerator=0;
+      for(size_t k=0;k<5;++k) numerator+=weights[stencil][k]*(a.states->Get((begin+k)*6+j)-a.states->Get(i*6+j));
+      double fd=numerator/(12*h);
       double d=fd-a.states->Get(i*6+3+j); sum+=d*d;
     } worst=std::max(worst,std::sqrt(sum));
   } return worst;

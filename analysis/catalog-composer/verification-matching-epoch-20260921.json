@@ -1,0 +1,41 @@
+{
+  "scope": "Complete-arc finite-difference checks and offline Vimpel epoch audit; no deployment claim",
+  "artifactVersion": "0.1.7",
+  "artifactSha256": "e35213e40564328bc466287bbcb63c0d19ffad25a61d6bc6e66d10f3c4a0065f",
+  "checks": [
+    {
+      "command": "npm test",
+      "exitCode": 0,
+      "passed": 35,
+      "skipped": 1,
+      "note": "Explicit parity run separately"
+    },
+    {
+      "command": "SDN_RUN_CATALOG_PARITY=1 node --test tests/parity.test.mjs",
+      "exitCode": 0,
+      "cases": 4,
+      "lanes": [
+        "Chromium",
+        "native WasmEdge",
+        "container WasmEdge"
+      ],
+      "comparisons": 20
+    },
+    {
+      "command": "python3 -m unittest discover -s tools -p 'test_*.py'",
+      "exitCode": 0,
+      "passed": 5
+    },
+    {
+      "command": "python3 tools/audit-vimpel-epoch.py ELEMENTS_FILE EPHEMERIS_RAR",
+      "exitCode": 0,
+      "evidence": "docs/vimpel-epoch-audit-20260921.json"
+    }
+  ],
+  "remaining": [
+    "datefirst parser and provider normalization",
+    "common-grid propagation flow and frame normalization",
+    "accepted identity persistence",
+    "live development-node matching and conjunction verification"
+  ]
+}

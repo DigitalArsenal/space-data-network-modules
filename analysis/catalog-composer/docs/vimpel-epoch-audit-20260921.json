@@ -1,0 +1,36 @@
+{
+  "scope": "Offline format/epoch diagnostic; not propagation validation or identity proof",
+  "elementSha256": "840cda6d499028c17a7e22228b1b22fe500078e996113ef5804c4fff7ba612fa",
+  "archiveSha256": "f46df9c310a8c33752d5baebf429a0583e7896f6714501b77d8fcc033c65e6bb",
+  "elementRecords": 13808,
+  "matchedArchiveEntries": 6654,
+  "sampledEntries": 64,
+  "frame": "J2000",
+  "timeSystem": "UTC",
+  "stepSeconds": 600.0,
+  "sampleCounts": {
+    "minimum": 1008,
+    "median": 1008,
+    "maximum": 1008
+  },
+  "epochPositionDifferenceKm": {
+    "minimum": 0.09834999642426169,
+    "median": 10.825710704465383,
+    "maximum": 48.79944891355508
+  },
+  "epochVelocityDifferenceKmS": {
+    "minimum": 0.0003901035095774578,
+    "median": 0.0024169222792255743,
+    "maximum": 1.1064153333705498
+  },
+  "threeVsFivePointVelocityDifferenceKmS": {
+    "minimum": 0.00018162078927816402,
+    "median": 0.006096352127223353,
+    "maximum": 1.8238240186813057
+  },
+  "limitations": [
+    "Rounded elements and positions; residuals are not absolute orbit errors",
+    "Endpoint differentiation has sampling/truncation and quantization error",
+    "No tolerance has been calibrated for catalog identity acceptance"
+  ]
+}

@@ -81,7 +81,7 @@ its orbital source independently. Global maximum state age has been removed.
 Providers without published membership remain visible as unavailable coverage;
 no other provider's catalog is silently used to infer their coverage.
 
-## Catalog matching review (0.1.6)
+## Catalog matching review (0.1.7)
 
 `match_catalog` evaluates proposed provider-native associations independently of
 CAT layer selection. It **does not merge identities or publish an authoritative
@@ -121,9 +121,10 @@ Control recipe (`recipe` port, JSON configuration, never observational data):
 
 These example thresholds require calibration for the sources and orbital regime;
 they are not validated identity probabilities. For each pair the matcher measures
-maximum position and velocity separation over the supplied arc. At interior
-samples it checks the fourth-order central derivative
-`(r[i-2] - 8*r[i-1] + 8*r[i+1] - r[i+2]) / (12*h)` against supplied velocity.
+maximum position and velocity separation over the supplied arc. At every sample it checks a fourth-order derivative, using shifted five-point
+stencils at the first/last two epochs and the central derivative
+`(r[i-2] - 8*r[i-1] + 8*r[i+1] - r[i+2]) / (12*h)` against supplied velocity. Identical endpoint errors in two products cannot
+bypass this check.
 Sampling too coarsely can fail this numerical check even with correct velocities;
 refine the upstream grid and compare convergence. It cannot establish absolute
 orbit accuracy, full dynamical validity, or covariance realism.
@@ -141,3 +142,6 @@ historical datefirst pairing discrepancy. It does not replace verification of
 the current provider format. Raw Vimpel normalization, automatic common-grid
 flow execution, crosswalk-file parsing, accepted identity persistence and live
 provider screening are **not implemented by this review method**.
+
+See [Vimpel normalization and epoch audit](docs/vimpel-normalization.md) for the
+confirmed provider format, differentiation limits and crosswalk policy.

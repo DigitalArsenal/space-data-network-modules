@@ -21,3 +21,23 @@ test('invalid tolerances, duplicate pairs and malformed buffers fail closed',asy
 test('invalid UTC calendar epochs are rejected',async t=>{for(const start of ['nonsense','2026-02-30T00:00:00Z','2026-09-21T25:00:00Z'])assert.notEqual((await invoke(t,config(),[oem({start}),oem({start})])).statusCode,0);});
 
 test('interior-Earth states are rejected before matching',async t=>{assert.notEqual((await invoke(t,config(),[oem({radius:6000}),oem({radius:6000})])).statusCode,0);});
+
+// Independent analytic derivative, same units/frame/epoch as matching-fixture.
+// A 0.02 km/s endpoint error exceeds the 1e-8 km/s numerical tolerance.
+// Both arcs share the error, so pairwise agreement alone cannot detect it.
+test('epoch and final two velocity samples must pass the physics check',async t=>{
+ for(const index of [0,1,7,8]) {
+  const arc=oem({velocityErrors:{[index]:.02}});
+  const r=await report(t,config(),[arc,arc]);
+  assert.equal(r.matches[0].status,'insufficient',`sample ${index}`);
+  assert.ok(r.matches[0].leftFiniteDifferenceResidualKmS>.0199);
+ }
+});
+test('minimum five-sample arcs validate every derivative stencil',async t=>{
+ const c={...config(),minimumSpanSeconds:4};
+ assert.equal((await report(t,c,[oem({n:5}),oem({n:5})])).matches[0].status,'compatible');
+ for(let index=0;index<5;index++) {
+  const arc=oem({n:5,velocityErrors:{[index]:.02}});
+  assert.equal((await report(t,c,[arc,arc])).matches[0].status,'insufficient');
+ }
+});
