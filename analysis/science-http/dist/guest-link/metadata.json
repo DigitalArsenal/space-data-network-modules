@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "format": "wasm-object",
+  "language": "c++",
+  "threadModel": "wasi-sequential",
+  "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e736369656e63652d68747470_",
+  "methodSymbols": {
+    "route": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e736369656e63652d68747470_route",
+    "respond": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e736369656e63652d68747470_respond"
+  },
+  "capabilities": []
+}

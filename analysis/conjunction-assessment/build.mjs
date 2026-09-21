@@ -77,6 +77,15 @@ const result = await compileModuleFromSource({manifest, sourceCode, language:'c+
 try {
   if (!result.report?.ok) throw new Error(`Artifact validation failed: ${JSON.stringify(result.report?.issues)}`);
   if (result.threadModel !== 'emscripten-pthreads') throw new Error('Unexpected canonical thread model');
+
+  const guestDir = path.join(packageRoot, 'dist/guest-link');
+  await fs.mkdir(guestDir, {recursive:true});
+  await fs.writeFile(path.join(guestDir,'module-link.o'), result.guestLink.objectBytes);
+  await fs.writeFile(path.join(guestDir,'metadata.json'), JSON.stringify({
+    version:1,format:result.guestLink.format,language:result.guestLink.language,
+    threadModel:result.guestLink.threadModel,symbolPrefix:result.guestLink.symbolPrefix,
+    methodSymbols:result.guestLink.methodSymbols,capabilities:manifest.capabilities
+  },null,2)+'\n');
   await fs.copyFile(manifestPath,path.join(packageRoot,'dist/plugin-manifest.json'));
   await fs.writeFile(path.join(packageRoot,'dist/build-provenance.json'),JSON.stringify({
     standards:{package:provenance.package,version,schemas:provenance.schemas},

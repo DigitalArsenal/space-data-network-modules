@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "format": "wasm-object",
+  "language": "c++",
+  "threadModel": "emscripten-pthreads",
+  "symbolPrefix": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_",
+  "methodSymbols": {
+    "assess_conjunction": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_assess_conjunction",
+    "emit_cdm": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_emit_cdm",
+    "emit_csm": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_emit_csm",
+    "find_tca": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_find_tca",
+    "alfano_max_probability": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_alfano_max_probability",
+    "compute_pc": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_compute_pc",
+    "compute_pc_from_cdm": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_compute_pc_from_cdm",
+    "parse_cdm_kvn": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_parse_cdm_kvn",
+    "write_cdm_kvn": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_write_cdm_kvn",
+    "parse_cdm_xml": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_parse_cdm_xml",
+    "write_cdm_xml": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_write_cdm_xml",
+    "screen_catalog": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_screen_catalog",
+    "prepare_screening_index": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_prepare_screening_index",
+    "prepare_segment_screening_index": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_prepare_segment_screening_index",
+    "prepare_sample_screening_index": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_prepare_sample_screening_index",
+    "screen_window": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_screen_window",
+    "screen_segment_window": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_screen_segment_window",
+    "destroy_screening_index": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_destroy_screening_index",
+    "version": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_version"
+  },
+  "capabilities": []
+}
