@@ -239,11 +239,11 @@
       "declaration": null
     },
     "analysis/catalog-composer/dist/isomorphic/module.wasm": {
-      "sha256": "5c4dbe85b32fd3032f468811716b5d6a53cfe812e34c18f8e90c24cd7d58c305",
-      "bytes": 5848245,
+      "sha256": "e35213e40564328bc466287bbcb63c0d19ffad25a61d6bc6e66d10f3c4a0065f",
+      "bytes": 5848683,
       "module": "analysis/catalog-composer",
-      "lastCommit": "d53633d6bb4733152f972db6f48b40f85bde38f2",
-      "lastCommitDate": "2026-09-21T16:58:43-04:00",
+      "lastCommit": "c793074d07a8e9119e832e9de59e72e60e5a0d5d",
+      "lastCommitDate": "2026-09-21T17:21:34-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": null,
