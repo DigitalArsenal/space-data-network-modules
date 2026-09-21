@@ -17,8 +17,10 @@ const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const BROWSER_MODULE_PATH = new URL("../dist/browser/module.js", import.meta.url);
 const BROWSER_WASM_PATH = new URL("../dist/browser/module.wasm", import.meta.url);
+// Owner-authorized development node publication key; signing occurs inside
+// the node, so rebuilding never reads a repository private-key fixture.
 const DEV_MODULE_SIGNER_PUBLIC_KEY_HEX =
-  "cf4625795484d8efe18860141cfdeaaaed7bbee9209488405b6ddeac7543fe78";
+  "49f6454d9f3c20209671081363d979e830d524a9fd040a82c603eb43a953db1c";
 const MINIMAL_MEME = `created:2026-03-10 20:32:53 UTC
 ephemeris_start:2026-03-10 20:16:42 UTC ephemeris_stop:2026-03-13 20:16:42 UTC step_size:60
 ephemeris_source:blend
@@ -61,12 +63,15 @@ function createInvokeRequest() {
   const scenario = createHarnessScenario("command");
   return {
     methodId: scenario.methodId,
-    inputs: scenario.inputs,
+    // MEME is optional in the manifest (OEM is the alternative), so the
+    // generated minimal request intentionally contains no input. Supply the
+    // selected text fixture explicitly for this command-compatibility test.
+    inputs: [{portId: "meme", payload: readFixtureBytes()}],
   };
 }
 
 function assertSuccessfulResponse(response) {
-  assert.equal(response.statusCode, 0);
+  assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
   assert.ok(response.errorCode === "" || response.errorCode === null);
   assert.equal(response.outputs.length, 1);
   assert.equal(response.outputs[0].portId, "result");
@@ -165,4 +170,75 @@ test("built artifact loads through the WasmEdge server path", async (t) => {
 
   const response = await harness.invoke(createInvokeRequest());
   assertSuccessfulResponse(response);
+});
+
+
+test("resident direct invocation remains reusable alongside the command surface", async (t) => {
+  const harness = await createBrowserModuleHarness({wasmSource: fs.readFileSync(ISOMORPHIC_WASM_PATH), surface: "direct"});
+  t.after(() => harness.destroy());
+  for (let i = 0; i < 3; i++) assertSuccessfulResponse(await harness.invoke(createInvokeRequest()));
+});
+
+async function createOemInput(wireFormat = "flatbuffer") {
+  const {Builder} = await import("flatbuffers");
+  const names = ["OEM", "ephemerisDataBlock", "ephemerisDataLine", "CAT", "RFM", "CelestialFrameWrapper"];
+  const [OEM, Block, Line, CAT, RFM, Frame] = await Promise.all(names.map(async name =>
+    (await import(`spacedatastandards.org/lib/js/OEM/${name}.js`))[`${name}T`]));
+  const {CelestialFrame} = await import("spacedatastandards.org/lib/js/OEM/CelestialFrame.js");
+  const {RFMUnion} = await import("spacedatastandards.org/lib/js/OEM/RFMUnion.js");
+  const {timingStandard} = await import("spacedatastandards.org/lib/js/OEM/timingStandard.js");
+  const text = fs.readFileSync(new URL("./data/supgp-reference/iss/ISS.OEM_J2K_EPH.trimmed.txt", import.meta.url), "utf8");
+  const lines = text.split(/\r?\n/).filter(line => /^\d{4}-\d{2}-\d{2}T/.test(line.trim())).map(line => {
+    const [epoch, ...numbers] = line.trim().split(/\s+/);
+    return new Line(epoch, ...numbers.map(Number));
+  });
+  assert.ok(lines.length > 10);
+  const cat = Object.assign(new CAT(), {OBJECT_NAME: "ISS", OBJECT_ID: "1998-067-A", NORAD_CAT_ID: 25544});
+  const frame = new RFM(RFMUnion.CelestialFrameWrapper, new Frame(CelestialFrame.EME2000));
+  const block = Object.assign(new Block(), {OBJECT: cat, CENTER_NAME: "EARTH", REFERENCE_FRAME: frame,
+    TIME_SYSTEM: timingStandard.UTC, EPHEMERIS_DATA_LINES: lines});
+  const oem = Object.assign(new OEM(), {EPHEMERIS_DATA_BLOCK: [block]});
+  const builder = new Builder(65536); builder.finish(oem.pack(builder), "$OEM");
+  return {portId: "oem", typeRef: {schemaName: "OEM.fbs", fileIdentifier: "$OEM", rootTypeName: "OEM", wireFormat, requiredAlignment: 8, byteLength: builder.asUint8Array().length},
+    wireFormat, requiredAlignment: 8, payload: builder.asUint8Array()};
+}
+
+for (const surface of ["direct", "command", "wasmedge"]) {
+  test(`typed OEM fits to a valid OMM on ${surface}`, async t => {
+    const {ByteBuffer} = await import("flatbuffers");
+    const {OMM} = await import("spacedatastandards.org/lib/js/OMM/OMM.js");
+    const harness = surface === "wasmedge"
+      ? await loadModule({wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH), runtimeKind: "wasmedge", enableThreads: false})
+      : await createBrowserModuleHarness({wasmSource: fs.readFileSync(ISOMORPHIC_WASM_PATH), surface});
+    t.after(() => harness.destroy());
+    for (const wireFormat of ["flatbuffer", "aligned-binary"]) {
+      const response = await harness.invoke({methodId: "fit", inputs: [await createOemInput(wireFormat)]});
+      assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
+      assert.equal(response.outputs.length, 1);
+      const output = response.outputs[0];
+      assert.equal(output.portId, "omm");
+      const buffer = new ByteBuffer(output.payload);
+      assert.equal(buffer.readUint32(0), output.payload.byteLength - 4);
+      buffer.setPosition(4);
+      assert.equal(OMM.bufferHasIdentifier(buffer), true);
+      buffer.setPosition(0);
+      const omm = OMM.getSizePrefixedRootAsOMM(buffer);
+      assert.equal(omm.NORAD_CAT_ID(), 25544);
+      assert.equal(omm.OBJECT_NAME(), "ISS");
+      assert.ok(omm.MEAN_MOTION() > 15 && omm.MEAN_MOTION() < 16);
+      assert.ok(Math.abs(omm.INCLINATION() - 51.6) < 0.2);
+    }
+  });
+}
+
+test("resident fitter rejects missing, mixed, and duplicate ephemerides", async t => {
+  const harness = await createBrowserModuleHarness({wasmSource: fs.readFileSync(ISOMORPHIC_WASM_PATH), surface: "direct"});
+  t.after(() => harness.destroy());
+  const oem = await createOemInput();
+  for (const inputs of [[], [oem, oem], [oem, ...createInvokeRequest().inputs]]) {
+    const response = await harness.invoke({methodId: "fit", inputs});
+    assert.notEqual(response.statusCode, 0);
+    assert.equal(response.errorCode, "invalid-ephemeris-count");
+    assert.equal(response.outputs.length, 0);
+  }
 });

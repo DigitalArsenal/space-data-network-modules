@@ -126,12 +126,17 @@ static const AcceptedTypeRef kMethod_fit_input_port_0_accepted_types[] = {
 static const AcceptedTypeRef kMethod_fit_input_port_1_accepted_types[] = {
   { true, "", "", 0u, false, "" },
 };
+static const AcceptedTypeRef kMethod_fit_oem_types[] = {
+  { false, "OEM.fbs", "$OEM", 0u, true, "OEM" },
+  { false, "OEM.fbs", "$OEM", 1u, true, "OEM" },
+};
 static const PortRequirement kMethod_fit_input_ports[] = {
-  { "meme", true, kMethod_fit_input_port_0_accepted_types, 1u },
+  { "meme", false, kMethod_fit_input_port_0_accepted_types, 1u },
   { "options", false, kMethod_fit_input_port_1_accepted_types, 1u },
+  { "oem", false, kMethod_fit_oem_types, 2u },
 };
 static const char *kMethod_fit_output_ports[] = {
-  "result",
+  "result", "omm",
 };
 
 static const MethodDescriptor kMethodTable[] = {
@@ -139,9 +144,9 @@ static const MethodDescriptor kMethodTable[] = {
     "fit",
     &fit,
     kMethod_fit_input_ports,
-    2u,
+    3u,
     kMethod_fit_output_ports,
-    1u,
+    2u,
     true,
     "meme",
     "result"
@@ -462,6 +467,16 @@ static bool ValidateRequiredInputs(const MethodDescriptor *method) {
   if (!method) {
     return false;
   }
+  // The resident fitter handles one ephemeris per invocation. Reject ambiguous
+  // or batched input instead of silently fitting only the first frame.
+  size_t ephemeris_count = 0;
+  for (const auto &frame : g_invoke_context.inputs) {
+    if (frame.port_id == "oem" || frame.port_id == "meme") ++ephemeris_count;
+  }
+  if (ephemeris_count != 1u) {
+    SetError("invalid-ephemeris-count", "Supply exactly one OEM or text ephemeris frame.");
+    return false;
+  }
   for (size_t port_index = 0; port_index < method->input_port_count; port_index += 1) {
     const auto &port = method->input_ports[port_index];
     if (!port.required) {
@@ -587,17 +602,21 @@ static std::vector<uint8_t> SerializePivResponse(
   output_frames.reserve(packed_outputs.size());
   for (const auto &packed : packed_outputs) {
     const auto *output = packed.output;
+    const auto wire_format =
+      output && output->wire_format == static_cast<uint32_t>(kPayloadWireFormatAlignedBinary)
+        ? kPayloadWireFormatAlignedBinary
+        : kPayloadWireFormatFlatbuffer;
     const auto type_ref = CreateFlatBufferTypeRefDirect(
       builder,
       output && !output->schema_name.empty() ? output->schema_name.c_str() : nullptr,
       output && !output->file_identifier.empty() ? output->file_identifier.c_str() : nullptr,
       nullptr,
-      output && !output->root_type_name.empty() ? output->root_type_name.c_str() : nullptr
+      output && !output->root_type_name.empty() ? output->root_type_name.c_str() : nullptr,
+      nullptr, false, wire_format,
+      output ? output->fixed_string_length : 0,
+      output ? output->byte_length : 0,
+      static_cast<uint16_t>(packed.alignment)
     );
-    const auto wire_format =
-      output && output->wire_format == static_cast<uint32_t>(kPayloadWireFormatAlignedBinary)
-        ? kPayloadWireFormatAlignedBinary
-        : kPayloadWireFormatFlatbuffer;
     output_frames.push_back(CreateTABDirect(
       builder,
       packed.offset,
@@ -1100,22 +1119,9 @@ extern "C" uint32_t plugin_invoke_stream(
   return response_ptr;
 }
 
-#ifdef OD_REACTOR_BUILD
-
-// Resident-reactor surface (STANDALONE_WASM, --no-entry): the module is hosted
-// as a RESIDENT instance and driven repeatedly via plugin_invoke_stream — there
-// is NO command main()/_start. In reactor mode emscripten links crt1_reactor.o,
-// which supplies _initialize (it runs the guest's global constructors via
-// __wasm_call_ctors and sets up the runtime). The host (modulert) calls
-// _initialize exactly once at load, after which plugin_invoke_stream may be
-// called any number of times. We only need to EXPORT _initialize
-// (EXPORTED_FUNCTIONS: __initialize) and __wasm_call_ctors (-Wl,--export=…) — do
-// NOT redefine _initialize here or wasm-ld reports a duplicate symbol against
-// crt1_reactor.o. The command main() below is compiled out.
-
-#else  // !OD_REACTOR_BUILD — legacy WASI COMMAND surface (_start reads stdin).
-
-int main(int argc, char **argv) {
+// Both entry surfaces dispatch the same typed PIV request. Resident callers
+// initialize once and use plugin_invoke_stream; command callers use _start.
+static int run_command(int argc, char **argv) {
   const char *shortcut_method = nullptr;
   for (int index = 1; index < argc; index += 1) {
     if (std::strcmp(argv[index], "--method") == 0) {
@@ -1211,4 +1217,37 @@ int main(int argc, char **argv) {
   return runtime_error ? 1 : 0;
 }
 
-#endif  // OD_REACTOR_BUILD
+#ifdef OD_REACTOR_BUILD
+#include <wasi/api.h>
+namespace {
+// Volatile prevents whole-program optimization from assuming C++ startup
+// already ran before this WASI export was entered.
+volatile bool command_runtime_initialized = false;
+__attribute__((constructor)) void mark_command_runtime_initialized() {
+  command_runtime_initialized = true;
+}
+}
+extern "C" void _initialize(void);
+static __attribute__((noinline)) void invoke_command_with_wasi_args() {
+  size_t argc = 0, bytes = 0;
+  if (__wasi_args_sizes_get(&argc, &bytes) != 0) __wasi_proc_exit(74);
+  std::vector<char> storage(bytes ? bytes : 1);
+  std::vector<char*> argv(argc + 1, nullptr);
+  if (__wasi_args_get(reinterpret_cast<uint8_t**>(argv.data()),
+                      reinterpret_cast<uint8_t*>(storage.data())) != 0) __wasi_proc_exit(74);
+  const int result = run_command(static_cast<int>(argc), argv.data());
+  std::fflush(stdout);
+  std::fflush(stderr);
+  if (result != 0) __wasi_proc_exit(static_cast<uint32_t>(result));
+}
+extern "C" __attribute__((visibility("default"))) void _start(void) {
+  // No allocations may precede reactor initialization: the WASI CLI enters
+  // here before C++/libc constructors have run. Keep argument handling out of
+  // line so it executes only after _initialize.
+  // Browser harnesses may already have initialized the resident instance.
+  if (!command_runtime_initialized) _initialize();
+  invoke_command_with_wasi_args();
+}
+#else
+int main(int argc, char **argv) { return run_command(argc, argv); }
+#endif

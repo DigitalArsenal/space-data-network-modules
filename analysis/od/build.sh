@@ -89,6 +89,22 @@ build_isomorphic() {
         --var od_plugin_manifest_bytes \
         --guard OD_PLUGIN_MANIFEST_BYTES_H
 
+    # Reproduce the PIV/TAB bindings from the installed SDK's SDS dependency.
+    # An old TAB header silently drops aligned-output type metadata.
+    node --input-type=module - "$SCRIPT_DIR" <<'JS'
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+import {pathToFileURL} from 'node:url';
+const root = process.argv[2];
+const require = createRequire(path.join(root, 'package.json'));
+const compiler = path.dirname(require.resolve('space-data-module-sdk/compiler'));
+const {getInvokeCppSchemaHeaders} = await import(pathToFileURL(path.join(compiler, 'flatcSupport.js')));
+for (const [name, content] of Object.entries(await getInvokeCppSchemaHeaders())) {
+    await fs.writeFile(path.join(root, 'src/cpp/generated', name), content);
+}
+JS
+
     rm -rf "$BUILD_DIR"
     rm -rf "$DIST_DIR"
     mkdir -p "$BROWSER_DIST_DIR" "$ISOMORPHIC_DIST_DIR"
@@ -109,14 +125,18 @@ build_isomorphic() {
     cp "$BUILD_DIR/${BROWSER_TARGET}.wasm" "$BROWSER_DIST_DIR/module.wasm"
 
     # Server/isomorphic host loads the RESIDENT REACTOR as module.wasm (driven
-    # via plugin_invoke_stream; no per-fit _start). The command build is retained
+    # via plugin_invoke_stream; _start also supports a fresh command host). The command build is retained
     # beside it as module.command.wasm for the reactor==command RMS parity gate.
     cp "$BUILD_DIR/${REACTOR_TARGET}.wasm" "$ISOMORPHIC_DIST_DIR/module.wasm"
     cp "$BUILD_DIR/${BROWSER_TARGET}.wasm" "$ISOMORPHIC_DIST_DIR/module.command.wasm"
-    node "$SCRIPT_DIR/../../scripts/sign-module-artifact.mjs" \
-        "$ISOMORPHIC_DIST_DIR/module.wasm"
-    node "$SCRIPT_DIR/../../scripts/sign-module-artifact.mjs" \
-        "$ISOMORPHIC_DIST_DIR/module.command.wasm"
+    # Explicit unsigned builds can be published by a node or external signer;
+    # this mode does not open local signing-key fixtures.
+    if [ "${SDN_OD_UNSIGNED_BUILD:-0}" != "1" ]; then
+        node "$SCRIPT_DIR/../../scripts/sign-module-artifact.mjs" \
+            "$ISOMORPHIC_DIST_DIR/module.wasm"
+        node "$SCRIPT_DIR/../../scripts/sign-module-artifact.mjs" \
+            "$ISOMORPHIC_DIST_DIR/module.command.wasm"
+    fi
 
     echo ""
     echo "=== Isomorphic/Browser Build Complete ==="

@@ -167,14 +167,9 @@ if(EMSCRIPTEN)
         "
     )
 
-    # Resident-reactor artifact (server/isomorphic host). Same sources as
-    # od_wasm, but built with -DOD_REACTOR_BUILD so the command main()/_start is
-    # compiled out and the module exports _initialize/__wasm_call_ctors instead
-    # (mirrors propagator/sgp4's reactor link surface). The node's modulert hosts
-    # this as a RESIDENT instance and drives the fit via plugin_invoke_stream —
-    # no per-fit process restart, N instances can run concurrently. The command
-    # od_wasm is retained for the browser bundle + the reactor==command parity
-    # gate.
+    # Resident artifact with an additional command entry point. Both surfaces
+    # share typed PIV dispatch; _initialize runs once for resident invocation,
+    # while _start also supports the manifest's command/SDK CLI contract.
     add_executable(
         od_wasm_reactor
         src/wasm_api.cpp
@@ -199,6 +194,7 @@ if(EMSCRIPTEN)
             -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
             -Wl,--allow-undefined \
             -Wl,--export=__wasm_call_ctors \
+            -Wl,--export=_start \
             --no-entry \
             -s INITIAL_MEMORY=67108864 \
             -s STACK_SIZE=2097152 \
