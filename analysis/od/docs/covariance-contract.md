@@ -62,8 +62,30 @@ state units. Serialization has zero tolerance because it performs no numerical
 transform. Tests also cover absent data, missing epoch, indefinite and singular
 matrices, NaN, infinity, unconverged fits, and unobservable normal-matrix modes.
 
-These source tests do not certify a released WASM artifact. OD 0.1.1's resident
-PIV interface currently publishes OMM, not OCM. Exposing OCM, independently
-retaining epoch state when covariance fails, a canonical WASI artifact rebuild,
-and tri-runtime verification remain separate release work. HPOP uncertainty
-propagation and covariance calibration also remain unverified.
+OD 0.1.2 emits OMM and OCM together for typed OEM input. Text input retains its
+existing JSON result. OCM can report unavailable covariance; absence must not
+be used as zero covariance when computing collision probability. Independently
+retaining epoch state when covariance fails remains separate work. HPOP
+uncertainty propagation and covariance calibration remain unverified.
+
+## Rebuilding and runtime verification
+
+Set `SDN_OD_EIGEN_DIR` to an Eigen include directory and run `npm run build:wasi`.
+The multi-translation-unit build uses the SDK's public WASI toolchain resolver,
+FlatBuffer runtime/schema headers, manifest encoder, artifact guard and compliance
+validator. It preserves isolated SDS translation units and the tested PIV bridge;
+it does not use the historical raw batch ABI in `build-isomorphic-threads.sh`.
+The target is `wasm32-wasip1-threads`, with the `wasi-sequential` execution model.
+Fast-math retains the fitter's established numerical configuration; covariance
+publication tests explicitly cover that configuration.
+
+The output is unsigned `dist/isomorphic/module.unsigned.wasm`. Sign that exact
+hash through the authorized node publication API, verify the public signature,
+and install the signed result as `dist/isomorphic/module.wasm`. Signing keys
+never enter the build. `npm test` covers SDK loading and public reference fits;
+`npm run test:release` compares exact output payloads for text/OEM/error inputs
+across browser, native WasmEdge and Docker WasmEdge 0.16.4. The Docker test requires
+`space-data-module-sdk/parity-wasmedge:0.16.4` (or `OD_PARITY_DOCKER_IMAGE`).
+WasmEdge must enable its threads feature to load WASI shared memory, even though
+the module itself spawns no threads. Browser delivery requires cross-origin
+isolation for the same shared memory.

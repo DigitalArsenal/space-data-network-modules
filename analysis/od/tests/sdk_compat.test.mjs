@@ -155,7 +155,7 @@ test("built artifact loads through the WasmEdge server path", async (t) => {
     harness = await loadModule({
       wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH),
       runtimeKind: "wasmedge",
-      enableThreads: false,
+      enableThreads: true,
     });
   } catch (error) {
     if (/spawn wasmedge ENOENT|command not found|Failed to launch/i.test(String(error))) {
@@ -208,14 +208,22 @@ for (const surface of ["direct", "command", "wasmedge"]) {
     const {ByteBuffer} = await import("flatbuffers");
     const {OMM} = await import("spacedatastandards.org/lib/js/OMM/OMM.js");
     const harness = surface === "wasmedge"
-      ? await loadModule({wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH), runtimeKind: "wasmedge", enableThreads: false})
+      ? await loadModule({wasmSource: fileURLToPath(ISOMORPHIC_WASM_PATH), runtimeKind: "wasmedge", enableThreads: true})
       : await createBrowserModuleHarness({wasmSource: fs.readFileSync(ISOMORPHIC_WASM_PATH), surface});
     t.after(() => harness.destroy());
     for (const wireFormat of ["flatbuffer", "aligned-binary"]) {
       const response = await harness.invoke({methodId: "fit", inputs: [await createOemInput(wireFormat)]});
       assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
-      assert.equal(response.outputs.length, 1);
-      const output = response.outputs[0];
+      assert.equal(response.outputs.length, 2);
+      const {OCM} = await import("spacedatastandards.org/lib/js/OCM/OCM.js");
+      const ocmFrame = response.outputs.find(x => x.portId === "ocm");
+      assert.ok(ocmFrame);
+      const ocm = OCM.getSizePrefixedRootAsOCM(new ByteBuffer(ocmFrame.payload));
+      assert.equal(ocm.ORBIT_DETERMINATION().OD_COV_REDUCTION(), "UNAVAILABLE");
+      assert.equal(ocm.covarianceDataArray(), null);
+      assert.ok(ocm.METADATA().START_TIME());
+      assert.equal(ocm.METADATA().TIME_SYSTEM(), "UTC");
+      const output = response.outputs.find(x => x.portId === "omm");
       assert.equal(output.portId, "omm");
       const buffer = new ByteBuffer(output.payload);
       assert.equal(buffer.readUint32(0), output.payload.byteLength - 4);

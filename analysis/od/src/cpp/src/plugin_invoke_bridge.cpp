@@ -136,7 +136,7 @@ static const PortRequirement kMethod_fit_input_ports[] = {
   { "oem", false, kMethod_fit_oem_types, 2u },
 };
 static const char *kMethod_fit_output_ports[] = {
-  "result", "omm",
+  "result", "omm", "ocm",
 };
 
 static const MethodDescriptor kMethodTable[] = {
@@ -146,7 +146,7 @@ static const MethodDescriptor kMethodTable[] = {
     kMethod_fit_input_ports,
     3u,
     kMethod_fit_output_ports,
-    2u,
+    sizeof(kMethod_fit_output_ports) / sizeof(kMethod_fit_output_ports[0]),
     true,
     "meme",
     "result"

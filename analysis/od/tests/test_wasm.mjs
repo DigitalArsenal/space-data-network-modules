@@ -534,7 +534,7 @@ function splitOemIntoTwoSegments(content) {
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   test(`OD fixture fit produces a stable GP estimate on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
     if (!harness) {
       return;
     }
@@ -561,7 +561,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`OD fit labels MEME output from caller/manifest fields on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
     if (!harness) {
       return;
     }
@@ -593,7 +593,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`OD fit honors maxIterations option on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
     if (!harness) {
       return;
     }
@@ -615,7 +615,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`OD fit rejects malformed MEME payloads on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
     if (!harness) {
       return;
     }
@@ -634,7 +634,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   // ── CCSDS OEM input path (ISS NASA public OEM fixture) ───────────────────
 
   test(`OD OEM ISS fixture parses META + fits plausible ISS elements on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
     if (!harness) {
       return;
     }
@@ -675,7 +675,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`OD OEM handles multiple META/data segments on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
     if (!harness) {
       return;
     }
@@ -702,7 +702,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`OD OEM fails closed on unsupported TIME_SYSTEM / REF_FRAME on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
     if (!harness) {
       return;
     }
@@ -735,7 +735,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`OD OEM fits a position-only IGS20/GPS (GLONASS) KVN ephemeris on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
     if (!harness) {
       return;
     }
@@ -811,7 +811,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
         return;
       }
 
-      const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+      const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
       if (!harness) {
         return;
       }
@@ -838,7 +838,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       return;
     }
 
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, {enableThreads: true});
     if (!harness) {
       return;
     }

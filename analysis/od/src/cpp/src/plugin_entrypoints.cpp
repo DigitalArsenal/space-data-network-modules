@@ -73,6 +73,13 @@ int fit(void) {
             plugin_set_error("emit-failed", "Failed to emit $OMM frame.");
             return 1;
         }
+        if (fb.ocm.empty() || plugin_push_output_ex(
+                "ocm", "OCM.fbs", "$OCM",
+                PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, "OCM",
+                0, 8, fb.ocm.data(), static_cast<uint32_t>(fb.ocm.size())) < 0) {
+            plugin_set_error("emit-failed", "Failed to emit $OCM frame.");
+            return 1;
+        }
         return 0;
     }
 

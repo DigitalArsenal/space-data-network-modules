@@ -1,8 +1,8 @@
 {
   "pluginId": "orbit-determination",
   "name": "Orbit Determination Plugin",
-  "version": "0.1.1",
-  "description": "Fits near-term SGP4 supplemental-GP mean elements ($OMM) to operator ephemeris ($OEM). Primary flow path is aligned-binary FlatBuffers ($OEM in -> fit -> $OMM out); a text command path (SpaceX MEME / CCSDS OEM KVN -> JSON) is retained for command back-compat.",
+  "version": "0.1.2",
+  "description": "Fits near-term SGP4 supplemental-GP mean elements ($OMM) to operator ephemeris ($OEM). Primary flow path is aligned-binary FlatBuffers ($OEM in -> fit -> $OMM out); a text command path (SpaceX MEME / CCSDS OEM KVN -> JSON) is retained for command back-compat. OEM fitting also emits an OCM with explicit covariance availability, epoch, frame and units.",
   "pluginFamily": "orbit_determination",
   "capabilities": [],
   "externalInterfaces": [],
@@ -111,6 +111,33 @@
           "description": "One size-prefixed SDS OMM, emitted only for the OEM input path."
         },
         {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
+                },
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Epoch state and optional formal fit covariance, with explicit availability and interpretation."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One size-prefixed SDS OCM with fit uncertainty status, emitted only for the OEM input path."
+        },
+        {
           "portId": "result",
           "acceptedTypeSets": [
             {
@@ -152,6 +179,16 @@
       "schemaName": "OCM.fbs",
       "fileIdentifier": "$OCM",
       "rootTypeName": "OCM"
+    },
+    {
+      "schemaName": "OCM.fbs",
+      "fileIdentifier": "$OCM",
+      "rootTypeName": "OCM"
     }
-  ]
+  ],
+  "threadModel": "wasi-sequential",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Each invocation fits one ephemeris arc using sequential differential correction. Independent objects are distributed across host instances; this module does not spawn guest threads."
+  }
 }
