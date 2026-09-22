@@ -239,11 +239,11 @@
       "declaration": null
     },
     "analysis/catalog-composer/dist/isomorphic/module.wasm": {
-      "sha256": "e35213e40564328bc466287bbcb63c0d19ffad25a61d6bc6e66d10f3c4a0065f",
-      "bytes": 5848683,
+      "sha256": "7d87d552215685ee6a069f42f83d411af244e69d3cab7b4880f2e378cae30eed",
+      "bytes": 6044770,
       "module": "analysis/catalog-composer",
-      "lastCommit": "c793074d07a8e9119e832e9de59e72e60e5a0d5d",
-      "lastCommitDate": "2026-09-21T17:21:34-04:00",
+      "lastCommit": "794262b12b74db755d8426345a0602f137bff4df",
+      "lastCommitDate": "2026-09-21T22:09:34-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": null,
@@ -1696,17 +1696,14 @@
       }
     },
     "files/orbit-products/dist/isomorphic/module.wasm": {
-      "sha256": "a01cbb0928cd917bf14da888823cdb8a4efb664aa7007a888c85159776a5ee96",
-      "bytes": 256653,
+      "sha256": "d9f8ea296eab142767a02eddcdc888899fdd8fdccd968a1b82479ff673698e82",
+      "bytes": 404528,
       "module": "files/orbit-products",
-      "lastCommit": "8f5a84fcf8e60ad14eb6309f7d1c7ad226dc618d",
-      "lastCommitDate": "2026-08-30T06:19:47-04:00",
+      "lastCommit": "794262b12b74db755d8426345a0602f137bff4df",
+      "lastCommitDate": "2026-09-21T22:09:34-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "c0808283773bc63dee48a5eafc9e926aab2bda56",
-        "sdkCommit": "f263cd7e37b40b686b6b050d4aa5259f7cff669e"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
