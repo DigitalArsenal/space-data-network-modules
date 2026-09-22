@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-files-orbit-products",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "main": "index.js",
@@ -21,9 +21,10 @@
     "test": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
+    "esbuild": "0.25.12",
     "flatbuffers": "^25.9.23",
     "flatc-wasm": "^26.1.32",
-    "space-data-module-sdk": "file:../../../../ancillary-packages/space-data-module-sdk",
-    "spacedatastandards.org": "^1.202.0"
+    "space-data-module-sdk": "0.8.15",
+    "spacedatastandards.org": "1.212.0"
   }
 }

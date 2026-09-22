@@ -145,3 +145,13 @@ provider screening are **not implemented by this review method**.
 
 See [Vimpel normalization and epoch audit](docs/vimpel-normalization.md) for the
 confirmed provider format, differentiation limits and crosswalk policy.
+
+## Epoch validation and refinement (0.1.8)
+
+`validate_epoch` checks propagated positions against a hash-verified native
+Vimpel position ephemeris. `fit_epoch_step` uses the existing estimation core
+and caller-supplied propagation sensitivities to return an unvalidated OPM
+candidate; held-out positions do not train the fit. A candidate must be
+repropagated and validated before use. These methods accept any propagator that
+supplies the declared J2000/UTC grid and retain explicit model provenance.
+See [the binary interfaces, policy and verification](docs/epoch-fitting.md).

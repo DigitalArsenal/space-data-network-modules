@@ -1,0 +1,165 @@
+{
+  "scope": "Offline real-provider module integration; no deployment, covariance or conjunction claim",
+  "normalizerSha256": "d9f8ea296eab142767a02eddcdc888899fdd8fdccd968a1b82479ff673698e82",
+  "catalogSha256": "7d87d552215685ee6a069f42f83d411af244e69d3cab7b4880f2e378cae30eed",
+  "model": {
+    "propagatorId": "com.orbpro.hpop",
+    "propagatorArtifactSha256": "7305c5ef6db04cfb5babc4f2c5f87b17b1e5901e4c14bd25cf9ca7b14b7b48b1",
+    "forceModel": {
+      "centralBody": true,
+      "j2": true,
+      "j3": true,
+      "j4": true,
+      "thirdBody": true,
+      "srp": false,
+      "drag": false,
+      "ephemerisSource": "Analytical",
+      "integrator": {
+        "method": "RKF78",
+        "initialStep": 10,
+        "minStep": 1e-05,
+        "maxStep": 60,
+        "absTolerance": 1e-11,
+        "relTolerance": 1e-11
+      },
+      "limitation": "J2-J4/analytical Sun-Moon; no GOST atmosphere or fitted SRP"
+    },
+    "frameTransformationRef": "foundation.frames:9615e397867ddb562ddc814a02c4928bb4c571c119e22014452dce7692b69c9e:J2000-to-GCRF-and-back"
+  },
+  "arcSeconds": 14400,
+  "holdoutStride": 4,
+  "positionToleranceKm": 1,
+  "results": [
+    {
+      "eccentricity": 0.004351,
+      "iterations": 1,
+      "status": "validated",
+      "initialTrainingRmsKm": 10.76988243447576,
+      "initialHoldoutRmsKm": 10.706863343714401,
+      "finalTrainingRmsKm": 0.06923666567206975,
+      "finalHoldoutRmsKm": 0.06992858991371959,
+      "maximumHoldoutResidualKm": 0.09734926639081634,
+      "history": [
+        {
+          "trainingRmsKm": 10.76988243447576,
+          "holdoutRmsKm": 10.706863343714401,
+          "maximumHoldoutResidualKm": 11.28642026378512
+        },
+        {
+          "trainingRmsKm": 0.06923666567206975,
+          "holdoutRmsKm": 0.06992858991371959,
+          "maximumHoldoutResidualKm": 0.09734926639081634
+        }
+      ],
+      "derivativeDiagnosticKmS": {
+        "h1": 4.7588293367706984e-05,
+        "hHalf": 0.0006428771214480228
+      },
+      "referenceSha256": "d1ba29306b09850a5b66843ae62ab31a0ebeda21f780d3e5f8072a58bf5a5a63"
+    },
+    {
+      "eccentricity": 0.892913,
+      "iterations": 1,
+      "status": "validated",
+      "initialTrainingRmsKm": 6.561396963291455,
+      "initialHoldoutRmsKm": 6.043572485769584,
+      "finalTrainingRmsKm": 0.0469411850789159,
+      "finalHoldoutRmsKm": 0.05909744856014278,
+      "maximumHoldoutResidualKm": 0.07284278710716229,
+      "history": [
+        {
+          "trainingRmsKm": 6.561396963291455,
+          "holdoutRmsKm": 6.043572485769584,
+          "maximumHoldoutResidualKm": 8.389394095836701
+        },
+        {
+          "trainingRmsKm": 0.0469411850789159,
+          "holdoutRmsKm": 0.05909744856014278,
+          "maximumHoldoutResidualKm": 0.07284278710716229
+        }
+      ],
+      "derivativeDiagnosticKmS": {
+        "h1": 0.0006325676902685553,
+        "hHalf": 0.0002643703750154093
+      },
+      "referenceSha256": "12e180d11e50bb58681cec774a18d2b01c72efec22408543401542d1d3ab2594"
+    },
+    {
+      "eccentricity": 0.840641,
+      "iterations": 1,
+      "status": "validated",
+      "initialTrainingRmsKm": 11.004666804921447,
+      "initialHoldoutRmsKm": 10.414809383599902,
+      "finalTrainingRmsKm": 0.057264833928454044,
+      "finalHoldoutRmsKm": 0.05282087669012539,
+      "maximumHoldoutResidualKm": 0.08968330729477388,
+      "history": [
+        {
+          "trainingRmsKm": 11.004666804921447,
+          "holdoutRmsKm": 10.414809383599902,
+          "maximumHoldoutResidualKm": 13.859599024154015
+        },
+        {
+          "trainingRmsKm": 0.057264833928454044,
+          "holdoutRmsKm": 0.05282087669012539,
+          "maximumHoldoutResidualKm": 0.08968330729477388
+        }
+      ],
+      "derivativeDiagnosticKmS": {
+        "h1": 0.00043124489416819956,
+        "hHalf": 0.0001802566159604201
+      },
+      "referenceSha256": "14c86cc96f9a1cb31b7e1cb4018c0c4bb15d9bf951ef41e794b226ab04b7ab7c"
+    }
+  ],
+  "fullTableConversion": {
+    "artifactSha256": "d9f8ea296eab142767a02eddcdc888899fdd8fdccd968a1b82479ff673698e82",
+    "statusCode": 0,
+    "error": null,
+    "states": 13808,
+    "descriptors": 1
+  },
+  "sourceElementSha256": "840cda6d499028c17a7e22228b1b22fe500078e996113ef5804c4fff7ba612fa",
+  "sourceArchiveSha256": "f46df9c310a8c33752d5baebf429a0583e7896f6714501b77d8fcc033c65e6bb",
+  "checks": [
+    {
+      "command": "npm test --prefix analysis/catalog-composer",
+      "exitCode": 0,
+      "passed": 41,
+      "skipped": 1,
+      "skipReason": "Opt-in parity run separately"
+    },
+    {
+      "command": "PATH=<WasmEdge binary directory>:$PATH npm test --prefix files/orbit-products",
+      "exitCode": 0,
+      "passed": 27,
+      "skipped": 1,
+      "skipReason": "Full DE440s fixture absent; checked-in excerpt and other native references exercised"
+    },
+    {
+      "command": "SDN_RUN_CATALOG_PARITY=1 node --test analysis/catalog-composer/tests/parity.test.mjs",
+      "exitCode": 0,
+      "cases": 6,
+      "lanes": 3,
+      "comparisons": 30
+    },
+    {
+      "command": "node files/orbit-products/tests/vimpel-parity.mjs",
+      "exitCode": 0,
+      "cases": 3,
+      "lanes": 3,
+      "comparisons": 15
+    },
+    {
+      "command": "node analysis/catalog-composer/tests/vimpel-live.mjs ELEMENTS_FILE EPHEMERIS_RAR",
+      "exitCode": 0,
+      "objects": 3
+    }
+  ],
+  "remaining": [
+    "Automatic node scheduling and installation",
+    "datefirst candidate generation and accepted identity persistence",
+    "Catalog-wide calibration and conjunction verification",
+    "Independent absolute orbit accuracy and covariance estimation"
+  ]
+}

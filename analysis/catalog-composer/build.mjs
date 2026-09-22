@@ -11,7 +11,7 @@ import { encodePluginManifest } from 'space-data-module-sdk/manifest';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const repo = path.resolve(root, '../..');
-process.env.SPACE_DATA_STANDARDS_ROOT ??= path.resolve(repo, '../spacedatastandards.org');
+process.env.SPACE_DATA_STANDARDS_ROOT ??= path.join(root,'node_modules/spacedatastandards.org');
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
 // Use the repository's pinned generated SDS headers, including CAT's actual
 // dependency graph. The SDK supplies matching FlatBuffers runtime headers.
@@ -26,12 +26,18 @@ async function addHeader(code) {
 }
 await addHeader('CAT');
 await addHeader('OEM');
+await addHeader('OPM');
+headers.push(await fs.readFile(path.join(repo,'files/orbit-products/src/generated/sds/NCD_generated.h'),'utf8'));
+headers.push(await fs.readFile(path.join(repo,'files/orbit-products/src/sha256.hpp'),'utf8'));
+headers.push(await fs.readFile(path.join(repo,'files/orbit-products/src/vimpel.hpp'),'utf8'));
+headers.push(await fs.readFile(path.join(repo,'analysis/estimation/src/estimation.hpp'),'utf8'));
+headers.push((await fs.readFile(path.join(repo,'analysis/estimation/src/estimation.cpp'),'utf8')).replace('#include "estimation.hpp"',''));
 const json = await fs.readFile(path.join(repo, 'propagator/sgp4/src/cpp/include/nlohmann/json.hpp'), 'utf8');
 const implementation = await fs.readFile(path.join(root, 'src/catalog_composer.cpp'), 'utf8');
 const outputPath = path.join(root, 'dist/isomorphic/module.wasm');
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 const result = await compileModuleFromSource({
-  manifest, sourceCode: [...headers, json, implementation, await fs.readFile(path.join(root, 'src/catalog_match.cpp'), 'utf8')].join('\n\n'),
+  manifest, sourceCode: [...headers, json, implementation, await fs.readFile(path.join(root, 'src/catalog_match.cpp'), 'utf8'), await fs.readFile(path.join(root,'src/epoch_fit.cpp'),'utf8')].join('\n\n'),
   language: 'c++', outputPath,
   // Composition is inherently sequential; still use the SDK's canonical
   // wasm32-wasip1-threads toolchain and identical bytes in every runtime.
@@ -53,7 +59,7 @@ const app = encodeAppManifest({
   id: 'catalog-editor', name: 'Catalog Editor', version: manifest.version,
   description: manifest.description,
   modules: [{ id: 'composer', pluginId: manifest.pluginId, contentHash: canonical.hashHex, version: manifest.version, role: 'primary', runtimeTarget: 'both' }],
-  data: ['CAT', 'MPE', 'OMM', 'OEM', 'OCM', 'NCD', 'PPE'].map(code => ({ id: code.toLowerCase(), sdsType: code, direction: code === 'CAT' ? 'both' : 'consumes', moduleId: 'composer' })),
+  data: ['CAT', 'MPE', 'OMM', 'OEM', 'OCM', 'NCD', 'PPE', 'OPM'].map(code => ({ id: code.toLowerCase(), sdsType: code, direction: code === 'CAT' ? 'both' : 'consumes', moduleId: 'composer' })),
   pages: [{ id: 'editor', title: 'Catalog Editor', mediaType: 'text/html', entry: true, encoding: 'base64_gzip', content: gzipSync(page, { level: 9 }).toString('base64'), contentSha256: createHash('sha256').update(page).digest('hex') }],
 });
 const bundle = await createSingleFileBundle({ wasmBytes: canonical.canonicalWasmBytes, manifestBytes: encodePluginManifest(manifest),

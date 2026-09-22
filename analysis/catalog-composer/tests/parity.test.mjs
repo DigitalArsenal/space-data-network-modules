@@ -1,3 +1,4 @@
+import {request as epochRequest,truth,perturbed,oemStates,affine} from './epoch-fixture.mjs';
 import { oem } from './matching-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,7 +21,7 @@ test('one artifact produces identical output in Chromium, native WasmEdge and co
   const matchingRequest={methodId:'match_catalog',inputs:[{portId:'recipe',payloadUtf8:matchingRecipe,typeRef:{wireFormat:'aligned-binary',byteLength:new TextEncoder().encode(matchingRecipe).length,requiredAlignment:1}},...[oem(),oem()].map(payload=>({portId:'ephemerides',payload,typeRef:{schemaName:'OEM.fbs',fileIdentifier:'$OEM',rootTypeName:'OEM'}}))]};
   const endpointRequest=structuredClone(matchingRequest);
   for(const input of endpointRequest.inputs.slice(1)) input.payload=oem({velocityErrors:{0:.02,8:.02}});
-  const plan = await normalizeParityFixture({name:'catalog-composer',threadCounts:[1],cases:[{id:'endpoint-velocity-error',request:endpointRequest,expect:'ok'},{id:'circular-trajectory-match',request:matchingRequest,expect:'ok'},{id:'exact-id-override',request,expect:'ok'},{id:'malformed-recipe',request:invalid,expect:'ok'}]});
+  const plan = await normalizeParityFixture({name:'catalog-composer',threadCounts:[1],cases:[{id:'epoch-position-validation',request:epochRequest('validate_epoch',truth,[oemStates(affine(truth))]),expect:'ok'},{id:'epoch-fit-step',request:epochRequest('fit_epoch_step',truth,perturbed(truth)),expect:'ok'},{id:'endpoint-velocity-error',request:endpointRequest,expect:'ok'},{id:'circular-trajectory-match',request:matchingRequest,expect:'ok'},{id:'exact-id-override',request,expect:'ok'},{id:'malformed-recipe',request:invalid,expect:'ok'}]});
   const report = await runParityHarness({wasmPath:fileURLToPath(new URL('../dist/isomorphic/module.wasm',import.meta.url)),plan,autoBuildDockerImage:false,timeoutMs:30000,log:message=>console.log(message)});
   console.log(formatParityReport(report));
   assert.equal(report.ok,true,formatParityReport(report));

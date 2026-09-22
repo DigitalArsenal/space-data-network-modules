@@ -122,3 +122,17 @@ npm test           # the native acceptance suites
 The build generates `src/generated/sds/*.h` from the **published**
 `spacedatastandards.org` package this repo pins, never from a sibling checkout
 (published-deps law, owner 2026-08-21).
+
+## Vimpel epoch-state conversion (0.1.1)
+
+`normalize_vimpel` accepts a hash-checked NCD+raw orbit table with provider format
+`vimpel-orbits-text`. It converts the documented **osculating** elements using
+`foundation/orbits`, with true anomaly equal to argument of latitude minus
+argument of perigee. It emits one canonical J2000/UTC OPM per object and the
+original NCD. The reference-epoch velocity is analytic; it is never differentiated
+from the ten-minute positions. Native identity remains namespaced. Unknown
+uncertainty markers and signed age values stay in the raw source, and no
+covariance, drag coefficient or SRP coefficient is fabricated.
+
+See [catalog epoch fitting](../../analysis/catalog-composer/docs/epoch-fitting.md)
+for position-arc validation, fitting and reproducible real-provider evidence.

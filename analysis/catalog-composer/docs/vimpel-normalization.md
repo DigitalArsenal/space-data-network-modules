@@ -45,7 +45,7 @@ v_J2000 = Q v_pf
 ```
 
 This is an instantaneous osculating-state conversion, not a numerical propagation.
-Production conversion should use `foundation/orbits` with explicit unit conversion:
+`files/orbit-products.normalize_vimpel` now uses `foundation/orbits` with explicit unit conversion:
 its internal lengths are metres, velocities m/s, angles radians and μ m³/s².
 Advancing away from the epoch requires the selected propagator and documented
 force-model configuration. Never interpret these fields as SGP4 mean elements.
@@ -110,6 +110,7 @@ The two 50%-confidence uncertainty scalars do not specify correlations, a full
 state uncertainty, or a Gaussian model. Preserve them; do not manufacture a
 6×6 covariance or infer a collision probability from them.
 
-The matcher currently supplies trajectory review only. Raw normalization,
-`datefirst` candidate generation, automatic propagation/frame composition,
+The normalizer and catalog validation/fitting methods are implemented. See
+[epoch fitting](epoch-fitting.md) for the binary interfaces and real-data
+verification. Automatic node scheduling, `datefirst` candidate generation,
 accepted-binding persistence and live conjunction integration remain outstanding.

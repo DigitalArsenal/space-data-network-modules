@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.202.0",
+  "spacedatastandards": "1.212.0",
   "threadModel": "wasi-sequential",
   "records": {
     "in": [
@@ -7,7 +7,8 @@
     ],
     "out": [
       "$OEM",
-      "$NCD"
+      "$NCD",
+      "$OPM"
     ]
   },
   "formats": [
@@ -16,6 +17,7 @@
     "SP3_D",
     "CODE_500",
     "SCENARIO_EPOCH_EPHEMERIS_TEXT",
-    "CCSDS_OEM_KVN"
+    "CCSDS_OEM_KVN",
+    "vimpel-orbits-text"
   ]
 }

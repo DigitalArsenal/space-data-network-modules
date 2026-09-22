@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.catalog-composer",
   "name": "Catalog Editor",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Compose immutable CAT snapshots with explicit source precedence, identifier conflict review and per-object orbital-state source selection.",
   "pluginFamily": "analysis",
   "capabilities": [],
@@ -184,6 +184,258 @@
         }
       ],
       "maxBatch": 65,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "validate_epoch",
+      "displayName": "validate epoch",
+      "inputPorts": [
+        {
+          "portId": "recipe",
+          "acceptedTypeSets": [
+            {
+              "setId": "recipe-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Matching policy, provider-native identities, immutable input references and proposed crosswalk pairs.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Matching policy, provider-native identities, immutable input references and proposed crosswalk pairs. Control metadata only; no observations encoded here."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Matching policy, provider-native identities, immutable input references and proposed crosswalk pairs."
+        },
+        {
+          "portId": "seed",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "acceptedTypeSets": [
+            {
+              "setId": "seed",
+              "allowedTypes": [
+                {
+                  "schemaName": "OPM.fbs",
+                  "fileIdentifier": "$OPM",
+                  "rootTypeName": "OPM"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "reference",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "acceptedTypeSets": [
+            {
+              "setId": "reference",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "ephemerides",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "acceptedTypeSets": [
+            {
+              "setId": "ephemerides",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Composition decisions and source/frame provenance for the editor.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Composition decisions and source/frame provenance for the editor. Module configuration/decision metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Composition decisions and source/frame provenance for the editor."
+        }
+      ],
+      "maxBatch": 4,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "fit_epoch_step",
+      "displayName": "fit epoch step",
+      "inputPorts": [
+        {
+          "portId": "recipe",
+          "acceptedTypeSets": [
+            {
+              "setId": "recipe-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Matching policy, provider-native identities, immutable input references and proposed crosswalk pairs.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Matching policy, provider-native identities, immutable input references and proposed crosswalk pairs. Control metadata only; no observations encoded here."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Matching policy, provider-native identities, immutable input references and proposed crosswalk pairs."
+        },
+        {
+          "portId": "seed",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "acceptedTypeSets": [
+            {
+              "setId": "seed",
+              "allowedTypes": [
+                {
+                  "schemaName": "OPM.fbs",
+                  "fileIdentifier": "$OPM",
+                  "rootTypeName": "OPM"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "reference",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "acceptedTypeSets": [
+            {
+              "setId": "reference",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "ephemerides",
+          "minStreams": 7,
+          "maxStreams": 7,
+          "required": true,
+          "acceptedTypeSets": [
+            {
+              "setId": "ephemerides",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Composition decisions and source/frame provenance for the editor.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Composition decisions and source/frame provenance for the editor. Module configuration/decision metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Composition decisions and source/frame provenance for the editor."
+        },
+        {
+          "portId": "candidate",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "acceptedTypeSets": [
+            {
+              "setId": "candidate",
+              "allowedTypes": [
+                {
+                  "schemaName": "OPM.fbs",
+                  "fileIdentifier": "$OPM",
+                  "rootTypeName": "OPM"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "maxBatch": 10,
       "drainPolicy": "single-shot"
     }
   ],

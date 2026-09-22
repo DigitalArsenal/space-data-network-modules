@@ -54,7 +54,7 @@ test('the executable and every SDK bundle record satisfy their own contracts', a
   // Validate the executable as WASM and validate the separate REC/MBL/APP
   // payloads structurally and by their hashes, rather than ignoring an issue.
   const executable = await createSingleFileBundle({ wasmBytes: bundle.canonicalWasmBytes, manifestBytes: declared.payloadBytes });
-  const result = await validateArtifactWithStandards({ wasmBytes: executable.wasmBytes, manifest, standardsRoot: process.env.SPACE_DATA_STANDARDS_ROOT });
+  const result = await validateArtifactWithStandards({ wasmBytes: executable.wasmBytes, manifest, standardsRoot: process.env.SPACE_DATA_STANDARDS_ROOT ?? fileURLToPath(new URL('../node_modules/spacedatastandards.org',import.meta.url)) });
   assert.equal(result.ok, true, JSON.stringify(result.issues));
   const app = decodeAppManifest(bundle.entries.find(entry => entry.entryId === 'app.app').payloadBytes);
   assert.equal(app.version, manifest.version);

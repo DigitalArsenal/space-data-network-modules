@@ -125,6 +125,9 @@ const pieces = [
   stripSdsCrossIncludes(headers.PPE),
   stripSdsCrossIncludes(headers.OEM),
   stripSdsCrossIncludes(headers.NCD),
+  stripSdsCrossIncludes(headers.OPM),
+  await read(path.join(packageRoot,"../../foundation/orbits/src/state_representations.hpp")),
+  await read(path.join(srcRoot,"vimpel.hpp")),
   stripLocalIncludes(await read(path.join(srcRoot, "sha256.hpp"))),
   stripLocalIncludes(await read(path.join(srcRoot, "ephemeris_series.hpp"))),
   stripLocalIncludes(await read(path.join(ccsdsSrc, "kvn.hpp"))),
@@ -136,6 +139,7 @@ const pieces = [
   stripLocalIncludes(await read(path.join(srcRoot, "oem_projection.hpp"))),
   stripLocalIncludes(await read(path.join(srcRoot, "containers.hpp"))),
   stripLocalIncludes(await read(path.join(srcRoot, "orbit_products_module.cpp"))),
+  await read(path.join(srcRoot, "vimpel_module.cpp")),
 ];
 
 const sourceCode = pieces.join("\n\n");
@@ -177,8 +181,8 @@ fsSync.writeFileSync(
     {
       spacedatastandards: sdsVersion,
       threadModel: "wasi-sequential",
-      records: { in: ["$NCD"], out: ["$OEM", "$NCD"] },
-      formats: ["SPK_DAF", "SP3_C", "SP3_D", "CODE_500", "SCENARIO_EPOCH_EPHEMERIS_TEXT", "CCSDS_OEM_KVN"],
+      records: { in: ["$NCD"], out: ["$OEM", "$NCD", "$OPM"] },
+      formats: ["SPK_DAF", "SP3_C", "SP3_D", "CODE_500", "SCENARIO_EPOCH_EPHEMERIS_TEXT", "CCSDS_OEM_KVN", "vimpel-orbits-text"],
     },
     null,
     2,
