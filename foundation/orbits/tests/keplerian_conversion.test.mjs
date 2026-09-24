@@ -2179,6 +2179,50 @@ test("recovers Basilisk parabolic OCM Cartesian state vector as OMM Barker mean 
 
 // Authoritative numerical source:
 // Basilisk `src/simulation/dynamics/DynOutput/orbElemConvert/_UnitTest/
+// test_orb_elem_convert.py` checks the `rv2elem` calculation against the
+// signed conic range by subtracting signed 2*pi when `eO >= 1` and
+// `abs(fO) > pi`.
+// This state uses the same TwoDimensionParabolic geometry as the upstream
+// unit test, but on the negative true-anomaly branch: f = -123 deg. OMM keeps
+// the sign in the Barker mean anomaly.
+test("recovers Basilisk parabolic OCM Cartesian state with signed true anomaly as OMM Barker mean elements", async (t) => {
+  const harness = await createBrowserModuleHarness({
+    wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
+    surface: "direct",
+  });
+  t.after(() => harness.destroy());
+
+  const barkerParameter = Math.tan(-123.0 * Math.PI / 180.0 / 2.0);
+  const signedMeanAnomalyDegrees = (barkerParameter + (barkerParameter ** 3) / 3.0) * 180.0 / Math.PI;
+
+  const response = await invokeOcmStateToOmm(
+    harness,
+    encodeOcmCartesianState({
+      objectName: "BASILISK-TWO-DIMENSION-PARABOLIC-NEGATIVE-F",
+      objectId: "BASILISK-ORBITAL-MOTION",
+      x: -18919.638129773895,
+      y: 26713.87519561345,
+      z: -3676.8269229873467,
+      xDot: 0.909969526808347,
+      yDot: -4.415647903980721,
+      zDot: 1.968490014978394,
+      gm: 398600.436,
+    }),
+  );
+  const omm = decodeOmmResponse(response);
+  assert.equal(omm.OBJECT_NAME(), "BASILISK-TWO-DIMENSION-PARABOLIC-NEGATIVE-F");
+  assertNear(omm.SEMI_MAJOR_AXIS(), 0.0, 1e-10, "OMM parabolic semi-major axis km");
+  assertNear(omm.ECCENTRICITY(), 1.0, 1e-12, "OMM parabolic eccentricity");
+  assertAngleNearDegrees(omm.INCLINATION(), 40.0, 1e-10, "OMM parabolic inclination deg");
+  assertAngleNearDegrees(omm.RA_OF_ASC_NODE(), 133.0, 1e-10, "OMM parabolic RAAN deg");
+  assertAngleNearDegrees(omm.ARG_OF_PERICENTER(), 113.0, 1e-10, "OMM parabolic argument of pericenter deg");
+  assert.ok(signedMeanAnomalyDegrees < 0.0);
+  assertNear(omm.MEAN_ANOMALY(), signedMeanAnomalyDegrees, 1e-10, "OMM parabolic signed Barker mean anomaly deg");
+  assertNear(omm.MEAN_MOTION(), 0.0, 1e-15, "OMM parabolic mean motion rev/day");
+});
+
+// Authoritative numerical source:
+// Basilisk `src/simulation/dynamics/DynOutput/orbElemConvert/_UnitTest/
 // test_orb_elem_convert.py` parameterizes inclined/equatorial elliptical,
 // circular, parabolic, and hyperbolic cases in SI units. SDS OCM stores the
 // same elements in km, km/s, and km^3/s^2, so this ports the upstream sweep

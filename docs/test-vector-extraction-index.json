@@ -1815,7 +1815,7 @@
         "sdnTests": [
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "normalizes Basilisk VCM Keplerian true-anomaly elements to SDS OMM mean elements"
+            "name": "normalizes Basilisk OCM Keplerian true-anomaly elements to SDS OMM mean elements"
           }
         ],
         "quantities": ["Keplerian mean motion"],
@@ -1832,11 +1832,11 @@
         "sdnTests": [
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "normalizes Basilisk VCM Keplerian anomaly conventions"
+            "name": "normalizes Basilisk OCM Keplerian anomaly conventions"
           }
         ],
         "quantities": ["elliptic mean anomaly", "elliptic true anomaly", "hyperbolic mean anomaly", "hyperbolic true anomaly"],
-        "units": "Basilisk radians converted to SDS VCM degree fields",
+        "units": "Basilisk radians converted to SDS OCM degree fields",
         "tolerance": "1e-10 degrees"
       },
       {
@@ -1887,7 +1887,7 @@
           },
           {
             "file": "propagator/atmosphere/tests/behavior.test.mjs",
-            "name": "direct drag method computes Basilisk atmosphericDrag acceleration from VCM spacecraft state"
+            "name": "direct drag method computes Basilisk atmosphericDrag acceleration from OCM spacecraft state"
           }
         ],
         "quantities": ["drag acceleration vector"],
@@ -1912,19 +1912,19 @@
           },
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "converts Basilisk VCM Keplerian true-anomaly elements to SDS OEM state vector"
+            "name": "converts Basilisk OCM Keplerian true-anomaly elements to SDS OEM state vector"
           },
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "converts Basilisk VCM Keplerian true-anomaly elements to VCM state vector"
+            "name": "converts Basilisk OCM Keplerian true-anomaly elements to OCM state vector"
           },
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "recovers Basilisk VCM Cartesian state vector as VCM Keplerian mean anomaly"
+            "name": "recovers Basilisk OCM Cartesian state vector as OCM Keplerian mean anomaly"
           },
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "recovers Basilisk VCM Cartesian state vector as VCM equinoctial elements"
+            "name": "recovers Basilisk OCM Cartesian state vector as OCM equinoctial elements"
           }
         ],
         "quantities": ["elliptical Keplerian elements", "Cartesian position", "Cartesian velocity", "mean anomaly"],
@@ -1945,19 +1945,19 @@
           },
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "promotes Basilisk VCM Cartesian state vector to SDS OEM state vector"
+            "name": "promotes Basilisk OCM Cartesian state vector to SDS OEM state vector"
           },
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "recovers Basilisk VCM Cartesian state vector as OMM argument of latitude"
+            "name": "recovers Basilisk OCM Cartesian state vector as OMM argument of latitude"
           },
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "recovers circular inclined VCM equinoctial elements as Keplerian argument of latitude"
+            "name": "recovers circular inclined OCM equinoctial elements as Keplerian argument of latitude"
           },
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "converts circular inclined VCM equinoctial elements to VCM state vector"
+            "name": "converts circular inclined OCM equinoctial elements to OCM state vector"
           }
         ],
         "quantities": ["circular inclined elements", "argument of latitude", "Cartesian state"],
@@ -1978,7 +1978,7 @@
           },
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "normalizes circular equatorial VCM equinoctial elements to SDS OMM true longitude"
+            "name": "normalizes circular equatorial OCM equinoctial elements to SDS OMM true longitude"
           }
         ],
         "quantities": ["circular equatorial elements", "true longitude", "Cartesian state"],
@@ -2062,7 +2062,7 @@
           },
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "normalizes Basilisk VCM hyperbolic Keplerian true-anomaly elements to SDS OMM mean elements"
+            "name": "normalizes Basilisk OCM hyperbolic Keplerian true-anomaly elements to SDS OMM mean elements"
           }
         ],
         "quantities": ["hyperbolic Keplerian elements", "Cartesian state", "hyperbolic mean anomaly"],
@@ -2079,7 +2079,7 @@
         "sdnTests": [
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "converts Basilisk rectilinear elliptical VCM anomaly elements to Cartesian state"
+            "name": "converts Basilisk rectilinear elliptical OCM anomaly elements to Cartesian state"
           }
         ],
         "quantities": ["rectilinear elliptical elements", "Basilisk source anomaly", "Cartesian state"],
@@ -2104,14 +2104,10 @@
           },
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "recovers Basilisk parabolic VCM Cartesian state vector as VCM Keplerian true anomaly"
-          },
-          {
-            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "recovers Basilisk parabolic VCM Cartesian state vector as OMM Barker mean elements"
+            "name": "recovers Basilisk parabolic OCM Cartesian state vector as OMM Barker mean elements"
           }
         ],
-        "quantities": ["parabolic Cartesian state", "Keplerian elements", "true anomaly", "Barker mean anomaly", "OMM mean elements"],
+        "quantities": ["parabolic Cartesian state", "Barker mean anomaly", "OMM mean elements"],
         "units": "km, km/s, degrees, km3/s2",
         "tolerance": "1e-10 degrees angles, 1e-12 eccentricity"
       },
@@ -2124,10 +2120,10 @@
         "sdnTests": [
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "recovers Basilisk parabolic VCM Cartesian state with signed true anomaly"
+            "name": "recovers Basilisk parabolic OCM Cartesian state with signed true anomaly as OMM Barker mean elements"
           }
         ],
-        "quantities": ["parabolic Cartesian state", "signed true anomaly", "periapsis radius"],
+        "quantities": ["parabolic Cartesian state", "signed Barker mean anomaly", "OMM mean elements"],
         "units": "km, km/s, degrees, km3/s2",
         "tolerance": "1e-10 degrees angles, 1e-12 eccentricity"
       },
@@ -2140,30 +2136,13 @@
         "sdnTests": [
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "covers Basilisk orbElemConvert parameter sweep through VCM Keplerian/state conversion"
+            "name": "covers Basilisk orbElemConvert parameter sweep through OCM Keplerian/state conversion"
           }
         ],
-        "quantities": ["Keplerian elements", "Cartesian state", "recovered Keplerian elements", "elliptic/circular/parabolic/hyperbolic conic families"],
+        "quantities": ["Keplerian elements", "Cartesian state", "recovered Keplerian elements", "elliptic/circular/hyperbolic conic families", "parabolic refusal"],
         "units": "source SI m, m/s, and m3/s2 converted to SDS km, km/s, and km3/s2; angles in degrees",
         "tolerance": "5e-10 relative or 5e-11 absolute for Cartesian state, 1e-7 degrees inverse angles, 5e-9 relative element recovery",
-        "notes": "Ports the full upstream parameter sweep over inclined/equatorial elliptic, circular, parabolic, and hyperbolic cases through VCM Keplerian-to-state and state-to-Keplerian FlatBuffer methods."
-      },
-      {
-        "id": "basilisk-orbital-motion-parabolic-forward",
-        "upstreamTestFile": "src/architecture/utilities/tests/test_orbitalMotion.cpp",
-        "upstreamFileKind": "sourceFile",
-        "upstreamTestMethod": "TwoDimensionParabolic.elem2rv",
-        "sourceContains": ["TwoDimensionParabolic", "elem2rv", "elements.rPeriap = 7500.", "elements.e = 1.0"],
-        "sdnModule": "foundation/orbits",
-        "sdnTests": [
-          {
-            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "converts Basilisk parabolic VCM Keplerian periapsis elements to Cartesian state"
-          }
-        ],
-        "quantities": ["parabolic Keplerian periapsis elements", "Cartesian position", "Cartesian velocity"],
-        "units": "km, km/s, degrees, km3/s2",
-        "tolerance": "1e-9 km position, 1e-12 km/s velocity"
+        "notes": "Ports the upstream parameter sweep over inclined/equatorial elliptic, circular, and hyperbolic cases through OCM Keplerian-to-state and state-to-Keplerian FlatBuffer methods. The parabolic cases are refused in both directions: SANA KEPLERIAN needs a finite semi-major axis."
       },
       {
         "id": "basilisk-orbital-motion-parabolic-barker-anomaly",
@@ -2175,17 +2154,13 @@
         "sdnTests": [
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "normalizes parabolic VCM Keplerian anomaly with Barker equation"
-          },
-          {
-            "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "normalizes Basilisk parabolic VCM Keplerian elements to SDS OMM mean elements"
+            "name": "recovers Basilisk parabolic OCM Cartesian state vector as OMM Barker mean elements"
           }
         ],
-        "quantities": ["parabolic true anomaly", "Barker mean anomaly", "periapsis radius", "Cartesian position", "Cartesian velocity", "OMM mean elements"],
-        "units": "km, km/s, degrees in SDS VCM, dimensionless Barker anomaly converted to degrees",
-        "tolerance": "1e-10 degrees anomaly, 1e-9 km position, 1e-12 km/s velocity, 1e-15 rev/day mean motion",
-        "notes": "The parabolic orbit vector comes from Basilisk TwoDimensionParabolic; mean anomaly uses the closed-form Barker equation M=tan(f/2)+tan(f/2)^3/3 and OMM mean motion remains zero because semi-major axis is undefined for parabolic states."
+        "quantities": ["parabolic Cartesian state", "Barker mean anomaly", "OMM mean elements"],
+        "units": "km, km/s, degrees, dimensionless Barker anomaly converted to degrees",
+        "tolerance": "1e-10 degrees anomaly, 1e-15 rev/day mean motion",
+        "notes": "The parabolic orbit vector comes from Basilisk TwoDimensionParabolic; mean anomaly uses the closed-form Barker equation M=tan(f/2)+tan(f/2)^3/3 and OMM mean motion remains zero because semi-major axis is undefined for parabolic states. OCM element-set input cannot carry a parabola (SANA KEPLERIAN has no periapsis radius), so only the Cartesian-to-OMM direction is ported."
       },
       {
         "id": "basilisk-orbital-motion-rectilinear-hyperbolic",
@@ -2197,7 +2172,7 @@
         "sdnTests": [
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "converts Basilisk rectilinear hyperbolic VCM anomaly elements to Cartesian state"
+            "name": "converts Basilisk rectilinear hyperbolic OCM anomaly elements to Cartesian state"
           }
         ],
         "quantities": ["rectilinear hyperbolic elements", "Basilisk source anomaly", "Cartesian state"],
@@ -2214,11 +2189,11 @@
         "sdnTests": [
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "maps Basilisk chief and deputy VCM states to CDM Hill relative state"
+            "name": "maps Basilisk chief and deputy OCM states to CDM Hill relative state"
           },
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "maps Basilisk CDM Hill relative state and chief VCM to deputy VCM state"
+            "name": "maps Basilisk CDM Hill relative state and chief OCM to deputy OCM state"
           }
         ],
         "quantities": ["chief Cartesian state", "deputy Cartesian state", "Hill relative position", "Hill relative velocity", "recovered deputy Cartesian state"],
@@ -2235,11 +2210,11 @@
         "sdnTests": [
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "maps Basilisk VCM Keplerian mean elements to osculating elements with GRV J2 context"
+            "name": "maps Basilisk OCM Keplerian mean elements to osculating elements with GRV J2 context"
           }
         ],
         "quantities": ["mean Keplerian elements", "osculating Keplerian elements", "equatorial radius", "J2"],
-        "units": "km, radians in upstream, degrees in SDS VCM, unitless J2",
+        "units": "km, radians in upstream, degrees in SDS OCM, unitless J2",
         "tolerance": "1e-10 km semi-major axis, 1e-14 eccentricity, 1e-10 degrees angles"
       },
       {
@@ -2252,11 +2227,11 @@
         "sdnTests": [
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "maps Basilisk VCM Keplerian osculating elements to mean elements with GRV J2 context"
+            "name": "maps Basilisk OCM Keplerian osculating elements to mean elements with GRV J2 context"
           }
         ],
         "quantities": ["osculating Keplerian elements", "mean Keplerian elements", "equatorial radius", "J2"],
-        "units": "km, radians in upstream, degrees in SDS VCM, unitless J2",
+        "units": "km, radians in upstream, degrees in SDS OCM, unitless J2",
         "tolerance": "2e-4 km semi-major axis, 1e-7 eccentricity, 5e-6 degrees angles for first-order inverse recovery"
       },
       {
@@ -2269,7 +2244,7 @@
         "sdnTests": [
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "computes Basilisk J2-J6 zonal perturbation acceleration from VCM state and GRV context"
+            "name": "computes Basilisk J2-J6 zonal perturbation acceleration from OCM state and GRV context"
           }
         ],
         "quantities": ["Cartesian position", "J2-J6 zonal coefficients", "equatorial radius", "gravitational parameter", "perturbation acceleration"],
@@ -2287,7 +2262,7 @@
         "sdnTests": [
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "computes Basilisk solar radiation pressure acceleration from VCM spacecraft parameters and CRD sun vector"
+            "name": "computes Basilisk solar radiation pressure acceleration from OCM spacecraft parameters and CRD sun vector"
           }
         ],
         "quantities": ["spacecraft area", "spacecraft mass", "solar radiation pressure coefficient", "central-body-to-Sun vector", "solar radiation pressure acceleration"],
@@ -2305,27 +2280,27 @@
         "sdnTests": [
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "converts Basilisk VCM Keplerian elements to VCM equinoctial elements"
+            "name": "converts Basilisk OCM Keplerian elements to OCM equinoctial elements"
           },
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "recovers Basilisk VCM equinoctial elements as VCM Keplerian true anomaly"
+            "name": "recovers Basilisk OCM equinoctial elements as OCM Keplerian true anomaly"
           },
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "normalizes Basilisk VCM equinoctial elements to SDS OMM mean elements"
+            "name": "normalizes Basilisk OCM equinoctial elements to SDS OMM mean elements"
           },
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "converts Basilisk VCM equinoctial elements to SDS OEM state vector"
+            "name": "converts Basilisk OCM equinoctial elements to SDS OEM state vector"
           },
           {
             "file": "foundation/orbits/tests/keplerian_conversion.test.mjs",
-            "name": "converts Basilisk VCM equinoctial elements to VCM state vector"
+            "name": "converts Basilisk OCM equinoctial elements to OCM state vector"
           }
         ],
         "quantities": ["equinoctial elements", "Keplerian elements", "Cartesian state"],
-        "units": "km, km/s, radians in upstream, degrees in SDS VCM, unitless AF/AG/CHI/PSI",
+        "units": "km, km/s, radians in upstream, degrees in SDS OCM, unitless AF/AG/CHI/PSI",
         "tolerance": "1e-15 unitless equinoctial fields, 1e-12 degrees angles"
       }
     ]
