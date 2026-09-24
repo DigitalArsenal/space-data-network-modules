@@ -2,6 +2,9 @@
  * Atmosphere Plugin — 6DOF Integration Tests
  */
 
+// These checks must run in every build type, including Release.
+#undef NDEBUG
+
 #include "atmosphere/sixdof_core.h"
 #include <iostream>
 #include <cassert>

@@ -26,9 +26,9 @@ The response payload is UTF-8 JSON returned on the `response` port.
 
 `query_atmosphere_state_batch` is the binary direct method for module-to-module
 use. It accepts SDS `HFC.fbs` (`$HFC`, root `HFC`) on the `atmosphere` port
-and optional SDS `SPW.fbs` (`$SPW`, root `SPW`) on the `space_weather` port,
-reads `ATMOSPHERE`, `ALTITUDE_M`, and optional sample metadata, and emits SDS
-`HFC.fbs` on the `states` port with:
+and zero to 64 daily SDS `SPW.fbs` (`$SPW`, root `SPW`) records on the
+`space_weather` port, reads `ATMOSPHERE`, `ALTITUDE_M`, and sample metadata,
+and emits SDS `HFC.fbs` on the `states` port with:
 
 - `ATMOSPHERE_PROVIDER`
 - `ATMOSPHERE_MODEL_REVISION`
@@ -44,15 +44,53 @@ reads `ATMOSPHERE`, `ALTITUDE_M`, and optional sample metadata, and emits SDS
 - `TEMPERATURE_K`
 - `PRESSURE_PA`
 - `SPEED_OF_SOUND_M_PER_S`
+- `ASSUMPTIONS`: the model inputs and approximations actually used
 
-For `ATMOSPHERE.MODEL = USSA_XX`, density samples at and above 100 km use the Basilisk `orbitalMotion.c` Standard Atmosphere 1976 orbital density curve fit while lower-altitude state quantities use the US76 layer model.
+An absent `ATMOSPHERE` means `USSA_XX` 1976. Any other model family is refused
+with `unsupported-atmosphere-model`; the module never answers a request with a
+different model than the one named.
 
-For `ATMOSPHERE.MODEL = NRLMSIS00E`, supplied `SAMPLE_EPOCHS`,
-`LATITUDE_DEG`, and `LONGITUDE_DEG` are converted into the NRLMSISE-00
-position/time inputs before density, temperature, pressure, and sound speed are
-computed. The output also preserves those request vectors for downstream
-module alignment. When a `space_weather` `$SPW` frame is supplied, its F10.7,
-centered F10.7A, and Ap fields feed the NRLMSISE-00 solar-activity input.
+For `ATMOSPHERE.MODEL = USSA_XX`, density samples at and above 100 km use the
+Basilisk `orbitalMotion.c` Standard Atmosphere 1976 orbital density curve fit
+while lower-altitude state quantities use the US76 layer model. That curve fit
+is an approximation, and `ASSUMPTIONS` says so.
+
+For `ATMOSPHERE.MODEL = NRLMSIS00E`, every sample needs a UTC `SAMPLE_EPOCHS`
+entry, `LATITUDE_DEG`, `LONGITUDE_DEG`, and an `ALTITUDE_M` geodetic height in
+0–1 000 000 m. `TIME_SYSTEM` must be `UTC` or absent. Space weather comes from
+the daily `$SPW` records, following the NRLMSISE-00 package definitions
+(`third_party/nrlmsise00/nrlmsise-00.h`, notes on input variables and
+`struct ap_array`):
+
+- F10.7 is the **observed** flux (`F107_OBS`) of the UTC day **before** the
+  sample. The model was built on flux at the Earth's actual distance, so the
+  1 AU adjusted fields are never read.
+- F10.7A is the observed 81-day centered mean (`F107_OBS_CENTER81`) of the
+  sample's own day.
+- The daily Ap is the sample day's `AP_AVG`.
+- When the 3-hour bins (`AP1`..`AP8`) covering the 57 hours before the sample
+  are all present, the model runs with switch 9 = -1 and the epoch-relative
+  ap history: current bin, 3 h, 6 h and 9 h before, and the means of the eight
+  bins 12–33 h and 36–57 h before. Otherwise it uses the daily Ap alone.
+  `ASSUMPTIONS` reports how many samples used each mode, and any use of
+  forecast flux (`F107_DATA_TYPE` `PRD`/`PRM`).
+
+Supply the sample day and the day before at minimum. Supply the three days
+before as well to get the ap history. Local solar time follows from UT and
+longitude. There are no default weather, time or position values.
+
+Refusals carry stable error codes: `missing-space-weather`,
+`missing-space-weather-day`, `missing-previous-day-f107`,
+`missing-centered-f107`, `duplicate-spw-day`, `invalid-spw-date`,
+`invalid-spw-value`, `too-many-spw-records`, `missing-sample-epochs`,
+`invalid-sample-epoch`, `missing-sample-positions`, `invalid-sample-position`,
+`altitude-out-of-range`, `invalid-altitude`, `invalid-speed`,
+`unsupported-time-system`, `unsupported-atmosphere-model`.
+
+The JSON command bridge follows the same rule for `NRLMSISE00`: `solar`
+(`F107`, `F107A`, `Ap`), `position` and `epoch` are required, and
+`"apHistory": true` passes a full 7-element `Ap` array as the model's ap
+history. Unknown `model` names are refused.
 
 The C++ model layer also includes Basilisk `orbitalMotion.c` `debyeLength` and
 `atmosphericDrag` utilities with SI input/output for native parity coverage.
@@ -94,16 +132,26 @@ These operations route the US Standard Atmosphere 1976 implementation (geopotent
 Native tests:
 
 ```bash
-cmake -S src/cpp -B build
+cmake -S src/cpp -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j4
 ctest --test-dir build --output-on-failure
 ```
 
-Wasm build:
+`test_nrlmsise_package` runs the vendored model over all 17 published cases of
+the NRLMSISE-00 C package, including the ap-history cases 16 and 17.
+`test_space_weather` checks the daily-record-to-model-input selection.
+
+Wasm build. `build.sh` regenerates the SDS bindings from the published
+`spacedatastandards.org` package with `generate-sds-headers.mjs`, so install
+the pinned packages first:
 
 ```bash
+npm ci
 bash build.sh
 ```
+
+The build has no `-ffast-math`: it would let the compiler assume NaN and
+infinity never occur and remove the input validation.
 
 Artifacts:
 
@@ -116,20 +164,23 @@ Artifacts:
 SDK, browser, and WasmEdge harness:
 
 ```bash
-npm test
+PATH="$HOME/.wasmedge/bin:$PATH" npm test
 ```
 
-That test covers:
+The WasmEdge cases need `wasmedge` on `PATH`. That test covers:
 
 - SDK artifact compliance
 - browser and WasmEdge command invoke smoke via `dist/isomorphic/module.wasm`
 - binary SDS HFC direct-method invoke in browser and WasmEdge
 - HFC sample epoch, latitude, and longitude preservation through the direct
   binary method
-- HFC NRLMSISE-00 density and temperature variation from per-sample epoch and
-  coordinate metadata in browser and WasmEdge
-- typed SDS SPW F10.7/F10.7A/Ap input for HFC NRLMSISE-00 in browser and
-  WasmEdge
+- HFC NRLMSISE-00 input selection from daily SPW records: observed
+  previous-day flux, centered mean, epoch-relative ap history, daily-Ap
+  fallback and forecast reporting, each checked against the same model
+  evaluated with independently stated inputs, in browser and WasmEdge
+- refusal codes for missing weather, epochs, positions, out-of-range altitude,
+  non-UTC time systems, duplicate days and unsupported models
+- NRLMSISE-00 published case 16 (ap history) through the JSON bridge
 - Basilisk `atmosphericDensity` reference density at 200 km through HFC
 - Basilisk `debyeLength` native reference values at 400 km, 1000 km, 10000 km,
   and 34000 km

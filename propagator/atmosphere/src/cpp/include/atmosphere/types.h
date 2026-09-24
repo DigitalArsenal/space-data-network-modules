@@ -75,17 +75,36 @@ struct WindVec {
 struct GeoPos {
     double lat_rad = 0;  // geodetic latitude [rad]
     double lon_rad = 0;  // geodetic longitude [rad]
-    double alt_m   = 0;  // altitude above MSL [m]
+    double alt_m   = 0;  // geodetic height above the WGS-84 ellipsoid [m]
 };
 
 // ---------------------------------------------------------------------------
 // Solar & Geomagnetic Activity (for NRLMSISE-00)
 // ---------------------------------------------------------------------------
 
+// How NRLMSISE-00 consumes the geomagnetic index (nrlmsise-00.h, switch 9).
+enum class GeomagneticInput : uint8_t {
+    DailyAp   = 0,  // switch 9 = 1: Ap[0] is the daily Ap; Ap[1..6] ignored
+    ApHistory = 1,  // switch 9 = -1: Ap[0..6] is the model's ap_array
+};
+
+// F10.7 values are the flux at the Earth's actual distance from the Sun
+// (observed), not the 1 AU adjusted flux — nrlmsise-00.h, notes on input
+// variables.
+//
+// ApHistory layout (nrlmsise-00.h, struct ap_array):
+//   Ap[0] daily Ap
+//   Ap[1] 3-hour ap for the current time
+//   Ap[2] 3-hour ap 3 hours before
+//   Ap[3] 3-hour ap 6 hours before
+//   Ap[4] 3-hour ap 9 hours before
+//   Ap[5] mean of eight 3-hour ap from 12 to 33 hours before
+//   Ap[6] mean of eight 3-hour ap from 36 to 57 hours before
 struct SolarActivity {
-    double F107  = 150.0;  // daily F10.7 solar flux (previous day) [SFU]
-    double F107A = 150.0;  // 81-day centered average F10.7 [SFU]
-    double Ap[7] = {4,4,4,4,4,4,4}; // magnetic index array
+    double F107  = 150.0;  // observed daily F10.7 for the previous day [SFU]
+    double F107A = 150.0;  // observed 81-day centered average F10.7 [SFU]
+    double Ap[7] = {4,4,4,4,4,4,4}; // magnetic index array (see above)
+    GeomagneticInput geomagnetic = GeomagneticInput::DailyAp;
 };
 
 // ---------------------------------------------------------------------------

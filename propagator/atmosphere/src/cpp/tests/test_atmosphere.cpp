@@ -1,3 +1,6 @@
+// These checks must run in every build type, including Release.
+#undef NDEBUG
+
 #include "atmosphere/types.h"
 #include "atmosphere/models.h"
 
@@ -273,6 +276,97 @@ void testNRLMSISE_CanonicalCase9_HighF107() {
               << " ✓\n";
 }
 
+// Published cases 16 and 17 of the same table run with switch 9 = -1 and
+// ap_a[0..6] = 100 (nrlmsise-00_test.c: aph.a[i] = 100). The DOCUMENTATION
+// file prints seven significant digits
+// (https://github.com/magnific0/nrlmsise-00/blob/master/DOCUMENTATION,
+// sha256 ddeb6c430007af087acceaa422d4a5b15bcbfa84258383f6fd75888ccb82f920).
+// Tolerance 1e-5 relative: print rounding is 5e-7; the rest allows for
+// floating-point evaluation-order differences between compilers.
+atmosphere::State runApHistory(double alt_km) {
+    atmosphere::GeoPos pos{60.0 * M_PI / 180.0, -70.0 * M_PI / 180.0, alt_km * 1000.0};
+    atmosphere::Epoch epoch{0, 172, 29000.0};
+    atmosphere::SolarActivity solar;
+    solar.F107 = 150.0;
+    solar.F107A = 150.0;
+    for (int i = 0; i < 7; ++i) solar.Ap[i] = 100.0;
+    solar.geomagnetic = atmosphere::GeomagneticInput::ApHistory;
+    return atmosphere::nrlmsise00(pos, epoch, solar, canonical::LST);
+}
+
+// Mass density in g/cm^3 from published species number densities (1/cm^3),
+// with the atomic-mass weights gtd7/gtd7d use (nrlmsise-00.c):
+// 1.66e-24 * (4 He + 16 O + 28 N2 + 32 O2 + 40 Ar + H + 14 N [+ 16 anomalous O]).
+double packageRhoGcm3(double he, double o, double n2, double o2, double ar,
+                      double h, double n, double anomalousO) {
+    return 1.66e-24 * (4.0 * he + 16.0 * o + 28.0 * n2 + 32.0 * o2 + 40.0 * ar +
+                       h + 14.0 * n + 16.0 * anomalousO);
+}
+
+void testNRLMSISE_PublishedCase16_ApHistory() {
+    // 5.196477E+05 1.274494E+08 4.850450E+07 1.720838E+06 2.354487E+04
+    // 5.881940E-15 2.500078E+04 6.279210E+06 2.667273E+04 1.426412E+03
+    // 1.408608E+03   (He O N2 O2 Ar RHO H N ANM-O TINF TG)
+    auto s = runApHistory(400.0);
+    constexpr double tol = 1e-5;
+    assertRelNear(s.exosphericTemp, 1.426412E+03, tol, "case16 TINF");
+    assertRelNear(s.temperature, 1.408608E+03, tol, "case16 TG");
+    assertRelNear(s.numDensityHe * 1e-6, 5.196477E+05, tol, "case16 He");
+    assertRelNear(s.numDensityO * 1e-6, 1.274494E+08, tol, "case16 O");
+    assertRelNear(s.numDensityN2 * 1e-6, 4.850450E+07, tol, "case16 N2");
+    assertRelNear(s.numDensityO2 * 1e-6, 1.720838E+06, tol, "case16 O2");
+    assertRelNear(s.numDensityAr * 1e-6, 2.354487E+04, tol, "case16 Ar");
+    assertRelNear(s.numDensityH * 1e-6, 2.500078E+04, tol, "case16 H");
+    assertRelNear(s.numDensityN * 1e-6, 6.279210E+06, tol, "case16 N");
+    // gtd7 RHO excludes anomalous oxygen: check the species sum against it,
+    // then the gtd7d drag density against the sum that includes it.
+    assertRelNear(packageRhoGcm3(5.196477E+05, 1.274494E+08, 4.850450E+07, 1.720838E+06,
+                                 2.354487E+04, 2.500078E+04, 6.279210E+06, 0.0),
+                  5.881940E-15, tol, "case16 published RHO from species");
+    const double rhoDrag = packageRhoGcm3(5.196477E+05, 1.274494E+08, 4.850450E+07,
+                                          1.720838E+06, 2.354487E+04, 2.500078E+04,
+                                          6.279210E+06, 2.667273E+04);
+    assertRelNear(s.density, rhoDrag * 1000.0, tol, "case16 gtd7d rho kg/m^3");
+    std::cout << "  NRLMSISE-00 published case 16 (ap history, 400 km): TINF="
+              << s.exosphericTemp << " rho=" << s.density << " ✓\n";
+}
+
+void testNRLMSISE_PublishedCase17_ApHistory() {
+    // 4.260860E+07 1.241342E+11 4.929562E+12 1.048407E+12 4.993465E+10
+    // 2.914304E-10 8.831229E+06 2.252516E+05 2.415246E-42 1.027318E+03
+    // 1.934071E+02
+    auto s = runApHistory(100.0);
+    constexpr double tol = 1e-5;
+    assertRelNear(s.exosphericTemp, 1.027318E+03, tol, "case17 TINF");
+    assertRelNear(s.temperature, 1.934071E+02, tol, "case17 TG");
+    assertRelNear(s.numDensityHe * 1e-6, 4.260860E+07, tol, "case17 He");
+    assertRelNear(s.numDensityO * 1e-6, 1.241342E+11, tol, "case17 O");
+    assertRelNear(s.numDensityN2 * 1e-6, 4.929562E+12, tol, "case17 N2");
+    assertRelNear(s.numDensityO2 * 1e-6, 1.048407E+12, tol, "case17 O2");
+    assertRelNear(s.numDensityAr * 1e-6, 4.993465E+10, tol, "case17 Ar");
+    assertRelNear(s.numDensityH * 1e-6, 8.831229E+06, tol, "case17 H");
+    assertRelNear(s.numDensityN * 1e-6, 2.252516E+05, tol, "case17 N");
+    assertRelNear(s.density, 2.914304E-10 * 1000.0, tol, "case17 rho kg/m^3");
+    std::cout << "  NRLMSISE-00 published case 17 (ap history, 100 km): TG="
+              << s.temperature << " rho=" << s.density << " ✓\n";
+}
+
+void testNRLMSISE_DailyModeIgnoresHistorySlots() {
+    // With switch 9 = 1 the model reads only the daily ap, so case 1 must be
+    // reproduced whatever Ap[1..6] hold.
+    atmosphere::GeoPos pos{60.0 * M_PI / 180.0, -70.0 * M_PI / 180.0, 400000.0};
+    atmosphere::Epoch epoch{0, 172, 29000.0};
+    atmosphere::SolarActivity solar;
+    solar.F107 = 150.0;
+    solar.F107A = 150.0;
+    solar.Ap[0] = 4.0;
+    for (int i = 1; i < 7; ++i) solar.Ap[i] = 250.0;
+    auto s = atmosphere::nrlmsise00(pos, epoch, solar, canonical::LST);
+    assertRelNear(s.exosphericTemp, 1.250540E+03, 1e-5, "daily mode TINF");
+    assertRelNear(s.numDensityO * 1e-6, 1.138806E+08, 1e-5, "daily mode O");
+    std::cout << "  NRLMSISE-00 daily-Ap mode ignores Ap[1..6] ✓\n";
+}
+
 void testNRLMSISE_SeaLevel() {
     // Real NRLMSISE-00 surface state varies with location/season; it does not
     // exactly reproduce US76. Physically-justified bounds: surface density
@@ -413,6 +507,9 @@ int main() {
     testNRLMSISE_CanonicalCase4();
     testNRLMSISE_CanonicalCase11();
     testNRLMSISE_CanonicalCase9_HighF107();
+    testNRLMSISE_PublishedCase16_ApHistory();
+    testNRLMSISE_PublishedCase17_ApHistory();
+    testNRLMSISE_DailyModeIgnoresHistorySlots();
 
     // NRLMSISE-00 (behavioral)
     testNRLMSISE_SeaLevel();

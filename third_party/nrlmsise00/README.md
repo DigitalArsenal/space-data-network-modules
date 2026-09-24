@@ -16,12 +16,22 @@ package release 20041227.
 Files `nrlmsise-00.c`, `nrlmsise-00_data.c`, `nrlmsise-00.h` were copied from
 the Basilisk astrodynamics framework
 (`src/simulation/environment/MsisAtmosphere/`), which redistributes the
-Brodowski package verbatim apart from cosmetic warning fixes (initialized
-locals, doxygen comments). Verified against upstream
-https://github.com/magnific0/nrlmsise-00 — the coefficient data file is
-byte-identical and `nrlmsise-00.c` differs only in those cosmetic edits.
+Brodowski package with warning fixes (initialized locals, doxygen comments,
+`(int)` casts on switch tests). Compared with upstream
+https://github.com/magnific0/nrlmsise-00 the coefficient data file is
+byte-identical.
 
-Do not edit these files. Consumers:
+One of Basilisk's casts was not cosmetic. Upstream tests the coefficient with
+`if (p[51])`; Basilisk wrote `if ((int) p[51])`, which truncates the
+fractional coefficient to zero and drops the UT/longitude magnetic-activity
+term whenever the 3-hour ap history is used (switch 9 = -1). With that cast
+the package's published test cases 16 and 17 fail (case 16 TINF 1405.566 K
+instead of 1426.412 K). `nrlmsise-00.c` restores the upstream semantics as
+`if (p[51] != 0.0)`; the other casts act on switch values that are exactly
+0, 1 or -1 and do not change results. With that line restored, all 17
+published cases reproduce to the printed seven significant digits.
+
+Do not edit these files except to restore upstream behavior. Consumers:
 
 - `propagator/atmosphere` (atmosphere SDN module)
 - `propagator/hpop` (HPOP drag / atmosphere path)

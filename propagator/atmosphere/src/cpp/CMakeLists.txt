@@ -7,11 +7,14 @@ set(NRLMSISE00_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/nrlmsise
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# No -ffast-math: it lets the compiler assume NaN and infinity never occur,
+# which makes the module's input validation undefined. No -march=native:
+# native test binaries must not depend on the build machine.
 if(EMSCRIPTEN)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -flto -ffast-math -DNDEBUG")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -flto -DNDEBUG")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -O3 -flto")
 else()
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -flto -ffast-math -march=native -mtune=native")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -flto")
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif()
 
@@ -38,6 +41,7 @@ add_library(
     src/us76.cpp
     src/nrlmsise00.cpp
     src/plugin_runtime.cpp
+    src/space_weather.cpp
     "${NRLMSISE00_DIR}/nrlmsise-00.c"
     "${NRLMSISE00_DIR}/nrlmsise-00_data.c"
 )
@@ -51,9 +55,18 @@ if(NOT EMSCRIPTEN)
     add_executable(test_sixdof tests/test_sixdof.cpp)
     target_include_directories(test_sixdof PRIVATE include)
 
+    add_executable(test_space_weather tests/test_space_weather.cpp)
+    target_link_libraries(test_space_weather atmosphere)
+    target_include_directories(test_space_weather PRIVATE include)
+
+    add_executable(test_nrlmsise_package tests/test_nrlmsise_package.cpp)
+    target_link_libraries(test_nrlmsise_package atmosphere)
+
     enable_testing()
     add_test(NAME atmosphere COMMAND test_atmosphere)
+    add_test(NAME nrlmsise_package COMMAND test_nrlmsise_package)
     add_test(NAME atmosphere_sixdof COMMAND test_sixdof)
+    add_test(NAME atmosphere_space_weather COMMAND test_space_weather)
 endif()
 
 if(EMSCRIPTEN)

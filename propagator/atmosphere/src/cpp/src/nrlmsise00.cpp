@@ -71,6 +71,17 @@ State nrlmsise00(const GeoPos& pos, const Epoch& epoch, const SolarActivity& sol
     input.ap = solar.Ap[0];
     input.ap_a = nullptr;
 
+    // Epoch-relative 3-hour ap history: switch 9 = -1 and ap_a set
+    // (nrlmsise-00.h, switches and struct ap_array).
+    ap_array history;
+    if (solar.geomagnetic == GeomagneticInput::ApHistory) {
+        for (int i = 0; i < 7; ++i) {
+            history.a[i] = solar.Ap[i];
+        }
+        flags.switches[9] = -1;
+        input.ap_a = &history;
+    }
+
     gtd7d(&input, &flags, &output);
 
     // Unit conversions: number densities 1/cm^3 -> 1/m^3,

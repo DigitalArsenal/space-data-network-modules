@@ -2,32 +2,32 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-import * as flatbuffers from "../../../../spacedatastandards.org/node_modules/flatbuffers/mjs/flatbuffers.js";
+import * as flatbuffers from "flatbuffers";
 import {
   AtmosphericModelFamily,
   ATMT,
   HFC,
   HFCT,
   hfcAtmosphereCouplingMode,
-} from "../../../../spacedatastandards.org/lib/js/HFC/main.js";
+} from "spacedatastandards.org/lib/js/HFC/main.js";
 import {
   F107DataType,
   SPW,
-} from "../../../../spacedatastandards.org/lib/js/SPW/main.js";
+} from "spacedatastandards.org/lib/js/SPW/main.js";
 import {
   OEM,
-} from "../../../../spacedatastandards.org/lib/js/OEM/main.js";
+} from "spacedatastandards.org/lib/js/OEM/main.js";
 import {
   VCM,
   VCMStateVectorT,
   VCMT,
-} from "../../../../spacedatastandards.org/lib/js/VCM/main.js";
+} from "spacedatastandards.org/lib/js/VCM/main.js";
 import {
   STANDALONE_RUNTIME_KINDS,
   assertSuccessfulResponse,
   createStandaloneHarnessOrSkip,
   invokeJsonRequest,
-} from "../../../tests/lib/isomorphicHarness.mjs";
+} from "space-data-module-sdk/testing/isomorphic";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
@@ -39,6 +39,7 @@ function readManifest() {
 function encodeHfcAtmosphereRequest({
   model = AtmosphericModelFamily.USSA_XX,
   year = 1976,
+  timeSystem = "UTC",
   sampleEpochs = [],
   latitudesDeg = [],
   longitudesDeg = [],
@@ -51,7 +52,7 @@ function encodeHfcAtmosphereRequest({
     "2026-05-25T00:00:00Z",
     "DigitalArsenal",
     "ATMOSPHERE-QUERY",
-    "UTC",
+    timeSystem,
     "ITRF",
     null,
     null,
@@ -84,7 +85,10 @@ function encodeSpwRecord({
   f107Adj = f107Obs,
   f107ObsCenter81 = f107Obs,
   f107AdjCenter81 = f107Adj,
+  f107DataType = F107DataType.OBS,
   ap = 4,
+  ap3Hour = [ap, ap, ap, ap, ap, ap, ap, ap],
+  apAvg = ap,
 } = {}) {
   const builder = new flatbuffers.Builder(256);
   const dateOffset = builder.createString(date);
@@ -102,21 +106,14 @@ function encodeSpwRecord({
     0,
     0,
     0,
-    ap,
-    ap,
-    ap,
-    ap,
-    ap,
-    ap,
-    ap,
-    ap,
-    ap,
+    ...ap3Hour,
+    apAvg,
     0,
     0,
     0,
     f107Obs,
     f107Adj,
-    F107DataType.OBS,
+    f107DataType,
     f107ObsCenter81,
     f107Obs,
     f107AdjCenter81,
@@ -124,6 +121,50 @@ function encodeSpwRecord({
   );
   SPW.finishSPWBuffer(builder, root);
   return builder.asUint8Array();
+}
+
+// Four consecutive UTC days, 2024-06-18..21. The 3-hour ap of day offset o
+// (0..3) and bin b is 10 * o + b + 1. Adjusted fluxes are deliberately far
+// from the observed ones: the model must read only the observed values.
+function spwWindow({ days = [0, 1, 2, 3], forecastDay = -1 } = {}) {
+  return days.map((offset) => encodeSpwRecord({
+    date: `2024-06-${String(18 + offset).padStart(2, "0")}`,
+    f107Obs: 100 + 10 * offset,
+    f107Adj: 500 + 10 * offset,
+    f107ObsCenter81: 140 + offset,
+    f107AdjCenter81: 600 + offset,
+    f107DataType: offset === forecastDay ? F107DataType.PRD : F107DataType.OBS,
+    ap3Hour: Array.from({ length: 8 }, (_, bin) => 10 * offset + bin + 1),
+    apAvg: 5 + offset,
+  }));
+}
+
+function spwInputs(payloads) {
+  return payloads.map((payload) => ({
+    portId: "space_weather",
+    typeRef: { schemaName: "SPW.fbs", fileIdentifier: "$SPW", rootTypeName: "SPW" },
+    payload,
+  }));
+}
+
+function hfcInput(payload) {
+  return {
+    portId: "atmosphere",
+    typeRef: { schemaName: "HFC.fbs", fileIdentifier: "$HFC", rootTypeName: "HFC" },
+    payload,
+  };
+}
+
+function nrlmsiseHfcRequest(overrides = {}) {
+  return encodeHfcAtmosphereRequest({
+    model: AtmosphericModelFamily.NRLMSIS00E,
+    year: 2000,
+    sampleEpochs: ["2024-06-21T12:30:00Z"],
+    latitudesDeg: [45],
+    longitudesDeg: [-100],
+    altitudesM: [400_000],
+    ...overrides,
+  });
 }
 
 function encodeVcmDragReferenceState() {
@@ -543,12 +584,17 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       await harness.destroy();
     });
 
+    const place = {
+      position: { latitudeDeg: 60, longitudeDeg: -70 },
+      epoch: { year: 2024, dayOfYear: 172, secondOfDay: 29_000 },
+    };
     const lowSolar = await invokeJsonRequest(harness, {
       operation: "queryAltitude",
       params: {
         altitudeM: 400_000,
         model: "NRLMSISE00",
-        solar: { F107: 70, F107A: 70, Ap: [0, 0, 0, 0, 0, 0, 0] },
+        ...place,
+        solar: { F107: 70, F107A: 70, Ap: [0] },
       },
     });
     const highSolar = await invokeJsonRequest(harness, {
@@ -556,12 +602,189 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       params: {
         altitudeM: 400_000,
         model: "NRLMSISE00",
-        solar: { F107: 200, F107A: 180, Ap: [50, 0, 0, 0, 0, 0, 0] },
+        ...place,
+        solar: { F107: 200, F107A: 180, Ap: [50] },
       },
     });
 
     assert.ok(highSolar.state.exosphericTemp > lowSolar.state.exosphericTemp);
     assert.ok(highSolar.state.temperature > lowSolar.state.temperature);
     assert.ok(highSolar.state.density > lowSolar.state.density);
+  });
+
+  test(`NRLMSISE00 JSON requests without place, time or weather are refused on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const complete = {
+      altitudeM: 400_000,
+      model: "NRLMSISE00",
+      position: { latitudeDeg: 60, longitudeDeg: -70 },
+      epoch: { year: 2024, dayOfYear: 172, secondOfDay: 29_000 },
+      solar: { F107: 150, F107A: 150, Ap: [4] },
+    };
+    const expectJsonRefusal = async (params, code, label) => {
+      const response = await harness.invoke({
+        methodId: "invoke",
+        inputs: [{
+          portId: "request",
+          typeRef: null,
+          payload: Buffer.from(JSON.stringify({ operation: "queryAltitude", params }), "utf8"),
+        }],
+      });
+      assert.notEqual(response.statusCode, 0, `${label}: expected a refusal`);
+      assert.equal(response.errorCode, code, `${label}: ${response.errorMessage}`);
+    };
+    for (const missing of ["position", "epoch", "solar"]) {
+      const params = { ...complete };
+      delete params[missing];
+      await expectJsonRefusal(params, "missing-nrlmsise-input", `${missing} must be required`);
+    }
+    await expectJsonRefusal({ ...complete, altitudeM: 1_200_000 }, "altitude-out-of-range", "1200 km");
+    await expectJsonRefusal({ ...complete, model: "JB2008" }, "unsupported-atmosphere-model", "unknown model");
+  });
+
+  test(`NRLMSISE00 JSON ap history reproduces published case 16 on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    // NRLMSISE-00 C package DOCUMENTATION, case 16: case-1 inputs with
+    // switch 9 = -1 and ap_a[0..6] = 100. Published (7 significant digits):
+    // TINF 1.426412E+03 K, TG 1.408608E+03 K, O 1.274494E+08 1/cm^3.
+    // https://github.com/magnific0/nrlmsise-00/blob/master/DOCUMENTATION
+    const result = await invokeJsonRequest(harness, {
+      operation: "queryAltitude",
+      params: {
+        altitudeM: 400_000,
+        model: "NRLMSISE00",
+        position: { latitudeDeg: 60, longitudeDeg: -70 },
+        epoch: { year: 0, dayOfYear: 172, secondOfDay: 29_000 },
+        localSolarTimeHours: 16,
+        apHistory: true,
+        solar: { F107: 150, F107A: 150, Ap: [100, 100, 100, 100, 100, 100, 100] },
+      },
+    });
+    const relClose = (a, b, tol, label) => {
+      assert.ok(Math.abs(a - b) / Math.abs(b) <= tol, `${label}: ${a} not within rel ${tol} of ${b}`);
+    };
+    relClose(result.state.exosphericTemp, 1426.412, 1e-5, "TINF");
+    relClose(result.state.temperature, 1408.608, 1e-5, "TG");
+    relClose(result.state.numDensityO, 1.274494e8 * 1e6, 1e-5, "O 1/m^3");
+  });
+
+  test(`HFC NRLMSISE00 selects observed previous-day flux and epoch-relative ap history on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const response = await harness.invoke({
+      methodId: "query_atmosphere_state_batch",
+      inputs: [hfcInput(nrlmsiseHfcRequest()), ...spwInputs(spwWindow())],
+    });
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    const hfc = decodeHfcResponse(response);
+    const assumptions = Array.from({ length: hfc.assumptionsLength() }, (_, i) => hfc.ASSUMPTIONS(i));
+    assert.ok(assumptions.some((line) => line.includes("3-hour ap history for 1 of 1 samples")), assumptions.join(" | "));
+
+    // Expected inputs, by the nrlmsise-00.h definitions, for 2024-06-21
+    // (day of year 173) 12:30 UT, which is in 3-hour bin 4:
+    //   F10.7  = observed flux of 06-20                    = 120
+    //   F10.7A = observed 81-day centered mean of 06-21    = 143
+    //   daily Ap of 06-21                                  = 8
+    //   ap now, -3 h, -6 h, -9 h = 06-21 bins 4, 3, 2, 1   = 35, 34, 33, 32
+    //   mean 12-33 h before = 31, 28, 27, 26, 25, 24, 23, 22 -> 206 / 8
+    //   mean 36-57 h before = 21, 18, 17, 16, 15, 14, 13, 12 -> 126 / 8
+    // The same model evaluated through the JSON surface with exactly these
+    // inputs must give the same density: this checks the selection, while the
+    // published vectors check the model.
+    const expected = await invokeJsonRequest(harness, {
+      operation: "queryAltitude",
+      params: {
+        altitudeM: 400_000,
+        model: "NRLMSISE00",
+        position: { latitudeDeg: 45, longitudeDeg: -100 },
+        epoch: { year: 2024, dayOfYear: 173, secondOfDay: 45_000 },
+        apHistory: true,
+        solar: { F107: 120, F107A: 143, Ap: [8, 35, 34, 33, 32, 206 / 8, 126 / 8] },
+      },
+    });
+    assert.equal(hfc.DENSITY_KG_PER_M3(0), expected.state.density);
+    assert.equal(hfc.TEMPERATURE_K(0), expected.state.temperature);
+  });
+
+  test(`HFC NRLMSISE00 uses daily Ap when the ap history is incomplete and reports forecasts on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const response = await harness.invoke({
+      methodId: "query_atmosphere_state_batch",
+      inputs: [
+        hfcInput(nrlmsiseHfcRequest()),
+        ...spwInputs(spwWindow({ days: [2, 3], forecastDay: 2 })),
+      ],
+    });
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    const hfc = decodeHfcResponse(response);
+    const assumptions = Array.from({ length: hfc.assumptionsLength() }, (_, i) => hfc.ASSUMPTIONS(i));
+    assert.ok(assumptions.some((line) => line.includes("3-hour ap history for 0 of 1 samples")), assumptions.join(" | "));
+    assert.ok(assumptions.some((line) => line.includes("Forecast F10.7")), assumptions.join(" | "));
+
+    const expected = await invokeJsonRequest(harness, {
+      operation: "queryAltitude",
+      params: {
+        altitudeM: 400_000,
+        model: "NRLMSISE00",
+        position: { latitudeDeg: 45, longitudeDeg: -100 },
+        epoch: { year: 2024, dayOfYear: 173, secondOfDay: 45_000 },
+        solar: { F107: 120, F107A: 143, Ap: [8] },
+      },
+    });
+    assert.equal(hfc.DENSITY_KG_PER_M3(0), expected.state.density);
+  });
+
+  test(`HFC NRLMSISE00 refuses missing weather, time, position and range on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) {
+      return;
+    }
+    t.after(async () => {
+      await harness.destroy();
+    });
+
+    const cases = [
+      ["missing-space-weather", [hfcInput(nrlmsiseHfcRequest())]],
+      ["missing-previous-day-f107", [hfcInput(nrlmsiseHfcRequest()), ...spwInputs(spwWindow({ days: [3] }))]],
+      ["missing-space-weather-day", [hfcInput(nrlmsiseHfcRequest()), ...spwInputs(spwWindow({ days: [0, 1, 2] }))]],
+      ["missing-sample-epochs", [hfcInput(nrlmsiseHfcRequest({ sampleEpochs: [] })), ...spwInputs(spwWindow())]],
+      ["missing-sample-positions", [hfcInput(nrlmsiseHfcRequest({ latitudesDeg: [], longitudesDeg: [] })), ...spwInputs(spwWindow())]],
+      ["altitude-out-of-range", [hfcInput(nrlmsiseHfcRequest({ altitudesM: [1_200_000] })), ...spwInputs(spwWindow())]],
+      ["unsupported-time-system", [hfcInput(nrlmsiseHfcRequest({ timeSystem: "TAI" })), ...spwInputs(spwWindow())]],
+      ["duplicate-spw-day", [hfcInput(nrlmsiseHfcRequest()), ...spwInputs([...spwWindow(), ...spwWindow({ days: [3] })])]],
+      ["unsupported-atmosphere-model", [hfcInput(nrlmsiseHfcRequest({ model: AtmosphericModelFamily.JB08, year: 2008 }))]],
+    ];
+    for (const [code, inputs] of cases) {
+      const response = await harness.invoke({ methodId: "query_atmosphere_state_batch", inputs });
+      assert.notEqual(response.statusCode, 0, `${code}: expected a refusal`);
+      assert.equal(response.errorCode, code, `${code}: ${response.errorMessage}`);
+    }
   });
 }

@@ -59,6 +59,10 @@ ensure_emscripten() {
 
 ensure_emscripten
 
+# SDS bindings come from the published spacedatastandards.org package
+# (npm ci first); they are regenerated so they never drift from the pin.
+node "$SCRIPT_DIR/generate-sds-headers.mjs"
+
 node "$SCRIPT_DIR/../../scripts/generate-plugin-manifest-header.mjs" \
     --package-dir "$SCRIPT_DIR" \
     --var atmosphere_plugin_manifest_bytes \
