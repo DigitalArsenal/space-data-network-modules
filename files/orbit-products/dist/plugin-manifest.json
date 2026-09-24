@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.files.orbit-products",
   "name": "Orbit Products Reader",
   "version": "0.1.1",
-  "description": "Reads the four ephemeris CONTAINERS this stack round-trips \u2014 SPK (NAIF DAF, segment types 8, 9 and 13), SP3-c/d, Code-500 and scenario-epoch STK ephemeris \u2014 plus CCSDS-OEM keyword-value notation, and projects them onto SDS $OEM with the container's own facts carried out separately as $NCD. A container is a wire format, not a standard: the state history becomes $OEM and the file-level header, comment area, segment address ranges and accuracy block become the native-container descriptor, so a read-then-write cycle reproduces the source instead of inventing header values. Each container is evaluated by the interpolation rule it declares, never by a rule this module picked, and no time-scale conversion happens here: epochs stay on the scale the container named and that name is carried out with them. A malformed container is a named status, never a trap and never a NaN. Converts public-format Vimpel osculating element tables to analytic J2000 epoch OPM states with source provenance; no differenced velocity or covariance is invented.",
+  "description": "Reads the four ephemeris CONTAINERS this stack round-trips \u2014 SPK (NAIF DAF, segment types 8, 9 and 13), SP3-c/d, Code-500 and scenario-epoch STK ephemeris \u2014 plus CCSDS-OEM keyword-value notation, and projects them onto SDS $OEM with the container's own facts carried out separately as $NCD. A container is a wire format, not a standard: the state history becomes $OEM and the file-level header, comment area, segment address ranges and accuracy block become the native-container descriptor, so a read-then-write cycle reproduces the source instead of inventing header values. Each container is evaluated by the interpolation rule it declares, never by a rule this module picked, and no time-scale conversion happens here: epochs stay on the scale the container named and that name is carried out with them. A malformed container is a named status, never a trap and never a NaN. Converts public-format Vimpel osculating element tables to analytic J2000 epoch OPM states with source provenance; no differenced velocity or covariance is invented. Converts SP Vector/Covariance Messages, legacy V2.0 text or superseded $VCM records, to $OCM without deriving uncertainty or splitting the ballistic coefficient.",
   "tagline": "SPK, SP3, Code-500, STK and CCSDS-OEM containers in; $OEM states and an $NCD descriptor out.",
   "pluginFamily": "parser",
   "capabilities": [],
@@ -30,7 +30,9 @@
     "oem",
     "ncd",
     "sds",
-    "space-data"
+    "space-data",
+    "vcm",
+    "ocm"
   ],
   "methods": [
     {
@@ -276,6 +278,149 @@
           ]
         }
       ]
+    },
+    {
+      "methodId": "normalize_vcm",
+      "displayName": "Convert an SP Vector/Covariance Message to OCM",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "container",
+          "displayName": "container",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The legacy SP Vector/Covariance Message V2.0 text, as a size-prefixed SDS $NCD descriptor (FORMAT PROVIDER_DEFINED, PROVIDER_DEFINED_FORMAT_NAME \"vcm-v2-text\", SOURCE_SHA256 and SOURCE_BYTE_LENGTH declared) followed immediately by the exact message bytes in the same frame. Lines not beginning with \"<>\" are communication-system insertions and are skipped.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-container",
+              "description": "SDS $NCD envelope, with the described container's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "orbit",
+          "displayName": "orbit",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $OCM: the J2K state as the trajectory in EME2000 about EARTH, with CCSDS 502.0-B-3 keywords where the VCM field means the same thing (gravity model and truncation, lunar/solar bodies, fixed F10.7, mean F10.7 and ap, SEDR, weighted RMS, revolution number, TAI-UTC, UT1-UTC). Fields without a CCSDS equivalent travel verbatim in USER_DEFINED_PARAMETERS with their units in the name: the ballistic coefficient (the product Cd*A/m, not split), the SRP coefficient, U,V,W sigmas, the equinoctial-element covariance (not converted to a Cartesian covariance), and the ECI and EFG copies of the state.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm-orbit",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "descriptor",
+          "displayName": "descriptor",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The exact input $NCD descriptor, which keeps the source hash so every field of the original message stays recoverable.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-descriptor",
+              "description": "SDS $NCD envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "methodId": "vcm_to_ocm",
+      "displayName": "Convert a $VCM record to OCM",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "vcm",
+          "displayName": "vcm",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One superseded SDS $VCM record. REF_FRAME, CENTER_NAME, TIME_SYSTEM and STATE_VECTOR with EPOCH are required; they are copied, never assumed.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-vcm-record",
+              "allowedTypes": [
+                {
+                  "schemaName": "VCM.fbs",
+                  "fileIdentifier": "$VCM",
+                  "rootTypeName": "VCM"
+                },
+                {
+                  "schemaName": "VCM.fbs",
+                  "fileIdentifier": "$VCM",
+                  "rootTypeName": "VCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "orbit",
+          "displayName": "orbit",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $OCM: the record's state in its own REF_FRAME and CENTER_NAME, CCSDS physical properties (mass, drag and SRP areas and coefficients), GM and revolution number; SGP4 terms, sigmas, covariance and element sets travel verbatim in USER_DEFINED_PARAMETERS.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm-orbit",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
+                }
+              ]
+            }
+          ]
+        }
+      ]
     }
   ],
   "schemasUsed": [
@@ -308,6 +453,16 @@
       "schemaName": "PPE.fbs",
       "fileIdentifier": "$PPE",
       "rootTypeName": "PPE"
+    },
+    {
+      "schemaName": "OCM.fbs",
+      "fileIdentifier": "$OCM",
+      "rootTypeName": "OCM"
+    },
+    {
+      "schemaName": "VCM.fbs",
+      "fileIdentifier": "$VCM",
+      "rootTypeName": "VCM"
     }
   ],
   "buildArtifacts": [

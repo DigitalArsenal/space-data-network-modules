@@ -2,9 +2,11 @@
   "pluginId": "com.digitalarsenal.foundation.orbits",
   "name": "Foundation Orbits",
   "version": "0.1.0",
-  "description": "Shared SDS OMM/OPM/OEM/VCM/CDM/GRV/CRD orbit conversion module for Orekit-compatible elliptical and hyperbolic Keplerian mean elements, parabolic VCM periapsis states, Cartesian state vectors, CCSDS orbit parameter messages, VCM equinoctial elements, Basilisk J2 mean/osculating elements, Basilisk J2-J6 zonal perturbation acceleration, Basilisk solar radiation pressure acceleration, and Basilisk Hill relative states.",
+  "description": "Shared SDS OMM/OPM/OEM/OCM/CDM/GRV/CRD orbit conversion module for Orekit-compatible elliptical and hyperbolic Keplerian mean elements, Cartesian state vectors, CCSDS orbit parameter messages, SANA Keplerian and equinoctial element sets in OCM, Basilisk first-order J2 Brouwer mean/osculating elements, Basilisk J2-J6 zonal perturbation acceleration, Basilisk solar radiation pressure acceleration, and Basilisk Hill relative states.",
   "pluginFamily": "foundation",
-  "capabilities": ["clock"],
+  "capabilities": [
+    "clock"
+  ],
   "externalInterfaces": [
     {
       "interfaceId": "com.digitalarsenal.foundation.time.convert_time",
@@ -14,8 +16,14 @@
       "description": "Epoch normalization is delegated to foundation/time; this module treats OMM epochs as opaque SDS timestamps and does not duplicate time-scale conversion logic."
     }
   ],
-  "invokeSurfaces": ["direct", "command"],
-  "runtimeTargets": ["browser", "wasmedge"],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
   "methods": [
     {
       "methodId": "keplerian_to_cartesian",
@@ -435,33 +443,35 @@
       "description": "Converts one SDS OPM Cartesian state into one SDS OMM elliptical or hyperbolic Keplerian mean-element state using GM from the OPM."
     },
     {
-      "methodId": "vcm_state_to_oem",
-      "displayName": "VCM State To OEM",
+      "methodId": "ocm_state_to_oem",
+      "displayName": "OCM State To OEM",
       "inputPorts": [
         {
           "portId": "vector_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-vector-state",
+              "setId": "sds-ocm-cartesian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying STATE_VECTOR position, velocity, and epoch fields."
+              "description": "SDS OCM with TRAJ_TYPE CARTESIAN_PV: one STATE_DATA row [X, Y, Z, X_DOT, Y_DOT, Z_DOT] in km and km/s; PERTURBATIONS.GM in km^3/s^2 where elements are derived. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "VCM Cartesian state vector."
+          "description": "OCM Cartesian state."
         }
       ],
       "outputPorts": [
@@ -495,36 +505,38 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Promotes one SDS VCM Cartesian state vector into a one-line SDS OEM ephemeris state vector."
+      "description": "Copies one SDS OCM Cartesian state into an SDS OEM line with the OCM's epoch, time system, centre and reference frame."
     },
     {
-      "methodId": "vcm_state_to_j_zonal_acceleration_oem",
-      "displayName": "VCM State To J-Zonal Acceleration OEM",
+      "methodId": "ocm_state_to_j_zonal_acceleration_oem",
+      "displayName": "OCM State To J-Zonal Acceleration OEM",
       "inputPorts": [
         {
           "portId": "vector_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-vector-state",
+              "setId": "sds-ocm-cartesian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying STATE_VECTOR position, velocity, and epoch fields."
+              "description": "SDS OCM with TRAJ_TYPE CARTESIAN_PV: one STATE_DATA row [X, Y, Z, X_DOT, Y_DOT, Z_DOT] in km and km/s; PERTURBATIONS.GM in km^3/s^2 where elements are derived. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "VCM Cartesian state vector."
+          "description": "OCM Cartesian state."
         },
         {
           "portId": "gravity_context",
@@ -585,36 +597,38 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Computes Basilisk-equivalent J2-J6 zonal perturbation acceleration from one SDS VCM Cartesian state and SDS GRV gravity context."
+      "description": "Evaluates the Basilisk J2-J6 zonal perturbation acceleration for one SDS OCM Cartesian state and a GRV gravity context, emitting an SDS OEM PVA line."
     },
     {
-      "methodId": "vcm_state_to_srp_acceleration_oem",
-      "displayName": "VCM State To SRP Acceleration OEM",
+      "methodId": "ocm_state_to_srp_acceleration_oem",
+      "displayName": "OCM State To SRP Acceleration OEM",
       "inputPorts": [
         {
           "portId": "vector_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-vector-state-with-spacecraft-parameters",
+              "setId": "sds-ocm-cartesian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying STATE_VECTOR plus MASS, SOLAR_RAD_AREA, and SOLAR_RAD_COEFF spacecraft fields."
+              "description": "SDS OCM with TRAJ_TYPE CARTESIAN_PV: one STATE_DATA row [X, Y, Z, X_DOT, Y_DOT, Z_DOT] in km and km/s; PERTURBATIONS.GM in km^3/s^2 where elements are derived. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "VCM Cartesian state vector and spacecraft SRP parameters."
+          "description": "OCM Cartesian state."
         },
         {
           "portId": "sun_vector",
@@ -675,36 +689,38 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Computes Basilisk-equivalent solar radiation pressure acceleration from one SDS VCM Cartesian state with spacecraft parameters and one SDS CRD Sun vector in AU."
+      "description": "Evaluates the Basilisk cannonball solar radiation pressure acceleration from OCM PHYSICAL_PROPERTIES (WET_MASS, SRP_CONST_AREA, SOLAR_RAD_COEFF) and a CRD Sun vector, emitting an SDS OEM PVA line."
     },
     {
-      "methodId": "vcm_state_to_omm",
-      "displayName": "VCM State To OMM",
+      "methodId": "ocm_state_to_omm",
+      "displayName": "OCM State To OMM",
       "inputPorts": [
         {
           "portId": "vector_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-vector-state",
+              "setId": "sds-ocm-cartesian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying STATE_VECTOR position, velocity, epoch, and GM fields."
+              "description": "SDS OCM with TRAJ_TYPE CARTESIAN_PV: one STATE_DATA row [X, Y, Z, X_DOT, Y_DOT, Z_DOT] in km and km/s; PERTURBATIONS.GM in km^3/s^2 where elements are derived. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "VCM Cartesian state vector."
+          "description": "OCM Cartesian state."
         }
       ],
       "outputPorts": [
@@ -738,36 +754,38 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Converts one SDS VCM Cartesian state vector into one SDS OMM elliptical or hyperbolic Keplerian mean-element state using GM from the VCM."
+      "description": "Converts one SDS OCM Cartesian state into SDS OMM Keplerian elements using PERTURBATIONS.GM."
     },
     {
-      "methodId": "vcm_state_to_keplerian",
-      "displayName": "VCM State To Keplerian",
+      "methodId": "ocm_state_to_keplerian",
+      "displayName": "OCM State To Keplerian",
       "inputPorts": [
         {
           "portId": "vector_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-vector-state",
+              "setId": "sds-ocm-cartesian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying STATE_VECTOR position, velocity, epoch, and GM fields."
+              "description": "SDS OCM with TRAJ_TYPE CARTESIAN_PV: one STATE_DATA row [X, Y, Z, X_DOT, Y_DOT, Z_DOT] in km and km/s; PERTURBATIONS.GM in km^3/s^2 where elements are derived. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "VCM Cartesian state vector."
+          "description": "OCM Cartesian state."
         }
       ],
       "outputPorts": [
@@ -775,60 +793,64 @@
           "portId": "keplerian_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-keplerian-state",
+              "setId": "sds-ocm-keplerian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying KEPLERIAN_ELEMENTS in km, degree, and anomaly-convention fields."
+              "description": "SDS OCM with TRAJ_TYPE KEPLERIAN (true anomaly) or KEPLERIAN_MEAN (mean anomaly): one STATE_DATA row [a km, e, i, RAAN, argument of periapsis, anomaly deg] per the SANA Orbital Elements registry; ORB_AVERAGING OSCULATING (or absent) or BROUWER; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Keplerian VCM state."
+          "description": "OCM Keplerian element set."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Converts one SDS VCM Cartesian state vector into SDS VCM KEPLERIAN_ELEMENTS using GM from the VCM. Elliptic and hyperbolic states emit MEAN_ANOMALY; parabolic states emit TRUE_ANOMALY and PERIAPSIS_RADIUS."
+      "description": "Converts one SDS OCM Cartesian state into an OCM KEPLERIAN_MEAN element set (ORB_AVERAGING OSCULATING) using PERTURBATIONS.GM. Parabolic states are refused: SANA Keplerian sets need a finite semi-major axis."
     },
     {
-      "methodId": "vcm_state_to_equinoctial",
-      "displayName": "VCM State To Equinoctial",
+      "methodId": "ocm_state_to_equinoctial",
+      "displayName": "OCM State To Equinoctial",
       "inputPorts": [
         {
           "portId": "vector_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-vector-state",
+              "setId": "sds-ocm-cartesian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying STATE_VECTOR position, velocity, epoch, and GM fields."
+              "description": "SDS OCM with TRAJ_TYPE CARTESIAN_PV: one STATE_DATA row [X, Y, Z, X_DOT, Y_DOT, Z_DOT] in km and km/s; PERTURBATIONS.GM in km^3/s^2 where elements are derived. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "VCM Cartesian state vector."
+          "description": "OCM Cartesian state."
         }
       ],
       "outputPorts": [
@@ -836,60 +858,64 @@
           "portId": "equinoctial_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-equinoctial-state",
+              "setId": "sds-ocm-equinoctial-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state with EQUINOCTIAL_ELEMENTS populated from the input Cartesian state vector."
+              "description": "SDS OCM with TRAJ_TYPE EQUINOCTIAL [a km, af, ag, mean longitude deg, chi, psi, fr] or EQUINOCTIAL_MOD [p km, af, ag, true longitude deg, chi, psi, fr] per the SANA Orbital Elements registry; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Equinoctial VCM state."
+          "description": "OCM equinoctial element set."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Converts one SDS VCM Cartesian state vector into SDS VCM EQUINOCTIAL_ELEMENTS using GM from the VCM."
+      "description": "Converts one SDS OCM Cartesian state into an OCM EQUINOCTIAL element set (SANA: mean longitude, retrograde factor +1 for direct and -1 for retrograde orbits)."
     },
     {
-      "methodId": "vcm_keplerian_to_oem",
-      "displayName": "VCM Keplerian To OEM",
+      "methodId": "ocm_keplerian_to_oem",
+      "displayName": "OCM Keplerian To OEM",
       "inputPorts": [
         {
           "portId": "keplerian_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-keplerian-state",
+              "setId": "sds-ocm-keplerian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying STATE_VECTOR.EPOCH, KEPLERIAN_ELEMENTS, and GM."
+              "description": "SDS OCM with TRAJ_TYPE KEPLERIAN (true anomaly) or KEPLERIAN_MEAN (mean anomaly): one STATE_DATA row [a km, e, i, RAAN, argument of periapsis, anomaly deg] per the SANA Orbital Elements registry; ORB_AVERAGING OSCULATING (or absent) or BROUWER; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Keplerian VCM state."
+          "description": "OCM Keplerian element set."
         }
       ],
       "outputPorts": [
@@ -923,36 +949,38 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Converts one SDS VCM Keplerian state into a one-line SDS OEM ephemeris state vector, including parabolic TRUE_ANOMALY states when PERIAPSIS_RADIUS is present."
+      "description": "Converts an OCM Keplerian element set into an SDS OEM Cartesian line using PERTURBATIONS.GM."
     },
     {
-      "methodId": "vcm_keplerian_to_state",
-      "displayName": "VCM Keplerian To State",
+      "methodId": "ocm_keplerian_to_state",
+      "displayName": "OCM Keplerian To State",
       "inputPorts": [
         {
           "portId": "keplerian_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-keplerian-state",
+              "setId": "sds-ocm-keplerian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying STATE_VECTOR.EPOCH, KEPLERIAN_ELEMENTS, and GM."
+              "description": "SDS OCM with TRAJ_TYPE KEPLERIAN (true anomaly) or KEPLERIAN_MEAN (mean anomaly): one STATE_DATA row [a km, e, i, RAAN, argument of periapsis, anomaly deg] per the SANA Orbital Elements registry; ORB_AVERAGING OSCULATING (or absent) or BROUWER; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Keplerian VCM state."
+          "description": "OCM Keplerian element set."
         }
       ],
       "outputPorts": [
@@ -960,60 +988,64 @@
           "portId": "vector_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-vector-state",
+              "setId": "sds-ocm-cartesian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying STATE_VECTOR position, velocity, epoch, and GM fields."
+              "description": "SDS OCM with TRAJ_TYPE CARTESIAN_PV: one STATE_DATA row [X, Y, Z, X_DOT, Y_DOT, Z_DOT] in km and km/s; PERTURBATIONS.GM in km^3/s^2 where elements are derived. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "VCM Cartesian state vector."
+          "description": "OCM Cartesian state."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Converts one SDS VCM Keplerian state into VCM STATE_VECTOR fields using GM from the VCM, including parabolic TRUE_ANOMALY states when PERIAPSIS_RADIUS is present."
+      "description": "Converts an OCM Keplerian element set into an OCM CARTESIAN_PV state using PERTURBATIONS.GM."
     },
     {
-      "methodId": "vcm_keplerian_to_omm",
-      "displayName": "VCM Keplerian To OMM",
+      "methodId": "ocm_keplerian_to_omm",
+      "displayName": "OCM Keplerian To OMM",
       "inputPorts": [
         {
           "portId": "keplerian_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-keplerian-state",
+              "setId": "sds-ocm-keplerian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying STATE_VECTOR.EPOCH, KEPLERIAN_ELEMENTS, and GM."
+              "description": "SDS OCM with TRAJ_TYPE KEPLERIAN (true anomaly) or KEPLERIAN_MEAN (mean anomaly): one STATE_DATA row [a km, e, i, RAAN, argument of periapsis, anomaly deg] per the SANA Orbital Elements registry; ORB_AVERAGING OSCULATING (or absent) or BROUWER; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Keplerian VCM state."
+          "description": "OCM Keplerian element set."
         }
       ],
       "outputPorts": [
@@ -1047,36 +1079,38 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Normalizes one SDS VCM elliptical or hyperbolic Keplerian state into one SDS OMM mean-element frame, converting TRUE_ANOMALY to MEAN_ANOMALY when required."
+      "description": "Converts an OCM Keplerian element set into SDS OMM Keplerian elements using PERTURBATIONS.GM."
     },
     {
-      "methodId": "vcm_keplerian_to_true_anomaly",
-      "displayName": "VCM Keplerian To True Anomaly",
+      "methodId": "ocm_keplerian_to_true_anomaly",
+      "displayName": "OCM Keplerian To True Anomaly",
       "inputPorts": [
         {
           "portId": "keplerian_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-keplerian-state",
+              "setId": "sds-ocm-keplerian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying KEPLERIAN_ELEMENTS with TRUE_ANOMALY or MEAN_ANOMALY."
+              "description": "SDS OCM with TRAJ_TYPE KEPLERIAN (true anomaly) or KEPLERIAN_MEAN (mean anomaly): one STATE_DATA row [a km, e, i, RAAN, argument of periapsis, anomaly deg] per the SANA Orbital Elements registry; ORB_AVERAGING OSCULATING (or absent) or BROUWER; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Keplerian VCM state."
+          "description": "OCM Keplerian element set."
         }
       ],
       "outputPorts": [
@@ -1084,60 +1118,64 @@
           "portId": "keplerian_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-keplerian-state",
+              "setId": "sds-ocm-keplerian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying KEPLERIAN_ELEMENTS normalized to TRUE_ANOMALY."
+              "description": "SDS OCM with TRAJ_TYPE KEPLERIAN (true anomaly) or KEPLERIAN_MEAN (mean anomaly): one STATE_DATA row [a km, e, i, RAAN, argument of periapsis, anomaly deg] per the SANA Orbital Elements registry; ORB_AVERAGING OSCULATING (or absent) or BROUWER; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Keplerian VCM state normalized to true anomaly."
+          "description": "OCM Keplerian element set."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Normalizes one SDS VCM elliptical or hyperbolic Keplerian state to TRUE_ANOMALY using Basilisk-compatible orbital anomaly conversions."
+      "description": "Re-expresses an OCM Keplerian element set with the true anomaly (TRAJ_TYPE KEPLERIAN)."
     },
     {
-      "methodId": "vcm_keplerian_to_mean_anomaly",
-      "displayName": "VCM Keplerian To Mean Anomaly",
+      "methodId": "ocm_keplerian_to_mean_anomaly",
+      "displayName": "OCM Keplerian To Mean Anomaly",
       "inputPorts": [
         {
           "portId": "keplerian_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-keplerian-state",
+              "setId": "sds-ocm-keplerian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying KEPLERIAN_ELEMENTS with TRUE_ANOMALY or MEAN_ANOMALY."
+              "description": "SDS OCM with TRAJ_TYPE KEPLERIAN (true anomaly) or KEPLERIAN_MEAN (mean anomaly): one STATE_DATA row [a km, e, i, RAAN, argument of periapsis, anomaly deg] per the SANA Orbital Elements registry; ORB_AVERAGING OSCULATING (or absent) or BROUWER; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Keplerian VCM state."
+          "description": "OCM Keplerian element set."
         }
       ],
       "outputPorts": [
@@ -1145,60 +1183,64 @@
           "portId": "keplerian_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-keplerian-state",
+              "setId": "sds-ocm-keplerian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying KEPLERIAN_ELEMENTS normalized to MEAN_ANOMALY."
+              "description": "SDS OCM with TRAJ_TYPE KEPLERIAN (true anomaly) or KEPLERIAN_MEAN (mean anomaly): one STATE_DATA row [a km, e, i, RAAN, argument of periapsis, anomaly deg] per the SANA Orbital Elements registry; ORB_AVERAGING OSCULATING (or absent) or BROUWER; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Keplerian VCM state normalized to mean anomaly."
+          "description": "OCM Keplerian element set."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Normalizes one SDS VCM elliptical or hyperbolic Keplerian state to MEAN_ANOMALY using Basilisk-compatible orbital anomaly conversions."
+      "description": "Re-expresses an OCM Keplerian element set with the mean anomaly (TRAJ_TYPE KEPLERIAN_MEAN)."
     },
     {
-      "methodId": "vcm_keplerian_mean_to_osculating",
-      "displayName": "VCM Keplerian Mean To Osculating",
+      "methodId": "ocm_keplerian_mean_to_osculating",
+      "displayName": "OCM Keplerian Mean To Osculating",
       "inputPorts": [
         {
           "portId": "keplerian_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-keplerian-state",
+              "setId": "sds-ocm-keplerian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying elliptical KEPLERIAN_ELEMENTS in km, degrees, and a declared anomaly convention."
+              "description": "SDS OCM with TRAJ_TYPE KEPLERIAN (true anomaly) or KEPLERIAN_MEAN (mean anomaly): one STATE_DATA row [a km, e, i, RAAN, argument of periapsis, anomaly deg] per the SANA Orbital Elements registry; ORB_AVERAGING OSCULATING (or absent) or BROUWER; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Mean Keplerian VCM state."
+          "description": "OCM Keplerian element set."
         },
         {
           "portId": "gravity_context",
@@ -1233,60 +1275,64 @@
           "portId": "keplerian_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-keplerian-state",
+              "setId": "sds-ocm-keplerian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying osculating KEPLERIAN_ELEMENTS."
+              "description": "SDS OCM with TRAJ_TYPE KEPLERIAN (true anomaly) or KEPLERIAN_MEAN (mean anomaly): one STATE_DATA row [a km, e, i, RAAN, argument of periapsis, anomaly deg] per the SANA Orbital Elements registry; ORB_AVERAGING OSCULATING (or absent) or BROUWER; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Osculating Keplerian VCM state."
+          "description": "OCM Keplerian element set."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Maps one SDS VCM elliptical Keplerian mean-element state to osculating elements using Basilisk clMeanOscMap first-order J2 semantics and GRV EQUATORIAL_RADIUS/J2."
+      "description": "Maps BROUWER mean Keplerian elements to osculating elements with the first-order J2 Brouwer map (Basilisk clMeanOscMap) and a GRV EQUATORIAL_RADIUS/J2 context; output ORB_AVERAGING OSCULATING."
     },
     {
-      "methodId": "vcm_keplerian_osculating_to_mean",
-      "displayName": "VCM Keplerian Osculating To Mean",
+      "methodId": "ocm_keplerian_osculating_to_mean",
+      "displayName": "OCM Keplerian Osculating To Mean",
       "inputPorts": [
         {
           "portId": "keplerian_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-keplerian-state",
+              "setId": "sds-ocm-keplerian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying elliptical KEPLERIAN_ELEMENTS in km, degrees, and a declared anomaly convention."
+              "description": "SDS OCM with TRAJ_TYPE KEPLERIAN (true anomaly) or KEPLERIAN_MEAN (mean anomaly): one STATE_DATA row [a km, e, i, RAAN, argument of periapsis, anomaly deg] per the SANA Orbital Elements registry; ORB_AVERAGING OSCULATING (or absent) or BROUWER; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Osculating Keplerian VCM state."
+          "description": "OCM Keplerian element set."
         },
         {
           "portId": "gravity_context",
@@ -1321,31 +1367,33 @@
           "portId": "keplerian_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-keplerian-state",
+              "setId": "sds-ocm-keplerian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying mean KEPLERIAN_ELEMENTS."
+              "description": "SDS OCM with TRAJ_TYPE KEPLERIAN (true anomaly) or KEPLERIAN_MEAN (mean anomaly): one STATE_DATA row [a km, e, i, RAAN, argument of periapsis, anomaly deg] per the SANA Orbital Elements registry; ORB_AVERAGING OSCULATING (or absent) or BROUWER; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Mean Keplerian VCM state."
+          "description": "OCM Keplerian element set."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Maps one SDS VCM elliptical Keplerian osculating-element state to mean elements using Basilisk clMeanOscMap first-order J2 semantics and GRV EQUATORIAL_RADIUS/J2."
+      "description": "Maps osculating Keplerian elements to BROUWER mean elements with the first-order J2 Brouwer map (Basilisk clMeanOscMap) and a GRV EQUATORIAL_RADIUS/J2 context; output ORB_AVERAGING BROUWER."
     },
     {
       "methodId": "keplerian_to_equinoctial",
@@ -1355,26 +1403,28 @@
           "portId": "keplerian_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-keplerian-state",
+              "setId": "sds-ocm-keplerian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying KEPLERIAN_ELEMENTS in km, degrees, and a declared anomaly convention."
+              "description": "SDS OCM with TRAJ_TYPE KEPLERIAN (true anomaly) or KEPLERIAN_MEAN (mean anomaly): one STATE_DATA row [a km, e, i, RAAN, argument of periapsis, anomaly deg] per the SANA Orbital Elements registry; ORB_AVERAGING OSCULATING (or absent) or BROUWER; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Keplerian VCM state."
+          "description": "OCM Keplerian element set."
         }
       ],
       "outputPorts": [
@@ -1382,31 +1432,33 @@
           "portId": "equinoctial_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-equinoctial-state",
+              "setId": "sds-ocm-equinoctial-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state with EQUINOCTIAL_ELEMENTS populated from the input Keplerian elements."
+              "description": "SDS OCM with TRAJ_TYPE EQUINOCTIAL [a km, af, ag, mean longitude deg, chi, psi, fr] or EQUINOCTIAL_MOD [p km, af, ag, true longitude deg, chi, psi, fr] per the SANA Orbital Elements registry; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Equinoctial VCM state."
+          "description": "OCM equinoctial element set."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Converts one SDS VCM elliptical Keplerian state into VCM equinoctial elements."
+      "description": "Converts an OCM Keplerian element set into an OCM EQUINOCTIAL element set (SANA: mean longitude and retrograde factor)."
     },
     {
       "methodId": "equinoctial_to_keplerian",
@@ -1416,26 +1468,28 @@
           "portId": "equinoctial_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-equinoctial-state",
+              "setId": "sds-ocm-equinoctial-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying EQUINOCTIAL_ELEMENTS in km, degrees, and unitless shape fields."
+              "description": "SDS OCM with TRAJ_TYPE EQUINOCTIAL [a km, af, ag, mean longitude deg, chi, psi, fr] or EQUINOCTIAL_MOD [p km, af, ag, true longitude deg, chi, psi, fr] per the SANA Orbital Elements registry; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Equinoctial VCM state."
+          "description": "OCM equinoctial element set."
         }
       ],
       "outputPorts": [
@@ -1443,60 +1497,64 @@
           "portId": "keplerian_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-keplerian-state",
+              "setId": "sds-ocm-keplerian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state with KEPLERIAN_ELEMENTS populated from the input equinoctial elements."
+              "description": "SDS OCM with TRAJ_TYPE KEPLERIAN (true anomaly) or KEPLERIAN_MEAN (mean anomaly): one STATE_DATA row [a km, e, i, RAAN, argument of periapsis, anomaly deg] per the SANA Orbital Elements registry; ORB_AVERAGING OSCULATING (or absent) or BROUWER; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Keplerian VCM state."
+          "description": "OCM Keplerian element set."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Converts one SDS VCM elliptical equinoctial state into VCM Keplerian elements with TRUE_ANOMALY, normalizing circular undefined angles."
+      "description": "Converts an OCM EQUINOCTIAL or EQUINOCTIAL_MOD element set into an OCM KEPLERIAN element set (true anomaly)."
     },
     {
-      "methodId": "vcm_equinoctial_to_omm",
-      "displayName": "VCM Equinoctial To OMM",
+      "methodId": "ocm_equinoctial_to_omm",
+      "displayName": "OCM Equinoctial To OMM",
       "inputPorts": [
         {
           "portId": "equinoctial_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-equinoctial-state",
+              "setId": "sds-ocm-equinoctial-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying EQUINOCTIAL_ELEMENTS, STATE_VECTOR.EPOCH, and GM."
+              "description": "SDS OCM with TRAJ_TYPE EQUINOCTIAL [a km, af, ag, mean longitude deg, chi, psi, fr] or EQUINOCTIAL_MOD [p km, af, ag, true longitude deg, chi, psi, fr] per the SANA Orbital Elements registry; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Equinoctial VCM state."
+          "description": "OCM equinoctial element set."
         }
       ],
       "outputPorts": [
@@ -1530,36 +1588,38 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Normalizes one SDS VCM elliptical equinoctial state into SDS OMM mean Keplerian elements by recovering true anomaly and converting it to mean anomaly, including circular prograde cases."
+      "description": "Converts an OCM equinoctial element set into SDS OMM Keplerian elements using PERTURBATIONS.GM."
     },
     {
-      "methodId": "vcm_equinoctial_to_oem",
-      "displayName": "VCM Equinoctial To OEM",
+      "methodId": "ocm_equinoctial_to_oem",
+      "displayName": "OCM Equinoctial To OEM",
       "inputPorts": [
         {
           "portId": "equinoctial_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-equinoctial-state",
+              "setId": "sds-ocm-equinoctial-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying EQUINOCTIAL_ELEMENTS, STATE_VECTOR.EPOCH, and GM."
+              "description": "SDS OCM with TRAJ_TYPE EQUINOCTIAL [a km, af, ag, mean longitude deg, chi, psi, fr] or EQUINOCTIAL_MOD [p km, af, ag, true longitude deg, chi, psi, fr] per the SANA Orbital Elements registry; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Equinoctial VCM state."
+          "description": "OCM equinoctial element set."
         }
       ],
       "outputPorts": [
@@ -1593,36 +1653,38 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Converts one SDS VCM elliptical equinoctial state into a one-line SDS OEM ephemeris state vector by recovering true anomaly and propagating through Keplerian Cartesian conversion, including circular prograde cases."
+      "description": "Converts an OCM equinoctial element set into an SDS OEM Cartesian line using PERTURBATIONS.GM."
     },
     {
-      "methodId": "vcm_equinoctial_to_state",
-      "displayName": "VCM Equinoctial To State",
+      "methodId": "ocm_equinoctial_to_state",
+      "displayName": "OCM Equinoctial To State",
       "inputPorts": [
         {
           "portId": "equinoctial_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-equinoctial-state",
+              "setId": "sds-ocm-equinoctial-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying EQUINOCTIAL_ELEMENTS, STATE_VECTOR.EPOCH, and GM."
+              "description": "SDS OCM with TRAJ_TYPE EQUINOCTIAL [a km, af, ag, mean longitude deg, chi, psi, fr] or EQUINOCTIAL_MOD [p km, af, ag, true longitude deg, chi, psi, fr] per the SANA Orbital Elements registry; PERTURBATIONS.GM in km^3/s^2. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Equinoctial VCM state."
+          "description": "OCM equinoctial element set."
         }
       ],
       "outputPorts": [
@@ -1630,85 +1692,91 @@
           "portId": "vector_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-vector-state",
+              "setId": "sds-ocm-cartesian-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM state carrying STATE_VECTOR position, velocity, epoch, and GM fields."
+              "description": "SDS OCM with TRAJ_TYPE CARTESIAN_PV: one STATE_DATA row [X, Y, Z, X_DOT, Y_DOT, Z_DOT] in km and km/s; PERTURBATIONS.GM in km^3/s^2 where elements are derived. Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "VCM Cartesian state vector."
+          "description": "OCM Cartesian state."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Converts one SDS VCM elliptical equinoctial state into VCM STATE_VECTOR fields by recovering true anomaly and propagating through Keplerian Cartesian conversion, including circular prograde cases."
+      "description": "Converts an OCM equinoctial element set into an OCM CARTESIAN_PV state using PERTURBATIONS.GM."
     },
     {
-      "methodId": "vcm_pair_to_cdm_relative_hill",
-      "displayName": "VCM Pair To CDM Relative Hill",
+      "methodId": "ocm_pair_to_cdm_relative_hill",
+      "displayName": "OCM Pair To CDM Relative Hill",
       "inputPorts": [
         {
           "portId": "chief_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-chief-state",
+              "setId": "sds-ocm-chief-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM chief state carrying inertial STATE_VECTOR position and velocity in km and km/s."
+              "description": "Chief SDS OCM with TRAJ_TYPE CARTESIAN_PV (km, km/s). Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Chief inertial Cartesian state."
+          "description": "Chief OCM Cartesian state."
         },
         {
           "portId": "deputy_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-deputy-state",
+              "setId": "sds-ocm-deputy-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM deputy state carrying inertial STATE_VECTOR position and velocity in km and km/s."
+              "description": "Deputy SDS OCM with TRAJ_TYPE CARTESIAN_PV (km, km/s). Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Deputy inertial Cartesian state."
+          "description": "Deputy OCM Cartesian state."
         }
       ],
       "outputPorts": [
@@ -1742,36 +1810,38 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Maps a chief/deputy pair of SDS VCM Cartesian state vectors into SDS CDM relative RTN/Hill position and velocity fields using the Basilisk orbitalMotion rv2hill convention."
+      "description": "Computes the Basilisk Hill-frame relative state between chief and deputy SDS OCM Cartesian states and emits it as SDS CDM RTN relative fields."
     },
     {
-      "methodId": "cdm_relative_hill_to_vcm_deputy_state",
-      "displayName": "CDM Relative Hill To VCM Deputy State",
+      "methodId": "cdm_relative_hill_to_ocm_deputy_state",
+      "displayName": "CDM Relative Hill To OCM Deputy State",
       "inputPorts": [
         {
           "portId": "chief_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-chief-state",
+              "setId": "sds-ocm-chief-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM chief state carrying inertial STATE_VECTOR position and velocity in km and km/s."
+              "description": "Chief SDS OCM with TRAJ_TYPE CARTESIAN_PV (km, km/s). Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Chief inertial Cartesian state."
+          "description": "Chief OCM Cartesian state."
         },
         {
           "portId": "relative_state",
@@ -1806,31 +1876,33 @@
           "portId": "deputy_state",
           "acceptedTypeSets": [
             {
-              "setId": "sds-vcm-deputy-state",
+              "setId": "sds-ocm-deputy-state",
               "allowedTypes": [
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }
               ],
-              "description": "SDS VCM deputy state carrying inertial STATE_VECTOR position and velocity in km and km/s."
+              "description": "Deputy SDS OCM with TRAJ_TYPE CARTESIAN_PV (km, km/s). Epoch (METADATA START_TIME or EPOCH_TZERO), METADATA TIME_SYSTEM, CENTER_NAME and TRAJ_REF_FRAME are required and copied to the output; nothing is defaulted."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Deputy inertial Cartesian state."
+          "description": "Deputy OCM Cartesian state."
         }
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Maps SDS CDM relative RTN/Hill position and velocity plus a chief SDS VCM Cartesian state into a deputy SDS VCM Cartesian state using the Basilisk orbitalMotion hill2rv convention."
+      "description": "Reconstructs the deputy Cartesian state from a chief SDS OCM state and SDS CDM RTN relative fields; the output OCM carries no identity of the chief and takes the CDM TCA as its epoch."
     }
   ],
   "schemasUsed": [
@@ -1850,10 +1922,6 @@
       "rootTypeName": "OPM"
     },
     {
-      "schemaName": "VCM.fbs",
-      "rootTypeName": "VCM"
-    },
-    {
       "schemaName": "GRV.fbs",
       "fileIdentifier": "$GRV",
       "rootTypeName": "GRV"
@@ -1867,6 +1935,11 @@
       "schemaName": "CDM.fbs",
       "fileIdentifier": "$CDM",
       "rootTypeName": "CDM"
+    },
+    {
+      "schemaName": "OCM.fbs",
+      "fileIdentifier": "$OCM",
+      "rootTypeName": "OCM"
     }
   ],
   "buildArtifacts": [

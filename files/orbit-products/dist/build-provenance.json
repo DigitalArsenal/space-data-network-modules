@@ -1,14 +1,16 @@
 {
-  "spacedatastandards": "1.212.0",
+  "spacedatastandards": "1.223.0",
   "threadModel": "wasi-sequential",
   "records": {
     "in": [
-      "$NCD"
+      "$NCD",
+      "$VCM"
     ],
     "out": [
       "$OEM",
       "$NCD",
-      "$OPM"
+      "$OPM",
+      "$OCM"
     ]
   },
   "formats": [
@@ -18,6 +20,7 @@
     "CODE_500",
     "SCENARIO_EPOCH_EPHEMERIS_TEXT",
     "CCSDS_OEM_KVN",
-    "vimpel-orbits-text"
+    "vimpel-orbits-text",
+    "vcm-v2-text"
   ]
 }

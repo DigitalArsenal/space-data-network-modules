@@ -127,19 +127,20 @@
       "drainPolicy": "single-shot"
     },
     {
-      "methodId": "vcm_state_to_drag_acceleration_oem",
-      "displayName": "VCM State To Atmospheric Drag Acceleration OEM",
+      "methodId": "ocm_state_to_drag_acceleration_oem",
+      "displayName": "OCM State To Atmospheric Drag Acceleration OEM",
       "inputPorts": [
         {
           "portId": "vector_state",
           "acceptedTypeSets": [
             {
-              "setId": "vcm-vector-state",
+              "setId": "ocm-vector-state",
               "allowedTypes": [
-                { "schemaName": "VCM.fbs", "rootTypeName": "VCM" },
+                { "schemaName": "OCM.fbs", "fileIdentifier": "$OCM", "rootTypeName": "OCM" },
                 {
-                  "schemaName": "VCM.fbs",
-                  "rootTypeName": "VCM",
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
                   "wireFormat": "aligned-binary",
                   "requiredAlignment": 8
                 }

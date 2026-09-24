@@ -18,10 +18,17 @@ import {
   OEM,
 } from "spacedatastandards.org/lib/js/OEM/main.js";
 import {
-  VCM,
-  VCMStateVectorT,
-  VCMT,
-} from "spacedatastandards.org/lib/js/VCM/main.js";
+  CelestialFrame,
+  CelestialFrameWrapperT,
+  HeaderT,
+  MetadataT,
+  OCM,
+  OCMT,
+  PhysicalPropertiesT,
+  RFMT,
+  RFMUnion,
+  trajectoryType,
+} from "spacedatastandards.org/lib/js/OCM/main.js";
 import {
   STANDALONE_RUNTIME_KINDS,
   assertSuccessfulResponse,
@@ -167,40 +174,29 @@ function nrlmsiseHfcRequest(overrides = {}) {
   });
 }
 
-function encodeVcmDragReferenceState() {
-  const builder = new flatbuffers.Builder(512);
-  const envelope = new VCMT(
-    2.0,
-    "2026-05-26T00:00:00Z",
-    "DigitalArsenal",
-    "BASILISK-ATMOSPHERIC-DRAG",
-    "BASILISK-ORBITAL-MOTION",
-    "EARTH",
-    "EME2000",
-    "UTC",
-    new VCMStateVectorT(
-      "2026-05-26T00:00:00Z",
-      6200.0,
-      100.0,
-      2000.0,
-      1.0,
-      9.0,
-      1.0,
-    ),
-    null,
-    null,
-    398600.436,
-    null,
-    null,
-    null,
-    50.0,
-    0.0,
-    0.0,
-    2.0,
-    0.2,
-  );
-  const root = envelope.pack(builder);
-  VCM.finishVCMBuffer(builder, root);
+// Basilisk atmosphericDrag reference: 50 kg, 2 m^2, Cd 0.2.
+function encodeOcmDragReferenceState() {
+  const metadata = new MetadataT();
+  metadata.OBJECT_NAME = "BASILISK-ATMOSPHERIC-DRAG";
+  metadata.INTERNATIONAL_DESIGNATOR = "BASILISK-ORBITAL-MOTION";
+  metadata.TIME_SYSTEM = "UTC";
+  metadata.EPOCH_TZERO = "2026-05-26T00:00:00Z";
+  metadata.START_TIME = "2026-05-26T00:00:00Z";
+  const physical = new PhysicalPropertiesT();
+  physical.WET_MASS = 50.0;
+  physical.DRAG_CONST_AREA = 2.0;
+  physical.DRAG_COEFF_NOM = 0.2;
+  const ocm = new OCMT();
+  ocm.HEADER = new HeaderT("3.0", [], "U", "2026-05-26T00:00:00Z", "DigitalArsenal");
+  ocm.METADATA = metadata;
+  ocm.TRAJ_TYPE = trajectoryType.CARTESIAN_PV;
+  ocm.STATE_VECTOR_SIZE = 6;
+  ocm.STATE_DATA = [6200.0, 100.0, 2000.0, 1.0, 9.0, 1.0];
+  ocm.PHYSICAL_PROPERTIES = physical;
+  ocm.CENTER_NAME = "EARTH";
+  ocm.TRAJ_REF_FRAME = new RFMT(RFMUnion.CelestialFrameWrapper, new CelestialFrameWrapperT(CelestialFrame.EME2000));
+  const builder = new flatbuffers.Builder(1024);
+  OCM.finishOCMBuffer(builder, ocm.pack(builder));
   return builder.asUint8Array();
 }
 
@@ -226,13 +222,14 @@ function decodeDragOemResponse(response) {
   return OEM.getRootAsOEM(bb);
 }
 
-test("manifest declares Basilisk atmospheric drag direct VCM/OEM surface", () => {
+test("manifest declares Basilisk atmospheric drag direct OCM/OEM surface", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_state_to_drag_acceleration_oem");
-  assert.ok(method, "missing vcm_state_to_drag_acceleration_oem method");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_state_to_drag_acceleration_oem");
+  assert.ok(method, "missing ocm_state_to_drag_acceleration_oem method");
   assert.equal(method.inputPorts[0].portId, "vector_state");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier, "$OCM");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.outputPorts[0].portId, "drag_acceleration");
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OEM.fbs");
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier, "$OEM");
@@ -533,7 +530,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     relClose(result.state.numDensityN2, 1.998e7 * 1e6, 1e-3, "N2 1/m^3");
   });
 
-  test(`direct drag method computes Basilisk atmosphericDrag acceleration from VCM spacecraft state on ${runtimeKind}`, async (t) => {
+  test(`direct drag method computes Basilisk atmosphericDrag acceleration from OCM spacecraft state on ${runtimeKind}`, async (t) => {
     const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
     if (!harness) {
       return;
@@ -543,15 +540,16 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     });
 
     const response = await harness.invoke({
-      methodId: "vcm_state_to_drag_acceleration_oem",
+      methodId: "ocm_state_to_drag_acceleration_oem",
       inputs: [
         {
           portId: "vector_state",
           typeRef: {
-            schemaName: "VCM.fbs",
-            rootTypeName: "VCM",
+            schemaName: "OCM.fbs",
+            fileIdentifier: "$OCM",
+            rootTypeName: "OCM",
           },
-          payload: encodeVcmDragReferenceState(),
+          payload: encodeOcmDragReferenceState(),
         },
       ],
     });
@@ -561,8 +559,12 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     const block = oem.EPHEMERIS_DATA_BLOCK(0);
     assert.ok(block, "missing OEM ephemeris block");
     assert.equal(block.ephemerisDataLinesLength(), 1);
+    assert.equal(block.CENTER_NAME(), "EARTH");
+    assert.equal(block.START_TIME(), "2026-05-26T00:00:00Z");
+    assert.equal(block.REFERENCE_FRAME()?.REFERENCE_FRAME_type(), RFMUnion.CelestialFrameWrapper);
     const line = block.EPHEMERIS_DATA_LINES(0);
     assert.ok(line, "missing OEM ephemeris data line");
+    assert.equal(line.X(), 6200.0);
 
     const assertNear = (actual, expected, tolerance, label) => {
       assert.ok(

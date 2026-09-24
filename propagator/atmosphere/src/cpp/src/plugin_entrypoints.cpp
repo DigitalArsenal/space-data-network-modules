@@ -12,7 +12,7 @@
 #include "HFC_generated.h"
 #include "OEM_generated.h"
 #include "SPW_generated.h"
-#include "VCM_generated.h"
+#include "OCM_generated.h"
 
 #include <cstdint>
 #include <cstring>
@@ -323,64 +323,45 @@ int emit_json_response(const char* port_id, const atmosphere::PluginInvokeResult
     return 0;
 }
 
+// $OEM carrying the input state and its drag acceleration, at the OCM epoch,
+// in the OCM TRAJ_REF_FRAME about its CENTER_NAME.
 int emit_drag_oem(
-        const VCM* vcm,
-        const VCMStateVector* state_vector,
+        const OCM* ocm,
+        const char* epoch,
+        const double state[6],
         const double acceleration_km_per_s2[3]) {
-    const char* epoch = flatbuffer_string_or_null(state_vector->EPOCH());
-    if (epoch == nullptr) {
-        plugin_set_error("missing-state-vector-epoch", "VCM STATE_VECTOR.EPOCH is required for OEM output.");
-        return 1;
+    OEMT oem;
+    oem.CCSDS_OEM_VERS = 2.0;
+    oem.CLASSIFICATION = "U";
+    if (ocm->HEADER() != nullptr && ocm->HEADER()->CREATION_DATE() != nullptr) {
+        oem.CREATION_DATE = ocm->HEADER()->CREATION_DATE()->str();
     }
+    oem.ORIGINATOR = "DigitalArsenal propagator/atmosphere";
+    auto block = std::make_unique<ephemerisDataBlockT>();
+    block->COMMENT = "Basilisk orbitalMotion.c atmosphericDrag acceleration from an SDS OCM spacecraft state.";
+    block->CENTER_NAME = ocm->CENTER_NAME()->str();
+    block->REFERENCE_FRAME = std::make_unique<RFMT>();
+    ocm->TRAJ_REF_FRAME()->UnPackTo(block->REFERENCE_FRAME.get());
+    block->TIME_SYSTEM = timing_standard_from_string(flatbuffer_string_or_null(ocm->METADATA()->TIME_SYSTEM()));
+    block->START_TIME = epoch;
+    block->STOP_TIME = epoch;
+    block->STATE_VECTOR_SIZE = 9;
+    auto line = std::make_unique<ephemerisDataLineT>();
+    line->EPOCH = epoch;
+    line->X = state[0];
+    line->Y = state[1];
+    line->Z = state[2];
+    line->X_DOT = state[3];
+    line->Y_DOT = state[4];
+    line->Z_DOT = state[5];
+    line->X_DDOT = acceleration_km_per_s2[0];
+    line->Y_DDOT = acceleration_km_per_s2[1];
+    line->Z_DDOT = acceleration_km_per_s2[2];
+    block->EPHEMERIS_DATA_LINES.push_back(std::move(line));
+    oem.EPHEMERIS_DATA_BLOCK.push_back(std::move(block));
 
     ::flatbuffers::FlatBufferBuilder builder(1024);
-    const auto epoch_offset = builder.CreateString(epoch);
-    const auto center_name = builder.CreateString(
-        flatbuffer_string_or_null(vcm->CENTER_NAME()) != nullptr
-            ? flatbuffer_string_or_null(vcm->CENTER_NAME())
-            : "EARTH");
-    const auto comment = builder.CreateString(
-        "Basilisk orbitalMotion.c atmosphericDrag acceleration from SDS VCM spacecraft state.");
-    const auto line = CreateephemerisDataLine(
-        builder,
-        epoch_offset,
-        state_vector->X(),
-        state_vector->Y(),
-        state_vector->Z(),
-        state_vector->X_DOT(),
-        state_vector->Y_DOT(),
-        state_vector->Z_DOT(),
-        acceleration_km_per_s2[0],
-        acceleration_km_per_s2[1],
-        acceleration_km_per_s2[2]);
-    const std::vector<::flatbuffers::Offset<ephemerisDataLine>> line_entries = {line};
-    const auto line_vector = builder.CreateVector(line_entries);
-    ephemerisDataBlockBuilder block_builder(builder);
-    block_builder.add_EPHEMERIS_DATA_LINES(line_vector);
-    block_builder.add_STATE_VECTOR_SIZE(9);
-    block_builder.add_STOP_TIME(epoch_offset);
-    block_builder.add_START_TIME(epoch_offset);
-    block_builder.add_TIME_SYSTEM(timing_standard_from_string(flatbuffer_string_or_null(vcm->TIME_SYSTEM())));
-    block_builder.add_CENTER_NAME(center_name);
-    block_builder.add_COMMENT(comment);
-    const auto block = block_builder.Finish();
-    const std::vector<::flatbuffers::Offset<ephemerisDataBlock>> block_entries = {block};
-    const auto block_vector = builder.CreateVector(block_entries);
-    const auto classification = builder.CreateString("U");
-    const auto creation_date = builder.CreateString(
-        flatbuffer_string_or_null(vcm->CREATION_DATE()) != nullptr
-            ? flatbuffer_string_or_null(vcm->CREATION_DATE())
-            : "2026-05-26T00:00:00Z");
-    const auto originator = builder.CreateString("DigitalArsenal propagator/atmosphere");
-    const auto oem = CreateOEM(
-        builder,
-        classification,
-        2.0,
-        creation_date,
-        originator,
-        block_vector);
-    builder.Finish(oem, "$OEM");
-
+    builder.Finish(CreateOEM(builder, &oem), "$OEM");
     if (plugin_push_output_typed(
             "drag_acceleration",
             "OEM.fbs",
@@ -399,51 +380,73 @@ int emit_drag_oem(
     return 0;
 }
 
-int vcm_state_to_drag_acceleration_oem_impl(const plugin_input_frame_t* frame) {
-    if (frame->payload_length < 8) {
-        plugin_set_error("invalid-vcm-buffer", "Input vector_state frame is too small to be a VCM FlatBuffer.");
+int ocm_state_to_drag_acceleration_oem_impl(const plugin_input_frame_t* frame) {
+    // Aligned copy: 8-byte scalars are read in place.
+    std::vector<uint8_t> bytes(frame->payload, frame->payload + frame->payload_length);
+    const OCM* ocm = nullptr;
+    if (bytes.size() >= 12 && OCMBufferHasIdentifier(bytes.data())) {
+        ::flatbuffers::Verifier verifier(bytes.data(), bytes.size());
+        if (VerifyOCMBuffer(verifier)) ocm = GetOCM(bytes.data());
+    } else if (bytes.size() >= 12 && SizePrefixedOCMBufferHasIdentifier(bytes.data())) {
+        ::flatbuffers::Verifier verifier(bytes.data(), bytes.size());
+        if (VerifySizePrefixedOCMBuffer(verifier)) ocm = GetSizePrefixedOCM(bytes.data());
+    }
+    if (ocm == nullptr) {
+        plugin_set_error("invalid-ocm-buffer", "Input vector_state frame is not a verifiable SDS $OCM FlatBuffer.");
         return 1;
     }
 
-    ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-    if (!VerifyVCMBuffer(verifier)) {
-        plugin_set_error("invalid-vcm-buffer", "Input vector_state frame is not a valid SDS VCM FlatBuffer.");
+    const auto* metadata = ocm->METADATA();
+    const char* epoch = metadata != nullptr ? flatbuffer_string_or_null(metadata->START_TIME()) : nullptr;
+    if (epoch == nullptr && metadata != nullptr) epoch = flatbuffer_string_or_null(metadata->EPOCH_TZERO());
+    if (epoch == nullptr || flatbuffer_string_or_null(metadata->TIME_SYSTEM()) == nullptr) {
+        plugin_set_error("missing-epoch", "OCM METADATA.START_TIME (or EPOCH_TZERO) and TIME_SYSTEM are required.");
+        return 1;
+    }
+    if (flatbuffer_string_or_null(ocm->CENTER_NAME()) == nullptr || ocm->TRAJ_REF_FRAME() == nullptr) {
+        plugin_set_error("missing-frame", "OCM CENTER_NAME and TRAJ_REF_FRAME are required.");
         return 1;
     }
 
-    const auto* vcm = GetVCM(frame->payload);
-    const auto* state_vector = vcm ? vcm->STATE_VECTOR() : nullptr;
-    if (state_vector == nullptr) {
-        plugin_set_error("missing-vcm-state-vector", "VCM STATE_VECTOR is required for atmospheric drag.");
+    const auto type = ocm->TRAJ_TYPE();
+    const uint32_t width = ocm->STATE_VECTOR_SIZE();
+    const auto* data = ocm->STATE_DATA();
+    if ((type != trajectoryType::CARTESIAN_PV || width != 6) &&
+        (type != trajectoryType::CARTESIAN_PVA || width != 9)) {
+        plugin_set_error("unsupported-trajectory-type", "Expected OCM TRAJ_TYPE CARTESIAN_PV (6) or CARTESIAN_PVA (9).");
+        return 1;
+    }
+    if (data == nullptr || data->size() < width) {
+        plugin_set_error("missing-state-data", "OCM STATE_DATA must hold at least one row.");
+        return 1;
+    }
+    const double state[6] = {data->Get(0), data->Get(1), data->Get(2), data->Get(3), data->Get(4), data->Get(5)};
+    if (!finite3(state[0], state[1], state[2]) || !finite3(state[3], state[4], state[5])) {
+        plugin_set_error("invalid-state-data", "OCM STATE_DATA position and velocity must be finite.");
         return 1;
     }
 
-    if (!finite3(state_vector->X(), state_vector->Y(), state_vector->Z()) ||
-        !finite3(state_vector->X_DOT(), state_vector->Y_DOT(), state_vector->Z_DOT())) {
-        plugin_set_error("invalid-vcm-state-vector", "VCM STATE_VECTOR position and velocity must be finite.");
-        return 1;
-    }
-
-    const double mass_kg = vcm->MASS();
-    const double drag_area_m2 = vcm->DRAG_AREA();
-    const double drag_coefficient = vcm->DRAG_COEFF();
+    const auto* physical = ocm->PHYSICAL_PROPERTIES();
+    const double mass_kg = physical != nullptr ? physical->WET_MASS() : 0.0;
+    const double drag_area_m2 = physical != nullptr ? physical->DRAG_CONST_AREA() : 0.0;
+    const double drag_coefficient = physical != nullptr ? physical->DRAG_COEFF_NOM() : 0.0;
     if (!std::isfinite(mass_kg) || !std::isfinite(drag_area_m2) ||
         !std::isfinite(drag_coefficient) || mass_kg <= 0.0 ||
         drag_area_m2 < 0.0 || drag_coefficient < 0.0) {
         plugin_set_error(
             "invalid-drag-parameters",
-            "VCM MASS, DRAG_AREA, and DRAG_COEFF must be finite non-negative values with positive MASS.");
+            "OCM PHYSICAL_PROPERTIES WET_MASS, DRAG_CONST_AREA and DRAG_COEFF_NOM must be finite non-negative values with positive WET_MASS.");
         return 1;
     }
 
     const double position_m[3] = {
-        state_vector->X() * kKilometersToMeters,
-        state_vector->Y() * kKilometersToMeters,
-        state_vector->Z() * kKilometersToMeters};
+        state[0] * kKilometersToMeters,
+        state[1] * kKilometersToMeters,
+        state[2] * kKilometersToMeters};
     const double velocity_m_per_s[3] = {
-        state_vector->X_DOT() * kKilometersToMeters,
-        state_vector->Y_DOT() * kKilometersToMeters,
-        state_vector->Z_DOT() * kKilometersToMeters};
+        state[3] * kKilometersToMeters,
+        state[4] * kKilometersToMeters,
+        state[5] * kKilometersToMeters};
     double acceleration_m_per_s2[3] = {0.0, 0.0, 0.0};
     atmosphere::basiliskAtmosphericDragAcceleration(
         drag_coefficient,
@@ -461,7 +464,7 @@ int vcm_state_to_drag_acceleration_oem_impl(const plugin_input_frame_t* frame) {
         acceleration_m_per_s2[0] * kMetersPerSecondToKilometersPerSecond,
         acceleration_m_per_s2[1] * kMetersPerSecondToKilometersPerSecond,
         acceleration_m_per_s2[2] * kMetersPerSecondToKilometersPerSecond};
-    return emit_drag_oem(vcm, state_vector, acceleration_km_per_s2);
+    return emit_drag_oem(ocm, epoch, state, acceleration_km_per_s2);
 }
 
 int fail_sample(const char* code, const char* message, uint32_t index) {
@@ -871,7 +874,7 @@ int query_atmosphere_state_batch(void) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-int vcm_state_to_drag_acceleration_oem(void) {
+int ocm_state_to_drag_acceleration_oem(void) {
     plugin_reset_output_state();
 
     const auto* frame = find_frame("vector_state");
@@ -880,7 +883,7 @@ int vcm_state_to_drag_acceleration_oem(void) {
         return 1;
     }
 
-    return vcm_state_to_drag_acceleration_oem_impl(frame);
+    return ocm_state_to_drag_acceleration_oem_impl(frame);
 }
 
 }  // extern "C"

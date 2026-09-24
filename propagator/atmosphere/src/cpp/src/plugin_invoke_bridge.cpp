@@ -19,7 +19,7 @@ extern "C" __attribute__((weak)) void emscripten_notify_memory_growth(int) {}
 
 extern "C" int invoke(void);
 extern "C" int query_atmosphere_state_batch(void);
-extern "C" int vcm_state_to_drag_acceleration_oem(void);
+extern "C" int ocm_state_to_drag_acceleration_oem(void);
 
 namespace {
 
@@ -148,14 +148,14 @@ static const char *kMethod_query_atmosphere_state_batch_output_ports[] = {
   "states",
 };
 
-static const AcceptedTypeRef kMethod_vcm_state_to_drag_acceleration_oem_input_port_0_accepted_types[] = {
-  { false, "VCM.fbs", "", 0u, false, "VCM" },
-  { false, "VCM.fbs", "", 1u, true, "VCM" },
+static const AcceptedTypeRef kMethod_ocm_state_to_drag_acceleration_oem_input_port_0_accepted_types[] = {
+  { false, "OCM.fbs", "$OCM", 0u, false, "OCM" },
+  { false, "OCM.fbs", "$OCM", 1u, true, "OCM" },
 };
-static const PortRequirement kMethod_vcm_state_to_drag_acceleration_oem_input_ports[] = {
-  { "vector_state", true, kMethod_vcm_state_to_drag_acceleration_oem_input_port_0_accepted_types, 2u },
+static const PortRequirement kMethod_ocm_state_to_drag_acceleration_oem_input_ports[] = {
+  { "vector_state", true, kMethod_ocm_state_to_drag_acceleration_oem_input_port_0_accepted_types, 2u },
 };
-static const char *kMethod_vcm_state_to_drag_acceleration_oem_output_ports[] = {
+static const char *kMethod_ocm_state_to_drag_acceleration_oem_output_ports[] = {
   "drag_acceleration",
 };
 
@@ -183,11 +183,11 @@ static const MethodDescriptor kMethodTable[] = {
     nullptr
   },
   {
-    "vcm_state_to_drag_acceleration_oem",
-    &vcm_state_to_drag_acceleration_oem,
-    kMethod_vcm_state_to_drag_acceleration_oem_input_ports,
+    "ocm_state_to_drag_acceleration_oem",
+    &ocm_state_to_drag_acceleration_oem,
+    kMethod_ocm_state_to_drag_acceleration_oem_input_ports,
     1u,
-    kMethod_vcm_state_to_drag_acceleration_oem_output_ports,
+    kMethod_ocm_state_to_drag_acceleration_oem_output_ports,
     1u,
     true,
     "vector_state",

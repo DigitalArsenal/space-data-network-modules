@@ -3,53 +3,59 @@ import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import * as flatbuffers from "../../../../spacedatastandards.org/node_modules/flatbuffers/mjs/flatbuffers.js";
+import * as flatbuffers from "flatbuffers";
 import {
   meanElementSource,
   OMM,
   OMMT,
   timingStandard,
-} from "../../../../spacedatastandards.org/lib/js/OMM/main.js";
+} from "spacedatastandards.org/lib/js/OMM/main.js";
 import {
   OPM,
   OPMT,
-} from "../../../../spacedatastandards.org/lib/js/OPM/main.js";
+} from "spacedatastandards.org/lib/js/OPM/main.js";
 import {
   ephemerisDataBlockT,
   ephemerisDataLineT,
   OEM,
   OEMT,
-} from "../../../../spacedatastandards.org/lib/js/OEM/main.js";
+} from "spacedatastandards.org/lib/js/OEM/main.js";
 import {
   CDM,
   CDMT,
-} from "../../../../spacedatastandards.org/lib/js/CDM/main.js";
+} from "spacedatastandards.org/lib/js/CDM/main.js";
 import {
   CRD,
   CRDT,
-} from "../../../../spacedatastandards.org/lib/js/CRD/main.js";
+} from "spacedatastandards.org/lib/js/CRD/main.js";
 import {
   CentralBody,
   GravityModelName,
   GravityModelType,
   GRV,
   GRVT,
-} from "../../../../spacedatastandards.org/lib/js/GRV/main.js";
+} from "spacedatastandards.org/lib/js/GRV/main.js";
 import {
-  anomalyConvention as vcmAnomalyConvention,
-  equinoctialElementsT,
-  keplerianElementsT,
-  VCM,
-  VCMStateVectorT,
-  VCMT,
-} from "../../../../spacedatastandards.org/lib/js/VCM/main.js";
+  CelestialFrame,
+  CelestialFrameWrapper,
+  CelestialFrameWrapperT,
+  HeaderT,
+  MetadataT,
+  OCM,
+  OCMT,
+  PerturbationsT,
+  PhysicalPropertiesT,
+  RFMT,
+  RFMUnion,
+  trajectoryType,
+} from "spacedatastandards.org/lib/js/OCM/main.js";
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
-const STANDARDS_ROOT = fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
+const STANDARDS_ROOT = fileURLToPath(new URL("../node_modules/spacedatastandards.org/", import.meta.url));
 
 function readManifest() {
   return JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
@@ -276,72 +282,6 @@ function encodeGrvJ6Context({
   });
 }
 
-function encodeVcmKeplerianState({
-  objectName = "BASILISK-EQUINOCTIAL-REFERENCE",
-  objectId = "BASILISK-ORBITAL-MOTION",
-  stateEpoch = "2000-04-01T00:00:00.000Z",
-  x = 0.0,
-  y = 0.0,
-  z = 0.0,
-  xDot = 0.0,
-  yDot = 0.0,
-  zDot = 0.0,
-  semiMajorAxis = 1000.0,
-  eccentricity = 0.2,
-  inclination = 0.2 * 180.0 / Math.PI,
-  raan = 0.15 * 180.0 / Math.PI,
-  argPericenter = 0.5 * 180.0 / Math.PI,
-  anomalyType = vcmAnomalyConvention.TRUE_ANOMALY,
-  anomaly = 0.2 * 180.0 / Math.PI,
-  periapsisRadius = 0.0,
-  gm = 398600.436,
-  mass = 0.0,
-  solarRadArea = 0.0,
-  solarRadCoeff = 0.0,
-} = {}) {
-  const builder = new flatbuffers.Builder(512);
-  const envelope = new VCMT(
-    2.0,
-    "2026-05-24T00:00:00Z",
-    "DigitalArsenal",
-    objectName,
-    objectId,
-    "EARTH",
-    "EME2000",
-    "UTC",
-    new VCMStateVectorT(
-      stateEpoch,
-      x,
-      y,
-      z,
-      xDot,
-      yDot,
-      zDot,
-    ),
-    new keplerianElementsT(
-      semiMajorAxis,
-      eccentricity,
-      inclination,
-      raan,
-      argPericenter,
-      anomalyType,
-      anomaly,
-      periapsisRadius,
-    ),
-    null,
-    gm,
-    null,
-    null,
-    null,
-    mass,
-    solarRadArea,
-    solarRadCoeff,
-  );
-  const root = envelope.pack(builder);
-  VCM.finishVCMBuffer(builder, root);
-  return builder.asUint8Array();
-}
-
 function encodeCrdSunVectorAu({
   x = 1.0,
   y = 0.3,
@@ -364,19 +304,122 @@ function encodeCrdSunVectorAu({
   return builder.asUint8Array();
 }
 
-function encodeVcmParabolicKeplerianState({
+// OCM trajectory frames. Every encoder emits one STATE_DATA row at the
+// METADATA.START_TIME epoch, EME2000 about EARTH, with GM in PERTURBATIONS.
+function encodeOcm({
+  objectName,
+  objectId,
+  stateEpoch,
+  trajectory,
+  row,
+  gm,
+  averaging = null,
+  mass = 0.0,
+  solarRadArea = 0.0,
+  solarRadCoeff = 0.0,
+}) {
+  const metadata = new MetadataT();
+  metadata.OBJECT_NAME = objectName;
+  metadata.INTERNATIONAL_DESIGNATOR = objectId;
+  metadata.TIME_SYSTEM = "UTC";
+  metadata.EPOCH_TZERO = stateEpoch;
+  metadata.START_TIME = stateEpoch;
+  metadata.STOP_TIME = stateEpoch;
+  const perturbations = new PerturbationsT();
+  perturbations.GM = gm;
+  const ocm = new OCMT();
+  ocm.HEADER = new HeaderT("3.0", [], "U", "2026-05-24T00:00:00Z", "DigitalArsenal");
+  ocm.METADATA = metadata;
+  ocm.TRAJ_TYPE = trajectory;
+  ocm.STATE_VECTOR_SIZE = row.length;
+  ocm.STATE_DATA = row;
+  ocm.PERTURBATIONS = perturbations;
+  if (mass !== 0.0 || solarRadArea !== 0.0 || solarRadCoeff !== 0.0) {
+    const physical = new PhysicalPropertiesT();
+    physical.WET_MASS = mass;
+    physical.SRP_CONST_AREA = solarRadArea;
+    physical.SOLAR_RAD_COEFF = solarRadCoeff;
+    ocm.PHYSICAL_PROPERTIES = physical;
+  }
+  ocm.CENTER_NAME = "EARTH";
+  ocm.TRAJ_REF_FRAME = new RFMT(
+    RFMUnion.CelestialFrameWrapper,
+    new CelestialFrameWrapperT(CelestialFrame.EME2000),
+  );
+  ocm.ORB_AVERAGING = averaging;
+  const builder = new flatbuffers.Builder(1024);
+  OCM.finishOCMBuffer(builder, ocm.pack(builder));
+  return builder.asUint8Array();
+}
+
+function encodeOcmCartesianState({
+  objectName = "BASILISK-EQUINOCTIAL-REFERENCE",
+  objectId = "BASILISK-ORBITAL-MOTION",
+  stateEpoch = "2000-04-01T00:00:00.000Z",
+  x = 0.0,
+  y = 0.0,
+  z = 0.0,
+  xDot = 0.0,
+  yDot = 0.0,
+  zDot = 0.0,
+  gm = 398600.436,
+  mass = 0.0,
+  solarRadArea = 0.0,
+  solarRadCoeff = 0.0,
+} = {}) {
+  return encodeOcm({
+    objectName,
+    objectId,
+    stateEpoch,
+    trajectory: trajectoryType.CARTESIAN_PV,
+    row: [x, y, z, xDot, yDot, zDot],
+    gm,
+    mass,
+    solarRadArea,
+    solarRadCoeff,
+  });
+}
+
+// SANA KEPLERIAN (true anomaly) or KEPLERIAN_MEAN (mean anomaly).
+function encodeOcmKeplerianState({
+  objectName = "BASILISK-EQUINOCTIAL-REFERENCE",
+  objectId = "BASILISK-ORBITAL-MOTION",
+  stateEpoch = "2000-04-01T00:00:00.000Z",
+  semiMajorAxis = 1000.0,
+  eccentricity = 0.2,
+  inclination = 0.2 * 180.0 / Math.PI,
+  raan = 0.15 * 180.0 / Math.PI,
+  argPericenter = 0.5 * 180.0 / Math.PI,
+  anomalyType = trajectoryType.KEPLERIAN,
+  anomaly = 0.2 * 180.0 / Math.PI,
+  gm = 398600.436,
+  averaging = null,
+} = {}) {
+  return encodeOcm({
+    objectName,
+    objectId,
+    stateEpoch,
+    trajectory: anomalyType,
+    row: [semiMajorAxis, eccentricity, inclination, raan, argPericenter, anomaly],
+    gm,
+    averaging,
+  });
+}
+
+// A parabolic orbit has no finite semi-major axis, so SANA KEPLERIAN can only
+// carry it as a=0, e=1, which the module must refuse.
+function encodeOcmParabolicKeplerianState({
   objectName = "BASILISK-TWO-DIMENSION-PARABOLIC",
   objectId = "BASILISK-ORBITAL-MOTION",
   stateEpoch = "2000-04-01T00:00:00.000Z",
-  periapsisRadius = 7500.0,
   inclination = 40.0,
   raan = 133.0,
   argPericenter = 113.0,
-  anomalyType = vcmAnomalyConvention.TRUE_ANOMALY,
+  anomalyType = trajectoryType.KEPLERIAN,
   anomaly = 123.0,
   gm = 398600.436,
 } = {}) {
-  return encodeVcmKeplerianState({
+  return encodeOcmKeplerianState({
     objectName,
     objectId,
     stateEpoch,
@@ -387,12 +430,13 @@ function encodeVcmParabolicKeplerianState({
     argPericenter,
     anomalyType,
     anomaly,
-    periapsisRadius,
     gm,
   });
 }
 
-function encodeVcmEquinoctialState({
+// Basilisk equinoctial references use true longitude, which is SANA
+// EQUINOCTIAL_MOD: [p = a(1 - af^2 - ag^2), af, ag, true longitude, chi, psi, fr].
+function encodeOcmEquinoctialState({
   objectName = "BASILISK-EQUINOCTIAL-REFERENCE",
   objectId = "BASILISK-ORBITAL-MOTION",
   stateEpoch = "2000-04-01T00:00:00.000Z",
@@ -402,41 +446,18 @@ function encodeVcmEquinoctialState({
   semiMajorAxis = 1000.0,
   chi = 0.01499382601880069713906618034116,
   psi = 0.09920802187229026125603326136115,
+  retrogradeFactor = 1,
   gm = 398600.436,
 } = {}) {
-  const builder = new flatbuffers.Builder(512);
-  const envelope = new VCMT(
-    2.0,
-    "2026-05-24T00:00:00Z",
-    "DigitalArsenal",
+  const semiLatusRectum = semiMajorAxis * (1.0 - af * af - ag * ag);
+  return encodeOcm({
     objectName,
     objectId,
-    "EARTH",
-    "EME2000",
-    "UTC",
-    new VCMStateVectorT(
-      stateEpoch,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-    ),
-    null,
-    new equinoctialElementsT(
-      af,
-      ag,
-      trueLongitude,
-      semiMajorAxis,
-      chi,
-      psi,
-    ),
+    stateEpoch,
+    trajectory: trajectoryType.EQUINOCTIAL_MOD,
+    row: [semiLatusRectum, af, ag, trueLongitude, chi, psi, retrogradeFactor],
     gm,
-  );
-  const root = envelope.pack(builder);
-  VCM.finishVCMBuffer(builder, root);
-  return builder.asUint8Array();
+  });
 }
 
 function encodeCdmRelativeHillState({
@@ -485,6 +506,7 @@ async function invokeKeplerianToCartesian(harness, payload) {
         typeRef: {
           schemaName: "OMM.fbs",
           fileIdentifier: "$OMM",
+          rootTypeName: "OMM",
         },
         payload,
       },
@@ -501,6 +523,7 @@ async function invokeCartesianToKeplerian(harness, cartesianPayload, contextPayl
         typeRef: {
           schemaName: "OEM.fbs",
           fileIdentifier: "$OEM",
+          rootTypeName: "OEM",
         },
         payload: cartesianPayload,
       },
@@ -509,6 +532,7 @@ async function invokeCartesianToKeplerian(harness, cartesianPayload, contextPayl
         typeRef: {
           schemaName: "OMM.fbs",
           fileIdentifier: "$OMM",
+          rootTypeName: "OMM",
         },
         payload: contextPayload,
       },
@@ -525,6 +549,7 @@ async function invokeOpmToOem(harness, payload) {
         typeRef: {
           schemaName: "OPM.fbs",
           fileIdentifier: "$OPM",
+          rootTypeName: "OPM",
         },
         payload,
       },
@@ -541,6 +566,7 @@ async function invokeOpmKeplerianToOem(harness, payload) {
         typeRef: {
           schemaName: "OPM.fbs",
           fileIdentifier: "$OPM",
+          rootTypeName: "OPM",
         },
         payload,
       },
@@ -557,6 +583,7 @@ async function invokeOpmToOmm(harness, payload) {
         typeRef: {
           schemaName: "OPM.fbs",
           fileIdentifier: "$OPM",
+          rootTypeName: "OPM",
         },
         payload,
       },
@@ -573,6 +600,7 @@ async function invokeOpmKeplerianToOmm(harness, payload) {
         typeRef: {
           schemaName: "OPM.fbs",
           fileIdentifier: "$OPM",
+          rootTypeName: "OPM",
         },
         payload,
       },
@@ -587,8 +615,9 @@ async function invokeKeplerianToEquinoctial(harness, payload) {
       {
         portId: "keplerian_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload,
       },
@@ -603,8 +632,9 @@ async function invokeEquinoctialToKeplerian(harness, payload) {
       {
         portId: "equinoctial_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload,
       },
@@ -612,15 +642,16 @@ async function invokeEquinoctialToKeplerian(harness, payload) {
   });
 }
 
-async function invokeVcmEquinoctialToOem(harness, payload) {
+async function invokeOcmEquinoctialToOem(harness, payload) {
   return harness.invoke({
-    methodId: "vcm_equinoctial_to_oem",
+    methodId: "ocm_equinoctial_to_oem",
     inputs: [
       {
         portId: "equinoctial_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload,
       },
@@ -628,15 +659,16 @@ async function invokeVcmEquinoctialToOem(harness, payload) {
   });
 }
 
-async function invokeVcmEquinoctialToState(harness, payload) {
+async function invokeOcmEquinoctialToState(harness, payload) {
   return harness.invoke({
-    methodId: "vcm_equinoctial_to_state",
+    methodId: "ocm_equinoctial_to_state",
     inputs: [
       {
         portId: "equinoctial_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload,
       },
@@ -644,15 +676,16 @@ async function invokeVcmEquinoctialToState(harness, payload) {
   });
 }
 
-async function invokeVcmKeplerianToOem(harness, payload) {
+async function invokeOcmKeplerianToOem(harness, payload) {
   return harness.invoke({
-    methodId: "vcm_keplerian_to_oem",
+    methodId: "ocm_keplerian_to_oem",
     inputs: [
       {
         portId: "keplerian_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload,
       },
@@ -660,15 +693,16 @@ async function invokeVcmKeplerianToOem(harness, payload) {
   });
 }
 
-async function invokeVcmKeplerianToState(harness, payload) {
+async function invokeOcmKeplerianToState(harness, payload) {
   return harness.invoke({
-    methodId: "vcm_keplerian_to_state",
+    methodId: "ocm_keplerian_to_state",
     inputs: [
       {
         portId: "keplerian_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload,
       },
@@ -676,15 +710,16 @@ async function invokeVcmKeplerianToState(harness, payload) {
   });
 }
 
-async function invokeVcmStateToOem(harness, payload) {
+async function invokeOcmStateToOem(harness, payload) {
   return harness.invoke({
-    methodId: "vcm_state_to_oem",
+    methodId: "ocm_state_to_oem",
     inputs: [
       {
         portId: "vector_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload,
       },
@@ -692,15 +727,16 @@ async function invokeVcmStateToOem(harness, payload) {
   });
 }
 
-async function invokeVcmStateToJZonalAccelerationOem(harness, statePayload, gravityPayload) {
+async function invokeOcmStateToJZonalAccelerationOem(harness, statePayload, gravityPayload) {
   return harness.invoke({
-    methodId: "vcm_state_to_j_zonal_acceleration_oem",
+    methodId: "ocm_state_to_j_zonal_acceleration_oem",
     inputs: [
       {
         portId: "vector_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload: statePayload,
       },
@@ -717,15 +753,16 @@ async function invokeVcmStateToJZonalAccelerationOem(harness, statePayload, grav
   });
 }
 
-async function invokeVcmStateToSrpAccelerationOem(harness, statePayload, sunVectorPayload) {
+async function invokeOcmStateToSrpAccelerationOem(harness, statePayload, sunVectorPayload) {
   return harness.invoke({
-    methodId: "vcm_state_to_srp_acceleration_oem",
+    methodId: "ocm_state_to_srp_acceleration_oem",
     inputs: [
       {
         portId: "vector_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload: statePayload,
       },
@@ -742,15 +779,16 @@ async function invokeVcmStateToSrpAccelerationOem(harness, statePayload, sunVect
   });
 }
 
-async function invokeVcmStateToOmm(harness, payload) {
+async function invokeOcmStateToOmm(harness, payload) {
   return harness.invoke({
-    methodId: "vcm_state_to_omm",
+    methodId: "ocm_state_to_omm",
     inputs: [
       {
         portId: "vector_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload,
       },
@@ -758,15 +796,16 @@ async function invokeVcmStateToOmm(harness, payload) {
   });
 }
 
-async function invokeVcmStateToKeplerian(harness, payload) {
+async function invokeOcmStateToKeplerian(harness, payload) {
   return harness.invoke({
-    methodId: "vcm_state_to_keplerian",
+    methodId: "ocm_state_to_keplerian",
     inputs: [
       {
         portId: "vector_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload,
       },
@@ -774,15 +813,16 @@ async function invokeVcmStateToKeplerian(harness, payload) {
   });
 }
 
-async function invokeVcmStateToEquinoctial(harness, payload) {
+async function invokeOcmStateToEquinoctial(harness, payload) {
   return harness.invoke({
-    methodId: "vcm_state_to_equinoctial",
+    methodId: "ocm_state_to_equinoctial",
     inputs: [
       {
         portId: "vector_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload,
       },
@@ -790,15 +830,16 @@ async function invokeVcmStateToEquinoctial(harness, payload) {
   });
 }
 
-async function invokeVcmKeplerianToOmm(harness, payload) {
+async function invokeOcmKeplerianToOmm(harness, payload) {
   return harness.invoke({
-    methodId: "vcm_keplerian_to_omm",
+    methodId: "ocm_keplerian_to_omm",
     inputs: [
       {
         portId: "keplerian_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload,
       },
@@ -806,15 +847,16 @@ async function invokeVcmKeplerianToOmm(harness, payload) {
   });
 }
 
-async function invokeVcmKeplerianToTrueAnomaly(harness, payload) {
+async function invokeOcmKeplerianToTrueAnomaly(harness, payload) {
   return harness.invoke({
-    methodId: "vcm_keplerian_to_true_anomaly",
+    methodId: "ocm_keplerian_to_true_anomaly",
     inputs: [
       {
         portId: "keplerian_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload,
       },
@@ -822,15 +864,16 @@ async function invokeVcmKeplerianToTrueAnomaly(harness, payload) {
   });
 }
 
-async function invokeVcmKeplerianToMeanAnomaly(harness, payload) {
+async function invokeOcmKeplerianToMeanAnomaly(harness, payload) {
   return harness.invoke({
-    methodId: "vcm_keplerian_to_mean_anomaly",
+    methodId: "ocm_keplerian_to_mean_anomaly",
     inputs: [
       {
         portId: "keplerian_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload,
       },
@@ -838,15 +881,16 @@ async function invokeVcmKeplerianToMeanAnomaly(harness, payload) {
   });
 }
 
-async function invokeVcmKeplerianMeanToOsculating(harness, keplerianPayload, gravityPayload) {
+async function invokeOcmKeplerianMeanToOsculating(harness, keplerianPayload, gravityPayload) {
   return harness.invoke({
-    methodId: "vcm_keplerian_mean_to_osculating",
+    methodId: "ocm_keplerian_mean_to_osculating",
     inputs: [
       {
         portId: "keplerian_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload: keplerianPayload,
       },
@@ -863,15 +907,16 @@ async function invokeVcmKeplerianMeanToOsculating(harness, keplerianPayload, gra
   });
 }
 
-async function invokeVcmKeplerianOsculatingToMean(harness, keplerianPayload, gravityPayload) {
+async function invokeOcmKeplerianOsculatingToMean(harness, keplerianPayload, gravityPayload) {
   return harness.invoke({
-    methodId: "vcm_keplerian_osculating_to_mean",
+    methodId: "ocm_keplerian_osculating_to_mean",
     inputs: [
       {
         portId: "keplerian_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload: keplerianPayload,
       },
@@ -888,15 +933,16 @@ async function invokeVcmKeplerianOsculatingToMean(harness, keplerianPayload, gra
   });
 }
 
-async function invokeVcmEquinoctialToOmm(harness, payload) {
+async function invokeOcmEquinoctialToOmm(harness, payload) {
   return harness.invoke({
-    methodId: "vcm_equinoctial_to_omm",
+    methodId: "ocm_equinoctial_to_omm",
     inputs: [
       {
         portId: "equinoctial_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload,
       },
@@ -904,23 +950,25 @@ async function invokeVcmEquinoctialToOmm(harness, payload) {
   });
 }
 
-async function invokeVcmPairToCdmRelativeHill(harness, chiefPayload, deputyPayload) {
+async function invokeOcmPairToCdmRelativeHill(harness, chiefPayload, deputyPayload) {
   return harness.invoke({
-    methodId: "vcm_pair_to_cdm_relative_hill",
+    methodId: "ocm_pair_to_cdm_relative_hill",
     inputs: [
       {
         portId: "chief_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload: chiefPayload,
       },
       {
         portId: "deputy_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload: deputyPayload,
       },
@@ -928,15 +976,16 @@ async function invokeVcmPairToCdmRelativeHill(harness, chiefPayload, deputyPaylo
   });
 }
 
-async function invokeCdmRelativeHillToVcmDeputyState(harness, chiefPayload, relativePayload) {
+async function invokeCdmRelativeHillToOcmDeputyState(harness, chiefPayload, relativePayload) {
   return harness.invoke({
-    methodId: "cdm_relative_hill_to_vcm_deputy_state",
+    methodId: "cdm_relative_hill_to_ocm_deputy_state",
     inputs: [
       {
         portId: "chief_state",
         typeRef: {
-          schemaName: "VCM.fbs",
-          rootTypeName: "VCM",
+          schemaName: "OCM.fbs",
+          fileIdentifier: "$OCM",
+          rootTypeName: "OCM",
         },
         payload: chiefPayload,
       },
@@ -977,40 +1026,97 @@ function decodeOmmResponse(response) {
   return OMM.getRootAsOMM(bb);
 }
 
-function decodeVcmResponse(response) {
-  assert.equal(response.statusCode, 0, response.errorMessage);
-  assert.equal(response.outputs.length, 1);
-  const [frame] = response.outputs;
-  assert.equal(frame.portId, "equinoctial_state");
-  assert.equal(frame.typeRef?.schemaName, "VCM.fbs");
-  assert.equal(frame.typeRef?.fileIdentifier, null);
-  assert.equal(frame.typeRef?.rootTypeName, "VCM");
+function ocmFrame(frame) {
+  assert.equal(frame.typeRef?.schemaName, "OCM.fbs");
+  assert.equal(frame.typeRef?.fileIdentifier, "$OCM");
+  assert.equal(frame.typeRef?.rootTypeName, "OCM");
+  // The module emits size-prefixed $OCM buffers.
   const bb = new flatbuffers.ByteBuffer(frame.payload);
-  return VCM.getRootAsVCM(bb);
+  bb.setPosition(flatbuffers.SIZE_PREFIX_LENGTH);
+  assert.equal(OCM.bufferHasIdentifier(bb), true);
+  return OCM.getSizePrefixedRootAsOCM(new flatbuffers.ByteBuffer(frame.payload));
 }
 
-function decodeVcmKeplerianResponse(response) {
-  assert.equal(response.statusCode, 0, response.errorMessage);
-  assert.equal(response.outputs.length, 1);
-  const [frame] = response.outputs;
-  assert.equal(frame.portId, "keplerian_state");
-  assert.equal(frame.typeRef?.schemaName, "VCM.fbs");
-  assert.equal(frame.typeRef?.fileIdentifier, null);
-  assert.equal(frame.typeRef?.rootTypeName, "VCM");
-  const bb = new flatbuffers.ByteBuffer(frame.payload);
-  return VCM.getRootAsVCM(bb);
+function frameName(rfm) {
+  if (rfm === null) return null;
+  if (rfm.REFERENCE_FRAME_type() === RFMUnion.CelestialFrameWrapper) {
+    return CelestialFrame[rfm.REFERENCE_FRAME(new CelestialFrameWrapper()).frame()];
+  }
+  return rfm.NAME();
 }
 
-function decodeVcmVectorResponse(response) {
+// Named views over the single STATE_DATA row an OCM output carries.
+function ocmView(ocm) {
+  const row = Array.from(ocm.stateDataArray() ?? []);
+  const type = ocm.TRAJ_TYPE();
+  const epoch = ocm.METADATA()?.START_TIME() ?? ocm.METADATA()?.EPOCH_TZERO();
+  return {
+    raw: ocm,
+    OBJECT_NAME: () => ocm.METADATA()?.OBJECT_NAME(),
+    OBJECT_ID: () => ocm.METADATA()?.INTERNATIONAL_DESIGNATOR(),
+    CENTER_NAME: () => ocm.CENTER_NAME(),
+    frameName: () => frameName(ocm.TRAJ_REF_FRAME()),
+    TIME_SYSTEM: () => ocm.METADATA()?.TIME_SYSTEM(),
+    GM: () => ocm.PERTURBATIONS()?.GM() ?? 0.0,
+    ORB_AVERAGING: () => ocm.ORB_AVERAGING(),
+    cartesian: () => {
+      if (type !== trajectoryType.CARTESIAN_PV || row.length !== 6) return null;
+      return {
+        EPOCH: () => epoch,
+        X: () => row[0],
+        Y: () => row[1],
+        Z: () => row[2],
+        X_DOT: () => row[3],
+        Y_DOT: () => row[4],
+        Z_DOT: () => row[5],
+      };
+    },
+    keplerian: () => {
+      if ((type !== trajectoryType.KEPLERIAN && type !== trajectoryType.KEPLERIAN_MEAN) || row.length !== 6) return null;
+      return {
+        SEMI_MAJOR_AXIS: () => row[0],
+        ECCENTRICITY: () => row[1],
+        INCLINATION: () => row[2],
+        RA_OF_ASC_NODE: () => row[3],
+        ARG_OF_PERICENTER: () => row[4],
+        ANOMALY_TYPE: () => type,
+        ANOMALY: () => row[5],
+      };
+    },
+    // SANA EQUINOCTIAL: a, af, ag, mean longitude, chi, psi, fr.
+    equinoctial: () => {
+      if (type !== trajectoryType.EQUINOCTIAL || row.length !== 7) return null;
+      return {
+        SEMI_MAJOR_AXIS: () => row[0],
+        AF: () => row[1],
+        AG: () => row[2],
+        MEAN_LONGITUDE: () => row[3],
+        CHI: () => row[4],
+        PSI: () => row[5],
+        FR: () => row[6],
+      };
+    },
+  };
+}
+
+function decodeOcmPortResponse(response, portId) {
   assert.equal(response.statusCode, 0, response.errorMessage);
   assert.equal(response.outputs.length, 1);
   const [frame] = response.outputs;
-  assert.equal(frame.portId, "vector_state");
-  assert.equal(frame.typeRef?.schemaName, "VCM.fbs");
-  assert.equal(frame.typeRef?.fileIdentifier, null);
-  assert.equal(frame.typeRef?.rootTypeName, "VCM");
-  const bb = new flatbuffers.ByteBuffer(frame.payload);
-  return VCM.getRootAsVCM(bb);
+  assert.equal(frame.portId, portId);
+  return ocmView(ocmFrame(frame));
+}
+
+function decodeOcmEquinoctialResponse(response) {
+  return decodeOcmPortResponse(response, "equinoctial_state");
+}
+
+function decodeOcmKeplerianResponse(response) {
+  return decodeOcmPortResponse(response, "keplerian_state");
+}
+
+function decodeOcmVectorResponse(response) {
+  return decodeOcmPortResponse(response, "vector_state");
 }
 
 function outputPayload(response, portId) {
@@ -1021,16 +1127,14 @@ function outputPayload(response, portId) {
   return frame.payload;
 }
 
-function decodeVcmDeputyResponse(response) {
-  assert.equal(response.statusCode, 0, response.errorMessage);
-  assert.equal(response.outputs.length, 1);
-  const [frame] = response.outputs;
-  assert.equal(frame.portId, "deputy_state");
-  assert.equal(frame.typeRef?.schemaName, "VCM.fbs");
-  assert.equal(frame.typeRef?.fileIdentifier, null);
-  assert.equal(frame.typeRef?.rootTypeName, "VCM");
-  const bb = new flatbuffers.ByteBuffer(frame.payload);
-  return VCM.getRootAsVCM(bb);
+function decodeOcmDeputyResponse(response) {
+  return decodeOcmPortResponse(response, "deputy_state");
+}
+
+function assertRefused(response, errorCode, label) {
+  assert.notEqual(response.statusCode, 0, `${label} should be refused`);
+  assert.equal(response.outputs.length, 0, `${label} should publish no output`);
+  assert.equal(response.errorCode, errorCode, `${label}: ${response.errorMessage}`);
 }
 
 function decodeCdmRelativeResponse(response) {
@@ -1084,6 +1188,18 @@ function ellipticMeanAnomalyDegreesFromTrueAnomaly(eccentricity, trueAnomalyDegr
   return ((meanAnomaly * 180.0 / Math.PI) + 360.0) % 360.0;
 }
 
+// SANA EQUINOCTIAL mean longitude from a Basilisk true-longitude reference
+// (direct orbit, fr = +1): L = M + argp + RAAN.
+function meanLongitudeDegreesFromTrueLongitude(af, ag, trueLongitudeDegrees) {
+  const eccentricity = Math.hypot(af, ag);
+  const longitudeOfPericenter = Math.atan2(ag, af) * 180.0 / Math.PI;
+  const meanAnomaly = ellipticMeanAnomalyDegreesFromTrueAnomaly(
+    eccentricity,
+    trueLongitudeDegrees - longitudeOfPericenter,
+  );
+  return meanAnomaly + longitudeOfPericenter;
+}
+
 function basiliskOrbElemConvertSweepCases() {
   const inclined = { inclination: 33.3, raan: 48.2, argPericenter: 347.8, trueAnomaly: 85.3 };
   const equatorial = { inclination: 0.0, raan: 0.0, argPericenter: 347.8, trueAnomaly: 85.3 };
@@ -1120,20 +1236,18 @@ function basiliskOrbElemConvertSweepCases() {
   return cases;
 }
 
+// Parabolic cases (e=1) carry a=0: SANA KEPLERIAN has no periapsis radius.
 function encodeBasiliskOrbElemConvertCase(caseEntry) {
-  const semiMajorAxisKm = caseEntry.eccentricity === 1.0 ? 0.0 : caseEntry.aMeters / 1000.0;
-  const periapsisRadiusKm = caseEntry.eccentricity === 1.0 ? -caseEntry.aMeters / 1000.0 : 0.0;
-  return encodeVcmKeplerianState({
+  return encodeOcmKeplerianState({
     objectName: `BASILISK-ORBELEM-${caseEntry.name}`,
     objectId: "BASILISK-ORB-ELEM-CONVERT",
-    semiMajorAxis: semiMajorAxisKm,
+    semiMajorAxis: caseEntry.eccentricity === 1.0 ? 0.0 : caseEntry.aMeters / 1000.0,
     eccentricity: caseEntry.eccentricity,
     inclination: caseEntry.inclination,
     raan: caseEntry.raan,
     argPericenter: caseEntry.argPericenter,
-    anomalyType: vcmAnomalyConvention.TRUE_ANOMALY,
+    anomalyType: trajectoryType.KEPLERIAN,
     anomaly: caseEntry.trueAnomaly,
-    periapsisRadius: periapsisRadiusKm,
     gm: caseEntry.mu / 1e9,
   });
 }
@@ -1247,13 +1361,13 @@ test("manifest declares OPM Keplerian true-anomaly to OMM contract", () => {
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
 });
 
-test("manifest declares VCM Keplerian to OEM contract", () => {
+test("manifest declares OCM Keplerian to OEM contract", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_keplerian_to_oem");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_keplerian_to_oem");
   assert.notEqual(method, undefined);
   assert.equal(method.inputPorts[0].portId, "keplerian_state");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
   assert.equal(method.outputPorts[0].portId, "cartesian_state");
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OEM.fbs");
@@ -1261,27 +1375,27 @@ test("manifest declares VCM Keplerian to OEM contract", () => {
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
 });
 
-test("manifest declares VCM Keplerian to state-vector contract", () => {
+test("manifest declares OCM Keplerian to state-vector contract", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_keplerian_to_state");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_keplerian_to_state");
   assert.notEqual(method, undefined);
   assert.equal(method.inputPorts[0].portId, "keplerian_state");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
   assert.equal(method.outputPorts[0].portId, "vector_state");
-  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
 });
 
-test("manifest declares VCM Keplerian to OMM contract", () => {
+test("manifest declares OCM Keplerian to OMM contract", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_keplerian_to_omm");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_keplerian_to_omm");
   assert.notEqual(method, undefined);
   assert.equal(method.inputPorts[0].portId, "keplerian_state");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
   assert.equal(method.outputPorts[0].portId, "mean_elements");
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OMM.fbs");
@@ -1289,49 +1403,49 @@ test("manifest declares VCM Keplerian to OMM contract", () => {
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
 });
 
-test("manifest declares VCM Keplerian mean-to-osculating J2 contract", () => {
+test("manifest declares OCM Keplerian mean-to-osculating J2 contract", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_keplerian_mean_to_osculating");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_keplerian_mean_to_osculating");
   assert.notEqual(method, undefined);
   assert.equal(method.inputPorts[0].portId, "keplerian_state");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
   assert.equal(method.inputPorts[1].portId, "gravity_context");
   assert.equal(method.inputPorts[1].acceptedTypeSets[0].allowedTypes[0].schemaName, "GRV.fbs");
   assert.equal(method.inputPorts[1].acceptedTypeSets[0].allowedTypes[0].fileIdentifier, "$GRV");
   assert.equal(method.inputPorts[1].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
   assert.equal(method.outputPorts[0].portId, "keplerian_state");
-  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
 });
 
-test("manifest declares VCM Keplerian osculating-to-mean J2 contract", () => {
+test("manifest declares OCM Keplerian osculating-to-mean J2 contract", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_keplerian_osculating_to_mean");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_keplerian_osculating_to_mean");
   assert.notEqual(method, undefined);
   assert.equal(method.inputPorts[0].portId, "keplerian_state");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
   assert.equal(method.inputPorts[1].portId, "gravity_context");
   assert.equal(method.inputPorts[1].acceptedTypeSets[0].allowedTypes[0].schemaName, "GRV.fbs");
   assert.equal(method.inputPorts[1].acceptedTypeSets[0].allowedTypes[0].fileIdentifier, "$GRV");
   assert.equal(method.inputPorts[1].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
   assert.equal(method.outputPorts[0].portId, "keplerian_state");
-  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
 });
 
-test("manifest declares VCM state-vector to OEM contract", () => {
+test("manifest declares OCM state-vector to OEM contract", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_state_to_oem");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_state_to_oem");
   assert.notEqual(method, undefined);
   assert.equal(method.inputPorts[0].portId, "vector_state");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
   assert.equal(method.outputPorts[0].portId, "cartesian_state");
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OEM.fbs");
@@ -1339,13 +1453,13 @@ test("manifest declares VCM state-vector to OEM contract", () => {
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
 });
 
-test("manifest declares VCM state-vector to J-zonal acceleration OEM contract", () => {
+test("manifest declares OCM state-vector to J-zonal acceleration OEM contract", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_state_to_j_zonal_acceleration_oem");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_state_to_j_zonal_acceleration_oem");
   assert.notEqual(method, undefined);
   assert.equal(method.inputPorts[0].portId, "vector_state");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
   assert.equal(method.inputPorts[1].portId, "gravity_context");
   assert.equal(method.inputPorts[1].acceptedTypeSets[0].allowedTypes[0].schemaName, "GRV.fbs");
@@ -1357,13 +1471,13 @@ test("manifest declares VCM state-vector to J-zonal acceleration OEM contract", 
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
 });
 
-test("manifest declares VCM state-vector to SRP acceleration OEM contract", () => {
+test("manifest declares OCM state-vector to SRP acceleration OEM contract", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_state_to_srp_acceleration_oem");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_state_to_srp_acceleration_oem");
   assert.notEqual(method, undefined);
   assert.equal(method.inputPorts[0].portId, "vector_state");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
   assert.equal(method.inputPorts[1].portId, "sun_vector");
   assert.equal(method.inputPorts[1].acceptedTypeSets[0].allowedTypes[0].schemaName, "CRD.fbs");
@@ -1375,13 +1489,13 @@ test("manifest declares VCM state-vector to SRP acceleration OEM contract", () =
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
 });
 
-test("manifest declares VCM state-vector to OMM contract", () => {
+test("manifest declares OCM state-vector to OMM contract", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_state_to_omm");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_state_to_omm");
   assert.notEqual(method, undefined);
   assert.equal(method.inputPorts[0].portId, "vector_state");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
   assert.equal(method.outputPorts[0].portId, "mean_elements");
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OMM.fbs");
@@ -1389,41 +1503,41 @@ test("manifest declares VCM state-vector to OMM contract", () => {
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
 });
 
-test("manifest declares VCM state-vector to Keplerian contract", () => {
+test("manifest declares OCM state-vector to Keplerian contract", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_state_to_keplerian");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_state_to_keplerian");
   assert.notEqual(method, undefined);
   assert.equal(method.inputPorts[0].portId, "vector_state");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
   assert.equal(method.outputPorts[0].portId, "keplerian_state");
-  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
 });
 
-test("manifest declares VCM state-vector to equinoctial contract", () => {
+test("manifest declares OCM state-vector to equinoctial contract", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_state_to_equinoctial");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_state_to_equinoctial");
   assert.notEqual(method, undefined);
   assert.equal(method.inputPorts[0].portId, "vector_state");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
   assert.equal(method.outputPorts[0].portId, "equinoctial_state");
-  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
 });
 
-test("manifest declares VCM equinoctial to OMM contract", () => {
+test("manifest declares OCM equinoctial to OMM contract", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_equinoctial_to_omm");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_equinoctial_to_omm");
   assert.notEqual(method, undefined);
   assert.equal(method.inputPorts[0].portId, "equinoctial_state");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
   assert.equal(method.outputPorts[0].portId, "mean_elements");
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OMM.fbs");
@@ -1431,13 +1545,13 @@ test("manifest declares VCM equinoctial to OMM contract", () => {
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
 });
 
-test("manifest declares VCM equinoctial to OEM contract", () => {
+test("manifest declares OCM equinoctial to OEM contract", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_equinoctial_to_oem");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_equinoctial_to_oem");
   assert.notEqual(method, undefined);
   assert.equal(method.inputPorts[0].portId, "equinoctial_state");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
   assert.equal(method.outputPorts[0].portId, "cartesian_state");
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OEM.fbs");
@@ -1445,17 +1559,17 @@ test("manifest declares VCM equinoctial to OEM contract", () => {
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
 });
 
-test("manifest declares VCM equinoctial to state-vector contract", () => {
+test("manifest declares OCM equinoctial to state-vector contract", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_equinoctial_to_state");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_equinoctial_to_state");
   assert.notEqual(method, undefined);
   assert.equal(method.inputPorts[0].portId, "equinoctial_state");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.inputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
   assert.equal(method.outputPorts[0].portId, "vector_state");
-  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "VCM.fbs");
-  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "VCM");
+  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].schemaName, "OCM.fbs");
+  assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[0].rootTypeName, "OCM");
   assert.equal(method.outputPorts[0].acceptedTypeSets[0].allowedTypes[1].wireFormat, "aligned-binary");
 });
 
@@ -1774,16 +1888,16 @@ test("recovers Basilisk circular inclined Cartesian state as OMM argument of lat
   assertAngleNearDegrees(omm.MEAN_ANOMALY(), 236.0, 1e-10, "argument of latitude deg");
 });
 
-test("promotes Basilisk VCM Cartesian state vector to SDS OEM state vector", async (t) => {
+test("promotes Basilisk OCM Cartesian state vector to SDS OEM state vector", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const response = await invokeVcmStateToOem(
+  const response = await invokeOcmStateToOem(
     harness,
-    encodeVcmKeplerianState({
+    encodeOcmCartesianState({
       objectName: "BASILISK-CIRCULAR-INCLINED",
       objectId: "BASILISK-ORBITAL-MOTION",
       x: 6343.7735859429586,
@@ -1792,13 +1906,6 @@ test("promotes Basilisk VCM Cartesian state vector to SDS OEM state vector", asy
       xDot: -1.8379619466304487,
       yDot: 6.5499717954886121,
       zDot: -2.6203988553352131,
-      semiMajorAxis: 1000.0,
-      eccentricity: 0.2,
-      inclination: 0.2 * 180.0 / Math.PI,
-      raan: 0.15 * 180.0 / Math.PI,
-      argPericenter: 0.5 * 180.0 / Math.PI,
-      anomalyType: vcmAnomalyConvention.TRUE_ANOMALY,
-      anomaly: 0.2 * 180.0 / Math.PI,
       gm: 398600.436,
     }),
   );
@@ -1809,12 +1916,12 @@ test("promotes Basilisk VCM Cartesian state vector to SDS OEM state vector", asy
   assert.equal(block.START_TIME(), "2000-04-01T00:00:00.000Z");
   const line = block.EPHEMERIS_DATA_LINES(0);
   assert.equal(line.EPOCH(), "2000-04-01T00:00:00.000Z");
-  assertNear(line.X(), 6343.7735859429586, 1e-12, "VCM state position x km");
-  assertNear(line.Y(), 181.16597468085499, 1e-12, "VCM state position y km");
-  assertNear(line.Z(), -3996.7130970223939, 1e-12, "VCM state position z km");
-  assertNear(line.X_DOT(), -1.8379619466304487, 1e-12, "VCM state velocity x km/s");
-  assertNear(line.Y_DOT(), 6.5499717954886121, 1e-12, "VCM state velocity y km/s");
-  assertNear(line.Z_DOT(), -2.6203988553352131, 1e-12, "VCM state velocity z km/s");
+  assertNear(line.X(), 6343.7735859429586, 1e-12, "OCM state position x km");
+  assertNear(line.Y(), 181.16597468085499, 1e-12, "OCM state position y km");
+  assertNear(line.Z(), -3996.7130970223939, 1e-12, "OCM state position z km");
+  assertNear(line.X_DOT(), -1.8379619466304487, 1e-12, "OCM state velocity x km/s");
+  assertNear(line.Y_DOT(), 6.5499717954886121, 1e-12, "OCM state velocity y km/s");
+  assertNear(line.Z_DOT(), -2.6203988553352131, 1e-12, "OCM state velocity z km/s");
 });
 
 // Authoritative numerical source:
@@ -1824,16 +1931,16 @@ test("promotes Basilisk VCM Cartesian state vector to SDS OEM state vector", asy
 // The fixture's stored check vector is stale; compiling current orbitalMotion.c
 // directly with those constants yields the values asserted below.
 
-test("computes Basilisk J2-J6 zonal perturbation acceleration from VCM state and GRV context", async (t) => {
+test("computes Basilisk J2-J6 zonal perturbation acceleration from OCM state and GRV context", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const response = await invokeVcmStateToJZonalAccelerationOem(
+  const response = await invokeOcmStateToJZonalAccelerationOem(
     harness,
-    encodeVcmKeplerianState({
+    encodeOcmCartesianState({
       objectName: "BASILISK-JPERTURB-ORDER-6",
       objectId: "BASILISK-ORBITAL-MOTION",
       x: 6200.0,
@@ -1870,16 +1977,16 @@ test("computes Basilisk J2-J6 zonal perturbation acceleration from VCM state and
 // The fixture's stored check vector appears to come from an older flux value;
 // compiling current orbitalMotion.c directly yields the values asserted below.
 
-test("computes Basilisk solar radiation pressure acceleration from VCM spacecraft parameters and CRD sun vector", async (t) => {
+test("computes Basilisk solar radiation pressure acceleration from OCM spacecraft parameters and CRD sun vector", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const response = await invokeVcmStateToSrpAccelerationOem(
+  const response = await invokeOcmStateToSrpAccelerationOem(
     harness,
-    encodeVcmKeplerianState({
+    encodeOcmCartesianState({
       objectName: "BASILISK-SOLAR-RADIATION-PRESSURE",
       objectId: "BASILISK-ORBITAL-MOTION",
       x: 7000.0,
@@ -1909,16 +2016,16 @@ test("computes Basilisk solar radiation pressure acceleration from VCM spacecraf
   assertNear(line.Z_DDOT(), 3.96387470057475276e-11, 5e-22, "SRP acceleration z km/s^2");
 });
 
-test("recovers Basilisk VCM Cartesian state vector as OMM argument of latitude", async (t) => {
+test("recovers Basilisk OCM Cartesian state vector as OMM argument of latitude", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const response = await invokeVcmStateToOmm(
+  const response = await invokeOcmStateToOmm(
     harness,
-    encodeVcmKeplerianState({
+    encodeOcmCartesianState({
       objectName: "BASILISK-CIRCULAR-INCLINED",
       objectId: "BASILISK-ORBITAL-MOTION",
       x: 6343.7735859429586,
@@ -1927,13 +2034,6 @@ test("recovers Basilisk VCM Cartesian state vector as OMM argument of latitude",
       xDot: -1.8379619466304487,
       yDot: 6.5499717954886121,
       zDot: -2.6203988553352131,
-      semiMajorAxis: 1000.0,
-      eccentricity: 0.2,
-      inclination: 0.2 * 180.0 / Math.PI,
-      raan: 0.15 * 180.0 / Math.PI,
-      argPericenter: 0.5 * 180.0 / Math.PI,
-      anomalyType: vcmAnomalyConvention.TRUE_ANOMALY,
-      anomaly: 0.2 * 180.0 / Math.PI,
       gm: 398600.436,
     }),
   );
@@ -1943,25 +2043,25 @@ test("recovers Basilisk VCM Cartesian state vector as OMM argument of latitude",
   assert.equal(omm.CENTER_NAME(), "EARTH");
   assert.equal(omm.TIME_SYSTEM(), timingStandard.UTC);
   assert.equal(omm.EPOCH(), "2000-04-01T00:00:00.000Z");
-  assertNear(omm.SEMI_MAJOR_AXIS(), 7500.0, 1e-8, "VCM state semi-major axis km");
-  assertNear(omm.ECCENTRICITY(), 0.0, 1e-11, "VCM state eccentricity");
-  assertAngleNearDegrees(omm.INCLINATION(), 40.0, 1e-10, "VCM state inclination deg");
-  assertAngleNearDegrees(omm.RA_OF_ASC_NODE(), 133.0, 1e-10, "VCM state RAAN deg");
-  assertAngleNearDegrees(omm.ARG_OF_PERICENTER(), 0.0, 1e-10, "VCM state argument of pericenter deg");
-  assertAngleNearDegrees(omm.MEAN_ANOMALY(), 236.0, 1e-10, "VCM state argument of latitude deg");
-  assertNear(omm.GM(), 398600.436, 1e-12, "VCM state GM km^3/s^2");
+  assertNear(omm.SEMI_MAJOR_AXIS(), 7500.0, 1e-8, "OCM state semi-major axis km");
+  assertNear(omm.ECCENTRICITY(), 0.0, 1e-11, "OCM state eccentricity");
+  assertAngleNearDegrees(omm.INCLINATION(), 40.0, 1e-10, "OCM state inclination deg");
+  assertAngleNearDegrees(omm.RA_OF_ASC_NODE(), 133.0, 1e-10, "OCM state RAAN deg");
+  assertAngleNearDegrees(omm.ARG_OF_PERICENTER(), 0.0, 1e-10, "OCM state argument of pericenter deg");
+  assertAngleNearDegrees(omm.MEAN_ANOMALY(), 236.0, 1e-10, "OCM state argument of latitude deg");
+  assertNear(omm.GM(), 398600.436, 1e-12, "OCM state GM km^3/s^2");
 });
 
-test("recovers Basilisk VCM Cartesian state vector as VCM Keplerian mean anomaly", async (t) => {
+test("recovers Basilisk OCM Cartesian state vector as OCM Keplerian mean anomaly", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const response = await invokeVcmStateToKeplerian(
+  const response = await invokeOcmStateToKeplerian(
     harness,
-    encodeVcmKeplerianState({
+    encodeOcmCartesianState({
       objectName: "BASILISK-TWO-DIMENSION-ELLIPTICAL",
       objectId: "BASILISK-ORBITAL-MOTION",
       x: 6538.3506963942027,
@@ -1970,91 +2070,75 @@ test("recovers Basilisk VCM Cartesian state vector as VCM Keplerian mean anomaly
       xDot: 1.4414106130924005,
       yDot: 5.588901415902356,
       zDot: -4.0828931566657038,
-      semiMajorAxis: 1000.0,
-      eccentricity: 0.2,
-      inclination: 0.2 * 180.0 / Math.PI,
-      raan: 0.15 * 180.0 / Math.PI,
-      argPericenter: 0.5 * 180.0 / Math.PI,
-      anomalyType: vcmAnomalyConvention.TRUE_ANOMALY,
-      anomaly: 0.2 * 180.0 / Math.PI,
       gm: 398600.436,
     }),
   );
-  const vcm = decodeVcmKeplerianResponse(response);
-  const keplerian = vcm.KEPLERIAN_ELEMENTS();
+  const ocm = decodeOcmKeplerianResponse(response);
+  const keplerian = ocm.keplerian();
   assert.notEqual(keplerian, null);
-  assert.equal(vcm.OBJECT_NAME(), "BASILISK-TWO-DIMENSION-ELLIPTICAL");
-  assert.equal(vcm.OBJECT_ID(), "BASILISK-ORBITAL-MOTION");
-  assert.equal(vcm.CENTER_NAME(), "EARTH");
-  assert.equal(vcm.REF_FRAME(), "EME2000");
-  assert.equal(vcm.TIME_SYSTEM(), "UTC");
-  assertNear(keplerian.SEMI_MAJOR_AXIS(), 7500.0, 1e-8, "VCM state semi-major axis km");
-  assertNear(keplerian.ECCENTRICITY(), 0.5, 1e-12, "VCM state eccentricity");
-  assertAngleNearDegrees(keplerian.INCLINATION(), 40.0, 1e-10, "VCM state inclination deg");
-  assertAngleNearDegrees(keplerian.RA_OF_ASC_NODE(), 133.0, 1e-10, "VCM state RAAN deg");
-  assertAngleNearDegrees(keplerian.ARG_OF_PERICENTER(), 113.0, 1e-10, "VCM state argument of pericenter deg");
-  assert.equal(keplerian.ANOMALY_TYPE(), vcmAnomalyConvention.MEAN_ANOMALY);
+  assert.equal(ocm.OBJECT_NAME(), "BASILISK-TWO-DIMENSION-ELLIPTICAL");
+  assert.equal(ocm.OBJECT_ID(), "BASILISK-ORBITAL-MOTION");
+  assert.equal(ocm.CENTER_NAME(), "EARTH");
+  assert.equal(ocm.frameName(), "EME2000");
+  assert.equal(ocm.TIME_SYSTEM(), "UTC");
+  assertNear(keplerian.SEMI_MAJOR_AXIS(), 7500.0, 1e-8, "OCM state semi-major axis km");
+  assertNear(keplerian.ECCENTRICITY(), 0.5, 1e-12, "OCM state eccentricity");
+  assertAngleNearDegrees(keplerian.INCLINATION(), 40.0, 1e-10, "OCM state inclination deg");
+  assertAngleNearDegrees(keplerian.RA_OF_ASC_NODE(), 133.0, 1e-10, "OCM state RAAN deg");
+  assertAngleNearDegrees(keplerian.ARG_OF_PERICENTER(), 113.0, 1e-10, "OCM state argument of pericenter deg");
+  assert.equal(keplerian.ANOMALY_TYPE(), trajectoryType.KEPLERIAN_MEAN);
   assertAngleNearDegrees(
     keplerian.ANOMALY(),
     ellipticMeanAnomalyDegreesFromTrueAnomaly(0.5, 123.0),
     1e-10,
-    "VCM state mean anomaly deg",
+    "OCM state mean anomaly deg",
   );
-  assertNear(vcm.GM(), 398600.436, 1e-12, "VCM state GM km^3/s^2");
+  assertNear(ocm.GM(), 398600.436, 1e-12, "OCM state GM km^3/s^2");
 });
 
 // Authoritative numerical source:
 // Basilisk src/architecture/utilities/tests/test_orbitalMotion.cpp
 // TwoDimensionParabolic.rv2elem uses rPeriap=7500 km, e=1, i=40 deg,
-// RAAN=133 deg, argPerigee=113 deg, true anomaly=123 deg, and MU_EARTH.
-// VCM can preserve the recovered parabolic state as KEPLERIAN_ELEMENTS with
-// TRUE_ANOMALY, while OMM uses the Barker mean-anomaly convention.
+// RAAN=133 deg, argPerigee=113 deg, true anomaly=123 deg, and MU_EARTH; the
+// second state is the same geometry on the negative branch, f = -123 deg.
+// SANA KEPLERIAN needs a finite semi-major axis, so both states are refused as
+// OCM element sets; OMM carries the parabola with the Barker convention below.
 
-test("recovers Basilisk parabolic VCM Cartesian state vector as VCM Keplerian true anomaly", async (t) => {
+test("refuses Basilisk parabolic OCM Cartesian states as OCM Keplerian elements", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const response = await invokeVcmStateToKeplerian(
-    harness,
-    encodeVcmKeplerianState({
+  const parabolicStates = [
+    {
       objectName: "BASILISK-TWO-DIMENSION-PARABOLIC",
-      objectId: "BASILISK-ORBITAL-MOTION",
       x: 27862.6148209797,
       y: 795.70270010667,
       z: -17554.0435142669,
       xDot: 3.06499561197954,
       yDot: 2.21344887266898,
       zDot: -3.14760065404514,
-      semiMajorAxis: 1000.0,
-      eccentricity: 0.2,
-      inclination: 0.2 * 180.0 / Math.PI,
-      raan: 0.15 * 180.0 / Math.PI,
-      argPericenter: 0.5 * 180.0 / Math.PI,
-      anomalyType: vcmAnomalyConvention.TRUE_ANOMALY,
-      anomaly: 0.2 * 180.0 / Math.PI,
-      gm: 398600.436,
-    }),
-  );
-  const vcm = decodeVcmKeplerianResponse(response);
-  const keplerian = vcm.KEPLERIAN_ELEMENTS();
-  assert.notEqual(keplerian, null);
-  assert.equal(vcm.OBJECT_NAME(), "BASILISK-TWO-DIMENSION-PARABOLIC");
-  assert.equal(vcm.OBJECT_ID(), "BASILISK-ORBITAL-MOTION");
-  assertNear(keplerian.SEMI_MAJOR_AXIS(), 0.0, 1e-10, "VCM parabolic semi-major axis km");
-  assertNear(keplerian.ECCENTRICITY(), 1.0, 1e-12, "VCM parabolic eccentricity");
-  assertAngleNearDegrees(keplerian.INCLINATION(), 40.0, 1e-10, "VCM parabolic inclination deg");
-  assertAngleNearDegrees(keplerian.RA_OF_ASC_NODE(), 133.0, 1e-10, "VCM parabolic RAAN deg");
-  assertAngleNearDegrees(keplerian.ARG_OF_PERICENTER(), 113.0, 1e-10, "VCM parabolic argument of pericenter deg");
-  assert.equal(keplerian.ANOMALY_TYPE(), vcmAnomalyConvention.TRUE_ANOMALY);
-  assertAngleNearDegrees(keplerian.ANOMALY(), 123.0, 1e-10, "VCM parabolic true anomaly deg");
-  assertNear(keplerian.PERIAPSIS_RADIUS(), 7500.0, 1e-8, "VCM parabolic periapsis radius km");
-  assertNear(vcm.GM(), 398600.436, 1e-12, "VCM parabolic GM km^3/s^2");
+    },
+    {
+      objectName: "BASILISK-TWO-DIMENSION-PARABOLIC-NEGATIVE-F",
+      x: -18919.638129773895,
+      y: 26713.87519561345,
+      z: -3676.8269229873467,
+      xDot: 0.909969526808347,
+      yDot: -4.415647903980721,
+      zDot: 1.968490014978394,
+    },
+  ];
+  for (const state of parabolicStates) {
+    const payload = encodeOcmCartesianState({ ...state, gm: 398600.436 });
+    assertRefused(await invokeOcmStateToKeplerian(harness, payload), "unsupported-orbit", `${state.objectName} Keplerian`);
+    assertRefused(await invokeOcmStateToEquinoctial(harness, payload), "unsupported-orbit", `${state.objectName} equinoctial`);
+  }
 });
 
-test("recovers Basilisk parabolic VCM Cartesian state vector as OMM Barker mean elements", async (t) => {
+test("recovers Basilisk parabolic OCM Cartesian state vector as OMM Barker mean elements", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
@@ -2066,9 +2150,9 @@ test("recovers Basilisk parabolic VCM Cartesian state vector as OMM Barker mean 
   const parabolicMeanAnomalyDegrees =
     (barkerParameter + (barkerParameter ** 3) / 3.0) * 180.0 / Math.PI;
 
-  const response = await invokeVcmStateToOmm(
+  const response = await invokeOcmStateToOmm(
     harness,
-    encodeVcmKeplerianState({
+    encodeOcmCartesianState({
       objectName: "BASILISK-TWO-DIMENSION-PARABOLIC",
       objectId: "BASILISK-ORBITAL-MOTION",
       x: 27862.6148209797,
@@ -2077,13 +2161,6 @@ test("recovers Basilisk parabolic VCM Cartesian state vector as OMM Barker mean 
       xDot: 3.06499561197954,
       yDot: 2.21344887266898,
       zDot: -3.14760065404514,
-      semiMajorAxis: 1000.0,
-      eccentricity: 0.2,
-      inclination: 0.2 * 180.0 / Math.PI,
-      raan: 0.15 * 180.0 / Math.PI,
-      argPericenter: 0.5 * 180.0 / Math.PI,
-      anomalyType: vcmAnomalyConvention.TRUE_ANOMALY,
-      anomaly: 0.2 * 180.0 / Math.PI,
       gm: 398600.436,
     }),
   );
@@ -2102,62 +2179,13 @@ test("recovers Basilisk parabolic VCM Cartesian state vector as OMM Barker mean 
 
 // Authoritative numerical source:
 // Basilisk `src/simulation/dynamics/DynOutput/orbElemConvert/_UnitTest/
-// test_orb_elem_convert.py` checks the `rv2elem` calculation against the
-// signed conic range by subtracting signed 2*pi when `eO >= 1` and
-// `abs(fO) > pi`.
-// This state uses the same TwoDimensionParabolic geometry as the upstream
-// unit test, but on the negative true-anomaly branch: f = -123 deg.
-test("recovers Basilisk parabolic VCM Cartesian state with signed true anomaly", async (t) => {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
-    surface: "direct",
-  });
-  t.after(() => harness.destroy());
-
-  const response = await invokeVcmStateToKeplerian(
-    harness,
-    encodeVcmKeplerianState({
-      objectName: "BASILISK-TWO-DIMENSION-PARABOLIC-NEGATIVE-F",
-      objectId: "BASILISK-ORBITAL-MOTION",
-      x: -18919.638129773895,
-      y: 26713.87519561345,
-      z: -3676.8269229873467,
-      xDot: 0.909969526808347,
-      yDot: -4.415647903980721,
-      zDot: 1.968490014978394,
-      semiMajorAxis: 1000.0,
-      eccentricity: 0.2,
-      inclination: 0.2 * 180.0 / Math.PI,
-      raan: 0.15 * 180.0 / Math.PI,
-      argPericenter: 0.5 * 180.0 / Math.PI,
-      anomalyType: vcmAnomalyConvention.TRUE_ANOMALY,
-      anomaly: 0.2 * 180.0 / Math.PI,
-      gm: 398600.436,
-    }),
-  );
-  const vcm = decodeVcmKeplerianResponse(response);
-  const keplerian = vcm.KEPLERIAN_ELEMENTS();
-  assert.notEqual(keplerian, null);
-  assert.equal(vcm.OBJECT_NAME(), "BASILISK-TWO-DIMENSION-PARABOLIC-NEGATIVE-F");
-  assertNear(keplerian.SEMI_MAJOR_AXIS(), 0.0, 1e-10, "VCM parabolic semi-major axis km");
-  assertNear(keplerian.ECCENTRICITY(), 1.0, 1e-12, "VCM parabolic eccentricity");
-  assertAngleNearDegrees(keplerian.INCLINATION(), 40.0, 1e-10, "VCM parabolic inclination deg");
-  assertAngleNearDegrees(keplerian.RA_OF_ASC_NODE(), 133.0, 1e-10, "VCM parabolic RAAN deg");
-  assertAngleNearDegrees(keplerian.ARG_OF_PERICENTER(), 113.0, 1e-10, "VCM parabolic argument of pericenter deg");
-  assert.equal(keplerian.ANOMALY_TYPE(), vcmAnomalyConvention.TRUE_ANOMALY);
-  assertNear(keplerian.ANOMALY(), -123.0, 1e-10, "VCM parabolic signed true anomaly deg");
-  assertNear(keplerian.PERIAPSIS_RADIUS(), 7500.0, 1e-8, "VCM parabolic periapsis radius km");
-  assertNear(vcm.GM(), 398600.436, 1e-12, "VCM parabolic GM km^3/s^2");
-});
-
-// Authoritative numerical source:
-// Basilisk `src/simulation/dynamics/DynOutput/orbElemConvert/_UnitTest/
 // test_orb_elem_convert.py` parameterizes inclined/equatorial elliptical,
-// circular, parabolic, and hyperbolic cases in SI units. SDS VCM stores the
-// same elements in km, km/s, and km^3/s^2, so this ports the complete upstream
-// sweep through the module's Keplerian-to-state and state-to-Keplerian VCM
-// FlatBuffer surfaces.
-test("covers Basilisk orbElemConvert parameter sweep through VCM Keplerian/state conversion", async (t) => {
+// circular, parabolic, and hyperbolic cases in SI units. SDS OCM stores the
+// same elements in km, km/s, and km^3/s^2, so this ports the upstream sweep
+// through the module's Keplerian-to-state and state-to-Keplerian OCM
+// FlatBuffer surfaces. SANA KEPLERIAN needs a finite semi-major axis, so the
+// parabolic cases must be refused in both directions.
+test("covers Basilisk orbElemConvert parameter sweep through OCM Keplerian/state conversion", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
@@ -2168,12 +2196,29 @@ test("covers Basilisk orbElemConvert parameter sweep through VCM Keplerian/state
     const payload = encodeBasiliskOrbElemConvertCase(caseEntry);
     const expected = basiliskElem2RvReferenceKm(caseEntry);
 
-    const stateResponse = await invokeVcmKeplerianToState(harness, payload);
-    const stateVcm = decodeVcmVectorResponse(stateResponse);
-    const state = stateVcm.STATE_VECTOR();
+    if (caseEntry.eccentricity === 1.0) {
+      assertRefused(
+        await invokeOcmKeplerianToState(harness, payload),
+        "unsupported-orbit",
+        `${caseEntry.name} parabolic elements`,
+      );
+      assertRefused(
+        await invokeOcmStateToKeplerian(
+          harness,
+          encodeOcmCartesianState({ ...expected, gm: caseEntry.mu / 1e9 }),
+        ),
+        "unsupported-orbit",
+        `${caseEntry.name} parabolic state`,
+      );
+      continue;
+    }
+
+    const stateResponse = await invokeOcmKeplerianToState(harness, payload);
+    const stateOcm = decodeOcmVectorResponse(stateResponse);
+    const state = stateOcm.cartesian();
     assert.notEqual(state, null, `${caseEntry.name} missing state vector`);
-    assert.equal(stateVcm.OBJECT_NAME(), `BASILISK-ORBELEM-${caseEntry.name}`);
-    assert.equal(stateVcm.OBJECT_ID(), "BASILISK-ORB-ELEM-CONVERT");
+    assert.equal(stateOcm.OBJECT_NAME(), `BASILISK-ORBELEM-${caseEntry.name}`);
+    assert.equal(stateOcm.OBJECT_ID(), "BASILISK-ORB-ELEM-CONVERT");
     assertNearRelative(state.X(), expected.x, 5e-10, 5e-11, `${caseEntry.name} position x km`);
     assertNearRelative(state.Y(), expected.y, 5e-10, 5e-11, `${caseEntry.name} position y km`);
     assertNearRelative(state.Z(), expected.z, 5e-10, 5e-11, `${caseEntry.name} position z km`);
@@ -2181,39 +2226,22 @@ test("covers Basilisk orbElemConvert parameter sweep through VCM Keplerian/state
     assertNearRelative(state.Y_DOT(), expected.yDot, 5e-10, 5e-11, `${caseEntry.name} velocity y km/s`);
     assertNearRelative(state.Z_DOT(), expected.zDot, 5e-10, 5e-11, `${caseEntry.name} velocity z km/s`);
 
-    const recoveredResponse = await invokeVcmStateToKeplerian(
+    const recoveredResponse = await invokeOcmStateToKeplerian(
       harness,
       outputPayload(stateResponse, "vector_state"),
     );
-    const recoveredTruePayload = outputPayload(
-      await invokeVcmKeplerianToTrueAnomaly(
+    const recoveredOcm = decodeOcmKeplerianResponse(
+      await invokeOcmKeplerianToTrueAnomaly(
         harness,
         outputPayload(recoveredResponse, "keplerian_state"),
       ),
-      "keplerian_state",
     );
-    const recoveredVcm = decodeVcmKeplerianResponse({
-      statusCode: 0,
-      outputs: [
-        {
-          portId: "keplerian_state",
-          typeRef: {
-            schemaName: "VCM.fbs",
-            fileIdentifier: null,
-            rootTypeName: "VCM",
-          },
-          payload: recoveredTruePayload,
-        },
-      ],
-    });
-    const recovered = recoveredVcm.KEPLERIAN_ELEMENTS();
+    const recovered = recoveredOcm.keplerian();
     assert.notEqual(recovered, null, `${caseEntry.name} missing recovered Keplerian elements`);
 
-    const expectedSemiMajorAxis = caseEntry.eccentricity === 1.0 ? 0.0 : caseEntry.aMeters / 1000.0;
-    const expectedPeriapsisRadius = caseEntry.eccentricity === 1.0 ? -caseEntry.aMeters / 1000.0 : 0.0;
     assertNearRelative(
       recovered.SEMI_MAJOR_AXIS(),
-      expectedSemiMajorAxis,
+      caseEntry.aMeters / 1000.0,
       5e-9,
       5e-10,
       `${caseEntry.name} recovered semi-major axis km`,
@@ -2223,55 +2251,31 @@ test("covers Basilisk orbElemConvert parameter sweep through VCM Keplerian/state
     assertAngleNearDegrees(recovered.RA_OF_ASC_NODE(), caseEntry.raan, 1e-7, `${caseEntry.name} recovered RAAN deg`);
     assertAngleNearDegrees(recovered.ARG_OF_PERICENTER(), caseEntry.argPericenter, 1e-7, `${caseEntry.name} recovered argument of pericenter deg`);
     assertAngleNearDegrees(recovered.ANOMALY(), caseEntry.trueAnomaly, 1e-7, `${caseEntry.name} recovered true anomaly deg`);
-    assert.equal(recovered.ANOMALY_TYPE(), vcmAnomalyConvention.TRUE_ANOMALY);
-    assertNearRelative(
-      recovered.PERIAPSIS_RADIUS(),
-      expectedPeriapsisRadius,
-      5e-9,
-      5e-10,
-      `${caseEntry.name} recovered periapsis radius km`,
-    );
-    assertNear(recoveredVcm.GM(), caseEntry.mu / 1e9, 1e-12, `${caseEntry.name} recovered GM km^3/s^2`);
+    assert.equal(recovered.ANOMALY_TYPE(), trajectoryType.KEPLERIAN);
+    assertNear(recoveredOcm.GM(), caseEntry.mu / 1e9, 1e-12, `${caseEntry.name} recovered GM km^3/s^2`);
   }
 });
 
-// Authoritative numerical source:
-// Basilisk src/architecture/utilities/tests/test_orbitalMotion.cpp
-// TwoDimensionParabolic.elem2rv uses rPeriap=7500 km, e=1, i=40 deg,
-// RAAN=133 deg, argPerigee=113 deg, true anomaly=123 deg, and MU_EARTH.
-// The SDS VCM Keplerian payload uses PERIAPSIS_RADIUS to carry the parabolic
-// geometry that cannot be represented by semi-major axis when a=0.
-
-test("converts Basilisk parabolic VCM Keplerian periapsis elements to Cartesian state", async (t) => {
+// Source orbit: Basilisk `src/architecture/utilities/tests/test_orbitalMotion.cpp`
+// `TwoDimensionParabolic` (rPeriap=7500 km, e=1). SANA KEPLERIAN carries no
+// periapsis radius, so a=0, e=1 does not define the orbit: every element-set
+// method must refuse it rather than publish a state for a guessed geometry.
+test("refuses parabolic OCM Keplerian elements on every element-set method", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const payload = encodeVcmParabolicKeplerianState();
-  const stateResponse = await invokeVcmKeplerianToState(harness, payload);
-  const vcm = decodeVcmVectorResponse(stateResponse);
-  const state = vcm.STATE_VECTOR();
-  assert.notEqual(state, null);
-  assert.equal(vcm.OBJECT_NAME(), "BASILISK-TWO-DIMENSION-PARABOLIC");
-  assert.equal(vcm.OBJECT_ID(), "BASILISK-ORBITAL-MOTION");
-  assertNear(state.X(), 27862.6148209797, 1e-9, "parabolic state position x km");
-  assertNear(state.Y(), 795.70270010667, 1e-9, "parabolic state position y km");
-  assertNear(state.Z(), -17554.0435142669, 1e-9, "parabolic state position z km");
-  assertNear(state.X_DOT(), 3.06499561197954, 1e-12, "parabolic state velocity x km/s");
-  assertNear(state.Y_DOT(), 2.21344887266898, 1e-12, "parabolic state velocity y km/s");
-  assertNear(state.Z_DOT(), -3.14760065404514, 1e-12, "parabolic state velocity z km/s");
-
-  const oemResponse = await invokeVcmKeplerianToOem(harness, payload);
-  const oem = decodeOemResponse(oemResponse);
-  const line = oem.EPHEMERIS_DATA_BLOCK(0).EPHEMERIS_DATA_LINES(0);
-  assertNear(line.X(), 27862.6148209797, 1e-9, "parabolic OEM position x km");
-  assertNear(line.Y(), 795.70270010667, 1e-9, "parabolic OEM position y km");
-  assertNear(line.Z(), -17554.0435142669, 1e-9, "parabolic OEM position z km");
-  assertNear(line.X_DOT(), 3.06499561197954, 1e-12, "parabolic OEM velocity x km/s");
-  assertNear(line.Y_DOT(), 2.21344887266898, 1e-12, "parabolic OEM velocity y km/s");
-  assertNear(line.Z_DOT(), -3.14760065404514, 1e-12, "parabolic OEM velocity z km/s");
+  for (const anomalyType of [trajectoryType.KEPLERIAN, trajectoryType.KEPLERIAN_MEAN]) {
+    const payload = encodeOcmParabolicKeplerianState({ anomalyType });
+    const label = `parabolic ${trajectoryType[anomalyType]}`;
+    assertRefused(await invokeOcmKeplerianToState(harness, payload), "unsupported-orbit", `${label} to state`);
+    assertRefused(await invokeOcmKeplerianToOem(harness, payload), "unsupported-orbit", `${label} to OEM`);
+    assertRefused(await invokeOcmKeplerianToOmm(harness, payload), "unsupported-orbit", `${label} to OMM`);
+    assertRefused(await invokeOcmKeplerianToTrueAnomaly(harness, payload), "unsupported-orbit", `${label} to true anomaly`);
+    assertRefused(await invokeOcmKeplerianToMeanAnomaly(harness, payload), "unsupported-orbit", `${label} to mean anomaly`);
+  }
 });
 
 // Source: Basilisk `src/architecture/utilitiesSelfCheck/avsLibrarySelfCheck/avsLibrarySelfCheck.c`
@@ -2280,14 +2284,14 @@ test("converts Basilisk parabolic VCM Keplerian periapsis elements to Cartesian 
 // position and velocity in km and km/s. Basilisk validates the vector with
 // 1e-4 relative tolerance; these assertions use tighter absolute tolerances
 // while respecting the source file's rounded six-decimal position vector.
-test("maps Basilisk chief and deputy VCM states to CDM Hill relative state", async (t) => {
+test("maps Basilisk chief and deputy OCM states to CDM Hill relative state", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const chief = encodeVcmKeplerianState({
+  const chief = encodeOcmCartesianState({
     objectName: "BASILISK-HILL-CHIEF",
     objectId: "BASILISK-HILL-CHIEF",
     stateEpoch: "2000-04-01T00:00:00.000Z",
@@ -2298,7 +2302,7 @@ test("maps Basilisk chief and deputy VCM states to CDM Hill relative state", asy
     yDot: -0.5666429544308719,
     zDot: 2.6565522055197555,
   });
-  const deputy = encodeVcmKeplerianState({
+  const deputy = encodeOcmCartesianState({
     objectName: "BASILISK-HILL-DEPUTY",
     objectId: "BASILISK-HILL-DEPUTY",
     stateEpoch: "2000-04-01T00:00:00.000Z",
@@ -2311,7 +2315,7 @@ test("maps Basilisk chief and deputy VCM states to CDM Hill relative state", asy
   });
 
   const cdm = decodeCdmRelativeResponse(
-    await invokeVcmPairToCdmRelativeHill(harness, chief, deputy),
+    await invokeOcmPairToCdmRelativeHill(harness, chief, deputy),
   );
 
   assertNear(cdm.RELATIVE_POSITION_R(), -0.286371, 1e-6, "Hill radial relative position km");
@@ -2322,14 +2326,14 @@ test("maps Basilisk chief and deputy VCM states to CDM Hill relative state", asy
   assertNear(cdm.RELATIVE_VELOCITY_N(), 0.000927434, 1e-9, "Hill normal relative velocity km/s");
 });
 
-test("maps Basilisk CDM Hill relative state and chief VCM to deputy VCM state", async (t) => {
+test("maps Basilisk CDM Hill relative state and chief OCM to deputy OCM state", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const chief = encodeVcmKeplerianState({
+  const chief = encodeOcmCartesianState({
     objectName: "BASILISK-HILL-CHIEF",
     objectId: "BASILISK-HILL-CHIEF",
     stateEpoch: "2000-04-01T00:00:00.000Z",
@@ -2342,10 +2346,10 @@ test("maps Basilisk CDM Hill relative state and chief VCM to deputy VCM state", 
   });
   const relative = encodeCdmRelativeHillState();
 
-  const deputy = decodeVcmDeputyResponse(
-    await invokeCdmRelativeHillToVcmDeputyState(harness, chief, relative),
+  const deputy = decodeOcmDeputyResponse(
+    await invokeCdmRelativeHillToOcmDeputyState(harness, chief, relative),
   );
-  const state = deputy.STATE_VECTOR();
+  const state = deputy.cartesian();
 
   assert.equal(state.EPOCH(), "2000-04-01T00:00:00.000Z");
   assertNear(state.X(), 353.6672082996106, 1e-6, "deputy position x km");
@@ -2356,16 +2360,16 @@ test("maps Basilisk CDM Hill relative state and chief VCM to deputy VCM state", 
   assertNear(state.Z_DOT(), 2.65770594819381, 1e-9, "deputy velocity z km/s");
 });
 
-test("recovers Basilisk VCM Cartesian state vector as VCM equinoctial elements", async (t) => {
+test("recovers Basilisk OCM Cartesian state vector as OCM equinoctial elements", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const response = await invokeVcmStateToEquinoctial(
+  const response = await invokeOcmStateToEquinoctial(
     harness,
-    encodeVcmKeplerianState({
+    encodeOcmCartesianState({
       objectName: "BASILISK-TWO-DIMENSION-ELLIPTICAL",
       objectId: "BASILISK-ORBITAL-MOTION",
       x: 6538.3506963942027,
@@ -2374,31 +2378,30 @@ test("recovers Basilisk VCM Cartesian state vector as VCM equinoctial elements",
       xDot: 1.4414106130924005,
       yDot: 5.588901415902356,
       zDot: -4.0828931566657038,
-      semiMajorAxis: 1000.0,
-      eccentricity: 0.2,
-      inclination: 0.2 * 180.0 / Math.PI,
-      raan: 0.15 * 180.0 / Math.PI,
-      argPericenter: 0.5 * 180.0 / Math.PI,
-      anomalyType: vcmAnomalyConvention.TRUE_ANOMALY,
-      anomaly: 0.2 * 180.0 / Math.PI,
       gm: 398600.436,
     }),
   );
-  const vcm = decodeVcmResponse(response);
-  const equinoctial = vcm.EQUINOCTIAL_ELEMENTS();
+  const ocm = decodeOcmEquinoctialResponse(response);
+  const equinoctial = ocm.equinoctial();
   assert.notEqual(equinoctial, null);
-  assert.equal(vcm.OBJECT_NAME(), "BASILISK-TWO-DIMENSION-ELLIPTICAL");
-  assert.equal(vcm.OBJECT_ID(), "BASILISK-ORBITAL-MOTION");
-  assert.equal(vcm.CENTER_NAME(), "EARTH");
-  assert.equal(vcm.REF_FRAME(), "EME2000");
-  assert.equal(vcm.TIME_SYSTEM(), "UTC");
-  assertNear(equinoctial.N(), 7500.0, 1e-8, "VCM state equinoctial semi-major axis km");
-  assertNear(equinoctial.AF(), -0.20336832153790005, 1e-14, "VCM state equinoctial AF");
-  assertNear(equinoctial.AG(), -0.4567727288213005, 1e-14, "VCM state equinoctial AG");
-  assertNear(equinoctial.CHI(), 0.26619097810978376, 1e-14, "VCM state equinoctial CHI");
-  assertNear(equinoctial.PSI(), -0.24822710288111335, 1e-14, "VCM state equinoctial PSI");
-  assertAngleNearDegrees(equinoctial.L(), 9.0, 1e-10, "VCM state equinoctial true longitude deg");
-  assertNear(vcm.GM(), 398600.436, 1e-12, "VCM state GM km^3/s^2");
+  assert.equal(ocm.OBJECT_NAME(), "BASILISK-TWO-DIMENSION-ELLIPTICAL");
+  assert.equal(ocm.OBJECT_ID(), "BASILISK-ORBITAL-MOTION");
+  assert.equal(ocm.CENTER_NAME(), "EARTH");
+  assert.equal(ocm.frameName(), "EME2000");
+  assert.equal(ocm.TIME_SYSTEM(), "UTC");
+  assertNear(equinoctial.SEMI_MAJOR_AXIS(), 7500.0, 1e-8, "OCM state equinoctial semi-major axis km");
+  assertNear(equinoctial.AF(), -0.20336832153790005, 1e-14, "OCM state equinoctial AF");
+  assertNear(equinoctial.AG(), -0.4567727288213005, 1e-14, "OCM state equinoctial AG");
+  assertNear(equinoctial.CHI(), 0.26619097810978376, 1e-14, "OCM state equinoctial CHI");
+  assertNear(equinoctial.PSI(), -0.24822710288111335, 1e-14, "OCM state equinoctial PSI");
+  assertAngleNearDegrees(
+    equinoctial.MEAN_LONGITUDE(),
+    meanLongitudeDegreesFromTrueLongitude(-0.20336832153790005, -0.4567727288213005, 9.0),
+    1e-10,
+    "OCM state equinoctial mean longitude deg",
+  );
+  assert.equal(equinoctial.FR(), 1);
+  assertNear(ocm.GM(), 398600.436, 1e-12, "OCM state GM km^3/s^2");
 });
 
 // Authoritative numerical source:
@@ -2699,16 +2702,16 @@ test("recovers Basilisk hyperbolic Cartesian state as OMM mean elements", async 
   );
 });
 
-test("normalizes Basilisk VCM hyperbolic Keplerian true-anomaly elements to SDS OMM mean elements", async (t) => {
+test("normalizes Basilisk OCM hyperbolic Keplerian true-anomaly elements to SDS OMM mean elements", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const response = await invokeVcmKeplerianToOmm(
+  const response = await invokeOcmKeplerianToOmm(
     harness,
-    encodeVcmKeplerianState({
+    encodeOcmKeplerianState({
       objectName: "BASILISK-TWO-DIMENSION-HYPERBOLIC",
       objectId: "BASILISK-ORBITAL-MOTION",
       semiMajorAxis: -7500.0,
@@ -2716,7 +2719,7 @@ test("normalizes Basilisk VCM hyperbolic Keplerian true-anomaly elements to SDS 
       inclination: 40.0,
       raan: 133.0,
       argPericenter: 113.0,
-      anomalyType: vcmAnomalyConvention.TRUE_ANOMALY,
+      anomalyType: trajectoryType.KEPLERIAN,
       anomaly: 23.0,
       gm: 398600.436,
     }),
@@ -2724,36 +2727,36 @@ test("normalizes Basilisk VCM hyperbolic Keplerian true-anomaly elements to SDS 
   const omm = decodeOmmResponse(response);
   assert.equal(omm.OBJECT_NAME(), "BASILISK-TWO-DIMENSION-HYPERBOLIC");
   assert.equal(omm.OBJECT_ID(), "BASILISK-ORBITAL-MOTION");
-  assertNear(omm.SEMI_MAJOR_AXIS(), -7500.0, 1e-12, "VCM hyperbolic semi-major axis km");
-  assertNear(omm.ECCENTRICITY(), 1.4, 1e-15, "VCM hyperbolic eccentricity");
-  assertAngleNearDegrees(omm.INCLINATION(), 40.0, 1e-12, "VCM hyperbolic inclination deg");
-  assertAngleNearDegrees(omm.RA_OF_ASC_NODE(), 133.0, 1e-12, "VCM hyperbolic RAAN deg");
-  assertAngleNearDegrees(omm.ARG_OF_PERICENTER(), 113.0, 1e-12, "VCM hyperbolic argument of pericenter deg");
+  assertNear(omm.SEMI_MAJOR_AXIS(), -7500.0, 1e-12, "OCM hyperbolic semi-major axis km");
+  assertNear(omm.ECCENTRICITY(), 1.4, 1e-15, "OCM hyperbolic eccentricity");
+  assertAngleNearDegrees(omm.INCLINATION(), 40.0, 1e-12, "OCM hyperbolic inclination deg");
+  assertAngleNearDegrees(omm.RA_OF_ASC_NODE(), 133.0, 1e-12, "OCM hyperbolic RAAN deg");
+  assertAngleNearDegrees(omm.ARG_OF_PERICENTER(), 113.0, 1e-12, "OCM hyperbolic argument of pericenter deg");
   assertNear(
     omm.MEAN_ANOMALY(),
     hyperbolicMeanAnomalyDegreesFromTrueAnomaly(1.4, 23.0),
     1e-12,
-    "VCM hyperbolic mean anomaly deg",
+    "OCM hyperbolic mean anomaly deg",
   );
-  assertNear(omm.GM(), 398600.436, 1e-12, "VCM hyperbolic GM km^3/s^2");
+  assertNear(omm.GM(), 398600.436, 1e-12, "OCM hyperbolic GM km^3/s^2");
 });
 
 // Authoritative numerical source:
 // Basilisk src/architecture/utilities/tests/test_orbitalMotion.cpp
 // OrbitalMotion.elem2rv1DHyperbolic uses a=-7500 km, e=1, i=40 deg,
 // RAAN=133 deg, argPerigee=113 deg, anomaly=23 deg, and MU_EARTH. Basilisk's
-// rectilinear branch treats ClassicElements.f as the hyperbolic anomaly, so SDS
-// VCM carries that source anomaly through ANOMALY with TRUE_ANOMALY convention
-// rather than normalizing it into an SDS OMM mean anomaly.
+// rectilinear branch treats ClassicElements.f as the hyperbolic anomaly, so the
+// OCM KEPLERIAN row carries that source anomaly in its anomaly slot rather than
+// normalizing it into an SDS OMM mean anomaly.
 
-test("converts Basilisk rectilinear hyperbolic VCM anomaly elements to Cartesian state", async (t) => {
+test("converts Basilisk rectilinear hyperbolic OCM anomaly elements to Cartesian state", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const payload = encodeVcmKeplerianState({
+  const payload = encodeOcmKeplerianState({
     objectName: "BASILISK-RECTILINEAR-HYPERBOLIC",
     objectId: "BASILISK-ORBITAL-MOTION",
     semiMajorAxis: -7500.0,
@@ -2761,16 +2764,16 @@ test("converts Basilisk rectilinear hyperbolic VCM anomaly elements to Cartesian
     inclination: 40.0,
     raan: 133.0,
     argPericenter: 113.0,
-    anomalyType: vcmAnomalyConvention.TRUE_ANOMALY,
+    anomalyType: trajectoryType.KEPLERIAN,
     anomaly: 23.0,
     gm: 398600.436,
   });
 
-  const stateResponse = await invokeVcmKeplerianToState(harness, payload);
-  const vcm = decodeVcmVectorResponse(stateResponse);
-  const state = vcm.STATE_VECTOR();
+  const stateResponse = await invokeOcmKeplerianToState(harness, payload);
+  const ocm = decodeOcmVectorResponse(stateResponse);
+  const state = ocm.cartesian();
   assert.notEqual(state, null);
-  assert.equal(vcm.OBJECT_NAME(), "BASILISK-RECTILINEAR-HYPERBOLIC");
+  assert.equal(ocm.OBJECT_NAME(), "BASILISK-RECTILINEAR-HYPERBOLIC");
   assertNear(state.X(), -152.641873349816, 1e-9, "rectilinear state position x km");
   assertNear(state.Y(), -469.543156608544, 1e-9, "rectilinear state position y km");
   assertNear(state.Z(), 362.375968124408, 1e-9, "rectilinear state position z km");
@@ -2778,7 +2781,7 @@ test("converts Basilisk rectilinear hyperbolic VCM anomaly elements to Cartesian
   assertNear(state.Y_DOT(), -28.2195763820421, 1e-12, "rectilinear state velocity y km/s");
   assertNear(state.Z_DOT(), 21.7788208976681, 1e-12, "rectilinear state velocity z km/s");
 
-  const oemResponse = await invokeVcmKeplerianToOem(harness, payload);
+  const oemResponse = await invokeOcmKeplerianToOem(harness, payload);
   const oem = decodeOemResponse(oemResponse);
   const line = oem.EPHEMERIS_DATA_BLOCK(0).EPHEMERIS_DATA_LINES(0);
   assertNear(line.X(), -152.641873349816, 1e-9, "rectilinear OEM position x km");
@@ -2796,16 +2799,16 @@ test("converts Basilisk rectilinear hyperbolic VCM anomaly elements to Cartesian
 // rectilinear hyperbolic case, Basilisk treats ClassicElements.f as the source
 // rectilinear anomaly.
 
-test("converts Basilisk rectilinear elliptical VCM anomaly elements to Cartesian state", async (t) => {
+test("converts Basilisk rectilinear elliptical OCM anomaly elements to Cartesian state", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const response = await invokeVcmKeplerianToState(
+  const response = await invokeOcmKeplerianToState(
     harness,
-    encodeVcmKeplerianState({
+    encodeOcmKeplerianState({
       objectName: "BASILISK-RECTILINEAR-ELLIPTICAL",
       objectId: "BASILISK-ORBITAL-MOTION",
       semiMajorAxis: 7500.0,
@@ -2813,15 +2816,15 @@ test("converts Basilisk rectilinear elliptical VCM anomaly elements to Cartesian
       inclination: 40.0,
       raan: 133.0,
       argPericenter: 113.0,
-      anomalyType: vcmAnomalyConvention.TRUE_ANOMALY,
+      anomalyType: trajectoryType.KEPLERIAN,
       anomaly: 23.0,
       gm: 398600.436,
     }),
   );
-  const vcm = decodeVcmVectorResponse(response);
-  const state = vcm.STATE_VECTOR();
+  const ocm = decodeOcmVectorResponse(response);
+  const state = ocm.cartesian();
   assert.notEqual(state, null);
-  assert.equal(vcm.OBJECT_NAME(), "BASILISK-RECTILINEAR-ELLIPTICAL");
+  assert.equal(ocm.OBJECT_NAME(), "BASILISK-RECTILINEAR-ELLIPTICAL");
   assertNear(state.X(), -148.596902253492, 1e-9, "rectilinear elliptical position x km");
   assertNear(state.Y(), -457.100381534593, 1e-9, "rectilinear elliptical position y km");
   assertNear(state.Z(), 352.773096481799, 1e-9, "rectilinear elliptical position z km");
@@ -2834,33 +2837,26 @@ test("converts Basilisk rectilinear elliptical VCM anomaly elements to Cartesian
 // Basilisk src/architecture/utilities/tests/test_orbitalMotion.cpp
 // TwoDimensionElliptical uses a=7500 km, e=0.5, i=40 deg, RAAN=133 deg,
 // argPerigee=113 deg, true anomaly=123 deg, and MU_EARTH=398600.436 km^3/s^2.
-// The VCM test carries a deliberately wrong STATE_VECTOR and derives OEM from
-// KEPLERIAN_ELEMENTS while using STATE_VECTOR.EPOCH as required OEM metadata.
+// OEM takes its epoch from the OCM METADATA.START_TIME.
 
-test("converts Basilisk VCM Keplerian true-anomaly elements to SDS OEM state vector", async (t) => {
+test("converts Basilisk OCM Keplerian true-anomaly elements to SDS OEM state vector", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const response = await invokeVcmKeplerianToOem(
+  const response = await invokeOcmKeplerianToOem(
     harness,
-    encodeVcmKeplerianState({
+    encodeOcmKeplerianState({
       objectName: "BASILISK-TWO-DIMENSION-ELLIPTICAL",
       objectId: "BASILISK-ORBITAL-MOTION",
-      x: 0.0,
-      y: 0.0,
-      z: 0.0,
-      xDot: 0.0,
-      yDot: 0.0,
-      zDot: 0.0,
       semiMajorAxis: 7500.0,
       eccentricity: 0.5,
       inclination: 40.0,
       raan: 133.0,
       argPericenter: 113.0,
-      anomalyType: vcmAnomalyConvention.TRUE_ANOMALY,
+      anomalyType: trajectoryType.KEPLERIAN,
       anomaly: 123.0,
       gm: 398600.436,
     }),
@@ -2872,65 +2868,59 @@ test("converts Basilisk VCM Keplerian true-anomaly elements to SDS OEM state vec
   assert.equal(block.START_TIME(), "2000-04-01T00:00:00.000Z");
   const line = block.EPHEMERIS_DATA_LINES(0);
   assert.equal(line.EPOCH(), "2000-04-01T00:00:00.000Z");
-  assertNear(line.X(), 6538.3506963942027, 1e-9, "VCM Keplerian position x km");
-  assertNear(line.Y(), 186.7227227879431, 1e-9, "VCM Keplerian position y km");
-  assertNear(line.Z(), -4119.3008399778619, 1e-9, "VCM Keplerian position z km");
-  assertNear(line.X_DOT(), 1.4414106130924005, 1e-12, "VCM Keplerian velocity x km/s");
-  assertNear(line.Y_DOT(), 5.588901415902356, 1e-12, "VCM Keplerian velocity y km/s");
-  assertNear(line.Z_DOT(), -4.0828931566657038, 1e-12, "VCM Keplerian velocity z km/s");
+  assertNear(line.X(), 6538.3506963942027, 1e-9, "OCM Keplerian position x km");
+  assertNear(line.Y(), 186.7227227879431, 1e-9, "OCM Keplerian position y km");
+  assertNear(line.Z(), -4119.3008399778619, 1e-9, "OCM Keplerian position z km");
+  assertNear(line.X_DOT(), 1.4414106130924005, 1e-12, "OCM Keplerian velocity x km/s");
+  assertNear(line.Y_DOT(), 5.588901415902356, 1e-12, "OCM Keplerian velocity y km/s");
+  assertNear(line.Z_DOT(), -4.0828931566657038, 1e-12, "OCM Keplerian velocity z km/s");
 });
 
-test("converts Basilisk VCM Keplerian true-anomaly elements to VCM state vector", async (t) => {
+test("converts Basilisk OCM Keplerian true-anomaly elements to OCM state vector", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const response = await invokeVcmKeplerianToState(
+  const response = await invokeOcmKeplerianToState(
     harness,
-    encodeVcmKeplerianState({
+    encodeOcmKeplerianState({
       objectName: "BASILISK-TWO-DIMENSION-ELLIPTICAL",
       objectId: "BASILISK-ORBITAL-MOTION",
-      x: 0.0,
-      y: 0.0,
-      z: 0.0,
-      xDot: 0.0,
-      yDot: 0.0,
-      zDot: 0.0,
       semiMajorAxis: 7500.0,
       eccentricity: 0.5,
       inclination: 40.0,
       raan: 133.0,
       argPericenter: 113.0,
-      anomalyType: vcmAnomalyConvention.TRUE_ANOMALY,
+      anomalyType: trajectoryType.KEPLERIAN,
       anomaly: 123.0,
       gm: 398600.436,
     }),
   );
-  const vcm = decodeVcmVectorResponse(response);
-  const state = vcm.STATE_VECTOR();
+  const ocm = decodeOcmVectorResponse(response);
+  const state = ocm.cartesian();
   assert.notEqual(state, null);
-  assert.equal(vcm.OBJECT_NAME(), "BASILISK-TWO-DIMENSION-ELLIPTICAL");
-  assert.equal(vcm.OBJECT_ID(), "BASILISK-ORBITAL-MOTION");
+  assert.equal(ocm.OBJECT_NAME(), "BASILISK-TWO-DIMENSION-ELLIPTICAL");
+  assert.equal(ocm.OBJECT_ID(), "BASILISK-ORBITAL-MOTION");
   assert.equal(state.EPOCH(), "2000-04-01T00:00:00.000Z");
-  assertNear(state.X(), 6538.3506963942027, 1e-9, "VCM Keplerian state position x km");
-  assertNear(state.Y(), 186.7227227879431, 1e-9, "VCM Keplerian state position y km");
-  assertNear(state.Z(), -4119.3008399778619, 1e-9, "VCM Keplerian state position z km");
-  assertNear(state.X_DOT(), 1.4414106130924005, 1e-12, "VCM Keplerian state velocity x km/s");
-  assertNear(state.Y_DOT(), 5.588901415902356, 1e-12, "VCM Keplerian state velocity y km/s");
-  assertNear(state.Z_DOT(), -4.0828931566657038, 1e-12, "VCM Keplerian state velocity z km/s");
-  assertNear(vcm.GM(), 398600.436, 1e-12, "VCM state GM km^3/s^2");
+  assertNear(state.X(), 6538.3506963942027, 1e-9, "OCM Keplerian state position x km");
+  assertNear(state.Y(), 186.7227227879431, 1e-9, "OCM Keplerian state position y km");
+  assertNear(state.Z(), -4119.3008399778619, 1e-9, "OCM Keplerian state position z km");
+  assertNear(state.X_DOT(), 1.4414106130924005, 1e-12, "OCM Keplerian state velocity x km/s");
+  assertNear(state.Y_DOT(), 5.588901415902356, 1e-12, "OCM Keplerian state velocity y km/s");
+  assertNear(state.Z_DOT(), -4.0828931566657038, 1e-12, "OCM Keplerian state velocity z km/s");
+  assertNear(ocm.GM(), 398600.436, 1e-12, "OCM state GM km^3/s^2");
 });
 
-test("normalizes Basilisk VCM Keplerian true-anomaly elements to SDS OMM mean elements", async (t) => {
+test("normalizes Basilisk OCM Keplerian true-anomaly elements to SDS OMM mean elements", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const response = await invokeVcmKeplerianToOmm(harness, encodeVcmKeplerianState());
+  const response = await invokeOcmKeplerianToOmm(harness, encodeOcmKeplerianState());
   const omm = decodeOmmResponse(response);
   assert.equal(omm.OBJECT_NAME(), "BASILISK-EQUINOCTIAL-REFERENCE");
   assert.equal(omm.OBJECT_ID(), "BASILISK-ORBITAL-MOTION");
@@ -2959,29 +2949,29 @@ test("normalizes Basilisk VCM Keplerian true-anomaly elements to SDS OMM mean el
 
 // Source: Basilisk `src/architecture/utilitiesSelfCheck/avsLibrarySelfCheck/avsLibrarySelfCheck.c`
 // `testOrbitalAnomalies` checks E2f, E2M, f2E, H2f, H2N, M2E, and N2H.
-// These VCM methods expose the same anomaly conversions with SDS degree fields.
-test("normalizes Basilisk VCM Keplerian anomaly conventions", async (t) => {
+// These OCM methods expose the same anomaly conversions with SDS degree fields.
+test("normalizes Basilisk OCM Keplerian anomaly conventions", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const ellipticalMean = decodeVcmKeplerianResponse(
-    await invokeVcmKeplerianToTrueAnomaly(
+  const ellipticalMean = decodeOcmKeplerianResponse(
+    await invokeOcmKeplerianToTrueAnomaly(
       harness,
-      encodeVcmKeplerianState({
+      encodeOcmKeplerianState({
         objectName: "BASILISK-ORBITAL-ANOMALY-ELLIPTIC-MEAN",
         semiMajorAxis: 1000.0,
         eccentricity: 0.1,
-        anomalyType: vcmAnomalyConvention.MEAN_ANOMALY,
+        anomalyType: trajectoryType.KEPLERIAN_MEAN,
         anomaly: 3.471144674255927 * 180.0 / Math.PI,
       }),
     ),
   );
-  let keplerian = ellipticalMean.KEPLERIAN_ELEMENTS();
+  let keplerian = ellipticalMean.keplerian();
   assert.notEqual(keplerian, null);
-  assert.equal(keplerian.ANOMALY_TYPE(), vcmAnomalyConvention.TRUE_ANOMALY);
+  assert.equal(keplerian.ANOMALY_TYPE(), trajectoryType.KEPLERIAN);
   assertAngleNearDegrees(
     keplerian.ANOMALY(),
     3.413322139966247 * 180.0 / Math.PI,
@@ -2989,21 +2979,21 @@ test("normalizes Basilisk VCM Keplerian anomaly conventions", async (t) => {
     "elliptic E2M plus E2f anomaly deg",
   );
 
-  const ellipticalTrue = decodeVcmKeplerianResponse(
-    await invokeVcmKeplerianToMeanAnomaly(
+  const ellipticalTrue = decodeOcmKeplerianResponse(
+    await invokeOcmKeplerianToMeanAnomaly(
       harness,
-      encodeVcmKeplerianState({
+      encodeOcmKeplerianState({
         objectName: "BASILISK-ORBITAL-ANOMALY-ELLIPTIC-TRUE",
         semiMajorAxis: 1000.0,
         eccentricity: 0.1,
-        anomalyType: vcmAnomalyConvention.TRUE_ANOMALY,
+        anomalyType: trajectoryType.KEPLERIAN,
         anomaly: 0.3 * 180.0 / Math.PI,
       }),
     ),
   );
-  keplerian = ellipticalTrue.KEPLERIAN_ELEMENTS();
+  keplerian = ellipticalTrue.keplerian();
   assert.notEqual(keplerian, null);
-  assert.equal(keplerian.ANOMALY_TYPE(), vcmAnomalyConvention.MEAN_ANOMALY);
+  assert.equal(keplerian.ANOMALY_TYPE(), trajectoryType.KEPLERIAN_MEAN);
   assertAngleNearDegrees(
     keplerian.ANOMALY(),
     (0.2717294863764543 - 0.1 * Math.sin(0.2717294863764543)) * 180.0 / Math.PI,
@@ -3011,21 +3001,21 @@ test("normalizes Basilisk VCM Keplerian anomaly conventions", async (t) => {
     "elliptic f2E plus E2M anomaly deg",
   );
 
-  const hyperbolicMean = decodeVcmKeplerianResponse(
-    await invokeVcmKeplerianToTrueAnomaly(
+  const hyperbolicMean = decodeOcmKeplerianResponse(
+    await invokeOcmKeplerianToTrueAnomaly(
       harness,
-      encodeVcmKeplerianState({
+      encodeOcmKeplerianState({
         objectName: "BASILISK-ORBITAL-ANOMALY-HYPERBOLIC-MEAN",
         semiMajorAxis: -7500.0,
         eccentricity: 2.1,
-        anomalyType: vcmAnomalyConvention.MEAN_ANOMALY,
+        anomalyType: trajectoryType.KEPLERIAN_MEAN,
         anomaly: 0.33949261623899946 * 180.0 / Math.PI,
       }),
     ),
   );
-  keplerian = hyperbolicMean.KEPLERIAN_ELEMENTS();
+  keplerian = hyperbolicMean.keplerian();
   assert.notEqual(keplerian, null);
-  assert.equal(keplerian.ANOMALY_TYPE(), vcmAnomalyConvention.TRUE_ANOMALY);
+  assert.equal(keplerian.ANOMALY_TYPE(), trajectoryType.KEPLERIAN);
   assertAngleNearDegrees(
     keplerian.ANOMALY(),
     0.4898441475256363 * 180.0 / Math.PI,
@@ -3033,21 +3023,21 @@ test("normalizes Basilisk VCM Keplerian anomaly conventions", async (t) => {
     "hyperbolic H2N plus H2f anomaly deg",
   );
 
-  const hyperbolicTrue = decodeVcmKeplerianResponse(
-    await invokeVcmKeplerianToMeanAnomaly(
+  const hyperbolicTrue = decodeOcmKeplerianResponse(
+    await invokeOcmKeplerianToMeanAnomaly(
       harness,
-      encodeVcmKeplerianState({
+      encodeOcmKeplerianState({
         objectName: "BASILISK-ORBITAL-ANOMALY-HYPERBOLIC-TRUE",
         semiMajorAxis: -7500.0,
         eccentricity: 2.1,
-        anomalyType: vcmAnomalyConvention.TRUE_ANOMALY,
+        anomalyType: trajectoryType.KEPLERIAN,
         anomaly: 0.3 * 180.0 / Math.PI,
       }),
     ),
   );
-  keplerian = hyperbolicTrue.KEPLERIAN_ELEMENTS();
+  keplerian = hyperbolicTrue.keplerian();
   assert.notEqual(keplerian, null);
-  assert.equal(keplerian.ANOMALY_TYPE(), vcmAnomalyConvention.MEAN_ANOMALY);
+  assert.equal(keplerian.ANOMALY_TYPE(), trajectoryType.KEPLERIAN_MEAN);
   assertAngleNearDegrees(
     keplerian.ANOMALY(),
     (2.1 * Math.sinh(0.18054632550895094) - 0.18054632550895094) * 180.0 / Math.PI,
@@ -3056,137 +3046,29 @@ test("normalizes Basilisk VCM Keplerian anomaly conventions", async (t) => {
   );
 });
 
-// Source orbit: Basilisk `src/architecture/utilities/tests/test_orbitalMotion.cpp`
-// `TwoDimensionParabolic`, with closed-form Barker parabolic anomaly
-// M = tan(f/2) + tan(f/2)^3 / 3. SDS VCM stores this M in the same degree-valued
-// ANOMALY field used by elliptic and hyperbolic mean-anomaly conventions.
-test("normalizes parabolic VCM Keplerian anomaly with Barker equation", async (t) => {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
-    surface: "direct",
-  });
-  t.after(() => harness.destroy());
-
-  const parabolicTrueAnomalyRad = 123.0 * Math.PI / 180.0;
-  const barkerParameter = Math.tan(parabolicTrueAnomalyRad / 2.0);
-  const parabolicMeanAnomalyDegrees =
-    (barkerParameter + (barkerParameter ** 3) / 3.0) * 180.0 / Math.PI;
-
-  const meanNormalized = decodeVcmKeplerianResponse(
-    await invokeVcmKeplerianToMeanAnomaly(
-      harness,
-      encodeVcmParabolicKeplerianState({
-        objectName: "BASILISK-PARABOLIC-BARKER-TRUE",
-        anomalyType: vcmAnomalyConvention.TRUE_ANOMALY,
-        anomaly: 123.0,
-      }),
-    ),
-  );
-  let keplerian = meanNormalized.KEPLERIAN_ELEMENTS();
-  assert.notEqual(keplerian, null);
-  assert.equal(keplerian.ANOMALY_TYPE(), vcmAnomalyConvention.MEAN_ANOMALY);
-  assertNear(keplerian.SEMI_MAJOR_AXIS(), 0.0, 1e-12, "parabolic semi-major axis km");
-  assertNear(keplerian.ECCENTRICITY(), 1.0, 1e-15, "parabolic eccentricity");
-  assertNear(keplerian.PERIAPSIS_RADIUS(), 7500.0, 1e-12, "parabolic periapsis radius km");
-  assertAngleNearDegrees(
-    keplerian.ANOMALY(),
-    parabolicMeanAnomalyDegrees,
-    1e-10,
-    "parabolic Barker mean anomaly deg",
-  );
-
-  const trueNormalized = decodeVcmKeplerianResponse(
-    await invokeVcmKeplerianToTrueAnomaly(
-      harness,
-      encodeVcmParabolicKeplerianState({
-        objectName: "BASILISK-PARABOLIC-BARKER-MEAN",
-        anomalyType: vcmAnomalyConvention.MEAN_ANOMALY,
-        anomaly: parabolicMeanAnomalyDegrees,
-      }),
-    ),
-  );
-  keplerian = trueNormalized.KEPLERIAN_ELEMENTS();
-  assert.notEqual(keplerian, null);
-  assert.equal(keplerian.ANOMALY_TYPE(), vcmAnomalyConvention.TRUE_ANOMALY);
-  assertAngleNearDegrees(keplerian.ANOMALY(), 123.0, 1e-10, "parabolic true anomaly deg");
-
-  const stateFromMean = decodeVcmVectorResponse(
-    await invokeVcmKeplerianToState(
-      harness,
-      encodeVcmParabolicKeplerianState({
-        objectName: "BASILISK-PARABOLIC-BARKER-STATE",
-        anomalyType: vcmAnomalyConvention.MEAN_ANOMALY,
-        anomaly: parabolicMeanAnomalyDegrees,
-      }),
-    ),
-  ).STATE_VECTOR();
-  assert.notEqual(stateFromMean, null);
-  assertNear(stateFromMean.X(), 27862.6148209797, 1e-9, "parabolic mean state position x km");
-  assertNear(stateFromMean.Y(), 795.70270010667, 1e-9, "parabolic mean state position y km");
-  assertNear(stateFromMean.Z(), -17554.0435142669, 1e-9, "parabolic mean state position z km");
-  assertNear(stateFromMean.X_DOT(), 3.06499561197954, 1e-12, "parabolic mean velocity x km/s");
-  assertNear(stateFromMean.Y_DOT(), 2.21344887266898, 1e-12, "parabolic mean velocity y km/s");
-  assertNear(stateFromMean.Z_DOT(), -3.14760065404514, 1e-12, "parabolic mean velocity z km/s");
-});
-
-test("normalizes Basilisk parabolic VCM Keplerian elements to SDS OMM mean elements", async (t) => {
-  const harness = await createBrowserModuleHarness({
-    wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
-    surface: "direct",
-  });
-  t.after(() => harness.destroy());
-
-  const parabolicTrueAnomalyRad = 123.0 * Math.PI / 180.0;
-  const barkerParameter = Math.tan(parabolicTrueAnomalyRad / 2.0);
-  const parabolicMeanAnomalyDegrees =
-    (barkerParameter + (barkerParameter ** 3) / 3.0) * 180.0 / Math.PI;
-
-  const response = await invokeVcmKeplerianToOmm(
-    harness,
-    encodeVcmParabolicKeplerianState({
-      objectName: "BASILISK-PARABOLIC-BARKER-OMM",
-      anomalyType: vcmAnomalyConvention.TRUE_ANOMALY,
-      anomaly: 123.0,
-    }),
-  );
-  const omm = decodeOmmResponse(response);
-  assert.equal(omm.OBJECT_NAME(), "BASILISK-PARABOLIC-BARKER-OMM");
-  assert.equal(omm.OBJECT_ID(), "BASILISK-ORBITAL-MOTION");
-  assert.equal(omm.CENTER_NAME(), "EARTH");
-  assert.equal(omm.TIME_SYSTEM(), timingStandard.UTC);
-  assert.equal(omm.EPOCH(), "2000-04-01T00:00:00.000Z");
-  assertNear(omm.SEMI_MAJOR_AXIS(), 0.0, 1e-12, "parabolic semi-major axis km");
-  assertNear(omm.ECCENTRICITY(), 1.0, 1e-15, "parabolic eccentricity");
-  assertAngleNearDegrees(omm.INCLINATION(), 40.0, 1e-12, "parabolic inclination deg");
-  assertAngleNearDegrees(omm.RA_OF_ASC_NODE(), 133.0, 1e-12, "parabolic RAAN deg");
-  assertAngleNearDegrees(omm.ARG_OF_PERICENTER(), 113.0, 1e-12, "parabolic argument of pericenter deg");
-  assertNear(omm.MEAN_ANOMALY(), parabolicMeanAnomalyDegrees, 1e-10, "parabolic Barker mean anomaly deg");
-  assertNear(omm.MEAN_MOTION(), 0.0, 1e-15, "parabolic mean motion rev/day");
-  assertNear(omm.GM(), 398600.436, 1e-12, "GM km^3/s^2");
-});
-
 // Authoritative numerical source:
 // Basilisk src/architecture/utilities/tests/test_orbitalMotion.cpp
 // classicElementsToMeanElements calls clMeanOscMap with sgn=1 (mean to
 // osculating) and asserts the expected first-order J2-mapped orbital elements.
 
-test("maps Basilisk VCM Keplerian mean elements to osculating elements with GRV J2 context", async (t) => {
+test("maps Basilisk OCM Keplerian mean elements to osculating elements with GRV J2 context", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const response = await invokeVcmKeplerianMeanToOsculating(
+  const response = await invokeOcmKeplerianMeanToOsculating(
     harness,
-    encodeVcmKeplerianState({
+    encodeOcmKeplerianState({
       objectName: "BASILISK-J2-MEAN-REFERENCE",
+      averaging: "BROUWER",
       semiMajorAxis: 1000.0,
       eccentricity: 0.2,
       inclination: 0.2 * 180.0 / Math.PI,
       raan: 0.15 * 180.0 / Math.PI,
       argPericenter: 0.5 * 180.0 / Math.PI,
-      anomalyType: vcmAnomalyConvention.TRUE_ANOMALY,
+      anomalyType: trajectoryType.KEPLERIAN,
       anomaly: 0.2 * 180.0 / Math.PI,
     }),
     encodeGrvJ2Context({
@@ -3194,12 +3076,13 @@ test("maps Basilisk VCM Keplerian mean elements to osculating elements with GRV 
       j2: 1e-3,
     }),
   );
-  const vcm = decodeVcmKeplerianResponse(response);
-  const keplerian = vcm.KEPLERIAN_ELEMENTS();
+  const ocm = decodeOcmKeplerianResponse(response);
+  const keplerian = ocm.keplerian();
   assert.notEqual(keplerian, null);
-  assert.equal(vcm.OBJECT_NAME(), "BASILISK-J2-MEAN-REFERENCE");
-  assert.equal(vcm.OBJECT_ID(), "BASILISK-ORBITAL-MOTION");
-  assert.equal(keplerian.ANOMALY_TYPE(), vcmAnomalyConvention.TRUE_ANOMALY);
+  assert.equal(ocm.OBJECT_NAME(), "BASILISK-J2-MEAN-REFERENCE");
+  assert.equal(ocm.ORB_AVERAGING(), "OSCULATING");
+  assert.equal(ocm.OBJECT_ID(), "BASILISK-ORBITAL-MOTION");
+  assert.equal(keplerian.ANOMALY_TYPE(), trajectoryType.KEPLERIAN);
   assertNear(keplerian.SEMI_MAJOR_AXIS(), 1000.07546442015950560744386166334152, 1e-10, "osculating semi-major axis km");
   assertNear(keplerian.ECCENTRICITY(), 0.20017786852908628358882481279579, 1e-14, "osculating eccentricity");
   assertAngleNearDegrees(keplerian.INCLINATION(), 0.20000333960738947425284095515963 * 180.0 / Math.PI, 1e-10, "osculating inclination deg");
@@ -3214,23 +3097,23 @@ test("maps Basilisk VCM Keplerian mean elements to osculating elements with GRV 
 // asserted by classicElementsToMeanElements and checks recovery of the source
 // mean vector to first-order inverse tolerance.
 
-test("maps Basilisk VCM Keplerian osculating elements to mean elements with GRV J2 context", async (t) => {
+test("maps Basilisk OCM Keplerian osculating elements to mean elements with GRV J2 context", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const response = await invokeVcmKeplerianOsculatingToMean(
+  const response = await invokeOcmKeplerianOsculatingToMean(
     harness,
-    encodeVcmKeplerianState({
+    encodeOcmKeplerianState({
       objectName: "BASILISK-J2-OSC-REFERENCE",
       semiMajorAxis: 1000.07546442015950560744386166334152,
       eccentricity: 0.20017786852908628358882481279579,
       inclination: 0.20000333960738947425284095515963 * 180.0 / Math.PI,
       raan: 0.15007256499303692209856819772540 * 180.0 / Math.PI,
       argPericenter: 0.50011857315729335571319325026707 * 180.0 / Math.PI,
-      anomalyType: vcmAnomalyConvention.TRUE_ANOMALY,
+      anomalyType: trajectoryType.KEPLERIAN,
       anomaly: 0.19982315726261962174348241205735 * 180.0 / Math.PI,
     }),
     encodeGrvJ2Context({
@@ -3238,12 +3121,13 @@ test("maps Basilisk VCM Keplerian osculating elements to mean elements with GRV 
       j2: 1e-3,
     }),
   );
-  const vcm = decodeVcmKeplerianResponse(response);
-  const keplerian = vcm.KEPLERIAN_ELEMENTS();
+  const ocm = decodeOcmKeplerianResponse(response);
+  const keplerian = ocm.keplerian();
   assert.notEqual(keplerian, null);
-  assert.equal(vcm.OBJECT_NAME(), "BASILISK-J2-OSC-REFERENCE");
-  assert.equal(vcm.OBJECT_ID(), "BASILISK-ORBITAL-MOTION");
-  assert.equal(keplerian.ANOMALY_TYPE(), vcmAnomalyConvention.TRUE_ANOMALY);
+  assert.equal(ocm.OBJECT_NAME(), "BASILISK-J2-OSC-REFERENCE");
+  assert.equal(ocm.ORB_AVERAGING(), "BROUWER");
+  assert.equal(ocm.OBJECT_ID(), "BASILISK-ORBITAL-MOTION");
+  assert.equal(keplerian.ANOMALY_TYPE(), trajectoryType.KEPLERIAN);
   assertNear(keplerian.SEMI_MAJOR_AXIS(), 1000.0, 2e-4, "mean semi-major axis km");
   assertNear(keplerian.ECCENTRICITY(), 0.2, 1e-7, "mean eccentricity");
   assertAngleNearDegrees(keplerian.INCLINATION(), 0.2 * 180.0 / Math.PI, 5e-6, "mean inclination deg");
@@ -3255,65 +3139,75 @@ test("maps Basilisk VCM Keplerian osculating elements to mean elements with GRV 
 // Authoritative numerical source:
 // Basilisk src/architecture/utilities/tests/test_orbitalMotion.cpp
 // classicElementsToEquinoctialElements uses a=1000 km, e=0.2, i=0.2 rad,
-// RAAN=0.15 rad, argPerigee=0.5 rad, true anomaly=0.2 rad. SDS VCM stores
-// Keplerian angles in degrees; VCM equinoctial AF/AG/CHI/PSI are unitless and
-// L is emitted as true longitude in degrees.
+// RAAN=0.15 rad, argPerigee=0.5 rad, true anomaly=0.2 rad. SDS OCM stores
+// Keplerian angles in degrees. Basilisk's true longitude becomes the SANA
+// EQUINOCTIAL mean longitude; AF/AG/CHI/PSI are unchanged for a direct orbit.
 
-test("converts Basilisk VCM Keplerian elements to VCM equinoctial elements", async (t) => {
+test("converts Basilisk OCM Keplerian elements to OCM equinoctial elements", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const response = await invokeKeplerianToEquinoctial(harness, encodeVcmKeplerianState());
-  const vcm = decodeVcmResponse(response);
-  const equinoctial = vcm.EQUINOCTIAL_ELEMENTS();
+  const response = await invokeKeplerianToEquinoctial(harness, encodeOcmKeplerianState());
+  const ocm = decodeOcmEquinoctialResponse(response);
+  const equinoctial = ocm.equinoctial();
   assert.notEqual(equinoctial, null);
-  assert.equal(vcm.OBJECT_NAME(), "BASILISK-EQUINOCTIAL-REFERENCE");
-  assert.equal(vcm.CENTER_NAME(), "EARTH");
-  assert.equal(vcm.REF_FRAME(), "EME2000");
-  assert.equal(vcm.TIME_SYSTEM(), "UTC");
-  assertNear(equinoctial.N(), 1000.0, 1e-12, "semi-major axis km");
+  assert.equal(ocm.OBJECT_NAME(), "BASILISK-EQUINOCTIAL-REFERENCE");
+  assert.equal(ocm.CENTER_NAME(), "EARTH");
+  assert.equal(ocm.frameName(), "EME2000");
+  assert.equal(ocm.TIME_SYSTEM(), "UTC");
+  assertNear(equinoctial.SEMI_MAJOR_AXIS(), 1000.0, 1e-12, "semi-major axis km");
   assertNear(equinoctial.AF(), 0.15921675970981119530023306651856, 1e-15, "AF");
   assertNear(equinoctial.AG(), 0.12103728114720790909331071816268, 1e-15, "AG");
   assertNear(equinoctial.CHI(), 0.01499382601880069713906618034116, 1e-15, "CHI");
   assertNear(equinoctial.PSI(), 0.09920802187229026125603326136115, 1e-15, "PSI");
-  assertAngleNearDegrees(equinoctial.L(), 0.85000000000000008881784197001252 * 180.0 / Math.PI, 1e-12, "true longitude deg");
+  assertAngleNearDegrees(
+    equinoctial.MEAN_LONGITUDE(),
+    meanLongitudeDegreesFromTrueLongitude(
+      0.15921675970981119530023306651856,
+      0.12103728114720790909331071816268,
+      0.85000000000000008881784197001252 * 180.0 / Math.PI,
+    ),
+    1e-12,
+    "mean longitude deg",
+  );
+  assert.equal(equinoctial.FR(), 1);
 });
 
-test("recovers Basilisk VCM equinoctial elements as VCM Keplerian true anomaly", async (t) => {
+test("recovers Basilisk OCM equinoctial elements as OCM Keplerian true anomaly", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const response = await invokeEquinoctialToKeplerian(harness, encodeVcmEquinoctialState());
-  const vcm = decodeVcmKeplerianResponse(response);
-  const keplerian = vcm.KEPLERIAN_ELEMENTS();
+  const response = await invokeEquinoctialToKeplerian(harness, encodeOcmEquinoctialState());
+  const ocm = decodeOcmKeplerianResponse(response);
+  const keplerian = ocm.keplerian();
   assert.notEqual(keplerian, null);
-  assert.equal(vcm.OBJECT_NAME(), "BASILISK-EQUINOCTIAL-REFERENCE");
-  assert.equal(vcm.CENTER_NAME(), "EARTH");
-  assert.equal(vcm.REF_FRAME(), "EME2000");
-  assert.equal(vcm.TIME_SYSTEM(), "UTC");
+  assert.equal(ocm.OBJECT_NAME(), "BASILISK-EQUINOCTIAL-REFERENCE");
+  assert.equal(ocm.CENTER_NAME(), "EARTH");
+  assert.equal(ocm.frameName(), "EME2000");
+  assert.equal(ocm.TIME_SYSTEM(), "UTC");
   assertNear(keplerian.SEMI_MAJOR_AXIS(), 1000.0, 1e-12, "semi-major axis km");
   assertNear(keplerian.ECCENTRICITY(), 0.2, 1e-15, "eccentricity");
   assertAngleNearDegrees(keplerian.INCLINATION(), 0.2 * 180.0 / Math.PI, 1e-12, "inclination deg");
   assertAngleNearDegrees(keplerian.RA_OF_ASC_NODE(), 0.15 * 180.0 / Math.PI, 1e-12, "RAAN deg");
   assertAngleNearDegrees(keplerian.ARG_OF_PERICENTER(), 0.5 * 180.0 / Math.PI, 1e-12, "argument of pericenter deg");
-  assert.equal(keplerian.ANOMALY_TYPE(), vcmAnomalyConvention.TRUE_ANOMALY);
+  assert.equal(keplerian.ANOMALY_TYPE(), trajectoryType.KEPLERIAN);
   assertAngleNearDegrees(keplerian.ANOMALY(), 0.2 * 180.0 / Math.PI, 1e-12, "true anomaly deg");
 });
 
-test("normalizes Basilisk VCM equinoctial elements to SDS OMM mean elements", async (t) => {
+test("normalizes Basilisk OCM equinoctial elements to SDS OMM mean elements", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const response = await invokeVcmEquinoctialToOmm(harness, encodeVcmEquinoctialState());
+  const response = await invokeOcmEquinoctialToOmm(harness, encodeOcmEquinoctialState());
   const omm = decodeOmmResponse(response);
   assert.equal(omm.OBJECT_NAME(), "BASILISK-EQUINOCTIAL-REFERENCE");
   assert.equal(omm.OBJECT_ID(), "BASILISK-ORBITAL-MOTION");
@@ -3334,7 +3228,7 @@ test("normalizes Basilisk VCM equinoctial elements to SDS OMM mean elements", as
   assertNear(omm.GM(), 398600.436, 1e-12, "GM km^3/s^2");
 });
 
-test("converts Basilisk VCM equinoctial elements to SDS OEM state vector", async (t) => {
+test("converts Basilisk OCM equinoctial elements to SDS OEM state vector", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
@@ -3346,9 +3240,9 @@ test("converts Basilisk VCM equinoctial elements to SDS OEM state vector", async
   const argPericenter = 113.0 * Math.PI / 180.0;
   const trueAnomaly = 123.0 * Math.PI / 180.0;
   const nodePericenterSum = raan + argPericenter;
-  const response = await invokeVcmEquinoctialToOem(
+  const response = await invokeOcmEquinoctialToOem(
     harness,
-    encodeVcmEquinoctialState({
+    encodeOcmEquinoctialState({
       objectName: "BASILISK-TWO-DIMENSION-ELLIPTICAL",
       objectId: "BASILISK-ORBITAL-MOTION",
       semiMajorAxis: 7500.0,
@@ -3367,15 +3261,15 @@ test("converts Basilisk VCM equinoctial elements to SDS OEM state vector", async
   assert.equal(block.START_TIME(), "2000-04-01T00:00:00.000Z");
   const line = block.EPHEMERIS_DATA_LINES(0);
   assert.equal(line.EPOCH(), "2000-04-01T00:00:00.000Z");
-  assertNear(line.X(), 6538.3506963942027, 1e-9, "VCM equinoctial position x km");
-  assertNear(line.Y(), 186.7227227879431, 1e-9, "VCM equinoctial position y km");
-  assertNear(line.Z(), -4119.3008399778619, 1e-9, "VCM equinoctial position z km");
-  assertNear(line.X_DOT(), 1.4414106130924005, 1e-12, "VCM equinoctial velocity x km/s");
-  assertNear(line.Y_DOT(), 5.588901415902356, 1e-12, "VCM equinoctial velocity y km/s");
-  assertNear(line.Z_DOT(), -4.0828931566657038, 1e-12, "VCM equinoctial velocity z km/s");
+  assertNear(line.X(), 6538.3506963942027, 1e-9, "OCM equinoctial position x km");
+  assertNear(line.Y(), 186.7227227879431, 1e-9, "OCM equinoctial position y km");
+  assertNear(line.Z(), -4119.3008399778619, 1e-9, "OCM equinoctial position z km");
+  assertNear(line.X_DOT(), 1.4414106130924005, 1e-12, "OCM equinoctial velocity x km/s");
+  assertNear(line.Y_DOT(), 5.588901415902356, 1e-12, "OCM equinoctial velocity y km/s");
+  assertNear(line.Z_DOT(), -4.0828931566657038, 1e-12, "OCM equinoctial velocity z km/s");
 });
 
-test("converts Basilisk VCM equinoctial elements to VCM state vector", async (t) => {
+test("converts Basilisk OCM equinoctial elements to OCM state vector", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
@@ -3387,9 +3281,9 @@ test("converts Basilisk VCM equinoctial elements to VCM state vector", async (t)
   const argPericenter = 113.0 * Math.PI / 180.0;
   const trueAnomaly = 123.0 * Math.PI / 180.0;
   const nodePericenterSum = raan + argPericenter;
-  const response = await invokeVcmEquinoctialToState(
+  const response = await invokeOcmEquinoctialToState(
     harness,
-    encodeVcmEquinoctialState({
+    encodeOcmEquinoctialState({
       objectName: "BASILISK-TWO-DIMENSION-ELLIPTICAL",
       af: 0.5 * Math.cos(nodePericenterSum),
       ag: 0.5 * Math.sin(nodePericenterSum),
@@ -3400,19 +3294,19 @@ test("converts Basilisk VCM equinoctial elements to VCM state vector", async (t)
       gm: 398600.436,
     }),
   );
-  const vcm = decodeVcmVectorResponse(response);
-  const state = vcm.STATE_VECTOR();
+  const ocm = decodeOcmVectorResponse(response);
+  const state = ocm.cartesian();
   assert.notEqual(state, null);
-  assert.equal(vcm.OBJECT_NAME(), "BASILISK-TWO-DIMENSION-ELLIPTICAL");
-  assert.equal(vcm.OBJECT_ID(), "BASILISK-ORBITAL-MOTION");
+  assert.equal(ocm.OBJECT_NAME(), "BASILISK-TWO-DIMENSION-ELLIPTICAL");
+  assert.equal(ocm.OBJECT_ID(), "BASILISK-ORBITAL-MOTION");
   assert.equal(state.EPOCH(), "2000-04-01T00:00:00.000Z");
-  assertNear(state.X(), 6538.3506963942027, 1e-9, "VCM equinoctial state position x km");
-  assertNear(state.Y(), 186.7227227879431, 1e-9, "VCM equinoctial state position y km");
-  assertNear(state.Z(), -4119.3008399778619, 1e-9, "VCM equinoctial state position z km");
-  assertNear(state.X_DOT(), 1.4414106130924005, 1e-12, "VCM equinoctial state velocity x km/s");
-  assertNear(state.Y_DOT(), 5.588901415902356, 1e-12, "VCM equinoctial state velocity y km/s");
-  assertNear(state.Z_DOT(), -4.0828931566657038, 1e-12, "VCM equinoctial state velocity z km/s");
-  assertNear(vcm.GM(), 398600.436, 1e-12, "VCM state GM km^3/s^2");
+  assertNear(state.X(), 6538.3506963942027, 1e-9, "OCM equinoctial state position x km");
+  assertNear(state.Y(), 186.7227227879431, 1e-9, "OCM equinoctial state position y km");
+  assertNear(state.Z(), -4119.3008399778619, 1e-9, "OCM equinoctial state position z km");
+  assertNear(state.X_DOT(), 1.4414106130924005, 1e-12, "OCM equinoctial state velocity x km/s");
+  assertNear(state.Y_DOT(), 5.588901415902356, 1e-12, "OCM equinoctial state velocity y km/s");
+  assertNear(state.Z_DOT(), -4.0828931566657038, 1e-12, "OCM equinoctial state velocity z km/s");
+  assertNear(ocm.GM(), 398600.436, 1e-12, "OCM state GM km^3/s^2");
 });
 
 // Authoritative numerical source:
@@ -3423,7 +3317,7 @@ test("converts Basilisk VCM equinoctial elements to VCM state vector", async (t)
 // normalizes undefined argument of pericenter to zero and recovers argument of
 // latitude as the Keplerian anomaly.
 
-test("recovers circular inclined VCM equinoctial elements as Keplerian argument of latitude", async (t) => {
+test("recovers circular inclined OCM equinoctial elements as Keplerian argument of latitude", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
@@ -3434,7 +3328,7 @@ test("recovers circular inclined VCM equinoctial elements as Keplerian argument 
   const raan = 133.0 * Math.PI / 180.0;
   const response = await invokeEquinoctialToKeplerian(
     harness,
-    encodeVcmEquinoctialState({
+    encodeOcmEquinoctialState({
       objectName: "BASILISK-CIRCULAR-INCLINED",
       objectId: "BASILISK-ORBITAL-MOTION",
       af: 0.0,
@@ -3446,20 +3340,20 @@ test("recovers circular inclined VCM equinoctial elements as Keplerian argument 
       gm: 398600.436,
     }),
   );
-  const vcm = decodeVcmKeplerianResponse(response);
-  const keplerian = vcm.KEPLERIAN_ELEMENTS();
+  const ocm = decodeOcmKeplerianResponse(response);
+  const keplerian = ocm.keplerian();
   assert.notEqual(keplerian, null);
-  assert.equal(vcm.OBJECT_NAME(), "BASILISK-CIRCULAR-INCLINED");
+  assert.equal(ocm.OBJECT_NAME(), "BASILISK-CIRCULAR-INCLINED");
   assertNear(keplerian.SEMI_MAJOR_AXIS(), 7500.0, 1e-12, "semi-major axis km");
   assertNear(keplerian.ECCENTRICITY(), 0.0, 1e-15, "eccentricity");
   assertAngleNearDegrees(keplerian.INCLINATION(), 40.0, 1e-12, "inclination deg");
   assertAngleNearDegrees(keplerian.RA_OF_ASC_NODE(), 133.0, 1e-12, "RAAN deg");
   assertAngleNearDegrees(keplerian.ARG_OF_PERICENTER(), 0.0, 1e-12, "argument of pericenter deg");
-  assert.equal(keplerian.ANOMALY_TYPE(), vcmAnomalyConvention.TRUE_ANOMALY);
+  assert.equal(keplerian.ANOMALY_TYPE(), trajectoryType.KEPLERIAN);
   assertAngleNearDegrees(keplerian.ANOMALY(), 236.0, 1e-12, "argument of latitude deg");
 });
 
-test("converts circular inclined VCM equinoctial elements to VCM state vector", async (t) => {
+test("converts circular inclined OCM equinoctial elements to OCM state vector", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
@@ -3468,9 +3362,9 @@ test("converts circular inclined VCM equinoctial elements to VCM state vector", 
 
   const inclination = 40.0 * Math.PI / 180.0;
   const raan = 133.0 * Math.PI / 180.0;
-  const response = await invokeVcmEquinoctialToState(
+  const response = await invokeOcmEquinoctialToState(
     harness,
-    encodeVcmEquinoctialState({
+    encodeOcmEquinoctialState({
       objectName: "BASILISK-CIRCULAR-INCLINED",
       objectId: "BASILISK-ORBITAL-MOTION",
       af: 0.0,
@@ -3482,10 +3376,10 @@ test("converts circular inclined VCM equinoctial elements to VCM state vector", 
       gm: 398600.436,
     }),
   );
-  const vcm = decodeVcmVectorResponse(response);
-  const state = vcm.STATE_VECTOR();
+  const ocm = decodeOcmVectorResponse(response);
+  const state = ocm.cartesian();
   assert.notEqual(state, null);
-  assert.equal(vcm.OBJECT_NAME(), "BASILISK-CIRCULAR-INCLINED");
+  assert.equal(ocm.OBJECT_NAME(), "BASILISK-CIRCULAR-INCLINED");
   assert.equal(state.EPOCH(), "2000-04-01T00:00:00.000Z");
   assertNear(state.X(), 6343.7735859429586, 1e-9, "circular equinoctial state position x km");
   assertNear(state.Y(), 181.16597468085499, 1e-9, "circular equinoctial state position y km");
@@ -3495,16 +3389,16 @@ test("converts circular inclined VCM equinoctial elements to VCM state vector", 
   assertNear(state.Z_DOT(), -2.6203988553352131, 1e-12, "circular equinoctial state velocity z km/s");
 });
 
-test("normalizes circular equatorial VCM equinoctial elements to SDS OMM true longitude", async (t) => {
+test("normalizes circular equatorial OCM equinoctial elements to SDS OMM true longitude", async (t) => {
   const harness = await createBrowserModuleHarness({
     wasmSource: fs.readFileSync(fileURLToPath(ISOMORPHIC_WASM_PATH)),
     surface: "direct",
   });
   t.after(() => harness.destroy());
 
-  const response = await invokeVcmEquinoctialToOmm(
+  const response = await invokeOcmEquinoctialToOmm(
     harness,
-    encodeVcmEquinoctialState({
+    encodeOcmEquinoctialState({
       objectName: "BASILISK-CIRCULAR-EQUATORIAL",
       objectId: "BASILISK-ORBITAL-MOTION",
       af: 0.0,

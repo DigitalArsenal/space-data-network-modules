@@ -103,37 +103,37 @@ test("manifest declares SDK-compliant Keplerian-to-Equinoctial surface", () => {
 
   assertDualWireTypes(
     allowedTypesFor(method, "inputPorts", "keplerian_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "keplerian_state port",
-    "VCM",
+    "OCM",
   );
   assertDualWireTypes(
     allowedTypesFor(method, "outputPorts", "equinoctial_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "equinoctial_state port",
-    "VCM",
+    "OCM",
   );
   assert.ok(
     manifest.schemasUsed.some(
-      (entry) => entry.schemaName === "VCM.fbs" && (entry.fileIdentifier ?? null) === null,
+      (entry) => entry.schemaName === "OCM.fbs" && entry.fileIdentifier === "$OCM",
     ),
-    "manifest should declare SDS VCM usage",
+    "manifest should declare SDS OCM usage",
   );
 });
 
-test("manifest declares SDK-compliant VCM Keplerian-to-OMM surface", () => {
+test("manifest declares SDK-compliant OCM Keplerian-to-OMM surface", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_keplerian_to_omm");
-  assert.ok(method, "missing vcm_keplerian_to_omm method");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_keplerian_to_omm");
+  assert.ok(method, "missing ocm_keplerian_to_omm method");
 
   assertDualWireTypes(
     allowedTypesFor(method, "inputPorts", "keplerian_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "keplerian_state port",
-    "VCM",
+    "OCM",
   );
   assertDualWireTypes(
     allowedTypesFor(method, "outputPorts", "mean_elements"),
@@ -143,80 +143,80 @@ test("manifest declares SDK-compliant VCM Keplerian-to-OMM surface", () => {
   );
 });
 
-test("manifest declares SDK-compliant VCM Keplerian-to-State surface", () => {
+test("manifest declares SDK-compliant OCM Keplerian-to-State surface", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_keplerian_to_state");
-  assert.ok(method, "missing vcm_keplerian_to_state method");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_keplerian_to_state");
+  assert.ok(method, "missing ocm_keplerian_to_state method");
 
   assertDualWireTypes(
     allowedTypesFor(method, "inputPorts", "keplerian_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "keplerian_state port",
-    "VCM",
+    "OCM",
   );
   assertDualWireTypes(
     allowedTypesFor(method, "outputPorts", "vector_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "vector_state port",
-    "VCM",
+    "OCM",
   );
 });
 
-test("manifest declares SDK-compliant VCM State-to-Keplerian surface", () => {
+test("manifest declares SDK-compliant OCM State-to-Keplerian surface", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_state_to_keplerian");
-  assert.ok(method, "missing vcm_state_to_keplerian method");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_state_to_keplerian");
+  assert.ok(method, "missing ocm_state_to_keplerian method");
 
   assertDualWireTypes(
     allowedTypesFor(method, "inputPorts", "vector_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "vector_state port",
-    "VCM",
+    "OCM",
   );
   assertDualWireTypes(
     allowedTypesFor(method, "outputPorts", "keplerian_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "keplerian_state port",
-    "VCM",
+    "OCM",
   );
 });
 
-test("manifest declares SDK-compliant VCM State-to-Equinoctial surface", () => {
+test("manifest declares SDK-compliant OCM State-to-Equinoctial surface", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_state_to_equinoctial");
-  assert.ok(method, "missing vcm_state_to_equinoctial method");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_state_to_equinoctial");
+  assert.ok(method, "missing ocm_state_to_equinoctial method");
 
   assertDualWireTypes(
     allowedTypesFor(method, "inputPorts", "vector_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "vector_state port",
-    "VCM",
+    "OCM",
   );
   assertDualWireTypes(
     allowedTypesFor(method, "outputPorts", "equinoctial_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "equinoctial_state port",
-    "VCM",
+    "OCM",
   );
 });
 
-test("manifest declares SDK-compliant VCM State-to-J-zonal-Acceleration surface", () => {
+test("manifest declares SDK-compliant OCM State-to-J-zonal-Acceleration surface", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_state_to_j_zonal_acceleration_oem");
-  assert.ok(method, "missing vcm_state_to_j_zonal_acceleration_oem method");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_state_to_j_zonal_acceleration_oem");
+  assert.ok(method, "missing ocm_state_to_j_zonal_acceleration_oem method");
 
   assertDualWireTypes(
     allowedTypesFor(method, "inputPorts", "vector_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "vector_state port",
-    "VCM",
+    "OCM",
   );
   assertDualWireTypes(
     allowedTypesFor(method, "inputPorts", "gravity_context"),
@@ -239,17 +239,17 @@ test("manifest declares SDK-compliant VCM State-to-J-zonal-Acceleration surface"
   );
 });
 
-test("manifest declares SDK-compliant VCM State-to-SRP-Acceleration surface", () => {
+test("manifest declares SDK-compliant OCM State-to-SRP-Acceleration surface", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_state_to_srp_acceleration_oem");
-  assert.ok(method, "missing vcm_state_to_srp_acceleration_oem method");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_state_to_srp_acceleration_oem");
+  assert.ok(method, "missing ocm_state_to_srp_acceleration_oem method");
 
   assertDualWireTypes(
     allowedTypesFor(method, "inputPorts", "vector_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "vector_state port",
-    "VCM",
+    "OCM",
   );
   assertDualWireTypes(
     allowedTypesFor(method, "inputPorts", "sun_vector"),
@@ -272,24 +272,24 @@ test("manifest declares SDK-compliant VCM State-to-SRP-Acceleration surface", ()
   );
 });
 
-test("manifest declares SDK-compliant VCM Equinoctial-to-State surface", () => {
+test("manifest declares SDK-compliant OCM Equinoctial-to-State surface", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_equinoctial_to_state");
-  assert.ok(method, "missing vcm_equinoctial_to_state method");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_equinoctial_to_state");
+  assert.ok(method, "missing ocm_equinoctial_to_state method");
 
   assertDualWireTypes(
     allowedTypesFor(method, "inputPorts", "equinoctial_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "equinoctial_state port",
-    "VCM",
+    "OCM",
   );
   assertDualWireTypes(
     allowedTypesFor(method, "outputPorts", "vector_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "vector_state port",
-    "VCM",
+    "OCM",
   );
 });
 
@@ -300,31 +300,31 @@ test("manifest declares SDK-compliant Equinoctial-to-Keplerian surface", () => {
 
   assertDualWireTypes(
     allowedTypesFor(method, "inputPorts", "equinoctial_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "equinoctial_state port",
-    "VCM",
+    "OCM",
   );
   assertDualWireTypes(
     allowedTypesFor(method, "outputPorts", "keplerian_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "keplerian_state port",
-    "VCM",
+    "OCM",
   );
 });
 
-test("manifest declares SDK-compliant VCM Equinoctial-to-OMM surface", () => {
+test("manifest declares SDK-compliant OCM Equinoctial-to-OMM surface", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_equinoctial_to_omm");
-  assert.ok(method, "missing vcm_equinoctial_to_omm method");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_equinoctial_to_omm");
+  assert.ok(method, "missing ocm_equinoctial_to_omm method");
 
   assertDualWireTypes(
     allowedTypesFor(method, "inputPorts", "equinoctial_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "equinoctial_state port",
-    "VCM",
+    "OCM",
   );
   assertDualWireTypes(
     allowedTypesFor(method, "outputPorts", "mean_elements"),
@@ -334,17 +334,17 @@ test("manifest declares SDK-compliant VCM Equinoctial-to-OMM surface", () => {
   );
 });
 
-test("manifest declares SDK-compliant VCM Equinoctial-to-OEM surface", () => {
+test("manifest declares SDK-compliant OCM Equinoctial-to-OEM surface", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_equinoctial_to_oem");
-  assert.ok(method, "missing vcm_equinoctial_to_oem method");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_equinoctial_to_oem");
+  assert.ok(method, "missing ocm_equinoctial_to_oem method");
 
   assertDualWireTypes(
     allowedTypesFor(method, "inputPorts", "equinoctial_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "equinoctial_state port",
-    "VCM",
+    "OCM",
   );
   assertDualWireTypes(
     allowedTypesFor(method, "outputPorts", "cartesian_state"),
@@ -354,24 +354,24 @@ test("manifest declares SDK-compliant VCM Equinoctial-to-OEM surface", () => {
   );
 });
 
-test("manifest declares SDK-compliant VCM pair to CDM relative Hill surface", () => {
+test("manifest declares SDK-compliant OCM pair to CDM relative Hill surface", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "vcm_pair_to_cdm_relative_hill");
-  assert.ok(method, "missing vcm_pair_to_cdm_relative_hill method");
+  const method = manifest.methods.find((entry) => entry.methodId === "ocm_pair_to_cdm_relative_hill");
+  assert.ok(method, "missing ocm_pair_to_cdm_relative_hill method");
 
   assertDualWireTypes(
     allowedTypesFor(method, "inputPorts", "chief_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "chief_state port",
-    "VCM",
+    "OCM",
   );
   assertDualWireTypes(
     allowedTypesFor(method, "inputPorts", "deputy_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "deputy_state port",
-    "VCM",
+    "OCM",
   );
   assertDualWireTypes(
     allowedTypesFor(method, "outputPorts", "relative_state"),
@@ -387,17 +387,17 @@ test("manifest declares SDK-compliant VCM pair to CDM relative Hill surface", ()
   );
 });
 
-test("manifest declares SDK-compliant CDM relative Hill to VCM deputy surface", () => {
+test("manifest declares SDK-compliant CDM relative Hill to OCM deputy surface", () => {
   const manifest = readManifest();
-  const method = manifest.methods.find((entry) => entry.methodId === "cdm_relative_hill_to_vcm_deputy_state");
-  assert.ok(method, "missing cdm_relative_hill_to_vcm_deputy_state method");
+  const method = manifest.methods.find((entry) => entry.methodId === "cdm_relative_hill_to_ocm_deputy_state");
+  assert.ok(method, "missing cdm_relative_hill_to_ocm_deputy_state method");
 
   assertDualWireTypes(
     allowedTypesFor(method, "inputPorts", "chief_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "chief_state port",
-    "VCM",
+    "OCM",
   );
   assertDualWireTypes(
     allowedTypesFor(method, "inputPorts", "relative_state"),
@@ -408,9 +408,9 @@ test("manifest declares SDK-compliant CDM relative Hill to VCM deputy surface", 
   );
   assertDualWireTypes(
     allowedTypesFor(method, "outputPorts", "deputy_state"),
-    "VCM.fbs",
-    null,
+    "OCM.fbs",
+    "$OCM",
     "deputy_state port",
-    "VCM",
+    "OCM",
   );
 });

@@ -9,6 +9,20 @@
 #include <string>
 #include <vector>
 
+
+// Generated from the published spacedatastandards.org package by
+// generate-sds-headers.mjs; never edited by hand.
+#include "CDM_generated.h"
+#include "CRD_generated.h"
+#include "GRV_generated.h"
+#include "OCM_generated.h"
+#include "OEM_generated.h"
+#include "OMM_generated.h"
+#include "OPM_generated.h"
+
+// GMAT-parity element-set conversions (dependency-free, SI units, radians).
+#include "state_representations.hpp"
+
 namespace {
 
 constexpr double kPi = 3.141592653589793238462643383279502884;
@@ -21,881 +35,7 @@ constexpr double kSingularOrbitTolerance = 1e-10;
 constexpr double kBasiliskSolarFlux = 1372.5398;
 constexpr double kSpeedOfLightMetersPerSecond = 299792458.0;
 
-struct OMM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  static constexpr ::flatbuffers::voffset_t VT_CCSDS_OMM_VERS = 4;
-  static constexpr ::flatbuffers::voffset_t VT_CREATION_DATE = 6;
-  static constexpr ::flatbuffers::voffset_t VT_ORIGINATOR = 8;
-  static constexpr ::flatbuffers::voffset_t VT_OBJECT_NAME = 10;
-  static constexpr ::flatbuffers::voffset_t VT_OBJECT_ID = 12;
-  static constexpr ::flatbuffers::voffset_t VT_CENTER_NAME = 14;
-  static constexpr ::flatbuffers::voffset_t VT_REFERENCE_FRAME_EPOCH = 18;
-  static constexpr ::flatbuffers::voffset_t VT_TIME_SYSTEM = 20;
-  static constexpr ::flatbuffers::voffset_t VT_MEAN_ELEMENT_THEORY = 22;
-  static constexpr ::flatbuffers::voffset_t VT_COMMENT = 24;
-  static constexpr ::flatbuffers::voffset_t VT_EPOCH = 26;
-  static constexpr ::flatbuffers::voffset_t VT_SEMI_MAJOR_AXIS = 28;
-  static constexpr ::flatbuffers::voffset_t VT_MEAN_MOTION = 30;
-  static constexpr ::flatbuffers::voffset_t VT_ECCENTRICITY = 32;
-  static constexpr ::flatbuffers::voffset_t VT_INCLINATION = 34;
-  static constexpr ::flatbuffers::voffset_t VT_RA_OF_ASC_NODE = 36;
-  static constexpr ::flatbuffers::voffset_t VT_ARG_OF_PERICENTER = 38;
-  static constexpr ::flatbuffers::voffset_t VT_MEAN_ANOMALY = 40;
-  static constexpr ::flatbuffers::voffset_t VT_GM = 42;
-
-  const ::flatbuffers::String* CREATION_DATE() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_CREATION_DATE);
-  }
-  const ::flatbuffers::String* ORIGINATOR() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_ORIGINATOR);
-  }
-  const ::flatbuffers::String* OBJECT_NAME() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_OBJECT_NAME);
-  }
-  const ::flatbuffers::String* OBJECT_ID() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_OBJECT_ID);
-  }
-  const ::flatbuffers::String* CENTER_NAME() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_CENTER_NAME);
-  }
-  const ::flatbuffers::String* REFERENCE_FRAME_EPOCH() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_REFERENCE_FRAME_EPOCH);
-  }
-  int8_t TIME_SYSTEM() const {
-    return GetField<int8_t>(VT_TIME_SYSTEM, 11);
-  }
-  int8_t MEAN_ELEMENT_THEORY() const {
-    return GetField<int8_t>(VT_MEAN_ELEMENT_THEORY, 0);
-  }
-  const ::flatbuffers::String* COMMENT() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_COMMENT);
-  }
-  const ::flatbuffers::String* EPOCH() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_EPOCH);
-  }
-  double SEMI_MAJOR_AXIS() const {
-    return GetField<double>(VT_SEMI_MAJOR_AXIS, 0.0);
-  }
-  double ECCENTRICITY() const {
-    return GetField<double>(VT_ECCENTRICITY, 0.0);
-  }
-  double INCLINATION() const {
-    return GetField<double>(VT_INCLINATION, 0.0);
-  }
-  double RA_OF_ASC_NODE() const {
-    return GetField<double>(VT_RA_OF_ASC_NODE, 0.0);
-  }
-  double ARG_OF_PERICENTER() const {
-    return GetField<double>(VT_ARG_OF_PERICENTER, 0.0);
-  }
-  double MEAN_ANOMALY() const {
-    return GetField<double>(VT_MEAN_ANOMALY, 0.0);
-  }
-  double GM() const {
-    return GetField<double>(VT_GM, 0.0);
-  }
-
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B>& verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyOffset(verifier, VT_CREATION_DATE) &&
-           verifier.VerifyString(CREATION_DATE()) &&
-           VerifyOffset(verifier, VT_ORIGINATOR) &&
-           verifier.VerifyString(ORIGINATOR()) &&
-           VerifyOffset(verifier, VT_OBJECT_NAME) &&
-           verifier.VerifyString(OBJECT_NAME()) &&
-           VerifyOffset(verifier, VT_OBJECT_ID) &&
-           verifier.VerifyString(OBJECT_ID()) &&
-           VerifyOffset(verifier, VT_CENTER_NAME) &&
-           verifier.VerifyString(CENTER_NAME()) &&
-           VerifyOffset(verifier, VT_REFERENCE_FRAME_EPOCH) &&
-           verifier.VerifyString(REFERENCE_FRAME_EPOCH()) &&
-           VerifyField<int8_t>(verifier, VT_TIME_SYSTEM, 1) &&
-           VerifyField<int8_t>(verifier, VT_MEAN_ELEMENT_THEORY, 1) &&
-           VerifyOffset(verifier, VT_COMMENT) &&
-           verifier.VerifyString(COMMENT()) &&
-           VerifyOffset(verifier, VT_EPOCH) &&
-           verifier.VerifyString(EPOCH()) &&
-           VerifyField<double>(verifier, VT_SEMI_MAJOR_AXIS, 8) &&
-           VerifyField<double>(verifier, VT_MEAN_MOTION, 8) &&
-           VerifyField<double>(verifier, VT_ECCENTRICITY, 8) &&
-           VerifyField<double>(verifier, VT_INCLINATION, 8) &&
-           VerifyField<double>(verifier, VT_RA_OF_ASC_NODE, 8) &&
-           VerifyField<double>(verifier, VT_ARG_OF_PERICENTER, 8) &&
-           VerifyField<double>(verifier, VT_MEAN_ANOMALY, 8) &&
-           VerifyField<double>(verifier, VT_GM, 8) &&
-           verifier.EndTable();
-  }
-};
-
-struct ephemerisDataLine FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  static constexpr ::flatbuffers::voffset_t VT_EPOCH = 4;
-  static constexpr ::flatbuffers::voffset_t VT_X = 6;
-  static constexpr ::flatbuffers::voffset_t VT_Y = 8;
-  static constexpr ::flatbuffers::voffset_t VT_Z = 10;
-  static constexpr ::flatbuffers::voffset_t VT_X_DOT = 12;
-  static constexpr ::flatbuffers::voffset_t VT_Y_DOT = 14;
-  static constexpr ::flatbuffers::voffset_t VT_Z_DOT = 16;
-  static constexpr ::flatbuffers::voffset_t VT_X_DDOT = 18;
-  static constexpr ::flatbuffers::voffset_t VT_Y_DDOT = 20;
-  static constexpr ::flatbuffers::voffset_t VT_Z_DDOT = 22;
-
-  const ::flatbuffers::String* EPOCH() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_EPOCH);
-  }
-  double X() const {
-    return GetField<double>(VT_X, 0.0);
-  }
-  double Y() const {
-    return GetField<double>(VT_Y, 0.0);
-  }
-  double Z() const {
-    return GetField<double>(VT_Z, 0.0);
-  }
-  double X_DOT() const {
-    return GetField<double>(VT_X_DOT, 0.0);
-  }
-  double Y_DOT() const {
-    return GetField<double>(VT_Y_DOT, 0.0);
-  }
-  double Z_DOT() const {
-    return GetField<double>(VT_Z_DOT, 0.0);
-  }
-  double X_DDOT() const {
-    return GetField<double>(VT_X_DDOT, 0.0);
-  }
-  double Y_DDOT() const {
-    return GetField<double>(VT_Y_DDOT, 0.0);
-  }
-  double Z_DDOT() const {
-    return GetField<double>(VT_Z_DDOT, 0.0);
-  }
-
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B>& verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyOffset(verifier, VT_EPOCH) &&
-           verifier.VerifyString(EPOCH()) &&
-           VerifyField<double>(verifier, VT_X, 8) &&
-           VerifyField<double>(verifier, VT_Y, 8) &&
-           VerifyField<double>(verifier, VT_Z, 8) &&
-           VerifyField<double>(verifier, VT_X_DOT, 8) &&
-           VerifyField<double>(verifier, VT_Y_DOT, 8) &&
-           VerifyField<double>(verifier, VT_Z_DOT, 8) &&
-           VerifyField<double>(verifier, VT_X_DDOT, 8) &&
-           VerifyField<double>(verifier, VT_Y_DDOT, 8) &&
-           VerifyField<double>(verifier, VT_Z_DDOT, 8) &&
-           verifier.EndTable();
-  }
-};
-
-struct ephemerisDataBlock FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  static constexpr ::flatbuffers::voffset_t VT_COMMENT = 4;
-  static constexpr ::flatbuffers::voffset_t VT_CENTER_NAME = 8;
-  static constexpr ::flatbuffers::voffset_t VT_TIME_SYSTEM = 16;
-  static constexpr ::flatbuffers::voffset_t VT_START_TIME = 18;
-  static constexpr ::flatbuffers::voffset_t VT_STOP_TIME = 24;
-  static constexpr ::flatbuffers::voffset_t VT_STEP_SIZE = 30;
-  static constexpr ::flatbuffers::voffset_t VT_STATE_VECTOR_SIZE = 32;
-  static constexpr ::flatbuffers::voffset_t VT_EPHEMERIS_DATA_LINES = 36;
-
-  const ::flatbuffers::String* COMMENT() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_COMMENT);
-  }
-  const ::flatbuffers::String* CENTER_NAME() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_CENTER_NAME);
-  }
-  int8_t TIME_SYSTEM() const {
-    return GetField<int8_t>(VT_TIME_SYSTEM, 0);
-  }
-  const ::flatbuffers::String* START_TIME() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_START_TIME);
-  }
-  const ::flatbuffers::String* STOP_TIME() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_STOP_TIME);
-  }
-  const ::flatbuffers::Vector<::flatbuffers::Offset<ephemerisDataLine>>* EPHEMERIS_DATA_LINES() const {
-    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ephemerisDataLine>>*>(
-        VT_EPHEMERIS_DATA_LINES);
-  }
-
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B>& verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyOffset(verifier, VT_COMMENT) &&
-           verifier.VerifyString(COMMENT()) &&
-           VerifyOffset(verifier, VT_CENTER_NAME) &&
-           verifier.VerifyString(CENTER_NAME()) &&
-           VerifyField<int8_t>(verifier, VT_TIME_SYSTEM, 1) &&
-           VerifyOffset(verifier, VT_START_TIME) &&
-           verifier.VerifyString(START_TIME()) &&
-           VerifyOffset(verifier, VT_STOP_TIME) &&
-           verifier.VerifyString(STOP_TIME()) &&
-           VerifyField<double>(verifier, VT_STEP_SIZE, 8) &&
-           VerifyField<uint8_t>(verifier, VT_STATE_VECTOR_SIZE, 1) &&
-           VerifyOffset(verifier, VT_EPHEMERIS_DATA_LINES) &&
-           verifier.VerifyVector(EPHEMERIS_DATA_LINES()) &&
-           verifier.VerifyVectorOfTables(EPHEMERIS_DATA_LINES()) &&
-           verifier.EndTable();
-  }
-};
-
-struct OEM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  static constexpr ::flatbuffers::voffset_t VT_CLASSIFICATION = 4;
-  static constexpr ::flatbuffers::voffset_t VT_CCSDS_OEM_VERS = 6;
-  static constexpr ::flatbuffers::voffset_t VT_CREATION_DATE = 8;
-  static constexpr ::flatbuffers::voffset_t VT_ORIGINATOR = 10;
-  static constexpr ::flatbuffers::voffset_t VT_EPHEMERIS_DATA_BLOCK = 12;
-
-  const ::flatbuffers::String* CREATION_DATE() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_CREATION_DATE);
-  }
-  const ::flatbuffers::Vector<::flatbuffers::Offset<ephemerisDataBlock>>* EPHEMERIS_DATA_BLOCK() const {
-    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ephemerisDataBlock>>*>(
-        VT_EPHEMERIS_DATA_BLOCK);
-  }
-
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B>& verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyOffset(verifier, VT_CREATION_DATE) &&
-           verifier.VerifyString(CREATION_DATE()) &&
-           VerifyField<double>(verifier, VT_CCSDS_OEM_VERS, 8) &&
-           VerifyOffset(verifier, VT_EPHEMERIS_DATA_BLOCK) &&
-           verifier.VerifyVector(EPHEMERIS_DATA_BLOCK()) &&
-           verifier.VerifyVectorOfTables(EPHEMERIS_DATA_BLOCK()) &&
-           verifier.EndTable();
-  }
-};
-
-struct OPM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  static constexpr ::flatbuffers::voffset_t VT_CCSDS_OPM_VERS = 4;
-  static constexpr ::flatbuffers::voffset_t VT_CREATION_DATE = 6;
-  static constexpr ::flatbuffers::voffset_t VT_ORIGINATOR = 8;
-  static constexpr ::flatbuffers::voffset_t VT_OBJECT_NAME = 10;
-  static constexpr ::flatbuffers::voffset_t VT_OBJECT_ID = 12;
-  static constexpr ::flatbuffers::voffset_t VT_CENTER_NAME = 14;
-  static constexpr ::flatbuffers::voffset_t VT_REF_FRAME = 16;
-  static constexpr ::flatbuffers::voffset_t VT_TIME_SYSTEM = 18;
-  static constexpr ::flatbuffers::voffset_t VT_EPOCH = 20;
-  static constexpr ::flatbuffers::voffset_t VT_X = 22;
-  static constexpr ::flatbuffers::voffset_t VT_Y = 24;
-  static constexpr ::flatbuffers::voffset_t VT_Z = 26;
-  static constexpr ::flatbuffers::voffset_t VT_X_DOT = 28;
-  static constexpr ::flatbuffers::voffset_t VT_Y_DOT = 30;
-  static constexpr ::flatbuffers::voffset_t VT_Z_DOT = 32;
-  static constexpr ::flatbuffers::voffset_t VT_SEMI_MAJOR_AXIS = 34;
-  static constexpr ::flatbuffers::voffset_t VT_ECCENTRICITY = 36;
-  static constexpr ::flatbuffers::voffset_t VT_INCLINATION = 38;
-  static constexpr ::flatbuffers::voffset_t VT_RA_OF_ASC_NODE = 40;
-  static constexpr ::flatbuffers::voffset_t VT_ARG_OF_PERICENTER = 42;
-  static constexpr ::flatbuffers::voffset_t VT_TRUE_ANOMALY = 44;
-  static constexpr ::flatbuffers::voffset_t VT_MEAN_ANOMALY = 46;
-  static constexpr ::flatbuffers::voffset_t VT_GM = 48;
-  static constexpr ::flatbuffers::voffset_t VT_MASS = 50;
-  static constexpr ::flatbuffers::voffset_t VT_SOLAR_RAD_AREA = 52;
-  static constexpr ::flatbuffers::voffset_t VT_SOLAR_RAD_COEFF = 54;
-  static constexpr ::flatbuffers::voffset_t VT_DRAG_AREA = 56;
-  static constexpr ::flatbuffers::voffset_t VT_DRAG_COEFF = 58;
-
-  const ::flatbuffers::String* CREATION_DATE() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_CREATION_DATE);
-  }
-  const ::flatbuffers::String* ORIGINATOR() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_ORIGINATOR);
-  }
-  const ::flatbuffers::String* OBJECT_NAME() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_OBJECT_NAME);
-  }
-  const ::flatbuffers::String* OBJECT_ID() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_OBJECT_ID);
-  }
-  const ::flatbuffers::String* CENTER_NAME() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_CENTER_NAME);
-  }
-  const ::flatbuffers::String* TIME_SYSTEM() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_TIME_SYSTEM);
-  }
-  const ::flatbuffers::String* EPOCH() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_EPOCH);
-  }
-  double X() const {
-    return GetField<double>(VT_X, 0.0);
-  }
-  double Y() const {
-    return GetField<double>(VT_Y, 0.0);
-  }
-  double Z() const {
-    return GetField<double>(VT_Z, 0.0);
-  }
-  double X_DOT() const {
-    return GetField<double>(VT_X_DOT, 0.0);
-  }
-  double Y_DOT() const {
-    return GetField<double>(VT_Y_DOT, 0.0);
-  }
-  double Z_DOT() const {
-    return GetField<double>(VT_Z_DOT, 0.0);
-  }
-  double SEMI_MAJOR_AXIS() const {
-    return GetField<double>(VT_SEMI_MAJOR_AXIS, 0.0);
-  }
-  double ECCENTRICITY() const {
-    return GetField<double>(VT_ECCENTRICITY, 0.0);
-  }
-  double INCLINATION() const {
-    return GetField<double>(VT_INCLINATION, 0.0);
-  }
-  double RA_OF_ASC_NODE() const {
-    return GetField<double>(VT_RA_OF_ASC_NODE, 0.0);
-  }
-  double ARG_OF_PERICENTER() const {
-    return GetField<double>(VT_ARG_OF_PERICENTER, 0.0);
-  }
-  double TRUE_ANOMALY() const {
-    return GetField<double>(VT_TRUE_ANOMALY, 0.0);
-  }
-  double MEAN_ANOMALY() const {
-    return GetField<double>(VT_MEAN_ANOMALY, 0.0);
-  }
-  double GM() const {
-    return GetField<double>(VT_GM, 0.0);
-  }
-
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B>& verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyOffset(verifier, VT_CCSDS_OPM_VERS) &&
-           verifier.VerifyString(GetPointer<const ::flatbuffers::String*>(VT_CCSDS_OPM_VERS)) &&
-           VerifyOffset(verifier, VT_CREATION_DATE) &&
-           verifier.VerifyString(CREATION_DATE()) &&
-           VerifyOffset(verifier, VT_ORIGINATOR) &&
-           verifier.VerifyString(ORIGINATOR()) &&
-           VerifyOffset(verifier, VT_OBJECT_NAME) &&
-           verifier.VerifyString(OBJECT_NAME()) &&
-           VerifyOffset(verifier, VT_OBJECT_ID) &&
-           verifier.VerifyString(OBJECT_ID()) &&
-           VerifyOffset(verifier, VT_CENTER_NAME) &&
-           verifier.VerifyString(CENTER_NAME()) &&
-           VerifyOffset(verifier, VT_REF_FRAME) &&
-           verifier.VerifyString(GetPointer<const ::flatbuffers::String*>(VT_REF_FRAME)) &&
-           VerifyOffset(verifier, VT_TIME_SYSTEM) &&
-           verifier.VerifyString(TIME_SYSTEM()) &&
-           VerifyOffset(verifier, VT_EPOCH) &&
-           verifier.VerifyString(EPOCH()) &&
-           VerifyField<double>(verifier, VT_X, 8) &&
-           VerifyField<double>(verifier, VT_Y, 8) &&
-           VerifyField<double>(verifier, VT_Z, 8) &&
-           VerifyField<double>(verifier, VT_X_DOT, 8) &&
-           VerifyField<double>(verifier, VT_Y_DOT, 8) &&
-           VerifyField<double>(verifier, VT_Z_DOT, 8) &&
-           VerifyField<double>(verifier, VT_SEMI_MAJOR_AXIS, 8) &&
-           VerifyField<double>(verifier, VT_ECCENTRICITY, 8) &&
-           VerifyField<double>(verifier, VT_INCLINATION, 8) &&
-           VerifyField<double>(verifier, VT_RA_OF_ASC_NODE, 8) &&
-           VerifyField<double>(verifier, VT_ARG_OF_PERICENTER, 8) &&
-           VerifyField<double>(verifier, VT_TRUE_ANOMALY, 8) &&
-           VerifyField<double>(verifier, VT_MEAN_ANOMALY, 8) &&
-           VerifyField<double>(verifier, VT_GM, 8) &&
-           VerifyField<double>(verifier, VT_MASS, 8) &&
-           VerifyField<double>(verifier, VT_SOLAR_RAD_AREA, 8) &&
-           VerifyField<double>(verifier, VT_SOLAR_RAD_COEFF, 8) &&
-           VerifyField<double>(verifier, VT_DRAG_AREA, 8) &&
-           VerifyField<double>(verifier, VT_DRAG_COEFF, 8) &&
-           verifier.EndTable();
-  }
-};
-
-struct keplerianElements FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  static constexpr ::flatbuffers::voffset_t VT_SEMI_MAJOR_AXIS = 4;
-  static constexpr ::flatbuffers::voffset_t VT_ECCENTRICITY = 6;
-  static constexpr ::flatbuffers::voffset_t VT_INCLINATION = 8;
-  static constexpr ::flatbuffers::voffset_t VT_RA_OF_ASC_NODE = 10;
-  static constexpr ::flatbuffers::voffset_t VT_ARG_OF_PERICENTER = 12;
-  static constexpr ::flatbuffers::voffset_t VT_ANOMALY_TYPE = 14;
-  static constexpr ::flatbuffers::voffset_t VT_ANOMALY = 16;
-  static constexpr ::flatbuffers::voffset_t VT_PERIAPSIS_RADIUS = 18;
-
-  double SEMI_MAJOR_AXIS() const {
-    return GetField<double>(VT_SEMI_MAJOR_AXIS, 0.0);
-  }
-  double ECCENTRICITY() const {
-    return GetField<double>(VT_ECCENTRICITY, 0.0);
-  }
-  double INCLINATION() const {
-    return GetField<double>(VT_INCLINATION, 0.0);
-  }
-  double RA_OF_ASC_NODE() const {
-    return GetField<double>(VT_RA_OF_ASC_NODE, 0.0);
-  }
-  double ARG_OF_PERICENTER() const {
-    return GetField<double>(VT_ARG_OF_PERICENTER, 0.0);
-  }
-  int8_t ANOMALY_TYPE() const {
-    return GetField<int8_t>(VT_ANOMALY_TYPE, 0);
-  }
-  double ANOMALY() const {
-    return GetField<double>(VT_ANOMALY, 0.0);
-  }
-  double PERIAPSIS_RADIUS() const {
-    return GetField<double>(VT_PERIAPSIS_RADIUS, 0.0);
-  }
-
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B>& verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyField<double>(verifier, VT_SEMI_MAJOR_AXIS, 8) &&
-           VerifyField<double>(verifier, VT_ECCENTRICITY, 8) &&
-           VerifyField<double>(verifier, VT_INCLINATION, 8) &&
-           VerifyField<double>(verifier, VT_RA_OF_ASC_NODE, 8) &&
-           VerifyField<double>(verifier, VT_ARG_OF_PERICENTER, 8) &&
-           VerifyField<int8_t>(verifier, VT_ANOMALY_TYPE, 1) &&
-           VerifyField<double>(verifier, VT_ANOMALY, 8) &&
-           VerifyField<double>(verifier, VT_PERIAPSIS_RADIUS, 8) &&
-           verifier.EndTable();
-  }
-};
-
-struct equinoctialElements FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  static constexpr ::flatbuffers::voffset_t VT_AF = 4;
-  static constexpr ::flatbuffers::voffset_t VT_AG = 6;
-  static constexpr ::flatbuffers::voffset_t VT_L = 8;
-  static constexpr ::flatbuffers::voffset_t VT_N = 10;
-  static constexpr ::flatbuffers::voffset_t VT_CHI = 12;
-  static constexpr ::flatbuffers::voffset_t VT_PSI = 14;
-
-  double AF() const {
-    return GetField<double>(VT_AF, 0.0);
-  }
-  double AG() const {
-    return GetField<double>(VT_AG, 0.0);
-  }
-  double L() const {
-    return GetField<double>(VT_L, 0.0);
-  }
-  double N() const {
-    return GetField<double>(VT_N, 0.0);
-  }
-  double CHI() const {
-    return GetField<double>(VT_CHI, 0.0);
-  }
-  double PSI() const {
-    return GetField<double>(VT_PSI, 0.0);
-  }
-
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B>& verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyField<double>(verifier, VT_AF, 8) &&
-           VerifyField<double>(verifier, VT_AG, 8) &&
-           VerifyField<double>(verifier, VT_L, 8) &&
-           VerifyField<double>(verifier, VT_N, 8) &&
-           VerifyField<double>(verifier, VT_CHI, 8) &&
-           VerifyField<double>(verifier, VT_PSI, 8) &&
-           verifier.EndTable();
-  }
-};
-
-struct VCMStateVector FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  static constexpr ::flatbuffers::voffset_t VT_EPOCH = 4;
-  static constexpr ::flatbuffers::voffset_t VT_X = 6;
-  static constexpr ::flatbuffers::voffset_t VT_Y = 8;
-  static constexpr ::flatbuffers::voffset_t VT_Z = 10;
-  static constexpr ::flatbuffers::voffset_t VT_X_DOT = 12;
-  static constexpr ::flatbuffers::voffset_t VT_Y_DOT = 14;
-  static constexpr ::flatbuffers::voffset_t VT_Z_DOT = 16;
-
-  const ::flatbuffers::String* EPOCH() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_EPOCH);
-  }
-  double X() const {
-    return GetField<double>(VT_X, 0.0);
-  }
-  double Y() const {
-    return GetField<double>(VT_Y, 0.0);
-  }
-  double Z() const {
-    return GetField<double>(VT_Z, 0.0);
-  }
-  double X_DOT() const {
-    return GetField<double>(VT_X_DOT, 0.0);
-  }
-  double Y_DOT() const {
-    return GetField<double>(VT_Y_DOT, 0.0);
-  }
-  double Z_DOT() const {
-    return GetField<double>(VT_Z_DOT, 0.0);
-  }
-
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B>& verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyOffset(verifier, VT_EPOCH) &&
-           verifier.VerifyString(EPOCH()) &&
-           VerifyField<double>(verifier, VT_X, 8) &&
-           VerifyField<double>(verifier, VT_Y, 8) &&
-           VerifyField<double>(verifier, VT_Z, 8) &&
-           VerifyField<double>(verifier, VT_X_DOT, 8) &&
-           VerifyField<double>(verifier, VT_Y_DOT, 8) &&
-           VerifyField<double>(verifier, VT_Z_DOT, 8) &&
-           verifier.EndTable();
-  }
-};
-
-struct VCM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  static constexpr ::flatbuffers::voffset_t VT_CCSDS_OMM_VERS = 4;
-  static constexpr ::flatbuffers::voffset_t VT_CREATION_DATE = 6;
-  static constexpr ::flatbuffers::voffset_t VT_ORIGINATOR = 8;
-  static constexpr ::flatbuffers::voffset_t VT_OBJECT_NAME = 10;
-  static constexpr ::flatbuffers::voffset_t VT_OBJECT_ID = 12;
-  static constexpr ::flatbuffers::voffset_t VT_CENTER_NAME = 14;
-  static constexpr ::flatbuffers::voffset_t VT_REF_FRAME = 16;
-  static constexpr ::flatbuffers::voffset_t VT_TIME_SYSTEM = 18;
-  static constexpr ::flatbuffers::voffset_t VT_STATE_VECTOR = 20;
-  static constexpr ::flatbuffers::voffset_t VT_KEPLERIAN_ELEMENTS = 22;
-  static constexpr ::flatbuffers::voffset_t VT_EQUINOCTIAL_ELEMENTS = 24;
-  static constexpr ::flatbuffers::voffset_t VT_GM = 26;
-  static constexpr ::flatbuffers::voffset_t VT_MASS = 34;
-  static constexpr ::flatbuffers::voffset_t VT_SOLAR_RAD_AREA = 36;
-  static constexpr ::flatbuffers::voffset_t VT_SOLAR_RAD_COEFF = 38;
-
-  double CCSDS_OMM_VERS() const {
-    return GetField<double>(VT_CCSDS_OMM_VERS, 2.0);
-  }
-  const ::flatbuffers::String* CREATION_DATE() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_CREATION_DATE);
-  }
-  const ::flatbuffers::String* ORIGINATOR() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_ORIGINATOR);
-  }
-  const ::flatbuffers::String* OBJECT_NAME() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_OBJECT_NAME);
-  }
-  const ::flatbuffers::String* OBJECT_ID() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_OBJECT_ID);
-  }
-  const ::flatbuffers::String* CENTER_NAME() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_CENTER_NAME);
-  }
-  const ::flatbuffers::String* REF_FRAME() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_REF_FRAME);
-  }
-  const ::flatbuffers::String* TIME_SYSTEM() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_TIME_SYSTEM);
-  }
-  const VCMStateVector* STATE_VECTOR() const {
-    return GetPointer<const VCMStateVector*>(VT_STATE_VECTOR);
-  }
-  const keplerianElements* KEPLERIAN_ELEMENTS() const {
-    return GetPointer<const keplerianElements*>(VT_KEPLERIAN_ELEMENTS);
-  }
-  const equinoctialElements* EQUINOCTIAL_ELEMENTS() const {
-    return GetPointer<const equinoctialElements*>(VT_EQUINOCTIAL_ELEMENTS);
-  }
-  double GM() const {
-    return GetField<double>(VT_GM, 0.0);
-  }
-  double MASS() const {
-    return GetField<double>(VT_MASS, 0.0);
-  }
-  double SOLAR_RAD_AREA() const {
-    return GetField<double>(VT_SOLAR_RAD_AREA, 0.0);
-  }
-  double SOLAR_RAD_COEFF() const {
-    return GetField<double>(VT_SOLAR_RAD_COEFF, 0.0);
-  }
-
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B>& verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyField<double>(verifier, VT_CCSDS_OMM_VERS, 8) &&
-           VerifyOffset(verifier, VT_CREATION_DATE) &&
-           verifier.VerifyString(CREATION_DATE()) &&
-           VerifyOffset(verifier, VT_ORIGINATOR) &&
-           verifier.VerifyString(ORIGINATOR()) &&
-           VerifyOffset(verifier, VT_OBJECT_NAME) &&
-           verifier.VerifyString(OBJECT_NAME()) &&
-           VerifyOffset(verifier, VT_OBJECT_ID) &&
-           verifier.VerifyString(OBJECT_ID()) &&
-           VerifyOffset(verifier, VT_CENTER_NAME) &&
-           verifier.VerifyString(CENTER_NAME()) &&
-           VerifyOffset(verifier, VT_REF_FRAME) &&
-           verifier.VerifyString(REF_FRAME()) &&
-           VerifyOffset(verifier, VT_TIME_SYSTEM) &&
-           verifier.VerifyString(TIME_SYSTEM()) &&
-           VerifyOffset(verifier, VT_STATE_VECTOR) &&
-           verifier.VerifyTable(STATE_VECTOR()) &&
-           VerifyOffset(verifier, VT_KEPLERIAN_ELEMENTS) &&
-           verifier.VerifyTable(KEPLERIAN_ELEMENTS()) &&
-           VerifyOffset(verifier, VT_EQUINOCTIAL_ELEMENTS) &&
-           verifier.VerifyTable(EQUINOCTIAL_ELEMENTS()) &&
-           VerifyField<double>(verifier, VT_GM, 8) &&
-           VerifyField<double>(verifier, VT_MASS, 8) &&
-           VerifyField<double>(verifier, VT_SOLAR_RAD_AREA, 8) &&
-           VerifyField<double>(verifier, VT_SOLAR_RAD_COEFF, 8) &&
-           verifier.EndTable();
-  }
-};
-
-struct GRV FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  static constexpr ::flatbuffers::voffset_t VT_MODEL_TYPE = 4;
-  static constexpr ::flatbuffers::voffset_t VT_MODEL_NAME = 6;
-  static constexpr ::flatbuffers::voffset_t VT_CENTRAL_BODY = 8;
-  static constexpr ::flatbuffers::voffset_t VT_MAX_DEGREE = 10;
-  static constexpr ::flatbuffers::voffset_t VT_MAX_ORDER = 12;
-  static constexpr ::flatbuffers::voffset_t VT_INCLUDE_SUN = 14;
-  static constexpr ::flatbuffers::voffset_t VT_INCLUDE_MOON = 16;
-  static constexpr ::flatbuffers::voffset_t VT_INCLUDE_PLANETS = 18;
-  static constexpr ::flatbuffers::voffset_t VT_SOLID_TIDES = 20;
-  static constexpr ::flatbuffers::voffset_t VT_OCEAN_TIDES = 22;
-  static constexpr ::flatbuffers::voffset_t VT_POLE_TIDES = 24;
-  static constexpr ::flatbuffers::voffset_t VT_EQUATORIAL_RADIUS = 26;
-  static constexpr ::flatbuffers::voffset_t VT_J2 = 28;
-  static constexpr ::flatbuffers::voffset_t VT_MU = 30;
-  static constexpr ::flatbuffers::voffset_t VT_J3 = 32;
-  static constexpr ::flatbuffers::voffset_t VT_J4 = 34;
-  static constexpr ::flatbuffers::voffset_t VT_J5 = 36;
-  static constexpr ::flatbuffers::voffset_t VT_J6 = 38;
-
-  uint16_t MAX_DEGREE() const {
-    return GetField<uint16_t>(VT_MAX_DEGREE, 70);
-  }
-
-  double EQUATORIAL_RADIUS() const {
-    return GetField<double>(VT_EQUATORIAL_RADIUS, 0.0);
-  }
-  double MU() const {
-    return GetField<double>(VT_MU, 0.0);
-  }
-  double J2() const {
-    return GetField<double>(VT_J2, 0.0);
-  }
-  double J3() const {
-    return GetField<double>(VT_J3, 0.0);
-  }
-  double J4() const {
-    return GetField<double>(VT_J4, 0.0);
-  }
-  double J5() const {
-    return GetField<double>(VT_J5, 0.0);
-  }
-  double J6() const {
-    return GetField<double>(VT_J6, 0.0);
-  }
-
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B>& verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyField<int8_t>(verifier, VT_MODEL_TYPE, 1) &&
-           VerifyField<int8_t>(verifier, VT_MODEL_NAME, 1) &&
-           VerifyField<int8_t>(verifier, VT_CENTRAL_BODY, 1) &&
-           VerifyField<uint16_t>(verifier, VT_MAX_DEGREE, 2) &&
-           VerifyField<uint16_t>(verifier, VT_MAX_ORDER, 2) &&
-           VerifyField<uint8_t>(verifier, VT_INCLUDE_SUN, 1) &&
-           VerifyField<uint8_t>(verifier, VT_INCLUDE_MOON, 1) &&
-           VerifyField<uint8_t>(verifier, VT_INCLUDE_PLANETS, 1) &&
-           VerifyField<uint8_t>(verifier, VT_SOLID_TIDES, 1) &&
-           VerifyField<uint8_t>(verifier, VT_OCEAN_TIDES, 1) &&
-           VerifyField<uint8_t>(verifier, VT_POLE_TIDES, 1) &&
-           VerifyField<double>(verifier, VT_EQUATORIAL_RADIUS, 8) &&
-           VerifyField<double>(verifier, VT_MU, 8) &&
-           VerifyField<double>(verifier, VT_J2, 8) &&
-           VerifyField<double>(verifier, VT_J3, 8) &&
-           VerifyField<double>(verifier, VT_J4, 8) &&
-           VerifyField<double>(verifier, VT_J5, 8) &&
-           VerifyField<double>(verifier, VT_J6, 8) &&
-           verifier.EndTable();
-  }
-};
-
-struct CRD FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  static constexpr ::flatbuffers::voffset_t VT_X = 4;
-  static constexpr ::flatbuffers::voffset_t VT_Y = 6;
-  static constexpr ::flatbuffers::voffset_t VT_Z = 8;
-  static constexpr ::flatbuffers::voffset_t VT_VX = 10;
-  static constexpr ::flatbuffers::voffset_t VT_VY = 12;
-  static constexpr ::flatbuffers::voffset_t VT_VZ = 14;
-  static constexpr ::flatbuffers::voffset_t VT_FRAME = 16;
-  static constexpr ::flatbuffers::voffset_t VT_ELLIPSOID = 18;
-  static constexpr ::flatbuffers::voffset_t VT_RESERVED = 20;
-
-  double X() const {
-    return GetField<double>(VT_X, 0.0);
-  }
-  double Y() const {
-    return GetField<double>(VT_Y, 0.0);
-  }
-  double Z() const {
-    return GetField<double>(VT_Z, 0.0);
-  }
-
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B>& verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyField<double>(verifier, VT_X, 8) &&
-           VerifyField<double>(verifier, VT_Y, 8) &&
-           VerifyField<double>(verifier, VT_Z, 8) &&
-           VerifyField<double>(verifier, VT_VX, 8) &&
-           VerifyField<double>(verifier, VT_VY, 8) &&
-           VerifyField<double>(verifier, VT_VZ, 8) &&
-           VerifyField<uint8_t>(verifier, VT_FRAME, 1) &&
-           VerifyField<uint8_t>(verifier, VT_ELLIPSOID, 1) &&
-           verifier.EndTable();
-  }
-};
-
-struct CDM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
-  static constexpr ::flatbuffers::voffset_t VT_CCSDS_CDM_VERS = 4;
-  static constexpr ::flatbuffers::voffset_t VT_CREATION_DATE = 6;
-  static constexpr ::flatbuffers::voffset_t VT_ORIGINATOR = 8;
-  static constexpr ::flatbuffers::voffset_t VT_MESSAGE_FOR = 10;
-  static constexpr ::flatbuffers::voffset_t VT_MESSAGE_ID = 12;
-  static constexpr ::flatbuffers::voffset_t VT_TCA = 14;
-  static constexpr ::flatbuffers::voffset_t VT_MISS_DISTANCE = 16;
-  static constexpr ::flatbuffers::voffset_t VT_RELATIVE_SPEED = 18;
-  static constexpr ::flatbuffers::voffset_t VT_RELATIVE_POSITION_R = 20;
-  static constexpr ::flatbuffers::voffset_t VT_RELATIVE_POSITION_T = 22;
-  static constexpr ::flatbuffers::voffset_t VT_RELATIVE_POSITION_N = 24;
-  static constexpr ::flatbuffers::voffset_t VT_RELATIVE_VELOCITY_R = 26;
-  static constexpr ::flatbuffers::voffset_t VT_RELATIVE_VELOCITY_T = 28;
-  static constexpr ::flatbuffers::voffset_t VT_RELATIVE_VELOCITY_N = 30;
-
-  const ::flatbuffers::String* CREATION_DATE() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_CREATION_DATE);
-  }
-  const ::flatbuffers::String* ORIGINATOR() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_ORIGINATOR);
-  }
-  const ::flatbuffers::String* MESSAGE_FOR() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_MESSAGE_FOR);
-  }
-  const ::flatbuffers::String* MESSAGE_ID() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_MESSAGE_ID);
-  }
-  const ::flatbuffers::String* TCA() const {
-    return GetPointer<const ::flatbuffers::String*>(VT_TCA);
-  }
-  double MISS_DISTANCE() const {
-    return GetField<double>(VT_MISS_DISTANCE, 0.0);
-  }
-  double RELATIVE_SPEED() const {
-    return GetField<double>(VT_RELATIVE_SPEED, 0.0);
-  }
-  double RELATIVE_POSITION_R() const {
-    return GetField<double>(VT_RELATIVE_POSITION_R, 0.0);
-  }
-  double RELATIVE_POSITION_T() const {
-    return GetField<double>(VT_RELATIVE_POSITION_T, 0.0);
-  }
-  double RELATIVE_POSITION_N() const {
-    return GetField<double>(VT_RELATIVE_POSITION_N, 0.0);
-  }
-  double RELATIVE_VELOCITY_R() const {
-    return GetField<double>(VT_RELATIVE_VELOCITY_R, 0.0);
-  }
-  double RELATIVE_VELOCITY_T() const {
-    return GetField<double>(VT_RELATIVE_VELOCITY_T, 0.0);
-  }
-  double RELATIVE_VELOCITY_N() const {
-    return GetField<double>(VT_RELATIVE_VELOCITY_N, 0.0);
-  }
-
-  template <bool B = false>
-  bool Verify(::flatbuffers::VerifierTemplate<B>& verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyField<double>(verifier, VT_CCSDS_CDM_VERS, 8) &&
-           VerifyOffset(verifier, VT_CREATION_DATE) &&
-           verifier.VerifyString(CREATION_DATE()) &&
-           VerifyOffset(verifier, VT_ORIGINATOR) &&
-           verifier.VerifyString(ORIGINATOR()) &&
-           VerifyOffset(verifier, VT_MESSAGE_FOR) &&
-           verifier.VerifyString(MESSAGE_FOR()) &&
-           VerifyOffset(verifier, VT_MESSAGE_ID) &&
-           verifier.VerifyString(MESSAGE_ID()) &&
-           VerifyOffset(verifier, VT_TCA) &&
-           verifier.VerifyString(TCA()) &&
-           VerifyField<double>(verifier, VT_MISS_DISTANCE, 8) &&
-           VerifyField<double>(verifier, VT_RELATIVE_SPEED, 8) &&
-           VerifyField<double>(verifier, VT_RELATIVE_POSITION_R, 8) &&
-           VerifyField<double>(verifier, VT_RELATIVE_POSITION_T, 8) &&
-           VerifyField<double>(verifier, VT_RELATIVE_POSITION_N, 8) &&
-           VerifyField<double>(verifier, VT_RELATIVE_VELOCITY_R, 8) &&
-           VerifyField<double>(verifier, VT_RELATIVE_VELOCITY_T, 8) &&
-           VerifyField<double>(verifier, VT_RELATIVE_VELOCITY_N, 8) &&
-           verifier.EndTable();
-  }
-};
-
-const OMM* GetOMM(const void* buffer) {
-  return ::flatbuffers::GetRoot<OMM>(buffer);
-}
-
-bool OMMBufferHasIdentifier(const void* buffer) {
-  return ::flatbuffers::BufferHasIdentifier(buffer, "$OMM");
-}
-
-bool VerifyOMMBuffer(::flatbuffers::Verifier& verifier) {
-  return verifier.VerifyBuffer<OMM>("$OMM");
-}
-
-const OEM* GetOEM(const void* buffer) {
-  return ::flatbuffers::GetRoot<OEM>(buffer);
-}
-
-bool OEMBufferHasIdentifier(const void* buffer) {
-  return ::flatbuffers::BufferHasIdentifier(buffer, "$OEM");
-}
-
-bool VerifyOEMBuffer(::flatbuffers::Verifier& verifier) {
-  return verifier.VerifyBuffer<OEM>("$OEM");
-}
-
-const OPM* GetOPM(const void* buffer) {
-  return ::flatbuffers::GetRoot<OPM>(buffer);
-}
-
-bool OPMBufferHasIdentifier(const void* buffer) {
-  return ::flatbuffers::BufferHasIdentifier(buffer, "$OPM");
-}
-
-bool VerifyOPMBuffer(::flatbuffers::Verifier& verifier) {
-  return verifier.VerifyBuffer<OPM>("$OPM");
-}
-
-const VCM* GetVCM(const void* buffer) {
-  return ::flatbuffers::GetRoot<VCM>(buffer);
-}
-
-bool VerifyVCMBuffer(::flatbuffers::Verifier& verifier) {
-  return verifier.VerifyBuffer<VCM>(nullptr);
-}
-
-const GRV* GetGRV(const void* buffer) {
-  return ::flatbuffers::GetRoot<GRV>(buffer);
-}
-
-bool VerifyGRVBuffer(::flatbuffers::Verifier& verifier) {
-  return verifier.VerifyBuffer<GRV>("$GRV");
-}
-
-const CRD* GetCRD(const void* buffer) {
-  return ::flatbuffers::GetRoot<CRD>(buffer);
-}
-
-bool VerifyCRDBuffer(::flatbuffers::Verifier& verifier) {
-  return verifier.VerifyBuffer<CRD>("$CRD");
-}
-
-const CDM* GetCDM(const void* buffer) {
-  return ::flatbuffers::GetRoot<CDM>(buffer);
-}
-
-bool CDMBufferHasIdentifier(const void* buffer) {
-  return ::flatbuffers::BufferHasIdentifier(buffer, "$CDM");
-}
-
-bool VerifyCDMBuffer(::flatbuffers::Verifier& verifier) {
-  return verifier.VerifyBuffer<CDM>("$CDM");
-}
+bool finite(double value);
 
 double compute_omm_mean_motion_rev_per_day(double semi_major_axis, double gm) {
   if (!std::isfinite(semi_major_axis) || !std::isfinite(gm) ||
@@ -906,7 +46,9 @@ double compute_omm_mean_motion_rev_per_day(double semi_major_axis, double gm) {
          kSecondsPerDay / kTwoPi;
 }
 
-::flatbuffers::Offset<OMM> CreateOMM(
+// Thin builders over the generated SDS API, one per record this module emits.
+
+::flatbuffers::Offset<OMM> BuildOmmElements(
     ::flatbuffers::FlatBufferBuilder& builder,
     ::flatbuffers::Offset<::flatbuffers::String> creation_date,
     ::flatbuffers::Offset<::flatbuffers::String> originator,
@@ -925,29 +67,29 @@ double compute_omm_mean_motion_rev_per_day(double semi_major_axis, double gm) {
     double mean_anomaly,
     double gm) {
   const double mean_motion = compute_omm_mean_motion_rev_per_day(semi_major_axis, gm);
-  const auto start = builder.StartTable();
-  builder.AddElement<double>(OMM::VT_GM, gm, 0.0);
-  builder.AddElement<double>(OMM::VT_MEAN_ANOMALY, mean_anomaly, 0.0);
-  builder.AddElement<double>(OMM::VT_ARG_OF_PERICENTER, arg_pericenter, 0.0);
-  builder.AddElement<double>(OMM::VT_RA_OF_ASC_NODE, raan, 0.0);
-  builder.AddElement<double>(OMM::VT_INCLINATION, inclination, 0.0);
-  builder.AddElement<double>(OMM::VT_ECCENTRICITY, eccentricity, 0.0);
-  builder.AddElement<double>(OMM::VT_MEAN_MOTION, mean_motion, 0.0);
-  builder.AddElement<double>(OMM::VT_SEMI_MAJOR_AXIS, semi_major_axis, 0.0);
-  builder.AddOffset(OMM::VT_EPOCH, epoch);
-  builder.AddOffset(OMM::VT_COMMENT, comment);
-  builder.AddElement<int8_t>(OMM::VT_MEAN_ELEMENT_THEORY, mean_element_theory, 0);
-  builder.AddElement<int8_t>(OMM::VT_TIME_SYSTEM, time_system, 11);
-  builder.AddOffset(OMM::VT_CENTER_NAME, center_name);
-  builder.AddOffset(OMM::VT_OBJECT_ID, object_id);
-  builder.AddOffset(OMM::VT_OBJECT_NAME, object_name);
-  builder.AddOffset(OMM::VT_ORIGINATOR, originator);
-  builder.AddOffset(OMM::VT_CREATION_DATE, creation_date);
-  builder.AddElement<double>(OMM::VT_CCSDS_OMM_VERS, 2.0, 0.0);
-  return ::flatbuffers::Offset<OMM>(builder.EndTable(start));
+  OMMBuilder b(builder);
+  b.add_GM(gm);
+  b.add_MEAN_ANOMALY(mean_anomaly);
+  b.add_ARG_OF_PERICENTER(arg_pericenter);
+  b.add_RA_OF_ASC_NODE(raan);
+  b.add_INCLINATION(inclination);
+  b.add_ECCENTRICITY(eccentricity);
+  b.add_MEAN_MOTION(mean_motion);
+  b.add_SEMI_MAJOR_AXIS(semi_major_axis);
+  b.add_EPOCH(epoch);
+  b.add_COMMENT(comment);
+  b.add_MEAN_ELEMENT_THEORY(static_cast<meanElementSource>(mean_element_theory));
+  b.add_TIME_SYSTEM(static_cast<timingStandard>(time_system));
+  b.add_CENTER_NAME(center_name);
+  b.add_OBJECT_ID(object_id);
+  b.add_OBJECT_NAME(object_name);
+  b.add_ORIGINATOR(originator);
+  b.add_CREATION_DATE(creation_date);
+  b.add_CCSDS_OMM_VERS(2.0);
+  return b.Finish();
 }
 
-::flatbuffers::Offset<ephemerisDataLine> CreateEphemerisDataLine(
+::flatbuffers::Offset<ephemerisDataLine> BuildOemLine(
     ::flatbuffers::FlatBufferBuilder& builder,
     ::flatbuffers::Offset<::flatbuffers::String> epoch,
     double x,
@@ -959,21 +101,10 @@ double compute_omm_mean_motion_rev_per_day(double semi_major_axis, double gm) {
     double x_ddot = 0.0,
     double y_ddot = 0.0,
     double z_ddot = 0.0) {
-  const auto start = builder.StartTable();
-  builder.AddElement<double>(ephemerisDataLine::VT_Z_DDOT, z_ddot, 0.0);
-  builder.AddElement<double>(ephemerisDataLine::VT_Y_DDOT, y_ddot, 0.0);
-  builder.AddElement<double>(ephemerisDataLine::VT_X_DDOT, x_ddot, 0.0);
-  builder.AddElement<double>(ephemerisDataLine::VT_Z_DOT, z_dot, 0.0);
-  builder.AddElement<double>(ephemerisDataLine::VT_Y_DOT, y_dot, 0.0);
-  builder.AddElement<double>(ephemerisDataLine::VT_X_DOT, x_dot, 0.0);
-  builder.AddElement<double>(ephemerisDataLine::VT_Z, z, 0.0);
-  builder.AddElement<double>(ephemerisDataLine::VT_Y, y, 0.0);
-  builder.AddElement<double>(ephemerisDataLine::VT_X, x, 0.0);
-  builder.AddOffset(ephemerisDataLine::VT_EPOCH, epoch);
-  return ::flatbuffers::Offset<ephemerisDataLine>(builder.EndTable(start));
+  return CreateephemerisDataLine(builder, epoch, x, y, z, x_dot, y_dot, z_dot, x_ddot, y_ddot, z_ddot);
 }
 
-::flatbuffers::Offset<ephemerisDataBlock> CreateEphemerisDataBlock(
+::flatbuffers::Offset<ephemerisDataBlock> BuildOemBlock(
     ::flatbuffers::FlatBufferBuilder& builder,
     ::flatbuffers::Offset<::flatbuffers::String> comment,
     ::flatbuffers::Offset<::flatbuffers::String> center_name,
@@ -982,199 +113,28 @@ double compute_omm_mean_motion_rev_per_day(double semi_major_axis, double gm) {
     ::flatbuffers::Offset<::flatbuffers::String> stop_time,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ephemerisDataLine>>> lines,
     uint8_t state_vector_size = 6) {
-  const auto start = builder.StartTable();
-  builder.AddOffset(ephemerisDataBlock::VT_EPHEMERIS_DATA_LINES, lines);
-  builder.AddElement<uint8_t>(ephemerisDataBlock::VT_STATE_VECTOR_SIZE, state_vector_size, 6);
-  builder.AddElement<double>(ephemerisDataBlock::VT_STEP_SIZE, 0.0, 0.0);
-  builder.AddOffset(ephemerisDataBlock::VT_STOP_TIME, stop_time);
-  builder.AddOffset(ephemerisDataBlock::VT_START_TIME, start_time);
-  builder.AddElement<int8_t>(ephemerisDataBlock::VT_TIME_SYSTEM, time_system, 0);
-  builder.AddOffset(ephemerisDataBlock::VT_CENTER_NAME, center_name);
-  builder.AddOffset(ephemerisDataBlock::VT_COMMENT, comment);
-  return ::flatbuffers::Offset<ephemerisDataBlock>(builder.EndTable(start));
+  ephemerisDataBlockBuilder b(builder);
+  b.add_EPHEMERIS_DATA_LINES(lines);
+  b.add_STATE_VECTOR_SIZE(state_vector_size);
+  b.add_STOP_TIME(stop_time);
+  b.add_START_TIME(start_time);
+  b.add_TIME_SYSTEM(static_cast<timingStandard>(time_system));
+  b.add_CENTER_NAME(center_name);
+  b.add_COMMENT(comment);
+  return b.Finish();
 }
 
-::flatbuffers::Offset<OEM> CreateOEM(
+::flatbuffers::Offset<OEM> BuildOem(
     ::flatbuffers::FlatBufferBuilder& builder,
     ::flatbuffers::Offset<::flatbuffers::String> classification,
     double version,
     ::flatbuffers::Offset<::flatbuffers::String> creation_date,
     ::flatbuffers::Offset<::flatbuffers::String> originator,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ephemerisDataBlock>>> blocks) {
-  const auto start = builder.StartTable();
-  builder.AddElement<double>(OEM::VT_CCSDS_OEM_VERS, version, 0.0);
-  builder.AddOffset(OEM::VT_EPHEMERIS_DATA_BLOCK, blocks);
-  builder.AddOffset(OEM::VT_ORIGINATOR, originator);
-  builder.AddOffset(OEM::VT_CREATION_DATE, creation_date);
-  builder.AddOffset(OEM::VT_CLASSIFICATION, classification);
-  return ::flatbuffers::Offset<OEM>(builder.EndTable(start));
+  return CreateOEM(builder, classification, version, creation_date, originator, blocks);
 }
 
-::flatbuffers::Offset<keplerianElements> CreateVcmKeplerianElements(
-    ::flatbuffers::FlatBufferBuilder& builder,
-    const keplerianElements* source) {
-  const auto start = builder.StartTable();
-  if (source != nullptr) {
-    builder.AddElement<double>(
-        keplerianElements::VT_ANOMALY,
-        source->ANOMALY(),
-        0.0);
-    builder.AddElement<double>(
-        keplerianElements::VT_PERIAPSIS_RADIUS,
-        source->PERIAPSIS_RADIUS(),
-        0.0);
-    builder.AddElement<int8_t>(
-        keplerianElements::VT_ANOMALY_TYPE,
-        source->ANOMALY_TYPE(),
-        0);
-    builder.AddElement<double>(
-        keplerianElements::VT_ARG_OF_PERICENTER,
-        source->ARG_OF_PERICENTER(),
-        0.0);
-    builder.AddElement<double>(
-        keplerianElements::VT_RA_OF_ASC_NODE,
-        source->RA_OF_ASC_NODE(),
-        0.0);
-    builder.AddElement<double>(
-        keplerianElements::VT_INCLINATION,
-        source->INCLINATION(),
-        0.0);
-    builder.AddElement<double>(
-        keplerianElements::VT_ECCENTRICITY,
-        source->ECCENTRICITY(),
-        0.0);
-    builder.AddElement<double>(
-        keplerianElements::VT_SEMI_MAJOR_AXIS,
-        source->SEMI_MAJOR_AXIS(),
-        0.0);
-  }
-  return ::flatbuffers::Offset<keplerianElements>(builder.EndTable(start));
-}
-
-::flatbuffers::Offset<keplerianElements> CreateVcmKeplerianElements(
-    ::flatbuffers::FlatBufferBuilder& builder,
-    double semi_major_axis,
-    double eccentricity,
-    double inclination,
-    double raan,
-    double arg_pericenter,
-    int8_t anomaly_type,
-    double anomaly,
-    double periapsis_radius = 0.0) {
-  const auto start = builder.StartTable();
-  builder.AddElement<double>(keplerianElements::VT_ANOMALY, anomaly, 0.0);
-  builder.AddElement<double>(keplerianElements::VT_PERIAPSIS_RADIUS, periapsis_radius, 0.0);
-  builder.AddElement<int8_t>(keplerianElements::VT_ANOMALY_TYPE, anomaly_type, 0);
-  builder.AddElement<double>(keplerianElements::VT_ARG_OF_PERICENTER, arg_pericenter, 0.0);
-  builder.AddElement<double>(keplerianElements::VT_RA_OF_ASC_NODE, raan, 0.0);
-  builder.AddElement<double>(keplerianElements::VT_INCLINATION, inclination, 0.0);
-  builder.AddElement<double>(keplerianElements::VT_ECCENTRICITY, eccentricity, 0.0);
-  builder.AddElement<double>(keplerianElements::VT_SEMI_MAJOR_AXIS, semi_major_axis, 0.0);
-  return ::flatbuffers::Offset<keplerianElements>(builder.EndTable(start));
-}
-
-::flatbuffers::Offset<equinoctialElements> CreateEquinoctialElements(
-    ::flatbuffers::FlatBufferBuilder& builder,
-    double af,
-    double ag,
-    double true_longitude,
-    double semi_major_axis,
-    double chi,
-    double psi) {
-  const auto start = builder.StartTable();
-  builder.AddElement<double>(equinoctialElements::VT_PSI, psi, 0.0);
-  builder.AddElement<double>(equinoctialElements::VT_CHI, chi, 0.0);
-  builder.AddElement<double>(equinoctialElements::VT_N, semi_major_axis, 0.0);
-  builder.AddElement<double>(equinoctialElements::VT_L, true_longitude, 0.0);
-  builder.AddElement<double>(equinoctialElements::VT_AG, ag, 0.0);
-  builder.AddElement<double>(equinoctialElements::VT_AF, af, 0.0);
-  return ::flatbuffers::Offset<equinoctialElements>(builder.EndTable(start));
-}
-
-::flatbuffers::Offset<equinoctialElements> CreateEquinoctialElements(
-    ::flatbuffers::FlatBufferBuilder& builder,
-    const equinoctialElements* source) {
-  if (source == nullptr) {
-    return 0;
-  }
-  return CreateEquinoctialElements(
-      builder,
-      source->AF(),
-      source->AG(),
-      source->L(),
-      source->N(),
-      source->CHI(),
-      source->PSI());
-}
-
-::flatbuffers::Offset<VCMStateVector> CreateVCMStateVector(
-    ::flatbuffers::FlatBufferBuilder& builder,
-    ::flatbuffers::Offset<::flatbuffers::String> epoch,
-    double x,
-    double y,
-    double z,
-    double x_dot,
-    double y_dot,
-    double z_dot) {
-  const auto start = builder.StartTable();
-  builder.AddElement<double>(VCMStateVector::VT_Z_DOT, z_dot, 0.0);
-  builder.AddElement<double>(VCMStateVector::VT_Y_DOT, y_dot, 0.0);
-  builder.AddElement<double>(VCMStateVector::VT_X_DOT, x_dot, 0.0);
-  builder.AddElement<double>(VCMStateVector::VT_Z, z, 0.0);
-  builder.AddElement<double>(VCMStateVector::VT_Y, y, 0.0);
-  builder.AddElement<double>(VCMStateVector::VT_X, x, 0.0);
-  builder.AddOffset(VCMStateVector::VT_EPOCH, epoch);
-  return ::flatbuffers::Offset<VCMStateVector>(builder.EndTable(start));
-}
-
-::flatbuffers::Offset<VCMStateVector> CreateVCMStateVector(
-    ::flatbuffers::FlatBufferBuilder& builder,
-    const VCMStateVector* source) {
-  if (source == nullptr) {
-    return 0;
-  }
-  return CreateVCMStateVector(
-      builder,
-      source->EPOCH() != nullptr ? builder.CreateString(source->EPOCH()->c_str()) : 0,
-      source->X(),
-      source->Y(),
-      source->Z(),
-      source->X_DOT(),
-      source->Y_DOT(),
-      source->Z_DOT());
-}
-
-::flatbuffers::Offset<VCM> CreateVCM(
-    ::flatbuffers::FlatBufferBuilder& builder,
-    double version,
-    ::flatbuffers::Offset<::flatbuffers::String> creation_date,
-    ::flatbuffers::Offset<::flatbuffers::String> originator,
-    ::flatbuffers::Offset<::flatbuffers::String> object_name,
-    ::flatbuffers::Offset<::flatbuffers::String> object_id,
-    ::flatbuffers::Offset<::flatbuffers::String> center_name,
-    ::flatbuffers::Offset<::flatbuffers::String> ref_frame,
-    ::flatbuffers::Offset<::flatbuffers::String> time_system,
-    ::flatbuffers::Offset<VCMStateVector> state_vector,
-    ::flatbuffers::Offset<keplerianElements> keplerian_elements,
-    ::flatbuffers::Offset<equinoctialElements> equinoctial_elements,
-    double gm) {
-  const auto start = builder.StartTable();
-  builder.AddElement<double>(VCM::VT_GM, gm, 0.0);
-  builder.AddOffset(VCM::VT_EQUINOCTIAL_ELEMENTS, equinoctial_elements);
-  builder.AddOffset(VCM::VT_KEPLERIAN_ELEMENTS, keplerian_elements);
-  builder.AddOffset(VCM::VT_STATE_VECTOR, state_vector);
-  builder.AddOffset(VCM::VT_TIME_SYSTEM, time_system);
-  builder.AddOffset(VCM::VT_REF_FRAME, ref_frame);
-  builder.AddOffset(VCM::VT_CENTER_NAME, center_name);
-  builder.AddOffset(VCM::VT_OBJECT_ID, object_id);
-  builder.AddOffset(VCM::VT_OBJECT_NAME, object_name);
-  builder.AddOffset(VCM::VT_ORIGINATOR, originator);
-  builder.AddOffset(VCM::VT_CREATION_DATE, creation_date);
-  builder.AddElement<double>(VCM::VT_CCSDS_OMM_VERS, version, 0.0);
-  return ::flatbuffers::Offset<VCM>(builder.EndTable(start));
-}
-
-::flatbuffers::Offset<CDM> CreateCDMRelativeState(
+::flatbuffers::Offset<CDM> BuildCdmRelativeState(
     ::flatbuffers::FlatBufferBuilder& builder,
     ::flatbuffers::Offset<::flatbuffers::String> creation_date,
     ::flatbuffers::Offset<::flatbuffers::String> originator,
@@ -1189,22 +149,22 @@ double compute_omm_mean_motion_rev_per_day(double semi_major_axis, double gm) {
     double relative_velocity_r,
     double relative_velocity_t,
     double relative_velocity_n) {
-  const auto start = builder.StartTable();
-  builder.AddElement<double>(CDM::VT_RELATIVE_VELOCITY_N, relative_velocity_n, 0.0);
-  builder.AddElement<double>(CDM::VT_RELATIVE_VELOCITY_T, relative_velocity_t, 0.0);
-  builder.AddElement<double>(CDM::VT_RELATIVE_VELOCITY_R, relative_velocity_r, 0.0);
-  builder.AddElement<double>(CDM::VT_RELATIVE_POSITION_N, relative_position_n, 0.0);
-  builder.AddElement<double>(CDM::VT_RELATIVE_POSITION_T, relative_position_t, 0.0);
-  builder.AddElement<double>(CDM::VT_RELATIVE_POSITION_R, relative_position_r, 0.0);
-  builder.AddElement<double>(CDM::VT_RELATIVE_SPEED, relative_speed, 0.0);
-  builder.AddElement<double>(CDM::VT_MISS_DISTANCE, miss_distance, 0.0);
-  builder.AddOffset(CDM::VT_TCA, tca);
-  builder.AddOffset(CDM::VT_MESSAGE_ID, message_id);
-  builder.AddOffset(CDM::VT_MESSAGE_FOR, message_for);
-  builder.AddOffset(CDM::VT_ORIGINATOR, originator);
-  builder.AddOffset(CDM::VT_CREATION_DATE, creation_date);
-  builder.AddElement<double>(CDM::VT_CCSDS_CDM_VERS, 2.0, 0.0);
-  return ::flatbuffers::Offset<CDM>(builder.EndTable(start));
+  CDMBuilder b(builder);
+  b.add_RELATIVE_VELOCITY_N(relative_velocity_n);
+  b.add_RELATIVE_VELOCITY_T(relative_velocity_t);
+  b.add_RELATIVE_VELOCITY_R(relative_velocity_r);
+  b.add_RELATIVE_POSITION_N(relative_position_n);
+  b.add_RELATIVE_POSITION_T(relative_position_t);
+  b.add_RELATIVE_POSITION_R(relative_position_r);
+  b.add_RELATIVE_SPEED(relative_speed);
+  b.add_MISS_DISTANCE(miss_distance);
+  b.add_TCA(tca);
+  b.add_MESSAGE_ID(message_id);
+  b.add_MESSAGE_FOR(message_for);
+  b.add_ORIGINATOR(originator);
+  b.add_CREATION_DATE(creation_date);
+  b.add_CCSDS_CDM_VERS(2.0);
+  return b.Finish();
 }
 
 struct CartesianState {
@@ -1242,7 +202,7 @@ struct EquinoctialElements {
   double psi = 0.0;
 };
 
-struct VcmKeplerianElements {
+struct ElementRecord {
   double semi_major_axis = 0.0;
   double eccentricity = 0.0;
   double inclination = 0.0;
@@ -2033,7 +993,7 @@ bool normalize_parabolic_recovered_elements_to_omm(KeplerianElements* elements) 
   return finite(elements->mean_anomaly);
 }
 
-bool vcm_true_anomaly_from_anomaly(
+bool record_true_anomaly_from_anomaly(
     double anomaly,
     double eccentricity,
     int8_t anomaly_type,
@@ -2060,7 +1020,7 @@ bool vcm_true_anomaly_from_anomaly(
   return finite(*true_anomaly);
 }
 
-bool vcm_mean_anomaly_from_anomaly(
+bool record_mean_anomaly_from_anomaly(
     double anomaly,
     double eccentricity,
     int8_t anomaly_type,
@@ -2107,168 +1067,24 @@ bool true_anomaly_from_eccentric_anomaly(
   return finite(*true_anomaly);
 }
 
-bool convert_vcm_keplerian_to_cartesian(const VCM* vcm, CartesianState* state) {
-  if (vcm == nullptr || state == nullptr) {
-    return false;
-  }
-  const keplerianElements* source = vcm->KEPLERIAN_ELEMENTS();
-  if (source == nullptr) {
-    return false;
-  }
-
-  const double semi_major_axis = source->SEMI_MAJOR_AXIS();
-  const double eccentricity = source->ECCENTRICITY();
-  const double inclination = source->INCLINATION() * kDegreesToRadians;
-  const double raan = source->RA_OF_ASC_NODE() * kDegreesToRadians;
-  const double arg_pericenter = source->ARG_OF_PERICENTER() * kDegreesToRadians;
-  const double anomaly = source->ANOMALY() * kDegreesToRadians;
-  const double periapsis_radius = source->PERIAPSIS_RADIUS();
-  const double gm = vcm->GM();
-
-  if (source->ANOMALY_TYPE() == 0 &&
-      std::abs(eccentricity - 1.0) <= kSingularOrbitTolerance &&
-      std::abs(semi_major_axis) > kSmall) {
-    return convert_rectilinear_anomaly_values_to_cartesian(
-        semi_major_axis,
-        eccentricity,
-        inclination,
-        raan,
-        arg_pericenter,
-        anomaly,
-        gm,
-        state);
-  }
-
-  if (source->ANOMALY_TYPE() == 0 &&
-      std::abs(eccentricity - 1.0) <= kSingularOrbitTolerance &&
-      std::abs(semi_major_axis) <= kSmall) {
-    return convert_parabolic_true_anomaly_values_to_cartesian(
-        periapsis_radius,
-        eccentricity,
-        inclination,
-        raan,
-        arg_pericenter,
-        anomaly,
-        gm,
-        state);
-  }
-
-  if (source->ANOMALY_TYPE() == 1 &&
-      std::abs(eccentricity - 1.0) <= kSingularOrbitTolerance &&
-      std::abs(semi_major_axis) <= kSmall) {
-    double true_anomaly = 0.0;
-    if (!true_anomaly_from_parabolic_mean_anomaly(anomaly, &true_anomaly)) {
-      return false;
-    }
-    return convert_parabolic_true_anomaly_values_to_cartesian(
-        periapsis_radius,
-        eccentricity,
-        inclination,
-        raan,
-        arg_pericenter,
-        true_anomaly,
-        gm,
-        state);
-  }
-
-  double mean_anomaly = 0.0;
-  if (!vcm_mean_anomaly_from_anomaly(
-          anomaly,
-          eccentricity,
-          source->ANOMALY_TYPE(),
-          &mean_anomaly)) {
-    return false;
-  }
-
-  return convert_keplerian_values_to_cartesian(
-      semi_major_axis,
-      eccentricity,
-      inclination,
-      raan,
-      arg_pericenter,
-      mean_anomaly,
-      gm,
-      state);
-}
-
-bool convert_vcm_keplerian_values_to_equinoctial(
-    const VcmKeplerianElements& source,
-    EquinoctialElements* elements) {
-  if (elements == nullptr) {
-    return false;
-  }
-
-  const double semi_major_axis = source.semi_major_axis;
-  const double eccentricity = source.eccentricity;
-  const double inclination = source.inclination * kDegreesToRadians;
-  const double raan = source.raan * kDegreesToRadians;
-  const double arg_pericenter = source.arg_pericenter * kDegreesToRadians;
-  const double anomaly = source.anomaly * kDegreesToRadians;
-  const int8_t anomaly_type = source.anomaly_type;
-
-  if (!finite(semi_major_axis) || !finite(eccentricity) || !finite(inclination) ||
-      !finite(raan) || !finite(arg_pericenter) || !finite(anomaly) ||
-      !(semi_major_axis > 0.0) || eccentricity < 0.0 || eccentricity >= 1.0) {
-    return false;
-  }
-
-  double true_anomaly = 0.0;
-  if (!vcm_true_anomaly_from_anomaly(anomaly, eccentricity, anomaly_type, &true_anomaly)) {
-    return false;
-  }
-
-  const double node_pericenter_sum = raan + arg_pericenter;
-  const double tan_half_inclination = std::tan(inclination / 2.0);
-  elements->af = eccentricity * std::cos(node_pericenter_sum);
-  elements->ag = eccentricity * std::sin(node_pericenter_sum);
-  elements->true_longitude = normalize_degrees(node_pericenter_sum + true_anomaly);
-  elements->semi_major_axis = semi_major_axis;
-  elements->chi = tan_half_inclination * std::sin(raan);
-  elements->psi = tan_half_inclination * std::cos(raan);
-
-  return finite(elements->af) && finite(elements->ag) &&
-         finite(elements->true_longitude) && finite(elements->semi_major_axis) &&
-         finite(elements->chi) && finite(elements->psi);
-}
-
-bool convert_vcm_keplerian_to_equinoctial(
-    const keplerianElements* source,
-    EquinoctialElements* elements) {
-  if (source == nullptr) {
-    return false;
-  }
-
-  VcmKeplerianElements values;
-  values.semi_major_axis = source->SEMI_MAJOR_AXIS();
-  values.eccentricity = source->ECCENTRICITY();
-  values.inclination = source->INCLINATION();
-  values.raan = source->RA_OF_ASC_NODE();
-  values.arg_pericenter = source->ARG_OF_PERICENTER();
-  values.anomaly = source->ANOMALY();
-  values.periapsis_radius = source->PERIAPSIS_RADIUS();
-  values.anomaly_type = source->ANOMALY_TYPE();
-
-  return convert_vcm_keplerian_values_to_equinoctial(values, elements);
-}
-
-bool convert_vcm_keplerian_mean_osc_map(
-    const keplerianElements* source,
+bool convert_record_mean_osc_map(
+    const ElementRecord& source,
     const GRV* gravity,
     double direction_sign,
-    VcmKeplerianElements* elements) {
-  if (source == nullptr || gravity == nullptr || elements == nullptr) {
+    ElementRecord* elements) {
+  if (gravity == nullptr || elements == nullptr) {
     return false;
   }
   if (direction_sign != 1.0 && direction_sign != -1.0) {
     return false;
   }
 
-  const double a = source->SEMI_MAJOR_AXIS();
-  const double e = source->ECCENTRICITY();
-  const double i = source->INCLINATION() * kDegreesToRadians;
-  const double Omega = source->RA_OF_ASC_NODE() * kDegreesToRadians;
-  const double omega = source->ARG_OF_PERICENTER() * kDegreesToRadians;
-  const double anomaly = source->ANOMALY() * kDegreesToRadians;
+  const double a = source.semi_major_axis;
+  const double e = source.eccentricity;
+  const double i = source.inclination * kDegreesToRadians;
+  const double Omega = source.raan * kDegreesToRadians;
+  const double omega = source.arg_pericenter * kDegreesToRadians;
+  const double anomaly = source.anomaly * kDegreesToRadians;
   const double req = gravity->EQUATORIAL_RADIUS();
   const double J2 = gravity->J2();
 
@@ -2279,7 +1095,7 @@ bool convert_vcm_keplerian_mean_osc_map(
   }
 
   double f = 0.0;
-  if (!vcm_true_anomaly_from_anomaly(anomaly, e, source->ANOMALY_TYPE(), &f)) {
+  if (!record_true_anomaly_from_anomaly(anomaly, e, source.anomaly_type, &f)) {
     return false;
   }
 
@@ -2434,18 +1250,18 @@ bool convert_vcm_keplerian_mean_osc_map(
          finite(elements->arg_pericenter) && finite(elements->anomaly);
 }
 
-bool convert_vcm_keplerian_mean_to_osculating(
-    const keplerianElements* source,
+bool convert_record_mean_to_osculating(
+    const ElementRecord& source,
     const GRV* gravity,
-    VcmKeplerianElements* elements) {
-  return convert_vcm_keplerian_mean_osc_map(source, gravity, 1.0, elements);
+    ElementRecord* elements) {
+  return convert_record_mean_osc_map(source, gravity, 1.0, elements);
 }
 
-bool convert_vcm_keplerian_osculating_to_mean(
-    const keplerianElements* source,
+bool convert_record_osculating_to_mean(
+    const ElementRecord& source,
     const GRV* gravity,
-    VcmKeplerianElements* elements) {
-  return convert_vcm_keplerian_mean_osc_map(source, gravity, -1.0, elements);
+    ElementRecord* elements) {
+  return convert_record_mean_osc_map(source, gravity, -1.0, elements);
 }
 
 bool compute_j_zonal_perturbation_acceleration(
@@ -2532,16 +1348,15 @@ bool compute_j_zonal_perturbation_acceleration(
 }
 
 bool compute_solar_radiation_pressure_acceleration(
-    const VCM* vcm,
+    double mass,
+    double area,
+    double coefficient,
     const CRD* sun_vector,
     Vector3* acceleration) {
-  if (vcm == nullptr || sun_vector == nullptr || acceleration == nullptr) {
+  if (sun_vector == nullptr || acceleration == nullptr) {
     return false;
   }
 
-  const double area = vcm->SOLAR_RAD_AREA();
-  const double mass = vcm->MASS();
-  const double coefficient = vcm->SOLAR_RAD_COEFF();
   const Vector3 sun = {
       sun_vector->X(),
       sun_vector->Y(),
@@ -2566,85 +1381,8 @@ bool compute_solar_radiation_pressure_acceleration(
          finite(acceleration->z);
 }
 
-bool convert_vcm_equinoctial_to_keplerian(
-    const equinoctialElements* source,
-    VcmKeplerianElements* elements) {
-  if (source == nullptr || elements == nullptr) {
-    return false;
-  }
-
-  const double af = source->AF();
-  const double ag = source->AG();
-  const double true_longitude = source->L() * kDegreesToRadians;
-  const double semi_major_axis = source->N();
-  const double chi = source->CHI();
-  const double psi = source->PSI();
-
-  if (!finite(af) || !finite(ag) || !finite(true_longitude) ||
-      !finite(semi_major_axis) || !finite(chi) || !finite(psi) ||
-      !(semi_major_axis > 0.0)) {
-    return false;
-  }
-
-  const double eccentricity = std::hypot(af, ag);
-  if (!finite(eccentricity) || eccentricity >= 1.0) {
-    return false;
-  }
-
-  const double tan_half_inclination = std::hypot(chi, psi);
-  const double inclination = 2.0 * std::atan(tan_half_inclination);
-  const double raan = tan_half_inclination <= kSingularOrbitTolerance
-                          ? 0.0
-                          : normalize_radians(std::atan2(chi, psi));
-  double arg_pericenter = 0.0;
-  double true_anomaly = 0.0;
-
-  if (eccentricity <= kSingularOrbitTolerance) {
-    true_anomaly = normalize_radians(true_longitude - raan);
-  } else {
-    const double node_pericenter_sum = normalize_radians(std::atan2(ag, af));
-    arg_pericenter = normalize_radians(node_pericenter_sum - raan);
-    true_anomaly = normalize_radians(true_longitude - node_pericenter_sum);
-  }
-
-  elements->semi_major_axis = semi_major_axis;
-  elements->eccentricity = eccentricity <= kSingularOrbitTolerance ? 0.0 : eccentricity;
-  elements->inclination = normalize_degrees(inclination);
-  elements->raan = normalize_degrees(raan);
-  elements->arg_pericenter = normalize_degrees(arg_pericenter);
-  elements->anomaly = normalize_degrees(true_anomaly);
-  elements->anomaly_type = 0;
-
-  return finite(elements->semi_major_axis) && finite(elements->eccentricity) &&
-         finite(elements->inclination) && finite(elements->raan) &&
-         finite(elements->arg_pericenter) && finite(elements->anomaly);
-}
-
-bool read_vcm_keplerian_elements(
-    const keplerianElements* source,
-    VcmKeplerianElements* elements) {
-  if (source == nullptr || elements == nullptr) {
-    return false;
-  }
-
-  elements->semi_major_axis = source->SEMI_MAJOR_AXIS();
-  elements->eccentricity = source->ECCENTRICITY();
-  elements->inclination = source->INCLINATION();
-  elements->raan = source->RA_OF_ASC_NODE();
-  elements->arg_pericenter = source->ARG_OF_PERICENTER();
-  elements->anomaly = source->ANOMALY();
-  elements->periapsis_radius = source->PERIAPSIS_RADIUS();
-  elements->anomaly_type = source->ANOMALY_TYPE();
-
-  return finite(elements->semi_major_axis) && finite(elements->eccentricity) &&
-         finite(elements->inclination) && finite(elements->raan) &&
-         finite(elements->arg_pericenter) && finite(elements->anomaly) &&
-         finite(elements->periapsis_radius) &&
-         (elements->anomaly_type == 0 || elements->anomaly_type == 1);
-}
-
-bool vcm_keplerian_shape_supports_anomaly_conversion(
-    const VcmKeplerianElements& source) {
+bool record_shape_supports_anomaly_conversion(
+    const ElementRecord& source) {
   return (source.semi_major_axis > 0.0 &&
           source.eccentricity >= 0.0 &&
           source.eccentricity < 1.0) ||
@@ -2655,15 +1393,15 @@ bool vcm_keplerian_shape_supports_anomaly_conversion(
           source.periapsis_radius > 0.0);
 }
 
-bool normalize_vcm_keplerian_to_mean_anomaly(
-    const VcmKeplerianElements& source,
-    VcmKeplerianElements* elements) {
-  if (elements == nullptr || !vcm_keplerian_shape_supports_anomaly_conversion(source)) {
+bool normalize_record_to_mean_anomaly(
+    const ElementRecord& source,
+    ElementRecord* elements) {
+  if (elements == nullptr || !record_shape_supports_anomaly_conversion(source)) {
     return false;
   }
 
   double mean_anomaly = 0.0;
-  if (!vcm_mean_anomaly_from_anomaly(
+  if (!record_mean_anomaly_from_anomaly(
           source.anomaly * kDegreesToRadians,
           source.eccentricity,
           source.anomaly_type,
@@ -2679,10 +1417,10 @@ bool normalize_vcm_keplerian_to_mean_anomaly(
   return finite(elements->anomaly);
 }
 
-bool normalize_vcm_keplerian_to_true_anomaly(
-    const VcmKeplerianElements& source,
-    VcmKeplerianElements* elements) {
-  if (elements == nullptr || !vcm_keplerian_shape_supports_anomaly_conversion(source)) {
+bool normalize_record_to_true_anomaly(
+    const ElementRecord& source,
+    ElementRecord* elements) {
+  if (elements == nullptr || !record_shape_supports_anomaly_conversion(source)) {
     return false;
   }
 
@@ -2708,8 +1446,8 @@ bool normalize_vcm_keplerian_to_true_anomaly(
   return finite(elements->anomaly);
 }
 
-bool convert_vcm_keplerian_elements_to_omm(
-    const VcmKeplerianElements& source,
+bool convert_record_to_omm(
+    const ElementRecord& source,
     double gm,
     KeplerianElements* elements) {
   if (elements == nullptr || !finite(gm) || gm <= 0.0) {
@@ -2721,7 +1459,7 @@ bool convert_vcm_keplerian_elements_to_omm(
       source.periapsis_radius > 0.0;
 
   double mean_anomaly = 0.0;
-  if (!vcm_mean_anomaly_from_anomaly(
+  if (!record_mean_anomaly_from_anomaly(
           source.anomaly * kDegreesToRadians,
           source.eccentricity,
           source.anomaly_type,
@@ -2749,28 +1487,8 @@ bool convert_vcm_keplerian_elements_to_omm(
           parabolic);
 }
 
-bool convert_vcm_keplerian_elements_to_omm(
-    const keplerianElements* source,
-    double gm,
-    KeplerianElements* elements) {
-  if (source == nullptr) {
-    return false;
-  }
-
-  VcmKeplerianElements normalized;
-  normalized.semi_major_axis = source->SEMI_MAJOR_AXIS();
-  normalized.eccentricity = source->ECCENTRICITY();
-  normalized.inclination = source->INCLINATION();
-  normalized.raan = source->RA_OF_ASC_NODE();
-  normalized.arg_pericenter = source->ARG_OF_PERICENTER();
-  normalized.anomaly = source->ANOMALY();
-  normalized.periapsis_radius = source->PERIAPSIS_RADIUS();
-  normalized.anomaly_type = source->ANOMALY_TYPE();
-  return convert_vcm_keplerian_elements_to_omm(normalized, gm, elements);
-}
-
-bool convert_vcm_keplerian_elements_to_cartesian(
-    const VcmKeplerianElements& source,
+bool convert_record_to_cartesian(
+    const ElementRecord& source,
     double gm,
     CartesianState* state) {
   if (state == nullptr || !finite(gm) || gm <= 0.0) {
@@ -2826,7 +1544,7 @@ bool convert_vcm_keplerian_elements_to_cartesian(
   }
 
   double mean_anomaly = 0.0;
-  if (!vcm_mean_anomaly_from_anomaly(
+  if (!record_mean_anomaly_from_anomaly(
           source.anomaly * kDegreesToRadians,
           source.eccentricity,
           source.anomaly_type,
@@ -2915,7 +1633,7 @@ int emit_oem(const OMM* omm, const CartesianState& state) {
 
   const auto epoch_offset = create_optional_string(builder, epoch);
   const auto center_offset = create_optional_string(builder, center != nullptr ? center : "EARTH");
-  const auto line = CreateEphemerisDataLine(
+  const auto line = BuildOemLine(
       builder,
       epoch_offset,
       state.x,
@@ -2927,11 +1645,11 @@ int emit_oem(const OMM* omm, const CartesianState& state) {
   const std::vector<::flatbuffers::Offset<ephemerisDataLine>> line_entries = {line};
   const auto line_vector = builder.CreateVector(line_entries);
   const auto block_comment = builder.CreateString("Generated from SDS OMM Keplerian mean elements.");
-  const auto block = CreateEphemerisDataBlock(
+  const auto block = BuildOemBlock(
       builder,
       block_comment,
       center_offset,
-      omm->TIME_SYSTEM(),
+      static_cast<int8_t>(omm->TIME_SYSTEM()),
       epoch_offset,
       epoch_offset,
       line_vector);
@@ -2942,7 +1660,7 @@ int emit_oem(const OMM* omm, const CartesianState& state) {
       builder,
       creation_date != nullptr ? creation_date : "2026-05-24T00:00:00Z");
   const auto originator = builder.CreateString("DigitalArsenal foundation/orbits");
-  const auto oem = CreateOEM(builder, classification, 2.0, creation_offset, originator, block_vector);
+  const auto oem = BuildOem(builder, classification, 2.0, creation_offset, originator, block_vector);
   builder.Finish(oem, "$OEM");
 
   if (plugin_push_output(
@@ -2972,7 +1690,7 @@ int emit_oem_from_opm(const OPM* opm, const CartesianState& state) {
 
   const auto epoch_offset = create_optional_string(builder, epoch);
   const auto center_offset = create_optional_string(builder, center != nullptr ? center : "EARTH");
-  const auto line = CreateEphemerisDataLine(
+  const auto line = BuildOemLine(
       builder,
       epoch_offset,
       state.x,
@@ -2984,7 +1702,7 @@ int emit_oem_from_opm(const OPM* opm, const CartesianState& state) {
   const std::vector<::flatbuffers::Offset<ephemerisDataLine>> line_entries = {line};
   const auto line_vector = builder.CreateVector(line_entries);
   const auto block_comment = builder.CreateString("Generated from SDS OPM Cartesian state.");
-  const auto block = CreateEphemerisDataBlock(
+  const auto block = BuildOemBlock(
       builder,
       block_comment,
       center_offset,
@@ -2999,7 +1717,7 @@ int emit_oem_from_opm(const OPM* opm, const CartesianState& state) {
       builder,
       creation_date != nullptr ? creation_date : "2026-05-24T00:00:00Z");
   const auto originator = builder.CreateString("DigitalArsenal foundation/orbits");
-  const auto oem = CreateOEM(builder, classification, 2.0, creation_offset, originator, block_vector);
+  const auto oem = BuildOem(builder, classification, 2.0, creation_offset, originator, block_vector);
   builder.Finish(oem, "$OEM");
 
   if (plugin_push_output(
@@ -3012,116 +1730,6 @@ int emit_oem_from_opm(const OPM* opm, const CartesianState& state) {
     return 1;
   }
   return 0;
-}
-
-int emit_oem_from_vcm(
-    const VCM* vcm,
-    const CartesianState& state,
-    const char* block_comment_text,
-    const Vector3* acceleration = nullptr) {
-  if (vcm == nullptr) {
-    plugin_set_error("missing-vcm", "No VCM input was provided.");
-    return 3;
-  }
-
-  const VCMStateVector* state_vector = vcm->STATE_VECTOR();
-  const char* epoch = state_vector != nullptr ? flatbuffer_string_or_null(state_vector->EPOCH()) : nullptr;
-  if (epoch == nullptr) {
-    plugin_set_error("missing-state-vector-epoch", "VCM STATE_VECTOR.EPOCH is required for OEM output.");
-    return 3;
-  }
-
-  ::flatbuffers::FlatBufferBuilder builder(1024);
-
-  const char* center = flatbuffer_string_or_null(vcm->CENTER_NAME());
-  const char* creation_date = flatbuffer_string_or_null(vcm->CREATION_DATE());
-  const int8_t time_system = timing_standard_from_string(flatbuffer_string_or_null(vcm->TIME_SYSTEM()));
-
-  const auto epoch_offset = create_optional_string(builder, epoch);
-  const auto center_offset = create_optional_string(builder, center != nullptr ? center : "EARTH");
-  const auto line = CreateEphemerisDataLine(
-      builder,
-      epoch_offset,
-      state.x,
-      state.y,
-      state.z,
-      state.x_dot,
-      state.y_dot,
-      state.z_dot,
-      acceleration != nullptr ? acceleration->x : 0.0,
-      acceleration != nullptr ? acceleration->y : 0.0,
-      acceleration != nullptr ? acceleration->z : 0.0);
-  const std::vector<::flatbuffers::Offset<ephemerisDataLine>> line_entries = {line};
-  const auto line_vector = builder.CreateVector(line_entries);
-  const auto block_comment = builder.CreateString(
-      block_comment_text != nullptr ? block_comment_text : "Generated from SDS VCM state.");
-  const auto block = CreateEphemerisDataBlock(
-      builder,
-      block_comment,
-      center_offset,
-      time_system,
-      epoch_offset,
-      epoch_offset,
-      line_vector,
-      acceleration != nullptr ? 9 : 6);
-  const std::vector<::flatbuffers::Offset<ephemerisDataBlock>> block_entries = {block};
-  const auto block_vector = builder.CreateVector(block_entries);
-  const auto classification = builder.CreateString("U");
-  const auto creation_offset = create_optional_string(
-      builder,
-      creation_date != nullptr ? creation_date : "2026-05-24T00:00:00Z");
-  const auto originator = builder.CreateString("DigitalArsenal foundation/orbits");
-  const auto oem = CreateOEM(builder, classification, 2.0, creation_offset, originator, block_vector);
-  builder.Finish(oem, "$OEM");
-
-  if (plugin_push_output(
-          "cartesian_state",
-          "OEM.fbs",
-          "$OEM",
-          builder.GetBufferPointer(),
-          static_cast<uint32_t>(builder.GetSize())) < 0) {
-    plugin_set_error("emit-failed", "Failed to emit OEM Cartesian state.");
-    return 1;
-  }
-  return 0;
-}
-
-bool extract_vcm_metadata(const VCM* vcm, OemMetadata* metadata) {
-  if (vcm == nullptr || metadata == nullptr) {
-    return false;
-  }
-  const VCMStateVector* state_vector = vcm->STATE_VECTOR();
-  if (state_vector == nullptr) {
-    return false;
-  }
-
-  metadata->epoch = flatbuffer_string_or_null(state_vector->EPOCH());
-  metadata->center_name = flatbuffer_string_or_null(vcm->CENTER_NAME());
-  metadata->time_system = timing_standard_from_string(flatbuffer_string_or_null(vcm->TIME_SYSTEM()));
-  return metadata->epoch != nullptr;
-}
-
-bool extract_vcm_state(const VCM* vcm, CartesianState* state, OemMetadata* metadata) {
-  if (vcm == nullptr || state == nullptr || metadata == nullptr) {
-    return false;
-  }
-  const VCMStateVector* state_vector = vcm->STATE_VECTOR();
-  if (state_vector == nullptr) {
-    return false;
-  }
-
-  state->x = state_vector->X();
-  state->y = state_vector->Y();
-  state->z = state_vector->Z();
-  state->x_dot = state_vector->X_DOT();
-  state->y_dot = state_vector->Y_DOT();
-  state->z_dot = state_vector->Z_DOT();
-  if (!finite(state->x) || !finite(state->y) || !finite(state->z) ||
-      !finite(state->x_dot) || !finite(state->y_dot) || !finite(state->z_dot)) {
-    return false;
-  }
-
-  return extract_vcm_metadata(vcm, metadata);
 }
 
 bool extract_cdm_relative_state(const CDM* cdm, RelativeHillState* relative) {
@@ -3185,7 +1793,7 @@ bool extract_oem_state(const OEM* oem, CartesianState* state, OemMetadata* metad
     metadata->epoch = flatbuffer_string_or_null(block->START_TIME());
   }
   metadata->center_name = flatbuffer_string_or_null(block->CENTER_NAME());
-  metadata->time_system = block->TIME_SYSTEM();
+  metadata->time_system = static_cast<int8_t>(block->TIME_SYSTEM());
   return true;
 }
 
@@ -3232,7 +1840,7 @@ int emit_omm(
                           : (context ? flatbuffer_string_or_null(context->EPOCH()) : nullptr);
   const int8_t time_system = metadata.time_system != 0
                                  ? metadata.time_system
-                                 : (context ? context->TIME_SYSTEM() : static_cast<int8_t>(11));
+                                 : (context ? static_cast<int8_t>(context->TIME_SYSTEM()) : static_cast<int8_t>(11));
 
   const auto creation_date = create_optional_string(
       builder,
@@ -3248,7 +1856,7 @@ int emit_omm(
   const auto comment = builder.CreateString("Generated from SDS OEM Cartesian state and SDS OMM gravity context.");
   const auto epoch_offset = create_optional_string(builder, epoch);
 
-  const auto omm = CreateOMM(
+  const auto omm = BuildOmmElements(
       builder,
       creation_date,
       originator,
@@ -3256,7 +1864,7 @@ int emit_omm(
       object_id,
       center_name,
       time_system,
-      context ? context->MEAN_ELEMENT_THEORY() : static_cast<int8_t>(2),
+      context ? static_cast<int8_t>(context->MEAN_ELEMENT_THEORY()) : static_cast<int8_t>(2),
       comment,
       epoch_offset,
       elements.semi_major_axis,
@@ -3304,7 +1912,7 @@ int emit_omm_from_opm(
   const auto comment = builder.CreateString("Generated from SDS OPM Cartesian state.");
   const auto epoch_offset = create_optional_string(builder, epoch);
 
-  const auto omm = CreateOMM(
+  const auto omm = BuildOmmElements(
       builder,
       creation_date,
       originator,
@@ -3331,426 +1939,43 @@ int emit_omm_from_opm(
           builder.GetBufferPointer(),
           static_cast<uint32_t>(builder.GetSize())) < 0) {
     plugin_set_error("emit-failed", "Failed to emit OMM mean elements.");
-    return 1;
-  }
-  return 0;
-}
-
-int emit_omm_from_vcm(
-    const VCM* vcm,
-    const OemMetadata& metadata,
-    const KeplerianElements& elements) {
-  if (vcm == nullptr) {
-    plugin_set_error("missing-vcm", "No VCM input was provided.");
-    return 3;
-  }
-
-  ::flatbuffers::FlatBufferBuilder builder(1024);
-
-  const char* center = metadata.center_name != nullptr ? metadata.center_name : "EARTH";
-  const char* epoch = metadata.epoch;
-
-  const auto creation_date = create_optional_string(
-      builder,
-      vcm->CREATION_DATE() ? vcm->CREATION_DATE()->c_str() : "2026-05-24T00:00:00Z");
-  const auto originator = builder.CreateString("DigitalArsenal foundation/orbits");
-  const auto object_name = create_optional_string(builder, flatbuffer_string_or_null(vcm->OBJECT_NAME()));
-  const auto object_id = create_optional_string(builder, flatbuffer_string_or_null(vcm->OBJECT_ID()));
-  const auto center_name = create_optional_string(builder, center);
-  const auto comment = builder.CreateString("Generated from SDS VCM state.");
-  const auto epoch_offset = create_optional_string(builder, epoch);
-
-  const auto omm = CreateOMM(
-      builder,
-      creation_date,
-      originator,
-      object_name,
-      object_id,
-      center_name,
-      metadata.time_system,
-      2,
-      comment,
-      epoch_offset,
-      elements.semi_major_axis,
-      elements.eccentricity,
-      elements.inclination,
-      elements.raan,
-      elements.arg_pericenter,
-      elements.mean_anomaly,
-      elements.gm);
-  builder.Finish(omm, "$OMM");
-
-  if (plugin_push_output(
-          "mean_elements",
-          "OMM.fbs",
-          "$OMM",
-          builder.GetBufferPointer(),
-          static_cast<uint32_t>(builder.GetSize())) < 0) {
-    plugin_set_error("emit-failed", "Failed to emit OMM mean elements.");
-    return 1;
-  }
-  return 0;
-}
-
-int emit_vcm_equinoctial(
-    const VCM* input,
-    const EquinoctialElements& elements) {
-  if (input == nullptr) {
-    plugin_set_error("missing-vcm", "No VCM input was provided.");
-    return 3;
-  }
-
-  ::flatbuffers::FlatBufferBuilder builder(1024);
-
-  const auto creation_date = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->CREATION_DATE()));
-  const auto originator = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->ORIGINATOR()));
-  const auto object_name = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->OBJECT_NAME()));
-  const auto object_id = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->OBJECT_ID()));
-  const auto center_name = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->CENTER_NAME()));
-  const auto ref_frame = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->REF_FRAME()));
-  const auto time_system = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->TIME_SYSTEM()));
-  const auto state_vector = CreateVCMStateVector(
-      builder,
-      input->STATE_VECTOR());
-  const auto keplerian_elements = CreateVcmKeplerianElements(
-      builder,
-      input->KEPLERIAN_ELEMENTS());
-  const auto equinoctial_elements = CreateEquinoctialElements(
-      builder,
-      elements.af,
-      elements.ag,
-      elements.true_longitude,
-      elements.semi_major_axis,
-      elements.chi,
-      elements.psi);
-  const auto vcm = CreateVCM(
-      builder,
-      input->CCSDS_OMM_VERS(),
-      creation_date,
-      originator,
-      object_name,
-      object_id,
-      center_name,
-      ref_frame,
-      time_system,
-      state_vector,
-      keplerian_elements,
-      equinoctial_elements,
-      input->GM());
-  builder.Finish(vcm);
-
-  if (plugin_push_output_ex(
-          "equinoctial_state",
-          "VCM.fbs",
-          nullptr,
-          PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
-          "VCM",
-          0,
-          0,
-          builder.GetBufferPointer(),
-          static_cast<uint32_t>(builder.GetSize())) < 0) {
-    plugin_set_error("emit-failed", "Failed to emit VCM equinoctial state.");
-    return 1;
-  }
-  return 0;
-}
-
-int emit_vcm_keplerian(
-    const VCM* input,
-    const VcmKeplerianElements& elements) {
-  if (input == nullptr) {
-    plugin_set_error("missing-vcm", "No VCM input was provided.");
-    return 3;
-  }
-
-  ::flatbuffers::FlatBufferBuilder builder(1024);
-
-  const auto creation_date = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->CREATION_DATE()));
-  const auto originator = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->ORIGINATOR()));
-  const auto object_name = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->OBJECT_NAME()));
-  const auto object_id = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->OBJECT_ID()));
-  const auto center_name = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->CENTER_NAME()));
-  const auto ref_frame = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->REF_FRAME()));
-  const auto time_system = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->TIME_SYSTEM()));
-  const auto state_vector = CreateVCMStateVector(
-      builder,
-      input->STATE_VECTOR());
-  const auto keplerian_elements = CreateVcmKeplerianElements(
-      builder,
-      elements.semi_major_axis,
-      elements.eccentricity,
-      elements.inclination,
-      elements.raan,
-      elements.arg_pericenter,
-      elements.anomaly_type,
-      elements.anomaly,
-      elements.periapsis_radius);
-  const auto equinoctial_elements = CreateEquinoctialElements(
-      builder,
-      input->EQUINOCTIAL_ELEMENTS());
-  const auto vcm = CreateVCM(
-      builder,
-      input->CCSDS_OMM_VERS(),
-      creation_date,
-      originator,
-      object_name,
-      object_id,
-      center_name,
-      ref_frame,
-      time_system,
-      state_vector,
-      keplerian_elements,
-      equinoctial_elements,
-      input->GM());
-  builder.Finish(vcm);
-
-  if (plugin_push_output_ex(
-          "keplerian_state",
-          "VCM.fbs",
-          nullptr,
-          PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
-          "VCM",
-          0,
-          0,
-          builder.GetBufferPointer(),
-          static_cast<uint32_t>(builder.GetSize())) < 0) {
-    plugin_set_error("emit-failed", "Failed to emit VCM Keplerian state.");
-    return 1;
-  }
-  return 0;
-}
-
-int emit_vcm_state_vector(
-    const VCM* input,
-    const CartesianState& state) {
-  if (input == nullptr) {
-    plugin_set_error("missing-vcm", "No VCM input was provided.");
-    return 3;
-  }
-  const VCMStateVector* source_state = input->STATE_VECTOR();
-  const char* epoch = source_state != nullptr
-                          ? flatbuffer_string_or_null(source_state->EPOCH())
-                          : nullptr;
-  if (epoch == nullptr) {
-    plugin_set_error("missing-state-vector-epoch", "VCM STATE_VECTOR.EPOCH is required for VCM state output.");
-    return 3;
-  }
-
-  ::flatbuffers::FlatBufferBuilder builder(1024);
-
-  const auto creation_date = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->CREATION_DATE()));
-  const auto originator = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->ORIGINATOR()));
-  const auto object_name = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->OBJECT_NAME()));
-  const auto object_id = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->OBJECT_ID()));
-  const auto center_name = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->CENTER_NAME()));
-  const auto ref_frame = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->REF_FRAME()));
-  const auto time_system = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(input->TIME_SYSTEM()));
-  const auto epoch_offset = create_optional_string(builder, epoch);
-  const auto state_vector = CreateVCMStateVector(
-      builder,
-      epoch_offset,
-      state.x,
-      state.y,
-      state.z,
-      state.x_dot,
-      state.y_dot,
-      state.z_dot);
-  const auto keplerian_elements = CreateVcmKeplerianElements(
-      builder,
-      input->KEPLERIAN_ELEMENTS());
-  const auto equinoctial_elements = CreateEquinoctialElements(
-      builder,
-      input->EQUINOCTIAL_ELEMENTS());
-  const auto vcm = CreateVCM(
-      builder,
-      input->CCSDS_OMM_VERS(),
-      creation_date,
-      originator,
-      object_name,
-      object_id,
-      center_name,
-      ref_frame,
-      time_system,
-      state_vector,
-      keplerian_elements,
-      equinoctial_elements,
-      input->GM());
-  builder.Finish(vcm);
-
-  if (plugin_push_output_ex(
-          "vector_state",
-          "VCM.fbs",
-          nullptr,
-          PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
-          "VCM",
-          0,
-          0,
-          builder.GetBufferPointer(),
-          static_cast<uint32_t>(builder.GetSize())) < 0) {
-    plugin_set_error("emit-failed", "Failed to emit VCM Cartesian state.");
-    return 1;
-  }
-  return 0;
-}
-
-int emit_vcm_deputy_state(
-    const VCM* chief,
-    const CDM* relative_cdm,
-    const CartesianState& state) {
-  if (chief == nullptr || relative_cdm == nullptr) {
-    plugin_set_error("missing-input", "Both chief VCM and relative CDM inputs are required.");
-    return 3;
-  }
-  const VCMStateVector* source_state = chief->STATE_VECTOR();
-  const char* chief_epoch = source_state != nullptr
-                                ? flatbuffer_string_or_null(source_state->EPOCH())
-                                : nullptr;
-  const char* relative_epoch = flatbuffer_string_or_null(relative_cdm->TCA());
-  const char* epoch = relative_epoch != nullptr ? relative_epoch : chief_epoch;
-  if (epoch == nullptr) {
-    plugin_set_error("missing-state-vector-epoch", "CDM TCA or VCM chief STATE_VECTOR.EPOCH is required for VCM deputy output.");
-    return 3;
-  }
-
-  ::flatbuffers::FlatBufferBuilder builder(1024);
-
-  const char* message_id = flatbuffer_string_or_null(relative_cdm->MESSAGE_ID());
-  const auto creation_date = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(chief->CREATION_DATE()));
-  const auto originator = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(chief->ORIGINATOR()));
-  const auto object_name = create_optional_string(
-      builder,
-      message_id != nullptr ? message_id : "Basilisk Hill deputy state");
-  const auto object_id = create_optional_string(
-      builder,
-      message_id != nullptr ? message_id : flatbuffer_string_or_null(chief->OBJECT_ID()));
-  const auto center_name = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(chief->CENTER_NAME()));
-  const auto ref_frame = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(chief->REF_FRAME()));
-  const auto time_system = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(chief->TIME_SYSTEM()));
-  const auto epoch_offset = create_optional_string(builder, epoch);
-  const auto state_vector = CreateVCMStateVector(
-      builder,
-      epoch_offset,
-      state.x,
-      state.y,
-      state.z,
-      state.x_dot,
-      state.y_dot,
-      state.z_dot);
-  const auto vcm = CreateVCM(
-      builder,
-      chief->CCSDS_OMM_VERS(),
-      creation_date,
-      originator,
-      object_name,
-      object_id,
-      center_name,
-      ref_frame,
-      time_system,
-      state_vector,
-      0,
-      0,
-      chief->GM());
-  builder.Finish(vcm);
-
-  if (plugin_push_output_ex(
-          "deputy_state",
-          "VCM.fbs",
-          nullptr,
-          PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,
-          "VCM",
-          0,
-          0,
-          builder.GetBufferPointer(),
-          static_cast<uint32_t>(builder.GetSize())) < 0) {
-    plugin_set_error("emit-failed", "Failed to emit VCM deputy Cartesian state.");
     return 1;
   }
   return 0;
 }
 
 int emit_cdm_relative_hill(
-    const VCM* chief,
-    const VCM* deputy,
+    const OCM* chief,
+    const OCM* deputy,
     const OemMetadata& metadata,
     const RelativeHillState& relative) {
   if (chief == nullptr || deputy == nullptr) {
-    plugin_set_error("missing-vcm", "Both chief and deputy VCM inputs are required.");
+    plugin_set_error("missing-ocm", "Both chief and deputy OCM inputs are required.");
     return 3;
   }
-
-  const char* chief_id = flatbuffer_string_or_null(chief->OBJECT_ID());
-  const char* deputy_id = flatbuffer_string_or_null(deputy->OBJECT_ID());
+  auto designator = [](const OCM* o) -> const char* {
+    const Metadata* md = o->METADATA();
+    if (md == nullptr) return nullptr;
+    if (md->OBJECT_DESIGNATOR() != nullptr) return md->OBJECT_DESIGNATOR()->c_str();
+    return flatbuffer_string_or_null(md->INTERNATIONAL_DESIGNATOR());
+  };
+  const char* chief_id = designator(chief);
+  const char* deputy_id = designator(deputy);
   std::string message_id = "foundation-orbits-hill-relative";
   if (chief_id != nullptr || deputy_id != nullptr) {
-    message_id = std::string(chief_id != nullptr ? chief_id : "chief") +
-                 "-to-" +
+    message_id = std::string(chief_id != nullptr ? chief_id : "chief") + "-to-" +
                  (deputy_id != nullptr ? deputy_id : "deputy");
   }
 
   ::flatbuffers::FlatBufferBuilder builder(1024);
+  const Header* header = chief->HEADER();
   const auto creation_date = create_optional_string(
-      builder,
-      flatbuffer_string_or_null(chief->CREATION_DATE()) != nullptr
-          ? flatbuffer_string_or_null(chief->CREATION_DATE())
-          : "2026-05-25T00:00:00Z");
+      builder, header != nullptr ? flatbuffer_string_or_null(header->CREATION_DATE()) : nullptr);
   const auto originator = builder.CreateString("DigitalArsenal foundation/orbits");
   const auto message_for = builder.CreateString("Basilisk Hill relative state");
   const auto message_id_offset = builder.CreateString(message_id);
   const auto tca = create_optional_string(builder, metadata.epoch);
-
-  const auto cdm = CreateCDMRelativeState(
+  const auto cdm = BuildCdmRelativeState(
       builder,
       creation_date,
       originator,
@@ -3779,41 +2004,386 @@ int emit_cdm_relative_hill(
   return 0;
 }
 
-int emit_normalized_vcm_keplerian_anomaly(bool output_true_anomaly) {
-  plugin_reset_output_state();
+// ---------------------------------------------------------------------------
+// $OCM input and output. One trajectory row per message: CARTESIAN_PV, or a
+// SANA Orbital Elements set (KEPLERIAN, KEPLERIAN_MEAN, EQUINOCTIAL,
+// EQUINOCTIAL_MOD) in CCSDS 502.0-B-3 units: km, km/s and degrees. Epoch,
+// time system, centre and reference frame are required and copied through;
+// nothing is defaulted.
+// ---------------------------------------------------------------------------
 
-  const plugin_input_frame_t* frame = find_input_frame("keplerian_state");
+bool timing_standard_named(const char* value, timingStandard* out) {
+  struct Row { const char* name; timingStandard value; };
+  static const Row kRows[] = {
+      {"UTC", timingStandard::UTC}, {"GPS", timingStandard::GPS}, {"TAI", timingStandard::TAI},
+      {"TT", timingStandard::TT}, {"UT1", timingStandard::UT1}, {"TDB", timingStandard::TDB},
+      {"TCB", timingStandard::TCB}, {"TCG", timingStandard::TCG}, {"GMST", timingStandard::GMST},
+      {"MET", timingStandard::MET}, {"MRT", timingStandard::MRT}, {"SCLK", timingStandard::SCLK},
+  };
+  if (value == nullptr) return false;
+  for (const Row& r : kRows) {
+    if (std::strcmp(value, r.name) == 0) {
+      *out = r.value;
+      return true;
+    }
+  }
+  return false;
+}
+
+struct OcmInput {
+  std::vector<uint8_t> bytes;  // aligned copy of the frame
+  const OCM* ocm = nullptr;
+  OemMetadata metadata;
+  timingStandard time_system = timingStandard::UTC;
+  double gm = 0.0;             // km^3/s^2, PERTURBATIONS.GM
+  std::vector<double> row;     // first STATE_DATA row
+};
+
+// Reads and checks one $OCM frame (plain or size-prefixed) on `port`.
+int read_ocm_frame(const char* port, OcmInput* in) {
+  const plugin_input_frame_t* frame = find_input_frame(port);
+  if (frame == nullptr || frame->payload == nullptr || frame->payload_length < 12) {
+    const std::string message = std::string("No $OCM frame on port \"") + port + "\".";
+    plugin_set_error("missing-ocm", message.c_str());
+    return 3;
+  }
+  in->bytes.assign(frame->payload, frame->payload + frame->payload_length);
+  if (OCMBufferHasIdentifier(in->bytes.data())) {
+    ::flatbuffers::Verifier verifier(in->bytes.data(), in->bytes.size());
+    if (VerifyOCMBuffer(verifier)) in->ocm = GetOCM(in->bytes.data());
+  } else if (SizePrefixedOCMBufferHasIdentifier(in->bytes.data())) {
+    ::flatbuffers::Verifier verifier(in->bytes.data(), in->bytes.size());
+    if (VerifySizePrefixedOCMBuffer(verifier)) in->ocm = GetSizePrefixedOCM(in->bytes.data());
+  }
+  if (in->ocm == nullptr) {
+    const std::string message = std::string("Port \"") + port + "\" does not carry a verifiable $OCM buffer.";
+    plugin_set_error("invalid-ocm-buffer", message.c_str());
+    return 3;
+  }
+  const OCM* o = in->ocm;
+  const Metadata* md = o->METADATA();
+  const char* epoch = md != nullptr ? flatbuffer_string_or_null(md->START_TIME()) : nullptr;
+  if (epoch == nullptr && md != nullptr) epoch = flatbuffer_string_or_null(md->EPOCH_TZERO());
+  if (epoch == nullptr) {
+    plugin_set_error("missing-epoch", "OCM METADATA.START_TIME or EPOCH_TZERO is required.");
+    return 3;
+  }
+  if (md == nullptr || !timing_standard_named(flatbuffer_string_or_null(md->TIME_SYSTEM()), &in->time_system)) {
+    plugin_set_error("missing-time-system", "OCM METADATA.TIME_SYSTEM must name a supported time scale.");
+    return 3;
+  }
+  if (o->CENTER_NAME() == nullptr || o->CENTER_NAME()->size() == 0) {
+    plugin_set_error("missing-center", "OCM CENTER_NAME is required.");
+    return 3;
+  }
+  if (o->TRAJ_REF_FRAME() == nullptr) {
+    plugin_set_error("missing-frame", "OCM TRAJ_REF_FRAME is required.");
+    return 3;
+  }
+  in->metadata.epoch = epoch;
+  in->metadata.center_name = o->CENTER_NAME()->c_str();
+  in->metadata.time_system = static_cast<int8_t>(in->time_system);
+  in->gm = o->PERTURBATIONS() != nullptr ? o->PERTURBATIONS()->GM() : 0.0;
+  const auto* data = o->STATE_DATA();
+  const uint32_t width = o->STATE_VECTOR_SIZE();
+  if (data == nullptr || width == 0 || data->size() < width) {
+    plugin_set_error("missing-state-data", "OCM STATE_DATA must hold at least one row.");
+    return 3;
+  }
+  in->row.assign(data->begin(), data->begin() + width);
+  for (double v : in->row) {
+    if (!finite(v)) {
+      plugin_set_error("invalid-state-data", "OCM STATE_DATA must be finite.");
+      return 3;
+    }
+  }
+  return 0;
+}
+
+int read_ocm_cartesian(const char* port, OcmInput* in, CartesianState* state) {
+  if (const int rc = read_ocm_frame(port, in)) return rc;
+  if (in->ocm->TRAJ_TYPE() != trajectoryType::CARTESIAN_PV || in->row.size() != 6) {
+    plugin_set_error("unsupported-trajectory-type", "Expected OCM TRAJ_TYPE CARTESIAN_PV with 6 values per row.");
+    return 3;
+  }
+  state->x = in->row[0];
+  state->y = in->row[1];
+  state->z = in->row[2];
+  state->x_dot = in->row[3];
+  state->y_dot = in->row[4];
+  state->z_dot = in->row[5];
+  return 0;
+}
+
+// Any SANA element set onto the Keplerian record (km, degrees).
+int read_ocm_elements(const char* port, OcmInput* in, ElementRecord* elements) {
+  if (const int rc = read_ocm_frame(port, in)) return rc;
+  const trajectoryType type = in->ocm->TRAJ_TYPE();
+  const std::vector<double>& r = in->row;
+  if ((type == trajectoryType::KEPLERIAN || type == trajectoryType::KEPLERIAN_MEAN) && r.size() == 6) {
+    elements->semi_major_axis = r[0];
+    elements->eccentricity = r[1];
+    elements->inclination = r[2];
+    elements->raan = r[3];
+    elements->arg_pericenter = r[4];
+    elements->anomaly = r[5];
+    elements->periapsis_radius = 0.0;
+    elements->anomaly_type = type == trajectoryType::KEPLERIAN ? 0 : 1;
+    return 0;
+  }
+  if ((type == trajectoryType::EQUINOCTIAL || type == trajectoryType::EQUINOCTIAL_MOD) && r.size() == 7) {
+    if (r[6] != 1.0 && r[6] != -1.0) {
+      plugin_set_error("invalid-state-data", "The equinoctial retrograde factor must be +1 or -1.");
+      return 3;
+    }
+    sdn::orbits::Keplerian kep;
+    bool ok = false;
+    if (type == trajectoryType::EQUINOCTIAL) {
+      // SANA EQUINOCTIAL: a, af, ag, mean longitude, chi, psi, fr.
+      sdn::orbits::Equinoctial eq;
+      eq.semiMajorAxis = r[0] * 1000.0;
+      eq.k = r[1];
+      eq.h = r[2];
+      eq.meanLongitude = r[3] * kDegreesToRadians;
+      eq.p = r[4];
+      eq.q = r[5];
+      eq.retrogradeFactor = static_cast<int>(r[6]);
+      ok = sdn::orbits::keplerianFromEquinoctial(eq, &kep);
+    } else {
+      // SANA EQUINOCTIALMOD: p, af, ag, true longitude, chi, psi, fr.
+      sdn::orbits::ModifiedEquinoctial me;
+      me.semiLatusRectum = r[0] * 1000.0;
+      me.f = r[1];
+      me.g = r[2];
+      me.trueLongitude = r[3] * kDegreesToRadians;
+      me.k = r[4];
+      me.h = r[5];
+      me.retrogradeFactor = static_cast<int>(r[6]);
+      ok = sdn::orbits::keplerianFromModifiedEquinoctial(me, &kep);
+    }
+    if (!ok) {
+      plugin_set_error("unsupported-orbit", "The equinoctial elements do not describe a finite orbit.");
+      return 3;
+    }
+    // Undefined angles follow the Cartesian path: a circular orbit zeroes the
+    // argument of periapsis and carries the argument of latitude; a circular
+    // equatorial one also zeroes RAAN and carries the (retrograde) true longitude.
+    double raan = kep.raan;
+    double arg_pericenter = kep.argumentOfPeriapsis;
+    double anomaly = kep.trueAnomaly;
+    if (kep.eccentricity <= kSingularOrbitTolerance) {
+      anomaly += arg_pericenter;
+      arg_pericenter = 0.0;
+      if (std::sin(kep.inclination) <= kSingularOrbitTolerance) {
+        anomaly += kep.inclination < 0.5 * kPi ? raan : -raan;
+        raan = 0.0;
+      }
+    }
+    elements->semi_major_axis = kep.semiMajorAxis / 1000.0;
+    elements->eccentricity = kep.eccentricity <= kSingularOrbitTolerance ? 0.0 : kep.eccentricity;
+    elements->inclination = kep.inclination * kRadiansToDegrees;
+    elements->raan = normalize_degrees(raan);
+    elements->arg_pericenter = normalize_degrees(arg_pericenter);
+    elements->anomaly = normalize_degrees(anomaly);
+    elements->periapsis_radius = 0.0;
+    elements->anomaly_type = 0;
+    return 0;
+  }
+  plugin_set_error(
+      "unsupported-trajectory-type",
+      "Expected OCM TRAJ_TYPE KEPLERIAN or KEPLERIAN_MEAN (6 values) or EQUINOCTIAL or EQUINOCTIAL_MOD (7 values).");
+  return 3;
+}
+
+// Writes the input $OCM back out with its trajectory replaced; header,
+// identity, centre, frame, perturbations and physical properties are kept.
+int emit_ocm_trajectory(
+    const char* port,
+    const OcmInput& in,
+    trajectoryType type,
+    const std::vector<double>& row,
+    const char* averaging,
+    const char* comment) {
+  OCMT out;
+  in.ocm->UnPackTo(&out);
+  if (!out.COVARIANCE_DATA.empty()) {
+    if (!out.HEADER) out.HEADER = std::make_unique<HeaderT>();
+    out.HEADER->COMMENT.push_back("Input covariance not carried: it belongs to the input representation.");
+  }
+  out.TRAJ_TYPE = type;
+  out.STATE_VECTOR_SIZE = static_cast<uint8_t>(row.size());
+  out.STATE_DATA = row;
+  out.STATE_STEP_SIZE = 0.0;
+  out.COVARIANCE_DATA.clear();
+  out.COV_REF_FRAME.reset();
+  out.POLYNOMIAL_POSITION_RECORDS.clear();
+  out.POLYNOMIAL_OE_RECORDS.clear();
+  out.ORB_AVERAGING = averaging != nullptr ? averaging : "";
+  if (!out.HEADER) out.HEADER = std::make_unique<HeaderT>();
+  out.HEADER->COMMENT.push_back(comment);
+  if (out.METADATA) out.METADATA->STOP_TIME = out.METADATA->START_TIME.empty()
+                                                  ? out.METADATA->EPOCH_TZERO
+                                                  : out.METADATA->START_TIME;
+
+  ::flatbuffers::FlatBufferBuilder builder(2048);
+  builder.FinishSizePrefixed(CreateOCM(builder, &out), OCMIdentifier());
+  if (plugin_push_output_ex(port, "OCM.fbs", "$OCM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OCM", 0, 0,
+                            builder.GetBufferPointer(), static_cast<uint32_t>(builder.GetSize())) < 0) {
+    plugin_set_error("emit-failed", "Failed to emit $OCM.");
+    return 1;
+  }
+  return 0;
+}
+
+int emit_ocm_cartesian(const char* port, const OcmInput& in, const CartesianState& state, const char* comment) {
+  return emit_ocm_trajectory(port, in, trajectoryType::CARTESIAN_PV,
+                             {state.x, state.y, state.z, state.x_dot, state.y_dot, state.z_dot}, nullptr, comment);
+}
+
+// Keplerian record as SANA KEPLERIAN (true anomaly) or KEPLERIAN_MEAN.
+int emit_ocm_keplerian(const char* port, const OcmInput& in, const ElementRecord& e,
+                       const char* averaging, const char* comment) {
+  return emit_ocm_trajectory(port, in,
+                             e.anomaly_type == 0 ? trajectoryType::KEPLERIAN : trajectoryType::KEPLERIAN_MEAN,
+                             {e.semi_major_axis, e.eccentricity, e.inclination, e.raan, e.arg_pericenter, e.anomaly},
+                             averaging, comment);
+}
+
+// Keplerian record as SANA EQUINOCTIAL (mean longitude). fr = +1 for direct
+// orbits and -1 for retrograde ones, each away from its singular inclination.
+int emit_ocm_equinoctial(const char* port, const OcmInput& in, const ElementRecord& e, const char* comment) {
+  double true_anomaly = e.anomaly * kDegreesToRadians;
+  if (e.anomaly_type == 1 &&
+      !true_anomaly_from_mean_anomaly(e.anomaly * kDegreesToRadians, e.eccentricity, &true_anomaly)) {
+    plugin_set_error("unsupported-orbit", "Equinoctial output needs a finite elliptical orbit.");
+    return 3;
+  }
+  sdn::orbits::Keplerian kep;
+  kep.semiMajorAxis = e.semi_major_axis * 1000.0;
+  kep.eccentricity = e.eccentricity;
+  kep.inclination = e.inclination * kDegreesToRadians;
+  kep.raan = e.raan * kDegreesToRadians;
+  kep.argumentOfPeriapsis = e.arg_pericenter * kDegreesToRadians;
+  kep.trueAnomaly = true_anomaly;
+  const int fr = e.inclination > 90.0 ? -1 : 1;
+  sdn::orbits::Equinoctial eq;
+  if (!(e.semi_major_axis > 0.0) || e.eccentricity < 0.0 || e.eccentricity >= 1.0 ||
+      !sdn::orbits::equinoctialFromKeplerian(kep, fr, &eq)) {
+    plugin_set_error("unsupported-orbit", "Equinoctial output needs a finite elliptical orbit.");
+    return 3;
+  }
+  return emit_ocm_trajectory(port, in, trajectoryType::EQUINOCTIAL,
+                             {eq.semiMajorAxis / 1000.0, eq.k, eq.h, normalize_degrees(eq.meanLongitude), eq.p, eq.q,
+                              static_cast<double>(fr)},
+                             nullptr, comment);
+}
+
+// $OEM from an $OCM input: its epoch, time system, centre and frame.
+int emit_oem_from_ocm(const OcmInput& in, const CartesianState& state, const char* comment,
+                      const Vector3* acceleration = nullptr) {
+  OEMT oem;
+  oem.CCSDS_OEM_VERS = 2.0;
+  oem.CLASSIFICATION = "U";
+  if (in.ocm->HEADER() != nullptr && in.ocm->HEADER()->CREATION_DATE() != nullptr) {
+    oem.CREATION_DATE = in.ocm->HEADER()->CREATION_DATE()->str();
+  }
+  oem.ORIGINATOR = "DigitalArsenal foundation/orbits";
+  auto block = std::make_unique<ephemerisDataBlockT>();
+  block->COMMENT = comment;
+  block->CENTER_NAME = in.metadata.center_name;
+  block->REFERENCE_FRAME = std::make_unique<RFMT>();
+  in.ocm->TRAJ_REF_FRAME()->UnPackTo(block->REFERENCE_FRAME.get());
+  block->TIME_SYSTEM = in.time_system;
+  block->START_TIME = in.metadata.epoch;
+  block->STOP_TIME = in.metadata.epoch;
+  block->STATE_VECTOR_SIZE = acceleration != nullptr ? 9 : 6;
+  auto line = std::make_unique<ephemerisDataLineT>();
+  line->EPOCH = in.metadata.epoch;
+  line->X = state.x;
+  line->Y = state.y;
+  line->Z = state.z;
+  line->X_DOT = state.x_dot;
+  line->Y_DOT = state.y_dot;
+  line->Z_DOT = state.z_dot;
+  if (acceleration != nullptr) {
+    line->X_DDOT = acceleration->x;
+    line->Y_DDOT = acceleration->y;
+    line->Z_DDOT = acceleration->z;
+  }
+  block->EPHEMERIS_DATA_LINES.push_back(std::move(line));
+  oem.EPHEMERIS_DATA_BLOCK.push_back(std::move(block));
+  ::flatbuffers::FlatBufferBuilder builder(1024);
+  builder.Finish(CreateOEM(builder, &oem), "$OEM");
+  if (plugin_push_output("cartesian_state", "OEM.fbs", "$OEM", builder.GetBufferPointer(),
+                         static_cast<uint32_t>(builder.GetSize())) < 0) {
+    plugin_set_error("emit-failed", "Failed to emit OEM Cartesian state.");
+    return 1;
+  }
+  return 0;
+}
+
+// $OMM from an $OCM input.
+int emit_omm_from_ocm(const OcmInput& in, const KeplerianElements& elements, const char* comment) {
+  ::flatbuffers::FlatBufferBuilder builder(1024);
+  const Header* header = in.ocm->HEADER();
+  const Metadata* md = in.ocm->METADATA();
+  const auto creation_date = create_optional_string(
+      builder, header != nullptr ? flatbuffer_string_or_null(header->CREATION_DATE()) : nullptr);
+  const auto originator = builder.CreateString("DigitalArsenal foundation/orbits");
+  const auto object_name = create_optional_string(builder, md != nullptr ? flatbuffer_string_or_null(md->OBJECT_NAME()) : nullptr);
+  const auto object_id = create_optional_string(
+      builder, md != nullptr ? flatbuffer_string_or_null(md->INTERNATIONAL_DESIGNATOR()) : nullptr);
+  const auto center_name = builder.CreateString(in.metadata.center_name);
+  const auto comment_offset = builder.CreateString(comment);
+  const auto epoch = builder.CreateString(in.metadata.epoch);
+  const auto omm = BuildOmmElements(builder, creation_date, originator, object_name, object_id, center_name,
+                                    static_cast<int8_t>(in.time_system), 2, comment_offset, epoch,
+                                    elements.semi_major_axis, elements.eccentricity, elements.inclination,
+                                    elements.raan, elements.arg_pericenter, elements.mean_anomaly, elements.gm);
+  builder.Finish(omm, "$OMM");
+  if (plugin_push_output("mean_elements", "OMM.fbs", "$OMM", builder.GetBufferPointer(),
+                         static_cast<uint32_t>(builder.GetSize())) < 0) {
+    plugin_set_error("emit-failed", "Failed to emit OMM mean elements.");
+    return 1;
+  }
+  return 0;
+}
+
+bool read_grv_frame(std::vector<uint8_t>* storage, const GRV** gravity) {
+  const plugin_input_frame_t* frame = find_input_frame("gravity_context");
   if (frame == nullptr || frame->payload == nullptr || frame->payload_length < 8) {
-    plugin_set_error("missing-keplerian-state", "No VCM keplerian_state frame was provided.");
+    plugin_set_error("missing-gravity-context", "No GRV gravity_context frame was provided.");
+    return false;
+  }
+  storage->assign(frame->payload, frame->payload + frame->payload_length);
+  ::flatbuffers::Verifier verifier(storage->data(), storage->size());
+  if (!VerifyGRVBuffer(verifier)) {
+    plugin_set_error("invalid-grv-buffer", "Input gravity_context is not a valid SDS GRV FlatBuffer.");
+    return false;
+  }
+  *gravity = GetGRV(storage->data());
+  return true;
+}
+
+int emit_normalized_keplerian_anomaly(bool output_true_anomaly) {
+  plugin_reset_output_state();
+  OcmInput in;
+  ElementRecord input;
+  if (const int rc = read_ocm_elements("keplerian_state", &in, &input)) return rc;
+  if (in.ocm->TRAJ_TYPE() != trajectoryType::KEPLERIAN && in.ocm->TRAJ_TYPE() != trajectoryType::KEPLERIAN_MEAN) {
+    plugin_set_error("unsupported-trajectory-type", "Expected OCM TRAJ_TYPE KEPLERIAN or KEPLERIAN_MEAN.");
     return 3;
   }
-
-  ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-  if (!VerifyVCMBuffer(verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input keplerian_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  const VCM* vcm = GetVCM(frame->payload);
-  const keplerianElements* source = vcm ? vcm->KEPLERIAN_ELEMENTS() : nullptr;
-  VcmKeplerianElements input;
-  if (!read_vcm_keplerian_elements(source, &input)) {
-    plugin_set_error("missing-keplerian-elements", "VCM must contain finite KEPLERIAN_ELEMENTS.");
-    return 3;
-  }
-
-  VcmKeplerianElements output;
-  const bool converted = output_true_anomaly
-                             ? normalize_vcm_keplerian_to_true_anomaly(input, &output)
-                             : normalize_vcm_keplerian_to_mean_anomaly(input, &output);
+  ElementRecord output;
+  const bool converted = output_true_anomaly ? normalize_record_to_true_anomaly(input, &output)
+                                             : normalize_record_to_mean_anomaly(input, &output);
   if (!converted) {
-    plugin_set_error(
-        "unsupported-orbit",
-        "VCM KEPLERIAN_ELEMENTS must describe a finite elliptical, hyperbolic, or parabolic orbit with TRUE_ANOMALY or MEAN_ANOMALY.");
+    plugin_set_error("unsupported-orbit", "The Keplerian elements must describe a finite elliptical or hyperbolic orbit.");
     return 3;
   }
-
-  return emit_vcm_keplerian(vcm, output);
+  const char* averaging = in.ocm->ORB_AVERAGING() != nullptr ? in.ocm->ORB_AVERAGING()->c_str() : nullptr;
+  return emit_ocm_keplerian("keplerian_state", in, output, averaging,
+                            output_true_anomaly ? "Anomaly converted to true anomaly." : "Anomaly converted to mean anomaly.");
 }
 
 }  // namespace
@@ -4047,785 +2617,360 @@ extern "C" int opm_to_omm(void) {
   return emit_omm_from_opm(opm, metadata, elements);
 }
 
-extern "C" int vcm_keplerian_to_oem(void) {
+extern "C" int ocm_keplerian_to_oem(void) {
   plugin_reset_output_state();
-
-  const plugin_input_frame_t* frame = find_input_frame("keplerian_state");
-  if (frame == nullptr || frame->payload == nullptr || frame->payload_length < 8) {
-    plugin_set_error("missing-keplerian-state", "No VCM keplerian_state frame was provided.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-  if (!VerifyVCMBuffer(verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input keplerian_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  const VCM* vcm = GetVCM(frame->payload);
+  OcmInput in;
+  ElementRecord elements;
+  if (const int rc = read_ocm_elements("keplerian_state", &in, &elements)) return rc;
   CartesianState state;
-  if (!convert_vcm_keplerian_to_cartesian(vcm, &state)) {
-    plugin_set_error(
-        "unsupported-orbit",
-        "VCM KEPLERIAN_ELEMENTS and GM must describe a finite elliptical, hyperbolic, or Basilisk rectilinear orbit with supported anomaly semantics.");
+  if (!convert_record_to_cartesian(elements, in.gm, &state)) {
+    plugin_set_error("unsupported-orbit",
+                     "The OCM element set and PERTURBATIONS.GM must describe a finite elliptical or hyperbolic orbit.");
     return 3;
   }
-
-  return emit_oem_from_vcm(vcm, state, "Generated from SDS VCM Keplerian elements.");
+  return emit_oem_from_ocm(in, state, "Generated from an SDS OCM element set.");
 }
 
-extern "C" int vcm_keplerian_to_state(void) {
+extern "C" int ocm_keplerian_to_state(void) {
   plugin_reset_output_state();
-
-  const plugin_input_frame_t* frame = find_input_frame("keplerian_state");
-  if (frame == nullptr || frame->payload == nullptr || frame->payload_length < 8) {
-    plugin_set_error("missing-keplerian-state", "No VCM keplerian_state frame was provided.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-  if (!VerifyVCMBuffer(verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input keplerian_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  const VCM* vcm = GetVCM(frame->payload);
+  OcmInput in;
+  ElementRecord elements;
+  if (const int rc = read_ocm_elements("keplerian_state", &in, &elements)) return rc;
   CartesianState state;
-  if (!convert_vcm_keplerian_to_cartesian(vcm, &state)) {
-    plugin_set_error(
-        "unsupported-orbit",
-        "VCM KEPLERIAN_ELEMENTS and GM must describe a finite elliptical, hyperbolic, or Basilisk rectilinear orbit with supported anomaly semantics.");
+  if (!convert_record_to_cartesian(elements, in.gm, &state)) {
+    plugin_set_error("unsupported-orbit",
+                     "The OCM element set and PERTURBATIONS.GM must describe a finite elliptical or hyperbolic orbit.");
     return 3;
   }
-
-  return emit_vcm_state_vector(vcm, state);
+  return emit_ocm_cartesian("vector_state", in, state, "Cartesian state from the element set.");
 }
 
-extern "C" int vcm_state_to_oem(void) {
+extern "C" int ocm_state_to_oem(void) {
   plugin_reset_output_state();
-
-  const plugin_input_frame_t* frame = find_input_frame("vector_state");
-  if (frame == nullptr || frame->payload == nullptr || frame->payload_length < 8) {
-    plugin_set_error("missing-vector-state", "No VCM vector_state frame was provided.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-  if (!VerifyVCMBuffer(verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input vector_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  const VCM* vcm = GetVCM(frame->payload);
+  OcmInput in;
   CartesianState state;
-  OemMetadata metadata;
-  if (!extract_vcm_state(vcm, &state, &metadata)) {
-    plugin_set_error("missing-state-vector", "VCM must contain a finite STATE_VECTOR with EPOCH.");
-    return 3;
-  }
-
-  return emit_oem_from_vcm(vcm, state, "Generated from SDS VCM Cartesian state vector.");
+  if (const int rc = read_ocm_cartesian("vector_state", &in, &state)) return rc;
+  return emit_oem_from_ocm(in, state, "Generated from an SDS OCM Cartesian state.");
 }
 
-extern "C" int vcm_state_to_j_zonal_acceleration_oem(void) {
+extern "C" int ocm_state_to_j_zonal_acceleration_oem(void) {
   plugin_reset_output_state();
-
-  const plugin_input_frame_t* state_frame = find_input_frame("vector_state");
-  if (state_frame == nullptr || state_frame->payload == nullptr ||
-      state_frame->payload_length < 8) {
-    plugin_set_error("missing-vector-state", "No VCM vector_state frame was provided.");
-    return 3;
-  }
-
-  const plugin_input_frame_t* gravity_frame = find_input_frame("gravity_context");
-  if (gravity_frame == nullptr || gravity_frame->payload == nullptr ||
-      gravity_frame->payload_length < 8) {
-    plugin_set_error("missing-gravity-context", "No GRV gravity_context frame was provided.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier vcm_verifier(
-      state_frame->payload,
-      state_frame->payload_length);
-  if (!VerifyVCMBuffer(vcm_verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input vector_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier grv_verifier(
-      gravity_frame->payload,
-      gravity_frame->payload_length);
-  if (!VerifyGRVBuffer(grv_verifier)) {
-    plugin_set_error("invalid-grv-buffer", "Input gravity_context is not a valid SDS GRV FlatBuffer.");
-    return 3;
-  }
-
-  const VCM* vcm = GetVCM(state_frame->payload);
+  OcmInput in;
   CartesianState state;
-  OemMetadata metadata;
-  if (!extract_vcm_state(vcm, &state, &metadata)) {
-    plugin_set_error("missing-state-vector", "VCM must contain a finite STATE_VECTOR with EPOCH.");
-    return 3;
-  }
-
-  const GRV* gravity = GetGRV(gravity_frame->payload);
+  if (const int rc = read_ocm_cartesian("vector_state", &in, &state)) return rc;
+  std::vector<uint8_t> grv_bytes;
+  const GRV* gravity = nullptr;
+  if (!read_grv_frame(&grv_bytes, &gravity)) return 3;
   Vector3 acceleration;
   if (!compute_j_zonal_perturbation_acceleration(state, gravity, &acceleration)) {
-    plugin_set_error(
-        "unsupported-gravity-context",
-        "VCM STATE_VECTOR and GRV MU/EQUATORIAL_RADIUS/J2-J6 must describe a finite Basilisk J2-J6 zonal perturbation request.");
+    plugin_set_error("unsupported-gravity-context",
+                     "The OCM state and GRV MU/EQUATORIAL_RADIUS/J2-J6 must describe a finite Basilisk J2-J6 zonal perturbation request.");
     return 3;
   }
-
-  return emit_oem_from_vcm(
-      vcm,
-      state,
-      "Generated from SDS VCM Cartesian state vector and GRV J-zonal gravity context.",
-      &acceleration);
+  return emit_oem_from_ocm(in, state, "Generated from an SDS OCM Cartesian state and GRV J-zonal gravity context.",
+                           &acceleration);
 }
 
-extern "C" int vcm_state_to_srp_acceleration_oem(void) {
+extern "C" int ocm_state_to_srp_acceleration_oem(void) {
   plugin_reset_output_state();
-
-  const plugin_input_frame_t* state_frame = find_input_frame("vector_state");
-  if (state_frame == nullptr || state_frame->payload == nullptr ||
-      state_frame->payload_length < 8) {
-    plugin_set_error("missing-vector-state", "No VCM vector_state frame was provided.");
-    return 3;
-  }
-
+  OcmInput in;
+  CartesianState state;
+  if (const int rc = read_ocm_cartesian("vector_state", &in, &state)) return rc;
   const plugin_input_frame_t* sun_frame = find_input_frame("sun_vector");
-  if (sun_frame == nullptr || sun_frame->payload == nullptr ||
-      sun_frame->payload_length < 8) {
+  if (sun_frame == nullptr || sun_frame->payload == nullptr || sun_frame->payload_length < 8) {
     plugin_set_error("missing-sun-vector", "No CRD sun_vector frame was provided.");
     return 3;
   }
-
-  ::flatbuffers::Verifier vcm_verifier(
-      state_frame->payload,
-      state_frame->payload_length);
-  if (!VerifyVCMBuffer(vcm_verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input vector_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier crd_verifier(
-      sun_frame->payload,
-      sun_frame->payload_length);
-  if (!VerifyCRDBuffer(crd_verifier)) {
+  std::vector<uint8_t> crd_bytes(sun_frame->payload, sun_frame->payload + sun_frame->payload_length);
+  ::flatbuffers::Verifier verifier(crd_bytes.data(), crd_bytes.size());
+  if (!VerifyCRDBuffer(verifier)) {
     plugin_set_error("invalid-crd-buffer", "Input sun_vector is not a valid SDS CRD FlatBuffer.");
     return 3;
   }
-
-  const VCM* vcm = GetVCM(state_frame->payload);
-  CartesianState state;
-  OemMetadata metadata;
-  if (!extract_vcm_state(vcm, &state, &metadata)) {
-    plugin_set_error("missing-state-vector", "VCM must contain a finite STATE_VECTOR with EPOCH.");
-    return 3;
-  }
-
-  const CRD* sun_vector = GetCRD(sun_frame->payload);
+  const PhysicalProperties* physical = in.ocm->PHYSICAL_PROPERTIES();
   Vector3 acceleration;
-  if (!compute_solar_radiation_pressure_acceleration(vcm, sun_vector, &acceleration)) {
-    plugin_set_error(
-        "unsupported-srp-context",
-        "VCM MASS/SOLAR_RAD_AREA/SOLAR_RAD_COEFF and CRD X/Y/Z must describe a finite Basilisk solar radiation pressure request.");
+  if (physical == nullptr ||
+      !compute_solar_radiation_pressure_acceleration(physical->WET_MASS(), physical->SRP_CONST_AREA(),
+                                                     physical->SOLAR_RAD_COEFF(), GetCRD(crd_bytes.data()),
+                                                     &acceleration)) {
+    plugin_set_error("unsupported-srp-context",
+                     "OCM PHYSICAL_PROPERTIES WET_MASS/SRP_CONST_AREA/SOLAR_RAD_COEFF and CRD X/Y/Z must describe a finite Basilisk solar radiation pressure request.");
     return 3;
   }
-
-  return emit_oem_from_vcm(
-      vcm,
-      state,
-      "Generated from SDS VCM spacecraft parameters and CRD Sun vector using the Basilisk solarRad convention.",
-      &acceleration);
+  return emit_oem_from_ocm(in, state,
+                           "Generated from SDS OCM physical properties and a CRD Sun vector using the Basilisk solarRad convention.",
+                           &acceleration);
 }
 
-extern "C" int vcm_state_to_omm(void) {
+extern "C" int ocm_state_to_omm(void) {
   plugin_reset_output_state();
-
-  const plugin_input_frame_t* frame = find_input_frame("vector_state");
-  if (frame == nullptr || frame->payload == nullptr || frame->payload_length < 8) {
-    plugin_set_error("missing-vector-state", "No VCM vector_state frame was provided.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-  if (!VerifyVCMBuffer(verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input vector_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  const VCM* vcm = GetVCM(frame->payload);
+  OcmInput in;
   CartesianState state;
-  OemMetadata metadata;
-  if (!extract_vcm_state(vcm, &state, &metadata)) {
-    plugin_set_error("missing-state-vector", "VCM must contain a finite STATE_VECTOR with EPOCH.");
-    return 3;
-  }
-
+  if (const int rc = read_ocm_cartesian("vector_state", &in, &state)) return rc;
   KeplerianElements elements;
-  if (!convert_cartesian_to_keplerian(state, vcm ? vcm->GM() : 0.0, &elements, true)) {
-    plugin_set_error(
-        "unsupported-orbit",
-        "VCM STATE_VECTOR and GM must describe a finite elliptical, hyperbolic, or parabolic orbit.");
+  if (!convert_cartesian_to_keplerian(state, in.gm, &elements, true)) {
+    plugin_set_error("unsupported-orbit",
+                     "The OCM state and PERTURBATIONS.GM must describe a finite elliptical, hyperbolic, or parabolic orbit.");
     return 3;
   }
   if (!normalize_parabolic_recovered_elements_to_omm(&elements)) {
-    plugin_set_error(
-        "unsupported-orbit",
-        "VCM STATE_VECTOR and GM must describe a finite parabolic orbit with a Barker mean anomaly.");
+    plugin_set_error("unsupported-orbit",
+                     "The OCM state and PERTURBATIONS.GM must describe a finite parabolic orbit with a Barker mean anomaly.");
     return 3;
   }
-
-  return emit_omm_from_vcm(vcm, metadata, elements);
+  return emit_omm_from_ocm(in, elements, "Generated from an SDS OCM Cartesian state.");
 }
 
-extern "C" int vcm_state_to_keplerian(void) {
+extern "C" int ocm_state_to_keplerian(void) {
   plugin_reset_output_state();
-
-  const plugin_input_frame_t* frame = find_input_frame("vector_state");
-  if (frame == nullptr || frame->payload == nullptr || frame->payload_length < 8) {
-    plugin_set_error("missing-vector-state", "No VCM vector_state frame was provided.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-  if (!VerifyVCMBuffer(verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input vector_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  const VCM* vcm = GetVCM(frame->payload);
+  OcmInput in;
   CartesianState state;
-  OemMetadata metadata;
-  if (!extract_vcm_state(vcm, &state, &metadata)) {
-    plugin_set_error("missing-state-vector", "VCM must contain a finite STATE_VECTOR with EPOCH.");
-    return 3;
-  }
-
+  if (const int rc = read_ocm_cartesian("vector_state", &in, &state)) return rc;
   KeplerianElements elements;
-  if (!convert_cartesian_to_keplerian(state, vcm ? vcm->GM() : 0.0, &elements, true)) {
-    plugin_set_error(
-        "unsupported-orbit",
-        "VCM STATE_VECTOR and GM must describe a finite elliptical, hyperbolic, or parabolic orbit.");
+  if (!convert_cartesian_to_keplerian(state, in.gm, &elements, true)) {
+    plugin_set_error("unsupported-orbit",
+                     "The OCM state and PERTURBATIONS.GM must describe a finite elliptical, hyperbolic, or parabolic orbit.");
     return 3;
   }
-
-  const bool parabolic =
-      std::abs(elements.eccentricity - 1.0) <= kSingularOrbitTolerance &&
-      std::abs(elements.semi_major_axis) <= kSingularOrbitTolerance;
-  VcmKeplerianElements vcm_elements;
-  vcm_elements.semi_major_axis = elements.semi_major_axis;
-  vcm_elements.eccentricity = elements.eccentricity;
-  vcm_elements.inclination = elements.inclination;
-  vcm_elements.raan = elements.raan;
-  vcm_elements.arg_pericenter = elements.arg_pericenter;
-  vcm_elements.anomaly = elements.mean_anomaly;
-  vcm_elements.periapsis_radius = parabolic ? elements.periapsis_radius : 0.0;
-  vcm_elements.anomaly_type = parabolic ? 0 : 1;
-
-  return emit_vcm_keplerian(vcm, vcm_elements);
+  if (std::abs(elements.eccentricity - 1.0) <= kSingularOrbitTolerance &&
+      std::abs(elements.semi_major_axis) <= kSingularOrbitTolerance) {
+    plugin_set_error("unsupported-orbit",
+                     "SANA KEPLERIAN element sets cannot express a parabolic orbit (infinite semi-major axis).");
+    return 3;
+  }
+  ElementRecord record;
+  record.semi_major_axis = elements.semi_major_axis;
+  record.eccentricity = elements.eccentricity;
+  record.inclination = elements.inclination;
+  record.raan = elements.raan;
+  record.arg_pericenter = elements.arg_pericenter;
+  record.anomaly = elements.mean_anomaly;
+  record.anomaly_type = 1;
+  return emit_ocm_keplerian("keplerian_state", in, record, "OSCULATING", "Osculating Keplerian elements from the Cartesian state.");
 }
 
-extern "C" int vcm_state_to_equinoctial(void) {
+extern "C" int ocm_state_to_equinoctial(void) {
   plugin_reset_output_state();
-
-  const plugin_input_frame_t* frame = find_input_frame("vector_state");
-  if (frame == nullptr || frame->payload == nullptr || frame->payload_length < 8) {
-    plugin_set_error("missing-vector-state", "No VCM vector_state frame was provided.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-  if (!VerifyVCMBuffer(verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input vector_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  const VCM* vcm = GetVCM(frame->payload);
+  OcmInput in;
   CartesianState state;
-  OemMetadata metadata;
-  if (!extract_vcm_state(vcm, &state, &metadata)) {
-    plugin_set_error("missing-state-vector", "VCM must contain a finite STATE_VECTOR with EPOCH.");
-    return 3;
-  }
-
+  if (const int rc = read_ocm_cartesian("vector_state", &in, &state)) return rc;
   KeplerianElements elements;
-  if (!convert_cartesian_to_keplerian(state, vcm ? vcm->GM() : 0.0, &elements)) {
-    plugin_set_error(
-        "unsupported-orbit",
-        "VCM STATE_VECTOR and GM must describe a finite elliptical or hyperbolic orbit.");
+  if (!convert_cartesian_to_keplerian(state, in.gm, &elements)) {
+    plugin_set_error("unsupported-orbit",
+                     "The OCM state and PERTURBATIONS.GM must describe a finite elliptical orbit.");
     return 3;
   }
-
-  VcmKeplerianElements vcm_elements;
-  vcm_elements.semi_major_axis = elements.semi_major_axis;
-  vcm_elements.eccentricity = elements.eccentricity;
-  vcm_elements.inclination = elements.inclination;
-  vcm_elements.raan = elements.raan;
-  vcm_elements.arg_pericenter = elements.arg_pericenter;
-  vcm_elements.anomaly = elements.mean_anomaly;
-  vcm_elements.anomaly_type = 1;
-
-  EquinoctialElements equinoctial;
-  if (!convert_vcm_keplerian_values_to_equinoctial(vcm_elements, &equinoctial)) {
-    plugin_set_error(
-        "unsupported-orbit",
-        "VCM STATE_VECTOR and GM must describe a finite elliptical orbit for equinoctial output.");
-    return 3;
-  }
-
-  return emit_vcm_equinoctial(vcm, equinoctial);
+  ElementRecord record;
+  record.semi_major_axis = elements.semi_major_axis;
+  record.eccentricity = elements.eccentricity;
+  record.inclination = elements.inclination;
+  record.raan = elements.raan;
+  record.arg_pericenter = elements.arg_pericenter;
+  record.anomaly = elements.mean_anomaly;
+  record.anomaly_type = 1;
+  return emit_ocm_equinoctial("equinoctial_state", in, record, "Equinoctial elements from the Cartesian state.");
 }
 
-extern "C" int vcm_keplerian_to_omm(void) {
+extern "C" int ocm_keplerian_to_omm(void) {
   plugin_reset_output_state();
-
-  const plugin_input_frame_t* frame = find_input_frame("keplerian_state");
-  if (frame == nullptr || frame->payload == nullptr || frame->payload_length < 8) {
-    plugin_set_error("missing-keplerian-state", "No VCM keplerian_state frame was provided.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-  if (!VerifyVCMBuffer(verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input keplerian_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  const VCM* vcm = GetVCM(frame->payload);
-  const keplerianElements* source = vcm ? vcm->KEPLERIAN_ELEMENTS() : nullptr;
-  if (source == nullptr) {
-    plugin_set_error("missing-keplerian-elements", "VCM must contain KEPLERIAN_ELEMENTS.");
-    return 3;
-  }
-
-  OemMetadata metadata;
-  if (!extract_vcm_metadata(vcm, &metadata)) {
-    plugin_set_error("missing-state-vector-epoch", "VCM STATE_VECTOR.EPOCH is required for OMM output.");
-    return 3;
-  }
-
+  OcmInput in;
+  ElementRecord record;
+  if (const int rc = read_ocm_elements("keplerian_state", &in, &record)) return rc;
   KeplerianElements elements;
-  if (!convert_vcm_keplerian_elements_to_omm(source, vcm ? vcm->GM() : 0.0, &elements)) {
-    plugin_set_error(
-        "unsupported-orbit",
-        "VCM KEPLERIAN_ELEMENTS and GM must describe a finite elliptical, hyperbolic, or parabolic orbit with TRUE_ANOMALY or MEAN_ANOMALY.");
+  if (!convert_record_to_omm(record, in.gm, &elements)) {
+    plugin_set_error("unsupported-orbit",
+                     "The OCM element set and PERTURBATIONS.GM must describe a finite elliptical or hyperbolic orbit.");
     return 3;
   }
-
-  return emit_omm_from_vcm(vcm, metadata, elements);
+  return emit_omm_from_ocm(in, elements, "Generated from an SDS OCM element set.");
 }
 
-extern "C" int vcm_keplerian_to_true_anomaly(void) {
-  return emit_normalized_vcm_keplerian_anomaly(true);
+extern "C" int ocm_keplerian_to_true_anomaly(void) {
+  return emit_normalized_keplerian_anomaly(true);
 }
 
-extern "C" int vcm_keplerian_to_mean_anomaly(void) {
-  return emit_normalized_vcm_keplerian_anomaly(false);
+extern "C" int ocm_keplerian_to_mean_anomaly(void) {
+  return emit_normalized_keplerian_anomaly(false);
 }
 
-extern "C" int vcm_keplerian_mean_to_osculating(void) {
+namespace {
+// Basilisk clMeanOscMap: first-order J2 Brouwer map between mean and
+// osculating Keplerian elements.
+int map_mean_osculating(bool to_osculating) {
   plugin_reset_output_state();
-
-  const plugin_input_frame_t* keplerian_frame = find_input_frame("keplerian_state");
-  if (keplerian_frame == nullptr || keplerian_frame->payload == nullptr ||
-      keplerian_frame->payload_length < 8) {
-    plugin_set_error("missing-keplerian-state", "No VCM keplerian_state frame was provided.");
+  OcmInput in;
+  ElementRecord source;
+  if (const int rc = read_ocm_elements("keplerian_state", &in, &source)) return rc;
+  const char* averaging = in.ocm->ORB_AVERAGING() != nullptr ? in.ocm->ORB_AVERAGING()->c_str() : "";
+  const bool is_mean = std::strcmp(averaging, "BROUWER") == 0;
+  if (to_osculating != is_mean) {
+    plugin_set_error("unsupported-averaging",
+                     to_osculating ? "Mean-to-osculating needs ORB_AVERAGING BROUWER elements."
+                                   : "Osculating-to-mean needs osculating elements (ORB_AVERAGING absent or OSCULATING).");
     return 3;
   }
-
-  const plugin_input_frame_t* gravity_frame = find_input_frame("gravity_context");
-  if (gravity_frame == nullptr || gravity_frame->payload == nullptr ||
-      gravity_frame->payload_length < 8) {
-    plugin_set_error("missing-gravity-context", "No GRV gravity_context frame was provided.");
+  std::vector<uint8_t> grv_bytes;
+  const GRV* gravity = nullptr;
+  if (!read_grv_frame(&grv_bytes, &gravity)) return 3;
+  ElementRecord elements;
+  const bool ok = to_osculating ? convert_record_mean_to_osculating(source, gravity, &elements)
+                                : convert_record_osculating_to_mean(source, gravity, &elements);
+  if (!ok) {
+    plugin_set_error("unsupported-orbit",
+                     to_osculating ? "The elements and GRV EQUATORIAL_RADIUS/J2 must describe a finite elliptical first-order J2 mean-to-osculating map."
+                                   : "The elements and GRV EQUATORIAL_RADIUS/J2 must describe a finite elliptical first-order J2 osculating-to-mean map.");
     return 3;
   }
+  return emit_ocm_keplerian("keplerian_state", in, elements, to_osculating ? "OSCULATING" : "BROUWER",
+                            to_osculating ? "First-order J2 Brouwer mean-to-osculating map (Basilisk clMeanOscMap)."
+                                          : "First-order J2 Brouwer osculating-to-mean map (Basilisk clMeanOscMap).");
+}
+}  // namespace
 
-  ::flatbuffers::Verifier vcm_verifier(
-      keplerian_frame->payload,
-      keplerian_frame->payload_length);
-  if (!VerifyVCMBuffer(vcm_verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input keplerian_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier grv_verifier(
-      gravity_frame->payload,
-      gravity_frame->payload_length);
-  if (!VerifyGRVBuffer(grv_verifier)) {
-    plugin_set_error("invalid-grv-buffer", "Input gravity_context is not a valid SDS GRV FlatBuffer.");
-    return 3;
-  }
-
-  const VCM* vcm = GetVCM(keplerian_frame->payload);
-  const keplerianElements* source = vcm ? vcm->KEPLERIAN_ELEMENTS() : nullptr;
-  if (source == nullptr) {
-    plugin_set_error("missing-keplerian-elements", "VCM must contain KEPLERIAN_ELEMENTS.");
-    return 3;
-  }
-
-  const GRV* gravity = GetGRV(gravity_frame->payload);
-  VcmKeplerianElements elements;
-  if (!convert_vcm_keplerian_mean_to_osculating(source, gravity, &elements)) {
-    plugin_set_error(
-        "unsupported-orbit",
-        "VCM KEPLERIAN_ELEMENTS and GRV EQUATORIAL_RADIUS/J2 must describe a finite elliptical first-order J2 mean-to-osculating map.");
-    return 3;
-  }
-
-  return emit_vcm_keplerian(vcm, elements);
+extern "C" int ocm_keplerian_mean_to_osculating(void) {
+  return map_mean_osculating(true);
 }
 
-extern "C" int vcm_keplerian_osculating_to_mean(void) {
-  plugin_reset_output_state();
-
-  const plugin_input_frame_t* keplerian_frame = find_input_frame("keplerian_state");
-  if (keplerian_frame == nullptr || keplerian_frame->payload == nullptr ||
-      keplerian_frame->payload_length < 8) {
-    plugin_set_error("missing-keplerian-state", "No VCM keplerian_state frame was provided.");
-    return 3;
-  }
-
-  const plugin_input_frame_t* gravity_frame = find_input_frame("gravity_context");
-  if (gravity_frame == nullptr || gravity_frame->payload == nullptr ||
-      gravity_frame->payload_length < 8) {
-    plugin_set_error("missing-gravity-context", "No GRV gravity_context frame was provided.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier vcm_verifier(
-      keplerian_frame->payload,
-      keplerian_frame->payload_length);
-  if (!VerifyVCMBuffer(vcm_verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input keplerian_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier grv_verifier(
-      gravity_frame->payload,
-      gravity_frame->payload_length);
-  if (!VerifyGRVBuffer(grv_verifier)) {
-    plugin_set_error("invalid-grv-buffer", "Input gravity_context is not a valid SDS GRV FlatBuffer.");
-    return 3;
-  }
-
-  const VCM* vcm = GetVCM(keplerian_frame->payload);
-  const keplerianElements* source = vcm ? vcm->KEPLERIAN_ELEMENTS() : nullptr;
-  if (source == nullptr) {
-    plugin_set_error("missing-keplerian-elements", "VCM must contain KEPLERIAN_ELEMENTS.");
-    return 3;
-  }
-
-  const GRV* gravity = GetGRV(gravity_frame->payload);
-  VcmKeplerianElements elements;
-  if (!convert_vcm_keplerian_osculating_to_mean(source, gravity, &elements)) {
-    plugin_set_error(
-        "unsupported-orbit",
-        "VCM KEPLERIAN_ELEMENTS and GRV EQUATORIAL_RADIUS/J2 must describe a finite elliptical first-order J2 osculating-to-mean map.");
-    return 3;
-  }
-
-  return emit_vcm_keplerian(vcm, elements);
+extern "C" int ocm_keplerian_osculating_to_mean(void) {
+  return map_mean_osculating(false);
 }
 
 extern "C" int keplerian_to_equinoctial(void) {
   plugin_reset_output_state();
-
-  const plugin_input_frame_t* frame = find_input_frame("keplerian_state");
-  if (frame == nullptr || frame->payload == nullptr || frame->payload_length < 8) {
-    plugin_set_error("missing-keplerian-state", "No VCM keplerian_state frame was provided.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-  if (!VerifyVCMBuffer(verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input keplerian_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  const VCM* vcm = GetVCM(frame->payload);
-  const keplerianElements* source = vcm ? vcm->KEPLERIAN_ELEMENTS() : nullptr;
-  if (source == nullptr) {
-    plugin_set_error("missing-keplerian-elements", "VCM must contain KEPLERIAN_ELEMENTS.");
-    return 3;
-  }
-
-  EquinoctialElements elements;
-  if (!convert_vcm_keplerian_to_equinoctial(source, &elements)) {
-    plugin_set_error(
-        "unsupported-orbit",
-        "VCM KEPLERIAN_ELEMENTS must describe a finite elliptical orbit with SEMI_MAJOR_AXIS > 0, 0 <= ECCENTRICITY < 1, and TRUE_ANOMALY or MEAN_ANOMALY.");
-    return 3;
-  }
-
-  return emit_vcm_equinoctial(vcm, elements);
+  OcmInput in;
+  ElementRecord record;
+  if (const int rc = read_ocm_elements("keplerian_state", &in, &record)) return rc;
+  return emit_ocm_equinoctial("equinoctial_state", in, record, "SANA EQUINOCTIAL elements from the Keplerian elements.");
 }
 
 extern "C" int equinoctial_to_keplerian(void) {
   plugin_reset_output_state();
-
-  const plugin_input_frame_t* frame = find_input_frame("equinoctial_state");
-  if (frame == nullptr || frame->payload == nullptr || frame->payload_length < 8) {
-    plugin_set_error("missing-equinoctial-state", "No VCM equinoctial_state frame was provided.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-  if (!VerifyVCMBuffer(verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input equinoctial_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  const VCM* vcm = GetVCM(frame->payload);
-  const equinoctialElements* source = vcm ? vcm->EQUINOCTIAL_ELEMENTS() : nullptr;
-  if (source == nullptr) {
-    plugin_set_error("missing-equinoctial-elements", "VCM must contain EQUINOCTIAL_ELEMENTS.");
-    return 3;
-  }
-
-  VcmKeplerianElements elements;
-  if (!convert_vcm_equinoctial_to_keplerian(source, &elements)) {
-    plugin_set_error(
-        "unsupported-orbit",
-        "VCM EQUINOCTIAL_ELEMENTS must describe a finite elliptical orbit with N > 0 and 0 <= eccentricity < 1.");
-    return 3;
-  }
-
-  return emit_vcm_keplerian(vcm, elements);
+  OcmInput in;
+  ElementRecord record;
+  if (const int rc = read_ocm_elements("equinoctial_state", &in, &record)) return rc;
+  const char* averaging = in.ocm->ORB_AVERAGING() != nullptr ? in.ocm->ORB_AVERAGING()->c_str() : nullptr;
+  return emit_ocm_keplerian("keplerian_state", in, record, averaging, "Keplerian elements from the equinoctial elements.");
 }
 
-extern "C" int vcm_equinoctial_to_omm(void) {
+extern "C" int ocm_equinoctial_to_omm(void) {
   plugin_reset_output_state();
-
-  const plugin_input_frame_t* frame = find_input_frame("equinoctial_state");
-  if (frame == nullptr || frame->payload == nullptr || frame->payload_length < 8) {
-    plugin_set_error("missing-equinoctial-state", "No VCM equinoctial_state frame was provided.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-  if (!VerifyVCMBuffer(verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input equinoctial_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  const VCM* vcm = GetVCM(frame->payload);
-  const equinoctialElements* source = vcm ? vcm->EQUINOCTIAL_ELEMENTS() : nullptr;
-  if (source == nullptr) {
-    plugin_set_error("missing-equinoctial-elements", "VCM must contain EQUINOCTIAL_ELEMENTS.");
-    return 3;
-  }
-
-  OemMetadata metadata;
-  if (!extract_vcm_metadata(vcm, &metadata)) {
-    plugin_set_error("missing-state-vector-epoch", "VCM STATE_VECTOR.EPOCH is required for OMM output.");
-    return 3;
-  }
-
-  VcmKeplerianElements vcm_elements;
-  if (!convert_vcm_equinoctial_to_keplerian(source, &vcm_elements)) {
-    plugin_set_error(
-        "unsupported-orbit",
-        "VCM EQUINOCTIAL_ELEMENTS must describe a finite elliptical orbit with N > 0 and 0 <= eccentricity < 1.");
-    return 3;
-  }
-
+  OcmInput in;
+  ElementRecord record;
+  if (const int rc = read_ocm_elements("equinoctial_state", &in, &record)) return rc;
   KeplerianElements elements;
-  if (!convert_vcm_keplerian_elements_to_omm(vcm_elements, vcm ? vcm->GM() : 0.0, &elements)) {
-    plugin_set_error(
-        "unsupported-orbit",
-        "VCM EQUINOCTIAL_ELEMENTS and GM must describe a finite elliptical orbit.");
+  if (!convert_record_to_omm(record, in.gm, &elements)) {
+    plugin_set_error("unsupported-orbit", "The equinoctial elements and PERTURBATIONS.GM must describe a finite elliptical orbit.");
     return 3;
   }
-
-  return emit_omm_from_vcm(vcm, metadata, elements);
+  return emit_omm_from_ocm(in, elements, "Generated from SDS OCM equinoctial elements.");
 }
 
-extern "C" int vcm_equinoctial_to_oem(void) {
+extern "C" int ocm_equinoctial_to_oem(void) {
   plugin_reset_output_state();
-
-  const plugin_input_frame_t* frame = find_input_frame("equinoctial_state");
-  if (frame == nullptr || frame->payload == nullptr || frame->payload_length < 8) {
-    plugin_set_error("missing-equinoctial-state", "No VCM equinoctial_state frame was provided.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-  if (!VerifyVCMBuffer(verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input equinoctial_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  const VCM* vcm = GetVCM(frame->payload);
-  const equinoctialElements* source = vcm ? vcm->EQUINOCTIAL_ELEMENTS() : nullptr;
-  if (source == nullptr) {
-    plugin_set_error("missing-equinoctial-elements", "VCM must contain EQUINOCTIAL_ELEMENTS.");
-    return 3;
-  }
-
-  VcmKeplerianElements elements;
-  if (!convert_vcm_equinoctial_to_keplerian(source, &elements)) {
-    plugin_set_error(
-        "unsupported-orbit",
-        "VCM EQUINOCTIAL_ELEMENTS must describe a finite elliptical orbit with N > 0 and 0 <= eccentricity < 1.");
-    return 3;
-  }
-
+  OcmInput in;
+  ElementRecord record;
+  if (const int rc = read_ocm_elements("equinoctial_state", &in, &record)) return rc;
   CartesianState state;
-  if (!convert_vcm_keplerian_elements_to_cartesian(elements, vcm ? vcm->GM() : 0.0, &state)) {
-    plugin_set_error(
-        "unsupported-orbit",
-        "VCM EQUINOCTIAL_ELEMENTS and GM must describe a finite elliptical orbit.");
+  if (!convert_record_to_cartesian(record, in.gm, &state)) {
+    plugin_set_error("unsupported-orbit", "The equinoctial elements and PERTURBATIONS.GM must describe a finite elliptical orbit.");
     return 3;
   }
-
-  return emit_oem_from_vcm(vcm, state, "Generated from SDS VCM equinoctial elements.");
+  return emit_oem_from_ocm(in, state, "Generated from SDS OCM equinoctial elements.");
 }
 
-extern "C" int vcm_equinoctial_to_state(void) {
+extern "C" int ocm_equinoctial_to_state(void) {
   plugin_reset_output_state();
-
-  const plugin_input_frame_t* frame = find_input_frame("equinoctial_state");
-  if (frame == nullptr || frame->payload == nullptr || frame->payload_length < 8) {
-    plugin_set_error("missing-equinoctial-state", "No VCM equinoctial_state frame was provided.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
-  if (!VerifyVCMBuffer(verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input equinoctial_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  const VCM* vcm = GetVCM(frame->payload);
-  const equinoctialElements* source = vcm ? vcm->EQUINOCTIAL_ELEMENTS() : nullptr;
-  VcmKeplerianElements elements;
-  if (!convert_vcm_equinoctial_to_keplerian(source, &elements)) {
-    plugin_set_error(
-        "unsupported-orbit",
-        "VCM EQUINOCTIAL_ELEMENTS must describe a finite elliptical orbit.");
-    return 3;
-  }
-
+  OcmInput in;
+  ElementRecord record;
+  if (const int rc = read_ocm_elements("equinoctial_state", &in, &record)) return rc;
   CartesianState state;
-  if (!convert_vcm_keplerian_elements_to_cartesian(elements, vcm ? vcm->GM() : 0.0, &state)) {
-    plugin_set_error(
-        "unsupported-orbit",
-        "Recovered VCM equinoctial Keplerian elements and GM must describe a finite elliptical orbit.");
+  if (!convert_record_to_cartesian(record, in.gm, &state)) {
+    plugin_set_error("unsupported-orbit", "The equinoctial elements and PERTURBATIONS.GM must describe a finite elliptical orbit.");
     return 3;
   }
-
-  return emit_vcm_state_vector(vcm, state);
+  return emit_ocm_cartesian("vector_state", in, state, "Cartesian state from the equinoctial elements.");
 }
 
-extern "C" int vcm_pair_to_cdm_relative_hill(void) {
+extern "C" int ocm_pair_to_cdm_relative_hill(void) {
   plugin_reset_output_state();
-
-  const plugin_input_frame_t* chief_frame = find_input_frame("chief_state");
-  if (chief_frame == nullptr || chief_frame->payload == nullptr || chief_frame->payload_length < 8) {
-    plugin_set_error("missing-chief-state", "No VCM chief_state frame was provided.");
-    return 3;
-  }
-
-  const plugin_input_frame_t* deputy_frame = find_input_frame("deputy_state");
-  if (deputy_frame == nullptr || deputy_frame->payload == nullptr || deputy_frame->payload_length < 8) {
-    plugin_set_error("missing-deputy-state", "No VCM deputy_state frame was provided.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier chief_verifier(chief_frame->payload, chief_frame->payload_length);
-  if (!VerifyVCMBuffer(chief_verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input chief_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  ::flatbuffers::Verifier deputy_verifier(deputy_frame->payload, deputy_frame->payload_length);
-  if (!VerifyVCMBuffer(deputy_verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input deputy_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  const VCM* chief_vcm = GetVCM(chief_frame->payload);
-  const VCM* deputy_vcm = GetVCM(deputy_frame->payload);
+  OcmInput chief;
+  OcmInput deputy;
   CartesianState chief_state;
   CartesianState deputy_state;
-  OemMetadata chief_metadata;
-  OemMetadata deputy_metadata;
-  if (!extract_vcm_state(chief_vcm, &chief_state, &chief_metadata)) {
-    plugin_set_error("missing-chief-state-vector", "VCM chief_state must contain a finite STATE_VECTOR.");
-    return 3;
-  }
-  if (!extract_vcm_state(deputy_vcm, &deputy_state, &deputy_metadata)) {
-    plugin_set_error("missing-deputy-state-vector", "VCM deputy_state must contain a finite STATE_VECTOR.");
-    return 3;
-  }
-
+  if (const int rc = read_ocm_cartesian("chief_state", &chief, &chief_state)) return rc;
+  if (const int rc = read_ocm_cartesian("deputy_state", &deputy, &deputy_state)) return rc;
   RelativeHillState relative;
   if (!compute_hill_relative_state(chief_state, deputy_state, &relative)) {
-    plugin_set_error(
-        "unsupported-state",
-        "Chief and deputy VCM STATE_VECTOR values must be finite and chief angular momentum must be non-zero.");
+    plugin_set_error("unsupported-state",
+                     "Chief and deputy OCM states must be finite and chief angular momentum must be non-zero.");
     return 3;
   }
-
-  return emit_cdm_relative_hill(chief_vcm, deputy_vcm, chief_metadata, relative);
+  return emit_cdm_relative_hill(chief.ocm, deputy.ocm, chief.metadata, relative);
 }
 
-extern "C" int cdm_relative_hill_to_vcm_deputy_state(void) {
+extern "C" int cdm_relative_hill_to_ocm_deputy_state(void) {
   plugin_reset_output_state();
-
-  const plugin_input_frame_t* chief_frame = find_input_frame("chief_state");
-  if (chief_frame == nullptr || chief_frame->payload == nullptr || chief_frame->payload_length < 8) {
-    plugin_set_error("missing-chief-state", "No VCM chief_state frame was provided.");
-    return 3;
-  }
-
+  OcmInput chief;
+  CartesianState chief_state;
+  if (const int rc = read_ocm_cartesian("chief_state", &chief, &chief_state)) return rc;
   const plugin_input_frame_t* relative_frame = find_input_frame("relative_state");
   if (relative_frame == nullptr || relative_frame->payload == nullptr || relative_frame->payload_length < 8) {
     plugin_set_error("missing-relative-state", "No CDM relative_state frame was provided.");
     return 3;
   }
-
-  ::flatbuffers::Verifier chief_verifier(chief_frame->payload, chief_frame->payload_length);
-  if (!VerifyVCMBuffer(chief_verifier)) {
-    plugin_set_error("invalid-vcm-buffer", "Input chief_state is not a valid SDS VCM FlatBuffer.");
-    return 3;
-  }
-
-  if (!CDMBufferHasIdentifier(relative_frame->payload)) {
-    plugin_set_error("invalid-cdm-buffer", "Input relative_state is not an SDS CDM FlatBuffer.");
-    return 3;
-  }
-  ::flatbuffers::Verifier relative_verifier(relative_frame->payload, relative_frame->payload_length);
-  if (!VerifyCDMBuffer(relative_verifier)) {
+  std::vector<uint8_t> cdm_bytes(relative_frame->payload, relative_frame->payload + relative_frame->payload_length);
+  ::flatbuffers::Verifier verifier(cdm_bytes.data(), cdm_bytes.size());
+  if (!CDMBufferHasIdentifier(cdm_bytes.data()) || !VerifyCDMBuffer(verifier)) {
     plugin_set_error("invalid-cdm-buffer", "Input relative_state is not a valid SDS CDM FlatBuffer.");
     return 3;
   }
-
-  const VCM* chief_vcm = GetVCM(chief_frame->payload);
-  const CDM* relative_cdm = GetCDM(relative_frame->payload);
-  CartesianState chief_state;
-  OemMetadata chief_metadata;
-  if (!extract_vcm_state(chief_vcm, &chief_state, &chief_metadata)) {
-    plugin_set_error("missing-chief-state-vector", "VCM chief_state must contain a finite STATE_VECTOR.");
-    return 3;
-  }
-
+  const CDM* relative_cdm = GetCDM(cdm_bytes.data());
   RelativeHillState relative;
   if (!extract_cdm_relative_state(relative_cdm, &relative)) {
-    plugin_set_error("missing-relative-fields", "CDM relative_state must contain finite RTN/Hill relative position and velocity fields.");
+    plugin_set_error("missing-relative-fields",
+                     "CDM relative_state must contain finite RTN/Hill relative position and velocity fields.");
     return 3;
   }
-
   CartesianState deputy_state;
   if (!compute_deputy_from_hill_relative_state(chief_state, relative, &deputy_state)) {
-    plugin_set_error(
-        "unsupported-state",
-        "Chief VCM STATE_VECTOR and CDM relative_state values must be finite and chief angular momentum must be non-zero.");
+    plugin_set_error("unsupported-state",
+                     "The chief OCM state and CDM relative_state must be finite and chief angular momentum must be non-zero.");
     return 3;
   }
-
-  return emit_vcm_deputy_state(chief_vcm, relative_cdm, deputy_state);
+  // The deputy is a different object: the chief's identity is not reused,
+  // and its epoch is the CDM TCA when one is given.
+  OCMT out;
+  chief.ocm->UnPackTo(&out);
+  out.TRAJ_TYPE = trajectoryType::CARTESIAN_PV;
+  out.STATE_VECTOR_SIZE = 6;
+  out.STATE_DATA = {deputy_state.x, deputy_state.y, deputy_state.z, deputy_state.x_dot, deputy_state.y_dot, deputy_state.z_dot};
+  out.STATE_STEP_SIZE = 0.0;
+  out.COVARIANCE_DATA.clear();
+  out.COV_REF_FRAME.reset();
+  out.ORB_AVERAGING.clear();
+  out.PHYSICAL_PROPERTIES.reset();
+  out.MANEUVER_DATA.clear();
+  out.ORBIT_DETERMINATION.reset();
+  out.ORB_REVNUM = 0;
+  if (!out.METADATA) out.METADATA = std::make_unique<MetadataT>();
+  auto& md = *out.METADATA;
+  md.OBJECT_NAME = relative_cdm->MESSAGE_ID() != nullptr ? relative_cdm->MESSAGE_ID()->str() : "Basilisk Hill deputy state";
+  md.INTERNATIONAL_DESIGNATOR.clear();
+  md.OBJECT_DESIGNATOR.clear();
+  md.CATALOG_NAME.clear();
+  if (relative_cdm->TCA() != nullptr) {
+    md.START_TIME = relative_cdm->TCA()->str();
+    md.STOP_TIME = md.START_TIME;
+    md.EPOCH_TZERO = md.START_TIME;
+  }
+  if (!out.HEADER) out.HEADER = std::make_unique<HeaderT>();
+  out.HEADER->COMMENT.push_back("Deputy state from the chief state and a CDM Hill-frame relative state.");
+  ::flatbuffers::FlatBufferBuilder builder(2048);
+  builder.FinishSizePrefixed(CreateOCM(builder, &out), OCMIdentifier());
+  if (plugin_push_output_ex("deputy_state", "OCM.fbs", "$OCM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OCM", 0, 0,
+                            builder.GetBufferPointer(), static_cast<uint32_t>(builder.GetSize())) < 0) {
+    plugin_set_error("emit-failed", "Failed to emit OCM deputy state.");
+    return 1;
+  }
+  return 0;
 }

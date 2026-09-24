@@ -8,7 +8,7 @@ This plugin exposes atmosphere computations through these SDK methods:
 
 - `invoke`
 - `query_atmosphere_state_batch`
-- `vcm_state_to_drag_acceleration_oem`
+- `ocm_state_to_drag_acceleration_oem`
 
 `invoke` is the legacy command bridge. The request payload is UTF-8 JSON with this envelope:
 
@@ -94,11 +94,12 @@ history. Unknown `model` names are refused.
 
 The C++ model layer also includes Basilisk `orbitalMotion.c` `debyeLength` and
 `atmosphericDrag` utilities with SI input/output for native parity coverage.
-`vcm_state_to_drag_acceleration_oem` exposes the drag utility through the
-binary direct SDK surface: it consumes SDS `VCM.fbs` (`VCM`) with
-`STATE_VECTOR`, `MASS`, `DRAG_AREA`, and `DRAG_COEFF`, then emits SDS
-`OEM.fbs` (`$OEM`, root `OEM`) on `drag_acceleration` with
-`STATE_VECTOR_SIZE=9`. OEM acceleration components are in km/s^2, matching
+`ocm_state_to_drag_acceleration_oem` exposes the drag utility through the
+binary direct SDK surface: it consumes one SDS `OCM.fbs` (`$OCM`)
+`CARTESIAN_PV` or `CARTESIAN_PVA` row with `PHYSICAL_PROPERTIES` `WET_MASS`,
+`DRAG_CONST_AREA` and `DRAG_COEFF_NOM`, then emits SDS `OEM.fbs` (`$OEM`) on
+`drag_acceleration` with `STATE_VECTOR_SIZE=9`, carrying the OCM epoch, time
+system, `CENTER_NAME` and `TRAJ_REF_FRAME`. OEM acceleration components are in km/s^2, matching
 CCSDS OEM units and Basilisk `orbitalMotion.c` output conventions.
 Direct HFC Debye-length output remains open because the current SDS HFC record
 has no Debye-length output field.
@@ -109,7 +110,7 @@ has no Debye-length output field.
 - `queryAltitude`
 - `queryAltitudes`
 - `queryAtmosphereStateBatch`
-- `vcm_state_to_drag_acceleration_oem`
+- `ocm_state_to_drag_acceleration_oem`
 
 These operations route the US Standard Atmosphere 1976 implementation (geopotential-altitude formulation, 0-86 km geometric) and the REAL NRLMSISE-00 model (public-domain Picone/Hedin/Drob reference C port by D. Brodowski, vendored in `third_party/nrlmsise00/`) through the canonical SDK command bridge. NRLMSISE-00 mass density is the gtd7d drag-effective density (includes anomalous oxygen); outputs are verified against the canonical 17-case table distributed with the reference package.
 
@@ -185,7 +186,7 @@ The WasmEdge cases need `wasmedge` on `PATH`. That test covers:
 - Basilisk `debyeLength` native reference values at 400 km, 1000 km, 10000 km,
   and 34000 km
 - Basilisk `atmosphericDrag` native source-vector acceleration and direct
-  VCM-to-OEM browser/WasmEdge SDK invocation
+  OCM-to-OEM browser/WasmEdge SDK invocation
 - HFC dynamic pressure and Mach derived from speed samples
 - a hosted-runtime example contract check
 
