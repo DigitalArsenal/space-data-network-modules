@@ -374,3 +374,11 @@ show there as a factor of 1000 or 10000 rather than as a rounding difference.
 - **No SP3 file this writer produced has been fed to a third-party GNSS
   processing package** (Bernese, gLAB, RTKLIB). Orekit is the only independent
   reader in the loop.
+
+## vcm_v2_sample.txt
+
+- size: 2092 bytes
+- sha256 (as committed): b716157617e4ff210bd7d5b1e79abfdb236346c9904054e1f302b98748fbda8e
+- source: spacedatastandards.org `survey/legacy-messages/vcm/sample/vcm.txt`, commit 577268f0949e9815016315d8fe47d74bf73d5516, copied verbatim
+- format: SP Vector/Covariance Message V2.0 as documented in `survey/legacy-messages/vcm/README.md` of the same commit
+- note: a published example with placeholder identity (satellite 00000, centre FAKE_CENTER); used for field transcription and frame-invariant checks, not orbit accuracy
