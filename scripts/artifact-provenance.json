@@ -3181,30 +3181,30 @@
       "declaration": null
     },
     "propagator/atmosphere/dist/browser/module.wasm": {
-      "sha256": "ca24096f1a5a1dbb224a2ba40faccff35071fe440c6c19e863adecb02cb9bddf",
-      "bytes": 229447,
+      "sha256": "7b54482c8656007430af24d4045a473fa60e4284d5041908d434ae0401f5ab04",
+      "bytes": 283158,
       "module": null,
-      "lastCommit": "ba94c6ee3d2299932f3a594f35100d8be14add46",
-      "lastCommitDate": "2026-06-17T11:58:11-04:00",
+      "lastCommit": "91521406207166d04d6f9641c20f8ae2aa7b2511",
+      "lastCommitDate": "2026-09-24T09:45:52-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "a23b2ddc53a1c7ea42a197f3506c4495853d9d6c",
-        "sdkCommit": "9292994fe1c8c87ea7126faac82b1490f2a87d26"
+        "superRepoCommit": "db14dcde9442e10855b968472e594f394163e5d5",
+        "sdkCommit": "16616b39625bcfcf5ade89eb7b95b573c56d9a81"
       },
       "declaration": null
     },
     "propagator/atmosphere/dist/isomorphic/module.wasm": {
-      "sha256": "ca24096f1a5a1dbb224a2ba40faccff35071fe440c6c19e863adecb02cb9bddf",
-      "bytes": 229447,
+      "sha256": "7b54482c8656007430af24d4045a473fa60e4284d5041908d434ae0401f5ab04",
+      "bytes": 283158,
       "module": null,
-      "lastCommit": "ba94c6ee3d2299932f3a594f35100d8be14add46",
-      "lastCommitDate": "2026-06-17T11:58:11-04:00",
+      "lastCommit": "91521406207166d04d6f9641c20f8ae2aa7b2511",
+      "lastCommitDate": "2026-09-24T09:45:52-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "a23b2ddc53a1c7ea42a197f3506c4495853d9d6c",
-        "sdkCommit": "9292994fe1c8c87ea7126faac82b1490f2a87d26"
+        "superRepoCommit": "db14dcde9442e10855b968472e594f394163e5d5",
+        "sdkCommit": "16616b39625bcfcf5ade89eb7b95b573c56d9a81"
       },
       "declaration": null
     },
@@ -3263,32 +3263,56 @@
       }
     },
     "propagator/hpop/dist/browser/module.wasm": {
-      "sha256": "af6c51615f1be232df304ae5c0e35a34c11eb76367dca0306e67bf8b6522279e",
-      "bytes": 546479,
-      "module": null,
-      "lastCommit": "08bcad9c80c227244d4a8f7f43423e7e4b652ab4",
-      "lastCommitDate": "2026-08-29T23:31:49-04:00",
+      "sha256": "a533736e51827e787269caf8b2bef47aed45d8fd7d8f0cb5054131ac2b554728",
+      "bytes": 1014312,
+      "module": "propagator/hpop",
+      "lastCommit": "0301ea80de3cf482dcbd466908920342a527bf99",
+      "lastCommitDate": "2026-09-24T09:46:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "fa9294968943646c150bb73c5cc7ee85cbc4f979",
-        "sdkCommit": "166e0ca91354f73db99b27ed3c715c4c5cc0fc3b"
+        "superRepoCommit": "db14dcde9442e10855b968472e594f394163e5d5",
+        "sdkCommit": "16616b39625bcfcf5ade89eb7b95b573c56d9a81"
       },
-      "declaration": null
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "wasi-sequential"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
     },
     "propagator/hpop/dist/isomorphic/module.wasm": {
-      "sha256": "af6c51615f1be232df304ae5c0e35a34c11eb76367dca0306e67bf8b6522279e",
-      "bytes": 546479,
-      "module": null,
-      "lastCommit": "08bcad9c80c227244d4a8f7f43423e7e4b652ab4",
-      "lastCommitDate": "2026-08-29T23:31:49-04:00",
+      "sha256": "a533736e51827e787269caf8b2bef47aed45d8fd7d8f0cb5054131ac2b554728",
+      "bytes": 1014312,
+      "module": "propagator/hpop",
+      "lastCommit": "0301ea80de3cf482dcbd466908920342a527bf99",
+      "lastCommitDate": "2026-09-24T09:46:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "fa9294968943646c150bb73c5cc7ee85cbc4f979",
-        "sdkCommit": "166e0ca91354f73db99b27ed3c715c4c5cc0fc3b"
+        "superRepoCommit": "db14dcde9442e10855b968472e594f394163e5d5",
+        "sdkCommit": "16616b39625bcfcf5ade89eb7b95b573c56d9a81"
       },
-      "declaration": null
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "wasi-sequential"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
     },
     "propagator/hypersonics/dist/isomorphic/module.wasm": {
       "sha256": "73733a0672728a9db654f995b3a0c9b727f34a6dcde5db7cb945d8336cf57338",
