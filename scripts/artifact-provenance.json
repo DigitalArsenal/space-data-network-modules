@@ -1696,14 +1696,17 @@
       }
     },
     "files/orbit-products/dist/isomorphic/module.wasm": {
-      "sha256": "d9f8ea296eab142767a02eddcdc888899fdd8fdccd968a1b82479ff673698e82",
-      "bytes": 404528,
+      "sha256": "3f61f421214ffe2c96a411c907d21a4fb044f259e4d4608cc59925bf0d117ed8",
+      "bytes": 493957,
       "module": "files/orbit-products",
-      "lastCommit": "794262b12b74db755d8426345a0602f137bff4df",
-      "lastCommitDate": "2026-09-21T22:09:34-04:00",
+      "lastCommit": "da2982c58757d2de4b5c5e18c4ebf8952b25e600",
+      "lastCommitDate": "2026-09-24T11:47:48-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": null,
+      "sdkPinAtCommit": {
+        "superRepoCommit": "db14dcde9442e10855b968472e594f394163e5d5",
+        "sdkCommit": "16616b39625bcfcf5ade89eb7b95b573c56d9a81"
+      },
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2726,16 +2729,16 @@
       }
     },
     "foundation/orbits/dist/isomorphic/module.wasm": {
-      "sha256": "dbd2df05c870727cfa97232fd8465f9719127f94069d373c6c4aeefb8a9eeec2",
-      "bytes": 253559,
+      "sha256": "ec1f3d78ce118c12c3bd4be54a8330e69cb8943dd15371f61a0232e39c809598",
+      "bytes": 424812,
       "module": "foundation/orbits",
-      "lastCommit": "8978cd3435583707dc73a9a0840e75562fc4bc12",
-      "lastCommitDate": "2026-06-17T11:00:08-04:00",
+      "lastCommit": "da2982c58757d2de4b5c5e18c4ebf8952b25e600",
+      "lastCommitDate": "2026-09-24T11:47:48-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "c65c1c7892042d50548389acc5419f737d77505b",
-        "sdkCommit": "b06faf5c39e08890ece5ea011b9c9b7dafcedb95"
+        "superRepoCommit": "db14dcde9442e10855b968472e594f394163e5d5",
+        "sdkCommit": "16616b39625bcfcf5ade89eb7b95b573c56d9a81"
       },
       "declaration": {
         "declares": true,
@@ -3181,11 +3184,11 @@
       "declaration": null
     },
     "propagator/atmosphere/dist/browser/module.wasm": {
-      "sha256": "7b54482c8656007430af24d4045a473fa60e4284d5041908d434ae0401f5ab04",
-      "bytes": 283158,
+      "sha256": "1aca85d91cf1f4627a139d49d1401cbaa8ae67d38540376ee968acd8e9f12d02",
+      "bytes": 314606,
       "module": null,
-      "lastCommit": "91521406207166d04d6f9641c20f8ae2aa7b2511",
-      "lastCommitDate": "2026-09-24T09:45:52-04:00",
+      "lastCommit": "da2982c58757d2de4b5c5e18c4ebf8952b25e600",
+      "lastCommitDate": "2026-09-24T11:47:48-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -3195,11 +3198,11 @@
       "declaration": null
     },
     "propagator/atmosphere/dist/isomorphic/module.wasm": {
-      "sha256": "7b54482c8656007430af24d4045a473fa60e4284d5041908d434ae0401f5ab04",
-      "bytes": 283158,
+      "sha256": "1aca85d91cf1f4627a139d49d1401cbaa8ae67d38540376ee968acd8e9f12d02",
+      "bytes": 314606,
       "module": null,
-      "lastCommit": "91521406207166d04d6f9641c20f8ae2aa7b2511",
-      "lastCommitDate": "2026-09-24T09:45:52-04:00",
+      "lastCommit": "da2982c58757d2de4b5c5e18c4ebf8952b25e600",
+      "lastCommitDate": "2026-09-24T11:47:48-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
