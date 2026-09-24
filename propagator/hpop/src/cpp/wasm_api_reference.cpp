@@ -1266,10 +1266,13 @@ void plugin_set_force_model(double* configPtr) {
 
 /// Set drag-model options not included in the packed force-model array.
 /// includeWinds: 0/1, coRotatingAtmosphere: 0/1
-void plugin_set_drag_options(int includeWinds, int coRotatingAtmosphere) {
-    g_forceSet.drag.includeWinds = includeWinds != 0;
+/// @return 0, or -3 when winds are requested: no validated horizontal
+///         wind model is available, so winds stay off and the request is refused
+int plugin_set_drag_options(int includeWinds, int coRotatingAtmosphere) {
+    g_forceSet.drag.includeWinds = false;
     g_forceSet.drag.coRotatingAtmosphere = coRotatingAtmosphere != 0;
     g_configVersion++;
+    return includeWinds != 0 ? -3 : 0;
 }
 
 /// Set atmosphere model type.

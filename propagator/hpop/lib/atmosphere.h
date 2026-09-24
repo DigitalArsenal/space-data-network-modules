@@ -95,9 +95,8 @@ double atmosphere_get_mach_number(double velocity, double altitude);
  * @param position Geographic position
  * @param epoch Time specification
  * @param wind Output wind vector
- * @return ATMOSPHERE_OK on success, error code otherwise
- *
- * Note: Current implementation returns zero wind (stub).
+ * @return ATMOSPHERE_ERROR_INVALID_MODEL: no validated horizontal wind model
+ *         is available, and the wind is reported as zero with that error
  */
 AtmosphereResult atmosphere_get_wind(const GeoPosition* position,
                                       const AtmosphereEpoch* epoch,

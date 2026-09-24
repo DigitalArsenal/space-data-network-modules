@@ -13,10 +13,33 @@ Implements a high-fidelity numerical orbit propagator accounting for full geopot
 | `Exponential` | Piecewise-exponential model, Vallado *Fundamentals of Astrodynamics and Applications* 4th ed., Table 8-4. |
 | `JB2008` | **Simplified approximation only** — mimics the Jacchia-Bowman 2008 exospheric-temperature response to S10.7/M10.7/Y10.7 with a single-species barometric profile. NOT the published JB2008 coefficient model. |
 | `DTM2020` | **Simplified approximation only** — mimics the DTM2020 F30/Hp temperature response. NOT the published DTM2020 spherical-harmonic model. |
-| `GOST2004` / `HarrisPriester` | Enum placeholders; dispatch falls through to `NRLMSISE00`. |
+| `HarrisPriester` | Harris-Priester diurnal-bulge table (100-1000 km), with the apex taken from the Sun direction; outside the table the model declines and drag is zero. Selectable as `forces.dragModel` `HARRIS_PRIESTER` and the PRW `HARRIS_PRIESTER` family. |
+| `GOST2004` | Enum placeholder only; not implemented and not selectable. |
 
 The typed PRW `ATMOSPHERE_REQUEST` operation exposes only the implemented models
 (`NRLMSISE00`, `USSA1976`, `EXPONENTIAL`).
+
+### Drag frame and inputs
+
+The force set integrates GCRF. NRLMSISE-00 (and the JB2008/DTM2020 stand-ins)
+need an Earth-fixed position, so drag rotates the GCRF position by GMST about
+the GCRF z axis before the geodetic conversion. That fixes the longitude and
+local solar time that place the diurnal bulge. Precession, nutation and polar
+motion are not applied to this density lookup; together they move the pole by
+well under a degree since J2000, below these models' horizontal resolution.
+Relative velocity is `v - omega x r` in GCRF with the same axis.
+
+Space-weather inputs follow the NRLMSISE-00 package definitions
+(`third_party/nrlmsise00/nrlmsise-00.h`): `F107` is the **observed** flux (at
+the Earth's distance, not adjusted to 1 AU) of the day before the epoch,
+`F107a` the observed 81-day centered mean, and `Ap` the daily index. HPOP
+evaluates NRLMSISE-00 with the daily Ap only (switch 9 = 1).
+
+No validated horizontal wind model ships with HPOP. `includeWinds` is refused:
+`plugin_set_drag_options` returns `HPOP_ERR_NOT_IMPLEMENTED` and leaves winds
+off, and direct C++ drag calls with `includeWinds` throw
+`std::invalid_argument`. The earlier deterministic tidal wind pattern was not a
+physical model and has been removed.
 
 ## Installation
 

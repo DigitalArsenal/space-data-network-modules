@@ -10,6 +10,7 @@
 #include "ephemeris.h"
 #include "atmosphere.h"
 #include <cmath>
+#include <stdexcept>
 #include <cstring>
 #include <algorithm>
 #include <limits>
@@ -5184,38 +5185,10 @@ DragAccelerationResult computeDragAcceleration(
     }
 
     if (config.atmosphere.includeWinds) {
-        double lat = 0.0;
-        double lon = 0.0;
-        double altKm = 0.0;
-        ecefToGeodetic(position, lat, lon, altKm);
-
-        GeoPosition geoPos;
-        geoPos.latitude = lat;
-        geoPos.longitude = lon;
-        geoPos.altitude = altKm * 1000.0;
-
-        AtmosphereEpoch epoch;
-        epoch.year = 2000;
-        epoch.dayOfYear = 1;
-        double jdMidnight = std::floor(jd - 0.5) + 0.5;
-        epoch.secondOfDay = (jd - jdMidnight) * 86400.0;
-
-        WindVector windNED;
-        if (atmosphere_get_wind(&geoPos, &epoch, &windNED) == ATMOSPHERE_OK) {
-            const double sinLat = std::sin(lat);
-            const double cosLat = std::cos(lat);
-            const double sinLon = std::sin(lon);
-            const double cosLon = std::cos(lon);
-
-            const Vec3 northHat(-sinLat * cosLon, -sinLat * sinLon, cosLat);
-            const Vec3 eastHat(-sinLon, cosLon, 0.0);
-            const Vec3 downHat(-cosLat * cosLon, -cosLat * sinLon, -sinLat);
-
-            Vec3 wind = northHat * windNED.north
-                      + eastHat * windNED.east
-                      + downHat * windNED.down;
-            vAtm += wind * 1e-3;  // m/s -> km/s
-        }
+        // No validated horizontal wind model ships with HPOP; refuse rather
+        // than invent a wind field or silently drop the request.
+        throw std::invalid_argument(
+            "includeWinds: no validated horizontal wind model is available");
     }
     Vec3 vRel = velocity - vAtm;
     result.relativeSpeed = vRel.magnitude();

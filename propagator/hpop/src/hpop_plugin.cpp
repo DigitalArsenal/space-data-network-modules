@@ -1665,10 +1665,13 @@ int plugin_set_force_model_v2(double* configPtr, int len) {
 
 /// Set drag-model options not included in the packed force-model array.
 /// includeWinds: 0/1, coRotatingAtmosphere: 0/1
-void plugin_set_drag_options(int includeWinds, int coRotatingAtmosphere) {
-    g_forceSet.drag.includeWinds = includeWinds != 0;
+/// @return HPOP_OK, or HPOP_ERR_NOT_IMPLEMENTED when winds are requested: no validated horizontal
+///         wind model is available, so winds stay off and the request is refused
+int plugin_set_drag_options(int includeWinds, int coRotatingAtmosphere) {
+    g_forceSet.drag.includeWinds = false;
     g_forceSet.drag.coRotatingAtmosphere = coRotatingAtmosphere != 0;
     g_configVersion++;
+    return includeWinds != 0 ? HPOP_ERR_NOT_IMPLEMENTED : HPOP_OK;
 }
 
 /// Every atmosphere label the ABI names, in ABI order. This order is the

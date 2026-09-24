@@ -209,52 +209,18 @@ AtmosphereResult atmosphere_get_wind(const GeoPosition* position,
                                       const AtmosphereEpoch* epoch,
                                       WindVector* wind)
 {
+    (void)epoch;
     if (position == nullptr || wind == nullptr) {
         return ATMOSPHERE_ERROR_INVALID_PARAMETER;
     }
 
-    /* Simple horizontal wind model (NED frame, m/s).
-     * This provides a deterministic non-zero wind field for drag sensitivity
-     * tests until a full HWM-style model is integrated.
-     */
-    constexpr double PI = 3.14159265358979323846;
-    constexpr double TWO_PI = 6.28318530717958647692;
-
-    const double lat = position->latitude;
-    const double lon = position->longitude;
-    const double altKm = position->altitude * 1e-3;
-
-    // Winds are negligible outside the thermosphere regime for this model.
-    if (altKm < 80.0 || altKm > 800.0) {
-        wind->north = 0.0;
-        wind->east = 0.0;
-        wind->down = 0.0;
-        return ATMOSPHERE_OK;
-    }
-
-    double secondOfDay = 43200.0;
-    if (epoch != nullptr) {
-        secondOfDay = epoch->secondOfDay;
-    }
-    double lstHours = secondOfDay / 3600.0 + lon * (12.0 / PI);
-    lstHours = std::fmod(lstHours, 24.0);
-    if (lstHours < 0.0) {
-        lstHours += 24.0;
-    }
-
-    const double tidePhase = TWO_PI * (lstHours / 24.0);
-    const double altEnvelope = std::exp(-std::pow((altKm - 250.0) / 180.0, 2.0));
-    const double apScale = 1.0 + 0.003 * std::max(0.0, g_solarActivity.Ap[0]);
-
-    // Eastward winds are generally larger than meridional winds.
-    const double eastAmp = 110.0 * altEnvelope * std::cos(lat) * apScale;
-    const double northAmp = 45.0 * altEnvelope * std::sin(2.0 * lat) * apScale;
-
-    wind->east = eastAmp * std::sin(tidePhase - PI / 3.0);
-    wind->north = northAmp * std::cos(tidePhase + lon);
+    // No validated horizontal wind model (such as HWM14) ships with this
+    // module. The earlier deterministic tidal pattern was not a physical
+    // model, so the query is refused rather than answered with it.
+    wind->north = 0.0;
+    wind->east = 0.0;
     wind->down = 0.0;
-
-    return ATMOSPHERE_OK;
+    return ATMOSPHERE_ERROR_INVALID_MODEL;
 }
 
 /* ============================================================================

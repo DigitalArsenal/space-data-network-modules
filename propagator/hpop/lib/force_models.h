@@ -246,8 +246,8 @@ struct DragForceConfig {
 AtmosphereModelType AtmosphereModelForDrag(DragModelType model);
 
 /// Harris-Priester drag acceleration.
-/// @param position Body-fixed position (km)
-/// @param velocity Body-fixed velocity (km/s)
+/// @param position Satellite position, GCRF (km)
+/// @param velocity Satellite velocity, GCRF (km/s)
 /// @param jd Julian date (TDB), for the Sun direction that sets the bulge
 /// @param dragConfig Ballistic properties and atmosphere-relative velocity flags
 /// @param bulgeExponent Cosine exponent (2 low inclination, 6 polar)
@@ -255,9 +255,14 @@ AtmosphereModelType AtmosphereModelForDrag(DragModelType model);
 Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, double jd,
                     const DragForceConfig& dragConfig, double bulgeExponent = 4.0);
 
+/// GCRF position (km) re-expressed in Earth-fixed axes by a rotation of GMST
+/// about the GCRF z axis, for the geodetic density models. Precession,
+/// nutation and polar motion are not applied (see force_models.cpp).
+Vec3 EarthFixedForDensity(const Vec3& gcrf, double jdUt);
+
 /// Atmospheric drag acceleration
-/// @param position Satellite position in ECEF or ECI (km)
-/// @param velocity Satellite velocity in same frame (km/s)
+/// @param position Satellite position, GCRF (km)
+/// @param velocity Satellite velocity, GCRF (km/s)
 /// @param jd Julian date (TDB)
 /// @param weather Space weather data
 /// @param config Drag configuration
@@ -288,8 +293,8 @@ struct NRLMSISE00Config {
 };
 
 /// NRLMSISE-00 atmospheric drag acceleration
-/// @param position Satellite position (km)
-/// @param velocity Satellite velocity (km/s)
+/// @param position Satellite position, GCRF (km)
+/// @param velocity Satellite velocity, GCRF (km/s)
 /// @param jd Julian date
 /// @param weather Space weather indices
 /// @param dragConfig Drag configuration (mass, area, Cd)
@@ -299,7 +304,7 @@ Vec3 NRLMSISE00(const Vec3& position, const Vec3& velocity, double jd,
                 const SpaceWeatherData& weather, const DragForceConfig& dragConfig,
                 const NRLMSISE00Config& nrlmsiseConfig = NRLMSISE00Config());
 
-/// Get NRLMSISE-00 density components
+/// Get NRLMSISE-00 density components at a GCRF position (km)
 AtmosphericDensity NRLMSISE00Density(const Vec3& position, double jd,
                                      const SpaceWeatherData& weather,
                                      const NRLMSISE00Config& config = NRLMSISE00Config());

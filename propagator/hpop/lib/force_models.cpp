@@ -11,6 +11,7 @@
 #include "time_convert.h"
 #include <cmath>
 #include <algorithm>
+#include <stdexcept>
 
 namespace astro {
 namespace ForceModel {
@@ -41,47 +42,26 @@ Vec3 atmosphereCoRotationVelocity(const Vec3& position, bool coRotatingAtmospher
     return Vec3(-OMEGA_EARTH * position.y, OMEGA_EARTH * position.x, 0.0);
 }
 
+// No validated horizontal wind model (such as HWM14) ships with HPOP, so a
+// request for winds is refused instead of being answered with an invented
+// field or silently with none.
 Vec3 atmosphereWindVelocity(const Vec3& position, double jd, bool includeWinds) {
     if (!includeWinds) {
         return Vec3();
     }
-
-    double lat = 0.0;
-    double lon = 0.0;
-    double altKm = 0.0;
-    ecefToGeodetic(position, lat, lon, altKm);
-
-    GeoPosition geoPos;
-    geoPos.latitude = lat;
-    geoPos.longitude = lon;
-    geoPos.altitude = altKm * 1000.0;
-
-    AtmosphereEpoch epoch;
-    epoch.year = 2000;
-    epoch.dayOfYear = 1;
-    double jdMidnight = std::floor(jd - 0.5) + 0.5;
-    epoch.secondOfDay = (jd - jdMidnight) * 86400.0;
-
-    WindVector windNED;
-    if (atmosphere_get_wind(&geoPos, &epoch, &windNED) != ATMOSPHERE_OK) {
-        return Vec3();
-    }
-
-    const double sinLat = std::sin(lat);
-    const double cosLat = std::cos(lat);
-    const double sinLon = std::sin(lon);
-    const double cosLon = std::cos(lon);
-
-    const Vec3 northHat(-sinLat * cosLon, -sinLat * sinLon, cosLat);
-    const Vec3 eastHat(-sinLon, cosLon, 0.0);
-    const Vec3 downHat(-cosLat * cosLon, -cosLat * sinLon, -sinLat);
-
-    Vec3 wind = northHat * windNED.north
-              + eastHat * windNED.east
-              + downHat * windNED.down;
-    return wind * 1e-3;  // m/s -> km/s
+    throw std::invalid_argument(
+        "includeWinds: no validated horizontal wind model is available");
 }
 
+// The force set integrates GCRF, while the geodetic density models
+// (computeNRLMSISE00, computeJB2008, computeDTM2020 and computeDragAcceleration)
+// take an Earth-fixed position (astrodynamics.h). Rotating about the GCRF z
+// axis by GMST supplies the Earth-fixed longitude that sets local solar time
+// and the longitude terms. Precession, nutation and polar motion are not
+// applied: together they tilt the pole by well under a degree since J2000,
+// below the horizontal resolution of these empirical models, and the
+// co-rotation term below already uses the same axis. UT1-UTC (< 0.9 s) is
+// likewise negligible here.
 Vec3 relativeAtmosphereVelocity(const Vec3& position, const Vec3& velocity, double jd,
                                 bool coRotatingAtmosphere, bool includeWinds) {
     Vec3 vAtm = atmosphereCoRotationVelocity(position, coRotatingAtmosphere);
@@ -90,6 +70,22 @@ Vec3 relativeAtmosphereVelocity(const Vec3& position, const Vec3& velocity, doub
 }
 
 } // anonymous namespace
+
+Vec3 EarthFixedForDensity(const Vec3& gcrf, double jdUt) {
+    const double theta = timesys::ut1ToGmst(jdUt);
+    const double c = std::cos(theta);
+    const double s = std::sin(theta);
+    return Vec3(c * gcrf.x + s * gcrf.y, -s * gcrf.x + c * gcrf.y, gcrf.z);
+}
+
+namespace {
+Vec3 GcrfFromEarthFixed(const Vec3& earthFixed, double jdUt) {
+    const double theta = timesys::ut1ToGmst(jdUt);
+    const double c = std::cos(theta);
+    const double s = std::sin(theta);
+    return Vec3(c * earthFixed.x - s * earthFixed.y, s * earthFixed.x + c * earthFixed.y, earthFixed.z);
+}
+}  // namespace
 
 // =============================================================================
 // 1. Point Mass - Central Body Gravity
@@ -523,9 +519,9 @@ AtmosphereModelType AtmosphereModelForDrag(DragModelType model) {
 
 Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, double jd,
                     const DragForceConfig& dragConfig, double bulgeExponent) {
-    // The apex direction needs the Sun in the same frame as `position`. The
-    // force set works body-fixed, so the Sun comes from the same ephemeris the
-    // rest of the force model uses and is rotated with it.
+    // The apex direction needs the Sun in the same frame as `position`: both
+    // are GCRF here, and the bulge geometry depends only on their relative
+    // direction.
     EphemerisState sun = getSunPosition(jd);
     AtmosphericDensity density =
         computeHarrisPriester(position, sun.valid ? sun.position : Vec3(1.0, 0.0, 0.0),
@@ -566,9 +562,13 @@ Vec3 AtmosphericDrag(const Vec3& position, const Vec3& velocity, double jd,
     dragCfg.atmosphere.minAltitude = config.minAltitude;
     dragCfg.atmosphere.maxAltitude = config.maxAltitude;
 
-    DragAccelerationResult result = computeDragAcceleration(position, velocity, jd,
-                                                            dragCfg, weather);
-    return result.total;
+    // computeDragAcceleration takes Earth-fixed axes: rotate the GCRF state in
+    // (the inertial velocity is only re-expressed; co-rotation is subtracted
+    // inside) and the acceleration back out.
+    DragAccelerationResult result = computeDragAcceleration(
+        EarthFixedForDensity(position, jd), EarthFixedForDensity(velocity, jd), jd,
+        dragCfg, weather);
+    return GcrfFromEarthFixed(result.total, jd);
 }
 
 // =============================================================================
@@ -587,7 +587,8 @@ Vec3 NRLMSISE00(const Vec3& position, const Vec3& velocity, double jd,
     atmConfig.minAltitude = dragConfig.minAltitude;
     atmConfig.maxAltitude = dragConfig.maxAltitude;
 
-    AtmosphericDensity density = computeNRLMSISE00(position, jd, weather, atmConfig);
+    AtmosphericDensity density =
+        computeNRLMSISE00(EarthFixedForDensity(position, jd), jd, weather, atmConfig);
 
     if (density.density < 1e-20) {
         return Vec3();
@@ -622,7 +623,7 @@ AtmosphericDensity NRLMSISE00Density(const Vec3& position, double jd,
     atmConfig.diurnalVariation = config.diurnalVariation;
     atmConfig.geomagneticEffects = config.geomagneticActivity;
 
-    return computeNRLMSISE00(position, jd, weather, atmConfig);
+    return computeNRLMSISE00(EarthFixedForDensity(position, jd), jd, weather, atmConfig);
 }
 
 // =============================================================================
@@ -632,7 +633,7 @@ AtmosphericDensity NRLMSISE00Density(const Vec3& position, double jd,
 Vec3 JB2008(const Vec3& position, const Vec3& velocity, double jd,
             const SpaceWeatherData& weather, const DragForceConfig& dragConfig,
             const JB2008Config& jb2008Config) {
-    AtmosphericDensity density = computeJB2008(position, jd, weather);
+    AtmosphericDensity density = computeJB2008(EarthFixedForDensity(position, jd), jd, weather);
 
     if (density.density < 1e-20) {
         return Vec3();
@@ -661,7 +662,7 @@ Vec3 JB2008(const Vec3& position, const Vec3& velocity, double jd,
 AtmosphericDensity JB2008Density(const Vec3& position, double jd,
                                  const SpaceWeatherData& weather,
                                  const JB2008Config& config) {
-    return computeJB2008(position, jd, weather);
+    return computeJB2008(EarthFixedForDensity(position, jd), jd, weather);
 }
 
 // =============================================================================
@@ -671,7 +672,7 @@ AtmosphericDensity JB2008Density(const Vec3& position, double jd,
 Vec3 DTM2020(const Vec3& position, const Vec3& velocity, double jd,
              const SpaceWeatherData& weather, const DragForceConfig& dragConfig,
              const DTM2020Config& dtmConfig) {
-    AtmosphericDensity density = computeDTM2020(position, jd, weather);
+    AtmosphericDensity density = computeDTM2020(EarthFixedForDensity(position, jd), jd, weather);
 
     if (density.density < 1e-20) {
         return Vec3();
@@ -700,7 +701,7 @@ Vec3 DTM2020(const Vec3& position, const Vec3& velocity, double jd,
 AtmosphericDensity DTM2020Density(const Vec3& position, double jd,
                                   const SpaceWeatherData& weather,
                                   const DTM2020Config& config) {
-    return computeDTM2020(position, jd, weather);
+    return computeDTM2020(EarthFixedForDensity(position, jd), jd, weather);
 }
 
 // =============================================================================
