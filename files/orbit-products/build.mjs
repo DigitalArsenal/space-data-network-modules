@@ -98,7 +98,8 @@ function stripLocalIncludes(source) {
     .replace(/^#include "containers\.hpp"\n/gm, "")
     .replace(/^#include "oem_projection\.hpp"\n/gm, "")
     .replace(/^#include "kvn\.hpp"\n/gm, "")
-    .replace(/^#include "\.\.\/\.\.\/ccsds-messages\/src\/kvn\.hpp"\n/gm, "");
+    .replace(/^#include "\.\.\/\.\.\/ccsds-messages\/src\/kvn\.hpp"\n/gm, "")
+    .replace(/^#include "vcm\.hpp"\n/gm, "");
 }
 
 /*
@@ -126,6 +127,10 @@ const pieces = [
   stripSdsCrossIncludes(headers.OEM),
   stripSdsCrossIncludes(headers.NCD),
   stripSdsCrossIncludes(headers.OPM),
+  stripSdsCrossIncludes(headers.ATM),
+  stripSdsCrossIncludes(headers.OCM),
+  stripSdsCrossIncludes(headers.MET),
+  stripSdsCrossIncludes(headers.VCM),
   await read(path.join(packageRoot,"../../foundation/orbits/src/state_representations.hpp")),
   await read(path.join(srcRoot,"vimpel.hpp")),
   stripLocalIncludes(await read(path.join(srcRoot, "sha256.hpp"))),
@@ -140,6 +145,9 @@ const pieces = [
   stripLocalIncludes(await read(path.join(srcRoot, "containers.hpp"))),
   stripLocalIncludes(await read(path.join(srcRoot, "orbit_products_module.cpp"))),
   await read(path.join(srcRoot, "vimpel_module.cpp")),
+  await read(path.join(srcRoot, "vcm.hpp")),
+  stripLocalIncludes(await read(path.join(srcRoot, "vcm_ocm.hpp"))),
+  await read(path.join(srcRoot, "vcm_module.cpp")),
 ];
 
 const sourceCode = pieces.join("\n\n");
@@ -181,8 +189,8 @@ fsSync.writeFileSync(
     {
       spacedatastandards: sdsVersion,
       threadModel: "wasi-sequential",
-      records: { in: ["$NCD"], out: ["$OEM", "$NCD", "$OPM"] },
-      formats: ["SPK_DAF", "SP3_C", "SP3_D", "CODE_500", "SCENARIO_EPOCH_EPHEMERIS_TEXT", "CCSDS_OEM_KVN", "vimpel-orbits-text"],
+      records: { in: ["$NCD", "$VCM"], out: ["$OEM", "$NCD", "$OPM", "$OCM"] },
+      formats: ["SPK_DAF", "SP3_C", "SP3_D", "CODE_500", "SCENARIO_EPOCH_EPHEMERIS_TEXT", "CCSDS_OEM_KVN", "vimpel-orbits-text", "vcm-v2-text"],
     },
     null,
     2,
