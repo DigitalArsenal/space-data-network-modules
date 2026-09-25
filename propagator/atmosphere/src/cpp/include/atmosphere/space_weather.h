@@ -55,6 +55,9 @@ class SpaceWeatherWindow {
 public:
     SpaceWeatherError add(const DailySpaceWeather& record);
     SpaceWeatherError select(const Epoch& epoch, SpaceWeatherSelection& selection) const;
+    /// The 3-hour ap of the bin holding the epoch (AP1 00-03 UT ... AP8
+    /// 21-24 UT) from the epoch's own day, for the HWM14 disturbance winds.
+    SpaceWeatherError ap3HourAt(const Epoch& epoch, double& ap) const;
     std::size_t size() const { return days_.size(); }
 
 private:

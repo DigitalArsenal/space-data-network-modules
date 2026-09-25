@@ -13,8 +13,11 @@
 #include "OEM_generated.h"
 #include "SPW_generated.h"
 #include "OCM_generated.h"
+#include "WXF_generated.h"
 
+#include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <cmath>
 #include <vector>
@@ -577,7 +580,23 @@ int query_atmosphere_state_batch_hfc(const plugin_input_frame_t* frame) {
     }
 
     const bool nrlmsise = selection.model == atmosphere::Model::NRLMSISE00;
+    // HWM14 winds are evaluated whenever every sample has a UTC epoch and a
+    // position. Their storm-time (DWM07) part needs the 3-hour ap of the
+    // sample's UTC day, so it is added exactly when SPW records are supplied;
+    // WIND_MODEL says which.
+    const bool winds = sample_epochs && sample_epochs->size() > 0 && latitudes && latitudes->size() > 0 &&
+                       longitudes && longitudes->size() > 0;
     atmosphere::SpaceWeatherWindow space_weather;
+    if (winds && !nrlmsise) {
+        const auto* request_time_system = request->TIME_SYSTEM();
+        if (request_time_system && std::string_view(request_time_system->c_str(), request_time_system->size()) != "UTC") {
+            plugin_set_error("unsupported-time-system", "Wind SAMPLE_EPOCHS are UTC; HFC TIME_SYSTEM must be UTC or absent.");
+            return 1;
+        }
+        if (load_space_weather(space_weather) != 0) {
+            return 1;
+        }
+    }
     if (nrlmsise) {
         // NRLMSISE-00 depends on time, place and space weather; none of them
         // has a neutral default.
@@ -615,6 +634,9 @@ int query_atmosphere_state_batch_hfc(const plugin_input_frame_t* frame) {
     std::vector<double> temperature_values;
     std::vector<double> pressure_values;
     std::vector<double> sound_speed_values;
+    std::vector<double> wind_north_values;
+    std::vector<double> wind_east_values;
+    const bool disturbance_winds = winds && space_weather.size() > 0;
     altitude_values.reserve(altitudes->size());
     density_values.reserve(altitudes->size());
     temperature_values.reserve(altitudes->size());
@@ -643,11 +665,19 @@ int query_atmosphere_state_batch_hfc(const plugin_input_frame_t* frame) {
             return fail_sample("invalid-speed", "SPEED_M_PER_S must be finite.", index);
         }
         atmosphere::State state{};
-        if (nrlmsise) {
-            if (altitude_m < 0.0 || altitude_m > atmosphere::NRLMSISE_MAX_ALT) {
+        atmosphere::GeoPos position{};
+        atmosphere::Epoch epoch{};
+        if (nrlmsise || winds) {
+            if (nrlmsise && (altitude_m < 0.0 || altitude_m > atmosphere::NRLMSISE_MAX_ALT)) {
                 return fail_sample(
                     "altitude-out-of-range",
                     "NRLMSISE00 ALTITUDE_M (geodetic height) must be within 0 to 1000000 m.",
+                    index);
+            }
+            if (winds && altitude_m < 0.0) {
+                return fail_sample(
+                    "altitude-out-of-range",
+                    "Winds need ALTITUDE_M (geodetic height) of at least 0 m.",
                     index);
             }
             const double latitude_deg = latitudes->Get(index);
@@ -659,19 +689,31 @@ int query_atmosphere_state_batch_hfc(const plugin_input_frame_t* frame) {
                     "LATITUDE_DEG must be within -90 to 90 and LONGITUDE_DEG finite.",
                     index);
             }
-            atmosphere::GeoPos position{};
             position.alt_m = altitude_m;
             position.lat_rad = latitude_deg * kDegreesToRadians;
             position.lon_rad = longitude_deg * kDegreesToRadians;
 
-            atmosphere::Epoch epoch{};
             if (!parse_hfc_sample_epoch(sample_epochs->Get(index), epoch)) {
                 return fail_sample(
                     "invalid-sample-epoch",
                     "SAMPLE_EPOCHS entries must be ISO-8601 UTC timestamps like YYYY-MM-DDTHH:MM:SSZ.",
                     index);
             }
-
+        }
+        if (winds) {
+            double ap3h = -1.0;  // HWM14: a negative ap is quiet time only
+            if (disturbance_winds) {
+                const auto error = space_weather.ap3HourAt(epoch, ap3h);
+                if (error != atmosphere::SpaceWeatherError::None) {
+                    return fail_sample(atmosphere::spaceWeatherErrorCode(error),
+                                       atmosphere::spaceWeatherErrorMessage(error), index);
+                }
+            }
+            const atmosphere::WindVec wind = atmosphere::getWind(position, epoch, ap3h);
+            wind_north_values.push_back(wind.north);
+            wind_east_values.push_back(wind.east);
+        }
+        if (nrlmsise) {
             atmosphere::SpaceWeatherSelection weather;
             const auto error = space_weather.select(epoch, weather);
             if (error != atmosphere::SpaceWeatherError::None) {
@@ -734,6 +776,17 @@ int query_atmosphere_state_batch_hfc(const plugin_input_frame_t* frame) {
         assumptions.push_back(
             "US Standard Atmosphere 1976 below 100 km; above 100 km density is the Basilisk orbitalMotion curve fit to the 1976 standard.");
     }
+    std::string wind_model;
+    if (winds) {
+        wind_model = std::string(atmosphere::windModelRelease()) +
+                     (disturbance_winds ? " quiet time + DWM07 disturbance (3-hour ap from SPW AP1..AP8)"
+                                        : " quiet time only (no SPW records supplied)");
+        assumptions.push_back(
+            "Winds: HWM14 (Drob et al. 2015) horizontal neutral wind at each sample's geodetic position, height and UTC epoch; " +
+            std::string(disturbance_winds ? "storm-time DWM07 winds use the 3-hour ap of the sample's UT bin."
+                                          : "no 3-hour ap was supplied, so storm-time winds are not included.") +
+            " MACH and DYNAMIC_PRESSURE_PA use SPEED_M_PER_S as given.");
+    }
 
     ::flatbuffers::FlatBufferBuilder builder(1024 + altitude_values.size() * 64);
     const auto message_id = copy_optional_string(builder, request->MESSAGE_ID());
@@ -768,6 +821,9 @@ int query_atmosphere_state_batch_hfc(const plugin_input_frame_t* frame) {
     const auto pressure_vector = builder.CreateVector(pressure_values);
     const auto sound_speed_vector = builder.CreateVector(sound_speed_values);
     const auto assumptions_vector = create_string_vector(builder, assumptions);
+    const auto wind_north_vector = winds ? builder.CreateVector(wind_north_values) : 0;
+    const auto wind_east_vector = winds ? builder.CreateVector(wind_east_values) : 0;
+    const auto wind_model_string = winds ? builder.CreateString(wind_model) : 0;
 
     HFCBuilder hfc_builder(builder);
     hfc_builder.add_MESSAGE_ID(message_id);
@@ -797,6 +853,9 @@ int query_atmosphere_state_batch_hfc(const plugin_input_frame_t* frame) {
     hfc_builder.add_SPEED_OF_SOUND_M_PER_S(sound_speed_vector);
     hfc_builder.add_ASSUMPTIONS(assumptions_vector);
     hfc_builder.add_COMMENT(comment);
+    hfc_builder.add_WIND_NORTH_M_PER_S(wind_north_vector);
+    hfc_builder.add_WIND_EAST_M_PER_S(wind_east_vector);
+    hfc_builder.add_WIND_MODEL(wind_model_string);
     builder.Finish(hfc_builder.Finish(), "$HFC");
 
     if (plugin_push_output_typed(
@@ -815,6 +874,166 @@ int query_atmosphere_state_batch_hfc(const plugin_input_frame_t* frame) {
     }
 
     return 0;
+}
+
+// ---------------------------------------------------------------------------
+// query_wind_field: HWM14 on a WXF grid at one height and valid time.
+// ---------------------------------------------------------------------------
+
+constexpr uint64_t kMaximumWindCells = 262144;  // e.g. a 0.5 deg global grid
+
+// UTC calendar fields of a Unix time in milliseconds (civil_from_days).
+bool epoch_from_unix_ms(uint64_t ms, atmosphere::Epoch& epoch) {
+    const int64_t total = static_cast<int64_t>(ms / 1000u);
+    const int64_t days = total / 86400;
+    const double second = static_cast<double>(total % 86400) + static_cast<double>(ms % 1000u) / 1000.0;
+    int64_t z = days + 719468;
+    const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
+    const int64_t doe = z - era * 146097;
+    const int64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    int64_t y = yoe + era * 400;
+    const int64_t doy0 = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    const int64_t mp = (5 * doy0 + 2) / 153;
+    const int64_t month = mp < 10 ? mp + 3 : mp - 9;
+    if (month <= 2) ++y;
+    const int64_t day = doy0 - (153 * mp + 2) / 5 + 1;
+    if (y < 1 || y > 9999) return false;
+    epoch.year = static_cast<int32_t>(y);
+    epoch.dayOfYear = day_of_year(static_cast<int32_t>(y), static_cast<int32_t>(month), static_cast<int32_t>(day));
+    epoch.secondOfDay = second;
+    return true;
+}
+
+int emit_wind_field(const char* port, const WXF* tmpl, wxfVariable variable, const char* direction,
+                    const std::vector<float>& values, const std::string& variable_name) {
+    ::flatbuffers::FlatBufferBuilder builder(1024 + values.size() * 4);
+    const std::string field_id = (tmpl->FIELD_ID() ? tmpl->FIELD_ID()->str() : std::string()) + "#" + direction;
+    const auto field_id_offset = builder.CreateString(field_id);
+    const auto model_id = builder.CreateString("HWM14");
+    const auto model_version = builder.CreateString("123114");
+    const auto variable_name_offset = builder.CreateString(variable_name);
+    const auto units = builder.CreateString("m/s");
+    const WXFGrid* g = tmpl->GRID();
+    const auto grid = CreateWXFGrid(builder, g->KIND(), g->LAT0(), g->LON0(), g->DLAT(), g->DLON(), g->NLAT(),
+                                    g->NLON(), g->PERIODIC_LON());
+    const auto values_vector = builder.CreateVector(values);
+    const auto origin = copy_optional_string(builder, tmpl->ORIGIN_ID());
+    const auto dataset = copy_optional_string(builder, tmpl->DATASET_ID());
+    const auto license_url = builder.CreateString(
+        "https://www.law.cornell.edu/uscode/text/17/105");  // US Government work, no US copyright
+    const auto citation = builder.CreateString(
+        "Drob, D. P., et al. (2015), Earth and Space Science 2, 301-319, doi:10.1002/2014EA000089; "
+        "Emmert, J. T., et al. (2008), J. Geophys. Res. 113, A11319, doi:10.1029/2008JA013541");
+    float lo = values.empty() ? 0.0f : values[0], hi = lo;
+    for (float v : values) { lo = std::min(lo, v); hi = std::max(hi, v); }
+    WXFBuilder b(builder);
+    b.add_FIELD_ID(field_id_offset);
+    b.add_MODEL_CLASS(wxfModelClass::EmpiricalClimatology);
+    b.add_MODEL_ID(model_id);
+    b.add_MODEL_VERSION(model_version);
+    b.add_VALID_TIME_MS(tmpl->VALID_TIME_MS());
+    b.add_TIME_BASIS(wxfTimeBasis::ValidTimeOnly);
+    b.add_VARIABLE(variable);
+    b.add_VARIABLE_NAME(variable_name_offset);
+    b.add_UNITS(units);
+    b.add_LEVEL_KIND(wxfLevelKind::HeightAboveEllipsoid);
+    b.add_LEVEL_VALUE(tmpl->LEVEL_VALUE());
+    b.add_TEMPORAL_KIND(wxfTemporalKind::Instantaneous);
+    b.add_GRID(grid);
+    b.add_TILE_INDEX(0);
+    b.add_TILE_COUNT(1);
+    b.add_VALUES_ENCODING(wxfValuesEncoding::InlineFloat32);
+    b.add_VALUES(values_vector);
+    b.add_VALUE_MIN(lo);
+    b.add_VALUE_MAX(hi);
+    b.add_MISSING_COUNT(0);
+    b.add_ORIGIN_ID(origin);
+    b.add_DATASET_ID(dataset);
+    b.add_LICENSE_CLASS(wxfLicenseClass::OpenAttribution);
+    b.add_LICENSE_URL(license_url);
+    b.add_CITATION(citation);
+    builder.Finish(b.Finish(), "$WXF");
+    if (plugin_push_output_typed(port, "WXF.fbs", "$WXF", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "WXF", 0,
+                                 static_cast<uint32_t>(builder.GetSize()), 8, builder.GetBufferPointer(),
+                                 static_cast<uint32_t>(builder.GetSize())) < 0) {
+        plugin_set_error("emit-failed", "Failed to emit the WXF wind field.");
+        return 1;
+    }
+    return 0;
+}
+
+int query_wind_field_impl(const plugin_input_frame_t* frame) {
+    if (frame->payload_length < 8 || !WXFBufferHasIdentifier(frame->payload)) {
+        plugin_set_error("invalid-wxf-buffer", "Input template frame is not an SDS WXF FlatBuffer.");
+        return 1;
+    }
+    ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+    if (!VerifyWXFBuffer(verifier)) {
+        plugin_set_error("invalid-wxf-buffer", "Input template frame is not a valid SDS WXF FlatBuffer.");
+        return 1;
+    }
+    const WXF* tmpl = GetWXF(frame->payload);
+    const WXFGrid* g = tmpl->GRID();
+    if (!g || g->KIND() != wxfGridKind::RegularLatLon || g->NLAT() == 0 || g->NLON() == 0 ||
+        !std::isfinite(g->LAT0()) || !std::isfinite(g->LON0()) || !std::isfinite(g->DLAT()) || !std::isfinite(g->DLON())) {
+        plugin_set_error("invalid-grid", "The template needs a RegularLatLon GRID with finite LAT0, LON0, DLAT, DLON and NLAT, NLON >= 1.");
+        return 1;
+    }
+    const uint64_t cells = static_cast<uint64_t>(g->NLAT()) * static_cast<uint64_t>(g->NLON());
+    if (cells > kMaximumWindCells) {
+        plugin_set_error("grid-too-large", "At most 262144 cells per wind field; split the grid into tiles.");
+        return 1;
+    }
+    const double lat_last = g->LAT0() + static_cast<double>(g->NLAT() - 1) * g->DLAT();
+    if (g->LAT0() < -90.0 || g->LAT0() > 90.0 || lat_last < -90.0 || lat_last > 90.0) {
+        plugin_set_error("invalid-grid", "Every grid latitude must be within -90 to 90.");
+        return 1;
+    }
+    if (tmpl->LEVEL_KIND() != wxfLevelKind::HeightAboveEllipsoid || !std::isfinite(tmpl->LEVEL_VALUE()) ||
+        tmpl->LEVEL_VALUE() < 0.0f) {
+        plugin_set_error("invalid-level", "The template needs LEVEL_KIND HeightAboveEllipsoid with LEVEL_VALUE >= 0 m.");
+        return 1;
+    }
+    if (tmpl->TIME_BASIS() != wxfTimeBasis::ValidTimeOnly || tmpl->VALID_TIME_MS() == 0) {
+        plugin_set_error("invalid-valid-time", "The template needs TIME_BASIS ValidTimeOnly and a UTC VALID_TIME_MS.");
+        return 1;
+    }
+    atmosphere::Epoch epoch{};
+    if (!epoch_from_unix_ms(tmpl->VALID_TIME_MS(), epoch)) {
+        plugin_set_error("invalid-valid-time", "VALID_TIME_MS must fall within years 1 to 9999.");
+        return 1;
+    }
+    atmosphere::SpaceWeatherWindow space_weather;
+    if (load_space_weather(space_weather) != 0) return 1;
+    double ap3h = -1.0;  // HWM14: a negative ap is quiet time only
+    const bool disturbance = space_weather.size() > 0;
+    if (disturbance) {
+        const auto error = space_weather.ap3HourAt(epoch, ap3h);
+        if (error != atmosphere::SpaceWeatherError::None) {
+            plugin_set_error(atmosphere::spaceWeatherErrorCode(error), atmosphere::spaceWeatherErrorMessage(error));
+            return 1;
+        }
+    }
+    std::vector<float> east(static_cast<std::size_t>(cells)), north(static_cast<std::size_t>(cells));
+    atmosphere::GeoPos position{};
+    position.alt_m = tmpl->LEVEL_VALUE();
+    for (uint32_t i = 0; i < g->NLAT(); ++i) {
+        position.lat_rad = (g->LAT0() + static_cast<double>(i) * g->DLAT()) * kDegreesToRadians;
+        for (uint32_t j = 0; j < g->NLON(); ++j) {
+            position.lon_rad = (g->LON0() + static_cast<double>(j) * g->DLON()) * kDegreesToRadians;
+            const atmosphere::WindVec w = atmosphere::getWind(position, epoch, ap3h);
+            const std::size_t k = static_cast<std::size_t>(i) * g->NLON() + j;
+            east[k] = static_cast<float>(w.east);
+            north[k] = static_cast<float>(w.north);
+        }
+    }
+    char apText[32];
+    std::snprintf(apText, sizeof(apText), "%g", ap3h);
+    const std::string basis = disturbance
+        ? std::string("HWM14 quiet time + DWM07 disturbance, 3-hour ap ") + apText
+        : std::string("HWM14 quiet time only, no 3-hour ap supplied");
+    if (emit_wind_field("eastward_wind", tmpl, wxfVariable::WindU, "eastward", east, "Eastward wind (" + basis + ")")) return 1;
+    return emit_wind_field("northward_wind", tmpl, wxfVariable::WindV, "northward", north, "Northward wind (" + basis + ")");
 }
 
 }  // namespace
@@ -871,6 +1090,17 @@ int query_atmosphere_state_batch(void) {
     const auto result = atmosphere::invoke_json_request(request);
 
     return emit_json_response("states", result);
+}
+
+EMSCRIPTEN_KEEPALIVE
+int query_wind_field(void) {
+    plugin_reset_output_state();
+    const auto* frame = find_frame("template");
+    if (!frame || !frame->payload) {
+        plugin_set_error("missing-template-input", "Input port \"template\" is required.");
+        return 1;
+    }
+    return query_wind_field_impl(frame);
 }
 
 EMSCRIPTEN_KEEPALIVE

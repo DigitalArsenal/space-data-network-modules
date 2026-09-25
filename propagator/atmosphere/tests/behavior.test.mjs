@@ -18,6 +18,15 @@ import {
   OEM,
 } from "spacedatastandards.org/lib/js/OEM/main.js";
 import {
+  WXF,
+  WXFGridT,
+  WXFT,
+  wxfLevelKind,
+  wxfModelClass,
+  wxfTimeBasis,
+  wxfVariable,
+} from "spacedatastandards.org/lib/js/WXF/main.js";
+import {
   CelestialFrame,
   CelestialFrameWrapperT,
   HeaderT,
@@ -200,6 +209,79 @@ function encodeOcmDragReferenceState() {
   return builder.asUint8Array();
 }
 
+// HWM14 anchor: NRL's published test output (third_party/hwm14/nrl/Check/
+// gfortran.txt, height profile) at day 150, 12:00 UT, 45 S, 85 W, 250 km with
+// ap = 80 gives quiet (-4.150, -68.595) and total (40.408, -87.560) m/s,
+// meridional and zonal, printed to 1 mm/s.
+const WIND_ANCHOR = {
+  epoch: "1995-05-30T12:00:00Z",  // day 150
+  validTimeMs: 801835200000n,
+  latitudeDeg: -45,
+  longitudeDeg: -85,
+  altitudeM: 250_000,
+  quiet: { north: -4.150, east: -68.595 },
+  total: { north: 40.408, east: -87.560 },
+};
+const WIND_TOLERANCE = 6e-4;
+
+// The anchor day with the 12-15 UT bin (AP5) at 80.
+function windAnchorSpw() {
+  return encodeSpwRecord({ date: "1995-05-30", ap3Hour: [4, 4, 4, 4, 80, 4, 4, 4], apAvg: 15 });
+}
+
+function windAnchorHfcRequest() {
+  return encodeHfcAtmosphereRequest({
+    sampleEpochs: [WIND_ANCHOR.epoch],
+    latitudesDeg: [WIND_ANCHOR.latitudeDeg],
+    longitudesDeg: [WIND_ANCHOR.longitudeDeg],
+    altitudesM: [WIND_ANCHOR.altitudeM],
+  });
+}
+
+function assertWind(north, east, expected, label) {
+  assert.ok(Math.abs(north - expected.north) < WIND_TOLERANCE, `${label} north ${north}`);
+  assert.ok(Math.abs(east - expected.east) < WIND_TOLERANCE, `${label} east ${east}`);
+}
+
+function encodeWindTemplate({
+  levelKind = wxfLevelKind.HeightAboveEllipsoid,
+  levelValue = WIND_ANCHOR.altitudeM,
+  nlat = 3,
+  nlon = 4,
+} = {}) {
+  const w = new WXFT();
+  w.FIELD_ID = "hwm14-anchor-250km";
+  w.TIME_BASIS = wxfTimeBasis.ValidTimeOnly;
+  w.VALID_TIME_MS = WIND_ANCHOR.validTimeMs;
+  w.LEVEL_KIND = levelKind;
+  w.LEVEL_VALUE = levelValue;
+  const grid = new WXFGridT();
+  grid.LAT0 = -45;
+  grid.DLAT = 45;
+  grid.NLAT = nlat;
+  grid.LON0 = -85;
+  grid.DLON = 90;
+  grid.NLON = nlon;
+  w.GRID = grid;
+  const builder = new flatbuffers.Builder(256);
+  WXF.finishWXFBuffer(builder, w.pack(builder));
+  return builder.asUint8Array();
+}
+
+function windFieldInputs(template, spw = []) {
+  return [
+    { portId: "template", typeRef: { schemaName: "WXF.fbs", fileIdentifier: "$WXF", rootTypeName: "WXF" }, payload: template },
+    ...spwInputs(spw),
+  ];
+}
+
+function decodeWindField(response, portId) {
+  const payload = assertSuccessfulResponse(response, { outputPortId: portId });
+  const bb = new flatbuffers.ByteBuffer(payload);
+  assert.equal(WXF.bufferHasIdentifier(bb), true);
+  return WXF.getRootAsWXF(bb).unpack();
+}
+
 function decodeHfcResponse(response) {
   const payload = assertSuccessfulResponse(response, { outputPortId: "states" });
   const [frame] = response.outputs.filter((entry) => entry.portId === "states");
@@ -237,6 +319,129 @@ test("manifest declares Basilisk atmospheric drag direct OCM/OEM surface", () =>
 });
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
+  test(`HFC batch adds HWM14 winds, quiet time without SPW, on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) return;
+    t.after(async () => { await harness.destroy(); });
+    const hfc = decodeHfcResponse(await harness.invoke({
+      methodId: "query_atmosphere_state_batch",
+      inputs: [hfcInput(windAnchorHfcRequest())],
+    }));
+    assert.equal(hfc.windNorthMPerSLength(), 1);
+    assertWind(hfc.WIND_NORTH_M_PER_S(0), hfc.WIND_EAST_M_PER_S(0), WIND_ANCHOR.quiet, "quiet");
+    assert.match(hfc.WIND_MODEL(), /^HWM14\.123114 quiet time only/);
+  });
+
+  test(`HFC batch adds DWM07 storm-time winds from the SPW 3-hour ap on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) return;
+    t.after(async () => { await harness.destroy(); });
+    const hfc = decodeHfcResponse(await harness.invoke({
+      methodId: "query_atmosphere_state_batch",
+      inputs: [hfcInput(windAnchorHfcRequest()), ...spwInputs([windAnchorSpw()])],
+    }));
+    assertWind(hfc.WIND_NORTH_M_PER_S(0), hfc.WIND_EAST_M_PER_S(0), WIND_ANCHOR.total, "total");
+    assert.match(hfc.WIND_MODEL(), /DWM07/);
+  });
+
+  test(`HFC batch without sample epochs or positions carries no winds on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) return;
+    t.after(async () => { await harness.destroy(); });
+    const hfc = decodeHfcResponse(await harness.invoke({
+      methodId: "query_atmosphere_state_batch",
+      inputs: [hfcInput(encodeHfcAtmosphereRequest())],
+    }));
+    assert.equal(hfc.windNorthMPerSLength(), 0);
+    assert.equal(hfc.WIND_MODEL(), null);
+  });
+
+  test(`HFC winds refuse SPW that lacks the sample's day on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) return;
+    t.after(async () => { await harness.destroy(); });
+    const response = await harness.invoke({
+      methodId: "query_atmosphere_state_batch",
+      inputs: [hfcInput(windAnchorHfcRequest()), ...spwInputs([encodeSpwRecord({ date: "1995-05-29" })])],
+    });
+    assert.notEqual(response.statusCode, 0);
+    assert.equal(response.errorCode, "missing-space-weather-day");
+  });
+
+  test(`JSON queryWind reproduces the NRL HWM14 check values on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) return;
+    t.after(async () => { await harness.destroy(); });
+    const base = {
+      altitudeM: WIND_ANCHOR.altitudeM,
+      position: { latitudeDeg: WIND_ANCHOR.latitudeDeg, longitudeDeg: WIND_ANCHOR.longitudeDeg },
+      epoch: { year: 1995, dayOfYear: 150, secondOfDay: 43200 },
+    };
+    const total = await invokeJsonRequest(harness, { operation: "queryWind", params: { ...base, ap3h: 80 } });
+    assertWind(total.northMps, total.eastMps, WIND_ANCHOR.total, "json total");
+    const quiet = await invokeJsonRequest(harness, { operation: "queryWind", params: { ...base, ap3h: -1 } });
+    assertWind(quiet.northMps, quiet.eastMps, WIND_ANCHOR.quiet, "json quiet");
+    assert.match(quiet.model, /quiet time only/);
+  });
+
+  test(`query_wind_field fills a WXF grid that matches point queries on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) return;
+    t.after(async () => { await harness.destroy(); });
+    const response = await harness.invoke({
+      methodId: "query_wind_field",
+      inputs: windFieldInputs(encodeWindTemplate(), [windAnchorSpw()]),
+    });
+    const u = decodeWindField(response, "eastward_wind");
+    const v = decodeWindField(response, "northward_wind");
+    assert.equal(u.VARIABLE, wxfVariable.WindU);
+    assert.equal(v.VARIABLE, wxfVariable.WindV);
+    assert.equal(u.MODEL_CLASS, wxfModelClass.EmpiricalClimatology);
+    assert.equal(u.LEVEL_KIND, wxfLevelKind.HeightAboveEllipsoid);
+    assert.equal(u.LEVEL_VALUE, WIND_ANCHOR.altitudeM);
+    assert.equal(u.VALID_TIME_MS, WIND_ANCHOR.validTimeMs);
+    assert.match(u.VARIABLE_NAME, /DWM07 disturbance, 3-hour ap 80/);
+    assert.equal(u.VALUES.length, 12);
+    assertWind(v.VALUES[0], u.VALUES[0], WIND_ANCHOR.total, "grid cell (-45, -85)");
+    // Every cell is exactly the point value (both are float32 HWM14 output).
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 4; j++) {
+        const point = await invokeJsonRequest(harness, {
+          operation: "queryWind",
+          params: {
+            altitudeM: WIND_ANCHOR.altitudeM,
+            position: { latitudeDeg: -45 + 45 * i, longitudeDeg: -85 + 90 * j },
+            epoch: { year: 1995, dayOfYear: 150, secondOfDay: 43200 },
+            ap3h: 80,
+          },
+        });
+        assert.equal(u.VALUES[i * 4 + j], Math.fround(point.eastMps), `east cell ${i},${j}`);
+        assert.equal(v.VALUES[i * 4 + j], Math.fround(point.northMps), `north cell ${i},${j}`);
+      }
+    }
+    const quiet = await harness.invoke({ methodId: "query_wind_field", inputs: windFieldInputs(encodeWindTemplate()) });
+    const uq = decodeWindField(quiet, "eastward_wind");
+    const vq = decodeWindField(quiet, "northward_wind");
+    assert.match(uq.VARIABLE_NAME, /quiet time only/);
+    assertWind(vq.VALUES[0], uq.VALUES[0], WIND_ANCHOR.quiet, "quiet grid cell");
+  });
+
+  test(`query_wind_field refuses templates it cannot answer on ${runtimeKind}`, async (t) => {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) return;
+    t.after(async () => { await harness.destroy(); });
+    const pressure = await harness.invoke({
+      methodId: "query_wind_field",
+      inputs: windFieldInputs(encodeWindTemplate({ levelKind: wxfLevelKind.PressureLevel, levelValue: 50000 })),
+    });
+    assert.equal(pressure.errorCode, "invalid-level");
+    const huge = await harness.invoke({
+      methodId: "query_wind_field",
+      inputs: windFieldInputs(encodeWindTemplate({ nlat: 1, nlon: 300000 })),
+    });
+    assert.equal(huge.errorCode, "grid-too-large");
+  });
+
   test(`version request returns the package version on ${runtimeKind}`, async (t) => {
     const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
     if (!harness) {
@@ -790,3 +995,22 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     }
   });
 }
+
+test("query_wind_field emits byte-identical fields in the browser and WasmEdge", async (t) => {
+  const outputs = [];
+  for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) return;
+    try {
+      const response = await harness.invoke({
+        methodId: "query_wind_field",
+        inputs: windFieldInputs(encodeWindTemplate(), [windAnchorSpw()]),
+      });
+      outputs.push(response.outputs.map((frame) => Buffer.from(frame.payload).toString("hex")));
+    } finally {
+      await harness.destroy();
+    }
+  }
+  assert.ok(outputs.length >= 2, "both runtimes produced output");
+  assert.deepEqual(outputs[1], outputs[0]);
+});

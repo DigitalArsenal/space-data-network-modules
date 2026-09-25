@@ -350,6 +350,46 @@ RequestStatus query_atmosphere_state_batch_json(const json& params, json& out) {
     return {};
 }
 
+// {"operation":"queryWind","params":{"altitudeM", "position":{latitudeDeg,
+// longitudeDeg}, "epoch":{year, dayOfYear, secondOfDay}, "ap3h"}}: HWM14
+// horizontal wind. ap3h is the 3-hour ap of the epoch and is required; a
+// negative value asks for the quiet-time wind only (HWM14's convention).
+RequestStatus query_wind_json(const json& params, json& out) {
+    double altitude_m = 0.0, latitude_deg = 0.0, longitude_deg = 0.0;
+    double year = 0.0, day_of_year = 0.0, ap3h = 0.0;
+    Epoch epoch{};
+    if (auto status = required_number(params, "altitudeM", "params", altitude_m); !status.ok) return status;
+    if (!params.contains("position") || !params.contains("epoch")) {
+        return request_error("missing-wind-input", "position and epoch are required for queryWind.");
+    }
+    const auto& p = params.at("position");
+    const auto& e = params.at("epoch");
+    if (auto status = required_number(p, "latitudeDeg", "position", latitude_deg); !status.ok) return status;
+    if (auto status = required_number(p, "longitudeDeg", "position", longitude_deg); !status.ok) return status;
+    if (auto status = required_number(e, "year", "epoch", year); !status.ok) return status;
+    if (auto status = required_number(e, "dayOfYear", "epoch", day_of_year); !status.ok) return status;
+    if (auto status = required_number(e, "secondOfDay", "epoch", epoch.secondOfDay); !status.ok) return status;
+    if (auto status = required_number(params, "ap3h", "params", ap3h); !status.ok) return status;
+    if (altitude_m < 0.0 || latitude_deg < -90.0 || latitude_deg > 90.0 || day_of_year < 1.0 ||
+        day_of_year > 366.0 || epoch.secondOfDay < 0.0 || epoch.secondOfDay >= 86401.0 || ap3h > 400.0) {
+        return request_error("invalid-wind-input",
+                             "queryWind needs altitudeM >= 0, latitudeDeg within -90 to 90, dayOfYear 1-366, "
+                             "secondOfDay within the UTC day and ap3h <= 400 (negative for quiet time).");
+    }
+    epoch.year = static_cast<int32_t>(year);
+    epoch.dayOfYear = static_cast<int32_t>(day_of_year);
+    constexpr double RAD = M_PI / 180.0;
+    const GeoPos pos{latitude_deg * RAD, longitude_deg * RAD, altitude_m};
+    const WindVec wind = getWind(pos, epoch, ap3h);
+    out = json({
+        {"model", std::string(windModelRelease()) + (ap3h >= 0.0 ? " quiet time + DWM07 disturbance" : " quiet time only")},
+        {"northMps", wind.north},
+        {"eastMps", wind.east},
+        {"downMps", 0.0},
+    });
+    return {};
+}
+
 RequestStatus dispatch_operation(const std::string& operation, const json& params, json& out) {
     if (operation == "version") {
         out = json({{"version", version()}});
@@ -363,6 +403,9 @@ RequestStatus dispatch_operation(const std::string& operation, const json& param
     }
     if (operation == "queryAtmosphereStateBatch") {
         return query_atmosphere_state_batch_json(params, out);
+    }
+    if (operation == "queryWind") {
+        return query_wind_json(params, out);
     }
     return request_error("unknown-operation", "Unknown atmosphere operation: " + operation);
 }

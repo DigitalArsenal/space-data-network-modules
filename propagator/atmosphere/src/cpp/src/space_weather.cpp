@@ -78,6 +78,23 @@ SpaceWeatherError SpaceWeatherWindow::add(const DailySpaceWeather& record) {
     return SpaceWeatherError::None;
 }
 
+SpaceWeatherError SpaceWeatherWindow::ap3HourAt(const Epoch& epoch, double& ap) const {
+    const int32_t yearDays = isLeapYear(epoch.year) ? 366 : 365;
+    if (epoch.dayOfYear < 1 || epoch.dayOfYear > yearDays || !std::isfinite(epoch.secondOfDay) ||
+        epoch.secondOfDay < 0.0 || epoch.secondOfDay >= 86401.0) {
+        return SpaceWeatherError::InvalidEpoch;
+    }
+    const int64_t day = daysFromCivil(epoch.year, 1, 1) + epoch.dayOfYear - 1;
+    const auto current = days_.find(day);
+    if (current == days_.end()) {
+        return SpaceWeatherError::MissingCurrentDay;
+    }
+    // A leap second (86400 <= s < 86401) stays in the last bin.
+    const int bin = std::min(7, static_cast<int>(epoch.secondOfDay / 10800.0));
+    ap = current->second.ap3Hour[bin];
+    return SpaceWeatherError::None;
+}
+
 SpaceWeatherError SpaceWeatherWindow::select(const Epoch& epoch,
                                              SpaceWeatherSelection& selection) const {
     const int32_t yearDays = isLeapYear(epoch.year) ? 366 : 365;

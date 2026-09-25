@@ -127,6 +127,101 @@
       "drainPolicy": "single-shot"
     },
     {
+      "methodId": "query_wind_field",
+      "displayName": "Query Horizontal Wind Field",
+      "description": "HWM14 horizontal neutral wind on a WXF template grid (RegularLatLon, LEVEL_KIND HeightAboveEllipsoid, TIME_BASIS ValidTimeOnly). Emits eastward and northward WXF fields. With SPW records the 3-hour ap of the valid time adds DWM07 storm-time winds; without them the fields are quiet time, as VARIABLE_NAME states.",
+      "inputPorts": [
+        {
+          "portId": "template",
+          "acceptedTypeSets": [
+            {
+              "setId": "wxf-wind-template",
+              "allowedTypes": [
+                { "schemaName": "WXF.fbs", "fileIdentifier": "$WXF", "rootTypeName": "WXF" },
+                {
+                  "schemaName": "WXF.fbs",
+                  "fileIdentifier": "$WXF",
+                  "rootTypeName": "WXF",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "space_weather",
+          "acceptedTypeSets": [
+            {
+              "setId": "spw-space-weather",
+              "allowedTypes": [
+                { "schemaName": "SPW.fbs", "fileIdentifier": "$SPW", "rootTypeName": "SPW" },
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "eastward_wind",
+          "acceptedTypeSets": [
+            {
+              "setId": "wxf-eastward-wind",
+              "allowedTypes": [
+                { "schemaName": "WXF.fbs", "fileIdentifier": "$WXF", "rootTypeName": "WXF" },
+                {
+                  "schemaName": "WXF.fbs",
+                  "fileIdentifier": "$WXF",
+                  "rootTypeName": "WXF",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "northward_wind",
+          "acceptedTypeSets": [
+            {
+              "setId": "wxf-northward-wind",
+              "allowedTypes": [
+                { "schemaName": "WXF.fbs", "fileIdentifier": "$WXF", "rootTypeName": "WXF" },
+                {
+                  "schemaName": "WXF.fbs",
+                  "fileIdentifier": "$WXF",
+                  "rootTypeName": "WXF",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
       "methodId": "ocm_state_to_drag_acceleration_oem",
       "displayName": "OCM State To Atmospheric Drag Acceleration OEM",
       "inputPorts": [

@@ -6,7 +6,7 @@ import createFlatc from "flatc-wasm/module";
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
 const standardsRoot = path.join(packageRoot, "node_modules", "spacedatastandards.org");
 const outDir = path.join(packageRoot, "src", "cpp", "generated", "sds");
-const ROOT_FAMILIES = ["HFC", "SPW", "OCM", "OEM"];
+const ROOT_FAMILIES = ["HFC", "SPW", "OCM", "OEM", "WXF"];
 
 function includesFor(family) {
   const schemaPath = path.join(standardsRoot, "schema", family, "main.fbs");

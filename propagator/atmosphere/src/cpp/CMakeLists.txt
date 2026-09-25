@@ -3,6 +3,8 @@ project(atmosphere_sdn_plugin LANGUAGES CXX C)
 
 # Vendored public-domain NRLMSISE-00 C port (Picone/Hedin/Drob via Brodowski).
 set(NRLMSISE00_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/nrlmsise00")
+# Vendored HWM14 horizontal wind model (bit-exact C++ port of the NRL release).
+set(HWM14_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/hwm14")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -42,10 +44,13 @@ add_library(
     src/nrlmsise00.cpp
     src/plugin_runtime.cpp
     src/space_weather.cpp
+    src/winds.cpp
     "${NRLMSISE00_DIR}/nrlmsise-00.c"
     "${NRLMSISE00_DIR}/nrlmsise-00_data.c"
+    "${HWM14_DIR}/hwm14.cpp"
+    "${HWM14_DIR}/hwm14_data.cpp"
 )
-target_include_directories(atmosphere PUBLIC include "${NRLMSISE00_DIR}")
+target_include_directories(atmosphere PUBLIC include "${NRLMSISE00_DIR}" "${HWM14_DIR}")
 
 if(NOT EMSCRIPTEN)
     add_executable(test_atmosphere tests/test_atmosphere.cpp)

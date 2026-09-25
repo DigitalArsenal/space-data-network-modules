@@ -77,13 +77,17 @@ State getAtmosphere(const GeoPos& pos, const Epoch& epoch,
                     const SolarActivity& solar, Model model);
 
 // ---------------------------------------------------------------------------
-// Wind Models (stubs for external plugin integration)
+// Horizontal winds: HWM14 (third_party/hwm14, bit-exact port of the NRL
+// release HWM14.123114). Winds are horizontal; down is always 0.
 // ---------------------------------------------------------------------------
 
-/// Get wind at position and time
-/// Currently returns zero wind — designed for integration with
-/// atmospheric-wind-sdn-plugin via callback
-WindVec getWind(const GeoPos& pos, const Epoch& epoch);
+/// HWM14 wind at a geodetic position (height >= 0) and UTC epoch. ap3h is the
+/// 3-hour ap of the epoch; a negative ap3h gives the quiet-time wind only,
+/// HWM14's own convention.
+WindVec getWind(const GeoPos& pos, const Epoch& epoch, double ap3h);
+
+/// The model release string, "HWM14.123114".
+const char* windModelRelease();
 
 }  // namespace atmosphere
 

@@ -161,8 +161,5 @@ State getAtmosphere(const GeoPos& pos, const Epoch& epoch,
     return us76(pos.alt_m);
 }
 
-WindVec getWind(const GeoPos&, const Epoch&) {
-    return WindVec{};  // Stub — integrate with wind plugin
-}
 
 }  // namespace atmosphere

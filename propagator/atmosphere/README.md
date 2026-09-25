@@ -8,6 +8,7 @@ This plugin exposes atmosphere computations through these SDK methods:
 
 - `invoke`
 - `query_atmosphere_state_batch`
+- `query_wind_field`
 - `ocm_state_to_drag_acceleration_oem`
 
 `invoke` is the legacy command bridge. The request payload is UTF-8 JSON with this envelope:
@@ -104,12 +105,39 @@ CCSDS OEM units and Basilisk `orbitalMotion.c` output conventions.
 Direct HFC Debye-length output remains open because the current SDS HFC record
 has no Debye-length output field.
 
+## Horizontal winds (HWM14)
+
+Winds come from HWM14 (Drob et al. 2015; NRL release HWM14.123114), vendored as
+a bit-exact C++ port in `third_party/hwm14` (see its README for provenance and
+verification). Winds are horizontal (north, east in the local geodetic frame).
+
+- `query_atmosphere_state_batch` adds `WIND_NORTH_M_PER_S`,
+  `WIND_EAST_M_PER_S` and `WIND_MODEL` (SDS HFC, 1.224.0) whenever every
+  sample has a UTC epoch, latitude and longitude, for either atmosphere model.
+  The storm-time (DWM07) part needs the 3-hour ap of the sample's UT bin, so it
+  is added exactly when SPW records are supplied; SPW records that miss a
+  sample's day are refused (`missing-space-weather-day`). Without SPW the
+  winds are quiet time. `WIND_MODEL` states which, and `MACH` and
+  `DYNAMIC_PRESSURE_PA` still use `SPEED_M_PER_S` as given.
+- `query_wind_field` fills a grid: the `template` port takes an SDS WXF with a
+  RegularLatLon `GRID` (at most 262,144 cells), `LEVEL_KIND`
+  `HeightAboveEllipsoid` (metres), `TIME_BASIS` `ValidTimeOnly` and
+  `VALID_TIME_MS`; optional `space_weather` SPW records supply the 3-hour ap.
+  It emits `eastward_wind` (`WindU`) and `northward_wind` (`WindV`) WXF
+  fields, `MODEL_CLASS` `EmpiricalClimatology`, with the quiet or storm-time
+  basis in `VARIABLE_NAME`, the citations in `CITATION` and the US
+  Government-work basis in `LICENSE_URL`.
+- JSON `queryWind`: `altitudeM`, `position` {`latitudeDeg`,
+  `longitudeDeg`}, `epoch` {`year`, `dayOfYear`, `secondOfDay`} and a
+  required `ap3h` (negative for quiet time, HWM14's own convention).
+
 ## Supported operations
 
 - `version`
 - `queryAltitude`
 - `queryAltitudes`
 - `queryAtmosphereStateBatch`
+- `queryWind`
 - `ocm_state_to_drag_acceleration_oem`
 
 These operations route the US Standard Atmosphere 1976 implementation (geopotential-altitude formulation, 0-86 km geometric) and the REAL NRLMSISE-00 model (public-domain Picone/Hedin/Drob reference C port by D. Brodowski, vendored in `third_party/nrlmsise00/`) through the canonical SDK command bridge. NRLMSISE-00 mass density is the gtd7d drag-effective density (includes anomalous oxygen); outputs are verified against the canonical 17-case table distributed with the reference package.
@@ -188,6 +216,10 @@ The WasmEdge cases need `wasmedge` on `PATH`. That test covers:
 - Basilisk `atmosphericDrag` native source-vector acceleration and direct
   OCM-to-OEM browser/WasmEdge SDK invocation
 - HFC dynamic pressure and Mach derived from speed samples
+- HWM14 winds against NRL's published check output (quiet and ap = 80) through
+  HFC (with and without SPW), JSON `queryWind` and `query_wind_field`; every
+  grid cell equal to the point query; SPW missing the sample day refused;
+  byte-identical wind fields in the browser and WasmEdge
 - a hosted-runtime example contract check
 
 ## hosted-runtime example

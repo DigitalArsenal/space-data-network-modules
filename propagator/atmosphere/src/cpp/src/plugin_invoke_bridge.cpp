@@ -19,6 +19,7 @@ extern "C" __attribute__((weak)) void emscripten_notify_memory_growth(int) {}
 
 extern "C" int invoke(void);
 extern "C" int query_atmosphere_state_batch(void);
+extern "C" int query_wind_field(void);
 extern "C" int ocm_state_to_drag_acceleration_oem(void);
 
 namespace {
@@ -148,6 +149,23 @@ static const char *kMethod_query_atmosphere_state_batch_output_ports[] = {
   "states",
 };
 
+static const AcceptedTypeRef kMethod_query_wind_field_input_port_0_accepted_types[] = {
+  { false, "WXF.fbs", "$WXF", 0u, false, "WXF" },
+  { false, "WXF.fbs", "$WXF", 1u, true, "WXF" },
+};
+static const AcceptedTypeRef kMethod_query_wind_field_input_port_1_accepted_types[] = {
+  { false, "SPW.fbs", "$SPW", 0u, false, "SPW" },
+  { false, "SPW.fbs", "$SPW", 1u, true, "SPW" },
+};
+static const PortRequirement kMethod_query_wind_field_input_ports[] = {
+  { "template", true, kMethod_query_wind_field_input_port_0_accepted_types, 2u },
+  { "space_weather", false, kMethod_query_wind_field_input_port_1_accepted_types, 2u },
+};
+static const char *kMethod_query_wind_field_output_ports[] = {
+  "eastward_wind",
+  "northward_wind",
+};
+
 static const AcceptedTypeRef kMethod_ocm_state_to_drag_acceleration_oem_input_port_0_accepted_types[] = {
   { false, "OCM.fbs", "$OCM", 0u, false, "OCM" },
   { false, "OCM.fbs", "$OCM", 1u, true, "OCM" },
@@ -178,6 +196,17 @@ static const MethodDescriptor kMethodTable[] = {
     2u,
     kMethod_query_atmosphere_state_batch_output_ports,
     1u,
+    false,
+    nullptr,
+    nullptr
+  },
+  {
+    "query_wind_field",
+    &query_wind_field,
+    kMethod_query_wind_field_input_ports,
+    2u,
+    kMethod_query_wind_field_output_ports,
+    2u,
     false,
     nullptr,
     nullptr
