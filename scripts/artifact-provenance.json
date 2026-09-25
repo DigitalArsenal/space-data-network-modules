@@ -3183,11 +3183,11 @@
       "declaration": null
     },
     "propagator/atmosphere/dist/browser/module.wasm": {
-      "sha256": "1aca85d91cf1f4627a139d49d1401cbaa8ae67d38540376ee968acd8e9f12d02",
-      "bytes": 314606,
+      "sha256": "ee9c9dfcec13aa3feb06d115a507840e70e7b44f4eb376fef0a273bba8f61557",
+      "bytes": 561161,
       "module": null,
-      "lastCommit": "da2982c58757d2de4b5c5e18c4ebf8952b25e600",
-      "lastCommitDate": "2026-09-24T11:47:48-04:00",
+      "lastCommit": "2e08281b03d3421fc9660fb809ab0d75a114aa2c",
+      "lastCommitDate": "2026-09-25T00:14:35-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -3197,11 +3197,11 @@
       "declaration": null
     },
     "propagator/atmosphere/dist/isomorphic/module.wasm": {
-      "sha256": "1aca85d91cf1f4627a139d49d1401cbaa8ae67d38540376ee968acd8e9f12d02",
-      "bytes": 314606,
+      "sha256": "ee9c9dfcec13aa3feb06d115a507840e70e7b44f4eb376fef0a273bba8f61557",
+      "bytes": 561161,
       "module": null,
-      "lastCommit": "da2982c58757d2de4b5c5e18c4ebf8952b25e600",
-      "lastCommitDate": "2026-09-24T11:47:48-04:00",
+      "lastCommit": "2e08281b03d3421fc9660fb809ab0d75a114aa2c",
+      "lastCommitDate": "2026-09-25T00:14:35-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
