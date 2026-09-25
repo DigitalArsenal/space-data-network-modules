@@ -20,8 +20,8 @@ test('HPOP finite burns: Orekit, rocket equation, spiral, impulsive limit, frame
    execFileSync('cc',['-std=c11','-O2','-c',join(nrl,name),'-o',object],{stdio:'pipe'});
   }
   const binary=join(work,'finite-burn');
-  execFileSync('c++',['-std=c++17','-O2','-I',lib,'-I',nrl,join(here,'finite_burn_native.cpp'),
-   ...['astrodynamics','coords','ephemeris','environment_models','force_models','force_partials','finite_burn','variational','integrators','nrlmsise00','time_convert','us76','atmosphere_plugin'].map(n=>join(lib,`${n}.cpp`)),
+  execFileSync('c++',['-std=c++17','-O2','-I',lib,'-I',nrl,'-I',join(repo,'third_party/hwm14'),join(repo,'third_party/hwm14/hwm14.cpp'),join(repo,'third_party/hwm14/hwm14_data.cpp'),join(here,'finite_burn_native.cpp'),
+   ...['astrodynamics','coords','ephemeris','environment_models','force_models','atmosphere_winds','force_partials','finite_burn','variational','integrators','nrlmsise00','time_convert','us76','atmosphere_plugin'].map(n=>join(lib,`${n}.cpp`)),
    ...objects,'-o',binary],{stdio:'pipe'});
   const run=spawnSync(binary,[],{encoding:'utf8',timeout:240000});
   process.stdout.write(run.stdout??'');

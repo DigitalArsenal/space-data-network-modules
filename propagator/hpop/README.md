@@ -35,11 +35,30 @@ the Earth's distance, not adjusted to 1 AU) of the day before the epoch,
 `F107a` the observed 81-day centered mean, and `Ap` the daily index. HPOP
 evaluates NRLMSISE-00 with the daily Ap only (switch 9 = 1).
 
-No validated horizontal wind model ships with HPOP. `includeWinds` is refused:
-`plugin_set_drag_options` returns `HPOP_ERR_NOT_IMPLEMENTED` and leaves winds
-off, and direct C++ drag calls with `includeWinds` throw
-`std::invalid_argument`. The earlier deterministic tidal wind pattern was not a
-physical model and has been removed.
+Horizontal winds come from HWM14 (Drob et al. 2015; NRL release
+HWM14.123114, ported bit-exact to C++ in `third_party/hwm14`). With
+`includeWinds` the air velocity is `omega x r` plus the HWM14 wind, evaluated
+at the geodetic latitude, longitude and height of the Earth-fixed position (the
+same GMST axes as the density) and rotated back to GCRF; every drag model and
+`computeDragAcceleration` use it. HWM14 winds are horizontal only.
+
+- `windDisturbance` (default on) adds the DWM07 storm-time winds, which need
+  the 3-hour Kp of the epoch in `SpaceWeatherData.kp3h`: PRW `KP_INDEX`, an
+  explicit JSON `Kp`, or `ap_a[1]` of `plugin_set_solar_activity` through
+  HWM14's ap-to-Kp table. `plugin_set_solar_activity_from_prediction` puts the
+  predicted daily Ap in `ap_a[1]`, so predicted winds use the daily value.
+  Direct C++ calls without a Kp throw `std::invalid_argument`; they are never
+  given a default.
+- `plugin_set_drag_options(includeWinds, coRotating)`: `includeWinds` 0 off,
+  1 total winds, 2 quiet time only; other values return `HPOP_ERR_BAD_ARGUMENT`.
+  Mode 1 is quiet time while `ap_a[1]` is negative or unset, which is HWM14's
+  own convention for a negative ap, so the order of the two setters does not
+  matter.
+- `get_wind` / `atmosphere_get_wind` return the HWM14 wind (north, east;
+  down 0) with the supplied solar activity's `Ap[1]`, and refuse with
+  `ATMOSPHERE_ERROR_NOT_INITIALIZED` until solar activity is supplied.
+- The analytic STM still refuses winds (their position gradient is not
+  analytic here); select the finite-difference STM.
 
 ## Installation
 

@@ -41,6 +41,11 @@ public:
     void dwm07(int iyd, float sec, float alt, float glat, float glon, const float ap[2],
                float dw[2]) const;
 
+    // DWM07 with the 3-hour Kp given directly instead of ap. dwm07(ap) is
+    // exactly dwm07kp(ap2kp(ap[1])); inputs that carry Kp (for example SDS
+    // PRW weather) avoid the ap round trip.
+    void dwm07kp(int iyd, float sec, float alt, float glat, float glon, float kp, float dw[2]) const;
+
     // Disturbance wind in quasi-dipole coordinates (DWM07B).
     void dwm07b(float mlt, float mlat, float kp, float* mmpwind, float* mzpwind) const;
 

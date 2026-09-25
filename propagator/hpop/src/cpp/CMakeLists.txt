@@ -3,6 +3,7 @@ project(hpop_sdn_plugin LANGUAGES CXX C)
 
 # Vendored public-domain NRLMSISE-00 C port (Picone/Hedin/Drob via Brodowski).
 set(NRLMSISE00_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/nrlmsise00")
+set(HWM14_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/hwm14")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -67,14 +68,17 @@ add_library(
     "${HPOP_LIB_DIR}/environment_models.cpp"
     "${HPOP_LIB_DIR}/ephemeris.cpp"
     "${HPOP_LIB_DIR}/force_models.cpp"
+    "${HPOP_LIB_DIR}/atmosphere_winds.cpp"
     "${HPOP_LIB_DIR}/nrlmsise00.cpp"
     "${HPOP_LIB_DIR}/time_convert.cpp"
     "${HPOP_LIB_DIR}/us76.cpp"
     src/plugin_runtime.cpp
     "${NRLMSISE00_DIR}/nrlmsise-00.c"
     "${NRLMSISE00_DIR}/nrlmsise-00_data.c"
+    "${HWM14_DIR}/hwm14.cpp"
+    "${HWM14_DIR}/hwm14_data.cpp"
 )
-target_include_directories(hpop PUBLIC include "${HPOP_LIB_DIR}" "${NRLMSISE00_DIR}")
+target_include_directories(hpop PUBLIC include "${HPOP_LIB_DIR}" "${NRLMSISE00_DIR}" "${HWM14_DIR}")
 
 if(NOT EMSCRIPTEN)
     # Native test targets can be added here

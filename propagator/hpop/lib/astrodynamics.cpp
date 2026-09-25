@@ -7,6 +7,7 @@
 // =============================================================================
 
 #include "astrodynamics.h"
+#include "atmosphere_winds.h"
 #include "ephemeris.h"
 #include "atmosphere.h"
 #include <cmath>
@@ -4829,7 +4830,7 @@ AtmosphericDensity computeUSSA1976(double altitude) {
 
 // Convert a Julian date (UT) to calendar year, day-of-year and seconds of day.
 // Fliegel, H.F. & Van Flandern, T.C. (1968), Comm. ACM 11(10), 657.
-static void jdToYearDoySec(double jd, int& year, int& doy, double& sec) {
+void jdToYearDoySec(double jd, int& year, int& doy, double& sec) {
     const double jd05 = jd + 0.5;
     long z = static_cast<long>(std::floor(jd05));
     double frac = jd05 - static_cast<double>(z);
@@ -5185,10 +5186,8 @@ DragAccelerationResult computeDragAcceleration(
     }
 
     if (config.atmosphere.includeWinds) {
-        // No validated horizontal wind model ships with HPOP; refuse rather
-        // than invent a wind field or silently drop the request.
-        throw std::invalid_argument(
-            "includeWinds: no validated horizontal wind model is available");
+        // HWM14 (third_party/hwm14); position is already Earth-fixed here.
+        vAtm += HorizontalWindEarthFixed(position, jd, weather, config.atmosphere.windDisturbance);
     }
     Vec3 vRel = velocity - vAtm;
     result.relativeSpeed = vRel.magnitude();

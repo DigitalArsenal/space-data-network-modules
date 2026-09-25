@@ -817,7 +817,11 @@ void Model::dwm07b(float mlt, float mlat, float kp, float* mmpwind, float* mzpwi
 
 void Model::dwm07(int iyd, float sec, float alt, float glat, float glon, const float ap[2],
                   float dw[2]) const {
-    const float kp = ap2kp(ap[1]);
+    dwm07kp(iyd, sec, alt, glat, glon, ap2kp(ap[1]), dw);
+}
+
+void Model::dwm07kp(int iyd, float sec, float alt, float glat, float glon, float kp,
+                    float dw[2]) const {
     float mlat, mlon, f1e, f1n, f2e, f2n;
     gd2qd(glat, glon, &mlat, &mlon, &f1e, &f1n, &f2e, &f2n);
     const float day = static_cast<float>(iyd % 1000);

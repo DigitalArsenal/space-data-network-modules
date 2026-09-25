@@ -127,7 +127,7 @@ bool parseForces(const PRWForceConfiguration* in,double epoch,ForceModel::ForceM
     if(const auto* weather=in->WEATHER()) {
         if(!weather->EPOCH()||weather->EPOCH()->TIME_SYSTEM()!=timingStandard::UTC)return prwError(error,"epoch-time-scale: Space-weather epoch must be UTC.");
         double tdb=0,utc=0;if(!decodeEpoch(weather->EPOCH(),tdb,utc,error))return false;
-        out.weather.epoch=utc;out.weather.F107=weather->F107();out.weather.F107a=weather->F107_AVERAGE();out.weather.Ap=weather->AP_INDEX();out.weather.Kp=weather->KP_INDEX();
+        out.weather.epoch=utc;out.weather.F107=weather->F107();out.weather.F107a=weather->F107_AVERAGE();out.weather.Ap=weather->AP_INDEX();out.weather.Kp=weather->KP_INDEX();out.weather.kp3h=out.weather.Kp;
         if(!nonnegative(out.weather.F107)||!nonnegative(out.weather.F107a)||!nonnegative(out.weather.Ap)||!nonnegative(out.weather.Kp)||out.weather.Kp>9)
             return prwError(error,"invalid-weather: Space-weather indices must be finite and within their domain.");
     }

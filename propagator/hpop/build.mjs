@@ -20,13 +20,13 @@ if(!emsdk)throw new Error('A repo-local emsdk LLVM toolchain is required; set SD
 const libDir=path.join(emsdk,'upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/lto');
 const exceptionLibraries=['libc++abi-ww-wasmexcept.a','libunwind-ww-wasmexcept.a'].map(n=>path.join(libDir,n));
 for(const file of exceptionLibraries)if(!fsSync.existsSync(file))throw new Error(`Missing LLVM standard Wasm EH runtime archive ${file}`);
-const units=['astrodynamics','integrators','variational','finite_burn','force_partials','coords','atmosphere_plugin','environment_models','ephemeris','force_models','nrlmsise00','time_convert','us76'].map(n=>path.join(packageRoot,`lib/${n}.cpp`));
-units.push(path.join(packageRoot,'../../third_party/nrlmsise00/nrlmsise-00.c'),path.join(packageRoot,'../../third_party/nrlmsise00/nrlmsise-00_data.c'),path.join(packageRoot,'src/hpop_plugin.cpp'),path.join(packageRoot,'src/cpp/src/prw_execution.cpp'));
+const units=['astrodynamics','integrators','variational','finite_burn','force_partials','coords','atmosphere_plugin','environment_models','ephemeris','force_models','atmosphere_winds','nrlmsise00','time_convert','us76'].map(n=>path.join(packageRoot,`lib/${n}.cpp`));
+units.push(path.join(packageRoot,'../../third_party/hwm14/hwm14.cpp'),path.join(packageRoot,'../../third_party/hwm14/hwm14_data.cpp'),path.join(packageRoot,'../../third_party/nrlmsise00/nrlmsise-00.c'),path.join(packageRoot,'../../third_party/nrlmsise00/nrlmsise-00_data.c'),path.join(packageRoot,'src/hpop_plugin.cpp'),path.join(packageRoot,'src/cpp/src/prw_execution.cpp'));
 const pluginSource=await fs.readFile(path.join(packageRoot,'src/hpop_plugin.cpp'),'utf8');
 const diagnosticExports=[...new Set([...pluginSource.matchAll(/^(?:int|void|double|const char\*)\s+((?:plugin_|get_)[A-Za-z0-9_]+)\s*\(/gm)].map(m=>m[1]).filter(n=>n!=='plugin_stream_invoke')),'malloc','free','hpop_initialize','_initialize'];
 const buildDir=path.join(packageRoot,'.sdk-build');await fs.mkdir(buildDir,{recursive:true});
 const initializationSource=path.join(packageRoot,'src/cpp/src/prw_initialization.cpp');
-const config={initializationSource,clangxx:path.join(emsdk,'upstream/bin/clang++'),linker:path.join(emsdk,'upstream/bin/wasm-ld'),units,exceptionLibraries,diagnosticExports,includes:[path.join(packageRoot,'lib'),path.join(packageRoot,'src'),path.join(packageRoot,'src/cpp/include'),path.join(packageRoot,'src/cpp/generated'),path.join(packageRoot,'src/cpp/generated/sds'),path.join(packageRoot,'../../third_party/nrlmsise00')]};
+const config={initializationSource,clangxx:path.join(emsdk,'upstream/bin/clang++'),linker:path.join(emsdk,'upstream/bin/wasm-ld'),units,exceptionLibraries,diagnosticExports,includes:[path.join(packageRoot,'lib'),path.join(packageRoot,'src'),path.join(packageRoot,'src/cpp/include'),path.join(packageRoot,'src/cpp/generated'),path.join(packageRoot,'src/cpp/generated/sds'),path.join(packageRoot,'../../third_party/nrlmsise00'),path.join(packageRoot,'../../third_party/hwm14')]};
 const configPath=path.join(buildDir,'compiler.json');await fs.writeFile(configPath,JSON.stringify(config,null,2));
 process.env.HPOP_SDK_BUILD_CONFIG=configPath;
 process.env.SDN_WASI_CLANGXX=path.join(packageRoot,'build-driver.mjs');

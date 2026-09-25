@@ -16,6 +16,7 @@
 
 #include "../lib/astrodynamics_types.h"
 #include "../lib/astrodynamics.h"
+#include "atmosphere_winds.h"
 #include "../lib/integrators.h"
 #include "../lib/variational.h"
 #include "../lib/force_models.h"
@@ -51,6 +52,18 @@ static IntegrationMethod g_integratorType = IntegrationMethod::RK78;
 static bool g_analyticSTM = true;
 static ForceModel::DensityGradient g_densityGradient = ForceModel::DensityGradient::Neglected;
 static SpaceWeatherData g_weather;
+
+// ABI wind mode (plugin_set_drag_options): 0 off, 1 HWM14 total, 2 quiet
+// time. Mode 1 adds the DWM07 disturbance winds only while a 3-hour ap is
+// supplied; otherwise it is quiet time, HWM14's own convention for a
+// negative ap. Kept separate from the force set so the order of the two
+// setters does not matter and the force code never sees a missing Kp.
+static int g_windMode = 0;
+static void applyWindMode() {
+    g_forceSet.drag.includeWinds = g_windMode != 0;
+    g_forceSet.drag.windDisturbance = g_windMode == 1 && g_weather.kp3h >= 0.0;
+}
+
 static bool g_initialized = false;
 
 // gmat-07 environment state. A field loaded from a potential file, a predicted
@@ -1664,14 +1677,19 @@ int plugin_set_force_model_v2(double* configPtr, int len) {
 }
 
 /// Set drag-model options not included in the packed force-model array.
-/// includeWinds: 0/1, coRotatingAtmosphere: 0/1
-/// @return HPOP_OK, or HPOP_ERR_NOT_IMPLEMENTED when winds are requested: no validated horizontal
-///         wind model is available, so winds stay off and the request is refused
+/// includeWinds: 0 no winds, 1 HWM14 total winds (quiet time plus DWM07
+/// disturbance winds from ap_a[1] of plugin_set_solar_activity; quiet time
+/// while no non-negative ap_a[1] is set, as HWM14 does for a negative ap),
+/// 2 HWM14 quiet-time winds only. coRotatingAtmosphere: 0/1. Either order of
+/// this call and plugin_set_solar_activity gives the same result.
+/// @return HPOP_OK, or HPOP_ERR_BAD_ARGUMENT for an includeWinds value outside 0..2
 int plugin_set_drag_options(int includeWinds, int coRotatingAtmosphere) {
-    g_forceSet.drag.includeWinds = false;
+    if (includeWinds < 0 || includeWinds > 2) return HPOP_ERR_BAD_ARGUMENT;
+    g_windMode = includeWinds;
     g_forceSet.drag.coRotatingAtmosphere = coRotatingAtmosphere != 0;
+    applyWindMode();
     g_configVersion++;
-    return includeWinds != 0 ? HPOP_ERR_NOT_IMPLEMENTED : HPOP_OK;
+    return HPOP_OK;
 }
 
 /// Every atmosphere label the ABI names, in ABI order. This order is the
@@ -1766,7 +1784,11 @@ void plugin_set_solar_activity(double f107, double f107a, double* apPtr) {
     for (int i = 0; i < 7; i++) {
         g_weather.ap3h[i] = apPtr[i];
     }
+    // ap_a[1] is the 3-hour ap of the epoch (NRLMSISE-00 layout): the HWM14
+    // disturbance winds take its Kp.
+    g_weather.kp3h = apPtr[1] >= 0.0 ? KpFromAp(apPtr[1]) : -1.0;
     g_forceSet.weather = g_weather;
+    applyWindMode();
     g_configVersion++;
 }
 

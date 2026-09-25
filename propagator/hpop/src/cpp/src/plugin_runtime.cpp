@@ -274,6 +274,8 @@ void configure_weather(
     forces.weather.F107a = read_optional_double(weather, "F107a", "f107a", forces.weather.F107a);
     forces.weather.Ap = read_optional_double(weather, "Ap", "ap", forces.weather.Ap);
     forces.weather.Kp = read_optional_double(weather, "Kp", "kp", forces.weather.Kp);
+    // Only an explicit Kp feeds the HWM14 disturbance winds.
+    if (weather.contains("Kp") || weather.contains("kp")) forces.weather.kp3h = forces.weather.Kp;
 }
 
 // Expected finite-burn validation failures use statuses. WasmEdge 0.16.4

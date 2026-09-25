@@ -7,6 +7,7 @@
  */
 
 #include "atmosphere.h"
+#include "atmosphere_winds.h"
 #include <algorithm>
 #include <cstring>
 #include <cstdint>
@@ -18,6 +19,9 @@
  * ============================================================================ */
 
 static bool g_initialized = false;
+/* True once real solar activity was supplied; the defaults below never feed
+ * the wind query. */
+static bool g_solarActivitySet = false;
 static AtmosphereModel g_defaultModel = ATMOSPHERE_MODEL_US76;
 static SolarActivity g_solarActivity = {
     150.0,  /* F107: moderate solar activity */
@@ -44,6 +48,7 @@ AtmosphereResult atmosphere_init(const AtmosphereConfig* config)
     if (config != nullptr) {
         g_defaultModel = config->defaultModel;
         std::memcpy(&g_solarActivity, &config->solarActivity, sizeof(SolarActivity));
+        g_solarActivitySet = true;
     }
 
     g_initialized = true;
@@ -69,6 +74,7 @@ void atmosphere_set_solar_activity(const SolarActivity* solar)
 {
     if (solar != nullptr) {
         std::memcpy(&g_solarActivity, solar, sizeof(SolarActivity));
+        g_solarActivitySet = true;
     }
 }
 
@@ -209,18 +215,32 @@ AtmosphereResult atmosphere_get_wind(const GeoPosition* position,
                                       const AtmosphereEpoch* epoch,
                                       WindVector* wind)
 {
-    (void)epoch;
-    if (position == nullptr || wind == nullptr) {
+    if (position == nullptr || epoch == nullptr || wind == nullptr) {
         return ATMOSPHERE_ERROR_INVALID_PARAMETER;
     }
-
-    // No validated horizontal wind model (such as HWM14) ships with this
-    // module. The earlier deterministic tidal pattern was not a physical
-    // model, so the query is refused rather than answered with it.
     wind->north = 0.0;
     wind->east = 0.0;
-    wind->down = 0.0;
-    return ATMOSPHERE_ERROR_INVALID_MODEL;
+    wind->down = 0.0;  // HWM14 is horizontal only
+    // HWM14 (third_party/hwm14) with Ap[1], the 3-hour ap of the epoch; a
+    // negative Ap[1] asks for quiet-time winds only, as in HWM14 itself.
+    // Without supplied solar activity the geomagnetic input would be a
+    // default, so the query is refused.
+    if (!g_solarActivitySet) {
+        return ATMOSPHERE_ERROR_NOT_INITIALIZED;
+    }
+    if (!std::isfinite(position->latitude) || !std::isfinite(position->longitude) ||
+        !std::isfinite(position->altitude) || position->altitude < 0.0 ||
+        epoch->dayOfYear < 1 || epoch->dayOfYear > 366 ||
+        !(epoch->secondOfDay >= 0.0 && epoch->secondOfDay <= 86400.0)) {
+        return ATMOSPHERE_ERROR_INVALID_PARAMETER;
+    }
+    double north = 0.0, east = 0.0;
+    astro::HorizontalWindFromAp(position->latitude * 180.0 / 3.14159265358979323846, position->longitude * 180.0 / 3.14159265358979323846,
+                                position->altitude / 1000.0, epoch->year, epoch->dayOfYear,
+                                epoch->secondOfDay, g_solarActivity.Ap[1], &north, &east);
+    wind->north = north;
+    wind->east = east;
+    return ATMOSPHERE_OK;
 }
 
 /* ============================================================================

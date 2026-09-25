@@ -236,7 +236,8 @@ struct DragForceConfig {
     double minAltitude{100.0};      ///< Minimum altitude for drag (km)
     double maxAltitude{2500.0};     ///< Maximum altitude for drag (km)
 
-    bool includeWinds{false};       ///< Include horizontal winds
+    bool includeWinds{false};       ///< Include HWM14 horizontal winds
+    bool windDisturbance{true};     ///< Add DWM07 storm-time winds (needs weather.kp3h)
     bool coRotatingAtmosphere{true}; ///< Atmosphere co-rotates with Earth
 };
 
@@ -251,9 +252,12 @@ AtmosphereModelType AtmosphereModelForDrag(DragModelType model);
 /// @param jd Julian date (TDB), for the Sun direction that sets the bulge
 /// @param dragConfig Ballistic properties and atmosphere-relative velocity flags
 /// @param bulgeExponent Cosine exponent (2 low inclination, 6 polar)
+/// @param weather Space weather for HWM14 winds (needed only when includeWinds)
+/// @param windJdUtc UTC Julian date for the winds; 0 uses jd
 /// @return Drag acceleration (km/s^2)
 Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, double jd,
-                    const DragForceConfig& dragConfig, double bulgeExponent = 4.0);
+                    const DragForceConfig& dragConfig, double bulgeExponent = 4.0,
+                    const SpaceWeatherData* weather = nullptr, double windJdUtc = 0.0);
 
 /// GCRF position (km) re-expressed in Earth-fixed axes by a rotation of GMST
 /// about the GCRF z axis, for the geodetic density models. Precession,

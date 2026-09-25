@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '../../..');
-test('drag density uses Earth-fixed longitude and winds are refused', () => {
+test('drag density and HWM14 winds use Earth-fixed axes', () => {
   const work = mkdtempSync(join(tmpdir(), 'hpop-drag-frame-'));
   const lib = join(here, '../lib');
   const nrl = join(repo, 'third_party/nrlmsise00');
@@ -21,9 +21,9 @@ test('drag density uses Earth-fixed longitude and winds are refused', () => {
     });
     const binary = join(work, 'drag-frame');
     const sources = ['astrodynamics', 'coords', 'ephemeris', 'environment_models',
-      'force_models', 'force_partials', 'integrators', 'nrlmsise00', 'time_convert',
+      'force_models','atmosphere_winds', 'force_partials', 'integrators', 'nrlmsise00', 'time_convert',
       'us76', 'atmosphere_plugin'].map(name => join(lib, `${name}.cpp`));
-    execFileSync('c++', ['-std=c++17', '-O2', '-I', lib, '-I', nrl,
+    execFileSync('c++', ['-std=c++17', '-O2', '-I', lib, '-I',nrl,'-I',join(repo,'third_party/hwm14'),join(repo,'third_party/hwm14/hwm14.cpp'),join(repo,'third_party/hwm14/hwm14_data.cpp'),
       join(here, 'drag_frame_native.cpp'), ...sources, ...objects, '-o', binary], { stdio: 'pipe' });
     const run = spawnSync(binary, [], { encoding: 'utf8' });
     process.stdout.write(run.stdout ?? '');

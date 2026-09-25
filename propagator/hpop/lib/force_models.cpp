@@ -8,6 +8,7 @@
 #include "environment_models.h"
 #include "astrodynamics.h"
 #include "atmosphere.h"
+#include "atmosphere_winds.h"
 #include "time_convert.h"
 #include <cmath>
 #include <algorithm>
@@ -42,16 +43,6 @@ Vec3 atmosphereCoRotationVelocity(const Vec3& position, bool coRotatingAtmospher
     return Vec3(-OMEGA_EARTH * position.y, OMEGA_EARTH * position.x, 0.0);
 }
 
-// No validated horizontal wind model (such as HWM14) ships with HPOP, so a
-// request for winds is refused instead of being answered with an invented
-// field or silently with none.
-Vec3 atmosphereWindVelocity(const Vec3& position, double jd, bool includeWinds) {
-    if (!includeWinds) {
-        return Vec3();
-    }
-    throw std::invalid_argument(
-        "includeWinds: no validated horizontal wind model is available");
-}
 
 // The force set integrates GCRF, while the geodetic density models
 // (computeNRLMSISE00, computeJB2008, computeDTM2020 and computeDragAcceleration)
@@ -62,13 +53,6 @@ Vec3 atmosphereWindVelocity(const Vec3& position, double jd, bool includeWinds) 
 // below the horizontal resolution of these empirical models, and the
 // co-rotation term below already uses the same axis. UT1-UTC (< 0.9 s) is
 // likewise negligible here.
-Vec3 relativeAtmosphereVelocity(const Vec3& position, const Vec3& velocity, double jd,
-                                bool coRotatingAtmosphere, bool includeWinds) {
-    Vec3 vAtm = atmosphereCoRotationVelocity(position, coRotatingAtmosphere);
-    vAtm += atmosphereWindVelocity(position, jd, includeWinds);
-    return velocity - vAtm;
-}
-
 } // anonymous namespace
 
 Vec3 EarthFixedForDensity(const Vec3& gcrf, double jdUt) {
@@ -84,6 +68,24 @@ Vec3 GcrfFromEarthFixed(const Vec3& earthFixed, double jdUt) {
     const double c = std::cos(theta);
     const double s = std::sin(theta);
     return Vec3(c * earthFixed.x - s * earthFixed.y, s * earthFixed.x + c * earthFixed.y, earthFixed.z);
+}
+
+// Velocity of the air relative to GCRF: co-rotation plus, when requested, the
+// HWM14 horizontal wind, evaluated in the same Earth-fixed axes as the density
+// and rotated back. Winds without weather are refused (Harris-Priester and the
+// exponential helper carry none).
+Vec3 relativeAtmosphereVelocity(const Vec3& position, const Vec3& velocity, double jd,
+                                bool coRotatingAtmosphere, bool includeWinds,
+                                const SpaceWeatherData* weather = nullptr, bool windDisturbance = true) {
+    Vec3 vAtm = atmosphereCoRotationVelocity(position, coRotatingAtmosphere);
+    if (includeWinds) {
+        if (weather == nullptr) {
+            throw std::invalid_argument("includeWinds: this drag model has no space-weather input for HWM14");
+        }
+        vAtm += GcrfFromEarthFixed(
+            HorizontalWindEarthFixed(EarthFixedForDensity(position, jd), jd, *weather, windDisturbance), jd);
+    }
+    return velocity - vAtm;
 }
 }  // namespace
 
@@ -518,7 +520,8 @@ AtmosphereModelType AtmosphereModelForDrag(DragModelType model) {
 }
 
 Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, double jd,
-                    const DragForceConfig& dragConfig, double bulgeExponent) {
+                    const DragForceConfig& dragConfig, double bulgeExponent,
+                    const SpaceWeatherData* weather, double windJdUtc) {
     // The apex direction needs the Sun in the same frame as `position`: both
     // are GCRF here, and the bulge geometry depends only on their relative
     // direction.
@@ -532,9 +535,11 @@ Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, double jd,
     // same as asserting a vacuum, but for an acceleration the two agree.
     if (density.density < 1e-20) return Vec3();
 
-    Vec3 vRel = relativeAtmosphereVelocity(position, velocity, jd,
+    // jd is TDB for the Sun; the winds need the UTC day and time.
+    Vec3 vRel = relativeAtmosphereVelocity(position, velocity, windJdUtc > 0.0 ? windJdUtc : jd,
                                            dragConfig.coRotatingAtmosphere,
-                                           dragConfig.includeWinds);
+                                           dragConfig.includeWinds, weather,
+                                           dragConfig.windDisturbance);
     double vRelMag = vRel.magnitude();
     if (vRelMag < 1e-6) return Vec3();
 
@@ -558,6 +563,7 @@ Vec3 AtmosphericDrag(const Vec3& position, const Vec3& velocity, double jd,
     dragCfg.Cd = config.Cd;
     dragCfg.atmosphere.model = AtmosphereModelForDrag(config.model);
     dragCfg.atmosphere.includeWinds = config.includeWinds;
+    dragCfg.atmosphere.windDisturbance = config.windDisturbance;
     dragCfg.atmosphere.coRotatingAtmosphere = config.coRotatingAtmosphere;
     dragCfg.atmosphere.minAltitude = config.minAltitude;
     dragCfg.atmosphere.maxAltitude = config.maxAltitude;
@@ -600,7 +606,9 @@ Vec3 NRLMSISE00(const Vec3& position, const Vec3& velocity, double jd,
         velocity,
         jd,
         dragConfig.coRotatingAtmosphere,
-        dragConfig.includeWinds
+        dragConfig.includeWinds,
+        &weather,
+        dragConfig.windDisturbance
     );
     double vRelMag = vRel.magnitude();
 
@@ -644,7 +652,9 @@ Vec3 JB2008(const Vec3& position, const Vec3& velocity, double jd,
         velocity,
         jd,
         dragConfig.coRotatingAtmosphere,
-        dragConfig.includeWinds
+        dragConfig.includeWinds,
+        &weather,
+        dragConfig.windDisturbance
     );
     double vRelMag = vRel.magnitude();
 
@@ -683,7 +693,9 @@ Vec3 DTM2020(const Vec3& position, const Vec3& velocity, double jd,
         velocity,
         jd,
         dragConfig.coRotatingAtmosphere,
-        dragConfig.includeWinds
+        dragConfig.includeWinds,
+        &weather,
+        dragConfig.windDisturbance
     );
     double vRelMag = vRel.magnitude();
 
@@ -1692,7 +1704,8 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double
                 break;
             case DragModelType::HarrisPriester:
                 totalAcc += HarrisPriester(position, velocity, jd, forceSet.drag,
-                                           forceSet.harrisPriesterExponent);
+                                           forceSet.harrisPriesterExponent, &forceSet.weather,
+                                           atmosphereJD);
                 break;
             case DragModelType::USSA1976:
                 totalAcc += AtmosphericDrag(position, velocity, atmosphereJD,

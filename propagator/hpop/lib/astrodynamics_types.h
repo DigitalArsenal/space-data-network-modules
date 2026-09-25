@@ -798,7 +798,8 @@ enum class AtmosphereModelType {
 /// Atmospheric model configuration
 struct AtmosphereConfig {
     AtmosphereModelType model{AtmosphereModelType::NRLMSISE00};
-    bool includeWinds{false};           ///< Include horizontal wind effects
+    bool includeWinds{false};           ///< Include HWM14 horizontal winds
+    bool windDisturbance{true};         ///< Add DWM07 storm-time winds (needs kp3h)
     bool coRotatingAtmosphere{true};    ///< Atmosphere rotates with Earth if true
     bool diurnalVariation{true};        ///< Include day/night variation
     bool geomagneticEffects{true};      ///< Include geomagnetic storm effects
@@ -865,6 +866,10 @@ struct SpaceWeatherData {
     // Geomagnetic indices
     double Ap{15.0};            ///< Daily Ap index (0-400)
     double Kp{3.0};             ///< 3-hour Kp index (0-9)
+    /// 3-hour Kp of the epoch for the HWM14 disturbance winds, set only from
+    /// real input (PRW KP_INDEX, an explicit JSON Kp, or ap_a[1] of
+    /// plugin_set_solar_activity); negative when not supplied.
+    double kp3h{-1.0};
     double ap3h[8] = {};        ///< 3-hourly ap values for day
     double Dst{0};              ///< Disturbance storm time (nT)
 

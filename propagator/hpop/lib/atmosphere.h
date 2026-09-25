@@ -95,8 +95,12 @@ double atmosphere_get_mach_number(double velocity, double altitude);
  * @param position Geographic position
  * @param epoch Time specification
  * @param wind Output wind vector
- * @return ATMOSPHERE_ERROR_INVALID_MODEL: no validated horizontal wind model
- *         is available, and the wind is reported as zero with that error
+ * HWM14 horizontal wind (north/east; down is always 0) using Ap[1] of the
+ * supplied solar activity as the 3-hour ap; a negative Ap[1] gives quiet-time
+ * winds only.
+ * @return ATMOSPHERE_OK; ATMOSPHERE_ERROR_NOT_INITIALIZED when no solar
+ *         activity was supplied; ATMOSPHERE_ERROR_INVALID_PARAMETER for a bad
+ *         position or epoch
  */
 AtmosphereResult atmosphere_get_wind(const GeoPosition* position,
                                       const AtmosphereEpoch* epoch,

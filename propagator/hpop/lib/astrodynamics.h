@@ -1258,6 +1258,10 @@ Vec3 geodeticToECEF(double latitude, double longitude, double altitude);
 /// @param altitude Output altitude (km)
 void ecefToGeodetic(const Vec3& ecef, double& latitude, double& longitude, double& altitude);
 
+/// Calendar year, day of year (1-366) and seconds of day of a Julian date
+/// (Fliegel & Van Flandern 1968); the scale of `jd` is the scale of the result.
+void jdToYearDoySec(double jd, int& year, int& doy, double& sec);
+
 /// Compute local solar time
 /// @param longitude Geographic longitude (rad)
 /// @param jd Julian date (UT)
