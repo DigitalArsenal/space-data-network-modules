@@ -396,6 +396,29 @@
       },
       "declaration": null
     },
+    "analysis/epoch-state/dist/isomorphic/module.wasm": {
+      "sha256": "49841968736eb2aee20c3a79a610ef2646fcad462331c89fcb092f806cd1332d",
+      "bytes": 223119,
+      "module": "analysis/epoch-state",
+      "lastCommit": "e375827af3e4b278de6dec0fbc93a560f3ceccd8",
+      "lastCommitDate": "2026-09-26T09:34:21-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
     "analysis/estimation/dist/isomorphic/module.wasm": {
       "sha256": "42d10718037289a1e53d70755ee2374cf450e54fee96313be04c55828582cc16",
       "bytes": 279278,
