@@ -1,0 +1,25 @@
+{
+  "name": "@digitalarsenal/sdn-module-analysis-epoch-state",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "exports": {
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist/",
+    "plugin-manifest.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "flatbuffers": "25.9.23",
+    "flatc-wasm": "26.1.32",
+    "space-data-module-sdk": "0.8.19",
+    "spacedatastandards.org": "1.226.0"
+  }
+}

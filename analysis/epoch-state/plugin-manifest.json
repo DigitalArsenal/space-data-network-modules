@@ -1,0 +1,132 @@
+{
+  "pluginId": "com.digitalarsenal.analysis.epoch-state",
+  "name": "SDN Epoch State",
+  "version": "0.1.0",
+  "description": "TLE-to-numerical handoff (Evidence-Supported ASO Catalog, section 5): evaluates each $MPE element set with SGP4 at zero elapsed time, transforms the TEME state to GCRF at the same instant (IAU 2006/2000A via ERFA, velocity including the frame rotation rate), verifies the round trip, and emits one single-row $OEM per element set with its lineage and initial-condition uncertainty marked unknown. Pure compute; output bytes depend only on input bytes.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each element set is evaluated independently in one bounded pass; the module starts no workers. Hosts parallelize by invoking separate instances on separate batches."
+  },
+  "methods": [
+    {
+      "methodId": "derive",
+      "displayName": "Derive Epoch States",
+      "inputPorts": [
+        {
+          "portId": "elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-mpe-aligned-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "MPE.fbs",
+                  "fileIdentifier": "$MPE",
+                  "rootTypeName": "MPE"
+                },
+                {
+                  "schemaName": "MPE.fbs",
+                  "fileIdentifier": "$MPE",
+                  "rootTypeName": "MPE",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "ALIGNED size-prefixed $MPE stream: concatenated [u32le length][$MPE buffer] frames; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is Unix seconds (UTC)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Element sets to hand off."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "states",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-aligned-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "ALIGNED size-prefixed $OEM stream, one single-row OEM (GCRF, UTC, km and km/s) per derived element set, in input order."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Derived epoch states. Absent when no element set could be derived."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Derives one GCRF epoch state per $MPE element set. Refused element sets (theory other than SGP4, non-finite or invalid elements, SGP4 errors, round trip outside tolerance) are listed in the report and produce no OEM."
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "MPE.fbs",
+      "fileIdentifier": "$MPE",
+      "rootTypeName": "MPE"
+    },
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "analysis-epoch-state-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

@@ -1,0 +1,19 @@
+{
+  "spacedatastandards": "1.226.0",
+  "sdsFamilies": [
+    "MET",
+    "MPE",
+    "RFM",
+    "TIM",
+    "IDM",
+    "PLD",
+    "LCC",
+    "CAT",
+    "PPE",
+    "OEM"
+  ],
+  "erfaSourceFiles": 248,
+  "axisEngine": "foundation/frames/src/axis_engine.hpp",
+  "sgp4": "propagator/sgp4/src/cpp/src/SGP4.cpp",
+  "threadModel": "single-thread"
+}
