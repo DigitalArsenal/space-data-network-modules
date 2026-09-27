@@ -9,8 +9,18 @@ extern "C" void __wrap___wasm_call_ctors(void) {
         __real___wasm_call_ctors();
     }
 }
-extern "C" void _initialize(void) { __wrap___wasm_call_ctors(); }
-// Keep this unit on the final SDK link so LLVM preserves export_name for the
-// SDK persistent WasmEdge service host.
-extern "C" __attribute__((export_name("__wasm_call_ctors")))
-void cqr_initialize_service(void) { __wrap___wasm_call_ctors(); }
+// The threads sysroot's crt1-command sets up the main thread's pthread record
+// in _start; a host that enters through _initialize never runs _start, so it
+// is set up here before the constructors, exactly once.
+extern "C" __attribute__((weak)) void __wasi_init_tp(void);
+extern "C" void _initialize(void) {
+    static bool thread_pointer_ready = false;
+    if (!thread_pointer_ready) {
+        thread_pointer_ready = true;
+        if (__wasi_init_tp) __wasi_init_tp();
+    }
+    __wrap___wasm_call_ctors();
+}
+// The __wasm_call_ctors export for command-surface direct and persistent
+// service hosts comes from the SDK (0.8.21+) invoke glue; it resolves through
+// the --wrap above, so both entries share this unit's once-only guard.

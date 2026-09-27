@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// SDK 0.8.18 public compiler hook. Keep C++ globals alive for the resident
+// SDK public compiler hook. Keep C++ globals alive for the resident
 // instance and guard the command/reactor constructor paths. SDK still owns
 // wasi-threads flags, PIV, PLG, allocation, linking and artifact validation.
 import path from 'node:path';

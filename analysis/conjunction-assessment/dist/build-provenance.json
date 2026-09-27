@@ -28,7 +28,7 @@
       "PIV": "857589cdd5fc3e784baada0f261f1b3d97475361692638447c75ccaee7800eff"
     }
   },
-  "sdk": "0.8.20",
+  "sdk": "0.8.21",
   "compiler": "wasm32-wasi-clang++ (wasi-threads)",
   "threadModel": "emscripten-pthreads",
   "runtimeTargets": [
@@ -36,7 +36,7 @@
     "wasmedge"
   ],
   "sourceSha256": "80241dbe9811b755ce0502392061e1bd081925922c73596fe38a949d530dad13",
-  "wasmSha256": "7ed526ea5b52954dedf4d49d76be1685bb2419631e7b7f5fe74cb33fc335a747",
+  "wasmSha256": "cd762de0e8a73e538ec51a046b0b7d3320f2da5232f6e567b90af08c0c724e03",
   "threadFeatures": {
     "hasSharedMemory": true,
     "sharedMemory": {
@@ -62,7 +62,7 @@
       }
     ],
     "usesAtomics": true,
-    "atomicInstructionCount": 806,
+    "atomicInstructionCount": 810,
     "declaredFeatures": [
       "atomics",
       "mutable-globals",
@@ -84,7 +84,7 @@
   "initialization": "Once per resident instance; static destruction deferred to instance teardown",
   "compilerVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project bbeae6932d653b8a71a3a985af0ccf97e13e2e08)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk/upstream/bin",
   "buildSupportSha256": {
-    "build-driver.mjs": "24043f1c1e42616f739e00eb28f1551827b096de21840d6c8c19420843698655",
-    "src/cpp/src/cqr_initialization.cpp": "63b7f3887d908b99b7b88b22e38583c7f2ae3cceb8cf99c1e990c63d5fab29be"
+    "build-driver.mjs": "84cfdd391a5eea3fc15f9bc138ad52a41a6fbc234ab28f92190d1666a8f0f317",
+    "src/cpp/src/cqr_initialization.cpp": "4a1727981275cd1a4fa539afcb9029c964c7872eb946847ef824a9a449982bf2"
   }
 }
