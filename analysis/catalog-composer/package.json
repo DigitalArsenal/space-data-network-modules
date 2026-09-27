@@ -14,6 +14,6 @@
     "flatbuffers": "25.9.23",
     "flatsql": "2.0.2",
     "space-data-module-sdk": "0.8.15",
-    "spacedatastandards.org": "1.212.0"
+    "spacedatastandards.org": "1.223.0"
   }
 }

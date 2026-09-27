@@ -12,7 +12,10 @@ test('datefirst preserves edition, original identifiers, unknown dates, duplicat
   assert.equal(r.edges[1].duplicateOf, 2); assert.match(r.sha256, /^[a-f0-9]{64}$/);
 });
 test('malformed headers, columns, IDs, impossible dates and oversized files fail atomically', async () => {
-  for (const text of ['wrong\n', header, header + '1 20230229 2 20240101', header + '0 20240101 2 20240101', header + '1 20240101 2 20240101 extra']) await assert.rejects(parse(text));
+  for (const text of ['wrong\n', header, header + '0 20240101 2 20240101', header + '1 20240101 2 20240101 extra']) await assert.rejects(parse(text));
+  const invalid = await parse(header + '1 20230229 2 20240101');
+  assert.equal(invalid.edges[0].status, 'invalid'); assert.match(invalid.edges[0].evidence.original, /20230229/);
+  assert.equal(invalid.edges[0].evidence.leftDetectionDate, undefined);
   await assert.rejects(parseDatefirst(new Uint8Array(MAX_CROSSWALK_BYTES + 1), { recordId: 'edition' }));
 });
 test('candidate generation uses exact provider namespaces and requires both products', async () => {

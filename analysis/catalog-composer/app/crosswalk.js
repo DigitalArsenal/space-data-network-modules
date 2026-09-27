@@ -36,9 +36,10 @@ export async function parseDatefirst(bytes, { leftProvider = 'vimpel', rightProv
     const [v, vd, n, nd] = fields;
     const left = { provider: leftProvider, nativeId: numericId(v), originalNativeId: v }, right = { provider: rightProvider, nativeId: numericId(n), originalNativeId: n };
     const key = JSON.stringify([identityKey(left), identityKey(right)]);
-    const edge = { left, right, evidence: { source, recordId, sha256: digest, line: i + 1, original: line,
-      leftDetectionDate: detectionDate(vd, i + 1), rightDetectionDate: detectionDate(nd, i + 1) }, status: 'proposed' };
-    if (seen.has(key)) { edge.status = 'duplicate'; edge.duplicateOf = seen.get(key); }
+    const edge = { left, right, evidence: { source, recordId, sha256: digest, line: i + 1, original: line }, status: 'proposed' };
+    try { edge.evidence.leftDetectionDate = detectionDate(vd, i + 1); edge.evidence.rightDetectionDate = detectionDate(nd, i + 1); }
+    catch (error) { edge.status = 'invalid'; edge.reason = error.message; }
+    if (seen.has(key)) { if (edge.status === 'proposed') edge.status = 'duplicate'; edge.duplicateOf = seen.get(key); }
     else seen.set(key, i + 1);
     edges.push(edge);
   }
@@ -47,7 +48,7 @@ export async function parseDatefirst(bytes, { leftProvider = 'vimpel', rightProv
   for (const edge of edges) for (const [a, b] of [[edge.left, edge.right], [edge.right, edge.left]]) {
     const key = identityKey(a); if (!partners.has(key)) partners.set(key, new Set()); partners.get(key).add(identityKey(b));
   }
-  for (const edge of edges) if (partners.get(identityKey(edge.left)).size > 1 || partners.get(identityKey(edge.right)).size > 1) edge.status = 'conflicting';
+  for (const edge of edges) if (edge.status !== 'invalid' && (partners.get(identityKey(edge.left)).size > 1 || partners.get(identityKey(edge.right)).size > 1)) edge.status = 'conflicting';
   return { version: 1, format: 'datefirst', recordId, sha256: digest, bytes: bytes.length, edges };
 }
 
