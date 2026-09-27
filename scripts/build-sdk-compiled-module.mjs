@@ -134,16 +134,29 @@ async function resolveCompileOptions(packageJson) {
         compileConfig.maximumMemoryBytes,
     ),
   };
-  // Opt into the isomorphic wasi-threads model (compileWithWasiThreads) when the
-  // module declares it. The SDK routes "emscripten-pthreads" through the
-  // wasi-threads toolchain and validates the emitted artifact
-  // (assertPthreadArtifact). Overridable via SDM_MODULE_THREAD_MODEL for spikes.
+  // The thread model decides the toolchain lane and therefore the bytes, so it
+  // is DECLARED, never inferred (scripts/lib/thread-model.mjs). Without a
+  // declaration the SDK infers one from runtimeTargets, and that inference is a
+  // property of the SDK version: [browser, wasmedge] now selects the
+  // wasi-threads model, whose artifact guard refuses a guest that never
+  // threads. "emscripten-pthreads" builds real wasi-threads
+  // (assertPthreadArtifact); "wasi-sequential" builds the same clang target
+  // for a guest that provably never spawns and requires
+  // manifest.sequentialJustification (assertSequentialArtifact);
+  // "single-thread" is the Emscripten STANDALONE_WASM lane.
+  // SDM_MODULE_THREAD_MODEL overrides the declaration for spikes only.
   const threadModel = threadModelOption(
     process.env.SDM_MODULE_THREAD_MODEL ?? compileConfig.threadModel,
   );
-  if (threadModel) {
-    compileOptions.threadModel = threadModel;
+  if (!threadModel) {
+    throw new Error(
+      `${path.relative(repoRoot, packageJsonPath)} must declare ` +
+        "sdnModuleCompile.threadModel explicitly " +
+        '("single-thread", "wasi-sequential" or "emscripten-pthreads"); ' +
+        "the build never infers a thread model.",
+    );
   }
+  compileOptions.threadModel = threadModel;
   const emscriptenRoot = await resolveEmscriptenRoot(compileConfig);
   if (emscriptenRoot) {
     compileOptions.emscriptenRoot = emscriptenRoot;
