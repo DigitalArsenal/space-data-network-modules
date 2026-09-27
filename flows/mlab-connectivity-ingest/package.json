@@ -8,6 +8,6 @@
     "build": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../mlab-connectivity-ingest.flow.json --deps ../mlab-connectivity-ingest.deps.json --out ./dist/cnp"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.8.20"
+    "space-data-module-sdk": "0.8.21"
   }
 }

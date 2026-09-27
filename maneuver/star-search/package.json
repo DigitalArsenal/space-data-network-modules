@@ -23,6 +23,6 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "space-data-module-sdk": "0.8.20"
+    "space-data-module-sdk": "0.8.21"
   }
 }

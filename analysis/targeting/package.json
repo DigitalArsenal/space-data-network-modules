@@ -9,7 +9,7 @@
   },
   "devDependencies": {
     "flatbuffers": "25.9.23",
-    "space-data-module-sdk": "0.8.20",
+    "space-data-module-sdk": "0.8.21",
     "spacedatastandards.org": "1.206.0"
   }
 }
