@@ -82,8 +82,8 @@ ensure_emscripten() {
     source "$EMSDK_DIR/emsdk_env.sh" >/dev/null 2>&1
 }
 
-# ── Isomorphic reactor + browser command builds (the CMake targets) ──────────
-build_isomorphic() {
+# ── Generated bindings shared by every Emscripten target ────────────────────
+generate_bindings() {
     node "$SCRIPT_DIR/../../scripts/generate-plugin-manifest-header.mjs" \
         --package-dir "$SCRIPT_DIR" \
         --var od_plugin_manifest_bytes \
@@ -103,6 +103,32 @@ for (const [name, content] of Object.entries(await getInvokeCppSchemaHeaders()))
     await fs.writeFile(path.join(root, 'src/cpp/generated', name), content);
 }
 JS
+}
+
+# ── Browser bundle only (dist/browser/module.{js,wasm}) ─────────────────────
+# The committed dist/isomorphic artifacts come from build-wasi.mjs (the SDK's
+# WASI toolchain), so this mode rebuilds the Emscripten command bundle without
+# touching them. The bundle exports _initialize (src/direct_initialize.cpp) so
+# a direct-surface host can construct it without entering _start.
+build_browser() {
+    generate_bindings
+    rm -rf "$BUILD_DIR" "$BROWSER_DIST_DIR"
+    mkdir -p "$BROWSER_DIST_DIR"
+    echo "Configuring Emscripten build..."
+    emcmake cmake -S "$SRC_DIR" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
+    echo ""
+    echo "Building browser-compatible standalone (command) artifact..."
+    cmake --build "$BUILD_DIR" --target "$BROWSER_TARGET" -j"$(cpu_count)"
+    cp "$BUILD_DIR/${BROWSER_TARGET}.js" "$BROWSER_DIST_DIR/module.js"
+    cp "$BUILD_DIR/${BROWSER_TARGET}.wasm" "$BROWSER_DIST_DIR/module.wasm"
+    echo ""
+    echo "=== Browser Build Complete ==="
+    ls -lh "$BROWSER_DIST_DIR/module.js" "$BROWSER_DIST_DIR/module.wasm"
+}
+
+# ── Isomorphic reactor + browser command builds (the CMake targets) ──────────
+build_isomorphic() {
+    generate_bindings
 
     rm -rf "$BUILD_DIR"
     rm -rf "$DIST_DIR"
@@ -269,12 +295,15 @@ case "$MODE" in
     isomorphic)
         build_isomorphic
         ;;
+    browser)
+        build_browser
+        ;;
     all|"")
         build_isomorphic
         build_guest_link
         ;;
     *)
-        echo "usage: build.sh [all|isomorphic|guest-link]" >&2
+        echo "usage: build.sh [all|isomorphic|browser|guest-link]" >&2
         exit 1
         ;;
 esac

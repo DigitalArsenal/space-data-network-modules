@@ -143,6 +143,7 @@ if(EMSCRIPTEN)
         src/wasm_api.cpp
         src/plugin_entrypoints.cpp
         src/plugin_invoke_bridge.cpp
+        src/direct_initialize.cpp
     )
     target_include_directories(
         od_wasm PRIVATE
@@ -159,6 +160,7 @@ if(EMSCRIPTEN)
             -s EXPORTED_RUNTIME_METHODS='[\"ccall\",\"cwrap\",\"UTF8ToString\",\"stringToUTF8\",\"lengthBytesUTF8\"]' \
             -s MODULARIZE=1 \
             -s EXPORT_NAME='ODModule' \
+            -Wl,--wrap=__wasm_call_ctors \
             -s STANDALONE_WASM=1 \
             -s INITIAL_MEMORY=67108864 \
             -s STACK_SIZE=2097152 \

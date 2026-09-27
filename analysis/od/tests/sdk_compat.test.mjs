@@ -179,6 +179,16 @@ test("resident direct invocation remains reusable alongside the command surface"
   for (let i = 0; i < 3; i++) assertSuccessfulResponse(await harness.invoke(createInvokeRequest()));
 });
 
+// The browser bundle is the Emscripten command build: a direct-surface host
+// never enters its _start, so it constructs the guest through the exported
+// _initialize. Without it the first direct call trapped with "memory access
+// out of bounds".
+test("browser bundle serves the direct surface after its exported _initialize", async (t) => {
+  const harness = await createBrowserModuleHarness({wasmSource: fs.readFileSync(BROWSER_WASM_PATH), surface: "direct"});
+  t.after(() => harness.destroy());
+  for (let i = 0; i < 2; i++) assertSuccessfulResponse(await harness.invoke(createInvokeRequest()));
+});
+
 async function createOemInput(wireFormat = "flatbuffer") {
   const {Builder} = await import("flatbuffers");
   const names = ["OEM", "ephemerisDataBlock", "ephemerisDataLine", "CAT", "RFM", "CelestialFrameWrapper"];

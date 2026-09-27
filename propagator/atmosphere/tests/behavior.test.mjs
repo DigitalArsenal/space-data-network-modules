@@ -41,12 +41,14 @@ import {
 import {
   STANDALONE_RUNTIME_KINDS,
   assertSuccessfulResponse,
+  createStandaloneHarness,
   createStandaloneHarnessOrSkip,
   invokeJsonRequest,
 } from "space-data-module-sdk/testing/isomorphic";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
+const BROWSER_WASM_PATH = new URL("../dist/browser/module.wasm", import.meta.url);
 
 function readManifest() {
   return JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
@@ -1014,3 +1016,25 @@ test("query_wind_field emits byte-identical fields in the browser and WasmEdge",
   assert.ok(outputs.length >= 2, "both runtimes produced output");
   assert.deepEqual(outputs[1], outputs[0]);
 });
+
+// A direct-surface host never enters _start, so it must construct the guest
+// through the exported _initialize before its first call; without it the first
+// call traps with "memory access out of bounds". US76 sea level (1.225 kg/m^3,
+// 101325 Pa, 288.15 K) as in the command-surface case, twice on one instance.
+for (const [label, wasmPath] of [["isomorphic", WASM_PATH], ["browser", BROWSER_WASM_PATH]]) {
+  test(`direct surface constructs the ${label} artifact before its first call`, async (t) => {
+    const harness = await createStandaloneHarness("browser", wasmPath, { surface: "direct" });
+    t.after(async () => {
+      await harness.destroy();
+    });
+    for (let call = 0; call < 2; call += 1) {
+      const seaLevel = await invokeJsonRequest(harness, {
+        operation: "queryAltitude",
+        params: { altitudeM: 0, model: "US76" },
+      });
+      assert.ok(Math.abs(seaLevel.state.density - 1.225) < 0.001);
+      assert.ok(Math.abs(seaLevel.state.pressure - 101_325) < 0.1);
+      assert.ok(Math.abs(seaLevel.state.temperature - 288.15) < 1e-9);
+    }
+  });
+}

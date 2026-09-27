@@ -4,11 +4,13 @@ import test from "node:test";
 
 import {
   STANDALONE_RUNTIME_KINDS,
+  createStandaloneHarness,
   createStandaloneHarnessOrSkip,
   invokeJsonRequest,
 } from "space-data-module-sdk/testing/isomorphic";
 
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
+const BROWSER_WASM_PATH = new URL("../dist/browser/module.wasm", import.meta.url);
 const EARTH_MOON_MU = 0.0121505856;
 const EARTH_MOON_SYSTEM = {
   mu: EARTH_MOON_MU,
@@ -207,5 +209,27 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     const finalJacobi = jacobiConstant(propagated.states.at(-1), EARTH_MOON_MU);
     assert.ok(Math.abs(propagated.jacobi - initialJacobi) < 1e-12);
     assert.ok(Math.abs(finalJacobi - initialJacobi) < 1e-5);
+  });
+}
+
+// A direct-surface host never enters _start, so it must construct the guest
+// through the exported _initialize before its first call; without it the first
+// call traps with "memory access out of bounds". Same textbook L1 (Earth-Moon
+// mu = 0.0121505856) as the command-surface case above, called twice on one
+// resident instance.
+for (const [label, wasmPath] of [["isomorphic", WASM_PATH], ["browser", BROWSER_WASM_PATH]]) {
+  test(`direct surface constructs the ${label} artifact before its first call`, async (t) => {
+    const harness = await createStandaloneHarness("browser", wasmPath, { surface: "direct" });
+    t.after(async () => {
+      await harness.destroy();
+    });
+    for (let call = 0; call < 2; call += 1) {
+      const points = await invokeJsonRequest(harness, {
+        operation: "computeLagrangePoints",
+        params: { mu: EARTH_MOON_MU },
+      });
+      assert.equal(points.length, 5);
+      assert.ok(Math.abs(points[0].position[0] - 0.8369151258197124) < 1e-9);
+    }
   });
 }
