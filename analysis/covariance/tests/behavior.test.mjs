@@ -8,6 +8,13 @@ import {
 } from "../../../tests/lib/isomorphicHarness.mjs";
 
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
+// The artifact is wasi-sequential on the sanctioned wasm32-wasip1-threads
+// triple, which implies the atomics feature, so wasm-ld declares its own
+// memory shared (limits flags 0x03) even though the guest never spawns a
+// thread. The WasmEdge CLI only parses a shared memory with the threads
+// proposal enabled; --enable-threads adds no wasi thread-spawn host function.
+// The browser leg ignores this option.
+const HARNESS_OPTIONS = Object.freeze({ enableThreads: true });
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   test(`independent RTN uncertainties obey the closed-form variance sum on ${runtimeKind}`, async (t) => {
@@ -17,7 +24,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     // Frame: RTN. Epoch: 2024-03-03T04:53:00 UTC; no time propagation.
     // Output units: km² and (km/s)². Relative tolerance 1e-11 allows the
     // documented 12-significant-digit JSON serialization; zeros stay exact.
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, HARNESS_OPTIONS);
     if (!harness) return;
     t.after(() => harness.destroy());
     const result = await invokeJsonRequest(harness, {
@@ -45,7 +52,7 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
   });
 
   test(`covariance module combines direct, TLE-series, and sensor-bias inputs on ${runtimeKind}`, async (t) => {
-    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t, HARNESS_OPTIONS);
     if (!harness) {
       return;
     }
