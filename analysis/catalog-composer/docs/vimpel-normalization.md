@@ -3,7 +3,7 @@
 ## Verified format
 
 Primary source: JSC Vimpel, [Orbit parameters of newly detected HEO space debris
-objects](https://spacedata.vimpel.ru/en/), public format documentation inspected
+objects](http://spacedata.vimpel.ru/), public format documentation inspected
 2026-09-21. This describes osculating elements, not an SGP4/TLE mean-element set.
 The 15 columns are:
 
@@ -112,5 +112,8 @@ state uncertainty, or a Gaussian model. Preserve them; do not manufacture a
 
 The normalizer and catalog validation/fitting methods are implemented. See
 [epoch fitting](epoch-fitting.md) for the binary interfaces and real-data
-verification. Automatic node scheduling, `datefirst` candidate generation,
-accepted-binding persistence and live conjunction integration remain outstanding.
+verification. `datefirst` candidate generation, common-grid preparation and accepted-binding
+persistence now run in the Catalog Editor APP. See [workflow evidence](matching-workflow.md).
+The local-node audit normalizes its immutable published data; absent independent
+counterproducts remain insufficient. This work does not schedule a service or
+claim conjunction screening, collision probabilities or production deployment.

@@ -23,3 +23,10 @@ test('direct and transitive conflicting identities require explicit revocation',
  await assert.rejects(recordDecision(d,await review(candidate('c','3'),candidate('a','4')),0,'accepted','review'),/conflicts/);
  await assert.rejects(recordDecision(d,await review(candidate('a','1'),candidate('b','5')),0,'accepted','review'),/conflicts/);
 });
+
+test('imported history cannot activate incompatible or contradictory identities',async()=>{
+ const a=await recordDecision([],await review(candidate('a','1'),candidate('b','2')),0,'accepted','review');
+ const b=await recordDecision([],await review(candidate('a','1'),candidate('b','3')),0,'accepted','review');
+ assert.throws(()=>activeBindings([...a,...b]),/conflicts/);
+ a[0].diagnostics.status='ambiguous';assert.throws(()=>activeBindings(a),/compatible/);
+});

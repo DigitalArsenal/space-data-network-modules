@@ -8,8 +8,8 @@ export function setupMatching({ getModule, getRecipe, changed, status }) {
   const $=id=>document.getElementById(id);
   const fields=['positionToleranceKm','velocityToleranceKmS','finiteDifferenceToleranceKmS','minimumSpanSeconds'];
   const defaults={positionToleranceKm:10,velocityToleranceKmS:.01,finiteDifferenceToleranceKmS:.001,minimumSpanSeconds:3600};
-  let review;
-  const invalidate=()=>{review=null;$('matching-decision').hidden=true;$('matching-download').hidden=true;};
+  let review,revision=0;
+  const invalidate=()=>{revision++;review=null;$('matching-decision').hidden=true;$('matching-download').hidden=true;};
   const download=(value,name)=>{const u=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);};
   const history=()=>{$('matching-history').textContent=`${activeBindings(getRecipe().identityDecisions||[]).length} accepted associations · ${(getRecipe().identityDecisions||[]).length} review decisions saved with this recipe.`;};
   $('matching-open').onclick=()=>{const r=getRecipe(),p=r.matching||defaults;for(const k of fields)$(`matching-${k}`).value=p[k];
@@ -18,7 +18,7 @@ export function setupMatching({ getModule, getRecipe, changed, status }) {
     $('matching-model').value=JSON.stringify(r.matchingModel||DEFAULT_MODEL,null,2);invalidate();history();$('matching-dialog').showModal();};
   for(const tab of ['sources','policy','help']) $(`matching-tab-${tab}`).onclick=()=>{for(const key of ['sources','policy','help']){$(`matching-panel-${key}`).hidden=key!==tab;$(`matching-tab-${key}`).setAttribute('aria-selected',String(key===tab));}};
   $('matching-close').onclick=()=>$('matching-dialog').close();
-  $('matching-form').addEventListener('input',event=>{if(event.target.id!=='matching-reason')invalidate();});
+  $('matching-form').addEventListener('input',event=>{if(event.target.id!=='matching-reason'){invalidate();$('matching-crosswalk-download').hidden=true;}});
   $('matching-history-download').onclick=()=>download(getRecipe().identityDecisions||[],'catalog-identity-decisions.json');
   for(const decision of ['accepted','rejected','revoked'])$(`matching-${decision}`).onclick=async()=>{
     try {if(!review)throw new Error('Run a trajectory check first.');
@@ -30,7 +30,7 @@ export function setupMatching({ getModule, getRecipe, changed, status }) {
   };
   $('matching-form').onsubmit=async event=>{
     event.preventDefault();const button=$('matching-run');button.disabled=true;invalidate();$('matching-result').textContent='Preparing and checking trajectories…';
-    const runtimes=[];
+    const runtimes=[],startedRevision=revision;
     try {
       const module=getModule();if(!module)throw new Error('The catalog module is not ready.');
       const policy=Object.fromEntries(fields.map(k=>[k,Number($(`matching-${k}`).value)]));
@@ -46,7 +46,8 @@ export function setupMatching({ getModule, getRecipe, changed, status }) {
       const crosswalkFile=$('matching-crosswalk').files[0];
       if(crosswalkFile){if(crosswalkFile.size>8*1024*1024)throw new Error('Crosswalk exceeds 8 MiB.');const bytes=new Uint8Array(await crosswalkFile.arrayBuffer());
         crosswalk=await parseDatefirst(bytes,{recordId:`sha256:${await sha256(bytes)}`,leftProvider:candidates[0].provider,rightProvider:candidates[1].provider});
-        const generated=crosswalkCandidates(crosswalk,candidates);pairs=generated.pairs;
+        $('matching-crosswalk-download').hidden=false;$('matching-crosswalk-download').onclick=()=>download(crosswalk,'catalog-crosswalk-audit.json');
+        const generated=crosswalkCandidates(crosswalk,candidates);pairs=generated.pairs;candidates.splice(0,candidates.length,...generated.candidates);
         if(pairs.length!==1)throw new Error('The crosswalk has no unique, valid declaration for these two products. Review missing, invalid, duplicate or conflicting rows.');
       }
       const automatic=candidates.some(c=>c.format!=='oem');
@@ -71,6 +72,7 @@ export function setupMatching({ getModule, getRecipe, changed, status }) {
         const prepared=await propagateCommonGrid(seed,grid,adapters,model);
         return {...prepared,provenance:{sourceProduct:candidate.recordId,normalizedStateSha256:await sha256(seed),grid:prepared.grid,model:prepared.model,dependencies}};
       }});
+      if(revision!==startedRevision)throw new Error('Inputs changed during the check. Run it again before reviewing.');
       review=await sealReview(result.recipe,result.report,{...(grid?{grid,model,dependencies}:{}),...(crosswalk?{crosswalk:{sha256:crosswalk.sha256,recordId:crosswalk.recordId,rows:crosswalk.edges.length}}:{})});
       const row=review.report.matches[0];
       $('matching-result').textContent=`${row.status.toUpperCase()}: ${row.reason}`+(row.maximumPositionResidualKm!==undefined?` Maximum separation: ${row.maximumPositionResidualKm.toPrecision(5)} km; velocity difference: ${row.maximumVelocityResidualKmS.toPrecision(5)} km/s.`:'');

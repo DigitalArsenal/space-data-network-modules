@@ -72,6 +72,7 @@ function oemBytes(values,grid) {
 export async function propagateCommonGrid(seedBytes, requestedGrid, {propagator,frames,time}, model=DEFAULT_MODEL) {
   const grid=gridPolicy(requestedGrid),seed=readOpm(seedBytes);
   if(Date.parse(grid.start)<Date.parse(seed.epoch) || Date.parse(grid.start)-Date.parse(seed.epoch)>7*86400000) throw new Error('The grid must start within seven days after the state epoch.');
+  if(!model || Object.keys(model).some(key=>!Object.hasOwn(DEFAULT_MODEL,key))) throw new Error('Unsupported propagation model setting.');
   for(const key of ['mu','initialStep','maxStep','absoluteTolerance','relativeTolerance']) if(!Number.isFinite(model[key]) || model[key]<=0) throw new Error('Invalid propagation model settings.');
   for(const key of ['j2','j3','j4','thirdBody']) if(typeof model[key]!=='boolean') throw new Error('Specify every gravity and third-body switch.');
   const initial=await toGcrf(seed,frames),epochs=[];

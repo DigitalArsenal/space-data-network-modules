@@ -54,9 +54,10 @@ test('HPOP uses DE440 input buffer and reports monthly analytic error', (t) => {
       objects.push(output);
     }
     const binary=join(work,'de440-hpop');
-    execFileSync('c++',['-std=c++17','-O2','-DDE440_WITH_HPOP','-I',join(here,'../src'),'-I',hpop,'-I',nrl,
+    execFileSync('c++',['-std=c++17','-O2','-DDE440_WITH_HPOP','-I',join(here,'../src'),'-I',hpop,'-I',nrl,'-I',join(repo,'third_party/hwm14'),
       join(here,'de440_reference_native.cpp'),
-      ...['astrodynamics','coords','ephemeris','environment_models','force_models','integrators','nrlmsise00','time_convert','us76','atmosphere_plugin'].map(name=>join(hpop,`${name}.cpp`)),
+      ...['astrodynamics','coords','ephemeris','environment_models','force_models','integrators','nrlmsise00','time_convert','us76','atmosphere_plugin','atmosphere_winds'].map(name=>join(hpop,`${name}.cpp`)),
+      join(repo,'third_party/hwm14/hwm14.cpp'),join(repo,'third_party/hwm14/hwm14_data.cpp'),
       ...objects,'-o',binary],{stdio:'pipe'});
     const run=spawnSync(binary,[fixtures,'--excerpt'],{encoding:'utf8'});
     process.stdout.write(run.stdout??'');

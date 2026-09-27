@@ -15,6 +15,7 @@ export function validateDecisions(decisions) {
   const ids = new Set();
   for (const d of decisions) {
     if (!['accepted', 'rejected', 'revoked'].includes(d.status) || !/^[a-f0-9]{64}$/.test(d.reviewSha256) || !d.left?.provider || !d.left?.nativeId || !d.right?.provider || !d.right?.nativeId || !d.reason?.trim() || !Number.isFinite(Date.parse(d.reviewedAt)) || ids.has(d.id)) throw new Error('Invalid identity review history.');
+    if(d.status==='accepted' && d.diagnostics?.status!=='compatible') throw new Error('An accepted decision needs compatible diagnostics.');
     ids.add(d.id);
   }
   return decisions;
@@ -23,7 +24,9 @@ export function activeBindings(decisions = []) {
   validateDecisions(decisions);
   const latest = new Map();
   for (const d of decisions) latest.set([identityKey(d.left), identityKey(d.right)].sort().join('|'), d);
-  return [...latest.values()].filter(d => d.status === 'accepted');
+  const bindings=[...latest.values()].filter(d => d.status === 'accepted'),checked=[];
+  for(const d of bindings){assertNoConflict(checked,d.left,d.right);checked.push(d);}
+  return bindings;
 }
 function assertNoConflict(bindings, left, right) {
   // Connected components must contain at most one native object per provider.

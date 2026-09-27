@@ -36,7 +36,7 @@ export async function parseDatefirst(bytes, { leftProvider = 'vimpel', rightProv
     const [v, vd, n, nd] = fields;
     const left = { provider: leftProvider, nativeId: numericId(v), originalNativeId: v }, right = { provider: rightProvider, nativeId: numericId(n), originalNativeId: n };
     const key = JSON.stringify([identityKey(left), identityKey(right)]);
-    const edge = { left, right, evidence: { source, recordId, sha256: digest, line: i + 1, original: line }, status: 'proposed' };
+    const edge = { left, right, evidence: { source, recordId, sha256: digest, line: i + 1, original: lines[i] }, status: 'proposed' };
     try { edge.evidence.leftDetectionDate = detectionDate(vd, i + 1); edge.evidence.rightDetectionDate = detectionDate(nd, i + 1); }
     catch (error) { edge.status = 'invalid'; edge.reason = error.message; }
     if (seen.has(key)) { if (edge.status === 'proposed') edge.status = 'duplicate'; edge.duplicateOf = seen.get(key); }
@@ -54,12 +54,14 @@ export async function parseDatefirst(bytes, { leftProvider = 'vimpel', rightProv
 
 /** Select attributed candidates only when both immutable source products exist. */
 export function crosswalkCandidates(crosswalk, products) {
-  const byIdentity = new Map();
+  const byIdentity = new Map(), productIds = new Set();
   for (const p of products) {
     if (![p.provider, p.nativeId, p.id, p.recordId].every(identifier)) throw new Error('Every product needs provider, native ID, candidate ID and immutable record ID.');
+    if (productIds.has(p.id)) throw new Error('Product candidate IDs must be unique.');
+    productIds.add(p.id);
     const key = identityKey({ provider: p.provider, nativeId: numericId(p.nativeId) });
     if (byIdentity.has(key)) throw new Error('Choose one product edition per native object.');
-    byIdentity.set(key, p);
+    byIdentity.set(key, { ...p, originalNativeId:p.nativeId, nativeId:numericId(p.nativeId) });
   }
   const candidates = new Map(), pairs = [], unresolved = [];
   for (const edge of crosswalk.edges) {

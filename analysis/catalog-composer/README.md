@@ -86,8 +86,9 @@ no other provider's catalog is silently used to infer their coverage.
 `match_catalog` evaluates proposed provider-native associations independently of
 CAT layer selection. It **does not merge identities or publish an authoritative
 orbit**. The editor's **Match objects** dialog accepts two normalized binary OEM
-trajectories, provider/native IDs, a crosswalk evidence note, and four configurable
-thresholds. The downloaded review includes the policy, source-file SHA-256
+trajectories or epoch products (OPM or the public Vimpel orbit table), provider/native
+IDs, an optional datefirst edition, and four configurable thresholds. Epoch products
+run through the selected PRW propagator and native frame/time modules automatically. The downloaded review includes the policy, source-file SHA-256
 references, diagnostics and verdict. Thresholds persist with the catalog recipe;
 uploaded orbit bytes do not persist in configuration.
 
@@ -98,8 +99,8 @@ canonical `$OEM`, one Earth-centered UTC uniform block, six components per state
 positions within the polar Earth radius and nonnegative two-body orbital energy
 (using Earth mu 398600.4418 km³/s²); this is only a coarse physical sanity gate. Supported inertial frames are J2000,
 EME2000 and GCRF; two compared arcs must have exactly the same frame, START_TIME,
-STEP_SIZE and sample count. Unsupported layouts fail explicitly. The host flow
-must use its selected propagator and frame module to create this common grid;
+STEP_SIZE and sample count. Unsupported layouts fail explicitly. The editor host adapter
+uses its selected propagator and frame module to create this common grid;
 the matcher neither hardwires SGP4 nor interprets raw Vimpel elements.
 
 Control recipe (`recipe` port, JSON configuration, never observational data):
@@ -139,9 +140,9 @@ Reference: Nicholas J. Baietto (2022), *Space Object Correlation Between the
 Space-Track and Vimpel Catalogs*, https://doi.org/10.25394/PGS.19658076.
 The thesis documents direct and observation-arc correlation and identifies a
 historical datefirst pairing discrepancy. It does not replace verification of
-the current provider format. Raw Vimpel normalization, automatic common-grid
-flow execution, crosswalk-file parsing, accepted identity persistence and live
-provider screening are **not implemented by this review method**.
+the current provider format. The native method evaluates only the supplied trajectories. Version 0.1.9 adds
+automatic preparation and reviewed identity persistence in the embedded APP host
+adapter; see [the workflow and live evidence](docs/matching-workflow.md).
 
 See [Vimpel normalization and epoch audit](docs/vimpel-normalization.md) for the
 confirmed provider format, differentiation limits and crosswalk policy.
@@ -155,3 +156,20 @@ candidate; held-out positions do not train the fit. A candidate must be
 repropagated and validated before use. These methods accept any propagator that
 supplies the declared J2000/UTC grid and retain explicit model provenance.
 See [the binary interfaces, policy and verification](docs/epoch-fitting.md).
+
+## Reviewed workflow (0.1.9)
+
+Upload two prepared OEMs or two epoch products, choose provider namespaces and IDs,
+and optionally load the attributed `datefirst` crosswalk. For epoch products, set
+a bounded UTC grid and review the propagation model. HPOP is the packaged default;
+an alternative WASM artifact implementing canonical PRW execution can be selected.
+The module and all input/output hashes accompany the review. No JavaScript physics
+or mean-element reinterpretation is used.
+
+Download the crosswalk audit to inspect invalid dates, duplicates and conflicting
+associations. Only one valid declaration for the chosen products proceeds to the
+trajectory check. A compatible result enables **Accept association**; a reason is
+required. Decisions persist in the existing node/app configuration namespace and
+travel with recipe export/import. Rejection and revocation remain in the bounded
+history. Direct and transitive conflicts require revocation before a replacement
+is accepted. Identity bindings remain separate from CAT source selection.

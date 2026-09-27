@@ -11,7 +11,7 @@ test('datefirst preserves edition, original identifiers, unknown dates, duplicat
   assert.equal(r.edges[0].evidence.rightDetectionDate, '2024-02-29'); assert.equal(r.edges[1].evidence.rightDetectionDate, undefined);
   assert.equal(r.edges[1].duplicateOf, 2); assert.match(r.sha256, /^[a-f0-9]{64}$/);
 });
-test('malformed headers, columns, IDs, impossible dates and oversized files fail atomically', async () => {
+test('malformed files fail atomically and impossible dates remain invalid attributed rows', async () => {
   for (const text of ['wrong\n', header, header + '0 20240101 2 20240101', header + '1 20240101 2 20240101 extra']) await assert.rejects(parse(text));
   const invalid = await parse(header + '1 20230229 2 20240101');
   assert.equal(invalid.edges[0].status, 'invalid'); assert.match(invalid.edges[0].evidence.original, /20230229/);
@@ -22,7 +22,9 @@ test('candidate generation uses exact provider namespaces and requires both prod
   const crosswalk = await parse(header + '1 20240101 2 20240101\n3 20240101 4 20240101');
   const p = (provider, nativeId, id) => ({ provider, nativeId, id, recordId: `edition-${id}` });
   const r = crosswalkCandidates(crosswalk, [p('vimpel', '0001', 'v1'), p('space-track', '2', 'n2')]);
+  assert.equal(r.candidates[0].nativeId, '1'); assert.equal(r.candidates[0].originalNativeId, '0001');
   assert.equal(r.pairs.length, 1); assert.equal(r.unresolved[0].reason, 'missing-state-product');
   assert.equal(r.pairs[0].evidence.line, 2);
   assert.throws(() => crosswalkCandidates(crosswalk, [p('vimpel', '1', 'a'), p('vimpel', '01', 'b')]));
+  assert.throws(() => crosswalkCandidates(crosswalk, [p('vimpel', '1', 'a'), p('space-track', '2', 'a')]), /unique/);
 });
