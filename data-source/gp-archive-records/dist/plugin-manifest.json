@@ -1,0 +1,166 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.gp-archive-records",
+  "name": "SDN GP Archive Records",
+  "version": "0.1.0",
+  "description": "Builds the GP history archive's $MPE element sets and $CAT catalog rows in archive encoding v1: the exact byte layout the archive's content IDs (sha256 over the record bytes) depend on. Records are built with the schema-generated SDS C++ builders; field names and vtable slots come only from the generated headers, and the field order and default handling are a compatibility contract gated by fixture bytes from the importer's original builder. Pure compute; output bytes depend only on input bytes.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each record is encoded independently in one bounded pass; the module starts no workers. Hosts parallelize by invoking separate instances on separate batches."
+  },
+  "methods": [
+    {
+      "methodId": "build_mpe",
+      "displayName": "Build Archive $MPE Records",
+      "inputPorts": [
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "gp-archive-record-fields-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON array; one object per element set with ENTITY_ID (string), EPOCH (Unix seconds, UTC), MEAN_MOTION, ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER, MEAN_ANOMALY and BSTAR (numbers), and optionally MEAN_ELEMENT_THEORY, which must be \"SGP4\". Every key is required except MEAN_ELEMENT_THEORY; unknown or repeated keys are refused. Strings are byte strings: escapes are decoded and other bytes are kept as given.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Transient input frame from the GP archive importer to this encoder: the parsed field values of one batch, keyed by the SDS field names of the record being built. It is never stored or published; only the $MPE/$CAT records this method returns are persisted, and those are typed on the output port."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One JSON frame holding the batch."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-mpe-aligned-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "MPE.fbs",
+                  "fileIdentifier": "$MPE",
+                  "rootTypeName": "MPE"
+                },
+                {
+                  "schemaName": "MPE.fbs",
+                  "fileIdentifier": "$MPE",
+                  "rootTypeName": "MPE",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "ALIGNED size-prefixed $MPE stream: concatenated [u32le length][$MPE buffer] frames, each padded to 8 bytes with zeros (zero-length prefixes are padding). Archive encoding v1: every field written, defaults included, MEAN_ELEMENT_THEORY = SGP4."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The built records, one per input element, in input order."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Builds one $MPE per input element set in archive encoding v1. A malformed batch is refused whole, naming the first bad record by index."
+    },
+    {
+      "methodId": "build_cat",
+      "displayName": "Build Archive $CAT Records",
+      "inputPorts": [
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "gp-archive-record-fields-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON array; one object per catalog row with OBJECT_ID and OBJECT_NAME (strings) and NORAD_CAT_ID (unsigned 32-bit integer). All three keys are required; unknown or repeated keys are refused. Strings are byte strings: escapes are decoded and other bytes are kept as given.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Transient input frame from the GP archive importer to this encoder: the parsed field values of one batch, keyed by the SDS field names of the record being built. It is never stored or published; only the $MPE/$CAT records this method returns are persisted, and those are typed on the output port."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One JSON frame holding the batch."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cat-aligned-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "CAT.fbs",
+                  "fileIdentifier": "$CAT",
+                  "rootTypeName": "CAT"
+                },
+                {
+                  "schemaName": "CAT.fbs",
+                  "fileIdentifier": "$CAT",
+                  "rootTypeName": "CAT",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "ALIGNED size-prefixed $CAT stream: concatenated [u32le length][$CAT buffer] frames, each padded to 8 bytes with zeros (zero-length prefixes are padding). Archive encoding v1: OBJECT_ID, NORAD_CAT_ID and OBJECT_NAME, defaults omitted."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The built records, one per input element, in input order."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Builds one $CAT per input catalog row in archive encoding v1. A malformed batch is refused whole, naming the first bad record by index."
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "MPE.fbs",
+      "fileIdentifier": "$MPE",
+      "rootTypeName": "MPE"
+    },
+    {
+      "schemaName": "CAT.fbs",
+      "fileIdentifier": "$CAT",
+      "rootTypeName": "CAT"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "data-source-gp-archive-records-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

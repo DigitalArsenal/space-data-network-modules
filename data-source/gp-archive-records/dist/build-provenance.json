@@ -1,0 +1,13 @@
+{
+  "spacedatastandards": "1.226.0",
+  "sdsFamilies": [
+    "MET",
+    "MPE",
+    "IDM",
+    "PLD",
+    "LCC",
+    "CAT"
+  ],
+  "encoding": "gp-archive-v1",
+  "threadModel": "single-thread"
+}
