@@ -13,7 +13,7 @@
     "esbuild": "0.25.12",
     "flatbuffers": "25.9.23",
     "flatsql": "2.0.2",
-    "space-data-module-sdk": "0.8.15",
+    "space-data-module-sdk": "0.8.20",
     "spacedatastandards.org": "1.223.0"
   }
 }
