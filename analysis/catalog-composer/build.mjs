@@ -45,20 +45,27 @@ const result = await compileModuleFromSource({
 });
 if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
 const canonical = await computeCanonicalModuleHash(await fs.readFile(outputPath));
+// Dependencies are loaded by the generic APP bridge with exact artifact hashes.
+const matchingModules = [];
+for (const [role, relative] of [['normalizer','files/orbit-products'],['frames','foundation/frames'],['time','foundation/time'],['propagator','propagator/hpop']]) {
+  const dependency = JSON.parse(await fs.readFile(path.join(repo,relative,'plugin-manifest.json'),'utf8'));
+  const artifact = await computeCanonicalModuleHash(await fs.readFile(path.join(repo,relative,'dist/isomorphic/module.wasm')));
+  matchingModules.push({role,pluginId:dependency.pluginId,name:dependency.name,manifest:dependency,hash:artifact.hashHex});
+}
 const searchWasm = await fs.readFile(path.join(root,'node_modules/flatsql/wasm/flatsql.wasm'));
 const editor = await build({
   entryPoints: [path.join(root, 'app/editor.js')], bundle: true, write: false,
   platform: 'browser', format: 'esm', minify: true, target: 'es2022',
   alias: { 'catalog-search-wasm-factory':path.join(root,'node_modules/flatsql/wasm/flatsql.js') },
   external:['node:*','fs','path','url','module'],
-  define: { __PLUGIN_MANIFEST__: JSON.stringify(manifest), __SEARCH_WASM__:JSON.stringify(searchWasm.toString('base64')) },
+  define: { __PLUGIN_MANIFEST__: JSON.stringify(manifest), __MATCHING_MODULES__:JSON.stringify(matchingModules), __SEARCH_WASM__:JSON.stringify(searchWasm.toString('base64')) },
 });
 const script = editor.outputFiles[0].text.replaceAll('__MODULE_HASH__', canonical.hashHex).replaceAll('</script', '<\\/script');
 const page = (await fs.readFile(path.join(root, 'app/index.html'), 'utf8')).replace('__EDITOR_SCRIPT__', () => script);
 const app = encodeAppManifest({
   id: 'catalog-editor', name: 'Catalog Editor', version: manifest.version,
   description: manifest.description,
-  modules: [{ id: 'composer', pluginId: manifest.pluginId, contentHash: canonical.hashHex, version: manifest.version, role: 'primary', runtimeTarget: 'both' }],
+  modules: [{ id: 'composer', pluginId: manifest.pluginId, contentHash: canonical.hashHex, version: manifest.version, role: 'primary', runtimeTarget: 'both' }, ...matchingModules.map(m=>({id:m.role,pluginId:m.pluginId,contentHash:m.hash,version:m.manifest.version,role:'dependency',runtimeTarget:'both'}))],
   data: ['CAT', 'MPE', 'OMM', 'OEM', 'OCM', 'NCD', 'PPE', 'OPM'].map(code => ({ id: code.toLowerCase(), sdsType: code, direction: code === 'CAT' ? 'both' : 'consumes', moduleId: 'composer' })),
   pages: [{ id: 'editor', title: 'Catalog Editor', mediaType: 'text/html', entry: true, encoding: 'base64_gzip', content: gzipSync(page, { level: 9 }).toString('base64'), contentSha256: createHash('sha256').update(page).digest('hex') }],
 });

@@ -21,10 +21,15 @@ function option(value, label) { const o = document.createElement('option'); o.va
 const label = (source) => `${source.provider} · ${source.source}`;
 const layerLabel = (id) => { const layer = recipe.layers.find(l => l.id === id); return layer ? label(layer) : id; };
 const stateLabel = (id) => { const source = primarySources(available).find(l => l.id === id); return source ? label(source) : id; };
+let saveQueue = Promise.resolve();
 function persist() {
-  void callHost('configuration.write', { value: recipe }).catch(e => status(`Could not save the recipe: ${e.message}`, true));
+  const snapshot=structuredClone(recipe);
+  const saved=saveQueue.catch(()=>{}).then(()=>callHost('configuration.write', { value:snapshot }));
+  saveQueue=saved;
+  saved.catch(e=>status(`Could not save the recipe: ${e.message}`,true));
+  return saved;
 }
-function changed() { catalog = null; $('download').disabled = true; persist(); }
+function changed() { catalog = null; $('download').disabled = true; return persist(); }
 function renderLayers() {
   $('layers').replaceChildren();
   recipe.layers.forEach((layer, index) => {
