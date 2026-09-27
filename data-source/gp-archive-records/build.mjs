@@ -34,9 +34,18 @@ const compilation = await compileModuleFromSource({
   sourceCode: [...sdsHeaders, implementationSource].join("\n\n"),
   language: "c++",
   outputPath,
-  // Pure encoding: nothing spawned, nothing shared.
-  threadModel: "single-thread",
+  // wasi-sequential: the sanctioned clang wasm32-wasip1-threads toolchain
+  // without the wasi-threads contract (new modules compile on it, not emcc).
+  // The guest never spawns: each record is encoded in one bounded pass. The
+  // SDK holds the artifact to that claim. (On the emcc single-thread lane the
+  // SDK 0.8.21 compiles its invoke bridge without -O, which costs ~500
+  // interpreted instructions per payload byte: ~40x slower for this module.)
+  threadModel: "wasi-sequential",
 });
+
+if (compilation.threadModel !== "wasi-sequential") {
+  throw new Error(`Compiler resolved threadModel "${compilation.threadModel}", not wasi-sequential.`);
+}
 
 await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));
 await fs.writeFile(
@@ -46,7 +55,7 @@ await fs.writeFile(
       spacedatastandards: sdsVersion,
       sdsFamilies: SCHEMA_FAMILIES,
       encoding: "gp-archive-v1",
-      threadModel: "single-thread",
+      threadModel: "wasi-sequential",
     },
     null,
     2,

@@ -5,14 +5,23 @@ import { fileURLToPath } from "node:url";
 
 import { formatParityReport, normalizeParityFixture, runParityHarness } from "space-data-module-sdk/testing";
 
+import { CAT_FIELDS, MPE_FIELDS, encodeFieldBatch } from "./field-batch.mjs";
+
 // Tri-runtime parity (SDK harness): the one artifact in headless Chrome, native
 // WasmEdge at the SDK pin and the pinned Docker WasmEdge must return identical
 // bytes and identical error classes. Needs Chrome, WasmEdge 0.16.4 and Docker,
 // so it runs on request: npm run test:parity.
 const VECTORS = JSON.parse(fs.readFileSync(new URL("./archive-v1-vectors.json", import.meta.url), "utf8"));
 
-const inputBytes = (vector) =>
-  vector.inputBase64 !== undefined ? Buffer.from(vector.inputBase64, "base64") : Buffer.from(vector.inputJson, "utf8");
+const fieldValues = (vector, fields) =>
+  Object.fromEntries(
+    fields.map(([name, kind]) => [
+      name,
+      kind === "string" && vector[`${name}_BASE64`] !== undefined
+        ? new Uint8Array(Buffer.from(vector[`${name}_BASE64`], "base64"))
+        : vector[name],
+    ]),
+  );
 
 function request(methodId, payload) {
   return {
@@ -27,8 +36,7 @@ function request(methodId, payload) {
   };
 }
 
-const batch = (vectors) =>
-  Buffer.concat([Buffer.from("["), ...vectors.flatMap((v, i) => (i ? [Buffer.from(","), inputBytes(v)] : [inputBytes(v)])), Buffer.from("]")]);
+const batch = (fields, vectors) => Buffer.from(encodeFieldBatch(fields, vectors.map((v) => fieldValues(v, fields))));
 
 test(
   "one artifact produces identical records in Chromium, native WasmEdge and container WasmEdge",
@@ -38,11 +46,11 @@ test(
       name: "gp-archive-records",
       threadCounts: [1],
       cases: [
-        { id: "build-mpe-archive-v1-vectors", request: request("build_mpe", batch(VECTORS.mpe)), expect: "ok" },
-        { id: "build-cat-archive-v1-vectors", request: request("build_cat", batch(VECTORS.cat)), expect: "ok" },
-        { id: "build-mpe-empty", request: request("build_mpe", Buffer.from("[]")), expect: "ok" },
-        { id: "build-mpe-malformed", request: request("build_mpe", Buffer.from('[{"ENTITY_ID":"A"}]')), expect: "ok" },
-        { id: "build-cat-out-of-range", request: request("build_cat", Buffer.from('[{"OBJECT_ID":"A","NORAD_CAT_ID":4294967296,"OBJECT_NAME":""}]')), expect: "ok" },
+        { id: "build-mpe-archive-v1-vectors", request: request("build_mpe", batch(MPE_FIELDS, VECTORS.mpe)), expect: "ok" },
+        { id: "build-cat-archive-v1-vectors", request: request("build_cat", batch(CAT_FIELDS, VECTORS.cat)), expect: "ok" },
+        { id: "build-mpe-empty", request: request("build_mpe", batch(MPE_FIELDS, [])), expect: "ok" },
+        { id: "build-mpe-missing-field", request: request("build_mpe", batch(MPE_FIELDS.slice(0, 3), VECTORS.mpe.slice(0, 2))), expect: "ok" },
+        { id: "build-cat-truncated", request: request("build_cat", batch(CAT_FIELDS, VECTORS.cat.slice(0, 3)).subarray(0, 40)), expect: "ok" },
       ],
     });
     const report = await runParityHarness({

@@ -10,11 +10,15 @@ import { validateArtifactWithStandards } from "space-data-module-sdk/compliance"
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
+import { CAT_FIELDS, MPE_FIELDS, encodeFieldBatch } from "./field-batch.mjs";
+
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const STANDARDS_ROOT = fileURLToPath(new URL("../node_modules/spacedatastandards.org/", import.meta.url));
 
-// Archive encoding v1 vectors. Every expected byte string was written by the GP
+// Archive encoding v1 vectors (tests/archive-v1-vectors.json; doubles as
+// IEEE-754 bit patterns, non-UTF-8 strings as <FIELD>_BASE64). Every expected
+// byte string was written by the GP
 // archive importer's original Go builders (buildGPArchiveMPE and
 // buildGPArchiveCAT at space-data-network 70c9d4884) for the same input, not by
 // this module: synthetic edge cases (defaults, negative zero, extreme doubles,
@@ -28,20 +32,24 @@ const VECTORS = JSON.parse(fs.readFileSync(new URL("./archive-v1-vectors.json", 
 const manifest = () => JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
 const wasm = () => fs.readFileSync(fileURLToPath(WASM_PATH));
 
-const inputBytes = (vector) =>
-  vector.inputBase64 !== undefined
-    ? Buffer.from(vector.inputBase64, "base64")
-    : Buffer.from(vector.inputJson, "utf8");
-
-function batch(vectors) {
-  const parts = [Buffer.from("[")];
-  vectors.forEach((vector, i) => {
-    if (i > 0) parts.push(Buffer.from(","));
-    parts.push(inputBytes(vector));
-  });
-  parts.push(Buffer.from("]"));
-  return new Uint8Array(Buffer.concat(parts));
+// A vector's field values as the field batch encoder takes them.
+function fieldValues(vector, fields) {
+  const values = {};
+  for (const [name, kind] of fields) {
+    if (kind === "string") {
+      values[name] =
+        vector[`${name}_BASE64`] !== undefined
+          ? new Uint8Array(Buffer.from(vector[`${name}_BASE64`], "base64"))
+          : vector[name];
+    } else {
+      values[name] = vector[name];
+    }
+  }
+  return values;
 }
+
+const mpeBatch = (vectors) => encodeFieldBatch(MPE_FIELDS, vectors.map((v) => fieldValues(v, MPE_FIELDS)));
+const catBatch = (vectors) => encodeFieldBatch(CAT_FIELDS, vectors.map((v) => fieldValues(v, CAT_FIELDS)));
 
 function splitStream(bytes) {
   const frames = [];
@@ -114,7 +122,7 @@ test("artifact passes SDK compliance and is standalone WASI", async () => {
 
 test("build_mpe reproduces the importer's bytes for every archive-v1 vector", async (t) => {
   const h = await harness(t);
-  const frames = await build(h, "build_mpe", batch(VECTORS.mpe));
+  const frames = await build(h, "build_mpe", mpeBatch(VECTORS.mpe));
   assert.equal(frames.length, VECTORS.mpe.length);
   VECTORS.mpe.forEach((vector, i) => {
     assert.equal(frames[i].toString("hex"), vector.expected, `${vector.id} (${vector.source})`);
@@ -123,7 +131,7 @@ test("build_mpe reproduces the importer's bytes for every archive-v1 vector", as
 
 test("build_cat reproduces the importer's bytes for every archive-v1 vector", async (t) => {
   const h = await harness(t);
-  const frames = await build(h, "build_cat", batch(VECTORS.cat));
+  const frames = await build(h, "build_cat", catBatch(VECTORS.cat));
   assert.equal(frames.length, VECTORS.cat.length);
   VECTORS.cat.forEach((vector, i) => {
     assert.equal(frames[i].toString("hex"), vector.expected, `${vector.id} (${vector.source})`);
@@ -133,11 +141,11 @@ test("build_cat reproduces the importer's bytes for every archive-v1 vector", as
 test("a record's bytes do not depend on the rest of its batch", async (t) => {
   const h = await harness(t);
   for (const vector of [...VECTORS.mpe.slice(0, 8), ...VECTORS.mpe.slice(-4)]) {
-    const [frame] = await build(h, "build_mpe", batch([vector]));
+    const [frame] = await build(h, "build_mpe", mpeBatch([vector]));
     assert.equal(frame.toString("hex"), vector.expected, vector.id);
   }
   for (const vector of [...VECTORS.cat.slice(0, 8), ...VECTORS.cat.slice(-4)]) {
-    const [frame] = await build(h, "build_cat", batch([vector]));
+    const [frame] = await build(h, "build_cat", catBatch([vector]));
     assert.equal(frame.toString("hex"), vector.expected, vector.id);
   }
 });
@@ -155,7 +163,7 @@ test("archive encoding v1 layout: every MPE field present, in the importer's ord
     MEAN_ANOMALY: 325.0288,
     BSTAR: 0,
   };
-  const [frame] = await build(h, "build_mpe", new TextEncoder().encode(JSON.stringify([input])));
+  const [frame] = await build(h, "build_mpe", encodeFieldBatch(MPE_FIELDS, [input]));
   // Every key lands in the schema field of the same name (read back through the
   // generated SDS JavaScript bindings).
   const mpe = MPE.getSizePrefixedRootAsMPE(new flatbuffers.ByteBuffer(new Uint8Array(frame))).unpack();
@@ -176,7 +184,7 @@ test("archive encoding v1 layout: CAT adds OBJECT_ID, NORAD_CAT_ID, OBJECT_NAME 
     { OBJECT_ID: "1998-067A", NORAD_CAT_ID: 25544, OBJECT_NAME: "ISS (ZARYA)" },
     { OBJECT_ID: "NORAD:0", NORAD_CAT_ID: 0, OBJECT_NAME: "UNKNOWN" },
   ];
-  const [present, absent] = await build(h, "build_cat", new TextEncoder().encode(JSON.stringify(rows)));
+  const [present, absent] = await build(h, "build_cat", encodeFieldBatch(CAT_FIELDS, rows));
   const cat = CAT.getSizePrefixedRootAsCAT(new flatbuffers.ByteBuffer(new Uint8Array(present))).unpack();
   assert.equal(cat.OBJECT_ID, "1998-067A");
   assert.equal(cat.NORAD_CAT_ID, 25544);
@@ -188,41 +196,36 @@ test("archive encoding v1 layout: CAT adds OBJECT_ID, NORAD_CAT_ID, OBJECT_NAME 
   assert.equal(fieldOffsets(absent)[2] ?? 0, 0, "NORAD_CAT_ID 0 is not written");
 });
 
-test("the optional MEAN_ELEMENT_THEORY key accepts SGP4 and changes nothing", async (t) => {
+test("header fields may come in any order", async (t) => {
   const h = await harness(t);
-  const vector = VECTORS.mpe[0];
-  const withTheory = { ...JSON.parse(vector.inputJson), MEAN_ELEMENT_THEORY: "SGP4" };
-  const [frame] = await build(h, "build_mpe", new TextEncoder().encode(JSON.stringify([withTheory])));
-  assert.equal(frame.toString("hex"), vector.expected);
+  const reversed = [...MPE_FIELDS].reverse();
+  const [frame] = await build(h, "build_mpe", encodeFieldBatch(reversed, [fieldValues(VECTORS.mpe[0], MPE_FIELDS)]));
+  assert.equal(frame.toString("hex"), VECTORS.mpe[0].expected);
 });
 
 test("an empty batch builds an empty stream", async (t) => {
   const h = await harness(t);
-  assert.deepEqual(await build(h, "build_mpe", new TextEncoder().encode("[]")), []);
-  assert.deepEqual(await build(h, "build_cat", new TextEncoder().encode(" [ ] ")), []);
+  assert.deepEqual(await build(h, "build_mpe", encodeFieldBatch(MPE_FIELDS, [])), []);
+  assert.deepEqual(await build(h, "build_cat", encodeFieldBatch(CAT_FIELDS, [])), []);
 });
 
-test("malformed batches are refused whole, naming the first bad record", async (t) => {
+test("malformed batches are refused whole", async (t) => {
   const h = await harness(t);
-  const good = JSON.parse(VECTORS.mpe[0].inputJson);
+  const good = fieldValues(VECTORS.mpe[0], MPE_FIELDS);
+  const valid = encodeFieldBatch(MPE_FIELDS, [good, good]);
+  const withHeader = (fields) => encodeFieldBatch(fields, [good]);
   const cases = [
-    ["build_mpe", [good, { ...good, EPOCH: undefined }], /record 1: missing EPOCH/],
-    ["build_mpe", [{ ...good, EXTRA: 1 }], /record 0: unknown key EXTRA/],
-    ["build_mpe", [good, good, { ...good, MEAN_ELEMENT_THEORY: "SGP4XP" }], /record 2: .*SGP4/],
-    ["build_mpe", [{ ...good, BSTAR: "0.0001" }], /record 0: expected a number/],
-    ["build_cat", [{ OBJECT_ID: "A", NORAD_CAT_ID: 4294967296, OBJECT_NAME: "" }], /record 0: .*out of range/],
-    ["build_cat", [{ OBJECT_ID: "A", NORAD_CAT_ID: -1, OBJECT_NAME: "" }], /record 0: expected an unsigned integer/],
-    ["build_cat", [{ OBJECT_ID: "A", OBJECT_NAME: "" }], /record 0: missing NORAD_CAT_ID/],
+    ["build_mpe", withHeader(MPE_FIELDS.filter(([name]) => name !== "BSTAR")), /missing field BSTAR/],
+    ["build_mpe", withHeader([...MPE_FIELDS, ["MEAN_ELEMENT_THEORY", "uint32"]]), /unknown field MEAN_ELEMENT_THEORY/],
+    ["build_mpe", withHeader([...MPE_FIELDS, ["EPOCH", "double"]]), /duplicate field EPOCH/],
+    ["build_mpe", valid.subarray(0, valid.length - 1), /record 1 is truncated/],
+    ["build_mpe", Buffer.concat([valid, Buffer.from([0])]), /Trailing bytes/],
+    ["build_mpe", Buffer.from("[]"), /not a GPAF field batch/],
+    ["build_cat", withHeader(MPE_FIELDS), /unknown field ENTITY_ID/],
   ];
-  for (const [methodId, rows, message] of cases) {
-    const response = await invoke(h, methodId, new TextEncoder().encode(JSON.stringify(rows)));
-    assert.equal(response.statusCode, 400, `${methodId} ${JSON.stringify(rows).slice(0, 80)}`);
+  for (const [methodId, payload, message] of cases) {
+    const response = await invoke(h, methodId, new Uint8Array(payload));
+    assert.equal(response.statusCode, 400, String(message));
     assert.match(response.errorMessage, message);
-  }
-  const duplicate = new TextEncoder().encode(`[${VECTORS.mpe[0].inputJson.replace("}", ',"BSTAR":0}')}]`);
-  assert.match((await invoke(h, "build_mpe", duplicate)).errorMessage, /duplicate key BSTAR/);
-  for (const text of [" ", "{", "[", `[${VECTORS.mpe[0].inputJson}] x`, `[${VECTORS.mpe[0].inputJson},]`]) {
-    const response = await invoke(h, "build_mpe", new TextEncoder().encode(text));
-    assert.equal(response.statusCode, 400, JSON.stringify(text.slice(0, 40)));
   }
 });

@@ -9,5 +9,5 @@
     "CAT"
   ],
   "encoding": "gp-archive-v1",
-  "threadModel": "single-thread"
+  "threadModel": "wasi-sequential"
 }

@@ -27,24 +27,24 @@
           "portId": "records",
           "acceptedTypeSets": [
             {
-              "setId": "gp-archive-record-fields-json",
+              "setId": "gp-archive-field-batch-v1",
               "allowedTypes": [
                 {
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "UTF-8 JSON array; one object per element set with ENTITY_ID (string), EPOCH (Unix seconds, UTC), MEAN_MOTION, ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER, MEAN_ANOMALY and BSTAR (numbers), and optionally MEAN_ELEMENT_THEORY, which must be \"SGP4\". Every key is required except MEAN_ELEMENT_THEORY; unknown or repeated keys are refused. Strings are byte strings: escapes are decoded and other bytes are kept as given.",
+              "description": "GPAF field batch (little-endian): \"GPAF\", u16 version 1, u16 field count, then each field name (u8 length + bytes), u32 record count, then each record's values in header order. Fields: ENTITY_ID (string: u32 length + bytes, kept exactly) and EPOCH (Unix seconds, UTC), MEAN_MOTION, ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER, MEAN_ANOMALY, BSTAR (IEEE-754 binary64). Every field exactly once, in any order; unknown fields are refused.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Transient input frame from the GP archive importer to this encoder: the parsed field values of one batch, keyed by the SDS field names of the record being built. It is never stored or published; only the $MPE/$CAT records this method returns are persisted, and those are typed on the output port."
+                "mediaType": "application/vnd.spacedatanetwork.gp-archive-field-batch",
+                "detail": "Transient input frame from the GP archive importer to this encoder: the parsed field values of one batch, named by the SDS field names of the record being built and carried as their exact bytes and IEEE-754 bits. It is never stored or published; only the $MPE/$CAT records this method returns are persisted, and those are typed on the output port."
               }
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One JSON frame holding the batch."
+          "description": "One field batch frame holding the records to build."
         }
       ],
       "outputPorts": [
@@ -78,7 +78,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Builds one $MPE per input element set in archive encoding v1. A malformed batch is refused whole, naming the first bad record by index."
+      "description": "Builds one $MPE per input element set in archive encoding v1. A malformed batch is refused whole."
     },
     {
       "methodId": "build_cat",
@@ -88,24 +88,24 @@
           "portId": "records",
           "acceptedTypeSets": [
             {
-              "setId": "gp-archive-record-fields-json",
+              "setId": "gp-archive-field-batch-v1",
               "allowedTypes": [
                 {
                   "acceptsAnyFlatbuffer": true
                 }
               ],
-              "description": "UTF-8 JSON array; one object per catalog row with OBJECT_ID and OBJECT_NAME (strings) and NORAD_CAT_ID (unsigned 32-bit integer). All three keys are required; unknown or repeated keys are refused. Strings are byte strings: escapes are decoded and other bytes are kept as given.",
+              "description": "GPAF field batch (little-endian): \"GPAF\", u16 version 1, u16 field count, then each field name (u8 length + bytes), u32 record count, then each record's values in header order. Fields: OBJECT_ID and OBJECT_NAME (string: u32 length + bytes, kept exactly) and NORAD_CAT_ID (u32). Every field exactly once, in any order; unknown fields are refused.",
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
-                "mediaType": "application/json",
-                "detail": "Transient input frame from the GP archive importer to this encoder: the parsed field values of one batch, keyed by the SDS field names of the record being built. It is never stored or published; only the $MPE/$CAT records this method returns are persisted, and those are typed on the output port."
+                "mediaType": "application/vnd.spacedatanetwork.gp-archive-field-batch",
+                "detail": "Transient input frame from the GP archive importer to this encoder: the parsed field values of one batch, named by the SDS field names of the record being built and carried as their exact bytes and IEEE-754 bits. It is never stored or published; only the $MPE/$CAT records this method returns are persisted, and those are typed on the output port."
               }
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One JSON frame holding the batch."
+          "description": "One field batch frame holding the records to build."
         }
       ],
       "outputPorts": [
@@ -139,7 +139,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Builds one $CAT per input catalog row in archive encoding v1. A malformed batch is refused whole, naming the first bad record by index."
+      "description": "Builds one $CAT per input catalog row in archive encoding v1. A malformed batch is refused whole."
     }
   ],
   "schemasUsed": [
