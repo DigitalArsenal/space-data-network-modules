@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
+import { createRequire } from "node:module";
+import { Builder, ByteBuffer } from "flatbuffers";
+import { createBrowserModuleHarness } from "space-data-module-sdk/host/browser-module";
 import { spawnSync } from "node:child_process";
 import {
   mkdir,
@@ -12,20 +15,14 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 const flowDirectory = path.resolve(testDirectory, "..");
 const nodeDirectory = process.env.FLATSQL_INCREMENTAL_NODE_ROOT
   ? path.resolve(process.env.FLATSQL_INCREMENTAL_NODE_ROOT)
   : path.resolve(flowDirectory, "nodes/flatsql");
-const sdkDirectory = process.env.SPACE_DATA_MODULE_SDK_ROOT
-  ? path.resolve(process.env.SPACE_DATA_MODULE_SDK_ROOT)
-  : path.resolve(flowDirectory, "../../../../ancillary-packages/space-data-module-sdk");
-const { Builder, ByteBuffer } = await import(pathToFileURL(path.join(
-  sdkDirectory,
-  "node_modules/flatbuffers/mjs/flatbuffers.js",
-)));
+const sdkDirectory = path.dirname(createRequire(import.meta.url).resolve("space-data-module-sdk/package.json"));
 
 const manifest = JSON.parse(
   await readFile(path.join(nodeDirectory, "plugin-manifest.json"), "utf8"),
@@ -56,10 +53,6 @@ table User {
   age: int;
 }
 `;
-
-function sdkUrl(relativePath) {
-  return pathToFileURL(path.join(sdkDirectory, relativePath)).href;
-}
 
 function createOpaqueStateAdapter() {
   let working = new Map();
@@ -187,9 +180,6 @@ function createOpaqueStateAdapter() {
 }
 
 async function createHarness(opaqueState) {
-  const { createBrowserModuleHarness } = await import(
-    sdkUrl("src/testing/browserModuleHarness.js")
-  );
   return createBrowserModuleHarness({
     wasmSource: artifactBytes,
     manifest,
