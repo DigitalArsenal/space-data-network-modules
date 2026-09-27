@@ -100,6 +100,8 @@ export function catalogRequest(o) {
 export function eventInReferenceUnits(e) {
   return { obj1Name: e.PRIMARY_NAME, obj1Id: e.PRIMARY_ID, obj1Norad: e.PRIMARY_NORAD_ID, obj2Name: e.SECONDARY_NAME, obj2Id: e.SECONDARY_ID, obj2Norad: e.SECONDARY_NORAD_ID, tcaJd: e.TCA.JULIAN_DATE, tcaIso: e.TCA.ISO8601, minRangeKm: e.MISS_DISTANCE_M / 1000, relSpeedKms: e.RELATIVE_SPEED_M_S / 1000, maxProbability: e.PROBABILITY?.MAXIMUM_PROBABILITY || e.PROBABILITY?.PROBABILITY || 0, probabilityMethod: e.PROBABILITY?.ALGORITHM };
 }
+// FlatBuffers stores no vector for an empty one: a catalog chunk that found no
+// conjunctions decodes without EVENTS, which the object API reads as length 0.
 export function catalogInReferenceUnits(r) {
-  return { objectsParsed: r.OBJECTS_PARSED, conjunctionsFound: r.CONJUNCTIONS_FOUND, conjunctions: r.EVENTS.map(eventInReferenceUnits), stats: { totalObjects: r.STATISTICS?.TOTAL_OBJECTS, pairsScreened: r.STATISTICS?.PAIRS_SCREENED, failedPairs: r.STATISTICS?.FAILED_PAIRS } };
+  return { objectsParsed: r.OBJECTS_PARSED, conjunctionsFound: r.CONJUNCTIONS_FOUND, conjunctions: (r.EVENTS ?? []).map(eventInReferenceUnits), stats: { totalObjects: r.STATISTICS?.TOTAL_OBJECTS, pairsScreened: r.STATISTICS?.PAIRS_SCREENED, failedPairs: r.STATISTICS?.FAILED_PAIRS } };
 }

@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 import { execFile as execFileCallback } from 'node:child_process';
 import { promisify } from 'node:util';
 import { loadWasmEdgePin, resolveWasmEdgeRunnerBuildPlan } from 'space-data-module-sdk/testing';
+import { toLoadableWasmBytes } from 'space-data-module-sdk/bundle';
 
 const execFile = promisify(execFileCallback);
 export const packageDir = fileURLToPath(new URL('../../', import.meta.url));
@@ -57,8 +58,26 @@ export async function buildDockerWasiThreadsRunner() {
   })();
 }
 
+// A signed artifact carries an appended $REC publication trailer after its last
+// section, which WasmEdge refuses ("malformed section id"). Like the SDK's own
+// WasmEdge loader, launch the canonical module payload the signature covers:
+// staged once per payload inside the package so the Docker lane's mount sees it.
+function loadableWasmPath(wasmPath) {
+  const bytes = fs.readFileSync(wasmPath);
+  const loadable = toLoadableWasmBytes(bytes);
+  if (loadable.byteLength === bytes.byteLength) return wasmPath;
+  fs.mkdirSync(cache, { recursive: true });
+  const staged = path.join(cache, `loadable-${createHash('sha256').update(loadable).digest('hex').slice(0, 16)}.wasm`);
+  if (!fs.existsSync(staged)) {
+    const temporary = `${staged}.${process.pid}.tmp`;
+    fs.writeFileSync(temporary, loadable);
+    fs.renameSync(temporary, staged);
+  }
+  return staged;
+}
+
 export async function wasiThreadsLaunchPlan(runtime, options = {}) {
-  const wasmPath = options.wasmPath ?? path.join(packageDir, 'dist/isomorphic/module.wasm');
+  const wasmPath = loadableWasmPath(options.wasmPath ?? path.join(packageDir, 'dist/isomorphic/module.wasm'));
   const hostArgs = [...(options.hostArgs ?? []), ...Object.entries(options.guestEnv ?? {}).flatMap(([key, value]) => ['--env', `${key}=${value}`])];
   if (runtime === 'wasmedge') return { command: await buildNativeWasiThreadsRunner(), args: [...hostArgs, wasmPath, ...(options.args ?? [])], cwd: packageDir, env: process.env };
   if (runtime === 'docker-wasmedge') {

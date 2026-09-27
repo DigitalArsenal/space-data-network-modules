@@ -102,3 +102,9 @@ try {
   },null,2)+'\n');
   console.log(`Built dist/isomorphic/module.wasm (${result.wasmBytes.length} bytes), SDS ${version}; SDK validation PASS`);
 } finally { await cleanupCompilation(result); }
+
+// Hosts that require a trusted signer refuse an unsigned artifact
+// (missing_signature), so the build signs it with the repo's shared module
+// signing step. wasmSha256 above names the unsigned module the signature covers.
+execFileSync(process.execPath, [path.join(packageRoot, '../../scripts/sign-module-artifact.mjs'), outputPath],
+  {stdio:'inherit'});
