@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { Builder, ByteBuffer } from "flatbuffers";
 import { createBrowserModuleHarness } from "space-data-module-sdk/host/browser-module";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import {
   mkdir,
   mkdtemp,
@@ -22,7 +23,21 @@ const flowDirectory = path.resolve(testDirectory, "..");
 const nodeDirectory = process.env.FLATSQL_INCREMENTAL_NODE_ROOT
   ? path.resolve(process.env.FLATSQL_INCREMENTAL_NODE_ROOT)
   : path.resolve(flowDirectory, "nodes/flatsql");
-const sdkDirectory = path.dirname(createRequire(import.meta.url).resolve("space-data-module-sdk/package.json"));
+// The published SDK exports no "./package.json", so its root is found by
+// walking up from the resolved package entry to the manifest that names it.
+function resolvePublishedSdkDirectory() {
+  let directory = path.dirname(createRequire(import.meta.url).resolve("space-data-module-sdk"));
+  for (;;) {
+    try {
+      const manifest = JSON.parse(readFileSync(path.join(directory, "package.json"), "utf8"));
+      if (manifest.name === "space-data-module-sdk") return directory;
+    } catch {}
+    const parent = path.dirname(directory);
+    if (parent === directory) throw new Error("space-data-module-sdk package root not found");
+    directory = parent;
+  }
+}
+const sdkDirectory = resolvePublishedSdkDirectory();
 
 const manifest = JSON.parse(
   await readFile(path.join(nodeDirectory, "plugin-manifest.json"), "utf8"),

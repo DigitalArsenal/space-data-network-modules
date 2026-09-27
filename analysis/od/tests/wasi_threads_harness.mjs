@@ -110,7 +110,7 @@ if (!isMainThread) {
   // Determine required initial pages from the imported-memory min declared in the module.
   let initialPages = 512;
   try {
-    const { analyzeWasmThreadFeatures } = await import("/Users/tj/software/spacedatanetwork-stack/repos/ancillary-packages/space-data-module-sdk/src/compiler/index.js");
+    const { analyzeWasmThreadFeatures } = await import("space-data-module-sdk/compiler");
     const a = analyzeWasmThreadFeatures(moduleBytes);
     if (a.sharedMemory && a.sharedMemory.min) initialPages = Math.max(initialPages, a.sharedMemory.min);
   } catch {}

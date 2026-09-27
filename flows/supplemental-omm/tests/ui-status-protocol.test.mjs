@@ -5,7 +5,7 @@ import test from "node:test";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
-import { Builder } from "../../../../../ancillary-packages/space-data-module-sdk/node_modules/flatbuffers/js/flatbuffers.js";
+import { Builder } from "flatbuffers";
 
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const uiPath = path.join(packageRoot, "app/ui/index.html");

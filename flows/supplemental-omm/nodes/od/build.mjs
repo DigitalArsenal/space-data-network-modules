@@ -15,17 +15,17 @@ import {
   signModuleArtifact,
 } from "space-data-module-sdk";
 import {
+  assertPthreadArtifact,
   cleanupCompilation,
   compileModuleFromSource,
-} from "space-data-module-sdk/compiler";
-import { validateArtifactWithStandards } from "../../../../node_modules/space-data-module-sdk/src/compliance/index.js";
-import { SDS_MANIFEST_SECTION_NAME } from "../../../../node_modules/space-data-module-sdk/src/bundle/constants.js";
-import { appendWasmCustomSection } from "../../../../node_modules/space-data-module-sdk/src/bundle/wasm.js";
-import {
-  assertPthreadArtifact,
   PTHREAD_FINAL_LINK_FLAGS,
-} from "../../../../node_modules/space-data-module-sdk/src/compiler/pthreadArtifactGuard.js";
-import { resolveWasiThreadsToolchain } from "../../../../node_modules/space-data-module-sdk/src/compiler/wasiThreadsToolchain.js";
+  resolveWasiThreadsToolchain,
+} from "space-data-module-sdk/compiler";
+import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
+import {
+  appendWasmCustomSection,
+  SDS_MANIFEST_SECTION_NAME,
+} from "space-data-module-sdk/bundle";
 
 import { manifest } from "./manifest.mjs";
 import { resolveSupplementalSigning } from "../signing.mjs";
@@ -37,7 +37,6 @@ const modulesRoot = path.resolve(nodeRoot, "../../../..");
 const mainPackagesRoot = path.dirname(modulesRoot);
 const standardsRoot = path.join(mainPackagesRoot, "spacedatastandards.org");
 const flatbuffersRoot = path.join(mainPackagesRoot, "flatbuffers");
-const sdkRoot = path.join(mainPackagesRoot, "..", "ancillary-packages", "space-data-module-sdk");
 const buildRoot = path.join(nodeRoot, ".build");
 const unsignedRoot = path.join(nodeRoot, "dist/.unsigned");
 const distRoot = path.join(nodeRoot, "dist/isomorphic");

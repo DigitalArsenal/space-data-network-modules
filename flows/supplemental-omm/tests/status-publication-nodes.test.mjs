@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { Builder, ByteBuffer } from "../../../../../ancillary-packages/space-data-module-sdk/node_modules/flatbuffers/js/flatbuffers.js";
+import { Builder, ByteBuffer } from "flatbuffers";
 import { DSS } from "../../../../spacedatastandards.org/lib/js/DSS/DSS.js";
 import { FSB } from "../../../../spacedatastandards.org/lib/js/FSB/FSB.js";
 import {

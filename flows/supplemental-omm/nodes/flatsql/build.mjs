@@ -9,6 +9,8 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -39,13 +41,30 @@ const nodeDirectory = path.dirname(fileURLToPath(import.meta.url));
 const modulesDirectory = path.resolve(nodeDirectory, "../../../..");
 const mainPackagesDirectory = path.resolve(modulesDirectory, "..");
 const flatsqlDirectory = path.join(mainPackagesDirectory, "flatsql");
-const repositoriesDirectory = path.resolve(mainPackagesDirectory, "..");
+// The installed, published SDK (published-deps law), never a sibling checkout.
+// It exports no "./package.json", so its root is found by walking up from the
+// resolved package entry to the manifest that names it.
+function installedSdkDirectory() {
+  let directory = path.dirname(
+    createRequire(import.meta.url).resolve("space-data-module-sdk"),
+  );
+  for (;;) {
+    try {
+      const manifest = JSON.parse(
+        readFileSync(path.join(directory, "package.json"), "utf8"),
+      );
+      if (manifest.name === "space-data-module-sdk") return directory;
+    } catch {}
+    const parent = path.dirname(directory);
+    if (parent === directory) {
+      throw new Error("space-data-module-sdk is not installed for this node");
+    }
+    directory = parent;
+  }
+}
 const sdkDirectory = process.env.SPACE_DATA_MODULE_SDK_ROOT
   ? path.resolve(process.env.SPACE_DATA_MODULE_SDK_ROOT)
-  : path.join(
-      repositoriesDirectory,
-      "ancillary-packages/space-data-module-sdk",
-    );
+  : installedSdkDirectory();
 const standardsDirectory = path.join(
   mainPackagesDirectory,
   "spacedatastandards.org",

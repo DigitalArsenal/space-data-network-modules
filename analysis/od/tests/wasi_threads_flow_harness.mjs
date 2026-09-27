@@ -264,7 +264,7 @@ if (!isMainThread) {
   // to avoid frequent growth during the multi-object Eigen fit.
   let initialPages = 4096; // 256 MiB
   try {
-    const { analyzeWasmThreadFeatures } = await import("/Users/tj/software/spacedatanetwork-stack/repos/ancillary-packages/space-data-module-sdk/src/compiler/index.js");
+    const { analyzeWasmThreadFeatures } = await import("space-data-module-sdk/compiler");
     const a = analyzeWasmThreadFeatures(moduleBytes);
     if (a.sharedMemory && a.sharedMemory.min) initialPages = Math.max(initialPages, a.sharedMemory.min);
   } catch {}

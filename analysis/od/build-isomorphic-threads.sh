@@ -22,7 +22,6 @@ MODS_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"                     # space-data-ne
 MP_ROOT="$(cd "$MODS_ROOT/.." && pwd)"                           # main-packages
 SDS_DIR="$MODS_ROOT/licensing/core/src/cpp/generated/sds"
 FB_DIR="$MP_ROOT/flatbuffers/include"
-SDK_DIR="${SDN_MODULE_SDK_DIR:-$(cd "$MP_ROOT/../ancillary-packages/space-data-module-sdk" && pwd)}"
 WASI_SDK_IMAGE="${WASI_SDK_IMAGE:-ghcr.io/webassembly/wasi-sdk:wasi-sdk-24}"
 
 DIST_ISO="$SCRIPT_DIR/dist/isomorphic"
@@ -82,13 +81,15 @@ cp "$BUILD_DIR/module.wasm" "$DIST_ISO/module.wasm"
 echo "Built: $DIST_ISO/module.wasm ($(wc -c < "$DIST_ISO/module.wasm") bytes)"
 
 echo "Validating with SDK pthreadArtifactGuard..."
-node --input-type=module -e "
-import { analyzeWasmThreadFeatures, assertPthreadArtifact } from '$SDK_DIR/src/compiler/index.js';
+# The guard comes from this package's installed, published SDK (package.json
+# pins it); an eval'd module resolves packages from the working directory.
+(cd "$SCRIPT_DIR" && node --input-type=module -e "
+import { analyzeWasmThreadFeatures, assertPthreadArtifact } from 'space-data-module-sdk/compiler';
 import { readFileSync } from 'node:fs';
 const b = readFileSync('$DIST_ISO/module.wasm');
 const a = analyzeWasmThreadFeatures(b);
 console.log('threadFeatures:', JSON.stringify({sharedMemory:a.hasSharedMemory, atomics:a.usesAtomics, atomicCount:a.atomicInstructionCount, wasiThreadSpawnImport:a.hasWasiThreadSpawnImport, wasiThreadStartExport:a.hasWasiThreadStartExport, emscriptenHooks:a.emscriptenThreadHooks, isIsomorphicPthreads:a.isIsomorphicPthreads}));
 assertPthreadArtifact(b, { source: '$DIST_ISO/module.wasm' });
 console.log('pthreadArtifactGuard: PASS');
-"
+")
 echo "OK."
