@@ -1049,6 +1049,29 @@
         "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-18; artifact committed 2026-07-19."
       }
     },
+    "data-source/gp-archive-records/dist/isomorphic/module.wasm": {
+      "sha256": "71a1614382d4ff939123ee14cb23157fb060c5dd07023c877b49059499beb5c5",
+      "bytes": 87251,
+      "module": "data-source/gp-archive-records",
+      "lastCommit": "3940c356970343ab5cec688848cd3e58a9a3040b",
+      "lastCommitDate": "2026-09-27T19:08:47-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "wasi-sequential"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
     "data-source/gps-source/dist/gps-source.wasm": {
       "sha256": "98aa2f9cae7b65bd6fd67c4b09bdf0c928385a4ae53f93bffcc4d0133973b444",
       "bytes": 106806,
