@@ -8,6 +8,11 @@
   "externalInterfaces": [],
   "invokeSurfaces": ["command"],
   "runtimeTargets": ["browser", "wasmedge"],
+  "threadModel": "wasi-sequential",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Each invocation combines one object's covariance, TLE sample scatter and sensor biases into one fixed-size 6x6 covariance product. The kernel performs ordered scalar reductions and sorts three diagonal position sigmas without spawning guest threads; independent objects are parallelized by the caller."
+  },
   "methods": [
     {
       "methodId": "compute_covariance",

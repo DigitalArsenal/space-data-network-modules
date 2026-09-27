@@ -105,13 +105,14 @@ function threadModelOption(value) {
   const normalized = String(value).trim().toLowerCase();
   if (
     normalized === "single-thread" ||
-    normalized === "emscripten-pthreads"
+    normalized === "emscripten-pthreads" ||
+    normalized === "wasi-sequential"
   ) {
     return normalized;
   }
   throw new Error(
     `Invalid sdnModuleCompile.threadModel "${value}". Expected ` +
-      '"single-thread" or "emscripten-pthreads".',
+      '"single-thread", "emscripten-pthreads" or "wasi-sequential".',
   );
 }
 

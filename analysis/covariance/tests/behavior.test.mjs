@@ -10,6 +10,40 @@ import {
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 
 for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
+  test(`independent RTN uncertainties obey the closed-form variance sum on ${runtimeKind}`, async (t) => {
+    // Source: Var(X + Y) = Var(X) + Var(Y) for independent zero-mean errors.
+    // Independently calculated Pythagorean cases: 3²+4²=25, 4²+3²=25,
+    // 12²+5²=169 m²; velocity variances are 2², 3², 6² (mm/s)².
+    // Frame: RTN. Epoch: 2024-03-03T04:53:00 UTC; no time propagation.
+    // Output units: km² and (km/s)². Relative tolerance 1e-11 allows the
+    // documented 12-significant-digit JSON serialization; zeros stay exact.
+    const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
+    if (!harness) return;
+    t.after(() => harness.destroy());
+    const result = await invokeJsonRequest(harness, {
+      objectId: "INDEPENDENT-RTN-ERRORS",
+      epoch: "2024-03-03T04:53:00Z",
+      directCovariance: {
+        frame: "RTN",
+        positionSigmaM: { radial: 3, inTrack: 4, crossTrack: 12 },
+        velocitySigmaMmps: { radial: 2, inTrack: 3, crossTrack: 6 },
+      },
+      sensorBiases: [{ radialBiasM: 4, inTrackBiasM: 3, crossTrackBiasM: 5 }],
+    }, { methodId: "compute_covariance", inputPortId: "covariance", outputPortId: "covariance" });
+    const expected = [25e-6, 0, 25e-6, 0, 0, 169e-6, 0, 0, 0, 4e-12,
+      0, 0, 0, 0, 9e-12, 0, 0, 0, 0, 0, 36e-12];
+    assert.equal(result.covariance6x6LowerTriangular.length, expected.length);
+    expected.forEach((value, index) => {
+      const actual = result.covariance6x6LowerTriangular[index];
+      if (value === 0) assert.equal(actual, 0);
+      else assert.ok(Math.abs(actual - value) <= Math.abs(value) * 1e-11,
+        `covariance[${index}]: ${actual} versus ${value}`);
+    });
+    assert.deepEqual(result.ellipsoid.semiAxesM, [13, 5, 5]);
+    assert.equal(result.referenceFrame, "RTN");
+    assert.equal(result.epoch, "2024-03-03T04:53:00Z");
+  });
+
   test(`covariance module combines direct, TLE-series, and sensor-bias inputs on ${runtimeKind}`, async (t) => {
     const harness = await createStandaloneHarnessOrSkip(runtimeKind, WASM_PATH, t);
     if (!harness) {
