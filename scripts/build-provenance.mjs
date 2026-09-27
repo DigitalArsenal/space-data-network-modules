@@ -90,10 +90,20 @@ function git(args, cwd) {
   }
 }
 
-// The SDK is linked in by `file:` path, so there is no lockfile line naming it.
-// Its identity is its checkout: version + HEAD sha + whether that checkout is
-// dirty. A dirty SDK checkout means the artifact cannot be reproduced by anyone
-// else at all, so it is recorded rather than hidden.
+// The SDK arrives one of two ways, and each has exactly one real identity:
+//
+//   published  a registry install (the published-deps law). Its identity is the
+//              version plus the integrity the root lockfile pins for it; two
+//              different tarballs cannot share an integrity.
+//   checkout   a `file:` link to a sibling SDK checkout. Its identity is that
+//              checkout's HEAD sha plus whether it is dirty. A dirty SDK
+//              checkout means the artifact cannot be reproduced by anyone else,
+//              so it is recorded rather than hidden.
+//
+// git is only asked about a directory that IS a checkout's top level. A registry
+// install sits inside THIS repo's node_modules, where `git rev-parse HEAD`
+// answers with the modules repo's own HEAD and `git status` with its own dirt —
+// which the ledger then recorded as the SDK's identity.
 export function resolveSdkRoot() {
   const require = createRequire(path.join(REPO_ROOT, "package.json"));
   try {
@@ -104,27 +114,60 @@ export function resolveSdkRoot() {
   }
 }
 
+function lockedSdkEntry() {
+  const lock = readJson(path.join(REPO_ROOT, "package-lock.json"));
+  return lock?.packages?.["node_modules/space-data-module-sdk"] ?? null;
+}
+
 function describeSdk(sdkRoot) {
   if (!sdkRoot) return { resolved: false };
   const pkg = readJson(path.join(sdkRoot, "package.json")) ?? {};
-  const commit = git(["rev-parse", "HEAD"], sdkRoot);
-  const status = git(["status", "--porcelain"], sdkRoot);
+  const realRoot = fs.realpathSync(sdkRoot);
+  const topLevel = git(["rev-parse", "--show-toplevel"], realRoot);
+  if (topLevel !== null && fs.realpathSync(topLevel) === realRoot) {
+    const status = git(["status", "--porcelain"], realRoot);
+    return {
+      resolved: true,
+      version: pkg.version ?? null,
+      commit: git(["rev-parse", "HEAD"], realRoot),
+      dirty: status === null ? null : status.length > 0,
+    };
+  }
+  // A registry install. The lockfile integrity names these exact bytes only if
+  // the lockfile and the installed package agree on the version; otherwise the
+  // installed tree is not the locked one and no integrity is claimed for it.
+  const locked = lockedSdkEntry();
+  const integrity =
+    locked && !locked.link && locked.version === pkg.version ? locked.integrity ?? null : null;
   return {
     resolved: true,
     version: pkg.version ?? null,
-    commit,
-    // A dirty SDK checkout is recorded, never silently normalised away: an
-    // artifact built against uncommitted SDK source is not reproducible by
-    // anyone, and the ledger must be able to say so.
-    dirty: status === null ? null : status.length > 0,
+    commit: null,
+    integrity,
+    // There is no working tree to be dirty; whether the installed files still
+    // match the tarball is npm's question (`npm ci`), not git's.
+    dirty: null,
   };
+}
+
+// Node's own lookup from the SDK's real location: its nested node_modules
+// first, then every ancestor's. A registry install HOISTS most dependencies into
+// the consuming repo's node_modules, so reading only <sdk>/node_modules/<name>
+// reported them as absent.
+function resolveSdkDependency(sdkRoot, name) {
+  for (let dir = fs.realpathSync(sdkRoot); ; dir = path.dirname(dir)) {
+    if (path.basename(dir) !== "node_modules") {
+      const pkg = readJson(path.join(dir, "node_modules", name, "package.json"));
+      if (pkg) return pkg;
+    }
+    if (path.dirname(dir) === dir) return null;
+  }
 }
 
 function describeSdkDependencies(sdkRoot) {
   const out = {};
   for (const name of GUEST_REACHING_SDK_DEPENDENCIES) {
-    const pkg = sdkRoot ? readJson(path.join(sdkRoot, "node_modules", name, "package.json")) : null;
-    out[name] = pkg?.version ?? null;
+    out[name] = sdkRoot ? resolveSdkDependency(sdkRoot, name)?.version ?? null : null;
   }
   return out;
 }
@@ -188,8 +231,12 @@ export function resolveToolchain(options = {}) {
 // A stable identity for "the set of inputs that decides the bytes". Key order is
 // fixed by construction (object literals above), so the JSON is canonical.
 export function toolchainId(toolchain) {
+  const sdk = { version: toolchain.sdk?.version ?? null, commit: toolchain.sdk?.commit ?? null };
+  // Only a registry install carries an integrity. Adding the key only when it
+  // exists keeps every checkout-built toolchain id already in the ledger stable.
+  if (toolchain.sdk?.integrity) sdk.integrity = toolchain.sdk.integrity;
   const material = {
-    sdk: { version: toolchain.sdk?.version ?? null, commit: toolchain.sdk?.commit ?? null },
+    sdk,
     sdkDependencies: toolchain.sdkDependencies ?? {},
     externalStandardsRoot: { version: toolchain.externalStandardsRoot?.version ?? null },
   };
@@ -200,7 +247,13 @@ export function toolchainId(toolchain) {
 export function describeToolchain(toolchain) {
   const deps = toolchain.sdkDependencies ?? {};
   return [
-    `sdk ${toolchain.sdk?.version ?? "?"}@${(toolchain.sdk?.commit ?? "?").slice(0, 8)}${toolchain.sdk?.dirty ? " (DIRTY)" : ""}`,
+    `sdk ${toolchain.sdk?.version ?? "?"}@${
+      toolchain.sdk?.commit
+        ? toolchain.sdk.commit.slice(0, 8)
+        : toolchain.sdk?.integrity
+          ? `npm:${toolchain.sdk.integrity.slice(0, 19)}`
+          : "?"
+    }${toolchain.sdk?.dirty ? " (DIRTY)" : ""}`,
     `sds(sdk) ${deps["spacedatastandards.org"] ?? "?"}`,
     `sds(external) ${toolchain.externalStandardsRoot?.version ?? "?"}`,
     `flatc-wasm ${deps["flatc-wasm"] ?? "?"}`,

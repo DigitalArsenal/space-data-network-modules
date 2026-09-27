@@ -179,9 +179,18 @@ test("the toolchain identity covers every input that can change the emitted byte
   const toolchain = resolveToolchain();
   assert.equal(toolchain.sdk.resolved, true, "the module SDK must resolve from this repo");
   assert.ok(toolchain.sdk.version, "the SDK version must be recorded");
-  // The SDK is linked by `file:` path, so its COMMIT is the only real identity —
-  // two different checkouts can both call themselves 0.8.11.
-  assert.ok(toolchain.sdk.commit, "the SDK commit must be recorded");
+  // A version alone is not an identity — two different checkouts can both call
+  // themselves 0.8.11. A registry install is named by the integrity the root
+  // lockfile pins; a `file:`-linked checkout by its commit. Exactly one applies.
+  if (toolchain.sdk.commit) {
+    assert.equal(toolchain.sdk.integrity, undefined, "a checkout has no registry integrity");
+  } else {
+    assert.match(
+      String(toolchain.sdk.integrity),
+      /^sha512-[A-Za-z0-9+/]+=*$/,
+      "a registry-installed SDK must be named by its lockfile integrity",
+    );
+  }
   for (const dependency of ["spacedatastandards.org", "flatc-wasm", "flatbuffers", "sdn-emception"]) {
     assert.ok(
       toolchain.sdkDependencies[dependency],
