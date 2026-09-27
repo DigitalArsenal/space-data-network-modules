@@ -1,6 +1,6 @@
 {
-  "spacedatastandards": "1.202.0",
-  "propagatorAbiHeader": "../../../space-data-module-sdk--gmat-09-ephemeris-and-message-formats/include/orbpro/orbpro_propagator_abi.h",
+  "spacedatastandards": "1.206.0",
+  "propagatorAbiHeader": "node_modules/space-data-module-sdk/include/orbpro/orbpro_propagator_abi.h",
   "threadModel": "wasi-sequential",
   "formats": [
     "CCSDS_OEM_KVN",

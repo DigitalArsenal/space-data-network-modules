@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.202.0",
+  "spacedatastandards": "1.206.0",
   "threadModel": "wasi-sequential",
   "records": {
     "in": [

@@ -1,6 +1,6 @@
 {
   "spacedatastandards": "1.203.0",
-  "moduleSdk": "0.8.17",
+  "moduleSdk": "0.8.20",
   "family": "estimation",
   "invokeContract": {
     "path": "schemas/Estimation.fbs",
