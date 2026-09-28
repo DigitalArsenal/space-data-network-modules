@@ -2,9 +2,8 @@
 // TCA search, selected by LAAS_2015) on overlapping tiles of a window, apart
 // from the screener's coarse pass and refinement. A tile yields its closest
 // approach; one within the threshold and strictly inside the tile (1 s from
-// either edge) is a conjunction. Run as a child process, one per pair: an
-// instance fails after about 1780 pair-method calls (a separate defect), and
-// a process holds the count.
+// either edge) is a conjunction. Run as a child process, one per pair, so the
+// pairs solve in parallel.
 //
 // argv[2]: JSON { primary, secondary (GP records), startJd, durationSeconds,
 // tileSeconds, strideSeconds, thresholdKm, fineTolSec }. Prints a JSON array

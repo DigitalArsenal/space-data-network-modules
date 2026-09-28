@@ -26,8 +26,60 @@ export function publishedSchema(code) {
   return schema;
 }
 export const cqrSchema = () => publishedSchema('CQR');
+// flatc-wasm 26.1.32 converts by running flatc's main() through Emscripten's
+// callMain (src/runner.mjs:527), which pushes argv and every argument string
+// onto the Emscripten stack (dist/flatc-wasm.js:9, stackAlloc and
+// stringToUTF8OnStack) and never pops them. The runtime stays alive between
+// conversions (runner.mjs:505, noExitRuntime), so each conversion leaves its
+// argv on flatc's 2 MiB stack: 1,168 bytes for a CQR encode (flatc gets `-I`
+// for each of the 21 include directories, runner.mjs:694), 1,216 for a
+// decode. The 1,783rd CQR encode in one process runs off the stack and traps
+// ("memory access out of bounds"), and a host that encodes each request and
+// decodes each result fails after about 875 calls. The conjunction module is
+// not involved: its instance runs 10,000 pair calls
+// (tests/pairCallsOneInstance.test.mjs).
+//
+// flatcWithHeapArgv runs flatc's main with argv on the heap, freed after each
+// conversion; main pops its own frames when it returns, so a successful
+// conversion leaves the stack where it found it. A failing conversion still
+// exits flatc from inside main (exit(1) throws ExitStatus past main's frames,
+// about 0.9 KB of stack), and generateBinary/generateJSON then throw to their
+// caller. flatc's exit status is the conversion's, not the process's: the
+// Node glue also writes it to process.exitCode, which is put back.
+export function flatcWithHeapArgv(runner) {
+  const M = runner.Module;
+  M.callMain = (args) => {
+    const argv = ['flatc', ...args];
+    const pointers = [];
+    const exitCode = process.exitCode;
+    try {
+      for (const arg of argv) {
+        const size = M.lengthBytesUTF8(arg) + 1;
+        const pointer = M._malloc(size);
+        if (!pointer) throw new Error('flatc argv allocation failed');
+        pointers.push(pointer);
+        M.stringToUTF8(arg, pointer, size);
+      }
+      const table = M._malloc((argv.length + 1) * 4);
+      if (!table) throw new Error('flatc argv allocation failed');
+      pointers.push(table);
+      // Read the view after allocating: memory growth replaces it.
+      const heap = M.HEAPU32;
+      argv.forEach((_, index) => { heap[(table >>> 2) + index] = pointers[index]; });
+      heap[(table >>> 2) + argv.length] = 0;
+      return M._main(argv.length, table);
+    } catch (error) {
+      if (error && typeof error === 'object' && 'status' in error) process.exitCode = exitCode;
+      throw error;
+    } finally {
+      for (const pointer of pointers) M._free(pointer);
+    }
+  };
+  return runner;
+}
+export const createFlatcRunner = async () => flatcWithHeapArgv(await FlatcRunner.init());
 let flatcPromise;
-export const initCqrFlatc = () => flatcPromise ??= FlatcRunner.init();
+export const initCqrFlatc = () => flatcPromise ??= createFlatcRunner();
 export function encodeCqr(flatc, record) {
   return flatc.generateBinary(cqrSchema(), JSON.stringify(record), { sizePrefix: false });
 }

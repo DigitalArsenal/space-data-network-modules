@@ -23,10 +23,9 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import * as flatbuffers from "flatbuffers";
 
-import { FlatcRunner } from "flatc-wasm";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
-import { cqrSchema, publishedSchema, encodeCqr, decodeCqr, catalogRequest, catalogInReferenceUnits } from './cqr.mjs';
+import { cqrSchema, createFlatcRunner, publishedSchema, encodeCqr, decodeCqr, catalogRequest, catalogInReferenceUnits } from './cqr.mjs';
 import { relVelStratum } from "./caParityTolerances.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -64,7 +63,7 @@ export async function loadRawConjunctionModule() {
 }
 
 export async function initFlatc() {
-  return FlatcRunner.init();
+  return createFlatcRunner();
 }
 
 // --- flatc schema descriptors ----------------------------------------------

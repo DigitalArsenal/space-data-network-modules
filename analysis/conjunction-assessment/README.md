@@ -83,6 +83,13 @@ and supplies it through SDK launch plans. This host only provides threading
 and transport; calculations remain in the primary WASM artifact. Host build
 outputs are ignored under `.sdk-build/`.
 
+Test hosts and scripts encode and decode CQR with flatc-wasm through
+`tests/lib/cqr.mjs` (`initCqrFlatc`, `createFlatcRunner`). A plain flatc-wasm
+26.1.32 `FlatcRunner` leaves each conversion's argv on its 2 MiB stack and
+traps at the 1,783rd CQR encode in a process; the helper runs flatc with argv
+on the heap, and `tests/pairCallsOneInstance.test.mjs` makes 10,000 pair calls
+on one instance, each request encoded as it is sent.
+
 Measured results, source references, and limitations are in the
 [handoff](../../docs/tmpl-lane-14-conjunction-cqr-handoff.md). The eight large
 dataset checks require the ignored files documented below; checked-in snapshots
