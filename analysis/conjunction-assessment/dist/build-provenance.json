@@ -28,7 +28,7 @@
       "PIV": "857589cdd5fc3e784baada0f261f1b3d97475361692638447c75ccaee7800eff"
     }
   },
-  "sdk": "0.8.24",
+  "sdk": "0.8.25",
   "compiler": "wasm32-wasi-clang++ (wasi-threads)",
   "threadModel": "emscripten-pthreads",
   "runtimeTargets": [
