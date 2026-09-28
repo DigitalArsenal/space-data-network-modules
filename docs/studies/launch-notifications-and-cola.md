@@ -86,6 +86,26 @@ instead of calling upstream. RocketLaunch.live is a later cross-check.
 Hazard areas wait for a current feed. The airspace volume standard ($AVL)
 already carries polygon volumes when one is available.
 
+**Related work this table should have cited.** The 2026-07-30 launch
+intelligence design (stack
+`docs/superpowers/specs/2026-07-30-launch-intelligence-program-design.md`)
+surveyed these sources in more depth. Its findings that change the rows above:
+
+- **NGA:** the `broadcast-warn` JSON API is frozen at 2024, but NGA's
+  `DailyMem*.txt` products are current. They carry NAVAREA IV, NAVAREA XII and
+  HYDROPAC, polled at 5–15 min.
+- **USCG Local Notices to Mariners:** D7 (Cape) and D11 (Vandenberg) weekly PDFs
+  carry decimal-degree launch hazard polygons with primary and backup-day
+  windows.
+- **FAA TFR:** `exportTfrList` plus `detail_*.xml` carry airspace hazard
+  polygons with altitude bands.
+- **FAA NOTAM API:** needs an SSO-registered account.
+
+Also, `space-data-network-closed-modules/packages/launch-events-provider` still
+polls Launch Library 2 on a 5-minute cadence, which can reach 72 requests per
+hour against the 15 allowed. Wherever it runs, it spends the same budget as
+this flow.
+
 ## Records
 
 **Notices use the existing Launch Data Message ($LDM).** One record per
@@ -202,6 +222,9 @@ node:
   - results are stored as $CQR and published.
 - **Trajectories:**
   - operator-supplied EFG files;
+  - or a projection from `analysis/launch-trajectory`, whose Earth-fixed
+    `TRAJECTORY_OEM` is this segment shape
+    (see [launch-trajectory-tracking-and-insertion.md](launch-trajectory-tracking-and-insertion.md));
   - or the existing `analysis/launch-ascent` module, which has a Crew-8
     reference mission, for planning studies.
 
@@ -210,7 +233,8 @@ node:
 - Probability screening (covariance for launched and orbiting objects).
 - Maritime and airspace hazard areas (needs a current feed; $AVL exists).
 - The COLA gap after insertion: screening deployed objects from their insertion
-  vectors until they are catalogued.
+  vectors until they are catalogued. `analysis/launch-trajectory` now produces
+  the insertion vectors; propagating them into the screen is still open.
 - Suborbital and reentry screening. The request already covers them (altitude
   floor, duration); only the fixtures are orbital.
 

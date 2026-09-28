@@ -1,0 +1,174 @@
+{
+  "pluginId": "com.digitalarsenal.analysis.launch-trajectory",
+  "name": "Launch trajectory tracking and projected insertion",
+  "version": "0.1.0",
+  "description": "Reconstructs a launch ascent from altitude and speed telemetry (ground track, downrange, flight-path angle, instantaneous impact point, each sample's osculating apsides, and the insertion orbit at engine cutoff), and projects the insertion orbit of a scheduled launch from its pad, liftoff time, target orbit and a comparable flight's profile, including the liftoff times that join a reference plane.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Deterministic geometry over caller-supplied telemetry, target orbits and reference ephemerides. No host calls, threads, orbit propagation or network access."
+  },
+  "schemasUsed": [
+    {
+      "schemaName": "LAM.fbs",
+      "fileIdentifier": "$LAM",
+      "rootTypeName": "LAM"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "track_ascent",
+      "displayName": "Track launch ascent",
+      "inputPorts": [
+        {
+          "portId": "telemetry",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-lam",
+              "allowedTypes": [
+                {
+                  "schemaName": "LAM.fbs",
+                  "fileIdentifier": "$LAM",
+                  "rootTypeName": "LAM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$LAM with LAUNCH_EPOCH, LAUNCH_DATA.SITE, TARGET_ORBIT inclination and pass direction, SPEED_REFERENCE, and TIME_FROM_LAUNCH_S / ALTITUDE_M / SPEED_M_PER_S samples so far; an ASCENT_EVENTS cutoff is optional."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "trajectory",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-lam",
+              "allowedTypes": [
+                {
+                  "schemaName": "LAM.fbs",
+                  "fileIdentifier": "$LAM",
+                  "rootTypeName": "LAM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$LAM (TELEMETRY): reconstructed samples, Earth-fixed TRAJECTORY_OEM, instantaneous impact points and apsides, and INSERTION with BURN_OUT_VECTORS once cutoff is reached."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Phase, azimuth, cutoff, insertion elements and the latest sample as JSON; the result is the $LAM frame."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Phase, azimuth, cutoff, insertion elements and the latest sample as JSON; the result is the $LAM frame."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "project_insertion",
+      "displayName": "Project orbit insertion",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-lam",
+              "allowedTypes": [
+                {
+                  "schemaName": "LAM.fbs",
+                  "fileIdentifier": "$LAM",
+                  "rootTypeName": "LAM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$LAM with LAUNCH_DATA.SITE, LAUNCH_EPOCH or a launch window, TARGET_ORBIT (inclination or PLANE_REFERENCE, pass direction, insertion time, optional apsides), SPEED_REFERENCE, and a comparable flight's TIME_FROM_LAUNCH_S / ALTITUDE_M / SPEED_M_PER_S profile."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "projection",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-lam",
+              "allowedTypes": [
+                {
+                  "schemaName": "LAM.fbs",
+                  "fileIdentifier": "$LAM",
+                  "rootTypeName": "LAM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$LAM (PROJECTED): nominal samples, Earth-fixed TRAJECTORY_OEM for launch screening, INSERTION with BURN_OUT_VECTORS, and IN_PLANE_LIFTOFF_EPOCHS for a reference plane."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Azimuth, insertion elements and in-plane liftoff times as JSON; the result is the $LAM frame."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Azimuth, insertion elements and in-plane liftoff times as JSON; the result is the $LAM frame."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}
