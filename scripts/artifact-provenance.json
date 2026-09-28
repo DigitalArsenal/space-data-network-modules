@@ -375,11 +375,11 @@
       "declaration": null
     },
     "analysis/epoch-state/dist/isomorphic/module.wasm": {
-      "sha256": "49841968736eb2aee20c3a79a610ef2646fcad462331c89fcb092f806cd1332d",
-      "bytes": 223119,
+      "sha256": "4ab9c06821515fba9a082af6f057670b10efd1484d11ce1e3dfc4d366ce158e3",
+      "bytes": 186347,
       "module": "analysis/epoch-state",
-      "lastCommit": "e375827af3e4b278de6dec0fbc93a560f3ceccd8",
-      "lastCommitDate": "2026-09-26T09:34:21-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": null,
@@ -448,17 +448,14 @@
       }
     },
     "analysis/launch-ascent/dist/isomorphic/module.wasm": {
-      "sha256": "bf74c481543b800ecdcd3ab0023677937de2092d7a7d1c13b026ad95410d8616",
-      "bytes": 214468,
+      "sha256": "e592cbfe4a7c0d171709ede21bfc85d335d05beb46f0c89b8bad6d1792a2113f",
+      "bytes": 192845,
       "module": null,
-      "lastCommit": "ceb5554ca8f7d2e2dcf7030f2c727832d57d1d56",
-      "lastCommitDate": "2026-06-19T17:24:20-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "b13d3fcc5edc7dd51fa8d90ee9b8784d37e11d55",
-        "sdkCommit": "aa5bf2eb166bf967bf14cbe70909714a0dc95ed3"
-      },
+      "sdkPinAtCommit": null,
       "declaration": null
     },
     "analysis/maneuver/dist/isomorphic/module.wasm": {
@@ -608,17 +605,14 @@
       }
     },
     "analysis/reentry/dist/isomorphic/module.wasm": {
-      "sha256": "37080f20cf095296af11e0e21db519e408492c4466108e13fe3e2efd00563696",
-      "bytes": 165137,
+      "sha256": "51cbfe1325fdeb7cb5acb32b212ea4699a716dbbb1f47bcdbb1b8b3d511b4e6e",
+      "bytes": 144781,
       "module": null,
-      "lastCommit": "ceb5554ca8f7d2e2dcf7030f2c727832d57d1d56",
-      "lastCommitDate": "2026-06-19T17:24:20-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "b13d3fcc5edc7dd51fa8d90ee9b8784d37e11d55",
-        "sdkCommit": "aa5bf2eb166bf967bf14cbe70909714a0dc95ed3"
-      },
+      "sdkPinAtCommit": null,
       "declaration": null
     },
     "analysis/targeting/dist/isomorphic/module.wasm": {
@@ -749,17 +743,37 @@
       }
     },
     "data-source/celestrak-parser/dist/isomorphic/module.wasm": {
-      "sha256": "893a5476c92941e3ce9ba5706add8c78ab86f5ffea20893130244beef7a45771",
-      "bytes": 211218,
+      "sha256": "101ba3812fd258a65640d2e898180d5939d306b3f3069e95d0f520fa35c3e6e2",
+      "bytes": 214904,
       "module": "data-source/celestrak-parser",
-      "lastCommit": "e56d0aa3ba49960040b71955bbd0c014cfa0129d",
-      "lastCommitDate": "2026-09-01T19:39:36-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "5e3a4be9596750de3bd60e9d813c1900354c9915",
-        "sdkCommit": "c6b22120fc920e6208254958fd2ce811c7cddd73"
-      },
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
+    "data-source/celestrak-reference/dist/isomorphic/module.wasm": {
+      "sha256": "b51238ae34897549dfaa7294f23f36d992dcf8c22a34eb29ae80b1203648fb61",
+      "bytes": 213218,
+      "module": "data-source/celestrak-reference",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -775,17 +789,14 @@
       }
     },
     "data-source/celestrak-request/dist/isomorphic/module.wasm": {
-      "sha256": "440abbc50015f234a77854e79d16dfce23c95015f73e25366737b21badb8e388",
-      "bytes": 150323,
+      "sha256": "35be5b0e6f1051e528d69d94ca06402022703fbaa19907aa03038f0563284228",
+      "bytes": 142584,
       "module": "data-source/celestrak-request",
-      "lastCommit": "32349758dd12e6b88596d410cb70057aae0a68cf",
-      "lastCommitDate": "2026-08-09T01:34:54-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "fefdf495463119d6288fd580215e42427c0d028b",
-        "sdkCommit": "925af779c3a82e723661899a50befa70247ac47a"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -867,17 +878,14 @@
       }
     },
     "data-source/cell-tower-credentials/dist/isomorphic/module.wasm": {
-      "sha256": "5703532559fa8a11b0cd50ee018b9d17629b55b9058768551bdc8fa669eb1b31",
-      "bytes": 137261,
+      "sha256": "cc823fb3ee705ad13d69c8726e53a200742e7c2b92bd94d7d968de777bc0858e",
+      "bytes": 102289,
       "module": "data-source/cell-tower-credentials",
-      "lastCommit": "7dc3ebd786d12e5b3ef8e9cb0256008c634b1d40",
-      "lastCommitDate": "2026-08-14T08:29:46-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "5f8665e4dfa17d0f9731ad0398fba03d2d917e03",
-        "sdkCommit": "925af779c3a82e723661899a50befa70247ac47a"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -892,17 +900,14 @@
       }
     },
     "data-source/cell-tower-source/dist/isomorphic/module.wasm": {
-      "sha256": "af06ad12314e23e7b67eddf39dc8e211ae7863b05ea3b6f724cbe0f58bcf97ff",
-      "bytes": 275827,
+      "sha256": "e7b535449d98e55d52d98375bb22fd65a1ce54b422426f238917b0d023fab1dc",
+      "bytes": 242735,
       "module": "data-source/cell-tower-source",
-      "lastCommit": "9db2c44108b4f4227f4200b31793feeea758f6ad",
-      "lastCommitDate": "2026-08-26T16:45:44-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "2fd8ba7671bf6cf87f879d37ed95921dc608f60f",
-        "sdkCommit": "166e0ca91354f73db99b27ed3c715c4c5cc0fc3b"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -981,6 +986,52 @@
         "toolchain": "em-6.0.1",
         "confidence": "strong",
         "evidence": "Own deps/emsdk carries 6.0.1 installed 2026-07-18; artifact committed 2026-07-18, the same day."
+      }
+    },
+    "data-source/eop-parser/dist/isomorphic/module.wasm": {
+      "sha256": "f9628c311bfae18754d0e177892b6ab8da221c87c70c1f5fbf01d06c60b6c5c1",
+      "bytes": 172974,
+      "module": "data-source/eop-parser",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
+    "data-source/eop-request/dist/isomorphic/module.wasm": {
+      "sha256": "e568f507b002e281b19ba837548be8a83f9f3df41d17a4e89c025b39caa9b4b5",
+      "bytes": 93768,
+      "module": "data-source/eop-request",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
       }
     },
     "data-source/glonass-source/dist/glonass-source.wasm": {
@@ -1271,17 +1322,14 @@
       }
     },
     "data-source/mlab-starlink-connectivity/dist/isomorphic/module.wasm": {
-      "sha256": "7b9de3ce07c8b3525f083c6a4c222b4b33280bec84eb93131123617b39637b5b",
-      "bytes": 188918,
+      "sha256": "9ae5d4586e4f3c9487852fe666434908fb15c853ccd83aaf5bc3372fd67f89ba",
+      "bytes": 160515,
       "module": "data-source/mlab-starlink-connectivity",
-      "lastCommit": "32349758dd12e6b88596d410cb70057aae0a68cf",
-      "lastCommitDate": "2026-08-09T01:34:54-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "fefdf495463119d6288fd580215e42427c0d028b",
-        "sdkCommit": "925af779c3a82e723661899a50befa70247ac47a"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -1297,17 +1345,14 @@
       }
     },
     "data-source/oem-source-iss/dist/isomorphic/module.wasm": {
-      "sha256": "e384a80ab427417bca207b3eb7f45edda21e576849006383ba6592c5e9d42460",
-      "bytes": 129453,
+      "sha256": "4bb3826f257499c6c7666885eb1f4576562da872a5804c2ec152770cf608026f",
+      "bytes": 93261,
       "module": "data-source/oem-source-iss",
-      "lastCommit": "2c4e53582dd8953e79dff9d2167506c6915f02ff",
-      "lastCommitDate": "2026-08-10T08:54:46-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "8399c56c065419477476405dd7262e498c59c6a8",
-        "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -1389,17 +1434,14 @@
       }
     },
     "data-source/retrieval/dist/isomorphic/module.wasm": {
-      "sha256": "97e5fdae1dc1cd02f1cebc0d47e25db84a042dc7d30db2f988f57df424602057",
-      "bytes": 139188,
+      "sha256": "accfd0222cc1e3676383609b65e1247d1e07a6378063deb50176123085077b6a",
+      "bytes": 106771,
       "module": "data-source/retrieval",
-      "lastCommit": "450511b697883a738be0d784a9e5c61bd9d4778a",
-      "lastCommitDate": "2026-08-16T10:22:34-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "9eb693792c751ea984e4d315f6a90654101c833b",
-        "sdkCommit": "6b38404f84fdc33d9538aefaed9f7ddc0685762a"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -1415,17 +1457,14 @@
       }
     },
     "data-source/satnogs-source/dist/isomorphic/module.wasm": {
-      "sha256": "22b60975f955ea412e0b03a9e4451264fbc94f454c9181c11f8bee4b32b180b0",
-      "bytes": 172234,
+      "sha256": "764f75bfbfe45676b2670e54906b0bb5651b4ef2f92a0100f535c67a9a147ba2",
+      "bytes": 144942,
       "module": "data-source/satnogs-source",
-      "lastCommit": "32349758dd12e6b88596d410cb70057aae0a68cf",
-      "lastCommitDate": "2026-08-09T01:34:54-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "fefdf495463119d6288fd580215e42427c0d028b",
-        "sdkCommit": "925af779c3a82e723661899a50befa70247ac47a"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -1441,17 +1480,14 @@
       }
     },
     "data-source/sigmf-captures/dist/isomorphic/module.wasm": {
-      "sha256": "ec4d5b2cd6462fb1a84275a66025cb916126067cbbff0691447b2a3d7e384de8",
-      "bytes": 202430,
+      "sha256": "307245cc5f2570d7f645fadb897212548b9b33dbfade6c62acb83aea9f751fa4",
+      "bytes": 174131,
       "module": "data-source/sigmf-captures",
-      "lastCommit": "32349758dd12e6b88596d410cb70057aae0a68cf",
-      "lastCommitDate": "2026-08-09T01:34:54-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "fefdf495463119d6288fd580215e42427c0d028b",
-        "sdkCommit": "925af779c3a82e723661899a50befa70247ac47a"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -1556,11 +1592,11 @@
       }
     },
     "data-source/weathernext-parser/dist/isomorphic/module.wasm": {
-      "sha256": "d89731029025ed10a80e8da81459799112430e0e913db293d25b5957224bafee",
-      "bytes": 214670,
+      "sha256": "69de192cea86a97ce548c9e2508c5b14ce3c974810a422aa5660f0b2b579ac25",
+      "bytes": 183011,
       "module": "data-source/weathernext-parser",
-      "lastCommit": null,
-      "lastCommitDate": null,
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": null,
@@ -1579,11 +1615,11 @@
       }
     },
     "data-source/weathernext-source/dist/isomorphic/module.wasm": {
-      "sha256": "cca109c000b0220f3e5d98595213ad6dc180d5dea2c412382d9184a47d785c9f",
-      "bytes": 173363,
+      "sha256": "bfb526897e00e57f6198e5e51e26a7f1d195c62160d7daa44a99b1223748f10b",
+      "bytes": 140418,
       "module": "data-source/weathernext-source",
-      "lastCommit": null,
-      "lastCommitDate": null,
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": null,
@@ -2512,17 +2548,14 @@
       "declaration": null
     },
     "foundation/attitude-math/dist/isomorphic/module.wasm": {
-      "sha256": "00b438a25a9433fbb82940ed96ff6b2d3bd49605074a79ba6edfacc2cb69a8ff",
-      "bytes": 168496,
+      "sha256": "45b86a54ad68d598c04b4ff2e959c9404cec2e8e259337fa1fcda11aa32cde6f",
+      "bytes": 131242,
       "module": "foundation/attitude-math",
-      "lastCommit": "2c4e53582dd8953e79dff9d2167506c6915f02ff",
-      "lastCommitDate": "2026-08-10T08:54:46-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "c65c1c7892042d50548389acc5419f737d77505b",
-        "sdkCommit": "b06faf5c39e08890ece5ea011b9c9b7dafcedb95"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2538,17 +2571,14 @@
       }
     },
     "foundation/decision-gate/dist/isomorphic/module.wasm": {
-      "sha256": "3e9d3a91190498c038fd812efdf5bc24561222c11d1d0bdb5a5a778b959fe027",
-      "bytes": 128654,
+      "sha256": "23bbd49721947022451c06fa7fc7c40d04190d2cd4cfb6c0adab8d96ac074d47",
+      "bytes": 96904,
       "module": "foundation/decision-gate",
-      "lastCommit": "32349758dd12e6b88596d410cb70057aae0a68cf",
-      "lastCommitDate": "2026-08-09T01:34:54-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "fefdf495463119d6288fd580215e42427c0d028b",
-        "sdkCommit": "925af779c3a82e723661899a50befa70247ac47a"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2564,17 +2594,14 @@
       }
     },
     "foundation/discovery-shape/dist/isomorphic/module.wasm": {
-      "sha256": "7558821c40bbc8148170fb476e3f12a2da8460042bffaf2c65ee03ffa6708bc9",
-      "bytes": 181681,
+      "sha256": "7e250afd90cb9cda59219a3e13d5a2a8a7f2958a8b793fe459100dfbd6b07e4d",
+      "bytes": 149549,
       "module": "foundation/discovery-shape",
-      "lastCommit": "32349758dd12e6b88596d410cb70057aae0a68cf",
-      "lastCommitDate": "2026-08-09T01:34:54-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "fefdf495463119d6288fd580215e42427c0d028b",
-        "sdkCommit": "925af779c3a82e723661899a50befa70247ac47a"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2590,17 +2617,14 @@
       }
     },
     "foundation/frames/dist/isomorphic/module.wasm": {
-      "sha256": "654810eaf12a0aa433e6ac6801149b18eade85168ac98363dd8eb66244609af3",
-      "bytes": 377400,
+      "sha256": "3aee9e013e856e9eae40850358154520c756cf3e203f6fc08745d09327e4b744",
+      "bytes": 377932,
       "module": "foundation/frames",
-      "lastCommit": "2aa343269d78b3e1eff7448b2f4cc4828d2953d3",
-      "lastCommitDate": "2026-08-30T04:22:59-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "54afbbe6e3fe61ea068ec0d06d55c4b69a75008c",
-        "sdkCommit": "dfb9fb270afe4909d1d61a4f287ce2bf1566a6da"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2616,17 +2640,14 @@
       }
     },
     "foundation/http-respond/dist/isomorphic/module.wasm": {
-      "sha256": "ef8205cbcdeb4bb4cc29bd1a802d56d46cddba0137e737d6e651fd217ead195d",
-      "bytes": 135299,
+      "sha256": "b792163a58ed877a518c00a3804ed456a37aad80f84ce26ef7d4ef2c0cada3df",
+      "bytes": 99544,
       "module": "foundation/http-respond",
-      "lastCommit": "08a8c482634b30e1af573b28075116d75d77b5f6",
-      "lastCommitDate": "2026-08-14T11:11:37-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "99c5cb53fdde1e81c7d99b0e23c03a13b26cb715",
-        "sdkCommit": "915141d7aedda354e3a8d9a95aaa45f58b15dacd"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2642,17 +2663,14 @@
       }
     },
     "foundation/http-route/dist/isomorphic/module.wasm": {
-      "sha256": "3569f1231e09237ab3545e01ed96ea8a974e1be9e0432b64fd30c58009c96fcd",
-      "bytes": 186886,
+      "sha256": "2be5eaa53ad315f173a86fc549c20bdb3130ff56dbcee3c168af2dbe7b4b7cdb",
+      "bytes": 154362,
       "module": "foundation/http-route",
-      "lastCommit": "32349758dd12e6b88596d410cb70057aae0a68cf",
-      "lastCommitDate": "2026-08-09T01:34:54-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "fefdf495463119d6288fd580215e42427c0d028b",
-        "sdkCommit": "925af779c3a82e723661899a50befa70247ac47a"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2668,17 +2686,14 @@
       }
     },
     "foundation/math-bspline/dist/isomorphic/module.wasm": {
-      "sha256": "e1b08ae0c76d542f61d9bee37e1a6ea55801a452a2aa9ab039f8b7ae6c10622f",
-      "bytes": 123178,
+      "sha256": "9bf693f7a8ac780a7aa6cedbc79f19f13aee06e9f66da94b8fa5cbc3053bfa7f",
+      "bytes": 85691,
       "module": "foundation/math-bspline",
-      "lastCommit": "2c4e53582dd8953e79dff9d2167506c6915f02ff",
-      "lastCommitDate": "2026-08-10T08:54:46-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "c65c1c7892042d50548389acc5419f737d77505b",
-        "sdkCommit": "b06faf5c39e08890ece5ea011b9c9b7dafcedb95"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2694,17 +2709,14 @@
       }
     },
     "foundation/numerics/dist/isomorphic/module.wasm": {
-      "sha256": "c1149071c904abe69c5cb10f3ea858f1ae3cd933cb1d4f158734926986c53575",
-      "bytes": 146401,
+      "sha256": "29c2093876d103626610182fb60f1af3371d940e495449e5ec6055daa3275e7e",
+      "bytes": 109239,
       "module": "foundation/numerics",
-      "lastCommit": "2c4e53582dd8953e79dff9d2167506c6915f02ff",
-      "lastCommitDate": "2026-08-10T08:54:46-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "c65c1c7892042d50548389acc5419f737d77505b",
-        "sdkCommit": "b06faf5c39e08890ece5ea011b9c9b7dafcedb95"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2720,17 +2732,14 @@
       }
     },
     "foundation/omm-json/dist/isomorphic/module.wasm": {
-      "sha256": "c8334c1cb3e42926de29d62da0a2e0520ac3be4fc8ffb57ef938829e85e5ea37",
-      "bytes": 124498,
+      "sha256": "d2e9754ba57de63dc53f96c509fd7f7262f3f0b29017d7fcec1646d836baa057",
+      "bytes": 93518,
       "module": "foundation/omm-json",
-      "lastCommit": "32349758dd12e6b88596d410cb70057aae0a68cf",
-      "lastCommitDate": "2026-08-09T01:34:54-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "fefdf495463119d6288fd580215e42427c0d028b",
-        "sdkCommit": "925af779c3a82e723661899a50befa70247ac47a"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2746,17 +2755,14 @@
       }
     },
     "foundation/orbits/dist/isomorphic/module.wasm": {
-      "sha256": "ec1f3d78ce118c12c3bd4be54a8330e69cb8943dd15371f61a0232e39c809598",
-      "bytes": 424812,
+      "sha256": "b7be60e88ff2ce792aae2a8b0a57705519f4fa268042aa7d339c08df0a2c9030",
+      "bytes": 390290,
       "module": "foundation/orbits",
-      "lastCommit": "da2982c58757d2de4b5c5e18c4ebf8952b25e600",
-      "lastCommitDate": "2026-09-24T11:47:48-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "db14dcde9442e10855b968472e594f394163e5d5",
-        "sdkCommit": "16616b39625bcfcf5ade89eb7b95b573c56d9a81"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2772,17 +2778,14 @@
       }
     },
     "foundation/time/dist/isomorphic/module.wasm": {
-      "sha256": "8f06eec747d0001f2bf7a241402603830b0ffcb882ba054b8eb3d95be93b5eec",
-      "bytes": 147589,
+      "sha256": "647029729c8a1d16d3e272b9167577b414f524e8537c2a45904ca109b763a337",
+      "bytes": 114652,
       "module": "foundation/time",
-      "lastCommit": "4f3e92578411b6f514bf625037afc42c006f5c48",
-      "lastCommitDate": "2026-08-29T23:13:44-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "04c6eb4fe2b4416bdeccd3e7b9beb933cb7cd9b7",
-        "sdkCommit": "166e0ca91354f73db99b27ed3c715c4c5cc0fc3b"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2798,17 +2801,14 @@
       }
     },
     "hostcap/clock/dist/isomorphic/module.wasm": {
-      "sha256": "4190dd52a9e7f78e486bedb4596c8813eaa5db7058991eb77f02ec2540092b97",
-      "bytes": 123464,
+      "sha256": "fce954e760a18a56f21505ba5a88db27b5aa6fc22890e3ad35d8e14d580b46c1",
+      "bytes": 89222,
       "module": "hostcap/clock",
-      "lastCommit": "2c4e53582dd8953e79dff9d2167506c6915f02ff",
-      "lastCommitDate": "2026-08-10T08:54:46-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "e9cb00b6bccb1f9136da0740ea11e340e4dfe539",
-        "sdkCommit": "f65bad5c21f1b0206002252c0fcc385bc72f2c92"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2824,17 +2824,14 @@
       }
     },
     "hostcap/file/dist/isomorphic/module.wasm": {
-      "sha256": "e23083b88a27453bcc3671b21e445d6b232afc70c1f44785f09aa512188dc767",
-      "bytes": 119942,
+      "sha256": "3c1dddfa8e56113b5e1397db6a52a2112e33f6842798f7c94db4511adb71fd6a",
+      "bytes": 86572,
       "module": "hostcap/file",
-      "lastCommit": "32349758dd12e6b88596d410cb70057aae0a68cf",
-      "lastCommitDate": "2026-08-09T01:34:54-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "fefdf495463119d6288fd580215e42427c0d028b",
-        "sdkCommit": "925af779c3a82e723661899a50befa70247ac47a"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2850,17 +2847,14 @@
       }
     },
     "hostcap/flatsql-query/dist/isomorphic/module.wasm": {
-      "sha256": "b8ebf6b73d3166e373ce26bf6e59e3a4f0b474b732ffcf38697d4dff4b1cbad7",
-      "bytes": 158158,
+      "sha256": "f8fdb6af4fd51893e6d865346c6779aff1999d6ef5415653fb9ce40ebcad1e18",
+      "bytes": 125968,
       "module": "hostcap/flatsql-query",
-      "lastCommit": "32349758dd12e6b88596d410cb70057aae0a68cf",
-      "lastCommitDate": "2026-08-09T01:34:54-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "fefdf495463119d6288fd580215e42427c0d028b",
-        "sdkCommit": "925af779c3a82e723661899a50befa70247ac47a"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2876,17 +2870,14 @@
       }
     },
     "hostcap/http-request/dist/isomorphic/module.wasm": {
-      "sha256": "e99fece3e3622247bb88145c1e9db78b272f500ba60e121ca6335df0836bebef",
-      "bytes": 142529,
+      "sha256": "9ce014a53df0e43276d80538b2467d338083a77a09d1f72355d9ea80c11c8710",
+      "bytes": 110157,
       "module": "hostcap/http-request",
-      "lastCommit": "3b4e7142848407098c5b6106f1ee4ceadc816fef",
-      "lastCommitDate": "2026-08-13T10:08:12-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "fefdf495463119d6288fd580215e42427c0d028b",
-        "sdkCommit": "925af779c3a82e723661899a50befa70247ac47a"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2902,17 +2893,14 @@
       }
     },
     "hostcap/node-activity/dist/isomorphic/module.wasm": {
-      "sha256": "efa4bb749f57ca8be46c21022c1c43d75a9aa79f58427fe9ec3856bb025f0175",
-      "bytes": 119576,
+      "sha256": "acd608cf6bd97ff4cc457c3b9d13bd77ccfd853b80335afd919fea6666a8019d",
+      "bytes": 83986,
       "module": "hostcap/node-activity",
-      "lastCommit": "32349758dd12e6b88596d410cb70057aae0a68cf",
-      "lastCommitDate": "2026-08-09T01:34:54-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "fefdf495463119d6288fd580215e42427c0d028b",
-        "sdkCommit": "925af779c3a82e723661899a50befa70247ac47a"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2928,17 +2916,14 @@
       }
     },
     "hostcap/node-status/dist/isomorphic/module.wasm": {
-      "sha256": "19c2b29fa724a71af2523abe2b942e3fcfdc711591b0bf29d2fb3d41c5f71813",
-      "bytes": 117614,
+      "sha256": "a70db6f5b07d2e1b60b380cd948dd4ee0b9b04e9f5b1f2fcb7437340c2181f5b",
+      "bytes": 82036,
       "module": "hostcap/node-status",
-      "lastCommit": "32349758dd12e6b88596d410cb70057aae0a68cf",
-      "lastCommitDate": "2026-08-09T01:34:54-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "fefdf495463119d6288fd580215e42427c0d028b",
-        "sdkCommit": "925af779c3a82e723661899a50befa70247ac47a"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2954,17 +2939,14 @@
       }
     },
     "hostcap/p2p-discovery/dist/isomorphic/module.wasm": {
-      "sha256": "b9f959ec03f71f1a0d5220e3ea56a5eb731fe10f3d119c5e117129299a8c5808",
-      "bytes": 139115,
+      "sha256": "8dce1905ca7335f2e07672b964a6aa9c9560cf99ad730d42d6a6a1eac21fbd29",
+      "bytes": 105610,
       "module": "hostcap/p2p-discovery",
-      "lastCommit": "32349758dd12e6b88596d410cb70057aae0a68cf",
-      "lastCommitDate": "2026-08-09T01:34:54-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "fefdf495463119d6288fd580215e42427c0d028b",
-        "sdkCommit": "925af779c3a82e723661899a50befa70247ac47a"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2980,17 +2962,14 @@
       }
     },
     "hostcap/random/dist/isomorphic/module.wasm": {
-      "sha256": "1af51a0389caf201bfb061d6afc644e9e5e251ee944f2c237827a4cb4283ea48",
-      "bytes": 122232,
+      "sha256": "0e843f1c2a1ffbe6a3a6c906f8b11c7629e4dcebd9596ccef245d350daaabc09",
+      "bytes": 87733,
       "module": "hostcap/random",
-      "lastCommit": "2c4e53582dd8953e79dff9d2167506c6915f02ff",
-      "lastCommitDate": "2026-08-10T08:54:46-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "e9cb00b6bccb1f9136da0740ea11e340e4dfe539",
-        "sdkCommit": "f65bad5c21f1b0206002252c0fcc385bc72f2c92"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -3006,17 +2985,14 @@
       }
     },
     "hostcap/storage-ingest/dist/isomorphic/module.wasm": {
-      "sha256": "c8d55314b14880723da95996a7dc2f089a4452a21551bb171e456cf936a18104",
-      "bytes": 116245,
+      "sha256": "3424f11ab76dfec1a6ee403735fe8a68eaab76095d90a5956168c04d46a1efaf",
+      "bytes": 80492,
       "module": "hostcap/storage-ingest",
-      "lastCommit": "32349758dd12e6b88596d410cb70057aae0a68cf",
-      "lastCommitDate": "2026-08-09T01:34:54-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "fefdf495463119d6288fd580215e42427c0d028b",
-        "sdkCommit": "925af779c3a82e723661899a50befa70247ac47a"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -3032,17 +3008,14 @@
       }
     },
     "hostcap/storage-write/dist/isomorphic/module.wasm": {
-      "sha256": "26c5237996008839d1cc77c1a587e165c99343f5c99097384c7671473d894bcd",
-      "bytes": 120901,
+      "sha256": "65f29aebe93529d83631fb3089854cd087e7fc76facc9163d764d975444aafac",
+      "bytes": 85197,
       "module": "hostcap/storage-write",
-      "lastCommit": "271569ca7ed14697208668142571a782e8e919d3",
-      "lastCommitDate": "2026-08-26T17:00:03-04:00",
+      "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
+      "lastCommitDate": "2026-09-27T22:43:13-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "2fd8ba7671bf6cf87f879d37ed95921dc608f60f",
-        "sdkCommit": "166e0ca91354f73db99b27ed3c715c4c5cc0fc3b"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
