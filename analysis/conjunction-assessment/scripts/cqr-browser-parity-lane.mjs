@@ -21,10 +21,21 @@ export async function runThreadedBrowserLane(context) {
     ${factoryImport}
     import { setBrowserWasiThreadWorkerBase } from ${JSON.stringify(path.join(sdkSource, 'host/wasiThreadHost.js'))};
     ${context.publicWrapper ? '' : "setBrowserWasiThreadWorkerBase('/sdk/host/');"}
+    // Count the guest's successful wasi.thread-spawn calls on this (owner)
+    // thread at the import itself. SDK 0.8.25 pool workers claim threads from
+    // shared memory, so no {t:'run'} message is posted to count.
     let spawnCount = 0;
-    const NativeWorker = globalThis.Worker;
-    globalThis.Worker = class extends NativeWorker {
-      postMessage(message, ...rest) { if (message?.t === 'run') spawnCount += 1; return super.postMessage(message, ...rest); }
+    const nativeInstantiate = WebAssembly.instantiate;
+    WebAssembly.instantiate = function (source, imports, ...rest) {
+      const threadSpawn = imports?.wasi?.['thread-spawn'];
+      if (typeof threadSpawn === 'function') {
+        imports = { ...imports, wasi: { ...imports.wasi, 'thread-spawn': (startArg) => {
+          const tid = threadSpawn(startArg);
+          if (tid > 0) spawnCount += 1;
+          return tid;
+        } } };
+      }
+      return nativeInstantiate.call(this, source, imports, ...rest);
     };
     self.onmessage = async ({ data }) => {
       let harness, stdout = new Uint8Array(), exitClass = 'ok', exitDetail = null;
