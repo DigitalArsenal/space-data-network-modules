@@ -7,9 +7,8 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { FlatcRunner } from "flatc-wasm";
-
 import { conjunctionArtifactExists } from "./lib/conjunctionCommandHarness.mjs";
+import { createFlatcRunner, gpRecord, publishedSchema } from "./lib/cqr.mjs";
 import { buildThreadedWasmEdgeRunner } from "./lib/wasmedgePthreadRunner.mjs";
 import {
   buildPartitionedRunProvenance,
@@ -20,6 +19,7 @@ import {
   planCatalogBlockPairWork,
   planTimedOutBlockPairSubdivisions,
   planPartitionWork,
+  partitionInvocation,
   sliceUint32beBlockPair,
   sliceUint32beFrames,
   canonicalJson,
@@ -318,27 +318,45 @@ test("partitioned runner can resume from successful checkpoints and schedule onl
   });
 
   await writeFile(
-    path.join(tempDir, "partition-000001-000002-000004.json"),
+    path.join(tempDir, "partition-000001-000002-000004-000002-000006.json"),
     JSON.stringify({
       partitionIndex: 1,
       startOrderIndex: 2,
       endOrderIndex: 4,
+      secondaryStartOrderIndex: 2,
+      secondaryEndOrderIndex: 6,
       statusCode: 0,
       objectsParsed: 6,
       conjunctionsFound: 1,
-      stats: { pairsScreened: 8 },
+      stats: { pairsScreened: 7 },
     }),
   );
   await writeFile(
-    path.join(tempDir, "partition-000002-000004-000006.json"),
+    path.join(tempDir, "partition-000002-000004-000006-000004-000006.json"),
     JSON.stringify({
       partitionIndex: 2,
       startOrderIndex: 4,
       endOrderIndex: 6,
+      secondaryStartOrderIndex: 4,
+      secondaryEndOrderIndex: 6,
       statusCode: 2,
       objectsParsed: 0,
       conjunctionsFound: 0,
       stats: { pairsScreened: 0 },
+    }),
+  );
+  // Written before ordered-primary partitions named a secondary range: that
+  // partition screened only the pairs inside [0, 2), so it is not complete.
+  await writeFile(
+    path.join(tempDir, "partition-000000-000000-000002.json"),
+    JSON.stringify({
+      partitionIndex: 0,
+      startOrderIndex: 0,
+      endOrderIndex: 2,
+      statusCode: 0,
+      objectsParsed: 6,
+      conjunctionsFound: 0,
+      stats: { pairsScreened: 1 },
     }),
   );
 
@@ -366,11 +384,71 @@ test("partitioned runner can resume from successful checkpoints and schedule onl
       partition.partitionIndex,
       partition.startOrderIndex,
       partition.endOrderIndex,
+      partition.secondaryStartOrderIndex,
+      partition.secondaryEndOrderIndex,
     ]),
-    [[0, 0, 2]],
+    [[0, 0, 2, 0, 6]],
   );
   assert.equal(plan.deferredRanges.length, 1);
   assert.equal(plan.deferredRanges[0].partitionIndex, 2);
+});
+
+// The pairs one screen_catalog request screens, as its guest defines them for
+// OMM catalog frames (plugin_invoke_bridge.cpp screenSources and
+// ConjunctionScreener::screen): every unordered pair of distinct objects with
+// one object in the primary range and the other in the secondary range, once
+// however the ranges overlap; with an empty secondary range, every pair
+// inside the primary range. ids maps an order index to the object it names.
+function requestPairs(ids, invocation) {
+  const primaries = ids.slice(invocation.primaryStartOrderIndex, invocation.primaryEndOrderIndex);
+  const secondaries =
+    invocation.secondaryEndOrderIndex > invocation.secondaryStartOrderIndex
+      ? ids.slice(invocation.secondaryStartOrderIndex, invocation.secondaryEndOrderIndex)
+      : primaries;
+  const pairs = new Set();
+  for (const a of primaries) {
+    for (const b of secondaries) {
+      if (a !== b) pairs.add(a < b ? `${a}-${b}` : `${b}-${a}`);
+    }
+  }
+  return pairs;
+}
+
+test("every partition schedule screens each pair of the ordered range exactly once", () => {
+  for (let objectCount = 0; objectCount <= 12; objectCount += 1) {
+    // Frame i holds the byte i, so a sliced payload names the objects it sends.
+    const catalog = Buffer.from(
+      encodeUint32beFramedStream(Array.from({ length: objectCount }, (_, index) => Uint8Array.of(index))),
+    );
+    const windows = [[0, objectCount], [1, objectCount], [0, objectCount - 1], [2, objectCount - 2]]
+      .filter(([start, end]) => start >= 0 && end >= start);
+    for (const [startOrderIndex, endOrderIndex] of windows) {
+      const expected = new Set();
+      for (let i = startOrderIndex; i < endOrderIndex; i += 1) {
+        for (let j = i + 1; j < endOrderIndex; j += 1) expected.add(`${i}-${j}`);
+      }
+      for (let size = 1; size <= objectCount + 1; size += 1) {
+        for (const [partitionMode, plan] of [
+          ["ordered-primary", planPartitionWork({ objectCount, startOrderIndex, endOrderIndex, partitionSize: size })],
+          ["catalog-block-pair", planCatalogBlockPairWork({ objectCount, startOrderIndex, endOrderIndex, catalogBlockSize: size })],
+        ]) {
+          const label = `${partitionMode} N=${objectCount} [${startOrderIndex}, ${endOrderIndex}) size ${size}`;
+          const seen = new Map();
+          for (const range of plan.pendingRanges) {
+            const invocation = partitionInvocation(catalog, objectCount, range, partitionMode);
+            const ids = [];
+            for (let offset = 0; offset < invocation.payload.length; offset += 5) ids.push(invocation.payload[offset + 4]);
+            assert.equal(ids.length, invocation.objectCount, label);
+            for (const pair of requestPairs(ids, invocation)) seen.set(pair, (seen.get(pair) ?? 0) + 1);
+          }
+          assert.deepEqual([...seen.keys()].sort(), [...expected].sort(), `${label}: the pairs of the range`);
+          const n = endOrderIndex - startOrderIndex;
+          assert.equal(seen.size, n < 2 ? 0 : (n * (n - 1)) / 2, `${label}: N(N-1)/2 pairs`);
+          for (const [pair, count] of seen) assert.equal(count, 1, `${label}: ${pair} screened ${count} times`);
+        }
+      }
+    }
+  }
 });
 
 test("catalog block-pair planner schedules exact upper-triangular block pairs", async (t) => {
@@ -539,8 +617,8 @@ test("partitioned runner provenance hashes and Ed25519 signatures are determinis
   assert.equal(signed.resultSignature.algorithm, "Ed25519");
 });
 
-import { publishedSchema } from "./lib/cqr.mjs";
-const ommSchema = async () => publishedSchema("OMM");
+const ommSchemaSync = () => publishedSchema("OMM");
+const ommSchema = async () => ommSchemaSync();
 
 async function createOmmRecord(flatc, schema, noradCatId) {
   return flatc.generateBinary(
@@ -881,7 +959,7 @@ test(
       await rm(tempDir, { recursive: true, force: true });
     });
 
-    const flatc = await FlatcRunner.init();
+    const flatc = await createFlatcRunner();
     const schema = await ommSchema();
     const records = [];
     for (let index = 0; index < 6; index++) {
@@ -926,12 +1004,19 @@ test(
       summary.partitions.map((partition) => [
         partition.startOrderIndex,
         partition.endOrderIndex,
+        partition.secondaryStartOrderIndex,
+        partition.secondaryEndOrderIndex,
       ]),
       [
-        [0, 2],
-        [2, 4],
-        [4, 6],
+        [0, 2, 0, 6],
+        [2, 4, 2, 6],
+        [4, 6, 4, 6],
       ],
+    );
+    assert.equal(
+      summary.aggregate.pairsScreened + summary.aggregate.pairsPrefiltered,
+      15,
+      "the partitions plan the 6 * 5 / 2 pairs of the catalog",
     );
     assert.equal(summary.aggregate.failedPartitions, 0);
     assert.ok(summary.aggregate.elapsedMs >= 0);
@@ -956,6 +1041,93 @@ test(
   },
 );
 
+// Real objects with real conjunctions, most of them across partition
+// boundaries. Source: CelesTrak GP element sets, SGP4 mean elements in TEME of
+// date, UTC (fixtures/decaying/gp_2026-07-06.json without its three
+// reentering objects): EXPLORER 7 (NORAD 22), last in catalog order, and the
+// eight objects that pass near it on 2026-07-06. Window 2026-07-06T00:00Z +
+// 1 day, 15 km threshold, 300 s coarse step, 1 ms refinement tolerance.
+// Exact assertions only: the planned pairs (PAIRS_SCREENED +
+// PAIRS_PREFILTERED of every partition) add up to 9 * 8 / 2 = 36 in both
+// partition modes, and both find the conjunctions of one screen_catalog over
+// the whole catalog. Before ordered-primary partitions named a secondary
+// range, the same run planned 4 pairs and found none: EXPLORER 7 was alone
+// in its partition.
+test(
+  "partitioned runner screens every pair of a real catalog once in both partition modes",
+  { timeout: 600000 },
+  async (t) => {
+    if (!conjunctionArtifactExists()) {
+      t.skip("Build conjunction-assessment before running the partitioned runner test.");
+      return;
+    }
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "sdn-omm-pair-coverage-"));
+    t.after(async () => {
+      await rm(tempDir, { recursive: true, force: true });
+    });
+    const gp = JSON.parse(
+      await readFile(path.join(__dirname, "fixtures/decaying/gp_2026-07-06.json"), "utf8"),
+    ).filter((record) => ![8301, 60875, 69729].includes(record.NORAD_CAT_ID));
+    const ordered = [
+      ...gp.filter((record) => record.NORAD_CAT_ID !== 22),
+      ...gp.filter((record) => record.NORAD_CAT_ID === 22),
+    ];
+    const flatc = await createFlatcRunner();
+    const catalogPath = path.join(tempDir, "catalog.uint32be.bin");
+    await writeFile(
+      catalogPath,
+      encodeUint32beFramedStream(
+        ordered.map((record) =>
+          flatc.generateBinary(ommSchemaSync(), JSON.stringify(gpRecord(record)), { sizePrefix: false }),
+        ),
+      ),
+    );
+    const run = async (label, scheduleArgs) => {
+      const outputPath = path.join(tempDir, `${label}.json`);
+      const result = await runNodeScript([
+        "scripts/run-sdn-omm-partitioned-screen-catalog.mjs",
+        "--catalog",
+        catalogPath,
+        ...scheduleArgs,
+        "--start-jd",
+        String(Date.parse("2026-07-06T00:00:00Z") / 86400000 + 2440587.5),
+        "--duration-days",
+        "1",
+        "--threshold-km",
+        "15",
+        "--coarse-step-sec",
+        "300",
+        "--fine-tol-sec",
+        "0.001",
+        "--output",
+        outputPath,
+      ]);
+      assert.equal(result.status, 0, result.stderr);
+      const summary = JSON.parse(await readFile(outputPath, "utf8"));
+      assert.equal(summary.objectCount, 9);
+      assert.equal(summary.aggregate.failedPartitions, 0, label);
+      assert.equal(summary.aggregate.deferredPartitions, 0, label);
+      assert.equal(
+        summary.aggregate.pairsScreened + summary.aggregate.pairsPrefiltered,
+        36,
+        `${label}: N(N-1)/2 pairs`,
+      );
+      return summary;
+    };
+    const whole = await run("whole", ["--partition-size", "9"]);
+    assert.equal(whole.aggregate.partitions, 1);
+    assert.ok(whole.aggregate.conjunctionsFound > 0, "the window has conjunctions");
+    const orderedPrimary = await run("ordered-primary", ["--partition-size", "2"]);
+    assert.equal(orderedPrimary.partitionMode, "ordered-primary");
+    assert.equal(orderedPrimary.aggregate.partitions, 5);
+    assert.equal(orderedPrimary.aggregate.conjunctionsFound, whole.aggregate.conjunctionsFound);
+    const blockPairs = await run("block-pairs", ["--catalog-block-size", "2"]);
+    assert.equal(blockPairs.partitionMode, "catalog-block-pair");
+    assert.equal(blockPairs.aggregate.partitions, 15);
+    assert.equal(blockPairs.aggregate.conjunctionsFound, whole.aggregate.conjunctionsFound);
+  },
+);
+
 test(
   "partitioned SDN OMM runner can execute catalog block-pair shards",
   { timeout: 30000 },
@@ -977,7 +1149,7 @@ test(
       await rm(tempDir, { recursive: true, force: true });
     });
 
-    const flatc = await FlatcRunner.init();
+    const flatc = await createFlatcRunner();
     const schema = await ommSchema();
     const records = [];
     for (let index = 0; index < 6; index++) {

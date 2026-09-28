@@ -154,6 +154,9 @@ export function eventInReferenceUnits(e) {
 }
 // FlatBuffers stores no vector for an empty one: a catalog chunk that found no
 // conjunctions decodes without EVENTS, which the object API reads as length 0.
+// PAIRS_SCREENED counts the planned pairs the altitude prefilter kept and
+// PAIRS_PREFILTERED the ones it dropped, so the planned pairs are their sum.
 export function catalogInReferenceUnits(r) {
-  return { objectsParsed: r.OBJECTS_PARSED, conjunctionsFound: r.CONJUNCTIONS_FOUND, conjunctions: (r.EVENTS ?? []).map(eventInReferenceUnits), stats: { totalObjects: r.STATISTICS?.TOTAL_OBJECTS, pairsScreened: r.STATISTICS?.PAIRS_SCREENED, failedPairs: r.STATISTICS?.FAILED_PAIRS } };
+  const s = r.STATISTICS;
+  return { objectsParsed: r.OBJECTS_PARSED, conjunctionsFound: r.CONJUNCTIONS_FOUND, conjunctions: (r.EVENTS ?? []).map(eventInReferenceUnits), stats: { totalObjects: s?.TOTAL_OBJECTS, pairsScreened: s?.PAIRS_SCREENED, pairsPrefiltered: s?.PAIRS_PREFILTERED, kdtreeCandidates: s?.KD_TREE_CANDIDATES, tcaRefined: s?.TCA_REFINED, propagations: s?.PROPAGATIONS, failedPairs: s?.FAILED_PAIRS } };
 }

@@ -126,6 +126,38 @@ This holds for SGP4 mean-element sources screened with `ALFANO_MAXIMUM`
 engine path (sampled or non-mean polynomial sources, other probability
 algorithms) still reports each pair's closest approach in the window.
 
+## Catalog size and partitioned runs
+
+One `screen_catalog` call screens its whole pair set inside the guest's linear
+memory, which is at most 2 GiB. The coarse pass keeps a record per encounter,
+so an all-vs-all call grows with the square of the object count and with the
+window: about 0.63 encounters per pair per day over a full catalog. Measured
+all-vs-all, one call, over a stride sample of a full CelesTrak GP catalog
+(31,807 objects, OrbPro's gallery `omm-cache.fb`), 2026-07-06 + 1 day, 5 km
+threshold, 60 s coarse step, 8 workers, Node V8 host:
+
+| Objects | Pairs | Encounters | Peak guest memory | Result |
+| ---: | ---: | ---: | ---: | --- |
+| 2,000 | 2.0 M | 1.3 M | 211 MiB | 181 conjunctions |
+| 4,000 | 8.0 M | 5.1 M | 596 MiB | 837 conjunctions |
+| 6,000 | 18.0 M | 11.3 M | 1,905 MiB | 1,890 conjunctions |
+| 7,000 | 24.5 M | 15.6 M | 1,503 MiB | 2,571 conjunctions |
+| 8,000 | 32.0 M | | | traps out of memory (`RuntimeError: unreachable`), also with 4 workers |
+
+So one call screens about 7,000 objects against each other per day of window,
+fewer for longer windows; past that the guest traps and its instance is lost.
+Peak memory is not monotone in the object count because the encounter tables
+grow by doubling.
+
+Screen larger catalogs with the partitioned runner,
+`scripts/run-sdn-omm-partitioned-screen-catalog.mjs`, and
+`--catalog-block-size B` ([partition runs](docs/celestrak-full-catalog-partitions.md)):
+each invocation carries one block pair, at most `2B` objects and `B * B` pairs,
+and the run screens every pair of the catalog exactly once. Keep `2B` well
+inside the single-call figure for the window (`B = 1000` for one day). The
+runner's default ordered-primary mode (`--partition-size`) also screens every
+pair once, but every invocation carries the whole catalog.
+
 Authoritative numerical tests include the committed CelesTrak SOCRATES snapshot,
 closed-form constant-velocity encounters, the Gaussian/Rayleigh probability
 integral, and native published Orekit probability and CDM fixtures. Each

@@ -16,9 +16,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { FlatcRunner } from "flatc-wasm";
 import { loadModule } from "space-data-module-sdk/host/isomorphic";
-import { encodeCqr, decodeCqr, catalogRequest, catalogInReferenceUnits } from "../tests/lib/cqr.mjs";
+import { createFlatcRunner, encodeCqr, decodeCqr, catalogRequest, catalogInReferenceUnits } from "../tests/lib/cqr.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, "..");
@@ -183,6 +182,23 @@ export function sliceUint32beBlockPair(buffer, range) {
   };
 }
 
+// The catalog frames and the order ranges one partition sends: a block pair
+// sends only its one or two blocks; an ordered-primary partition sends the
+// whole ordered catalog.
+export function partitionInvocation(catalogPayload, objectCount, range, partitionMode) {
+  if (partitionMode === "catalog-block-pair") {
+    return sliceUint32beBlockPair(catalogPayload, range);
+  }
+  return {
+    payload: catalogPayload,
+    objectCount,
+    primaryStartOrderIndex: range.startOrderIndex,
+    primaryEndOrderIndex: range.endOrderIndex,
+    secondaryStartOrderIndex: range.secondaryStartOrderIndex,
+    secondaryEndOrderIndex: range.secondaryEndOrderIndex,
+  };
+}
+
 function makeRange(start, end, step) {
   const ranges = [];
   let partitionIndex = 0;
@@ -219,13 +235,23 @@ function makeCatalogBlockPairRanges(start, end, step) {
   return ranges;
 }
 
+// On OMM catalog frames with ALFANO_MAXIMUM (the only request this runner
+// makes), screen_catalog screens every unordered pair of distinct objects with
+// one object in the primary range and the other in the secondary range, once,
+// however the ranges overlap; an empty secondary range means the pairs within
+// the primary range only (plugin_invoke_bridge.cpp screenSources). So every
+// partition names its secondary range: defaulting it to empty dropped every
+// pair that crosses a partition boundary.
 function createScreenCatalogRequest(flatc, options, range, orderedCatalogIndices) {
-  const startOrderIndex =
-    range.primaryStartOrderIndex ?? (Array.isArray(range) ? range[0] : range.startOrderIndex);
-  const endOrderIndex =
-    range.primaryEndOrderIndex ?? (Array.isArray(range) ? range[1] : range.endOrderIndex);
-  const secondaryStartOrderIndex = range.secondaryStartOrderIndex ?? 0;
-  const secondaryEndOrderIndex = range.secondaryEndOrderIndex ?? 0;
+  const {
+    primaryStartOrderIndex: startOrderIndex,
+    primaryEndOrderIndex: endOrderIndex,
+    secondaryStartOrderIndex,
+    secondaryEndOrderIndex,
+  } = range;
+  if (![startOrderIndex, endOrderIndex, secondaryStartOrderIndex, secondaryEndOrderIndex].every(Number.isInteger)) {
+    throw new Error("A partition request needs explicit primary and secondary order ranges.");
+  }
   return encodeCqr(flatc, catalogRequest({
       selectedSources: [
         {
@@ -678,6 +704,11 @@ function checkpointFileName(partition) {
   }
   const start = String(partition.startOrderIndex).padStart(6, "0");
   const end = String(partition.endOrderIndex).padStart(6, "0");
+  if (partition.secondaryStartOrderIndex !== undefined) {
+    const secondaryStart = String(partition.secondaryStartOrderIndex).padStart(6, "0");
+    const secondaryEnd = String(partition.secondaryEndOrderIndex).padStart(6, "0");
+    return `partition-${index}-${start}-${end}-${secondaryStart}-${secondaryEnd}.json`;
+  }
   return `partition-${index}-${start}-${end}.json`;
 }
 
@@ -686,6 +717,17 @@ function checkpointKey(partition) {
     return [
       partition.primaryStartOrderIndex,
       partition.primaryEndOrderIndex,
+      partition.secondaryStartOrderIndex,
+      partition.secondaryEndOrderIndex,
+    ].join(":");
+  }
+  // An ordered-primary checkpoint without a secondary range was written when
+  // that mode screened only the pairs inside each partition. Its key matches
+  // no planned range, so a resumed run screens that partition again.
+  if (partition.secondaryStartOrderIndex !== undefined) {
+    return [
+      partition.startOrderIndex,
+      partition.endOrderIndex,
       partition.secondaryStartOrderIndex,
       partition.secondaryEndOrderIndex,
     ].join(":");
@@ -1492,9 +1534,18 @@ export function planPartitionWork({
     throw new Error("--max-partitions must be greater than or equal to zero.");
   }
 
-  const allRanges = makeRange(startOrderIndex, endOrderIndex, partitionSize).filter(
-    (range) => range.partitionIndex % partitionShardCount === partitionShardIndex,
-  );
+  // Ordered-primary partition k screens its objects against every object from
+  // its own start to the end of the ordered range: the pair {i, j}, i < j, is
+  // screened by the partition that holds i, and by no other.
+  const allRanges = makeRange(startOrderIndex, endOrderIndex, partitionSize)
+    .map((range) => ({
+      ...range,
+      secondaryStartOrderIndex: range.startOrderIndex,
+      secondaryEndOrderIndex: endOrderIndex,
+    }))
+    .filter(
+      (range) => range.partitionIndex % partitionShardCount === partitionShardIndex,
+    );
   const completedByRange = new Map(
     completedPartitions.map((partition) => [checkpointKey(partition), partition]),
   );
@@ -1643,10 +1694,6 @@ export async function runPartitionedSdnOmmCatalog(options) {
           completedPartitions: checkpointState.completedPartitions,
         });
 
-  const orderedCatalogIndices =
-    partitionMode === "catalog-block-pair"
-      ? null
-      : Array.from({ length: objectCount }, (_, index) => index);
   const partitions = [...workPlan.completedPartitions];
   const runtimeDeferredRanges = [];
   const startedAt = performance.now();
@@ -1663,38 +1710,20 @@ export async function runPartitionedSdnOmmCatalog(options) {
       });
     }
     const flatc =
-      workPlan.pendingRanges.length > 0 ? await FlatcRunner.init() : null;
+      workPlan.pendingRanges.length > 0 ? await createFlatcRunner() : null;
     for (let rangeIndex = 0; rangeIndex < workPlan.pendingRanges.length; rangeIndex += 1) {
       const range = workPlan.pendingRanges[rangeIndex];
-      const partitionCatalog =
-        partitionMode === "catalog-block-pair"
-          ? sliceUint32beBlockPair(catalogPayload, range)
-          : {
-              payload: catalogPayload,
-              objectCount,
-              primaryStartOrderIndex: range.startOrderIndex,
-              primaryEndOrderIndex: range.endOrderIndex,
-              secondaryStartOrderIndex: 0,
-              secondaryEndOrderIndex: 0,
-            };
-      const partitionOrderedCatalogIndices = Array.from(
-        { length: partitionCatalog.objectCount },
-        (_, index) => index,
+      const partitionCatalog = partitionInvocation(
+        catalogPayload,
+        objectCount,
+        range,
+        partitionMode,
       );
-      const requestRange =
-        partitionMode === "catalog-block-pair"
-          ? {
-              primaryStartOrderIndex: partitionCatalog.primaryStartOrderIndex,
-              primaryEndOrderIndex: partitionCatalog.primaryEndOrderIndex,
-              secondaryStartOrderIndex: partitionCatalog.secondaryStartOrderIndex,
-              secondaryEndOrderIndex: partitionCatalog.secondaryEndOrderIndex,
-            }
-          : range;
       const requestPayload = createScreenCatalogRequest(
         flatc,
         options,
-        requestRange,
-        orderedCatalogIndices ?? partitionOrderedCatalogIndices,
+        partitionCatalog,
+        Array.from({ length: partitionCatalog.objectCount }, (_, index) => index),
       );
       const partitionStartedAt = performance.now();
       let response;

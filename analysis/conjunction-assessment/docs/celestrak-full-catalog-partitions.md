@@ -25,6 +25,24 @@ node scripts/run-sdn-omm-partitioned-screen-catalog.mjs \
 `--resume` until the summary reports `"complete": true` and
 `aggregate.failedPartitions` is `0`.
 
+This ordered-primary mode screens partition `[start, end)` against every
+object from `start` to the end of the ordered range, so the pair `{i, j}`
+(`i < j`) is screened once, by the partition that holds `i`. Each partition
+records that secondary range (`secondaryStartOrderIndex`,
+`secondaryEndOrderIndex`) and names its checkpoint
+`partition-<index>-<start>-<end>-<start>-<rangeEnd>.json`. Until 2026-09-28 the
+mode sent an empty secondary range, which screened only the pairs inside each
+partition; `--resume` does not reuse a checkpoint written that way
+(`partition-<index>-<start>-<end>.json`), it screens the partition again. Every
+invocation still carries the whole catalog and screens `partition-size` objects
+against the rest of it, so the work per partition grows with the catalog; for
+full catalogs use the block-pair mode below.
+
+`aggregate.pairsScreened + aggregate.pairsPrefiltered` is the number of pairs
+the run planned (the altitude prefilter drops the second kind before the coarse
+pass). A complete run over `N` objects plans `N * (N - 1) / 2` pairs in either
+mode.
+
 ## Catalog Windows
 
 For launch verification against a production-scale export, the runner can slice
@@ -70,8 +88,9 @@ files and retry failed or missing partitions.
 
 ## Exact Block-Pair Mode
 
-For production-scale exact coverage, prefer catalog block pairs over the legacy
-ordered-primary partition mode:
+For production-scale catalogs, prefer catalog block pairs over the
+ordered-primary partition mode; both screen every pair once, but a block pair
+sends only its own blocks:
 
 ```bash
 node scripts/run-sdn-omm-partitioned-screen-catalog.mjs \
