@@ -13,13 +13,22 @@ import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import * as flatbuffers from "flatbuffers";
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
+import {
+  CelestialFrame,
+  CelestialFrameWrapper,
+  OMM,
+  RFMUnion,
+} from "spacedatastandards.org/lib/js/OMM/main.js";
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
-const STANDARDS_ROOT = fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
+const STANDARDS_ROOT =
+  process.env.SPACE_DATA_STANDARDS_ROOT ??
+  fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -278,6 +287,39 @@ test("parse_gp produces OMM + MPE streams with full attribution", async (t) => {
 
   const raw = outputs.get("raw");
   assert.deepEqual(Buffer.from(raw.payload), Buffer.from(GP_CSV), "raw payload passthrough");
+});
+
+// CelesTrak GP data are SGP4 mean elements in TEME of date: the GP product
+// defines them that way and CelesTrak's own OMM KVN/XML for the same records
+// states REF_FRAME = TEME. Every GP OMM therefore declares Earth + TEME of
+// date, read here through the published SDS JavaScript bindings (SDS RFM
+// CelestialFrame.TEMEOFDATE, SANA OID 1.3.112.4.57.2.25). An OMM without a
+// frame is refused by SGP4 consumers such as conjunction-assessment.
+test("parse_gp declares CENTER_NAME EARTH and REFERENCE_FRAME TEME of date on every OMM", async (t) => {
+  const harness = await createHarness(t);
+  const response = await harness.invoke({
+    methodId: "parse_gp",
+    inputs: [jsonInput("job", GP_JOB), jsonInput("response", httpResponse(GP_CSV))],
+  });
+  assert.equal(response.statusCode, 0, response.errorMessage);
+  const ommRecords = splitStream(outputsByPort(response).get("omm_records").payload);
+  assert.equal(ommRecords.length, 2);
+  const expected = [
+    { norad: 25544, name: "ISS (ZARYA)" },
+    { norad: 40909, name: "STARLINK-1001" },
+  ];
+  ommRecords.forEach((record, index) => {
+    const omm = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(Uint8Array.from(record)));
+    assert.equal(omm.NORAD_CAT_ID(), expected[index].norad);
+    assert.equal(omm.OBJECT_NAME(), expected[index].name);
+    assert.equal(omm.CENTER_NAME(), "EARTH");
+    const frame = omm.REFERENCE_FRAME();
+    assert.ok(frame, `NORAD ${expected[index].norad}: REFERENCE_FRAME must be present`);
+    assert.equal(frame.REFERENCE_FRAME_type(), RFMUnion.CelestialFrameWrapper);
+    const celestial = frame.REFERENCE_FRAME(new CelestialFrameWrapper());
+    assert.equal(celestial.frame(), CelestialFrame.TEMEOFDATE);
+    assert.equal(CelestialFrame[celestial.frame()], "TEMEOFDATE");
+  });
 });
 
 test("parse_gp forwards the job's licence and origin into the ingest meta", async (t) => {

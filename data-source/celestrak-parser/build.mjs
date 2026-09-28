@@ -9,9 +9,14 @@ const manifestPath = path.join(packageRoot, "plugin-manifest.json");
 const sourcePath = path.join(packageRoot, "src", "celestrak_parser_module.cpp");
 const distRoot = path.join(packageRoot, "dist");
 const outputPath = path.join(distRoot, "isomorphic", "module.wasm");
-const standardsRoot = fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
+// The SDS checkout that supplies the generated C++ headers: the sibling of
+// this repository by default, or SPACE_DATA_STANDARDS_ROOT when the package is
+// built from a worktree that has no sibling checkout.
+const standardsRoot =
+  process.env.SPACE_DATA_STANDARDS_ROOT ??
+  fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
 
-process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
+process.env.SPACE_DATA_STANDARDS_ROOT = standardsRoot;
 
 // flatc emits every SDS header with the same include guard
 // (FLATBUFFERS_GENERATED_MAIN_H_) and a self-named `#include

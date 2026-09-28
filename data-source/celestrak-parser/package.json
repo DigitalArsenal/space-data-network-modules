@@ -14,9 +14,13 @@
   "scripts": {
     "build": "node build.mjs",
     "test": "node --test tests/*.test.mjs",
-    "test:sdk-compat": "node --test tests/sdk_compat.test.mjs"
+    "test:sdk-compat": "node --test tests/sdk_compat.test.mjs",
+    "test:parity": "SDN_RUN_CELESTRAK_PARSER_PARITY=1 node --test tests/parity.test.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.8.24"
+    "esbuild": "0.28.2",
+    "flatbuffers": "25.9.23",
+    "space-data-module-sdk": "0.8.24",
+    "spacedatastandards.org": "1.220.0"
   }
 }

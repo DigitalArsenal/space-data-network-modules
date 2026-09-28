@@ -954,9 +954,11 @@ EphemerisType normalize_ephemeris_type(const std::string& raw) {
     return out;
 }
 
-// internal/sds OMMBuilder.Build() — identical string-creation and add order;
-// records are size-prefixed in the builder and the prefix is stripped for the
-// stream (the store takes unprefixed record bytes; the stream re-prefixes).
+// internal/sds OMMBuilder.Build() — identical string-creation and add order,
+// plus the REFERENCE_FRAME (TEME of date) that the Go builder never wrote and
+// that every SGP4 consumer needs; records are size-prefixed in the builder and
+// the prefix is stripped for the stream (the store takes unprefixed record
+// bytes; the stream re-prefixes).
 // SGP4 propagation terms + element-set identity follow CLASSIFICATION_TYPE in
 // the Go add order; zero values are slot defaults and are omitted, matching
 // the Go builder's unconditional adds of zero-initialized fields.
@@ -975,6 +977,14 @@ std::vector<uint8_t> build_omm_record(const std::string& object_name, const std:
     const auto object_id_off = fbb.CreateString(object_id);
     const auto epoch_off = fbb.CreateString(epoch_rfc3339);
     const auto center_name_off = fbb.CreateString("EARTH");
+    // CelesTrak GP elements are SGP4 mean elements in TEME of date: the GP
+    // product defines them that way, and CelesTrak's own OMM KVN/XML for the
+    // same data states REF_FRAME = TEME. The frame is the source's contract,
+    // not an inference, so every GP record declares it. Only parse_gp builds
+    // OMM records.
+    const auto reference_frame_off = CreateRFM(
+        fbb, RFMUnion_CelestialFrameWrapper,
+        CreateCelestialFrameWrapper(fbb, CelestialFrame_TEMEOFDATE).Union());
     const auto creation_date_off = fbb.CreateString(creation_date);
     // Honest CCSDS ORIGINATOR (runner parity: gpOriginatorForSource) — the
     // sds test-builder default "SDN-TEST" must never reach production bytes.
@@ -994,6 +1004,7 @@ std::vector<uint8_t> build_omm_record(const std::string& object_name, const std:
     builder.add_ARG_OF_PERICENTER(argp);
     builder.add_MEAN_ANOMALY(mean_anomaly);
     builder.add_CENTER_NAME(center_name_off);
+    builder.add_REFERENCE_FRAME(reference_frame_off);
     builder.add_CREATION_DATE(creation_date_off);
     builder.add_ORIGINATOR(originator_off);
     builder.add_CLASSIFICATION_TYPE(classification_off);
