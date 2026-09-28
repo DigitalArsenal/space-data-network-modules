@@ -1,0 +1,102 @@
+{
+  "pluginId": "com.digitalarsenal.analysis.launch-cola",
+  "name": "Launch collision avoidance screening",
+  "version": "0.1.0",
+  "description": "Screens a launch window: every liftoff time on a grid, every launched segment against every orbiting object, spherical or radial/in-track/cross-track ellipsoid criteria per object class. Returns prohibited liftoff spans and the worst approach of each run.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Deterministic geometry over caller-supplied Earth-fixed ephemerides. No host calls, threads, propagation or network access."
+  },
+  "schemasUsed": [
+    {
+      "schemaName": "CQR.fbs",
+      "fileIdentifier": "$CQR",
+      "rootTypeName": "CQR"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "screen_launch_window",
+      "displayName": "Screen launch window",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cqr-launch",
+              "allowedTypes": [
+                {
+                  "schemaName": "CQR.fbs",
+                  "fileIdentifier": "$CQR",
+                  "rootTypeName": "CQR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$CQR with LAUNCH_REQUEST: window, liftoff step, segments (Earth-fixed OEM relative to the nominal liftoff), orbiting objects as Earth-fixed ephemerides, one criterion per object class."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cqr-launch",
+              "allowedTypes": [
+                {
+                  "schemaName": "CQR.fbs",
+                  "fileIdentifier": "$CQR",
+                  "rootTypeName": "CQR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$CQR with LAUNCH_RESULT: merged prohibited liftoff spans and the worst approach of every run."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Closure intervals as ISO 8601 text for the launch notice, with counts; the scientific result is the $CQR frame."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Closure intervals as ISO 8601 text for the launch notice, with counts; the scientific result is the $CQR frame."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

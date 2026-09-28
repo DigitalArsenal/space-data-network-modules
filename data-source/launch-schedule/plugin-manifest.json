@@ -1,0 +1,245 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.launch-schedule",
+  "name": "Upcoming launch notices",
+  "version": "0.1.0",
+  "description": "Fetch-plan and normalization nodes for upcoming-launch notices from a public launch registry. Emits binary LDM with each launch window; generic host HTTP, scheduling, storage and publication supply network transport.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Bounded deterministic request planning and binary normalization of one registry page. No host calls, threads or network access."
+  },
+  "methods": [
+    {
+      "methodId": "plan_launches",
+      "displayName": "Plan launch registry request",
+      "inputPorts": [
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "config-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Explicit access tier (anonymous) and page size (1-100 upcoming launches)."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Explicit access tier (anonymous) and page size (1-100 upcoming launches)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "GET descriptor for the generic HTTP host."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "GET descriptor for the generic HTTP host."
+        },
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "job-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Canonical request attribution and page size used to bind parsing to the request."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Canonical request attribution and page size used to bind parsing to the request."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "parse_launches",
+      "displayName": "Normalize launch notices",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "job-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The unmodified launch plan emitted by plan_launches; parsing refuses a response whose job differs from its canonical plan."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The unmodified launch plan emitted by plan_launches; parsing refuses a response whose job differs from its canonical plan."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "response-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/vnd.sdn.http-raw-body-v1",
+                "detail": "Bounded raw-body-v1 response from hostcap/http-request: $HRB, int32 status, upstream JSON bytes."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Bounded raw-body-v1 response from hostcap/http-request: $HRB, int32 status, upstream JSON bytes."
+        },
+        {
+          "portId": "receipt",
+          "acceptedTypeSets": [
+            {
+              "setId": "receipt-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Authenticated host receipt: integer retrieved_at_ms and producer_peer_id."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Authenticated host receipt: integer retrieved_at_ms and producer_peer_id."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "launch-notices",
+              "allowedTypes": [
+                {
+                  "schemaName": "LDM.fbs",
+                  "fileIdentifier": "$LDM",
+                  "rootTypeName": "LDM"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Size-prefixed binary LDM stream, one per upcoming launch with its NET and window."
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "meta-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Attribution metadata for generic storage.ingest_with_source. The host adds a cryptographic batch ID."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Attribution metadata for generic storage.ingest_with_source. The host adds a cryptographic batch ID."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Record counts, launches skipped for unsupported NET precision and retrieval time; never a dataset record."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Record counts, launches skipped for unsupported NET precision and retrieval time; never a dataset record."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "LDM.fbs",
+      "fileIdentifier": "$LDM",
+      "rootTypeName": "LDM"
+    }
+  ]
+}
