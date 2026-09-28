@@ -1773,88 +1773,158 @@
         "inferenceHazard": false
       }
     },
-    "flows/celestrak-ingest/dist/gp/isomorphic/module.wasm": {
-      "sha256": "ca625557990ce63357d7362bd72d37c473484f6394bb512ffa4d34062ff53563",
-      "bytes": 150180,
+    "flows/celestrak-ingest/dist/eop/isomorphic/module.wasm": {
+      "sha256": "a64e0cb0e0b78f374c936a483d2a89a66292380add6ff22dd4eea31ccbc032ca",
+      "bytes": 161537,
       "module": null,
-      "lastCommit": "e4befccaab758f775aa6a6f9813c54f68cc3c23a",
-      "lastCommitDate": "2026-07-29T07:47:34-04:00",
+      "lastCommit": "0ce743f799d9902b77ec6b6989a55156a4937f50",
+      "lastCommitDate": "2026-09-03T22:37:55-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "d8cfc6ea11504075ae0fbbf7f3bcb9e711174a4e",
-        "sdkCommit": "3acfb18a23a158182e36d475add405e8ba62b20c"
-      },
+      "sdkPinAtCommit": null,
+      "declaration": null
+    },
+    "flows/celestrak-ingest/dist/eop/runtime.wasm": {
+      "sha256": "a64e0cb0e0b78f374c936a483d2a89a66292380add6ff22dd4eea31ccbc032ca",
+      "bytes": 161537,
+      "module": null,
+      "lastCommit": "0ce743f799d9902b77ec6b6989a55156a4937f50",
+      "lastCommitDate": "2026-09-03T22:37:55-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": null
+    },
+    "flows/celestrak-ingest/dist/gp/isomorphic/module.wasm": {
+      "sha256": "b72d7fa60ca7974777059fb951ff50c973b35116f11e8b3a0359f12943566cba",
+      "bytes": 168975,
+      "module": null,
+      "lastCommit": "a8fff80976df1ebb3211ac23ca38931447d9f1de",
+      "lastCommitDate": "2026-09-28T18:27:15-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
       "declaration": null
     },
     "flows/celestrak-ingest/dist/gp/runtime.wasm": {
-      "sha256": "ca625557990ce63357d7362bd72d37c473484f6394bb512ffa4d34062ff53563",
-      "bytes": 150180,
+      "sha256": "b72d7fa60ca7974777059fb951ff50c973b35116f11e8b3a0359f12943566cba",
+      "bytes": 168975,
       "module": null,
-      "lastCommit": "e4befccaab758f775aa6a6f9813c54f68cc3c23a",
-      "lastCommitDate": "2026-07-29T07:47:34-04:00",
+      "lastCommit": "a8fff80976df1ebb3211ac23ca38931447d9f1de",
+      "lastCommitDate": "2026-09-28T18:27:15-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "d8cfc6ea11504075ae0fbbf7f3bcb9e711174a4e",
-        "sdkCommit": "3acfb18a23a158182e36d475add405e8ba62b20c"
-      },
+      "sdkPinAtCommit": null,
       "declaration": null
     },
     "flows/celestrak-ingest/dist/satcat/isomorphic/module.wasm": {
-      "sha256": "060dc775fc08f19180089007032dfdfbd9dae8a55d3bc2f17bfb0cb7563080c6",
-      "bytes": 160267,
+      "sha256": "1f78b5b0eb8c1f120d8ca1531cdccbd7c0aed0121cfc2b669bd9925026b61eec",
+      "bytes": 179854,
       "module": null,
-      "lastCommit": "e4befccaab758f775aa6a6f9813c54f68cc3c23a",
-      "lastCommitDate": "2026-07-29T07:47:34-04:00",
+      "lastCommit": "0ce743f799d9902b77ec6b6989a55156a4937f50",
+      "lastCommitDate": "2026-09-03T22:37:55-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "d8cfc6ea11504075ae0fbbf7f3bcb9e711174a4e",
-        "sdkCommit": "3acfb18a23a158182e36d475add405e8ba62b20c"
-      },
+      "sdkPinAtCommit": null,
       "declaration": null
     },
     "flows/celestrak-ingest/dist/satcat/runtime.wasm": {
-      "sha256": "060dc775fc08f19180089007032dfdfbd9dae8a55d3bc2f17bfb0cb7563080c6",
-      "bytes": 160267,
+      "sha256": "1f78b5b0eb8c1f120d8ca1531cdccbd7c0aed0121cfc2b669bd9925026b61eec",
+      "bytes": 179854,
       "module": null,
-      "lastCommit": "e4befccaab758f775aa6a6f9813c54f68cc3c23a",
-      "lastCommitDate": "2026-07-29T07:47:34-04:00",
+      "lastCommit": "0ce743f799d9902b77ec6b6989a55156a4937f50",
+      "lastCommitDate": "2026-09-03T22:37:55-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "d8cfc6ea11504075ae0fbbf7f3bcb9e711174a4e",
-        "sdkCommit": "3acfb18a23a158182e36d475add405e8ba62b20c"
-      },
+      "sdkPinAtCommit": null,
+      "declaration": null
+    },
+    "flows/celestrak-ingest/dist/socrates/isomorphic/module.wasm": {
+      "sha256": "e914448695a55d71099e8b9b14e2a34947d417d7941c472122d38874719e57dd",
+      "bytes": 171278,
+      "module": null,
+      "lastCommit": "0ce743f799d9902b77ec6b6989a55156a4937f50",
+      "lastCommitDate": "2026-09-03T22:37:55-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": null
+    },
+    "flows/celestrak-ingest/dist/socrates/runtime.wasm": {
+      "sha256": "e914448695a55d71099e8b9b14e2a34947d417d7941c472122d38874719e57dd",
+      "bytes": 171278,
+      "module": null,
+      "lastCommit": "0ce743f799d9902b77ec6b6989a55156a4937f50",
+      "lastCommitDate": "2026-09-03T22:37:55-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
       "declaration": null
     },
     "flows/celestrak-ingest/dist/spw/isomorphic/module.wasm": {
-      "sha256": "59c609f8c840d9bc8175686951266451c7da0c136a70d146ddad5281ed7485aa",
-      "bytes": 142529,
+      "sha256": "3d07c2190b258aa9db96df83a32446291ab72d4cd62e7f47db316274b4167687",
+      "bytes": 160131,
       "module": null,
-      "lastCommit": "e4befccaab758f775aa6a6f9813c54f68cc3c23a",
-      "lastCommitDate": "2026-07-29T07:47:34-04:00",
+      "lastCommit": "0ce743f799d9902b77ec6b6989a55156a4937f50",
+      "lastCommitDate": "2026-09-03T22:37:55-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "d8cfc6ea11504075ae0fbbf7f3bcb9e711174a4e",
-        "sdkCommit": "3acfb18a23a158182e36d475add405e8ba62b20c"
-      },
+      "sdkPinAtCommit": null,
       "declaration": null
     },
     "flows/celestrak-ingest/dist/spw/runtime.wasm": {
-      "sha256": "59c609f8c840d9bc8175686951266451c7da0c136a70d146ddad5281ed7485aa",
-      "bytes": 142529,
+      "sha256": "3d07c2190b258aa9db96df83a32446291ab72d4cd62e7f47db316274b4167687",
+      "bytes": 160131,
       "module": null,
-      "lastCommit": "e4befccaab758f775aa6a6f9813c54f68cc3c23a",
-      "lastCommitDate": "2026-07-29T07:47:34-04:00",
+      "lastCommit": "0ce743f799d9902b77ec6b6989a55156a4937f50",
+      "lastCommitDate": "2026-09-03T22:37:55-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "d8cfc6ea11504075ae0fbbf7f3bcb9e711174a4e",
-        "sdkCommit": "3acfb18a23a158182e36d475add405e8ba62b20c"
-      },
+      "sdkPinAtCommit": null,
+      "declaration": null
+    },
+    "flows/celestrak-reference/dist/gp-groups/isomorphic/module.wasm": {
+      "sha256": "9d16ca5a176c5daa98a639282fd9ded604e9054aaec3fce4390c9c7285c69fbf",
+      "bytes": 189387,
+      "module": null,
+      "lastCommit": "a8fff80976df1ebb3211ac23ca38931447d9f1de",
+      "lastCommitDate": "2026-09-28T18:27:15-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": null
+    },
+    "flows/celestrak-reference/dist/gp-groups/runtime.wasm": {
+      "sha256": "9d16ca5a176c5daa98a639282fd9ded604e9054aaec3fce4390c9c7285c69fbf",
+      "bytes": 189387,
+      "module": null,
+      "lastCommit": "a8fff80976df1ebb3211ac23ca38931447d9f1de",
+      "lastCommitDate": "2026-09-28T18:27:15-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": null
+    },
+    "flows/celestrak-reference/dist/satcat-reference/isomorphic/module.wasm": {
+      "sha256": "10a9c028efb06dfc2afb0feef80463bf007398c749355efd846cf249cae148f1",
+      "bytes": 157685,
+      "module": null,
+      "lastCommit": "4837d818846033fafb4c4e841c517c685ce93035",
+      "lastCommitDate": "2026-09-03T22:33:31-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": null
+    },
+    "flows/celestrak-reference/dist/satcat-reference/runtime.wasm": {
+      "sha256": "10a9c028efb06dfc2afb0feef80463bf007398c749355efd846cf249cae148f1",
+      "bytes": 157685,
+      "module": null,
+      "lastCommit": "4837d818846033fafb4c4e841c517c685ce93035",
+      "lastCommitDate": "2026-09-03T22:33:31-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
       "declaration": null
     },
     "flows/cellular-network-aggregate/dist/isomorphic/module.wasm": {
