@@ -16,6 +16,6 @@
     "test": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.8.21"
+    "space-data-module-sdk": "0.8.23"
   }
 }

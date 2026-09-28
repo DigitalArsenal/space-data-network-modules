@@ -13,7 +13,7 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "space-data-module-sdk": "0.8.21"
+    "space-data-module-sdk": "0.8.23"
   },
   "private": true
 }
