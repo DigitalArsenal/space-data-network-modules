@@ -743,36 +743,6 @@ struct PendingCatalog {
   // chunk on the `excluded` port.
   std::vector<std::vector<uint8_t>> excluded;
 };
-// UTC calendar text of a Julian date rounded to the millisecond, from integer
-// civil-from-days arithmetic (H. Hinnant, "chrono-Compatible Low-Level Date
-// Algorithms"). Coarse epochs sit on whole seconds, so rounding first keeps
-// e.g. 21:37:00 from printing as 21:36:60.000.
-std::string utcIsoMillis(double jd) {
-  const int64_t ms =
-      static_cast<int64_t>(std::llround((jd - 2440587.5) * 86400000.0));
-  int64_t days = ms / 86400000, rem = ms % 86400000;
-  if (rem < 0) {
-    rem += 86400000;
-    --days;
-  }
-  days += 719468;
-  const int64_t era = (days >= 0 ? days : days - 146096) / 146097;
-  const int64_t doe = days - era * 146097;
-  const int64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-  const int64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-  const int64_t mp = (5 * doy + 2) / 153;
-  const int64_t day = doy - (153 * mp + 2) / 5 + 1;
-  const int64_t month = mp < 10 ? mp + 3 : mp - 9;
-  const int64_t year = yoe + era * 400 + (month <= 2 ? 1 : 0);
-  char text[32];
-  std::snprintf(text, sizeof text, "%04lld-%02lld-%02lldT%02lld:%02lld:%02lld.%03lldZ",
-                static_cast<long long>(year), static_cast<long long>(month),
-                static_cast<long long>(day), static_cast<long long>(rem / 3600000),
-                static_cast<long long>(rem / 60000 % 60),
-                static_cast<long long>(rem / 1000 % 60),
-                static_cast<long long>(rem % 1000));
-  return text;
-}
 // One $OMM per excluded object: the mean elements the screening was given
 // (already verified as SGP4 mean elements, UTC, Earth TEME), with COMMENT
 // stating that the object was excluded, the earliest coarse epoch whose
@@ -793,7 +763,7 @@ std::vector<uint8_t> excludedRecord(const Source &source, const ExcludedObject &
   o.MEAN_ELEMENT_THEORY = meanElementSource::SGP4;
   o.COMMENT = "Excluded from conjunction screening: SGP4 cannot propagate this "
               "object over the screening window. First failure at " +
-              utcIsoMillis(x.first_failure_jd) + ": " + x.reason;
+              jd_to_iso(x.first_failure_jd) + ": " + x.reason;
   o.EPOCH = g.epoch_iso;
   o.MEAN_MOTION = g.mean_motion;
   o.ECCENTRICITY = g.eccentricity;

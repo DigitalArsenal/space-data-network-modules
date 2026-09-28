@@ -100,7 +100,9 @@ for(const run of observed){
   }
   if(run.caseId==='centered-isotropic-pc'){const p=result.PROBABILITY_RESULT;assert.equal(p.ALGORITHM,'LAAS_2015');assert.equal(p.CONVERGED,true);assert.ok(Math.abs(p.PROBABILITY-.00498752080731768)<=1e-12);return;}
   const cmp=compareToReference(catalogInReferenceUnits(result.CATALOG_RESULT),referenceEvents);
-  assert.equal(cmp.counts.missingCount,0);assert.equal(cmp.counts.extraCount,0);assert.equal(result.CATALOG_RESULT.STATISTICS.FAILED_PAIRS,0);
+  assert.equal(cmp.counts.missingCount,0);assert.equal(cmp.counts.otherPairCount,0);assert.equal(result.CATALOG_RESULT.STATISTICS.FAILED_PAIRS,0);
+  // Other close approaches of the reported pairs (SOCRATES's top three is not its full listing) must be within the threshold.
+  for(const e of cmp.otherTcas)assert.ok(e.minRangeKm<=T.screening.socrates.thresholdKm);
   for(const m of cmp.matched){assert.ok(m.deltas.tcaDeltaSec<=T.tca.NLRV.hardFailSec);assert.ok(m.deltas.missDeltaM<=T.missDistance.socratesHardFailM);assert.ok(m.deltas.relSpeedDeltaMS<=T.relSpeed.hardFailMS);}
   numerical.push({lane:run.lane,workers:run.threadCount,sha256:createHash('sha256').update(run.stdout).digest('hex'),deltas:cmp.matched.map(m=>({pair:m.key,...m.deltas}))});
   report.threadEvidence.push({lane:run.lane,workers:run.threadCount,spawnCount:run.spawnCount,hardwareConcurrency:run.hardwareConcurrency});

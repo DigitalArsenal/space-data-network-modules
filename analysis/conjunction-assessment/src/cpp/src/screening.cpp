@@ -81,6 +81,148 @@ std::vector<ExcludedObject> excluded_list(
     return out;
 }
 
+// Coarse hits are kept per encounter, not per pair. An encounter is a maximal
+// run of consecutive coarse steps at which the pair is inside its coarse
+// radius; the orbits bring a pair together again and again over a window,
+// and each encounter is bracketed and refined on its own. (One record per
+// pair over the whole window bracketed all encounters together and refined
+// one of them, so a multi-day window reported at most one conjunction per
+// pair and, refining near the closest coarse sample, often not the real one.)
+// A worker scans a contiguous block of steps in increasing order, so a hit
+// either extends the pair's open run (its last hit was the previous step) or
+// closes that run and opens a new one.
+struct CoarseRunCollector {
+    std::unordered_map<uint64_t, CoarseHitRecord> open;
+    std::vector<CoarseHitRecord> closed;
+
+    void hit(uint32_t lo, uint32_t hi, int32_t step, double distance_km) {
+        auto& run = open[coarse_hit_key(lo, hi)];
+        if (run.best_step >= 0 && run.latest_step + 1 < step) {
+            closed.push_back(run);
+            run = CoarseHitRecord{};
+        }
+        if (run.best_step < 0) {
+            run.obj1_index = lo;
+            run.obj2_index = hi;
+        }
+        merge_coarse_hit(run, step, distance_km);
+    }
+
+    std::vector<CoarseHitRecord> finish() {
+        closed.reserve(closed.size() + open.size());
+        for (const auto& [key, run] : open) closed.push_back(run);
+        open.clear();
+        return std::move(closed);
+    }
+};
+
+uint64_t encounter_key(const CoarseHitRecord& hit) {
+    return coarse_hit_key(hit.obj1_index, hit.obj2_index);
+}
+
+// Joins runs of one pair that overlap or touch (runs of neighbouring worker
+// blocks or chunks) into maximal encounters, ordered by pair then time. The
+// result does not depend on how the steps were split among workers or chunks.
+std::vector<CoarseHitRecord> coalesce_encounters(std::vector<CoarseHitRecord> runs) {
+    std::sort(runs.begin(), runs.end(),
+              [](const CoarseHitRecord& a, const CoarseHitRecord& b) {
+                  const uint64_t ka = encounter_key(a);
+                  const uint64_t kb = encounter_key(b);
+                  if (ka != kb) return ka < kb;
+                  if (a.earliest_step != b.earliest_step) {
+                      return a.earliest_step < b.earliest_step;
+                  }
+                  return a.latest_step < b.latest_step;
+              });
+    size_t encounters = 0;
+    for (size_t i = 0; i < runs.size(); ++i) {
+        if (encounters > 0 &&
+            encounter_key(runs[encounters - 1]) == encounter_key(runs[i]) &&
+            runs[i].earliest_step <= runs[encounters - 1].latest_step + 1) {
+            merge_coarse_hit_record(runs[encounters - 1], runs[i]);
+        } else {
+            runs[encounters++] = runs[i];
+        }
+    }
+    runs.resize(encounters);
+    return runs;
+}
+
+std::vector<CoarseHitRecord> drop_excluded_encounters(
+    std::vector<CoarseHitRecord> encounters,
+    const std::map<uint32_t, ExcludedObject>& excluded) {
+    if (excluded.empty()) return encounters;
+    encounters.erase(
+        std::remove_if(encounters.begin(), encounters.end(),
+                       [&](const CoarseHitRecord& hit) {
+                           return involves_excluded(hit.obj1_index, hit.obj2_index, excluded);
+                       }),
+        encounters.end());
+    return encounters;
+}
+
+uint64_t distinct_encounter_pairs(const std::vector<CoarseHitRecord>& encounters) {
+    uint64_t pairs = 0;
+    for (size_t i = 0; i < encounters.size(); ++i) {
+        if (i == 0 || encounter_key(encounters[i]) != encounter_key(encounters[i - 1])) ++pairs;
+    }
+    return pairs;
+}
+
+// Worker thread_id of total_threads scans the contiguous block [begin, end)
+// of the steps first_step..last_step; the blocks cover them in order.
+std::pair<int32_t, int32_t> worker_step_block(
+    int32_t first_step, int32_t last_step, int thread_id, int total_threads) {
+    const int64_t count =
+        std::max<int64_t>(0, static_cast<int64_t>(last_step) - first_step + 1);
+    const int64_t workers = std::max(1, total_threads);
+    const int64_t worker = std::min<int64_t>(std::max(0, thread_id), workers - 1);
+    return {static_cast<int32_t>(first_step + count * worker / workers),
+            static_cast<int32_t>(first_step + count * (worker + 1) / workers)};
+}
+
+// A conjunction belongs to the window that holds its TCA. A refined TCA can
+// leave the window by up to the one-second golden-section bracket. If the pair
+// is strictly closer out there than at the window edge, the approach goes on
+// past the edge: the TCA lies in the neighbouring window, which reports it.
+// If it is not closer (a range that is flat across the edge, as for two
+// objects on one element set), the conjunction holds at the edge and is
+// reported there. The refinement tolerance keeps a TCA that close to an edge
+// in both windows rather than in neither.
+std::optional<ConjunctionSolution> solution_in_screening_window(
+    const TLE& obj1, const TLE& obj2, const ConjunctionSolution& solution,
+    double start_jd, double end_jd, double fine_tol_sec) {
+    const double tolerance_days = std::max(0.001, fine_tol_sec) / 86400.0;
+    if (!std::isfinite(solution.tca_jd)) return std::nullopt;
+    if (solution.tca_jd >= start_jd - tolerance_days &&
+        solution.tca_jd <= end_jd + tolerance_days) {
+        return solution;
+    }
+    const double edge_jd = solution.tca_jd < start_jd ? start_jd : end_jd;
+    const auto at_edge = assess_conjunction_solution_in_window_near_hint(
+        obj1, obj2, edge_jd, edge_jd, edge_jd);
+    if (has_error() || solution.min_range_km < at_edge.min_range_km) {
+        return std::nullopt;
+    }
+    return at_edge;
+}
+
+// Highest probability first; equal probabilities in TCA order, then by pair,
+// so the order does not depend on the order in which encounters were refined.
+void sort_conjunction_events(std::vector<ConjunctionEvent>& events) {
+    std::sort(events.begin(), events.end(),
+              [](const ConjunctionEvent& a, const ConjunctionEvent& b) {
+                  if (a.max_probability != b.max_probability) {
+                      return a.max_probability > b.max_probability;
+                  }
+                  if (a.tca_jd != b.tca_jd) return a.tca_jd < b.tca_jd;
+                  if (a.obj1.norad_cat_id != b.obj1.norad_cat_id) {
+                      return a.obj1.norad_cat_id < b.obj1.norad_cat_id;
+                  }
+                  return a.obj2.norad_cat_id < b.obj2.norad_cat_id;
+              });
+}
+
 #ifndef CONJUNCTION_SINGLE_THREAD
 class ReusableBarrier {
 public:
@@ -583,7 +725,7 @@ struct ExactSolvedHit {
     double tca_jd = 0.0;
 };
 
-std::optional<ExactSolvedHit> solve_coarse_hit_if_within_threshold_exact(
+std::vector<ExactSolvedHit> solve_encounter_exact(
     const TLE& obj1,
     const TLE& obj2,
     uint32_t obj1_index,
@@ -592,6 +734,22 @@ std::optional<ExactSolvedHit> solve_coarse_hit_if_within_threshold_exact(
     double slice_start_jd,
     double slice_end_jd,
     const ScreeningConfig& config);
+
+// Conjunctions of refined encounters, unsorted, with the object indices of
+// each event and of each encounter whose refinement failed (so a caller can
+// drop those of objects excluded afterwards).
+struct RefinedEncounters {
+    std::vector<ConjunctionEvent> events;
+    std::vector<std::pair<uint32_t, uint32_t>> event_objects;
+    std::vector<std::pair<uint32_t, uint32_t>> failed_objects;
+};
+
+RefinedEncounters refine_encounters(
+    const std::vector<TLE>& tles,
+    const std::vector<CoarseHitRecord>& encounters,
+    const ScreeningConfig& config,
+    ProgressCallback progress,
+    const ResidentScreeningIndex* resident_index);
 
 ConjunctionSolution refine_exact_window_locally(
     const TLE& obj1,
@@ -808,7 +966,8 @@ namespace {
 // Maximum coarse steps processed in a single threaded window. Keep browser
 // pthread screening in one native window where possible; repeated native chunks
 // can exhaust Emscripten's pthread worker pool before the JS event loop recycles
-// workers.
+// workers. Longer windows run their coarse pass in chunks of this many steps;
+// encounters are joined across chunks and refined once, as in one window.
 constexpr int MAX_IMPLICIT_COARSE_STEPS_PER_CHUNK = 10000;
 
 void reset_implicit_stats(ScreeningStats& stats) {
@@ -819,61 +978,6 @@ void reset_implicit_stats(ScreeningStats& stats) {
     stats.total_objects = total_objects;
     stats.pairs_screened = pairs_screened;
     stats.pairs_prefiltered = pairs_prefiltered;
-}
-
-bool event_in_nominal_chunk_window(
-    const ConjunctionEvent& event,
-    double chunk_start_jd,
-    double nominal_end_jd,
-    bool include_nominal_end)
-{
-    if (!(event.tca_jd >= chunk_start_jd)) {
-        return false;
-    }
-    if (include_nominal_end) {
-        return event.tca_jd <= nominal_end_jd;
-    }
-    return event.tca_jd < nominal_end_jd;
-}
-
-std::vector<ConjunctionEvent> dedupe_chunked_events(
-    std::vector<ConjunctionEvent> events)
-{
-    if (events.size() < 2) {
-        return events;
-    }
-
-    std::vector<ConjunctionEvent> deduped;
-    deduped.reserve(events.size());
-    for (auto& event : events) {
-        bool merged = false;
-        for (auto& existing : deduped) {
-            const int existing_lo =
-                std::min(existing.obj1.norad_cat_id, existing.obj2.norad_cat_id);
-            const int existing_hi =
-                std::max(existing.obj1.norad_cat_id, existing.obj2.norad_cat_id);
-            const int event_lo =
-                std::min(event.obj1.norad_cat_id, event.obj2.norad_cat_id);
-            const int event_hi =
-                std::max(event.obj1.norad_cat_id, event.obj2.norad_cat_id);
-            if (existing_lo != event_lo || existing_hi != event_hi) {
-                continue;
-            }
-
-            if (event.min_range_km < existing.min_range_km ||
-                (event.min_range_km == existing.min_range_km &&
-                 event.max_probability > existing.max_probability)) {
-                existing = std::move(event);
-            }
-            merged = true;
-            break;
-        }
-
-        if (!merged) {
-            deduped.push_back(std::move(event));
-        }
-    }
-    return deduped;
 }
 
 } // namespace
@@ -1025,7 +1129,7 @@ ScreeningThreadWork process_time_steps(
         return work;
     }
 
-    std::unordered_map<uint64_t, CoarseHitRecord> coarse_hits;
+    CoarseRunCollector runs;
 
     std::vector<std::vector<uint32_t>> allowed_secondaries(tles.size());
     std::vector<uint32_t> primary_ids;
@@ -1057,8 +1161,10 @@ ScreeningThreadWork process_time_steps(
     // Objects this worker has already excluded; their pairs are dropped after
     // the merge, so they are not propagated again here.
     std::vector<uint8_t> excluded_here(tles.size(), 0);
+    const auto [block_begin, block_end] =
+        worker_step_block(0, total_steps, thread_id, total_threads);
 
-    for (int step = thread_id; step <= total_steps; step += total_threads) {
+    for (int step = block_begin; step < block_end; ++step) {
         double jd = start_jd + step * step_days;
         std::vector<KDPoint> cached_points(tles.size());
         std::vector<uint8_t> has_state(tles.size(), 0);
@@ -1141,12 +1247,7 @@ ScreeningThreadWork process_time_steps(
                     double dist = std::sqrt(dx * dx + dy * dy + dz * dz);
                     const uint32_t obj1 = std::min(primary_id, secondary_point.obj_index);
                     const uint32_t obj2 = std::max(primary_id, secondary_point.obj_index);
-                    auto& hit = coarse_hits[coarse_hit_key(obj1, obj2)];
-                    if (hit.best_step < 0) {
-                        hit.obj1_index = obj1;
-                        hit.obj2_index = obj2;
-                    }
-                    merge_coarse_hit(hit, step, dist);
+                    runs.hit(obj1, obj2, step, dist);
                 }
             }
         } else {
@@ -1194,23 +1295,14 @@ ScreeningThreadWork process_time_steps(
                     if (dist <= coarse_threshold) {
                         const uint32_t obj1 = std::min(primary_id, secondary_id);
                         const uint32_t obj2 = std::max(primary_id, secondary_id);
-                        auto& hit = coarse_hits[coarse_hit_key(obj1, obj2)];
-                        if (hit.best_step < 0) {
-                            hit.obj1_index = obj1;
-                            hit.obj2_index = obj2;
-                        }
-                        merge_coarse_hit(hit, step, dist);
+                        runs.hit(obj1, obj2, step, dist);
                     }
                 }
             }
         }
     }
 
-    work.coarse_hits.reserve(coarse_hits.size());
-    for (auto& [key, hit] : coarse_hits) {
-        work.coarse_hits.push_back(std::move(hit));
-    }
-
+    work.coarse_hits = runs.finish();
     return work;
 }
 
@@ -1271,149 +1363,33 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
     }
 #endif
 
-    // Merge exclusions first (worker order is fixed), then the coarse-hit
-    // aggregates of every pair whose objects both propagated over the window.
+    // Merge exclusions first (worker order is fixed), then the encounters of
+    // every pair whose objects both propagated over the window.
     std::map<uint32_t, ExcludedObject> excluded;
     for (const auto& tw : thread_results) {
         if (!tw.error.empty()) { set_error(tw.error); return {}; }
         merge_exclusions(excluded, tw.excluded);
     }
     stats.excluded_objects = excluded_list(excluded);
-    std::map<uint64_t, CoarseHitRecord> unique_pairs;
-    for (const auto& tw : thread_results) {
+    std::vector<CoarseHitRecord> runs;
+    for (auto& tw : thread_results) {
         stats.propagations += tw.propagations;
-        for (const auto& hit : tw.coarse_hits) {
-            if (involves_excluded(hit.obj1_index, hit.obj2_index, excluded)) continue;
-            const uint64_t key = coarse_hit_key(hit.obj1_index, hit.obj2_index);
-            auto& aggregate = unique_pairs[key];
-            if (aggregate.best_step < 0) {
-                aggregate.obj1_index = hit.obj1_index;
-                aggregate.obj2_index = hit.obj2_index;
-            }
-            merge_coarse_hit_record(aggregate, hit);
-        }
+        runs.insert(runs.end(), tw.coarse_hits.begin(), tw.coarse_hits.end());
+        tw.coarse_hits = {};
     }
+    const auto encounters = drop_excluded_encounters(
+        coalesce_encounters(std::move(runs)), excluded);
 
     if (progress) progress(0.7, "Deduplicating candidates...");
 
-    stats.kdtree_candidates = unique_pairs.size();
+    stats.kdtree_candidates = distinct_encounter_pairs(encounters);
 
-    if (progress) progress(0.75, "Refining TCA...");
-
-    // Step 4: Fine TCA refinement for each candidate pair
-    std::vector<ConjunctionEvent> events;
-    std::vector<ExactSolvedHit> solved_hits;
-    std::atomic<uint64_t> failed_pairs{0};
-    std::vector<std::pair<uint64_t, CoarseHitRecord>> pair_list(
-        unique_pairs.begin(), unique_pairs.end());
-    const double radius_m = config.combined_radius_m / 2.0;
-#ifdef CONJUNCTION_SINGLE_THREAD
-    for (const auto& [key, hit] : pair_list) {
-        {
-            auto solved = solve_coarse_hit_if_within_threshold_exact(
-                tles[hit.obj1_index],
-                tles[hit.obj2_index],
-                hit.obj1_index,
-                hit.obj2_index,
-                hit,
-                start_jd,
-                end_jd,
-                config);
-                if (has_error()) { ++failed_pairs; clear_error(); continue; }
-            if (solved.has_value()) {
-                solved_hits.push_back(std::move(*solved));
-            }
-        }
-    }
-#else
-    if (num_threads <= 1) {
-        for (const auto& [key, hit] : pair_list) {
-            {
-                auto solved = solve_coarse_hit_if_within_threshold_exact(
-                    tles[hit.obj1_index],
-                    tles[hit.obj2_index],
-                    hit.obj1_index,
-                    hit.obj2_index,
-                    hit,
-                    start_jd,
-                    end_jd,
-                    config);
-                if (has_error()) { ++failed_pairs; clear_error(); continue; }
-                if (solved.has_value()) {
-                    solved_hits.push_back(std::move(*solved));
-                }
-            }
-        }
-    } else {
-        std::mutex solved_hits_mutex;
-
-        // Parallel TCA refinement
-        auto refine_range = [&](size_t from, size_t to) {
-            std::vector<ExactSolvedHit> local_solved_hits;
-            for (size_t i = from; i < to; i++) {
-                const auto& [key, hit] = pair_list[i];
-                {
-                    auto solved = solve_coarse_hit_if_within_threshold_exact(
-                        tles[hit.obj1_index],
-                        tles[hit.obj2_index],
-                        hit.obj1_index,
-                        hit.obj2_index,
-                        hit,
-                        start_jd,
-                        end_jd,
-                        config);
-                if (has_error()) { ++failed_pairs; clear_error(); continue; }
-                    if (solved.has_value()) {
-                        local_solved_hits.push_back(std::move(*solved));
-                    }
-                }
-            }
-
-            std::lock_guard<std::mutex> lock(solved_hits_mutex);
-            solved_hits.insert(
-                solved_hits.end(),
-                local_solved_hits.begin(),
-                local_solved_hits.end());
-        };
-
-        std::vector<std::thread> threads;
-        size_t chunk = (pair_list.size() + num_threads - 1) / num_threads;
-        for (int t = 0; t < num_threads; t++) {
-            size_t from = t * chunk;
-            size_t to = std::min(from + chunk, pair_list.size());
-            if (from < to) {
-                threads.emplace_back(refine_range, from, to);
-            }
-        }
-        for (auto& t : threads) t.join();
-    }
-#endif
-
-    events.reserve(solved_hits.size());
-    for (const auto& solved : solved_hits) {
-        {
-            auto event = assess_conjunction_at_tca(
-                tles[solved.obj1_index],
-                tles[solved.obj2_index],
-                solved.tca_jd,
-                radius_m,
-                radius_m);
-                if (has_error()) { ++failed_pairs; clear_error(); continue; }
-            if (is_conjunction_within_threshold(event.min_range_km, config.threshold_km)) {
-                events.push_back(std::move(event));
-            }
-        }
-    }
-
-    stats.failed_pairs = failed_pairs.load();
-    stats.tca_refined = pair_list.size();
+    auto refined = refine_encounters(tles, encounters, config, progress, nullptr);
+    auto events = std::move(refined.events);
+    stats.failed_pairs = refined.failed_objects.size();
+    stats.tca_refined = encounters.size();
     stats.conjunctions_found = events.size();
-
-    // Sort by max probability descending
-    std::sort(events.begin(), events.end(),
-              [](const ConjunctionEvent& a, const ConjunctionEvent& b) {
-                  return a.max_probability > b.max_probability;
-              });
+    sort_conjunction_events(events);
 
     auto t_end = std::chrono::high_resolution_clock::now();
     stats.elapsed_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
@@ -1427,6 +1403,9 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
 // Implicit-pair screening (no materialized pair list)
 // ============================================================================
 
+// Scans the coarse steps first_step..last_step of the window starting at
+// start_jd (step k is at start_jd + k * step_sec), this worker taking its
+// contiguous block of them. Step numbers are the window's, whatever the range.
 ScreeningThreadWork process_time_steps_implicit(
     const ScreeningConfig& config,
     const std::vector<TLE>& tles,
@@ -1434,7 +1413,7 @@ ScreeningThreadWork process_time_steps_implicit(
     const std::vector<float>& apogee_km,
     const std::vector<uint8_t>& is_primary,
     const std::vector<uint8_t>& participates,
-    double start_jd, double end_jd, double step_sec,
+    double start_jd, int32_t first_step, int32_t last_step, double step_sec,
     int thread_id, int total_threads,
     const ResidentScreeningIndex* resident_index)
 {
@@ -1606,12 +1585,10 @@ ScreeningThreadWork process_time_steps_implicit(
     }
 
     const double step_days = step_sec / 86400.0;
-    const int total_steps = static_cast<int>((end_jd - start_jd) / step_days);
 
-    // Running per-thread coarse-hit aggregation bounds memory to
-    // O(unique_coarse_pairs) while preserving the bracket span needed for
-    // local refinement.
-    std::unordered_map<uint64_t, CoarseHitRecord> coarse_hits;
+    // One record per encounter (a run of consecutive coarse hits of a pair):
+    // memory is O(encounters), and each encounter keeps its own bracket.
+    CoarseRunCollector runs;
 
     // Reusable per-step buffers to avoid repeated allocation.
     std::vector<KDPoint> points;
@@ -1622,7 +1599,9 @@ ScreeningThreadWork process_time_steps_implicit(
     // Objects this worker has already excluded (see ExcludedObject).
     std::vector<uint8_t> excluded_here(n, 0);
 
-    for (int step = thread_id; step <= total_steps; step += total_threads) {
+    const auto [block_begin, block_end] =
+        worker_step_block(first_step, last_step, thread_id, total_threads);
+    for (int step = block_begin; step < block_end; ++step) {
         const double jd = start_jd + step * step_days;
 
         // Propagate all active objects.
@@ -1711,12 +1690,7 @@ ScreeningThreadWork process_time_steps_implicit(
 
                     const uint32_t lo = std::min(primary_id, secondary_id);
                     const uint32_t hi = std::max(primary_id, secondary_id);
-                    auto& hit = coarse_hits[coarse_hit_key(lo, hi)];
-                    if (hit.best_step < 0) {
-                        hit.obj1_index = lo;
-                        hit.obj2_index = hi;
-                    }
-                    merge_coarse_hit(hit, step, dist);
+                    runs.hit(lo, hi, step, dist);
                 }
             }
         } else if (config.use_kdtree && points.size() > 50) {
@@ -1789,12 +1763,7 @@ ScreeningThreadWork process_time_steps_implicit(
 
                     const uint32_t lo = std::min(primary_id, sec_id);
                     const uint32_t hi = std::max(primary_id, sec_id);
-                    auto& hit = coarse_hits[coarse_hit_key(lo, hi)];
-                    if (hit.best_step < 0) {
-                        hit.obj1_index = lo;
-                        hit.obj2_index = hi;
-                    }
-                    merge_coarse_hit(hit, step, dist);
+                    runs.hit(lo, hi, step, dist);
                 }
             }
         } else {
@@ -1840,28 +1809,20 @@ ScreeningThreadWork process_time_steps_implicit(
                     if (dist <= pair_radius_km) {
                         const uint32_t lo = std::min(id1, id2);
                         const uint32_t hi = std::max(id1, id2);
-                        auto& hit = coarse_hits[coarse_hit_key(lo, hi)];
-                        if (hit.best_step < 0) {
-                            hit.obj1_index = lo;
-                            hit.obj2_index = hi;
-                        }
-                        merge_coarse_hit(hit, step, dist);
+                        runs.hit(lo, hi, step, dist);
                     }
                 }
             }
         }
     }
 
-    work.coarse_hits.reserve(coarse_hits.size());
-    for (auto& [key, hit] : coarse_hits) {
-        work.coarse_hits.push_back(std::move(hit));
-    }
-
+    work.coarse_hits = runs.finish();
     return work;
 }
 
 struct ImplicitCoarseHitWindowResult {
-    std::unordered_map<uint64_t, CoarseHitRecord> coarse_hits;
+    // Joined encounters of the scanned steps; excluded objects already dropped.
+    std::vector<CoarseHitRecord> encounters;
     ScreeningStats stats;
     std::map<uint32_t, ExcludedObject> excluded;
 };
@@ -1925,7 +1886,7 @@ ConjunctionSolution refine_exact_window_locally(
     return solution;
 }
 
-std::optional<ExactSolvedHit> solve_coarse_hit_if_within_threshold_exact(
+std::vector<ExactSolvedHit> solve_encounter_exact(
     const TLE& obj1,
     const TLE& obj2,
     uint32_t obj1_index,
@@ -1935,12 +1896,28 @@ std::optional<ExactSolvedHit> solve_coarse_hit_if_within_threshold_exact(
     double slice_end_jd,
     const ScreeningConfig& config)
 {
+    std::vector<ExactSolvedHit> solved;
+    const auto keep = [&](const ConjunctionSolution& solution) {
+        if (has_error() ||
+            !is_conjunction_within_threshold(solution.min_range_km, config.threshold_km)) {
+            return;
+        }
+        const auto in_window = solution_in_screening_window(
+            obj1, obj2, solution, slice_start_jd, slice_end_jd, config.fine_tol_sec);
+        if (in_window.has_value() &&
+            is_conjunction_within_threshold(in_window->min_range_km, config.threshold_km)) {
+            solved.push_back(ExactSolvedHit{obj1_index, obj2_index, in_window->tca_jd});
+        }
+    };
+
     const auto window = build_refinement_window(
         hit,
         slice_start_jd,
         slice_end_jd,
         config.coarse_step_sec);
 
+    // At most three consecutive coarse hits: one fast pass, gated by a local
+    // descent from the closest coarse sample.
     const bool use_local_gate =
         hit.earliest_step != std::numeric_limits<int32_t>::max() &&
         hit.latest_step >= hit.earliest_step &&
@@ -1969,46 +1946,226 @@ std::optional<ExactSolvedHit> solve_coarse_hit_if_within_threshold_exact(
             config);
 
         if (!is_conjunction_within_threshold(coarse_solution.min_range_km, config.threshold_km)) {
-            return std::nullopt;
+            return solved;
         }
     }
 
-    ConjunctionSolution solution;
     if (window.duration_days() <= 0.0) {
-        solution = assess_conjunction_solution_in_window_near_hint(
+        keep(assess_conjunction_solution_in_window_near_hint(
             obj1,
             obj2,
             slice_start_jd,
             slice_end_jd,
             use_local_gate
                 ? coarse_solution.tca_jd
-                : 0.5 * (slice_start_jd + slice_end_jd));
+                : 0.5 * (slice_start_jd + slice_end_jd)));
+    } else if (use_local_gate) {
+        keep(assess_conjunction_solution_in_window_near_hint(
+            obj1,
+            obj2,
+            window.start_jd,
+            window.end_jd,
+            coarse_solution.tca_jd));
     } else {
-        if (use_local_gate) {
-            solution = assess_conjunction_solution_in_window_near_hint(
-                obj1,
-                obj2,
-                window.start_jd,
-                window.end_jd,
-                coarse_solution.tca_jd);
-        } else {
-            solution = assess_conjunction_solution(
-                obj1,
-                obj2,
-                window.start_jd,
-                window.duration_days());
+        // A longer encounter is a slower pass, and a slow pair can close in
+        // more than once while it stays inside the coarse radius: every local
+        // minimum of the range within the threshold is its own conjunction.
+        for (const auto& solution : assess_conjunction_solutions_within_threshold(
+                 obj1,
+                 obj2,
+                 window.start_jd,
+                 window.duration_days(),
+                 config.threshold_km,
+                 config.fine_tol_sec)) {
+            keep(solution);
         }
     }
+    return solved;
+}
 
-    if (!is_conjunction_within_threshold(solution.min_range_km, config.threshold_km)) {
-        return std::nullopt;
+// Refines every encounter on its own bracket and materializes the
+// conjunctions it holds. Used by the explicit-pair, the single-window and the
+// chunked paths alike, so an encounter refines to the same TCA and miss
+// distance whichever path found it.
+RefinedEncounters refine_encounters(
+    const std::vector<TLE>& tles,
+    const std::vector<CoarseHitRecord>& encounters,
+    const ScreeningConfig& config,
+    ProgressCallback progress,
+    const ResidentScreeningIndex* resident_index)
+{
+    const double start_jd = config.start_jd;
+    const double end_jd = start_jd + config.duration_days;
+
+    if (progress) progress(0.75, "Refining TCA...");
+
+    RefinedEncounters result;
+    auto& events = result.events;
+    std::vector<ExactSolvedHit> solved_hits;
+    const bool use_exact_solution_path =
+        resident_index == nullptr ||
+        resident_index->screening_mode ==
+            ScreeningMode::exact_only;
+    const double radius_m = config.combined_radius_m / 2.0;
+
+    // Polynomial-mode events carry their encounter's objects; exact-mode
+    // events get theirs from the solved hit when materialized below.
+    struct PolynomialEvent {
+        ConjunctionEvent event;
+        std::pair<uint32_t, uint32_t> objects;
+    };
+    using FailedObjects = std::vector<std::pair<uint32_t, uint32_t>>;
+    const auto refine_one =
+        [&](const CoarseHitRecord& hit,
+            std::vector<ExactSolvedHit>& solved_out,
+            std::vector<PolynomialEvent>& events_out,
+            FailedObjects& failed_out) {
+            if (use_exact_solution_path) {
+                auto solved = solve_encounter_exact(
+                    tles[hit.obj1_index], tles[hit.obj2_index],
+                    hit.obj1_index, hit.obj2_index,
+                    hit, start_jd, end_jd, config);
+                if (has_error()) {
+                    failed_out.emplace_back(hit.obj1_index, hit.obj2_index);
+                    clear_error();
+                    return;
+                }
+                solved_out.insert(solved_out.end(), solved.begin(), solved.end());
+            } else {
+                auto event = refine_coarse_hit_if_within_threshold(
+                    tles[hit.obj1_index], tles[hit.obj2_index],
+                    hit, start_jd, end_jd, config, resident_index);
+                if (has_error()) {
+                    failed_out.emplace_back(hit.obj1_index, hit.obj2_index);
+                    clear_error();
+                    return;
+                }
+                if (event.has_value()) {
+                    events_out.push_back({std::move(*event), {hit.obj1_index, hit.obj2_index}});
+                }
+            }
+        };
+    std::vector<PolynomialEvent> polynomial_events;
+
+    {
+    const size_t refine_total = encounters.size();
+    const int num_refine_threads =
+#ifdef CONJUNCTION_SINGLE_THREAD
+        1;
+#else
+        std::max(1, config.num_threads);
+#endif
+
+    if (refine_total > 0 && num_refine_threads > 1) {
+#ifndef CONJUNCTION_SINGLE_THREAD
+        // Parallel refinement with barrier-based batching for progress.
+        // Split encounters into batches; each batch uses N threads via
+        // barrier, then the main thread fires progress and starts the next.
+        const size_t REFINE_BATCH_SIZE = 500;
+        const size_t num_refine_batches =
+            (refine_total + REFINE_BATCH_SIZE - 1) / REFINE_BATCH_SIZE;
+
+        std::vector<std::vector<PolynomialEvent>> thread_events(num_refine_threads);
+        std::vector<std::vector<ExactSolvedHit>> thread_solved(num_refine_threads);
+        std::vector<FailedObjects> thread_failed(num_refine_threads);
+
+        ReusableBarrier refine_barrier(static_cast<size_t>(num_refine_threads + 1));
+        std::atomic<size_t> batch_start{0};
+        std::atomic<size_t> batch_end{0};
+        std::atomic<bool> refine_shutdown{false};
+
+        std::vector<std::thread> threads;
+        for (int t = 0; t < num_refine_threads; t++) {
+            threads.emplace_back([&, t]() {
+                while (true) {
+                    refine_barrier.wait();
+                    if (refine_shutdown.load(std::memory_order_acquire)) return;
+                    const size_t b_start = batch_start.load(std::memory_order_acquire);
+                    const size_t b_end = batch_end.load(std::memory_order_acquire);
+                    const size_t span = b_end - b_start;
+                    const size_t chunk = (span + num_refine_threads - 1)
+                                         / num_refine_threads;
+                    const size_t from = b_start + static_cast<size_t>(t) * chunk;
+                    const size_t to = std::min(from + chunk, b_end);
+                    for (size_t i = from; i < to; i++) {
+                        refine_one(encounters[i], thread_solved[t], thread_events[t],
+                                   thread_failed[t]);
+                    }
+                    refine_barrier.wait();
+                }
+            });
+        }
+
+        for (size_t b = 0; b < num_refine_batches; b++) {
+            batch_start.store(b * REFINE_BATCH_SIZE, std::memory_order_release);
+            batch_end.store(
+                std::min((b + 1) * REFINE_BATCH_SIZE, refine_total),
+                std::memory_order_release);
+            refine_barrier.wait();
+            refine_barrier.wait();
+            if (progress) {
+                progress(0.75 + 0.25 * static_cast<double>(b + 1)
+                                      / static_cast<double>(num_refine_batches),
+                         "Refining TCA...");
+            }
+        }
+
+        refine_shutdown.store(true, std::memory_order_release);
+        refine_barrier.wait();
+        for (auto& t : threads) t.join();
+
+        for (auto& te : thread_events)
+            polynomial_events.insert(polynomial_events.end(),
+                std::make_move_iterator(te.begin()),
+                std::make_move_iterator(te.end()));
+        for (auto& ts : thread_solved)
+            solved_hits.insert(solved_hits.end(),
+                std::make_move_iterator(ts.begin()),
+                std::make_move_iterator(ts.end()));
+        for (auto& tf : thread_failed)
+            result.failed_objects.insert(result.failed_objects.end(), tf.begin(), tf.end());
+#endif
+    } else {
+        // Single-threaded refinement with progress.
+        size_t refine_index = 0;
+        for (const auto& hit : encounters) {
+            refine_one(hit, solved_hits, polynomial_events, result.failed_objects);
+            ++refine_index;
+            if (progress && refine_total > 0 &&
+                (refine_index % 100 == 0 || refine_index == refine_total)) {
+                progress(0.75 + 0.25 * static_cast<double>(refine_index)
+                                      / static_cast<double>(refine_total),
+                         "Refining TCA...");
+            }
+        }
+    }
     }
 
-    return ExactSolvedHit{
-        obj1_index,
-        obj2_index,
-        solution.tca_jd,
-    };
+    for (auto& polynomial : polynomial_events) {
+        events.push_back(std::move(polynomial.event));
+        result.event_objects.push_back(polynomial.objects);
+    }
+    if (use_exact_solution_path) {
+        events.reserve(events.size() + solved_hits.size());
+        for (const auto& solved : solved_hits) {
+            auto event = assess_conjunction_at_tca(
+                tles[solved.obj1_index],
+                tles[solved.obj2_index],
+                solved.tca_jd,
+                radius_m,
+                radius_m);
+            if (has_error()) {
+                result.failed_objects.emplace_back(solved.obj1_index, solved.obj2_index);
+                clear_error();
+                continue;
+            }
+            if (is_conjunction_within_threshold(event.min_range_km, config.threshold_km)) {
+                events.push_back(std::move(event));
+                result.event_objects.emplace_back(solved.obj1_index, solved.obj2_index);
+            }
+        }
+    }
+    return result;
 }
 
 ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
@@ -2018,6 +2175,8 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
     const std::vector<uint8_t>& is_primary,
     const std::vector<uint8_t>& participates,
     const ScreeningConfig& config,
+    int32_t first_step,
+    int32_t last_step,
     ProgressCallback progress,
     const ResidentScreeningIndex* resident_index)
 {
@@ -2027,40 +2186,41 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
     reset_implicit_stats(stats);
 
     const double start_jd = config.start_jd;
-    const double end_jd = start_jd + config.duration_days;
 
     if (progress) progress(0.05, "Propagating and screening...");
 
     int num_threads = std::max(1, config.num_threads);
     std::vector<ScreeningThreadWork> thread_results(num_threads);
 
-    // Determine batching from progress_interval_sec.
-    const double interval_days =
-        (config.progress_interval_sec > 0.0)
-            ? config.progress_interval_sec / 86400.0
-            : config.duration_days;
-    const int num_batches = std::max(
-        1, static_cast<int>(std::ceil(config.duration_days / interval_days)));
+    // Determine batching from progress_interval_sec, in whole coarse steps of
+    // the window, so every batch numbers its steps as the window does.
+    const int64_t step_count =
+        std::max<int64_t>(0, static_cast<int64_t>(last_step) - first_step + 1);
+    int64_t steps_per_batch = std::max<int64_t>(1, step_count);
+    if (config.progress_interval_sec > 0.0 && config.coarse_step_sec > 0.0) {
+        steps_per_batch = std::max<int64_t>(
+            1,
+            static_cast<int64_t>(
+                std::floor(config.progress_interval_sec / config.coarse_step_sec)));
+    }
+    const int num_batches = static_cast<int>(std::max<int64_t>(
+        1, (step_count + steps_per_batch - 1) / steps_per_batch));
+    const auto batch_first = [&](int b) {
+        return static_cast<int32_t>(first_step + b * steps_per_batch);
+    };
+    const auto batch_last = [&](int b) {
+        return static_cast<int32_t>(std::min<int64_t>(
+            last_step, first_step + (b + 1) * steps_per_batch - 1));
+    };
 
+    std::vector<CoarseHitRecord> runs;
     auto merge_thread_results = [&]() {
-        size_t incoming_hits = 0;
-        for (const auto& tw : thread_results) {
-            incoming_hits += tw.coarse_hits.size();
-        }
-        result.coarse_hits.reserve(result.coarse_hits.size() + incoming_hits);
-        for (const auto& tw : thread_results) {
+        for (auto& tw : thread_results) {
             if (!tw.error.empty()) { set_error(tw.error); return; }
             merge_exclusions(result.excluded, tw.excluded);
             stats.propagations += tw.propagations;
-            for (const auto& hit : tw.coarse_hits) {
-                const uint64_t key = coarse_hit_key(hit.obj1_index, hit.obj2_index);
-                auto& aggregate = result.coarse_hits[key];
-                if (aggregate.best_step < 0) {
-                    aggregate.obj1_index = hit.obj1_index;
-                    aggregate.obj2_index = hit.obj2_index;
-                }
-                merge_coarse_hit_record(aggregate, hit);
-            }
+            runs.insert(runs.end(), tw.coarse_hits.begin(), tw.coarse_hits.end());
+            tw = ScreeningThreadWork{};
         }
     };
 
@@ -2068,11 +2228,10 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
     // Single-threaded: process each batch sequentially, fire progress between.
     num_threads = 1;
     for (int b = 0; b < num_batches; b++) {
-        const double batch_start = start_jd + interval_days * b;
-        const double batch_end = std::min(end_jd, batch_start + interval_days);
         thread_results[0] = process_time_steps_implicit(
             config, tles, perigee_km, apogee_km, is_primary, participates,
-            batch_start, batch_end, config.coarse_step_sec, 0, 1, resident_index);
+            start_jd, batch_first(b), batch_last(b), config.coarse_step_sec, 0, 1,
+            resident_index);
         merge_thread_results();
         if (progress) {
             const double frac = 0.05 + 0.65 * static_cast<double>(b + 1)
@@ -2083,11 +2242,10 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
 #else
     if (num_threads <= 1) {
         for (int b = 0; b < num_batches; b++) {
-            const double batch_start = start_jd + interval_days * b;
-            const double batch_end = std::min(end_jd, batch_start + interval_days);
             thread_results[0] = process_time_steps_implicit(
                 config, tles, perigee_km, apogee_km, is_primary, participates,
-                batch_start, batch_end, config.coarse_step_sec, 0, 1, resident_index);
+                start_jd, batch_first(b), batch_last(b), config.coarse_step_sec, 0, 1,
+                resident_index);
             merge_thread_results();
             if (progress) {
                 const double frac = 0.05 + 0.65 * static_cast<double>(b + 1)
@@ -2103,7 +2261,8 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
                 {
                     thread_results[t] = process_time_steps_implicit(
                         config, tles, perigee_km, apogee_km, is_primary, participates,
-                        start_jd, end_jd, config.coarse_step_sec, t, num_threads, resident_index);
+                        start_jd, first_step, last_step, config.coarse_step_sec,
+                        t, num_threads, resident_index);
                 }
             });
         }
@@ -2123,13 +2282,10 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
                     barrier.wait(); // wait for batch signal
                     if (shutdown.load(std::memory_order_acquire)) return;
                     const int b = current_batch.load(std::memory_order_acquire);
-                    const double batch_start = start_jd + interval_days * b;
-                    const double batch_end =
-                        std::min(end_jd, batch_start + interval_days);
                     thread_results[t] = process_time_steps_implicit(
                         config, tles, perigee_km, apogee_km,
                         is_primary, participates,
-                        batch_start, batch_end, config.coarse_step_sec,
+                        start_jd, batch_first(b), batch_last(b), config.coarse_step_sec,
                         t, num_threads, resident_index);
                     barrier.wait(); // signal batch done
                 }
@@ -2156,24 +2312,30 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
 #endif
 
     if (progress) progress(0.7, "Deduplicating candidates...");
-    // An object excluded in any batch is excluded from the whole window,
-    // including pairs it formed in earlier batches.
-    if (!result.excluded.empty()) {
-        for (auto it = result.coarse_hits.begin(); it != result.coarse_hits.end();) {
-            if (involves_excluded(it->second.obj1_index, it->second.obj2_index, result.excluded)) {
-                it = result.coarse_hits.erase(it);
-            } else {
-                ++it;
-            }
-        }
-    }
+    // Runs of neighbouring workers and batches join into encounters. An object
+    // excluded in any batch is excluded from the whole window, including the
+    // encounters it had in earlier batches.
+    result.encounters = drop_excluded_encounters(
+        coalesce_encounters(std::move(runs)), result.excluded);
     stats.excluded_objects = excluded_list(result.excluded);
-    stats.kdtree_candidates = result.coarse_hits.size();
+    stats.kdtree_candidates = distinct_encounter_pairs(result.encounters);
 
     auto t_end = std::chrono::high_resolution_clock::now();
     stats.elapsed_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
     return result;
 }
+
+namespace {
+
+// Coarse steps of the window: step k is at start_jd + k * coarse_step_sec,
+// k = 0..count.
+int32_t window_coarse_steps(const ScreeningConfig& config) {
+    const double step_days = config.coarse_step_sec / 86400.0;
+    const double end_jd = config.start_jd + config.duration_days;
+    return static_cast<int32_t>((end_jd - config.start_jd) / step_days);
+}
+
+} // namespace
 
 std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
     const std::vector<TLE>& tles,
@@ -2217,178 +2379,27 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
         is_primary,
         participates,
         config,
+        0,
+        window_coarse_steps(config),
         progress,
         resident_index);
     if (has_error()) return {};
+    // The coarse pass fills propagations, candidates and exclusions; the pair
+    // counts are the caller's (a resident index counts its candidate pairs).
+    const uint64_t pairs_screened = stats.pairs_screened;
+    const uint64_t pairs_prefiltered = stats.pairs_prefiltered;
     stats = window_result.stats;
     stats.total_objects = tles.size();
+    stats.pairs_screened = pairs_screened;
+    stats.pairs_prefiltered = pairs_prefiltered;
 
-    const double start_jd = config.start_jd;
-    const double end_jd = start_jd + config.duration_days;
-
-    if (progress) progress(0.75, "Refining TCA...");
-
-    std::vector<ConjunctionEvent> events;
-    std::vector<ExactSolvedHit> solved_hits;
-    std::atomic<uint64_t> failed_pairs{0};
-    std::vector<std::pair<uint64_t, CoarseHitRecord>> pair_list(
-        window_result.coarse_hits.begin(), window_result.coarse_hits.end());
-    const bool use_exact_solution_path =
-        resident_index == nullptr ||
-        resident_index->screening_mode ==
-            ScreeningMode::exact_only;
-    const double radius_m = config.combined_radius_m / 2.0;
-
-    {
-    const size_t refine_total = pair_list.size();
-    const int num_refine_threads =
-#ifdef CONJUNCTION_SINGLE_THREAD
-        1;
-#else
-        std::max(1, config.num_threads);
-#endif
-
-    if (refine_total > 0 && num_refine_threads > 1) {
-#ifndef CONJUNCTION_SINGLE_THREAD
-        // Parallel refinement with barrier-based batching for progress.
-        // Split pairs into batches; each batch uses N threads via barrier,
-        // then the main thread fires progress and starts the next batch.
-        const size_t REFINE_BATCH_SIZE = 500;
-        const size_t num_refine_batches =
-            (refine_total + REFINE_BATCH_SIZE - 1) / REFINE_BATCH_SIZE;
-
-        std::vector<std::vector<ConjunctionEvent>> thread_events(num_refine_threads);
-        std::vector<std::vector<ExactSolvedHit>> thread_solved(num_refine_threads);
-
-        ReusableBarrier refine_barrier(static_cast<size_t>(num_refine_threads + 1));
-        std::atomic<size_t> batch_start{0};
-        std::atomic<size_t> batch_end{0};
-        std::atomic<bool> refine_shutdown{false};
-
-        std::vector<std::thread> threads;
-        for (int t = 0; t < num_refine_threads; t++) {
-            threads.emplace_back([&, t]() {
-                while (true) {
-                    refine_barrier.wait();
-                    if (refine_shutdown.load(std::memory_order_acquire)) return;
-                    const size_t b_start = batch_start.load(std::memory_order_acquire);
-                    const size_t b_end = batch_end.load(std::memory_order_acquire);
-                    const size_t span = b_end - b_start;
-                    const size_t chunk = (span + num_refine_threads - 1)
-                                         / num_refine_threads;
-                    const size_t from = b_start + static_cast<size_t>(t) * chunk;
-                    const size_t to = std::min(from + chunk, b_end);
-                    for (size_t i = from; i < to; i++) {
-                        const auto& [key, hit] = pair_list[i];
-                        {
-                            if (use_exact_solution_path) {
-                                auto solved = solve_coarse_hit_if_within_threshold_exact(
-                                    tles[hit.obj1_index], tles[hit.obj2_index],
-                                    hit.obj1_index, hit.obj2_index,
-                                    hit, start_jd, end_jd, config);
-                if (has_error()) { ++failed_pairs; clear_error(); continue; }
-                                if (solved.has_value())
-                                    thread_solved[t].push_back(std::move(*solved));
-                            } else {
-                                auto event = refine_coarse_hit_if_within_threshold(
-                                    tles[hit.obj1_index], tles[hit.obj2_index],
-                                    hit, start_jd, end_jd, config, resident_index);
-                                if (has_error()) { ++failed_pairs; clear_error(); continue; }
-                                if (event.has_value())
-                                    thread_events[t].push_back(std::move(*event));
-                            }
-                        }
-                    }
-                    refine_barrier.wait();
-                }
-            });
-        }
-
-        for (size_t b = 0; b < num_refine_batches; b++) {
-            batch_start.store(b * REFINE_BATCH_SIZE, std::memory_order_release);
-            batch_end.store(
-                std::min((b + 1) * REFINE_BATCH_SIZE, refine_total),
-                std::memory_order_release);
-            refine_barrier.wait();
-            refine_barrier.wait();
-            if (progress) {
-                progress(0.75 + 0.25 * static_cast<double>(b + 1)
-                                      / static_cast<double>(num_refine_batches),
-                         "Refining TCA...");
-            }
-        }
-
-        refine_shutdown.store(true, std::memory_order_release);
-        refine_barrier.wait();
-        for (auto& t : threads) t.join();
-
-        for (auto& te : thread_events)
-            events.insert(events.end(),
-                std::make_move_iterator(te.begin()),
-                std::make_move_iterator(te.end()));
-        for (auto& ts : thread_solved)
-            solved_hits.insert(solved_hits.end(),
-                std::make_move_iterator(ts.begin()),
-                std::make_move_iterator(ts.end()));
-#endif
-    } else {
-        // Single-threaded refinement with progress.
-        size_t refine_index = 0;
-        for (const auto& [key, hit] : pair_list) {
-            {
-                if (use_exact_solution_path) {
-                    auto solved = solve_coarse_hit_if_within_threshold_exact(
-                        tles[hit.obj1_index], tles[hit.obj2_index],
-                        hit.obj1_index, hit.obj2_index,
-                        hit, start_jd, end_jd, config);
-                if (has_error()) { ++failed_pairs; clear_error(); continue; }
-                    if (solved.has_value()) solved_hits.push_back(std::move(*solved));
-                } else {
-                    auto event = refine_coarse_hit_if_within_threshold(
-                        tles[hit.obj1_index], tles[hit.obj2_index],
-                        hit, start_jd, end_jd, config, resident_index);
-                                if (has_error()) { ++failed_pairs; clear_error(); continue; }
-                    if (event.has_value()) events.push_back(std::move(*event));
-                }
-            }
-            ++refine_index;
-            if (progress && refine_total > 0 &&
-                (refine_index % 100 == 0 || refine_index == refine_total)) {
-                progress(0.75 + 0.25 * static_cast<double>(refine_index)
-                                      / static_cast<double>(refine_total),
-                         "Refining TCA...");
-            }
-        }
-    }
-    }
-
-    if (use_exact_solution_path) {
-        events.reserve(events.size() + solved_hits.size());
-        for (const auto& solved : solved_hits) {
-            {
-                auto event = assess_conjunction_at_tca(
-                    tles[solved.obj1_index],
-                    tles[solved.obj2_index],
-                    solved.tca_jd,
-                    radius_m,
-                    radius_m);
-                if (has_error()) { ++failed_pairs; clear_error(); continue; }
-                if (is_conjunction_within_threshold(event.min_range_km, config.threshold_km)) {
-                    events.push_back(std::move(event));
-                }
-            }
-        }
-    }
-
-    stats.failed_pairs = failed_pairs.load();
-    stats.tca_refined = pair_list.size();
+    auto refined = refine_encounters(
+        tles, window_result.encounters, config, progress, resident_index);
+    auto events = std::move(refined.events);
+    stats.failed_pairs = refined.failed_objects.size();
+    stats.tca_refined = window_result.encounters.size();
     stats.conjunctions_found = events.size();
-
-    // Sort by max probability descending
-    std::sort(events.begin(), events.end(),
-              [](const ConjunctionEvent& a, const ConjunctionEvent& b) {
-                  return a.max_probability > b.max_probability;
-              });
+    sort_conjunction_events(events);
 
     auto t_end = std::chrono::high_resolution_clock::now();
     stats.elapsed_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
@@ -2432,12 +2443,7 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
     require_optional_size(is_primary, "is_primary");
     require_optional_size(participates, "participates");
     if (has_error()) return {};
-    const double step_sec = std::max(1.0, config.coarse_step_sec);
-    const double step_days = step_sec / 86400.0;
-    const double start_jd = config.start_jd;
-    const double end_jd = start_jd + config.duration_days;
-    const int total_steps =
-        static_cast<int>((end_jd - start_jd) / step_days);
+    const int32_t total_steps = window_coarse_steps(config);
 
     if (total_steps <= MAX_IMPLICIT_COARSE_STEPS_PER_CHUNK) {
         return screen_precomputed_tles_implicit_window(
@@ -2455,156 +2461,83 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
     auto t_start = std::chrono::high_resolution_clock::now();
     reset_implicit_stats(stats);
 
-    std::map<uint64_t, CoarseHitRecord> carry_hits;
-    std::vector<ConjunctionEvent> events;
-    // Chunks are refined as they finish, so an object excluded in a later
-    // chunk may already have refined pairs: keep each event's and each failed
-    // refinement's object indices and drop those pairs once the window is done.
-    std::vector<std::pair<uint32_t, uint32_t>> event_objects;
-    std::vector<std::pair<uint32_t, uint32_t>> failed_pair_objects;
+    // The coarse pass runs in chunks of the window's own steps. Encounters
+    // that end inside a chunk are refined when it finishes; one still open at
+    // the chunk's last step is carried and joined with its continuation, so
+    // every encounter is refined once, on the bracket a single window would
+    // give it, and only the open encounters outlive a chunk. An object
+    // excluded in a later chunk is excluded from the whole window: its
+    // earlier events and failed refinements are dropped at the end.
+    std::vector<CoarseHitRecord> carry;
     std::map<uint32_t, ExcludedObject> excluded;
-    const int chunk_steps = MAX_IMPLICIT_COARSE_STEPS_PER_CHUNK;
-    const int overlap_steps = 1;
-
-    const auto globalize_hit =
-        [](const CoarseHitRecord& hit, int step_offset) -> CoarseHitRecord {
-            CoarseHitRecord global_hit = hit;
-            if (global_hit.earliest_step != std::numeric_limits<int32_t>::max()) {
-                global_hit.earliest_step += step_offset;
-            }
-            if (global_hit.latest_step >= 0) {
-                global_hit.latest_step += step_offset;
-            }
-            if (global_hit.best_step >= 0) {
-                global_hit.best_step += step_offset;
-            }
-            return global_hit;
-        };
-    const auto refine_and_store_hit =
-        [&](const CoarseHitRecord& hit) {
-            {
-                auto event = refine_coarse_hit_if_within_threshold(
-                    tles[hit.obj1_index],
-                    tles[hit.obj2_index],
-                    hit,
-                    start_jd,
-                    end_jd,
-                    config,
-                    resident_index);
-                if (has_error()) {
-                    failed_pair_objects.emplace_back(hit.obj1_index, hit.obj2_index);
-                    clear_error();
-                    return;
-                }
-                stats.tca_refined += 1;
-                if (event.has_value()) {
-                    events.push_back(std::move(*event));
-                    event_objects.emplace_back(hit.obj1_index, hit.obj2_index);
-                }
-            }
-        };
-
-    for (int chunk_start_step = 0; chunk_start_step <= total_steps;
-         chunk_start_step += chunk_steps) {
-        const int nominal_end_step =
-            std::min(total_steps, chunk_start_step + chunk_steps);
-        const bool is_final_chunk = nominal_end_step >= total_steps;
-        const int screen_end_step = is_final_chunk
-            ? nominal_end_step
-            : std::min(total_steps, nominal_end_step + overlap_steps);
-
-        ScreeningConfig chunk_config = config;
-        chunk_config.start_jd =
-            start_jd + static_cast<double>(chunk_start_step) * step_days;
-        chunk_config.duration_days = std::max(
-            0.0,
-            static_cast<double>(screen_end_step - chunk_start_step) * step_days);
-
+    RefinedEncounters refined;
+    const int32_t chunk_steps = MAX_IMPLICIT_COARSE_STEPS_PER_CHUNK;
+    for (int32_t chunk_first = 0; chunk_first <= total_steps;
+         chunk_first += chunk_steps) {
+        const int32_t chunk_last =
+            std::min(total_steps, chunk_first + chunk_steps - 1);
+        const bool is_final_chunk = chunk_last >= total_steps;
         auto chunk_result = collect_precomputed_tles_implicit_window(
             tles,
             perigee_km,
             apogee_km,
             is_primary,
             participates,
-            chunk_config,
+            config,
+            chunk_first,
+            chunk_last,
             nullptr,
             resident_index);
 
         if (has_error()) return {};
         merge_exclusions(excluded, chunk_result.excluded);
-        if (!excluded.empty()) {
-            for (auto it = carry_hits.begin(); it != carry_hits.end();) {
-                if (involves_excluded(it->second.obj1_index, it->second.obj2_index, excluded)) {
-                    it = carry_hits.erase(it);
-                } else {
-                    ++it;
-                }
-            }
-        }
-        for (const auto& [key, hit] : chunk_result.coarse_hits) {
-            if (involves_excluded(hit.obj1_index, hit.obj2_index, excluded)) continue;
-            auto global_hit = globalize_hit(hit, chunk_start_step);
-            auto& aggregate = carry_hits[key];
-            if (aggregate.best_step < 0) {
-                aggregate.obj1_index = global_hit.obj1_index;
-                aggregate.obj2_index = global_hit.obj2_index;
-            }
-            merge_coarse_hit_record(aggregate, global_hit);
-        }
-
-        std::vector<uint64_t> finalized_keys;
-        finalized_keys.reserve(carry_hits.size());
-        for (const auto& [key, hit] : carry_hits) {
-            if (is_final_chunk || hit.latest_step < nominal_end_step) {
-                finalized_keys.push_back(key);
-            }
-        }
-        for (uint64_t key : finalized_keys) {
-            const auto found = carry_hits.find(key);
-            if (found == carry_hits.end()) {
-                continue;
-            }
-            refine_and_store_hit(found->second);
-            carry_hits.erase(found);
-        }
-
-        stats.kdtree_candidates += chunk_result.stats.kdtree_candidates;
         stats.propagations += chunk_result.stats.propagations;
+        stats.kdtree_candidates += chunk_result.stats.kdtree_candidates;
+
+        std::vector<CoarseHitRecord> runs = std::move(chunk_result.encounters);
+        runs.insert(runs.end(), carry.begin(), carry.end());
+        carry.clear();
+        std::vector<CoarseHitRecord> closed;
+        for (const auto& encounter : drop_excluded_encounters(
+                 coalesce_encounters(std::move(runs)), excluded)) {
+            if (is_final_chunk || encounter.latest_step < chunk_last) {
+                closed.push_back(encounter);
+            } else {
+                carry.push_back(encounter);
+            }
+        }
+        stats.tca_refined += closed.size();
+        auto batch = refine_encounters(tles, closed, config, nullptr, resident_index);
+        refined.events.insert(refined.events.end(),
+                              std::make_move_iterator(batch.events.begin()),
+                              std::make_move_iterator(batch.events.end()));
+        refined.event_objects.insert(refined.event_objects.end(),
+                                     batch.event_objects.begin(), batch.event_objects.end());
+        refined.failed_objects.insert(refined.failed_objects.end(),
+                                      batch.failed_objects.begin(), batch.failed_objects.end());
 
         if (progress) {
-            const double fraction =
-                std::min(1.0,
-                         static_cast<double>(nominal_end_step) /
-                             static_cast<double>(std::max(1, total_steps)));
-            progress(fraction, "Streaming resident screening...");
-        }
-
-        if (is_final_chunk) {
-            break;
+            progress(static_cast<double>(chunk_last + 1) /
+                         static_cast<double>(total_steps + 1),
+                     "Streaming resident screening...");
         }
     }
 
     stats.excluded_objects = excluded_list(excluded);
-    if (!excluded.empty()) {
-        std::vector<ConjunctionEvent> kept;
-        kept.reserve(events.size());
-        for (size_t i = 0; i < events.size(); ++i) {
-            if (!involves_excluded(event_objects[i].first, event_objects[i].second, excluded)) {
-                kept.push_back(std::move(events[i]));
-            }
+    std::vector<ConjunctionEvent> events;
+    events.reserve(refined.events.size());
+    for (size_t i = 0; i < refined.events.size(); ++i) {
+        if (!involves_excluded(refined.event_objects[i].first,
+                               refined.event_objects[i].second, excluded)) {
+            events.push_back(std::move(refined.events[i]));
         }
-        events = std::move(kept);
     }
-    for (const auto& [obj1_index, obj2_index] : failed_pair_objects) {
+    for (const auto& [obj1_index, obj2_index] : refined.failed_objects) {
         if (!involves_excluded(obj1_index, obj2_index, excluded)) ++stats.failed_pairs;
     }
-
-    std::sort(events.begin(), events.end(),
-              [](const ConjunctionEvent& a, const ConjunctionEvent& b) {
-                  return a.max_probability > b.max_probability;
-              });
-    events = dedupe_chunked_events(std::move(events));
     stats.conjunctions_found = events.size();
+    sort_conjunction_events(events);
+
     auto t_end = std::chrono::high_resolution_clock::now();
     stats.elapsed_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
 

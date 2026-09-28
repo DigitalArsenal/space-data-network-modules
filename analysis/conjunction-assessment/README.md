@@ -107,6 +107,18 @@ difference is the number of excluded records. `PAIRS_SCREENED` and
 pass never propagates (for example, secondaries whose altitude band misses
 every primary) are neither screened nor reported.
 
+Each close approach within the threshold is its own event: a pair that meets
+several times in a window is reported at each TCA, and an event belongs to the
+window that holds its TCA. One window or consecutive windows over the same span
+(on the same coarse-step grid) give the same events: the same pairs, TCAs
+within the refinement tolerance, the same miss distances. `KD_TREE_CANDIDATES`
+counts pairs with a coarse hit (per chunk past 10000 coarse steps) and
+`TCA_REFINED` counts encounters, runs of consecutive coarse hits of one pair.
+This holds for SGP4 mean-element sources screened with `ALFANO_MAXIMUM`
+(`screen_catalog` and the resident source-description index). The generic
+engine path (sampled or non-mean polynomial sources, other probability
+algorithms) still reports each pair's closest approach in the window.
+
 Authoritative numerical tests include the committed CelesTrak SOCRATES snapshot,
 closed-form constant-velocity encounters, the Gaussian/Rayleigh probability
 integral, and native published Orekit probability and CDM fixtures. Each

@@ -20,6 +20,7 @@
 #include "Eci.h"
 
 #include <cmath>
+#include <cstdio>
 #include <algorithm>
 #include <stdexcept>
 #include <sstream>
@@ -86,9 +87,17 @@ double epoch_to_jd(int year, double day_of_year) {
 
 std::string jd_to_iso(double jd) {
     if (!std::isfinite(jd)) { set_error("Non-finite epoch"); return {}; }
-    // JD → calendar date
+    // Round to the printed millisecond before splitting the day: a fraction
+    // that rounds up to the next second carries into the minute, hour and
+    // calendar day (and on into month and year) instead of printing second 60
+    // (21:36:59.9999996 is 21:37:00.000, never 21:36:60.000).
     double z = std::floor(jd + 0.5);
-    double f = (jd + 0.5) - z;
+    long long ms = std::llround(((jd + 0.5) - z) * 86400000.0);
+    if (ms >= 86400000LL) {
+        ms -= 86400000LL;
+        z += 1.0;
+    }
+    // Day number -> calendar date (Meeus, Astronomical Algorithms, ch. 7).
     double a;
     if (z < 2299161) { a = z; }
     else {
@@ -100,26 +109,16 @@ std::string jd_to_iso(double jd) {
     double d = std::floor(365.25 * c);
     double e = std::floor((b - d) / 30.6001);
 
-    double day = b - d - std::floor(30.6001 * e) + f;
+    int day = (int)(b - d - std::floor(30.6001 * e));
     int month = (e < 14) ? (int)e - 1 : (int)e - 13;
     int year = (month > 2) ? (int)c - 4716 : (int)c - 4715;
 
-    int day_int = (int)day;
-    double frac = day - day_int;
-    int hour = (int)(frac * 24);
-    int minute = (int)((frac * 24 - hour) * 60);
-    double second = ((frac * 24 - hour) * 60 - minute) * 60;
-
-    std::stringstream ss;
-    ss << std::setfill('0')
-       << std::setw(4) << year << "-"
-       << std::setw(2) << month << "-"
-       << std::setw(2) << day_int << "T"
-       << std::setw(2) << hour << ":"
-       << std::setw(2) << minute << ":"
-       << std::fixed << std::setprecision(3) << std::setw(6) << std::setfill('0') << second
-       << "Z";
-    return ss.str();
+    char text[40];
+    std::snprintf(text, sizeof text, "%04d-%02d-%02dT%02lld:%02lld:%02lld.%03lldZ",
+                  year, month, day,
+                  ms / 3600000LL, ms / 60000LL % 60LL,
+                  ms / 1000LL % 60LL, ms % 1000LL);
+    return text;
 }
 
 double iso_to_jd(const std::string& iso) {
@@ -628,6 +627,89 @@ double find_tca(const TLE& tle1, const TLE& tle2,
     }
 
     return best_jd;
+}
+
+std::vector<ConjunctionSolution> assess_conjunction_solutions_within_threshold(
+    const TLE& tle1, const TLE& tle2,
+    double start_jd, double duration_days, double threshold_km,
+    double fine_tol_sec)
+{
+    const double end_jd = start_jd + duration_days;
+    // The range sampled every 5 s over the window, the end included. 5 s is
+    // what find_tca samples at: at 12+ km/s a sub-km minimum lasts < 0.1 s,
+    // but the sample below both its neighbours still brackets it.
+    constexpr double SAMPLE_DAYS = 5.0 / 86400.0;
+    // find_tca's candidate bound: the sample nearest a minimum within the
+    // threshold is at most 2.5 s from it, so no farther than 5 km + 2.5 s of
+    // relative motion (45 km at 16 km/s).
+    constexpr double CANDIDATE_KM = 50.0;
+    std::vector<double> jds;
+    std::vector<double> ranges;
+    for (double jd = start_jd; jd <= end_jd; jd += SAMPLE_DAYS) {
+        jds.push_back(jd);
+    }
+    if (jds.empty() || jds.back() < end_jd) jds.push_back(end_jd);
+    ranges.reserve(jds.size());
+    for (double jd : jds) {
+        ranges.push_back(distance_at_jd(tle1, tle2, jd));
+        if (has_error()) return {};
+    }
+
+    // Each sample below its predecessor and not above its successor brackets
+    // a minimum between those two neighbours. A window edge sample not above
+    // its neighbour brackets one within a sample interval of the edge, on
+    // either side of it (a minimum outside the window refines outside it).
+    std::vector<std::pair<double, double>> brackets;
+    const size_t n = jds.size();
+    if (n == 1) {
+        if (ranges[0] < CANDIDATE_KM) brackets.push_back({jds[0] - SAMPLE_DAYS, jds[0] + SAMPLE_DAYS});
+    } else {
+        if (ranges[0] <= ranges[1] && ranges[0] < CANDIDATE_KM) {
+            brackets.push_back({jds[0] - SAMPLE_DAYS, jds[1]});
+        }
+        for (size_t i = 1; i + 1 < n; ++i) {
+            if (ranges[i] < ranges[i - 1] && ranges[i] <= ranges[i + 1] &&
+                ranges[i] < CANDIDATE_KM) {
+                brackets.push_back({jds[i - 1], jds[i + 1]});
+            }
+        }
+        if (ranges[n - 1] <= ranges[n - 2] && ranges[n - 1] < CANDIDATE_KM) {
+            brackets.push_back({jds[n - 2], jds[n - 1] + SAMPLE_DAYS});
+        }
+    }
+
+    // Golden section to the refinement tolerance within each bracket. A
+    // minimum that refines outside the window is the tail of one outside it.
+    // Brackets that refine into the same minimum are one conjunction.
+    constexpr double SAME_MINIMUM_DAYS = 1.0 / 86400.0;
+    const double tolerance_days = std::max(0.001, fine_tol_sec) / 86400.0;
+    std::vector<ConjunctionSolution> solutions;
+    for (const auto& [low, high] : brackets) {
+        const double tca_jd = refine_minimum(
+            tle1, tle2, 0.5 * (low + high), 0.5 * (high - low), fine_tol_sec);
+        if (has_error()) return {};
+        if (!(tca_jd >= start_jd - tolerance_days && tca_jd <= end_jd + tolerance_days)) {
+            continue;
+        }
+        const double d = distance_at_jd(tle1, tle2, tca_jd);
+        if (has_error()) return {};
+        if (!(std::isfinite(d) && d >= 0.0 && d <= threshold_km)) continue;
+        auto same = std::find_if(
+            solutions.begin(), solutions.end(),
+            [&](const ConjunctionSolution& s) {
+                return std::abs(s.tca_jd - tca_jd) <= SAME_MINIMUM_DAYS;
+            });
+        if (same == solutions.end()) {
+            solutions.push_back({tca_jd, d});
+        } else if (d < same->min_range_km) {
+            *same = {tca_jd, d};
+        }
+    }
+    std::sort(solutions.begin(), solutions.end(),
+              [](const ConjunctionSolution& a, const ConjunctionSolution& b) {
+                  return a.tca_jd < b.tca_jd;
+              });
+    return solutions;
 }
 
 // ============================================================================

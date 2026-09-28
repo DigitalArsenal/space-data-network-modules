@@ -252,24 +252,40 @@ function probabilityRatio(actual, expected) {
 
 // Match a decoded screen_catalog result against a reference event list.
 // referenceEvents: [{ obj1Norad, obj2Norad, tcaJd, missKm, relSpeedKms, pc? }]
+// A pair can meet more than once in a window and every close approach is its
+// own event, so each reference row is matched to the event of its pair with
+// the nearest TCA (each event matched at most once).
 // Returns { matched:[{stratum, deltas, event, reference}], missing:[...ref],
-//           extra:[...event], counts }.
+//           extra:[...event], otherPairs:[...event], otherTcas:[...event], counts }:
+// extra = every unmatched event; otherPairs = unmatched events of pairs that
+// have no reference row; otherTcas = unmatched events of referenced pairs.
 export function compareToReference(decoded, referenceEvents) {
-  const found = new Map();
+  const byPair = new Map();
   for (const event of decoded.conjunctions ?? []) {
-    found.set(pairKey(event.obj1Norad, event.obj2Norad), event);
+    const key = pairKey(event.obj1Norad, event.obj2Norad);
+    if (!byPair.has(key)) byPair.set(key, []);
+    byPair.get(key).push(event);
   }
   const matched = [];
   const missing = [];
-  const usedKeys = new Set();
+  const used = new Set();
+  const referencedPairs = new Set();
   for (const reference of referenceEvents) {
     const key = pairKey(reference.obj1Norad, reference.obj2Norad);
-    const event = found.get(key);
+    referencedPairs.add(key);
+    let event = null;
+    for (const candidate of byPair.get(key) ?? []) {
+      if (used.has(candidate)) continue;
+      if (!event || Math.abs(Number(candidate.tcaJd) - Number(reference.tcaJd)) <
+          Math.abs(Number(event.tcaJd) - Number(reference.tcaJd))) {
+        event = candidate;
+      }
+    }
     if (!event) {
       missing.push(reference);
       continue;
     }
-    usedKeys.add(key);
+    used.add(event);
     const tcaDeltaSec = Math.abs(Number(event.tcaJd) - Number(reference.tcaJd)) * 86400.0;
     const missDeltaM = Math.abs(Number(event.minRangeKm) - Number(reference.missKm)) * 1000.0;
     const relSpeedDeltaMS =
@@ -289,20 +305,23 @@ export function compareToReference(decoded, referenceEvents) {
       },
     });
   }
-  const extra = [];
-  for (const [key, event] of found) {
-    if (!usedKeys.has(key)) extra.push(event);
-  }
+  const extra = (decoded.conjunctions ?? []).filter((event) => !used.has(event));
+  const otherPairs = extra.filter((event) => !referencedPairs.has(pairKey(event.obj1Norad, event.obj2Norad)));
+  const otherTcas = extra.filter((event) => referencedPairs.has(pairKey(event.obj1Norad, event.obj2Norad)));
   return {
     matched,
     missing,
     extra,
+    otherPairs,
+    otherTcas,
     counts: {
       referenceCount: referenceEvents.length,
       foundCount: decoded.conjunctions?.length ?? 0,
       matchedCount: matched.length,
       missingCount: missing.length,
       extraCount: extra.length,
+      otherPairCount: otherPairs.length,
+      otherTcaCount: otherTcas.length,
       objectsParsed: decoded.objectsParsed ?? 0,
     },
   };

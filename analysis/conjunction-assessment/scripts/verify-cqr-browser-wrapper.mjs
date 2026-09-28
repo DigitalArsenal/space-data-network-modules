@@ -29,7 +29,8 @@ try {
   const response=decodePluginInvokeResponse(run.stdout);assert.equal(response.statusCode,0,response.errorMessage);
   const result=decodeCqr(flatc,response.outputs[0].payload).CATALOG_RESULT;
   const cmp=compareToReference(catalogInReferenceUnits(result),events);
-  assert.equal(cmp.counts.missingCount,0);assert.equal(cmp.counts.extraCount,0);assert.equal(result.STATISTICS.FAILED_PAIRS,0);
+  assert.equal(cmp.counts.missingCount,0);assert.equal(cmp.counts.otherPairCount,0);assert.equal(result.STATISTICS.FAILED_PAIRS,0);
+  for(const e of cmp.otherTcas)assert.ok(e.minRangeKm<=T.screening.socrates.thresholdKm);
   for(const m of cmp.matched){assert.ok(m.deltas.tcaDeltaSec<=T.tca.NLRV.hardFailSec);assert.ok(m.deltas.missDeltaM<=T.missDistance.socratesHardFailM);assert.ok(m.deltas.relSpeedDeltaMS<=T.relSpeed.hardFailMS);}
   report.deltas=cmp.matched.map(m=>({pair:m.key,...m.deltas}));report.ok=true;
 }catch(error){report.ok=false;report.error=error.message;process.exitCode=1;}

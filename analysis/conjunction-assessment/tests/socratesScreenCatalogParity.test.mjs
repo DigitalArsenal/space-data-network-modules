@@ -12,10 +12,19 @@
 // Gate honesty (see tests/lib/caParityTolerances.mjs):
 //   [independent-parity] event-set recall + rel-vel-stratified TCA + geometry
 //                        vs SOCRATES's own GP elements (SGP4 == SGP4).
-//   [regression-guard]   exact event count + miss-distance bound on the fixed
-//                        6-object catalog (SOCRATES CSV range is quantized).
+//   [regression-guard]   no event on a pair SOCRATES did not report + miss-
+//                        distance bound on the fixed 6-object catalog
+//                        (SOCRATES CSV range is quantized).
 //   [same-family-advisory] Pc vs SOCRATES MAX_PROB (ALFANO-MAXPROB family):
 //                        recorded + warned, NEVER a pass/fail axis.
+//
+// Every close approach within the threshold is its own event, so a reported
+// pair can appear again at other TCAs of the window (48282-58288 meets once an
+// orbit on 03-12 and 03-16). The reference is SOCRATES's top three by maximum
+// probability, not its full listing: those other conjunctions are checked as
+// conjunctions (their own local minimum within the threshold, confirmed by the
+// pair solver, and ranked below the three by maximum probability), not
+// counted as spurious.
 // =============================================================================
 
 import assert from "node:assert/strict";
@@ -25,11 +34,13 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { CA_PARITY_TOLERANCES } from "./lib/caParityTolerances.mjs";
+import { decodeCqr, earthFrame, encodeCqr, gpSource, screeningControls } from "./lib/cqr.mjs";
 import {
   buildOmmCatalogFrame,
   buildScreenCatalogRequest,
   compareToReference,
   initFlatc,
+  invokeRaw,
   isoToJd,
   loadRawConjunctionModule,
   runScreenCatalog,
@@ -102,7 +113,25 @@ if (ARTIFACT) {
   const decoded = runScreenCatalog(exports, flatc, { requestBinary, catalogBinary });
   const cmp = compareToReference(decoded, referenceEvents);
 
-  ctx = { reference, catalog, referenceEvents, decoded, cmp, startJd, durationDays };
+  // Each other conjunction of a reported pair, solved again by the pair
+  // method on its own two-minute window: the engine TCA solver (LAAS_2015
+  // selects ConjunctionEngine, a separate implementation from the screener's
+  // refinement), 5 s coarse step, 1 ms tolerance.
+  const gpByNorad = new Map(catalog.map((gp) => [gp.NORAD_CAT_ID, gp]));
+  const resolved = cmp.otherTcas.map((event) => {
+    const request = encodeCqr(flatc, { PAIR_REQUEST: {
+      PRIMARY: gpSource(gpByNorad.get(event.obj1Norad)),
+      SECONDARY: gpSource(gpByNorad.get(event.obj2Norad)),
+      CONTROLS: { ...screeningControls({ startJd: event.tcaJd - 60 / 86400, durationSeconds: 120, coarseStepSec: 5,
+        thresholdKm: T.screening.socrates.thresholdKm, fineTolSec: T.screening.socrates.fineTolSec }), ALGORITHM: "LAAS_2015" },
+      PRIMARY_RADIUS_M: 5, SECONDARY_RADIUS_M: 5, EVALUATION_FRAME: earthFrame("TEME"),
+    } });
+    const response = invokeRaw(exports, "assess_conjunction", [{ portId: "request", bytes: request }]);
+    const pair = response.statusCode === 0 ? decodeCqr(flatc, response.outputs[0].payload).EVENT_RESULT : null;
+    return { event, statusCode: response.statusCode, errorMessage: response.errorMessage, pair };
+  });
+
+  ctx = { reference, catalog, referenceEvents, decoded, cmp, resolved, startJd, durationDays };
 }
 
 function requireCtx(t) {
@@ -121,7 +150,8 @@ test("SOCRATES: parity summary (measured deltas for the coordinator)", (t) => {
   t.diagnostic(
     `catalog=${c.catalog.length} objectsParsed=${c.cmp.counts.objectsParsed} ` +
       `found=${c.cmp.counts.foundCount} matched=${c.cmp.counts.matchedCount} ` +
-      `missing=${c.cmp.counts.missingCount} extra=${c.cmp.counts.extraCount} ` +
+      `missing=${c.cmp.counts.missingCount} otherTcas=${c.cmp.counts.otherTcaCount} ` +
+      `otherPairs=${c.cmp.counts.otherPairCount} ` +
       `window=[${c.startJd.toFixed(3)},+${c.durationDays.toFixed(2)}d] thr=${T.screening.socrates.thresholdKm}km`,
   );
   for (const m of c.cmp.matched) {
@@ -142,19 +172,50 @@ test("SOCRATES: event set — full reference recall, no spurious events [indepen
   if (!c) return;
   // All 6 objects parsed.
   assert.equal(c.cmp.counts.objectsParsed, c.catalog.length);
-  // Recall: every reference pair reproduced.
+  // Recall: every reference conjunction reproduced.
   assert.equal(
     c.cmp.counts.missingCount,
     0,
     `missing reference pairs: ${c.cmp.missing.map((m) => `${m.obj1Norad}-${m.obj2Norad}`).join(",")}`,
   );
-  // Precision: on this fixed catalog the event set is deterministic.
+  assert.equal(c.cmp.counts.matchedCount, c.referenceEvents.length);
+  // Precision: on this fixed catalog no pair SOCRATES did not report comes
+  // within the threshold.
   assert.equal(
-    c.cmp.counts.extraCount,
+    c.cmp.counts.otherPairCount,
     T.eventSet.allowExtraEventsOnFixedCatalog,
-    `unexpected extra events: ${c.cmp.extra.map((e) => `${e.obj1Norad}-${e.obj2Norad}`).join(",")}`,
+    `unexpected extra events: ${c.cmp.otherPairs.map((e) => `${e.obj1Norad}-${e.obj2Norad}`).join(",")}`,
   );
-  assert.equal(c.cmp.counts.foundCount, c.referenceEvents.length);
+});
+
+test("SOCRATES: other conjunctions of the reported pairs are distinct close approaches [regression-guard: same SGP4, separate TCA solver]", (t) => {
+  const c = requireCtx(t);
+  if (!c) return;
+  const thresholdM = T.screening.socrates.thresholdKm * 1000;
+  const endJd = c.startJd + c.durationDays;
+  // SOCRATES ranks by maximum probability; its top three end at this value.
+  const lowestReferencePc = Math.min(...c.referenceEvents.map((r) => r.pc));
+  for (const { event, statusCode, errorMessage, pair } of c.resolved) {
+    const label = `${event.obj1Norad}-${event.obj2Norad} @ ${event.tcaJd}`;
+    assert.ok(event.minRangeKm * 1000 <= thresholdM, `${label} is beyond the threshold`);
+    assert.ok(event.tcaJd >= c.startJd && event.tcaJd <= endJd, `${label} is outside the window`);
+    assert.ok(event.maxProbability < lowestReferencePc, `${label} would rank inside SOCRATES's top three`);
+    assert.equal(statusCode, 0, `${label}: ${errorMessage}`);
+    t.diagnostic(`${label} miss=${(event.minRangeKm * 1000).toFixed(3)}m pair-solver dTCA=${(Math.abs(pair.TCA.JULIAN_DATE - event.tcaJd) * 86400).toFixed(5)}s dMiss=${Math.abs(pair.MISS_DISTANCE_M - event.minRangeKm * 1000).toFixed(4)}m`);
+    assert.ok(Math.abs(pair.TCA.JULIAN_DATE - event.tcaJd) * 86400 <= T.tca.NLRV.hardFailSec, `${label}: pair solver TCA differs`);
+    assert.ok(Math.abs(pair.MISS_DISTANCE_M - event.minRangeKm * 1000) <= T.missDistance.aerospaceHardFailM, `${label}: pair solver miss differs`);
+  }
+  // Distinct close approaches: no two events of a pair within two coarse steps.
+  const byPair = new Map();
+  for (const e of c.decoded.conjunctions) {
+    const key = [e.obj1Norad, e.obj2Norad].sort((a, b) => a - b).join("-");
+    byPair.set(key, [...(byPair.get(key) ?? []), e.tcaJd].sort((a, b) => a - b));
+  }
+  for (const [key, tcas] of byPair) {
+    for (let i = 1; i < tcas.length; i++) {
+      assert.ok((tcas[i] - tcas[i - 1]) * 86400 > 2 * T.screening.socrates.coarseStepSec, `${key}: two events ${((tcas[i] - tcas[i - 1]) * 86400).toFixed(3)} s apart`);
+    }
+  }
 });
 
 test("SOCRATES: TCA within rel-vel-stratified tolerance [independent-parity]", (t) => {

@@ -97,6 +97,16 @@ ConjunctionSolution assess_conjunction_solution(
     const TLE& tle1, const TLE& tle2,
     double start_jd, double duration_days = 7.0);
 
+/// Every local minimum of the pair's range inside
+/// [start_jd, start_jd + duration_days] whose refined miss distance is within
+/// threshold_km, in TCA order: the range is sampled every 5 s, each sample
+/// below its neighbours (or a window edge not above its neighbour) brackets
+/// a minimum, and golden section refines it to fine_tol_sec.
+std::vector<ConjunctionSolution> assess_conjunction_solutions_within_threshold(
+    const TLE& tle1, const TLE& tle2,
+    double start_jd, double duration_days, double threshold_km,
+    double fine_tol_sec = 0.001);
+
 /// Solve only for TCA + miss distance inside an explicit search window,
 /// seeded by a nearby TCA hint to avoid rescanning the whole interval.
 ConjunctionSolution assess_conjunction_solution_in_window_near_hint(
