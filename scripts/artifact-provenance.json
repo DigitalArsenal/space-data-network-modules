@@ -191,7 +191,7 @@
     "pin": "em-6.0.1",
     "emscriptenVersion": "6.0.1",
     "modules": 14,
-    "unknownToolchainBaseline": 27
+    "unknownToolchainBaseline": 25
   },
   "artifacts": {
     "analysis/access/dist/access.wasm": {
@@ -1502,17 +1502,14 @@
       }
     },
     "data-source/spacex-starlink-source/dist/isomorphic/module.wasm": {
-      "sha256": "94c069fb7be9fd6c091973c1a2c402230f1d35d48f06c6222e2839fa5cbfe787",
+      "sha256": "685f81656ac69be951481f1a88a4be2d6a495a02703418f9bb05072de1ab1316",
       "bytes": 70670,
       "module": "data-source/spacex-starlink-source",
-      "lastCommit": "052e30b644c1332b8511c3873bd86affd3648701",
-      "lastCommitDate": "2026-07-19T07:09:27-04:00",
-      "provenance": "inferred",
+      "lastCommit": "e86dcff2c1b5fdc30fdce33154b3bee96c25637d",
+      "lastCommitDate": "2026-09-28T18:45:01-04:00",
+      "provenance": "recorded",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "d45b72c3864756f67280927409179df01948a81c",
-        "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -1526,26 +1523,27 @@
         ],
         "inferenceHazard": false
       },
-      "emsdkToolchain": null,
-      "toolchainUnknown": true,
-      "emsdkEvidence": {
-        "toolchain": "em-6.0.1",
-        "confidence": "strong",
-        "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-17; artifact committed 2026-07-19."
-      }
+      "emsdkToolchain": {
+        "lane": "raw-em++",
+        "pinId": "em-6.0.1",
+        "era": false,
+        "emscriptenVersion": "6.0.1",
+        "emscriptenRelease": "releases-4857659ec65fbcf1f3e43c88499925475957b238-64bit",
+        "llvmRevision": "25e4e8d6550d392ba9e0c2936bce7cf41ee47cc0",
+        "emsdkCommit": "c68d67a7c82f8d9c56301dff5ff34367e3892553",
+        "emsdkRoot": "../../spacedatanetwork-stack/repos/main-packages/space-data-network-modules/data-source/spacex-starlink-source/deps/emsdk"
+      },
+      "toolchainUnknown": false
     },
     "data-source/spacex-starlink-source/dist/spacex-starlink-source.wasm": {
-      "sha256": "b51d6a588587987061acd7e3bc2ae840241526a13029c934deebddc282e1ac48",
+      "sha256": "3910fb8c63d392a6e830d768a09288268bff516888e910a0e000c4fdd72761a1",
       "bytes": 71634,
       "module": "data-source/spacex-starlink-source",
-      "lastCommit": "052e30b644c1332b8511c3873bd86affd3648701",
-      "lastCommitDate": "2026-07-19T07:09:27-04:00",
-      "provenance": "inferred",
+      "lastCommit": "e86dcff2c1b5fdc30fdce33154b3bee96c25637d",
+      "lastCommitDate": "2026-09-28T18:45:01-04:00",
+      "provenance": "recorded",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "d45b72c3864756f67280927409179df01948a81c",
-        "sdkCommit": "68e67a0dc44dc91d43a7da2849048faf21b40ae9"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -1559,13 +1557,17 @@
         ],
         "inferenceHazard": false
       },
-      "emsdkToolchain": null,
-      "toolchainUnknown": true,
-      "emsdkEvidence": {
-        "toolchain": "em-6.0.1",
-        "confidence": "strong",
-        "evidence": "Own deps/emsdk 6.0.1 installed 2026-07-17; artifact committed 2026-07-19."
-      }
+      "emsdkToolchain": {
+        "lane": "raw-em++",
+        "pinId": "em-6.0.1",
+        "era": false,
+        "emscriptenVersion": "6.0.1",
+        "emscriptenRelease": "releases-4857659ec65fbcf1f3e43c88499925475957b238-64bit",
+        "llvmRevision": "25e4e8d6550d392ba9e0c2936bce7cf41ee47cc0",
+        "emsdkCommit": "c68d67a7c82f8d9c56301dff5ff34367e3892553",
+        "emsdkRoot": "../../spacedatanetwork-stack/repos/main-packages/space-data-network-modules/data-source/spacex-starlink-source/deps/emsdk"
+      },
+      "toolchainUnknown": false
     },
     "data-source/spk-source/dist/isomorphic/module.wasm": {
       "sha256": "55ecd5ca14a35277273644792df9947886826f6752eec268bdbc1e086599426b",
@@ -2272,31 +2274,25 @@
       "declaration": null
     },
     "flows/supplemental-omm/dist/isomorphic/module.wasm": {
-      "sha256": "d8dd6bc2cac11a4005d1a1f327264fe57f48b1495e85b7bd008169db1520d5f0",
-      "bytes": 21354338,
+      "sha256": "9984b7bfa9b300448cad28e0614d11a46d4392d4bfed468c06107a49bbdadb85",
+      "bytes": 21354358,
       "module": null,
-      "lastCommit": "6e347f73f6a6b46e36b5b31071f741499b0ae1f4",
-      "lastCommitDate": "2026-08-06T16:20:26-04:00",
+      "lastCommit": "e86dcff2c1b5fdc30fdce33154b3bee96c25637d",
+      "lastCommitDate": "2026-09-28T18:45:01-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "3b594eccd55f9d6ddfd003118e689c9715139626",
-        "sdkCommit": "7be98c73e93205534cb50749270d25ac36fbca89"
-      },
+      "sdkPinAtCommit": null,
       "declaration": null
     },
     "flows/supplemental-omm/dist/runtime.wasm": {
-      "sha256": "d8dd6bc2cac11a4005d1a1f327264fe57f48b1495e85b7bd008169db1520d5f0",
-      "bytes": 21354338,
+      "sha256": "9984b7bfa9b300448cad28e0614d11a46d4392d4bfed468c06107a49bbdadb85",
+      "bytes": 21354358,
       "module": null,
-      "lastCommit": "6e347f73f6a6b46e36b5b31071f741499b0ae1f4",
-      "lastCommitDate": "2026-08-06T16:20:26-04:00",
+      "lastCommit": "e86dcff2c1b5fdc30fdce33154b3bee96c25637d",
+      "lastCommitDate": "2026-09-28T18:45:01-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "3b594eccd55f9d6ddfd003118e689c9715139626",
-        "sdkCommit": "7be98c73e93205534cb50749270d25ac36fbca89"
-      },
+      "sdkPinAtCommit": null,
       "declaration": null
     },
     "flows/supplemental-omm/nodes/flatsql/dist/isomorphic/module.wasm": {
@@ -2333,17 +2329,14 @@
       }
     },
     "flows/supplemental-omm/nodes/od/dist/isomorphic/module.wasm": {
-      "sha256": "cbcdd060f81963f3874817bc5971cbedde7860724cd99f4dcad13dd1a8ea443c",
-      "bytes": 2782072,
+      "sha256": "82a8fa3c5d11534252ee77fe03eeac328f9b0f754983f108fe79f78a66dc8fa2",
+      "bytes": 2782079,
       "module": "flows/supplemental-omm/nodes/od",
-      "lastCommit": "6e347f73f6a6b46e36b5b31071f741499b0ae1f4",
-      "lastCommitDate": "2026-08-06T16:20:26-04:00",
+      "lastCommit": "e86dcff2c1b5fdc30fdce33154b3bee96c25637d",
+      "lastCommitDate": "2026-09-28T18:45:01-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "3b594eccd55f9d6ddfd003118e689c9715139626",
-        "sdkCommit": "7be98c73e93205534cb50749270d25ac36fbca89"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
