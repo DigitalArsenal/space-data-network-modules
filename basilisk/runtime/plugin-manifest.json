@@ -21,7 +21,8 @@
               "allowedTypes": [
                 {
                   "schemaName": "XTC.fbs",
-                  "fileIdentifier": "$XTC"
+                  "fileIdentifier": "$XTC",
+                  "rootTypeName": "XTC"
                 }
               ]
             }
@@ -40,7 +41,8 @@
               "allowedTypes": [
                 {
                   "schemaName": "XTC.fbs",
-                  "fileIdentifier": "$XTC"
+                  "fileIdentifier": "$XTC",
+                  "rootTypeName": "XTC"
                 }
               ]
             }

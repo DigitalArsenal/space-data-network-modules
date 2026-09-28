@@ -40,3 +40,19 @@ test("tracked module sources do not reference legacy PINQ/PINS invoke identifier
 
   assert.deepEqual(matches, []);
 });
+
+// The source scan above skips dist/, so a committed artifact built before the
+// PIV migration went unnoticed: basilisk/runtime's June 2026 module.wasm still
+// verified requests as the legacy invoke table, rejected every PIV request
+// with this message and exited 1. Only the legacy invoke glue carries it.
+const LEGACY_INVOKE_GLUE_MARKER = Buffer.from(
+  "Invoke request FlatBuffer verification failed.",
+);
+
+test("committed wasm artifacts do not embed the legacy pre-PIV invoke glue", () => {
+  const legacy = trackedFiles()
+    .filter((path) => path.endsWith(".wasm"))
+    .filter((path) => readFileSync(path).includes(LEGACY_INVOKE_GLUE_MARKER));
+
+  assert.deepEqual(legacy, []);
+});
