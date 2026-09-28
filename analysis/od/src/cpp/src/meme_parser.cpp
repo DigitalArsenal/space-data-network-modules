@@ -6,6 +6,8 @@
  */
 
 #include "od/meme_parser.h"
+#include "od/frame_transform.h"
+#include "od/state_series.h"
 #include <sstream>
 #include <fstream>
 #include <cmath>
@@ -269,6 +271,28 @@ MEMEFile parse_meme_file(const std::string& path) {
     }
 
     return result;
+}
+
+StateSeries meme_state_series(const MEMEFile& meme) {
+    StateSeries series;
+    series.samples = meme.points;
+    for (EphemerisPoint& p : series.samples) {
+        const double r_in[3] = {p.x, p.y, p.z};
+        const double v_in[3] = {p.vx, p.vy, p.vz};
+        double r_out[3], v_out[3];
+        eci_j2000_to_teme(p.epoch_jd, r_in, v_in, r_out, v_out);
+        p.x = r_out[0]; p.y = r_out[1]; p.z = r_out[2];
+        p.vx = v_out[0]; p.vy = v_out[1]; p.vz = v_out[2];
+    }
+    series.meta.norad_cat_id = meme.header.norad_cat_id;
+    series.meta.object_name = meme.header.object_name;
+    series.meta.ref_frame = "TEME";
+    series.meta.source_frame = "EME2000";
+    series.meta.time_system = "UTC";
+    series.meta.segment_count = 1;
+    // MEME's filename COSPAR field is a SpaceX-internal id, not an international
+    // designator, so OBJECT_ID is intentionally not derived from it.
+    return series;
 }
 
 std::vector<std::string> parse_manifest(const std::string& content) {

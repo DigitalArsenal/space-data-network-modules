@@ -1396,21 +1396,8 @@ FitResult fit_sgp4_meme(
     const FitterConfig& config,
     const std::string& data_source) {
 
-    StateSeries series;
-    series.samples = meme.points;
-    series.meta.norad_cat_id = meme.header.norad_cat_id;
-    series.meta.object_name = meme.header.object_name;
-    // MEME state vectors are already effectively TEME (confirmed by the <1 m
-    // fit RMS on the checked-in Starlink suite); no rotation is applied.
-    series.meta.ref_frame = "TEME";
-    series.meta.source_frame =
-        meme.header.reference_frame.empty() ? "TEME" : meme.header.reference_frame;
-    series.meta.time_system = "UTC";
+    StateSeries series = meme_state_series(meme);
     series.meta.data_source = data_source;
-    series.meta.segment_count = 1;
-    // MEME's filename COSPAR field is a SpaceX-internal id, not an international
-    // designator, so OBJECT_ID is intentionally not derived from it.
-
     return fit_sgp4_series(series, config);
 }
 

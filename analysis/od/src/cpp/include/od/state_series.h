@@ -13,8 +13,8 @@
  *   - samples[].epoch_jd is a UTC Julian Date.
  *   - samples[] position/velocity are expressed in TEME (True Equator, Mean
  *     Equinox of date) km / km/s — the frame SGP4 propagates in. Parsers are
- *     responsible for converting into TEME (MEME is already TEME; OEM EME2000
- *     is rotated via od::eci_j2000_to_teme). meta.source_frame records the
+ *     responsible for converting into TEME (MEME and OEM EME2000 states are
+ *     rotated via od::eci_j2000_to_teme). meta.source_frame records the
  *     original input frame for provenance.
  *
  * The per-sample type reuses EphemerisPoint (position/velocity + optional
@@ -52,6 +52,13 @@ struct StateSeries {
     StateSeriesMeta meta;
     std::vector<EphemerisPoint> samples;
 };
+
+/// The one MEME -> StateSeries conversion every fit path uses. MEME states are
+/// EME2000; each sample is rotated to TEME with od::eci_j2000_to_teme at its
+/// own epoch. Reading them as TEME instead offsets the fit by the precession
+/// since J2000 (~30 km for Starlink in 2026). The covariance is UVW (local
+/// orbital), so the rotation leaves it unchanged.
+StateSeries meme_state_series(const MEMEFile& meme);
 
 }  // namespace od
 

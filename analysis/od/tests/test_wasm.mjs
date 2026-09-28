@@ -302,6 +302,24 @@ function assertBeatsCelestrak(result) {
   );
 }
 
+// Frame check: CelesTrak fits its SupGP to the same operator ephemeris, so its
+// elements scored on OUR TEME states (REFERENCE_RMS) must land within a few km.
+// Our own fit RMS cannot catch a frame error, because a fit is self-consistent
+// in whatever frame it is handed. Reading the EME2000 MEME states as TEME put
+// CelesTrak 35-41 km off on the checked-in Starlink fixtures; rotated to TEME it
+// is 0.4-3.0 km.
+async function assertSameEphemerisAgreement(harness, manifest, rows, content, fit, maxKm, label) {
+  assert.ok(rows && rows.length > 0, `${label}: no CelesTrak SupGP row to score.`);
+  const { row } = pickClosestEpochRow(rows, fit.EPOCH);
+  const scored = await invokeFitJson(harness, content, referenceOptionsFromRow(manifest, row));
+  const referenceRms = Number.parseFloat(scored.REFERENCE_RMS);
+  assert.ok(
+    Number.isFinite(referenceRms) && referenceRms <= maxKm,
+    `${label}: CelesTrak SupGP scores ${scored.REFERENCE_RMS} km on our TEME states `
+      + `(limit ${maxKm} km); the input states are in the wrong frame.`,
+  );
+}
+
 async function runBeatsCelestrakGate(t, harness, dir, manifest) {
   const files = providerInputFiles(dir, manifest);
   assert.ok(
@@ -315,6 +333,10 @@ async function runBeatsCelestrakGate(t, harness, dir, manifest) {
   );
 
   const options = fitOptionsForProvider(manifest);
+  const agreementMaxKm = manifest.tolerances?.referenceRmsMaxKm;
+  const supGpRows = Number.isFinite(agreementMaxKm)
+    ? parseCelestrakSupGpRows(path.join(dir, manifest.celestrakCsv))
+    : null;
   const results = [];
   for (const filePath of files) {
     const noradId = manifest.noradFromFilename
@@ -325,13 +347,20 @@ async function runBeatsCelestrakGate(t, harness, dir, manifest) {
       reference,
       `Missing CelesTrak SupGP reference RMS for NORAD ${noradId} (${manifest.name}).`,
     );
-    const fit = await invokeFitJson(harness, fs.readFileSync(filePath), options);
+    const content = fs.readFileSync(filePath);
+    const fit = await invokeFitJson(harness, content, options);
     const rms = Number.parseFloat(fit.RMS);
     assert.ok(
       Number.isFinite(rms),
       `Fit RMS must be finite for ${path.basename(filePath)}.`,
     );
     results.push({ filePath, noradId, rms, referenceRms: reference.rms });
+    if (supGpRows) {
+      await assertSameEphemerisAgreement(
+        harness, manifest, supGpRows.get(noradId), content, fit, agreementMaxKm,
+        `${manifest.name}:${path.basename(filePath)}`,
+      );
+    }
   }
   for (const result of results) {
     assertBeatsCelestrak(result);

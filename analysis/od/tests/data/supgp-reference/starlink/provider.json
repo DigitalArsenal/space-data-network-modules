@@ -9,6 +9,7 @@
   "noradFromFilename": true,
   "celestrakCsv": "celestrak_supgp_2026-034.csv",
   "tolerances": {
-    "rmsMustBeatCelestrak": true
+    "rmsMustBeatCelestrak": true,
+    "referenceRmsMaxKm": 5.0
   }
 }

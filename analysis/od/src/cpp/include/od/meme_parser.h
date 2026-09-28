@@ -16,6 +16,10 @@
  *   <21 covariance elements, lower triangular 6×6, 3 lines of 7 values>
  *   ... repeats every step_size seconds
  *
+ * State vectors are EME2000 (J2000 mean equator and equinox), km and km/s,
+ * UTC epochs. "UVW" names the covariance frame only. Use meme_state_series
+ * (state_series.h) to hand them to the fitter in TEME.
+ *
  * Filename pattern:
  *   MEME_{NORAD}_{NAME}_{COSPAR}_{Status}_{UnixTimestamp}_UNCLASSIFIED.txt
  */
@@ -43,7 +47,7 @@ struct MEMEHeader {
     std::string ephemeris_stop;
     int step_size_sec = 60;
     std::string ephemeris_source;
-    std::string reference_frame;  // "UVW"
+    std::string reference_frame;  // "UVW": the covariance frame (states are EME2000)
 
     // Parsed from filename
     int norad_cat_id = 0;

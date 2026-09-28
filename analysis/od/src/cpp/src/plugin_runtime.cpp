@@ -240,7 +240,7 @@ std::string lower(std::string s) {
     return s;
 }
 
-// Build a common StateSeries from a MEME payload (already-TEME state vectors).
+// Build a common StateSeries from a MEME payload (EME2000 states, rotated to TEME).
 bool build_meme_series(std::string_view content, StateSeries* out,
                        std::string* error_code, std::string* error_message) {
     MEMEFile meme = parse_meme(std::string(content));
@@ -249,14 +249,7 @@ bool build_meme_series(std::string_view content, StateSeries* out,
         *error_message = "MEME payload did not contain any ephemeris points.";
         return false;
     }
-    out->samples = meme.points;
-    out->meta.norad_cat_id = meme.header.norad_cat_id;
-    out->meta.object_name = meme.header.object_name;
-    out->meta.ref_frame = "TEME";
-    out->meta.source_frame =
-        meme.header.reference_frame.empty() ? "TEME" : meme.header.reference_frame;
-    out->meta.time_system = "UTC";
-    out->meta.segment_count = 1;
+    *out = meme_state_series(meme);
     return true;
 }
 
