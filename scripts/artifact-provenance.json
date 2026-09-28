@@ -641,18 +641,28 @@
       }
     },
     "basilisk/runtime/dist/isomorphic/module.wasm": {
-      "sha256": "c4d392e14282f4537e0f59bea87d22152c0164226e801f7291c8d9c5540e3aaa",
-      "bytes": 116776,
-      "module": null,
-      "lastCommit": "1a89416b14282a6b30737d2f0ab6c69bc7240125",
-      "lastCommitDate": "2026-06-12T15:38:08-04:00",
+      "sha256": "7c5d8069638744c0029450054bc11b30ce403ffee45503a91b1c2699a12e19c4",
+      "bytes": 100403,
+      "module": "basilisk/runtime",
+      "lastCommit": "d66b702e4fa98acb957089ca8de1e3425d083063",
+      "lastCommitDate": "2026-09-28T19:53:37-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "30c094571c7903a0cc3ae826a4b16438221f3fe0",
-        "sdkCommit": "78ef31673dd0682c17f3718e60616aa4cc7aa1e2"
-      },
-      "declaration": null
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasi",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
     },
     "data-source/bond-attestation-source/dist/bond-attestation-source.wasm": {
       "sha256": "7c7690528f16e4c5c8f4e8b76090edb240dd6b8e7e754984bc46f7f448139ba3",
