@@ -20,7 +20,14 @@ import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import * as flatbuffers from "flatbuffers";
 import { createFlowRuntimeHost } from "space-data-module-sdk/flow";
+import {
+  CelestialFrame,
+  CelestialFrameWrapper,
+  OMM,
+  RFMUnion,
+} from "spacedatastandards.org/lib/js/OMM/main.js";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -324,6 +331,59 @@ test("celestrak-gp-groups-ingest: OMM re-emission stores a second batch only whe
   assert.equal(omm.meta.reconcile, "duplicates");
   assert.equal(omm.meta.archive, undefined, "payload archived once (EGP batch only)");
   assert.equal(results.find((r) => r.schema === "OMM.fbs").inserted, 4);
+});
+
+// The storage.ingest_with_source records segment is a stream of 4-byte
+// little-endian size-prefixed FlatBuffers, one per record.
+function splitStream(payload) {
+  const records = [];
+  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  let off = 0;
+  while (off < payload.byteLength) {
+    assert.ok(off + 4 <= payload.byteLength, "truncated size prefix");
+    const len = view.getUint32(off, true);
+    off += 4;
+    assert.ok(len > 0 && off + len <= payload.byteLength, "invalid record length");
+    records.push(payload.subarray(off, off + len));
+    off += len;
+  }
+  return records;
+}
+
+// CelesTrak GP data are SGP4 mean elements in TEME of date: the GP product
+// defines them that way and CelesTrak's own OMM KVN/XML for the same records
+// states REF_FRAME = TEME. The flow links celestrak-reference statically, so
+// the re-emitted OMMs it hands the store carry the frame only once the flow is
+// recompiled against the fixed module. Read here through the published SDS
+// JavaScript bindings (SDS RFM CelestialFrame.TEMEOFDATE, SANA OID
+// 1.3.112.4.57.2.25), the same contract as celestrak-gp-ingest.
+test("celestrak-gp-groups-ingest: every re-emitted OMM declares CENTER_NAME EARTH and REFERENCE_FRAME TEME of date", async () => {
+  const stub = createIngestHostStub({
+    config: { ...TWO_GROUPS, celestrak_gp_groups_emit_omm: true },
+    fetches: { [STATIONS_URL]: { body: STATIONS_CSV }, [GPZ_URL]: { body: GPZ_CSV } },
+  });
+  await runFlowOnce(GP_GROUPS_WASM, stub);
+  const omm = ingestCalls(stub).find((call) => call.meta.schema === "OMM.fbs");
+  assert.ok(omm, "OMM ingest fired");
+  const records = splitStream(omm.segments[0]);
+  const expected = [
+    { norad: 25544, name: "ISS (ZARYA)" },
+    { norad: 48274, name: "CSS (TIANHE)" },
+    { norad: 41866, name: "GOES 16" },
+    { norad: 36516, name: "SES-1" },
+  ];
+  assert.equal(records.length, expected.length);
+  records.forEach((record, index) => {
+    const decoded = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(Uint8Array.from(record)));
+    assert.equal(decoded.NORAD_CAT_ID(), expected[index].norad);
+    assert.equal(decoded.OBJECT_NAME(), expected[index].name);
+    assert.equal(decoded.CENTER_NAME(), "EARTH");
+    const frame = decoded.REFERENCE_FRAME();
+    assert.ok(frame, `NORAD ${expected[index].norad}: REFERENCE_FRAME must be present`);
+    assert.equal(frame.REFERENCE_FRAME_type(), RFMUnion.CelestialFrameWrapper);
+    const celestial = frame.REFERENCE_FRAME(new CelestialFrameWrapper());
+    assert.equal(CelestialFrame[celestial.frame()], "TEMEOFDATE");
+  });
 });
 
 test("celestrak-satcat-reference-ingest: one tick fans out to BOTH reference tables", async () => {
