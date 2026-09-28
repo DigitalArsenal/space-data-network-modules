@@ -8,6 +8,6 @@
     "build": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../sigmf-captures-ingest.flow.json --deps ../sigmf-captures-ingest.deps.json --out ./dist/iqc"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.8.24"
+    "space-data-module-sdk": "0.8.25"
   }
 }

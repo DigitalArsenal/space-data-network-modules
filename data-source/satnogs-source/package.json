@@ -17,6 +17,6 @@
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.8.24"
+    "space-data-module-sdk": "0.8.25"
   }
 }

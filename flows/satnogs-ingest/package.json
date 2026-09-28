@@ -8,6 +8,6 @@
     "build": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../satnogs-rf-ingest.flow.json --deps ../satnogs-ingest.deps.json --out ./dist/rf"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.8.24"
+    "space-data-module-sdk": "0.8.25"
   }
 }

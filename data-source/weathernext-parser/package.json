@@ -18,6 +18,6 @@
     "fixtures": "node tests/fixtures/generate-fixtures.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.8.24"
+    "space-data-module-sdk": "0.8.25"
   }
 }

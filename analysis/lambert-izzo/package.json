@@ -28,7 +28,7 @@
     "check:compliance": "node --test tests/manifest-sdk.test.mjs tests/sdk_compat.test.mjs"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.8.24",
+    "space-data-module-sdk": "0.8.25",
     "flatc-wasm": "26.1.32",
     "esbuild": "0.28.0"
   },

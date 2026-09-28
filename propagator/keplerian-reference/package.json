@@ -17,7 +17,7 @@
     "vectors:build": "node vectors/tools/build-vectors.mjs"
   },
   "dependencies": {
-    "space-data-module-sdk": "0.8.24"
+    "space-data-module-sdk": "0.8.25"
   },
   "private": true
 }
