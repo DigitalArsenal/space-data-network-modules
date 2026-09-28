@@ -11,7 +11,8 @@ selected data-level via the optional `options` frame's `inputFormat` field, or
 auto-detected from the payload:
 
 - **SpaceX MEME text** (`inputFormat: "meme"`) — the SpaceX/Starlink source
-  format. Its state vectors are already effectively TEME.
+  format. Its state vectors are EME2000; the `UVW` header line names the
+  covariance frame.
 - **CCSDS OEM KVN** (`inputFormat: "oem"`, CCSDS 502.0-B) — header +
   one-or-more `META_START`/`META_STOP` segments + state lines
   (`epoch  x y z  vx vy vz`, km / km/s). Multiple segments of the same object
@@ -25,7 +26,11 @@ or format is a parser change, never a fitter change.
 
 The fitter propagates in **TEME**, so every sample handed to it must be TEME.
 
-- MEME: used as-is (already TEME; confirmed by the <1 m Starlink fit RMS).
+- MEME: EME2000, rotated to TEME like OEM `EME2000` (`meme_state_series`).
+  A fit's own RMS cannot detect a frame error, since the fit is self-consistent
+  in any frame. The Starlink reference suites therefore also score CelesTrak's
+  SupGP elements on our TEME states (`referenceRmsMaxKm`): 0.4–3.0 km when
+  rotated, 35–41 km when the states are read as TEME.
 - OEM `REF_FRAME`:
   - `TEME` → used as-is.
   - `EME2000` / `J2000` / `GCRF` → rotated to TEME with the standard IAU-76/FK5
