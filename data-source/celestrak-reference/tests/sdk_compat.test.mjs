@@ -13,13 +13,22 @@ import fs from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import * as flatbuffers from "flatbuffers";
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
+import {
+  CelestialFrame,
+  CelestialFrameWrapper,
+  OMM,
+  RFMUnion,
+} from "spacedatastandards.org/lib/js/OMM/main.js";
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
 const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
-const STANDARDS_ROOT = fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
+const STANDARDS_ROOT =
+  process.env.SPACE_DATA_STANDARDS_ROOT ??
+  fileURLToPath(new URL("../../../../spacedatastandards.org/", import.meta.url));
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -624,6 +633,31 @@ test("parse_gp_groups re-emits OMM rows only when celestrak_gp_groups_emit_omm i
   assert.equal(omm.length, 4, "two rows per fixture group");
   for (const record of omm) assert.equal(fileIdentifier(record), "$OMM");
   assert.equal(provenanceOf(onlyJson(response, "egp_meta")).schema_counts["OMM.fbs"], 4);
+  // CelesTrak GP data are SGP4 mean elements in TEME of date: the GP product
+  // defines them that way and CelesTrak's own OMM KVN/XML for the same records
+  // states REF_FRAME = TEME. Every re-emitted GP-group OMM therefore declares
+  // Earth + TEME of date, read through the published SDS JavaScript bindings
+  // (SDS RFM CelestialFrame.TEMEOFDATE, SANA OID 1.3.112.4.57.2.25), the same
+  // contract as celestrak-parser's parse_gp. An OMM without a frame is refused
+  // by SGP4 consumers such as conjunction-assessment.
+  const expected = [
+    { norad: 25544, name: "ISS (ZARYA)" },
+    { norad: 48274, name: "CSS (TIANHE)" },
+    { norad: 41866, name: "GOES 16" },
+    { norad: 36516, name: "SES-1" },
+  ];
+  omm.forEach((record, index) => {
+    const decoded = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(Uint8Array.from(record)));
+    assert.equal(decoded.NORAD_CAT_ID(), expected[index].norad);
+    assert.equal(decoded.OBJECT_NAME(), expected[index].name);
+    assert.equal(decoded.CENTER_NAME(), "EARTH");
+    const frame = decoded.REFERENCE_FRAME();
+    assert.ok(frame, `NORAD ${expected[index].norad}: REFERENCE_FRAME must be present`);
+    assert.equal(frame.REFERENCE_FRAME_type(), RFMUnion.CelestialFrameWrapper);
+    const celestial = frame.REFERENCE_FRAME(new CelestialFrameWrapper());
+    assert.equal(celestial.frame(), CelestialFrame.TEMEOFDATE);
+    assert.equal(CelestialFrame[celestial.frame()], "TEMEOFDATE");
+  });
 });
 
 // ---------------------------------------------------------------------------

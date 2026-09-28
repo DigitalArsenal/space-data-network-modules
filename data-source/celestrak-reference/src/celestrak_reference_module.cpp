@@ -1549,6 +1549,14 @@ std::vector<uint8_t> build_omm_record(const std::string& object_name, const std:
     const auto object_id_off = fbb.CreateString(object_id);
     const auto epoch_off = fbb.CreateString(epoch_rfc3339);
     const auto center_name_off = fbb.CreateString("EARTH");
+    // CelesTrak GP elements are SGP4 mean elements in TEME of date: the GP
+    // product defines them that way, and CelesTrak's own OMM KVN/XML for the
+    // same data states REF_FRAME = TEME. The frame is the source's contract,
+    // not an inference, so every GP-group OMM declares it, exactly as
+    // celestrak-parser's parse_gp does.
+    const auto reference_frame_off = CreateRFM(
+        fbb, RFMUnion_CelestialFrameWrapper,
+        CreateCelestialFrameWrapper(fbb, CelestialFrame_TEMEOFDATE).Union());
     const auto creation_date_off = fbb.CreateString(creation_date);
     const auto originator_off = fbb.CreateString(originator);
     const auto classification_off = fbb.CreateString(classification.empty() ? "U" : classification);
@@ -1565,6 +1573,7 @@ std::vector<uint8_t> build_omm_record(const std::string& object_name, const std:
     builder.add_ARG_OF_PERICENTER(argp);
     builder.add_MEAN_ANOMALY(mean_anomaly);
     builder.add_CENTER_NAME(center_name_off);
+    builder.add_REFERENCE_FRAME(reference_frame_off);
     builder.add_CREATION_DATE(creation_date_off);
     builder.add_ORIGINATOR(originator_off);
     builder.add_CLASSIFICATION_TYPE(classification_off);
