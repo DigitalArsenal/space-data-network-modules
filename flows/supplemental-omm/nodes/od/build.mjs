@@ -191,6 +191,9 @@ extern "C" int fit(void) {
   threadModel: "emscripten-pthreads",
   allowUndefinedImports: true,
   outputPath: stubOutput,
+  // The final link below reuses the stub's bridge and manifest objects from
+  // the compile's temp dir, so keep it; cleanupCompilation frees it.
+  keepTempDir: true,
 });
 
 try {

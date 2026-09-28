@@ -7,7 +7,7 @@
     "spacedatastandards.org": "1.220.0"
   },
   "devDependencies": {
-    "space-data-module-sdk": "0.8.23"
+    "space-data-module-sdk": "0.8.24"
   },
   "scripts": {
     "generate:basilisk-plan": "node scripts/generate-basilisk-module-plan.mjs && node scripts/generate-basilisk-message-map.mjs",

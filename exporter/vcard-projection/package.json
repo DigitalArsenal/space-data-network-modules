@@ -9,6 +9,6 @@
   },
   "sdn-module": "./dist/isomorphic/module.wasm",
   "devDependencies": {
-    "space-data-module-sdk": "0.8.23"
+    "space-data-module-sdk": "0.8.24"
   }
 }

@@ -27,7 +27,7 @@
     "@helia/unixfs": "^7.1.0",
     "helia": "^6.0.22",
     "flatc-wasm": "^26.1.32",
-    "space-data-module-sdk": "0.8.23"
+    "space-data-module-sdk": "0.8.24"
   },
   "keywords": ["sdn", "wasm", "decryption", "x25519", "ecies", "aes-gcm"],
   "repository": {
