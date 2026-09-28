@@ -17,9 +17,9 @@ source provenance, probability algorithms and units.
 | `compute_pc_from_cdm` | SDS CDM | CQR probability result |
 | `parse_cdm_kvn`, `parse_cdm_xml` | CQR native document | SDS CDM |
 | `write_cdm_kvn`, `write_cdm_xml` | SDS CDM | CQR native document |
-| `screen_catalog` | CQR catalog request plus verified OMM frames | Chunked CQR catalog results |
+| `screen_catalog` | CQR catalog request plus verified OMM frames | Chunked CQR catalog results, plus one OMM per excluded object |
 | Three `prepare_*_screening_index` methods | CQR index request | CQR index result |
-| `screen_window`, `screen_segment_window` | CQR window request | Chunked CQR catalog results |
+| `screen_window`, `screen_segment_window` | CQR window request | Chunked CQR catalog results, plus one OMM per excluded object |
 | `destroy_screening_index` | CQR destroy request | Empty successful response |
 | `version` | CQR version query | CQR version result |
 
@@ -93,6 +93,19 @@ until `FINAL_CHUNK` is true, preserving its input `FRAME_ID`. Concurrent drains
 must use distinct input frame IDs because SDK 0.8.18 does not expose the PIV
 trace ID to guest continuation state. Failed pairs are counted, and the final
 response reports `incomplete-screening` when any evaluation failed.
+
+An object that SGP4 cannot propagate at one of the coarse epochs of the window
+(a reentering or already decayed element set: "Satellite has decayed",
+"Error: (e <= -0.001)", ...) is excluded from the screening instead of failing
+the request. Every other pair is screened exactly as if the object were absent.
+The final chunk carries one `$OMM` per excluded object on the `excluded` port:
+its mean elements, Earth/TEME, with `COMMENT` naming the earliest failing
+coarse epoch and the propagator error there. `OBJECTS_PARSED` counts every
+object; `STATISTICS.TOTAL_OBJECTS` leaves the excluded ones out, so the
+difference is the number of excluded records. `PAIRS_SCREENED` and
+`PAIRS_PREFILTERED` still describe the planned pair set. Objects the coarse
+pass never propagates (for example, secondaries whose altitude band misses
+every primary) are neither screened nor reported.
 
 Authoritative numerical tests include the committed CelesTrak SOCRATES snapshot,
 closed-form constant-velocity encounters, the Gaussian/Rayleigh probability
@@ -176,7 +189,7 @@ context is retained in `docs/a2.8a-ca-parity-ground-truth.md`.
 manual trigger to `screen_catalog` on the typed `request` port. Hosts submit CQR
 catalog requests and drain yielded responses without changing the request or
 its trace/stream identity. The final chunk reports failure counts/status when
-pair evaluation is incomplete.
+pair evaluation is incomplete, and lists excluded objects on `excluded`.
 
 ## License
 

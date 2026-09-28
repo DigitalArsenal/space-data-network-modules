@@ -644,6 +644,26 @@
           "minStreams": 0,
           "maxStreams": 65535,
           "required": false
+        },
+        {
+          "portId": "excluded",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "One OMM per object excluded because SGP4 cannot propagate it over the screening window (for example a decayed element set): its mean elements, with COMMENT giving the first failing epoch and the propagator error. Sent with the final result chunk; the statistics' TOTAL_OBJECTS leaves these out and OBJECTS_PARSED keeps them."
         }
       ],
       "maxBatch": 1,
@@ -836,6 +856,26 @@
           "minStreams": 0,
           "maxStreams": 1,
           "required": false
+        },
+        {
+          "portId": "excluded",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "One OMM per object excluded because SGP4 cannot propagate it over the screening window (for example a decayed element set): its mean elements, with COMMENT giving the first failing epoch and the propagator error. Sent with the final result chunk; the statistics' TOTAL_OBJECTS leaves these out and OBJECTS_PARSED keeps them."
         }
       ],
       "maxBatch": 1,
@@ -884,6 +924,26 @@
           "minStreams": 0,
           "maxStreams": 1,
           "required": false
+        },
+        {
+          "portId": "excluded",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "One OMM per object excluded because SGP4 cannot propagate it over the screening window (for example a decayed element set): its mean elements, with COMMENT giving the first failing epoch and the propagator error. Sent with the final result chunk; the statistics' TOTAL_OBJECTS leaves these out and OBJECTS_PARSED keeps them."
         }
       ],
       "maxBatch": 1,

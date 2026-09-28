@@ -47,6 +47,40 @@ constexpr size_t MIN_EXPLICIT_PAIRS_FOR_KDTREE = 8192;
 constexpr uint64_t MIN_IMPLICIT_ALL_VS_ALL_PAIR_ESTIMATE = 250000;
 constexpr double MAX_RESIDENT_SPEED_BOUND_KM_S = 16.0;
 
+// A coarse-pass propagation failure excludes that object from the screening
+// (see ExcludedObject). Keeps the earliest failing epoch, so the record is the
+// same whichever worker saw the failure first.
+void record_exclusion(std::map<uint32_t, ExcludedObject>& excluded,
+                      uint32_t object_index, double jd, const std::string& reason) {
+    auto [it, inserted] = excluded.try_emplace(object_index);
+    if (inserted || jd < it->second.first_failure_jd) {
+        it->second.index = object_index;
+        it->second.first_failure_jd = jd;
+        it->second.reason = reason;
+    }
+}
+
+void merge_exclusions(std::map<uint32_t, ExcludedObject>& into,
+                      const std::map<uint32_t, ExcludedObject>& from) {
+    for (const auto& [object_index, excluded] : from) {
+        record_exclusion(into, object_index, excluded.first_failure_jd, excluded.reason);
+    }
+}
+
+bool involves_excluded(uint32_t obj1_index, uint32_t obj2_index,
+                       const std::map<uint32_t, ExcludedObject>& excluded) {
+    return !excluded.empty() &&
+           (excluded.count(obj1_index) != 0 || excluded.count(obj2_index) != 0);
+}
+
+std::vector<ExcludedObject> excluded_list(
+    const std::map<uint32_t, ExcludedObject>& excluded) {
+    std::vector<ExcludedObject> out;
+    out.reserve(excluded.size());
+    for (const auto& [object_index, record] : excluded) out.push_back(record);
+    return out;
+}
+
 #ifndef CONJUNCTION_SINGLE_THREAD
 class ReusableBarrier {
 public:
@@ -1020,6 +1054,9 @@ ScreeningThreadWork process_time_steps(
 
     double step_days = step_sec / 86400.0;
     int total_steps = static_cast<int>((end_jd - start_jd) / step_days);
+    // Objects this worker has already excluded; their pairs are dropped after
+    // the merge, so they are not propagated again here.
+    std::vector<uint8_t> excluded_here(tles.size(), 0);
 
     for (int step = thread_id; step <= total_steps; step += total_threads) {
         double jd = start_jd + step * step_days;
@@ -1029,9 +1066,15 @@ ScreeningThreadWork process_time_steps(
         secondary_points.reserve(secondary_ids.size());
 
         for (uint32_t secondary_id : secondary_ids) {
+            if (excluded_here[secondary_id]) continue;
             {
                 const auto state = propagate_sgp4(tles[secondary_id], jd);
-                if (has_error()) { work.error = error_message(); clear_error(); return work; }
+                if (has_error()) {
+                    record_exclusion(work.excluded, secondary_id, jd, error_message());
+                    clear_error();
+                    excluded_here[secondary_id] = 1;
+                    continue;
+                }
                 const KDPoint point{state.x, state.y, state.z, secondary_id, static_cast<uint32_t>(step)};
                 cached_points[secondary_id] = point;
                 has_state[secondary_id] = 1;
@@ -1054,9 +1097,15 @@ ScreeningThreadWork process_time_steps(
 
             for (uint32_t primary_id : primary_ids) {
                 if (!has_state[primary_id]) {
+                    if (excluded_here[primary_id]) continue;
                     {
                         const auto state = propagate_sgp4(tles[primary_id], jd);
-                if (has_error()) { work.error = error_message(); clear_error(); return work; }
+                        if (has_error()) {
+                            record_exclusion(work.excluded, primary_id, jd, error_message());
+                            clear_error();
+                            excluded_here[primary_id] = 1;
+                            continue;
+                        }
                         cached_points[primary_id] = {
                             state.x,
                             state.y,
@@ -1103,9 +1152,15 @@ ScreeningThreadWork process_time_steps(
         } else {
             for (uint32_t primary_id : primary_ids) {
                 if (!has_state[primary_id]) {
+                    if (excluded_here[primary_id]) continue;
                     {
                         const auto state = propagate_sgp4(tles[primary_id], jd);
-                if (has_error()) { work.error = error_message(); clear_error(); return work; }
+                        if (has_error()) {
+                            record_exclusion(work.excluded, primary_id, jd, error_message());
+                            clear_error();
+                            excluded_here[primary_id] = 1;
+                            continue;
+                        }
                         cached_points[primary_id] = {
                             state.x,
                             state.y,
@@ -1216,12 +1271,19 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
     }
 #endif
 
-    // Merge coarse-hit aggregates from all threads.
-    std::map<uint64_t, CoarseHitRecord> unique_pairs;
+    // Merge exclusions first (worker order is fixed), then the coarse-hit
+    // aggregates of every pair whose objects both propagated over the window.
+    std::map<uint32_t, ExcludedObject> excluded;
     for (const auto& tw : thread_results) {
         if (!tw.error.empty()) { set_error(tw.error); return {}; }
+        merge_exclusions(excluded, tw.excluded);
+    }
+    stats.excluded_objects = excluded_list(excluded);
+    std::map<uint64_t, CoarseHitRecord> unique_pairs;
+    for (const auto& tw : thread_results) {
         stats.propagations += tw.propagations;
         for (const auto& hit : tw.coarse_hits) {
+            if (involves_excluded(hit.obj1_index, hit.obj2_index, excluded)) continue;
             const uint64_t key = coarse_hit_key(hit.obj1_index, hit.obj2_index);
             auto& aggregate = unique_pairs[key];
             if (aggregate.best_step < 0) {
@@ -1557,6 +1619,8 @@ ScreeningThreadWork process_time_steps_implicit(
     std::vector<KDPoint> cached_points(n);
     std::vector<uint8_t> has_state(n, 0);
     std::vector<size_t> segment_cursors(n, 0);
+    // Objects this worker has already excluded (see ExcludedObject).
+    std::vector<uint8_t> excluded_here(n, 0);
 
     for (int step = thread_id; step <= total_steps; step += total_threads) {
         const double jd = start_jd + step * step_days;
@@ -1567,6 +1631,7 @@ ScreeningThreadWork process_time_steps_implicit(
         std::fill(has_state.begin(), has_state.end(), 0);
 
         for (uint32_t obj_id : active_ids) {
+            if (excluded_here[obj_id]) continue;
             {
                 StateVector state = {};
                 const bool requires_resident_polynomial =
@@ -1587,7 +1652,12 @@ ScreeningThreadWork process_time_steps_implicit(
                         return work;
                     }
                     state = propagate_sgp4(tles[obj_id], jd);
-                if (has_error()) { work.error = error_message(); clear_error(); return work; }
+                    if (has_error()) {
+                        record_exclusion(work.excluded, obj_id, jd, error_message());
+                        clear_error();
+                        excluded_here[obj_id] = 1;
+                        continue;
+                    }
                     work.propagations++;
                 }
                 if (!std::isfinite(state.x) || !std::isfinite(state.y) || !std::isfinite(state.z) ||
@@ -1793,6 +1863,7 @@ ScreeningThreadWork process_time_steps_implicit(
 struct ImplicitCoarseHitWindowResult {
     std::unordered_map<uint64_t, CoarseHitRecord> coarse_hits;
     ScreeningStats stats;
+    std::map<uint32_t, ExcludedObject> excluded;
 };
 
 ConjunctionSolution refine_exact_window_locally(
@@ -1979,6 +2050,7 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
         result.coarse_hits.reserve(result.coarse_hits.size() + incoming_hits);
         for (const auto& tw : thread_results) {
             if (!tw.error.empty()) { set_error(tw.error); return; }
+            merge_exclusions(result.excluded, tw.excluded);
             stats.propagations += tw.propagations;
             for (const auto& hit : tw.coarse_hits) {
                 const uint64_t key = coarse_hit_key(hit.obj1_index, hit.obj2_index);
@@ -2084,6 +2156,18 @@ ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
 #endif
 
     if (progress) progress(0.7, "Deduplicating candidates...");
+    // An object excluded in any batch is excluded from the whole window,
+    // including pairs it formed in earlier batches.
+    if (!result.excluded.empty()) {
+        for (auto it = result.coarse_hits.begin(); it != result.coarse_hits.end();) {
+            if (involves_excluded(it->second.obj1_index, it->second.obj2_index, result.excluded)) {
+                it = result.coarse_hits.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    stats.excluded_objects = excluded_list(result.excluded);
     stats.kdtree_candidates = result.coarse_hits.size();
 
     auto t_end = std::chrono::high_resolution_clock::now();
@@ -2373,6 +2457,12 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
 
     std::map<uint64_t, CoarseHitRecord> carry_hits;
     std::vector<ConjunctionEvent> events;
+    // Chunks are refined as they finish, so an object excluded in a later
+    // chunk may already have refined pairs: keep each event's and each failed
+    // refinement's object indices and drop those pairs once the window is done.
+    std::vector<std::pair<uint32_t, uint32_t>> event_objects;
+    std::vector<std::pair<uint32_t, uint32_t>> failed_pair_objects;
+    std::map<uint32_t, ExcludedObject> excluded;
     const int chunk_steps = MAX_IMPLICIT_COARSE_STEPS_PER_CHUNK;
     const int overlap_steps = 1;
 
@@ -2401,10 +2491,15 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
                     end_jd,
                     config,
                     resident_index);
-                if (has_error()) { ++stats.failed_pairs; clear_error(); return; }
+                if (has_error()) {
+                    failed_pair_objects.emplace_back(hit.obj1_index, hit.obj2_index);
+                    clear_error();
+                    return;
+                }
                 stats.tca_refined += 1;
                 if (event.has_value()) {
                     events.push_back(std::move(*event));
+                    event_objects.emplace_back(hit.obj1_index, hit.obj2_index);
                 }
             }
         };
@@ -2436,7 +2531,18 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
             resident_index);
 
         if (has_error()) return {};
+        merge_exclusions(excluded, chunk_result.excluded);
+        if (!excluded.empty()) {
+            for (auto it = carry_hits.begin(); it != carry_hits.end();) {
+                if (involves_excluded(it->second.obj1_index, it->second.obj2_index, excluded)) {
+                    it = carry_hits.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
         for (const auto& [key, hit] : chunk_result.coarse_hits) {
+            if (involves_excluded(hit.obj1_index, hit.obj2_index, excluded)) continue;
             auto global_hit = globalize_hit(hit, chunk_start_step);
             auto& aggregate = carry_hits[key];
             if (aggregate.best_step < 0) {
@@ -2476,6 +2582,21 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
         if (is_final_chunk) {
             break;
         }
+    }
+
+    stats.excluded_objects = excluded_list(excluded);
+    if (!excluded.empty()) {
+        std::vector<ConjunctionEvent> kept;
+        kept.reserve(events.size());
+        for (size_t i = 0; i < events.size(); ++i) {
+            if (!involves_excluded(event_objects[i].first, event_objects[i].second, excluded)) {
+                kept.push_back(std::move(events[i]));
+            }
+        }
+        events = std::move(kept);
+    }
+    for (const auto& [obj1_index, obj2_index] : failed_pair_objects) {
+        if (!involves_excluded(obj1_index, obj2_index, excluded)) ++stats.failed_pairs;
     }
 
     std::sort(events.begin(), events.end(),
@@ -2538,6 +2659,10 @@ std::vector<ConjunctionEvent> ConjunctionScreener::screen(
         if (stats_.pairs_screened == 0) {
             stats_.pairs_screened = pair_estimate;
         }
+        for (auto& excluded : stats_.excluded_objects) {
+            excluded.input_list = 0;
+            excluded.input_index = excluded.index;
+        }
         return events;
     }
     return screen(catalog, catalog, progress);
@@ -2550,15 +2675,19 @@ std::vector<ConjunctionEvent> ConjunctionScreener::screen(
 {
     stats_ = {};
 
-    // Merge catalogs (dedup by NORAD ID)
+    // Merge catalogs (dedup by NORAD ID). origin[k] names the input entry the
+    // merged object k came from, so exclusions can be reported against it.
     std::vector<GPElement> catalog;
+    std::vector<std::pair<int, uint32_t>> origin;
     std::unordered_set<int> seen;
     std::vector<uint32_t> primary_indices;
     std::vector<uint32_t> secondary_indices;
-    for (const auto& gp : primaries) {
+    for (size_t input_index = 0; input_index < primaries.size(); ++input_index) {
+        const auto& gp = primaries[input_index];
         if (seen.insert(gp.norad_cat_id).second) {
             primary_indices.push_back(static_cast<uint32_t>(catalog.size()));
             catalog.push_back(gp);
+            origin.emplace_back(0, static_cast<uint32_t>(input_index));
             continue;
         }
 
@@ -2573,10 +2702,12 @@ std::vector<ConjunctionEvent> ConjunctionScreener::screen(
                 static_cast<uint32_t>(std::distance(catalog.begin(), existing)));
         }
     }
-    for (const auto& gp : secondaries) {
+    for (size_t input_index = 0; input_index < secondaries.size(); ++input_index) {
+        const auto& gp = secondaries[input_index];
         if (seen.insert(gp.norad_cat_id).second) {
             secondary_indices.push_back(static_cast<uint32_t>(catalog.size()));
             catalog.push_back(gp);
+            origin.emplace_back(1, static_cast<uint32_t>(input_index));
             continue;
         }
 
@@ -2651,6 +2782,10 @@ std::vector<ConjunctionEvent> ConjunctionScreener::screen(
         if (stats_.pairs_screened == 0) {
             stats_.pairs_screened = pair_estimate;
         }
+        for (auto& excluded : stats_.excluded_objects) {
+            excluded.input_list = origin[excluded.index].first;
+            excluded.input_index = origin[excluded.index].second;
+        }
         return events;
     }
 
@@ -2668,7 +2803,12 @@ std::vector<ConjunctionEvent> ConjunctionScreener::screen(
             : 0;
     stats_.pairs_screened = valid_pairs.size();
 
-    return screen_precomputed_tles(tles, valid_pairs, config_, stats_, progress);
+    auto events = screen_precomputed_tles(tles, valid_pairs, config_, stats_, progress);
+    for (auto& excluded : stats_.excluded_objects) {
+        excluded.input_list = origin[excluded.index].first;
+        excluded.input_index = origin[excluded.index].second;
+    }
+    return events;
 }
 
 } // namespace conjunction

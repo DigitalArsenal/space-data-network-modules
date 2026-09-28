@@ -32,7 +32,7 @@ export async function runThreadedBrowserLane(context) {
         harness = await createHarness({ wasmSource: data.wasmBytes, wasmBinary: data.wasmBytes, surface: 'command',
           args: ['module.wasm', ...data.args], env: data.env,
           wasiThreadWorkerBaseUrl: '/sdk/host/',
-          enableBrowserWasiThreads: true, maxThreads: data.caseId.startsWith('socrates') && data.threadCount > 1 ? data.threadCount * 2 : 0 });
+          enableBrowserWasiThreads: true, maxThreads: /^(socrates|decaying)-/.test(data.caseId) && data.threadCount > 1 ? data.threadCount * 2 : 0 });
         stdout = await harness.invokeRaw(data.stdinBytes);
       } catch (error) {
         exitClass = error.name === 'WasiExitError' ? 'guest-error' : 'trap';

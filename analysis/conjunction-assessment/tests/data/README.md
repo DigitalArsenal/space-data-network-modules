@@ -19,6 +19,12 @@ runs. Override with `CONJUNCTION_ASSESSMENT_CELESTRAK_CACHE_DIR`,
 `CELESTRAK_CACHE_DIR`, or the script `--cache-dir` option. Use `--force-refresh`
 only when intentionally replacing cached CelesTrak responses.
 
+Place a full CelesTrak GP catalog as size-prefixed SDS `$OMM` records at
+`omm-cache.fb` (for example OrbPro's sandcastle gallery
+`sgp4-propagation/omm-cache.fb`), or point `CQR_REAL_CATALOG_OMM_FB` at one,
+to run `tests/realCatalogExclusion.test.mjs`: a real-catalog screen whose
+reentering objects must be excluded and listed rather than fail the request.
+
 Place Aerospace IVV archive files in `aerospace-archives/`:
 
 - `aerospace-archives/AerospaceIVVDataset_20251009a.tar.gz`

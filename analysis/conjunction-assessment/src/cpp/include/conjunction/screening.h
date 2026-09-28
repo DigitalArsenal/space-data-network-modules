@@ -32,6 +32,8 @@
 #include <vector>
 #include <functional>
 #include <atomic>
+#include <map>
+#include <string>
 
 namespace conjunction {
 
@@ -62,6 +64,22 @@ struct ScreeningConfig {
 /// Screening progress callback
 using ProgressCallback = std::function<void(double fraction, const std::string& status)>;
 
+/// An object the coarse pass could not propagate at one of its coarse epochs
+/// (for SGP4, a decayed or out-of-bounds element set: "Satellite has decayed",
+/// "Error: (e <= -0.001)", ...). It is excluded from every pair of the
+/// screening instead of failing the request; every other pair is screened
+/// exactly as it would be without it. Deterministic: the reported epoch is the
+/// earliest failing coarse epoch, whatever the worker count.
+struct ExcludedObject {
+    uint32_t index = 0;             // position in the screened TLE vector
+    double first_failure_jd = 0.0;  // earliest coarse epoch that failed (UTC JD)
+    std::string reason;             // propagator error at that epoch
+    // Filled by callers that know where the object came from.
+    int input_list = -1;            // ConjunctionScreener: 0 primaries, 1 secondaries
+    uint32_t input_index = 0;       // position in that input vector
+    uint32_t source_handle = 0;     // resident index source handle, 0 = none
+};
+
 /// Screening statistics
 struct ScreeningStats {
     uint64_t total_objects = 0;
@@ -73,6 +91,9 @@ struct ScreeningStats {
     uint64_t propagations = 0;       // Total SGP4 propagations
     uint64_t failed_pairs = 0;       // Failed refinement/assessment evaluations
     double elapsed_ms = 0.0;         // Wall clock time
+    /// Objects excluded because they cannot be propagated over the window,
+    /// ordered by index. total_objects still counts them.
+    std::vector<ExcludedObject> excluded_objects;
 };
 
 struct ScreeningThreadWork {
@@ -80,6 +101,8 @@ struct ScreeningThreadWork {
     std::vector<CoarseHitRecord> coarse_hits;
     std::vector<CandidatePair> candidates;
     uint64_t propagations = 0;
+    /// Per-worker exclusions keyed by object index (earliest failure kept).
+    std::map<uint32_t, ExcludedObject> excluded;
 };
 
 /// Can objects at these altitudes ever meet?

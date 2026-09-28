@@ -5,6 +5,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <flatbuffers/flatbuffers.h>
 #include <limits>
@@ -39,6 +40,8 @@ constexpr size_t kMaximumPendingEvents = 16384;
 constexpr size_t kMaximumPendingStreams = 8;
 constexpr size_t kMaximumRetainedRequestBytes = 32 * 1024 * 1024;
 constexpr size_t kMaximumDocumentBytes = 16 * 1024 * 1024;
+// The manifest's `excluded` port maxStreams.
+constexpr size_t kMaximumExcludedFrames = 65535;
 std::string text(const flatbuffers::String *s) {
   return s ? s->str() : std::string();
 }
@@ -383,6 +386,9 @@ struct Source {
   std::shared_ptr<EphemerisSource> provider;
   GPElement gp;
   TLE tle;
+  // True when gp.object_id is the catalog number standing in for an absent
+  // OMM OBJECT_ID (screening identity only; never written back as OBJECT_ID).
+  bool object_id_from_norad = false;
   bool mean = false;
   int axes = 0;
   uint32_t handle = 0;
@@ -711,9 +717,14 @@ std::unique_ptr<CQREventT> event(const ConjunctionEvent2 &e,
   o->HAS_COMBINED_RADIUS_M = true;
   return o;
 }
+// TOTAL_OBJECTS counts the objects the screening covered: the catalog less
+// the objects excluded because they cannot be propagated over the window
+// (listed on the `excluded` port). OBJECTS_PARSED keeps the full count.
 std::unique_ptr<CQRScreeningStatisticsT> statistics(const ScreeningStats &s) {
   auto o = std::make_unique<CQRScreeningStatisticsT>();
-  o->TOTAL_OBJECTS = s.total_objects;
+  o->TOTAL_OBJECTS = s.total_objects >= s.excluded_objects.size()
+                         ? s.total_objects - s.excluded_objects.size()
+                         : 0;
   o->PAIRS_SCREENED = s.pairs_screened;
   o->PAIRS_PREFILTERED = s.pairs_prefiltered;
   o->KD_TREE_CANDIDATES = s.kdtree_candidates;
@@ -728,7 +739,91 @@ struct PendingCatalog {
   ScreeningStats stats;
   size_t offset = 0;
   std::string request_bytes;
+  // Canonical $OMM records of the excluded objects, emitted with the final
+  // chunk on the `excluded` port.
+  std::vector<std::vector<uint8_t>> excluded;
 };
+// UTC calendar text of a Julian date rounded to the millisecond, from integer
+// civil-from-days arithmetic (H. Hinnant, "chrono-Compatible Low-Level Date
+// Algorithms"). Coarse epochs sit on whole seconds, so rounding first keeps
+// e.g. 21:37:00 from printing as 21:36:60.000.
+std::string utcIsoMillis(double jd) {
+  const int64_t ms =
+      static_cast<int64_t>(std::llround((jd - 2440587.5) * 86400000.0));
+  int64_t days = ms / 86400000, rem = ms % 86400000;
+  if (rem < 0) {
+    rem += 86400000;
+    --days;
+  }
+  days += 719468;
+  const int64_t era = (days >= 0 ? days : days - 146096) / 146097;
+  const int64_t doe = days - era * 146097;
+  const int64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  const int64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+  const int64_t mp = (5 * doy + 2) / 153;
+  const int64_t day = doy - (153 * mp + 2) / 5 + 1;
+  const int64_t month = mp < 10 ? mp + 3 : mp - 9;
+  const int64_t year = yoe + era * 400 + (month <= 2 ? 1 : 0);
+  char text[32];
+  std::snprintf(text, sizeof text, "%04lld-%02lld-%02lldT%02lld:%02lld:%02lld.%03lldZ",
+                static_cast<long long>(year), static_cast<long long>(month),
+                static_cast<long long>(day), static_cast<long long>(rem / 3600000),
+                static_cast<long long>(rem / 60000 % 60),
+                static_cast<long long>(rem / 1000 % 60),
+                static_cast<long long>(rem % 1000));
+  return text;
+}
+// One $OMM per excluded object: the mean elements the screening was given
+// (already verified as SGP4 mean elements, UTC, Earth TEME), with COMMENT
+// stating that the object was excluded, the earliest coarse epoch whose
+// propagation failed and the propagator's error there.
+std::vector<uint8_t> excludedRecord(const Source &source, const ExcludedObject &x) {
+  const GPElement &g = source.gp;
+  OMMT o;
+  o.OBJECT_NAME = g.object_name;
+  if (!source.object_id_from_norad)
+    o.OBJECT_ID = g.object_id;
+  o.NORAD_CAT_ID = g.norad_cat_id > 0 ? static_cast<uint32_t>(g.norad_cat_id) : 0;
+  o.CENTER_NAME = "EARTH";
+  o.REFERENCE_FRAME = std::make_unique<RFMT>();
+  CelestialFrameWrapperT teme;
+  teme.frame = CelestialFrame::TEMEOFDATE;
+  o.REFERENCE_FRAME->REFERENCE_FRAME.Set(std::move(teme));
+  o.TIME_SYSTEM = timingStandard::UTC;
+  o.MEAN_ELEMENT_THEORY = meanElementSource::SGP4;
+  o.COMMENT = "Excluded from conjunction screening: SGP4 cannot propagate this "
+              "object over the screening window. First failure at " +
+              utcIsoMillis(x.first_failure_jd) + ": " + x.reason;
+  o.EPOCH = g.epoch_iso;
+  o.MEAN_MOTION = g.mean_motion;
+  o.ECCENTRICITY = g.eccentricity;
+  o.INCLINATION = g.inclination;
+  o.RA_OF_ASC_NODE = g.ra_of_asc_node;
+  o.ARG_OF_PERICENTER = g.arg_of_pericenter;
+  o.MEAN_ANOMALY = g.mean_anomaly;
+  o.EPHEMERIS_TYPE = static_cast<ephemerisFormat>(g.ephemeris_type);
+  o.CLASSIFICATION_TYPE = std::string(1, g.classification_type);
+  o.ELEMENT_SET_NO = g.element_set_no > 0 ? static_cast<uint32_t>(g.element_set_no) : 0;
+  o.REV_AT_EPOCH = g.rev_at_epoch;
+  o.BSTAR = g.bstar;
+  o.MEAN_MOTION_DOT = g.mean_motion_dot;
+  o.MEAN_MOTION_DDOT = g.mean_motion_ddot;
+  flatbuffers::FlatBufferBuilder b(512);
+  FinishOMMBuffer(b, OMM::Pack(b, &o));
+  return std::vector<uint8_t>(b.GetBufferPointer(),
+                              b.GetBufferPointer() + b.GetSize());
+}
+bool pushExcluded(const std::vector<std::vector<uint8_t>> &records) {
+  for (size_t k = 0; k < records.size(); ++k) {
+    int i = plugin_push_output_ex("excluded", "OMM.fbs", "$OMM", 0, "OMM", 0, 0,
+                                  records[k].data(),
+                                  static_cast<uint32_t>(records[k].size()));
+    if (i < 0)
+      return false;
+    plugin_set_output_stream_frame(i, k, k + 1 == records.size() ? 1 : 0);
+  }
+  return true;
+}
 std::map<std::string, PendingCatalog> pending;
 std::string pendingKey(const std::string &method) {
   std::string key = method;
@@ -777,6 +872,8 @@ bool emitPending(const std::string &method) {
   bool failed = p.stats.failed_pairs > 0;
   if (!push(q, "result", start / kEventsPerChunk, final))
     return false;
+  if (final && !pushExcluded(p.excluded))
+    return false;
   for (size_t i = start; i < start + r.EVENTS.size(); ++i)
     p.events[i].reset();
   p.offset += r.EVENTS.size();
@@ -804,7 +901,8 @@ bool hasPending(const std::string &method) {
   return true;
 }
 bool catalogOutput(std::vector<std::unique_ptr<CQREventT>> events,
-                   const ScreeningStats &s, const std::string &method) {
+                   const ScreeningStats &s, const std::string &method,
+                   std::vector<std::vector<uint8_t>> excluded = {}) {
   size_t retainedEvents = events.size();
   size_t retainedRequestBytes = 0;
   for (const auto &entry : pending) {
@@ -812,6 +910,10 @@ bool catalogOutput(std::vector<std::unique_ptr<CQREventT>> events,
     retainedRequestBytes += entry.second.request_bytes.size();
   }
   std::string identity = requestKey();
+  if (excluded.size() > kMaximumExcludedFrames)
+    return error("output-staging-limit",
+                 "More excluded objects than the excluded port can carry; "
+                 "screen a smaller catalog range.");
   if (pending.size() >= kMaximumPendingStreams ||
       retainedEvents > kMaximumPendingEvents ||
       retainedRequestBytes + identity.size() > kMaximumRetainedRequestBytes)
@@ -826,15 +928,17 @@ bool catalogOutput(std::vector<std::unique_ptr<CQREventT>> events,
   p.events = std::move(events);
   p.stats = s;
   p.request_bytes = std::move(identity);
+  p.excluded = std::move(excluded);
   pending[pendingKey(method)] = std::move(p);
   return emitPending(method);
 }
 bool catalogOutput(const std::vector<ConjunctionEvent> &e,
-                   const ScreeningStats &s, const std::string &method) {
+                   const ScreeningStats &s, const std::string &method,
+                   std::vector<std::vector<uint8_t>> excluded = {}) {
   std::vector<std::unique_ptr<CQREventT>> out;
   for (auto &x : e)
     out.push_back(event(x));
-  return catalogOutput(std::move(out), s, method);
+  return catalogOutput(std::move(out), s, method, std::move(excluded));
 }
 
 bool pair(const CQRPairRequest *p, Source &a, Source &b, ScreeningConfig &c) {
@@ -1152,6 +1256,7 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
                    const ScreeningConfig &c, cqrProbabilityAlgorithm alg,
                    ScreeningStats &stats,
                    std::vector<std::unique_ptr<CQREventT>> &events,
+                   std::vector<std::vector<uint8_t>> &excluded,
                    const std::vector<uint32_t> *primary_handles = nullptr) {
   stats.total_objects = p.size() + s.size();
   if (p.empty())
@@ -1172,6 +1277,13 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
       return error("screening-failed", error_message());
     for (auto &e : results)
       events.push_back(event(e));
+    for (const auto &x : stats.excluded_objects) {
+      const auto &list = x.input_list == 1 ? s : p;
+      if (x.input_list < 0 || x.input_index >= list.size())
+        return error("screening-failed",
+                     "Excluded object has no source in the request.");
+      excluded.push_back(excludedRecord(list[x.input_index], x));
+    }
     return true;
   }
   struct Worker {
@@ -1307,6 +1419,7 @@ extern "C" int screen_catalog() {
       if (v.gp.norad_cat_id <= 0)
         return error("invalid-source", "Catalog OMM needs OBJECT_ID or a positive NORAD_CAT_ID."), 400;
       v.gp.object_id = std::to_string(v.gp.norad_cat_id);
+      v.object_id_from_norad = true;
     }
     v.tle = gp_to_tle(v.gp);
     v.mean = true;
@@ -1368,9 +1481,14 @@ extern "C" int screen_catalog() {
   }
   ScreeningStats stats;
   std::vector<std::unique_ptr<CQREventT>> events;
-  if (!screenSources(p, s, c, r->CONTROLS()->ALGORITHM(), stats, events))
+  std::vector<std::vector<uint8_t>> excluded;
+  if (!screenSources(p, s, c, r->CONTROLS()->ALGORITHM(), stats, events,
+                     excluded))
     return 422;
-  return catalogOutput(std::move(events), stats, "screen_catalog") ? 0 : 422;
+  return catalogOutput(std::move(events), stats, "screen_catalog",
+                       std::move(excluded))
+             ? 0
+             : 422;
 }
 
 namespace ca_cqr {
@@ -1646,14 +1764,24 @@ bool screenWindow(const char *method) {
     auto events = screen_resident_index_window(*native, c, stats);
     if (has_error())
       return error("screening-failed", error_message());
-    return catalogOutput(events, stats, method);
+    std::vector<std::vector<uint8_t>> excluded;
+    for (const auto &x : stats.excluded_objects) {
+      auto found = std::find_if(i->sources.begin(), i->sources.end(),
+                                [&](auto &s) { return s.handle == x.source_handle; });
+      if (!x.source_handle || found == i->sources.end())
+        return error("screening-failed",
+                     "Excluded object has no resident source.");
+      excluded.push_back(excludedRecord(*found, x));
+    }
+    return catalogOutput(events, stats, method, std::move(excluded));
   }
   ScreeningStats stats;
   std::vector<std::unique_ptr<CQREventT>> events;
+  std::vector<std::vector<uint8_t>> excluded;
   if (!screenSources(i->sources, {}, c, r->CONTROLS()->ALGORITHM(), stats, events,
-                     &i->primaries))
+                     excluded, &i->primaries))
     return false;
-  return catalogOutput(std::move(events), stats, method);
+  return catalogOutput(std::move(events), stats, method, std::move(excluded));
 }
 } // namespace ca_cqr
 extern "C" int prepare_screening_index() {

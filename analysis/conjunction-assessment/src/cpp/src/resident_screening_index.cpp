@@ -627,6 +627,11 @@ std::vector<ConjunctionEvent> screen_resident_index_window(
         stats,
         progress,
         &index);
+    for (auto& excluded : stats.excluded_objects) {
+        if (excluded.index < index.source_handles.size()) {
+            excluded.source_handle = index.source_handles[excluded.index];
+        }
+    }
     return events;
 }
 
