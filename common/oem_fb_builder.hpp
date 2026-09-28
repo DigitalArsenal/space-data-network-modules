@@ -33,9 +33,9 @@ struct Identity {
 // Build a NON-size-prefixed SDS $OEM FlatBuffer from one object's states. StateT
 // must expose `.epoch` (CreateString-able, ISO-8601 UTC) and doubles
 // `.x/.y/.z/.vx/.vy/.vz` (km, km/s). `frame` is a CelestialFrame arm — e.g.
-// CelestialFrame_EME2000 (ISS OEM), CelestialFrame_TEMEOFDATE (SpaceX MEME, which
-// is effectively TEME); the OD reader rotates the honest source frame to TEME for
-// the fit. `time_system` is a timingStandard arm (e.g. timingStandard_UTC).
+// CelestialFrame_EME2000 (ISS OEM, and SpaceX MEME: its states are EME2000, the UVW
+// header names only the covariance frame); the OD reader rotates the honest source
+// frame to TEME for the fit. `time_system` is a timingStandard arm (e.g. timingStandard_UTC).
 //
 // Construction ORDER mirrors build_iss_oem EXACTLY, so identical inputs yield
 // byte-identical output — preserving the sacred RMS-parity gate.
@@ -157,8 +157,8 @@ inline std::vector<uint8_t> build_oem_flatbuffer(
 // (seconds), from which analysis/od's oem_fb_reader reconstructs epoch[i] =
 // START_TIME + i*STEP_SIZE. This is the shape uniform-cadence providers carry
 // (e.g. SpaceX MEME: parse yields a flat state array + start/stop/step, per-line
-// epochs dropped), so they build $OEM without materializing an ISO string per
-// state. `ephemeris_data` length must be a multiple of 6.
+// epochs dropped, EME2000), so they build $OEM without materializing an ISO string
+// per state. `ephemeris_data` length must be a multiple of 6.
 inline std::vector<uint8_t> build_oem_flatbuffer_compact(
     const Identity& id, CelestialFrame frame, const char* center_name,
     timingStandard time_system, const char* start_iso, const char* stop_iso,
@@ -214,7 +214,7 @@ inline std::vector<uint8_t> build_oem_flatbuffer_compact(
 }
 
 // COMPACT-form $OEM with a CUSTOM frame (RFM{ CustomFrameWrapper{ frame } }) instead
-// of a celestial frame. This is what SpaceX MEME and other TEME providers need:
+// of a celestial frame, for TEME providers (not SpaceX MEME, which is EME2000):
 // `frame = CustomFrame_TEME` reads back as the token "TEME" (the SDS CustomFrame
 // TEME arm is documented "same as TEMEOFDATE: Dynamic frame for SGP4"), which the
 // OD reader's classify_frame accepts as FrameKind::Teme — whereas CelestialFrame's

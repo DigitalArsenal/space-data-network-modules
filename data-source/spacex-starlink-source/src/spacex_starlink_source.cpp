@@ -191,7 +191,7 @@ std::string run_pull(const uint8_t* req, uint32_t req_len) {
         parse_meme(content, &m, &states);  // drops the truncated trailing record
         if (states.empty()) continue;
 
-        std::vector<uint8_t> oem = build_oem_fb(m, states);  // in-memory $OEM (TEME)
+        std::vector<uint8_t> oem = build_oem_fb(m, states);  // in-memory $OEM (EME2000)
         if (oem.empty()) continue;
 
         const size_t hdr = stream.size();

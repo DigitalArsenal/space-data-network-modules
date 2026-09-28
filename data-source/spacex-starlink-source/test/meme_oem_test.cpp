@@ -1,5 +1,6 @@
 // meme_oem_test.cpp — native test: real SpaceX MEME fixture -> parse_meme ->
-// build_oem_fb -> assert a valid SDS $OEM with frame token "TEME", matching NORAD,
+// build_oem_fb -> assert a valid SDS $OEM with frame token "EME2000" (MEME states are
+// EME2000; the UVW header names the covariance frame only), matching NORAD,
 // START_TIME + STEP_SIZE. Proves the in-memory MEME->$OEM path (no network, no store).
 //
 // Compile + run (from repo root main-packages/):
@@ -34,13 +35,13 @@ int main(int argc, char** argv) {
     const char* frame = "?"; const char* start = "?"; double step = -1; long nrd = -1;
     if (rec && rec->EPHEMERIS_DATA_BLOCK() && rec->EPHEMERIS_DATA_BLOCK()->size() > 0) {
         auto blk = rec->EPHEMERIS_DATA_BLOCK()->Get(0);
-        if (blk->REFERENCE_FRAME() && blk->REFERENCE_FRAME()->REFERENCE_FRAME_as_CustomFrameWrapper())
-            frame = EnumNameCustomFrame(blk->REFERENCE_FRAME()->REFERENCE_FRAME_as_CustomFrameWrapper()->frame());
+        if (blk->REFERENCE_FRAME() && blk->REFERENCE_FRAME()->REFERENCE_FRAME_as_CelestialFrameWrapper())
+            frame = EnumNameCelestialFrame(blk->REFERENCE_FRAME()->REFERENCE_FRAME_as_CelestialFrameWrapper()->frame());
         if (blk->START_TIME()) start = blk->START_TIME()->c_str();
         step = blk->STEP_SIZE();
         if (blk->OBJECT()) nrd = blk->OBJECT()->NORAD_CAT_ID();
     }
     std::printf("NORAD=%ld name=%s states=%zu oem=%zuB valid=%d frame=%s start=%s step=%.0f\n",
                 m.norad_cat_id, m.object_name.c_str(), states.size()/6, oem.size(), ok?1:0, frame, start, step);
-    return (ok && std::strcmp(frame,"TEME")==0 && nrd==m.norad_cat_id && m.norad_cat_id>0 && states.size()>=6*10) ? 0 : 1;
+    return (ok && std::strcmp(frame,"EME2000")==0 && nrd==m.norad_cat_id && m.norad_cat_id>0 && states.size()>=6*10) ? 0 : 1;
 }

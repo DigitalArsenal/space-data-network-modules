@@ -31,9 +31,12 @@ all through host capabilities.
   output), keys per the SDS `OEM` schema
   (`EPHEMERIS_DATA_BLOCK[].{CENTER_NAME, REFERENCE_FRAME, TIME_SYSTEM,
   START_TIME, STOP_TIME, STEP_SIZE, STATE_VECTOR_SIZE, EPHEMERIS_DATA}` +
-  `OBJECT_NAME`/`NORAD_CAT_ID`). MEME state vectors are effectively TEME
-  (validated by the OD module's <1 m fit RMS); the `UVW` line is the
-  *covariance* frame only, so `REFERENCE_FRAME` = `TEME`.
+  `OBJECT_NAME`/`NORAD_CAT_ID`). MEME state vectors are **EME2000**; the `UVW`
+  line is the *covariance* frame only, so `REFERENCE_FRAME` = `EME2000` and
+  analysis/od rotates the states to TEME before the SGP4 fit. A fit's own RMS
+  cannot detect a frame error (it is self-consistent in any frame): labelled
+  `TEME`, the fitted GP sat 35-41 km off CelesTrak SupGP scored on the same
+  states; labelled `EME2000` it agrees within a few km.
 - **The raw MEME text is bound by SHA-256, not mislabeled.** The old adapter
   stored the raw manifest listing bytes under an `"OEM"` label (the A2.1-flagged
   placeholder bug). There is no honest raw-blob SDS type, so the raw MEME source

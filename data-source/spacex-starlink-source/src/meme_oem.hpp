@@ -2,8 +2,8 @@
 // meme_oem.hpp — SpaceX MEME parsing + $OEM FlatBuffer build, factored out of the
 // module so it is unit-testable against the checked-in MEME fixtures (no network).
 // The parse (MemeMeta + parse_meme) is the exact logic the module uses; build_oem_fb
-// maps a parsed object to a compact SDS $OEM (CustomFrame::TEME — SGP4/TEME) via the
-// shared oem_fb builder. Pure C++ (no host ABI), so a native test can include it.
+// maps a parsed object to a compact SDS $OEM (CelestialFrame::EME2000, the frame MEME
+// states are in) via the shared oem_fb builder. Pure C++ (no host ABI), so a native test can include it.
 
 // math.h SVID matherr macros (SING/DOMAIN/...) collide with generated enum ids on
 // native builds; undef before the generated header (the em++/WASI sysroot is clean).
@@ -166,16 +166,19 @@ inline void parse_meme(const std::string& content, MemeMeta* m, std::vector<doub
 }
 
 // Build a compact SDS $OEM FlatBuffer for one parsed MEME object. MEME state
-// vectors are TEME (SGP4); frame = CustomFrame::TEME reads back as the token
-// "TEME", which analysis/od's classify_frame accepts. OBJECT_ID is unset (the MEME
-// COSPAR field is SpaceX-internal, not an intl designator). Ephemeris in-memory
-// only; the caller emits the bytes, never stores them.
+// vectors are EME2000 (the UVW header line names only the covariance frame), so
+// the frame is CelestialFrame::EME2000: it reads back as the token "EME2000",
+// which analysis/od rotates to TEME before the SGP4 fit. Labelled TEME, the
+// states were fitted unrotated and every Starlink GP landed ~30-40 km off
+// CelesTrak SupGP. OBJECT_ID is unset (the MEME COSPAR field is SpaceX-internal,
+// not an intl designator). Ephemeris in-memory only; the caller emits the bytes,
+// never stores them.
 inline std::vector<uint8_t> build_oem_fb(const MemeMeta& m,
                                          const std::vector<double>& states) {
     const oem_fb::Identity id{m.object_name.c_str(), "",
                               static_cast<uint32_t>(m.norad_cat_id)};
     return oem_fb::build_oem_flatbuffer_compact(
-        id, CustomFrame::TEME, "EARTH", timingStandard::UTC, m.start_iso.c_str(),
+        id, CelestialFrame::EME2000, "EARTH", timingStandard::UTC, m.start_iso.c_str(),
         m.stop_iso.c_str(), static_cast<double>(m.step_size), states.data(),
         static_cast<int>(states.size()));
 }

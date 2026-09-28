@@ -483,8 +483,12 @@ std::vector<od::BatchObject> parse_starlink_meme(
     state.vz = std::strtod(tokens[6].c_str(), nullptr);
     states.push_back(std::move(state));
   });
-  std::vector<uint8_t> oem = build_custom_oem(
-      object_name, "", norad, CustomFrame::TEME, timingStandard::UTC, states);
+  // MEME state vectors are EME2000 (the UVW header line names only the
+  // covariance frame). Label them honestly so the fit core rotates them to
+  // TEME; read as TEME they put every Starlink fit ~30-40 km off.
+  std::vector<uint8_t> oem = build_celestial_oem(
+      object_name, "", norad, CelestialFrame::EME2000, timingStandard::UTC,
+      states);
   if (oem.empty()) return {};
   return {{std::move(oem)}};
 }

@@ -199,8 +199,9 @@ function serveHttp(url) {
 }
 
 // Drive plugin_invoke_stream with an optional JSON config, collecting the
-// storage.write records and pubsub.publish messages the module emits.
-async function runPull(config) {
+// storage.write records and pubsub.publish messages the module emits. `serve`
+// answers http.request (default: the checked-in fixtures above).
+async function runPull(config, serve = serveHttp) {
   const { stripWasmCustomSections } = await import("space-data-module-sdk/bundle");
   const loadable = stripWasmCustomSections(loadWasm());
 
@@ -225,7 +226,7 @@ async function runPull(config) {
       if (op === "http.request") {
         captured.http = captured.http || [];
         captured.http.push({ url: req.url, headers: req.headers || {} });
-        const r = serveHttp(req.url);
+        const r = serve(req.url);
         // Emulate a range server: a Range request on a MEME file yields 206.
         const isMeme = !req.url.endsWith("MANIFEST.txt");
         const hasRange = req.headers && req.headers.Range;
@@ -314,7 +315,7 @@ test("pull: manifest parse → capped per-object fetch → in-memory $OEM stream
   const { count, records, consumed } = parseOemStream(resultBytes);
 
   // Manifest parsed (3 MEME lines), fetch plan capped to 2 → two $OEM records
-  // framed in the stream. (Full $OEM validity — TEME frame, NORAD, states — is
+  // framed in the stream. (Full $OEM validity — EME2000 frame, NORAD, states — is
   // covered by the native meme_oem_test against the same fixtures.)
   assert.equal(count, 2, "capped to 2 objects");
   assert.equal(records.length, 2);
@@ -384,5 +385,179 @@ test("range: rangeBytes=0 opts out (full-file fetch, no Range header)", async ()
   const memeFetches = (http || []).filter((h) => !h.url.endsWith("MANIFEST.txt"));
   for (const f of memeFetches) {
     assert.ok(!f.headers.Range, "no Range header when rangeBytes=0");
+  }
+});
+
+// ── Frame: MEME state vectors are EME2000 ────────────────────────────────────
+// Source: the checked-in OD reference suite analysis/od/tests/data/supgp-reference/
+// starlink — ten SpaceX MEME operator ephemerides (captured 2026-05-14, launch
+// 2026-034) and CelesTrak's SupGP elements for the same objects
+// (celestrak_supgp_2026-034.csv, DATA_SOURCE SpaceX-E), which CelesTrak fitted to
+// that same operator ephemeris. Units km; TEME of date; UTC epochs.
+//
+// Method: pull the ten full-length MEME files through this module and fit each
+// emitted $OEM with analysis/od (typed `oem` port), which honours the frame the
+// $OEM declares. Then score two element sets with the same SGP4 on the
+// frame-correct TEME states, i.e. analysis/od's own MEME reader (EME2000 rotated
+// to TEME, IAU-76/FK5) over the same file: our fitted GP, and CelesTrak's SupGP
+// (REFERENCE_RMS each). Both are RMS position errors against the same states, so
+// by Minkowski their sum bounds the RMS separation of our GP from SupGP. A fit's
+// own RMS cannot catch a frame error, because a fit is self-consistent in
+// whatever frame it is handed; an independent reference can.
+//
+// Tolerance 5 km on that bound: frame-correct, our GP sits <0.1 km from the
+// states and SupGP 2.2-3.0 km (CelesTrak's own fit residual plus propagation from
+// its element epoch). The pre-fix TEME label left the EME2000 states unrotated
+// and put our GP ~35 km from them, the precession since J2000.
+const SUPGP_SUITE_DIR = path.resolve(__dirname, "../../../analysis/od/tests/data/supgp-reference/starlink");
+const SUPGP_MEME_DIR = path.join(SUPGP_SUITE_DIR, "meme");
+const SUPGP_CSV = path.join(SUPGP_SUITE_DIR, "celestrak_supgp_2026-034.csv");
+const OD_WASM_PATH = path.resolve(__dirname, "../../../analysis/od/dist/isomorphic/module.wasm");
+const SUPGP_AGREEMENT_MAX_KM = 5.0;
+
+function parseSupGpRows(csvPath) {
+  const lines = fs.readFileSync(csvPath, "utf8").split(/\r?\n/).filter((line) => line.trim());
+  const header = lines[0].split(",");
+  const col = (name) => header.indexOf(name);
+  const byNorad = new Map();
+  for (const line of lines.slice(1)) {
+    const f = line.split(",");
+    const num = (name) => Number.parseFloat(f[col(name)]);
+    const norad = Number.parseInt(f[col("NORAD_CAT_ID")], 10);
+    const row = {
+      epoch: f[col("EPOCH")],
+      meanMotion: num("MEAN_MOTION"),
+      eccentricity: num("ECCENTRICITY"),
+      inclination: num("INCLINATION"),
+      raan: num("RA_OF_ASC_NODE"),
+      argp: num("ARG_OF_PERICENTER"),
+      meanAnomaly: num("MEAN_ANOMALY"),
+      bstar: num("BSTAR"),
+      meanMotionDot: num("MEAN_MOTION_DOT"),
+      meanMotionDdot: num("MEAN_MOTION_DDOT"),
+    };
+    if (!byNorad.has(norad)) byNorad.set(norad, []);
+    byNorad.get(norad).push(row);
+  }
+  return byNorad;
+}
+
+function epochMs(iso) {
+  return Date.parse(/[zZ]$/.test(iso) ? iso : `${iso}Z`);
+}
+
+function closestRow(rows, iso) {
+  return rows.reduce((best, row) =>
+    !best || Math.abs(epochMs(row.epoch) - epochMs(iso)) < Math.abs(epochMs(best.epoch) - epochMs(iso))
+      ? row
+      : best, null);
+}
+
+function referenceOptions(elements) {
+  return {
+    inputFormat: "meme",
+    refEpoch: elements.epoch,
+    refMeanMotion: elements.meanMotion,
+    refEccentricity: elements.eccentricity,
+    refInclination: elements.inclination,
+    refRaan: elements.raan,
+    refArgPericenter: elements.argp,
+    refMeanAnomaly: elements.meanAnomaly,
+    refBstar: elements.bstar,
+    refMeanMotionDot: elements.meanMotionDot,
+    refMeanMotionDdot: elements.meanMotionDdot,
+  };
+}
+
+test("pull: $OEM carries EME2000, and our fitted GP agrees with CelesTrak SupGP within 5 km", async (t) => {
+  const { ByteBuffer } = await import("flatbuffers");
+  const { OEM } = await import("spacedatastandards.org/lib/js/OEM/OEM.js");
+  const { RFMUnion } = await import("spacedatastandards.org/lib/js/OEM/RFMUnion.js");
+  const { CelestialFrame } = await import("spacedatastandards.org/lib/js/OEM/CelestialFrame.js");
+  const { CelestialFrameWrapper } = await import("spacedatastandards.org/lib/js/OEM/CelestialFrameWrapper.js");
+  const { OMM } = await import("spacedatastandards.org/lib/js/OMM/OMM.js");
+  const { createStandaloneHarness } = await import("space-data-module-sdk/testing/isomorphic");
+
+  const files = fs.readdirSync(SUPGP_MEME_DIR).filter((name) => /^MEME_\d+_.*\.txt$/.test(name)).sort();
+  assert.equal(files.length, 10, "the Starlink SupGP suite holds ten MEME files");
+  const memeByNorad = new Map(files.map((name) => [Number.parseInt(name.split("_")[1], 10), name]));
+  const serveSuite = (url) => {
+    if (url.endsWith("MANIFEST.txt")) return { status: 200, body: `${files.join("\n")}\n` };
+    const p = path.join(SUPGP_MEME_DIR, url.slice(BASE_URL.length));
+    return fs.existsSync(p) ? { status: 200, body: fs.readFileSync(p, "utf8") } : { status: 404, body: "" };
+  };
+  const { resultBytes } = await runPull({ rangeBytes: 0 }, serveSuite);
+  const { count, records } = parseOemStream(resultBytes);
+  assert.equal(count, files.length, "one $OEM per suite object");
+
+  const supGp = parseSupGpRows(SUPGP_CSV);
+  const od = await createStandaloneHarness("browser", OD_WASM_PATH, { enableThreads: true });
+  t.after(() => od.destroy());
+  const fitOem = async (oem) => {
+    const response = await od.invoke({
+      methodId: "fit",
+      inputs: [{
+        portId: "oem",
+        wireFormat: "flatbuffer",
+        typeRef: { schemaName: "OEM.fbs", fileIdentifier: "$OEM", rootTypeName: "OEM", wireFormat: "flatbuffer" },
+        payload: oem,
+      }],
+    });
+    assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
+    const omm = OMM.getSizePrefixedRootAsOMM(
+      new ByteBuffer(new Uint8Array(response.outputs.find((o) => o.portId === "omm").payload)),
+    );
+    return {
+      epoch: omm.EPOCH(),
+      meanMotion: omm.MEAN_MOTION(),
+      eccentricity: omm.ECCENTRICITY(),
+      inclination: omm.INCLINATION(),
+      raan: omm.RA_OF_ASC_NODE(),
+      argp: omm.ARG_OF_PERICENTER(),
+      meanAnomaly: omm.MEAN_ANOMALY(),
+      bstar: omm.BSTAR(),
+      meanMotionDot: omm.MEAN_MOTION_DOT(),
+      meanMotionDdot: omm.MEAN_MOTION_DDOT(),
+    };
+  };
+  const scoreOnMemeStates = async (meme, elements) => {
+    const response = await od.invoke({
+      methodId: "fit",
+      inputs: [
+        { portId: "meme", payload: meme },
+        { portId: "options", payload: new TextEncoder().encode(JSON.stringify(referenceOptions(elements))) },
+      ],
+    });
+    assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
+    const result = JSON.parse(
+      new TextDecoder().decode(response.outputs.find((o) => o.portId === "result").payload),
+    );
+    const km = Number.parseFloat(result.REFERENCE_RMS);
+    assert.ok(Number.isFinite(km), "analysis/od reported no REFERENCE_RMS");
+    return km;
+  };
+
+  for (const record of records) {
+    const block = OEM.getRootAsOEM(new ByteBuffer(new Uint8Array(record))).EPHEMERIS_DATA_BLOCK(0);
+    const norad = block.OBJECT().NORAD_CAT_ID();
+    const rfm = block.REFERENCE_FRAME();
+    assert.equal(rfm.REFERENCE_FRAME_type(), RFMUnion.CelestialFrameWrapper, `${norad}: celestial frame arm`);
+    assert.equal(rfm.REFERENCE_FRAME(new CelestialFrameWrapper()).frame(), CelestialFrame.EME2000, `${norad}: EME2000`);
+
+    const ours = await fitOem(record);
+    const rows = supGp.get(norad);
+    assert.ok(rows?.length, `no CelesTrak SupGP row for NORAD ${norad}`);
+    const meme = new Uint8Array(fs.readFileSync(path.join(SUPGP_MEME_DIR, memeByNorad.get(norad))));
+    const oursKm = await scoreOnMemeStates(meme, ours);
+    const supGpKm = await scoreOnMemeStates(meme, closestRow(rows, ours.epoch));
+    t.diagnostic(
+      `NORAD ${norad}: our GP ${oursKm.toFixed(3)} km, SupGP ${supGpKm.toFixed(3)} km from the TEME states; ` +
+        `our GP to SupGP ${Math.abs(oursKm - supGpKm).toFixed(3)}..${(oursKm + supGpKm).toFixed(3)} km`,
+    );
+    assert.ok(
+      oursKm + supGpKm <= SUPGP_AGREEMENT_MAX_KM,
+      `${norad}: our GP is ${oursKm} km and CelesTrak SupGP ${supGpKm} km from the frame-correct ` +
+        `TEME states (sum limit ${SUPGP_AGREEMENT_MAX_KM} km); the $OEM states are in the wrong frame.`,
+    );
   }
 });
