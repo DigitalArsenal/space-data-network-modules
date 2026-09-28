@@ -156,7 +156,9 @@ constexpr const char* kUserAgent =
 // deployment: give it room rather than retry-storming.
 constexpr long kDefaultTimeoutMs = 300000;
 // The live corpus is 36,636 recordings; the cap is headroom and is overridable
-// DOWN so a first deploy can stage a slice.
+// DOWN so a first deploy can stage a slice. `sigmf_record_cap` bounds the
+// records ONE cycle emits: the first N capture documents of the index, in
+// index order, and the batch provenance says how many rows it left unread.
 constexpr long kDefaultRecordCap = 50000;
 
 // ---------------------------------------------------------------------------
@@ -703,10 +705,49 @@ std::string config_string(const std::string& config, const char* key, const char
     return fallback;
 }
 
-long config_long(const std::string& config, const char* key, long fallback) {
-    double v = 0;
-    if (json_number_field(config, key, &v) && v > 0) return static_cast<long>(v);
-    return fallback;
+// A positive integer from node CONFIG. The node serves its YAML config block
+// verbatim, so an operator's `sigmf_record_cap: "2000"` arrives as a JSON
+// STRING, not a number: both spellings are the same value. Absent (or null)
+// means the default. Anything else present — "2k", 0, -5, 2.5, true — is
+// REFUSED rather than read as the default: host-02 staged a 2,000-record cap
+// as a quoted string and the module silently ingested all 36,636.
+enum class ConfigInteger { kAbsent, kValue, kInvalid };
+
+ConfigInteger config_positive_long(const std::string& config, const char* key, long* out) {
+    const std::string raw = trim(json_member(config, key));
+    if (raw.empty() || raw == "null") return ConfigInteger::kAbsent;
+    std::string digits;
+    if (raw.front() == '"') {
+        std::string value;
+        if (!json_string_field(config, key, &value)) return ConfigInteger::kInvalid;
+        digits = trim(value);
+    } else {
+        digits = raw;
+    }
+    // wasm32 `long` is 32 bits: nine digits always fit.
+    if (digits.empty() || digits.size() > 9) return ConfigInteger::kInvalid;
+    long value = 0;
+    for (const char c : digits) {
+        if (c < '0' || c > '9') return ConfigInteger::kInvalid;
+        value = value * 10 + (c - '0');
+    }
+    if (value <= 0) return ConfigInteger::kInvalid;
+    *out = value;
+    return ConfigInteger::kValue;
+}
+
+// config_positive_long with the default applied; false (and the flow error
+// already set) when the key is present but not a positive integer.
+bool config_positive_long_or(const std::string& config, const char* key, long fallback, long* out) {
+    long value = fallback;
+    if (config_positive_long(config, key, &value) == ConfigInteger::kInvalid) {
+        const std::string msg = std::string(key) + " must be a positive integer (a JSON number or a " +
+                                "decimal string); got " + trim(json_member(config, key));
+        plugin_set_error("invalid-config", msg.c_str());
+        return false;
+    }
+    *out = value;
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -814,6 +855,9 @@ struct CaptureInput {
 struct DecodeStats {
     int rows = 0;
     int emitted = 0;
+    long record_cap = 0;
+    // Capture documents the cycle never read because the record cap was met.
+    int rows_unread_record_cap = 0;
     int skipped_no_identity = 0;
     int geolocation_present = 0;
     int geolocation_refused_out_of_range = 0;
@@ -1397,6 +1441,12 @@ std::string build_provenance_json(const FetchContext& ctx, const std::string& re
                                   const DecodeStats& stats, const std::string& normalized_sha256) {
     char nbuf[64];
     std::snprintf(nbuf, sizeof(nbuf), "{\"IQC.fbs\":%d}", stats.emitted);
+    std::string warnings;
+    if (stats.rows_unread_record_cap > 0) {
+        warnings = "\"sigmf_record_cap " + std::to_string(stats.record_cap) + " reached: " +
+                   std::to_string(stats.rows_unread_record_cap) + " of " +
+                   std::to_string(stats.rows) + " capture documents not read\"";
+    }
     std::string out = std::string("{\"source_url\":\"") + json_escape(ctx.source_url) + "\"" +
                       ",\"adapter\":\"" + json_escape(ctx.adapter) + "\"" +
                       ",\"registered_adapters\":\"" + registered_adapter_ids() + "\"" +
@@ -1421,13 +1471,15 @@ std::string build_provenance_json(const FetchContext& ctx, const std::string& re
            ",\"records_with_annotations\":" + std::to_string(stats.with_annotations) +
            ",\"records_with_multiple_segments\":" +
            std::to_string(stats.with_multiple_segments) +
+           ",\"record_cap\":" + std::to_string(stats.record_cap) +
+           ",\"rows_unread_record_cap\":" + std::to_string(stats.rows_unread_record_cap) +
            // Licence is PER RECORDING here, never per site: a record with no
            // core:license carries no LICENSE, which means UNKNOWN TERMS.
            ",\"license_model\":\"per-recording\"" +
            ",\"custody\":\"UPSTREAM_ONLY\"" +
            ",\"units\":{\"frequency\":\"Hz\",\"sample_rate\":\"Hz\"}" +
            ",\"source_units\":{\"frequency\":\"Hz\",\"sample_rate\":\"Hz\"}" +
-           ",\"warnings\":[],\"from_cache\":false}";
+           ",\"warnings\":[" + warnings + "],\"from_cache\":false}";
     return out;
 }
 
@@ -1550,7 +1602,10 @@ int request(void) {
     const std::string base = config_string(config, "iqengine_base_url", kIQEngineBaseURL);
     const std::string account = config_string(config, "iqengine_account", kIQEngineAccount);
     const std::string container = config_string(config, "iqengine_container", kIQEngineContainer);
-    const long timeout_ms = config_long(config, "sigmf_http_timeout_ms", kDefaultTimeoutMs);
+    long timeout_ms = kDefaultTimeoutMs;
+    if (!config_positive_long_or(config, "sigmf_http_timeout_ms", kDefaultTimeoutMs, &timeout_ms)) {
+        return 400;
+    }
     const std::string provider = config_string(config, "sigmf_provider_id", kDefaultProviderID);
 
     // ONE bulk request per cycle. The per-file /meta route exists but walking
@@ -1622,7 +1677,10 @@ int parse(void) {
     }
 
     const std::string config = load_config();
-    const long record_cap = config_long(config, "sigmf_record_cap", kDefaultRecordCap);
+    long record_cap = kDefaultRecordCap;
+    if (!config_positive_long_or(config, "sigmf_record_cap", kDefaultRecordCap, &record_cap)) {
+        return 400;
+    }
 
     IQEngineContext adapter_ctx;
     adapter_ctx.base_url = ctx.base_url.empty() ? kIQEngineBaseURL : ctx.base_url;
@@ -1640,12 +1698,17 @@ int parse(void) {
 
     DecodeStats stats;
     stats.rows = static_cast<int>(rows.size());
+    stats.record_cap = record_cap;
     std::vector<uint8_t> stream;
     stream.reserve(rows.size() * 512);
     Sha256 normalized;
 
-    for (const std::string& row : rows) {
-        if (stats.emitted >= record_cap) break;
+    for (size_t index = 0; index < rows.size(); ++index) {
+        if (stats.emitted >= record_cap) {
+            stats.rows_unread_record_cap = static_cast<int>(rows.size() - index);
+            break;
+        }
+        const std::string& row = rows[index];
         CaptureInput input;
         if (!adapter->decode(row, adapter_ctx, &input, &stats)) continue;
         const std::vector<uint8_t> rec = build_iqc_record(input, retrieved_at, created_at);

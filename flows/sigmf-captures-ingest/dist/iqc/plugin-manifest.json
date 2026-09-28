@@ -32,7 +32,7 @@
       "direction": "bidirectional",
       "capability": "http",
       "resource": "https://*",
-      "description": "Outbound HTTP through the host http.request hostcall. Go server host: 4 MiB response cap, 30 s default timeout. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
+      "description": "Outbound HTTP through the host http.request hostcall. Go server host: 100 MiB response ceiling lowered per request by max_bytes (exceeding the effective bound is an error, never a truncation), 30 s default timeout, per-destination egress pacing. SDK NodeHost/BrowserHost: fetch-based, origin allowlists enforced by host policy.",
       "properties": {
         "hostOps": [
           "http.request"

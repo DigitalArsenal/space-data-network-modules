@@ -17,31 +17,36 @@
       "nodeId": "req",
       "pluginId": "com.digitalarsenal.data-source.sigmf-captures",
       "methodId": "request",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "http",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "methodId": "request",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "parse",
       "pluginId": "com.digitalarsenal.data-source.sigmf-captures",
       "methodId": "parse",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "ingest_iqc",
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
       "methodId": "ingest",
-      "dispatchModel": "linked-direct"
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
     },
     {
       "nodeId": "egress",
       "pluginId": "sdn.flow.egress",
       "methodId": "emit",
-      "dispatchModel": "host"
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
     }
   ],
   "dependencies": [
@@ -50,7 +55,7 @@
       "dependencyId": "com.digitalarsenal.data-source.sigmf-captures",
       "pluginId": "com.digitalarsenal.data-source.sigmf-captures",
       "version": "0.1.0",
-      "sha256": "6abefd7d9c354aee2a0ef89867bd68a7ffef643df95a7f21e7c7c2adbf3956a3",
+      "sha256": "1be8132dc95543cec386d84c682cff7f6f5c3406fb5e9540254e5d867f4daf74",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -65,13 +70,13 @@
       "dependencyId": "com.digitalarsenal.hostcap.http-request",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "version": "0.1.0",
-      "sha256": "f4077d1660745473b49d0accde178d0573c2bd1b4b69439da5b741ba14667adb",
+      "sha256": "9ce014a53df0e43276d80538b2467d338083a77a09d1f72355d9ea80c11c8710",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
-      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_",
       "methodSymbols": {
-        "request": "sdm_guest_636f6d2e6469676974616c61_request"
+        "request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_request"
       }
     },
     {
@@ -79,13 +84,13 @@
       "dependencyId": "com.digitalarsenal.hostcap.storage-ingest",
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
       "version": "0.1.0",
-      "sha256": "bc808cd24571bf26758f68446eb8b6701cd2550d8e8a867fb430e579c0b61783",
+      "sha256": "3424f11ab76dfec1a6ee403735fe8a68eaab76095d90a5956168c04d46a1efaf",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
-      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c61_",
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_",
       "methodSymbols": {
-        "ingest": "sdm_guest_636f6d2e6469676974616c61_ingest"
+        "ingest": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_ingest"
       }
     }
   ]
