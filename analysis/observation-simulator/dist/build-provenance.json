@@ -1,0 +1,17 @@
+{
+  "spacedatastandards": "1.229.0",
+  "sdsFamilies": [
+    "MEM",
+    "EOP",
+    "ACW",
+    "RDO",
+    "RFM",
+    "IDM",
+    "EOO",
+    "RFO"
+  ],
+  "erfaSourceFiles": 248,
+  "axisEngine": "foundation/frames/src/axis_engine.hpp",
+  "measurementModel": "analysis/estimation/src/estimation.cpp",
+  "threadModel": "single-thread"
+}

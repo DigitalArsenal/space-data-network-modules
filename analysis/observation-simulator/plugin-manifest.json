@@ -1,0 +1,155 @@
+{
+  "pluginId": "com.digitalarsenal.analysis.observation-simulator",
+  "name": "Observation simulator",
+  "version": "0.1.0",
+  "description": "Simulates raw sensor observations of targets from their truth trajectories: radar ($RDO), optical ($EOO) and passive RF ($RFO), scheduled inside access windows with tasking limits, measured with the estimation module's models in GCRF, with noise, biases, detection limits and false alarms.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Deterministic, seeded simulation over caller-supplied truth states and access windows. No host calls, threads, propagation or network access."
+  },
+  "schemasUsed": [
+    {
+      "schemaName": "ACW.fbs",
+      "fileIdentifier": "$ACW",
+      "rootTypeName": "ACW"
+    },
+    {
+      "schemaName": "RDO.fbs",
+      "fileIdentifier": "$RDO",
+      "rootTypeName": "RDO"
+    },
+    {
+      "schemaName": "EOO.fbs",
+      "fileIdentifier": "$EOO",
+      "rootTypeName": "EOO"
+    },
+    {
+      "schemaName": "RFO.fbs",
+      "fileIdentifier": "$RFO",
+      "rootTypeName": "RFO"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "simulate_observations",
+      "displayName": "Simulate observations",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-acw",
+              "allowedTypes": [
+                {
+                  "schemaName": "ACW.fbs",
+                  "fileIdentifier": "$ACW",
+                  "rootTypeName": "ACW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$ACW REQUEST with OPERATION SIMULATE_OBSERVATIONS: targets with Earth-fixed truth states and velocities, ground stations or observers, sensors with MEM error models, ACCESS windows per sensor and target, SUN_STATES for optical, EOP, seed."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "radar",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-rdo",
+              "allowedTypes": [
+                {
+                  "schemaName": "RDO.fbs",
+                  "fileIdentifier": "$RDO",
+                  "rootTypeName": "RDO",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One $RDO per radar observation (DESCRIPTOR SIMULATED)."
+        },
+        {
+          "portId": "optical",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eoo",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOO.fbs",
+                  "fileIdentifier": "$EOO",
+                  "rootTypeName": "EOO",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One $EOO per optical or laser-ranging observation (DATA_MODE SIMULATED)."
+        },
+        {
+          "portId": "rf",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-rfo",
+              "allowedTypes": [
+                {
+                  "schemaName": "RFO.fbs",
+                  "fileIdentifier": "$RFO",
+                  "rootTypeName": "RFO",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One $RFO per passive RF observation (DESCRIPTOR SIMULATED)."
+        },
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-acw",
+              "allowedTypes": [
+                {
+                  "schemaName": "ACW.fbs",
+                  "fileIdentifier": "$ACW",
+                  "rootTypeName": "ACW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$ACW RESULT: every scheduled track with its scheduled and detected counts and loss reasons, and the observation count."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}
