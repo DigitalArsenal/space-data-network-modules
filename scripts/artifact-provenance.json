@@ -506,6 +506,32 @@
       },
       "declaration": null
     },
+    "analysis/observation-simulator/dist/isomorphic/module.wasm": {
+      "sha256": "3a2b06e7afc25c4208ca5e8e725fc1fd1a460369f5979e6d3197f5e470e2274e",
+      "bytes": 252366,
+      "module": "analysis/observation-simulator",
+      "lastCommit": "29334baa1092caf6cc8a1eb0e6192aea2e587e17",
+      "lastCommitDate": "2026-09-29T16:15:43-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": {
+        "superRepoCommit": "fe893d0051eb3c189a7f0ff6c8b396424320deb5",
+        "sdkCommit": "d8a42797c01e7fb4299719007482123c31cddfa5"
+      },
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
     "analysis/od/dist/browser/module.wasm": {
       "sha256": "680cdeb4ac3d492cbfc4c42e6e6de1f2c134b714c23df4b064caabf17b07ecec",
       "bytes": 496643,
