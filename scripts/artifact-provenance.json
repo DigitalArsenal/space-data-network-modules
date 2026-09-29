@@ -466,6 +466,32 @@
       "sdkPinAtCommit": null,
       "declaration": null
     },
+    "analysis/maneuver-detection/dist/isomorphic/module.wasm": {
+      "sha256": "c2d71834a577c15a9b063814f59c6406306bb28aa86e818a0fc7859215232279",
+      "bytes": 256912,
+      "module": "analysis/maneuver-detection",
+      "lastCommit": "49e341b96ab5cea941d17531f891a3b1e2b5497f",
+      "lastCommitDate": "2026-09-29T13:01:31-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": {
+        "superRepoCommit": "5db83b15c0e29446a568bb4fbe53624bbbd91923",
+        "sdkCommit": "d8a42797c01e7fb4299719007482123c31cddfa5"
+      },
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
     "analysis/maneuver/dist/isomorphic/module.wasm": {
       "sha256": "5ec29b228968e09ebff481cee386f70f835dc0c8ef1ae07e0a8c26901a5b652d",
       "bytes": 231542,
