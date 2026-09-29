@@ -185,13 +185,22 @@
       "measured": "2026-08-09",
       "task": "modules-undeclared-threadmodel-artifacts",
       "note": "Third module, a DIFFERENT era pin. Its build.mjs has two compileModuleFromSource calls; both declare, and the primary artifact reproduces."
+    },
+    "flows/supplemental-omm/nodes/flatsql": {
+      "sdkPin": "9dc4acb2",
+      "sdkVersion": "0.8.6",
+      "emsdkEra": "em-5.0.5",
+      "sha256": "bdd61ebd9b755b697cd501c94d111702ad63c3b0e39bef382c1ac8a435ccf2a5",
+      "measured": "2026-09-29",
+      "task": "flatsql-wasm-db-key-switch-on-20260929",
+      "note": "Before the flatsql 3.3.1 rebuild, the shipped node reproduced exactly (12,830,577 B, WasmEdge 0.16.4 linux/amd64 universal-AOT section and release signature spaceaware-sdn-isomorphic-2026-08-06 included). Inputs: modules 6e347f7 source (plugin-manifest pluginFamily \"storage\"), flatsql b26ed45 (the stack pin on 2026-08-06), flatbuffers 71e7728f and its flatc 25.12.19, SDS FSO/FSB (unchanged since 9faa42f6), SDK 9dc4acb, emscripten 5.0.5. At 6b04c47 with SDK 0.8.25 and em-6.0.1, the same flatsql and flatbuffers give ebb6cf87 (12,833,247 B). flatsql 3.3.1 (2f6d86e) with flatbuffers 8af3053e gives the committed d0a2ca25."
     }
   },
   "emsdkLane": {
     "pin": "em-6.0.1",
     "emscriptenVersion": "6.0.1",
     "modules": 14,
-    "unknownToolchainBaseline": 25
+    "unknownToolchainBaseline": 24
   },
   "artifacts": {
     "analysis/access/dist/access.wasm": {
@@ -2284,39 +2293,36 @@
       "declaration": null
     },
     "flows/supplemental-omm/dist/isomorphic/module.wasm": {
-      "sha256": "9984b7bfa9b300448cad28e0614d11a46d4392d4bfed468c06107a49bbdadb85",
-      "bytes": 21354358,
+      "sha256": "7ade2cf334e174ae06a0898570134376e8d5b657ee15f04f415d50eca47cdcdf",
+      "bytes": 23084594,
       "module": null,
-      "lastCommit": "e86dcff2c1b5fdc30fdce33154b3bee96c25637d",
-      "lastCommitDate": "2026-09-28T18:45:01-04:00",
+      "lastCommit": "6b1e46113bf36d68c393b9c8cdb55c5d995d5e05",
+      "lastCommitDate": "2026-09-29T10:34:33-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": null,
       "declaration": null
     },
     "flows/supplemental-omm/dist/runtime.wasm": {
-      "sha256": "9984b7bfa9b300448cad28e0614d11a46d4392d4bfed468c06107a49bbdadb85",
-      "bytes": 21354358,
+      "sha256": "7ade2cf334e174ae06a0898570134376e8d5b657ee15f04f415d50eca47cdcdf",
+      "bytes": 23084594,
       "module": null,
-      "lastCommit": "e86dcff2c1b5fdc30fdce33154b3bee96c25637d",
-      "lastCommitDate": "2026-09-28T18:45:01-04:00",
+      "lastCommit": "6b1e46113bf36d68c393b9c8cdb55c5d995d5e05",
+      "lastCommitDate": "2026-09-29T10:34:33-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": null,
       "declaration": null
     },
     "flows/supplemental-omm/nodes/flatsql/dist/isomorphic/module.wasm": {
-      "sha256": "bdd61ebd9b755b697cd501c94d111702ad63c3b0e39bef382c1ac8a435ccf2a5",
-      "bytes": 12830577,
+      "sha256": "d0a2ca25c08351b6eb939d36adce0be6bba551e27c56b1bc7c4970266f45417a",
+      "bytes": 14560816,
       "module": "flows/supplemental-omm/nodes/flatsql",
-      "lastCommit": "6e347f73f6a6b46e36b5b31071f741499b0ae1f4",
-      "lastCommitDate": "2026-08-06T16:20:26-04:00",
-      "provenance": "inferred",
+      "lastCommit": "6b1e46113bf36d68c393b9c8cdb55c5d995d5e05",
+      "lastCommitDate": "2026-09-29T10:34:33-04:00",
+      "provenance": "recorded",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "3b594eccd55f9d6ddfd003118e689c9715139626",
-        "sdkCommit": "7be98c73e93205534cb50749270d25ac36fbca89"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -2330,13 +2336,17 @@
         ],
         "inferenceHazard": false
       },
-      "emsdkToolchain": null,
-      "toolchainUnknown": true,
-      "emsdkEvidence": {
-        "toolchain": "em-5.0.5",
-        "confidence": "strong",
-        "evidence": "build.mjs hard-defaults to analysis/od/deps/emsdk, 5.0.5. Artifact committed 2026-08-06. (This module was already network-free before the pin landed — it refused a missing emsdk instead of cloning one — but it verified no version and recorded no identity.)"
-      }
+      "emsdkToolchain": {
+        "lane": "raw-em++",
+        "pinId": "em-6.0.1",
+        "era": false,
+        "emscriptenVersion": "6.0.1",
+        "emscriptenRelease": "releases-4857659ec65fbcf1f3e43c88499925475957b238-64bit",
+        "llvmRevision": "25e4e8d6550d392ba9e0c2936bce7cf41ee47cc0",
+        "emsdkCommit": "c68d67a7c82f8d9c56301dff5ff34367e3892553",
+        "emsdkRoot": ".lane-emsdk-6.0.1"
+      },
+      "toolchainUnknown": false
     },
     "flows/supplemental-omm/nodes/od/dist/isomorphic/module.wasm": {
       "sha256": "82a8fa3c5d11534252ee77fe03eeac328f9b0f754983f108fe79f78a66dc8fa2",
