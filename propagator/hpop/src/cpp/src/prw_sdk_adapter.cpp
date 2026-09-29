@@ -58,11 +58,14 @@ extern "C" int prepare_trajectory_segments(void){return resident("prepare_trajec
 extern "C" int describe_trajectory_segments(void){return resident("describe_trajectory_segments","result");}
 
 // Diagnostic clients initialize and call the same module bytes through the
-// retained C entrypoints. SDK still owns allocation, PIV and PLG exports.
-// Both reactor initialization and the WASI command CRT can request C++
-// constructors. Run them once per resident instance. The build defers global
-// C++ destruction to instance teardown, so command exit cannot invalidate
-// the SDK context or resident catalog before the next invoke.
+// retained C entrypoints. SDK still owns allocation, PIV and PLG exports,
+// and the exported __wasm_call_ctors direct-surface initializer.
+// The SDK initializer, the WASI command CRT and hpop_initialize can each
+// request C++ constructors; the build's --wrap=__wasm_call_ctors sends all of
+// them here, so they run once per resident instance. The artifact has one
+// entry model (command: _start) and no reactor _initialize. The build defers
+// global C++ destruction to instance teardown, so command exit cannot
+// invalidate the SDK context or resident catalog before the next invoke.
 extern "C" void __real___wasm_call_ctors(void);
 extern "C" void __wrap___wasm_call_ctors(void) {
   static bool initialized=false;
@@ -70,7 +73,6 @@ extern "C" void __wrap___wasm_call_ctors(void) {
 }
 extern "C" void __wasm_call_ctors(void);
 extern "C" void hpop_initialize(void){static bool initialized=false;if(!initialized){initialized=true;__wasm_call_ctors();}}
-extern "C" void _initialize(void){hpop_initialize();}
 
 // LLVM's shared-memory C++ ABI archives use these futex ABI symbols in local
 // static initialization. Implement them with standard Wasm instructions so no

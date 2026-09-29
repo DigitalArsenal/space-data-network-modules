@@ -1,11 +1,11 @@
 {
-  "sdk": "0.8.18",
+  "sdk": "0.8.25",
   "spacedatastandards": "1.220.0",
   "threadModel": "wasi-sequential",
   "target": "wasm32-wasip1-threads",
   "sharedMemory": true,
-  "sha256": "d798decbcabd7f491b6d0d94f1941f8af4179e8a56bac4ab22c609b760c55abe",
-  "bytes": 1247817,
+  "sha256": "1070829bf83d9c05a1b4e56f70ff453a8a0f1e852c69c919fb932be7ea0215c3",
+  "bytes": 1141185,
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
   "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project 7b58716d96c3ae4c0c4e6f72e29b16137bb6224b)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/bin",
   "exceptionRuntimeArchives": [
@@ -20,7 +20,6 @@
   ],
   "units": [
     "src/cpp/src/prw_sdk_adapter.cpp",
-    "src/cpp/src/prw_initialization.cpp",
     "lib/astrodynamics.cpp",
     "lib/integrators.cpp",
     "lib/variational.cpp",
@@ -44,5 +43,6 @@
   ],
   "standardWasmExceptions": true,
   "legacyRuntimeCompiled": false,
-  "sdkAccommodation": "Public SDN_WASI_CLANGXX driver compiles multiple source units and supplies LLVM exception ABI archives and the preexisting 256 MiB initial memory, idempotent constructor wrapping and per-instance static-object lifetime; SDK owns PIV, allocation, command framing, manifest embedding and validation."
+  "debugInfo": "stripped",
+  "sdkAccommodation": "Public SDN_WASI_CLANGXX driver compiles multiple source units and supplies LLVM exception ABI archives and the preexisting 256 MiB initial memory, idempotent constructor wrapping and per-instance static-object lifetime; SDK owns PIV, allocation, command framing, the __wasm_call_ctors direct-surface initializer, manifest embedding and validation."
 }
