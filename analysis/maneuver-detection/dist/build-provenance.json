@@ -1,0 +1,8 @@
+{
+  "spacedatastandards": "1.228.2",
+  "schemas": [
+    "OEM",
+    "MNV"
+  ],
+  "threadModel": "single-thread"
+}

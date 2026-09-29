@@ -1,0 +1,129 @@
+{
+  "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
+  "name": "Maneuver detection",
+  "version": "0.1.0",
+  "description": "Detects maneuvers in an element-set history. Takes each element set's trajectory from any propagator, finds where consecutive trajectories cross, measures the energy and orbit-plane change there, and flags steps beyond the object's own noise. Emits $MNV DETECTED events with time, in-track and cross-track delta-V, pre and post states and characterization.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Deterministic statistics over caller-supplied inertial ephemerides. No host calls, threads, propagation or network access."
+  },
+  "schemasUsed": [
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    },
+    {
+      "schemaName": "MNV.fbs",
+      "fileIdentifier": "$MNV",
+      "rootTypeName": "MNV"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "detect_maneuvers",
+      "displayName": "Detect maneuvers",
+      "inputPorts": [
+        {
+          "portId": "ephemerides",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One or more $OEM frames. One data block per element set, in an Earth-centred inertial frame, spanning at least the neighbouring element sets' epochs (two on each side recommended). Blocks are grouped by OBJECT and ordered by the midpoint of their span."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "detection-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Detection thresholds as a JSON object (k, floor_in_track_mps, floor_cross_track_mps, median_sets, scale_window_pairs, grid_step_s, report_time); every field optional."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Detection thresholds as a JSON object; every field optional."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "maneuvers",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-mnv",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One $MNV frame per detected maneuver, STATUS DETECTED."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-pair crossing times, jumps, steps and thresholds for every object, and each event's evidence; the scientific result is the $MNV frames."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Per-pair crossing times, jumps, steps and thresholds, and each event's evidence, as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}
