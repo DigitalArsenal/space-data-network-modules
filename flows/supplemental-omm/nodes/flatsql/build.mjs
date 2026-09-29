@@ -32,7 +32,7 @@ import {
 // there is no compiler argument to carry a declaration. It read as "undeclared"
 // in the artifact-reproducibility census with no way to answer.
 //
-// Truth of the SHIPPED artifact bdd61ebd9b75… (12,830,577 B): unshared linear
+// Truth of the SHIPPED artifact d0a2ca25c083… (14,560,816 B): unshared linear
 // memory, no `wasi.thread-spawn` import, no `wasi_thread_start` export. The
 // FlatSQL engine runs its btree on the calling thread; it spawns nothing.
 const THREAD_MODEL = "single-thread";
@@ -414,7 +414,9 @@ async function main() {
   // before the manifest section and the WasmEdge AOT wrapper are attached — the
   // threading contract is a property of the compile, not of the packaging.
   assertArtifactThreadModel(rawWasm, THREAD_MODEL, "flows/supplemental-omm/nodes/flatsql");
-  recordLaneToolchain(distDirectory, toolchain.laneToolchain);
+  // dist/build-toolchain.json, where check-artifact-reproducibility.mjs reads
+  // every lane module's record (not dist/isomorphic/).
+  recordLaneToolchain(path.dirname(distDirectory), toolchain.laneToolchain);
   const manifestBytes = encodePluginManifest(manifest);
   const withManifest = bundle.appendWasmCustomSection(
     rawWasm,

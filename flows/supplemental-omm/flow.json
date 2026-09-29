@@ -129,7 +129,7 @@
       "artifact": {
         "path": "./nodes/flatsql/dist/isomorphic/module.wasm",
         "publisher": "./nodes/flatsql/publisher.json",
-        "sha256": "bdd61ebd9b755b697cd501c94d111702ad63c3b0e39bef382c1ac8a435ccf2a5"
+        "sha256": "d0a2ca25c08351b6eb939d36adce0be6bba551e27c56b1bc7c4970266f45417a"
       }
     },
     {
