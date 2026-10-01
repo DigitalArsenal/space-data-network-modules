@@ -27,6 +27,7 @@
 #include "sgp4_propagator.h"
 #include "conjunction/ephemeris_source.h"
 #include "conjunction/pc_method.h"
+#include <optional>
 #include <vector>
 #include <string>
 
@@ -153,6 +154,13 @@ ConjunctionEvent assess_conjunction_in_window_near_hint(
 double find_tca(const EphemerisSource& obj1, const EphemerisSource& obj2,
                 double start_jd, double duration_days = 7.0,
                 double coarse_step_sec = 60.0, double fine_tol_sec = 0.001);
+/// find_tca's result, with its range, in a few evaluations when both sources
+/// bound their acceleration and the range provably has one minimum on the
+/// window (and the second beyond each edge that find_tca also searches);
+/// nullopt otherwise, and find_tca scans.
+std::optional<ConjunctionSolution> solve_unimodal_conjunction(
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
+    double start_jd, double end_jd, double fine_tol_sec);
 ConjunctionSolution assess_conjunction_solution(
     const EphemerisSource& obj1, const EphemerisSource& obj2,
     double start_jd, double duration_days = 7.0);

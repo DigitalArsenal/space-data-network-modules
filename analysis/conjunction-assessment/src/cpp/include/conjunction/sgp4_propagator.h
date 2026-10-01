@@ -17,11 +17,29 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <atomic>
 #include <memory>
 
 namespace conjunction {
 
 struct Sgp4PropagationCache;
+struct TLE;
+
+/// An element set's initialized SGP4 state: created on first use, then read
+/// with one atomic load (no lock, no reference count), as every screening
+/// thread samples every object. Copies share it.
+class Sgp4CacheSlot {
+public:
+    Sgp4CacheSlot() = default;
+    Sgp4CacheSlot(const Sgp4CacheSlot& other);
+    Sgp4CacheSlot& operator=(const Sgp4CacheSlot& other);
+    /// The state for tle, created on first use; nullptr if SGP4 rejects it.
+    const Sgp4PropagationCache* get_or_create(const TLE& tle) const;
+
+private:
+    mutable std::shared_ptr<const Sgp4PropagationCache> owner_;
+    mutable std::atomic<const Sgp4PropagationCache*> ready_{nullptr};
+};
 
 /// State vector: position (km) + velocity (km/s) in J2000/TEME
 struct StateVector {
@@ -54,7 +72,7 @@ struct TLE {
     char classification_type = 'U';
     int element_set_no = 0;
     int rev_at_epoch = 0;
-    mutable std::shared_ptr<const Sgp4PropagationCache> cache;
+    Sgp4CacheSlot cache;
 };
 
 // Forward declaration

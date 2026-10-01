@@ -191,14 +191,19 @@ bool GPEphemerisSource::covariance_rtn_sigma_at(
 
 // ── Natural motion bound ──
 
-double natural_motion_deviation_bound_km(const StateVector& state, double half_step_sec) {
+double natural_motion_acceleration_bound_km_s2(const StateVector& state, double half_window_sec) {
     constexpr double MU_KM3_S2 = 398600.8;          // SGP4 (WGS 72)
     constexpr double MARGIN = 1.05;
     constexpr double RADIUS_FLOOR_KM = 6000.0;
     const double r = std::sqrt(state.x * state.x + state.y * state.y + state.z * state.z);
     const double v = std::sqrt(state.vx * state.vx + state.vy * state.vy + state.vz * state.vz);
-    const double r_min = std::max(r - v * half_step_sec, RADIUS_FLOOR_KM);
-    return 0.5 * MARGIN * MU_KM3_S2 / (r_min * r_min) * half_step_sec * half_step_sec;
+    const double r_min = std::max(r - v * half_window_sec, RADIUS_FLOOR_KM);
+    return MARGIN * MU_KM3_S2 / (r_min * r_min);
+}
+
+double natural_motion_deviation_bound_km(const StateVector& state, double half_step_sec) {
+    return 0.5 * natural_motion_acceleration_bound_km_s2(state, half_step_sec) *
+           half_step_sec * half_step_sec;
 }
 
 // ── Chebyshev polynomial ephemeris ──

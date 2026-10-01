@@ -38,6 +38,9 @@ extern "C" int32_t plugin_set_output_stream_frame(uint32_t, uint64_t, int32_t);
 namespace ca_cqr {
 using namespace conjunction;
 constexpr size_t kEventsPerChunk = 128;
+// refine_candidates serves the all-vs-all driver, which drains whole windows:
+// larger frames (about 0.9 MB) save a call per 128 events.
+constexpr size_t kRefineEventsPerChunk = 1024;
 constexpr size_t kMaximumPendingEvents = 16384;
 constexpr size_t kMaximumPendingStreams = 8;
 constexpr size_t kMaximumRetainedRequestBytes = 32 * 1024 * 1024;
@@ -749,6 +752,7 @@ struct PendingCatalog {
   std::vector<std::unique_ptr<CQREventT>> events;
   ScreeningStats stats;
   size_t offset = 0;
+  size_t events_per_chunk = kEventsPerChunk;
   std::string request_bytes;
   // Canonical $OMM records of the excluded objects, emitted with the final
   // chunk on the `excluded` port.
@@ -838,7 +842,7 @@ bool emitPending(const std::string &method) {
   if (it == pending.end())
     return false;
   auto &p = it->second;
-  size_t count = p.events.size(), start = p.offset;
+  size_t count = p.events.size(), start = p.offset, chunk = p.events_per_chunk;
   CQRT q;
   q.CATALOG_RESULT = std::make_unique<CQRCatalogResultT>();
   auto &r = *q.CATALOG_RESULT;
@@ -846,12 +850,12 @@ bool emitPending(const std::string &method) {
   r.CONJUNCTIONS_FOUND = count;
   r.STATISTICS = statistics(p.stats);
   r.EVENT_OFFSET = start;
-  r.FINAL_CHUNK = start + kEventsPerChunk >= count;
-  for (size_t i = start; i < std::min(start + kEventsPerChunk, count); ++i)
+  r.FINAL_CHUNK = start + chunk >= count;
+  for (size_t i = start; i < std::min(start + chunk, count); ++i)
     r.EVENTS.push_back(std::make_unique<CQREventT>(*p.events[i]));
   bool final = r.FINAL_CHUNK;
   bool failed = p.stats.failed_pairs > 0;
-  if (!push(q, "result", start / kEventsPerChunk, final))
+  if (!push(q, "result", start / chunk, final))
     return false;
   if (final && !pushExcluded(p.excluded))
     return false;
@@ -863,7 +867,7 @@ bool emitPending(const std::string &method) {
   else {
     plugin_set_yielded(1);
     plugin_set_backlog_remaining(static_cast<uint32_t>(
-        (count - p.offset + kEventsPerChunk - 1) / kEventsPerChunk));
+        (count - p.offset + chunk - 1) / chunk));
   }
   if (final && failed)
     return error("incomplete-screening",
@@ -883,7 +887,8 @@ bool hasPending(const std::string &method) {
 }
 bool catalogOutput(std::vector<std::unique_ptr<CQREventT>> events,
                    const ScreeningStats &s, const std::string &method,
-                   std::vector<std::vector<uint8_t>> excluded = {}) {
+                   std::vector<std::vector<uint8_t>> excluded = {},
+                   size_t eventsPerChunk = kEventsPerChunk) {
   size_t retainedEvents = events.size();
   size_t retainedRequestBytes = 0;
   for (const auto &entry : pending) {
@@ -910,6 +915,7 @@ bool catalogOutput(std::vector<std::unique_ptr<CQREventT>> events,
   p.stats = s;
   p.request_bytes = std::move(identity);
   p.excluded = std::move(excluded);
+  p.events_per_chunk = eventsPerChunk;
   pending[pendingKey(method)] = std::move(p);
   return emitPending(method);
 }
@@ -2019,7 +2025,8 @@ extern "C" int refine_candidates() {
   std::vector<std::vector<uint8_t>> excludedRecords;
   for (const auto &x : stats.excluded_objects)
     excludedRecords.push_back(excludedRecord(t.index->sources[x.index], x));
-  return catalogOutput(std::move(out), stats, "refine_candidates", std::move(excludedRecords)) ? 0 : 422;
+  return catalogOutput(std::move(out), stats, "refine_candidates", std::move(excludedRecords),
+                       kRefineEventsPerChunk) ? 0 : 422;
 }
 
 extern "C" int prepare_screening_index() {

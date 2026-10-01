@@ -1852,7 +1852,18 @@ std::vector<ExactSolvedHit> solve_encounter_exact(
             std::clamp(window.hint_jd, window.start_jd, window.end_jd),
         };
 
-        coarse_solution = refine_exact_window_locally(
+        // A minimum provably alone in the local window and strictly inside it
+        // is the one the search near the hint would find: report it as is.
+        const auto exact = local_window.duration_days() > 0.0
+            ? solve_unimodal_conjunction(obj1, obj2, local_window.start_jd, local_window.end_jd,
+                                         config.fine_tol_sec)
+            : std::nullopt;
+        if (exact && exact->tca_jd > local_window.start_jd && exact->tca_jd < local_window.end_jd) {
+            keep(*exact);
+            return solved;
+        }
+
+        coarse_solution = exact ? *exact : refine_exact_window_locally(
             obj1,
             obj2,
             local_window.duration_days() > 0.0
@@ -1919,25 +1930,21 @@ RefinedEncounters refine_encounters(
     if (progress) progress(0.75, "Refining TCA...");
 
     RefinedEncounters result;
-    auto& events = result.events;
-    std::vector<ExactSolvedHit> solved_hits;
     const bool use_exact_solution_path =
         resident_index == nullptr ||
         resident_index->screening_mode ==
             ScreeningMode::exact_only;
     const double radius_m = config.combined_radius_m / 2.0;
 
-    // Polynomial-mode events carry their encounter's objects; exact-mode
-    // events get theirs from the solved hit when materialized below.
-    struct PolynomialEvent {
+    // Each event carries the objects of the encounter it came from.
+    struct RefinedEvent {
         ConjunctionEvent event;
         std::pair<uint32_t, uint32_t> objects;
     };
     using FailedObjects = std::vector<std::pair<uint32_t, uint32_t>>;
     const auto refine_one =
         [&](const CoarseHitRecord& hit,
-            std::vector<ExactSolvedHit>& solved_out,
-            std::vector<PolynomialEvent>& events_out,
+            std::vector<RefinedEvent>& events_out,
             FailedObjects& failed_out) {
             if (use_exact_solution_path) {
                 auto solved = solve_encounter_exact(
@@ -1949,7 +1956,19 @@ RefinedEncounters refine_encounters(
                     clear_error();
                     return;
                 }
-                solved_out.insert(solved_out.end(), solved.begin(), solved.end());
+                for (const auto& at : solved) {
+                    auto event = assess_conjunction_at_tca(
+                        *sources[at.obj1_index], *sources[at.obj2_index],
+                        at.tca_jd, radius_m, radius_m);
+                    if (has_error()) {
+                        failed_out.emplace_back(at.obj1_index, at.obj2_index);
+                        clear_error();
+                        continue;
+                    }
+                    if (is_conjunction_within_threshold(event.min_range_km, config.threshold_km)) {
+                        events_out.push_back({std::move(event), {at.obj1_index, at.obj2_index}});
+                    }
+                }
             } else {
                 auto event = refine_coarse_hit_if_within_threshold(
                     *sources[hit.obj1_index], *sources[hit.obj2_index],
@@ -1964,125 +1983,53 @@ RefinedEncounters refine_encounters(
                 }
             }
         };
-    std::vector<PolynomialEvent> polynomial_events;
 
-    {
     const size_t refine_total = encounters.size();
     const int num_refine_threads =
 #ifdef CONJUNCTION_SINGLE_THREAD
         1;
 #else
-        std::max(1, config.num_threads);
+        static_cast<int>(std::min<size_t>(std::max(1, config.num_threads), std::max<size_t>(1, refine_total)));
 #endif
-
-    if (refine_total > 0 && num_refine_threads > 1) {
+    std::vector<std::vector<RefinedEvent>> thread_events(num_refine_threads);
+    std::vector<FailedObjects> thread_failed(num_refine_threads);
+    // Workers take small chunks from one counter, so a slow encounter holds up
+    // only its own thread.
+    constexpr size_t REFINE_CHUNK = 16;
+    std::atomic<size_t> next{0};
+    std::atomic<size_t> refined{0};
+    // The calling thread works too and reports progress between its chunks.
+    const auto work = [&](int t) {
+        for (;;) {
+            const size_t from = next.fetch_add(REFINE_CHUNK, std::memory_order_relaxed);
+            if (from >= refine_total) return;
+            const size_t to = std::min(from + REFINE_CHUNK, refine_total);
+            for (size_t i = from; i < to; i++) refine_one(encounters[i], thread_events[t], thread_failed[t]);
+            const size_t done = refined.fetch_add(to - from, std::memory_order_relaxed) + (to - from);
+            if (t == 0 && progress) {
+                progress(0.75 + 0.25 * static_cast<double>(done) / static_cast<double>(refine_total),
+                         "Refining TCA...");
+            }
+        }
+    };
 #ifndef CONJUNCTION_SINGLE_THREAD
-        // Parallel refinement with barrier-based batching for progress.
-        // Split encounters into batches; each batch uses N threads via
-        // barrier, then the main thread fires progress and starts the next.
-        const size_t REFINE_BATCH_SIZE = 500;
-        const size_t num_refine_batches =
-            (refine_total + REFINE_BATCH_SIZE - 1) / REFINE_BATCH_SIZE;
-
-        std::vector<std::vector<PolynomialEvent>> thread_events(num_refine_threads);
-        std::vector<std::vector<ExactSolvedHit>> thread_solved(num_refine_threads);
-        std::vector<FailedObjects> thread_failed(num_refine_threads);
-
-        ReusableBarrier refine_barrier(static_cast<size_t>(num_refine_threads + 1));
-        std::atomic<size_t> batch_start{0};
-        std::atomic<size_t> batch_end{0};
-        std::atomic<bool> refine_shutdown{false};
-
-        std::vector<std::thread> threads;
-        for (int t = 0; t < num_refine_threads; t++) {
-            threads.emplace_back([&, t]() {
-                while (true) {
-                    refine_barrier.wait();
-                    if (refine_shutdown.load(std::memory_order_acquire)) return;
-                    const size_t b_start = batch_start.load(std::memory_order_acquire);
-                    const size_t b_end = batch_end.load(std::memory_order_acquire);
-                    const size_t span = b_end - b_start;
-                    const size_t chunk = (span + num_refine_threads - 1)
-                                         / num_refine_threads;
-                    const size_t from = b_start + static_cast<size_t>(t) * chunk;
-                    const size_t to = std::min(from + chunk, b_end);
-                    for (size_t i = from; i < to; i++) {
-                        refine_one(encounters[i], thread_solved[t], thread_events[t],
-                                   thread_failed[t]);
-                    }
-                    refine_barrier.wait();
-                }
-            });
-        }
-
-        for (size_t b = 0; b < num_refine_batches; b++) {
-            batch_start.store(b * REFINE_BATCH_SIZE, std::memory_order_release);
-            batch_end.store(
-                std::min((b + 1) * REFINE_BATCH_SIZE, refine_total),
-                std::memory_order_release);
-            refine_barrier.wait();
-            refine_barrier.wait();
-            if (progress) {
-                progress(0.75 + 0.25 * static_cast<double>(b + 1)
-                                      / static_cast<double>(num_refine_batches),
-                         "Refining TCA...");
-            }
-        }
-
-        refine_shutdown.store(true, std::memory_order_release);
-        refine_barrier.wait();
-        for (auto& t : threads) t.join();
-
-        for (auto& te : thread_events)
-            polynomial_events.insert(polynomial_events.end(),
-                std::make_move_iterator(te.begin()),
-                std::make_move_iterator(te.end()));
-        for (auto& ts : thread_solved)
-            solved_hits.insert(solved_hits.end(),
-                std::make_move_iterator(ts.begin()),
-                std::make_move_iterator(ts.end()));
-        for (auto& tf : thread_failed)
-            result.failed_objects.insert(result.failed_objects.end(), tf.begin(), tf.end());
+    std::vector<std::thread> threads;
+    for (int t = 1; t < num_refine_threads; t++) {
+        threads.emplace_back([&, t] { clear_error(); work(t); });
+    }
+    work(0);
+    for (auto& thread : threads) thread.join();
+#else
+    work(0);
 #endif
-    } else {
-        // Single-threaded refinement with progress.
-        size_t refine_index = 0;
-        for (const auto& hit : encounters) {
-            refine_one(hit, solved_hits, polynomial_events, result.failed_objects);
-            ++refine_index;
-            if (progress && refine_total > 0 &&
-                (refine_index % 100 == 0 || refine_index == refine_total)) {
-                progress(0.75 + 0.25 * static_cast<double>(refine_index)
-                                      / static_cast<double>(refine_total),
-                         "Refining TCA...");
-            }
-        }
-    }
-    }
 
-    for (auto& polynomial : polynomial_events) {
-        events.push_back(std::move(polynomial.event));
-        result.event_objects.push_back(polynomial.objects);
-    }
-    if (use_exact_solution_path) {
-        events.reserve(events.size() + solved_hits.size());
-        for (const auto& solved : solved_hits) {
-            auto event = assess_conjunction_at_tca(
-                *sources[solved.obj1_index],
-                *sources[solved.obj2_index],
-                solved.tca_jd,
-                radius_m,
-                radius_m);
-            if (has_error()) {
-                result.failed_objects.emplace_back(solved.obj1_index, solved.obj2_index);
-                clear_error();
-                continue;
-            }
-            if (is_conjunction_within_threshold(event.min_range_km, config.threshold_km)) {
-                events.push_back(std::move(event));
-                result.event_objects.emplace_back(solved.obj1_index, solved.obj2_index);
-            }
+    for (int t = 0; t < num_refine_threads; t++) {
+        for (auto& refined_event : thread_events[t]) {
+            result.events.push_back(std::move(refined_event.event));
+            result.event_objects.push_back(refined_event.objects);
         }
+        result.failed_objects.insert(result.failed_objects.end(),
+                                     thread_failed[t].begin(), thread_failed[t].end());
     }
     return result;
 }

@@ -77,6 +77,15 @@ public:
         return false;
     }
 
+    /// A bound (km/s^2) on the acceleration of the path within half_window_sec
+    /// of jd, where state is this source's state at jd, for a path whose
+    /// velocity is continuous there. False when it has none.
+    virtual bool acceleration_bound_km_s2(double jd, const StateVector& state,
+                                          double half_window_sec, double& bound) const {
+        (void)jd; (void)state; (void)half_window_sec; (void)bound;
+        return false;
+    }
+
     /// Optional RTN 1-sigma position covariance prior (km) evaluated at jd.
     /// Implementations return false when no source-specific covariance is available.
     virtual bool covariance_rtn_sigma_at(
@@ -87,9 +96,12 @@ public:
     }
 };
 
-/// Deviation bound for natural (unpowered) Earth-orbit motion: 1/2 A h^2 with
-/// A = 1.05 mu / r_min^2, r_min = |r| - |v| h floored at 6000 km. The 5 %
-/// covers J2 (0.16 % at the surface) and drag. SGP4 motion is natural.
+/// Acceleration bound for natural (unpowered) Earth-orbit motion within
+/// half_window_sec of state: A = 1.05 mu / r_min^2, r_min = |r| - |v| h floored
+/// at 6000 km. The 5 % covers J2 (0.16 % at the surface) and drag. SGP4 motion
+/// is natural.
+double natural_motion_acceleration_bound_km_s2(const StateVector& state, double half_window_sec);
+/// Deviation bound for natural motion: 1/2 A h^2.
 double natural_motion_deviation_bound_km(const StateVector& state, double half_step_sec);
 
 // ── SGP4 from TLE ──
@@ -115,6 +127,11 @@ public:
         bound_km = natural_motion_deviation_bound_km(state, half_step_sec);
         return std::isfinite(bound_km);
     }
+    bool acceleration_bound_km_s2(double, const StateVector& state, double half_window_sec,
+                                  double& bound) const override {
+        bound = natural_motion_acceleration_bound_km_s2(state, half_window_sec);
+        return std::isfinite(bound);
+    }
     bool covariance_rtn_sigma_at(
         double jd, RtnCovarianceSigmas& sigmas) const override;
 
@@ -126,10 +143,12 @@ private:
 
 class GPEphemerisSource : public EphemerisSource {
 public:
-    explicit GPEphemerisSource(const GPElement& gp) : gp_(gp) {}
+    // The element set is converted once, so its SGP4 initialization is kept
+    // (propagate_sgp4_gp converts and initializes on every call).
+    explicit GPEphemerisSource(const GPElement& gp) : gp_(gp), tle_(gp_to_tle(gp)) {}
 
     StateVector state_at(double jd) const override {
-        return propagate_sgp4_gp(gp_, jd);
+        return propagate_sgp4(tle_, jd);
     }
 
     double epoch_jd() const override { return gp_.epoch_jd; }
@@ -142,11 +161,17 @@ public:
         bound_km = natural_motion_deviation_bound_km(state, half_step_sec);
         return std::isfinite(bound_km);
     }
+    bool acceleration_bound_km_s2(double, const StateVector& state, double half_window_sec,
+                                  double& bound) const override {
+        bound = natural_motion_acceleration_bound_km_s2(state, half_window_sec);
+        return std::isfinite(bound);
+    }
     bool covariance_rtn_sigma_at(
         double jd, RtnCovarianceSigmas& sigmas) const override;
 
 private:
     GPElement gp_;
+    TLE tle_;
 };
 
 // ── Tabulated OEM (Hermite interpolation) ──

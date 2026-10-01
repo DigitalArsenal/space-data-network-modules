@@ -98,7 +98,7 @@ Measured results, source references, and limitations are in the
 dataset checks require the ignored files documented below; checked-in snapshots
 run without those files.
 
-Catalog results emit at most 128 events per frame. Continue an identical request
+Catalog results emit at most 128 events per frame (`refine_candidates`: 1024). Continue an identical request
 until `FINAL_CHUNK` is true, preserving its input `FRAME_ID`. Concurrent drains
 must use distinct input frame IDs because SDK 0.8.18 does not expose the PIV
 trace ID to guest continuation state. Failed pairs are counted, and the final

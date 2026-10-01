@@ -22,6 +22,7 @@
 #include <cmath>
 #include <cstdio>
 #include <algorithm>
+#include <optional>
 #include <stdexcept>
 #include <sstream>
 #include <iomanip>
@@ -48,26 +49,32 @@ namespace {
 std::mutex g_sgp4_cache_mutex;
 #endif
 
-std::shared_ptr<const Sgp4PropagationCache> get_or_create_sgp4_cache(
-    const conjunction::TLE& tle)
-{
-    auto cached = std::atomic_load(&tle.cache);
-    if (cached) return cached;
+} // namespace
 
+Sgp4CacheSlot::Sgp4CacheSlot(const Sgp4CacheSlot& other) { *this = other; }
+
+Sgp4CacheSlot& Sgp4CacheSlot::operator=(const Sgp4CacheSlot& other) {
+    if (this == &other) return *this;
 #ifndef CONJUNCTION_SINGLE_THREAD
     std::lock_guard<std::mutex> lock(g_sgp4_cache_mutex);
 #endif
-    cached = std::atomic_load(&tle.cache);
-    if (!cached) {
-        std::shared_ptr<const Sgp4PropagationCache> candidate = std::make_shared<Sgp4PropagationCache>(tle);
-        if (has_error()) return nullptr;
-        std::atomic_store(&tle.cache, candidate);
-        cached = std::move(candidate);
-    }
-    return cached;
+    owner_ = other.owner_;
+    ready_.store(other.ready_.load(std::memory_order_acquire), std::memory_order_release);
+    return *this;
 }
 
-} // namespace
+const Sgp4PropagationCache* Sgp4CacheSlot::get_or_create(const TLE& tle) const {
+    if (const auto* ready = ready_.load(std::memory_order_acquire)) return ready;
+#ifndef CONJUNCTION_SINGLE_THREAD
+    std::lock_guard<std::mutex> lock(g_sgp4_cache_mutex);
+#endif
+    if (const auto* ready = ready_.load(std::memory_order_relaxed)) return ready;
+    auto created = std::make_shared<const Sgp4PropagationCache>(tle);
+    if (has_error()) return nullptr;
+    owner_ = std::move(created);
+    ready_.store(owner_.get(), std::memory_order_release);
+    return owner_.get();
+}
 
 // ============================================================================
 // Time Utilities
@@ -271,7 +278,7 @@ StateVector propagate_sgp4(const TLE& tle, double target_jd) {
     if (has_error()) return sv;
 
     {
-        const auto cache = get_or_create_sgp4_cache(tle);
+        const Sgp4PropagationCache* cache = tle.cache.get_or_create(tle);
         if (has_error() || !cache) return sv;
 
         // Propagate using elapsed minutes from the TLE epoch. This avoids
@@ -562,10 +569,80 @@ static ConjunctionSolution build_conjunction_solution(
     return solution;
 }
 
+// The TCA find_tca's scan would find, when the range provably has one
+// minimum on the window widened by the scan's one-second golden-section
+// bracket; nullopt otherwise. |dr|^2 is strictly convex where
+// |dr'|^2 + dr . dr'' > 0. With A bounding both accelerations over that span
+// (half-width T about its middle), |dr'| >= |dv| - eps - A T and
+// |dr| <= |dr_mid| + |dv| T + A T^2 / 2, so q = |dr|max A / (|dr'|min)^2 < 1
+// proves it. eps allows for a source's velocity differing from the rate of its
+// position. The minimum is then the root of the range rate f = dr . dv, which
+// Newton steps of -f / |dv|^2 approach by a factor q or better each step. A
+// root outside the span leaves the TCA at the span's edge, as the scan's
+// bracket does.
+std::optional<ConjunctionSolution> solve_unimodal_conjunction(
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
+    double start_jd, double end_jd, double tol_sec) {
+    constexpr double VELOCITY_SLACK_KM_S = 1e-3;
+    constexpr double EDGE_BRACKET_DAYS = 1.0 / 86400.0;
+    const Coverage covered = joint_coverage(obj1, obj2);
+    const double a = std::max(start_jd, covered.start);
+    const double b = std::min(end_jd, covered.end);
+    if (!(b > a)) return std::nullopt;
+    const double span_start = std::max(a - EDGE_BRACKET_DAYS, covered.start);
+    const double span_end = std::min(b + EDGE_BRACKET_DAYS, covered.end);
+    const double mid = 0.5 * (span_start + span_end);
+    const double half_sec = 0.5 * (span_end - span_start) * 86400.0;
+    const StateVector s1 = obj1.state_at(mid);
+    const StateVector s2 = obj2.state_at(mid);
+    if (has_error()) return std::nullopt;
+    double a1 = 0, a2 = 0;
+    if (!obj1.acceleration_bound_km_s2(mid, s1, half_sec, a1) ||
+        !obj2.acceleration_bound_km_s2(mid, s2, half_sec, a2)) {
+        return std::nullopt;
+    }
+    const double acceleration = a1 + a2;
+    const double dr = std::sqrt((s1.x - s2.x) * (s1.x - s2.x) + (s1.y - s2.y) * (s1.y - s2.y) +
+                                (s1.z - s2.z) * (s1.z - s2.z));
+    const double dv = std::sqrt((s1.vx - s2.vx) * (s1.vx - s2.vx) + (s1.vy - s2.vy) * (s1.vy - s2.vy) +
+                                (s1.vz - s2.vz) * (s1.vz - s2.vz));
+    const double rate_min = dv - VELOCITY_SLACK_KM_S - acceleration * half_sec;
+    const double range_max = dr + dv * half_sec + 0.5 * acceleration * half_sec * half_sec;
+    if (!(rate_min > 0.0 && rate_min * rate_min > range_max * acceleration)) return std::nullopt;
+
+    // Converged once a step is below a thousandth of the tolerance, or below
+    // what a Julian date resolves (about 47 us near JD 2.46e6).
+    constexpr int MAX_STEPS = 32;
+    const double converged_days = std::max(1e-3 * tol_sec / 86400.0,
+                                           2.0 * std::numeric_limits<double>::epsilon() * b);
+    double tca_jd = 0.5 * (a + b);
+    for (int i = 0; i < MAX_STEPS; ++i) {
+        const StateVector p1 = obj1.state_at(tca_jd);
+        const StateVector p2 = obj2.state_at(tca_jd);
+        if (has_error()) return std::nullopt;
+        const double rx = p1.x - p2.x, ry = p1.y - p2.y, rz = p1.z - p2.z;
+        const double vx = p1.vx - p2.vx, vy = p1.vy - p2.vy, vz = p1.vz - p2.vz;
+        const double step_days = -(rx * vx + ry * vy + rz * vz) / (vx * vx + vy * vy + vz * vz) / 86400.0;
+        const double next_jd = std::clamp(tca_jd + step_days, span_start, span_end);
+        if (!std::isfinite(next_jd)) return std::nullopt;
+        const bool converged = std::abs(next_jd - tca_jd) <= converged_days;
+        tca_jd = next_jd;
+        if (converged) {
+            const auto solution = build_conjunction_solution(obj1, obj2, tca_jd);
+            if (has_error()) return std::nullopt;
+            return solution;
+        }
+    }
+    return std::nullopt;
+}
+
 double find_tca(const EphemerisSource& obj1, const EphemerisSource& obj2,
                 double start_jd, double duration_days,
                 double coarse_step_sec, double fine_tol_sec) {
     double end_jd = start_jd + duration_days;
+    if (const auto solution = solve_unimodal_conjunction(obj1, obj2, start_jd, end_jd, fine_tol_sec)) {
+        return solution->tca_jd;
+    }
 
     // Step 1: Find all local minima with 5-second steps
     // 5s is critical for catching razor-thin encounters where objects
