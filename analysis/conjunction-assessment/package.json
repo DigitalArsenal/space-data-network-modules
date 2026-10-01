@@ -31,7 +31,7 @@
     "flatbuffers": "25.9.23",
     "flatc-wasm": "^26.1.32",
     "space-data-module-sdk": "0.8.26",
-    "spacedatastandards.org": "1.220.0",
+    "spacedatastandards.org": "1.231.0",
     "tar": "^7.5.13"
   }
 }

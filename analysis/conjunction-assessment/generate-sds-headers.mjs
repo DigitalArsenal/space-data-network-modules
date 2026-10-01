@@ -11,8 +11,11 @@ export const packageRoot = path.dirname(fileURLToPath(import.meta.url));
 export const standardsRoot = path.join(packageRoot, 'node_modules/spacedatastandards.org');
 export const outDir = path.join(packageRoot, 'src/cpp/generated/sds');
 export async function generateSdsHeaders() {
-  const version = JSON.parse(fs.readFileSync(path.join(standardsRoot, 'package.json'), 'utf8')).version;
-  if (version !== '1.220.0') throw new Error(`Expected published SDS 1.220.0, installed ${version}; run npm ci.`);
+  // The pinned release (package.json) must be the installed one; build
+  // metadata ("+stamp") is not part of a published version.
+  const pinned = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8')).devDependencies['spacedatastandards.org'];
+  const version = JSON.parse(fs.readFileSync(path.join(standardsRoot, 'package.json'), 'utf8')).version.split('+')[0];
+  if (version !== pinned) throw new Error(`Expected published SDS ${pinned}, installed ${version}; run npm ci.`);
   const schemas = new Map();
   function visit(code) {
     if (schemas.has(code)) return;

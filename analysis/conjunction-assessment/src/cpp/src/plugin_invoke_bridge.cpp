@@ -374,7 +374,47 @@ struct Source {
   // Mean elements evaluated with the parsed element set; its SGP4
   // initialization is kept for the life of the source (resident indexes).
   std::shared_ptr<SGP4EphemerisSource> sgp4;
+  // Hard-body radius (m) from the source, and where it came from; 0 when the
+  // source gives none (the request's default applies).
+  double hard_body_radius_m = 0;
+  cqrHardBodyRadiusBasis radius_basis = cqrHardBodyRadiusBasis::UNSPECIFIED;
 };
+// The source's hard-body radius: supplied, else half its catalog SIZE, else
+// the radius of a sphere of its catalog RCS.
+bool hardBodyRadius(const CQRObjectSource *r, Source &o) {
+  if (r->HAS_HARD_BODY_RADIUS_M()) {
+    if (!positive(r->HARD_BODY_RADIUS_M()))
+      return error("invalid-source", "HARD_BODY_RADIUS_M must be positive and finite.");
+    o.hard_body_radius_m = r->HARD_BODY_RADIUS_M();
+    o.radius_basis = cqrHardBodyRadiusBasis::SUPPLIED;
+  } else if (auto c = r->CATALOG_ENTRY()) {
+    if (positive(c->SIZE())) {
+      o.hard_body_radius_m = c->SIZE() / 2.;
+      o.radius_basis = cqrHardBodyRadiusBasis::CATALOG_SIZE;
+    } else if (positive(c->RCS())) {
+      o.hard_body_radius_m = std::sqrt(c->RCS() / M_PI);
+      o.radius_basis = cqrHardBodyRadiusBasis::RADAR_CROSS_SECTION;
+    }
+  }
+  return true;
+}
+// A source's radius in a screen: its own, else half the request's
+// COMBINED_RADIUS_M.
+std::pair<double, cqrHardBodyRadiusBasis> radiusOf(const Source &s, const ScreeningConfig &c) {
+  if (s.hard_body_radius_m > 0)
+    return {s.hard_body_radius_m, s.radius_basis};
+  return {c.combined_radius_m / 2., cqrHardBodyRadiusBasis::REQUEST_DEFAULT};
+}
+// Each source's radius by index, for screening.
+void radii(const std::vector<Source> &sources, ScreeningConfig &c) {
+  c.hard_body_radius_m.resize(sources.size());
+  c.radius_basis.resize(sources.size());
+  for (size_t i = 0; i < sources.size(); ++i) {
+    const auto [radius, basis] = radiusOf(sources[i], c);
+    c.hard_body_radius_m[i] = radius;
+    c.radius_basis[i] = static_cast<uint8_t>(basis);
+  }
+}
 bool points(const OEM *r, Source &o) {
   if (!r || !r->EPHEMERIS_DATA_BLOCK() ||
       r->EPHEMERIS_DATA_BLOCK()->size() == 0)
@@ -515,6 +555,8 @@ bool source(const CQRObjectSource *r, Source &o, const PPE *trajectory = nullptr
                  "the source handle counts as one); arbitrary external handles "
                  "cannot be resolved by this instance.");
   o.handle = r->SOURCE_HANDLE();
+  if (!hardBodyRadius(r, o))
+    return false;
   if (trajectory) {
     if (!polynomial(trajectory, o))
       return false;
@@ -686,6 +728,18 @@ std::unique_ptr<CQREventT> event(const ConjunctionEvent &e, int axes = 1) {
       vec(e.rel_pos_r * 1000., e.rel_pos_t * 1000., e.rel_pos_n * 1000.);
   o->RELATIVE_VELOCITY_RTN =
       vec(e.rel_vel_r * 1000., e.rel_vel_t * 1000., e.rel_vel_n * 1000.);
+  if (positive(e.radius1_m) && positive(e.radius2_m)) {
+    o->PRIMARY_HARD_BODY_RADIUS_M = e.radius1_m;
+    o->HAS_PRIMARY_HARD_BODY_RADIUS_M = true;
+    o->SECONDARY_HARD_BODY_RADIUS_M = e.radius2_m;
+    o->HAS_SECONDARY_HARD_BODY_RADIUS_M = true;
+    o->COMBINED_RADIUS_M = e.radius1_m + e.radius2_m;
+    o->HAS_COMBINED_RADIUS_M = true;
+  }
+  o->PRIMARY_RADIUS_BASIS = static_cast<cqrHardBodyRadiusBasis>(e.radius_basis1);
+  o->SECONDARY_RADIUS_BASIS = static_cast<cqrHardBodyRadiusBasis>(e.radius_basis2);
+  if (!e.has_covariance)
+    o->PRIMARY_COVARIANCE_BASIS = o->SECONDARY_COVARIANCE_BASIS = cqrCovarianceBasis::NONE;
   // Uncertainty only from covariance a source supplied; none is invented.
   if (e.has_covariance) {
     o->PRIMARY_SIGMA_RTN_M = vec(e.cov_r1, e.cov_t1, e.cov_n1);
@@ -706,8 +760,6 @@ ConjunctionEvent legacy(const ConjunctionEvent2 &e);
 std::unique_ptr<CQREventT> event(const ConjunctionEvent2 &e,
                                  cqrProbabilityAlgorithm a, int axes = 1) {
   auto o = event(legacy(e), axes);
-  o->COMBINED_RADIUS_M = e.combined_radius_km * 1000.;
-  o->HAS_COMBINED_RADIUS_M = true;
   if (!e.has_covariance)
     return o;
   o->HAS_DILUTION_THRESHOLD_M = false;
@@ -1074,6 +1126,9 @@ extern "C" int assess_conjunction() {
     return error("pair-evaluation-failed",
                  "Pair assessment produced nonfinite geometry."),
            422;
+  // A pair request gives each object's radius itself.
+  out.EVENT_RESULT->PRIMARY_RADIUS_BASIS = out.EVENT_RESULT->SECONDARY_RADIUS_BASIS =
+      cqrHardBodyRadiusBasis::SUPPLIED;
   return push(out) ? 0 : 500;
 }
 
@@ -1171,6 +1226,8 @@ ConjunctionEvent legacy(const ConjunctionEvent2 &e) {
   l.dilution_threshold_km = e.dilution_threshold_km;
   l.probability_method = e.pc.method;
   l.has_covariance = e.has_covariance;
+  l.radius1_m = e.radius1_m;
+  l.radius2_m = e.radius2_m;
   l.covariance_probability = e.pc.probability;
   l.rel_pos_r = e.rel_r;
   l.rel_pos_t = e.rel_t;
@@ -1286,7 +1343,6 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
     clear_error();
     ConjunctionEngine e;
     e.set_pc_method(algorithm(alg));
-    e.set_combined_radius_m(c.combined_radius_m / 2., c.combined_radius_m / 2.);
     auto &w = work[worker];
     for (size_t i = worker; i < p.size(); i += workers) {
       size_t end = s.empty() ? p.size() : s.size();
@@ -1300,6 +1356,8 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
           continue;
         ++w.pairs;
         clear_error();
+        const auto radius1 = radiusOf(p[i], c), radius2 = radiusOf(b, c);
+        e.set_combined_radius_m(radius1.first, radius2.first);
         auto result =
             e.assess(*p[i].provider, *b.provider, c.start_jd, c.duration_days,
                      nullptr, nullptr, c.coarse_step_sec, c.fine_tol_sec);
@@ -1311,6 +1369,8 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
         }
         if (result.miss_distance_km <= c.threshold_km) {
           auto output = event(result, alg, p[i].axes);
+          output->PRIMARY_RADIUS_BASIS = radius1.second;
+          output->SECONDARY_RADIUS_BASIS = radius2.second;
           // Serialization also validates probability metadata. A worker-local
           // failure must not disappear when the next pair clears its status.
           if (has_error()) {
@@ -1762,6 +1822,7 @@ bool screenWindow(const char *method) {
   ScreeningConfig c;
   if (!controls(r->CONTROLS(), c))
     return false;
+  radii(i->sources, c);
   int f = frame(r->EVALUATION_FRAME());
   if (!f || f != i->axes)
     return error("frame-mismatch",
@@ -1820,6 +1881,7 @@ bool tightRequest(const char *method, ScreeningConfig &c, TightSet &t) {
     return false;
   if (!controls(r->CONTROLS(), c))
     return false;
+  radii(t.index->sources, c);
   int f = frame(r->EVALUATION_FRAME());
   if (!f || f != t.index->axes)
     return error("frame-mismatch", "Window evaluation frame differs from the resident index.");

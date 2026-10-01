@@ -96,6 +96,34 @@ struct CQRVersionResult;
 struct CQRVersionResultBuilder;
 struct CQRVersionResultT;
 
+struct CQRLaunchCriterion;
+struct CQRLaunchCriterionBuilder;
+struct CQRLaunchCriterionT;
+
+struct CQRLaunchSegment;
+struct CQRLaunchSegmentBuilder;
+struct CQRLaunchSegmentT;
+
+struct CQRLaunchObject;
+struct CQRLaunchObjectBuilder;
+struct CQRLaunchObjectT;
+
+struct CQRLaunchRequest;
+struct CQRLaunchRequestBuilder;
+struct CQRLaunchRequestT;
+
+struct CQRLaunchClosure;
+struct CQRLaunchClosureBuilder;
+struct CQRLaunchClosureT;
+
+struct CQRLaunchApproach;
+struct CQRLaunchApproachBuilder;
+struct CQRLaunchApproachT;
+
+struct CQRLaunchResult;
+struct CQRLaunchResultBuilder;
+struct CQRLaunchResultT;
+
 struct CQR;
 struct CQRBuilder;
 struct CQRT;
@@ -204,6 +232,135 @@ inline const char *EnumNamecqrUncertaintyOrigin(cqrUncertaintyOrigin e) {
   if (::flatbuffers::IsOutRange(e, cqrUncertaintyOrigin::UNSPECIFIED, cqrUncertaintyOrigin::MAXIMUM_PROBABILITY_ONLY)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamescqrUncertaintyOrigin()[index];
+}
+
+/// Where an object's hard-body radius came from.
+enum class cqrHardBodyRadiusBasis : uint8_t {
+  UNSPECIFIED = 0,
+  /// Given with the source, by an operator or the requester.
+  SUPPLIED = 1,
+  /// Half the catalog entry's characteristic size (CAT SIZE).
+  CATALOG_SIZE = 2,
+  /// Radius of a sphere of the catalog entry's radar cross section,
+  /// sqrt(RCS / pi): a radar measure, not a physical size.
+  RADAR_CROSS_SECTION = 3,
+  /// Half the request's COMBINED_RADIUS_M: no object-specific value.
+  REQUEST_DEFAULT = 4,
+  MIN = UNSPECIFIED,
+  MAX = REQUEST_DEFAULT
+};
+
+inline const cqrHardBodyRadiusBasis (&EnumValuescqrHardBodyRadiusBasis())[5] {
+  static const cqrHardBodyRadiusBasis values[] = {
+    cqrHardBodyRadiusBasis::UNSPECIFIED,
+    cqrHardBodyRadiusBasis::SUPPLIED,
+    cqrHardBodyRadiusBasis::CATALOG_SIZE,
+    cqrHardBodyRadiusBasis::RADAR_CROSS_SECTION,
+    cqrHardBodyRadiusBasis::REQUEST_DEFAULT
+  };
+  return values;
+}
+
+inline const char * const *EnumNamescqrHardBodyRadiusBasis() {
+  static const char * const names[6] = {
+    "UNSPECIFIED",
+    "SUPPLIED",
+    "CATALOG_SIZE",
+    "RADAR_CROSS_SECTION",
+    "REQUEST_DEFAULT",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamecqrHardBodyRadiusBasis(cqrHardBodyRadiusBasis e) {
+  if (::flatbuffers::IsOutRange(e, cqrHardBodyRadiusBasis::UNSPECIFIED, cqrHardBodyRadiusBasis::REQUEST_DEFAULT)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamescqrHardBodyRadiusBasis()[index];
+}
+
+/// Where an object's position covariance at TCA came from.
+enum class cqrCovarianceBasis : uint8_t {
+  UNSPECIFIED = 0,
+  /// None: the source supplied no covariance (an element set carries none).
+  NONE = 1,
+  /// The source's ephemeris or orbit message (OEM or OCM covariance).
+  SOURCE_EPHEMERIS = 2,
+  /// A conjunction data message.
+  CONJUNCTION_MESSAGE = 3,
+  /// The formal covariance of an orbit-determination fit.
+  ORBIT_DETERMINATION = 4,
+  /// An empirical prediction-error model for the source's element sets.
+  EMPIRICAL_MODEL = 5,
+  MIN = UNSPECIFIED,
+  MAX = EMPIRICAL_MODEL
+};
+
+inline const cqrCovarianceBasis (&EnumValuescqrCovarianceBasis())[6] {
+  static const cqrCovarianceBasis values[] = {
+    cqrCovarianceBasis::UNSPECIFIED,
+    cqrCovarianceBasis::NONE,
+    cqrCovarianceBasis::SOURCE_EPHEMERIS,
+    cqrCovarianceBasis::CONJUNCTION_MESSAGE,
+    cqrCovarianceBasis::ORBIT_DETERMINATION,
+    cqrCovarianceBasis::EMPIRICAL_MODEL
+  };
+  return values;
+}
+
+inline const char * const *EnumNamescqrCovarianceBasis() {
+  static const char * const names[7] = {
+    "UNSPECIFIED",
+    "NONE",
+    "SOURCE_EPHEMERIS",
+    "CONJUNCTION_MESSAGE",
+    "ORBIT_DETERMINATION",
+    "EMPIRICAL_MODEL",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamecqrCovarianceBasis(cqrCovarianceBasis e) {
+  if (::flatbuffers::IsOutRange(e, cqrCovarianceBasis::UNSPECIFIED, cqrCovarianceBasis::EMPIRICAL_MODEL)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamescqrCovarianceBasis()[index];
+}
+
+/// The assumed correlation between the two objects' position errors.
+enum class cqrCovarianceCorrelation : uint8_t {
+  UNSPECIFIED = 0,
+  /// Independent errors: the combined covariance is the sum of the two.
+  INDEPENDENT = 1,
+  /// A cross covariance was supplied and used.
+  SUPPLIED_CROSS_COVARIANCE = 2,
+  MIN = UNSPECIFIED,
+  MAX = SUPPLIED_CROSS_COVARIANCE
+};
+
+inline const cqrCovarianceCorrelation (&EnumValuescqrCovarianceCorrelation())[3] {
+  static const cqrCovarianceCorrelation values[] = {
+    cqrCovarianceCorrelation::UNSPECIFIED,
+    cqrCovarianceCorrelation::INDEPENDENT,
+    cqrCovarianceCorrelation::SUPPLIED_CROSS_COVARIANCE
+  };
+  return values;
+}
+
+inline const char * const *EnumNamescqrCovarianceCorrelation() {
+  static const char * const names[4] = {
+    "UNSPECIFIED",
+    "INDEPENDENT",
+    "SUPPLIED_CROSS_COVARIANCE",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamecqrCovarianceCorrelation(cqrCovarianceCorrelation e) {
+  if (::flatbuffers::IsOutRange(e, cqrCovarianceCorrelation::UNSPECIFIED, cqrCovarianceCorrelation::SUPPLIED_CROSS_COVARIANCE)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamescqrCovarianceCorrelation()[index];
 }
 
 enum class cqrDocumentSyntax : uint8_t {
@@ -357,6 +514,102 @@ inline const char *EnumNamecqrDataOrigin(cqrDataOrigin e) {
   if (::flatbuffers::IsOutRange(e, cqrDataOrigin::UNSPECIFIED, cqrDataOrigin::PUBSUB_TOPIC)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamescqrDataOrigin()[index];
+}
+
+/// Launch and reentry screening (normative). A launch window is screened by
+/// sweeping liftoff times; each launched object (stage, payload or jettisoned
+/// component) is one segment whose trajectory is fixed relative to liftoff.
+///
+/// Every segment trajectory and every orbiting-object ephemeris is expressed
+/// in EVALUATION_FRAME, which must be Earth-fixed: a fixed-azimuth ascent has
+/// the same Earth-fixed state at liftoff + τ for every liftoff time. Segment
+/// epochs are absolute times for a liftoff at NOMINAL_LIFTOFF; a provider
+/// evaluates another liftoff time by shifting them. Orbiting objects are
+/// screened at absolute times. A provider never selects a propagator: mean
+/// elements reach it only as ephemerides produced by a host-selected
+/// propagator.
+///
+/// Distances are SI metres, times TIMInstant, probabilities unitless.
+/// Unsupported screening kinds fail explicitly; they are never approximated.
+/// Orbiting-object class used to choose a screening criterion.
+enum class cqrLaunchObjectClass : uint8_t {
+  UNSPECIFIED = 0,
+  /// Crewed or crew-capable object.
+  INHABITABLE = 1,
+  /// Any object that is neither inhabitable nor orbital debris.
+  NON_DEBRIS = 2,
+  /// Catalogued orbital debris.
+  DEBRIS = 3,
+  MIN = UNSPECIFIED,
+  MAX = DEBRIS
+};
+
+inline const cqrLaunchObjectClass (&EnumValuescqrLaunchObjectClass())[4] {
+  static const cqrLaunchObjectClass values[] = {
+    cqrLaunchObjectClass::UNSPECIFIED,
+    cqrLaunchObjectClass::INHABITABLE,
+    cqrLaunchObjectClass::NON_DEBRIS,
+    cqrLaunchObjectClass::DEBRIS
+  };
+  return values;
+}
+
+inline const char * const *EnumNamescqrLaunchObjectClass() {
+  static const char * const names[5] = {
+    "UNSPECIFIED",
+    "INHABITABLE",
+    "NON_DEBRIS",
+    "DEBRIS",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamecqrLaunchObjectClass(cqrLaunchObjectClass e) {
+  if (::flatbuffers::IsOutRange(e, cqrLaunchObjectClass::UNSPECIFIED, cqrLaunchObjectClass::DEBRIS)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamescqrLaunchObjectClass()[index];
+}
+
+/// How one criterion decides a violation.
+enum class cqrLaunchScreening : uint8_t {
+  UNSPECIFIED = 0,
+  /// Separation below RADIUS_M.
+  SPHERICAL = 1,
+  /// Separation inside the RADIAL_M / IN_TRACK_M / CROSS_TRACK_M ellipsoid,
+  /// centred on the orbiting object in its radial/in-track/cross-track frame.
+  ELLIPSOIDAL = 2,
+  /// Probability of collision above MAX_PROBABILITY.
+  PROBABILITY = 3,
+  MIN = UNSPECIFIED,
+  MAX = PROBABILITY
+};
+
+inline const cqrLaunchScreening (&EnumValuescqrLaunchScreening())[4] {
+  static const cqrLaunchScreening values[] = {
+    cqrLaunchScreening::UNSPECIFIED,
+    cqrLaunchScreening::SPHERICAL,
+    cqrLaunchScreening::ELLIPSOIDAL,
+    cqrLaunchScreening::PROBABILITY
+  };
+  return values;
+}
+
+inline const char * const *EnumNamescqrLaunchScreening() {
+  static const char * const names[5] = {
+    "UNSPECIFIED",
+    "SPHERICAL",
+    "ELLIPSOIDAL",
+    "PROBABILITY",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamecqrLaunchScreening(cqrLaunchScreening e) {
+  if (::flatbuffers::IsOutRange(e, cqrLaunchScreening::UNSPECIFIED, cqrLaunchScreening::PROBABILITY)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamescqrLaunchScreening()[index];
 }
 
 struct CQRSourceProvenanceT : public ::flatbuffers::NativeTable {
@@ -581,6 +834,9 @@ struct CQRObjectSourceT : public ::flatbuffers::NativeTable {
   bool HAS_PERIGEE_ALTITUDE_M = false;
   double APOGEE_ALTITUDE_M = 0.0;
   bool HAS_APOGEE_ALTITUDE_M = false;
+  double HARD_BODY_RADIUS_M = 0.0;
+  bool HAS_HARD_BODY_RADIUS_M = false;
+  std::unique_ptr<CATT> CATALOG_ENTRY{};
   CQRObjectSourceT() = default;
   CQRObjectSourceT(const CQRObjectSourceT &o);
   CQRObjectSourceT(CQRObjectSourceT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -611,7 +867,10 @@ struct CQRObjectSource FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_PERIGEE_ALTITUDE_M = 30,
     VT_HAS_PERIGEE_ALTITUDE_M = 32,
     VT_APOGEE_ALTITUDE_M = 34,
-    VT_HAS_APOGEE_ALTITUDE_M = 36
+    VT_HAS_APOGEE_ALTITUDE_M = 36,
+    VT_HARD_BODY_RADIUS_M = 38,
+    VT_HAS_HARD_BODY_RADIUS_M = 40,
+    VT_CATALOG_ENTRY = 42
   };
   const ::flatbuffers::String *OBJECT_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_OBJECT_ID);
@@ -669,6 +928,19 @@ struct CQRObjectSource FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   bool HAS_APOGEE_ALTITUDE_M() const {
     return GetField<uint8_t>(VT_HAS_APOGEE_ALTITUDE_M, 0) != 0;
   }
+  /// Hard-body radius in metres given with the source.
+  double HARD_BODY_RADIUS_M() const {
+    return GetField<double>(VT_HARD_BODY_RADIUS_M, 0.0);
+  }
+  /// True when HARD_BODY_RADIUS_M carries a value; false means absent.
+  bool HAS_HARD_BODY_RADIUS_M() const {
+    return GetField<uint8_t>(VT_HAS_HARD_BODY_RADIUS_M, 0) != 0;
+  }
+  /// The object's catalog entry. Without a supplied radius, its SIZE, else
+  /// its RCS, gives the hard-body radius (see cqrHardBodyRadiusBasis).
+  const CAT *CATALOG_ENTRY() const {
+    return GetPointer<const CAT *>(VT_CATALOG_ENTRY);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -700,6 +972,10 @@ struct CQRObjectSource FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint8_t>(verifier, VT_HAS_PERIGEE_ALTITUDE_M, 1) &&
            VerifyField<double>(verifier, VT_APOGEE_ALTITUDE_M, 8) &&
            VerifyField<uint8_t>(verifier, VT_HAS_APOGEE_ALTITUDE_M, 1) &&
+           VerifyField<double>(verifier, VT_HARD_BODY_RADIUS_M, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_HARD_BODY_RADIUS_M, 1) &&
+           VerifyOffset(verifier, VT_CATALOG_ENTRY) &&
+           verifier.VerifyTable(CATALOG_ENTRY()) &&
            verifier.EndTable();
   }
   CQRObjectSourceT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -762,6 +1038,15 @@ struct CQRObjectSourceBuilder {
   void add_HAS_APOGEE_ALTITUDE_M(bool HAS_APOGEE_ALTITUDE_M) {
     fbb_.AddElement<uint8_t>(CQRObjectSource::VT_HAS_APOGEE_ALTITUDE_M, static_cast<uint8_t>(HAS_APOGEE_ALTITUDE_M), 0);
   }
+  void add_HARD_BODY_RADIUS_M(double HARD_BODY_RADIUS_M) {
+    fbb_.AddElement<double>(CQRObjectSource::VT_HARD_BODY_RADIUS_M, HARD_BODY_RADIUS_M, 0.0);
+  }
+  void add_HAS_HARD_BODY_RADIUS_M(bool HAS_HARD_BODY_RADIUS_M) {
+    fbb_.AddElement<uint8_t>(CQRObjectSource::VT_HAS_HARD_BODY_RADIUS_M, static_cast<uint8_t>(HAS_HARD_BODY_RADIUS_M), 0);
+  }
+  void add_CATALOG_ENTRY(::flatbuffers::Offset<CAT> CATALOG_ENTRY) {
+    fbb_.AddOffset(CQRObjectSource::VT_CATALOG_ENTRY, CATALOG_ENTRY);
+  }
   explicit CQRObjectSourceBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -792,10 +1077,15 @@ inline ::flatbuffers::Offset<CQRObjectSource> CreateCQRObjectSource(
     double PERIGEE_ALTITUDE_M = 0.0,
     bool HAS_PERIGEE_ALTITUDE_M = false,
     double APOGEE_ALTITUDE_M = 0.0,
-    bool HAS_APOGEE_ALTITUDE_M = false) {
+    bool HAS_APOGEE_ALTITUDE_M = false,
+    double HARD_BODY_RADIUS_M = 0.0,
+    bool HAS_HARD_BODY_RADIUS_M = false,
+    ::flatbuffers::Offset<CAT> CATALOG_ENTRY = 0) {
   CQRObjectSourceBuilder builder_(_fbb);
+  builder_.add_HARD_BODY_RADIUS_M(HARD_BODY_RADIUS_M);
   builder_.add_APOGEE_ALTITUDE_M(APOGEE_ALTITUDE_M);
   builder_.add_PERIGEE_ALTITUDE_M(PERIGEE_ALTITUDE_M);
+  builder_.add_CATALOG_ENTRY(CATALOG_ENTRY);
   builder_.add_SOURCE_EPOCH(SOURCE_EPOCH);
   builder_.add_PROVENANCE(PROVENANCE);
   builder_.add_TLE_LINES(TLE_LINES);
@@ -809,6 +1099,7 @@ inline ::flatbuffers::Offset<CQRObjectSource> CreateCQRObjectSource(
   builder_.add_NORAD_CATALOG_ID(NORAD_CATALOG_ID);
   builder_.add_OBJECT_NAME(OBJECT_NAME);
   builder_.add_OBJECT_ID(OBJECT_ID);
+  builder_.add_HAS_HARD_BODY_RADIUS_M(HAS_HARD_BODY_RADIUS_M);
   builder_.add_HAS_APOGEE_ALTITUDE_M(HAS_APOGEE_ALTITUDE_M);
   builder_.add_HAS_PERIGEE_ALTITUDE_M(HAS_PERIGEE_ALTITUDE_M);
   return builder_.Finish();
@@ -837,7 +1128,10 @@ inline ::flatbuffers::Offset<CQRObjectSource> CreateCQRObjectSourceDirect(
     double PERIGEE_ALTITUDE_M = 0.0,
     bool HAS_PERIGEE_ALTITUDE_M = false,
     double APOGEE_ALTITUDE_M = 0.0,
-    bool HAS_APOGEE_ALTITUDE_M = false) {
+    bool HAS_APOGEE_ALTITUDE_M = false,
+    double HARD_BODY_RADIUS_M = 0.0,
+    bool HAS_HARD_BODY_RADIUS_M = false,
+    ::flatbuffers::Offset<CAT> CATALOG_ENTRY = 0) {
   auto OBJECT_ID__ = OBJECT_ID ? _fbb.CreateString(OBJECT_ID) : 0;
   auto OBJECT_NAME__ = OBJECT_NAME ? _fbb.CreateString(OBJECT_NAME) : 0;
   auto PROPAGATOR_PORT_ID__ = PROPAGATOR_PORT_ID ? _fbb.CreateString(PROPAGATOR_PORT_ID) : 0;
@@ -859,7 +1153,10 @@ inline ::flatbuffers::Offset<CQRObjectSource> CreateCQRObjectSourceDirect(
       PERIGEE_ALTITUDE_M,
       HAS_PERIGEE_ALTITUDE_M,
       APOGEE_ALTITUDE_M,
-      HAS_APOGEE_ALTITUDE_M);
+      HAS_APOGEE_ALTITUDE_M,
+      HARD_BODY_RADIUS_M,
+      HAS_HARD_BODY_RADIUS_M,
+      CATALOG_ENTRY);
 }
 
 ::flatbuffers::Offset<CQRObjectSource> CreateCQRObjectSource(::flatbuffers::FlatBufferBuilder &_fbb, const CQRObjectSourceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1399,6 +1696,9 @@ struct CQRProbabilityResultT : public ::flatbuffers::NativeTable {
   double MAHALANOBIS_SQUARED = 0.0;
   bool HAS_MAHALANOBIS_SQUARED = false;
   cqrUncertaintyOrigin UNCERTAINTY_SOURCE = cqrUncertaintyOrigin::UNSPECIFIED;
+  covarianceCalibration CALIBRATION = covarianceCalibration::Unspecified;
+  std::string CALIBRATION_REFERENCE{};
+  cqrCovarianceCorrelation CROSS_CORRELATION = cqrCovarianceCorrelation::UNSPECIFIED;
 };
 
 /// Report the actual algorithm and uncertainty origin. With
@@ -1419,7 +1719,10 @@ struct CQRProbabilityResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tab
     VT_HAS_MAXIMUM_PROBABILITY = 14,
     VT_MAHALANOBIS_SQUARED = 16,
     VT_HAS_MAHALANOBIS_SQUARED = 18,
-    VT_UNCERTAINTY_SOURCE = 20
+    VT_UNCERTAINTY_SOURCE = 20,
+    VT_CALIBRATION = 22,
+    VT_CALIBRATION_REFERENCE = 24,
+    VT_CROSS_CORRELATION = 26
   };
   double PROBABILITY() const {
     return GetField<double>(VT_PROBABILITY, 0.0);
@@ -1451,6 +1754,21 @@ struct CQRProbabilityResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tab
   cqrUncertaintyOrigin UNCERTAINTY_SOURCE() const {
     return static_cast<cqrUncertaintyOrigin>(GetField<uint8_t>(VT_UNCERTAINTY_SOURCE, 0));
   }
+  /// For a covariance-based probability: whether the covariance's coverage was
+  /// measured against independent reference states. Only CALIBRATED
+  /// covariance supports a probability beyond "conditional on the stated
+  /// assumptions".
+  covarianceCalibration CALIBRATION() const {
+    return static_cast<covarianceCalibration>(GetField<int8_t>(VT_CALIBRATION, 0));
+  }
+  /// Identifier of the calibration evidence (a report or record).
+  const ::flatbuffers::String *CALIBRATION_REFERENCE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_CALIBRATION_REFERENCE);
+  }
+  /// The correlation assumed between the two objects' errors.
+  cqrCovarianceCorrelation CROSS_CORRELATION() const {
+    return static_cast<cqrCovarianceCorrelation>(GetField<uint8_t>(VT_CROSS_CORRELATION, 0));
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1463,6 +1781,10 @@ struct CQRProbabilityResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tab
            VerifyField<double>(verifier, VT_MAHALANOBIS_SQUARED, 8) &&
            VerifyField<uint8_t>(verifier, VT_HAS_MAHALANOBIS_SQUARED, 1) &&
            VerifyField<uint8_t>(verifier, VT_UNCERTAINTY_SOURCE, 1) &&
+           VerifyField<int8_t>(verifier, VT_CALIBRATION, 1) &&
+           VerifyOffset(verifier, VT_CALIBRATION_REFERENCE) &&
+           verifier.VerifyString(CALIBRATION_REFERENCE()) &&
+           VerifyField<uint8_t>(verifier, VT_CROSS_CORRELATION, 1) &&
            verifier.EndTable();
   }
   CQRProbabilityResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1501,6 +1823,15 @@ struct CQRProbabilityResultBuilder {
   void add_UNCERTAINTY_SOURCE(cqrUncertaintyOrigin UNCERTAINTY_SOURCE) {
     fbb_.AddElement<uint8_t>(CQRProbabilityResult::VT_UNCERTAINTY_SOURCE, static_cast<uint8_t>(UNCERTAINTY_SOURCE), 0);
   }
+  void add_CALIBRATION(covarianceCalibration CALIBRATION) {
+    fbb_.AddElement<int8_t>(CQRProbabilityResult::VT_CALIBRATION, static_cast<int8_t>(CALIBRATION), 0);
+  }
+  void add_CALIBRATION_REFERENCE(::flatbuffers::Offset<::flatbuffers::String> CALIBRATION_REFERENCE) {
+    fbb_.AddOffset(CQRProbabilityResult::VT_CALIBRATION_REFERENCE, CALIBRATION_REFERENCE);
+  }
+  void add_CROSS_CORRELATION(cqrCovarianceCorrelation CROSS_CORRELATION) {
+    fbb_.AddElement<uint8_t>(CQRProbabilityResult::VT_CROSS_CORRELATION, static_cast<uint8_t>(CROSS_CORRELATION), 0);
+  }
   explicit CQRProbabilityResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1522,12 +1853,18 @@ inline ::flatbuffers::Offset<CQRProbabilityResult> CreateCQRProbabilityResult(
     bool HAS_MAXIMUM_PROBABILITY = false,
     double MAHALANOBIS_SQUARED = 0.0,
     bool HAS_MAHALANOBIS_SQUARED = false,
-    cqrUncertaintyOrigin UNCERTAINTY_SOURCE = cqrUncertaintyOrigin::UNSPECIFIED) {
+    cqrUncertaintyOrigin UNCERTAINTY_SOURCE = cqrUncertaintyOrigin::UNSPECIFIED,
+    covarianceCalibration CALIBRATION = covarianceCalibration::Unspecified,
+    ::flatbuffers::Offset<::flatbuffers::String> CALIBRATION_REFERENCE = 0,
+    cqrCovarianceCorrelation CROSS_CORRELATION = cqrCovarianceCorrelation::UNSPECIFIED) {
   CQRProbabilityResultBuilder builder_(_fbb);
   builder_.add_MAHALANOBIS_SQUARED(MAHALANOBIS_SQUARED);
   builder_.add_MAXIMUM_PROBABILITY(MAXIMUM_PROBABILITY);
   builder_.add_ITERATIONS(ITERATIONS);
   builder_.add_PROBABILITY(PROBABILITY);
+  builder_.add_CALIBRATION_REFERENCE(CALIBRATION_REFERENCE);
+  builder_.add_CROSS_CORRELATION(CROSS_CORRELATION);
+  builder_.add_CALIBRATION(CALIBRATION);
   builder_.add_UNCERTAINTY_SOURCE(UNCERTAINTY_SOURCE);
   builder_.add_HAS_MAHALANOBIS_SQUARED(HAS_MAHALANOBIS_SQUARED);
   builder_.add_HAS_MAXIMUM_PROBABILITY(HAS_MAXIMUM_PROBABILITY);
@@ -1540,6 +1877,37 @@ struct CQRProbabilityResult::Traits {
   using type = CQRProbabilityResult;
   static auto constexpr Create = CreateCQRProbabilityResult;
 };
+
+inline ::flatbuffers::Offset<CQRProbabilityResult> CreateCQRProbabilityResultDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    double PROBABILITY = 0.0,
+    cqrProbabilityAlgorithm ALGORITHM = cqrProbabilityAlgorithm::UNSPECIFIED,
+    bool CONVERGED = false,
+    uint64_t ITERATIONS = 0,
+    double MAXIMUM_PROBABILITY = 0.0,
+    bool HAS_MAXIMUM_PROBABILITY = false,
+    double MAHALANOBIS_SQUARED = 0.0,
+    bool HAS_MAHALANOBIS_SQUARED = false,
+    cqrUncertaintyOrigin UNCERTAINTY_SOURCE = cqrUncertaintyOrigin::UNSPECIFIED,
+    covarianceCalibration CALIBRATION = covarianceCalibration::Unspecified,
+    const char *CALIBRATION_REFERENCE = nullptr,
+    cqrCovarianceCorrelation CROSS_CORRELATION = cqrCovarianceCorrelation::UNSPECIFIED) {
+  auto CALIBRATION_REFERENCE__ = CALIBRATION_REFERENCE ? _fbb.CreateString(CALIBRATION_REFERENCE) : 0;
+  return CreateCQRProbabilityResult(
+      _fbb,
+      PROBABILITY,
+      ALGORITHM,
+      CONVERGED,
+      ITERATIONS,
+      MAXIMUM_PROBABILITY,
+      HAS_MAXIMUM_PROBABILITY,
+      MAHALANOBIS_SQUARED,
+      HAS_MAHALANOBIS_SQUARED,
+      UNCERTAINTY_SOURCE,
+      CALIBRATION,
+      CALIBRATION_REFERENCE__,
+      CROSS_CORRELATION);
+}
 
 ::flatbuffers::Offset<CQRProbabilityResult> CreateCQRProbabilityResult(::flatbuffers::FlatBufferBuilder &_fbb, const CQRProbabilityResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
@@ -2071,6 +2439,14 @@ struct CQREventT : public ::flatbuffers::NativeTable {
   bool HAS_MAHALANOBIS_3D_SQUARED = false;
   double COMBINED_RADIUS_M = 0.0;
   bool HAS_COMBINED_RADIUS_M = false;
+  double PRIMARY_HARD_BODY_RADIUS_M = 0.0;
+  bool HAS_PRIMARY_HARD_BODY_RADIUS_M = false;
+  double SECONDARY_HARD_BODY_RADIUS_M = 0.0;
+  bool HAS_SECONDARY_HARD_BODY_RADIUS_M = false;
+  cqrHardBodyRadiusBasis PRIMARY_RADIUS_BASIS = cqrHardBodyRadiusBasis::UNSPECIFIED;
+  cqrHardBodyRadiusBasis SECONDARY_RADIUS_BASIS = cqrHardBodyRadiusBasis::UNSPECIFIED;
+  cqrCovarianceBasis PRIMARY_COVARIANCE_BASIS = cqrCovarianceBasis::UNSPECIFIED;
+  cqrCovarianceBasis SECONDARY_COVARIANCE_BASIS = cqrCovarianceBasis::UNSPECIFIED;
   CQREventT() = default;
   CQREventT(const CQREventT &o);
   CQREventT(CQREventT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -2109,7 +2485,15 @@ struct CQREvent FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_MAHALANOBIS_3D_SQUARED = 50,
     VT_HAS_MAHALANOBIS_3D_SQUARED = 52,
     VT_COMBINED_RADIUS_M = 54,
-    VT_HAS_COMBINED_RADIUS_M = 56
+    VT_HAS_COMBINED_RADIUS_M = 56,
+    VT_PRIMARY_HARD_BODY_RADIUS_M = 58,
+    VT_HAS_PRIMARY_HARD_BODY_RADIUS_M = 60,
+    VT_SECONDARY_HARD_BODY_RADIUS_M = 62,
+    VT_HAS_SECONDARY_HARD_BODY_RADIUS_M = 64,
+    VT_PRIMARY_RADIUS_BASIS = 66,
+    VT_SECONDARY_RADIUS_BASIS = 68,
+    VT_PRIMARY_COVARIANCE_BASIS = 70,
+    VT_SECONDARY_COVARIANCE_BASIS = 72
   };
   const ::flatbuffers::String *PRIMARY_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_PRIMARY_ID);
@@ -2200,6 +2584,36 @@ struct CQREvent FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   bool HAS_COMBINED_RADIUS_M() const {
     return GetField<uint8_t>(VT_HAS_COMBINED_RADIUS_M, 0) != 0;
   }
+  /// Each object's hard-body radius in metres and where it came from;
+  /// COMBINED_RADIUS_M is their sum.
+  double PRIMARY_HARD_BODY_RADIUS_M() const {
+    return GetField<double>(VT_PRIMARY_HARD_BODY_RADIUS_M, 0.0);
+  }
+  /// True when PRIMARY_HARD_BODY_RADIUS_M carries a value; false means absent.
+  bool HAS_PRIMARY_HARD_BODY_RADIUS_M() const {
+    return GetField<uint8_t>(VT_HAS_PRIMARY_HARD_BODY_RADIUS_M, 0) != 0;
+  }
+  double SECONDARY_HARD_BODY_RADIUS_M() const {
+    return GetField<double>(VT_SECONDARY_HARD_BODY_RADIUS_M, 0.0);
+  }
+  /// True when SECONDARY_HARD_BODY_RADIUS_M carries a value; false means absent.
+  bool HAS_SECONDARY_HARD_BODY_RADIUS_M() const {
+    return GetField<uint8_t>(VT_HAS_SECONDARY_HARD_BODY_RADIUS_M, 0) != 0;
+  }
+  cqrHardBodyRadiusBasis PRIMARY_RADIUS_BASIS() const {
+    return static_cast<cqrHardBodyRadiusBasis>(GetField<uint8_t>(VT_PRIMARY_RADIUS_BASIS, 0));
+  }
+  cqrHardBodyRadiusBasis SECONDARY_RADIUS_BASIS() const {
+    return static_cast<cqrHardBodyRadiusBasis>(GetField<uint8_t>(VT_SECONDARY_RADIUS_BASIS, 0));
+  }
+  /// Where each object's position covariance came from; NONE means the event
+  /// carries no covariance-based quantity for it.
+  cqrCovarianceBasis PRIMARY_COVARIANCE_BASIS() const {
+    return static_cast<cqrCovarianceBasis>(GetField<uint8_t>(VT_PRIMARY_COVARIANCE_BASIS, 0));
+  }
+  cqrCovarianceBasis SECONDARY_COVARIANCE_BASIS() const {
+    return static_cast<cqrCovarianceBasis>(GetField<uint8_t>(VT_SECONDARY_COVARIANCE_BASIS, 0));
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -2243,6 +2657,14 @@ struct CQREvent FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint8_t>(verifier, VT_HAS_MAHALANOBIS_3D_SQUARED, 1) &&
            VerifyField<double>(verifier, VT_COMBINED_RADIUS_M, 8) &&
            VerifyField<uint8_t>(verifier, VT_HAS_COMBINED_RADIUS_M, 1) &&
+           VerifyField<double>(verifier, VT_PRIMARY_HARD_BODY_RADIUS_M, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_PRIMARY_HARD_BODY_RADIUS_M, 1) &&
+           VerifyField<double>(verifier, VT_SECONDARY_HARD_BODY_RADIUS_M, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_SECONDARY_HARD_BODY_RADIUS_M, 1) &&
+           VerifyField<uint8_t>(verifier, VT_PRIMARY_RADIUS_BASIS, 1) &&
+           VerifyField<uint8_t>(verifier, VT_SECONDARY_RADIUS_BASIS, 1) &&
+           VerifyField<uint8_t>(verifier, VT_PRIMARY_COVARIANCE_BASIS, 1) &&
+           VerifyField<uint8_t>(verifier, VT_SECONDARY_COVARIANCE_BASIS, 1) &&
            verifier.EndTable();
   }
   CQREventT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2335,6 +2757,30 @@ struct CQREventBuilder {
   void add_HAS_COMBINED_RADIUS_M(bool HAS_COMBINED_RADIUS_M) {
     fbb_.AddElement<uint8_t>(CQREvent::VT_HAS_COMBINED_RADIUS_M, static_cast<uint8_t>(HAS_COMBINED_RADIUS_M), 0);
   }
+  void add_PRIMARY_HARD_BODY_RADIUS_M(double PRIMARY_HARD_BODY_RADIUS_M) {
+    fbb_.AddElement<double>(CQREvent::VT_PRIMARY_HARD_BODY_RADIUS_M, PRIMARY_HARD_BODY_RADIUS_M, 0.0);
+  }
+  void add_HAS_PRIMARY_HARD_BODY_RADIUS_M(bool HAS_PRIMARY_HARD_BODY_RADIUS_M) {
+    fbb_.AddElement<uint8_t>(CQREvent::VT_HAS_PRIMARY_HARD_BODY_RADIUS_M, static_cast<uint8_t>(HAS_PRIMARY_HARD_BODY_RADIUS_M), 0);
+  }
+  void add_SECONDARY_HARD_BODY_RADIUS_M(double SECONDARY_HARD_BODY_RADIUS_M) {
+    fbb_.AddElement<double>(CQREvent::VT_SECONDARY_HARD_BODY_RADIUS_M, SECONDARY_HARD_BODY_RADIUS_M, 0.0);
+  }
+  void add_HAS_SECONDARY_HARD_BODY_RADIUS_M(bool HAS_SECONDARY_HARD_BODY_RADIUS_M) {
+    fbb_.AddElement<uint8_t>(CQREvent::VT_HAS_SECONDARY_HARD_BODY_RADIUS_M, static_cast<uint8_t>(HAS_SECONDARY_HARD_BODY_RADIUS_M), 0);
+  }
+  void add_PRIMARY_RADIUS_BASIS(cqrHardBodyRadiusBasis PRIMARY_RADIUS_BASIS) {
+    fbb_.AddElement<uint8_t>(CQREvent::VT_PRIMARY_RADIUS_BASIS, static_cast<uint8_t>(PRIMARY_RADIUS_BASIS), 0);
+  }
+  void add_SECONDARY_RADIUS_BASIS(cqrHardBodyRadiusBasis SECONDARY_RADIUS_BASIS) {
+    fbb_.AddElement<uint8_t>(CQREvent::VT_SECONDARY_RADIUS_BASIS, static_cast<uint8_t>(SECONDARY_RADIUS_BASIS), 0);
+  }
+  void add_PRIMARY_COVARIANCE_BASIS(cqrCovarianceBasis PRIMARY_COVARIANCE_BASIS) {
+    fbb_.AddElement<uint8_t>(CQREvent::VT_PRIMARY_COVARIANCE_BASIS, static_cast<uint8_t>(PRIMARY_COVARIANCE_BASIS), 0);
+  }
+  void add_SECONDARY_COVARIANCE_BASIS(cqrCovarianceBasis SECONDARY_COVARIANCE_BASIS) {
+    fbb_.AddElement<uint8_t>(CQREvent::VT_SECONDARY_COVARIANCE_BASIS, static_cast<uint8_t>(SECONDARY_COVARIANCE_BASIS), 0);
+  }
   explicit CQREventBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2377,8 +2823,18 @@ inline ::flatbuffers::Offset<CQREvent> CreateCQREvent(
     double MAHALANOBIS_3D_SQUARED = 0.0,
     bool HAS_MAHALANOBIS_3D_SQUARED = false,
     double COMBINED_RADIUS_M = 0.0,
-    bool HAS_COMBINED_RADIUS_M = false) {
+    bool HAS_COMBINED_RADIUS_M = false,
+    double PRIMARY_HARD_BODY_RADIUS_M = 0.0,
+    bool HAS_PRIMARY_HARD_BODY_RADIUS_M = false,
+    double SECONDARY_HARD_BODY_RADIUS_M = 0.0,
+    bool HAS_SECONDARY_HARD_BODY_RADIUS_M = false,
+    cqrHardBodyRadiusBasis PRIMARY_RADIUS_BASIS = cqrHardBodyRadiusBasis::UNSPECIFIED,
+    cqrHardBodyRadiusBasis SECONDARY_RADIUS_BASIS = cqrHardBodyRadiusBasis::UNSPECIFIED,
+    cqrCovarianceBasis PRIMARY_COVARIANCE_BASIS = cqrCovarianceBasis::UNSPECIFIED,
+    cqrCovarianceBasis SECONDARY_COVARIANCE_BASIS = cqrCovarianceBasis::UNSPECIFIED) {
   CQREventBuilder builder_(_fbb);
+  builder_.add_SECONDARY_HARD_BODY_RADIUS_M(SECONDARY_HARD_BODY_RADIUS_M);
+  builder_.add_PRIMARY_HARD_BODY_RADIUS_M(PRIMARY_HARD_BODY_RADIUS_M);
   builder_.add_COMBINED_RADIUS_M(COMBINED_RADIUS_M);
   builder_.add_MAHALANOBIS_3D_SQUARED(MAHALANOBIS_3D_SQUARED);
   builder_.add_SECONDARY_DAYS_SINCE_EPOCH(SECONDARY_DAYS_SINCE_EPOCH);
@@ -2401,6 +2857,12 @@ inline ::flatbuffers::Offset<CQREvent> CreateCQREvent(
   builder_.add_PRIMARY_NAME(PRIMARY_NAME);
   builder_.add_SECONDARY_ID(SECONDARY_ID);
   builder_.add_PRIMARY_ID(PRIMARY_ID);
+  builder_.add_SECONDARY_COVARIANCE_BASIS(SECONDARY_COVARIANCE_BASIS);
+  builder_.add_PRIMARY_COVARIANCE_BASIS(PRIMARY_COVARIANCE_BASIS);
+  builder_.add_SECONDARY_RADIUS_BASIS(SECONDARY_RADIUS_BASIS);
+  builder_.add_PRIMARY_RADIUS_BASIS(PRIMARY_RADIUS_BASIS);
+  builder_.add_HAS_SECONDARY_HARD_BODY_RADIUS_M(HAS_SECONDARY_HARD_BODY_RADIUS_M);
+  builder_.add_HAS_PRIMARY_HARD_BODY_RADIUS_M(HAS_PRIMARY_HARD_BODY_RADIUS_M);
   builder_.add_HAS_COMBINED_RADIUS_M(HAS_COMBINED_RADIUS_M);
   builder_.add_HAS_MAHALANOBIS_3D_SQUARED(HAS_MAHALANOBIS_3D_SQUARED);
   builder_.add_HAS_SECONDARY_DAYS_SINCE_EPOCH(HAS_SECONDARY_DAYS_SINCE_EPOCH);
@@ -2442,7 +2904,15 @@ inline ::flatbuffers::Offset<CQREvent> CreateCQREventDirect(
     double MAHALANOBIS_3D_SQUARED = 0.0,
     bool HAS_MAHALANOBIS_3D_SQUARED = false,
     double COMBINED_RADIUS_M = 0.0,
-    bool HAS_COMBINED_RADIUS_M = false) {
+    bool HAS_COMBINED_RADIUS_M = false,
+    double PRIMARY_HARD_BODY_RADIUS_M = 0.0,
+    bool HAS_PRIMARY_HARD_BODY_RADIUS_M = false,
+    double SECONDARY_HARD_BODY_RADIUS_M = 0.0,
+    bool HAS_SECONDARY_HARD_BODY_RADIUS_M = false,
+    cqrHardBodyRadiusBasis PRIMARY_RADIUS_BASIS = cqrHardBodyRadiusBasis::UNSPECIFIED,
+    cqrHardBodyRadiusBasis SECONDARY_RADIUS_BASIS = cqrHardBodyRadiusBasis::UNSPECIFIED,
+    cqrCovarianceBasis PRIMARY_COVARIANCE_BASIS = cqrCovarianceBasis::UNSPECIFIED,
+    cqrCovarianceBasis SECONDARY_COVARIANCE_BASIS = cqrCovarianceBasis::UNSPECIFIED) {
   auto PRIMARY_ID__ = PRIMARY_ID ? _fbb.CreateString(PRIMARY_ID) : 0;
   auto SECONDARY_ID__ = SECONDARY_ID ? _fbb.CreateString(SECONDARY_ID) : 0;
   auto PRIMARY_NAME__ = PRIMARY_NAME ? _fbb.CreateString(PRIMARY_NAME) : 0;
@@ -2475,7 +2945,15 @@ inline ::flatbuffers::Offset<CQREvent> CreateCQREventDirect(
       MAHALANOBIS_3D_SQUARED,
       HAS_MAHALANOBIS_3D_SQUARED,
       COMBINED_RADIUS_M,
-      HAS_COMBINED_RADIUS_M);
+      HAS_COMBINED_RADIUS_M,
+      PRIMARY_HARD_BODY_RADIUS_M,
+      HAS_PRIMARY_HARD_BODY_RADIUS_M,
+      SECONDARY_HARD_BODY_RADIUS_M,
+      HAS_SECONDARY_HARD_BODY_RADIUS_M,
+      PRIMARY_RADIUS_BASIS,
+      SECONDARY_RADIUS_BASIS,
+      PRIMARY_COVARIANCE_BASIS,
+      SECONDARY_COVARIANCE_BASIS);
 }
 
 ::flatbuffers::Offset<CQREvent> CreateCQREvent(::flatbuffers::FlatBufferBuilder &_fbb, const CQREventT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -3294,6 +3772,1226 @@ inline ::flatbuffers::Offset<CQRVersionResult> CreateCQRVersionResultDirect(
 
 ::flatbuffers::Offset<CQRVersionResult> CreateCQRVersionResult(::flatbuffers::FlatBufferBuilder &_fbb, const CQRVersionResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct CQRLaunchCriterionT : public ::flatbuffers::NativeTable {
+  typedef CQRLaunchCriterion TableType;
+  cqrLaunchObjectClass OBJECT_CLASS = cqrLaunchObjectClass::UNSPECIFIED;
+  cqrLaunchScreening SCREENING = cqrLaunchScreening::UNSPECIFIED;
+  double RADIUS_M = 0.0;
+  double RADIAL_M = 0.0;
+  double IN_TRACK_M = 0.0;
+  double CROSS_TRACK_M = 0.0;
+  double MAX_PROBABILITY = 0.0;
+  cqrProbabilityAlgorithm ALGORITHM = cqrProbabilityAlgorithm::UNSPECIFIED;
+};
+
+/// Screening criterion for one object class. Exactly one kind per entry;
+/// SCREENING selects which fields apply.
+struct CQRLaunchCriterion FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef CQRLaunchCriterionT NativeTableType;
+  typedef CQRLaunchCriterionBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_OBJECT_CLASS = 4,
+    VT_SCREENING = 6,
+    VT_RADIUS_M = 8,
+    VT_RADIAL_M = 10,
+    VT_IN_TRACK_M = 12,
+    VT_CROSS_TRACK_M = 14,
+    VT_MAX_PROBABILITY = 16,
+    VT_ALGORITHM = 18
+  };
+  cqrLaunchObjectClass OBJECT_CLASS() const {
+    return static_cast<cqrLaunchObjectClass>(GetField<uint8_t>(VT_OBJECT_CLASS, 0));
+  }
+  cqrLaunchScreening SCREENING() const {
+    return static_cast<cqrLaunchScreening>(GetField<uint8_t>(VT_SCREENING, 0));
+  }
+  /// Sphere radius, metres (SPHERICAL).
+  double RADIUS_M() const {
+    return GetField<double>(VT_RADIUS_M, 0.0);
+  }
+  /// Ellipsoid semi-axes, metres (ELLIPSOIDAL).
+  double RADIAL_M() const {
+    return GetField<double>(VT_RADIAL_M, 0.0);
+  }
+  double IN_TRACK_M() const {
+    return GetField<double>(VT_IN_TRACK_M, 0.0);
+  }
+  double CROSS_TRACK_M() const {
+    return GetField<double>(VT_CROSS_TRACK_M, 0.0);
+  }
+  /// Largest acceptable probability of collision (PROBABILITY).
+  double MAX_PROBABILITY() const {
+    return GetField<double>(VT_MAX_PROBABILITY, 0.0);
+  }
+  cqrProbabilityAlgorithm ALGORITHM() const {
+    return static_cast<cqrProbabilityAlgorithm>(GetField<uint8_t>(VT_ALGORITHM, 0));
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_OBJECT_CLASS, 1) &&
+           VerifyField<uint8_t>(verifier, VT_SCREENING, 1) &&
+           VerifyField<double>(verifier, VT_RADIUS_M, 8) &&
+           VerifyField<double>(verifier, VT_RADIAL_M, 8) &&
+           VerifyField<double>(verifier, VT_IN_TRACK_M, 8) &&
+           VerifyField<double>(verifier, VT_CROSS_TRACK_M, 8) &&
+           VerifyField<double>(verifier, VT_MAX_PROBABILITY, 8) &&
+           VerifyField<uint8_t>(verifier, VT_ALGORITHM, 1) &&
+           verifier.EndTable();
+  }
+  CQRLaunchCriterionT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(CQRLaunchCriterionT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<CQRLaunchCriterion> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchCriterionT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct CQRLaunchCriterionBuilder {
+  typedef CQRLaunchCriterion Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_OBJECT_CLASS(cqrLaunchObjectClass OBJECT_CLASS) {
+    fbb_.AddElement<uint8_t>(CQRLaunchCriterion::VT_OBJECT_CLASS, static_cast<uint8_t>(OBJECT_CLASS), 0);
+  }
+  void add_SCREENING(cqrLaunchScreening SCREENING) {
+    fbb_.AddElement<uint8_t>(CQRLaunchCriterion::VT_SCREENING, static_cast<uint8_t>(SCREENING), 0);
+  }
+  void add_RADIUS_M(double RADIUS_M) {
+    fbb_.AddElement<double>(CQRLaunchCriterion::VT_RADIUS_M, RADIUS_M, 0.0);
+  }
+  void add_RADIAL_M(double RADIAL_M) {
+    fbb_.AddElement<double>(CQRLaunchCriterion::VT_RADIAL_M, RADIAL_M, 0.0);
+  }
+  void add_IN_TRACK_M(double IN_TRACK_M) {
+    fbb_.AddElement<double>(CQRLaunchCriterion::VT_IN_TRACK_M, IN_TRACK_M, 0.0);
+  }
+  void add_CROSS_TRACK_M(double CROSS_TRACK_M) {
+    fbb_.AddElement<double>(CQRLaunchCriterion::VT_CROSS_TRACK_M, CROSS_TRACK_M, 0.0);
+  }
+  void add_MAX_PROBABILITY(double MAX_PROBABILITY) {
+    fbb_.AddElement<double>(CQRLaunchCriterion::VT_MAX_PROBABILITY, MAX_PROBABILITY, 0.0);
+  }
+  void add_ALGORITHM(cqrProbabilityAlgorithm ALGORITHM) {
+    fbb_.AddElement<uint8_t>(CQRLaunchCriterion::VT_ALGORITHM, static_cast<uint8_t>(ALGORITHM), 0);
+  }
+  explicit CQRLaunchCriterionBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<CQRLaunchCriterion> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<CQRLaunchCriterion>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<CQRLaunchCriterion> CreateCQRLaunchCriterion(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    cqrLaunchObjectClass OBJECT_CLASS = cqrLaunchObjectClass::UNSPECIFIED,
+    cqrLaunchScreening SCREENING = cqrLaunchScreening::UNSPECIFIED,
+    double RADIUS_M = 0.0,
+    double RADIAL_M = 0.0,
+    double IN_TRACK_M = 0.0,
+    double CROSS_TRACK_M = 0.0,
+    double MAX_PROBABILITY = 0.0,
+    cqrProbabilityAlgorithm ALGORITHM = cqrProbabilityAlgorithm::UNSPECIFIED) {
+  CQRLaunchCriterionBuilder builder_(_fbb);
+  builder_.add_MAX_PROBABILITY(MAX_PROBABILITY);
+  builder_.add_CROSS_TRACK_M(CROSS_TRACK_M);
+  builder_.add_IN_TRACK_M(IN_TRACK_M);
+  builder_.add_RADIAL_M(RADIAL_M);
+  builder_.add_RADIUS_M(RADIUS_M);
+  builder_.add_ALGORITHM(ALGORITHM);
+  builder_.add_SCREENING(SCREENING);
+  builder_.add_OBJECT_CLASS(OBJECT_CLASS);
+  return builder_.Finish();
+}
+
+struct CQRLaunchCriterion::Traits {
+  using type = CQRLaunchCriterion;
+  static auto constexpr Create = CreateCQRLaunchCriterion;
+};
+
+::flatbuffers::Offset<CQRLaunchCriterion> CreateCQRLaunchCriterion(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchCriterionT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct CQRLaunchSegmentT : public ::flatbuffers::NativeTable {
+  typedef CQRLaunchSegment TableType;
+  std::string SEGMENT_ID{};
+  std::string SEGMENT_NAME{};
+  std::unique_ptr<OEMT> TRAJECTORY{};
+  double RADIUS_M = 5.0;
+  double RADAR_CROSS_SECTION_M2 = 0.0;
+  bool HAS_RADAR_CROSS_SECTION_M2 = false;
+  std::unique_ptr<TIMInstantT> VALID_FROM{};
+  std::unique_ptr<TIMInstantT> VALID_UNTIL{};
+  CQRLaunchSegmentT() = default;
+  CQRLaunchSegmentT(const CQRLaunchSegmentT &o);
+  CQRLaunchSegmentT(CQRLaunchSegmentT&&) FLATBUFFERS_NOEXCEPT = default;
+  CQRLaunchSegmentT &operator=(CQRLaunchSegmentT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// One launched object: its trajectory for a liftoff at NOMINAL_LIFTOFF.
+struct CQRLaunchSegment FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef CQRLaunchSegmentT NativeTableType;
+  typedef CQRLaunchSegmentBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SEGMENT_ID = 4,
+    VT_SEGMENT_NAME = 6,
+    VT_TRAJECTORY = 8,
+    VT_RADIUS_M = 10,
+    VT_RADAR_CROSS_SECTION_M2 = 12,
+    VT_HAS_RADAR_CROSS_SECTION_M2 = 14,
+    VT_VALID_FROM = 16,
+    VT_VALID_UNTIL = 18
+  };
+  const ::flatbuffers::String *SEGMENT_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SEGMENT_ID);
+  }
+  const ::flatbuffers::String *SEGMENT_NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SEGMENT_NAME);
+  }
+  /// Sampled states in EVALUATION_FRAME, km and km/s as the OEM defines.
+  const OEM *TRAJECTORY() const {
+    return GetPointer<const OEM *>(VT_TRAJECTORY);
+  }
+  /// Hard-body radius, metres.
+  double RADIUS_M() const {
+    return GetField<double>(VT_RADIUS_M, 5.0);
+  }
+  /// Radar cross section, square metres.
+  double RADAR_CROSS_SECTION_M2() const {
+    return GetField<double>(VT_RADAR_CROSS_SECTION_M2, 0.0);
+  }
+  /// True when RADAR_CROSS_SECTION_M2 carries a value; false means absent.
+  bool HAS_RADAR_CROSS_SECTION_M2() const {
+    return GetField<uint8_t>(VT_HAS_RADAR_CROSS_SECTION_M2, 0) != 0;
+  }
+  /// Liftoff times this trajectory applies to, half-open [VALID_FROM,
+  /// VALID_UNTIL). Absent bounds select the whole window. Windows whose
+  /// trajectory changes (for example a varying azimuth) supply one segment
+  /// per span.
+  const TIMInstant *VALID_FROM() const {
+    return GetPointer<const TIMInstant *>(VT_VALID_FROM);
+  }
+  const TIMInstant *VALID_UNTIL() const {
+    return GetPointer<const TIMInstant *>(VT_VALID_UNTIL);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_SEGMENT_ID) &&
+           verifier.VerifyString(SEGMENT_ID()) &&
+           VerifyOffset(verifier, VT_SEGMENT_NAME) &&
+           verifier.VerifyString(SEGMENT_NAME()) &&
+           VerifyOffsetRequired(verifier, VT_TRAJECTORY) &&
+           verifier.VerifyTable(TRAJECTORY()) &&
+           VerifyField<double>(verifier, VT_RADIUS_M, 8) &&
+           VerifyField<double>(verifier, VT_RADAR_CROSS_SECTION_M2, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_RADAR_CROSS_SECTION_M2, 1) &&
+           VerifyOffset(verifier, VT_VALID_FROM) &&
+           verifier.VerifyTable(VALID_FROM()) &&
+           VerifyOffset(verifier, VT_VALID_UNTIL) &&
+           verifier.VerifyTable(VALID_UNTIL()) &&
+           verifier.EndTable();
+  }
+  CQRLaunchSegmentT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(CQRLaunchSegmentT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<CQRLaunchSegment> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchSegmentT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct CQRLaunchSegmentBuilder {
+  typedef CQRLaunchSegment Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_SEGMENT_ID(::flatbuffers::Offset<::flatbuffers::String> SEGMENT_ID) {
+    fbb_.AddOffset(CQRLaunchSegment::VT_SEGMENT_ID, SEGMENT_ID);
+  }
+  void add_SEGMENT_NAME(::flatbuffers::Offset<::flatbuffers::String> SEGMENT_NAME) {
+    fbb_.AddOffset(CQRLaunchSegment::VT_SEGMENT_NAME, SEGMENT_NAME);
+  }
+  void add_TRAJECTORY(::flatbuffers::Offset<OEM> TRAJECTORY) {
+    fbb_.AddOffset(CQRLaunchSegment::VT_TRAJECTORY, TRAJECTORY);
+  }
+  void add_RADIUS_M(double RADIUS_M) {
+    fbb_.AddElement<double>(CQRLaunchSegment::VT_RADIUS_M, RADIUS_M, 5.0);
+  }
+  void add_RADAR_CROSS_SECTION_M2(double RADAR_CROSS_SECTION_M2) {
+    fbb_.AddElement<double>(CQRLaunchSegment::VT_RADAR_CROSS_SECTION_M2, RADAR_CROSS_SECTION_M2, 0.0);
+  }
+  void add_HAS_RADAR_CROSS_SECTION_M2(bool HAS_RADAR_CROSS_SECTION_M2) {
+    fbb_.AddElement<uint8_t>(CQRLaunchSegment::VT_HAS_RADAR_CROSS_SECTION_M2, static_cast<uint8_t>(HAS_RADAR_CROSS_SECTION_M2), 0);
+  }
+  void add_VALID_FROM(::flatbuffers::Offset<TIMInstant> VALID_FROM) {
+    fbb_.AddOffset(CQRLaunchSegment::VT_VALID_FROM, VALID_FROM);
+  }
+  void add_VALID_UNTIL(::flatbuffers::Offset<TIMInstant> VALID_UNTIL) {
+    fbb_.AddOffset(CQRLaunchSegment::VT_VALID_UNTIL, VALID_UNTIL);
+  }
+  explicit CQRLaunchSegmentBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<CQRLaunchSegment> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<CQRLaunchSegment>(end);
+    fbb_.Required(o, CQRLaunchSegment::VT_SEGMENT_ID);
+    fbb_.Required(o, CQRLaunchSegment::VT_TRAJECTORY);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<CQRLaunchSegment> CreateCQRLaunchSegment(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> SEGMENT_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> SEGMENT_NAME = 0,
+    ::flatbuffers::Offset<OEM> TRAJECTORY = 0,
+    double RADIUS_M = 5.0,
+    double RADAR_CROSS_SECTION_M2 = 0.0,
+    bool HAS_RADAR_CROSS_SECTION_M2 = false,
+    ::flatbuffers::Offset<TIMInstant> VALID_FROM = 0,
+    ::flatbuffers::Offset<TIMInstant> VALID_UNTIL = 0) {
+  CQRLaunchSegmentBuilder builder_(_fbb);
+  builder_.add_RADAR_CROSS_SECTION_M2(RADAR_CROSS_SECTION_M2);
+  builder_.add_RADIUS_M(RADIUS_M);
+  builder_.add_VALID_UNTIL(VALID_UNTIL);
+  builder_.add_VALID_FROM(VALID_FROM);
+  builder_.add_TRAJECTORY(TRAJECTORY);
+  builder_.add_SEGMENT_NAME(SEGMENT_NAME);
+  builder_.add_SEGMENT_ID(SEGMENT_ID);
+  builder_.add_HAS_RADAR_CROSS_SECTION_M2(HAS_RADAR_CROSS_SECTION_M2);
+  return builder_.Finish();
+}
+
+struct CQRLaunchSegment::Traits {
+  using type = CQRLaunchSegment;
+  static auto constexpr Create = CreateCQRLaunchSegment;
+};
+
+inline ::flatbuffers::Offset<CQRLaunchSegment> CreateCQRLaunchSegmentDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *SEGMENT_ID = nullptr,
+    const char *SEGMENT_NAME = nullptr,
+    ::flatbuffers::Offset<OEM> TRAJECTORY = 0,
+    double RADIUS_M = 5.0,
+    double RADAR_CROSS_SECTION_M2 = 0.0,
+    bool HAS_RADAR_CROSS_SECTION_M2 = false,
+    ::flatbuffers::Offset<TIMInstant> VALID_FROM = 0,
+    ::flatbuffers::Offset<TIMInstant> VALID_UNTIL = 0) {
+  auto SEGMENT_ID__ = SEGMENT_ID ? _fbb.CreateString(SEGMENT_ID) : 0;
+  auto SEGMENT_NAME__ = SEGMENT_NAME ? _fbb.CreateString(SEGMENT_NAME) : 0;
+  return CreateCQRLaunchSegment(
+      _fbb,
+      SEGMENT_ID__,
+      SEGMENT_NAME__,
+      TRAJECTORY,
+      RADIUS_M,
+      RADAR_CROSS_SECTION_M2,
+      HAS_RADAR_CROSS_SECTION_M2,
+      VALID_FROM,
+      VALID_UNTIL);
+}
+
+::flatbuffers::Offset<CQRLaunchSegment> CreateCQRLaunchSegment(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchSegmentT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct CQRLaunchObjectT : public ::flatbuffers::NativeTable {
+  typedef CQRLaunchObject TableType;
+  std::unique_ptr<CQRObjectSourceT> SOURCE{};
+  cqrLaunchObjectClass OBJECT_CLASS = cqrLaunchObjectClass::UNSPECIFIED;
+  bool RENDEZVOUS_COORDINATED = false;
+  CQRLaunchObjectT() = default;
+  CQRLaunchObjectT(const CQRLaunchObjectT &o);
+  CQRLaunchObjectT(CQRLaunchObjectT&&) FLATBUFFERS_NOEXCEPT = default;
+  CQRLaunchObjectT &operator=(CQRLaunchObjectT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// One orbiting object to screen against.
+struct CQRLaunchObject FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef CQRLaunchObjectT NativeTableType;
+  typedef CQRLaunchObjectBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SOURCE = 4,
+    VT_OBJECT_CLASS = 6,
+    VT_RENDEZVOUS_COORDINATED = 8
+  };
+  /// Ephemeris in EVALUATION_FRAME covering the screened absolute times.
+  const CQRObjectSource *SOURCE() const {
+    return GetPointer<const CQRObjectSource *>(VT_SOURCE);
+  }
+  cqrLaunchObjectClass OBJECT_CLASS() const {
+    return static_cast<cqrLaunchObjectClass>(GetField<uint8_t>(VT_OBJECT_CLASS, 0));
+  }
+  /// A pre-coordinated rendezvous or close approach: reported, never a
+  /// window closure.
+  bool RENDEZVOUS_COORDINATED() const {
+    return GetField<uint8_t>(VT_RENDEZVOUS_COORDINATED, 0) != 0;
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_SOURCE) &&
+           verifier.VerifyTable(SOURCE()) &&
+           VerifyField<uint8_t>(verifier, VT_OBJECT_CLASS, 1) &&
+           VerifyField<uint8_t>(verifier, VT_RENDEZVOUS_COORDINATED, 1) &&
+           verifier.EndTable();
+  }
+  CQRLaunchObjectT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(CQRLaunchObjectT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<CQRLaunchObject> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchObjectT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct CQRLaunchObjectBuilder {
+  typedef CQRLaunchObject Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_SOURCE(::flatbuffers::Offset<CQRObjectSource> SOURCE) {
+    fbb_.AddOffset(CQRLaunchObject::VT_SOURCE, SOURCE);
+  }
+  void add_OBJECT_CLASS(cqrLaunchObjectClass OBJECT_CLASS) {
+    fbb_.AddElement<uint8_t>(CQRLaunchObject::VT_OBJECT_CLASS, static_cast<uint8_t>(OBJECT_CLASS), 0);
+  }
+  void add_RENDEZVOUS_COORDINATED(bool RENDEZVOUS_COORDINATED) {
+    fbb_.AddElement<uint8_t>(CQRLaunchObject::VT_RENDEZVOUS_COORDINATED, static_cast<uint8_t>(RENDEZVOUS_COORDINATED), 0);
+  }
+  explicit CQRLaunchObjectBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<CQRLaunchObject> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<CQRLaunchObject>(end);
+    fbb_.Required(o, CQRLaunchObject::VT_SOURCE);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<CQRLaunchObject> CreateCQRLaunchObject(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<CQRObjectSource> SOURCE = 0,
+    cqrLaunchObjectClass OBJECT_CLASS = cqrLaunchObjectClass::UNSPECIFIED,
+    bool RENDEZVOUS_COORDINATED = false) {
+  CQRLaunchObjectBuilder builder_(_fbb);
+  builder_.add_SOURCE(SOURCE);
+  builder_.add_RENDEZVOUS_COORDINATED(RENDEZVOUS_COORDINATED);
+  builder_.add_OBJECT_CLASS(OBJECT_CLASS);
+  return builder_.Finish();
+}
+
+struct CQRLaunchObject::Traits {
+  using type = CQRLaunchObject;
+  static auto constexpr Create = CreateCQRLaunchObject;
+};
+
+::flatbuffers::Offset<CQRLaunchObject> CreateCQRLaunchObject(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchObjectT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct CQRLaunchRequestT : public ::flatbuffers::NativeTable {
+  typedef CQRLaunchRequest TableType;
+  std::string MISSION_NAME{};
+  std::unique_ptr<TIMInstantT> NOMINAL_LIFTOFF{};
+  std::unique_ptr<TIMInstantT> WINDOW_OPEN{};
+  std::unique_ptr<TIMInstantT> WINDOW_CLOSE{};
+  double LIFTOFF_STEP_SECONDS = 1.0;
+  std::vector<std::unique_ptr<CQRLaunchSegmentT>> SEGMENTS{};
+  std::vector<std::unique_ptr<CQRLaunchObjectT>> OBJECTS{};
+  std::vector<std::unique_ptr<CQRLaunchCriterionT>> CRITERIA{};
+  double MINIMUM_ALTITUDE_M = 150000.0;
+  double SCREEN_SECONDS_AFTER_LIFTOFF = 10800.0;
+  double CLOSURE_PAD_SECONDS = 0.0;
+  double REPORT_RATIO = 1.0;
+  std::unique_ptr<RFMCoordinateSystemT> EVALUATION_FRAME{};
+  CQRLaunchRequestT() = default;
+  CQRLaunchRequestT(const CQRLaunchRequestT &o);
+  CQRLaunchRequestT(CQRLaunchRequestT&&) FLATBUFFERS_NOEXCEPT = default;
+  CQRLaunchRequestT &operator=(CQRLaunchRequestT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct CQRLaunchRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef CQRLaunchRequestT NativeTableType;
+  typedef CQRLaunchRequestBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_MISSION_NAME = 4,
+    VT_NOMINAL_LIFTOFF = 6,
+    VT_WINDOW_OPEN = 8,
+    VT_WINDOW_CLOSE = 10,
+    VT_LIFTOFF_STEP_SECONDS = 12,
+    VT_SEGMENTS = 14,
+    VT_OBJECTS = 16,
+    VT_CRITERIA = 18,
+    VT_MINIMUM_ALTITUDE_M = 20,
+    VT_SCREEN_SECONDS_AFTER_LIFTOFF = 22,
+    VT_CLOSURE_PAD_SECONDS = 24,
+    VT_REPORT_RATIO = 26,
+    VT_EVALUATION_FRAME = 28
+  };
+  const ::flatbuffers::String *MISSION_NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MISSION_NAME);
+  }
+  /// Liftoff time the segment trajectories were produced for.
+  const TIMInstant *NOMINAL_LIFTOFF() const {
+    return GetPointer<const TIMInstant *>(VT_NOMINAL_LIFTOFF);
+  }
+  /// Liftoff window, inclusive of both ends.
+  const TIMInstant *WINDOW_OPEN() const {
+    return GetPointer<const TIMInstant *>(VT_WINDOW_OPEN);
+  }
+  const TIMInstant *WINDOW_CLOSE() const {
+    return GetPointer<const TIMInstant *>(VT_WINDOW_CLOSE);
+  }
+  /// Spacing of evaluated liftoff times, seconds.
+  double LIFTOFF_STEP_SECONDS() const {
+    return GetField<double>(VT_LIFTOFF_STEP_SECONDS, 1.0);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchSegment>> *SEGMENTS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchSegment>> *>(VT_SEGMENTS);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchObject>> *OBJECTS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchObject>> *>(VT_OBJECTS);
+  }
+  /// One criterion per object class present in OBJECTS.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchCriterion>> *CRITERIA() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchCriterion>> *>(VT_CRITERIA);
+  }
+  /// Segment states below this height above the reference ellipsoid are not
+  /// screened, metres.
+  double MINIMUM_ALTITUDE_M() const {
+    return GetField<double>(VT_MINIMUM_ALTITUDE_M, 150000.0);
+  }
+  /// Screening ends this long after liftoff, seconds, or earlier where a
+  /// trajectory ends.
+  double SCREEN_SECONDS_AFTER_LIFTOFF() const {
+    return GetField<double>(VT_SCREEN_SECONDS_AFTER_LIFTOFF, 10800.0);
+  }
+  /// Time added before and after every closure for vehicle performance and
+  /// timing uncertainty, seconds.
+  double CLOSURE_PAD_SECONDS() const {
+    return GetField<double>(VT_CLOSURE_PAD_SECONDS, 0.0);
+  }
+  /// Report approaches whose criterion ratio is below this value; 1 reports
+  /// violations only.
+  double REPORT_RATIO() const {
+    return GetField<double>(VT_REPORT_RATIO, 1.0);
+  }
+  /// Earth-fixed frame shared by every trajectory and ephemeris.
+  const RFMCoordinateSystem *EVALUATION_FRAME() const {
+    return GetPointer<const RFMCoordinateSystem *>(VT_EVALUATION_FRAME);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_MISSION_NAME) &&
+           verifier.VerifyString(MISSION_NAME()) &&
+           VerifyOffsetRequired(verifier, VT_NOMINAL_LIFTOFF) &&
+           verifier.VerifyTable(NOMINAL_LIFTOFF()) &&
+           VerifyOffsetRequired(verifier, VT_WINDOW_OPEN) &&
+           verifier.VerifyTable(WINDOW_OPEN()) &&
+           VerifyOffsetRequired(verifier, VT_WINDOW_CLOSE) &&
+           verifier.VerifyTable(WINDOW_CLOSE()) &&
+           VerifyField<double>(verifier, VT_LIFTOFF_STEP_SECONDS, 8) &&
+           VerifyOffsetRequired(verifier, VT_SEGMENTS) &&
+           verifier.VerifyVector(SEGMENTS()) &&
+           verifier.VerifyVectorOfTables(SEGMENTS()) &&
+           VerifyOffsetRequired(verifier, VT_OBJECTS) &&
+           verifier.VerifyVector(OBJECTS()) &&
+           verifier.VerifyVectorOfTables(OBJECTS()) &&
+           VerifyOffsetRequired(verifier, VT_CRITERIA) &&
+           verifier.VerifyVector(CRITERIA()) &&
+           verifier.VerifyVectorOfTables(CRITERIA()) &&
+           VerifyField<double>(verifier, VT_MINIMUM_ALTITUDE_M, 8) &&
+           VerifyField<double>(verifier, VT_SCREEN_SECONDS_AFTER_LIFTOFF, 8) &&
+           VerifyField<double>(verifier, VT_CLOSURE_PAD_SECONDS, 8) &&
+           VerifyField<double>(verifier, VT_REPORT_RATIO, 8) &&
+           VerifyOffsetRequired(verifier, VT_EVALUATION_FRAME) &&
+           verifier.VerifyTable(EVALUATION_FRAME()) &&
+           verifier.EndTable();
+  }
+  CQRLaunchRequestT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(CQRLaunchRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<CQRLaunchRequest> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct CQRLaunchRequestBuilder {
+  typedef CQRLaunchRequest Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_MISSION_NAME(::flatbuffers::Offset<::flatbuffers::String> MISSION_NAME) {
+    fbb_.AddOffset(CQRLaunchRequest::VT_MISSION_NAME, MISSION_NAME);
+  }
+  void add_NOMINAL_LIFTOFF(::flatbuffers::Offset<TIMInstant> NOMINAL_LIFTOFF) {
+    fbb_.AddOffset(CQRLaunchRequest::VT_NOMINAL_LIFTOFF, NOMINAL_LIFTOFF);
+  }
+  void add_WINDOW_OPEN(::flatbuffers::Offset<TIMInstant> WINDOW_OPEN) {
+    fbb_.AddOffset(CQRLaunchRequest::VT_WINDOW_OPEN, WINDOW_OPEN);
+  }
+  void add_WINDOW_CLOSE(::flatbuffers::Offset<TIMInstant> WINDOW_CLOSE) {
+    fbb_.AddOffset(CQRLaunchRequest::VT_WINDOW_CLOSE, WINDOW_CLOSE);
+  }
+  void add_LIFTOFF_STEP_SECONDS(double LIFTOFF_STEP_SECONDS) {
+    fbb_.AddElement<double>(CQRLaunchRequest::VT_LIFTOFF_STEP_SECONDS, LIFTOFF_STEP_SECONDS, 1.0);
+  }
+  void add_SEGMENTS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchSegment>>> SEGMENTS) {
+    fbb_.AddOffset(CQRLaunchRequest::VT_SEGMENTS, SEGMENTS);
+  }
+  void add_OBJECTS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchObject>>> OBJECTS) {
+    fbb_.AddOffset(CQRLaunchRequest::VT_OBJECTS, OBJECTS);
+  }
+  void add_CRITERIA(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchCriterion>>> CRITERIA) {
+    fbb_.AddOffset(CQRLaunchRequest::VT_CRITERIA, CRITERIA);
+  }
+  void add_MINIMUM_ALTITUDE_M(double MINIMUM_ALTITUDE_M) {
+    fbb_.AddElement<double>(CQRLaunchRequest::VT_MINIMUM_ALTITUDE_M, MINIMUM_ALTITUDE_M, 150000.0);
+  }
+  void add_SCREEN_SECONDS_AFTER_LIFTOFF(double SCREEN_SECONDS_AFTER_LIFTOFF) {
+    fbb_.AddElement<double>(CQRLaunchRequest::VT_SCREEN_SECONDS_AFTER_LIFTOFF, SCREEN_SECONDS_AFTER_LIFTOFF, 10800.0);
+  }
+  void add_CLOSURE_PAD_SECONDS(double CLOSURE_PAD_SECONDS) {
+    fbb_.AddElement<double>(CQRLaunchRequest::VT_CLOSURE_PAD_SECONDS, CLOSURE_PAD_SECONDS, 0.0);
+  }
+  void add_REPORT_RATIO(double REPORT_RATIO) {
+    fbb_.AddElement<double>(CQRLaunchRequest::VT_REPORT_RATIO, REPORT_RATIO, 1.0);
+  }
+  void add_EVALUATION_FRAME(::flatbuffers::Offset<RFMCoordinateSystem> EVALUATION_FRAME) {
+    fbb_.AddOffset(CQRLaunchRequest::VT_EVALUATION_FRAME, EVALUATION_FRAME);
+  }
+  explicit CQRLaunchRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<CQRLaunchRequest> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<CQRLaunchRequest>(end);
+    fbb_.Required(o, CQRLaunchRequest::VT_NOMINAL_LIFTOFF);
+    fbb_.Required(o, CQRLaunchRequest::VT_WINDOW_OPEN);
+    fbb_.Required(o, CQRLaunchRequest::VT_WINDOW_CLOSE);
+    fbb_.Required(o, CQRLaunchRequest::VT_SEGMENTS);
+    fbb_.Required(o, CQRLaunchRequest::VT_OBJECTS);
+    fbb_.Required(o, CQRLaunchRequest::VT_CRITERIA);
+    fbb_.Required(o, CQRLaunchRequest::VT_EVALUATION_FRAME);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<CQRLaunchRequest> CreateCQRLaunchRequest(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> MISSION_NAME = 0,
+    ::flatbuffers::Offset<TIMInstant> NOMINAL_LIFTOFF = 0,
+    ::flatbuffers::Offset<TIMInstant> WINDOW_OPEN = 0,
+    ::flatbuffers::Offset<TIMInstant> WINDOW_CLOSE = 0,
+    double LIFTOFF_STEP_SECONDS = 1.0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchSegment>>> SEGMENTS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchObject>>> OBJECTS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchCriterion>>> CRITERIA = 0,
+    double MINIMUM_ALTITUDE_M = 150000.0,
+    double SCREEN_SECONDS_AFTER_LIFTOFF = 10800.0,
+    double CLOSURE_PAD_SECONDS = 0.0,
+    double REPORT_RATIO = 1.0,
+    ::flatbuffers::Offset<RFMCoordinateSystem> EVALUATION_FRAME = 0) {
+  CQRLaunchRequestBuilder builder_(_fbb);
+  builder_.add_REPORT_RATIO(REPORT_RATIO);
+  builder_.add_CLOSURE_PAD_SECONDS(CLOSURE_PAD_SECONDS);
+  builder_.add_SCREEN_SECONDS_AFTER_LIFTOFF(SCREEN_SECONDS_AFTER_LIFTOFF);
+  builder_.add_MINIMUM_ALTITUDE_M(MINIMUM_ALTITUDE_M);
+  builder_.add_LIFTOFF_STEP_SECONDS(LIFTOFF_STEP_SECONDS);
+  builder_.add_EVALUATION_FRAME(EVALUATION_FRAME);
+  builder_.add_CRITERIA(CRITERIA);
+  builder_.add_OBJECTS(OBJECTS);
+  builder_.add_SEGMENTS(SEGMENTS);
+  builder_.add_WINDOW_CLOSE(WINDOW_CLOSE);
+  builder_.add_WINDOW_OPEN(WINDOW_OPEN);
+  builder_.add_NOMINAL_LIFTOFF(NOMINAL_LIFTOFF);
+  builder_.add_MISSION_NAME(MISSION_NAME);
+  return builder_.Finish();
+}
+
+struct CQRLaunchRequest::Traits {
+  using type = CQRLaunchRequest;
+  static auto constexpr Create = CreateCQRLaunchRequest;
+};
+
+inline ::flatbuffers::Offset<CQRLaunchRequest> CreateCQRLaunchRequestDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *MISSION_NAME = nullptr,
+    ::flatbuffers::Offset<TIMInstant> NOMINAL_LIFTOFF = 0,
+    ::flatbuffers::Offset<TIMInstant> WINDOW_OPEN = 0,
+    ::flatbuffers::Offset<TIMInstant> WINDOW_CLOSE = 0,
+    double LIFTOFF_STEP_SECONDS = 1.0,
+    const std::vector<::flatbuffers::Offset<CQRLaunchSegment>> *SEGMENTS = nullptr,
+    const std::vector<::flatbuffers::Offset<CQRLaunchObject>> *OBJECTS = nullptr,
+    const std::vector<::flatbuffers::Offset<CQRLaunchCriterion>> *CRITERIA = nullptr,
+    double MINIMUM_ALTITUDE_M = 150000.0,
+    double SCREEN_SECONDS_AFTER_LIFTOFF = 10800.0,
+    double CLOSURE_PAD_SECONDS = 0.0,
+    double REPORT_RATIO = 1.0,
+    ::flatbuffers::Offset<RFMCoordinateSystem> EVALUATION_FRAME = 0) {
+  auto MISSION_NAME__ = MISSION_NAME ? _fbb.CreateString(MISSION_NAME) : 0;
+  auto SEGMENTS__ = SEGMENTS ? _fbb.CreateVector<::flatbuffers::Offset<CQRLaunchSegment>>(*SEGMENTS) : 0;
+  auto OBJECTS__ = OBJECTS ? _fbb.CreateVector<::flatbuffers::Offset<CQRLaunchObject>>(*OBJECTS) : 0;
+  auto CRITERIA__ = CRITERIA ? _fbb.CreateVector<::flatbuffers::Offset<CQRLaunchCriterion>>(*CRITERIA) : 0;
+  return CreateCQRLaunchRequest(
+      _fbb,
+      MISSION_NAME__,
+      NOMINAL_LIFTOFF,
+      WINDOW_OPEN,
+      WINDOW_CLOSE,
+      LIFTOFF_STEP_SECONDS,
+      SEGMENTS__,
+      OBJECTS__,
+      CRITERIA__,
+      MINIMUM_ALTITUDE_M,
+      SCREEN_SECONDS_AFTER_LIFTOFF,
+      CLOSURE_PAD_SECONDS,
+      REPORT_RATIO,
+      EVALUATION_FRAME);
+}
+
+::flatbuffers::Offset<CQRLaunchRequest> CreateCQRLaunchRequest(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct CQRLaunchClosureT : public ::flatbuffers::NativeTable {
+  typedef CQRLaunchClosure TableType;
+  std::unique_ptr<TIMInstantT> START{};
+  std::unique_ptr<TIMInstantT> END{};
+  std::vector<std::string> OBJECT_IDS{};
+  std::vector<std::string> SEGMENT_IDS{};
+  CQRLaunchClosureT() = default;
+  CQRLaunchClosureT(const CQRLaunchClosureT &o);
+  CQRLaunchClosureT(CQRLaunchClosureT&&) FLATBUFFERS_NOEXCEPT = default;
+  CQRLaunchClosureT &operator=(CQRLaunchClosureT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Liftoff times that violate at least one criterion, half-open [START, END),
+/// widened by the liftoff step and CLOSURE_PAD_SECONDS and merged.
+struct CQRLaunchClosure FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef CQRLaunchClosureT NativeTableType;
+  typedef CQRLaunchClosureBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_START = 4,
+    VT_END = 6,
+    VT_OBJECT_IDS = 8,
+    VT_SEGMENT_IDS = 10
+  };
+  const TIMInstant *START() const {
+    return GetPointer<const TIMInstant *>(VT_START);
+  }
+  const TIMInstant *END() const {
+    return GetPointer<const TIMInstant *>(VT_END);
+  }
+  /// Orbiting objects that cause this closure.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *OBJECT_IDS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_OBJECT_IDS);
+  }
+  /// Segments involved.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *SEGMENT_IDS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_SEGMENT_IDS);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_START) &&
+           verifier.VerifyTable(START()) &&
+           VerifyOffsetRequired(verifier, VT_END) &&
+           verifier.VerifyTable(END()) &&
+           VerifyOffset(verifier, VT_OBJECT_IDS) &&
+           verifier.VerifyVector(OBJECT_IDS()) &&
+           verifier.VerifyVectorOfStrings(OBJECT_IDS()) &&
+           VerifyOffset(verifier, VT_SEGMENT_IDS) &&
+           verifier.VerifyVector(SEGMENT_IDS()) &&
+           verifier.VerifyVectorOfStrings(SEGMENT_IDS()) &&
+           verifier.EndTable();
+  }
+  CQRLaunchClosureT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(CQRLaunchClosureT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<CQRLaunchClosure> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchClosureT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct CQRLaunchClosureBuilder {
+  typedef CQRLaunchClosure Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_START(::flatbuffers::Offset<TIMInstant> START) {
+    fbb_.AddOffset(CQRLaunchClosure::VT_START, START);
+  }
+  void add_END(::flatbuffers::Offset<TIMInstant> END) {
+    fbb_.AddOffset(CQRLaunchClosure::VT_END, END);
+  }
+  void add_OBJECT_IDS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> OBJECT_IDS) {
+    fbb_.AddOffset(CQRLaunchClosure::VT_OBJECT_IDS, OBJECT_IDS);
+  }
+  void add_SEGMENT_IDS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> SEGMENT_IDS) {
+    fbb_.AddOffset(CQRLaunchClosure::VT_SEGMENT_IDS, SEGMENT_IDS);
+  }
+  explicit CQRLaunchClosureBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<CQRLaunchClosure> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<CQRLaunchClosure>(end);
+    fbb_.Required(o, CQRLaunchClosure::VT_START);
+    fbb_.Required(o, CQRLaunchClosure::VT_END);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<CQRLaunchClosure> CreateCQRLaunchClosure(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<TIMInstant> START = 0,
+    ::flatbuffers::Offset<TIMInstant> END = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> OBJECT_IDS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> SEGMENT_IDS = 0) {
+  CQRLaunchClosureBuilder builder_(_fbb);
+  builder_.add_SEGMENT_IDS(SEGMENT_IDS);
+  builder_.add_OBJECT_IDS(OBJECT_IDS);
+  builder_.add_END(END);
+  builder_.add_START(START);
+  return builder_.Finish();
+}
+
+struct CQRLaunchClosure::Traits {
+  using type = CQRLaunchClosure;
+  static auto constexpr Create = CreateCQRLaunchClosure;
+};
+
+inline ::flatbuffers::Offset<CQRLaunchClosure> CreateCQRLaunchClosureDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<TIMInstant> START = 0,
+    ::flatbuffers::Offset<TIMInstant> END = 0,
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *OBJECT_IDS = nullptr,
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *SEGMENT_IDS = nullptr) {
+  auto OBJECT_IDS__ = OBJECT_IDS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*OBJECT_IDS) : 0;
+  auto SEGMENT_IDS__ = SEGMENT_IDS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*SEGMENT_IDS) : 0;
+  return CreateCQRLaunchClosure(
+      _fbb,
+      START,
+      END,
+      OBJECT_IDS__,
+      SEGMENT_IDS__);
+}
+
+::flatbuffers::Offset<CQRLaunchClosure> CreateCQRLaunchClosure(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchClosureT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct CQRLaunchApproachT : public ::flatbuffers::NativeTable {
+  typedef CQRLaunchApproach TableType;
+  std::string SEGMENT_ID{};
+  std::string OBJECT_ID{};
+  cqrLaunchObjectClass OBJECT_CLASS = cqrLaunchObjectClass::UNSPECIFIED;
+  std::unique_ptr<TIMInstantT> LIFTOFF{};
+  std::unique_ptr<TIMInstantT> TCA{};
+  double MISS_DISTANCE_M = 0.0;
+  double RELATIVE_SPEED_M_S = 0.0;
+  std::unique_ptr<FRMVector3T> RELATIVE_POSITION_RTN{};
+  double CRITERION_RATIO = 0.0;
+  bool VIOLATES = false;
+  bool RENDEZVOUS_COORDINATED = false;
+  std::unique_ptr<TIMInstantT> RUN_START{};
+  std::unique_ptr<TIMInstantT> RUN_END{};
+  CQRLaunchApproachT() = default;
+  CQRLaunchApproachT(const CQRLaunchApproachT &o);
+  CQRLaunchApproachT(CQRLaunchApproachT&&) FLATBUFFERS_NOEXCEPT = default;
+  CQRLaunchApproachT &operator=(CQRLaunchApproachT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Closest approach of one segment to one orbiting object for one liftoff
+/// time: the worst liftoff time of each contiguous run below REPORT_RATIO.
+struct CQRLaunchApproach FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef CQRLaunchApproachT NativeTableType;
+  typedef CQRLaunchApproachBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SEGMENT_ID = 4,
+    VT_OBJECT_ID = 6,
+    VT_OBJECT_CLASS = 8,
+    VT_LIFTOFF = 10,
+    VT_TCA = 12,
+    VT_MISS_DISTANCE_M = 14,
+    VT_RELATIVE_SPEED_M_S = 16,
+    VT_RELATIVE_POSITION_RTN = 18,
+    VT_CRITERION_RATIO = 20,
+    VT_VIOLATES = 22,
+    VT_RENDEZVOUS_COORDINATED = 24,
+    VT_RUN_START = 26,
+    VT_RUN_END = 28
+  };
+  const ::flatbuffers::String *SEGMENT_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SEGMENT_ID);
+  }
+  const ::flatbuffers::String *OBJECT_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_OBJECT_ID);
+  }
+  cqrLaunchObjectClass OBJECT_CLASS() const {
+    return static_cast<cqrLaunchObjectClass>(GetField<uint8_t>(VT_OBJECT_CLASS, 0));
+  }
+  const TIMInstant *LIFTOFF() const {
+    return GetPointer<const TIMInstant *>(VT_LIFTOFF);
+  }
+  const TIMInstant *TCA() const {
+    return GetPointer<const TIMInstant *>(VT_TCA);
+  }
+  double MISS_DISTANCE_M() const {
+    return GetField<double>(VT_MISS_DISTANCE_M, 0.0);
+  }
+  double RELATIVE_SPEED_M_S() const {
+    return GetField<double>(VT_RELATIVE_SPEED_M_S, 0.0);
+  }
+  /// Segment position relative to the orbiting object in the object's
+  /// radial/in-track/cross-track frame, metres.
+  const FRMVector3 *RELATIVE_POSITION_RTN() const {
+    return GetPointer<const FRMVector3 *>(VT_RELATIVE_POSITION_RTN);
+  }
+  /// Normalised separation: distance over radius (SPHERICAL) or ellipsoid
+  /// radius (ELLIPSOIDAL). Below 1 violates.
+  double CRITERION_RATIO() const {
+    return GetField<double>(VT_CRITERION_RATIO, 0.0);
+  }
+  bool VIOLATES() const {
+    return GetField<uint8_t>(VT_VIOLATES, 0) != 0;
+  }
+  bool RENDEZVOUS_COORDINATED() const {
+    return GetField<uint8_t>(VT_RENDEZVOUS_COORDINATED, 0) != 0;
+  }
+  /// First and last liftoff times of the run this approach represents.
+  const TIMInstant *RUN_START() const {
+    return GetPointer<const TIMInstant *>(VT_RUN_START);
+  }
+  const TIMInstant *RUN_END() const {
+    return GetPointer<const TIMInstant *>(VT_RUN_END);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_SEGMENT_ID) &&
+           verifier.VerifyString(SEGMENT_ID()) &&
+           VerifyOffsetRequired(verifier, VT_OBJECT_ID) &&
+           verifier.VerifyString(OBJECT_ID()) &&
+           VerifyField<uint8_t>(verifier, VT_OBJECT_CLASS, 1) &&
+           VerifyOffsetRequired(verifier, VT_LIFTOFF) &&
+           verifier.VerifyTable(LIFTOFF()) &&
+           VerifyOffsetRequired(verifier, VT_TCA) &&
+           verifier.VerifyTable(TCA()) &&
+           VerifyField<double>(verifier, VT_MISS_DISTANCE_M, 8) &&
+           VerifyField<double>(verifier, VT_RELATIVE_SPEED_M_S, 8) &&
+           VerifyOffset(verifier, VT_RELATIVE_POSITION_RTN) &&
+           verifier.VerifyTable(RELATIVE_POSITION_RTN()) &&
+           VerifyField<double>(verifier, VT_CRITERION_RATIO, 8) &&
+           VerifyField<uint8_t>(verifier, VT_VIOLATES, 1) &&
+           VerifyField<uint8_t>(verifier, VT_RENDEZVOUS_COORDINATED, 1) &&
+           VerifyOffset(verifier, VT_RUN_START) &&
+           verifier.VerifyTable(RUN_START()) &&
+           VerifyOffset(verifier, VT_RUN_END) &&
+           verifier.VerifyTable(RUN_END()) &&
+           verifier.EndTable();
+  }
+  CQRLaunchApproachT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(CQRLaunchApproachT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<CQRLaunchApproach> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchApproachT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct CQRLaunchApproachBuilder {
+  typedef CQRLaunchApproach Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_SEGMENT_ID(::flatbuffers::Offset<::flatbuffers::String> SEGMENT_ID) {
+    fbb_.AddOffset(CQRLaunchApproach::VT_SEGMENT_ID, SEGMENT_ID);
+  }
+  void add_OBJECT_ID(::flatbuffers::Offset<::flatbuffers::String> OBJECT_ID) {
+    fbb_.AddOffset(CQRLaunchApproach::VT_OBJECT_ID, OBJECT_ID);
+  }
+  void add_OBJECT_CLASS(cqrLaunchObjectClass OBJECT_CLASS) {
+    fbb_.AddElement<uint8_t>(CQRLaunchApproach::VT_OBJECT_CLASS, static_cast<uint8_t>(OBJECT_CLASS), 0);
+  }
+  void add_LIFTOFF(::flatbuffers::Offset<TIMInstant> LIFTOFF) {
+    fbb_.AddOffset(CQRLaunchApproach::VT_LIFTOFF, LIFTOFF);
+  }
+  void add_TCA(::flatbuffers::Offset<TIMInstant> TCA) {
+    fbb_.AddOffset(CQRLaunchApproach::VT_TCA, TCA);
+  }
+  void add_MISS_DISTANCE_M(double MISS_DISTANCE_M) {
+    fbb_.AddElement<double>(CQRLaunchApproach::VT_MISS_DISTANCE_M, MISS_DISTANCE_M, 0.0);
+  }
+  void add_RELATIVE_SPEED_M_S(double RELATIVE_SPEED_M_S) {
+    fbb_.AddElement<double>(CQRLaunchApproach::VT_RELATIVE_SPEED_M_S, RELATIVE_SPEED_M_S, 0.0);
+  }
+  void add_RELATIVE_POSITION_RTN(::flatbuffers::Offset<FRMVector3> RELATIVE_POSITION_RTN) {
+    fbb_.AddOffset(CQRLaunchApproach::VT_RELATIVE_POSITION_RTN, RELATIVE_POSITION_RTN);
+  }
+  void add_CRITERION_RATIO(double CRITERION_RATIO) {
+    fbb_.AddElement<double>(CQRLaunchApproach::VT_CRITERION_RATIO, CRITERION_RATIO, 0.0);
+  }
+  void add_VIOLATES(bool VIOLATES) {
+    fbb_.AddElement<uint8_t>(CQRLaunchApproach::VT_VIOLATES, static_cast<uint8_t>(VIOLATES), 0);
+  }
+  void add_RENDEZVOUS_COORDINATED(bool RENDEZVOUS_COORDINATED) {
+    fbb_.AddElement<uint8_t>(CQRLaunchApproach::VT_RENDEZVOUS_COORDINATED, static_cast<uint8_t>(RENDEZVOUS_COORDINATED), 0);
+  }
+  void add_RUN_START(::flatbuffers::Offset<TIMInstant> RUN_START) {
+    fbb_.AddOffset(CQRLaunchApproach::VT_RUN_START, RUN_START);
+  }
+  void add_RUN_END(::flatbuffers::Offset<TIMInstant> RUN_END) {
+    fbb_.AddOffset(CQRLaunchApproach::VT_RUN_END, RUN_END);
+  }
+  explicit CQRLaunchApproachBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<CQRLaunchApproach> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<CQRLaunchApproach>(end);
+    fbb_.Required(o, CQRLaunchApproach::VT_SEGMENT_ID);
+    fbb_.Required(o, CQRLaunchApproach::VT_OBJECT_ID);
+    fbb_.Required(o, CQRLaunchApproach::VT_LIFTOFF);
+    fbb_.Required(o, CQRLaunchApproach::VT_TCA);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<CQRLaunchApproach> CreateCQRLaunchApproach(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> SEGMENT_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> OBJECT_ID = 0,
+    cqrLaunchObjectClass OBJECT_CLASS = cqrLaunchObjectClass::UNSPECIFIED,
+    ::flatbuffers::Offset<TIMInstant> LIFTOFF = 0,
+    ::flatbuffers::Offset<TIMInstant> TCA = 0,
+    double MISS_DISTANCE_M = 0.0,
+    double RELATIVE_SPEED_M_S = 0.0,
+    ::flatbuffers::Offset<FRMVector3> RELATIVE_POSITION_RTN = 0,
+    double CRITERION_RATIO = 0.0,
+    bool VIOLATES = false,
+    bool RENDEZVOUS_COORDINATED = false,
+    ::flatbuffers::Offset<TIMInstant> RUN_START = 0,
+    ::flatbuffers::Offset<TIMInstant> RUN_END = 0) {
+  CQRLaunchApproachBuilder builder_(_fbb);
+  builder_.add_CRITERION_RATIO(CRITERION_RATIO);
+  builder_.add_RELATIVE_SPEED_M_S(RELATIVE_SPEED_M_S);
+  builder_.add_MISS_DISTANCE_M(MISS_DISTANCE_M);
+  builder_.add_RUN_END(RUN_END);
+  builder_.add_RUN_START(RUN_START);
+  builder_.add_RELATIVE_POSITION_RTN(RELATIVE_POSITION_RTN);
+  builder_.add_TCA(TCA);
+  builder_.add_LIFTOFF(LIFTOFF);
+  builder_.add_OBJECT_ID(OBJECT_ID);
+  builder_.add_SEGMENT_ID(SEGMENT_ID);
+  builder_.add_RENDEZVOUS_COORDINATED(RENDEZVOUS_COORDINATED);
+  builder_.add_VIOLATES(VIOLATES);
+  builder_.add_OBJECT_CLASS(OBJECT_CLASS);
+  return builder_.Finish();
+}
+
+struct CQRLaunchApproach::Traits {
+  using type = CQRLaunchApproach;
+  static auto constexpr Create = CreateCQRLaunchApproach;
+};
+
+inline ::flatbuffers::Offset<CQRLaunchApproach> CreateCQRLaunchApproachDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *SEGMENT_ID = nullptr,
+    const char *OBJECT_ID = nullptr,
+    cqrLaunchObjectClass OBJECT_CLASS = cqrLaunchObjectClass::UNSPECIFIED,
+    ::flatbuffers::Offset<TIMInstant> LIFTOFF = 0,
+    ::flatbuffers::Offset<TIMInstant> TCA = 0,
+    double MISS_DISTANCE_M = 0.0,
+    double RELATIVE_SPEED_M_S = 0.0,
+    ::flatbuffers::Offset<FRMVector3> RELATIVE_POSITION_RTN = 0,
+    double CRITERION_RATIO = 0.0,
+    bool VIOLATES = false,
+    bool RENDEZVOUS_COORDINATED = false,
+    ::flatbuffers::Offset<TIMInstant> RUN_START = 0,
+    ::flatbuffers::Offset<TIMInstant> RUN_END = 0) {
+  auto SEGMENT_ID__ = SEGMENT_ID ? _fbb.CreateString(SEGMENT_ID) : 0;
+  auto OBJECT_ID__ = OBJECT_ID ? _fbb.CreateString(OBJECT_ID) : 0;
+  return CreateCQRLaunchApproach(
+      _fbb,
+      SEGMENT_ID__,
+      OBJECT_ID__,
+      OBJECT_CLASS,
+      LIFTOFF,
+      TCA,
+      MISS_DISTANCE_M,
+      RELATIVE_SPEED_M_S,
+      RELATIVE_POSITION_RTN,
+      CRITERION_RATIO,
+      VIOLATES,
+      RENDEZVOUS_COORDINATED,
+      RUN_START,
+      RUN_END);
+}
+
+::flatbuffers::Offset<CQRLaunchApproach> CreateCQRLaunchApproach(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchApproachT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct CQRLaunchResultT : public ::flatbuffers::NativeTable {
+  typedef CQRLaunchResult TableType;
+  std::string MISSION_NAME{};
+  std::unique_ptr<TIMInstantT> WINDOW_OPEN{};
+  std::unique_ptr<TIMInstantT> WINDOW_CLOSE{};
+  double LIFTOFF_STEP_SECONDS = 0.0;
+  uint64_t LIFTOFF_TIMES_EVALUATED = 0;
+  std::vector<std::unique_ptr<CQRLaunchClosureT>> CLOSURES{};
+  std::vector<std::unique_ptr<CQRLaunchApproachT>> APPROACHES{};
+  std::unique_ptr<CQRScreeningStatisticsT> STATISTICS{};
+  CQRLaunchResultT() = default;
+  CQRLaunchResultT(const CQRLaunchResultT &o);
+  CQRLaunchResultT(CQRLaunchResultT&&) FLATBUFFERS_NOEXCEPT = default;
+  CQRLaunchResultT &operator=(CQRLaunchResultT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct CQRLaunchResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef CQRLaunchResultT NativeTableType;
+  typedef CQRLaunchResultBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_MISSION_NAME = 4,
+    VT_WINDOW_OPEN = 6,
+    VT_WINDOW_CLOSE = 8,
+    VT_LIFTOFF_STEP_SECONDS = 10,
+    VT_LIFTOFF_TIMES_EVALUATED = 12,
+    VT_CLOSURES = 14,
+    VT_APPROACHES = 16,
+    VT_STATISTICS = 18
+  };
+  const ::flatbuffers::String *MISSION_NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MISSION_NAME);
+  }
+  const TIMInstant *WINDOW_OPEN() const {
+    return GetPointer<const TIMInstant *>(VT_WINDOW_OPEN);
+  }
+  const TIMInstant *WINDOW_CLOSE() const {
+    return GetPointer<const TIMInstant *>(VT_WINDOW_CLOSE);
+  }
+  double LIFTOFF_STEP_SECONDS() const {
+    return GetField<double>(VT_LIFTOFF_STEP_SECONDS, 0.0);
+  }
+  uint64_t LIFTOFF_TIMES_EVALUATED() const {
+    return GetField<uint64_t>(VT_LIFTOFF_TIMES_EVALUATED, 0);
+  }
+  /// Ordered by START.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchClosure>> *CLOSURES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchClosure>> *>(VT_CLOSURES);
+  }
+  /// Ordered by LIFTOFF, then segment and object identity.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchApproach>> *APPROACHES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchApproach>> *>(VT_APPROACHES);
+  }
+  const CQRScreeningStatistics *STATISTICS() const {
+    return GetPointer<const CQRScreeningStatistics *>(VT_STATISTICS);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_MISSION_NAME) &&
+           verifier.VerifyString(MISSION_NAME()) &&
+           VerifyOffset(verifier, VT_WINDOW_OPEN) &&
+           verifier.VerifyTable(WINDOW_OPEN()) &&
+           VerifyOffset(verifier, VT_WINDOW_CLOSE) &&
+           verifier.VerifyTable(WINDOW_CLOSE()) &&
+           VerifyField<double>(verifier, VT_LIFTOFF_STEP_SECONDS, 8) &&
+           VerifyField<uint64_t>(verifier, VT_LIFTOFF_TIMES_EVALUATED, 8) &&
+           VerifyOffset(verifier, VT_CLOSURES) &&
+           verifier.VerifyVector(CLOSURES()) &&
+           verifier.VerifyVectorOfTables(CLOSURES()) &&
+           VerifyOffset(verifier, VT_APPROACHES) &&
+           verifier.VerifyVector(APPROACHES()) &&
+           verifier.VerifyVectorOfTables(APPROACHES()) &&
+           VerifyOffset(verifier, VT_STATISTICS) &&
+           verifier.VerifyTable(STATISTICS()) &&
+           verifier.EndTable();
+  }
+  CQRLaunchResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(CQRLaunchResultT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<CQRLaunchResult> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct CQRLaunchResultBuilder {
+  typedef CQRLaunchResult Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_MISSION_NAME(::flatbuffers::Offset<::flatbuffers::String> MISSION_NAME) {
+    fbb_.AddOffset(CQRLaunchResult::VT_MISSION_NAME, MISSION_NAME);
+  }
+  void add_WINDOW_OPEN(::flatbuffers::Offset<TIMInstant> WINDOW_OPEN) {
+    fbb_.AddOffset(CQRLaunchResult::VT_WINDOW_OPEN, WINDOW_OPEN);
+  }
+  void add_WINDOW_CLOSE(::flatbuffers::Offset<TIMInstant> WINDOW_CLOSE) {
+    fbb_.AddOffset(CQRLaunchResult::VT_WINDOW_CLOSE, WINDOW_CLOSE);
+  }
+  void add_LIFTOFF_STEP_SECONDS(double LIFTOFF_STEP_SECONDS) {
+    fbb_.AddElement<double>(CQRLaunchResult::VT_LIFTOFF_STEP_SECONDS, LIFTOFF_STEP_SECONDS, 0.0);
+  }
+  void add_LIFTOFF_TIMES_EVALUATED(uint64_t LIFTOFF_TIMES_EVALUATED) {
+    fbb_.AddElement<uint64_t>(CQRLaunchResult::VT_LIFTOFF_TIMES_EVALUATED, LIFTOFF_TIMES_EVALUATED, 0);
+  }
+  void add_CLOSURES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchClosure>>> CLOSURES) {
+    fbb_.AddOffset(CQRLaunchResult::VT_CLOSURES, CLOSURES);
+  }
+  void add_APPROACHES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchApproach>>> APPROACHES) {
+    fbb_.AddOffset(CQRLaunchResult::VT_APPROACHES, APPROACHES);
+  }
+  void add_STATISTICS(::flatbuffers::Offset<CQRScreeningStatistics> STATISTICS) {
+    fbb_.AddOffset(CQRLaunchResult::VT_STATISTICS, STATISTICS);
+  }
+  explicit CQRLaunchResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<CQRLaunchResult> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<CQRLaunchResult>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<CQRLaunchResult> CreateCQRLaunchResult(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> MISSION_NAME = 0,
+    ::flatbuffers::Offset<TIMInstant> WINDOW_OPEN = 0,
+    ::flatbuffers::Offset<TIMInstant> WINDOW_CLOSE = 0,
+    double LIFTOFF_STEP_SECONDS = 0.0,
+    uint64_t LIFTOFF_TIMES_EVALUATED = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchClosure>>> CLOSURES = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<CQRLaunchApproach>>> APPROACHES = 0,
+    ::flatbuffers::Offset<CQRScreeningStatistics> STATISTICS = 0) {
+  CQRLaunchResultBuilder builder_(_fbb);
+  builder_.add_LIFTOFF_TIMES_EVALUATED(LIFTOFF_TIMES_EVALUATED);
+  builder_.add_LIFTOFF_STEP_SECONDS(LIFTOFF_STEP_SECONDS);
+  builder_.add_STATISTICS(STATISTICS);
+  builder_.add_APPROACHES(APPROACHES);
+  builder_.add_CLOSURES(CLOSURES);
+  builder_.add_WINDOW_CLOSE(WINDOW_CLOSE);
+  builder_.add_WINDOW_OPEN(WINDOW_OPEN);
+  builder_.add_MISSION_NAME(MISSION_NAME);
+  return builder_.Finish();
+}
+
+struct CQRLaunchResult::Traits {
+  using type = CQRLaunchResult;
+  static auto constexpr Create = CreateCQRLaunchResult;
+};
+
+inline ::flatbuffers::Offset<CQRLaunchResult> CreateCQRLaunchResultDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *MISSION_NAME = nullptr,
+    ::flatbuffers::Offset<TIMInstant> WINDOW_OPEN = 0,
+    ::flatbuffers::Offset<TIMInstant> WINDOW_CLOSE = 0,
+    double LIFTOFF_STEP_SECONDS = 0.0,
+    uint64_t LIFTOFF_TIMES_EVALUATED = 0,
+    const std::vector<::flatbuffers::Offset<CQRLaunchClosure>> *CLOSURES = nullptr,
+    const std::vector<::flatbuffers::Offset<CQRLaunchApproach>> *APPROACHES = nullptr,
+    ::flatbuffers::Offset<CQRScreeningStatistics> STATISTICS = 0) {
+  auto MISSION_NAME__ = MISSION_NAME ? _fbb.CreateString(MISSION_NAME) : 0;
+  auto CLOSURES__ = CLOSURES ? _fbb.CreateVector<::flatbuffers::Offset<CQRLaunchClosure>>(*CLOSURES) : 0;
+  auto APPROACHES__ = APPROACHES ? _fbb.CreateVector<::flatbuffers::Offset<CQRLaunchApproach>>(*APPROACHES) : 0;
+  return CreateCQRLaunchResult(
+      _fbb,
+      MISSION_NAME__,
+      WINDOW_OPEN,
+      WINDOW_CLOSE,
+      LIFTOFF_STEP_SECONDS,
+      LIFTOFF_TIMES_EVALUATED,
+      CLOSURES__,
+      APPROACHES__,
+      STATISTICS);
+}
+
+::flatbuffers::Offset<CQRLaunchResult> CreateCQRLaunchResult(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct CQRT : public ::flatbuffers::NativeTable {
   typedef CQR TableType;
   std::unique_ptr<CQRPairRequestT> PAIR_REQUEST{};
@@ -3312,6 +5010,8 @@ struct CQRT : public ::flatbuffers::NativeTable {
   std::unique_ptr<CQRDestroyRequestT> DESTROY_REQUEST{};
   bool VERSION_QUERY = false;
   std::unique_ptr<CQRVersionResultT> VERSION_RESULT{};
+  std::unique_ptr<CQRLaunchRequestT> LAUNCH_REQUEST{};
+  std::unique_ptr<CQRLaunchResultT> LAUNCH_RESULT{};
   CQRT() = default;
   CQRT(const CQRT &o);
   CQRT(CQRT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -3319,7 +5019,8 @@ struct CQRT : public ::flatbuffers::NativeTable {
 };
 
 /// Conjunction Query and Result — pair/catalog screening, encounter-plane
-/// probability, typed native documents and resident screening-index control.
+/// probability, typed native documents, resident screening-index control and
+/// launch-window screening.
 /// Exactly one arm per PIV payload, selected by the declared METHOD_ID.
 struct CQR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef CQRT NativeTableType;
@@ -3341,7 +5042,9 @@ struct CQR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_WINDOW_REQUEST = 28,
     VT_DESTROY_REQUEST = 30,
     VT_VERSION_QUERY = 32,
-    VT_VERSION_RESULT = 34
+    VT_VERSION_RESULT = 34,
+    VT_LAUNCH_REQUEST = 36,
+    VT_LAUNCH_RESULT = 38
   };
   const CQRPairRequest *PAIR_REQUEST() const {
     return GetPointer<const CQRPairRequest *>(VT_PAIR_REQUEST);
@@ -3391,6 +5094,13 @@ struct CQR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const CQRVersionResult *VERSION_RESULT() const {
     return GetPointer<const CQRVersionResult *>(VT_VERSION_RESULT);
   }
+  /// APPENDED. Launch-window screening request and result.
+  const CQRLaunchRequest *LAUNCH_REQUEST() const {
+    return GetPointer<const CQRLaunchRequest *>(VT_LAUNCH_REQUEST);
+  }
+  const CQRLaunchResult *LAUNCH_RESULT() const {
+    return GetPointer<const CQRLaunchResult *>(VT_LAUNCH_RESULT);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -3425,6 +5135,10 @@ struct CQR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint8_t>(verifier, VT_VERSION_QUERY, 1) &&
            VerifyOffset(verifier, VT_VERSION_RESULT) &&
            verifier.VerifyTable(VERSION_RESULT()) &&
+           VerifyOffset(verifier, VT_LAUNCH_REQUEST) &&
+           verifier.VerifyTable(LAUNCH_REQUEST()) &&
+           VerifyOffset(verifier, VT_LAUNCH_RESULT) &&
+           verifier.VerifyTable(LAUNCH_RESULT()) &&
            verifier.EndTable();
   }
   CQRT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -3484,6 +5198,12 @@ struct CQRBuilder {
   void add_VERSION_RESULT(::flatbuffers::Offset<CQRVersionResult> VERSION_RESULT) {
     fbb_.AddOffset(CQR::VT_VERSION_RESULT, VERSION_RESULT);
   }
+  void add_LAUNCH_REQUEST(::flatbuffers::Offset<CQRLaunchRequest> LAUNCH_REQUEST) {
+    fbb_.AddOffset(CQR::VT_LAUNCH_REQUEST, LAUNCH_REQUEST);
+  }
+  void add_LAUNCH_RESULT(::flatbuffers::Offset<CQRLaunchResult> LAUNCH_RESULT) {
+    fbb_.AddOffset(CQR::VT_LAUNCH_RESULT, LAUNCH_RESULT);
+  }
   explicit CQRBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -3512,8 +5232,12 @@ inline ::flatbuffers::Offset<CQR> CreateCQR(
     ::flatbuffers::Offset<CQRWindowRequest> WINDOW_REQUEST = 0,
     ::flatbuffers::Offset<CQRDestroyRequest> DESTROY_REQUEST = 0,
     bool VERSION_QUERY = false,
-    ::flatbuffers::Offset<CQRVersionResult> VERSION_RESULT = 0) {
+    ::flatbuffers::Offset<CQRVersionResult> VERSION_RESULT = 0,
+    ::flatbuffers::Offset<CQRLaunchRequest> LAUNCH_REQUEST = 0,
+    ::flatbuffers::Offset<CQRLaunchResult> LAUNCH_RESULT = 0) {
   CQRBuilder builder_(_fbb);
+  builder_.add_LAUNCH_RESULT(LAUNCH_RESULT);
+  builder_.add_LAUNCH_REQUEST(LAUNCH_REQUEST);
   builder_.add_VERSION_RESULT(VERSION_RESULT);
   builder_.add_DESTROY_REQUEST(DESTROY_REQUEST);
   builder_.add_WINDOW_REQUEST(WINDOW_REQUEST);
@@ -3610,7 +5334,10 @@ inline CQRObjectSourceT::CQRObjectSourceT(const CQRObjectSourceT &o)
         PERIGEE_ALTITUDE_M(o.PERIGEE_ALTITUDE_M),
         HAS_PERIGEE_ALTITUDE_M(o.HAS_PERIGEE_ALTITUDE_M),
         APOGEE_ALTITUDE_M(o.APOGEE_ALTITUDE_M),
-        HAS_APOGEE_ALTITUDE_M(o.HAS_APOGEE_ALTITUDE_M) {
+        HAS_APOGEE_ALTITUDE_M(o.HAS_APOGEE_ALTITUDE_M),
+        HARD_BODY_RADIUS_M(o.HARD_BODY_RADIUS_M),
+        HAS_HARD_BODY_RADIUS_M(o.HAS_HARD_BODY_RADIUS_M),
+        CATALOG_ENTRY((o.CATALOG_ENTRY) ? new CATT(*o.CATALOG_ENTRY) : nullptr) {
 }
 
 inline CQRObjectSourceT &CQRObjectSourceT::operator=(CQRObjectSourceT o) FLATBUFFERS_NOEXCEPT {
@@ -3631,6 +5358,9 @@ inline CQRObjectSourceT &CQRObjectSourceT::operator=(CQRObjectSourceT o) FLATBUF
   std::swap(HAS_PERIGEE_ALTITUDE_M, o.HAS_PERIGEE_ALTITUDE_M);
   std::swap(APOGEE_ALTITUDE_M, o.APOGEE_ALTITUDE_M);
   std::swap(HAS_APOGEE_ALTITUDE_M, o.HAS_APOGEE_ALTITUDE_M);
+  std::swap(HARD_BODY_RADIUS_M, o.HARD_BODY_RADIUS_M);
+  std::swap(HAS_HARD_BODY_RADIUS_M, o.HAS_HARD_BODY_RADIUS_M);
+  std::swap(CATALOG_ENTRY, o.CATALOG_ENTRY);
   return *this;
 }
 
@@ -3660,6 +5390,9 @@ inline void CQRObjectSource::UnPackTo(CQRObjectSourceT *_o, const ::flatbuffers:
   { auto _e = HAS_PERIGEE_ALTITUDE_M(); _o->HAS_PERIGEE_ALTITUDE_M = _e; }
   { auto _e = APOGEE_ALTITUDE_M(); _o->APOGEE_ALTITUDE_M = _e; }
   { auto _e = HAS_APOGEE_ALTITUDE_M(); _o->HAS_APOGEE_ALTITUDE_M = _e; }
+  { auto _e = HARD_BODY_RADIUS_M(); _o->HARD_BODY_RADIUS_M = _e; }
+  { auto _e = HAS_HARD_BODY_RADIUS_M(); _o->HAS_HARD_BODY_RADIUS_M = _e; }
+  { auto _e = CATALOG_ENTRY(); if (_e) { if(_o->CATALOG_ENTRY) { _e->UnPackTo(_o->CATALOG_ENTRY.get(), _resolver); } else { _o->CATALOG_ENTRY = std::unique_ptr<CATT>(_e->UnPack(_resolver)); } } else if (_o->CATALOG_ENTRY) { _o->CATALOG_ENTRY.reset(); } }
 }
 
 inline ::flatbuffers::Offset<CQRObjectSource> CreateCQRObjectSource(::flatbuffers::FlatBufferBuilder &_fbb, const CQRObjectSourceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -3687,6 +5420,9 @@ inline ::flatbuffers::Offset<CQRObjectSource> CQRObjectSource::Pack(::flatbuffer
   auto _HAS_PERIGEE_ALTITUDE_M = _o->HAS_PERIGEE_ALTITUDE_M;
   auto _APOGEE_ALTITUDE_M = _o->APOGEE_ALTITUDE_M;
   auto _HAS_APOGEE_ALTITUDE_M = _o->HAS_APOGEE_ALTITUDE_M;
+  auto _HARD_BODY_RADIUS_M = _o->HARD_BODY_RADIUS_M;
+  auto _HAS_HARD_BODY_RADIUS_M = _o->HAS_HARD_BODY_RADIUS_M;
+  auto _CATALOG_ENTRY = _o->CATALOG_ENTRY ? CreateCAT(_fbb, _o->CATALOG_ENTRY.get(), _rehasher) : 0;
   return CreateCQRObjectSource(
       _fbb,
       _OBJECT_ID,
@@ -3705,7 +5441,10 @@ inline ::flatbuffers::Offset<CQRObjectSource> CQRObjectSource::Pack(::flatbuffer
       _PERIGEE_ALTITUDE_M,
       _HAS_PERIGEE_ALTITUDE_M,
       _APOGEE_ALTITUDE_M,
-      _HAS_APOGEE_ALTITUDE_M);
+      _HAS_APOGEE_ALTITUDE_M,
+      _HARD_BODY_RADIUS_M,
+      _HAS_HARD_BODY_RADIUS_M,
+      _CATALOG_ENTRY);
 }
 
 inline CQRScreeningControlsT::CQRScreeningControlsT(const CQRScreeningControlsT &o)
@@ -3962,6 +5701,9 @@ inline void CQRProbabilityResult::UnPackTo(CQRProbabilityResultT *_o, const ::fl
   { auto _e = MAHALANOBIS_SQUARED(); _o->MAHALANOBIS_SQUARED = _e; }
   { auto _e = HAS_MAHALANOBIS_SQUARED(); _o->HAS_MAHALANOBIS_SQUARED = _e; }
   { auto _e = UNCERTAINTY_SOURCE(); _o->UNCERTAINTY_SOURCE = _e; }
+  { auto _e = CALIBRATION(); _o->CALIBRATION = _e; }
+  { auto _e = CALIBRATION_REFERENCE(); if (_e) _o->CALIBRATION_REFERENCE = _e->str(); }
+  { auto _e = CROSS_CORRELATION(); _o->CROSS_CORRELATION = _e; }
 }
 
 inline ::flatbuffers::Offset<CQRProbabilityResult> CreateCQRProbabilityResult(::flatbuffers::FlatBufferBuilder &_fbb, const CQRProbabilityResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -3981,6 +5723,9 @@ inline ::flatbuffers::Offset<CQRProbabilityResult> CQRProbabilityResult::Pack(::
   auto _MAHALANOBIS_SQUARED = _o->MAHALANOBIS_SQUARED;
   auto _HAS_MAHALANOBIS_SQUARED = _o->HAS_MAHALANOBIS_SQUARED;
   auto _UNCERTAINTY_SOURCE = _o->UNCERTAINTY_SOURCE;
+  auto _CALIBRATION = _o->CALIBRATION;
+  auto _CALIBRATION_REFERENCE = _o->CALIBRATION_REFERENCE.empty() ? 0 : _fbb.CreateString(_o->CALIBRATION_REFERENCE);
+  auto _CROSS_CORRELATION = _o->CROSS_CORRELATION;
   return CreateCQRProbabilityResult(
       _fbb,
       _PROBABILITY,
@@ -3991,7 +5736,10 @@ inline ::flatbuffers::Offset<CQRProbabilityResult> CQRProbabilityResult::Pack(::
       _HAS_MAXIMUM_PROBABILITY,
       _MAHALANOBIS_SQUARED,
       _HAS_MAHALANOBIS_SQUARED,
-      _UNCERTAINTY_SOURCE);
+      _UNCERTAINTY_SOURCE,
+      _CALIBRATION,
+      _CALIBRATION_REFERENCE,
+      _CROSS_CORRELATION);
 }
 
 inline CQRAlfanoRequestT *CQRAlfanoRequest::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -4214,7 +5962,15 @@ inline CQREventT::CQREventT(const CQREventT &o)
         MAHALANOBIS_3D_SQUARED(o.MAHALANOBIS_3D_SQUARED),
         HAS_MAHALANOBIS_3D_SQUARED(o.HAS_MAHALANOBIS_3D_SQUARED),
         COMBINED_RADIUS_M(o.COMBINED_RADIUS_M),
-        HAS_COMBINED_RADIUS_M(o.HAS_COMBINED_RADIUS_M) {
+        HAS_COMBINED_RADIUS_M(o.HAS_COMBINED_RADIUS_M),
+        PRIMARY_HARD_BODY_RADIUS_M(o.PRIMARY_HARD_BODY_RADIUS_M),
+        HAS_PRIMARY_HARD_BODY_RADIUS_M(o.HAS_PRIMARY_HARD_BODY_RADIUS_M),
+        SECONDARY_HARD_BODY_RADIUS_M(o.SECONDARY_HARD_BODY_RADIUS_M),
+        HAS_SECONDARY_HARD_BODY_RADIUS_M(o.HAS_SECONDARY_HARD_BODY_RADIUS_M),
+        PRIMARY_RADIUS_BASIS(o.PRIMARY_RADIUS_BASIS),
+        SECONDARY_RADIUS_BASIS(o.SECONDARY_RADIUS_BASIS),
+        PRIMARY_COVARIANCE_BASIS(o.PRIMARY_COVARIANCE_BASIS),
+        SECONDARY_COVARIANCE_BASIS(o.SECONDARY_COVARIANCE_BASIS) {
 }
 
 inline CQREventT &CQREventT::operator=(CQREventT o) FLATBUFFERS_NOEXCEPT {
@@ -4245,6 +6001,14 @@ inline CQREventT &CQREventT::operator=(CQREventT o) FLATBUFFERS_NOEXCEPT {
   std::swap(HAS_MAHALANOBIS_3D_SQUARED, o.HAS_MAHALANOBIS_3D_SQUARED);
   std::swap(COMBINED_RADIUS_M, o.COMBINED_RADIUS_M);
   std::swap(HAS_COMBINED_RADIUS_M, o.HAS_COMBINED_RADIUS_M);
+  std::swap(PRIMARY_HARD_BODY_RADIUS_M, o.PRIMARY_HARD_BODY_RADIUS_M);
+  std::swap(HAS_PRIMARY_HARD_BODY_RADIUS_M, o.HAS_PRIMARY_HARD_BODY_RADIUS_M);
+  std::swap(SECONDARY_HARD_BODY_RADIUS_M, o.SECONDARY_HARD_BODY_RADIUS_M);
+  std::swap(HAS_SECONDARY_HARD_BODY_RADIUS_M, o.HAS_SECONDARY_HARD_BODY_RADIUS_M);
+  std::swap(PRIMARY_RADIUS_BASIS, o.PRIMARY_RADIUS_BASIS);
+  std::swap(SECONDARY_RADIUS_BASIS, o.SECONDARY_RADIUS_BASIS);
+  std::swap(PRIMARY_COVARIANCE_BASIS, o.PRIMARY_COVARIANCE_BASIS);
+  std::swap(SECONDARY_COVARIANCE_BASIS, o.SECONDARY_COVARIANCE_BASIS);
   return *this;
 }
 
@@ -4284,6 +6048,14 @@ inline void CQREvent::UnPackTo(CQREventT *_o, const ::flatbuffers::resolver_func
   { auto _e = HAS_MAHALANOBIS_3D_SQUARED(); _o->HAS_MAHALANOBIS_3D_SQUARED = _e; }
   { auto _e = COMBINED_RADIUS_M(); _o->COMBINED_RADIUS_M = _e; }
   { auto _e = HAS_COMBINED_RADIUS_M(); _o->HAS_COMBINED_RADIUS_M = _e; }
+  { auto _e = PRIMARY_HARD_BODY_RADIUS_M(); _o->PRIMARY_HARD_BODY_RADIUS_M = _e; }
+  { auto _e = HAS_PRIMARY_HARD_BODY_RADIUS_M(); _o->HAS_PRIMARY_HARD_BODY_RADIUS_M = _e; }
+  { auto _e = SECONDARY_HARD_BODY_RADIUS_M(); _o->SECONDARY_HARD_BODY_RADIUS_M = _e; }
+  { auto _e = HAS_SECONDARY_HARD_BODY_RADIUS_M(); _o->HAS_SECONDARY_HARD_BODY_RADIUS_M = _e; }
+  { auto _e = PRIMARY_RADIUS_BASIS(); _o->PRIMARY_RADIUS_BASIS = _e; }
+  { auto _e = SECONDARY_RADIUS_BASIS(); _o->SECONDARY_RADIUS_BASIS = _e; }
+  { auto _e = PRIMARY_COVARIANCE_BASIS(); _o->PRIMARY_COVARIANCE_BASIS = _e; }
+  { auto _e = SECONDARY_COVARIANCE_BASIS(); _o->SECONDARY_COVARIANCE_BASIS = _e; }
 }
 
 inline ::flatbuffers::Offset<CQREvent> CreateCQREvent(::flatbuffers::FlatBufferBuilder &_fbb, const CQREventT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -4321,6 +6093,14 @@ inline ::flatbuffers::Offset<CQREvent> CQREvent::Pack(::flatbuffers::FlatBufferB
   auto _HAS_MAHALANOBIS_3D_SQUARED = _o->HAS_MAHALANOBIS_3D_SQUARED;
   auto _COMBINED_RADIUS_M = _o->COMBINED_RADIUS_M;
   auto _HAS_COMBINED_RADIUS_M = _o->HAS_COMBINED_RADIUS_M;
+  auto _PRIMARY_HARD_BODY_RADIUS_M = _o->PRIMARY_HARD_BODY_RADIUS_M;
+  auto _HAS_PRIMARY_HARD_BODY_RADIUS_M = _o->HAS_PRIMARY_HARD_BODY_RADIUS_M;
+  auto _SECONDARY_HARD_BODY_RADIUS_M = _o->SECONDARY_HARD_BODY_RADIUS_M;
+  auto _HAS_SECONDARY_HARD_BODY_RADIUS_M = _o->HAS_SECONDARY_HARD_BODY_RADIUS_M;
+  auto _PRIMARY_RADIUS_BASIS = _o->PRIMARY_RADIUS_BASIS;
+  auto _SECONDARY_RADIUS_BASIS = _o->SECONDARY_RADIUS_BASIS;
+  auto _PRIMARY_COVARIANCE_BASIS = _o->PRIMARY_COVARIANCE_BASIS;
+  auto _SECONDARY_COVARIANCE_BASIS = _o->SECONDARY_COVARIANCE_BASIS;
   return CreateCQREvent(
       _fbb,
       _PRIMARY_ID,
@@ -4349,7 +6129,15 @@ inline ::flatbuffers::Offset<CQREvent> CQREvent::Pack(::flatbuffers::FlatBufferB
       _MAHALANOBIS_3D_SQUARED,
       _HAS_MAHALANOBIS_3D_SQUARED,
       _COMBINED_RADIUS_M,
-      _HAS_COMBINED_RADIUS_M);
+      _HAS_COMBINED_RADIUS_M,
+      _PRIMARY_HARD_BODY_RADIUS_M,
+      _HAS_PRIMARY_HARD_BODY_RADIUS_M,
+      _SECONDARY_HARD_BODY_RADIUS_M,
+      _HAS_SECONDARY_HARD_BODY_RADIUS_M,
+      _PRIMARY_RADIUS_BASIS,
+      _SECONDARY_RADIUS_BASIS,
+      _PRIMARY_COVARIANCE_BASIS,
+      _SECONDARY_COVARIANCE_BASIS);
 }
 
 inline CQRScreeningStatisticsT *CQRScreeningStatistics::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -4702,6 +6490,483 @@ inline ::flatbuffers::Offset<CQRVersionResult> CQRVersionResult::Pack(::flatbuff
       _VERSION);
 }
 
+inline CQRLaunchCriterionT *CQRLaunchCriterion::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<CQRLaunchCriterionT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void CQRLaunchCriterion::UnPackTo(CQRLaunchCriterionT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = OBJECT_CLASS(); _o->OBJECT_CLASS = _e; }
+  { auto _e = SCREENING(); _o->SCREENING = _e; }
+  { auto _e = RADIUS_M(); _o->RADIUS_M = _e; }
+  { auto _e = RADIAL_M(); _o->RADIAL_M = _e; }
+  { auto _e = IN_TRACK_M(); _o->IN_TRACK_M = _e; }
+  { auto _e = CROSS_TRACK_M(); _o->CROSS_TRACK_M = _e; }
+  { auto _e = MAX_PROBABILITY(); _o->MAX_PROBABILITY = _e; }
+  { auto _e = ALGORITHM(); _o->ALGORITHM = _e; }
+}
+
+inline ::flatbuffers::Offset<CQRLaunchCriterion> CreateCQRLaunchCriterion(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchCriterionT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CQRLaunchCriterion::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<CQRLaunchCriterion> CQRLaunchCriterion::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchCriterionT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const CQRLaunchCriterionT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _OBJECT_CLASS = _o->OBJECT_CLASS;
+  auto _SCREENING = _o->SCREENING;
+  auto _RADIUS_M = _o->RADIUS_M;
+  auto _RADIAL_M = _o->RADIAL_M;
+  auto _IN_TRACK_M = _o->IN_TRACK_M;
+  auto _CROSS_TRACK_M = _o->CROSS_TRACK_M;
+  auto _MAX_PROBABILITY = _o->MAX_PROBABILITY;
+  auto _ALGORITHM = _o->ALGORITHM;
+  return CreateCQRLaunchCriterion(
+      _fbb,
+      _OBJECT_CLASS,
+      _SCREENING,
+      _RADIUS_M,
+      _RADIAL_M,
+      _IN_TRACK_M,
+      _CROSS_TRACK_M,
+      _MAX_PROBABILITY,
+      _ALGORITHM);
+}
+
+inline CQRLaunchSegmentT::CQRLaunchSegmentT(const CQRLaunchSegmentT &o)
+      : SEGMENT_ID(o.SEGMENT_ID),
+        SEGMENT_NAME(o.SEGMENT_NAME),
+        TRAJECTORY((o.TRAJECTORY) ? new OEMT(*o.TRAJECTORY) : nullptr),
+        RADIUS_M(o.RADIUS_M),
+        RADAR_CROSS_SECTION_M2(o.RADAR_CROSS_SECTION_M2),
+        HAS_RADAR_CROSS_SECTION_M2(o.HAS_RADAR_CROSS_SECTION_M2),
+        VALID_FROM((o.VALID_FROM) ? new TIMInstantT(*o.VALID_FROM) : nullptr),
+        VALID_UNTIL((o.VALID_UNTIL) ? new TIMInstantT(*o.VALID_UNTIL) : nullptr) {
+}
+
+inline CQRLaunchSegmentT &CQRLaunchSegmentT::operator=(CQRLaunchSegmentT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(SEGMENT_ID, o.SEGMENT_ID);
+  std::swap(SEGMENT_NAME, o.SEGMENT_NAME);
+  std::swap(TRAJECTORY, o.TRAJECTORY);
+  std::swap(RADIUS_M, o.RADIUS_M);
+  std::swap(RADAR_CROSS_SECTION_M2, o.RADAR_CROSS_SECTION_M2);
+  std::swap(HAS_RADAR_CROSS_SECTION_M2, o.HAS_RADAR_CROSS_SECTION_M2);
+  std::swap(VALID_FROM, o.VALID_FROM);
+  std::swap(VALID_UNTIL, o.VALID_UNTIL);
+  return *this;
+}
+
+inline CQRLaunchSegmentT *CQRLaunchSegment::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<CQRLaunchSegmentT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void CQRLaunchSegment::UnPackTo(CQRLaunchSegmentT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = SEGMENT_ID(); if (_e) _o->SEGMENT_ID = _e->str(); }
+  { auto _e = SEGMENT_NAME(); if (_e) _o->SEGMENT_NAME = _e->str(); }
+  { auto _e = TRAJECTORY(); if (_e) { if(_o->TRAJECTORY) { _e->UnPackTo(_o->TRAJECTORY.get(), _resolver); } else { _o->TRAJECTORY = std::unique_ptr<OEMT>(_e->UnPack(_resolver)); } } else if (_o->TRAJECTORY) { _o->TRAJECTORY.reset(); } }
+  { auto _e = RADIUS_M(); _o->RADIUS_M = _e; }
+  { auto _e = RADAR_CROSS_SECTION_M2(); _o->RADAR_CROSS_SECTION_M2 = _e; }
+  { auto _e = HAS_RADAR_CROSS_SECTION_M2(); _o->HAS_RADAR_CROSS_SECTION_M2 = _e; }
+  { auto _e = VALID_FROM(); if (_e) { if(_o->VALID_FROM) { _e->UnPackTo(_o->VALID_FROM.get(), _resolver); } else { _o->VALID_FROM = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->VALID_FROM) { _o->VALID_FROM.reset(); } }
+  { auto _e = VALID_UNTIL(); if (_e) { if(_o->VALID_UNTIL) { _e->UnPackTo(_o->VALID_UNTIL.get(), _resolver); } else { _o->VALID_UNTIL = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->VALID_UNTIL) { _o->VALID_UNTIL.reset(); } }
+}
+
+inline ::flatbuffers::Offset<CQRLaunchSegment> CreateCQRLaunchSegment(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchSegmentT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CQRLaunchSegment::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<CQRLaunchSegment> CQRLaunchSegment::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchSegmentT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const CQRLaunchSegmentT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _SEGMENT_ID = _fbb.CreateString(_o->SEGMENT_ID);
+  auto _SEGMENT_NAME = _o->SEGMENT_NAME.empty() ? 0 : _fbb.CreateString(_o->SEGMENT_NAME);
+  auto _TRAJECTORY = _o->TRAJECTORY ? CreateOEM(_fbb, _o->TRAJECTORY.get(), _rehasher) : 0;
+  auto _RADIUS_M = _o->RADIUS_M;
+  auto _RADAR_CROSS_SECTION_M2 = _o->RADAR_CROSS_SECTION_M2;
+  auto _HAS_RADAR_CROSS_SECTION_M2 = _o->HAS_RADAR_CROSS_SECTION_M2;
+  auto _VALID_FROM = _o->VALID_FROM ? CreateTIMInstant(_fbb, _o->VALID_FROM.get(), _rehasher) : 0;
+  auto _VALID_UNTIL = _o->VALID_UNTIL ? CreateTIMInstant(_fbb, _o->VALID_UNTIL.get(), _rehasher) : 0;
+  return CreateCQRLaunchSegment(
+      _fbb,
+      _SEGMENT_ID,
+      _SEGMENT_NAME,
+      _TRAJECTORY,
+      _RADIUS_M,
+      _RADAR_CROSS_SECTION_M2,
+      _HAS_RADAR_CROSS_SECTION_M2,
+      _VALID_FROM,
+      _VALID_UNTIL);
+}
+
+inline CQRLaunchObjectT::CQRLaunchObjectT(const CQRLaunchObjectT &o)
+      : SOURCE((o.SOURCE) ? new CQRObjectSourceT(*o.SOURCE) : nullptr),
+        OBJECT_CLASS(o.OBJECT_CLASS),
+        RENDEZVOUS_COORDINATED(o.RENDEZVOUS_COORDINATED) {
+}
+
+inline CQRLaunchObjectT &CQRLaunchObjectT::operator=(CQRLaunchObjectT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(SOURCE, o.SOURCE);
+  std::swap(OBJECT_CLASS, o.OBJECT_CLASS);
+  std::swap(RENDEZVOUS_COORDINATED, o.RENDEZVOUS_COORDINATED);
+  return *this;
+}
+
+inline CQRLaunchObjectT *CQRLaunchObject::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<CQRLaunchObjectT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void CQRLaunchObject::UnPackTo(CQRLaunchObjectT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = SOURCE(); if (_e) { if(_o->SOURCE) { _e->UnPackTo(_o->SOURCE.get(), _resolver); } else { _o->SOURCE = std::unique_ptr<CQRObjectSourceT>(_e->UnPack(_resolver)); } } else if (_o->SOURCE) { _o->SOURCE.reset(); } }
+  { auto _e = OBJECT_CLASS(); _o->OBJECT_CLASS = _e; }
+  { auto _e = RENDEZVOUS_COORDINATED(); _o->RENDEZVOUS_COORDINATED = _e; }
+}
+
+inline ::flatbuffers::Offset<CQRLaunchObject> CreateCQRLaunchObject(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchObjectT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CQRLaunchObject::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<CQRLaunchObject> CQRLaunchObject::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchObjectT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const CQRLaunchObjectT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _SOURCE = _o->SOURCE ? CreateCQRObjectSource(_fbb, _o->SOURCE.get(), _rehasher) : 0;
+  auto _OBJECT_CLASS = _o->OBJECT_CLASS;
+  auto _RENDEZVOUS_COORDINATED = _o->RENDEZVOUS_COORDINATED;
+  return CreateCQRLaunchObject(
+      _fbb,
+      _SOURCE,
+      _OBJECT_CLASS,
+      _RENDEZVOUS_COORDINATED);
+}
+
+inline CQRLaunchRequestT::CQRLaunchRequestT(const CQRLaunchRequestT &o)
+      : MISSION_NAME(o.MISSION_NAME),
+        NOMINAL_LIFTOFF((o.NOMINAL_LIFTOFF) ? new TIMInstantT(*o.NOMINAL_LIFTOFF) : nullptr),
+        WINDOW_OPEN((o.WINDOW_OPEN) ? new TIMInstantT(*o.WINDOW_OPEN) : nullptr),
+        WINDOW_CLOSE((o.WINDOW_CLOSE) ? new TIMInstantT(*o.WINDOW_CLOSE) : nullptr),
+        LIFTOFF_STEP_SECONDS(o.LIFTOFF_STEP_SECONDS),
+        MINIMUM_ALTITUDE_M(o.MINIMUM_ALTITUDE_M),
+        SCREEN_SECONDS_AFTER_LIFTOFF(o.SCREEN_SECONDS_AFTER_LIFTOFF),
+        CLOSURE_PAD_SECONDS(o.CLOSURE_PAD_SECONDS),
+        REPORT_RATIO(o.REPORT_RATIO),
+        EVALUATION_FRAME((o.EVALUATION_FRAME) ? new RFMCoordinateSystemT(*o.EVALUATION_FRAME) : nullptr) {
+  SEGMENTS.reserve(o.SEGMENTS.size());
+  for (const auto &SEGMENTS_ : o.SEGMENTS) { SEGMENTS.emplace_back((SEGMENTS_) ? new CQRLaunchSegmentT(*SEGMENTS_) : nullptr); }
+  OBJECTS.reserve(o.OBJECTS.size());
+  for (const auto &OBJECTS_ : o.OBJECTS) { OBJECTS.emplace_back((OBJECTS_) ? new CQRLaunchObjectT(*OBJECTS_) : nullptr); }
+  CRITERIA.reserve(o.CRITERIA.size());
+  for (const auto &CRITERIA_ : o.CRITERIA) { CRITERIA.emplace_back((CRITERIA_) ? new CQRLaunchCriterionT(*CRITERIA_) : nullptr); }
+}
+
+inline CQRLaunchRequestT &CQRLaunchRequestT::operator=(CQRLaunchRequestT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(MISSION_NAME, o.MISSION_NAME);
+  std::swap(NOMINAL_LIFTOFF, o.NOMINAL_LIFTOFF);
+  std::swap(WINDOW_OPEN, o.WINDOW_OPEN);
+  std::swap(WINDOW_CLOSE, o.WINDOW_CLOSE);
+  std::swap(LIFTOFF_STEP_SECONDS, o.LIFTOFF_STEP_SECONDS);
+  std::swap(SEGMENTS, o.SEGMENTS);
+  std::swap(OBJECTS, o.OBJECTS);
+  std::swap(CRITERIA, o.CRITERIA);
+  std::swap(MINIMUM_ALTITUDE_M, o.MINIMUM_ALTITUDE_M);
+  std::swap(SCREEN_SECONDS_AFTER_LIFTOFF, o.SCREEN_SECONDS_AFTER_LIFTOFF);
+  std::swap(CLOSURE_PAD_SECONDS, o.CLOSURE_PAD_SECONDS);
+  std::swap(REPORT_RATIO, o.REPORT_RATIO);
+  std::swap(EVALUATION_FRAME, o.EVALUATION_FRAME);
+  return *this;
+}
+
+inline CQRLaunchRequestT *CQRLaunchRequest::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<CQRLaunchRequestT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void CQRLaunchRequest::UnPackTo(CQRLaunchRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = MISSION_NAME(); if (_e) _o->MISSION_NAME = _e->str(); }
+  { auto _e = NOMINAL_LIFTOFF(); if (_e) { if(_o->NOMINAL_LIFTOFF) { _e->UnPackTo(_o->NOMINAL_LIFTOFF.get(), _resolver); } else { _o->NOMINAL_LIFTOFF = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->NOMINAL_LIFTOFF) { _o->NOMINAL_LIFTOFF.reset(); } }
+  { auto _e = WINDOW_OPEN(); if (_e) { if(_o->WINDOW_OPEN) { _e->UnPackTo(_o->WINDOW_OPEN.get(), _resolver); } else { _o->WINDOW_OPEN = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->WINDOW_OPEN) { _o->WINDOW_OPEN.reset(); } }
+  { auto _e = WINDOW_CLOSE(); if (_e) { if(_o->WINDOW_CLOSE) { _e->UnPackTo(_o->WINDOW_CLOSE.get(), _resolver); } else { _o->WINDOW_CLOSE = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->WINDOW_CLOSE) { _o->WINDOW_CLOSE.reset(); } }
+  { auto _e = LIFTOFF_STEP_SECONDS(); _o->LIFTOFF_STEP_SECONDS = _e; }
+  { auto _e = SEGMENTS(); if (_e) { _o->SEGMENTS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->SEGMENTS[_i]) { _e->Get(_i)->UnPackTo(_o->SEGMENTS[_i].get(), _resolver); } else { _o->SEGMENTS[_i] = std::unique_ptr<CQRLaunchSegmentT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->SEGMENTS.resize(0); } }
+  { auto _e = OBJECTS(); if (_e) { _o->OBJECTS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->OBJECTS[_i]) { _e->Get(_i)->UnPackTo(_o->OBJECTS[_i].get(), _resolver); } else { _o->OBJECTS[_i] = std::unique_ptr<CQRLaunchObjectT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->OBJECTS.resize(0); } }
+  { auto _e = CRITERIA(); if (_e) { _o->CRITERIA.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->CRITERIA[_i]) { _e->Get(_i)->UnPackTo(_o->CRITERIA[_i].get(), _resolver); } else { _o->CRITERIA[_i] = std::unique_ptr<CQRLaunchCriterionT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->CRITERIA.resize(0); } }
+  { auto _e = MINIMUM_ALTITUDE_M(); _o->MINIMUM_ALTITUDE_M = _e; }
+  { auto _e = SCREEN_SECONDS_AFTER_LIFTOFF(); _o->SCREEN_SECONDS_AFTER_LIFTOFF = _e; }
+  { auto _e = CLOSURE_PAD_SECONDS(); _o->CLOSURE_PAD_SECONDS = _e; }
+  { auto _e = REPORT_RATIO(); _o->REPORT_RATIO = _e; }
+  { auto _e = EVALUATION_FRAME(); if (_e) { if(_o->EVALUATION_FRAME) { _e->UnPackTo(_o->EVALUATION_FRAME.get(), _resolver); } else { _o->EVALUATION_FRAME = std::unique_ptr<RFMCoordinateSystemT>(_e->UnPack(_resolver)); } } else if (_o->EVALUATION_FRAME) { _o->EVALUATION_FRAME.reset(); } }
+}
+
+inline ::flatbuffers::Offset<CQRLaunchRequest> CreateCQRLaunchRequest(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CQRLaunchRequest::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<CQRLaunchRequest> CQRLaunchRequest::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const CQRLaunchRequestT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _MISSION_NAME = _o->MISSION_NAME.empty() ? 0 : _fbb.CreateString(_o->MISSION_NAME);
+  auto _NOMINAL_LIFTOFF = _o->NOMINAL_LIFTOFF ? CreateTIMInstant(_fbb, _o->NOMINAL_LIFTOFF.get(), _rehasher) : 0;
+  auto _WINDOW_OPEN = _o->WINDOW_OPEN ? CreateTIMInstant(_fbb, _o->WINDOW_OPEN.get(), _rehasher) : 0;
+  auto _WINDOW_CLOSE = _o->WINDOW_CLOSE ? CreateTIMInstant(_fbb, _o->WINDOW_CLOSE.get(), _rehasher) : 0;
+  auto _LIFTOFF_STEP_SECONDS = _o->LIFTOFF_STEP_SECONDS;
+  auto _SEGMENTS = _fbb.CreateVector<::flatbuffers::Offset<CQRLaunchSegment>> (_o->SEGMENTS.size(), [](size_t i, _VectorArgs *__va) { return CreateCQRLaunchSegment(*__va->__fbb, __va->__o->SEGMENTS[i].get(), __va->__rehasher); }, &_va );
+  auto _OBJECTS = _fbb.CreateVector<::flatbuffers::Offset<CQRLaunchObject>> (_o->OBJECTS.size(), [](size_t i, _VectorArgs *__va) { return CreateCQRLaunchObject(*__va->__fbb, __va->__o->OBJECTS[i].get(), __va->__rehasher); }, &_va );
+  auto _CRITERIA = _fbb.CreateVector<::flatbuffers::Offset<CQRLaunchCriterion>> (_o->CRITERIA.size(), [](size_t i, _VectorArgs *__va) { return CreateCQRLaunchCriterion(*__va->__fbb, __va->__o->CRITERIA[i].get(), __va->__rehasher); }, &_va );
+  auto _MINIMUM_ALTITUDE_M = _o->MINIMUM_ALTITUDE_M;
+  auto _SCREEN_SECONDS_AFTER_LIFTOFF = _o->SCREEN_SECONDS_AFTER_LIFTOFF;
+  auto _CLOSURE_PAD_SECONDS = _o->CLOSURE_PAD_SECONDS;
+  auto _REPORT_RATIO = _o->REPORT_RATIO;
+  auto _EVALUATION_FRAME = _o->EVALUATION_FRAME ? CreateRFMCoordinateSystem(_fbb, _o->EVALUATION_FRAME.get(), _rehasher) : 0;
+  return CreateCQRLaunchRequest(
+      _fbb,
+      _MISSION_NAME,
+      _NOMINAL_LIFTOFF,
+      _WINDOW_OPEN,
+      _WINDOW_CLOSE,
+      _LIFTOFF_STEP_SECONDS,
+      _SEGMENTS,
+      _OBJECTS,
+      _CRITERIA,
+      _MINIMUM_ALTITUDE_M,
+      _SCREEN_SECONDS_AFTER_LIFTOFF,
+      _CLOSURE_PAD_SECONDS,
+      _REPORT_RATIO,
+      _EVALUATION_FRAME);
+}
+
+inline CQRLaunchClosureT::CQRLaunchClosureT(const CQRLaunchClosureT &o)
+      : START((o.START) ? new TIMInstantT(*o.START) : nullptr),
+        END((o.END) ? new TIMInstantT(*o.END) : nullptr),
+        OBJECT_IDS(o.OBJECT_IDS),
+        SEGMENT_IDS(o.SEGMENT_IDS) {
+}
+
+inline CQRLaunchClosureT &CQRLaunchClosureT::operator=(CQRLaunchClosureT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(START, o.START);
+  std::swap(END, o.END);
+  std::swap(OBJECT_IDS, o.OBJECT_IDS);
+  std::swap(SEGMENT_IDS, o.SEGMENT_IDS);
+  return *this;
+}
+
+inline CQRLaunchClosureT *CQRLaunchClosure::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<CQRLaunchClosureT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void CQRLaunchClosure::UnPackTo(CQRLaunchClosureT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = START(); if (_e) { if(_o->START) { _e->UnPackTo(_o->START.get(), _resolver); } else { _o->START = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->START) { _o->START.reset(); } }
+  { auto _e = END(); if (_e) { if(_o->END) { _e->UnPackTo(_o->END.get(), _resolver); } else { _o->END = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->END) { _o->END.reset(); } }
+  { auto _e = OBJECT_IDS(); if (_e) { _o->OBJECT_IDS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->OBJECT_IDS[_i] = _e->Get(_i)->str(); } } else { _o->OBJECT_IDS.resize(0); } }
+  { auto _e = SEGMENT_IDS(); if (_e) { _o->SEGMENT_IDS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->SEGMENT_IDS[_i] = _e->Get(_i)->str(); } } else { _o->SEGMENT_IDS.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<CQRLaunchClosure> CreateCQRLaunchClosure(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchClosureT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CQRLaunchClosure::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<CQRLaunchClosure> CQRLaunchClosure::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchClosureT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const CQRLaunchClosureT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _START = _o->START ? CreateTIMInstant(_fbb, _o->START.get(), _rehasher) : 0;
+  auto _END = _o->END ? CreateTIMInstant(_fbb, _o->END.get(), _rehasher) : 0;
+  auto _OBJECT_IDS = _o->OBJECT_IDS.size() ? _fbb.CreateVectorOfStrings(_o->OBJECT_IDS) : 0;
+  auto _SEGMENT_IDS = _o->SEGMENT_IDS.size() ? _fbb.CreateVectorOfStrings(_o->SEGMENT_IDS) : 0;
+  return CreateCQRLaunchClosure(
+      _fbb,
+      _START,
+      _END,
+      _OBJECT_IDS,
+      _SEGMENT_IDS);
+}
+
+inline CQRLaunchApproachT::CQRLaunchApproachT(const CQRLaunchApproachT &o)
+      : SEGMENT_ID(o.SEGMENT_ID),
+        OBJECT_ID(o.OBJECT_ID),
+        OBJECT_CLASS(o.OBJECT_CLASS),
+        LIFTOFF((o.LIFTOFF) ? new TIMInstantT(*o.LIFTOFF) : nullptr),
+        TCA((o.TCA) ? new TIMInstantT(*o.TCA) : nullptr),
+        MISS_DISTANCE_M(o.MISS_DISTANCE_M),
+        RELATIVE_SPEED_M_S(o.RELATIVE_SPEED_M_S),
+        RELATIVE_POSITION_RTN((o.RELATIVE_POSITION_RTN) ? new FRMVector3T(*o.RELATIVE_POSITION_RTN) : nullptr),
+        CRITERION_RATIO(o.CRITERION_RATIO),
+        VIOLATES(o.VIOLATES),
+        RENDEZVOUS_COORDINATED(o.RENDEZVOUS_COORDINATED),
+        RUN_START((o.RUN_START) ? new TIMInstantT(*o.RUN_START) : nullptr),
+        RUN_END((o.RUN_END) ? new TIMInstantT(*o.RUN_END) : nullptr) {
+}
+
+inline CQRLaunchApproachT &CQRLaunchApproachT::operator=(CQRLaunchApproachT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(SEGMENT_ID, o.SEGMENT_ID);
+  std::swap(OBJECT_ID, o.OBJECT_ID);
+  std::swap(OBJECT_CLASS, o.OBJECT_CLASS);
+  std::swap(LIFTOFF, o.LIFTOFF);
+  std::swap(TCA, o.TCA);
+  std::swap(MISS_DISTANCE_M, o.MISS_DISTANCE_M);
+  std::swap(RELATIVE_SPEED_M_S, o.RELATIVE_SPEED_M_S);
+  std::swap(RELATIVE_POSITION_RTN, o.RELATIVE_POSITION_RTN);
+  std::swap(CRITERION_RATIO, o.CRITERION_RATIO);
+  std::swap(VIOLATES, o.VIOLATES);
+  std::swap(RENDEZVOUS_COORDINATED, o.RENDEZVOUS_COORDINATED);
+  std::swap(RUN_START, o.RUN_START);
+  std::swap(RUN_END, o.RUN_END);
+  return *this;
+}
+
+inline CQRLaunchApproachT *CQRLaunchApproach::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<CQRLaunchApproachT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void CQRLaunchApproach::UnPackTo(CQRLaunchApproachT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = SEGMENT_ID(); if (_e) _o->SEGMENT_ID = _e->str(); }
+  { auto _e = OBJECT_ID(); if (_e) _o->OBJECT_ID = _e->str(); }
+  { auto _e = OBJECT_CLASS(); _o->OBJECT_CLASS = _e; }
+  { auto _e = LIFTOFF(); if (_e) { if(_o->LIFTOFF) { _e->UnPackTo(_o->LIFTOFF.get(), _resolver); } else { _o->LIFTOFF = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->LIFTOFF) { _o->LIFTOFF.reset(); } }
+  { auto _e = TCA(); if (_e) { if(_o->TCA) { _e->UnPackTo(_o->TCA.get(), _resolver); } else { _o->TCA = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->TCA) { _o->TCA.reset(); } }
+  { auto _e = MISS_DISTANCE_M(); _o->MISS_DISTANCE_M = _e; }
+  { auto _e = RELATIVE_SPEED_M_S(); _o->RELATIVE_SPEED_M_S = _e; }
+  { auto _e = RELATIVE_POSITION_RTN(); if (_e) { if(_o->RELATIVE_POSITION_RTN) { _e->UnPackTo(_o->RELATIVE_POSITION_RTN.get(), _resolver); } else { _o->RELATIVE_POSITION_RTN = std::unique_ptr<FRMVector3T>(_e->UnPack(_resolver)); } } else if (_o->RELATIVE_POSITION_RTN) { _o->RELATIVE_POSITION_RTN.reset(); } }
+  { auto _e = CRITERION_RATIO(); _o->CRITERION_RATIO = _e; }
+  { auto _e = VIOLATES(); _o->VIOLATES = _e; }
+  { auto _e = RENDEZVOUS_COORDINATED(); _o->RENDEZVOUS_COORDINATED = _e; }
+  { auto _e = RUN_START(); if (_e) { if(_o->RUN_START) { _e->UnPackTo(_o->RUN_START.get(), _resolver); } else { _o->RUN_START = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->RUN_START) { _o->RUN_START.reset(); } }
+  { auto _e = RUN_END(); if (_e) { if(_o->RUN_END) { _e->UnPackTo(_o->RUN_END.get(), _resolver); } else { _o->RUN_END = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->RUN_END) { _o->RUN_END.reset(); } }
+}
+
+inline ::flatbuffers::Offset<CQRLaunchApproach> CreateCQRLaunchApproach(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchApproachT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CQRLaunchApproach::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<CQRLaunchApproach> CQRLaunchApproach::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchApproachT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const CQRLaunchApproachT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _SEGMENT_ID = _fbb.CreateString(_o->SEGMENT_ID);
+  auto _OBJECT_ID = _fbb.CreateString(_o->OBJECT_ID);
+  auto _OBJECT_CLASS = _o->OBJECT_CLASS;
+  auto _LIFTOFF = _o->LIFTOFF ? CreateTIMInstant(_fbb, _o->LIFTOFF.get(), _rehasher) : 0;
+  auto _TCA = _o->TCA ? CreateTIMInstant(_fbb, _o->TCA.get(), _rehasher) : 0;
+  auto _MISS_DISTANCE_M = _o->MISS_DISTANCE_M;
+  auto _RELATIVE_SPEED_M_S = _o->RELATIVE_SPEED_M_S;
+  auto _RELATIVE_POSITION_RTN = _o->RELATIVE_POSITION_RTN ? CreateFRMVector3(_fbb, _o->RELATIVE_POSITION_RTN.get(), _rehasher) : 0;
+  auto _CRITERION_RATIO = _o->CRITERION_RATIO;
+  auto _VIOLATES = _o->VIOLATES;
+  auto _RENDEZVOUS_COORDINATED = _o->RENDEZVOUS_COORDINATED;
+  auto _RUN_START = _o->RUN_START ? CreateTIMInstant(_fbb, _o->RUN_START.get(), _rehasher) : 0;
+  auto _RUN_END = _o->RUN_END ? CreateTIMInstant(_fbb, _o->RUN_END.get(), _rehasher) : 0;
+  return CreateCQRLaunchApproach(
+      _fbb,
+      _SEGMENT_ID,
+      _OBJECT_ID,
+      _OBJECT_CLASS,
+      _LIFTOFF,
+      _TCA,
+      _MISS_DISTANCE_M,
+      _RELATIVE_SPEED_M_S,
+      _RELATIVE_POSITION_RTN,
+      _CRITERION_RATIO,
+      _VIOLATES,
+      _RENDEZVOUS_COORDINATED,
+      _RUN_START,
+      _RUN_END);
+}
+
+inline CQRLaunchResultT::CQRLaunchResultT(const CQRLaunchResultT &o)
+      : MISSION_NAME(o.MISSION_NAME),
+        WINDOW_OPEN((o.WINDOW_OPEN) ? new TIMInstantT(*o.WINDOW_OPEN) : nullptr),
+        WINDOW_CLOSE((o.WINDOW_CLOSE) ? new TIMInstantT(*o.WINDOW_CLOSE) : nullptr),
+        LIFTOFF_STEP_SECONDS(o.LIFTOFF_STEP_SECONDS),
+        LIFTOFF_TIMES_EVALUATED(o.LIFTOFF_TIMES_EVALUATED),
+        STATISTICS((o.STATISTICS) ? new CQRScreeningStatisticsT(*o.STATISTICS) : nullptr) {
+  CLOSURES.reserve(o.CLOSURES.size());
+  for (const auto &CLOSURES_ : o.CLOSURES) { CLOSURES.emplace_back((CLOSURES_) ? new CQRLaunchClosureT(*CLOSURES_) : nullptr); }
+  APPROACHES.reserve(o.APPROACHES.size());
+  for (const auto &APPROACHES_ : o.APPROACHES) { APPROACHES.emplace_back((APPROACHES_) ? new CQRLaunchApproachT(*APPROACHES_) : nullptr); }
+}
+
+inline CQRLaunchResultT &CQRLaunchResultT::operator=(CQRLaunchResultT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(MISSION_NAME, o.MISSION_NAME);
+  std::swap(WINDOW_OPEN, o.WINDOW_OPEN);
+  std::swap(WINDOW_CLOSE, o.WINDOW_CLOSE);
+  std::swap(LIFTOFF_STEP_SECONDS, o.LIFTOFF_STEP_SECONDS);
+  std::swap(LIFTOFF_TIMES_EVALUATED, o.LIFTOFF_TIMES_EVALUATED);
+  std::swap(CLOSURES, o.CLOSURES);
+  std::swap(APPROACHES, o.APPROACHES);
+  std::swap(STATISTICS, o.STATISTICS);
+  return *this;
+}
+
+inline CQRLaunchResultT *CQRLaunchResult::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<CQRLaunchResultT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void CQRLaunchResult::UnPackTo(CQRLaunchResultT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = MISSION_NAME(); if (_e) _o->MISSION_NAME = _e->str(); }
+  { auto _e = WINDOW_OPEN(); if (_e) { if(_o->WINDOW_OPEN) { _e->UnPackTo(_o->WINDOW_OPEN.get(), _resolver); } else { _o->WINDOW_OPEN = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->WINDOW_OPEN) { _o->WINDOW_OPEN.reset(); } }
+  { auto _e = WINDOW_CLOSE(); if (_e) { if(_o->WINDOW_CLOSE) { _e->UnPackTo(_o->WINDOW_CLOSE.get(), _resolver); } else { _o->WINDOW_CLOSE = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->WINDOW_CLOSE) { _o->WINDOW_CLOSE.reset(); } }
+  { auto _e = LIFTOFF_STEP_SECONDS(); _o->LIFTOFF_STEP_SECONDS = _e; }
+  { auto _e = LIFTOFF_TIMES_EVALUATED(); _o->LIFTOFF_TIMES_EVALUATED = _e; }
+  { auto _e = CLOSURES(); if (_e) { _o->CLOSURES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->CLOSURES[_i]) { _e->Get(_i)->UnPackTo(_o->CLOSURES[_i].get(), _resolver); } else { _o->CLOSURES[_i] = std::unique_ptr<CQRLaunchClosureT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->CLOSURES.resize(0); } }
+  { auto _e = APPROACHES(); if (_e) { _o->APPROACHES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->APPROACHES[_i]) { _e->Get(_i)->UnPackTo(_o->APPROACHES[_i].get(), _resolver); } else { _o->APPROACHES[_i] = std::unique_ptr<CQRLaunchApproachT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->APPROACHES.resize(0); } }
+  { auto _e = STATISTICS(); if (_e) { if(_o->STATISTICS) { _e->UnPackTo(_o->STATISTICS.get(), _resolver); } else { _o->STATISTICS = std::unique_ptr<CQRScreeningStatisticsT>(_e->UnPack(_resolver)); } } else if (_o->STATISTICS) { _o->STATISTICS.reset(); } }
+}
+
+inline ::flatbuffers::Offset<CQRLaunchResult> CreateCQRLaunchResult(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CQRLaunchResult::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<CQRLaunchResult> CQRLaunchResult::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CQRLaunchResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const CQRLaunchResultT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _MISSION_NAME = _o->MISSION_NAME.empty() ? 0 : _fbb.CreateString(_o->MISSION_NAME);
+  auto _WINDOW_OPEN = _o->WINDOW_OPEN ? CreateTIMInstant(_fbb, _o->WINDOW_OPEN.get(), _rehasher) : 0;
+  auto _WINDOW_CLOSE = _o->WINDOW_CLOSE ? CreateTIMInstant(_fbb, _o->WINDOW_CLOSE.get(), _rehasher) : 0;
+  auto _LIFTOFF_STEP_SECONDS = _o->LIFTOFF_STEP_SECONDS;
+  auto _LIFTOFF_TIMES_EVALUATED = _o->LIFTOFF_TIMES_EVALUATED;
+  auto _CLOSURES = _o->CLOSURES.size() ? _fbb.CreateVector<::flatbuffers::Offset<CQRLaunchClosure>> (_o->CLOSURES.size(), [](size_t i, _VectorArgs *__va) { return CreateCQRLaunchClosure(*__va->__fbb, __va->__o->CLOSURES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _APPROACHES = _o->APPROACHES.size() ? _fbb.CreateVector<::flatbuffers::Offset<CQRLaunchApproach>> (_o->APPROACHES.size(), [](size_t i, _VectorArgs *__va) { return CreateCQRLaunchApproach(*__va->__fbb, __va->__o->APPROACHES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _STATISTICS = _o->STATISTICS ? CreateCQRScreeningStatistics(_fbb, _o->STATISTICS.get(), _rehasher) : 0;
+  return CreateCQRLaunchResult(
+      _fbb,
+      _MISSION_NAME,
+      _WINDOW_OPEN,
+      _WINDOW_CLOSE,
+      _LIFTOFF_STEP_SECONDS,
+      _LIFTOFF_TIMES_EVALUATED,
+      _CLOSURES,
+      _APPROACHES,
+      _STATISTICS);
+}
+
 inline CQRT::CQRT(const CQRT &o)
       : PAIR_REQUEST((o.PAIR_REQUEST) ? new CQRPairRequestT(*o.PAIR_REQUEST) : nullptr),
         CATALOG_REQUEST((o.CATALOG_REQUEST) ? new CQRCatalogRequestT(*o.CATALOG_REQUEST) : nullptr),
@@ -4718,7 +6983,9 @@ inline CQRT::CQRT(const CQRT &o)
         WINDOW_REQUEST((o.WINDOW_REQUEST) ? new CQRWindowRequestT(*o.WINDOW_REQUEST) : nullptr),
         DESTROY_REQUEST((o.DESTROY_REQUEST) ? new CQRDestroyRequestT(*o.DESTROY_REQUEST) : nullptr),
         VERSION_QUERY(o.VERSION_QUERY),
-        VERSION_RESULT((o.VERSION_RESULT) ? new CQRVersionResultT(*o.VERSION_RESULT) : nullptr) {
+        VERSION_RESULT((o.VERSION_RESULT) ? new CQRVersionResultT(*o.VERSION_RESULT) : nullptr),
+        LAUNCH_REQUEST((o.LAUNCH_REQUEST) ? new CQRLaunchRequestT(*o.LAUNCH_REQUEST) : nullptr),
+        LAUNCH_RESULT((o.LAUNCH_RESULT) ? new CQRLaunchResultT(*o.LAUNCH_RESULT) : nullptr) {
 }
 
 inline CQRT &CQRT::operator=(CQRT o) FLATBUFFERS_NOEXCEPT {
@@ -4738,6 +7005,8 @@ inline CQRT &CQRT::operator=(CQRT o) FLATBUFFERS_NOEXCEPT {
   std::swap(DESTROY_REQUEST, o.DESTROY_REQUEST);
   std::swap(VERSION_QUERY, o.VERSION_QUERY);
   std::swap(VERSION_RESULT, o.VERSION_RESULT);
+  std::swap(LAUNCH_REQUEST, o.LAUNCH_REQUEST);
+  std::swap(LAUNCH_RESULT, o.LAUNCH_RESULT);
   return *this;
 }
 
@@ -4766,6 +7035,8 @@ inline void CQR::UnPackTo(CQRT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = DESTROY_REQUEST(); if (_e) { if(_o->DESTROY_REQUEST) { _e->UnPackTo(_o->DESTROY_REQUEST.get(), _resolver); } else { _o->DESTROY_REQUEST = std::unique_ptr<CQRDestroyRequestT>(_e->UnPack(_resolver)); } } else if (_o->DESTROY_REQUEST) { _o->DESTROY_REQUEST.reset(); } }
   { auto _e = VERSION_QUERY(); _o->VERSION_QUERY = _e; }
   { auto _e = VERSION_RESULT(); if (_e) { if(_o->VERSION_RESULT) { _e->UnPackTo(_o->VERSION_RESULT.get(), _resolver); } else { _o->VERSION_RESULT = std::unique_ptr<CQRVersionResultT>(_e->UnPack(_resolver)); } } else if (_o->VERSION_RESULT) { _o->VERSION_RESULT.reset(); } }
+  { auto _e = LAUNCH_REQUEST(); if (_e) { if(_o->LAUNCH_REQUEST) { _e->UnPackTo(_o->LAUNCH_REQUEST.get(), _resolver); } else { _o->LAUNCH_REQUEST = std::unique_ptr<CQRLaunchRequestT>(_e->UnPack(_resolver)); } } else if (_o->LAUNCH_REQUEST) { _o->LAUNCH_REQUEST.reset(); } }
+  { auto _e = LAUNCH_RESULT(); if (_e) { if(_o->LAUNCH_RESULT) { _e->UnPackTo(_o->LAUNCH_RESULT.get(), _resolver); } else { _o->LAUNCH_RESULT = std::unique_ptr<CQRLaunchResultT>(_e->UnPack(_resolver)); } } else if (_o->LAUNCH_RESULT) { _o->LAUNCH_RESULT.reset(); } }
 }
 
 inline ::flatbuffers::Offset<CQR> CreateCQR(::flatbuffers::FlatBufferBuilder &_fbb, const CQRT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -4792,6 +7063,8 @@ inline ::flatbuffers::Offset<CQR> CQR::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _DESTROY_REQUEST = _o->DESTROY_REQUEST ? CreateCQRDestroyRequest(_fbb, _o->DESTROY_REQUEST.get(), _rehasher) : 0;
   auto _VERSION_QUERY = _o->VERSION_QUERY;
   auto _VERSION_RESULT = _o->VERSION_RESULT ? CreateCQRVersionResult(_fbb, _o->VERSION_RESULT.get(), _rehasher) : 0;
+  auto _LAUNCH_REQUEST = _o->LAUNCH_REQUEST ? CreateCQRLaunchRequest(_fbb, _o->LAUNCH_REQUEST.get(), _rehasher) : 0;
+  auto _LAUNCH_RESULT = _o->LAUNCH_RESULT ? CreateCQRLaunchResult(_fbb, _o->LAUNCH_RESULT.get(), _rehasher) : 0;
   return CreateCQR(
       _fbb,
       _PAIR_REQUEST,
@@ -4809,7 +7082,9 @@ inline ::flatbuffers::Offset<CQR> CQR::Pack(::flatbuffers::FlatBufferBuilder &_f
       _WINDOW_REQUEST,
       _DESTROY_REQUEST,
       _VERSION_QUERY,
-      _VERSION_RESULT);
+      _VERSION_RESULT,
+      _LAUNCH_REQUEST,
+      _LAUNCH_RESULT);
 }
 
 inline const CQR *GetCQR(const void *buf) {

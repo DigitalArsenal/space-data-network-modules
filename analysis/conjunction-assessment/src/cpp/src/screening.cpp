@@ -690,6 +690,8 @@ ConjunctionEvent assess_conjunction_polynomial(
     event.dse1 = event.tca_jd - event.obj1.epoch_jd;
     event.dse2 = event.tca_jd - event.obj2.epoch_jd;
 
+    event.radius1_m = radius1_m;
+    event.radius2_m = radius2_m;
     const double combined_radius_km = (radius1_m + radius2_m) / 1000.0;
     const auto probability = alfano_max_probability(event.min_range_km, combined_radius_km);
     event.max_probability = probability.max_probability;
@@ -754,7 +756,8 @@ std::optional<ConjunctionEvent> refine_coarse_hit_if_within_threshold(
     const ScreeningConfig& config,
     const ResidentScreeningIndex* resident_index)
 {
-    const double radius_m = config.combined_radius_m / 2.0;
+    const double radius1_m = object_radius_m(config, hit.obj1_index);
+    const double radius2_m = object_radius_m(config, hit.obj2_index);
     const auto window = build_refinement_window(
         hit,
         slice_start_jd,
@@ -770,8 +773,8 @@ std::optional<ConjunctionEvent> refine_coarse_hit_if_within_threshold(
                 obj1,
                 obj2,
                 solution.tca_jd,
-                radius_m,
-                radius_m);
+                radius1_m,
+                radius2_m);
             if (has_error()) return std::nullopt;
             if (!is_conjunction_within_threshold(event.min_range_km, config.threshold_km)) {
                 return std::nullopt;
@@ -790,8 +793,8 @@ std::optional<ConjunctionEvent> refine_coarse_hit_if_within_threshold(
                 slice_start_jd,
                 std::max(0.0, slice_end_jd - slice_start_jd),
                 config,
-                radius_m,
-                radius_m);
+                radius1_m,
+                radius2_m);
             if (!is_conjunction_within_threshold(event.min_range_km, config.threshold_km)) {
                 return std::nullopt;
             }
@@ -803,8 +806,8 @@ std::optional<ConjunctionEvent> refine_coarse_hit_if_within_threshold(
                     slice_start_jd,
                     slice_end_jd,
                     event.tca_jd,
-                    radius_m,
-                    radius_m);
+                    radius1_m,
+                    radius2_m);
                 if (!is_conjunction_within_threshold(polished_event.min_range_km, config.threshold_km)) {
                     return std::nullopt;
                 }
@@ -831,8 +834,8 @@ std::optional<ConjunctionEvent> refine_coarse_hit_if_within_threshold(
             window.start_jd,
             window.duration_days(),
             config,
-            radius_m,
-            radius_m);
+            radius1_m,
+            radius2_m);
         if (!is_conjunction_within_threshold(event.min_range_km, config.threshold_km)) {
             return std::nullopt;
         }
@@ -844,8 +847,8 @@ std::optional<ConjunctionEvent> refine_coarse_hit_if_within_threshold(
                 window.start_jd,
                 window.end_jd,
                 event.tca_jd,
-                radius_m,
-                radius_m);
+                radius1_m,
+                radius2_m);
             if (!is_conjunction_within_threshold(polished_event.min_range_km, config.threshold_km)) {
                 return std::nullopt;
             }
@@ -1913,8 +1916,6 @@ RefinedEncounters refine_encounters(
         resident_index == nullptr ||
         resident_index->screening_mode ==
             ScreeningMode::exact_only;
-    const double radius_m = config.combined_radius_m / 2.0;
-
     // Each event carries the objects of the encounter it came from.
     struct RefinedEvent {
         ConjunctionEvent event;
@@ -1938,13 +1939,16 @@ RefinedEncounters refine_encounters(
                 for (const auto& at : solved) {
                     auto event = assess_conjunction_at_tca(
                         *sources[at.obj1_index], *sources[at.obj2_index],
-                        at.tca_jd, radius_m, radius_m);
+                        at.tca_jd, object_radius_m(config, at.obj1_index),
+                        object_radius_m(config, at.obj2_index));
                     if (has_error()) {
                         failed_out.emplace_back(at.obj1_index, at.obj2_index);
                         clear_error();
                         continue;
                     }
                     if (is_conjunction_within_threshold(event.min_range_km, config.threshold_km)) {
+                        event.radius_basis1 = object_radius_basis(config, at.obj1_index);
+                        event.radius_basis2 = object_radius_basis(config, at.obj2_index);
                         events_out.push_back({std::move(event), {at.obj1_index, at.obj2_index}});
                     }
                 }
@@ -1958,6 +1962,8 @@ RefinedEncounters refine_encounters(
                     return;
                 }
                 if (event.has_value()) {
+                    event->radius_basis1 = object_radius_basis(config, hit.obj1_index);
+                    event->radius_basis2 = object_radius_basis(config, hit.obj2_index);
                     events_out.push_back({std::move(*event), {hit.obj1_index, hit.obj2_index}});
                 }
             }

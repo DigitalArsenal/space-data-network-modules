@@ -29,6 +29,7 @@
 #include "conjunction/kdtree.h"
 #include "conjunction/gp_json.h"
 #include "conjunction/screening_internal.h"
+#include <cstdint>
 #include <vector>
 #include <functional>
 #include <atomic>
@@ -63,6 +64,11 @@ struct ScreeningConfig {
     double coarse_step_sec = 60.0;  // Base coarse step size
     double fine_tol_sec = 0.001;    // TCA refinement tolerance
     double combined_radius_m = 10.0; // Combined hard-body radius
+    // Each object's hard-body radius (m) and the caller's code for where it
+    // came from, by source index. Absent entries are half combined_radius_m
+    // with basis 0.
+    std::vector<double> hard_body_radius_m;
+    std::vector<uint8_t> radius_basis;
     int num_threads = 4;            // Thread pool size
     bool use_kdtree = true;         // Use KD-tree (vs brute force)
     bool use_dynamic_window = true; // Adaptive step size
@@ -76,6 +82,15 @@ struct ScreeningConfig {
     double max_step_sec = 120.0;    // Maximum step when objects far apart
     double close_threshold_km = 100.0; // Distance to start reducing step
 };
+
+/// An object's hard-body radius (m) under the config.
+inline double object_radius_m(const ScreeningConfig& config, uint32_t index) {
+    return index < config.hard_body_radius_m.size() ? config.hard_body_radius_m[index]
+                                                    : config.combined_radius_m / 2.0;
+}
+inline uint8_t object_radius_basis(const ScreeningConfig& config, uint32_t index) {
+    return index < config.radius_basis.size() ? config.radius_basis[index] : 0;
+}
 
 /// Screening progress callback
 using ProgressCallback = std::function<void(double fraction, const std::string& status)>;

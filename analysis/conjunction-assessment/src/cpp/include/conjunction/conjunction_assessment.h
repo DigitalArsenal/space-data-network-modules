@@ -67,6 +67,10 @@ struct ConjunctionEvent {
     double max_probability = 0.0;
     double dilution_threshold_km = 0.0;
     std::string probability_method = "ALFANO-MAXPROB";
+    // Each object's hard-body radius (m); their sum gives the probability.
+    // The basis codes are the caller's (screening passes them through).
+    double radius1_m = 0.0, radius2_m = 0.0;
+    uint8_t radius_basis1 = 0, radius_basis2 = 0;
     bool has_covariance = false;
     double covariance_probability = 0.0;
 

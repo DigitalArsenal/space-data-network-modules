@@ -528,6 +528,8 @@ static ConjunctionEvent build_conjunction_event(
     event.dse1 = event.tca_jd - obj1.epoch_jd();
     event.dse2 = event.tca_jd - obj2.epoch_jd();
 
+    event.radius1_m = radius1_m;
+    event.radius2_m = radius2_m;
     double combined_radius_km = (radius1_m + radius2_m) / 1000.0;
     auto prob = alfano_max_probability(event.min_range_km, combined_radius_km);
     event.max_probability = prob.max_probability;

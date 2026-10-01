@@ -53,6 +53,15 @@ and no source here supplies one yet, so:
   `write_cdm_xml` refuse a CDM without covariance (`covariance-unavailable`),
   since CCSDS requires it, as does `compute_pc_from_cdm`.
 
+Each event reports both objects' hard-body radii and where each came from
+(`PRIMARY/SECONDARY_HARD_BODY_RADIUS_M`, `*_RADIUS_BASIS`), and
+`COMBINED_RADIUS_M` is their sum. A pair request gives the radii itself
+(`SUPPLIED`). In a screen, each source's radius is its `HARD_BODY_RADIUS_M`
+(`SUPPLIED`), else half its catalog entry's `SIZE` (`CATALOG_SIZE`), else
+`sqrt(RCS / pi)` (`RADAR_CROSS_SECTION`, a radar measure rather than a size),
+else half the request's `COMBINED_RADIUS_M` (`REQUEST_DEFAULT`). Events also
+state each object's covariance basis; `NONE` until a source supplies one.
+
 See the Evidence-Supported ASO Catalog whitepaper, sections 5, 9 and 16.2.
 
 `signCdmOutput(...)` remains a Node.js host utility for signing emitted CDM bytes and

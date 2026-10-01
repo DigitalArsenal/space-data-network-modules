@@ -95,6 +95,7 @@ struct ConjunctionEvent2 {
 
   Covariance3x3 cov1, cov2;
   double combined_radius_km = 0.01;
+  double radius1_m = 5.0, radius2_m = 5.0;
 
   // Days since epoch
   double dse1 = 0, dse2 = 0;

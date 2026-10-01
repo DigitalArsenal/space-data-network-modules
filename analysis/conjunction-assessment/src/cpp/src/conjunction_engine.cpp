@@ -328,6 +328,8 @@ ConjunctionEvent2 ConjunctionEngine::assess(
     event.dse1 = event.tca_jd - obj1.epoch_jd();
     event.dse2 = event.tca_jd - obj2.epoch_jd();
 
+    event.radius1_m = radius1_m_;
+    event.radius2_m = radius2_m_;
     event.combined_radius_km = (radius1_m_ + radius2_m_) / 1000.0;
     if (!cov1 || !cov2) {
         const auto bound = alfano_max_probability(event.miss_distance_km, event.combined_radius_km);
