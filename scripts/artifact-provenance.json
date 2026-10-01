@@ -3495,6 +3495,32 @@
         "sdkCommit": "75b2160af58ba0519f2831a93a9c8f720bffc176"
       },
       "declaration": null
+    },
+    "analysis/reference-states/dist/isomorphic/module.wasm": {
+      "sha256": "61fde7409de08db0f37d0fcc8c696f2dff10dd04aec3b51453181350c012eb8e",
+      "bytes": 285621,
+      "module": "analysis/reference-states",
+      "lastCommit": "773892d972ae2bfd110925252bc5af09d97b7078",
+      "lastCommitDate": "2026-10-01T18:16:37-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": {
+        "superRepoCommit": "2f3da7b96215f1d26b08bf83a8d38265ac9159d3",
+        "sdkCommit": "cf1a1276bdc6f400e13372e34b6ff30882d38f95"
+      },
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
     }
   }
 }
