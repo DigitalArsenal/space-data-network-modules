@@ -1870,34 +1870,29 @@ std::string jsonString(const std::string &s) {
 }
 } // namespace ca_cqr
 
-// One block of coarse steps in the GPU layout (screening_tight.h).
-// Inputs: request ($CQR WINDOW_REQUEST on a resident index), block
-// ("CAB1", u32 first_step, u32 step_count). Outputs: grid ("CAG1", u32
-// first_step, u32 step_count, u32 objects, then f32 states [step][object][8]
-// and f32 bands [object][2]) and report (JSON: the block and its exclusions).
-extern "C" int coarse_grid() {
-  using namespace ca_cqr;
-  ScreeningConfig c;
-  TightSet t;
-  if (!tightRequest("coarse_grid", c, t))
-    return 400;
+namespace ca_cqr {
+// The block ("CAB1", u32 first_step, u32 step_count) of a tight request.
+bool tightBlock(const char *method, ScreeningConfig &c, TightSet &t, uint32_t max_steps,
+                uint32_t &first, uint32_t &count, int32_t &last) {
+  if (!tightRequest(method, c, t))
+    return false;
   auto b = reader(input("block"));
-  uint32_t first = 0, count = 0;
   if (!b.tag("CAB1") || !b.get(first) || !b.get(count))
-    return error("invalid-block", "block must be CAB1, u32 first_step, u32 step_count."), 400;
-  const int32_t last = tight_last_coarse_step(c);
-  if (count == 0 || count > 256 || static_cast<int64_t>(first) + count - 1 > last)
-    return error("invalid-block", "The block must hold 1 to 256 steps of the window (steps 0.." + std::to_string(last) + ")."), 400;
-  auto g = tight_coarse_grid_block(t.refs, c, static_cast<int32_t>(first), static_cast<int32_t>(count), {});
-  std::vector<uint8_t> out(16 + (g.states.size() + g.bands.size()) * sizeof(float));
-  const uint32_t header[4] = {0x31474143u /* "CAG1" */, first, count, g.objects};
-  std::memcpy(out.data(), header, 16);
-  std::memcpy(out.data() + 16, g.states.data(), g.states.size() * sizeof(float));
-  std::memcpy(out.data() + 16 + g.states.size() * sizeof(float), g.bands.data(), g.bands.size() * sizeof(float));
+    return error("invalid-block", "block must be CAB1, u32 first_step, u32 step_count.");
+  last = tight_last_coarse_step(c);
+  if (count == 0 || count > max_steps || static_cast<int64_t>(first) + count - 1 > last)
+    return error("invalid-block", "The block must hold 1 to " + std::to_string(max_steps) +
+                                      " steps of the window (steps 0.." + std::to_string(last) + ").");
+  return true;
+}
+// report (JSON): the block, the window's last step, and the objects that
+// cannot be evaluated in it (index, earliest failing JD, reason).
+bool pushBlockReport(uint32_t first, uint32_t count, int32_t last, size_t objects,
+                     const std::map<uint32_t, ExcludedObject> &excluded) {
   std::string report = "{\"first_step\":" + std::to_string(first) + ",\"step_count\":" + std::to_string(count) +
-                       ",\"last_step\":" + std::to_string(last) + ",\"objects\":" + std::to_string(g.objects) + ",\"excluded\":[";
+                       ",\"last_step\":" + std::to_string(last) + ",\"objects\":" + std::to_string(objects) + ",\"excluded\":[";
   bool comma = false;
-  for (const auto &[index, x] : g.excluded) {
+  for (const auto &[index, x] : excluded) {
     char jd[40];
     std::snprintf(jd, sizeof jd, "%.17g", x.first_failure_jd);
     report += std::string(comma ? "," : "") + "{\"index\":" + std::to_string(index) + ",\"first_failure_jd\":" + jd +
@@ -1905,18 +1900,71 @@ extern "C" int coarse_grid() {
     comma = true;
   }
   report += "]}";
+  return plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
+                               reinterpret_cast<const uint8_t *>(report.data()),
+                               static_cast<uint32_t>(report.size())) >= 0;
+}
+} // namespace ca_cqr
+
+// One block of coarse steps in the GPU layout (screening_tight.h).
+// Inputs: request ($CQR WINDOW_REQUEST on a resident index), block
+// ("CAB1", u32 first_step, u32 step_count, 1-256 steps). Outputs: grid
+// ("CAG1", u32 first_step, u32 step_count, u32 objects, then f32 states
+// [step][object][8] and f32 bands [object][2]) and report.
+extern "C" int coarse_grid() {
+  using namespace ca_cqr;
+  ScreeningConfig c;
+  TightSet t;
+  uint32_t first = 0, count = 0;
+  int32_t last = 0;
+  if (!tightBlock("coarse_grid", c, t, 256, first, count, last))
+    return 400;
+  auto g = tight_coarse_grid_block(t.refs, c, static_cast<int32_t>(first), static_cast<int32_t>(count), {});
+  std::vector<uint8_t> out(16 + (g.states.size() + g.bands.size()) * sizeof(float));
+  const uint32_t header[4] = {0x31474143u /* "CAG1" */, first, count, g.objects};
+  std::memcpy(out.data(), header, 16);
+  std::memcpy(out.data() + 16, g.states.data(), g.states.size() * sizeof(float));
+  std::memcpy(out.data() + 16 + g.states.size() * sizeof(float), g.bands.data(), g.bands.size() * sizeof(float));
   if (plugin_push_output_ex("grid", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 16,
                             out.data(), static_cast<uint32_t>(out.size())) < 0)
     return 500;
-  return plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                               reinterpret_cast<const uint8_t *>(report.data()),
-                               static_cast<uint32_t>(report.size())) < 0 ? 500 : 0;
+  return pushBlockReport(first, count, last, g.objects, g.excluded) ? 0 : 500;
+}
+
+// The CPU counterpart of coarse_grid plus the GPU search: the candidates of a
+// block of coarse steps, found in the module (tight_search_block). Inputs:
+// request and block as coarse_grid (up to 65,535 steps). Outputs: candidates
+// ("CAC1", u32 count, then count x (u32 obj1, u32 obj2, u32 step)), the
+// frame refine_candidates takes, and report.
+extern "C" int search_candidates() {
+  using namespace ca_cqr;
+  ScreeningConfig c;
+  TightSet t;
+  uint32_t first = 0, count = 0;
+  int32_t last = 0;
+  if (!tightBlock("search_candidates", c, t, 65535, first, count, last))
+    return 400;
+  auto found = tight_search_block(t.refs, c, static_cast<int32_t>(first), static_cast<int32_t>(count));
+  if (conjunction::has_error())
+    return error("screening-failed", conjunction::error_message()), 422;
+  std::vector<uint32_t> out(2 + found.candidates.size() * 3);
+  std::memcpy(out.data(), "CAC1", 4);
+  out[1] = static_cast<uint32_t>(found.candidates.size());
+  for (size_t k = 0; k < found.candidates.size(); ++k) {
+    out[2 + 3 * k] = found.candidates[k].obj1;
+    out[3 + 3 * k] = found.candidates[k].obj2;
+    out[4 + 3 * k] = static_cast<uint32_t>(found.candidates[k].step);
+  }
+  if (plugin_push_output_ex("candidates", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 4,
+                            reinterpret_cast<const uint8_t *>(out.data()), static_cast<uint32_t>(out.size() * 4)) < 0)
+    return 500;
+  return pushBlockReport(first, count, last, t.refs.size(), found.excluded) ? 0 : 500;
 }
 
 // Refines candidate pairs into the catalog result screen_catalog returns.
 // Inputs: request as coarse_grid; candidates ("CAC1", u32 count,
-// then count x (u32 obj1, u32 obj2, u32 step)) - absent: scan every pair on
-// the CPU; excluded ("CAX1", u32 count, then count x (u32 index, f64
+// then count x (u32 obj1, u32 obj2, u32 step)) - absent: search every coarse
+// step in the module, as search_candidates does; excluded ("CAX1", u32 count, then count x (u32 index, f64
 // first_failure_jd)) - the exclusions coarse_grid reported for the window.
 extern "C" int refine_candidates() {
   using namespace ca_cqr;

@@ -25,6 +25,7 @@
     "destroy_screening_index": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_destroy_screening_index",
     "version": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_version",
     "coarse_grid": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_coarse_grid",
+    "search_candidates": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_search_candidates",
     "refine_candidates": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_refine_candidates"
   },
   "capabilities": []

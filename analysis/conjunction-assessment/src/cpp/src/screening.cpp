@@ -2699,7 +2699,6 @@ std::vector<ConjunctionEvent> screen_tight_candidates(
     const int workers = std::max(1, config.num_threads);
     struct Hit { uint32_t lo, hi; int32_t step; double closest_km; };
     std::vector<std::vector<Hit>> hits(workers);
-    std::vector<std::map<uint32_t, ExcludedObject>> scan_excluded(workers);
     std::vector<uint64_t> propagations(workers, 0);
 
     const auto run = [&](auto&& body, int64_t count) {
@@ -2716,7 +2715,16 @@ std::vector<ConjunctionEvent> screen_tight_candidates(
         body(0, 0, count);
     };
 
-    if (candidates) {
+    // Without candidates, search every coarse step of the window here (the
+    // CPU counterpart of the GPU path), then re-test the same way.
+    TightSearch searched;
+    if (!candidates) {
+        searched = tight_search_block(sources, config, 0, last_step + 1);
+        for (const auto& [i, x] : searched.excluded) record_exclusion(excluded, i, x.first_failure_jd, x.reason);
+        candidates = &searched.candidates;
+        propagations[0] += searched.samples;
+    }
+    {
         run([&](int w, int64_t lo, int64_t hi) {
             for (int64_t c = lo; c < hi; ++c) {
                 const auto& k = (*candidates)[c];
@@ -2738,42 +2746,6 @@ std::vector<ConjunctionEvent> screen_tight_candidates(
                 }
             }
         }, static_cast<int64_t>(candidates->size()));
-    } else {
-        // CPU scan: every pair at every coarse step, the same test.
-        run([&](int w, int64_t lo, int64_t hi) {
-            std::vector<StateVector> states(n);
-            std::vector<double> deviation(n);
-            std::string failure;
-            std::vector<uint8_t> ok(n);
-            std::vector<uint8_t> dead(n, 0);
-            for (int64_t step = lo; step < hi; ++step) {
-                const double jd = config.start_jd + step * step_days;
-                for (size_t i = 0; i < n; ++i) {
-                    ok[i] = 0;
-                    if (dead[i]) continue;
-                    ++propagations[w];
-                    if (!tight_sample(*sources[i], jd, h, states[i], deviation[i], failure)) {
-                        record_exclusion(scan_excluded[w], static_cast<uint32_t>(i), jd, failure);
-                        dead[i] = 1;
-                        continue;
-                    }
-                    ok[i] = 1;
-                }
-                for (size_t i = 0; i < n; ++i) {
-                    if (!ok[i]) continue;
-                    for (size_t j = i + 1; j < n; ++j) {
-                        if (!ok[j]) continue;
-                        double closest = 0.0;
-                        if (tight_pair_may_close(states[i], deviation[i], states[j], deviation[j],
-                                                 config.threshold_km, h, &closest)) {
-                            hits[w].push_back({static_cast<uint32_t>(i), static_cast<uint32_t>(j),
-                                               static_cast<int32_t>(step), closest});
-                        }
-                    }
-                }
-            }
-        }, static_cast<int64_t>(last_step) + 1);
-        for (const auto& part : scan_excluded) merge_exclusions(excluded, part);
     }
 
     // Steps of one pair in increasing order make runs; runs join into encounters.

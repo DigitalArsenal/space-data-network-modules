@@ -68,15 +68,16 @@ function sortTriples(triples, objects) {
  * @param {(bytes: Uint8Array) => {EVENTS: object[], FINAL_CHUNK: boolean, STATISTICS: object}} o.decodeCatalogResult
  * @param {Uint8Array} o.request  $CQR WINDOW_REQUEST on a resident index with no
  *   primaries (ALFANO_MAXIMUM controls).
- * @param {{screenBlock: Function}} o.screener  From gpu/gpuScreen.mjs.
+ * @param {{screenBlock: Function}} [o.screener]  From gpu/gpuScreen.mjs; absent, the module
+ *   searches on the CPU (search_candidates), for hosts without WebGPU.
  * @param {number} o.thresholdKm @param {number} o.coarseStepSec  As in the request.
- * @param {number} [o.blockSteps=32]  Coarse steps per coarse_grid call.
+ * @param {number} [o.blockSteps]  Coarse steps per call: 32 per coarse_grid, 120 per search_candidates.
  * @param {number} [o.candidatesPerRefine=150000]  Candidates per refine call (halved where its events overflow staging).
  * @param {(stage: string, done: number, total: number) => void} [o.onProgress]
  */
 export async function screenAllVsAllOnGpu(o) {
   const { invoke, decodeCatalogResult, request, screener, thresholdKm, coarseStepSec } = o;
-  const blockSteps = o.blockSteps ?? 32, perRefine = o.candidatesPerRefine ?? 150000;
+  const blockSteps = o.blockSteps ?? (o.screener ? 32 : 120), perRefine = o.candidatesPerRefine ?? 150000;
   const progress = o.onProgress ?? (() => {});
   const requestInput = [sds('request', 'CQR', request)];
   const port = (outputs, id) => outputs.find((x) => x.portId === id)?.payload;
@@ -85,13 +86,15 @@ export async function screenAllVsAllOnGpu(o) {
   const blocks = [];
   let lastStep = null, objects = 0, candidateCount = 0;
 
-  // The first call grids step 0 alone and reports the window's last step.
+  // The first call covers step 0 alone and reports the window's last step.
+  // With a GPU screener: coarse_grid samples, the GPU proposes. Without one:
+  // search_candidates finds the same candidates in the module.
   for (let first = 0; lastStep === null || first <= lastStep;) {
     const count = lastStep === null ? 1 : Math.min(blockSteps, lastStep - first + 1);
     let t = performance.now();
-    const response = await invoke('coarse_grid', [...requestInput,
+    const response = await invoke(screener ? 'coarse_grid' : 'search_candidates', [...requestInput,
       control('block', 'application/vnd.sdn.ca-grid-block', blockFrame(first, count))]);
-    if (response.statusCode !== 0) throw new Error(`coarse_grid: ${response.errorCode}: ${response.errorMessage}`);
+    if (response.statusCode !== 0) throw new Error(`${screener ? 'coarse_grid' : 'search_candidates'}: ${response.errorCode}: ${response.errorMessage}`);
     const out = response.outputs;
     timings.gridMs += performance.now() - t;
     const report = JSON.parse(new TextDecoder().decode(port(out, 'report')));
@@ -100,11 +103,19 @@ export async function screenAllVsAllOnGpu(o) {
     for (const x of report.excluded) {
       if (!excluded.has(x.index) || x.first_failure_jd < excluded.get(x.index)) excluded.set(x.index, x.first_failure_jd);
     }
-    t = performance.now();
-    const screened = await screener.screenBlock(port(out, 'grid'), { thresholdKm, halfStepSec: coarseStepSec / 2 });
-    timings.gpuMs += screened.gpuMs;
-    blocks.push(screened.triples);
-    candidateCount += screened.triples.length / 3;
+    let triples;
+    if (screener) {
+      t = performance.now();
+      const screened = await screener.screenBlock(port(out, 'grid'), { thresholdKm, halfStepSec: coarseStepSec / 2 });
+      timings.gpuMs += screened.gpuMs;
+      triples = screened.triples;
+    } else {
+      const frame = port(out, 'candidates');
+      const n = new DataView(frame.buffer, frame.byteOffset, frame.byteLength).getUint32(4, true);
+      triples = new Uint32Array(frame.slice(8, 8 + n * 12).buffer);
+    }
+    blocks.push(triples);
+    candidateCount += triples.length / 3;
     first += count;
     progress('screen', first, lastStep + 1);
   }

@@ -3,13 +3,15 @@
 //
 // usage: node scripts/run-all-vs-all-gpu.mjs --catalog <omm.uint32be.bin>
 //          [--propagator sgp4|hpop] [--start <jd>] [--days 3] [--window-hours 6]
-//          [--threshold-km 5] [--step-s 60] [--farm-workers N]
+//          [--threshold-km 5] [--step-s 60] [--farm-workers N] [--cpu]
 //          [--out summary.json] [--serve] [--port 0] [--timeout-s 7200]
 // The catalog is $OMM records, each prefixed by its u32 big-endian length.
 // One propagator per run. With --propagator hpop the runner hosts the HPOP
 // propagation farm (scripts/lib/hpopFarm.mjs) and serves each window's
 // trajectories to the page, exporting the next window while the page screens
-// the current one.
+// the current one. --cpu screens without WebGPU (the module's own search), as
+// a browser without a GPU does; scripts/run-all-vs-all-cpu.mjs runs the same
+// screen with no browser (Node or WasmEdge, as an SDN node runs modules).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -29,7 +31,7 @@ const { resolveChromeBinary } = await import(path.join(sdkTesting, 'parityLanes.
 const { values: o } = parseArgs({ options: {
   catalog: { type: 'string' }, propagator: { type: 'string', default: 'sgp4' }, start: { type: 'string', default: '2461314.5' },
   days: { type: 'string', default: '3' }, 'window-hours': { type: 'string' }, 'threshold-km': { type: 'string', default: '5' },
-  'step-s': { type: 'string', default: '60' }, 'farm-workers': { type: 'string' },
+  'step-s': { type: 'string', default: '60' }, 'farm-workers': { type: 'string' }, cpu: { type: 'boolean', default: false },
   out: { type: 'string' }, serve: { type: 'boolean', default: false }, port: { type: 'string', default: '0' },
   'timeout-s': { type: 'string', default: '7200' },
 } });
@@ -137,7 +139,7 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((resolve) => server.listen(Number(o.port), '127.0.0.1', resolve));
 const query = new URLSearchParams({ propagator: o.propagator, startJd: o.start, durationDays: o.days, windowHours,
-  thresholdKm: o['threshold-km'], coarseStepSec: o['step-s'] });
+  thresholdKm: o['threshold-km'], coarseStepSec: o['step-s'], ...(o.cpu ? { cpu: '1' } : {}) });
 const pageUrl = `http://127.0.0.1:${server.address().port}/?${query}`;
 
 if (o.serve) {
@@ -161,7 +163,7 @@ if (o.serve) {
     if (o.out) fs.writeFileSync(o.out, JSON.stringify(summary, null, 1) + '\n');
     const t = result.timings, s = (ms) => (ms / 1000).toFixed(1) + ' s';
     console.log(`${result.propagator}: ${result.objects} objects, ${o.days} days in ${result.windows.length} windows: ` +
-      `${result.candidates} GPU candidates, ${result.events.length} conjunctions, ${result.excluded.length} excluded, ${s(wallMs)} end to end ` +
+      `${result.candidates} candidates, ${result.events.length} conjunctions, ${result.excluded.length} excluded, ${s(wallMs)} end to end ` +
       `(page ${s(t.totalMs)}: load ${s(t.loadMs)}, window prep/wait ${s(t.prepareMs)}, grid ${s(t.gridMs)}, GPU ${s(t.gpuMs)}, refine ${s(t.refineMs)}` +
       (farmInfo ? `; farm: derive ${s(farmInfo.deriveMs)}, ingest ${s(farmInfo.ingestMs)}, exports ${s(farmInfo.windowExportMs.reduce((a, b) => a + (b ?? 0), 0))}` : '') +
       `; ${result.adapter})`);

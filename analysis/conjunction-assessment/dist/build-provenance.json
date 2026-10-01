@@ -28,15 +28,15 @@
       "PIV": "857589cdd5fc3e784baada0f261f1b3d97475361692638447c75ccaee7800eff"
     }
   },
-  "sdk": "0.8.25",
+  "sdk": "0.8.26",
   "compiler": "wasm32-wasi-clang++ (wasi-threads)",
   "threadModel": "emscripten-pthreads",
   "runtimeTargets": [
     "browser",
     "wasmedge"
   ],
-  "sourceSha256": "7775261cd22be2b3dd8763a96edff0caf70131d7460fb4c8a482b6a88c3faa54",
-  "wasmSha256": "3ff62e0fd71245f71337c07bf98e0257709f8ad35ea725b8be306f4e896e025d",
+  "sourceSha256": "e22aea01233f48f58aa09804d98e9c4d90c7ad264e1c41e161c00ec772f87c1c",
+  "wasmSha256": "6b73fd49a7452c38346fc280d6e752b06160b09e40042d3ca987afd8ae82bec3",
   "threadFeatures": {
     "hasSharedMemory": true,
     "sharedMemory": {

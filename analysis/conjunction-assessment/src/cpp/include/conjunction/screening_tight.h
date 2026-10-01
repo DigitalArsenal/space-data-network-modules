@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <map>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,24 @@ bool tight_pair_may_close(const StateVector& a, double deviation_a_km,
                           const StateVector& b, double deviation_b_km,
                           double threshold_km, double half_step_sec,
                           double* closest_km = nullptr);
+
+/// Reusable buffers for tight_box_pairs (one per worker).
+struct TightGridScratch {
+    std::vector<double> boxes;                       // [object][lo x, y, z, hi x, y, z]
+    std::vector<std::pair<uint64_t, uint32_t>> cells;   // (cell key, object)
+    std::vector<uint32_t> big;                       // objects spanning many cells
+};
+
+/// The pairs (i < j) of one coarse step that may close: those whose swept
+/// boxes overlap. An object's box encloses its straight-line segment over
+/// [-h, h] widened by threshold/2 + its deviation bound, so every pair the
+/// tight test can pass is returned; pairs whose boxes are apart cannot close.
+/// A uniform grid (cell size from the box edges) finds them in about linear
+/// time; a pair is reported once, in the cell holding the low corner of the
+/// two boxes' overlap. ok[i] = 0 skips object i.
+void tight_box_pairs(const std::vector<StateVector>& states, const std::vector<double>& deviation_km,
+                     const std::vector<uint8_t>& ok, double threshold_km, double half_step_sec,
+                     TightGridScratch& scratch, std::vector<std::pair<uint32_t, uint32_t>>& pairs);
 
 /// One block of coarse steps of the window, in the GPU layout: for step s of
 /// the block and object n, states[(s * objects + n) * 8 + 0..7] =
@@ -72,8 +91,20 @@ struct TightCandidate {
     int32_t step = 0;
 };
 
-/// Re-tests candidates in f64 (or, when candidates is null, scans every pair
-/// at every coarse step of the window), joins the passing steps of each pair
+/// The candidates of steps [first_step, first_step + step_count): every pair
+/// tight_box_pairs returns that passes the tight test, on config.num_threads
+/// workers, with the objects that cannot be evaluated (earliest epoch each).
+/// The CPU counterpart of coarse_grid plus the GPU kernel.
+struct TightSearch {
+    std::vector<TightCandidate> candidates;
+    std::map<uint32_t, ExcludedObject> excluded;
+    uint64_t samples = 0;
+};
+TightSearch tight_search_block(const SourceRefs& sources, const ScreeningConfig& config,
+                               int32_t first_step, int32_t step_count);
+
+/// Re-tests candidates in f64 (or, when candidates is null, searches every
+/// coarse step of the window itself with tight_box_pairs: no GPU needed), joins the passing steps of each pair
 /// into encounters, drops pairs with an excluded object, and refines them as
 /// screen_catalog does. excluded is completed with the scan's own exclusions
 /// (CPU scan) and copied into stats.excluded_objects.

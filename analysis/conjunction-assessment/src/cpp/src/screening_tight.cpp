@@ -130,4 +130,141 @@ CoarseGridBlock tight_coarse_grid_block(const SourceRefs& sources, const Screeni
     return block;
 }
 
+void tight_box_pairs(const std::vector<StateVector>& states, const std::vector<double>& deviation_km,
+                     const std::vector<uint8_t>& ok, double threshold_km, double h,
+                     TightGridScratch& scratch, std::vector<std::pair<uint32_t, uint32_t>>& pairs) {
+    pairs.clear();
+    const size_t n = states.size();
+    auto& box = scratch.boxes;
+    box.assign(n * 6, 0.0);
+    std::vector<double> edges;
+    edges.reserve(n);
+    for (size_t i = 0; i < n; ++i) {
+        if (!ok[i]) continue;
+        const double pad = 0.5 * threshold_km + deviation_km[i];
+        const double p[3] = {states[i].x, states[i].y, states[i].z};
+        const double d[3] = {states[i].vx * h, states[i].vy * h, states[i].vz * h};
+        double edge = 0;
+        for (int a = 0; a < 3; ++a) {
+            box[i * 6 + a] = std::min(p[a] - d[a], p[a] + d[a]) - pad;
+            box[i * 6 + 3 + a] = std::max(p[a] - d[a], p[a] + d[a]) + pad;
+            edge = std::max(edge, box[i * 6 + 3 + a] - box[i * 6 + a]);
+        }
+        edges.push_back(edge);
+    }
+    if (edges.size() < 2) return;
+    // Cell size: the 99th-percentile box edge, so nearly every box covers at
+    // most 2 cells per axis. Larger boxes are paired with every object.
+    const size_t q = std::min(edges.size() - 1, edges.size() * 99 / 100);
+    std::nth_element(edges.begin(), edges.begin() + q, edges.end());
+    const double cell = std::max(edges[q], 1e-3);
+    const auto index = [cell](double x) { return static_cast<int64_t>(std::floor(x / cell)); };
+    const auto key = [](int64_t x, int64_t y, int64_t z) {
+        constexpr int64_t bias = int64_t{1} << 20;
+        return (static_cast<uint64_t>(x + bias) << 42) | (static_cast<uint64_t>(y + bias) << 21) |
+               static_cast<uint64_t>(z + bias);
+    };
+    const auto overlap = [&](size_t i, size_t j) {
+        for (int a = 0; a < 3; ++a)
+            if (box[i * 6 + a] > box[j * 6 + 3 + a] || box[j * 6 + a] > box[i * 6 + 3 + a]) return false;
+        return true;
+    };
+    auto& cells = scratch.cells;
+    auto& big = scratch.big;
+    cells.clear();
+    big.clear();
+    std::vector<uint8_t> is_big(n, 0);
+    for (size_t i = 0; i < n; ++i) {
+        if (!ok[i]) continue;
+        int64_t lo[3], hi[3];
+        for (int a = 0; a < 3; ++a) { lo[a] = index(box[i * 6 + a]); hi[a] = index(box[i * 6 + 3 + a]); }
+        if (hi[0] - lo[0] > 3 || hi[1] - lo[1] > 3 || hi[2] - lo[2] > 3) {
+            is_big[i] = 1;
+            big.push_back(static_cast<uint32_t>(i));
+            continue;
+        }
+        for (int64_t x = lo[0]; x <= hi[0]; ++x)
+            for (int64_t y = lo[1]; y <= hi[1]; ++y)
+                for (int64_t z = lo[2]; z <= hi[2]; ++z) cells.push_back({key(x, y, z), static_cast<uint32_t>(i)});
+    }
+    std::sort(cells.begin(), cells.end());
+    for (size_t a = 0; a < cells.size();) {
+        size_t b = a;
+        while (b < cells.size() && cells[b].first == cells[a].first) ++b;
+        for (size_t u = a; u < b; ++u) {
+            for (size_t v = u + 1; v < b; ++v) {
+                const uint32_t i = cells[u].second, j = cells[v].second;
+                if (!overlap(i, j)) continue;
+                // Count the pair only in the cell holding its overlap's low corner.
+                const uint64_t home = key(index(std::max(box[i * 6], box[j * 6])),
+                                          index(std::max(box[i * 6 + 1], box[j * 6 + 1])),
+                                          index(std::max(box[i * 6 + 2], box[j * 6 + 2])));
+                if (home == cells[a].first) pairs.push_back({std::min(i, j), std::max(i, j)});
+            }
+        }
+        a = b;
+    }
+    for (const uint32_t i : big) {
+        for (size_t j = 0; j < n; ++j) {
+            if (!ok[j] || j == i || (is_big[j] && j < i) || !overlap(i, j)) continue;
+            pairs.push_back({std::min<uint32_t>(i, static_cast<uint32_t>(j)), std::max<uint32_t>(i, static_cast<uint32_t>(j))});
+        }
+    }
+}
+
+TightSearch tight_search_block(const SourceRefs& sources, const ScreeningConfig& config,
+                               int32_t first_step, int32_t step_count) {
+    const size_t n = sources.size();
+    const double step_days = config.coarse_step_sec / 86400.0;
+    const double h = 0.5 * config.coarse_step_sec;
+    const int workers = std::max(1, config.num_threads);
+    std::vector<std::vector<TightCandidate>> found(workers);
+    std::vector<std::map<uint32_t, ExcludedObject>> excluded(workers);
+    std::vector<uint64_t> samples(workers, 0);
+    for_blocks(step_count, workers, [&](int w, int64_t lo, int64_t hi) {
+        clear_error();
+        std::vector<StateVector> states(n);
+        std::vector<double> deviation(n);
+        std::vector<uint8_t> ok(n), dead(n, 0);
+        std::string failure;
+        TightGridScratch scratch;
+        std::vector<std::pair<uint32_t, uint32_t>> pairs;
+        for (int64_t s = lo; s < hi; ++s) {
+            const int32_t step = first_step + static_cast<int32_t>(s);
+            const double jd = config.start_jd + step * step_days;
+            for (size_t i = 0; i < n; ++i) {
+                ok[i] = 0;
+                if (dead[i]) continue;
+                ++samples[w];
+                if (!tight_sample(*sources[i], jd, h, states[i], deviation[i], failure)) {
+                    auto& x = excluded[w][static_cast<uint32_t>(i)];
+                    if (x.first_failure_jd == 0.0 || jd < x.first_failure_jd) {
+                        x.index = static_cast<uint32_t>(i);
+                        x.first_failure_jd = jd;
+                        x.reason = failure;
+                    }
+                    dead[i] = 1;
+                    continue;
+                }
+                ok[i] = 1;
+            }
+            tight_box_pairs(states, deviation, ok, config.threshold_km, h, scratch, pairs);
+            for (const auto& [i, j] : pairs) {
+                if (tight_pair_may_close(states[i], deviation[i], states[j], deviation[j], config.threshold_km, h))
+                    found[w].push_back({i, j, step});
+            }
+        }
+    });
+    TightSearch out;
+    for (int w = 0; w < workers; ++w) {
+        out.candidates.insert(out.candidates.end(), found[w].begin(), found[w].end());
+        out.samples += samples[w];
+        for (const auto& [i, x] : excluded[w]) {
+            auto it = out.excluded.find(i);
+            if (it == out.excluded.end() || x.first_failure_jd < it->second.first_failure_jd) out.excluded[i] = x;
+        }
+    }
+    return out;
+}
+
 } // namespace conjunction

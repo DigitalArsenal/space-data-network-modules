@@ -94,11 +94,13 @@ async function residentWindow(harness, sources, startJd, durationDays, frame) {
   return { WINDOW_REQUEST: { INSTANCE, SCREENING_INDEX_HANDLE, CONTROLS: controls(startJd, durationDays), EVALUATION_FRAME: earthFrame(frame) } };
 }
 
-async function gpuPath(harness, windowRecord) {
+// screener: everyPair (every pair proposed; the module's f64 test decides),
+// or null (the module's own CPU search, search_candidates).
+async function gpuPath(harness, windowRecord, screener = everyPair) {
   const windowRequest = encodeCqr(flatc, windowRecord);
   return screenAllVsAllOnGpu({
     invoke: (methodId, inputs) => harness.invoke({ methodId, inputs }),
-    decodeCatalogResult, request: windowRequest, screener: everyPair, thresholdKm: THRESHOLD_KM, coarseStepSec: STEP_S,
+    decodeCatalogResult, request: windowRequest, screener, thresholdKm: THRESHOLD_KM, coarseStepSec: STEP_S,
   });
 }
 
@@ -121,6 +123,10 @@ test('SGP4 element sets: the GPU path reports screen_catalog\'s conjunctions and
     const run = await gpuPath(harness, windowRecord);
     assertSameEvents(run.events, reference.events, 'candidate path');
     assert.deepEqual(excludedNorads(run.excludedRecords), excludedNorads(reference.excluded));
+
+    const cpu = await gpuPath(harness, windowRecord, null);
+    assertSameEvents(cpu.events, reference.events, 'CPU search');
+    assert.deepEqual(excludedNorads(cpu.excludedRecords), excludedNorads(reference.excluded));
   } finally {
     await harness.destroy?.();
   }
@@ -137,6 +143,8 @@ test('HPOP trajectories (PPE, GCRF, TDB): the GPU path finds every approach', as
     const scan = await drain(harness, 'refine_candidates', [request(windowRecord)]);
     const run = await gpuPath(harness, windowRecord);
     assertSameEvents(run.events, scan.events, 'candidate path');
+    const cpu = await gpuPath(harness, windowRecord, null);
+    assertSameEvents(cpu.events, scan.events, 'CPU search');
     assert.equal(run.excludedRecords.length, 0);
     const found = scan.events.filter((e) => closest.events.some((c) => pairOf(c) === pairOf(e) &&
       Math.abs(c.TCA.JULIAN_DATE - e.TCA.JULIAN_DATE) * 86400 <= T.tca.NLRV.hardFailSec));

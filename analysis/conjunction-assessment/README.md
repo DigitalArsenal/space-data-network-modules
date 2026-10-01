@@ -5,7 +5,7 @@ using the canonical SDK invoke contract and published SDS **1.220.0** records.
 
 ## Public methods and records
 
-`plugin-manifest.json` advertises all 21 methods. Requests and results use
+`plugin-manifest.json` advertises all 22 methods. Requests and results use
 ordinary, verified FlatBuffers with explicit UTC times, Earth reference frames,
 source provenance, probability algorithms and units.
 
@@ -21,6 +21,7 @@ source provenance, probability algorithms and units.
 | Three `prepare_*_screening_index` methods | CQR index request | CQR index result |
 | `screen_window`, `screen_segment_window` | CQR window request | Chunked CQR catalog results, plus one OMM per excluded object |
 | `coarse_grid` | CQR window request on a resident index, and a block of coarse steps | Sampled states and motion bounds for the GPU pair search, plus a JSON report of exclusions |
+| `search_candidates` | CQR window request on a resident index, and a block of coarse steps | Candidate pair-steps found on the CPU (the frame `refine_candidates` takes), plus a JSON report of exclusions |
 | `refine_candidates` | CQR window request on a resident index, optional candidate pairs and exclusions | Chunked CQR catalog results, plus one OMM per excluded object |
 | `destroy_screening_index` | CQR destroy request | Empty successful response |
 | `version` | CQR version query | CQR version result |
@@ -158,7 +159,7 @@ conjunction-screening export in TDB/GCRF. `coarse_grid` and
 `refine_candidates` keep sampling and refinement in the module and report
 `screen_catalog`'s result. `scripts/run-all-vs-all-gpu.mjs` runs
 `examples/all-vs-all-gpu` in a WebGPU browser. The full catalog for one day
-takes 55 s. Three days of the full catalog take 132 s with SGP4 and 338 s with HPOP, propagation included, in time windows with one propagator per run.
+takes 55 s. Three days of the full catalog take 132 s with SGP4 and 338 s with HPOP, propagation included, in time windows with one propagator per run. Without a GPU (`search_candidates`, in a browser without WebGPU, Node or WasmEdge as on an SDN node) the SGP4 screen takes 131 s in Node and 161 s in SDN's patched WasmEdge (AOT).
 
 Without a GPU, screen larger catalogs with the partitioned runner,
 `scripts/run-sdn-omm-partitioned-screen-catalog.mjs`, and

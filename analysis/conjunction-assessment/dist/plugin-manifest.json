@@ -1,7 +1,7 @@
 {
   "pluginId": "conjunction-assessment",
   "name": "Conjunction Assessment Plugin",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Conjunction assessment and collision probability analysis through the SDS PIV/TAB invoke surface.",
   "pluginFamily": "analysis",
   "capabilities": [],
@@ -1140,6 +1140,103 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "search_candidates",
+      "displayName": "Search candidates",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cqr",
+              "allowedTypes": [
+                {
+                  "schemaName": "CQR.fbs",
+                  "fileIdentifier": "$CQR",
+                  "rootTypeName": "CQR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "WINDOW_REQUEST on a resident index (prepare_screening_index and its siblings) with no primaries: ALFANO_MAXIMUM controls (window, coarse step, threshold, workers) in the index frame. Sources are mean elements (SGP4) or trajectories from any propagator (PPE in UTC, TT or TDB)."
+        },
+        {
+          "portId": "block",
+          "acceptedTypeSets": [
+            {
+              "setId": "block-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.ca-grid-block",
+                "detail": "CAB1 tag, u32 first_step, u32 step_count (1-256): which coarse steps of the window to propagate."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "CAB1, u32 first_step, u32 step_count (1-65535)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "candidates",
+          "acceptedTypeSets": [
+            {
+              "setId": "candidates-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.ca-candidates",
+                "detail": "CAC1 tag, u32 count, then (u32 obj1, u32 obj2, u32 step) per candidate pair-step proposed by the GPU screen."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "description": "CAC1, u32 count, then u32 (obj1, obj2, step) per candidate pair-step.",
+          "required": true
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The block and the objects SGP4 cannot propagate in it (index, first failing JD, reason), to pass to refine_candidates."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: the block and its exclusions."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "The candidates of a block of coarse steps, found in the module without a GPU: the CPU counterpart of coarse_grid plus the GPU search. Returns the CAC1 frame refine_candidates takes."
     },
     {
       "methodId": "refine_candidates",

@@ -107,6 +107,42 @@ It returns `screen_catalog`'s `result` chunks and `excluded` OMMs. Without
 When a refine call would stage more than 16,384 events, the driver splits it
 in two.
 
+## Without a GPU
+
+`search_candidates` finds a block's candidates inside the module, with no GPU.
+It runs in a browser without WebGPU, in Node, and in WasmEdge as an SDN node or
+a Docker container runs modules.
+
+At each coarse step, each object's straight-line segment over ±h, widened by
+threshold/2 + D, gives an axis-aligned box. Two objects can close only if their
+boxes overlap, so the search discards nothing the tight test would pass.
+`tight_box_pairs` finds the overlapping pairs:
+
+- Boxes go into a uniform grid whose cell is the 99th-percentile box edge.
+- Each pair is counted once, in the cell holding the low corner of the two
+  boxes' overlap.
+- The rare larger boxes are paired with every object.
+
+Survivors pass through the same f64 tight test. Steps run on the module's
+threads.
+
+`refine_candidates` takes the result exactly as it takes the GPU's, so
+refinement, windows and merging are shared. Without `candidates`,
+`refine_candidates` runs the same search itself. The driver
+(`gpu/allVsAll.mjs`) uses `search_candidates` whenever no GPU screener is
+given. `gpu/catalogScreen.mjs` runs one session the same way on every host:
+`examples/all-vs-all-gpu/worker.mjs` in a browser, and
+`scripts/run-all-vs-all-cpu.mjs` in Node or WasmEdge.
+
+`tests/gpuScreenParity.test.mjs` runs the CPU search against the same
+references as the GPU path.
+
+**WasmEdge:** run the module ahead-of-time compiled, as SDN nodes do. Use SDN's
+patched WasmEdge 0.16.4: stock `wasmedgec` 0.16.4 miscompiles atomic memory
+offsets. With stock AOT, the full-catalog search deadlocked in its second
+window; patch `04-atomic-memarg-offset` fixes it. The interpreter is about 75
+times slower.
+
 ## Time windows
 
 A long screen runs as consecutive windows (`screenWindowsOnGpu` in
@@ -154,7 +190,10 @@ requested window, so an instance holds about one window per object.
 ```
 node build.mjs
 node scripts/run-all-vs-all-gpu.mjs --catalog <omm.uint32be.bin> --propagator sgp4|hpop \
-  --start 2461314.5 --days 3 [--window-hours 6|2] --threshold-km 5 --step-s 60 --out summary.json
+  --start 2461314.5 --days 3 [--window-hours 6|2] --threshold-km 5 --step-s 60 [--cpu] --out summary.json
+# no browser, no GPU (Node, or WasmEdge as on an SDN node):
+node scripts/run-all-vs-all-cpu.mjs --catalog <omm.uint32be.bin> --runtime wasmedge --aot \
+  --propagator sgp4|hpop --days 3 --out summary.json
 ```
 
 The catalog file holds `$OMM` records, each prefixed by its u32 big-endian
@@ -198,6 +237,17 @@ steps. The host was a Mac Studio (28 cores) running headless Chrome on Metal.
   SGP4.
 - The two runs report different conjunctions because they are different
   propagators.
+
+Without a GPU, with SGP4 over 3 days, 12 × 6 h windows, 27 module threads:
+
+| Host | End to end | Search | Refine | Candidates | Conjunctions |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Node (V8) | 131.4 s | 14.4 s | 114.3 s | 2,675,123 | 292,516 |
+| WasmEdge 0.16.4, SDN-patched, AOT (as an SDN node) | 161.4 s | 17.4 s | 141.8 s | 2,675,123 | 292,516 |
+
+Both find the same conjunctions as the GPU run. With SGP4, refinement is most
+of the time, so the GPU saves little: 132 s with it, 131 s without. AOT
+compilation takes about 12 s once per install and is not counted.
 
 ### One day, single window
 
