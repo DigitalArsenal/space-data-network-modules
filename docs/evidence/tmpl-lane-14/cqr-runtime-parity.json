@@ -1,25 +1,25 @@
 {
   "ok": true,
   "fixture": "CQR-SDS-1.220.0",
-  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--modules-ca-gpu-all-vs-all-20260930/analysis/conjunction-assessment/dist/isomorphic/module.wasm",
-  "artifactSha256": "e7b00eac1585f1caeba2428e9d67e3da1842935ce2478b9939ec04a6010fd1c3",
-  "moduleSha256": "a4e4ca5b4bbef9d150eba4ba13de1b1449cbb4c047a3112890763177bb143172",
+  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--modules-ca-trajectory-sources-20261001/analysis/conjunction-assessment/dist/isomorphic/module.wasm",
+  "artifactSha256": "dc5c16cb68697cfadc93286c677ccc13fd926c4d977cba969859cfa77da51339",
+  "moduleSha256": "bc74691e1cd37201d68ad80299249e07a630f153f8e62feb45e332a3791f6f49",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 48,
-      "durationMs": 7441
+      "durationMs": 7540
     },
     {
       "lane": "wasmedge",
       "runs": 48,
-      "durationMs": 29726
+      "durationMs": 30783
     },
     {
       "lane": "docker-wasmedge",
       "runs": 48,
-      "durationMs": 47811
+      "durationMs": 43279
     }
   ],
   "cases": [
