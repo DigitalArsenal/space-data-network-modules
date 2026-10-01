@@ -38,6 +38,23 @@ explicitly. Unsupported providers, frame conversions and controls also fail
 explicitly. See the [lane handoff](../../docs/tmpl-lane-14-conjunction-cqr-handoff.md)
 for the exact supported profile and remaining work.
 
+### Uncertainty and probability
+
+No uncertainty is invented. A TLE or SGP4 element set carries no covariance,
+and no source here supplies one yet, so:
+
+- events report the Alfano maximum probability (`ALFANO_MAXIMUM`,
+  `MAXIMUM_PROBABILITY_ONLY`) and its dilution threshold, and no RTN sigmas;
+- a covariance method (Foster, Patera, Chan, Alfriend, Alfano 2005, Laas) runs
+  only on covariance the caller supplies (`compute_pc`, `compute_pc_from_cdm`,
+  reported as `SUPPLIED_COVARIANCE`). Requested for sources without it, the
+  event reports the Alfano maximum and says so;
+- `emit_cdm` writes no covariance it cannot back, and `write_cdm_kvn` /
+  `write_cdm_xml` refuse a CDM without covariance (`covariance-unavailable`),
+  since CCSDS requires it, as does `compute_pc_from_cdm`.
+
+See the Evidence-Supported ASO Catalog whitepaper, sections 5, 9 and 16.2.
+
 `signCdmOutput(...)` remains a Node.js host utility for signing emitted CDM bytes and
 provenance. It does not perform conjunction calculations.
 

@@ -690,27 +690,6 @@ ConjunctionEvent assess_conjunction_polynomial(
     event.dse1 = event.tca_jd - event.obj1.epoch_jd;
     event.dse2 = event.tca_jd - event.obj2.epoch_jd;
 
-    RtnCovarianceSigmas primary_sigmas;
-    RtnCovarianceSigmas secondary_sigmas;
-    if (primary_source.covariance_rtn_sigma_at(event.tca_jd, primary_sigmas)) {
-        event.cov_r1 = primary_sigmas.radial_km * 1000.0;
-        event.cov_t1 = primary_sigmas.along_track_km * 1000.0;
-        event.cov_n1 = primary_sigmas.cross_track_km * 1000.0;
-    } else {
-        event.cov_r1 = DEFAULT_COV_R_M;
-        event.cov_t1 = DEFAULT_COV_T_M;
-        event.cov_n1 = DEFAULT_COV_N_M;
-    }
-    if (secondary_source.covariance_rtn_sigma_at(event.tca_jd, secondary_sigmas)) {
-        event.cov_r2 = secondary_sigmas.radial_km * 1000.0;
-        event.cov_t2 = secondary_sigmas.along_track_km * 1000.0;
-        event.cov_n2 = secondary_sigmas.cross_track_km * 1000.0;
-    } else {
-        event.cov_r2 = DEFAULT_COV_R_M;
-        event.cov_t2 = DEFAULT_COV_T_M;
-        event.cov_n2 = DEFAULT_COV_N_M;
-    }
-
     const double combined_radius_km = (radius1_m + radius2_m) / 1000.0;
     const auto probability = alfano_max_probability(event.min_range_km, combined_radius_km);
     event.max_probability = probability.max_probability;

@@ -21,8 +21,7 @@ namespace conjunction {
 // ── Constructor ──
 
 ConjunctionEngine::ConjunctionEngine()
-    : pc_method_(std::make_unique<Foster2D>()),
-      default_cov_(Covariance3x3::socrates_default()) {}
+    : pc_method_(std::make_unique<Foster2D>()) {}
 
 void ConjunctionEngine::set_pc_method(std::unique_ptr<PcMethod> method) {
     pc_method_ = std::move(method);
@@ -35,10 +34,6 @@ void ConjunctionEngine::set_pc_method(const std::string& name) {
 void ConjunctionEngine::set_combined_radius_m(double r1, double r2) {
     radius1_m_ = r1;
     radius2_m_ = r2;
-}
-
-void ConjunctionEngine::set_default_covariance(const Covariance3x3& cov) {
-    default_cov_ = cov;
 }
 
 std::string ConjunctionEngine::pc_method_name() const {
@@ -143,28 +138,6 @@ static Covariance3x3 rotate_covariance(
         }
     }
     return rotated;
-}
-
-static Covariance3x3 resolve_inertial_covariance(
-    const EphemerisSource& source,
-    const StateVector& state,
-    const Covariance3x3* explicit_covariance,
-    const Covariance3x3& default_covariance) {
-    if (explicit_covariance != nullptr) {
-        return covariance_rtn_to_inertial(*explicit_covariance, state);
-    }
-
-    RtnCovarianceSigmas sigmas;
-    if (source.covariance_rtn_sigma_at(state.epoch_jd, sigmas)) {
-        return covariance_rtn_to_inertial(
-            Covariance3x3::from_rtn_diagonal(
-                sigmas.radial_km,
-                sigmas.along_track_km,
-                sigmas.cross_track_km),
-            state);
-    }
-
-    return covariance_rtn_to_inertial(default_covariance, state);
 }
 
 Covariance3x3 covariance_rtn_to_inertial(
@@ -355,14 +328,20 @@ ConjunctionEvent2 ConjunctionEngine::assess(
     event.dse1 = event.tca_jd - obj1.epoch_jd();
     event.dse2 = event.tca_jd - obj2.epoch_jd();
 
-    // Covariance
-    event.cov1 = resolve_inertial_covariance(
-        obj1, event.state1, cov1, default_cov_);
-    event.cov2 = resolve_inertial_covariance(
-        obj2, event.state2, cov2, default_cov_);
     event.combined_radius_km = (radius1_m_ + radius2_m_) / 1000.0;
+    if (!cov1 || !cov2) {
+        const auto bound = alfano_max_probability(event.miss_distance_km, event.combined_radius_km);
+        event.pc.method = "ALFANO-MAXPROB";
+        event.pc.max_probability = bound.max_probability;
+        event.pc.probability = bound.max_probability;
+        event.dilution_threshold_km = bound.dilution_threshold_km;
+        return event;
+    }
 
-    // Build B-plane and compute Pc
+    // Supplied covariance: B-plane and the chosen Pc method
+    event.has_covariance = true;
+    event.cov1 = covariance_rtn_to_inertial(*cov1, event.state1);
+    event.cov2 = covariance_rtn_to_inertial(*cov2, event.state2);
     event.bplane = build_bplane(event.state1, event.state2,
                                  event.cov1, event.cov2,
                                  event.combined_radius_km);
@@ -400,6 +379,7 @@ ConjunctionEvent2 ConjunctionEngine::compute_pc(
     event.state2 = state2;
     event.tca_jd = state1.epoch_jd;
     event.tca_iso = jd_to_iso(event.tca_jd);
+    event.has_covariance = true;
     event.cov1 = covariance_rtn_to_inertial(cov1, state1);
     event.cov2 = covariance_rtn_to_inertial(cov2, state2);
     event.combined_radius_km = combined_radius_km;

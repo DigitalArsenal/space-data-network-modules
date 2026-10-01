@@ -26,7 +26,7 @@ namespace conjunction {
 struct Covariance3x3 {
   double data[9] = {0};
 
-  /// Construct from an RTN diagonal covariance prior (σ_R, σ_T, σ_N in km).
+  /// Construct from an RTN diagonal covariance (σ_R, σ_T, σ_N in km).
   /// The engine rotates this into inertial coordinates at TCA before Pc math.
   static Covariance3x3 from_rtn_diagonal(double sr, double st, double sn) {
     Covariance3x3 c;
@@ -42,11 +42,6 @@ struct Covariance3x3 {
     for (int i = 0; i < 9; i++)
       c.data[i] = m[i];
     return c;
-  }
-
-  /// Default SOCRATES covariance (100m R, 300m T, 100m N)
-  static Covariance3x3 socrates_default() {
-    return from_rtn_diagonal(0.1, 0.3, 0.1);
   }
 };
 
@@ -90,10 +85,14 @@ struct ConjunctionEvent2 {
   double mahalanobis_2d = 0; // In encounter plane (from B-plane geometry)
   double mahalanobis_3d = 0; // Full 3D (from combined position covariance)
 
-  // Collision probability (from chosen method)
+  // Collision probability. With has_covariance, the chosen method's result
+  // from the covariance the caller supplied (cov1, cov2, inertial). Without,
+  // only the Alfano maximum (pc.max_probability, pc.method "ALFANO-MAXPROB"):
+  // no covariance is assumed, so no covariance-based probability exists.
   PcResult pc;
+  bool has_covariance = false;
+  double dilution_threshold_km = 0;
 
-  // Covariance used
   Covariance3x3 cov1, cov2;
   double combined_radius_km = 0.01;
 
@@ -114,10 +113,6 @@ public:
   /// Set default hard-body radii (meters)
   void set_combined_radius_m(double radius1, double radius2);
 
-  /// Set default RTN covariance prior used when no source-specific covariance
-  /// is available.
-  void set_default_covariance(const Covariance3x3 &cov);
-
   /// Find TCA between two ephemeris sources
   /// Searches [start_jd, start_jd + duration_days]
   double find_tca(const EphemerisSource &obj1, const EphemerisSource &obj2,
@@ -125,7 +120,8 @@ public:
                   double coarse_step_sec = 5.0,
                   double fine_tol_sec = 0.001) const;
 
-  /// Full conjunction assessment
+  /// Full conjunction assessment. The Pc method applies only when both RTN
+  /// covariances are supplied; otherwise the event carries the Alfano maximum.
   ConjunctionEvent2 assess(const EphemerisSource &obj1,
                            const EphemerisSource &obj2, double start_jd,
                            double duration_days = 7.0,
@@ -162,7 +158,6 @@ private:
   std::unique_ptr<PcMethod> pc_method_;
   double radius1_m_ = 5.0;
   double radius2_m_ = 5.0;
-  Covariance3x3 default_cov_;
 
   /// Build B-plane geometry from states + covariance
   BPlaneGeometry build_bplane(const StateVector &s1, const StateVector &s2,

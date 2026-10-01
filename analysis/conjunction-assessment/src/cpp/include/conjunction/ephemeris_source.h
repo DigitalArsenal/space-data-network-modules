@@ -33,12 +33,6 @@ struct ObjectIdentity {
     double epoch_jd = 0.0;   // epoch of the underlying data (days-since-epoch)
 };
 
-struct RtnCovarianceSigmas {
-    double radial_km = 0.0;
-    double along_track_km = 0.0;
-    double cross_track_km = 0.0;
-};
-
 // ── Abstract Interface ──
 
 class EphemerisSource {
@@ -85,15 +79,6 @@ public:
         (void)jd; (void)state; (void)half_window_sec; (void)bound;
         return false;
     }
-
-    /// Optional RTN 1-sigma position covariance prior (km) evaluated at jd.
-    /// Implementations return false when no source-specific covariance is available.
-    virtual bool covariance_rtn_sigma_at(
-        double jd, RtnCovarianceSigmas& sigmas) const {
-        (void)jd;
-        sigmas = {};
-        return false;
-    }
 };
 
 /// Acceleration bound for natural (unpowered) Earth-orbit motion within
@@ -132,8 +117,6 @@ public:
         bound = natural_motion_acceleration_bound_km_s2(state, half_window_sec);
         return std::isfinite(bound);
     }
-    bool covariance_rtn_sigma_at(
-        double jd, RtnCovarianceSigmas& sigmas) const override;
 
 private:
     TLE tle_;
@@ -166,8 +149,6 @@ public:
         bound = natural_motion_acceleration_bound_km_s2(state, half_window_sec);
         return std::isfinite(bound);
     }
-    bool covariance_rtn_sigma_at(
-        double jd, RtnCovarianceSigmas& sigmas) const override;
 
 private:
     GPElement gp_;

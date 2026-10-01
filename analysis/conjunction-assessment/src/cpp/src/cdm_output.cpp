@@ -1008,6 +1008,7 @@ static flatbuffers::Offset<CDMObject> build_cdm_object(
     int obj_num,
     double cov_r, double cov_t, double cov_n,
     const std::string& reference_frame) {
+    (void)obj_num;
 
     // CDM object states are absolute in the explicitly selected evaluation frame.
     // The root relative-state fields separately carry encounter RTN geometry.
@@ -1021,19 +1022,20 @@ static flatbuffers::Offset<CDMObject> build_cdm_object(
     cat_builder.add_NORAD_CAT_ID(tle.norad_cat_id);
     auto cat = cat_builder.Finish();
 
-    // Build covariance array (6×6 lower triangular = 21 elements for pos+vel)
-    // CDM uses 9×9 (45 elements) but we only fill the 6×6 block
-    std::vector<double> cov_data(45, 0.0);
-    // CR_R (index 0)
-    cov_data[0] = cov_r * cov_r / 1e6;  // m² → km²
-    // CT_T (index 2)
-    cov_data[2] = cov_t * cov_t / 1e6;
-    // CN_N (index 5)
-    cov_data[5] = cov_n * cov_n / 1e6;
+    // Covariance only from what the sources supplied (lower triangle, km²;
+    // the position diagonal); none is invented for sources without it.
+    flatbuffers::Offset<flatbuffers::Vector<double>> cov_vec;
+    if (event.has_covariance) {
+        std::vector<double> cov_data(45, 0.0);
+        cov_data[0] = cov_r * cov_r / 1e6;  // CR_R, m² → km²
+        cov_data[2] = cov_t * cov_t / 1e6;  // CT_T
+        cov_data[5] = cov_n * cov_n / 1e6;  // CN_N
+        cov_vec = builder.CreateVector(cov_data);
+    }
 
-    auto cov_vec = builder.CreateVector(cov_data);
-
-    auto comment = builder.CreateString("Conjunction assessment; diagonal RTN uncertainty model");
+    auto comment = builder.CreateString(event.has_covariance
+        ? "Conjunction assessment; RTN covariance supplied by the source"
+        : "Conjunction assessment; no covariance: the source supplied none");
     const auto frame_kind = reference_frame == "TEME" ? CelestialFrame::TEMEOFDATE :
         reference_frame == "EME2000" ? CelestialFrame::EME2000 : CelestialFrame::GCRF;
     const auto axes = CreateCelestialFrameWrapper(builder, frame_kind);
@@ -1044,14 +1046,14 @@ static flatbuffers::Offset<CDMObject> build_cdm_object(
     obj_builder.add_COMMENT(comment);
     obj_builder.add_OBJECT(cat);
     obj_builder.add_REFERENCE_FRAME(frame);
-    obj_builder.add_COVARIANCE_METHOD(covarianceAlgorithm::DEFAULT);
+    if (event.has_covariance) obj_builder.add_COVARIANCE_METHOD(covarianceAlgorithm::DEFAULT);
     obj_builder.add_X(state.x);
     obj_builder.add_Y(state.y);
     obj_builder.add_Z(state.z);
     obj_builder.add_X_DOT(state.vx);
     obj_builder.add_Y_DOT(state.vy);
     obj_builder.add_Z_DOT(state.vz);
-    obj_builder.add_COVARIANCE(cov_vec);
+    if (event.has_covariance) obj_builder.add_COVARIANCE(cov_vec);
 
     return obj_builder.Finish();
 }
@@ -1101,7 +1103,8 @@ int32_t conjunction_to_cdm(
     cdm_builder.add_RELATIVE_VELOCITY_R(event.rel_vel_r);
     cdm_builder.add_RELATIVE_VELOCITY_T(event.rel_vel_t);
     cdm_builder.add_RELATIVE_VELOCITY_N(event.rel_vel_n);
-    cdm_builder.add_COLLISION_PROBABILITY(event.max_probability);
+    cdm_builder.add_COLLISION_PROBABILITY(
+        event.has_covariance ? event.covariance_probability : event.max_probability);
     cdm_builder.add_COLLISION_PROBABILITY_METHOD(prob_method);
     cdm_builder.add_OBJECT1(obj1);
     cdm_builder.add_OBJECT2(obj2);
@@ -1182,6 +1185,24 @@ int32_t cdm_xml_to_sds(
         return static_cast<int32_t>(bytes.size());
 }
 
+static bool cdm_objects_have_covariance(const CDM* cdm) {
+    const auto has = [](const CDMObject* object) {
+        return object && object->COVARIANCE() && object->COVARIANCE()->size() >= 6;
+    };
+    if (has(cdm->OBJECT1()) && has(cdm->OBJECT2())) return true;
+    set_error("A CCSDS CDM requires each object's covariance, and this CDM has none: "
+              "its sources supplied no covariance (a TLE carries none).");
+    return false;
+}
+
+bool cdm_has_covariance(const uint8_t* cdm_buffer, uint32_t cdm_buffer_size) {
+    if (!cdm_buffer || cdm_buffer_size == 0u) return false;
+    flatbuffers::Verifier verifier(cdm_buffer, cdm_buffer_size);
+    if (!VerifyCDMBuffer(verifier)) return false;
+    const CDM* cdm = GetCDM(cdm_buffer);
+    return cdm && cdm_objects_have_covariance(cdm);
+}
+
 int32_t cdm_sds_to_kvn(
     const uint8_t* cdm_buffer, uint32_t cdm_buffer_size,
     char* output, uint32_t output_capacity) {
@@ -1201,6 +1222,9 @@ int32_t cdm_sds_to_kvn(
         const CDM* cdm = GetCDM(cdm_buffer);
         if (!cdm) {
             return -1;
+        }
+        if (!cdm_objects_have_covariance(cdm)) {
+            return -3;
         }
 
         std::ostringstream kvn;
@@ -1281,6 +1305,9 @@ int32_t cdm_sds_to_xml(
         const CDM* cdm = GetCDM(cdm_buffer);
         if (!cdm) {
             return -1;
+        }
+        if (!cdm_objects_have_covariance(cdm)) {
+            return -3;
         }
 
         std::ostringstream xml;

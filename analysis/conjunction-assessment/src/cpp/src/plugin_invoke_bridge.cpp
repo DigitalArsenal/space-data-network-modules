@@ -686,8 +686,11 @@ std::unique_ptr<CQREventT> event(const ConjunctionEvent &e, int axes = 1) {
       vec(e.rel_pos_r * 1000., e.rel_pos_t * 1000., e.rel_pos_n * 1000.);
   o->RELATIVE_VELOCITY_RTN =
       vec(e.rel_vel_r * 1000., e.rel_vel_t * 1000., e.rel_vel_n * 1000.);
-  o->PRIMARY_SIGMA_RTN_M = vec(e.cov_r1, e.cov_t1, e.cov_n1);
-  o->SECONDARY_SIGMA_RTN_M = vec(e.cov_r2, e.cov_t2, e.cov_n2);
+  // Uncertainty only from covariance a source supplied; none is invented.
+  if (e.has_covariance) {
+    o->PRIMARY_SIGMA_RTN_M = vec(e.cov_r1, e.cov_t1, e.cov_n1);
+    o->SECONDARY_SIGMA_RTN_M = vec(e.cov_r2, e.cov_t2, e.cov_n2);
+  }
   o->PRIMARY_DAYS_SINCE_EPOCH = e.dse1;
   o->SECONDARY_DAYS_SINCE_EPOCH = e.dse2;
   o->HAS_PRIMARY_DAYS_SINCE_EPOCH = o->HAS_SECONDARY_DAYS_SINCE_EPOCH = true;
@@ -697,38 +700,21 @@ std::unique_ptr<CQREventT> event(const ConjunctionEvent &e, int axes = 1) {
       state(e.state2, e.tca_jd, o->SECONDARY_ID, o->SECONDARY_NORAD_ID, axes);
   return o;
 }
+ConjunctionEvent legacy(const ConjunctionEvent2 &e);
+// Without supplied covariance the engine reports only the Alfano maximum, and
+// the event says so; the requested covariance method is not applied.
 std::unique_ptr<CQREventT> event(const ConjunctionEvent2 &e,
                                  cqrProbabilityAlgorithm a, int axes = 1) {
-  ConjunctionEvent l;
-  l.obj1.name = e.obj1_name;
-  l.obj1.object_id = e.obj1_id;
-  l.obj1.norad_cat_id = e.obj1_norad;
-  l.obj2.name = e.obj2_name;
-  l.obj2.object_id = e.obj2_id;
-  l.obj2.norad_cat_id = e.obj2_norad;
-  l.tca_jd = e.tca_jd;
-  l.state1 = e.state1;
-  l.state2 = e.state2;
-  l.min_range_km = e.miss_distance_km;
-  l.rel_speed_kms = e.relative_speed_kms;
-  l.rel_pos_r = e.rel_r;
-  l.rel_pos_t = e.rel_t;
-  l.rel_pos_n = e.rel_n;
-  l.rel_vel_r = e.rel_vr;
-  l.rel_vel_t = e.rel_vt;
-  l.rel_vel_n = e.rel_vn;
-  l.dse1 = e.dse1;
-  l.dse2 = e.dse2;
-  auto o = event(l, axes);
-  o->HAS_DILUTION_THRESHOLD_M = false;
-  o->PROBABILITY =
-      probability(e.pc, a, cqrUncertaintyOrigin::SYNTHESIZED_COVARIANCE);
-  o->PRIMARY_SIGMA_RTN_M.reset();
-  o->SECONDARY_SIGMA_RTN_M.reset();
-  o->MAHALANOBIS_3D_SQUARED = e.mahalanobis_3d * e.mahalanobis_3d;
-  o->HAS_MAHALANOBIS_3D_SQUARED = true;
+  auto o = event(legacy(e), axes);
   o->COMBINED_RADIUS_M = e.combined_radius_km * 1000.;
   o->HAS_COMBINED_RADIUS_M = true;
+  if (!e.has_covariance)
+    return o;
+  o->HAS_DILUTION_THRESHOLD_M = false;
+  o->PROBABILITY =
+      probability(e.pc, a, cqrUncertaintyOrigin::SUPPLIED_COVARIANCE);
+  o->MAHALANOBIS_3D_SQUARED = e.mahalanobis_3d * e.mahalanobis_3d;
+  o->HAS_MAHALANOBIS_3D_SQUARED = true;
   return o;
 }
 // TOTAL_OBJECTS counts the objects the screening covered: the catalog less
@@ -1018,7 +1004,11 @@ extern "C" int compute_pc_from_cdm() {
   auto f = input("cdm");
   if (!decode<CDM>(f, "$CDM"))
     return 400;
+  if (!conjunction::cdm_has_covariance(f->payload, f->payload_length))
+    return error("covariance-unavailable", error_message()), 422;
   auto p = conjunction::compute_pc_from_cdm(f->payload, f->payload_length);
+  if (has_error())
+    return error("invalid-cdm", error_message()), 422;
   auto a = algorithmEnum(p.method);
   if (a == cqrProbabilityAlgorithm::UNSPECIFIED)
     return error("unsupported-algorithm",
@@ -1145,6 +1135,8 @@ bool document(bool xml, bool write) {
     if (n == -2)
       data.resize(data.size() * 2);
   }
+  if (n == -3)
+    return error("covariance-unavailable", error_message());
   if (n < 0 || has_error())
     return error(
         "invalid-native-document",
@@ -1176,7 +1168,10 @@ ConjunctionEvent legacy(const ConjunctionEvent2 &e) {
   l.min_range_km = e.miss_distance_km;
   l.rel_speed_kms = e.relative_speed_kms;
   l.max_probability = e.pc.max_probability;
+  l.dilution_threshold_km = e.dilution_threshold_km;
   l.probability_method = e.pc.method;
+  l.has_covariance = e.has_covariance;
+  l.covariance_probability = e.pc.probability;
   l.rel_pos_r = e.rel_r;
   l.rel_pos_t = e.rel_t;
   l.rel_pos_n = e.rel_n;
@@ -1185,6 +1180,8 @@ ConjunctionEvent legacy(const ConjunctionEvent2 &e) {
   l.rel_vel_n = e.rel_vn;
   l.dse1 = e.dse1;
   l.dse2 = e.dse2;
+  if (!e.has_covariance)
+    return l;
   auto c1 = covariance_inertial_to_rtn(e.cov1, e.state1),
        c2 = covariance_inertial_to_rtn(e.cov2, e.state2);
   l.cov_r1 = std::sqrt(std::max(0., c1.data[0])) * 1000.;

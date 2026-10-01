@@ -36,11 +36,6 @@ namespace conjunction {
 /// Default hard-body radii (meters) — SOCRATES uses combined ~10m for LEO objects
 constexpr double DEFAULT_RADIUS_M = 5.0;
 
-/// Default RTN covariance (meters) — matches SOCRATES
-constexpr double DEFAULT_COV_R_M = 100.0;  // Radial
-constexpr double DEFAULT_COV_T_M = 300.0;  // In-track (along-track)
-constexpr double DEFAULT_COV_N_M = 100.0;  // Cross-track (normal)
-
 /// Screening threshold (km)
 constexpr double DEFAULT_THRESHOLD_KM = 5.0;
 
@@ -66,12 +61,18 @@ struct ConjunctionEvent {
     double rel_pos_r = 0.0, rel_pos_t = 0.0, rel_pos_n = 0.0;
     double rel_vel_r = 0.0, rel_vel_t = 0.0, rel_vel_n = 0.0;
 
-    // Collision probability (Alfano maximum probability method)
+    // Collision probability: the Alfano maximum (no covariance needed) unless
+    // has_covariance, when covariance_probability is the probability method's
+    // result from the covariance the sources supplied.
     double max_probability = 0.0;
     double dilution_threshold_km = 0.0;
     std::string probability_method = "ALFANO-MAXPROB";
+    bool has_covariance = false;
+    double covariance_probability = 0.0;
 
-    // Covariance (RTN, meters²)
+    // One-sigma RTN position uncertainty (metres) of each object, from the
+    // supplied covariance; meaningful only when has_covariance. No source
+    // covariance means none is reported: a TLE carries none.
     double cov_r1 = 0.0, cov_t1 = 0.0, cov_n1 = 0.0;  // Object 1
     double cov_r2 = 0.0, cov_t2 = 0.0, cov_n2 = 0.0;  // Object 2
 
@@ -244,8 +245,13 @@ int32_t cdm_kvn_to_sds(
     const char* kvn_text, uint32_t kvn_text_size,
     uint8_t* output, uint32_t output_capacity);
 
+/// Whether both objects of an SDS CDM FlatBuffer carry covariance; if not,
+/// sets the error saying so. Probability and CCSDS text need it.
+bool cdm_has_covariance(const uint8_t* cdm_buffer, uint32_t cdm_buffer_size);
+
 /// Write an SDS CDM FlatBuffer binary as CCSDS CDM KVN text.
-/// Returns bytes written (>=0 success), -2 buffer too small, -1 parse/error.
+/// Returns bytes written (>=0 success), -2 buffer too small, -1 parse/error,
+/// -3 an object has no covariance (CCSDS requires it; none is invented).
 int32_t cdm_sds_to_kvn(
     const uint8_t* cdm_buffer, uint32_t cdm_buffer_size,
     char* output, uint32_t output_capacity);
@@ -257,7 +263,8 @@ int32_t cdm_xml_to_sds(
     uint8_t* output, uint32_t output_capacity);
 
 /// Write an SDS CDM FlatBuffer binary as CCSDS CDM XML text.
-/// Returns bytes written (>=0 success), -2 buffer too small, -1 parse/error.
+/// Returns bytes written (>=0 success), -2 buffer too small, -1 parse/error,
+/// -3 an object has no covariance (CCSDS requires it; none is invented).
 int32_t cdm_sds_to_xml(
     const uint8_t* cdm_buffer, uint32_t cdm_buffer_size,
     char* output, uint32_t output_capacity);

@@ -270,16 +270,6 @@ test("emit_cdm accepts canonical OMM-backed conjunction requests", async (t) => 
     "signed CDM metadata verifies against emitted CDM bytes",
   );
 
-  const pcResponse = await harness.invoke({
-    methodId: "compute_pc_from_cdm",
-    inputs: [{ portId: "cdm", payload: cdm.payload }],
-  });
-  assert.equal(pcResponse.statusCode, 0, pcResponse.errorMessage);
-  const pcResult = pcResponse.outputs?.find((frame) => frame.portId === "result");
-  assert.ok(pcResult?.payload instanceof Uint8Array, "Pc result payload is emitted");
-  const decodedPc = decodeCqr(flatc, pcResult.payload).PROBABILITY_RESULT;
-  assert.ok(decodedPc.ALGORITHM !== "UNSPECIFIED");
-  assert.ok(Number.isFinite(decodedPc.PROBABILITY));
 });
 
 test("emit_csm accepts canonical OMM-backed conjunction requests", async (t) => {

@@ -11,87 +11,6 @@
 
 namespace conjunction {
 
-namespace {
-
-constexpr double EPHEMERIS_EARTH_RADIUS_KM = 6378.137;
-constexpr double EPHEMERIS_MU_EARTH_KM3_S2 = 398600.4418;
-constexpr double TWO_PI = 2.0 * M_PI;
-constexpr double SECONDS_PER_DAY = 86400.0;
-
-double clamp_covariance_value(double value, double minimum, double maximum) {
-    return std::min(maximum, std::max(minimum, value));
-}
-
-double semi_major_axis_from_mean_motion(double mean_motion_rev_day) {
-    if (!std::isfinite(mean_motion_rev_day) || mean_motion_rev_day <= 0.0) {
-        return std::numeric_limits<double>::quiet_NaN();
-    }
-    const double mean_motion_rad_sec =
-        mean_motion_rev_day * TWO_PI / SECONDS_PER_DAY;
-    return std::cbrt(
-        EPHEMERIS_MU_EARTH_KM3_S2 / (mean_motion_rad_sec * mean_motion_rad_sec));
-}
-
-RtnCovarianceSigmas estimate_tle_rtn_covariance_sigmas(
-    double epoch_jd,
-    double jd,
-    double mean_motion_rev_day,
-    double eccentricity,
-    double bstar,
-    double semi_major_axis_km) {
-    RtnCovarianceSigmas sigmas;
-
-    const double resolved_semi_major_axis_km =
-        std::isfinite(semi_major_axis_km) && semi_major_axis_km > 0.0
-            ? semi_major_axis_km
-            : semi_major_axis_from_mean_motion(mean_motion_rev_day);
-    if (!std::isfinite(resolved_semi_major_axis_km) ||
-        resolved_semi_major_axis_km <= EPHEMERIS_EARTH_RADIUS_KM) {
-        return sigmas;
-    }
-
-    const double altitude_km =
-        std::max(0.0, resolved_semi_major_axis_km - EPHEMERIS_EARTH_RADIUS_KM);
-    const double regime_scale =
-        std::sqrt(std::max(0.25, 1.0 + altitude_km / 500.0));
-    const double shape_scale =
-        1.0 + clamp_covariance_value(std::abs(eccentricity) * 8.0, 0.0, 4.0);
-    const double drag_scale =
-        1.0 + clamp_covariance_value(std::abs(bstar) * 25000.0, 0.0, 6.0);
-    const double dse_days =
-        std::abs(jd - epoch_jd);
-
-    const double radial_base_m = 45.0 * regime_scale * shape_scale;
-    const double along_base_m = 135.0 * regime_scale * shape_scale;
-    const double cross_base_m = 55.0 * regime_scale * shape_scale;
-    const double radial_growth_m_day = 70.0 * regime_scale * drag_scale;
-    const double along_growth_m_day = 240.0 * regime_scale * drag_scale;
-    const double cross_growth_m_day =
-        85.0 * regime_scale * std::sqrt(drag_scale);
-
-    sigmas.radial_km =
-        clamp_covariance_value(
-            std::hypot(radial_base_m, radial_growth_m_day * dse_days),
-            10.0,
-            50000.0) /
-        1000.0;
-    sigmas.along_track_km =
-        clamp_covariance_value(
-            std::hypot(along_base_m, along_growth_m_day * dse_days),
-            30.0,
-            150000.0) /
-        1000.0;
-    sigmas.cross_track_km =
-        clamp_covariance_value(
-            std::hypot(cross_base_m, cross_growth_m_day * dse_days),
-            10.0,
-            80000.0) /
-        1000.0;
-    return sigmas;
-}
-
-} // namespace
-
 // ── OEM Hermite Interpolation ──
 
 StateVector OEMEphemerisSource::state_at(double jd) const {
@@ -160,33 +79,7 @@ StateVector OEMEphemerisSource::state_at(double jd) const {
     return sv;
 }
 
-bool SGP4EphemerisSource::covariance_rtn_sigma_at(
-    double jd, RtnCovarianceSigmas& sigmas) const {
-    sigmas = estimate_tle_rtn_covariance_sigmas(
-        tle_.epoch_jd,
-        jd,
-        tle_.mean_motion,
-        tle_.eccentricity,
-        tle_.bstar,
-        semi_major_axis_from_mean_motion(tle_.mean_motion));
-    return sigmas.radial_km > 0.0 &&
-           sigmas.along_track_km > 0.0 &&
-           sigmas.cross_track_km > 0.0;
-}
 
-bool GPEphemerisSource::covariance_rtn_sigma_at(
-    double jd, RtnCovarianceSigmas& sigmas) const {
-    sigmas = estimate_tle_rtn_covariance_sigmas(
-        gp_.epoch_jd,
-        jd,
-        gp_.mean_motion,
-        gp_.eccentricity,
-        gp_.bstar,
-        gp_.semi_major_axis_km);
-    return sigmas.radial_km > 0.0 &&
-           sigmas.along_track_km > 0.0 &&
-           sigmas.cross_track_km > 0.0;
-}
 
 
 // ── Natural motion bound ──
