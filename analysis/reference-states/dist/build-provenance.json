@@ -1,0 +1,19 @@
+{
+  "spacedatastandards": "1.231.0",
+  "sdsFamilies": [
+    "RFM",
+    "TIM",
+    "IDM",
+    "PLD",
+    "LCC",
+    "CAT",
+    "PPE",
+    "OEM",
+    "NCD",
+    "EOP"
+  ],
+  "erfaSourceFiles": 248,
+  "axisEngine": "foundation/frames/src/axis_engine.hpp",
+  "eopTable": "foundation/frames/src/eop_table.hpp",
+  "threadModel": "single-thread"
+}

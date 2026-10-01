@@ -1,0 +1,152 @@
+{
+  "pluginId": "com.digitalarsenal.analysis.reference-states",
+  "name": "Reference states",
+  "version": "0.1.0",
+  "description": "Independent reference states for calibrating orbit uncertainty: precise orbits read from SP3 (files/orbit-products) become GCRF/UTC states per catalogued object, with the product's stated accuracy as covariance and its provenance.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Deterministic transform of caller-supplied precise-orbit states and Earth orientation. No host calls, threads, propagation or network access."
+  },
+  "schemasUsed": [
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    },
+    {
+      "schemaName": "NCD.fbs",
+      "fileIdentifier": "$NCD",
+      "rootTypeName": "NCD"
+    },
+    {
+      "schemaName": "EOP.fbs",
+      "fileIdentifier": "$EOP",
+      "rootTypeName": "EOP"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "reference_states",
+      "displayName": "Reference states",
+      "inputPorts": [
+        {
+          "portId": "ephemeris",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$OEM from files/orbit-products read_container of one SP3 file: one block per satellite, Earth-fixed (ITRF realization), in the file's time system, positions with SP3 standard-deviation exponents."
+        },
+        {
+          "portId": "descriptor",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$NCD from the same read_container call: the SP3 header (agency, coordinate system, base, per-satellite accuracy) and the file's SHA-256."
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 366,
+          "required": true,
+          "description": "$EOP rows bracketing the file's span (one row, several frames, or a size-prefixed stream), as foundation/frames reads them."
+        },
+        {
+          "portId": "identities",
+          "acceptedTypeSets": [
+            {
+              "setId": "identities-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Which catalogued object each SP3 satellite id is over the file's span, the product name and source, and an optional stated product accuracy."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON {\"product\": name, \"source\": url, \"statedSigmaM\": optional product accuracy (m) with \"statedSigmaBasis\", \"satellites\": {\"G01\": {\"norad\": 50, \"objectId\": \"1990-...\", \"name\": ...}}}: which catalogued object each SP3 satellite id is over this file's span."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "reference",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 999,
+          "required": false,
+          "description": "One $OEM per identified satellite: GCRF states in UTC, velocity from the degree-9 Lagrange interpolant of the positions, covariance from the stated accuracy, provenance in COMMENT."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}
