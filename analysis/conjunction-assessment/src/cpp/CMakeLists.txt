@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(conjunction_assessment_sdn_plugin LANGUAGES CXX)
+project(conjunction_assessment_sdn_plugin LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -38,6 +38,15 @@ add_library(sgp4_lib STATIC ${SGP4_SOURCES})
 target_include_directories(sgp4_lib PUBLIC "${SGP4_DIR}" "${CMAKE_SOURCE_DIR}/include")
 
 # ============================================================================
+# ERFA (vendored in higherpop): leap seconds and TDB for time_scales.cpp
+# ============================================================================
+set(ERFA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../higherpop/third_party/erfa")
+file(GLOB ERFA_SOURCES "${ERFA_DIR}/*.c")
+list(FILTER ERFA_SOURCES EXCLUDE REGEX "(t_erfa_c|t_erfa_c_extra|erfaversion)\\.c$")
+add_library(erfa_lib STATIC ${ERFA_SOURCES})
+target_include_directories(erfa_lib PUBLIC "${ERFA_DIR}")
+
+# ============================================================================
 # Conjunction assessment library
 # ============================================================================
 set(CA_SOURCES
@@ -47,6 +56,8 @@ set(CA_SOURCES
     src/resident_screening_index.cpp
     src/screening_internal.cpp
     src/screening.cpp
+    src/screening_tight.cpp
+    src/time_scales.cpp
     src/cdm_output.cpp
     src/csm_output.cpp
     src/pc_method.cpp
@@ -64,7 +75,7 @@ target_include_directories(conjunction_assessment PUBLIC
     "${CMAKE_SOURCE_DIR}/deps/sgp4"
     "${SGP4_DIR}"
 )
-target_link_libraries(conjunction_assessment PUBLIC sgp4_lib)
+target_link_libraries(conjunction_assessment PUBLIC sgp4_lib erfa_lib)
 
 # ============================================================================
 # Native test executables
@@ -114,6 +125,9 @@ if(NOT EMSCRIPTEN AND NOT WASI_SDK)
         target_include_directories(test_engine PRIVATE include "${SGP4_DIR}")
     endif()
 
+    add_executable(test_trajectory_bounds tests/test_trajectory_bounds.cpp)
+    target_link_libraries(test_trajectory_bounds conjunction_assessment)
+
     if(EXISTS "${CMAKE_SOURCE_DIR}/tests/test_cdm_output.cpp")
         add_executable(test_cdm_output tests/test_cdm_output.cpp)
         target_link_libraries(test_cdm_output conjunction_assessment)
@@ -127,6 +141,7 @@ if(NOT EMSCRIPTEN AND NOT WASI_SDK)
     endif()
 
     enable_testing()
+    add_test(NAME trajectory_bounds COMMAND test_trajectory_bounds)
     if(TARGET test_socrates)
         add_test(NAME socrates COMMAND test_socrates)
         set_tests_properties(socrates PROPERTIES SKIP_RETURN_CODE 77)

@@ -3,7 +3,8 @@
 // The authoritative test is conjunction::tight_pair_may_close
 // (src/cpp/include/conjunction/screening_tight.h): over [t_k - h, t_k + h] the
 // pair may close within THRESHOLD only if the straight-line relative path does
-// within THRESHOLD + 1/2 (A_i + A_j) h^2. A comes precomputed from coarse_grid.
+// within THRESHOLD + D_i + D_j, D the source's own bound on how far its path
+// strays from the straight line over the interval (coarse_grid computes it).
 // Positions are f32 here (0.5 m near 7000 km), so the limit carries SLACK and
 // this kernel proposes a superset; refine_candidates repeats the test in f64.
 
@@ -18,9 +19,9 @@ struct Params {
   pad1: f32,
 };
 
-// Per step, per object: (x, y, z, A), (vx, vy, vz, 0); TEME km, km/s^2, km/s.
+// Per step, per object: (x, y, z, D), (vx, vy, vz, 0); km and km/s.
 @group(0) @binding(0) var<storage, read> states: array<vec4<f32>>;
-// Per object: radius range over the block, +-50 km (NaN: excluded).
+// Per object: bounds on its radius over the block's intervals (NaN: excluded).
 @group(0) @binding(1) var<storage, read> bands: array<vec2<f32>>;
 // Candidates: (obj1, obj2, step, 0).
 @group(0) @binding(2) var<storage, read_write> candidates: array<vec4<u32>>;
@@ -54,17 +55,17 @@ fn main(@builtin(local_invocation_id) lid: vec3<u32>, @builtin(workgroup_id) wid
   let vi = states[base + i * 2u + 1u].xyz;
   let bi = bands[i];
   if (!(bi.x <= bi.y)) { return; }
-  let hh = P.half_step_s * P.half_step_s;
   for (var k = 0u; k < WG; k++) {
     let j = j_base + k;
     if (j <= i || j >= P.objects) { continue; }
     let bj = tile_b[k];
-    if (!(bi.x <= bj.y && bj.x <= bi.y)) { continue; }   // radius bands apart (or NaN)
+    let reach = P.threshold_km + P.slack_km;
+    if (!(bi.x <= bj.y + reach && bj.x <= bi.y + reach)) { continue; }   // radii apart (or NaN)
     let dr = tile_p[k].xyz - pi.xyz;
     let dv = tile_v[k].xyz - vi;
     let tau = clamp(-dot(dr, dv) / max(dot(dv, dv), 1e-20), -P.half_step_s, P.half_step_s);
     let d = length(dr + dv * tau);
-    if (d <= P.threshold_km + 0.5 * (pi.w + tile_p[k].w) * hh + P.slack_km) {
+    if (d <= P.threshold_km + pi.w + tile_p[k].w + P.slack_km) {
       let at = atomicAdd(&count, 1u);
       if (at < P.capacity) { candidates[at] = vec4<u32>(i, j, P.step_base + wid.z, 0u); }
     }

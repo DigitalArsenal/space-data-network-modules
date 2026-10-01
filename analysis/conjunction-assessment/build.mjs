@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { compileModuleFromSource, cleanupCompilation } from 'space-data-module-sdk/compiler';
 import { generateSdsHeaders, packageRoot, standardsRoot } from './generate-sds-headers.mjs';
+import { composeErfaTranslationUnit } from '../../foundation/frames/erfa-amalgamation.mjs';
 
 const cppRoot = path.join(packageRoot, 'src/cpp');
 const manifestPath = path.join(packageRoot, 'plugin-manifest.json');
@@ -60,12 +61,14 @@ async function sourceWithIncludes(file) {
 const caSources = ['conjunction_assessment.cpp','gp_json.cpp','kdtree.cpp',
   'resident_screening_index.cpp','screening_internal.cpp','screening.cpp','screening_tight.cpp',
   'cdm_output.cpp','csm_output.cpp','pc_method.cpp','ephemeris_source.cpp',
-  'conjunction_engine.cpp','plugin_invoke_bridge.cpp'];
+  'conjunction_engine.cpp','time_scales.cpp','plugin_invoke_bridge.cpp'];
 // sgp4_propagator.cpp is the unused alternate implementation: the historical
 // static archive selected conjunction_assessment.cpp for those same symbols.
 const sgp4Root = path.join(cppRoot,'deps/sgp4/libsgp4');
 const sgp4Sources = (await fs.readdir(sgp4Root)).filter(p=>p.endsWith('.cc')).sort();
-const pieces = [];
+// Leap seconds and TDB come from the vendored ERFA every frames/time module
+// compiles (foundation/frames/erfa-amalgamation.mjs), not a second table.
+const pieces = [(await composeErfaTranslationUnit()).source];
 for(const file of [...sgp4Sources.map(p=>path.join(sgp4Root,p)), ...caSources.map(p=>path.join(cppRoot,'src',p))]) {
   pieces.push(await sourceWithIncludes(file));
 }

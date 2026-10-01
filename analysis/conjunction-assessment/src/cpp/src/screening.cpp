@@ -191,7 +191,7 @@ std::pair<int32_t, int32_t> worker_step_block(
 // reported there. The refinement tolerance keeps a TCA that close to an edge
 // in both windows rather than in neither.
 std::optional<ConjunctionSolution> solution_in_screening_window(
-    const TLE& obj1, const TLE& obj2, const ConjunctionSolution& solution,
+    const EphemerisSource& obj1, const EphemerisSource& obj2, const ConjunctionSolution& solution,
     double start_jd, double end_jd, double fine_tol_sec) {
     const double tolerance_days = std::max(0.001, fine_tol_sec) / 86400.0;
     if (!std::isfinite(solution.tca_jd)) return std::nullopt;
@@ -648,8 +648,10 @@ ConjunctionEvent assess_conjunction_polynomial(
     double radius2_m)
 {
     ConjunctionEvent event;
-    event.obj1 = resident_index.tles[obj1_index];
-    event.obj2 = resident_index.tles[obj2_index];
+    const SGP4EphemerisSource primary_source(resident_index.tles[obj1_index]);
+    const SGP4EphemerisSource secondary_source(resident_index.tles[obj2_index]);
+    event.obj1 = primary_source.identity();
+    event.obj2 = secondary_source.identity();
     event.tca_jd = find_polynomial_tca(
         resident_index,
         obj1_index,
@@ -688,8 +690,6 @@ ConjunctionEvent assess_conjunction_polynomial(
     event.dse1 = event.tca_jd - event.obj1.epoch_jd;
     event.dse2 = event.tca_jd - event.obj2.epoch_jd;
 
-    const SGP4EphemerisSource primary_source(event.obj1);
-    const SGP4EphemerisSource secondary_source(event.obj2);
     RtnCovarianceSigmas primary_sigmas;
     RtnCovarianceSigmas secondary_sigmas;
     if (primary_source.covariance_rtn_sigma_at(event.tca_jd, primary_sigmas)) {
@@ -727,8 +727,8 @@ struct ExactSolvedHit {
 };
 
 std::vector<ExactSolvedHit> solve_encounter_exact(
-    const TLE& obj1,
-    const TLE& obj2,
+    const EphemerisSource& obj1,
+    const EphemerisSource& obj2,
     uint32_t obj1_index,
     uint32_t obj2_index,
     const CoarseHitRecord& hit,
@@ -746,107 +746,29 @@ struct RefinedEncounters {
 };
 
 RefinedEncounters refine_encounters(
-    const std::vector<TLE>& tles,
+    const SourceRefs& sources,
     const std::vector<CoarseHitRecord>& encounters,
     const ScreeningConfig& config,
     ProgressCallback progress,
     const ResidentScreeningIndex* resident_index);
 
+std::vector<ConjunctionEvent> refine_window_encounters(
+    const SourceRefs& sources,
+    const std::vector<CoarseHitRecord>& encounters,
+    const ScreeningConfig& config,
+    ScreeningStats& stats,
+    ProgressCallback progress,
+    const ResidentScreeningIndex* resident_index);
+
 ConjunctionSolution refine_exact_window_locally(
-    const TLE& obj1,
-    const TLE& obj2,
+    const EphemerisSource& obj1,
+    const EphemerisSource& obj2,
     const RefinementWindow& window,
     const ScreeningConfig& config);
 
-ConjunctionEvent refine_coarse_hit(
-    const TLE& obj1,
-    const TLE& obj2,
-    const CoarseHitRecord& hit,
-    double slice_start_jd,
-    double slice_end_jd,
-    const ScreeningConfig& config,
-    const ResidentScreeningIndex* resident_index)
-{
-    const double radius_m = config.combined_radius_m / 2.0;
-    const auto window = build_refinement_window(
-        hit,
-        slice_start_jd,
-        slice_end_jd,
-        config.coarse_step_sec);
-
-    if (window.duration_days() <= 0.0) {
-        if (resident_index != nullptr &&
-            resident_index->screening_mode !=
-                ScreeningMode::exact_only) {
-            auto event = assess_conjunction_polynomial(
-                *resident_index,
-                hit.obj1_index,
-                hit.obj2_index,
-                slice_start_jd,
-                std::max(0.0, slice_end_jd - slice_start_jd),
-                config,
-                radius_m,
-                radius_m);
-            if (resident_index->screening_mode ==
-                ScreeningMode::polynomial_plus_exact_polish) {
-                return assess_conjunction_in_window_near_hint(
-                    obj1,
-                    obj2,
-                    slice_start_jd,
-                    slice_end_jd,
-                    event.tca_jd,
-                    radius_m,
-                    radius_m);
-            }
-            return event;
-        }
-        return assess_conjunction(
-            obj1,
-            obj2,
-            slice_start_jd,
-            std::max(0.0, slice_end_jd - slice_start_jd),
-            radius_m,
-            radius_m);
-    }
-
-    if (resident_index != nullptr &&
-        resident_index->screening_mode !=
-            ScreeningMode::exact_only) {
-        auto event = assess_conjunction_polynomial(
-            *resident_index,
-            hit.obj1_index,
-            hit.obj2_index,
-            window.start_jd,
-            window.duration_days(),
-            config,
-            radius_m,
-            radius_m);
-        if (resident_index->screening_mode ==
-            ScreeningMode::polynomial_plus_exact_polish) {
-            return assess_conjunction_in_window_near_hint(
-                obj1,
-                obj2,
-                window.start_jd,
-                window.end_jd,
-                event.tca_jd,
-                radius_m,
-                radius_m);
-        }
-        return event;
-    }
-
-    return assess_conjunction(
-        obj1,
-        obj2,
-        window.start_jd,
-        window.duration_days(),
-        radius_m,
-        radius_m);
-}
-
 std::optional<ConjunctionEvent> refine_coarse_hit_if_within_threshold(
-    const TLE& obj1,
-    const TLE& obj2,
+    const EphemerisSource& obj1,
+    const EphemerisSource& obj2,
     const CoarseHitRecord& hit,
     double slice_start_jd,
     double slice_end_jd,
@@ -1385,12 +1307,8 @@ std::vector<ConjunctionEvent> screen_precomputed_tles(
 
     stats.kdtree_candidates = distinct_encounter_pairs(encounters);
 
-    auto refined = refine_encounters(tles, encounters, config, progress, nullptr);
-    auto events = std::move(refined.events);
-    stats.failed_pairs = refined.failed_objects.size();
-    stats.tca_refined = encounters.size();
-    stats.conjunctions_found = events.size();
-    sort_conjunction_events(events);
+    const Sgp4Sources sources(tles);
+    auto events = refine_window_encounters(sources.refs, encounters, config, stats, progress, nullptr);
 
     auto t_end = std::chrono::high_resolution_clock::now();
     stats.elapsed_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
@@ -1829,14 +1747,14 @@ struct ImplicitCoarseHitWindowResult {
 };
 
 ConjunctionSolution refine_exact_window_locally(
-    const TLE& obj1,
-    const TLE& obj2,
+    const EphemerisSource& obj1,
+    const EphemerisSource& obj2,
     const RefinementWindow& window,
     const ScreeningConfig& config)
 {
     auto distance_at_jd = [&](double jd) -> double {
-        const auto state1 = propagate_sgp4(obj1, jd);
-        const auto state2 = propagate_sgp4(obj2, jd);
+        const auto state1 = obj1.state_at(jd);
+        const auto state2 = obj2.state_at(jd);
         const double dx = state1.x - state2.x;
         const double dy = state1.y - state2.y;
         const double dz = state1.z - state2.z;
@@ -1888,8 +1806,8 @@ ConjunctionSolution refine_exact_window_locally(
 }
 
 std::vector<ExactSolvedHit> solve_encounter_exact(
-    const TLE& obj1,
-    const TLE& obj2,
+    const EphemerisSource& obj1,
+    const EphemerisSource& obj2,
     uint32_t obj1_index,
     uint32_t obj2_index,
     const CoarseHitRecord& hit,
@@ -1989,7 +1907,7 @@ std::vector<ExactSolvedHit> solve_encounter_exact(
 // chunked paths alike, so an encounter refines to the same TCA and miss
 // distance whichever path found it.
 RefinedEncounters refine_encounters(
-    const std::vector<TLE>& tles,
+    const SourceRefs& sources,
     const std::vector<CoarseHitRecord>& encounters,
     const ScreeningConfig& config,
     ProgressCallback progress,
@@ -2023,7 +1941,7 @@ RefinedEncounters refine_encounters(
             FailedObjects& failed_out) {
             if (use_exact_solution_path) {
                 auto solved = solve_encounter_exact(
-                    tles[hit.obj1_index], tles[hit.obj2_index],
+                    *sources[hit.obj1_index], *sources[hit.obj2_index],
                     hit.obj1_index, hit.obj2_index,
                     hit, start_jd, end_jd, config);
                 if (has_error()) {
@@ -2034,7 +1952,7 @@ RefinedEncounters refine_encounters(
                 solved_out.insert(solved_out.end(), solved.begin(), solved.end());
             } else {
                 auto event = refine_coarse_hit_if_within_threshold(
-                    tles[hit.obj1_index], tles[hit.obj2_index],
+                    *sources[hit.obj1_index], *sources[hit.obj2_index],
                     hit, start_jd, end_jd, config, resident_index);
                 if (has_error()) {
                     failed_out.emplace_back(hit.obj1_index, hit.obj2_index);
@@ -2150,8 +2068,8 @@ RefinedEncounters refine_encounters(
         events.reserve(events.size() + solved_hits.size());
         for (const auto& solved : solved_hits) {
             auto event = assess_conjunction_at_tca(
-                tles[solved.obj1_index],
-                tles[solved.obj2_index],
+                *sources[solved.obj1_index],
+                *sources[solved.obj2_index],
                 solved.tca_jd,
                 radius_m,
                 radius_m);
@@ -2173,14 +2091,14 @@ RefinedEncounters refine_encounters(
 // reports: failed pairs, encounters refined, conjunctions found. Events are
 // returned in the canonical order.
 std::vector<ConjunctionEvent> refine_window_encounters(
-    const std::vector<TLE>& tles,
+    const SourceRefs& sources,
     const std::vector<CoarseHitRecord>& encounters,
     const ScreeningConfig& config,
     ScreeningStats& stats,
     ProgressCallback progress,
     const ResidentScreeningIndex* resident_index)
 {
-    auto refined = refine_encounters(tles, encounters, config, progress, resident_index);
+    auto refined = refine_encounters(sources, encounters, config, progress, resident_index);
     auto events = std::move(refined.events);
     stats.failed_pairs = refined.failed_objects.size();
     stats.tca_refined = encounters.size();
@@ -2414,8 +2332,9 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
     stats.pairs_screened = pairs_screened;
     stats.pairs_prefiltered = pairs_prefiltered;
 
+    const Sgp4Sources sources(tles);
     auto events = refine_window_encounters(
-        tles, window_result.encounters, config, stats, progress, resident_index);
+        sources.refs, window_result.encounters, config, stats, progress, resident_index);
 
     auto t_end = std::chrono::high_resolution_clock::now();
     stats.elapsed_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
@@ -2487,6 +2406,7 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
     std::vector<CoarseHitRecord> carry;
     std::map<uint32_t, ExcludedObject> excluded;
     RefinedEncounters refined;
+    const Sgp4Sources sgp4_sources(tles);
     const int32_t chunk_steps = MAX_IMPLICIT_COARSE_STEPS_PER_CHUNK;
     for (int32_t chunk_first = 0; chunk_first <= total_steps;
          chunk_first += chunk_steps) {
@@ -2523,7 +2443,7 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit(
             }
         }
         stats.tca_refined += closed.size();
-        auto batch = refine_encounters(tles, closed, config, nullptr, resident_index);
+        auto batch = refine_encounters(sgp4_sources.refs, closed, config, nullptr, resident_index);
         refined.events.insert(refined.events.end(),
                               std::make_move_iterator(batch.events.begin()),
                               std::make_move_iterator(batch.events.end()));
@@ -2765,14 +2685,14 @@ std::vector<ConjunctionEvent> ConjunctionScreener::screen(
 // refined by the same refine_window_encounters as the coarse pass, so a pass
 // found either way yields the same TCA and miss distance.
 std::vector<ConjunctionEvent> screen_tight_candidates(
-    const std::vector<TLE>& tles,
+    const SourceRefs& sources,
     const ScreeningConfig& config,
     const std::vector<TightCandidate>* candidates,
     std::map<uint32_t, ExcludedObject> excluded,
     ScreeningStats& stats)
 {
     const auto t_start = std::chrono::high_resolution_clock::now();
-    const size_t n = tles.size();
+    const size_t n = sources.size();
     const double step_days = config.coarse_step_sec / 86400.0;
     const double h = 0.5 * config.coarse_step_sec;
     const int32_t last_step = tight_last_coarse_step(config);
@@ -2803,13 +2723,16 @@ std::vector<ConjunctionEvent> screen_tight_candidates(
                 if (k.obj1 >= n || k.obj2 >= n || k.obj1 == k.obj2 || k.step < 0 || k.step > last_step) continue;
                 if (excluded.count(k.obj1) || excluded.count(k.obj2)) continue;
                 const double jd = config.start_jd + k.step * step_days;
-                const StateVector a = propagate_sgp4(tles[k.obj1], jd);
-                const StateVector b = propagate_sgp4(tles[k.obj2], jd);
+                StateVector a, b;
+                double deviation_a = 0, deviation_b = 0;
+                std::string failure;
                 propagations[w] += 2;
-                if (has_error()) { clear_error(); continue; }   // the grid reported the exclusion
+                if (!tight_sample(*sources[k.obj1], jd, h, a, deviation_a, failure) ||
+                    !tight_sample(*sources[k.obj2], jd, h, b, deviation_b, failure)) {
+                    continue;   // the grid reported the exclusion
+                }
                 double closest = 0.0;
-                if (tight_pair_may_close(a, tight_acceleration_bound_km_s2(a, h),
-                                         b, tight_acceleration_bound_km_s2(b, h),
+                if (tight_pair_may_close(a, deviation_a, b, deviation_b,
                                          config.threshold_km, h, &closest)) {
                     hits[w].push_back({std::min(k.obj1, k.obj2), std::max(k.obj1, k.obj2), k.step, closest});
                 }
@@ -2819,7 +2742,8 @@ std::vector<ConjunctionEvent> screen_tight_candidates(
         // CPU scan: every pair at every coarse step, the same test.
         run([&](int w, int64_t lo, int64_t hi) {
             std::vector<StateVector> states(n);
-            std::vector<double> accel(n);
+            std::vector<double> deviation(n);
+            std::string failure;
             std::vector<uint8_t> ok(n);
             std::vector<uint8_t> dead(n, 0);
             for (int64_t step = lo; step < hi; ++step) {
@@ -2827,15 +2751,12 @@ std::vector<ConjunctionEvent> screen_tight_candidates(
                 for (size_t i = 0; i < n; ++i) {
                     ok[i] = 0;
                     if (dead[i]) continue;
-                    states[i] = propagate_sgp4(tles[i], jd);
                     ++propagations[w];
-                    if (has_error()) {
-                        record_exclusion(scan_excluded[w], static_cast<uint32_t>(i), jd, error_message());
-                        clear_error();
+                    if (!tight_sample(*sources[i], jd, h, states[i], deviation[i], failure)) {
+                        record_exclusion(scan_excluded[w], static_cast<uint32_t>(i), jd, failure);
                         dead[i] = 1;
                         continue;
                     }
-                    accel[i] = tight_acceleration_bound_km_s2(states[i], h);
                     ok[i] = 1;
                 }
                 for (size_t i = 0; i < n; ++i) {
@@ -2843,7 +2764,7 @@ std::vector<ConjunctionEvent> screen_tight_candidates(
                     for (size_t j = i + 1; j < n; ++j) {
                         if (!ok[j]) continue;
                         double closest = 0.0;
-                        if (tight_pair_may_close(states[i], accel[i], states[j], accel[j],
+                        if (tight_pair_may_close(states[i], deviation[i], states[j], deviation[j],
                                                  config.threshold_km, h, &closest)) {
                             hits[w].push_back({static_cast<uint32_t>(i), static_cast<uint32_t>(j),
                                                static_cast<int32_t>(step), closest});
@@ -2872,7 +2793,7 @@ std::vector<ConjunctionEvent> screen_tight_candidates(
     stats.pairs_screened = n < 2 ? 0 : static_cast<uint64_t>(n) * (n - 1) / 2;
     stats.kdtree_candidates = all.size();
     for (auto p : propagations) stats.propagations += p;
-    auto events = refine_window_encounters(tles, encounters, config, stats, nullptr, nullptr);
+    auto events = refine_window_encounters(sources, encounters, config, stats, nullptr, nullptr);
     stats.excluded_objects = excluded_list(excluded);
     for (auto& x : stats.excluded_objects) { x.input_list = 0; x.input_index = x.index; }
     stats.elapsed_ms = std::chrono::duration<double, std::milli>(

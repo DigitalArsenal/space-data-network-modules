@@ -12,10 +12,6 @@
 namespace conjunction {
 
 namespace {
-constexpr double kMuKm3S2 = 398600.8;          // SGP4 (WGS 72) gravitational parameter
-constexpr double kAccelerationMargin = 1.05;   // J2 and drag over two-body
-constexpr double kRadiusFloorKm = 6000.0;
-constexpr float kBandMarginKm = 50.0f;         // as screen_catalog's altitude gate
 
 double norm3(double x, double y, double z) { return std::sqrt(x * x + y * y + z * z); }
 
@@ -37,21 +33,35 @@ void for_blocks(int64_t count, int num_threads, Body body) {
 }
 } // namespace
 
-double tight_acceleration_bound_km_s2(const StateVector& s, double half_step_sec) {
-    const double r = norm3(s.x, s.y, s.z), v = norm3(s.vx, s.vy, s.vz);
-    const double r_min = std::max(r - v * half_step_sec, kRadiusFloorKm);
-    return kAccelerationMargin * kMuKm3S2 / (r_min * r_min);
+bool tight_sample(const EphemerisSource& source, double jd, double half_step_sec,
+                  StateVector& state, double& deviation_km, std::string& failure) {
+    state = source.state_at(jd);
+    if (has_error()) {
+        failure = error_message();
+        clear_error();
+        return false;
+    }
+    if (!std::isfinite(state.x) || !std::isfinite(state.y) || !std::isfinite(state.z) ||
+        !std::isfinite(state.vx) || !std::isfinite(state.vy) || !std::isfinite(state.vz)) {
+        failure = "The trajectory has no finite state at this epoch.";
+        return false;
+    }
+    if (!source.path_deviation_bound_km(jd, state, half_step_sec, deviation_km)) {
+        failure = "The trajectory cannot bound its motion between coarse steps.";
+        return false;
+    }
+    return true;
 }
 
-bool tight_pair_may_close(const StateVector& a, double accel_a, const StateVector& b, double accel_b,
-                          double threshold_km, double h, double* closest_km) {
+bool tight_pair_may_close(const StateVector& a, double deviation_a_km, const StateVector& b,
+                          double deviation_b_km, double threshold_km, double h, double* closest_km) {
     const double dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
     const double ux = b.vx - a.vx, uy = b.vy - a.vy, uz = b.vz - a.vz;
     const double vv = ux * ux + uy * uy + uz * uz;
     const double tau = std::clamp(-(dx * ux + dy * uy + dz * uz) / std::max(vv, 1e-20), -h, h);
     const double d = norm3(dx + ux * tau, dy + uy * tau, dz + uz * tau);
     if (closest_km) *closest_km = d;
-    return d <= threshold_km + 0.5 * (accel_a + accel_b) * h * h;
+    return d <= threshold_km + deviation_a_km + deviation_b_km;
 }
 
 int32_t tight_last_coarse_step(const ScreeningConfig& config) {
@@ -60,11 +70,11 @@ int32_t tight_last_coarse_step(const ScreeningConfig& config) {
     return static_cast<int32_t>(config.duration_days / step_days);
 }
 
-CoarseGridBlock tight_coarse_grid_block(const std::vector<TLE>& tles, const ScreeningConfig& config,
+CoarseGridBlock tight_coarse_grid_block(const SourceRefs& sources, const ScreeningConfig& config,
                                         int32_t first_step, int32_t step_count,
                                         const std::vector<uint8_t>& already_excluded) {
     CoarseGridBlock block;
-    const size_t n = tles.size();
+    const size_t n = sources.size();
     block.first_step = first_step;
     block.step_count = step_count;
     block.objects = static_cast<uint32_t>(n);
@@ -77,35 +87,43 @@ CoarseGridBlock tight_coarse_grid_block(const std::vector<TLE>& tles, const Scre
         clear_error();
         for (int64_t i = lo; i < hi; ++i) {
             if (!already_excluded.empty() && already_excluded[i]) continue;
-            float r_lo = std::numeric_limits<float>::infinity(), r_hi = -r_lo;
+            double r_lo = std::numeric_limits<double>::infinity(), r_hi = -r_lo;
             bool failed = false;
             for (int32_t s = 0; s < step_count && !failed; ++s) {
                 const double jd = config.start_jd + (first_step + s) * step_days;
-                const StateVector st = propagate_sgp4(tles[i], jd);
-                if (has_error()) {
+                StateVector st;
+                double deviation = 0;
+                std::string failure;
+                if (!tight_sample(*sources[i], jd, h, st, deviation, failure)) {
                     auto& x = excluded[worker][static_cast<uint32_t>(i)];
                     x.index = static_cast<uint32_t>(i);
                     x.first_failure_jd = jd;
-                    x.reason = error_message();
-                    clear_error();
+                    x.reason = failure;
                     failed = true;
                     break;
                 }
                 float* o = &block.states[(static_cast<size_t>(s) * n + i) * 8];
                 o[0] = static_cast<float>(st.x); o[1] = static_cast<float>(st.y); o[2] = static_cast<float>(st.z);
-                o[3] = static_cast<float>(tight_acceleration_bound_km_s2(st, h));
+                o[3] = static_cast<float>(deviation);
                 o[4] = static_cast<float>(st.vx); o[5] = static_cast<float>(st.vy); o[6] = static_cast<float>(st.vz);
                 o[7] = 0.0f;
-                const float r = static_cast<float>(norm3(st.x, st.y, st.z));
-                r_lo = std::min(r_lo, r); r_hi = std::max(r_hi, r);
+                // Over the interval |r| stays within D of |r + v tau|, |tau| <= h.
+                const double vv = st.vx * st.vx + st.vy * st.vy + st.vz * st.vz;
+                const double rv = st.x * st.vx + st.y * st.vy + st.z * st.vz;
+                const double rr = st.x * st.x + st.y * st.y + st.z * st.z;
+                const double tau = std::clamp(-rv / std::max(vv, 1e-20), -h, h);
+                const double nearest = std::sqrt(std::max(0.0, rr + 2 * rv * tau + vv * tau * tau));
+                const double farthest = std::sqrt(rr + 2 * std::abs(rv) * h + vv * h * h);
+                r_lo = std::min(r_lo, nearest - deviation);
+                r_hi = std::max(r_hi, farthest + deviation);
             }
             if (failed) {
                 for (int32_t s = 0; s < step_count; ++s)
                     std::fill_n(&block.states[(static_cast<size_t>(s) * n + i) * 8], 8, std::numeric_limits<float>::quiet_NaN());
                 continue;
             }
-            block.bands[i * 2] = r_lo - kBandMarginKm;
-            block.bands[i * 2 + 1] = r_hi + kBandMarginKm;
+            block.bands[i * 2] = static_cast<float>(r_lo);
+            block.bands[i * 2 + 1] = static_cast<float>(r_hi);
         }
     });
     for (auto& part : excluded) block.excluded.insert(part.begin(), part.end());

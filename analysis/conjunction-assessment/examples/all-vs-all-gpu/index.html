@@ -64,7 +64,7 @@ function run(report) {
 function render(r) {
   const t = r.timings, s = (ms) => (ms / 1000).toFixed(1) + ' s';
   show(`${r.objects} objects, ${r.coarseSteps} coarse steps, ${r.candidates} GPU candidates, ${r.events.length} conjunctions\n` +
-    `total ${s(t.totalMs)}: SGP4 grid ${s(t.gridMs)}, GPU search ${s(t.gpuMs)}, refinement ${s(t.refineMs)}` +
+    `total ${s(t.totalMs)}: load ${s(t.indexMs)}, grid ${s(t.gridMs)}, GPU search ${s(t.gpuMs)}, refinement ${s(t.refineMs)}` +
     (r.adapter ? ` (${r.adapter}, ${r.workers} module threads)` : ''));
   const body = document.querySelector('#events tbody');
   body.replaceChildren(...r.events.map((e) => {

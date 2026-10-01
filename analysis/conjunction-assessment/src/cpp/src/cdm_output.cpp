@@ -1002,7 +1002,7 @@ static std::string cdm_object_reference_frame_name(const CDMObject* object) {
 
 static flatbuffers::Offset<CDMObject> build_cdm_object(
     flatbuffers::FlatBufferBuilder& builder,
-    const TLE& tle,
+    const ObjectIdentity& tle,
     const StateVector& state,
     const ConjunctionEvent& event,
     int obj_num,

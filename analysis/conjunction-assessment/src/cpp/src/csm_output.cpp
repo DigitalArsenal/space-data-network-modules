@@ -21,7 +21,7 @@ uint32_t nonnegative_norad_id(int norad_cat_id) {
     return static_cast<uint32_t>(std::max(0, norad_cat_id));
 }
 
-std::string fallback_object_id(const TLE& tle) {
+std::string fallback_object_id(const ObjectIdentity& tle) {
     if (!tle.object_id.empty()) {
         return tle.object_id;
     }
@@ -33,7 +33,7 @@ std::string fallback_object_id(const TLE& tle) {
 
 flatbuffers::Offset<CAT> build_csm_cat(
     flatbuffers::FlatBufferBuilder& builder,
-    const TLE& tle)
+    const ObjectIdentity& tle)
 {
     const std::string object_id = fallback_object_id(tle);
     return CreateCATDirect(

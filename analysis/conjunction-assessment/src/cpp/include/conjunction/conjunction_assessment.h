@@ -25,6 +25,7 @@
  */
 
 #include "sgp4_propagator.h"
+#include "conjunction/ephemeris_source.h"
 #include "conjunction/pc_method.h"
 #include <vector>
 #include <string>
@@ -45,8 +46,8 @@ constexpr double DEFAULT_THRESHOLD_KM = 5.0;
 /// Conjunction event
 struct ConjunctionEvent {
     // Object identifiers
-    TLE obj1;
-    TLE obj2;
+    ObjectIdentity obj1;
+    ObjectIdentity obj2;
 
     // Time of closest approach
     double tca_jd = 0.0;
@@ -146,6 +147,37 @@ ConjunctionEvent assess_conjunction_in_window_near_hint(
     double tca_hint_jd,
     double radius1_m = DEFAULT_RADIUS_M,
     double radius2_m = DEFAULT_RADIUS_M);
+
+// The same solves for any two trajectory sources (SGP4, OEM, PPE, ...). The
+// TLE forms above evaluate each element set with SGP4.
+double find_tca(const EphemerisSource& obj1, const EphemerisSource& obj2,
+                double start_jd, double duration_days = 7.0,
+                double coarse_step_sec = 60.0, double fine_tol_sec = 0.001);
+ConjunctionSolution assess_conjunction_solution(
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
+    double start_jd, double duration_days = 7.0);
+std::vector<ConjunctionSolution> assess_conjunction_solutions_within_threshold(
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
+    double start_jd, double duration_days, double threshold_km,
+    double fine_tol_sec = 0.001);
+ConjunctionSolution assess_conjunction_solution_in_window_near_hint(
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
+    double search_start_jd, double search_end_jd, double tca_hint_jd);
+ConjunctionEvent assess_conjunction_at_tca(
+    const EphemerisSource& obj1, const EphemerisSource& obj2, double tca_jd,
+    double radius1_m = DEFAULT_RADIUS_M, double radius2_m = DEFAULT_RADIUS_M);
+ConjunctionEvent assess_conjunction(
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
+    double start_jd, double duration_days = 7.0,
+    double radius1_m = DEFAULT_RADIUS_M, double radius2_m = DEFAULT_RADIUS_M);
+ConjunctionEvent assess_conjunction_near(
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
+    double tca_hint_jd, double window_hours = 2.0,
+    double radius1_m = DEFAULT_RADIUS_M, double radius2_m = DEFAULT_RADIUS_M);
+ConjunctionEvent assess_conjunction_in_window_near_hint(
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
+    double search_start_jd, double search_end_jd, double tca_hint_jd,
+    double radius1_m = DEFAULT_RADIUS_M, double radius2_m = DEFAULT_RADIUS_M);
 
 /// Compute Alfano maximum collision probability
 /// d = miss distance (km), Rc = combined hard-body radius (km)

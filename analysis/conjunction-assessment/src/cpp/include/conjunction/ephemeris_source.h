@@ -16,12 +16,22 @@
 
 #include "conjunction/sgp4_propagator.h"  // for StateVector
 #include "conjunction/gp_json.h"          // for GPElement
+#include <array>
+#include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
 #include <functional>
 
 namespace conjunction {
+
+/// Who an object is, as conjunction results report it.
+struct ObjectIdentity {
+    std::string object_id;
+    std::string name;
+    int norad_cat_id = 0;
+    double epoch_jd = 0.0;   // epoch of the underlying data (days-since-epoch)
+};
 
 struct RtnCovarianceSigmas {
     double radial_km = 0.0;
@@ -45,10 +55,27 @@ public:
     virtual std::string object_id() const { return ""; }
     virtual std::string object_name() const { return ""; }
     virtual int norad_id() const { return 0; }
+    virtual ObjectIdentity identity() const {
+        return {object_id(), object_name(), norad_id(), epoch_jd()};
+    }
 
     /// Valid time range [start_jd, end_jd]. 0 = unlimited.
     virtual double valid_start_jd() const { return 0; }
     virtual double valid_end_jd() const { return 0; }
+
+    /// Whether path_deviation_bound_km is available: what all-vs-all
+    /// screening (screening_tight.h) needs to discard a pair between samples.
+    virtual bool bounds_path_deviation() const { return false; }
+
+    /// A bound (km) on how far the path strays from the straight line through
+    /// a sample: for every |tau| <= half_step_sec,
+    ///   |r(jd + tau) - state.r - state.v tau| <= bound_km,
+    /// where state is this source's state at jd. False when it has none.
+    virtual bool path_deviation_bound_km(double jd, const StateVector& state,
+                                         double half_step_sec, double& bound_km) const {
+        (void)jd; (void)state; (void)half_step_sec; (void)bound_km;
+        return false;
+    }
 
     /// Optional RTN 1-sigma position covariance prior (km) evaluated at jd.
     /// Implementations return false when no source-specific covariance is available.
@@ -59,6 +86,11 @@ public:
         return false;
     }
 };
+
+/// Deviation bound for natural (unpowered) Earth-orbit motion: 1/2 A h^2 with
+/// A = 1.05 mu / r_min^2, r_min = |r| - |v| h floored at 6000 km. The 5 %
+/// covers J2 (0.16 % at the surface) and drag. SGP4 motion is natural.
+double natural_motion_deviation_bound_km(const StateVector& state, double half_step_sec);
 
 // ── SGP4 from TLE ──
 
@@ -74,6 +106,15 @@ public:
     std::string object_id() const override { return tle_.object_id.empty() ? std::to_string(tle_.norad_cat_id) : tle_.object_id; }
     std::string object_name() const override { return tle_.name; }
     int norad_id() const override { return tle_.norad_cat_id; }
+    ObjectIdentity identity() const override {
+        return {tle_.object_id, tle_.name, tle_.norad_cat_id, tle_.epoch_jd};
+    }
+    bool bounds_path_deviation() const override { return true; }
+    bool path_deviation_bound_km(double, const StateVector& state, double half_step_sec,
+                                 double& bound_km) const override {
+        bound_km = natural_motion_deviation_bound_km(state, half_step_sec);
+        return std::isfinite(bound_km);
+    }
     bool covariance_rtn_sigma_at(
         double jd, RtnCovarianceSigmas& sigmas) const override;
 
@@ -95,6 +136,12 @@ public:
     std::string object_id() const override { return gp_.object_id.empty() ? std::to_string(gp_.norad_cat_id) : gp_.object_id; }
     std::string object_name() const override { return gp_.object_name; }
     int norad_id() const override { return gp_.norad_cat_id; }
+    bool bounds_path_deviation() const override { return true; }
+    bool path_deviation_bound_km(double, const StateVector& state, double half_step_sec,
+                                 double& bound_km) const override {
+        bound_km = natural_motion_deviation_bound_km(state, half_step_sec);
+        return std::isfinite(bound_km);
+    }
     bool covariance_rtn_sigma_at(
         double jd, RtnCovarianceSigmas& sigmas) const override;
 
@@ -143,6 +190,48 @@ private:
     std::string name_;
     std::string object_id_;
     int norad_ = 0;
+};
+
+// ── Chebyshev polynomial ephemeris (PPE) ──
+
+/// One PPE interval: Chebyshev coefficients of x, y, z (km) and vx, vy, vz
+/// (km/s) over [mid - half, mid + half], half in seconds.
+struct PolynomialRecord {
+    double mid = 0, half = 0;
+    std::array<std::vector<double>, 6> c;
+};
+
+/// A trajectory as contiguous Chebyshev intervals, from any propagator.
+/// Its deviation bound comes from the coefficients alone (the second
+/// derivative of the position series, plus position and velocity jumps where
+/// intervals meet), so it holds for any force model, thrust included.
+class PolynomialEphemerisSource final : public EphemerisSource {
+public:
+    explicit PolynomialEphemerisSource(std::vector<PolynomialRecord> records);
+
+    StateVector state_at(double jd) const override;
+    double epoch_jd() const override { return valid_start_jd(); }
+    double valid_start_jd() const override;
+    double valid_end_jd() const override;
+    std::string object_id() const override { return id; }
+    std::string object_name() const override { return name; }
+    int norad_id() const override { return norad; }
+    bool bounds_path_deviation() const override { return !records_.empty(); }
+    bool path_deviation_bound_km(double jd, const StateVector& state, double half_step_sec,
+                                 double& bound_km) const override;
+    const std::vector<PolynomialRecord>& records() const { return records_; }
+
+    std::string id, name;
+    int norad = 0;
+
+private:
+    size_t record_at(double jd) const;   // the interval holding jd (clamped)
+
+    std::vector<PolynomialRecord> records_;
+    std::vector<double> starts_;           // interval start JDs
+    std::vector<double> acceleration_km_s2_;   // per interval: bound on |r''|
+    std::vector<double> position_jump_km_;     // per boundary k|k+1
+    std::vector<double> velocity_jump_km_s_;
 };
 
 // ── Callback-based (user-supplied function) ──

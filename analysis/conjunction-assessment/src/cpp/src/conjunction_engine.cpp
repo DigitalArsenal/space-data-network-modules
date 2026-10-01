@@ -235,124 +235,15 @@ static double mahalanobis_3d(const double dr[3], const Covariance3x3& c1, const 
     return (md2 > 0) ? std::sqrt(md2) : 0;
 }
 
-static double distance_at(const EphemerisSource& o1, const EphemerisSource& o2, double jd) {
-    auto s1 = o1.state_at(jd);
-    auto s2 = o2.state_at(jd);
-    if (!state_is_finite(s1) || !state_is_finite(s2)) {
-        set_error("Non-finite propagated state."); return std::numeric_limits<double>::quiet_NaN();
-    }
-    double dx = s1.x - s2.x, dy = s1.y - s2.y, dz = s1.z - s2.z;
-    const double distance = std::sqrt(dx*dx + dy*dy + dz*dz);
-    if (!std::isfinite(distance)) {
-        set_error("Non-finite propagated distance."); return std::numeric_limits<double>::quiet_NaN();
-    }
-    return distance;
-}
-
 // ── TCA Finding ──
 
 double ConjunctionEngine::find_tca(
     const EphemerisSource& obj1, const EphemerisSource& obj2,
     double start_jd, double duration_days, double coarse_step_sec, double fine_tol_sec) const
 {
-    double end_jd = start_jd + duration_days;
-    double step = coarse_step_sec / 86400.0;
-
-    // Phase 1: Find all local minima
-    struct Minimum { double jd; double dist; };
-    std::vector<Minimum> minima;
-
-    double prev_d = 1e18, curr_d = 1e18, prev_jd = start_jd;
-    bool prev_decreasing = false;
-    double start_dist = 1e18;
-    double end_dist = 1e18;
-
-    for (double jd = start_jd; jd <= end_jd; jd += step) {
-        {
-            double d = distance_at(obj1, obj2, jd);
-            if (has_error()) return std::numeric_limits<double>::quiet_NaN();
-            if (jd == start_jd) {
-                start_dist = d;
-            }
-            end_dist = d;
-            bool decreasing = (d < curr_d);
-            if (prev_decreasing && !decreasing && curr_d < 50.0) {
-                minima.push_back({prev_jd, curr_d});
-            }
-            prev_decreasing = decreasing;
-            prev_d = curr_d;
-            curr_d = d;
-            prev_jd = jd;
-        }
-    }
-
-    if (std::isfinite(start_dist)) {
-        minima.push_back({start_jd, start_dist});
-    }
-    if (end_jd > start_jd && std::isfinite(end_dist)) {
-        minima.push_back({end_jd, end_dist});
-    }
-
-    // Phase 2: Sort and refine top candidates
-    std::sort(minima.begin(), minima.end(),
-              [](const Minimum& a, const Minimum& b) { return a.dist < b.dist; });
-
-    if (minima.empty()) {
-        set_error("No finite propagated states were available in the screening window."); return std::numeric_limits<double>::quiet_NaN();
-    }
-
-    int n_refine = std::min(static_cast<int>(minima.size()), 30);
-    double best_jd = minima[0].jd;
-    double best_dist = 1e18;
-
-    for (int i = 0; i < n_refine; i++) {
-        double center = minima[i].jd;
-
-        // Endpoints need a wider rescan window because the true TCA can occur
-        // inside the first coarse interval before an interior turning point exists.
-        double subscan_step = 0.05 / 86400.0;
-        double subscan_window =
-            std::max(10.0, coarse_step_sec) / 86400.0;
-        double sub_best_jd = center, sub_best_d = minima[i].dist;
-
-        double subscan_start = std::max(start_jd, center - subscan_window);
-        double subscan_stop = std::min(end_jd, center + subscan_window);
-
-        for (double sample_jd = subscan_start; sample_jd <= subscan_stop + subscan_step * 0.5; sample_jd += subscan_step) {
-            {
-                const double jd = std::min(sample_jd, subscan_stop);
-                double d = distance_at(obj1, obj2, jd);
-            if (has_error()) return std::numeric_limits<double>::quiet_NaN();
-                if (d < sub_best_d) { sub_best_d = d; sub_best_jd = jd; }
-            }
-        }
-
-        // Golden section refinement ±1s
-        double a = std::max(start_jd, sub_best_jd - 1.0/86400.0);
-        double b = std::min(end_jd, sub_best_jd + 1.0/86400.0);
-        double tol = fine_tol_sec / 86400.0;
-        const double phi = (std::sqrt(5.0) - 1.0) / 2.0;
-
-        for (unsigned iteration = 0; (b - a) > tol && iteration < 128; ++iteration) {
-            double c = b - phi * (b - a);
-            double d = a + phi * (b - a);
-            {
-                double fc = distance_at(obj1, obj2, c);
-                double fd = distance_at(obj1, obj2, d);
-            if (has_error()) return std::numeric_limits<double>::quiet_NaN();
-                if (fc < fd) b = d; else a = c;
-            }
-        }
-
-        double refined_jd = (a + b) / 2.0;
-        {
-            double d = distance_at(obj1, obj2, refined_jd);
-            if (has_error()) return std::numeric_limits<double>::quiet_NaN();
-            if (d < best_dist) { best_dist = d; best_jd = refined_jd; }
-        }
-    }
-
-    return best_jd;
+    // One TCA search for every caller: 5 s range sampling brackets minima
+    // that coarse-step sampling steps over at 10+ km/s (conjunction_assessment).
+    return conjunction::find_tca(obj1, obj2, start_jd, duration_days, coarse_step_sec, fine_tol_sec);
 }
 
 // ── B-plane Construction ──

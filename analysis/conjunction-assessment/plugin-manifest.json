@@ -1,7 +1,7 @@
 {
   "pluginId": "conjunction-assessment",
   "name": "Conjunction Assessment Plugin",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Conjunction assessment and collision probability analysis through the SDS PIV/TAB invoke surface.",
   "pluginFamily": "analysis",
   "capabilities": [],
@@ -1047,27 +1047,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "CATALOG_REQUEST with ALFANO_MAXIMUM controls (window, coarse step, threshold, workers); the all-vs-all request screen_catalog serves, over catalog frames only."
-        },
-        {
-          "portId": "catalog",
-          "acceptedTypeSets": [
-            {
-              "setId": "sds-omm",
-              "allowedTypes": [
-                {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM",
-                  "wireFormat": "flatbuffer"
-                }
-              ]
-            }
-          ],
-          "minStreams": 2,
-          "maxStreams": 65535,
-          "required": true,
-          "description": "One $OMM per catalog object, as screen_catalog reads them."
+          "description": "WINDOW_REQUEST on a resident index (prepare_screening_index and its siblings) with no primaries: ALFANO_MAXIMUM controls (window, coarse step, threshold, workers) in the index frame. Sources are mean elements (SGP4) or trajectories from any propagator (PPE in UTC, TT or TDB)."
         },
         {
           "portId": "block",
@@ -1163,27 +1143,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "CATALOG_REQUEST with ALFANO_MAXIMUM controls (window, coarse step, threshold, workers); the all-vs-all request screen_catalog serves, over catalog frames only."
-        },
-        {
-          "portId": "catalog",
-          "acceptedTypeSets": [
-            {
-              "setId": "sds-omm",
-              "allowedTypes": [
-                {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM",
-                  "wireFormat": "flatbuffer"
-                }
-              ]
-            }
-          ],
-          "minStreams": 2,
-          "maxStreams": 65535,
-          "required": true,
-          "description": "One $OMM per catalog object, as screen_catalog reads them."
+          "description": "WINDOW_REQUEST on a resident index (prepare_screening_index and its siblings) with no primaries: ALFANO_MAXIMUM controls (window, coarse step, threshold, workers) in the index frame. Sources are mean elements (SGP4) or trajectories from any propagator (PPE in UTC, TT or TDB)."
         },
         {
           "portId": "candidates",

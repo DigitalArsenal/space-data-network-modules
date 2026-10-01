@@ -39,6 +39,22 @@ namespace conjunction {
 
 struct ResidentScreeningIndex;
 
+/// Trajectory sources by catalog index: what encounter refinement evaluates.
+using SourceRefs = std::vector<const EphemerisSource*>;
+
+/// SGP4 sources for a TLE catalog, one per element set, index for index.
+struct Sgp4Sources {
+    explicit Sgp4Sources(const std::vector<TLE>& tles) {
+        owned.reserve(tles.size());
+        for (const auto& tle : tles) owned.emplace_back(tle);
+        for (const auto& source : owned) refs.push_back(&source);
+    }
+    Sgp4Sources(const Sgp4Sources&) = delete;
+    Sgp4Sources& operator=(const Sgp4Sources&) = delete;
+    std::vector<SGP4EphemerisSource> owned;
+    SourceRefs refs;
+};
+
 /// Screening configuration
 struct ScreeningConfig {
     double start_jd = 0.0;          // Start of screening window

@@ -385,19 +385,24 @@ void inertial_to_rtn(const StateVector& ref, const StateVector& target,
 // TCA Finding
 // ============================================================================
 
-static double distance_at_jd(const TLE& tle1, const TLE& tle2, double jd) {
-    auto s1 = propagate_sgp4(tle1, jd);
-    auto s2 = propagate_sgp4(tle2, jd);
+static double distance_at_jd(const EphemerisSource& obj1, const EphemerisSource& obj2, double jd) {
+    auto s1 = obj1.state_at(jd);
+    auto s2 = obj2.state_at(jd);
     if (has_error()) return std::numeric_limits<double>::quiet_NaN();
     double dx = s1.x - s2.x;
     double dy = s1.y - s2.y;
     double dz = s1.z - s2.z;
-    return std::sqrt(dx * dx + dy * dy + dz * dz);
+    const double distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+    if (!std::isfinite(distance)) {
+        set_error("Non-finite propagated distance.");
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    return distance;
 }
 
 /// Find all local distance minima (potential close approaches)
 static std::vector<std::pair<double, double>> find_all_minima(
-    const TLE& tle1, const TLE& tle2,
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
     double start_jd, double end_jd, double step_sec)
 {
     double step = step_sec / 86400.0;
@@ -410,7 +415,7 @@ static std::vector<std::pair<double, double>> find_all_minima(
 
     for (double jd = start_jd; jd <= end_jd; jd += step) {
         {
-            double d = distance_at_jd(tle1, tle2, jd);
+            double d = distance_at_jd(obj1, obj2, jd);
             if (has_error()) return {};
             if (jd == start_jd) {
                 start_dist = d;
@@ -441,12 +446,23 @@ static std::vector<std::pair<double, double>> find_all_minima(
 }
 
 /// Refine a local minimum using golden section search
-static double refine_minimum(const TLE& tle1, const TLE& tle2,
+// The span both trajectories cover: SGP4 covers all time (0 = unlimited); a
+// tabulated or polynomial track only its own interval. Searches stay inside.
+struct Coverage { double start, end; };
+static Coverage joint_coverage(const EphemerisSource& obj1, const EphemerisSource& obj2) {
+    const double inf = std::numeric_limits<double>::infinity();
+    const auto edge = [](double jd, double unlimited) { return jd != 0.0 ? jd : unlimited; };
+    return {std::max(edge(obj1.valid_start_jd(), -inf), edge(obj2.valid_start_jd(), -inf)),
+            std::min(edge(obj1.valid_end_jd(), inf), edge(obj2.valid_end_jd(), inf))};
+}
+
+static double refine_minimum(const EphemerisSource& obj1, const EphemerisSource& obj2,
                             double center_jd, double window_days,
                             double tol_sec)
 {
-    double a = center_jd - window_days;
-    double b = center_jd + window_days;
+    const Coverage covered = joint_coverage(obj1, obj2);
+    double a = std::max(center_jd - window_days, covered.start);
+    double b = std::min(center_jd + window_days, covered.end);
     double tol = tol_sec / 86400.0;
     const double phi = (std::sqrt(5.0) - 1.0) / 2.0;
 
@@ -455,8 +471,8 @@ static double refine_minimum(const TLE& tle1, const TLE& tle2,
         double d_val = a + phi * (b - a);
 
         {
-            double fc = distance_at_jd(tle1, tle2, c);
-            double fd = distance_at_jd(tle1, tle2, d_val);
+            double fc = distance_at_jd(obj1, obj2, c);
+            double fd = distance_at_jd(obj1, obj2, d_val);
             if (has_error()) return std::numeric_limits<double>::quiet_NaN();
 
             if (fc < fd) b = d_val;
@@ -472,20 +488,20 @@ static double clamp_jd_to_range(double value, double min_jd, double max_jd) {
 }
 
 static ConjunctionEvent build_conjunction_event(
-    const TLE& tle1,
-    const TLE& tle2,
+    const EphemerisSource& obj1,
+    const EphemerisSource& obj2,
     double tca_jd,
     double radius1_m,
     double radius2_m)
 {
     ConjunctionEvent event;
-    event.obj1 = tle1;
-    event.obj2 = tle2;
+    event.obj1 = obj1.identity();
+    event.obj2 = obj2.identity();
     event.tca_jd = tca_jd;
     event.tca_iso = jd_to_iso(event.tca_jd);
 
-    event.state1 = propagate_sgp4(tle1, event.tca_jd);
-    event.state2 = propagate_sgp4(tle2, event.tca_jd);
+    event.state1 = obj1.state_at(event.tca_jd);
+    event.state2 = obj2.state_at(event.tca_jd);
     if (has_error()) return {};
 
     double dx = event.state1.x - event.state2.x;
@@ -502,11 +518,11 @@ static ConjunctionEvent build_conjunction_event(
                     event.rel_pos_r, event.rel_pos_t, event.rel_pos_n,
                     event.rel_vel_r, event.rel_vel_t, event.rel_vel_n);
 
-    event.dse1 = event.tca_jd - tle1.epoch_jd;
-    event.dse2 = event.tca_jd - tle2.epoch_jd;
+    event.dse1 = event.tca_jd - obj1.epoch_jd();
+    event.dse2 = event.tca_jd - obj2.epoch_jd();
 
-    const SGP4EphemerisSource primary_source(tle1);
-    const SGP4EphemerisSource secondary_source(tle2);
+    const EphemerisSource& primary_source = obj1;
+    const EphemerisSource& secondary_source = obj2;
     RtnCovarianceSigmas primary_sigmas;
     RtnCovarianceSigmas secondary_sigmas;
     if (primary_source.covariance_rtn_sigma_at(event.tca_jd, primary_sigmas)) {
@@ -536,17 +552,17 @@ static ConjunctionEvent build_conjunction_event(
 }
 
 static ConjunctionSolution build_conjunction_solution(
-    const TLE& tle1,
-    const TLE& tle2,
+    const EphemerisSource& obj1,
+    const EphemerisSource& obj2,
     double tca_jd)
 {
     ConjunctionSolution solution;
     solution.tca_jd = tca_jd;
-    solution.min_range_km = distance_at_jd(tle1, tle2, tca_jd);
+    solution.min_range_km = distance_at_jd(obj1, obj2, tca_jd);
     return solution;
 }
 
-double find_tca(const TLE& tle1, const TLE& tle2,
+double find_tca(const EphemerisSource& obj1, const EphemerisSource& obj2,
                 double start_jd, double duration_days,
                 double coarse_step_sec, double fine_tol_sec) {
     double end_jd = start_jd + duration_days;
@@ -555,11 +571,11 @@ double find_tca(const TLE& tle1, const TLE& tle2,
     // 5s is critical for catching razor-thin encounters where objects
     // at 12+ km/s relative speed have sub-km TCA lasting < 0.1 seconds.
     // 10s step misses these entirely as local minima.
-    auto minima = find_all_minima(tle1, tle2, start_jd, end_jd, 5.0);
+    auto minima = find_all_minima(obj1, obj2, start_jd, end_jd, 5.0);
 
     if (has_error()) return std::numeric_limits<double>::quiet_NaN();
     if (minima.empty()) {
-        minima = find_all_minima(tle1, tle2, start_jd, end_jd, coarse_step_sec);
+        minima = find_all_minima(obj1, obj2, start_jd, end_jd, coarse_step_sec);
     }
 
     if (minima.empty()) {
@@ -598,11 +614,13 @@ double find_tca(const TLE& tle1, const TLE& tle2,
         double subscan_start = std::max(start_jd, center - subscan_window);
         double subscan_stop = std::min(end_jd, center + subscan_window);
 
-        for (double jd = subscan_start;
-             jd <= subscan_stop + subscan_step * 0.5;
-             jd += subscan_step) {
+        const double covered_end = joint_coverage(obj1, obj2).end;
+        for (double sample_jd = subscan_start;
+             sample_jd <= subscan_stop + subscan_step * 0.5;
+             sample_jd += subscan_step) {
             {
-                double d = distance_at_jd(tle1, tle2, jd);
+                const double jd = std::min(sample_jd, covered_end);
+                double d = distance_at_jd(obj1, obj2, jd);
             if (has_error()) return std::numeric_limits<double>::quiet_NaN();
                 if (d < subscan_best_dist) {
                     subscan_best_dist = d;
@@ -612,12 +630,12 @@ double find_tca(const TLE& tle1, const TLE& tle2,
         }
 
         // Phase 2: Golden section from the sub-second best position (±1s window)
-        double refined_jd = refine_minimum(tle1, tle2,
+        double refined_jd = refine_minimum(obj1, obj2,
                                            subscan_best_jd,
                                            1.0 / 86400.0, // ±1 second
                                            fine_tol_sec);
         {
-            double d = distance_at_jd(tle1, tle2, refined_jd);
+            double d = distance_at_jd(obj1, obj2, refined_jd);
             if (has_error()) return std::numeric_limits<double>::quiet_NaN();
             if (d < best_dist) {
                 best_dist = d;
@@ -630,7 +648,7 @@ double find_tca(const TLE& tle1, const TLE& tle2,
 }
 
 std::vector<ConjunctionSolution> assess_conjunction_solutions_within_threshold(
-    const TLE& tle1, const TLE& tle2,
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
     double start_jd, double duration_days, double threshold_km,
     double fine_tol_sec)
 {
@@ -651,7 +669,7 @@ std::vector<ConjunctionSolution> assess_conjunction_solutions_within_threshold(
     if (jds.empty() || jds.back() < end_jd) jds.push_back(end_jd);
     ranges.reserve(jds.size());
     for (double jd : jds) {
-        ranges.push_back(distance_at_jd(tle1, tle2, jd));
+        ranges.push_back(distance_at_jd(obj1, obj2, jd));
         if (has_error()) return {};
     }
 
@@ -686,12 +704,12 @@ std::vector<ConjunctionSolution> assess_conjunction_solutions_within_threshold(
     std::vector<ConjunctionSolution> solutions;
     for (const auto& [low, high] : brackets) {
         const double tca_jd = refine_minimum(
-            tle1, tle2, 0.5 * (low + high), 0.5 * (high - low), fine_tol_sec);
+            obj1, obj2, 0.5 * (low + high), 0.5 * (high - low), fine_tol_sec);
         if (has_error()) return {};
         if (!(tca_jd >= start_jd - tolerance_days && tca_jd <= end_jd + tolerance_days)) {
             continue;
         }
-        const double d = distance_at_jd(tle1, tle2, tca_jd);
+        const double d = distance_at_jd(obj1, obj2, tca_jd);
         if (has_error()) return {};
         if (!(std::isfinite(d) && d >= 0.0 && d <= threshold_km)) continue;
         auto same = std::find_if(
@@ -848,22 +866,22 @@ double collision_probability(
 // ============================================================================
 
 ConjunctionEvent assess_conjunction(
-    const TLE& tle1, const TLE& tle2,
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
     double start_jd, double duration_days,
     double radius1_m, double radius2_m)
 {
     const auto solution =
-        assess_conjunction_solution(tle1, tle2, start_jd, duration_days);
+        assess_conjunction_solution(obj1, obj2, start_jd, duration_days);
     return build_conjunction_event(
-        tle1,
-        tle2,
+        obj1,
+        obj2,
         solution.tca_jd,
         radius1_m,
         radius2_m);
 }
 
 ConjunctionEvent assess_conjunction_near(
-    const TLE& tle1, const TLE& tle2,
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
     double tca_hint_jd, double window_hours,
     double radius1_m, double radius2_m)
 {
@@ -872,8 +890,8 @@ ConjunctionEvent assess_conjunction_near(
     double search_start = tca_hint_jd - window_days;
     double search_end = tca_hint_jd + window_days;
     return assess_conjunction_in_window_near_hint(
-        tle1,
-        tle2,
+        obj1,
+        obj2,
         search_start,
         search_end,
         tca_hint_jd,
@@ -882,44 +900,44 @@ ConjunctionEvent assess_conjunction_near(
 }
 
 ConjunctionEvent assess_conjunction_in_window_near_hint(
-    const TLE& tle1, const TLE& tle2,
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
     double search_start_jd,
     double search_end_jd,
     double tca_hint_jd,
     double radius1_m, double radius2_m)
 {
     const auto solution = assess_conjunction_solution_in_window_near_hint(
-        tle1,
-        tle2,
+        obj1,
+        obj2,
         search_start_jd,
         search_end_jd,
         tca_hint_jd);
     return build_conjunction_event(
-        tle1,
-        tle2,
+        obj1,
+        obj2,
         solution.tca_jd,
         radius1_m,
         radius2_m);
 }
 
 ConjunctionSolution assess_conjunction_solution(
-    const TLE& tle1, const TLE& tle2,
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
     double start_jd, double duration_days)
 {
-    const double tca_jd = find_tca(tle1, tle2, start_jd, duration_days);
-    return build_conjunction_solution(tle1, tle2, tca_jd);
+    const double tca_jd = find_tca(obj1, obj2, start_jd, duration_days);
+    return build_conjunction_solution(obj1, obj2, tca_jd);
 }
 
 ConjunctionEvent assess_conjunction_at_tca(
-    const TLE& tle1, const TLE& tle2,
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
     double tca_jd,
     double radius1_m, double radius2_m)
 {
-    return build_conjunction_event(tle1, tle2, tca_jd, radius1_m, radius2_m);
+    return build_conjunction_event(obj1, obj2, tca_jd, radius1_m, radius2_m);
 }
 
 ConjunctionSolution assess_conjunction_solution_in_window_near_hint(
-    const TLE& tle1, const TLE& tle2,
+    const EphemerisSource& obj1, const EphemerisSource& obj2,
     double search_start_jd,
     double search_end_jd,
     double tca_hint_jd)
@@ -927,7 +945,7 @@ ConjunctionSolution assess_conjunction_solution_in_window_near_hint(
     if (!(search_end_jd > search_start_jd)) {
         const double clamped_tca =
             clamp_jd_to_range(tca_hint_jd, search_start_jd, search_start_jd);
-        return build_conjunction_solution(tle1, tle2, clamped_tca);
+        return build_conjunction_solution(obj1, obj2, clamped_tca);
     }
 
     constexpr double INITIAL_HALF_WINDOW_SEC = 5.0;
@@ -949,8 +967,8 @@ ConjunctionSolution assess_conjunction_solution_in_window_near_hint(
         const double local_end_jd =
             std::min(search_end_jd, center_jd + half_window_days);
         auto solution = assess_conjunction_solution(
-            tle1,
-            tle2,
+            obj1,
+            obj2,
             local_start_jd,
             std::max(0.0, local_end_jd - local_start_jd));
         center_jd =
@@ -972,14 +990,76 @@ ConjunctionSolution assess_conjunction_solution_in_window_near_hint(
             const double polish_end_jd =
                 std::min(search_end_jd, center_jd + polish_half_window_days);
             return assess_conjunction_solution(
-                tle1,
-                tle2,
+                obj1,
+                obj2,
                 polish_start_jd,
                 std::max(0.0, polish_end_jd - polish_start_jd));
         }
 
         half_window_days = std::min(max_half_window_days, half_window_days * 2.0);
     }
+}
+
+// ============================================================================
+// TLE entry points (SGP4 sources)
+// ============================================================================
+
+double find_tca(const TLE& tle1, const TLE& tle2,
+                double start_jd, double duration_days,
+                double coarse_step_sec, double fine_tol_sec) {
+    return find_tca(SGP4EphemerisSource(tle1), SGP4EphemerisSource(tle2),
+                    start_jd, duration_days, coarse_step_sec, fine_tol_sec);
+}
+
+ConjunctionSolution assess_conjunction_solution(
+    const TLE& tle1, const TLE& tle2, double start_jd, double duration_days) {
+    return assess_conjunction_solution(SGP4EphemerisSource(tle1), SGP4EphemerisSource(tle2),
+                                       start_jd, duration_days);
+}
+
+std::vector<ConjunctionSolution> assess_conjunction_solutions_within_threshold(
+    const TLE& tle1, const TLE& tle2,
+    double start_jd, double duration_days, double threshold_km, double fine_tol_sec) {
+    return assess_conjunction_solutions_within_threshold(
+        SGP4EphemerisSource(tle1), SGP4EphemerisSource(tle2),
+        start_jd, duration_days, threshold_km, fine_tol_sec);
+}
+
+ConjunctionSolution assess_conjunction_solution_in_window_near_hint(
+    const TLE& tle1, const TLE& tle2,
+    double search_start_jd, double search_end_jd, double tca_hint_jd) {
+    return assess_conjunction_solution_in_window_near_hint(
+        SGP4EphemerisSource(tle1), SGP4EphemerisSource(tle2),
+        search_start_jd, search_end_jd, tca_hint_jd);
+}
+
+ConjunctionEvent assess_conjunction_at_tca(
+    const TLE& tle1, const TLE& tle2, double tca_jd, double radius1_m, double radius2_m) {
+    return assess_conjunction_at_tca(SGP4EphemerisSource(tle1), SGP4EphemerisSource(tle2),
+                                     tca_jd, radius1_m, radius2_m);
+}
+
+ConjunctionEvent assess_conjunction(
+    const TLE& tle1, const TLE& tle2,
+    double start_jd, double duration_days, double radius1_m, double radius2_m) {
+    return assess_conjunction(SGP4EphemerisSource(tle1), SGP4EphemerisSource(tle2),
+                              start_jd, duration_days, radius1_m, radius2_m);
+}
+
+ConjunctionEvent assess_conjunction_near(
+    const TLE& tle1, const TLE& tle2,
+    double tca_hint_jd, double window_hours, double radius1_m, double radius2_m) {
+    return assess_conjunction_near(SGP4EphemerisSource(tle1), SGP4EphemerisSource(tle2),
+                                   tca_hint_jd, window_hours, radius1_m, radius2_m);
+}
+
+ConjunctionEvent assess_conjunction_in_window_near_hint(
+    const TLE& tle1, const TLE& tle2,
+    double search_start_jd, double search_end_jd, double tca_hint_jd,
+    double radius1_m, double radius2_m) {
+    return assess_conjunction_in_window_near_hint(
+        SGP4EphemerisSource(tle1), SGP4EphemerisSource(tle2),
+        search_start_jd, search_end_jd, tca_hint_jd, radius1_m, radius2_m);
 }
 
 // ============================================================================

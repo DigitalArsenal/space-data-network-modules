@@ -1,6 +1,9 @@
-// All-vs-all conjunction screening with the pair search on a GPU.
+// All-vs-all conjunction screening with the pair search on a GPU, for
+// trajectories from any propagator.
 //
-//   coarse_grid (module, WASM: SGP4 at every coarse step)
+//   prepare_screening_index (caller: OMM for SGP4, PPE from HPOP or any
+//     propagator, loaded once)
+//   coarse_grid (module, WASM: every source sampled at every coarse step)
 //     -> GPU screen (gpu/screen_kernel.wgsl: candidate pair-steps)
 //     -> refine_candidates (module, WASM: f64 re-test, encounters, TCA, Pc)
 //
@@ -43,7 +46,7 @@ function candidatesFrame(triples, from, to) {
 
 // Orders candidate triples by pair, then step, so a pair's steps stay in one
 // refine call and make whole encounters.
-// Records carry their SDS type; the module's frames are typed by media type.
+// The request carries its SDS type; the control frames their media type.
 const sds = (portId, code, payload) => ({ portId, payload,
   typeRef: { schemaName: `${code}.fbs`, fileIdentifier: `$${code}`, rootTypeName: code, wireFormat: 'flatbuffer' } });
 const control = (portId, mediaType, payload) => ({ portId, payload, typeRef: { wireFormat: 'flatbuffer', mediaType } });
@@ -63,8 +66,8 @@ function sortTriples(triples, objects) {
  * @param {(methodId: string, inputs: object[]) => Promise<{statusCode: number, errorCode?: string, errorMessage?: string, outputs: {portId: string, payload: Uint8Array}[]}>} o.invoke
  *   Calls the conjunction-assessment module (an SDK harness's invoke response).
  * @param {(bytes: Uint8Array) => {EVENTS: object[], FINAL_CHUNK: boolean, STATISTICS: object}} o.decodeCatalogResult
- * @param {Uint8Array} o.request  $CQR CATALOG_REQUEST (ALFANO_MAXIMUM controls).
- * @param {Uint8Array[]} o.catalog  One $OMM per object.
+ * @param {Uint8Array} o.request  $CQR WINDOW_REQUEST on a resident index with no
+ *   primaries (ALFANO_MAXIMUM controls).
  * @param {{screenBlock: Function}} o.screener  From gpu/gpuScreen.mjs.
  * @param {number} o.thresholdKm @param {number} o.coarseStepSec  As in the request.
  * @param {number} [o.blockSteps=32]  Coarse steps per coarse_grid call.
@@ -72,10 +75,10 @@ function sortTriples(triples, objects) {
  * @param {(stage: string, done: number, total: number) => void} [o.onProgress]
  */
 export async function screenAllVsAllOnGpu(o) {
-  const { invoke, decodeCatalogResult, request, catalog, screener, thresholdKm, coarseStepSec } = o;
+  const { invoke, decodeCatalogResult, request, screener, thresholdKm, coarseStepSec } = o;
   const blockSteps = o.blockSteps ?? 32, perRefine = o.candidatesPerRefine ?? 150000;
   const progress = o.onProgress ?? (() => {});
-  const catalogInputs = [sds('request', 'CQR', request), ...catalog.map((payload) => sds('catalog', 'OMM', payload))];
+  const requestInput = [sds('request', 'CQR', request)];
   const port = (outputs, id) => outputs.find((x) => x.portId === id)?.payload;
   const timings = { gridMs: 0, gpuMs: 0, refineMs: 0 };
   const excluded = new Map();
@@ -86,7 +89,7 @@ export async function screenAllVsAllOnGpu(o) {
   for (let first = 0; lastStep === null || first <= lastStep;) {
     const count = lastStep === null ? 1 : Math.min(blockSteps, lastStep - first + 1);
     let t = performance.now();
-    const response = await invoke('coarse_grid', [...catalogInputs,
+    const response = await invoke('coarse_grid', [...requestInput,
       control('block', 'application/vnd.sdn.ca-grid-block', blockFrame(first, count))]);
     if (response.statusCode !== 0) throw new Error(`coarse_grid: ${response.errorCode}: ${response.errorMessage}`);
     const out = response.outputs;
@@ -130,7 +133,7 @@ export async function screenAllVsAllOnGpu(o) {
   while (queue.length) {
     const [from, to] = queue.shift();
     const t = performance.now();
-    const inputs = [...catalogInputs,
+    const inputs = [...requestInput,
       control('candidates', 'application/vnd.sdn.ca-candidates', candidatesFrame(sorted, from, to)),
       control('excluded', 'application/vnd.sdn.ca-excluded', excludedBytes)];
     let response = await invoke('refine_candidates', inputs);

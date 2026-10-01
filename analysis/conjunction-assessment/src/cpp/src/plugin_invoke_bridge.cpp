@@ -31,6 +31,7 @@ extern "C" int32_t plugin_set_output_stream_frame(uint32_t, uint64_t, int32_t);
 #include "conjunction/resident_screening_index.h"
 #include "conjunction/screening.h"
 #include "conjunction/screening_tight.h"
+#include "conjunction/time_scales.h"
 #include <atomic>
 #include <thread>
 
@@ -340,49 +341,6 @@ GPElement tleGp(const TLE &t) {
   compute_derived(g);
   return g;
 }
-struct PolynomialRecord {
-  double mid = 0, half = 0;
-  std::array<std::vector<double>, 6> c;
-};
-class PolynomialSource final : public EphemerisSource {
-public:
-  std::vector<PolynomialRecord> records;
-  std::string id, name;
-  int norad = 0;
-  conjunction::StateVector state_at(double jd) const override {
-    for (auto &r : records)
-      if (jd >= r.mid - r.half / 86400. - epochRounding(jd) &&
-          jd <= r.mid + r.half / 86400. + epochRounding(jd)) {
-        double v[6] = {};
-        double x = std::clamp((jd - r.mid) * 86400. / r.half, -1.0, 1.0);
-        for (size_t k = 0; k < 6; ++k) {
-          double b1 = 0, b2 = 0;
-          for (size_t i = r.c[k].size(); i-- > 1;) {
-            double b = 2 * x * b1 - b2 + r.c[k][i];
-            b2 = b1;
-            b1 = b;
-          }
-          v[k] = x * b1 - b2 + r.c[k][0];
-        }
-        return {jd, v[0], v[1], v[2], v[3], v[4], v[5]};
-      }
-    double n = std::numeric_limits<double>::quiet_NaN();
-    return {jd, n, n, n, n, n, n};
-  }
-  double epoch_jd() const override { return valid_start_jd(); }
-  double valid_start_jd() const override {
-    return records.empty()
-               ? 0
-               : records.front().mid - records.front().half / 86400.;
-  }
-  double valid_end_jd() const override {
-    return records.empty() ? 0
-                           : records.back().mid + records.back().half / 86400.;
-  }
-  std::string object_id() const override { return id; }
-  std::string object_name() const override { return name; }
-  int norad_id() const override { return norad; }
-};
 struct Source {
   std::shared_ptr<EphemerisSource> provider;
   GPElement gp;
@@ -394,7 +352,10 @@ struct Source {
   int axes = 0;
   uint32_t handle = 0;
   std::vector<EphemerisPoint> samples;
-  std::shared_ptr<PolynomialSource> polynomial;
+  std::shared_ptr<PolynomialEphemerisSource> polynomial;
+  // Mean elements evaluated with the parsed element set; its SGP4
+  // initialization is kept for the life of the source (resident indexes).
+  std::shared_ptr<SGP4EphemerisSource> sgp4;
 };
 bool points(const OEM *r, Source &o) {
   if (!r || !r->EPHEMERIS_DATA_BLOCK() ||
@@ -452,10 +413,30 @@ bool points(const OEM *r, Source &o) {
   }
   return true;
 }
+// A PPE interval's UTC span. TDB and TT intervals map onto UTC linearly
+// between their converted ends (TDB - UTC curves by ~1e-12 s over an hour);
+// an interval holding a leap second does not map and is refused.
+bool utcSpan(timingStandard scale, double mid, double half, double &utc_mid, double &utc_half) {
+  if (scale == timingStandard::UTC) {
+    utc_mid = mid;
+    utc_half = half;
+    return true;
+  }
+  const auto convert = scale == timingStandard::TDB ? tdb_to_utc_jd : tt_to_utc_jd;
+  const double a = convert(mid - half / 86400.), b = convert(mid + half / 86400.);
+  if (!isFinite(a) || !isFinite(b))
+    return error("unsupported-time-system", "PPE epoch outside the leap-second table.");
+  utc_mid = 0.5 * (a + b);
+  utc_half = 0.5 * (b - a) * 86400.;
+  if (std::abs(utc_half - half) > 0.5)
+    return error("unsupported-time-system", "A PPE interval holds a leap second; split it there.");
+  return true;
+}
 bool polynomial(const PPE *p, Source &o) {
-  if (!p || p->TIME_SYSTEM() != timingStandard::UTC)
+  if (!p || (p->TIME_SYSTEM() != timingStandard::UTC && p->TIME_SYSTEM() != timingStandard::TDB &&
+             p->TIME_SYSTEM() != timingStandard::TT))
     return error("unsupported-time-system",
-                 "PPE adapter requires UTC coefficients.");
+                 "PPE coefficients must be in UTC, TT or TDB.");
   if (p->DEFAULT_BASIS_TYPE() != polynomialBasisType::CHEBYSHEV)
     return error("unsupported-polynomial",
                  "PPE default basis must be CHEBYSHEV.");
@@ -466,7 +447,7 @@ bool polynomial(const PPE *p, Source &o) {
       (p->ORBITAL_ELEMENT_RECORDS() && p->ORBITAL_ELEMENT_RECORDS()->size()))
     return error("unsupported-source",
                  "PPE needs Cartesian position records only.");
-  o.polynomial = std::make_shared<PolynomialSource>();
+  std::vector<PolynomialRecord> records;
   double last = -std::numeric_limits<double>::infinity();
   for (auto r : *p->POSITION_RECORDS()) {
     if (!r || r->BASIS_TYPE() != polynomialBasisType::CHEBYSHEV ||
@@ -476,11 +457,12 @@ bool polynomial(const PPE *p, Source &o) {
                    "PPE requires Chebyshev position and explicit velocity "
                    "coefficients.");
     PolynomialRecord rec;
-    rec.mid = iso_to_jd(text(r->EPOCH_MID()));
-    rec.half = r->EPOCH_HALF_SPAN();
+    if (!utcSpan(p->TIME_SYSTEM(), iso_to_jd(text(r->EPOCH_MID())), r->EPOCH_HALF_SPAN(),
+                 rec.mid, rec.half))
+      return false;
     double start = rec.mid - rec.half / 86400.;
     if (!isFinite(rec.mid) || start < last - 1e-9 ||
-        (!o.polynomial->records.empty() && start > last + 1e-9))
+        (!records.empty() && start > last + 1e-9))
       return error("invalid-coverage",
                    "PPE intervals must be ordered and contiguous.");
     last = rec.mid + rec.half / 86400.;
@@ -498,8 +480,9 @@ bool polynomial(const PPE *p, Source &o) {
         rec.c[k].push_back(x);
       }
     }
-    o.polynomial->records.push_back(std::move(rec));
+    records.push_back(std::move(rec));
   }
+  o.polynomial = std::make_shared<PolynomialEphemerisSource>(std::move(records));
   return true;
 }
 bool source(const CQRObjectSource *r, Source &o) {
@@ -543,6 +526,7 @@ bool source(const CQRObjectSource *r, Source &o) {
     o.mean = true;
     o.axes = 1;
     o.provider = std::make_shared<GPEphemerisSource>(o.gp);
+    o.sgp4 = std::make_shared<SGP4EphemerisSource>(o.tle);
   } else if (r->EPHEMERIS()) {
     if (!points(r->EPHEMERIS(), o))
       return false;
@@ -1377,171 +1361,7 @@ bool catalogFrames(const ScreeningConfig &c, int f, std::vector<Source> &catalog
   }
   return true;
 }
-
-// The tight path serves the SGP4 all-vs-all request screen_catalog serves:
-// ALFANO_MAXIMUM over catalog frames, no inline sources, no order ranges.
-bool tightRequest(const char *method, ScreeningConfig &c, std::vector<Source> &catalog,
-                  std::vector<TLE> &tles) {
-  auto q = request();
-  if (!q || !q->CATALOG_REQUEST())
-    return error("invalid-request-arm", std::string(method) + " requires CATALOG_REQUEST.");
-  auto r = q->CATALOG_REQUEST();
-  if (!controls(r->CONTROLS(), c))
-    return false;
-  int f = frame(r->EVALUATION_FRAME());
-  if (!f)
-    return false;
-  if (r->CONTROLS()->ALGORITHM() != cqrProbabilityAlgorithm::ALFANO_MAXIMUM)
-    return error("unsupported-algorithm", std::string(method) + " screens with ALFANO_MAXIMUM, as screen_catalog's all-vs-all path.");
-  if ((r->PRIMARIES() && r->PRIMARIES()->size()) || (r->SECONDARIES() && r->SECONDARIES()->size()) ||
-      (r->ORDERED_CATALOG_INDICES() && r->ORDERED_CATALOG_INDICES()->size()) || r->HAS_START_ORDER_INDEX() || r->HAS_END_ORDER_INDEX() ||
-      r->HAS_SECONDARY_START_ORDER_INDEX() || r->HAS_SECONDARY_END_ORDER_INDEX())
-    return error("unsupported-catalog", std::string(method) + " screens every catalog frame against every other; no inline sources or order ranges.");
-  if (!catalogFrames(c, f, catalog))
-    return false;
-  if (catalog.size() < 2)
-    return error("invalid-catalog", "At least two catalog objects are required.");
-  for (const auto &x : catalog)
-    tles.push_back(x.tle);
-  return true;
-}
-
-// Little-endian binary control frames: a 4-byte tag, then u32 / f64 fields.
-struct Reader {
-  const uint8_t *p = nullptr;
-  size_t n = 0, at = 0;
-  bool tag(const char *t) {
-    if (n < 4 || std::memcmp(p, t, 4) != 0) return false;
-    at = 4;
-    return true;
-  }
-  template <class T> bool get(T &v) {
-    if (at + sizeof(T) > n) return false;
-    std::memcpy(&v, p + at, sizeof(T));
-    at += sizeof(T);
-    return true;
-  }
-};
-Reader reader(const plugin_input_frame_t *f) {
-  Reader r;
-  if (f && f->payload) { r.p = f->payload; r.n = f->payload_length; }
-  return r;
-}
-std::string jsonString(const std::string &s) {
-  std::string o = "\"";
-  for (char ch : s) {
-    if (ch == '"' || ch == '\\') { o.push_back('\\'); o.push_back(ch); }
-    else if (static_cast<unsigned char>(ch) < 0x20) { char b[8]; std::snprintf(b, sizeof b, "\\u%04x", ch); o += b; }
-    else o.push_back(ch);
-  }
-  return o + "\"";
-}
 } // namespace ca_cqr
-
-// One block of coarse steps in the GPU layout (screening_tight.h).
-// Inputs: request ($CQR CATALOG_REQUEST), catalog ($OMM frames), block
-// ("CAB1", u32 first_step, u32 step_count). Outputs: grid ("CAG1", u32
-// first_step, u32 step_count, u32 objects, then f32 states [step][object][8]
-// and f32 bands [object][2]) and report (JSON: the block and its exclusions).
-extern "C" int coarse_grid() {
-  using namespace ca_cqr;
-  ScreeningConfig c;
-  std::vector<Source> catalog;
-  std::vector<TLE> tles;
-  if (!tightRequest("coarse_grid", c, catalog, tles))
-    return 400;
-  auto b = reader(input("block"));
-  uint32_t first = 0, count = 0;
-  if (!b.tag("CAB1") || !b.get(first) || !b.get(count))
-    return error("invalid-block", "block must be CAB1, u32 first_step, u32 step_count."), 400;
-  const int32_t last = tight_last_coarse_step(c);
-  if (count == 0 || count > 256 || static_cast<int64_t>(first) + count - 1 > last)
-    return error("invalid-block", "The block must hold 1 to 256 steps of the window (steps 0.." + std::to_string(last) + ")."), 400;
-  auto g = tight_coarse_grid_block(tles, c, static_cast<int32_t>(first), static_cast<int32_t>(count), {});
-  std::vector<uint8_t> out(16 + (g.states.size() + g.bands.size()) * sizeof(float));
-  const uint32_t header[4] = {0x31474143u /* "CAG1" */, first, count, g.objects};
-  std::memcpy(out.data(), header, 16);
-  std::memcpy(out.data() + 16, g.states.data(), g.states.size() * sizeof(float));
-  std::memcpy(out.data() + 16 + g.states.size() * sizeof(float), g.bands.data(), g.bands.size() * sizeof(float));
-  std::string report = "{\"first_step\":" + std::to_string(first) + ",\"step_count\":" + std::to_string(count) +
-                       ",\"last_step\":" + std::to_string(last) + ",\"objects\":" + std::to_string(g.objects) + ",\"excluded\":[";
-  bool comma = false;
-  for (const auto &[index, x] : g.excluded) {
-    char jd[40];
-    std::snprintf(jd, sizeof jd, "%.17g", x.first_failure_jd);
-    report += std::string(comma ? "," : "") + "{\"index\":" + std::to_string(index) + ",\"first_failure_jd\":" + jd +
-              ",\"reason\":" + jsonString(x.reason) + "}";
-    comma = true;
-  }
-  report += "]}";
-  if (plugin_push_output_ex("grid", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 16,
-                            out.data(), static_cast<uint32_t>(out.size())) < 0)
-    return 500;
-  return plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
-                               reinterpret_cast<const uint8_t *>(report.data()),
-                               static_cast<uint32_t>(report.size())) < 0 ? 500 : 0;
-}
-
-// Refines candidate pairs into the catalog result screen_catalog returns.
-// Inputs: request and catalog as coarse_grid; candidates ("CAC1", u32 count,
-// then count x (u32 obj1, u32 obj2, u32 step)) - absent: scan every pair on
-// the CPU; excluded ("CAX1", u32 count, then count x (u32 index, f64
-// first_failure_jd)) - the exclusions coarse_grid reported for the window.
-extern "C" int refine_candidates() {
-  using namespace ca_cqr;
-  if (hasPending("refine_candidates"))
-    return emitPending("refine_candidates") ? 0 : 422;
-  ScreeningConfig c;
-  std::vector<Source> catalog;
-  std::vector<TLE> tles;
-  if (!tightRequest("refine_candidates", c, catalog, tles))
-    return 400;
-  std::map<uint32_t, ExcludedObject> excluded;
-  if (auto xf = input("excluded")) {
-    auto x = reader(xf);
-    uint32_t count = 0;
-    if (!x.tag("CAX1") || !x.get(count))
-      return error("invalid-excluded", "excluded must be CAX1, u32 count, then u32 index + f64 first_failure_jd."), 400;
-    for (uint32_t k = 0; k < count; ++k) {
-      uint32_t index = 0;
-      double jd = 0;
-      if (!x.get(index) || !x.get(jd) || index >= tles.size() || !std::isfinite(jd))
-        return error("invalid-excluded", "An excluded entry is truncated or out of range."), 400;
-      ExcludedObject e;
-      e.index = index;
-      e.first_failure_jd = jd;
-      propagate_sgp4(tles[index], jd);           // the propagator's own reason at that epoch
-      e.reason = has_error() ? error_message() : "excluded by coarse_grid";
-      conjunction::clear_error();
-      excluded[index] = e;
-    }
-  }
-  std::vector<TightCandidate> candidates;
-  const auto cf = input("candidates");
-  if (cf) {
-    auto r = reader(cf);
-    uint32_t count = 0;
-    if (!r.tag("CAC1") || !r.get(count) || r.n != 8 + static_cast<size_t>(count) * 12)
-      return error("invalid-candidates", "candidates must be CAC1, u32 count, then count x (u32 obj1, u32 obj2, u32 step)."), 400;
-    candidates.resize(count);
-    for (auto &k : candidates) {
-      uint32_t step = 0;
-      r.get(k.obj1); r.get(k.obj2); r.get(step);
-      k.step = static_cast<int32_t>(step);
-    }
-  }
-  ScreeningStats stats;
-  auto events = screen_tight_candidates(tles, c, cf ? &candidates : nullptr, std::move(excluded), stats);
-  if (conjunction::has_error())
-    return error("screening-failed", conjunction::error_message()), 422;
-  std::vector<std::unique_ptr<CQREventT>> out;
-  for (auto &e : events)
-    out.push_back(event(e));
-  std::vector<std::vector<uint8_t>> excludedRecords;
-  for (const auto &x : stats.excluded_objects)
-    excludedRecords.push_back(excludedRecord(catalog[x.index], x));
-  return catalogOutput(std::move(out), stats, "refine_candidates", std::move(excludedRecords)) ? 0 : 422;
-}
 
 extern "C" int screen_catalog() {
   using namespace ca_cqr;
@@ -1791,7 +1611,7 @@ bool prepare(cqrIndexRepresentation expected) {
       if (!s.polynomial)
         return error("invalid-segment-set",
                      "Every resident source requires PPE segments.");
-      for (auto &p : s.polynomial->records) {
+      for (auto &p : s.polynomial->records()) {
         if (all_mean) {
           if (p.c[0].size() > RESIDENT_CHEBYSHEV_COEFFICIENT_COUNT)
             return error(
@@ -1928,6 +1748,182 @@ bool screenWindow(const char *method) {
   return catalogOutput(std::move(events), stats, method, std::move(excluded));
 }
 } // namespace ca_cqr
+namespace ca_cqr {
+// The tight path screens a resident index (prepare_screening_index and its
+// siblings) all-vs-all: ALFANO_MAXIMUM, no primaries, every source able to
+// bound its motion between coarse steps. Mean elements are evaluated with
+// SGP4; every other source is the trajectory its propagator supplied.
+struct TightSet {
+  Index *index = nullptr;
+  SourceRefs refs;
+};
+bool tightRequest(const char *method, ScreeningConfig &c, TightSet &t) {
+  auto q = request();
+  if (!q || !q->WINDOW_REQUEST())
+    return error("invalid-request-arm", std::string(method) + " requires WINDOW_REQUEST.");
+  auto r = q->WINDOW_REQUEST();
+  t.index = index(r->SCREENING_INDEX_HANDLE(), r->INSTANCE());
+  if (!t.index)
+    return false;
+  if (!controls(r->CONTROLS(), c))
+    return false;
+  int f = frame(r->EVALUATION_FRAME());
+  if (!f || f != t.index->axes)
+    return error("frame-mismatch", "Window evaluation frame differs from the resident index.");
+  if (r->CONTROLS()->ALGORITHM() != cqrProbabilityAlgorithm::ALFANO_MAXIMUM)
+    return error("unsupported-algorithm", std::string(method) + " screens with ALFANO_MAXIMUM, as screen_catalog's all-vs-all path.");
+  if (!t.index->primaries.empty())
+    return error("unsupported-index", std::string(method) + " screens every source against every other; the index names primaries.");
+  if (t.index->sources.size() < 2)
+    return error("invalid-catalog", "At least two sources are required.");
+  for (auto &s : t.index->sources) {
+    if (!window(s, c, f))
+      return false;
+    const EphemerisSource *e = s.sgp4 ? s.sgp4.get() : s.polynomial ? s.polynomial.get() : s.provider.get();
+    if (!e->bounds_path_deviation())
+      return error("unsupported-source", "Source " + e->object_id() +
+                   " cannot bound its motion between coarse steps; supply its trajectory as PPE.");
+    t.refs.push_back(e);
+  }
+  return true;
+}
+
+// Little-endian binary control frames: a 4-byte tag, then u32 / f64 fields.
+struct Reader {
+  const uint8_t *p = nullptr;
+  size_t n = 0, at = 0;
+  bool tag(const char *t) {
+    if (n < 4 || std::memcmp(p, t, 4) != 0) return false;
+    at = 4;
+    return true;
+  }
+  template <class T> bool get(T &v) {
+    if (at + sizeof(T) > n) return false;
+    std::memcpy(&v, p + at, sizeof(T));
+    at += sizeof(T);
+    return true;
+  }
+};
+Reader reader(const plugin_input_frame_t *f) {
+  Reader r;
+  if (f && f->payload) { r.p = f->payload; r.n = f->payload_length; }
+  return r;
+}
+std::string jsonString(const std::string &s) {
+  std::string o = "\"";
+  for (char ch : s) {
+    if (ch == '"' || ch == '\\') { o.push_back('\\'); o.push_back(ch); }
+    else if (static_cast<unsigned char>(ch) < 0x20) { char b[8]; std::snprintf(b, sizeof b, "\\u%04x", ch); o += b; }
+    else o.push_back(ch);
+  }
+  return o + "\"";
+}
+} // namespace ca_cqr
+
+// One block of coarse steps in the GPU layout (screening_tight.h).
+// Inputs: request ($CQR WINDOW_REQUEST on a resident index), block
+// ("CAB1", u32 first_step, u32 step_count). Outputs: grid ("CAG1", u32
+// first_step, u32 step_count, u32 objects, then f32 states [step][object][8]
+// and f32 bands [object][2]) and report (JSON: the block and its exclusions).
+extern "C" int coarse_grid() {
+  using namespace ca_cqr;
+  ScreeningConfig c;
+  TightSet t;
+  if (!tightRequest("coarse_grid", c, t))
+    return 400;
+  auto b = reader(input("block"));
+  uint32_t first = 0, count = 0;
+  if (!b.tag("CAB1") || !b.get(first) || !b.get(count))
+    return error("invalid-block", "block must be CAB1, u32 first_step, u32 step_count."), 400;
+  const int32_t last = tight_last_coarse_step(c);
+  if (count == 0 || count > 256 || static_cast<int64_t>(first) + count - 1 > last)
+    return error("invalid-block", "The block must hold 1 to 256 steps of the window (steps 0.." + std::to_string(last) + ")."), 400;
+  auto g = tight_coarse_grid_block(t.refs, c, static_cast<int32_t>(first), static_cast<int32_t>(count), {});
+  std::vector<uint8_t> out(16 + (g.states.size() + g.bands.size()) * sizeof(float));
+  const uint32_t header[4] = {0x31474143u /* "CAG1" */, first, count, g.objects};
+  std::memcpy(out.data(), header, 16);
+  std::memcpy(out.data() + 16, g.states.data(), g.states.size() * sizeof(float));
+  std::memcpy(out.data() + 16 + g.states.size() * sizeof(float), g.bands.data(), g.bands.size() * sizeof(float));
+  std::string report = "{\"first_step\":" + std::to_string(first) + ",\"step_count\":" + std::to_string(count) +
+                       ",\"last_step\":" + std::to_string(last) + ",\"objects\":" + std::to_string(g.objects) + ",\"excluded\":[";
+  bool comma = false;
+  for (const auto &[index, x] : g.excluded) {
+    char jd[40];
+    std::snprintf(jd, sizeof jd, "%.17g", x.first_failure_jd);
+    report += std::string(comma ? "," : "") + "{\"index\":" + std::to_string(index) + ",\"first_failure_jd\":" + jd +
+              ",\"reason\":" + jsonString(x.reason) + "}";
+    comma = true;
+  }
+  report += "]}";
+  if (plugin_push_output_ex("grid", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 16,
+                            out.data(), static_cast<uint32_t>(out.size())) < 0)
+    return 500;
+  return plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
+                               reinterpret_cast<const uint8_t *>(report.data()),
+                               static_cast<uint32_t>(report.size())) < 0 ? 500 : 0;
+}
+
+// Refines candidate pairs into the catalog result screen_catalog returns.
+// Inputs: request as coarse_grid; candidates ("CAC1", u32 count,
+// then count x (u32 obj1, u32 obj2, u32 step)) - absent: scan every pair on
+// the CPU; excluded ("CAX1", u32 count, then count x (u32 index, f64
+// first_failure_jd)) - the exclusions coarse_grid reported for the window.
+extern "C" int refine_candidates() {
+  using namespace ca_cqr;
+  if (hasPending("refine_candidates"))
+    return emitPending("refine_candidates") ? 0 : 422;
+  ScreeningConfig c;
+  TightSet t;
+  if (!tightRequest("refine_candidates", c, t))
+    return 400;
+  std::map<uint32_t, ExcludedObject> excluded;
+  if (auto xf = input("excluded")) {
+    auto x = reader(xf);
+    uint32_t count = 0;
+    if (!x.tag("CAX1") || !x.get(count))
+      return error("invalid-excluded", "excluded must be CAX1, u32 count, then u32 index + f64 first_failure_jd."), 400;
+    for (uint32_t k = 0; k < count; ++k) {
+      uint32_t index = 0;
+      double jd = 0;
+      if (!x.get(index) || !x.get(jd) || index >= t.refs.size() || !std::isfinite(jd))
+        return error("invalid-excluded", "An excluded entry is truncated or out of range."), 400;
+      ExcludedObject e;
+      e.index = index;
+      e.first_failure_jd = jd;
+      conjunction::StateVector state;
+      double deviation = 0;
+      e.reason = "excluded by coarse_grid";      // the source's own reason at that epoch
+      tight_sample(*t.refs[index], jd, 0.5 * c.coarse_step_sec, state, deviation, e.reason);
+      excluded[index] = e;
+    }
+  }
+  std::vector<TightCandidate> candidates;
+  const auto cf = input("candidates");
+  if (cf) {
+    auto r = reader(cf);
+    uint32_t count = 0;
+    if (!r.tag("CAC1") || !r.get(count) || r.n != 8 + static_cast<size_t>(count) * 12)
+      return error("invalid-candidates", "candidates must be CAC1, u32 count, then count x (u32 obj1, u32 obj2, u32 step)."), 400;
+    candidates.resize(count);
+    for (auto &k : candidates) {
+      uint32_t step = 0;
+      r.get(k.obj1); r.get(k.obj2); r.get(step);
+      k.step = static_cast<int32_t>(step);
+    }
+  }
+  ScreeningStats stats;
+  auto events = screen_tight_candidates(t.refs, c, cf ? &candidates : nullptr, std::move(excluded), stats);
+  if (conjunction::has_error())
+    return error("screening-failed", conjunction::error_message()), 422;
+  std::vector<std::unique_ptr<CQREventT>> out;
+  for (auto &e : events)
+    out.push_back(event(e));
+  std::vector<std::vector<uint8_t>> excludedRecords;
+  for (const auto &x : stats.excluded_objects)
+    excludedRecords.push_back(excludedRecord(t.index->sources[x.index], x));
+  return catalogOutput(std::move(out), stats, "refine_candidates", std::move(excludedRecords)) ? 0 : 422;
+}
+
 extern "C" int prepare_screening_index() {
   return ca_cqr::prepare(cqrIndexRepresentation::SOURCE_DESCRIPTIONS) ? 0 : 400;
 }

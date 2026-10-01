@@ -95,7 +95,7 @@ if (o.serve) {
     if (o.out) fs.writeFileSync(o.out, JSON.stringify(summary, null, 1) + '\n');
     const t = result.timings, s = (ms) => (ms / 1000).toFixed(1) + ' s';
     console.log(`${result.objects} objects x ${result.coarseSteps} steps: ${result.candidates} GPU candidates, ` +
-      `${result.events.length} conjunctions in ${s(t.totalMs)} (grid ${s(t.gridMs)}, GPU ${s(t.gpuMs)}, refine ${s(t.refineMs)}; ${result.adapter})`);
+      `${result.events.length} conjunctions in ${s(t.totalMs)} (load ${s(t.indexMs)}, grid ${s(t.gridMs)}, GPU ${s(t.gpuMs)}, refine ${s(t.refineMs)}; ${result.adapter})`);
   } finally {
     clearTimeout(timeout);
     chrome.removeAllListeners('exit');
