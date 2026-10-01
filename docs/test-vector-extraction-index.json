@@ -1166,8 +1166,8 @@
         "sdnModule": "analysis/conjunction-assessment",
         "sdnTests": [
           {
-            "file": "analysis/conjunction-assessment/src/cpp/tests/test_cdm_output.cpp",
-            "name": "test_orekit_cdm_example1_kvn_roundtrip"
+            "file": "analysis/conjunction-assessment/tests/wasmedgeStandaloneHarness.test.mjs",
+            "name": "CDM KVN command surface round-trips the Orekit CDMExample1 fixture"
           }
         ],
         "quantities": ["CDM header fields", "TCA", "miss distance", "object metadata", "state vectors", "RTN covariance"],
@@ -1185,8 +1185,8 @@
         "sdnModule": "analysis/conjunction-assessment",
         "sdnTests": [
           {
-            "file": "analysis/conjunction-assessment/src/cpp/tests/test_cdm_output.cpp",
-            "name": "test_orekit_cdm_example1_kvn_roundtrip"
+            "file": "analysis/conjunction-assessment/tests/wasmedgeStandaloneHarness.test.mjs",
+            "name": "CDM KVN command surface round-trips the Orekit CDMExample1 fixture"
           }
         ],
         "quantities": ["SDS CDM KVN writer header fields", "miss distance", "object block labels", "RTN covariance"],
