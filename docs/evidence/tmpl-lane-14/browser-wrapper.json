@@ -1,5 +1,5 @@
 {
-  "moduleSha256": "7ed526ea5b52954dedf4d49d76be1685bb2419631e7b7f5fe74cb33fc335a747",
+  "moduleSha256": "e7b00eac1585f1caeba2428e9d67e3da1842935ce2478b9939ec04a6010fd1c3",
   "oracle": "CelesTrak SOCRATES Plus, 2026-03-10 committed snapshot; https://celestrak.org/SOCRATES/",
   "frame": "TEME",
   "timeScale": "UTC",
@@ -15,24 +15,24 @@
   "deltas": [
     {
       "pair": "61721-67298",
-      "tcaDeltaSec": 0.0007241964340209961,
-      "missDeltaM": 4.177554292834001,
-      "relSpeedDeltaMS": 0.10029608228734332,
+      "tcaDeltaSec": 0.0008851289749145508,
+      "missDeltaM": 4.330067073862,
+      "relSpeedDeltaMS": 0.10029608438166804,
       "pcRatio": 1
     },
     {
       "pair": "47935-49179",
-      "tcaDeltaSec": 0.0003218650817871094,
-      "missDeltaM": 0.303122606974,
-      "relSpeedDeltaMS": 0.3038180323962081,
-      "pcRatio": 1.8590564676499581
+      "tcaDeltaSec": 0.0005632638931274414,
+      "missDeltaM": 0.3789368232959989,
+      "relSpeedDeltaMS": 0.3038180262873169,
+      "pcRatio": 1.8788166905773083
     },
     {
       "pair": "48282-58288",
-      "tcaDeltaSec": 0.0002816319465637207,
-      "missDeltaM": 0.13058791488199972,
-      "relSpeedDeltaMS": 0.4787075052021805,
-      "pcRatio": 1.730766895061497
+      "tcaDeltaSec": 0,
+      "missDeltaM": 0.1247180301420011,
+      "relSpeedDeltaMS": 0.4787075114229822,
+      "pcRatio": 1.7322322134162214
     }
   ],
   "ok": true
