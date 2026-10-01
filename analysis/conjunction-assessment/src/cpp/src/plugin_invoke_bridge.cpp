@@ -918,6 +918,186 @@ std::unique_ptr<CQREventT> event(const ConjunctionEvent2 &e,
   o->HAS_MAHALANOBIS_3D_SQUARED = true;
   return o;
 }
+// ── Empirical prediction-error covariance ──
+// An SGP4 object's covariance at TCA from an empirical prediction-error model
+// (analysis/gp-error-model, scaled and gated by its calibration), chosen by
+// the object's orbit regime and its prediction age (TCA minus the element
+// set's epoch), with the gate's label. Optional frame "uncertainty_model":
+//   "CAU1", u32 n + label (n bytes, padded to 4),
+//   u32 regimes x (f64 mean altitude lo, hi km; f64 eccentricity lo, hi),
+//   u32 ages x (f64 lo, hi days),
+//   u32 strata x (u32 regime, u32 age, f64[21] RTN position-velocity
+//   covariance lower triangle in km^2, km^2/s, km^2/s^2, u32 calibrated,
+//   u32 n + reference (n bytes, padded to 4)).
+// scripts/uncertainty-model.mjs writes it from the model and calibration JSON.
+struct EmpiricalStratum {
+  std::array<double, 21> cov{};
+  bool calibrated = false;
+  std::string reference;
+};
+struct EmpiricalModel {
+  bool loaded = false;
+  std::string label;
+  std::vector<std::array<double, 4>> regimes;
+  std::vector<std::pair<double, double>> ages;
+  std::map<std::pair<uint32_t, uint32_t>, EmpiricalStratum> strata;
+};
+bool empiricalModel(EmpiricalModel &m) {
+  const plugin_input_frame_t *f = input("uncertainty_model");
+  if (!f)
+    return true;
+  const uint8_t *p = f->payload;
+  const size_t n = f->payload ? f->payload_length : 0;
+  size_t at = 4;
+  auto get = [&](auto &v) {
+    if (at + sizeof v > n) return false;
+    std::memcpy(&v, p + at, sizeof v);
+    at += sizeof v;
+    return true;
+  };
+  auto text = [&](std::string &out) {
+    uint32_t len = 0;
+    if (!get(len) || len > n - at) return false;
+    out.assign(reinterpret_cast<const char *>(p + at), len);
+    at += (len + 3u) & ~3u;
+    return at <= n;
+  };
+  auto bad = [] { return error("invalid-uncertainty-model", "uncertainty_model is not a well-formed CAU1 frame."); };
+  uint32_t count = 0;
+  if (n < 4 || std::memcmp(p, "CAU1", 4) != 0 || !text(m.label) || !get(count) || count > 1024)
+    return bad();
+  m.regimes.resize(count);
+  for (auto &r : m.regimes)
+    for (double &x : r)
+      if (!get(x) || !isFinite(x)) return bad();
+  if (!get(count) || count > 1024)
+    return bad();
+  m.ages.resize(count);
+  for (auto &a : m.ages)
+    if (!get(a.first) || !get(a.second) || !(a.first >= 0 && a.second > a.first)) return bad();
+  if (!get(count))
+    return bad();
+  for (uint32_t k = 0; k < count; ++k) {
+    uint32_t r = 0, a = 0, calibrated = 0;
+    EmpiricalStratum s;
+    if (!get(r) || !get(a) || r >= m.regimes.size() || a >= m.ages.size())
+      return bad();
+    for (double &x : s.cov)
+      if (!get(x) || !isFinite(x)) return bad();
+    if (!get(calibrated) || !text(s.reference))
+      return bad();
+    s.calibrated = calibrated != 0;
+    if (s.cov[0] > 0 && s.cov[2] > 0 && s.cov[5] > 0)  // a usable position block
+      m.strata[{r, a}] = std::move(s);
+  }
+  m.loaded = true;
+  return true;
+}
+// Mean altitude (km) from SGP4's un-Kozai'd mean motion (WGS-72), as the
+// model's regimes are defined.
+double meanAltitudeKm(const GPElement &g) {
+  constexpr double re = 6378.135, mu = 398600.8, j2 = 0.001082616;
+  const double xke = 60.0 / std::sqrt(re * re * re / mu);
+  const double n = g.mean_motion * 2.0 * M_PI / 1440.0;  // rad/min, Kozai
+  const double cosio = std::cos(g.inclination * M_PI / 180.0);
+  const double omeosq = 1.0 - g.eccentricity * g.eccentricity;
+  const double ak = std::pow(xke / n, 2.0 / 3.0);
+  const double d1 = 0.75 * j2 * (3.0 * cosio * cosio - 1.0) / (std::sqrt(omeosq) * omeosq);
+  double del = d1 / (ak * ak);
+  const double adel = ak * (1.0 - del * del - del * (1.0 / 3.0 + 134.0 * del * del / 81.0));
+  del = d1 / (adel * adel);
+  return std::pow(xke / (n / (1.0 + del)), 2.0 / 3.0) * re - re;
+}
+const EmpiricalStratum *empiricalStratum(const EmpiricalModel &m, const GPElement &g, double age_days) {
+  if (!(g.mean_motion > 0) || !(age_days >= 0))
+    return nullptr;
+  const double alt = meanAltitudeKm(g), ecc = g.eccentricity;
+  uint32_t regime = 0;
+  while (regime < m.regimes.size() &&
+         !(ecc >= m.regimes[regime][2] && ecc < m.regimes[regime][3] && alt >= m.regimes[regime][0] &&
+           alt < m.regimes[regime][1]))
+    ++regime;
+  for (uint32_t a = 0; regime < m.regimes.size() && a < m.ages.size(); ++a)
+    if (age_days >= m.ages[a].first &&
+        (age_days < m.ages[a].second || (a + 1 == m.ages.size() && age_days == m.ages[a].second))) {
+      auto s = m.strata.find({regime, a});
+      return s == m.strata.end() ? nullptr : &s->second;
+    }
+  return nullptr;
+}
+struct EmpiricalUse {
+  bool used = false, calibrated = false;
+  std::string reference;
+  ConjunctionEvent2 computed;
+  std::array<double, 21> cov1{}, cov2{};
+};
+// A covariance method's probability from the empirical model, when a
+// covariance method was requested, both objects are element sets and both
+// strata exist; nothing otherwise (the event keeps what it had).
+EmpiricalUse empiricalPc(const EmpiricalModel &m, const GPElement *g1, const GPElement *g2, double age1,
+                         double age2, const conjunction::StateVector &s1,
+                         const conjunction::StateVector &s2, double radius1_m,
+                         double radius2_m, cqrProbabilityAlgorithm alg) {
+  EmpiricalUse u;
+  if (!m.loaded || alg == cqrProbabilityAlgorithm::ALFANO_MAXIMUM || !g1 || !g2)
+    return u;
+  const EmpiricalStratum *a = empiricalStratum(m, *g1, age1), *b = empiricalStratum(m, *g2, age2);
+  if (!a || !b)
+    return u;
+  ConjunctionEngine engine;
+  engine.set_pc_method(algorithm(alg));
+  engine.set_combined_radius_m(radius1_m, radius2_m);
+  u.computed = engine.compute_pc(s1, s2, position_block(a->cov), position_block(b->cov),
+                                 (radius1_m + radius2_m) / 1000.);
+  u.used = true;
+  u.cov1 = a->cov;
+  u.cov2 = b->cov;
+  u.calibrated = a->calibrated && b->calibrated;
+  if (u.calibrated)
+    u.reference = a == b || a->reference == b->reference ? a->reference : a->reference + "; " + b->reference;
+  return u;
+}
+// Labels an event whose probability came from the empirical model.
+void empiricalLabels(CQREventT &o, const EmpiricalUse &u, cqrProbabilityAlgorithm alg) {
+  if (!u.used)
+    return;
+  o.PROBABILITY = probability(u.computed.pc, alg, cqrUncertaintyOrigin::SYNTHESIZED_COVARIANCE);
+  o.HAS_DILUTION_THRESHOLD_M = false;
+  o.MAHALANOBIS_3D_SQUARED = u.computed.mahalanobis_3d * u.computed.mahalanobis_3d;
+  o.HAS_MAHALANOBIS_3D_SQUARED = true;
+  auto sigma = [](const std::array<double, 21> &c) {
+    return vec(std::sqrt(c[0]) * 1000., std::sqrt(c[2]) * 1000., std::sqrt(c[5]) * 1000.);
+  };
+  o.PRIMARY_SIGMA_RTN_M = sigma(u.cov1);
+  o.SECONDARY_SIGMA_RTN_M = sigma(u.cov2);
+  o.PRIMARY_COVARIANCE_BASIS = o.SECONDARY_COVARIANCE_BASIS = cqrCovarianceBasis::EMPIRICAL_MODEL;
+  o.PROBABILITY->CALIBRATION = u.calibrated ? covarianceCalibration::Calibrated : covarianceCalibration::Uncalibrated;
+  o.PROBABILITY->CALIBRATION_REFERENCE = u.calibrated ? u.reference : std::string();
+  o.PROBABILITY->CROSS_CORRELATION = cqrCovarianceCorrelation::INDEPENDENT;
+}
+// Element sets by catalog number, for events that carry only identities; a
+// number with two different element sets resolves to none.
+void addElements(std::map<int, const GPElement *> &out, const std::vector<Source> &sources) {
+  for (const auto &s : sources) {
+    if (!s.mean || s.gp.norad_cat_id <= 0)
+      continue;
+    auto [it, fresh] = out.emplace(s.gp.norad_cat_id, &s.gp);
+    if (!fresh && (!it->second || it->second->epoch_jd != s.gp.epoch_jd))
+      it->second = nullptr;
+  }
+}
+// A screened event (element-set screens) as a CQR event, with the empirical
+// model's probability when it applies.
+std::unique_ptr<CQREventT> screenedEvent(const ConjunctionEvent &e, const EmpiricalModel &m,
+                                         const std::map<int, const GPElement *> &gp,
+                                         cqrProbabilityAlgorithm alg, int axes = 1) {
+  auto o = event(e, axes);
+  auto find = [&](int norad) { auto it = gp.find(norad); return it == gp.end() ? nullptr : it->second; };
+  empiricalLabels(*o, empiricalPc(m, find(e.obj1.norad_cat_id), find(e.obj2.norad_cat_id), e.dse1, e.dse2,
+                                  e.state1, e.state2, e.radius1_m, e.radius2_m, alg),
+                  alg);
+  return o;
+}
 // TOTAL_OBJECTS counts the objects the screening covered: the catalog less
 // the objects excluded because they cannot be propagated over the window
 // (listed on the `excluded` port). OBJECTS_PARSED keeps the full count.
@@ -1270,6 +1450,15 @@ extern "C" int assess_conjunction() {
     const auto supplied = applySourceCovariance(assessed, a, b, e, alg);
     out.EVENT_RESULT = event(assessed, alg, a.axes);
     covarianceLabels(*out.EVENT_RESULT, supplied);
+    EmpiricalModel model;
+    if (!empiricalModel(model))
+      return 400;
+    if (!supplied.used && !has_error())
+      empiricalLabels(*out.EVENT_RESULT,
+                      empiricalPc(model, a.mean ? &a.gp : nullptr, b.mean ? &b.gp : nullptr, assessed.dse1,
+                                  assessed.dse2, assessed.state1, assessed.state2,
+                                  q->PAIR_REQUEST()->PRIMARY_RADIUS_M(), q->PAIR_REQUEST()->SECONDARY_RADIUS_M(), alg),
+                      alg);
   }
   if (!isFinite(out.EVENT_RESULT->MISS_DISTANCE_M) ||
       !isFinite(out.EVENT_RESULT->TCA->JULIAN_DATE))
@@ -1452,14 +1641,17 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
                    ScreeningStats &stats,
                    std::vector<std::unique_ptr<CQREventT>> &events,
                    std::vector<std::vector<uint8_t>> &excluded,
-                   const std::vector<uint32_t> *primary_handles = nullptr) {
+                   const std::vector<uint32_t> *primary_handles = nullptr,
+                   const EmpiricalModel &model = EmpiricalModel()) {
   stats.total_objects = p.size() + s.size();
   if (p.empty())
     return error("invalid-catalog", "At least one primary source is required.");
   bool means =
       std::all_of(p.begin(), p.end(), [](auto &x) { return x.mean; }) &&
       std::all_of(s.begin(), s.end(), [](auto &x) { return x.mean; });
-  if (means && !primary_handles && alg == cqrProbabilityAlgorithm::ALFANO_MAXIMUM) {
+  // Element sets screen on the fast path; with an empirical model a covariance
+  // method's probability is added to each event afterwards.
+  if (means && !primary_handles && (alg == cqrProbabilityAlgorithm::ALFANO_MAXIMUM || model.loaded)) {
     std::vector<GPElement> a, b;
     for (auto &x : p)
       a.push_back(x.gp);
@@ -1470,8 +1662,11 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
     stats = screener.stats();
     if (has_error())
       return error("screening-failed", error_message());
+    std::map<int, const GPElement *> gp;
+    addElements(gp, p);
+    addElements(gp, s);
     for (auto &e : results)
-      events.push_back(event(e));
+      events.push_back(screenedEvent(e, model, gp, alg));
     for (const auto &x : stats.excluded_objects) {
       const auto &list = x.input_list == 1 ? s : p;
       if (x.input_list < 0 || x.input_index >= list.size())
@@ -1527,6 +1722,12 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
           output->PRIMARY_RADIUS_BASIS = radius1.second;
           output->SECONDARY_RADIUS_BASIS = radius2.second;
           covarianceLabels(*output, supplied);
+          if (!supplied.used)
+            empiricalLabels(*output,
+                            empiricalPc(model, p[i].mean ? &p[i].gp : nullptr, b.mean ? &b.gp : nullptr,
+                                        result.dse1, result.dse2, result.state1, result.state2, radius1.first,
+                                        radius2.first, alg),
+                            alg);
           // Serialization also validates probability metadata. A worker-local
           // failure must not disappear when the next pair clears its status.
           if (has_error()) {
@@ -1691,8 +1892,11 @@ extern "C" int screen_catalog() {
   ScreeningStats stats;
   std::vector<std::unique_ptr<CQREventT>> events;
   std::vector<std::vector<uint8_t>> excluded;
+  EmpiricalModel model;
+  if (!empiricalModel(model))
+    return 400;
   if (!screenSources(p, s, c, r->CONTROLS()->ALGORITHM(), stats, events,
-                     excluded))
+                     excluded, nullptr, model))
     return 422;
   return catalogOutput(std::move(events), stats, "screen_catalog",
                        std::move(excluded))
@@ -1986,11 +2190,15 @@ bool screenWindow(const char *method) {
   for (auto &s : i->sources)
     if (!window(s, c, f))
       return false;
+  EmpiricalModel model;
+  if (!empiricalModel(model))
+    return false;
+  const auto alg = r->CONTROLS()->ALGORITHM();
   if (i->native_handle) {
-    if (r->CONTROLS()->ALGORITHM() != cqrProbabilityAlgorithm::ALFANO_MAXIMUM)
+    if (alg != cqrProbabilityAlgorithm::ALFANO_MAXIMUM && !model.loaded)
       return error(
           "unsupported-algorithm",
-          "Optimized resident GP index currently uses ALFANO_MAXIMUM.");
+          "Optimized resident GP index uses ALFANO_MAXIMUM, or a covariance method with an uncertainty_model.");
     auto native = find_resident_screening_index(i->native_handle);
     if (!native)
       return error("invalid-index-handle", "Resident native index is absent.");
@@ -2007,13 +2215,17 @@ bool screenWindow(const char *method) {
                      "Excluded object has no resident source.");
       excluded.push_back(excludedRecord(*found, x));
     }
-    return catalogOutput(events, stats, method, std::move(excluded));
+    std::map<int, const GPElement *> gp;
+    addElements(gp, i->sources);
+    std::vector<std::unique_ptr<CQREventT>> out;
+    for (auto &e : events)
+      out.push_back(screenedEvent(e, model, gp, alg));
+    return catalogOutput(std::move(out), stats, method, std::move(excluded));
   }
   ScreeningStats stats;
   std::vector<std::unique_ptr<CQREventT>> events;
   std::vector<std::vector<uint8_t>> excluded;
-  if (!screenSources(i->sources, {}, c, r->CONTROLS()->ALGORITHM(), stats, events,
-                     excluded, &i->primaries))
+  if (!screenSources(i->sources, {}, c, alg, stats, events, excluded, &i->primaries, model))
     return false;
   return catalogOutput(std::move(events), stats, method, std::move(excluded));
 }
@@ -2041,8 +2253,11 @@ bool tightRequest(const char *method, ScreeningConfig &c, TightSet &t) {
   int f = frame(r->EVALUATION_FRAME());
   if (!f || f != t.index->axes)
     return error("frame-mismatch", "Window evaluation frame differs from the resident index.");
-  if (r->CONTROLS()->ALGORITHM() != cqrProbabilityAlgorithm::ALFANO_MAXIMUM)
-    return error("unsupported-algorithm", std::string(method) + " screens with ALFANO_MAXIMUM, as screen_catalog's all-vs-all path.");
+  // The grid and the candidate search are geometry; only refinement reports a
+  // probability, and a covariance method needs the uncertainty_model there.
+  if (r->CONTROLS()->ALGORITHM() != cqrProbabilityAlgorithm::ALFANO_MAXIMUM &&
+      std::strcmp(method, "refine_candidates") == 0 && !input("uncertainty_model"))
+    return error("unsupported-algorithm", std::string(method) + " screens with ALFANO_MAXIMUM, or a covariance method with an uncertainty_model.");
   if (!t.index->primaries.empty())
     return error("unsupported-index", std::string(method) + " screens every source against every other; the index names primaries.");
   if (t.index->sources.size() < 2)
@@ -2231,12 +2446,19 @@ extern "C" int refine_candidates() {
     }
   }
   ScreeningStats stats;
+  EmpiricalModel model;
+  if (!empiricalModel(model))
+    return 400;
   auto events = screen_tight_candidates(t.refs, c, cf ? &candidates : nullptr, std::move(excluded), stats);
   if (conjunction::has_error())
     return error("screening-failed", conjunction::error_message()), 422;
+  std::map<int, const GPElement *> gp;
+  addElements(gp, t.index->sources);
+  const auto alg = request()->WINDOW_REQUEST() ? request()->WINDOW_REQUEST()->CONTROLS()->ALGORITHM()
+                                               : cqrProbabilityAlgorithm::ALFANO_MAXIMUM;
   std::vector<std::unique_ptr<CQREventT>> out;
   for (auto &e : events)
-    out.push_back(event(e));
+    out.push_back(screenedEvent(e, model, gp, alg));
   std::vector<std::vector<uint8_t>> excludedRecords;
   for (const auto &x : stats.excluded_objects)
     excludedRecords.push_back(excludedRecord(t.index->sources[x.index], x));

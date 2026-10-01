@@ -38,6 +38,28 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true
+        },
+        {
+          "portId": "uncertainty_model",
+          "acceptedTypeSets": [
+            {
+              "setId": "uncertainty-model-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.ca-uncertainty-model",
+                "detail": "CAU1 tag, label, regimes (mean altitude and eccentricity bounds), prediction-age bins, and per stratum the RTN position-velocity covariance, calibration flag and reference (analysis/gp-error-model, written by scripts/uncertainty-model.mjs)."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Empirical prediction-error model for element-set sources. With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the model's calibration gate passed; absent, or outside the model, events keep the Alfano maximum."
         }
       ],
       "outputPorts": [
@@ -604,6 +626,28 @@
           "minStreams": 0,
           "maxStreams": 65535,
           "required": false
+        },
+        {
+          "portId": "uncertainty_model",
+          "acceptedTypeSets": [
+            {
+              "setId": "uncertainty-model-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.ca-uncertainty-model",
+                "detail": "CAU1 tag, label, regimes (mean altitude and eccentricity bounds), prediction-age bins, and per stratum the RTN position-velocity covariance, calibration flag and reference (analysis/gp-error-model, written by scripts/uncertainty-model.mjs)."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Empirical prediction-error model for element-set sources. With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the model's calibration gate passed; absent, or outside the model, events keep the Alfano maximum."
         }
       ],
       "outputPorts": [
@@ -855,6 +899,28 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true
+        },
+        {
+          "portId": "uncertainty_model",
+          "acceptedTypeSets": [
+            {
+              "setId": "uncertainty-model-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.ca-uncertainty-model",
+                "detail": "CAU1 tag, label, regimes (mean altitude and eccentricity bounds), prediction-age bins, and per stratum the RTN position-velocity covariance, calibration flag and reference (analysis/gp-error-model, written by scripts/uncertainty-model.mjs)."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Empirical prediction-error model for element-set sources. With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the model's calibration gate passed; absent, or outside the model, events keep the Alfano maximum."
         }
       ],
       "outputPorts": [
@@ -923,6 +989,28 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true
+        },
+        {
+          "portId": "uncertainty_model",
+          "acceptedTypeSets": [
+            {
+              "setId": "uncertainty-model-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.ca-uncertainty-model",
+                "detail": "CAU1 tag, label, regimes (mean altitude and eccentricity bounds), prediction-age bins, and per stratum the RTN position-velocity covariance, calibration flag and reference (analysis/gp-error-model, written by scripts/uncertainty-model.mjs)."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Empirical prediction-error model for element-set sources. With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the model's calibration gate passed; absent, or outside the model, events keep the Alfano maximum."
         }
       ],
       "outputPorts": [
@@ -1305,6 +1393,28 @@
           "maxStreams": 1,
           "required": false,
           "description": "Exclusions coarse_grid reported over the window."
+        },
+        {
+          "portId": "uncertainty_model",
+          "acceptedTypeSets": [
+            {
+              "setId": "uncertainty-model-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.ca-uncertainty-model",
+                "detail": "CAU1 tag, label, regimes (mean altitude and eccentricity bounds), prediction-age bins, and per stratum the RTN position-velocity covariance, calibration flag and reference (analysis/gp-error-model, written by scripts/uncertainty-model.mjs)."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Empirical prediction-error model for element-set sources. With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the model's calibration gate passed; absent, or outside the model, events keep the Alfano maximum."
         }
       ],
       "outputPorts": [

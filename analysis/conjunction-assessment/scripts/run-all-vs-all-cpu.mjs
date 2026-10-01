@@ -5,13 +5,15 @@
 //          [--runtime wasmedge|docker-wasmedge|node] [--propagator sgp4|hpop]
 //          [--start <jd>] [--days 3] [--window-hours 6|2] [--threshold-km 5]
 //          [--step-s 60] [--workers N] [--farm-workers N] [--aot] [--wasmedge-runner <path>]
-//          [--out summary.json]
+//          [--algorithm FOSTER --uncertainty-model <model.cau1>] [--out summary.json]
 // wasmedge runs the module as an SDN node does (WasmEdge, wasi-threads), and
 // --aot compiles it ahead of time first as SDN nodes do (wasmedgec; set
 // WASMEDGEC or put it on PATH / ~/.wasmedge/bin); node runs it in V8. One
 // propagator per run; hpop uses the propagation farm. --wasmedge-runner runs a
 // given WasmEdge host build (for example the test runner linked against SDN's
-// patched static WasmEdge) instead of the one the tests build.
+// patched static WasmEdge) instead of the one the tests build. --algorithm with
+// --uncertainty-model (scripts/uncertainty-model.mjs) gives element-set events
+// the empirical model's covariance probability; the default is ALFANO_MAXIMUM.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -29,6 +31,7 @@ const { values: o } = parseArgs({ options: {
   start: { type: 'string', default: '2461314.5' }, days: { type: 'string', default: '3' }, 'window-hours': { type: 'string' },
   'threshold-km': { type: 'string', default: '5' }, 'step-s': { type: 'string', default: '60' },
   workers: { type: 'string' }, 'farm-workers': { type: 'string' }, aot: { type: 'boolean', default: false }, 'wasmedge-runner': { type: 'string' }, out: { type: 'string' },
+  algorithm: { type: 'string', default: 'ALFANO_MAXIMUM' }, 'uncertainty-model': { type: 'string' },
 } });
 if (!o.catalog) throw new Error('--catalog <omm.uint32be.bin> is required.');
 if (!['sgp4', 'hpop'].includes(o.propagator)) throw new Error('--propagator is sgp4 or hpop: one propagator per run.');
@@ -95,20 +98,25 @@ try {
       },
     } : undefined,
     windows,
-    controls: { thresholdKm: Number(o['threshold-km']), coarseStepSec: Number(o['step-s']), workers },
+    controls: { thresholdKm: Number(o['threshold-km']), coarseStepSec: Number(o['step-s']), workers, algorithm: o.algorithm },
+    uncertaintyModel: o['uncertainty-model'] ? new Uint8Array(fs.readFileSync(o['uncertainty-model'])) : undefined,
     screener: null,
     onProgress: (stage, done, total) => process.stderr.write(`\r${stage}: ${done} / ${total}   `),
   });
   process.stderr.write('\n');
   const wallMs = performance.now() - t0 - aotCompileMs, t = result.timings, s = (ms) => (ms / 1000).toFixed(1) + ' s';
+  const summaries = result.events.map(eventSummary);
   if (o.out) fs.writeFileSync(o.out, JSON.stringify({ catalog: path.basename(o.catalog), runtime: o.runtime, propagator: o.propagator,
     startJd: +o.start, durationDays: +o.days, windowHours, workers, wallMs, aotCompileMs, objects: result.objects, windows: result.windows,
-    candidates: result.candidates, excluded: result.excluded, timings: t,
-    events: result.events.map(eventSummary).sort((a, b) => a.missM - b.missM) }, null, 1) + '\n');
+    candidates: result.candidates, excluded: result.excluded, timings: t, algorithm: o.algorithm,
+    uncertaintyModel: o['uncertainty-model'] ? path.basename(o['uncertainty-model']) : null,
+    events: [...summaries].sort((a, b) => a.missM - b.missM) }, null, 1) + '\n');
   console.log(`${o.propagator} on ${o.runtime}${wasmSource ? ' AOT' : ''} (CPU, ${workers} module threads): ${result.objects} objects, ${o.days} days in ` +
     `${result.windows.length} windows: ${result.candidates} candidates, ${result.events.length} conjunctions, ` +
     `${result.excluded.length} excluded, ${s(wallMs)} end to end (load ${s(t.loadMs)}, window prep/wait ${s(t.prepareMs)}, ` +
-    `search ${s(t.gridMs)}, refine ${s(t.refineMs)}${wasmSource ? `; AOT compile ${s(aotCompileMs)} not counted` : ''})`);
+    `search ${s(t.gridMs)}, refine ${s(t.refineMs)}${wasmSource ? `; AOT compile ${s(aotCompileMs)} not counted` : ''})` +
+    (o['uncertainty-model'] ? `; ${o.algorithm}: ${summaries.filter((e) => e.uncertainty === 'SYNTHESIZED_COVARIANCE').length} ` +
+      `covariance probabilities, ${summaries.filter((e) => e.calibration === 'Calibrated').length} calibrated` : ''));
 } finally {
   await farm?.close();
   await harness.destroy?.();

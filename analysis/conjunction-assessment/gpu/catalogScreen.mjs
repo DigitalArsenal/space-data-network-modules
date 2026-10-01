@@ -13,7 +13,8 @@ import * as flatbuffers from 'flatbuffers';
 import {
   CQR, CQRT, CQRDestroyRequestT, CQRIndexRequestT, CQRObjectSourceT, CQRScreeningControlsT, CQRWindowRequestT, OMM,
   PRWInstanceT, RFMCoordinateSystemT, RFMOriginT, TIMInstantT, cqrIndexRepresentation, cqrProbabilityAlgorithm,
-  cqrRefinementStrategy, rfmAxisType, rfmOriginKind, timingStandard, timEpochRepresentation,
+  cqrRefinementStrategy, cqrUncertaintyOrigin, covarianceCalibration, rfmAxisType, rfmOriginKind, timingStandard,
+  timEpochRepresentation,
 } from 'spacedatastandards.org/lib/js/CQR/main.js';
 import { PRW } from 'spacedatastandards.org/lib/js/PRW/main.js';
 import { screenWindowsOnGpu } from './allVsAll.mjs';
@@ -30,11 +31,12 @@ function encode(arm, value) {
   return builder.asUint8Array().slice();
 }
 
-function windowRequest(handle, frameName, { startJd, durationDays }, { thresholdKm, coarseStepSec, workers }) {
+function windowRequest(handle, frameName, { startJd, durationDays }, { thresholdKm, coarseStepSec, workers, algorithm }) {
   const controls = new CQRScreeningControlsT(
     new TIMInstantT(timingStandard.UTC, timEpochRepresentation.JULIAN_DATE, startJd),
     durationDays * 86400, thresholdKm * 1000, workers, coarseStepSec);
-  controls.ALGORITHM = cqrProbabilityAlgorithm.ALFANO_MAXIMUM;
+  // A covariance method needs an uncertainty_model (o.uncertaintyModel) for its probability.
+  controls.ALGORITHM = cqrProbabilityAlgorithm[algorithm ?? 'ALFANO_MAXIMUM'];
   const frame = frameName === 'TEME'
     ? new RFMCoordinateSystemT('TEME', rfmAxisType.TRUE_EQUATOR_MEAN_EQUINOX_OF_DATE, new RFMOriginT(rfmOriginKind.CELESTIAL_BODY, 399))
     : new RFMCoordinateSystemT('GCRF', rfmAxisType.ICRF, new RFMOriginT(rfmOriginKind.CELESTIAL_BODY, 399), 399);
@@ -66,6 +68,8 @@ export const eventSummary = (e) => ({
   primaryNorad: e.PRIMARY_NORAD_ID, secondaryNorad: e.SECONDARY_NORAD_ID,
   tcaJd: e.TCA?.JULIAN_DATE, missM: e.MISS_DISTANCE_M, speedMS: e.RELATIVE_SPEED_M_S,
   probability: e.PROBABILITY?.PROBABILITY ?? null,
+  uncertainty: cqrUncertaintyOrigin[e.PROBABILITY?.UNCERTAINTY_SOURCE] ?? null,
+  calibration: covarianceCalibration[e.PROBABILITY?.CALIBRATION] ?? null,
 });
 
 /**
@@ -121,6 +125,7 @@ export async function screenCatalog(o) {
   }
   const loadMs = performance.now() - t0;
   const result = await screenWindowsOnGpu({ invoke, decodeCatalogResult, screener: o.screener, windows: o.windows,
+    uncertaintyModel: o.uncertaintyModel,
     prepareWindow, thresholdKm: controls.thresholdKm, coarseStepSec: controls.coarseStepSec, onProgress: o.onProgress });
   return { ...result, objects, timings: { loadMs, ...result.timings, totalMs: performance.now() - t0 } };
 }

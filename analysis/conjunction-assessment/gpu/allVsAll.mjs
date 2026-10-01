@@ -80,6 +80,8 @@ export async function screenAllVsAllOnGpu(o) {
   const blockSteps = o.blockSteps ?? (o.screener ? 32 : 120), perRefine = o.candidatesPerRefine ?? 150000;
   const progress = o.onProgress ?? (() => {});
   const requestInput = [sds('request', 'CQR', request)];
+  // An empirical prediction-error model goes to refinement only (where events get their probability).
+  const modelInput = o.uncertaintyModel ? [control('uncertainty_model', 'application/vnd.sdn.ca-uncertainty-model', o.uncertaintyModel)] : [];
   const port = (outputs, id) => outputs.find((x) => x.portId === id)?.payload;
   const timings = { gridMs: 0, gpuMs: 0, refineMs: 0 };
   const excluded = new Map();
@@ -146,7 +148,7 @@ export async function screenAllVsAllOnGpu(o) {
     const t = performance.now();
     const inputs = [...requestInput,
       control('candidates', 'application/vnd.sdn.ca-candidates', candidatesFrame(sorted, from, to)),
-      control('excluded', 'application/vnd.sdn.ca-excluded', excludedBytes)];
+      control('excluded', 'application/vnd.sdn.ca-excluded', excludedBytes), ...modelInput];
     let response = await invoke('refine_candidates', inputs);
     refineCalls++;
     if (response.statusCode !== 0 && response.errorCode === 'output-staging-limit') {

@@ -60,6 +60,32 @@ No uncertainty is invented. A TLE or SGP4 element set carries no covariance:
 - `emit_cdm` writes the sources' 6x6 RTN covariance at TCA, and none it cannot back, and `write_cdm_kvn` /
   `write_cdm_xml` refuse a CDM without covariance (`covariance-unavailable`),
   since CCSDS requires it, as does `compute_pc_from_cdm`.
+- **Empirical model.** Element sets can take covariance from an empirical
+  prediction-error model: `analysis/gp-error-model`, scaled and gated by its
+  calibration. `scripts/uncertainty-model.mjs` writes the model as the
+  `uncertainty_model` frame (`CAU1`).
+  - **Where:** `assess_conjunction`, `screen_catalog`, `screen_window`,
+    `screen_segment_window` and `refine_candidates`, with a covariance
+    `ALGORITHM`.
+  - **How:** for an event between two element sets with no supplied
+    covariance, each object's covariance comes from the stratum of its regime
+    (mean altitude and eccentricity) and prediction age (TCA minus epoch).
+    The covariance method's probability follows.
+  - **Labels:** `SYNTHESIZED_COVARIANCE`, `EMPIRICAL_MODEL` for both objects,
+    and `INDEPENDENT`. `CALIBRATION` is `Calibrated`, with the gate's
+    reference, only when both strata passed the calibration gate; otherwise
+    it is `Uncalibrated`.
+  - **Fallback:** outside the model (a negative or too-old age, or a stratum
+    it lacks), the event keeps the Alfano maximum.
+  - **Fast paths:** with the frame, the element-set screens (fast catalog
+    path, resident index, refinement) accept a covariance method.
+  - **Cost:** the 3-day full-catalog CPU screen (32,514 objects, Node, 27
+    threads) found the same 292,516 conjunctions.
+    - Refinement took 7.8 s instead of 7.0 s; the run took 19.6 s end to end
+      instead of 18.5 s.
+    - With the 2026-08 model, 288,105 events got a covariance probability and
+      13,088 are calibrated: both objects in LEO 600–800 km at a passing age.
+    - `scripts/run-all-vs-all-cpu.mjs --algorithm FOSTER --uncertainty-model <frame>`.
 
 Each event reports both objects' hard-body radii and where each came from
 (`PRIMARY/SECONDARY_HARD_BODY_RADIUS_M`, `*_RADIUS_BASIS`), and
@@ -68,7 +94,8 @@ Each event reports both objects' hard-body radii and where each came from
 (`SUPPLIED`), else half its catalog entry's `SIZE` (`CATALOG_SIZE`), else
 `sqrt(RCS / pi)` (`RADAR_CROSS_SECTION`, a radar measure rather than a size),
 else half the request's `COMBINED_RADIUS_M` (`REQUEST_DEFAULT`). Events also
-state each object's covariance basis; `NONE` until a source supplies one.
+state each object's covariance basis: `NONE` until a source supplies one or the
+empirical model applies.
 
 See the Evidence-Supported ASO Catalog whitepaper, sections 5, 9 and 16.2.
 
