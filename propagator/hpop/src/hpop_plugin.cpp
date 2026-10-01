@@ -243,6 +243,11 @@ static inline void pruneChebyshevEphemeris(ChebyshevEphemeris& eph, double focus
 static inline bool lookupCoveredSegment(const ChebyshevEphemeris& eph, double jd, int& idxOut) {
     idxOut = eph.lookup(jd);
     if (idxOut < 0) return false;
+    // The uniform-grid division can land one segment off at a boundary epoch
+    // (a Julian date resolves ~4.7e-10 day near 2026); step to the neighbour
+    // that holds jd.
+    if (idxOut > 0 && jd < eph.segments[idxOut].startJD) --idxOut;
+    else if (idxOut + 1 < eph.count && jd > eph.segments[idxOut].endJD) ++idxOut;
     const ChebyshevSegment& seg = eph.segments[idxOut];
     return jd >= (seg.startJD - 1e-12) && jd <= (seg.endJD + 1e-12);
 }
@@ -3275,6 +3280,10 @@ bool preparePortable(const PRWPrepareRequest* request, std::vector<std::vector<u
         for (int i = first; i <= last; ++i)
             if (!finiteSegment(entity.ephemeris.segments[i]))
                 return residentFailure(error, "propagation-failed", "Trajectory fitting produced non-finite coefficients.");
+        // Exports move forward window by window: drop what ends before this
+        // one, so a catalog's cache holds about one window per object. An
+        // earlier window refits from the seed if it is asked for again.
+        pruneFrontSegments(entity.ephemeris, startTdb);
     }
     if (prwNextSegmentSet == 0)
         return residentFailure(error, "handle-exhausted", "Resident segment handle space exhausted; create a new module instance.");

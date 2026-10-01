@@ -4,18 +4,18 @@
   "threadModel": "wasi-sequential",
   "target": "wasm32-wasip1-threads",
   "sharedMemory": true,
-  "sha256": "1070829bf83d9c05a1b4e56f70ff453a8a0f1e852c69c919fb932be7ea0215c3",
-  "bytes": 1141185,
+  "sha256": "0c729a51f605cfdd75a62c7c7a8a6d2472eebd2ce2104a8adc12bee296b43c10",
+  "bytes": 1140961,
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
-  "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project 7b58716d96c3ae4c0c4e6f72e29b16137bb6224b)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/propagator/hpop/deps/emsdk/upstream/bin",
+  "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/spacedatanetwork-stack/repos/main-packages/OrbPro/packages/wasm-engine/deps/emsdk/upstream/bin",
   "exceptionRuntimeArchives": [
     {
       "name": "libc++abi-ww-wasmexcept.a",
-      "sha256": "462bd8323cca9d53991757656ba68e23a4adfabc62acbc0a3ad925b8a3afe2e9"
+      "sha256": "4e27aa6d5bb01619802a27c00c611100ca10d5eb844f4a7261affcf5560bd51a"
     },
     {
       "name": "libunwind-ww-wasmexcept.a",
-      "sha256": "8578e2c540eb4a76d9061d510fe7a27e2270db23c2e4e9c6914da6ba1cafc17c"
+      "sha256": "d8bcc70af787c3993c20e100d48f6ea403e2176b838bca496f93e6f8520c5b8d"
     }
   ],
   "units": [

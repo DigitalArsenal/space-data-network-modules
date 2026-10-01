@@ -201,3 +201,24 @@ test('PRW trajectory exports nested PPE, honest quality, and bounded source chun
   }
   console.log('PASS PRW resident SI/UTC-generation/PPE: 2 sources, 13 coefficients per axis, quality UNMEASURED, 1-source chunks');
 });
+
+test('PRW trajectory windows on segment boundaries export one after another',async t=>{
+  const h=await harness(t);
+  success(await h.invoke({methodId:'ingest_state',inputs:[frame('state','RESIDENT_STATE',seed(31)),frame('state','RESIDENT_STATE',seed(47))]}));
+  // 2 h windows start on 10-minute segment boundaries, where the grid index
+  // used to land one segment off; each window is exported after the last.
+  let previousEnd=null;
+  for (let k=0;k<4;k++) {
+    const start=epoch+k*2/24;
+    const [prepared]=success(await h.invoke(input('prepare_trajectory_segments','PREPARE_REQUEST',
+      makeTable('PRWPrepareRequest',{INSTANCE:instance(),START_EPOCH:instant(start),DURATION_SECONDS:7200,PROFILE:'conjunction-screening'}))));
+    assert.equal(prepared.PREPARE_RESULT.COVERAGE_COMPLETE,true);
+    const [described]=success(await h.invoke(input('describe_trajectory_segments','DESCRIBE_REQUEST',describe(prepared.PREPARE_RESULT.SEGMENT_SET_HANDLE))));
+    const records=described.DESCRIBE_RESULT.SOURCES[0].EPHEMERIS.POSITION_RECORDS;
+    const jd=(iso)=>Date.parse(iso.slice(0,23)+'Z')/86400000+2440587.5;
+    const first=jd(records[0].EPOCH_MID)-records[0].EPOCH_HALF_SPAN/86400, last=jd(records.at(-1).EPOCH_MID)+records.at(-1).EPOCH_HALF_SPAN/86400;
+    assert.ok(first<=start+1e-8 && last>=start+2/24-1e-8,`window ${k} covered`);
+    if (previousEnd!==null) assert.ok(first<=previousEnd+1e-8,`window ${k} follows window ${k-1}`);
+    previousEnd=last;
+  }
+});
