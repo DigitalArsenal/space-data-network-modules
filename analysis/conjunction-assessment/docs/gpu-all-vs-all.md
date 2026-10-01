@@ -70,9 +70,23 @@ How each source computes D:
 
 The GPU applies the test in f32 with 0.01 km of slack, so it proposes a
 superset. `refine_candidates` repeats the test in f64 through
-`conjunction::tight_pair_may_close`. Before the test, the GPU skips pairs whose
-radius bounds differ by more than the threshold. Each step's bound is the
-range of |r_k + v_k τ| over the interval, widened by D.
+`conjunction::tight_pair_may_close`.
+
+The GPU finds pairs to test with the module's grid (below), in three passes
+per step (`gpu/screen_kernel.wgsl`):
+
+1. `insert`: each box goes into the cells it overlaps, hashed into one
+   lock-free list per slot. A box spanning four or more cells on an axis goes
+   on the step's big list instead.
+2. `pairs`: each object walks its cells' lists and tests a pair only in the
+   cell holding the low corner of the two boxes' overlap.
+3. `bigs_against_all`: each big box is tested against every object.
+
+The cell edge is the 99th-percentile box edge of a sample of the block.
+`gpu/gpuScreen.mjs` runs 8 steps per dispatch and halves that if the cell
+entries overflow. It proposes exactly the pairs an all-pairs test would: the
+full 3-day catalog gives the same 2,678,533 candidates as the all-pairs
+kernel it replaced.
 
 Passing steps join into encounters, which are refined as `screen_catalog`
 refines its own, through one source-based TCA search
@@ -249,15 +263,15 @@ so times are upper bounds.
 | --- | --- | ---: | ---: | ---: | ---: |
 | SGP4, 12 × 6 h | module, Node | 19.1 s | 9.7 s | 6.6 s | 292,516 (25 objects excluded) |
 | SGP4 | module, WasmEdge 0.16.4 AOT, SDN patches | 22.9 s | 11.9 s | 8.7 s | 292,516 |
-| SGP4 | GPU | 26.1 s | 5.7 + 8.5 s | 6.8 s | 292,516 |
-| HPOP, 36 × 2 h | GPU | 352.8 s | 4.6 + 9.3 s | 8.4 s | 301,396 |
+| SGP4 | GPU | 21.3 s | 6.1 + 2.3 s | 7.2 s | 292,516 |
+| HPOP, 36 × 2 h | GPU | 382.1 s | 4.7 + 1.8 s | 8.3 s | 301,396 |
 | HPOP | module, Node | 437.8 s | 15.2 s | 8.7 s | 301,396 |
 
 - Each propagator's runs report identical conjunctions (same TCA and miss
   distance) whichever host searched.
-- The GPU kernel tests every pair at every step; the module's grid tests only
-  nearby pairs, so it is faster here.
-- HPOP's time is propagation: about 315–400 s of waiting on the farm,
+- On the GPU path the module samples (6.1 s) and the GPU searches (2.3 s;
+  8.5 s with the all-pairs kernel the grid replaced).
+- HPOP's time is propagation: about 350–400 s of waiting on the farm,
   including about 120 s of catch-up from element epochs.
 - AOT compilation (about 10 s, once per install) is not counted.
 
@@ -273,7 +287,7 @@ candidates. SGP4, module search, Node:
 | 60 s | 2,675,123 | 9.7 s | 6.6 s | 19.1 s | 292,516 |
 | 120 s | 17,116,089 | 10.0 s | 20.4 s | 39.4 s | 292,516 |
 
-The GPU at 5 s took 162.5 s. All runs report the same conjunctions with miss
+The GPU at 5 s took 98.6 s (162.5 s with the all-pairs kernel). All runs report the same conjunctions with miss
 distances within 2 mm. TCAs differ by up to 173 ms only on flat minima, where
 the miss distance is the same.
 
