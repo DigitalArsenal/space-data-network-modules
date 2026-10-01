@@ -158,8 +158,7 @@ trajectories: mean elements (SGP4) or PPE, such as HPOP's
 conjunction-screening export in TDB/GCRF. `coarse_grid` and
 `refine_candidates` keep sampling and refinement in the module and report
 `screen_catalog`'s result. `scripts/run-all-vs-all-gpu.mjs` runs
-`examples/all-vs-all-gpu` in a WebGPU browser. The full catalog for one day
-takes 55 s. Three days of the full catalog take 132 s with SGP4 and 338 s with HPOP, propagation included, in time windows with one propagator per run. Without a GPU (`search_candidates`, in a browser without WebGPU, Node or WasmEdge as on an SDN node) the SGP4 screen takes 131 s in Node and 161 s in SDN's patched WasmEdge (AOT).
+`examples/all-vs-all-gpu` in a WebGPU browser. Three days of the full catalog take 19 s with SGP4 without a GPU (`search_candidates`, in Node; 23 s in SDN's patched WasmEdge, AOT), 26 s with the GPU, and 353–438 s with HPOP, propagation included, in time windows with one propagator per run. [docs/benchmark.md](docs/benchmark.md) runs it on another machine.
 
 Without a GPU, screen larger catalogs with the partitioned runner,
 `scripts/run-sdn-omm-partitioned-screen-catalog.mjs`, and

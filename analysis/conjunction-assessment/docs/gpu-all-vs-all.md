@@ -78,6 +78,26 @@ Passing steps join into encounters, which are refined as `screen_catalog`
 refines its own, through one source-based TCA search
 (`conjunction_assessment.h`).
 
+### TCA where the range has one minimum
+
+`find_tca` first tries `solve_unimodal_conjunction`. With A bounding both
+objects' accelerations over the window (`acceleration_bound_km_s2`; for SGP4,
+1.05 μ / r²_min) and half-width T about its middle:
+
+- |Δṙ| ≥ |Δv| − ε − A T, with ε = 1 m/s for a velocity that differs from the
+  rate of the position;
+- |Δr| ≤ |Δr_mid| + |Δv| T + A T² / 2.
+
+If q = |Δr|max A / |Δṙ|min² < 1, then d²|Δr|²/dt² > 0 on the window: one
+minimum, at the root of the range rate f = Δr · Δv. Newton steps of −f / |Δv|²
+converge by a factor q or better; a root outside the window leaves the TCA at
+the window edge plus the one second the scan also searches. The solve takes
+about ten state evaluations. Where the proof fails (slow pairs, long windows,
+sources without an acceleration bound), `find_tca` scans as before.
+
+Fast encounters (at most three coarse hits) use the same solve on their local
+window. A minimum strictly inside that window is reported as found.
+
 ## Methods
 
 **`coarse_grid`** takes:
@@ -101,8 +121,8 @@ It returns:
   triples;
 - optionally, `excluded`: `CAX1`, u32 count, then (u32 index, f64 JD).
 
-It returns `screen_catalog`'s `result` chunks and `excluded` OMMs. Without
-`candidates`, it scans every pair at every step on the CPU.
+It returns `screen_catalog`'s `result` chunks, up to 1,024 events each, and
+`excluded` OMMs. Without `candidates`, it runs the CPU search below.
 
 When a refine call would stage more than 16,384 events, the driver splits it
 in two.
@@ -217,64 +237,71 @@ With `--serve`, it leaves the page up for a WebGPU browser instead.
 
 ## Measured
 
-### Three days, whole catalog, one propagator per run
+The catalog is the Space-Track GP catalog of 2026-09-30, 32,514 objects. Each
+screen covers 2026-10-01T00:00Z plus 3 days with a 5 km threshold and 60 s
+steps, on a Mac Studio (28 cores; GPU runs in headless Chrome on Metal), with
+27 module threads. The host was shared with other work (1-minute load 20–60),
+so times are upper bounds.
 
-The catalog is the Space-Track GP catalog of 2026-09-30, 32,514 objects. The
-screen covers 2026-10-01T00:00Z plus 3 days, with a 5 km threshold and 60 s
-steps. The host was a Mac Studio (28 cores) running headless Chrome on Metal.
+### Three days, whole catalog
 
-| Propagator | Windows | End to end | Propagation | Grid | GPU | Refine | Candidates | Conjunctions |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| SGP4 (module, element sets) | 12 × 6 h | 132 s | in grid | 8.9 s | 8.3 s | 107.6 s | 2,678,533 | 292,516 (25 objects excluded) |
-| HPOP (farm: 26 workers, 52 instances) | 36 × 2 h | 338 s | 320 s, overlapped | 4.2 s | 8.6 s | 16.7 s | 3,080,922 | 301,396 |
+| Propagator | Pair search | End to end | Search (CPU) or grid + GPU | Refine | Conjunctions |
+| --- | --- | ---: | ---: | ---: | ---: |
+| SGP4, 12 × 6 h | module, Node | 19.1 s | 9.7 s | 6.6 s | 292,516 (25 objects excluded) |
+| SGP4 | module, WasmEdge 0.16.4 AOT, SDN patches | 22.9 s | 11.9 s | 8.7 s | 292,516 |
+| SGP4 | GPU | 26.1 s | 5.7 + 8.5 s | 6.8 s | 292,516 |
+| HPOP, 36 × 2 h | GPU | 352.8 s | 4.6 + 9.3 s | 8.4 s | 301,396 |
+| HPOP | module, Node | 437.8 s | 15.2 s | 8.7 s | 301,396 |
 
-- **SGP4:** refinement is the cost, because each TCA solve re-runs SGP4.
-- **HPOP:** the propagator is the cost. Its 320 s are 123 s of catch-up in
-  the first window, integrating every object from its element epoch, about
-  2.4 days on average, then about 5.6 s per 2-hour window. Screening a
-  window takes under a second, and it overlaps the next window's
-  propagation. Refining on trajectories takes 16.7 s, against 107.6 s with
-  SGP4.
-- The two runs report different conjunctions because they are different
-  propagators.
+- Each propagator's runs report identical conjunctions (same TCA and miss
+  distance) whichever host searched.
+- The GPU kernel tests every pair at every step; the module's grid tests only
+  nearby pairs, so it is faster here.
+- HPOP's time is propagation: about 315–400 s of waiting on the farm,
+  including about 120 s of catch-up from element epochs.
+- AOT compilation (about 10 s, once per install) is not counted.
 
-Without a GPU, with SGP4 over 3 days, 12 × 6 h windows, 27 module threads:
+### Step size
 
-| Host | End to end | Search | Refine | Candidates | Conjunctions |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Node (V8) | 131.4 s | 14.4 s | 114.3 s | 2,675,123 | 292,516 |
-| WasmEdge 0.16.4, SDN-patched, AOT (as an SDN node) | 161.4 s | 17.4 s | 141.8 s | 2,675,123 | 292,516 |
+The coarse test is exhaustive at any step, so the step trades sampling for
+candidates. SGP4, module search, Node:
 
-Both find the same conjunctions as the GPU run. With SGP4, refinement is most
-of the time, so the GPU saves little: 132 s with it, 131 s without. AOT
-compilation takes about 12 s once per install and is not counted.
+| Step | Candidates | Search | Refine | End to end | Conjunctions |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 5 s | 4,748,277 | 92.1 s | 6.9 s | 102.0 s | 292,516 |
+| 30 s | 1,414,694 | 17.8 s | 9.7 s | 29.9 s | 292,516 |
+| 60 s | 2,675,123 | 9.7 s | 6.6 s | 19.1 s | 292,516 |
+| 120 s | 17,116,089 | 10.0 s | 20.4 s | 39.4 s | 292,516 |
 
-### One day, single window
+The GPU at 5 s took 162.5 s. All runs report the same conjunctions with miss
+distances within 2 mm. TCAs differ by up to 173 ms only on flat minima, where
+the miss distance is the same.
 
-The run used the Space-Track GP catalog of 2026-09-30, with 32,514 objects.
-The window was 2026-10-01T00:00Z plus 1 day, with a 5 km threshold and 60 s
-steps. The host was a Mac Studio running headless Chrome on Metal, with 27
-module threads.
+### Refinement, step by step
 
-| Stage | Time | |
-| --- | ---: | --- |
-| Load the index (32,514 SGP4 sources, once) | 1.5 s | |
-| `coarse_grid`, 1,441 steps (46 calls) | 3.3 s | |
-| GPU pair search, 528.6 M pairs × 1,441 steps | 3.3 s | 829,990 candidates proposed; 828,910 passed the f64 test |
-| `refine_candidates` | 46.7 s | 661,321 encounters refined |
-| Total | 55.4 s | 77,667 conjunctions; 20 objects excluded |
+Three days, SGP4, module search, Node, on the same shared host:
 
-The first version sent the whole catalog with every call and took 266.7 s.
-`screen_catalog` traps out of memory above about 7,000 objects per call.
-Refinement is now 84 % of the time.
+| Change | End to end | Refine |
+| --- | ---: | ---: |
+| Dense TCA scan (modules dc51690) | 131.4 s | 114.3 s |
+| Unimodal proof, golden section | 63.9 s | 45.6 s |
+| Newton on the range rate | 55.3 s | 38.4 s |
+| Same solve as the fast-encounter gate | 34.7 s | 17.6 s |
+| Lock-free SGP4 state, GP elements converted once | 25.2 s | 12.7 s |
+| Chunked threads, events built in parallel, 1,024-event frames | 19.1 s | 6.6 s |
 
-Against `screen_catalog` on stride samples of the same catalog, with the same
-request:
+Every row reports the same 292,516 conjunctions.
 
-| Objects, window | `screen_catalog` | GPU example | Conjunctions | Largest difference |
+### Against `screen_catalog`
+
+`scripts/compare-single-call.mjs`, stride samples of the same catalog:
+
+| Objects, window | `screen_catalog` | Windowed, CPU search | Conjunctions | Largest difference |
 | --- | ---: | ---: | --- | --- |
-| 2,000, 0.1 day | 2.3 s | 0.3 s | 23 of 23 | TCA 0.3 ms, miss 2 mm |
-| 4,000, 1 day | 220.9 s | 4.7 s | 1,068 of 1,068 | TCA 0.64 ms, miss 7 mm |
+| 2,000, 0.1 day | 1.1 s | 0.08 s | 23 of 23 | TCA 0.16 ms, miss 0.6 mm |
+| 4,000, 1 day | 32.9 s | 0.44 s | 1,068 of 1,068 | TCA 0.64 ms, miss 5 mm |
+
+`screen_catalog` traps out of memory above about 7,000 objects per call.
 
 HPOP's own cost is about 41 ms per object-day for one resident instance
 (200 LEO objects, one day, `conjunction-screening` profile). A day of its
