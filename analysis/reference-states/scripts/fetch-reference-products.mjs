@@ -4,7 +4,7 @@
 // IERS EOP 20 C04 rows (data-source/eop-parser) for the Earth rotation.
 //
 //   node scripts/fetch-reference-products.mjs --from 2026-09-01 --to 2026-09-07 \
-//     [--products gps,slr,sentinel1] [--out DIR]
+//     [--products gps,slr,sentinel1,swarm] [--out DIR]
 //
 // Products (all public):
 //   gps        IGS final orbits (IGS0OPSFIN, 15 min, IGS20), satellite
@@ -16,6 +16,16 @@
 //   sentinel1  Copernicus Sentinel-1 precise orbits (AUX_POEORB, 10 s),
 //              transcribed to SP3-c; the stated sigma is the mission's 5 cm
 //              3D RMS precise-orbit requirement.
+//   slr-daily  ILRS analysis-centre (NSGF) 4-day fitted arcs of Ajisai,
+//              Starlette, Stella, LARETS, WESTPAC, LARES and LARES-2, one
+//              arc every 4 days from --from (non-overlapping); the stated
+//              sigma is the per-axis RMS of the arc's 3-day overlap with the
+//              next day's arc. Their frame is written "ECF" with the comment
+//              that it is ITRF, and is read as ITRF.
+//   swarm      Swarm A, B and C precise orbits (TU Delft reduced-dynamic SP3,
+//              10 s, IGc20) from the ESA Swarm dissemination server; the
+//              stated sigma is the per-axis RMS of the kinematic minus the
+//              reduced-dynamic orbit over the day.
 // Output (outside the repository): DIR/products/ holds the downloads,
 // DIR/reference/<product>/<norad>.oem the size-prefixed $OEM per object, and
 // DIR/reference/<product>/index.json what each came from.
@@ -31,7 +41,7 @@ import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-m
 
 const { values } = parseArgs({ options: {
   from: { type: 'string' }, to: { type: 'string' },
-  products: { type: 'string', default: 'gps,slr,sentinel1' },
+  products: { type: 'string', default: 'gps,slr,slr-daily,sentinel1,swarm' },
   out: { type: 'string', default: process.env.SDN_REFERENCE_CACHE ?? path.join(os.homedir(), '.cache', 'sdn-reference-states') },
 } });
 if (!values.from || !values.to) throw new Error('--from and --to (YYYY-MM-DD) are required.');
@@ -55,8 +65,8 @@ const typeRef = (code) => ({ schemaName: `${code}.fbs`, fileIdentifier: `$${code
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 // ── downloads, cached by URL basename ──
-async function fetchCached(url, dir = 'products') {
-  const file = path.join(out, dir, path.basename(new URL(url).pathname));
+async function fetchCached(url, dir = 'products', name = path.basename(new URL(url).pathname)) {
+  const file = path.join(out, dir, name);
   if (fs.existsSync(file)) return fs.readFileSync(file);
   for (let attempt = 1; ; ++attempt) {
     const response = await fetch(url).catch((error) => ({ ok: false, status: error.message }));
@@ -74,6 +84,20 @@ async function listing(url, pattern) {
   const response = await fetch(url).catch(() => null);
   if (!response?.ok) return [];
   return [...new Set((await response.text()).match(pattern) ?? [])];
+}
+function unzipEntry(zip, suffix) {  // the entry whose name ends with suffix, via the central directory
+  let end = zip.length - 22;
+  while (end >= 0 && zip.readUInt32LE(end) !== 0x06054b50) --end;
+  if (end < 0) return null;
+  for (let at = zip.readUInt32LE(end + 16), k = zip.readUInt16LE(end + 10); k > 0; --k) {
+    const method = zip.readUInt16LE(at + 10), size = zip.readUInt32LE(at + 20), n = zip.readUInt16LE(at + 28);
+    const name = zip.toString('latin1', at + 46, at + 46 + n), local = zip.readUInt32LE(at + 42);
+    at += 46 + n + zip.readUInt16LE(at + 30) + zip.readUInt16LE(at + 32);
+    if (!name.toLowerCase().endsWith(suffix)) continue;
+    const data = zip.subarray(local + 30 + zip.readUInt16LE(local + 26) + zip.readUInt16LE(local + 28)).subarray(0, size);
+    return method === 8 ? inflateRawSync(data) : Buffer.from(data);
+  }
+  return null;
 }
 function unzipFirst(zip) {  // one stored or deflated entry
   const name = zip.readUInt16LE(26), extra = zip.readUInt16LE(28), size = zip.readUInt32LE(18);
@@ -275,8 +299,91 @@ async function sentinel1(day) {
   }
 }
 
+// ── SLR daily: NSGF 4-day arcs, sigma from the overlap with the next arc ──
+const SLR_DAILY = { ajisai: { norad: 16908, objectId: '1986-061A', name: 'AJISAI' }, starlette: { norad: 7646, objectId: '1975-010A', name: 'STARLETTE' },
+  stella: { norad: 22824, objectId: '1993-061B', name: 'STELLA' }, larets: { norad: 27944, objectId: '2003-042F', name: 'LARETS' },
+  westpac: { norad: 25398, objectId: '1998-043E', name: 'WESTPAC' }, lares: { norad: 38077, objectId: '2012-006A', name: 'LARES' },
+  lares2: { norad: 53105, objectId: '2022-080A', name: 'LARES-2' } };
+const yymmdd = (ms) => new Date(ms).toISOString().slice(2, 10).replaceAll('-', '');
+async function slrDaily(arcStart) {
+  // The arc in file F spans F-4 00:00 to F-1; the next file's arc overlaps it by 3 days.
+  for (const [sat, identity] of Object.entries(SLR_DAILY)) {
+    const file = (ms) => `https://edc.dgfi.tum.de/pub/slr/products/orbits/${sat}/${yymmdd(ms)}/nsgf.orb.${sat}.${yymmdd(ms)}.v00.sp3.gz`;
+    const gz = await fetchCached(file(arcStart + 4 * DAY));
+    const next = await fetchCached(file(arcStart + 5 * DAY));
+    if (!gz || !next) { console.warn(`slr-daily: ${sat} arc from ${yymmdd(arcStart)} or its successor not published`); continue; }
+    const text = gunzipSync(gz).toString();
+    if (!text.startsWith(`#cV${new Date(arcStart).toISOString().slice(0, 4)}`)) { console.warn(`slr-daily: ${sat} ${yymmdd(arcStart)} is not SP3-c`); continue; }
+    const truth = sp3Positions(text);
+    let sum = 0, count = 0;
+    for (const [epoch, r] of sp3Positions(gunzipSync(next).toString())) {
+      const c = truth.get(epoch);
+      if (c) { sum += r.reduce((a, x, i) => a + (x - c[i]) ** 2, 0); count += 3; }
+    }
+    if (count < 300) { console.warn(`slr-daily: ${sat} ${yymmdd(arcStart)} overlap too short to state a sigma`); continue; }
+    const sigma = Math.sqrt(sum / count) * 1000;
+    const id = text.match(/^\+\s+1\s+(\S{3})/m)?.[1];
+    const name = path.basename(new URL(file(arcStart + 4 * DAY)).pathname);
+    // Header columns 47-51 carry the frame; "  ECF" is ITRF by the file's own comment.
+    const sp3 = Buffer.from(text.replace(/^(#cV.{43})  ECF/, '$1ITRF '));
+    const basis = `the per-axis RMS (${sigma.toFixed(4)} m) of this arc's overlap with the next day's arc (${count / 3} epochs)`;
+    const product = `${name} (SHA-256 ${sha256(gunzipSync(gz))}, coordinate system "ECF" read as ITRF per the file's comment)`;
+    await referenceStates(name.replace('.sp3.gz', ''), sp3, { product, source: file(arcStart + 4 * DAY), statedSigmaM: sigma, statedSigmaBasis: basis, satellites: { [id]: identity } },
+      { product: name, url: file(arcStart + 4 * DAY), sha256: sha256(gz), statedSigmaM: sigma, statedSigmaBasis: basis });
+  }
+}
+
+// ── Swarm: TU Delft reduced-dynamic orbits, sigma from kinematic minus reduced-dynamic ──
+const SWARM = { A: { norad: 39452, objectId: '2013-067B', name: 'SWARM A' }, B: { norad: 39451, objectId: '2013-067A', name: 'SWARM B' },
+  C: { norad: 39453, objectId: '2013-067C', name: 'SWARM C' } };
+const SWARM_SERVER = 'https://swarm-diss.eo.esa.int/';
+const swarmListings = new Map();
+async function swarmList(dir) {
+  if (!swarmListings.has(dir)) {
+    const response = await fetch(`${SWARM_SERVER}?do=list&maxfiles=10000&pos=0&file=${encodeURIComponent(dir)}`).catch(() => null);
+    swarmListings.set(dir, response?.ok ? (await response.json()).results.map((r) => r.name) : []);
+  }
+  return swarmListings.get(dir);
+}
+async function swarmFile(dir, pattern) {
+  const name = (await swarmList(dir)).filter((n) => pattern.test(n)).sort().at(-1);
+  if (!name) return null;
+  const url = `${SWARM_SERVER}?do=download&file=${encodeURIComponent(`${dir}/${name}`)}`;
+  const zip = await fetchCached(url, 'products', name);
+  return zip && { name, url, zip, sp3: unzipEntry(zip, '.sp3') };
+}
+async function swarm(day) {
+  const d = new Date(day - DAY).toISOString().slice(0, 10).replaceAll('-', '');  // files run 23:59:42 the day before to the day's end
+  for (const [sat, identity] of Object.entries(SWARM)) {
+    const span = new RegExp(`^SW_OPER_SP3${sat}(COM|RD_)_2__${d}T235942_`);
+    const rd = await swarmFile(`swarm/Level2daily/Latest_baselines/POD/RD/Sat_${sat}`, span);
+    const kin = await swarmFile(`swarm/Level2daily/Latest_baselines/POD/KIN/Sat_${sat}`, new RegExp(`^SW_OPER_SP3${sat}KIN_2__${d}T235942_`));
+    if (!rd?.sp3 || !kin?.sp3) { console.warn(`swarm: Swarm ${sat} ${d} not published (reduced-dynamic and kinematic both needed)`); continue; }
+    const truth = sp3Positions(rd.sp3.toString());
+    let sum = 0, count = 0, excluded = 0;
+    for (const [epoch, r] of sp3Positions(kin.sp3.toString())) {
+      const c = truth.get(epoch);
+      if (!c) continue;
+      const d2 = r.reduce((a, x, i) => a + (x - c[i]) ** 2, 0);
+      if (d2 > 1e-6) { ++excluded; continue; }  // kinematic outliers beyond 1 m
+      sum += d2;
+      count += 3;
+    }
+    if (count < 300) { console.warn(`swarm: Swarm ${sat} ${d} has too few kinematic epochs to state a sigma`); continue; }
+    const sigma = Math.sqrt(sum / count) * 1000;
+    const id = rd.sp3.toString().match(/^\+\s+1\s+(\S{3})/m)?.[1];
+    const basis = `the per-axis RMS (${sigma.toFixed(4)} m) of the kinematic minus reduced-dynamic Swarm ${sat} orbit over the day ` +
+      `(${count / 3} epochs, ${excluded} beyond 1 m excluded); kinematic noise dominates it`;
+    const product = `${rd.name} (SP3 SHA-256 ${sha256(rd.sp3)})`;
+    await referenceStates(rd.name.replace('.ZIP', ''), rd.sp3, { product, source: rd.url, statedSigmaM: sigma, statedSigmaBasis: basis, satellites: { [id]: identity } },
+      { product: rd.name, url: rd.url, sha256: sha256(rd.zip), kinematic: kin.name, statedSigmaM: sigma, statedSigmaBasis: basis });
+  }
+}
+
 let arcs = null;
 for (let day = from; day <= to; day += DAY) {
+  if (products.has('swarm')) await swarm(day);
+  if (products.has('slr-daily') && (day - from) % (4 * DAY) === 0) await slrDaily(day);
   if (products.has('gps')) await gps(day);
   if (products.has('sentinel1')) await sentinel1(day);
   // ILRS arcs are named by their last day, one each week.

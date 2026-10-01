@@ -46,7 +46,7 @@ One SP3 file per call, read first by `files/orbit-products` `read_container`.
 ## Products
 
 `scripts/fetch-reference-products.mjs --from YYYY-MM-DD --to YYYY-MM-DD
-[--products gps,slr,sentinel1] [--out DIR]` downloads and converts these
+[--products gps,slr,slr-daily,sentinel1,swarm] [--out DIR]` downloads and converts these
 products. Output goes outside the repository, by default
 `~/.cache/sdn-reference-states`.
 
@@ -54,11 +54,15 @@ products. Output goes outside the repository, by default
 | --- | --- | --- | --- |
 | IGS final orbits (`IGS0OPSFIN`) | GPS, identified from the IGS satellite metadata SINEX (PRN → SVN → COSPAR, catalog number) at the file's midpoint | 15 min | SP3 record standard deviations |
 | ILRS combined weekly arcs (`ilrsa`) | LAGEOS-1/2, ETALON-1/2 | 2 / 15 min | per-axis RMS of the analysis centres' orbits about the combination over the arc (precision; a lower bound, because the centres share data) |
+| ILRS analysis-centre 4-day fitted arcs (NSGF), one every 4 days, non-overlapping | Ajisai, Starlette, Stella, LARETS, WESTPAC, LARES, LARES-2 | 2–3 min | per-axis RMS of the arc's 3-day overlap with the next day's arc |
 | Sentinel-1 `AUX_POEORB`, transcribed to SP3-c | Sentinel-1C/1D (1A when published) | 10 s | the mission's 5 cm 3D RMS precise-orbit requirement, as 2.9 cm per axis |
+| Swarm reduced-dynamic precise orbits (ESA Swarm dissemination server) | Swarm A, B, C | 10 s | per-axis RMS of the kinematic minus the reduced-dynamic orbit over the day (kinematic outliers beyond 1 m excluded) |
 
 Earth orientation comes from IERS EOP 20 C04, parsed by
-`data-source/eop-parser`. ILRS comment lines (`%/*`) are read as SP3 `/*`;
-nothing else in a product is changed.
+`data-source/eop-parser`. Two changes are made to products, and only these:
+- ILRS comment lines (`%/*`) are read as SP3 `/*`;
+- the NSGF arcs' coordinate system "ECF" is read as ITRF, as their own
+  comment states.
 
 Each product gets `DIR/reference/<product>/<norad>.oem` (a size-prefixed
 `$OEM`) and an `index.json` recording the URL, SHA-256, stated sigma and basis.

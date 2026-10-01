@@ -1,0 +1,1975 @@
+{
+ "kind": "gp-error-model-calibration",
+ "version": 1,
+ "model": "model-2026-08.json",
+ "scaledModel": "model-2026-08-scaled.json",
+ "fit": {
+  "window": [
+   "2026-08-02",
+   "2026-08-08"
+  ],
+  "products": [
+   "IGS",
+   "ILRS",
+   "Sentinel-1"
+  ]
+ },
+ "test": {
+  "window": [
+   "2026-08-09",
+   "2026-08-15"
+  ],
+  "products": [
+   "IGS",
+   "ILRS",
+   "Sentinel-1"
+  ]
+ },
+ "gate": {
+  "minimumObjects": 3,
+  "minimumSamples": 30,
+  "nominal": [
+   0.682689492137086,
+   0.954499736103642,
+   0.99730020393674
+  ],
+  "rule": "CALIBRATED when the fractions inside the 1 and 2 sigma ellipsoids are within the tolerance of nominal and at most the tail limit lies outside 3 sigma, with at least the minimum samples and distinct objects; every sample counts",
+  "tailLimit": 0.01,
+  "tolerance": 0.05
+ },
+ "covariance": "position covariance of the stratum (clipped), zero mean, RTN",
+ "strata": [
+  {
+   "regime": "LEO below 450 km",
+   "regimeIndex": 0,
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "ageIndex": 0,
+   "scaleFactors": [
+    0.5476624380786892,
+    0.20302624171313507,
+    2.0276697487300153
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 8652,
+    "objects": 2,
+    "inside": [
+     0.5469255663430421,
+     0.8319463707813223,
+     0.9494914470642626
+    ],
+    "meanD2": 4.553645216177731,
+    "pitMaxCdfGap": 0.16322237632917258
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 8652,
+    "objects": 2,
+    "inside": [
+     0.6452843273231623,
+     0.9801202034211743,
+     1
+    ],
+    "meanD2": 3.1133357251774836,
+    "pitMaxCdfGap": 0.10635691169671752
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO below 450 km",
+   "regimeIndex": 0,
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "ageIndex": 1,
+   "scaleFactors": [
+    0.2644806963439443,
+    0.03662117414502494,
+    1.204087903494089
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 8424,
+    "objects": 2,
+    "inside": [
+     0.8461538461538461,
+     0.9852801519468186,
+     1
+    ],
+    "meanD2": 1.823497445808638,
+    "pitMaxCdfGap": 0.2527065527065527
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 8424,
+    "objects": 2,
+    "inside": [
+     0.47364672364672367,
+     0.853988603988604,
+     0.9613010446343779
+    ],
+    "meanD2": 4.753395585260739,
+    "pitMaxCdfGap": 0.22262583095916422
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO below 450 km",
+   "regimeIndex": 0,
+   "ageDays": [
+    1,
+    2
+   ],
+   "ageIndex": 2,
+   "scaleFactors": [
+    0.12756320987841982,
+    0.01960306968903026,
+    0.770210505501641
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 16426,
+    "objects": 2,
+    "inside": [
+     0.9828929745525387,
+     1,
+     1
+    ],
+    "meanD2": 0.8257844414281467,
+    "pitMaxCdfGap": 0.5105625228296602
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 16426,
+    "objects": 2,
+    "inside": [
+     0.349141604772921,
+     0.6786801412394984,
+     0.8565079751613296
+    ],
+    "meanD2": 7.844724039902353,
+    "pitMaxCdfGap": 0.3445026178010471
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO below 450 km",
+   "regimeIndex": 0,
+   "ageDays": [
+    2,
+    3
+   ],
+   "ageIndex": 3,
+   "scaleFactors": [
+    0.02865397315571422,
+    0.015139538538561521,
+    0.4281143021329583
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 15936,
+    "objects": 2,
+    "inside": [
+     1,
+     1,
+     1
+    ],
+    "meanD2": 0.2797286051453602,
+    "pitMaxCdfGap": 0.7650978915662652
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 15936,
+    "objects": 2,
+    "inside": [
+     0.4159136546184739,
+     0.8294427710843374,
+     0.9748995983935743
+    ],
+    "meanD2": 4.98047750712845,
+    "pitMaxCdfGap": 0.26670431726907634
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO below 450 km",
+   "regimeIndex": 0,
+   "ageDays": [
+    3,
+    5
+   ],
+   "ageIndex": 4,
+   "scaleFactors": [
+    0.00988048328733633,
+    0.019310847109772288,
+    0.2638732417423413
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 29875,
+    "objects": 2,
+    "inside": [
+     1,
+     1,
+     1
+    ],
+    "meanD2": 0.12159546024385928,
+    "pitMaxCdfGap": 0.8843347280334728
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 29875,
+    "objects": 2,
+    "inside": [
+     0.4243682008368201,
+     0.8391297071129707,
+     0.9778075313807532
+    ],
+    "meanD2": 4.858183048695741,
+    "pitMaxCdfGap": 0.2600334728033472
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO below 450 km",
+   "regimeIndex": 0,
+   "ageDays": [
+    5,
+    7
+   ],
+   "ageIndex": 5,
+   "scaleFactors": [
+    0.018144380068219328,
+    0.1303568776297181,
+    0.1485845247357231
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 25027,
+    "objects": 2,
+    "inside": [
+     1,
+     1,
+     1
+    ],
+    "meanD2": 0.04269006867982498,
+    "pitMaxCdfGap": 0.9498002157669716
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 25027,
+    "objects": 2,
+    "inside": [
+     0.8060494665760978,
+     0.9729492148479642,
+     0.998681424062013
+    ],
+    "meanD2": 1.9805776596885138,
+    "pitMaxCdfGap": 0.2808806488991889
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO 450-600 km",
+   "regimeIndex": 1,
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "ageIndex": 0,
+   "scaleFactors": [
+    0.9473130161991347,
+    0.416995587244359,
+    1.9519720449032403
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 4460,
+    "objects": 1,
+    "inside": [
+     0.45067264573991034,
+     0.7847533632286996,
+     0.962780269058296
+    ],
+    "meanD2": 5.1301504564039755,
+    "pitMaxCdfGap": 0.2399103139013452
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 4460,
+    "objects": 1,
+    "inside": [
+     0.6997757847533632,
+     0.992152466367713,
+     1
+    ],
+    "meanD2": 2.7677201375409837,
+    "pitMaxCdfGap": 0.06165919282511212
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO 450-600 km",
+   "regimeIndex": 1,
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "ageIndex": 1,
+   "scaleFactors": [
+    0.6768467843538292,
+    0.13467237135608123,
+    1.1478547053766384
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 4373,
+    "objects": 1,
+    "inside": [
+     0.8568488451863709,
+     0.9983992682369083,
+     1
+    ],
+    "meanD2": 1.9105095546863307,
+    "pitMaxCdfGap": 0.19190487079807905
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 4373,
+    "objects": 1,
+    "inside": [
+     0.6837411388063115,
+     0.9718728561628173,
+     0.9995426480676881
+    ],
+    "meanD2": 2.961805121138673,
+    "pitMaxCdfGap": 0.03587925908986961
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO 450-600 km",
+   "regimeIndex": 1,
+   "ageDays": [
+    1,
+    2
+   ],
+   "ageIndex": 2,
+   "scaleFactors": [
+    0.6920184085007557,
+    0.06758809161267272,
+    0.8260300194050284
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 8560,
+    "objects": 1,
+    "inside": [
+     0.97803738317757,
+     1,
+     1
+    ],
+    "meanD2": 1.4005465773890133,
+    "pitMaxCdfGap": 0.3489485981308411
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 8560,
+    "objects": 1,
+    "inside": [
+     0.5772196261682243,
+     0.9186915887850468,
+     0.9872663551401869
+    ],
+    "meanD2": 3.7957287146669594,
+    "pitMaxCdfGap": 0.13376168224299068
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO 450-600 km",
+   "regimeIndex": 1,
+   "ageDays": [
+    2,
+    3
+   ],
+   "ageIndex": 3,
+   "scaleFactors": [
+    0.5292830223874447,
+    0.03762115701112272,
+    0.5630539743377132
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 7986,
+    "objects": 1,
+    "inside": [
+     1,
+     1,
+     1
+    ],
+    "meanD2": 0.9471775374311524,
+    "pitMaxCdfGap": 0.521863260706236
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 7986,
+    "objects": 1,
+    "inside": [
+     0.42824943651389935,
+     0.8195592286501377,
+     0.957801152016028
+    ],
+    "meanD2": 5.1576608582559516,
+    "pitMaxCdfGap": 0.25756323566240924
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO 450-600 km",
+   "regimeIndex": 1,
+   "ageDays": [
+    3,
+    5
+   ],
+   "ageIndex": 4,
+   "scaleFactors": [
+    0.3567602412339928,
+    0.04655762829534576,
+    0.42056988044877924
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 15120,
+    "objects": 1,
+    "inside": [
+     1,
+     1,
+     1
+    ],
+    "meanD2": 0.6055213655305699,
+    "pitMaxCdfGap": 0.6906084656084657
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 15120,
+    "objects": 1,
+    "inside": [
+     0.38015873015873014,
+     0.7918650793650793,
+     0.9551587301587302
+    ],
+    "meanD2": 5.587110925468043,
+    "pitMaxCdfGap": 0.3012566137566138
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO 450-600 km",
+   "regimeIndex": 1,
+   "ageDays": [
+    5,
+    7
+   ],
+   "ageIndex": 5,
+   "scaleFactors": [
+    0.12334013779492442,
+    0.0446300377511285,
+    0.28993973747713364
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 12472,
+    "objects": 1,
+    "inside": [
+     1,
+     1,
+     1
+    ],
+    "meanD2": 0.13410178226015457,
+    "pitMaxCdfGap": 0.9103110968569595
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 12472,
+    "objects": 1,
+    "inside": [
+     0.3864656831302117,
+     0.792735728030789,
+     0.9211834509300834
+    ],
+    "meanD2": 5.969104569621654,
+    "pitMaxCdfGap": 0.2954939063502245
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO 600-800 km",
+   "regimeIndex": 2,
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "ageIndex": 0,
+   "scaleFactors": [
+    5.2080724105480725,
+    4.541989759628324,
+    6.777711179930015
+   ],
+   "model": {
+    "status": "FAILED",
+    "n": 14968,
+    "objects": 4,
+    "inside": [
+     0.006146445750935329,
+     0.020710849812934258,
+     0.04676643506146446
+    ],
+    "meanD2": 107.48943895393819,
+    "pitMaxCdfGap": 0.93029128808124
+   },
+   "scaled": {
+    "status": "CALIBRATED",
+    "n": 14968,
+    "objects": 4,
+    "inside": [
+     0.6417691074291823,
+     0.9543693212185996,
+     0.9967263495456975
+    ],
+    "meanD2": 3.2655224910438205,
+    "pitMaxCdfGap": 0.09886424371993585
+   },
+   "label": "CALIBRATED",
+   "reference": "Held-out coverage against reference states 2026-08-09..2026-08-15 (IGS, ILRS, Sentinel-1; 14968 samples, 4 objects): inside 1/2/3 sigma 0.642/0.954/0.997 vs 0.683/0.954/0.997; scale fitted on 2026-08-02..2026-08-08."
+  },
+  {
+   "regime": "LEO 600-800 km",
+   "regimeIndex": 2,
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "ageIndex": 1,
+   "scaleFactors": [
+    2.466795819726291,
+    2.4629479081233585,
+    2.9326292355799177
+   ],
+   "model": {
+    "status": "FAILED",
+    "n": 14876,
+    "objects": 4,
+    "inside": [
+     0.05176122613605808,
+     0.15985479967733263,
+     0.3531863404140898
+    ],
+    "meanD2": 23.83629780811715,
+    "pitMaxCdfGap": 0.7954557676794837
+   },
+   "scaled": {
+    "status": "FAILED",
+    "n": 14876,
+    "objects": 4,
+    "inside": [
+     0.627117504705566,
+     0.9471632159182576,
+     0.995764990588868
+    ],
+    "meanD2": 3.364718810314205,
+    "pitMaxCdfGap": 0.09884377520838938
+   },
+   "label": "UNCALIBRATED",
+   "reason": "FAILED on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO 600-800 km",
+   "regimeIndex": 2,
+   "ageDays": [
+    1,
+    2
+   ],
+   "ageIndex": 2,
+   "scaleFactors": [
+    1.586640492185239,
+    1.4032086649090034,
+    1.7654463573912569
+   ],
+   "model": {
+    "status": "FAILED",
+    "n": 31327,
+    "objects": 4,
+    "inside": [
+     0.23557953203307053,
+     0.5886934593162447,
+     0.8349027995020271
+    ],
+    "meanD2": 8.588163731018511,
+    "pitMaxCdfGap": 0.4643470488715805
+   },
+   "scaled": {
+    "status": "CALIBRATED",
+    "n": 31327,
+    "objects": 4,
+    "inside": [
+     0.6466307019503942,
+     0.9432119258147924,
+     0.9965844159989785
+    ],
+    "meanD2": 3.266110569014161,
+    "pitMaxCdfGap": 0.06317713154786608
+   },
+   "label": "CALIBRATED",
+   "reference": "Held-out coverage against reference states 2026-08-09..2026-08-15 (IGS, ILRS, Sentinel-1; 31327 samples, 4 objects): inside 1/2/3 sigma 0.647/0.943/0.997 vs 0.683/0.954/0.997; scale fitted on 2026-08-02..2026-08-08."
+  },
+  {
+   "regime": "LEO 600-800 km",
+   "regimeIndex": 2,
+   "ageDays": [
+    2,
+    3
+   ],
+   "ageIndex": 3,
+   "scaleFactors": [
+    1.0733213988002899,
+    0.7186087487431182,
+    1.0870311281831209
+   ],
+   "model": {
+    "status": "CALIBRATED",
+    "n": 31805,
+    "objects": 4,
+    "inside": [
+     0.6459676151548499,
+     0.934161295393806,
+     0.99729602263795
+    ],
+    "meanD2": 3.2698349339960706,
+    "pitMaxCdfGap": 0.0391133469580256
+   },
+   "scaled": {
+    "status": "CALIBRATED",
+    "n": 31805,
+    "objects": 4,
+    "inside": [
+     0.6359691872347115,
+     0.9222763716396793,
+     0.9938374469423047
+    ],
+    "meanD2": 3.4183106015141327,
+    "pitMaxCdfGap": 0.05639050463763562
+   },
+   "label": "CALIBRATED",
+   "reference": "Held-out coverage against reference states 2026-08-09..2026-08-15 (IGS, ILRS, Sentinel-1; 31805 samples, 4 objects): inside 1/2/3 sigma 0.636/0.922/0.994 vs 0.683/0.954/0.997; scale fitted on 2026-08-02..2026-08-08."
+  },
+  {
+   "regime": "LEO 600-800 km",
+   "regimeIndex": 2,
+   "ageDays": [
+    3,
+    5
+   ],
+   "ageIndex": 4,
+   "scaleFactors": [
+    0.959328370427518,
+    0.6757310650552896,
+    0.8522791458234237
+   ],
+   "model": {
+    "status": "FAILED",
+    "n": 58981,
+    "objects": 4,
+    "inside": [
+     0.8234516200132246,
+     0.9955578915243892,
+     1
+    ],
+    "meanD2": 2.09149999054228,
+    "pitMaxCdfGap": 0.15397246570929612
+   },
+   "scaled": {
+    "status": "CALIBRATED",
+    "n": 58981,
+    "objects": 4,
+    "inside": [
+     0.7009206354588766,
+     0.959817568369475,
+     0.9966429867245384
+    ],
+    "meanD2": 2.8992949999854414,
+    "pitMaxCdfGap": 0.022896356453773303
+   },
+   "label": "CALIBRATED",
+   "reference": "Held-out coverage against reference states 2026-08-09..2026-08-15 (IGS, ILRS, Sentinel-1; 58981 samples, 4 objects): inside 1/2/3 sigma 0.701/0.960/0.997 vs 0.683/0.954/0.997; scale fitted on 2026-08-02..2026-08-08."
+  },
+  {
+   "regime": "LEO 600-800 km",
+   "regimeIndex": 2,
+   "ageDays": [
+    5,
+    7
+   ],
+   "ageIndex": 5,
+   "scaleFactors": [
+    0.8009252289727483,
+    0.5081767736147753,
+    0.6352285651405652
+   ],
+   "model": {
+    "status": "FAILED",
+    "n": 49187,
+    "objects": 4,
+    "inside": [
+     0.9763555410982576,
+     0.9980482647854108,
+     1
+    ],
+    "meanD2": 1.2478610289689427,
+    "pitMaxCdfGap": 0.39148250554008185
+   },
+   "scaled": {
+    "status": "CALIBRATED",
+    "n": 49187,
+    "objects": 4,
+    "inside": [
+     0.7280582267672352,
+     0.9646857909610262,
+     0.9914611584361721
+    ],
+    "meanD2": 2.833983759158925,
+    "pitMaxCdfGap": 0.04642385183076836
+   },
+   "label": "CALIBRATED",
+   "reference": "Held-out coverage against reference states 2026-08-09..2026-08-15 (IGS, ILRS, Sentinel-1; 49187 samples, 4 objects): inside 1/2/3 sigma 0.728/0.965/0.991 vs 0.683/0.954/0.997; scale fitted on 2026-08-02..2026-08-08."
+  },
+  {
+   "regime": "LEO 800-1200 km",
+   "regimeIndex": 3,
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "ageIndex": 0,
+   "scaleFactors": [
+    5.248033123239625,
+    6.217061957314214,
+    11.271408419652504
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 5784,
+    "objects": 2,
+    "inside": [
+     0.0017289073305670815,
+     0.009681881051175657,
+     0.020228215767634856
+    ],
+    "meanD2": 284.1625894367715,
+    "pitMaxCdfGap": 0.940491009681881
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 5784,
+    "objects": 2,
+    "inside": [
+     0.540283540802213,
+     0.9202973720608575,
+     0.9927385892116183
+    ],
+    "meanD2": 3.8383064114746346,
+    "pitMaxCdfGap": 0.1606846473029045
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO 800-1200 km",
+   "regimeIndex": 3,
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "ageIndex": 1,
+   "scaleFactors": [
+    2.230256701391261,
+    2.8532571081253493,
+    5.175809465027359
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 6056,
+    "objects": 2,
+    "inside": [
+     0.022787318361955085,
+     0.07397622192866579,
+     0.15769484808454426
+    ],
+    "meanD2": 62.10869473208478,
+    "pitMaxCdfGap": 0.8786657859973579
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 6056,
+    "objects": 2,
+    "inside": [
+     0.5151915455746368,
+     0.8913474240422721,
+     0.9892668428005285
+    ],
+    "meanD2": 4.1105901513120875,
+    "pitMaxCdfGap": 0.1822655217965654
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO 800-1200 km",
+   "regimeIndex": 3,
+   "ageDays": [
+    1,
+    2
+   ],
+   "ageIndex": 2,
+   "scaleFactors": [
+    1.3181683997259213,
+    1.7784263024678306,
+    3.2400355705241015
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 12399,
+    "objects": 2,
+    "inside": [
+     0.1047665134285023,
+     0.28671667069924994,
+     0.5039116057746592
+    ],
+    "meanD2": 22.991830921952534,
+    "pitMaxCdfGap": 0.6861924348737802
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 12399,
+    "objects": 2,
+    "inside": [
+     0.5427857085248811,
+     0.900233889829825,
+     0.9919348334543109
+    ],
+    "meanD2": 3.9212305669678136,
+    "pitMaxCdfGap": 0.15593596257762732
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO 800-1200 km",
+   "regimeIndex": 3,
+   "ageDays": [
+    2,
+    3
+   ],
+   "ageIndex": 3,
+   "scaleFactors": [
+    0.817316969606489,
+    1.0281347684193942,
+    2.149694784302846
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 12451,
+    "objects": 2,
+    "inside": [
+     0.3353947474098466,
+     0.6442052847160871,
+     0.8032286563328247
+    ],
+    "meanD2": 9.251904639415862,
+    "pitMaxCdfGap": 0.3658180065858164
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 12451,
+    "objects": 2,
+    "inside": [
+     0.571520359810457,
+     0.9143843867962412,
+     0.9924504055899125
+    ],
+    "meanD2": 3.7298808585128476,
+    "pitMaxCdfGap": 0.1243313790057024
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO 800-1200 km",
+   "regimeIndex": 3,
+   "ageDays": [
+    3,
+    5
+   ],
+   "ageIndex": 4,
+   "scaleFactors": [
+    0.6382726201648367,
+    0.6636336260413302,
+    1.9385226242669267
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 22594,
+    "objects": 2,
+    "inside": [
+     0.503540763034434,
+     0.760334602106754,
+     0.8716030804638399
+    ],
+    "meanD2": 6.393405317716946,
+    "pitMaxCdfGap": 0.20322209436133476
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 22594,
+    "objects": 2,
+    "inside": [
+     0.6157386916880587,
+     0.9129857484287864,
+     0.99791980171727
+    ],
+    "meanD2": 3.495440554168616,
+    "pitMaxCdfGap": 0.07159865451004688
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO 800-1200 km",
+   "regimeIndex": 3,
+   "ageDays": [
+    5,
+    7
+   ],
+   "ageIndex": 5,
+   "scaleFactors": [
+    0.48619794454385806,
+    0.33709645328494214,
+    1.6523534399796163
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 18864,
+    "objects": 2,
+    "inside": [
+     0.6528837998303647,
+     0.8393765903307888,
+     0.9319868532654793
+    ],
+    "meanD2": 4.08340050533909,
+    "pitMaxCdfGap": 0.11576547921967784
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 18864,
+    "objects": 2,
+    "inside": [
+     0.6468935538592027,
+     0.9222328244274809,
+     1
+    ],
+    "meanD2": 3.2400442997276406,
+    "pitMaxCdfGap": 0.046935962680237475
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO 1200-2000 km",
+   "regimeIndex": 4,
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "ageIndex": 0,
+   "scaleFactors": [
+    6.76171979534384,
+    4.678933860577696,
+    8.240969957601537
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 6186,
+    "objects": 2,
+    "inside": [
+     0.0019398642095053346,
+     0.010830908503071451,
+     0.027158098933074686
+    ],
+    "meanD2": 159.55582268846766,
+    "pitMaxCdfGap": 0.9399773682508891
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 6186,
+    "objects": 2,
+    "inside": [
+     0.6294859359844811,
+     0.9397025541545425,
+     0.9966052376333656
+    ],
+    "meanD2": 3.350103641880056,
+    "pitMaxCdfGap": 0.08530552861299712
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO 1200-2000 km",
+   "regimeIndex": 4,
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "ageIndex": 1,
+   "scaleFactors": [
+    2.983361762265856,
+    2.278988825184239,
+    4.090517025222708
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 6644,
+    "objects": 2,
+    "inside": [
+     0.028446718844069838,
+     0.11092715231788079,
+     0.25391330523780853
+    ],
+    "meanD2": 37.45235129779324,
+    "pitMaxCdfGap": 0.8426851294400963
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 6644,
+    "objects": 2,
+    "inside": [
+     0.6070138470800722,
+     0.9419024683925347,
+     0.9941300421432872
+    ],
+    "meanD2": 3.4290806149008555,
+    "pitMaxCdfGap": 0.08534015653220944
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO 1200-2000 km",
+   "regimeIndex": 4,
+   "ageDays": [
+    1,
+    2
+   ],
+   "ageIndex": 2,
+   "scaleFactors": [
+    1.6643712541918247,
+    1.4051935492738155,
+    2.5283493575553146
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 14451,
+    "objects": 2,
+    "inside": [
+     0.15611376375337346,
+     0.42516088851982564,
+     0.6704726316517888
+    ],
+    "meanD2": 13.03252538079635,
+    "pitMaxCdfGap": 0.5835824510414505
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 14451,
+    "objects": 2,
+    "inside": [
+     0.6295758079025673,
+     0.9505916545567781,
+     0.9994464050930731
+    ],
+    "meanD2": 3.277603136305062,
+    "pitMaxCdfGap": 0.07013355477129612
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO 1200-2000 km",
+   "regimeIndex": 4,
+   "ageDays": [
+    2,
+    3
+   ],
+   "ageIndex": 3,
+   "scaleFactors": [
+    1.0312317107324371,
+    0.8472264589399502,
+    1.7747251589945248
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 14221,
+    "objects": 2,
+    "inside": [
+     0.46234442022361294,
+     0.8073975107235778,
+     0.9519021165881443
+    ],
+    "meanD2": 5.121568727406396,
+    "pitMaxCdfGap": 0.22486112087757537
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 14221,
+    "objects": 2,
+    "inside": [
+     0.667674565782997,
+     0.9669502847900991,
+     1
+    ],
+    "meanD2": 3.0271923843577473,
+    "pitMaxCdfGap": 0.043980732719218096
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO 1200-2000 km",
+   "regimeIndex": 4,
+   "ageDays": [
+    3,
+    5
+   ],
+   "ageIndex": 4,
+   "scaleFactors": [
+    0.8252719689049913,
+    0.6475116126478768,
+    1.5274402541031682
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 25685,
+    "objects": 2,
+    "inside": [
+     0.5961456102783725,
+     0.9187852832392447,
+     0.9947050807864513
+    ],
+    "meanD2": 3.5155676417987927,
+    "pitMaxCdfGap": 0.08598403737590032
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 25685,
+    "objects": 2,
+    "inside": [
+     0.6734670040879891,
+     0.9669456881448316,
+     0.9998442670819544
+    ],
+    "meanD2": 3.010744263689566,
+    "pitMaxCdfGap": 0.028265524625267713
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "LEO 1200-2000 km",
+   "regimeIndex": 4,
+   "ageDays": [
+    5,
+    7
+   ],
+   "ageIndex": 5,
+   "scaleFactors": [
+    0.6497652072944298,
+    0.544887660412221,
+    1.1812123563960912
+   ],
+   "model": {
+    "status": "INSUFFICIENT",
+    "n": 22794,
+    "objects": 2,
+    "inside": [
+     0.7603316662279547,
+     0.9944722295340879,
+     1
+    ],
+    "meanD2": 2.3897114033240276,
+    "pitMaxCdfGap": 0.08736948319733273
+   },
+   "scaled": {
+    "status": "INSUFFICIENT",
+    "n": 22794,
+    "objects": 2,
+    "inside": [
+     0.6353426340264982,
+     0.9590681758357462,
+     1
+    ],
+    "meanD2": 3.185323155771723,
+    "pitMaxCdfGap": 0.05121523207861722
+   },
+   "label": "UNCALIBRATED",
+   "reason": "INSUFFICIENT on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "MEO 2000-10000 km",
+   "regimeIndex": 5,
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "ageIndex": 0,
+   "scaleFactors": [
+    2.4092693780191543,
+    3.69847705279762,
+    4.286009325408169
+   ],
+   "model": {
+    "status": "FAILED",
+    "n": 3024,
+    "objects": 3,
+    "inside": [
+     0.01951058201058201,
+     0.061507936507936505,
+     0.1259920634920635
+    ],
+    "meanD2": 106.97769786767115,
+    "pitMaxCdfGap": 0.8891534391534391
+   },
+   "scaled": {
+    "status": "FAILED",
+    "n": 3024,
+    "objects": 3,
+    "inside": [
+     0.37037037037037035,
+     0.7017195767195767,
+     0.8852513227513228
+    ],
+    "meanD2": 10.855627219733734,
+    "pitMaxCdfGap": 0.33571428571428574
+   },
+   "label": "UNCALIBRATED",
+   "reason": "FAILED on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "MEO 2000-10000 km",
+   "regimeIndex": 5,
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "ageIndex": 1,
+   "scaleFactors": [
+    1.322548345439147,
+    2.631348567631535,
+    2.1352125829980864
+   ],
+   "model": {
+    "status": "FAILED",
+    "n": 3099,
+    "objects": 3,
+    "inside": [
+     0.08486608583414004,
+     0.20038722168441434,
+     0.33946434333656017
+    ],
+    "meanD2": 33.64473083884629,
+    "pitMaxCdfGap": 0.7538076798967408
+   },
+   "scaled": {
+    "status": "FAILED",
+    "n": 3099,
+    "objects": 3,
+    "inside": [
+     0.38818973862536305,
+     0.7224911261697322,
+     0.8860922878347854
+    ],
+    "meanD2": 10.551920912990465,
+    "pitMaxCdfGap": 0.3207970313004195
+   },
+   "label": "UNCALIBRATED",
+   "reason": "FAILED on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "MEO 2000-10000 km",
+   "regimeIndex": 5,
+   "ageDays": [
+    1,
+    2
+   ],
+   "ageIndex": 2,
+   "scaleFactors": [
+    0.7027190366401393,
+    1.8728933020745977,
+    1.366227614995763
+   ],
+   "model": {
+    "status": "FAILED",
+    "n": 5862,
+    "objects": 3,
+    "inside": [
+     0.24309109518935518,
+     0.46554077106789493,
+     0.652848857045377
+    ],
+    "meanD2": 12.680433083637727,
+    "pitMaxCdfGap": 0.5154895939952235
+   },
+   "scaled": {
+    "status": "FAILED",
+    "n": 5862,
+    "objects": 3,
+    "inside": [
+     0.4230638007505971,
+     0.7396792903445923,
+     0.8920163766632548
+    ],
+    "meanD2": 10.528242467536037,
+    "pitMaxCdfGap": 0.28515864892528153
+   },
+   "label": "UNCALIBRATED",
+   "reason": "FAILED on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "MEO 2000-10000 km",
+   "regimeIndex": 5,
+   "ageDays": [
+    2,
+    3
+   ],
+   "ageIndex": 3,
+   "scaleFactors": [
+    0.4777168296521881,
+    1.3994409906064151,
+    0.9565372472624163
+   ],
+   "model": {
+    "status": "FAILED",
+    "n": 5623,
+    "objects": 3,
+    "inside": [
+     0.3880490841187978,
+     0.683798683976525,
+     0.9181931353370087
+    ],
+    "meanD2": 6.637742094716795,
+    "pitMaxCdfGap": 0.32252356393384307
+   },
+   "scaled": {
+    "status": "FAILED",
+    "n": 5623,
+    "objects": 3,
+    "inside": [
+     0.415970122710297,
+     0.7472879245954117,
+     0.8904499377556464
+    ],
+    "meanD2": 10.266755588312195,
+    "pitMaxCdfGap": 0.2924417570691802
+   },
+   "label": "UNCALIBRATED",
+   "reason": "FAILED on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "MEO 2000-10000 km",
+   "regimeIndex": 5,
+   "ageDays": [
+    3,
+    5
+   ],
+   "ageIndex": 4,
+   "scaleFactors": [
+    0.35602258256681313,
+    0.9417668084025316,
+    0.8834461574275758
+   ],
+   "model": {
+    "status": "FAILED",
+    "n": 10590,
+    "objects": 3,
+    "inside": [
+     0.5634560906515581,
+     0.8881964117091596,
+     0.9711048158640226
+    ],
+    "meanD2": 3.8718280166994905,
+    "pitMaxCdfGap": 0.1300755429650614
+   },
+   "scaled": {
+    "status": "FAILED",
+    "n": 10590,
+    "objects": 3,
+    "inside": [
+     0.4256846081208687,
+     0.7538243626062323,
+     0.8954674220963172
+    ],
+    "meanD2": 9.28461813757659,
+    "pitMaxCdfGap": 0.28149197355996225
+   },
+   "label": "UNCALIBRATED",
+   "reason": "FAILED on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "MEO 2000-10000 km",
+   "regimeIndex": 5,
+   "ageDays": [
+    5,
+    7
+   ],
+   "ageIndex": 5,
+   "scaleFactors": [
+    0.2567117064588186,
+    0.6747958867030753,
+    0.751983719812661
+   ],
+   "model": {
+    "status": "FAILED",
+    "n": 8641,
+    "objects": 3,
+    "inside": [
+     0.8183080661960421,
+     0.9891216294410369,
+     1
+    ],
+    "meanD2": 1.7961984189200617,
+    "pitMaxCdfGap": 0.33154727462099287
+   },
+   "scaled": {
+    "status": "FAILED",
+    "n": 8641,
+    "objects": 3,
+    "inside": [
+     0.5291054276125449,
+     0.8223585233190603,
+     0.9487327855572272
+    ],
+    "meanD2": 5.408312617039366,
+    "pitMaxCdfGap": 0.18479342668672616
+   },
+   "label": "UNCALIBRATED",
+   "reason": "FAILED on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "MEO 10000-30000 km",
+   "regimeIndex": 6,
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "ageIndex": 0,
+   "scaleFactors": [
+    3.712877368379854,
+    12.583297039192841,
+    5.168699360731466
+   ],
+   "model": {
+    "status": "FAILED",
+    "n": 12717,
+    "objects": 33,
+    "inside": [
+     0.006054887158921129,
+     0.018164661476763388,
+     0.04199103562160887
+    ],
+    "meanD2": 783.6855499065019,
+    "pitMaxCdfGap": 0.9325430526067469
+   },
+   "scaled": {
+    "status": "FAILED",
+    "n": 12717,
+    "objects": 33,
+    "inside": [
+     0.6122513171345443,
+     0.942203349846662,
+     0.9849807344499489
+    ],
+    "meanD2": 7.586799803278659,
+    "pitMaxCdfGap": 0.07296532200990791
+   },
+   "label": "UNCALIBRATED",
+   "reason": "FAILED on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "MEO 10000-30000 km",
+   "regimeIndex": 6,
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "ageIndex": 1,
+   "scaleFactors": [
+    2.336119457643807,
+    8.342579385934277,
+    3.9592484417256935
+   ],
+   "model": {
+    "status": "FAILED",
+    "n": 12176,
+    "objects": 33,
+    "inside": [
+     0.016343626806833114,
+     0.05363009198423128,
+     0.11900459921156373
+    ],
+    "meanD2": 871.0645083947392,
+    "pitMaxCdfGap": 0.8980946123521681
+   },
+   "scaled": {
+    "status": "FAILED",
+    "n": 12176,
+    "objects": 33,
+    "inside": [
+     0.6227825229960579,
+     0.9438239159001314,
+     0.9847240473061761
+    ],
+    "meanD2": 15.916092019563695,
+    "pitMaxCdfGap": 0.060463206307490025
+   },
+   "label": "UNCALIBRATED",
+   "reason": "FAILED on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "MEO 10000-30000 km",
+   "regimeIndex": 6,
+   "ageDays": [
+    1,
+    2
+   ],
+   "ageIndex": 2,
+   "scaleFactors": [
+    1.7115185046122559,
+    4.936639505727419,
+    2.8488568013529694
+   ],
+   "model": {
+    "status": "FAILED",
+    "n": 24140,
+    "objects": 33,
+    "inside": [
+     0.055675227837613916,
+     0.1792460646230323,
+     0.3325186412593206
+    ],
+    "meanD2": 774.2800667624663,
+    "pitMaxCdfGap": 0.7766777133388566
+   },
+   "scaled": {
+    "status": "FAILED",
+    "n": 24140,
+    "objects": 33,
+    "inside": [
+     0.6368268434134217,
+     0.938152444076222,
+     0.9785418392709196
+    ],
+    "meanD2": 35.03370932445522,
+    "pitMaxCdfGap": 0.047473073736536975
+   },
+   "label": "UNCALIBRATED",
+   "reason": "FAILED on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "MEO 10000-30000 km",
+   "regimeIndex": 6,
+   "ageDays": [
+    2,
+    3
+   ],
+   "ageIndex": 3,
+   "scaleFactors": [
+    1.334807980384611,
+    2.854943230321443,
+    2.0962110361923956
+   ],
+   "model": {
+    "status": "FAILED",
+    "n": 24687,
+    "objects": 33,
+    "inside": [
+     0.18171507271033338,
+     0.42269210515656014,
+     0.6525701786365293
+    ],
+    "meanD2": 540.8409872330018,
+    "pitMaxCdfGap": 0.5656803175760521
+   },
+   "scaled": {
+    "status": "FAILED",
+    "n": 24687,
+    "objects": 33,
+    "inside": [
+     0.6706768744683437,
+     0.9441001336735934,
+     0.980678089682829
+    ],
+    "meanD2": 68.52899907333673,
+    "pitMaxCdfGap": 0.015360311094908263
+   },
+   "label": "UNCALIBRATED",
+   "reason": "FAILED on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "MEO 10000-30000 km",
+   "regimeIndex": 6,
+   "ageDays": [
+    3,
+    5
+   ],
+   "ageIndex": 4,
+   "scaleFactors": [
+    1.3688764958891344,
+    1.7864263924240722,
+    1.7702315523351442
+   ],
+   "model": {
+    "status": "FAILED",
+    "n": 49173,
+    "objects": 34,
+    "inside": [
+     0.3349399060460009,
+     0.6815732210766071,
+     0.8710674557175686
+    ],
+    "meanD2": 546.3264146840576,
+    "pitMaxCdfGap": 0.35723669493421195
+   },
+   "scaled": {
+    "status": "FAILED",
+    "n": 49173,
+    "objects": 34,
+    "inside": [
+     0.7312956297154942,
+     0.9458849368555915,
+     0.9744575275049315
+    ],
+    "meanD2": 171.88659896327587,
+    "pitMaxCdfGap": 0.07016350436214996
+   },
+   "label": "UNCALIBRATED",
+   "reason": "FAILED on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "MEO 10000-30000 km",
+   "regimeIndex": 6,
+   "ageDays": [
+    5,
+    7
+   ],
+   "ageIndex": 5,
+   "scaleFactors": [
+    1.2775558903798092,
+    1.1222398418002002,
+    1.4938112754443176
+   ],
+   "model": {
+    "status": "FAILED",
+    "n": 47457,
+    "objects": 34,
+    "inside": [
+     0.5575784394293781,
+     0.8530037718355564,
+     0.9405567144994416
+    ],
+    "meanD2": 470.1509105213867,
+    "pitMaxCdfGap": 0.13301725772804873
+   },
+   "scaled": {
+    "status": "FAILED",
+    "n": 47457,
+    "objects": 34,
+    "inside": [
+     0.7565796405166783,
+     0.9348673536043155,
+     0.9620709273658259
+    ],
+    "meanD2": 372.39509806007806,
+    "pitMaxCdfGap": 0.10102197779042077
+   },
+   "label": "UNCALIBRATED",
+   "reason": "FAILED on held-out reference states 2026-08-09..2026-08-15"
+  },
+  {
+   "regime": "GEO 30000-40000 km",
+   "regimeIndex": 7,
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "ageIndex": 0,
+   "scaleFactors": null,
+   "model": null,
+   "scaled": null,
+   "label": "UNCALIBRATED",
+   "reason": "no independent reference states in this regime and age"
+  },
+  {
+   "regime": "GEO 30000-40000 km",
+   "regimeIndex": 7,
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "ageIndex": 1,
+   "scaleFactors": null,
+   "model": null,
+   "scaled": null,
+   "label": "UNCALIBRATED",
+   "reason": "no independent reference states in this regime and age"
+  },
+  {
+   "regime": "GEO 30000-40000 km",
+   "regimeIndex": 7,
+   "ageDays": [
+    1,
+    2
+   ],
+   "ageIndex": 2,
+   "scaleFactors": null,
+   "model": null,
+   "scaled": null,
+   "label": "UNCALIBRATED",
+   "reason": "no independent reference states in this regime and age"
+  },
+  {
+   "regime": "GEO 30000-40000 km",
+   "regimeIndex": 7,
+   "ageDays": [
+    2,
+    3
+   ],
+   "ageIndex": 3,
+   "scaleFactors": null,
+   "model": null,
+   "scaled": null,
+   "label": "UNCALIBRATED",
+   "reason": "no independent reference states in this regime and age"
+  },
+  {
+   "regime": "GEO 30000-40000 km",
+   "regimeIndex": 7,
+   "ageDays": [
+    3,
+    5
+   ],
+   "ageIndex": 4,
+   "scaleFactors": null,
+   "model": null,
+   "scaled": null,
+   "label": "UNCALIBRATED",
+   "reason": "no independent reference states in this regime and age"
+  },
+  {
+   "regime": "GEO 30000-40000 km",
+   "regimeIndex": 7,
+   "ageDays": [
+    5,
+    7
+   ],
+   "ageIndex": 5,
+   "scaleFactors": null,
+   "model": null,
+   "scaled": null,
+   "label": "UNCALIBRATED",
+   "reason": "no independent reference states in this regime and age"
+  },
+  {
+   "regime": "Beyond 40000 km",
+   "regimeIndex": 8,
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "ageIndex": 0,
+   "scaleFactors": null,
+   "model": null,
+   "scaled": null,
+   "label": "UNCALIBRATED",
+   "reason": "no independent reference states in this regime and age"
+  },
+  {
+   "regime": "Beyond 40000 km",
+   "regimeIndex": 8,
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "ageIndex": 1,
+   "scaleFactors": null,
+   "model": null,
+   "scaled": null,
+   "label": "UNCALIBRATED",
+   "reason": "no independent reference states in this regime and age"
+  },
+  {
+   "regime": "Beyond 40000 km",
+   "regimeIndex": 8,
+   "ageDays": [
+    1,
+    2
+   ],
+   "ageIndex": 2,
+   "scaleFactors": null,
+   "model": null,
+   "scaled": null,
+   "label": "UNCALIBRATED",
+   "reason": "no independent reference states in this regime and age"
+  },
+  {
+   "regime": "Beyond 40000 km",
+   "regimeIndex": 8,
+   "ageDays": [
+    2,
+    3
+   ],
+   "ageIndex": 3,
+   "scaleFactors": null,
+   "model": null,
+   "scaled": null,
+   "label": "UNCALIBRATED",
+   "reason": "no independent reference states in this regime and age"
+  },
+  {
+   "regime": "Beyond 40000 km",
+   "regimeIndex": 8,
+   "ageDays": [
+    3,
+    5
+   ],
+   "ageIndex": 4,
+   "scaleFactors": null,
+   "model": null,
+   "scaled": null,
+   "label": "UNCALIBRATED",
+   "reason": "no independent reference states in this regime and age"
+  },
+  {
+   "regime": "Beyond 40000 km",
+   "regimeIndex": 8,
+   "ageDays": [
+    5,
+    7
+   ],
+   "ageIndex": 5,
+   "scaleFactors": null,
+   "model": null,
+   "scaled": null,
+   "label": "UNCALIBRATED",
+   "reason": "no independent reference states in this regime and age"
+  },
+  {
+   "regime": "Eccentric (e >= 0.1)",
+   "regimeIndex": 9,
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "ageIndex": 0,
+   "scaleFactors": null,
+   "model": null,
+   "scaled": null,
+   "label": "UNCALIBRATED",
+   "reason": "no independent reference states in this regime and age"
+  },
+  {
+   "regime": "Eccentric (e >= 0.1)",
+   "regimeIndex": 9,
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "ageIndex": 1,
+   "scaleFactors": null,
+   "model": null,
+   "scaled": null,
+   "label": "UNCALIBRATED",
+   "reason": "no independent reference states in this regime and age"
+  },
+  {
+   "regime": "Eccentric (e >= 0.1)",
+   "regimeIndex": 9,
+   "ageDays": [
+    1,
+    2
+   ],
+   "ageIndex": 2,
+   "scaleFactors": null,
+   "model": null,
+   "scaled": null,
+   "label": "UNCALIBRATED",
+   "reason": "no independent reference states in this regime and age"
+  },
+  {
+   "regime": "Eccentric (e >= 0.1)",
+   "regimeIndex": 9,
+   "ageDays": [
+    2,
+    3
+   ],
+   "ageIndex": 3,
+   "scaleFactors": null,
+   "model": null,
+   "scaled": null,
+   "label": "UNCALIBRATED",
+   "reason": "no independent reference states in this regime and age"
+  },
+  {
+   "regime": "Eccentric (e >= 0.1)",
+   "regimeIndex": 9,
+   "ageDays": [
+    3,
+    5
+   ],
+   "ageIndex": 4,
+   "scaleFactors": null,
+   "model": null,
+   "scaled": null,
+   "label": "UNCALIBRATED",
+   "reason": "no independent reference states in this regime and age"
+  },
+  {
+   "regime": "Eccentric (e >= 0.1)",
+   "regimeIndex": 9,
+   "ageDays": [
+    5,
+    7
+   ],
+   "ageIndex": 5,
+   "scaleFactors": null,
+   "model": null,
+   "scaled": null,
+   "label": "UNCALIBRATED",
+   "reason": "no independent reference states in this regime and age"
+  }
+ ]
+}

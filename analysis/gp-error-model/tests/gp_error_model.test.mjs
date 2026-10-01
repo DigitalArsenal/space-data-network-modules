@@ -146,6 +146,46 @@ test('quantiles, robust sigma and clipping on a normal design', async (t) => {
   assert.ok(Math.abs(s.clipped.fractionRemoved - (1 - inside / 200)) < 1e-12);
 });
 
+test('coverage: zero-mean Mahalanobis d^2 against the stratum covariance, every sample counted', async (t) => {
+  // Model: 06251's stratum (LEO below 450 km, age 0-0.5 d) with position
+  // covariance diag(0.04, 1, 0.09) km^2. Along-track offsets of 1, sqrt 5,
+  // sqrt 10 and sqrt 20 km give d^2 of about 1, 5, 10 and 20 (exactly as
+  // computed here from the expected errors). Chi-square (3 dof) table
+  // quantiles: 3.5267 (68.27 %), 8.0249 (95.45 %), 14.1564 (99.73 %).
+  const c = caseOf(6251);
+  const model = { kind: 'gp-error-model', mode: 'gp-differences', strata: [{ regimeIndex: 0, ageIndex: 0,
+    covariance: [0.04, 0, 1, 0, 0, 0.09, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1] }] };
+  const offsets = [1, 5, 10, 20].map((d2) => [0, Math.sqrt(d2), 0]);
+  const d2 = offsets.map((o) => { const e = expectedError(c, o); return e[0] ** 2 / 0.04 + e[1] ** 2 + e[2] ** 2 / 0.09; });
+  const acc = await call(t, 'accumulate', [elements(omm(c)), reference(c, offsets), json('options', { referenceStepSeconds: 0 }), json('model', model)]);
+  const out = await call(t, 'finalize', [json('accumulator', acc), json('options', { gate: { minimumSamples: 4, minimumObjects: 1 } })]);
+  const g = stratum(out, 'LEO below 450 km', 0).coverage;
+  assert.equal(g.n, 4);
+  assert.deepEqual(g.inside, [0.25, 0.5, 0.75]);
+  assert.ok(Math.abs(g.meanD2 - d2.reduce((a, b) => a + b) / 4) < 1e-6, `mean d2 ${g.meanD2}`);
+  assert.equal(g.status, 'FAILED');
+  // F(d^2) for chi-square 3 dof: 0.199, 0.828, 0.981, 0.9998 -> bins 3, 16, 19, 19.
+  const expectedPit = Array(20).fill(0); expectedPit[3] = 0.25; expectedPit[16] = 0.25; expectedPit[19] = 0.5;
+  assert.deepEqual(g.pit, expectedPit);
+  const insufficient = await call(t, 'finalize', [json('accumulator', acc)]);
+  assert.equal(stratum(insufficient, 'LEO below 450 km', 0).coverage.status, 'INSUFFICIENT');
+});
+
+test('scale_model: position covariance scaled to the reference second moment about zero', async (t) => {
+  // Model diag(1, 1, 1) km^2; reference clipped covariance diag(4, 9, 16) with
+  // mean (1, 0, 0) km: second moments 5, 9, 16, factors sqrt 5, 3, 4.
+  const unitCov = [1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1];
+  const model = { kind: 'gp-error-model', mode: 'gp-differences', strata: [{ regimeIndex: 2, ageIndex: 1, clipped: { covariance: unitCov } }] };
+  const truth = { kind: 'gp-error-model', mode: 'reference', strata: [{ regimeIndex: 2, ageIndex: 1,
+    clipped: { n: 100, mean: [1, 0, 0, 0, 0, 0], covariance: [4, 0, 9, 0, 0, 16, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1] } }] };
+  const out = await call(t, 'scale_model', [json('model', model), json('truth', truth)]);
+  const s = out.strata[0];
+  [Math.sqrt(5), 3, 4].forEach((f, k) => assert.ok(Math.abs(s.scale.factors[k] - f) < 1e-12));
+  [[0, 5], [2, 9], [5, 16], [9, 1], [14, 1], [20, 1]].forEach(([i, v]) => assert.ok(Math.abs(s.clipped.covariance[i] - v) < 1e-12, `entry ${i}`));
+  const thin = await call(t, 'scale_model', [json('model', model), json('truth', truth), json('options', { minimumSamples: 101 })]);
+  assert.equal(thin.strata[0].scale, null);
+});
+
 // Acklam's rational approximation to the normal quantile (|error| < 1.2e-9).
 function normalQuantile(p) {
   const a = [-39.69683028665376, 220.9460984245205, -275.9285104469687, 138.357751867269, -30.66479806614716, 2.506628277459239];

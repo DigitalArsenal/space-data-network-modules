@@ -1,8 +1,7 @@
 # GP prediction-error model
 
-Empirical SGP4 prediction error by orbit regime and prediction age, in RTN.
-This module measures error. It does not calibrate a covariance, and it states
-which strata independent evidence supports.
+Empirical SGP4 prediction error by orbit regime and prediction age, in RTN,
+and the coverage tests that decide which strata's covariance is calibrated.
 
 ## Methods
 
@@ -12,6 +11,8 @@ Inputs:
 
 - `elements`: size-prefixed `$OMM` records with SGP4 mean elements.
 - `reference` (optional): `$OEM` reference states (GCRF, UTC).
+- `model` (optional, needs `reference`): a model whose covariance each error
+  is tested against.
 - `options` (optional): JSON.
 - `prior` (optional): an accumulator from an earlier batch.
 
@@ -51,6 +52,12 @@ What it does:
   batch.
 - **Duplicates:** element sets of one object with epochs within 1 s are one
   set republished. The later record is kept.
+- **Coverage (with `model`):** each sample's position error **e** is tested
+  against its stratum's model position covariance C (clipped when present).
+  The test is d² = **e**ᵀC⁻¹**e**, zero mean, against χ² with 3 degrees of
+  freedom. Every sample counts. Kept per stratum: the count, Σd², the count
+  inside each of the 1/2/3 σ ellipsoids, a 20-bin histogram of F(d²) and
+  the distinct objects.
 
 ### `finalize`
 
@@ -64,6 +71,22 @@ Input: `accumulator`. Output: `model` (JSON). Per stratum:
 - robust sigma, (q84.13 − q15.87)/2;
 - when clipped: the clipped count, the fraction removed, and the clipped mean
   and covariance.
+- with coverage:
+  - the fractions inside 1/2/3 σ, mean d², the F(d²) histogram and its
+    largest CDF gap;
+  - the gate: CALIBRATED (1 and 2 σ within `tolerance`, at most
+    `tailLimit` outside 3 σ, at least `minimumSamples` and `minimumObjects`),
+    FAILED, or INSUFFICIENT. Defaults are 0.05, 0.01, 30 and 3, set by
+    `options.gate`.
+
+### `scale_model`
+
+Inputs: `model`, `truth` (a reference-mode model from another window) and
+`options` (`minimumSamples`, default 30). Output: `model`.
+
+It scales each stratum's position covariance by s_k = √(E[e_k²] / C_kk),
+using the clipped second moment of the reference errors about zero. It
+records the factors. Strata with too few reference samples stay unscaled.
 
 ## Model and validation
 
@@ -73,7 +96,7 @@ reference states:
 
 ```sh
 node scripts/build-model.mjs --train-from 2026-07-12 --train-to 2026-08-08 \
-  --truth <reference-states>/reference --truth-from 2026-08-02 --truth-to 2026-08-16 \
+  --reference <reference-states>/reference --reference-from 2026-08-09 --reference-to 2026-08-15 \
   --out <dir>
 ```
 
@@ -85,11 +108,31 @@ without reference states is marked unvalidated).
 The 2026-08 run is in `docs/`. Report: [docs/validation-2026-08.md](docs/validation-2026-08.md).
 In brief:
 
-- Under half a day, consecutive differences understate the true error 4–11×
-  along-track. Consecutive fits share their error.
-- The gap closes to about 1× by 2–7 days.
-- Only LEO 600–800 km and MEO have independent truth. Every other regime is
-  unvalidated.
+- From 600 km up, under half a day, consecutive differences understate the
+  true error 4–11× along-track. Consecutive fits share their error.
+- Below 600 km they overstate it, by 10–90× beyond a day. Manoeuvring and
+  decaying objects dominate those strata, while the passive reference
+  satellites do not behave like them.
+- GEO, beyond 40000 km and eccentric orbits have no independent truth.
+
+## Calibration gate
+
+`scripts/calibration-gate.mjs` fits `scale_model` on one reference week and
+tests both the model and the scaled model on a later, held-out week:
+
+```sh
+node scripts/calibration-gate.mjs --model docs/model-2026-08.json --reference <reference-states>/reference \
+  --fit-from 2026-08-02 --fit-to 2026-08-08 --test-from 2026-08-09 --test-to 2026-08-15 --out <dir>
+```
+
+It writes `calibration.json`, which labels each stratum:
+- CALIBRATED only when the scaled model passes the gate on the test week,
+  with the evidence as reference text;
+- UNCALIBRATED otherwise, with the reason.
+
+For 2026-08 ([docs/calibration-2026-08.md](docs/calibration-2026-08.md)),
+five strata pass: LEO 600–800 km at every age except 0.5–1 day. Conjunction
+assessment publishes covariance-based Pc as calibrated only in those strata.
 
 ## Build and test
 
@@ -105,3 +148,6 @@ Each test has an expected value that does not come from this module:
 - Reference mode: Vallado SGP4-VER t = 0 states and their pyerfa GCRF
   transforms, with designed offsets.
 - Quantiles and clipping: a normal design.
+- Coverage: designed offsets with d² computed here, against χ²₃ table
+  quantiles.
+- Scaling: hand-built model and truth.

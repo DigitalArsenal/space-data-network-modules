@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.analysis.gp-error-model",
   "name": "GP prediction-error model",
   "version": "0.1.0",
-  "description": "Empirical SGP4 prediction error by orbit regime and prediction age, in RTN. Element sets are propagated to later element sets of the same object (consecutive-set differences, which are not truth) or to independent reference states (GCRF, from analysis/reference-states). Batches accumulate counts, moments and histograms; finalize gives mean, covariance, quantiles, robust sigma and clipped covariance per stratum.",
+  "description": "Empirical SGP4 prediction error by orbit regime and prediction age, in RTN. Element sets are propagated to later element sets of the same object (consecutive-set differences, which are not truth) or to independent reference states (GCRF, from analysis/reference-states). Batches accumulate counts, moments and histograms; finalize gives mean, covariance, quantiles, robust sigma and clipped covariance per stratum. With a model on accumulate (reference mode), each error is also tested against its stratum's model covariance (Mahalanobis d^2 against chi-square with 3 degrees of freedom, every sample counted) and finalize gates each stratum CALIBRATED, FAILED or INSUFFICIENT; scale_model fits per-stratum scale factors to reference-state errors.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -74,6 +74,28 @@
           "maxStreams": 4096,
           "required": false,
           "description": "Independent reference states ($OEM, GCRF, UTC, OBJECT.NORAD_CAT_ID), e.g. analysis/reference-states output. When present, errors are taken against these instead of later element sets."
+        },
+        {
+          "portId": "model",
+          "acceptedTypeSets": [
+            {
+              "setId": "gp-error-model-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per regime and prediction age: count, mean and covariance of the six RTN components, quantiles, robust sigma and the clipped covariance, as finalize writes it."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "A gp-error-model (finalize or scale_model output) whose position covariance each reference-mode sample is tested against: zero-mean Mahalanobis d^2 with the clipped covariance when present."
         },
         {
           "portId": "options",
@@ -172,6 +194,28 @@
           "maxStreams": 1,
           "required": true,
           "description": "The accumulator after the last batch."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "gate-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "gate {tolerance, tailLimit, minimumSamples, minimumObjects}; defaults 0.05, 0.01, 30, 3."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Coverage gate settings as JSON: {\"gate\": {\"tolerance\": 0.05, \"tailLimit\": 0.01, \"minimumSamples\": 30, \"minimumObjects\": 3}}."
         }
       ],
       "outputPorts": [
@@ -196,6 +240,104 @@
           "maxStreams": 1,
           "required": true,
           "description": "The error model as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "scale_model",
+      "displayName": "Scale model to reference errors",
+      "inputPorts": [
+        {
+          "portId": "model",
+          "acceptedTypeSets": [
+            {
+              "setId": "gp-error-model-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per regime and prediction age: count, mean and covariance of the six RTN components, quantiles, robust sigma and the clipped covariance, as finalize writes it."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The gp-error-model to scale."
+        },
+        {
+          "portId": "truth",
+          "acceptedTypeSets": [
+            {
+              "setId": "gp-error-model-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per regime and prediction age: count, mean and covariance of the six RTN components, quantiles, robust sigma and the clipped covariance, as finalize writes it."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "A gp-error-model in reference mode (clipped), from a window other than the one the scaled model will be tested on."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "scale-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "minimumSamples (default 30)."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "{\"minimumSamples\": 30}: strata with fewer clipped reference samples stay unscaled."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "model",
+          "acceptedTypeSets": [
+            {
+              "setId": "gp-error-model-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per regime and prediction age: count, mean and covariance of the six RTN components, quantiles, robust sigma and the clipped covariance, as finalize writes it."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The model with scaled position covariance and per-stratum factors."
         }
       ],
       "maxBatch": 1,

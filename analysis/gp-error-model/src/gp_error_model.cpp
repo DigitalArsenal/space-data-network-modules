@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstring>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -32,6 +33,22 @@
 // A prior accumulator is added to, so a catalog is processed in batches.
 // finalize: mean, covariance, median, quantiles and robust sigma
 // ((q84.13 - q15.87) / 2) per stratum, and the clipped mean and covariance.
+//
+// Coverage (reference mode with a model): each sample's position error is
+// tested against its stratum's model position covariance (the clipped one
+// when present), zero mean as conjunction assessment uses it: d^2 = e' C^-1 e
+// against chi-square with 3 degrees of freedom. Every sample counts, outliers
+// included. finalize reports the fraction inside the 1, 2 and 3 sigma
+// ellipsoids (chi-square quantiles at 0.6827, 0.9545, 0.9973), mean d^2, the
+// histogram of F(d^2) (uniform when calibrated) and its largest CDF gap, and
+// the gate: CALIBRATED when the 1 and 2 sigma containments are within the
+// tolerance of nominal and no more than the tail limit falls outside 3 sigma,
+// with enough samples and distinct objects; FAILED when not; INSUFFICIENT
+// without enough evidence.
+// scale_model: per stratum, the model's position covariance scaled by
+// s_k = sqrt(E[e_k^2] / C_kk) from reference-state errors (second moment
+// about zero, clipped), so a scaled model is fitted on one reference window
+// and tested on another.
 
 namespace {
 
@@ -99,6 +116,30 @@ struct Options {
   double clip_k = 0;
   std::map<std::pair<int, int>, std::array<double, 6>> clip;  // (regime, age) -> centre[3], scale[3]
 };
+constexpr int kPitBins = 20;
+const double kContainment[3] = {0.682689492137086, 0.954499736103642, 0.997300203936740};
+
+double chi2_cdf3(double x) {
+  if (!(x > 0)) return 0.0;
+  return std::erf(std::sqrt(x / 2.0)) - std::sqrt(2.0 * x / kPi) * std::exp(-x / 2.0);
+}
+double chi2_quantile3(double p) {
+  double lo = 0, hi = 100;
+  for (int i = 0; i < 200; ++i) {
+    const double mid = 0.5 * (lo + hi);
+    (chi2_cdf3(mid) < p ? lo : hi) = mid;
+  }
+  return 0.5 * (lo + hi);
+}
+
+struct Coverage {
+  uint64_t n = 0, missing = 0;
+  double sum_d2 = 0;
+  uint64_t inside[3] = {};
+  uint64_t pit[kPitBins] = {};
+  std::set<uint32_t> objects;
+};
+
 struct Stratum {
   uint64_t n = 0;
   double sum[kComponents] = {};
@@ -187,6 +228,13 @@ nlohmann::json options_json(const Options& o) {
   j["ageBinsDays"] = nlohmann::json::array();
   for (const auto& a : o.ages) j["ageBinsDays"].push_back({a.first, a.second});
   return j;
+}
+
+// The strata definition alone, for comparing a prior, model or truth.
+std::string options_signature(const nlohmann::json& j) {
+  Options o;
+  parse_options(j, &o);
+  return options_json(o).dump();
 }
 
 int regime_of(const Options& o, double alt, double ecc) {
@@ -344,13 +392,72 @@ struct Accumulator {
   Options options;
   Counts counts;
   std::vector<Stratum> strata;  // regime-major
-  Stratum& at(int regime, int age) { return strata[regime * options.ages.size() + age]; }
+  std::string coverage_model;   // empty: no coverage
+  std::map<std::pair<int, int>, std::array<double, 9>> inverse;  // position covariance inverses
+  std::vector<Coverage> coverage;
+  double quantile[3] = {};
+  size_t index(int regime, int age) const { return regime * options.ages.size() + age; }
+  Stratum& at(int regime, int age) { return strata[index(regime, age)]; }
 };
 
-void sample(Accumulator& acc, int regime, int age, const double x[6]) {
+void sample(Accumulator& acc, int regime, int age, const double x[6], uint32_t norad) {
   const auto clip = acc.options.clip.find({regime, age});
   add_sample(acc.at(regime, age), x, clip == acc.options.clip.end() ? nullptr : &clip->second, acc.options.clip_k);
   ++acc.counts.samples;
+  if (acc.coverage_model.empty()) return;
+  Coverage& c = acc.coverage[acc.index(regime, age)];
+  const auto inv = acc.inverse.find({regime, age});
+  if (inv == acc.inverse.end()) { ++c.missing; return; }
+  double d2 = 0;
+  for (int a = 0; a < 3; ++a)
+    for (int b = 0; b < 3; ++b) d2 += x[a] * inv->second[3 * a + b] * x[b];
+  ++c.n;
+  c.sum_d2 += d2;
+  for (int k = 0; k < 3; ++k) c.inside[k] += d2 <= acc.quantile[k];
+  ++c.pit[std::min(kPitBins - 1, static_cast<int>(chi2_cdf3(d2) * kPitBins))];
+  c.objects.insert(norad);
+}
+
+// Position block of a lower-triangle 6x6 covariance, inverted; false unless
+// positive definite.
+bool position_inverse(const nlohmann::json& lower, std::array<double, 9>* out) {
+  if (!lower.is_array() || lower.size() != 21) return false;
+  double c[3][3];
+  const int idx[3][3] = {{0, 1, 3}, {1, 2, 4}, {3, 4, 5}};
+  for (int a = 0; a < 3; ++a)
+    for (int b = 0; b < 3; ++b) {
+      if (!lower[idx[a][b]].is_number()) return false;
+      c[a][b] = lower[idx[a][b]].get<double>();
+    }
+  const double m1 = c[0][0], m2 = c[0][0] * c[1][1] - c[0][1] * c[1][0];
+  const double det = c[0][0] * (c[1][1] * c[2][2] - c[1][2] * c[2][1]) - c[0][1] * (c[1][0] * c[2][2] - c[1][2] * c[2][0]) +
+                     c[0][2] * (c[1][0] * c[2][1] - c[1][1] * c[2][0]);
+  if (!(m1 > 0 && m2 > 0 && det > 0)) return false;
+  for (int a = 0; a < 3; ++a)
+    for (int b = 0; b < 3; ++b) {
+      const int a1 = (a + 1) % 3, a2 = (a + 2) % 3, b1 = (b + 1) % 3, b2 = (b + 2) % 3;
+      (*out)[3 * b + a] = (c[a1][b1] * c[a2][b2] - c[a1][b2] * c[a2][b1]) / det;  // cofactor transpose
+    }
+  return true;
+}
+
+
+std::string load_coverage_model(Accumulator& acc, const nlohmann::json& model) {
+  if (!model.is_object() || model.value("kind", std::string()) != "gp-error-model" || !model.contains("strata"))
+    return "model is not a gp-error-model.";
+  if (options_signature(model) != options_signature(options_json(acc.options)))
+    return "model regimes or age bins differ from these options.";
+  acc.coverage_model = model.value("mode", std::string()) + (model.contains("scale") ? "+scaled" : "");
+  for (const auto& s : model["strata"]) {
+    if (!s.contains("regimeIndex") || !s.contains("ageIndex")) return "model stratum without regimeIndex and ageIndex.";
+    const nlohmann::json& cov = s.contains("clipped") && s["clipped"].contains("covariance") ? s["clipped"]["covariance"]
+                                : s.contains("covariance") ? s["covariance"] : nlohmann::json();
+    std::array<double, 9> inv;
+    if (position_inverse(cov, &inv)) acc.inverse[{s["regimeIndex"].get<int>(), s["ageIndex"].get<int>()}] = inv;
+  }
+  for (int k = 0; k < 3; ++k) acc.quantile[k] = chi2_quantile3(kContainment[k]);
+  acc.coverage.assign(acc.strata.size(), Coverage());
+  return {};
 }
 
 // sgp4 keeps per-call state in the record (and SDP4 its resonance
@@ -373,7 +480,7 @@ void gp_differences(Accumulator& acc, std::vector<ElementSet>& sets) {
       double r[3], v[3], x[6];
       if (!propagate(sets[i], age_s / 60.0, r, v)) { ++acc.counts.failures; continue; }
       rtn_error(r, v, sets[j].r, sets[j].v, x);
-      sample(acc, sets[i].regime, bin, x);
+      sample(acc, sets[i].regime, bin, x, sets[i].norad);
     }
   }
 }
@@ -440,7 +547,7 @@ std::string reference_errors(Accumulator& acc, std::vector<ElementSet>& sets) {
             vg[a] = m.m[0][a] * v[0] + m.m[1][a] * v[1] + m.m[2][a] * v[2];
           }
           rtn_error(rg, vg, rc, vc, x);
-          sample(acc, s->regime, bin, x);
+          sample(acc, s->regime, bin, x, norad);
           any = true;
         }
       }
@@ -472,6 +579,7 @@ nlohmann::json accumulator_json(const Accumulator& acc) {
   j["mode"] = acc.mode;
   j["clipK"] = acc.options.clip_k;
   j["counts"] = counts_json(acc.counts);
+  if (!acc.coverage_model.empty()) j["coverageModel"] = acc.coverage_model;
   j["strata"] = nlohmann::json::array();
   for (size_t i = 0; i < acc.strata.size(); ++i) {
     const Stratum& s = acc.strata[i];
@@ -488,6 +596,13 @@ nlohmann::json accumulator_json(const Accumulator& acc) {
     if (acc.options.clip_k > 0)
       x["clip"] = {{"n", s.n_clip}, {"sum", std::vector<double>(s.sum_clip, s.sum_clip + kComponents)},
                    {"sq", std::vector<double>(s.sq_clip, s.sq_clip + 21)}};
+    if (!acc.coverage_model.empty()) {
+      const Coverage& c = acc.coverage[i];
+      x["coverage"] = {{"n", c.n}, {"missing", c.missing}, {"sumD2", c.sum_d2},
+                       {"inside", std::vector<uint64_t>(c.inside, c.inside + 3)},
+                       {"pit", std::vector<uint64_t>(c.pit, c.pit + kPitBins)},
+                       {"objects", std::vector<uint32_t>(c.objects.begin(), c.objects.end())}};
+    }
     j["strata"].push_back(x);
   }
   return j;
@@ -506,12 +621,10 @@ bool numbers(const nlohmann::json& j, const char* key, size_t n, double* out) {
 std::string merge(Accumulator& acc, const nlohmann::json& prior) {
   if (!prior.is_object() || prior.value("kind", std::string()) != "gp-error-accumulator" || !prior.contains("strata"))
     return "prior is not a gp-error-accumulator.";
-  if (options_json(acc.options) != options_json([&] {
-        Options o;
-        parse_options(prior, &o);
-        return o;
-      }()))
+  if (options_signature(prior) != options_signature(options_json(acc.options)))
     return "prior regimes or age bins differ from these options.";
+  if (prior.value("coverageModel", std::string()) != acc.coverage_model)
+    return "prior was accumulated against a different coverage model.";
   if (prior.value("mode", std::string()) != acc.mode) return "prior was accumulated in a different mode.";
   if (!prior.contains("clipK") || !prior["clipK"].is_number() || prior["clipK"].get<double>() != acc.options.clip_k)
     return "prior was accumulated with a different clip.";
@@ -544,6 +657,21 @@ std::string merge(Accumulator& acc, const nlohmann::json& prior) {
       s.n_clip += c["n"].get<uint64_t>();
       for (int k = 0; k < kComponents; ++k) s.sum_clip[k] += sum[k];
       for (int k = 0; k < 21; ++k) s.sq_clip[k] += sq[k];
+    }
+    if (!acc.coverage_model.empty() && x.contains("coverage")) {
+      const auto& c = x["coverage"];
+      Coverage& cv = acc.coverage[acc.index(static_cast<int>(r), static_cast<int>(a))];
+      if (!c.is_object() || !c.contains("n") || !c["n"].is_number_unsigned() || !c.contains("missing") ||
+          !c["missing"].is_number_unsigned() || !c.contains("sumD2") || !c["sumD2"].is_number() || !c.contains("inside") ||
+          !c["inside"].is_array() || c["inside"].size() != 3 || !c.contains("pit") || !c["pit"].is_array() ||
+          c["pit"].size() != kPitBins || !c.contains("objects") || !c["objects"].is_array())
+        return "prior coverage is malformed.";
+      cv.n += c["n"].get<uint64_t>();
+      cv.missing += c["missing"].get<uint64_t>();
+      cv.sum_d2 += c["sumD2"].get<double>();
+      for (int k = 0; k < 3; ++k) cv.inside[k] += c["inside"][k].get<uint64_t>();
+      for (int k = 0; k < kPitBins; ++k) cv.pit[k] += c["pit"][k].get<uint64_t>();
+      for (const auto& o : c["objects"]) cv.objects.insert(o.get<uint32_t>());
     }
   }
   return {};
@@ -588,6 +716,11 @@ extern "C" int accumulate() {
   if (!e.empty()) return fail("invalid-options", e);
   acc.strata.assign(acc.options.regimes.size() * acc.options.ages.size(), Stratum());
   acc.mode = plugin_find_input_index("reference", 0) >= 0 ? "reference" : "gp-differences";
+  if (input("model")) {
+    if (acc.mode != "reference") return fail("invalid-model", "coverage needs reference states.");
+    e = load_coverage_model(acc, json_input("model"));
+    if (!e.empty()) return fail("invalid-model", e);
+  }
   if (input("prior")) {
     e = merge(acc, json_input("prior"));
     if (!e.empty()) return fail("invalid-prior", e);
@@ -613,8 +746,22 @@ extern "C" int finalize() {
   acc.options.clip_k = j.contains("clipK") && j["clipK"].is_number() ? j["clipK"].get<double>() : 0;
   acc.mode = j.value("mode", std::string());
   acc.strata.assign(acc.options.regimes.size() * acc.options.ages.size(), Stratum());
+  acc.coverage_model = j.value("coverageModel", std::string());
+  acc.coverage.assign(acc.strata.size(), Coverage());
   e = merge(acc, j);
   if (!e.empty()) return fail("invalid-accumulator", e);
+  double tolerance = 0.05, tail_limit = 0.01, min_samples = 30, min_objects = 3;
+  if (input("options")) {
+    const nlohmann::json o = json_input("options");
+    const nlohmann::json g = o.is_object() && o.contains("gate") ? o["gate"] : nlohmann::json::object();
+    if (!g.is_object()) return fail("invalid-options", "gate must be an object.");
+    for (auto [key, target] : {std::pair<const char*, double*>{"tolerance", &tolerance}, {"tailLimit", &tail_limit},
+                               {"minimumSamples", &min_samples}, {"minimumObjects", &min_objects}}) {
+      if (!g.contains(key)) continue;
+      if (!g[key].is_number() || !(g[key].get<double>() >= 0)) return fail("invalid-options", "gate values are non-negative numbers.");
+      *target = g[key].get<double>();
+    }
+  }
 
   nlohmann::json out = options_json(acc.options);
   out["kind"] = "gp-error-model";
@@ -630,6 +777,15 @@ extern "C" int finalize() {
                   {"covariance", "lower triangle, row-major: RR, TR, TT, NR, NT, NN, dR R, ..."}};
   out["counts"] = counts_json(acc.counts);
   out["quantileProbabilities"] = std::vector<double>(std::begin(kQuantiles), std::end(kQuantiles));
+  if (!acc.coverage_model.empty()) {
+    out["coverageModel"] = acc.coverage_model;
+    out["gate"] = {{"rule", "CALIBRATED when the fractions inside the 1 and 2 sigma ellipsoids are within the tolerance "
+                            "of nominal and at most the tail limit lies outside 3 sigma, with at least the minimum "
+                            "samples and distinct objects; every sample counts"},
+                   {"tolerance", tolerance}, {"tailLimit", tail_limit}, {"minimumSamples", min_samples},
+                   {"minimumObjects", min_objects},
+                   {"nominal", std::vector<double>(std::begin(kContainment), std::end(kContainment))}};
+  }
   out["strata"] = nlohmann::json::array();
   for (size_t i = 0; i < acc.strata.size(); ++i) {
     const Stratum& s = acc.strata[i];
@@ -669,7 +825,91 @@ extern "C" int finalize() {
       }
       x["clipped"] = c;
     }
+    if (!acc.coverage_model.empty()) {
+      const Coverage& c = acc.coverage[i];
+      nlohmann::json g{{"n", c.n}, {"missingModel", c.missing}, {"objects", c.objects.size()}};
+      if (c.n) {
+        const double n = static_cast<double>(c.n);
+        std::vector<double> inside(3), pit(kPitBins);
+        bool within = true;
+        for (int k = 0; k < 3; ++k) inside[k] = c.inside[k] / n;
+        for (int k = 0; k < 2; ++k) within = within && std::fabs(inside[k] - kContainment[k]) <= tolerance;
+        within = within && 1.0 - inside[2] <= tail_limit;
+        double cum = 0, gap = 0;
+        for (int k = 0; k < kPitBins; ++k) {
+          pit[k] = c.pit[k] / n;
+          cum += pit[k];
+          gap = std::max(gap, std::fabs(cum - (k + 1.0) / kPitBins));
+        }
+        g["meanD2"] = c.sum_d2 / n;
+        g["inside"] = inside;
+        g["pit"] = pit;
+        g["pitMaxCdfGap"] = gap;
+        g["status"] = n < min_samples || c.objects.size() < min_objects ? "INSUFFICIENT" : within ? "CALIBRATED" : "FAILED";
+      } else {
+        g["status"] = c.missing ? "NO_MODEL" : "INSUFFICIENT";
+      }
+      x["coverage"] = g;
+    }
     out["strata"].push_back(x);
   }
   return emit("model", out);
+}
+
+// The model with each stratum's position covariance scaled to reference-state
+// errors: C'_ab = s_a s_b C_ab over the position rows and columns, with
+// s_k = sqrt(E[e_k^2] / C_kk) (clipped second moment about zero of the
+// reference errors). Strata with fewer reference samples than the minimum
+// are left unscaled and say so.
+extern "C" int scale_model() {
+  nlohmann::json model = json_input("model");
+  const nlohmann::json truth = json_input("truth");
+  if (!model.is_object() || model.value("kind", std::string()) != "gp-error-model" || !model.contains("strata"))
+    return fail("invalid-model", "model must be gp-error-model JSON.");
+  if (!truth.is_object() || truth.value("kind", std::string()) != "gp-error-model" ||
+      truth.value("mode", std::string()) != "reference" || !truth.contains("strata"))
+    return fail("invalid-truth", "truth must be gp-error-model JSON in reference mode.");
+  if (options_signature(model) != options_signature(truth))
+    return fail("invalid-truth", "truth regimes or age bins differ from the model's.");
+  double min_samples = 30;
+  if (input("options")) {
+    const nlohmann::json o = json_input("options");
+    if (o.is_object() && o.contains("minimumSamples")) {
+      if (!o["minimumSamples"].is_number()) return fail("invalid-options", "minimumSamples must be a number.");
+      min_samples = o["minimumSamples"].get<double>();
+    }
+  }
+  const int pos[3][3] = {{0, 1, 3}, {1, 2, 4}, {3, 4, 5}};
+  for (auto& s : model["strata"]) {
+    const nlohmann::json* t = nullptr;
+    for (const auto& x : truth["strata"])
+      if (x["regimeIndex"] == s["regimeIndex"] && x["ageIndex"] == s["ageIndex"]) t = &x;
+    nlohmann::json* target = s.contains("clipped") && s["clipped"].contains("covariance") ? &s["clipped"]["covariance"]
+                             : s.contains("covariance") ? &s["covariance"] : nullptr;
+    if (!t || !target || !(*t).contains("clipped") || !(*t)["clipped"].contains("covariance") ||
+        (*t)["clipped"]["n"].get<double>() < min_samples) {
+      s["scale"] = nullptr;
+      continue;
+    }
+    const auto& tc = (*t)["clipped"]["covariance"];
+    const auto& tm = (*t)["clipped"]["mean"];
+    double f[6] = {1, 1, 1, 1, 1, 1};
+    for (int k = 0; k < 3; ++k) {
+      const double second = tc[pos[k][k]].get<double>() + tm[k].get<double>() * tm[k].get<double>();
+      f[k] = std::sqrt(second / (*target)[pos[k][k]].get<double>());
+    }
+    for (nlohmann::json* c : {s.contains("covariance") ? &s["covariance"] : nullptr,
+                              s.contains("clipped") && s["clipped"].contains("covariance") ? &s["clipped"]["covariance"] : nullptr}) {
+      if (!c) continue;
+      for (int a = 0, i = 0; a < kComponents; ++a)
+        for (int b = 0; b <= a; ++b, ++i) (*c)[i] = (*c)[i].get<double>() * f[a] * f[b];
+    }
+    s["scale"] = {{"factors", {f[0], f[1], f[2]}}, {"truthN", (*t)["clipped"]["n"]}};
+  }
+  model["scale"] = {{"basis", "position covariance scaled per stratum to the clipped second moment about zero of "
+                              "reference-state errors"},
+                    {"truthCounts", truth.contains("counts") ? truth["counts"] : nlohmann::json()},
+                    {"truthWindow", truth.contains("window") ? truth["window"] : nlohmann::json()},
+                    {"minimumSamples", min_samples}};
+  return emit("model", model);
 }
