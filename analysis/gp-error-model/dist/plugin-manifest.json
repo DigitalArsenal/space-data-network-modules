@@ -1,0 +1,205 @@
+{
+  "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+  "name": "GP prediction-error model",
+  "version": "0.1.0",
+  "description": "Empirical SGP4 prediction error by orbit regime and prediction age, in RTN. Element sets are propagated to later element sets of the same object (consecutive-set differences, which are not truth) or to independent reference states (GCRF, from analysis/reference-states). Batches accumulate counts, moments and histograms; finalize gives mean, covariance, quantiles, robust sigma and clipped covariance per stratum.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Deterministic SGP4 propagation and statistics over caller-supplied element sets and reference states. No host calls, threads or network access; batches are combined through the prior accumulator."
+  },
+  "schemasUsed": [
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "accumulate",
+      "displayName": "Accumulate prediction errors",
+      "inputPorts": [
+        {
+          "portId": "elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "Size-prefixed $OMM records, concatenated, SGP4 mean elements; every element set of each object in the batch (objects are not split across batches). Epochs within one second are one element set republished: the later record is kept."
+        },
+        {
+          "portId": "reference",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "Independent reference states ($OEM, GCRF, UTC, OBJECT.NORAD_CAT_ID), e.g. analysis/reference-states output. When present, errors are taken against these instead of later element sets."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "error-model-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Strata and clipping: regimes [{id, altitudeKm [lo, hi], eccentricity [lo, hi]}], ageBinsDays [[lo, hi]], referenceStepSeconds, clip {k, strata [{regime, age, centre[3], scale[3]}]}; every field optional."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Strata and clipping as JSON; every field optional. Defaults: ten regimes by mean altitude and eccentricity, age bins 0-0.5, 0.5-1, 1-2, 2-3, 3-5, 5-7 days, reference step 300 s, no clipping."
+        },
+        {
+          "portId": "prior",
+          "acceptedTypeSets": [
+            {
+              "setId": "gp-error-accumulator-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-stratum counts, sums, second moments and signed log histograms of RTN prediction errors, with the strata definitions and counts."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "An accumulator from an earlier batch with the same strata, mode and clip, added to."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "accumulator",
+          "acceptedTypeSets": [
+            {
+              "setId": "gp-error-accumulator-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-stratum counts, sums, second moments and signed log histograms of RTN prediction errors, with the strata definitions and counts."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The accumulator after this batch, as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "finalize",
+      "displayName": "Finalize model",
+      "inputPorts": [
+        {
+          "portId": "accumulator",
+          "acceptedTypeSets": [
+            {
+              "setId": "gp-error-accumulator-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-stratum counts, sums, second moments and signed log histograms of RTN prediction errors, with the strata definitions and counts."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The accumulator after the last batch."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "model",
+          "acceptedTypeSets": [
+            {
+              "setId": "gp-error-model-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per regime and prediction age: count, mean and covariance of the six RTN components, quantiles, median, robust sigma and the clipped mean and covariance, with the basis and units."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The error model as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

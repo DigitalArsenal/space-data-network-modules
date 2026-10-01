@@ -1,0 +1,1609 @@
+{
+ "model": "docs/model-2026-08.json",
+ "truth": "docs/truth-2026-08.json",
+ "minimumTruthSamples": 30,
+ "strata": [
+  {
+   "regime": "LEO below 450 km",
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "modelN": 71239,
+   "modelSigmaKm": [
+    0.1947910554731601,
+    3.158097794354271,
+    0.0801836958940674
+   ],
+   "modelRobustSigmaKm": [
+    0.16589887062485725,
+    3.078069585096167,
+    0.06747136665969695
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO below 450 km",
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "modelN": 83798,
+   "modelSigmaKm": [
+    0.5041228336623073,
+    18.99688857041073,
+    0.1359366680467704
+   ],
+   "modelRobustSigmaKm": [
+    0.43028644232475305,
+    17.110285854680008,
+    0.12145112347147191
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO below 450 km",
+   "ageDays": [
+    1,
+    2
+   ],
+   "modelN": 101389,
+   "modelSigmaKm": [
+    1.4219739324601242,
+    66.17741548920033,
+    0.21445685846678356
+   ],
+   "modelRobustSigmaKm": [
+    1.3489253515677562,
+    62.31825111244261,
+    0.20526847497200432
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO below 450 km",
+   "ageDays": [
+    2,
+    3
+   ],
+   "modelN": 96463,
+   "modelSigmaKm": [
+    9.160923845407886,
+    217.80742771830117,
+    0.40162757285394257
+   ],
+   "modelRobustSigmaKm": [
+    9.325826568282135,
+    216.11675360983313,
+    0.394916376347757
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO below 450 km",
+   "ageDays": [
+    3,
+    5
+   ],
+   "modelN": 98168,
+   "modelSigmaKm": [
+    40.29460295567361,
+    470.3764040700536,
+    0.6771755749682996
+   ],
+   "modelRobustSigmaKm": [
+    42.79169558533823,
+    473.65037392309944,
+    0.6743263930161802
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO below 450 km",
+   "ageDays": [
+    5,
+    7
+   ],
+   "modelN": 93249,
+   "modelSigmaKm": [
+    244.62984751178664,
+    1146.3528755940129,
+    1.270503833551781
+   ],
+   "modelRobustSigmaKm": [
+    291.6059351527753,
+    1168.6740070689475,
+    1.36119399663131
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO 450-600 km",
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "modelN": 378024,
+   "modelSigmaKm": [
+    0.13914130814036246,
+    1.9063395864223778,
+    0.08470545485823146
+   ],
+   "modelRobustSigmaKm": [
+    0.12271317483108893,
+    1.8820580386146633,
+    0.07009361014435167
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO 450-600 km",
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "modelN": 497338,
+   "modelSigmaKm": [
+    0.22735039456016676,
+    6.473097624695383,
+    0.14520183586063415
+   ],
+   "modelRobustSigmaKm": [
+    0.19060680075592495,
+    5.749374535781395,
+    0.12997130345541497
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO 450-600 km",
+   "ageDays": [
+    1,
+    2
+   ],
+   "modelN": 589301,
+   "modelSigmaKm": [
+    0.2945184605984485,
+    14.341105485899831,
+    0.20086859060797504
+   ],
+   "modelRobustSigmaKm": [
+    0.2625256213918155,
+    12.488412898549845,
+    0.18904763743177372
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO 450-600 km",
+   "ageDays": [
+    2,
+    3
+   ],
+   "modelN": 566258,
+   "modelSigmaKm": [
+    0.5198905583019834,
+    34.38295505189982,
+    0.29666598090141577
+   ],
+   "modelRobustSigmaKm": [
+    0.5909972814903027,
+    30.43928115169405,
+    0.2849944337036054
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO 450-600 km",
+   "ageDays": [
+    3,
+    5
+   ],
+   "modelN": 577021,
+   "modelSigmaKm": [
+    1.1242815035428066,
+    65.21617082922339,
+    0.4052163645112025
+   ],
+   "modelRobustSigmaKm": [
+    1.3300617039218443,
+    58.781260894872716,
+    0.40090596205027645
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO 450-600 km",
+   "ageDays": [
+    5,
+    7
+   ],
+   "modelN": 547356,
+   "modelSigmaKm": [
+    4.725001905107358,
+    150.46292523258947,
+    0.6335819350633689
+   ],
+   "modelRobustSigmaKm": [
+    5.875965256043987,
+    137.8746066412924,
+    0.6528729421238881
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO 600-800 km",
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "modelN": 116997,
+   "modelSigmaKm": [
+    0.020536895364288932,
+    0.13272625527832876,
+    0.021937420189809775
+   ],
+   "modelRobustSigmaKm": [
+    0.0200693690304347,
+    0.10198886878521538,
+    0.018576469149836704
+   ],
+   "status": "validated",
+   "truthN": 8815,
+   "truthSigmaKm": [
+    0.10374289096057124,
+    0.593632326483288,
+    0.17689462944330045
+   ],
+   "truthRobustSigmaKm": [
+    0.1078712136385229,
+    0.6747421242182308,
+    0.16758982514036852
+   ],
+   "truthMeanKm": [
+    0.0025387864895340347,
+    0.0075431542471611785,
+    0.010927089368821757
+   ],
+   "ratio": [
+    5.051537202695546,
+    4.472606608529962,
+    8.063602188076352
+   ]
+  },
+  {
+   "regime": "LEO 600-800 km",
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "modelN": 134446,
+   "modelSigmaKm": [
+    0.0430631622052779,
+    0.2613697095230892,
+    0.05108463572974922
+   ],
+   "modelRobustSigmaKm": [
+    0.04481638518914785,
+    0.20488422059647365,
+    0.04368052763978013
+   ],
+   "status": "validated",
+   "truthN": 8375,
+   "truthSigmaKm": [
+    0.1114228719677274,
+    0.6489712842370701,
+    0.1772317029557347
+   ],
+   "truthRobustSigmaKm": [
+    0.11616066410593927,
+    0.7135207128406365,
+    0.16908882497636196
+   ],
+   "truthMeanKm": [
+    0.004038829166956788,
+    0.09476568722261342,
+    0.0033047000652213724
+   ],
+   "ratio": [
+    2.5874289360494576,
+    2.482962870568368,
+    3.469373920826914
+   ]
+  },
+  {
+   "regime": "LEO 600-800 km",
+   "ageDays": [
+    1,
+    2
+   ],
+   "modelN": 170183,
+   "modelSigmaKm": [
+    0.0739584566481892,
+    0.5165840988739019,
+    0.08835194132935903
+   ],
+   "modelRobustSigmaKm": [
+    0.07859881075383066,
+    0.4115355484275979,
+    0.07264979579066871
+   ],
+   "status": "validated",
+   "truthN": 17072,
+   "truthSigmaKm": [
+    0.1204593600892561,
+    0.8115809112303993,
+    0.18749819502695605
+   ],
+   "truthRobustSigmaKm": [
+    0.1233503363377568,
+    0.8384054845893765,
+    0.18137502940858158
+   ],
+   "truthMeanKm": [
+    0.0010373107530622155,
+    0.14025294715915365,
+    0.00040365602805258707
+   ],
+   "ratio": [
+    1.628743561568161,
+    1.571052831474215,
+    2.1221740258994295
+   ]
+  },
+  {
+   "regime": "LEO 600-800 km",
+   "ageDays": [
+    2,
+    3
+   ],
+   "modelN": 162632,
+   "modelSigmaKm": [
+    0.12764498225450654,
+    1.1666431705420106,
+    0.15469194634448538
+   ],
+   "modelRobustSigmaKm": [
+    0.13970137386315098,
+    0.9268000454313104,
+    0.12418042464916867
+   ],
+   "status": "validated",
+   "truthN": 16596,
+   "truthSigmaKm": [
+    0.14000598549536755,
+    1.1173581332614244,
+    0.20178956418477728
+   ],
+   "truthRobustSigmaKm": [
+    0.14320151870996783,
+    1.134451218761359,
+    0.20134995214424364
+   ],
+   "truthMeanKm": [
+    0.006116468448805711,
+    0.2040693963731315,
+    0.00047873134353722057
+   ],
+   "ratio": [
+    1.096838927958914,
+    0.9577548315328595,
+    1.3044606972324833
+   ]
+  },
+  {
+   "regime": "LEO 600-800 km",
+   "ageDays": [
+    3,
+    5
+   ],
+   "modelN": 169943,
+   "modelSigmaKm": [
+    0.1867817887311992,
+    2.3790158842800144,
+    0.22385103909697343
+   ],
+   "modelRobustSigmaKm": [
+    0.20683074853357852,
+    1.904735550933132,
+    0.17847030405523084
+   ],
+   "status": "validated",
+   "truthN": 30970,
+   "truthSigmaKm": [
+    0.18497700771339848,
+    1.9399479515679714,
+    0.2271416313264023
+   ],
+   "truthRobustSigmaKm": [
+    0.19884216378558928,
+    1.9461421928747702,
+    0.23477627047101823
+   ],
+   "truthMeanKm": [
+    0.0025305240112051776,
+    0.4717533900511198,
+    0.001553093641893426
+   ],
+   "ratio": [
+    0.9903374893769863,
+    0.8154413614413833,
+    1.014699919387032
+   ]
+  },
+  {
+   "regime": "LEO 600-800 km",
+   "ageDays": [
+    5,
+    7
+   ],
+   "modelN": 161376,
+   "modelSigmaKm": [
+    0.29623039363169096,
+    6.04660598348291,
+    0.35397745129642777
+   ],
+   "modelRobustSigmaKm": [
+    0.33281441830333525,
+    4.9169757940773025,
+    0.2799812197305027
+   ],
+   "status": "validated",
+   "truthN": 25518,
+   "truthSigmaKm": [
+    0.25155587071643004,
+    3.513026310418142,
+    0.2678728801554512
+   ],
+   "truthRobustSigmaKm": [
+    0.2827628135890742,
+    3.3255204265446965,
+    0.2897807379442873
+   ],
+   "truthMeanKm": [
+    -0.0009324515354332269,
+    1.8720303725280585,
+    0.0041287991246721015
+   ],
+   "ratio": [
+    0.8491899417626754,
+    0.5809914388360065,
+    0.7567512539976143
+   ]
+  },
+  {
+   "regime": "LEO 800-1200 km",
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "modelN": 165947,
+   "modelSigmaKm": [
+    0.018147965285255467,
+    0.07203634626613827,
+    0.017585924432186643
+   ],
+   "modelRobustSigmaKm": [
+    0.01802968002863644,
+    0.055627740080669195,
+    0.016004806778334994
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO 800-1200 km",
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "modelN": 202561,
+   "modelSigmaKm": [
+    0.04181620209962178,
+    0.15867937123630999,
+    0.040497306500381115
+   ],
+   "modelRobustSigmaKm": [
+    0.04400703076274727,
+    0.12126492561487881,
+    0.03916290504067442
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO 800-1200 km",
+   "ageDays": [
+    1,
+    2
+   ],
+   "modelN": 241846,
+   "modelSigmaKm": [
+    0.07344837257143141,
+    0.2592703952176182,
+    0.07072117602042946
+   ],
+   "modelRobustSigmaKm": [
+    0.07928498846514301,
+    0.20384463123311664,
+    0.06875699856021757
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO 800-1200 km",
+   "ageDays": [
+    2,
+    3
+   ],
+   "modelN": 228465,
+   "modelSigmaKm": [
+    0.1269581227962287,
+    0.45854052079900326,
+    0.12202429779722712
+   ],
+   "modelRobustSigmaKm": [
+    0.1418148767418707,
+    0.3635907977082864,
+    0.11834744895890348
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO 800-1200 km",
+   "ageDays": [
+    3,
+    5
+   ],
+   "modelN": 237217,
+   "modelSigmaKm": [
+    0.18281509407929158,
+    0.732998560196722,
+    0.17572763782045742
+   ],
+   "modelRobustSigmaKm": [
+    0.20461821283933002,
+    0.5750147167731637,
+    0.16999941619071163
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO 800-1200 km",
+   "ageDays": [
+    5,
+    7
+   ],
+   "modelN": 225480,
+   "modelSigmaKm": [
+    0.28852024139323734,
+    1.5109845463650147,
+    0.27903972751210093
+   ],
+   "modelRobustSigmaKm": [
+    0.3270049900470366,
+    1.1726050942721031,
+    0.2730796959826045
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO 1200-2000 km",
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "modelN": 68634,
+   "modelSigmaKm": [
+    0.011672768619428807,
+    0.07732118698742878,
+    0.015266635427058526
+   ],
+   "modelRobustSigmaKm": [
+    0.011044297918179609,
+    0.057785171265787014,
+    0.014703822855260493
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO 1200-2000 km",
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "modelN": 85981,
+   "modelSigmaKm": [
+    0.027566171556077115,
+    0.16032147374630784,
+    0.03223026296232656
+   ],
+   "modelRobustSigmaKm": [
+    0.02626311869969654,
+    0.11569361942641695,
+    0.030762356657267058
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO 1200-2000 km",
+   "ageDays": [
+    1,
+    2
+   ],
+   "modelN": 103107,
+   "modelSigmaKm": [
+    0.05153008900652201,
+    0.262729361590102,
+    0.05769524746403992
+   ],
+   "modelRobustSigmaKm": [
+    0.051220508285649405,
+    0.18866963640966986,
+    0.056072489210511625
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO 1200-2000 km",
+   "ageDays": [
+    2,
+    3
+   ],
+   "modelN": 97539,
+   "modelSigmaKm": [
+    0.09109372010906232,
+    0.4487273257652163,
+    0.09849905298091408
+   ],
+   "modelRobustSigmaKm": [
+    0.09276499858369797,
+    0.31625931170612187,
+    0.09779940058154538
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO 1200-2000 km",
+   "ageDays": [
+    3,
+    5
+   ],
+   "modelN": 100799,
+   "modelSigmaKm": [
+    0.13450542245593153,
+    0.6128375708428917,
+    0.14039935840900172
+   ],
+   "modelRobustSigmaKm": [
+    0.13606877915079968,
+    0.43432060022199226,
+    0.1393749991256556
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "LEO 1200-2000 km",
+   "ageDays": [
+    5,
+    7
+   ],
+   "modelN": 95586,
+   "modelSigmaKm": [
+    0.20829059806953368,
+    0.8105765862722439,
+    0.2215692440147242
+   ],
+   "modelRobustSigmaKm": [
+    0.22028311748573348,
+    0.618137901647585,
+    0.22294974987475052
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "MEO 2000-10000 km",
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "modelN": 2538,
+   "modelSigmaKm": [
+    0.011388830502431713,
+    0.09080994879594363,
+    0.02426975120254856
+   ],
+   "modelRobustSigmaKm": [
+    0.010409244062656607,
+    0.07768292341041766,
+    0.026044332107097723
+   ],
+   "status": "validated",
+   "truthN": 2664,
+   "truthSigmaKm": [
+    0.025226014245185547,
+    0.4437963075944292,
+    0.15911474955014868
+   ],
+   "truthRobustSigmaKm": [
+    0.02601421648081964,
+    0.5300222070259714,
+    0.15429461121228089
+   ],
+   "truthMeanKm": [
+    0.004266385542976398,
+    0.13550731393917712,
+    -0.011175974854547244
+   ],
+   "ratio": [
+    2.2149784597987785,
+    4.88708906324428,
+    6.5560931474831134
+   ]
+  },
+  {
+   "regime": "MEO 2000-10000 km",
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "modelN": 3359,
+   "modelSigmaKm": [
+    0.02213597362867951,
+    0.13356608533743308,
+    0.050449496719293295
+   ],
+   "modelRobustSigmaKm": [
+    0.021112331996703905,
+    0.11678820151614883,
+    0.05348594077424351
+   ],
+   "status": "validated",
+   "truthN": 2739,
+   "truthSigmaKm": [
+    0.028688788534065573,
+    0.44891450392368215,
+    0.16148069345743374
+   ],
+   "truthRobustSigmaKm": [
+    0.031027620958141357,
+    0.5306495754274921,
+    0.15948421923865738
+   ],
+   "truthMeanKm": [
+    0.0046677602000488065,
+    0.09379633380794121,
+    -0.01939854199623772
+   ],
+   "ratio": [
+    1.2960256013720668,
+    3.3609916977769645,
+    3.2008385406881374
+   ]
+  },
+  {
+   "regime": "MEO 2000-10000 km",
+   "ageDays": [
+    1,
+    2
+   ],
+   "modelN": 4216,
+   "modelSigmaKm": [
+    0.039277319442716306,
+    0.18685540687097518,
+    0.0884056538636673
+   ],
+   "modelRobustSigmaKm": [
+    0.038228164162522095,
+    0.17001743689726848,
+    0.09567381198289523
+   ],
+   "status": "validated",
+   "truthN": 5142,
+   "truthSigmaKm": [
+    0.026626067191779405,
+    0.4128290039437552,
+    0.17305419062647373
+   ],
+   "truthRobustSigmaKm": [
+    0.02828059200047816,
+    0.4742732271750622,
+    0.1653922368982058
+   ],
+   "truthMeanKm": [
+    0.0045850422921832204,
+    0.11158993231540111,
+    -0.015518156259875956
+   ],
+   "ratio": [
+    0.6778992958165585,
+    2.2093500576561653,
+    1.9575013934441927
+   ]
+  },
+  {
+   "regime": "MEO 2000-10000 km",
+   "ageDays": [
+    2,
+    3
+   ],
+   "modelN": 3988,
+   "modelSigmaKm": [
+    0.060074102685680864,
+    0.23703391981190466,
+    0.152710260638951
+   ],
+   "modelRobustSigmaKm": [
+    0.06430729434501581,
+    0.21908214226042827,
+    0.16983347925727482
+   ],
+   "status": "validated",
+   "truthN": 4903,
+   "truthSigmaKm": [
+    0.02637537182356653,
+    0.4293697386527023,
+    0.1916098310258079
+   ],
+   "truthRobustSigmaKm": [
+    0.027861292227004338,
+    0.47880164894512445,
+    0.19475844376479354
+   ],
+   "truthMeanKm": [
+    0.004469834371870552,
+    0.08007818380600555,
+    -0.011772024140496244
+   ],
+   "ratio": [
+    0.4390472873405616,
+    1.811427406648902,
+    1.2547279418167334
+   ]
+  },
+  {
+   "regime": "MEO 2000-10000 km",
+   "ageDays": [
+    3,
+    5
+   ],
+   "modelN": 4326,
+   "modelSigmaKm": [
+    0.08526660913951459,
+    0.33277029083568954,
+    0.21777033393315814
+   ],
+   "modelRobustSigmaKm": [
+    0.0935321459672216,
+    0.3119695378670542,
+    0.24429260201080807
+   ],
+   "status": "validated",
+   "truthN": 9437,
+   "truthSigmaKm": [
+    0.025967678119054406,
+    0.43187450619566875,
+    0.23879553755560276
+   ],
+   "truthRobustSigmaKm": [
+    0.027414997269526658,
+    0.4868157146777081,
+    0.26408082677016825
+   ],
+   "truthMeanKm": [
+    0.004265361399151457,
+    0.0037279423183410086,
+    -0.017417901832024057
+   ],
+   "ratio": [
+    0.304546860501579,
+    1.2978156947577795,
+    1.096547602433755
+   ]
+  },
+  {
+   "regime": "MEO 2000-10000 km",
+   "ageDays": [
+    5,
+    7
+   ],
+   "modelN": 4065,
+   "modelSigmaKm": [
+    0.1310775302850952,
+    0.46842893062097246,
+    0.3432032898633099
+   ],
+   "modelRobustSigmaKm": [
+    0.1420032830893458,
+    0.4343616384630751,
+    0.3856684547484788
+   ],
+   "status": "validated",
+   "truthN": 8201,
+   "truthSigmaKm": [
+    0.026471507569917077,
+    0.37037256976137256,
+    0.29852568902029003
+   ],
+   "truthRobustSigmaKm": [
+    0.027764412820079916,
+    0.4069629118542375,
+    0.32789467810019846
+   ],
+   "truthMeanKm": [
+    0.004559190806941383,
+    0.010357469044250812,
+    -0.01663293471308716
+   ],
+   "ratio": [
+    0.20195305413781622,
+    0.790669716472013,
+    0.8698217582331045
+   ]
+  },
+  {
+   "regime": "MEO 10000-30000 km",
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "modelN": 1304,
+   "modelSigmaKm": [
+    0.046441552887156824,
+    0.16305464402159253,
+    0.024084906095315838
+   ],
+   "modelRobustSigmaKm": [
+    0.03778074208008399,
+    0.13609591243042904,
+    0.023120785653429295
+   ],
+   "status": "validated",
+   "truthN": 12717,
+   "truthSigmaKm": [
+    0.18173283674970278,
+    1.805626986358988,
+    0.142989297954572
+   ],
+   "truthRobustSigmaKm": [
+    0.18759300628089587,
+    2.0233814456025896,
+    0.1430335143917673
+   ],
+   "truthMeanKm": [
+    0.02322022211072679,
+    0.7961969292916784,
+    0.0024676810749607956
+   ],
+   "ratio": [
+    3.9131515948933755,
+    11.073753815437955,
+    5.9368841791906055
+   ]
+  },
+  {
+   "regime": "MEO 10000-30000 km",
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "modelN": 2546,
+   "modelSigmaKm": [
+    0.07236044902679403,
+    0.2458636540785273,
+    0.03257279876762497
+   ],
+   "modelRobustSigmaKm": [
+    0.06343967170400998,
+    0.21118655373822703,
+    0.03026696570197484
+   ],
+   "status": "validated",
+   "truthN": 12176,
+   "truthSigmaKm": [
+    0.181786939825143,
+    1.7905751703628496,
+    0.14067000816873135
+   ],
+   "truthRobustSigmaKm": [
+    0.1874913104398302,
+    1.9849006380301903,
+    0.13885216236104087
+   ],
+   "truthMeanKm": [
+    0.025001502556228353,
+    0.7670639463512938,
+    0.0025346026633757354
+   ],
+   "ratio": [
+    2.5122417324667223,
+    7.282797358046875,
+    4.318634366431763
+   ]
+  },
+  {
+   "regime": "MEO 10000-30000 km",
+   "ageDays": [
+    1,
+    2
+   ],
+   "modelN": 3684,
+   "modelSigmaKm": [
+    0.10446864276834827,
+    0.4045772974388887,
+    0.04799037872218314
+   ],
+   "modelRobustSigmaKm": [
+    0.09295082846187759,
+    0.3307315543887598,
+    0.04364593389577197
+   ],
+   "status": "validated",
+   "truthN": 24140,
+   "truthSigmaKm": [
+    0.1960256988732001,
+    1.7800267635238718,
+    0.13942482517368487
+   ],
+   "truthRobustSigmaKm": [
+    0.20125273027822033,
+    2.0269998101326894,
+    0.13730500155704473
+   ],
+   "truthMeanKm": [
+    0.024347296402003265,
+    0.7433764363546895,
+    0.002862926535198517
+   ],
+   "ratio": [
+    1.8764070603259682,
+    4.399719842887982,
+    2.905266198894091
+   ]
+  },
+  {
+   "regime": "MEO 10000-30000 km",
+   "ageDays": [
+    2,
+    3
+   ],
+   "modelN": 3402,
+   "modelSigmaKm": [
+    0.1596686917855883,
+    0.6525520382047627,
+    0.07177758620580667
+   ],
+   "modelRobustSigmaKm": [
+    0.15007180834764322,
+    0.5291941845863805,
+    0.06509568960748209
+   ],
+   "status": "validated",
+   "truthN": 24687,
+   "truthSigmaKm": [
+    0.2276783257901069,
+    1.6990454023774046,
+    0.14004738007813214
+   ],
+   "truthRobustSigmaKm": [
+    0.2311675569855441,
+    1.8601519671926798,
+    0.1381548405978862
+   ],
+   "truthMeanKm": [
+    0.024361457623457594,
+    0.6759241264188941,
+    0.001631807850995114
+   ],
+   "ratio": [
+    1.4259422009660203,
+    2.6036933499612567,
+    1.9511296977384645
+   ]
+  },
+  {
+   "regime": "MEO 10000-30000 km",
+   "ageDays": [
+    3,
+    5
+   ],
+   "modelN": 4412,
+   "modelSigmaKm": [
+    0.21382655204174217,
+    0.9741264311497893,
+    0.1012428881311629
+   ],
+   "modelRobustSigmaKm": [
+    0.19825127579209384,
+    0.807387177672676,
+    0.09400134469822241
+   ],
+   "status": "validated",
+   "truthN": 49173,
+   "truthSigmaKm": [
+    0.2983399912759925,
+    1.5677340751030202,
+    0.145381630922216
+   ],
+   "truthRobustSigmaKm": [
+    0.30823614656666837,
+    1.6017214139200706,
+    0.1434762502056031
+   ],
+   "truthMeanKm": [
+    0.021049869712166266,
+    0.6248917007585937,
+    0.0018646554470913034
+   ],
+   "ratio": [
+    1.3952429594326152,
+    1.6093743327060521,
+    1.4359688231520042
+   ]
+  },
+  {
+   "regime": "MEO 10000-30000 km",
+   "ageDays": [
+    5,
+    7
+   ],
+   "modelN": 4242,
+   "modelSigmaKm": [
+    0.3206972693530113,
+    1.622698485133903,
+    0.15047700121507548
+   ],
+   "modelRobustSigmaKm": [
+    0.2798936982205204,
+    1.3281031265107992,
+    0.13741748814134833
+   ],
+   "status": "validated",
+   "truthN": 47457,
+   "truthSigmaKm": [
+    0.410772584921612,
+    1.4702202461054852,
+    0.1683820569987776
+   ],
+   "truthRobustSigmaKm": [
+    0.4373956419225431,
+    1.4766433422669754,
+    0.16646295594738209
+   ],
+   "truthMeanKm": [
+    0.018379142365347524,
+    0.745052040847996,
+    0.0018699189538575877
+   ],
+   "ratio": [
+    1.2808733474729068,
+    0.9060341521081561,
+    1.118988653675458
+   ]
+  },
+  {
+   "regime": "GEO 30000-40000 km",
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "modelN": 53934,
+   "modelSigmaKm": [
+    0.07745679162567887,
+    0.37395646556117934,
+    0.09511335842060308
+   ],
+   "modelRobustSigmaKm": [
+    0.07460095916164307,
+    0.32924544817153584,
+    0.07629288072990023
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "GEO 30000-40000 km",
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "modelN": 64880,
+   "modelSigmaKm": [
+    0.15057201212167046,
+    0.5865325058076192,
+    0.1749016497039748
+   ],
+   "modelRobustSigmaKm": [
+    0.1500761833984479,
+    0.5337030213964129,
+    0.1487138478665972
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "GEO 30000-40000 km",
+   "ageDays": [
+    1,
+    2
+   ],
+   "modelN": 79185,
+   "modelSigmaKm": [
+    0.26119086236977723,
+    0.9349107442621309,
+    0.23653278258946206
+   ],
+   "modelRobustSigmaKm": [
+    0.27442743773678013,
+    0.8944922705932121,
+    0.21561000700991861
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "GEO 30000-40000 km",
+   "ageDays": [
+    2,
+    3
+   ],
+   "modelN": 75948,
+   "modelSigmaKm": [
+    0.4432177487940189,
+    1.5874535759064656,
+    0.3944484899461539
+   ],
+   "modelRobustSigmaKm": [
+    0.4748080674390467,
+    1.5624850336116103,
+    0.36300625106250745
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "GEO 30000-40000 km",
+   "ageDays": [
+    3,
+    5
+   ],
+   "modelN": 77932,
+   "modelSigmaKm": [
+    0.6416243912172036,
+    2.562820338119096,
+    0.5533057099089307
+   ],
+   "modelRobustSigmaKm": [
+    0.679693214144226,
+    2.559757006631854,
+    0.5201273031305123
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "GEO 30000-40000 km",
+   "ageDays": [
+    5,
+    7
+   ],
+   "modelN": 74109,
+   "modelSigmaKm": [
+    1.005048690901258,
+    5.499551100993943,
+    0.8636587242503708
+   ],
+   "modelRobustSigmaKm": [
+    1.04347201478789,
+    5.369161493329606,
+    0.8093410828596603
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "Beyond 40000 km",
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "modelN": 12,
+   "modelSigmaKm": [
+    2.3524852641909524,
+    1.8849837232023277,
+    0.46502690448401246
+   ],
+   "modelRobustSigmaKm": [
+    1.6068324782475054,
+    1.605210311935473,
+    0.3281752072788741
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "Beyond 40000 km",
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "modelN": 2,
+   "modelSigmaKm": [
+    0.021751288171214307,
+    0.010585234516765664,
+    0.05027314902102033
+   ],
+   "modelRobustSigmaKm": [
+    0.016995217834686837,
+    0.006257029770666014,
+    0.036346970296677245
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "Beyond 40000 km",
+   "ageDays": [
+    1,
+    2
+   ],
+   "modelN": 25,
+   "modelSigmaKm": [
+    0.12886947110152422,
+    0.6626477247019467,
+    0.08118177071365856
+   ],
+   "modelRobustSigmaKm": [
+    0.15073695450589203,
+    0.6735971826996051,
+    0.07032737961347876
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "Beyond 40000 km",
+   "ageDays": [
+    2,
+    3
+   ],
+   "modelN": 24,
+   "modelSigmaKm": [
+    0.2544680026053571,
+    1.0735578552091347,
+    0.10362871719192929
+   ],
+   "modelRobustSigmaKm": [
+    0.2881134750940032,
+    1.1733164481562566,
+    0.1288204423250254
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "Beyond 40000 km",
+   "ageDays": [
+    3,
+    5
+   ],
+   "modelN": 28,
+   "modelSigmaKm": [
+    0.44451876182469213,
+    1.8309429883960031,
+    0.16562233405052845
+   ],
+   "modelRobustSigmaKm": [
+    0.5667726977780884,
+    2.112916198053222,
+    0.19877111906624315
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "Beyond 40000 km",
+   "ageDays": [
+    5,
+    7
+   ],
+   "modelN": 33,
+   "modelSigmaKm": [
+    0.6257110317305367,
+    3.457940175592321,
+    0.253420628787165
+   ],
+   "modelRobustSigmaKm": [
+    1.0440722470746422,
+    5.077936523782243,
+    6.742236743522104
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "Eccentric (e >= 0.1)",
+   "ageDays": [
+    0,
+    0.5
+   ],
+   "modelN": 24579,
+   "modelSigmaKm": [
+    0.1163009860965729,
+    0.38691409898883355,
+    0.07336316387108321
+   ],
+   "modelRobustSigmaKm": [
+    0.0960746119770639,
+    0.348044532945829,
+    0.05992089497660197
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "Eccentric (e >= 0.1)",
+   "ageDays": [
+    0.5,
+    1
+   ],
+   "modelN": 34824,
+   "modelSigmaKm": [
+    0.22878293549031525,
+    0.7655533334573251,
+    0.12545875414452579
+   ],
+   "modelRobustSigmaKm": [
+    0.19281856605376496,
+    0.6942134265254568,
+    0.10292310145569065
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "Eccentric (e >= 0.1)",
+   "ageDays": [
+    1,
+    2
+   ],
+   "modelN": 45921,
+   "modelSigmaKm": [
+    0.41028576186450577,
+    1.3890780423458573,
+    0.20676470431572644
+   ],
+   "modelRobustSigmaKm": [
+    0.35275051716926087,
+    1.266485484691073,
+    0.17091342557759237
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "Eccentric (e >= 0.1)",
+   "ageDays": [
+    2,
+    3
+   ],
+   "modelN": 43799,
+   "modelSigmaKm": [
+    0.8348772358596,
+    2.8696514468493945,
+    0.3500829683218496
+   ],
+   "modelRobustSigmaKm": [
+    0.7167272382093127,
+    2.605007040963142,
+    0.29031778078140685
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "Eccentric (e >= 0.1)",
+   "ageDays": [
+    3,
+    5
+   ],
+   "modelN": 47425,
+   "modelSigmaKm": [
+    1.526531813796643,
+    5.047627903639978,
+    0.5028808801860309
+   ],
+   "modelRobustSigmaKm": [
+    1.29775483391454,
+    4.625911482130361,
+    0.4191538085838728
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  },
+  {
+   "regime": "Eccentric (e >= 0.1)",
+   "ageDays": [
+    5,
+    7
+   ],
+   "modelN": 44417,
+   "modelSigmaKm": [
+    3.419412443753218,
+    11.294515789594131,
+    0.7925334862077217
+   ],
+   "modelRobustSigmaKm": [
+    2.955411102373688,
+    10.444490429133694,
+    0.6548853738252189
+   ],
+   "status": "unvalidated",
+   "truthN": 0,
+   "reason": "no independent reference states in this regime"
+  }
+ ]
+}
