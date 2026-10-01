@@ -58,7 +58,7 @@ async function sourceWithIncludes(file) {
   return `\n// Source: ${path.relative(packageRoot,file)}\n${lines.join('\n')}\n`;
 }
 const caSources = ['conjunction_assessment.cpp','gp_json.cpp','kdtree.cpp',
-  'resident_screening_index.cpp','screening_internal.cpp','screening.cpp',
+  'resident_screening_index.cpp','screening_internal.cpp','screening.cpp','screening_tight.cpp',
   'cdm_output.cpp','csm_output.cpp','pc_method.cpp','ephemeris_source.cpp',
   'conjunction_engine.cpp','plugin_invoke_bridge.cpp'];
 // sgp4_propagator.cpp is the unused alternate implementation: the historical

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>All-vs-All on the GPU</title>
+<style>
+  :root { --bg: #fff; --fg: #111; --muted: #666; --line: #ddd; color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #111; --fg: #eee; --muted: #999; --line: #333; } }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, sans-serif; }
+  form { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+  label { display: grid; gap: 4px; color: var(--muted); }
+  input { width: 10em; font: inherit; }
+  #status { color: var(--muted); margin: 12px 0; white-space: pre-wrap; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+  .wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<h1>All-vs-all conjunction screening on the GPU</h1>
+<p>SGP4 and refinement run in the conjunction-assessment module; the GPU searches every pair at every coarse step.</p>
+<form id="form">
+  <label>Catalog (length-prefixed $OMM)<input name="catalogUrl" value="catalog.bin"></label>
+  <label>Start (Julian date, UTC)<input name="startJd" type="number" step="any" value="2461314.5"></label>
+  <label>Days<input name="durationDays" type="number" step="any" value="1"></label>
+  <label>Threshold (km)<input name="thresholdKm" type="number" step="any" value="5"></label>
+  <label>Coarse step (s)<input name="coarseStepSec" type="number" step="any" value="60"></label>
+  <button>Screen</button>
+</form>
+<div id="status"></div>
+<div class="wrap"><table id="events" hidden>
+  <thead><tr><th>Primary</th><th>Secondary</th><th>TCA (UTC)</th><th>Miss (m)</th><th>Speed (m/s)</th><th>Pc (max)</th></tr></thead>
+  <tbody></tbody>
+</table></div>
+<script type="module">
+const form = document.getElementById('form'), status = document.getElementById('status');
+const params = new URLSearchParams(location.search);
+for (const [k, v] of params) if (form.elements[k]) form.elements[k].value = v;
+const iso = (jd) => new Date((jd - 2440587.5) * 864e5).toISOString().replace('T', ' ').slice(0, 23);
+const show = (text) => { status.textContent = text; };
+
+function run(report) {
+  if (!crossOriginIsolated) return Promise.reject(new Error('This page needs cross-origin isolation (COOP/COEP).'));
+  const f = Object.fromEntries(new FormData(form));
+  const job = { ...f, startJd: +f.startJd, durationDays: +f.durationDays, thresholdKm: +f.thresholdKm, coarseStepSec: +f.coarseStepSec,
+    catalogUrl: new URL(f.catalogUrl, location.href).href, wasmUrl: new URL('module.wasm', location.href).href,
+    threadWorkerBaseUrl: new URL('sdk/host/', location.href).pathname };
+  const worker = new Worker('worker.js', { type: 'module' });
+  return new Promise((resolve, reject) => {
+    worker.onerror = (e) => reject(new Error(`${e.message} at ${e.filename}:${e.lineno}`));
+    worker.onmessage = ({ data }) => {
+      if (data.type === 'progress') {
+        show(`${data.stage}: ${data.done} / ${data.total}`);
+        if (report) fetch('progress', { method: 'POST', body: status.textContent });
+      }
+      else if (data.type === 'error') reject(new Error(data.message));
+      else resolve(data);
+    };
+    worker.postMessage(job);
+  }).finally(() => worker.terminate());
+}
+
+function render(r) {
+  const t = r.timings, s = (ms) => (ms / 1000).toFixed(1) + ' s';
+  show(`${r.objects} objects, ${r.coarseSteps} coarse steps, ${r.candidates} GPU candidates, ${r.events.length} conjunctions\n` +
+    `total ${s(t.totalMs)}: SGP4 grid ${s(t.gridMs)}, GPU search ${s(t.gpuMs)}, refinement ${s(t.refineMs)}` +
+    (r.adapter ? ` (${r.adapter}, ${r.workers} module threads)` : ''));
+  const body = document.querySelector('#events tbody');
+  body.replaceChildren(...r.events.map((e) => {
+    const row = document.createElement('tr');
+    for (const v of [`${e.primary ?? ''} (${e.primaryNorad})`, `${e.secondary ?? ''} (${e.secondaryNorad})`, iso(e.tcaJd),
+      e.missM.toFixed(1), e.speedMS.toFixed(1), e.probability == null ? '' : e.probability.toExponential(2)]) {
+      const cell = document.createElement('td'); cell.textContent = v; row.append(cell);
+    }
+    return row;
+  }));
+  document.getElementById('events').hidden = false;
+}
+
+async function start(report) {
+  try {
+    const r = await run(report);
+    render(r);
+    if (report) await fetch('done', { method: 'POST', body: JSON.stringify(r) });
+  } catch (error) {
+    show(String(error.message ?? error));
+    if (report) await fetch('done', { method: 'POST', body: JSON.stringify({ fatal: String(error.message ?? error) }) });
+  }
+}
+form.onsubmit = (e) => { e.preventDefault(); start(false); };
+if (params.has('auto')) start(params.has('report'));
+</script>
+</body>
+</html>

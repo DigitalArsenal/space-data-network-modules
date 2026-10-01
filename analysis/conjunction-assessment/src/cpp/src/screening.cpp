@@ -17,6 +17,7 @@
 #include "conjunction/screening.h"
 #include "conjunction/ephemeris_source.h"
 #include "conjunction/resident_screening_index.h"
+#include "conjunction/screening_tight.h"
 #ifndef CONJUNCTION_SINGLE_THREAD
 #include <thread>
 #include <mutex>
@@ -2168,6 +2169,26 @@ RefinedEncounters refine_encounters(
     return result;
 }
 
+// Refines one window's encounters and records the counts every window path
+// reports: failed pairs, encounters refined, conjunctions found. Events are
+// returned in the canonical order.
+std::vector<ConjunctionEvent> refine_window_encounters(
+    const std::vector<TLE>& tles,
+    const std::vector<CoarseHitRecord>& encounters,
+    const ScreeningConfig& config,
+    ScreeningStats& stats,
+    ProgressCallback progress,
+    const ResidentScreeningIndex* resident_index)
+{
+    auto refined = refine_encounters(tles, encounters, config, progress, resident_index);
+    auto events = std::move(refined.events);
+    stats.failed_pairs = refined.failed_objects.size();
+    stats.tca_refined = encounters.size();
+    stats.conjunctions_found = events.size();
+    sort_conjunction_events(events);
+    return events;
+}
+
 ImplicitCoarseHitWindowResult collect_precomputed_tles_implicit_window(
     const std::vector<TLE>& tles,
     const std::vector<float>& perigee_km,
@@ -2393,13 +2414,8 @@ std::vector<ConjunctionEvent> screen_precomputed_tles_implicit_window(
     stats.pairs_screened = pairs_screened;
     stats.pairs_prefiltered = pairs_prefiltered;
 
-    auto refined = refine_encounters(
-        tles, window_result.encounters, config, progress, resident_index);
-    auto events = std::move(refined.events);
-    stats.failed_pairs = refined.failed_objects.size();
-    stats.tca_refined = window_result.encounters.size();
-    stats.conjunctions_found = events.size();
-    sort_conjunction_events(events);
+    auto events = refine_window_encounters(
+        tles, window_result.encounters, config, stats, progress, resident_index);
 
     auto t_end = std::chrono::high_resolution_clock::now();
     stats.elapsed_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
@@ -2741,6 +2757,126 @@ std::vector<ConjunctionEvent> ConjunctionScreener::screen(
         excluded.input_list = origin[excluded.index].first;
         excluded.input_index = origin[excluded.index].second;
     }
+    return events;
+}
+
+// Tight all-vs-all screening (see screening_tight.h). Candidates are re-tested
+// here in f64, so the GPU only ever proposes; the encounters they form are
+// refined by the same refine_window_encounters as the coarse pass, so a pass
+// found either way yields the same TCA and miss distance.
+std::vector<ConjunctionEvent> screen_tight_candidates(
+    const std::vector<TLE>& tles,
+    const ScreeningConfig& config,
+    const std::vector<TightCandidate>* candidates,
+    std::map<uint32_t, ExcludedObject> excluded,
+    ScreeningStats& stats)
+{
+    const auto t_start = std::chrono::high_resolution_clock::now();
+    const size_t n = tles.size();
+    const double step_days = config.coarse_step_sec / 86400.0;
+    const double h = 0.5 * config.coarse_step_sec;
+    const int32_t last_step = tight_last_coarse_step(config);
+    const int workers = std::max(1, config.num_threads);
+    struct Hit { uint32_t lo, hi; int32_t step; double closest_km; };
+    std::vector<std::vector<Hit>> hits(workers);
+    std::vector<std::map<uint32_t, ExcludedObject>> scan_excluded(workers);
+    std::vector<uint64_t> propagations(workers, 0);
+
+    const auto run = [&](auto&& body, int64_t count) {
+        const int used = static_cast<int>(std::max<int64_t>(1, std::min<int64_t>(workers, count)));
+#ifndef CONJUNCTION_SINGLE_THREAD
+        if (used > 1) {
+            std::vector<std::thread> threads;
+            for (int w = 0; w < used; ++w)
+                threads.emplace_back([&, w] { clear_error(); body(w, count * w / used, count * (w + 1) / used); });
+            for (auto& t : threads) t.join();
+            return;
+        }
+#endif
+        body(0, 0, count);
+    };
+
+    if (candidates) {
+        run([&](int w, int64_t lo, int64_t hi) {
+            for (int64_t c = lo; c < hi; ++c) {
+                const auto& k = (*candidates)[c];
+                if (k.obj1 >= n || k.obj2 >= n || k.obj1 == k.obj2 || k.step < 0 || k.step > last_step) continue;
+                if (excluded.count(k.obj1) || excluded.count(k.obj2)) continue;
+                const double jd = config.start_jd + k.step * step_days;
+                const StateVector a = propagate_sgp4(tles[k.obj1], jd);
+                const StateVector b = propagate_sgp4(tles[k.obj2], jd);
+                propagations[w] += 2;
+                if (has_error()) { clear_error(); continue; }   // the grid reported the exclusion
+                double closest = 0.0;
+                if (tight_pair_may_close(a, tight_acceleration_bound_km_s2(a, h),
+                                         b, tight_acceleration_bound_km_s2(b, h),
+                                         config.threshold_km, h, &closest)) {
+                    hits[w].push_back({std::min(k.obj1, k.obj2), std::max(k.obj1, k.obj2), k.step, closest});
+                }
+            }
+        }, static_cast<int64_t>(candidates->size()));
+    } else {
+        // CPU scan: every pair at every coarse step, the same test.
+        run([&](int w, int64_t lo, int64_t hi) {
+            std::vector<StateVector> states(n);
+            std::vector<double> accel(n);
+            std::vector<uint8_t> ok(n);
+            std::vector<uint8_t> dead(n, 0);
+            for (int64_t step = lo; step < hi; ++step) {
+                const double jd = config.start_jd + step * step_days;
+                for (size_t i = 0; i < n; ++i) {
+                    ok[i] = 0;
+                    if (dead[i]) continue;
+                    states[i] = propagate_sgp4(tles[i], jd);
+                    ++propagations[w];
+                    if (has_error()) {
+                        record_exclusion(scan_excluded[w], static_cast<uint32_t>(i), jd, error_message());
+                        clear_error();
+                        dead[i] = 1;
+                        continue;
+                    }
+                    accel[i] = tight_acceleration_bound_km_s2(states[i], h);
+                    ok[i] = 1;
+                }
+                for (size_t i = 0; i < n; ++i) {
+                    if (!ok[i]) continue;
+                    for (size_t j = i + 1; j < n; ++j) {
+                        if (!ok[j]) continue;
+                        double closest = 0.0;
+                        if (tight_pair_may_close(states[i], accel[i], states[j], accel[j],
+                                                 config.threshold_km, h, &closest)) {
+                            hits[w].push_back({static_cast<uint32_t>(i), static_cast<uint32_t>(j),
+                                               static_cast<int32_t>(step), closest});
+                        }
+                    }
+                }
+            }
+        }, static_cast<int64_t>(last_step) + 1);
+        for (const auto& part : scan_excluded) merge_exclusions(excluded, part);
+    }
+
+    // Steps of one pair in increasing order make runs; runs join into encounters.
+    std::vector<Hit> all;
+    for (auto& part : hits) all.insert(all.end(), part.begin(), part.end());
+    std::sort(all.begin(), all.end(), [](const Hit& a, const Hit& b) {
+        if (a.lo != b.lo) return a.lo < b.lo;
+        if (a.hi != b.hi) return a.hi < b.hi;
+        return a.step < b.step;
+    });
+    CoarseRunCollector runs;
+    for (const auto& x : all) runs.hit(x.lo, x.hi, x.step, x.closest_km);
+    auto encounters = drop_excluded_encounters(coalesce_encounters(runs.finish()), excluded);
+
+    stats = {};
+    stats.total_objects = n;
+    stats.pairs_screened = n < 2 ? 0 : static_cast<uint64_t>(n) * (n - 1) / 2;
+    stats.kdtree_candidates = all.size();
+    for (auto p : propagations) stats.propagations += p;
+    auto events = refine_window_encounters(tles, encounters, config, stats, nullptr, nullptr);
+    stats.excluded_objects = excluded_list(excluded);
+    for (auto& x : stats.excluded_objects) { x.input_list = 0; x.input_index = x.index; }
+    stats.elapsed_ms = std::chrono::duration<double, std::milli>(
+        std::chrono::high_resolution_clock::now() - t_start).count();
     return events;
 }
 

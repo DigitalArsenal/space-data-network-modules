@@ -5,7 +5,7 @@ using the canonical SDK invoke contract and published SDS **1.220.0** records.
 
 ## Public methods and records
 
-`plugin-manifest.json` advertises all 19 methods. Requests and results use
+`plugin-manifest.json` advertises all 21 methods. Requests and results use
 ordinary, verified FlatBuffers with explicit UTC times, Earth reference frames,
 source provenance, probability algorithms and units.
 
@@ -20,6 +20,8 @@ source provenance, probability algorithms and units.
 | `screen_catalog` | CQR catalog request plus verified OMM frames | Chunked CQR catalog results, plus one OMM per excluded object |
 | Three `prepare_*_screening_index` methods | CQR index request | CQR index result |
 | `screen_window`, `screen_segment_window` | CQR window request | Chunked CQR catalog results, plus one OMM per excluded object |
+| `coarse_grid` | CQR catalog request, OMM frames and a block of coarse steps | SGP4 states for the GPU pair search, plus a JSON report of exclusions |
+| `refine_candidates` | CQR catalog request, OMM frames, optional candidate pairs and exclusions | Chunked CQR catalog results, plus one OMM per excluded object |
 | `destroy_screening_index` | CQR destroy request | Empty successful response |
 | `version` | CQR version query | CQR version result |
 
@@ -149,7 +151,13 @@ fewer for longer windows; past that the guest traps and its instance is lost.
 Peak memory is not monotone in the object count because the encounter tables
 grow by doubling.
 
-Screen larger catalogs with the partitioned runner,
+A whole catalog screens in one pass with the pair search on a GPU
+([GPU all-vs-all](docs/gpu-all-vs-all.md)): `coarse_grid` and
+`refine_candidates` keep SGP4 and refinement in the module and report
+`screen_catalog`'s result, and `scripts/run-all-vs-all-gpu.mjs` runs
+`examples/all-vs-all-gpu` in a WebGPU browser.
+
+Without a GPU, screen larger catalogs with the partitioned runner,
 `scripts/run-sdn-omm-partitioned-screen-catalog.mjs`, and
 `--catalog-block-size B` ([partition runs](docs/celestrak-full-catalog-partitions.md)):
 each invocation carries one block pair, at most `2B` objects and `B * B` pairs,

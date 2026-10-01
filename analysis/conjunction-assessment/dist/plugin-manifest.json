@@ -1,7 +1,7 @@
 {
   "pluginId": "conjunction-assessment",
   "name": "Conjunction Assessment Plugin",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Conjunction assessment and collision probability analysis through the SDS PIV/TAB invoke surface.",
   "pluginFamily": "analysis",
   "capabilities": [],
@@ -1024,6 +1024,255 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "coarse_grid",
+      "displayName": "Coarse grid block",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cqr",
+              "allowedTypes": [
+                {
+                  "schemaName": "CQR.fbs",
+                  "fileIdentifier": "$CQR",
+                  "rootTypeName": "CQR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "CATALOG_REQUEST with ALFANO_MAXIMUM controls (window, coarse step, threshold, workers); the all-vs-all request screen_catalog serves, over catalog frames only."
+        },
+        {
+          "portId": "catalog",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 2,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "One $OMM per catalog object, as screen_catalog reads them."
+        },
+        {
+          "portId": "block",
+          "acceptedTypeSets": [
+            {
+              "setId": "block-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.ca-grid-block",
+                "detail": "CAB1 tag, u32 first_step, u32 step_count (1-256): which coarse steps of the window to propagate."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "CAB1, u32 first_step, u32 step_count."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "grid",
+          "acceptedTypeSets": [
+            {
+              "setId": "grid-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.ca-coarse-grid",
+                "detail": "CAG1 tag, u32 first_step, u32 step_count, u32 objects, then f32 (x, y, z, A, vx, vy, vz, 0) per step and object (TEME km, km/s^2, km/s) and f32 radius bands per object: the GPU screen kernel input."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The block of SGP4 coarse states in the GPU layout, with acceleration bounds and radius bands."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The block and the objects SGP4 cannot propagate in it (index, first failing JD, reason), to pass to refine_candidates."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: the block and its exclusions."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "refine_candidates",
+      "displayName": "Refine candidates",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cqr",
+              "allowedTypes": [
+                {
+                  "schemaName": "CQR.fbs",
+                  "fileIdentifier": "$CQR",
+                  "rootTypeName": "CQR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "CATALOG_REQUEST with ALFANO_MAXIMUM controls (window, coarse step, threshold, workers); the all-vs-all request screen_catalog serves, over catalog frames only."
+        },
+        {
+          "portId": "catalog",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 2,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "One $OMM per catalog object, as screen_catalog reads them."
+        },
+        {
+          "portId": "candidates",
+          "acceptedTypeSets": [
+            {
+              "setId": "candidates-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.ca-candidates",
+                "detail": "CAC1 tag, u32 count, then (u32 obj1, u32 obj2, u32 step) per candidate pair-step proposed by the GPU screen."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Candidate pair-steps; absent scans every pair on the CPU."
+        },
+        {
+          "portId": "excluded",
+          "acceptedTypeSets": [
+            {
+              "setId": "excluded-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.ca-excluded",
+                "detail": "CAX1 tag, u32 count, then (u32 index, f64 first_failure_jd) per object coarse_grid reported excluded."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Exclusions coarse_grid reported over the window."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cqr",
+              "allowedTypes": [
+                {
+                  "schemaName": "CQR.fbs",
+                  "fileIdentifier": "$CQR",
+                  "rootTypeName": "CQR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false
+        },
+        {
+          "portId": "excluded",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "One OMM per object excluded because SGP4 cannot propagate it over the screening window (for example a decayed element set): its mean elements, with COMMENT giving the first failing epoch and the propagator error. Sent with the final result chunk; the statistics' TOTAL_OBJECTS leaves these out and OBJECTS_PARSED keeps them."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-to-empty"
     }
   ],
   "threadModel": "emscripten-pthreads"

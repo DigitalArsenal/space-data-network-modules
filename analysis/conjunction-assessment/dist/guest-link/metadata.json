@@ -23,7 +23,9 @@
     "screen_window": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_screen_window",
     "screen_segment_window": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_screen_segment_window",
     "destroy_screening_index": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_destroy_screening_index",
-    "version": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_version"
+    "version": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_version",
+    "coarse_grid": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_coarse_grid",
+    "refine_candidates": "sdm_guest_636f6e6a756e6374696f6e2d6173736573736d656e74_refine_candidates"
   },
   "capabilities": []
 }

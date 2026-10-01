@@ -1027,7 +1027,10 @@ test(
     );
     assert.equal(summary.provenance.sourcePnmCids[0], "bafybeipnmfixture");
     assert.match(summary.provenance.moduleArtifactHash, /^sha256:[0-9a-f]{64}$/);
-    assert.equal(summary.provenance.moduleVersion, "0.2.0");
+    assert.equal(
+      summary.provenance.moduleVersion,
+      JSON.parse(await readFile(new URL("../plugin-manifest.json", import.meta.url), "utf8")).version,
+    );
     assert.ok(summary.provenance.resultHash);
     assert.ok(
       crypto.verify(
