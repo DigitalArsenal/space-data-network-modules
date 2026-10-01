@@ -158,7 +158,7 @@ conjunction-screening export in TDB/GCRF. `coarse_grid` and
 `refine_candidates` keep sampling and refinement in the module and report
 `screen_catalog`'s result. `scripts/run-all-vs-all-gpu.mjs` runs
 `examples/all-vs-all-gpu` in a WebGPU browser. The full catalog for one day
-takes 55 s.
+takes 55 s. Three days of the full catalog take 132 s with SGP4 and 338 s with HPOP, propagation included, in time windows with one propagator per run.
 
 Without a GPU, screen larger catalogs with the partitioned runner,
 `scripts/run-sdn-omm-partitioned-screen-catalog.mjs`, and

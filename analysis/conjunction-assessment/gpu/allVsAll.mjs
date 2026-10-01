@@ -150,7 +150,7 @@ export async function screenAllVsAllOnGpu(o) {
     for (;;) {
       if (response.statusCode !== 0) throw new Error(`refine_candidates: ${response.errorCode}: ${response.errorMessage}`);
       const result = decodeCatalogResult(port(response.outputs, 'result'));
-      events.push(...result.EVENTS);
+      events.push(...(result.EVENTS ?? []));   // an empty window may omit the vector
       if (firstCall) excludedRecords.push(...response.outputs.filter((x) => x.portId === 'excluded').map((x) => x.payload));
       if (result.FINAL_CHUNK) {
         statistics = result.STATISTICS;
@@ -168,6 +168,58 @@ export async function screenAllVsAllOnGpu(o) {
     events,
     excludedRecords,
     statistics: { ...statistics, ...totals, TOTAL_OBJECTS: objects - excluded.size, PAIRS_SCREENED: objects * (objects - 1) / 2 },
+    excluded: [...excluded],
     objects, lastStep, candidates: candidateCount, refineCalls, timings,
   };
+}
+
+/**
+ * A long screen as consecutive time windows (one propagator's output per
+ * run). Each window's sources cover it with a margin, so window k can be
+ * loaded and screened alone: a trajectory propagator exports one window at a
+ * time and the module holds one window's trajectories.
+ *
+ * Merging follows a single screen of the whole span: a conjunction belongs to
+ * the window holding its TCA (one at a shared edge is kept once), and an
+ * object excluded in any window has no conjunctions anywhere.
+ *
+ * @param {object} o  As screenAllVsAllOnGpu, without `request`, plus:
+ * @param {{startJd: number, durationDays: number}[]} o.windows  Consecutive.
+ * @param {(window: object, k: number) => Promise<{request: Uint8Array, sourceIds: string[], excluded?: [string, number][], release?: () => Promise<void>}>} o.prepareWindow
+ *   The window's WINDOW_REQUEST, its source object ids by index, and objects
+ *   the propagator could not cover there ([id, first failing JD]).
+ */
+export async function screenWindowsOnGpu(o) {
+  const progress = o.onProgress ?? (() => {});
+  const events = [], excludedIds = new Map(), windows = [];
+  const timings = { prepareMs: 0, gridMs: 0, gpuMs: 0, refineMs: 0 };
+  let candidates = 0;
+  for (let k = 0; k < o.windows.length; k++) {
+    let t = performance.now();
+    const prepared = await o.prepareWindow(o.windows[k], k);
+    timings.prepareMs += performance.now() - t;
+    const run = await screenAllVsAllOnGpu({ ...o, request: prepared.request,
+      onProgress: (stage, done, total) => progress(`window ${k + 1}/${o.windows.length} ${stage}`, done, total) });
+    await prepared.release?.();
+    for (const [id, jd] of [...run.excluded.map(([i, d]) => [prepared.sourceIds[i], d]), ...(prepared.excluded ?? [])]) {
+      if (!excludedIds.has(id) || jd < excludedIds.get(id)) excludedIds.set(id, jd);
+    }
+    for (const key of ['gridMs', 'gpuMs', 'refineMs']) timings[key] += run.timings[key];
+    candidates += run.candidates;
+    events.push(...run.events);
+    windows.push({ ...o.windows[k], conjunctions: run.events.length, candidates: run.candidates });
+  }
+  // A TCA within the refinement tolerance of a shared edge is in both windows.
+  const toleranceDays = 2 * Math.max(0.001, o.fineTolSec ?? 0.001) / 86400;
+  const key = (e) => [e.PRIMARY_ID, e.SECONDARY_ID].sort().join('\u0000');
+  const kept = [];
+  for (const e of [...events].sort((a, b) => a.TCA.JULIAN_DATE - b.TCA.JULIAN_DATE)) {
+    if (excludedIds.has(e.PRIMARY_ID) || excludedIds.has(e.SECONDARY_ID)) continue;
+    let same = false;
+    for (let i = kept.length - 1; i >= 0 && e.TCA.JULIAN_DATE - kept[i].TCA.JULIAN_DATE <= toleranceDays; i--) {
+      if (key(kept[i]) === key(e)) { same = true; break; }
+    }
+    if (!same) kept.push(e);
+  }
+  return { events: kept, excluded: [...excludedIds], windows, candidates, timings };
 }

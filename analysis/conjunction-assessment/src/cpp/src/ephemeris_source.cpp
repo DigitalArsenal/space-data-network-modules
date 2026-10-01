@@ -245,11 +245,13 @@ double chebyshev_second_derivative_bound(const std::vector<double>& c) {
 
 double vector_norm(double x, double y, double z) { return std::sqrt(x * x + y * y + z * z); }
 
-// Position (km) and its time derivative (km/s) of an interval at x in [-1, 1].
-void position_and_rate(const PolynomialRecord& r, double x, double p[3], double v[3]) {
+// Position (km) and its time derivative (km/s) of an interval at x in
+// [-1, 1]; rate holds the derivative series of x, y, z.
+void position_and_rate(const PolynomialRecord& r, const std::array<std::vector<double>, 3>& rate,
+                       double x, double p[3], double v[3]) {
     for (int k = 0; k < 3; ++k) {
         p[k] = chebyshev(r.c[k], x);
-        v[k] = chebyshev(chebyshev_derivative(r.c[k]), x) / r.half;
+        v[k] = chebyshev(rate[k], x) / r.half;
     }
 }
 
@@ -259,6 +261,7 @@ PolynomialEphemerisSource::PolynomialEphemerisSource(std::vector<PolynomialRecor
     : records_(std::move(records)) {
     for (const auto& r : records_) {
         starts_.push_back(r.mid - r.half / 86400.0);
+        rates_.push_back({chebyshev_derivative(r.c[0]), chebyshev_derivative(r.c[1]), chebyshev_derivative(r.c[2])});
         acceleration_km_s2_.push_back(
             vector_norm(chebyshev_second_derivative_bound(r.c[0]),
                   chebyshev_second_derivative_bound(r.c[1]),
@@ -266,8 +269,8 @@ PolynomialEphemerisSource::PolynomialEphemerisSource(std::vector<PolynomialRecor
     }
     for (size_t i = 0; i + 1 < records_.size(); ++i) {
         double p0[3], v0[3], p1[3], v1[3];
-        position_and_rate(records_[i], 1.0, p0, v0);
-        position_and_rate(records_[i + 1], -1.0, p1, v1);
+        position_and_rate(records_[i], rates_[i], 1.0, p0, v0);
+        position_and_rate(records_[i + 1], rates_[i + 1], -1.0, p1, v1);
         position_jump_km_.push_back(vector_norm(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]));
         velocity_jump_km_s_.push_back(vector_norm(v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]));
     }
@@ -316,7 +319,7 @@ bool PolynomialEphemerisSource::path_deviation_bound_km(
     }
     const auto& r = records_[at];
     double p[3], rate[3];
-    position_and_rate(r, std::clamp((jd - r.mid) * 86400.0 / r.half, -1.0, 1.0), p, rate);
+    position_and_rate(r, rates_[at], std::clamp((jd - r.mid) * 86400.0 / r.half, -1.0, 1.0), p, rate);
     const double velocity_mismatch =
         vector_norm(rate[0] - state.vx, rate[1] - state.vy, rate[2] - state.vz);
     bound_km = 0.5 * acceleration * half_step_sec * half_step_sec +

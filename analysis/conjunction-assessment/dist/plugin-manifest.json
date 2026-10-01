@@ -1,7 +1,7 @@
 {
   "pluginId": "conjunction-assessment",
   "name": "Conjunction Assessment Plugin",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Conjunction assessment and collision probability analysis through the SDS PIV/TAB invoke surface.",
   "pluginFamily": "analysis",
   "capabilities": [],
@@ -691,6 +691,26 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true
+        },
+        {
+          "portId": "trajectories",
+          "description": "Trajectories exported by one propagator module, forwarded unchanged: size-prefixed $PRW DESCRIBE_RESULT records whose sources match request SOURCES by handle; those SOURCES then carry identity only.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false
         }
       ],
       "outputPorts": [

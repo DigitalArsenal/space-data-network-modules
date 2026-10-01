@@ -223,12 +223,14 @@ public:
 
     std::string id, name;
     int norad = 0;
+    std::string generator;   // the propagator that produced it, as it names itself
 
 private:
     size_t record_at(double jd) const;   // the interval holding jd (clamped)
 
     std::vector<PolynomialRecord> records_;
     std::vector<double> starts_;           // interval start JDs
+    std::vector<std::array<std::vector<double>, 3>> rates_;   // d/dx series of x, y, z
     std::vector<double> acceleration_km_s2_;   // per interval: bound on |r''|
     std::vector<double> position_jump_km_;     // per boundary k|k+1
     std::vector<double> velocity_jump_km_s_;

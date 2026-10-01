@@ -29,10 +29,17 @@ PPE intervals may be in UTC, TT or TDB. A TDB or TT interval maps onto UTC
 linearly between its converted ends, using the vendored ERFA from
 `foundation/frames`. An interval that contains a leap second is refused.
 
-An index has one frame (for example TEME for SGP4, GCRF for HPOP), so
-mixing SGP4 and HPOP objects requires one propagator to supply the other's
-frame. Sampled OEM tracks cannot bound their motion between samples; supply
-those as PPE.
+One propagator per run. An index holds mean elements (SGP4) or trajectories
+from one generator (PPE `EPHEMERIS_SOURCE`), never both:
+`prepare_screening_index` refuses a mix with `mixed-propagators`. Sampled OEM
+tracks cannot bound their motion between samples; supply those as PPE.
+
+A propagator module's output goes in unchanged.
+`prepare_screening_index` takes its `$PRW` `DESCRIBE_RESULT` records, as
+`propagator/hpop` exports them, on the `trajectories` port. The request's
+`SOURCES` then carry identity only: object id, name, catalog number and
+handle. Records may be size-prefixed, as a module's `FinishSizePrefixed`
+builds them (see the SDK README, "Size-prefixed records"), or plain.
 
 ## The candidate test
 
@@ -100,12 +107,54 @@ It returns `screen_catalog`'s `result` chunks and `excluded` OMMs. Without
 When a refine call would stage more than 16,384 events, the driver splits it
 in two.
 
+## Time windows
+
+A long screen runs as consecutive windows (`screenWindowsOnGpu` in
+`gpu/allVsAll.mjs`):
+
+- **SGP4:** the catalog is loaded once, and every window screens that index.
+- **HPOP and other trajectory propagators:** each window loads only that
+  window's trajectories and releases them after. A day of HPOP's 10-minute
+  intervals is about 90 KB per object; a 2-hour window of the full catalog is
+  about 400 MB.
+
+The merged result is a single screen of the whole span:
+
+- A conjunction belongs to the window that holds its TCA.
+- A TCA within the refinement tolerance of a shared edge is reported in both
+  windows and kept once.
+- An object excluded in any window, by the module or by the propagator, has
+  no conjunctions anywhere.
+
+`tests/windowedScreenParity.test.mjs` checks four windows against one screen
+for both propagators.
+
+### The HPOP propagation farm
+
+`scripts/lib/hpopFarm.mjs` runs on worker threads:
+
+1. `analysis/epoch-state` turns each element set into a GCRF state at its
+   epoch: SGP4 at zero elapsed time, then TEME to GCRF through ERFA.
+2. `propagator/hpop` integrates those states. A resident instance holds at
+   most 1,024 objects; objects are dealt round-robin into about two instances
+   per worker.
+3. Each window, every instance prepares the window and describes its sources.
+   The `$PRW` records go to the page unchanged, and the next window is
+   prepared while the page screens the current one.
+
+An object HPOP cannot cover is found by preparing objects one at a time. It
+leaves its instance and is excluded from the whole span.
+
+HPOP integrates every object from its element epoch, so the first window
+carries that catch-up. HPOP prunes cache intervals that end before the
+requested window, so an instance holds about one window per object.
+
 ## Running it
 
 ```
 node build.mjs
-node scripts/run-all-vs-all-gpu.mjs --catalog <omm.uint32be.bin> \
-  --start 2461314.5 --days 1 --threshold-km 5 --step-s 60 --out summary.json
+node scripts/run-all-vs-all-gpu.mjs --catalog <omm.uint32be.bin> --propagator sgp4|hpop \
+  --start 2461314.5 --days 3 [--window-hours 6|2] --threshold-km 5 --step-s 60 --out summary.json
 ```
 
 The catalog file holds `$OMM` records, each prefixed by its u32 big-endian
@@ -128,6 +177,29 @@ With `--serve`, it leaves the page up for a WebGPU browser instead.
   `screen_window` finds it.
 
 ## Measured
+
+### Three days, whole catalog, one propagator per run
+
+The catalog is the Space-Track GP catalog of 2026-09-30, 32,514 objects. The
+screen covers 2026-10-01T00:00Z plus 3 days, with a 5 km threshold and 60 s
+steps. The host was a Mac Studio (28 cores) running headless Chrome on Metal.
+
+| Propagator | Windows | End to end | Propagation | Grid | GPU | Refine | Candidates | Conjunctions |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| SGP4 (module, element sets) | 12 × 6 h | 132 s | in grid | 8.9 s | 8.3 s | 107.6 s | 2,678,533 | 292,516 (25 objects excluded) |
+| HPOP (farm: 26 workers, 52 instances) | 36 × 2 h | 338 s | 320 s, overlapped | 4.2 s | 8.6 s | 16.7 s | 3,080,922 | 301,396 |
+
+- **SGP4:** refinement is the cost, because each TCA solve re-runs SGP4.
+- **HPOP:** the propagator is the cost. Its 320 s are 123 s of catch-up in
+  the first window, integrating every object from its element epoch, about
+  2.4 days on average, then about 5.6 s per 2-hour window. Screening a
+  window takes under a second, and it overlaps the next window's
+  propagation. Refining on trajectories takes 16.7 s, against 107.6 s with
+  SGP4.
+- The two runs report different conjunctions because they are different
+  propagators.
+
+### One day, single window
 
 The run used the Space-Track GP catalog of 2026-09-30, with 32,514 objects.
 The window was 2026-10-01T00:00Z plus 1 day, with a 5 km threshold and 60 s

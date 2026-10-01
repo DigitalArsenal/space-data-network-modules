@@ -77,6 +77,21 @@ const T *decode(const plugin_input_frame_t *f, const char *id) {
   }
   return flatbuffers::GetRoot<T>(f->payload);
 }
+// A record with or without a 4-byte size prefix (propagator modules emit
+// size-prefixed records; hosts may forward either form). Frames may carry
+// alignment padding past the record a prefix declares.
+template <class T>
+const T *decodeEither(const plugin_input_frame_t *f, const char *id) {
+  if (f && f->payload && f->payload_length >= 12 && std::memcmp(f->payload + 8, id, 4) == 0) {
+    const size_t declared = flatbuffers::ReadScalar<flatbuffers::uoffset_t>(f->payload) + sizeof(flatbuffers::uoffset_t);
+    flatbuffers::Verifier v(f->payload, std::min<size_t>(declared, f->payload_length));
+    if (declared <= f->payload_length && v.VerifySizePrefixedBuffer<T>(id))
+      return flatbuffers::GetSizePrefixedRoot<T>(f->payload);
+    error("invalid-request-frame", "Published SDS FlatBuffer verification failed.");
+    return nullptr;
+  }
+  return decode<T>(f, id);
+}
 const CQR *request(const char *port = "request") {
   conjunction::clear_error();
   auto q = decode<CQR>(input(port), "$CQR");
@@ -483,18 +498,29 @@ bool polynomial(const PPE *p, Source &o) {
     records.push_back(std::move(rec));
   }
   o.polynomial = std::make_shared<PolynomialEphemerisSource>(std::move(records));
+  o.polynomial->generator = text(p->EPHEMERIS_SOURCE());
   return true;
 }
-bool source(const CQRObjectSource *r, Source &o) {
+bool source(const CQRObjectSource *r, Source &o, const PPE *trajectory = nullptr) {
   if (!r || text(r->OBJECT_ID()).empty())
     return error("invalid-source", "CQR source requires object identity.");
   unsigned n = !!r->MEAN_ELEMENTS() + !!r->TLE_LINES() + !!r->EPHEMERIS() +
-               !!r->COMPREHENSIVE_ORBIT() + !!r->POLYNOMIAL_EPHEMERIS();
+               !!r->COMPREHENSIVE_ORBIT() + !!r->POLYNOMIAL_EPHEMERIS() + !!trajectory;
   if (n != 1)
     return error("invalid-source-arm",
-                 "One scientific source arm is required; arbitrary external "
-                 "handles cannot be resolved by this instance.");
+                 "One scientific source arm is required (a trajectories frame for "
+                 "the source handle counts as one); arbitrary external handles "
+                 "cannot be resolved by this instance.");
   o.handle = r->SOURCE_HANDLE();
+  if (trajectory) {
+    if (!polynomial(trajectory, o))
+      return false;
+    o.polynomial->name = text(r->OBJECT_NAME());
+    o.polynomial->id = text(r->OBJECT_ID());
+    o.polynomial->norad = r->NORAD_CATALOG_ID();
+    o.provider = o.polynomial;
+    return true;
+  }
   if (r->MEAN_ELEMENTS() || r->TLE_LINES()) {
     auto port = text(r->PROPAGATOR_PORT_ID());
     if (port != "sgp4")
@@ -1507,15 +1533,29 @@ bool prepare(cqrIndexRepresentation expected) {
   std::vector<uint32_t> selected;
   if (r->SOURCE_HANDLES())
     selected.assign(r->SOURCE_HANDLES()->begin(), r->SOURCE_HANDLES()->end());
+  // Trajectories a propagator module exported (its $PRW DESCRIBE_RESULT
+  // records, forwarded as they are), matched to SOURCES by handle.
+  std::map<uint32_t, const PPE *> trajectories;
+  for (uint32_t i = 0; auto f = input("trajectories", i); ++i) {
+    auto prw = decodeEither<PRW>(f, "$PRW");
+    if (!prw || !prw->DESCRIBE_RESULT() || !prw->DESCRIBE_RESULT()->SOURCES())
+      return error("invalid-trajectories", "trajectories frames must be verified $PRW DESCRIBE_RESULT records.");
+    for (auto t : *prw->DESCRIBE_RESULT()->SOURCES())
+      if (!t || !t->EPHEMERIS() || !trajectories.emplace(t->SOURCE_HANDLE(), t->EPHEMERIS()).second)
+        return error("invalid-trajectories", "Each trajectory needs a PPE and a unique source handle.");
+  }
+  size_t used = 0;
   for (auto s : *r->SOURCES()) {
     if (!s)
       return error("invalid-source", "Null resident source.");
     if (!selected.empty() && std::find(selected.begin(), selected.end(),
                                        s->SOURCE_HANDLE()) == selected.end())
       continue;
+    auto t = trajectories.find(s->SOURCE_HANDLE());
     Source v;
-    if (!source(s, v))
+    if (!source(s, v, t == trajectories.end() ? nullptr : t->second))
       return false;
+    used += t != trajectories.end();
     if (!v.handle)
       return error("invalid-source-handle",
                    "Resident source handles must be nonzero.");
@@ -1523,6 +1563,13 @@ bool prepare(cqrIndexRepresentation expected) {
       if (prev.handle == v.handle)
         return error("invalid-source-handle",
                      "Resident source handles must be unique.");
+    // One propagator per run: every source mean elements (SGP4), or every one
+    // a trajectory from the same generator.
+    const auto generator = [](const Source &x) {
+      return x.mean ? std::string("sgp4") : "trajectory:" + (x.polynomial ? x.polynomial->generator : std::string());
+    };
+    if (!result.sources.empty() && generator(v) != generator(result.sources.front()))
+      return error("mixed-propagators", "An index holds one propagator's output: mean elements (SGP4) or trajectories from one generator, never both.");
     if (result.axes && result.axes != v.axes)
       return error("frame-mismatch",
                    "Resident sources must share an explicit frame.");
@@ -1532,6 +1579,9 @@ bool prepare(cqrIndexRepresentation expected) {
   }
   if (result.sources.empty())
     return error("invalid-source-selection", "Source selection is empty.");
+  if (used != trajectories.size())
+    return error("invalid-trajectories", "A trajectory names a source handle the request does not list.");
+
   for (auto h : selected) {
     bool found = false;
     for (auto &s : result.sources)

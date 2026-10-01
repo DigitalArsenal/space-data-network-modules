@@ -80,6 +80,24 @@ export function flatcWithHeapArgv(runner) {
 export const createFlatcRunner = async () => flatcWithHeapArgv(await FlatcRunner.init());
 let flatcPromise;
 export const initCqrFlatc = () => flatcPromise ??= createFlatcRunner();
+// A size-prefixed record built by flatc itself (--size-prefixed), as a module's
+// FinishSizePrefixed emits it. flatc-wasm's generateBinary({sizePrefix: true})
+// prepends a length to an unprefixed buffer instead, which moves every field
+// 4 bytes off the alignment a size-prefixed finish gives it.
+export function generateSizePrefixed(flatc, schema, record) {
+  const dir = `/size-prefixed-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  flatc._mountSchemaIfNeeded(schema);
+  flatc.Module.FS.mkdirTree(dir);
+  flatc.mountFile(`${dir}/record.json`, new TextEncoder().encode(JSON.stringify(record)));
+  const result = flatc.runCommand(['--binary', '--size-prefixed', '--unknown-json', '-o', dir,
+    ...flatc._cachedIncludeDirs.flatMap((d) => ['-I', d]), schema.entry, `${dir}/record.json`]);
+  if (result.code !== 0 || result.stderr.includes('error:')) throw new Error(`flatc: ${result.stderr || result.stdout}`);
+  const bytes = new Uint8Array(flatc.Module.FS.readFile(`${dir}/record.bin`));
+  for (const name of ['record.json', 'record.bin']) flatc.unlink(`${dir}/${name}`);
+  flatc.rmdir(dir);
+  return bytes;
+}
+
 export function encodeCqr(flatc, record) {
   return flatc.generateBinary(cqrSchema(), JSON.stringify(record), { sizePrefix: false });
 }

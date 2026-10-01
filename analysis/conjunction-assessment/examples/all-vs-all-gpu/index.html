@@ -19,11 +19,13 @@
 </head>
 <body>
 <h1>All-vs-all conjunction screening on the GPU</h1>
-<p>SGP4 and refinement run in the conjunction-assessment module; the GPU searches every pair at every coarse step.</p>
+<p>One propagator per run, screened in time windows. Trajectories, refinement and every reported number come from WASM modules; the GPU searches every pair at every coarse step.</p>
 <form id="form">
   <label>Catalog (length-prefixed $OMM)<input name="catalogUrl" value="catalog.bin"></label>
   <label>Start (Julian date, UTC)<input name="startJd" type="number" step="any" value="2461314.5"></label>
-  <label>Days<input name="durationDays" type="number" step="any" value="1"></label>
+  <label>Propagator<select name="propagator"><option value="sgp4">SGP4 (catalog element sets)</option><option value="hpop">HPOP (runner propagation farm)</option></select></label>
+  <label>Days<input name="durationDays" type="number" step="any" value="3"></label>
+  <label>Window (h)<input name="windowHours" type="number" step="any" value="6"></label>
   <label>Threshold (km)<input name="thresholdKm" type="number" step="any" value="5"></label>
   <label>Coarse step (s)<input name="coarseStepSec" type="number" step="any" value="60"></label>
   <button>Screen</button>
@@ -43,7 +45,7 @@ const show = (text) => { status.textContent = text; };
 function run(report) {
   if (!crossOriginIsolated) return Promise.reject(new Error('This page needs cross-origin isolation (COOP/COEP).'));
   const f = Object.fromEntries(new FormData(form));
-  const job = { ...f, startJd: +f.startJd, durationDays: +f.durationDays, thresholdKm: +f.thresholdKm, coarseStepSec: +f.coarseStepSec,
+  const job = { ...f, startJd: +f.startJd, durationDays: +f.durationDays, windowHours: +f.windowHours, thresholdKm: +f.thresholdKm, coarseStepSec: +f.coarseStepSec,
     catalogUrl: new URL(f.catalogUrl, location.href).href, wasmUrl: new URL('module.wasm', location.href).href,
     threadWorkerBaseUrl: new URL('sdk/host/', location.href).pathname };
   const worker = new Worker('worker.js', { type: 'module' });
@@ -63,11 +65,11 @@ function run(report) {
 
 function render(r) {
   const t = r.timings, s = (ms) => (ms / 1000).toFixed(1) + ' s';
-  show(`${r.objects} objects, ${r.coarseSteps} coarse steps, ${r.candidates} GPU candidates, ${r.events.length} conjunctions\n` +
-    `total ${s(t.totalMs)}: load ${s(t.indexMs)}, grid ${s(t.gridMs)}, GPU search ${s(t.gpuMs)}, refinement ${s(t.refineMs)}` +
-    (r.adapter ? ` (${r.adapter}, ${r.workers} module threads)` : ''));
+  show(`${r.propagator}: ${r.objects} objects, ${r.windows.length} windows, ${r.candidates} GPU candidates, ${r.events.length} conjunctions, ${r.excluded.length} excluded\n` +
+    `total ${s(t.totalMs)}: load ${s(t.loadMs)}, windows ${s(t.prepareMs)}, grid ${s(t.gridMs)}, GPU search ${s(t.gpuMs)}, refinement ${s(t.refineMs)}` +
+    (r.adapter ? ` (${r.adapter}, ${r.workers} module threads)` : '') + (r.events.length > 1000 ? '\nThe 1,000 closest are listed.' : ''));
   const body = document.querySelector('#events tbody');
-  body.replaceChildren(...r.events.map((e) => {
+  body.replaceChildren(...r.events.slice(0, 1000).map((e) => {
     const row = document.createElement('tr');
     for (const v of [`${e.primary ?? ''} (${e.primaryNorad})`, `${e.secondary ?? ''} (${e.secondaryNorad})`, iso(e.tcaJd),
       e.missM.toFixed(1), e.speedMS.toFixed(1), e.probability == null ? '' : e.probability.toExponential(2)]) {
