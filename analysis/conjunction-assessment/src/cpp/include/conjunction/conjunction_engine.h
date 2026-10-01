@@ -15,7 +15,9 @@
 
 #include "conjunction/ephemeris_source.h"
 #include "conjunction/pc_method.h"
+#include <array>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace conjunction {
@@ -44,6 +46,32 @@ struct Covariance3x3 {
     return c;
   }
 };
+
+/// A source's position-velocity covariance at its own epochs, as its message
+/// (OEM, OCM) supplied it: the 21-element lower triangle of the 6x6 matrix
+/// (CX_X, CY_X, CY_Y, CZ_X, ...) in km², km²/s and km²/s², in the axes the
+/// message declared.
+struct CovarianceSeries {
+  enum class Axes { Rtn, Evaluation };
+  Axes axes = Axes::Evaluation;
+  std::vector<double> jd;
+  std::vector<std::array<double, 21>> lower;
+  /// The message's statement that this covariance was calibrated against
+  /// independent reference states, and the evidence it names.
+  bool calibrated = false;
+  std::string calibration_reference;
+  bool empty() const { return jd.empty(); }
+};
+
+/// The position-velocity covariance at jd in the object's RTN axes, as the
+/// 21-element lower triangle, each element interpolated linearly between the
+/// bracketing epochs; false when jd is outside the series. state is the
+/// object's state at jd, which orients an evaluation-frame covariance
+/// (position and velocity rotated alike).
+bool covariance_rtn_at(const CovarianceSeries &series, double jd,
+                       const StateVector &state, std::array<double, 21> &rtn);
+/// The position block of a 21-element lower triangle.
+Covariance3x3 position_block(const std::array<double, 21> &lower);
 
 /// Rotate an RTN-frame covariance into inertial coordinates using the state at
 /// jd.
@@ -94,6 +122,9 @@ struct ConjunctionEvent2 {
   double dilution_threshold_km = 0;
 
   Covariance3x3 cov1, cov2;
+  // With has_covariance, when the caller has them: each object's
+  // position-velocity covariance at TCA in RTN (21-element lower triangle).
+  std::array<double, 21> cov6_rtn1{}, cov6_rtn2{};
   double combined_radius_km = 0.01;
   double radius1_m = 5.0, radius2_m = 5.0;
 
@@ -138,7 +169,8 @@ public:
                                 const Covariance3x3 *cov1 = nullptr,
                                 const Covariance3x3 *cov2 = nullptr) const;
 
-  /// Compute Pc from pre-computed states + covariance (no propagation)
+  /// Compute Pc from pre-computed states and their RTN covariances (no
+  /// propagation)
   ConjunctionEvent2 compute_pc(const StateVector &state1,
                                const StateVector &state2,
                                const Covariance3x3 &cov1,

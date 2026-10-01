@@ -378,7 +378,46 @@ struct Source {
   // source gives none (the request's default applies).
   double hard_body_radius_m = 0;
   cqrHardBodyRadiusBasis radius_basis = cqrHardBodyRadiusBasis::UNSPECIFIED;
+  // The covariance the source's message supplied (OEM, OCM); empty if none.
+  CovarianceSeries covariance;
 };
+// The axes of a source's covariance: RTN (RSW), or the source's own state
+// frame. Anything else would need a transform the guest does not perform.
+bool covarianceAxes(const RFM *f, int state_axes, CovarianceSeries::Axes &axes) {
+  axes = CovarianceSeries::Axes::Evaluation;
+  if (!f)
+    return true;   // CCSDS: absent COV_REF_FRAME means the state frame
+  if (auto w = f->REFERENCE_FRAME_as_OrbitFrameWrapper()) {
+    if (w->frame() == OrbitFrame::RSW_INERTIAL || w->frame() == OrbitFrame::RSW_ROTATING) {
+      axes = CovarianceSeries::Axes::Rtn;
+      return true;
+    }
+  }
+  if (auto w = f->REFERENCE_FRAME_as_RFMCoordinateSystemWrapper())
+    if (w->COORDINATE_SYSTEM() &&
+        w->COORDINATE_SYSTEM()->AXIS_TYPE() == rfmAxisType::ORBITAL_RADIAL_TRANSVERSE_NORMAL) {
+      axes = CovarianceSeries::Axes::Rtn;
+      return true;
+    }
+  if (sourceFrame(f, "EARTH") == state_axes)
+    return true;
+  clear_error();
+  return error("covariance-frame-mismatch",
+               "Source covariance must be in RTN (RSW) or in the source's own state frame.");
+}
+// One covariance epoch: a positive position diagonal and finite entries.
+bool covarianceRow(double jd, const std::array<double, 21> &lower, CovarianceSeries &series) {
+  for (double x : lower)
+    if (!isFinite(x))
+      return error("invalid-covariance", "Covariance entries must be finite.");
+  if (!(lower[0] > 0 && lower[2] > 0 && lower[5] > 0))
+    return error("invalid-covariance", "Covariance position variances must be positive.");
+  if (!isFinite(jd) || (!series.jd.empty() && jd <= series.jd.back()))
+    return error("invalid-covariance", "Covariance epochs must increase strictly.");
+  series.jd.push_back(jd);
+  series.lower.push_back(lower);
+  return true;
+}
 // The source's hard-body radius: supplied, else half its catalog SIZE, else
 // the radius of a sphere of its catalog RCS.
 bool hardBodyRadius(const CQRObjectSource *r, Source &o) {
@@ -398,6 +437,54 @@ bool hardBodyRadius(const CQRObjectSource *r, Source &o) {
   }
   return true;
 }
+// The covariance both sources supplied, at the event's TCA, and what their
+// messages say about its calibration.
+struct SuppliedCovariance {
+  bool used = false;
+  bool calibrated = false;
+  std::string reference;
+};
+// A covariance method's probability from the sources' own covariance, when a
+// covariance method was requested and both sources cover the TCA; the event
+// keeps the Alfano maximum otherwise.
+SuppliedCovariance applySourceCovariance(ConjunctionEvent2 &e, const Source &a, const Source &b,
+                                         const ConjunctionEngine &engine,
+                                         cqrProbabilityAlgorithm alg) {
+  SuppliedCovariance out;
+  if (alg == cqrProbabilityAlgorithm::ALFANO_MAXIMUM || a.covariance.empty() || b.covariance.empty())
+    return out;
+  std::array<double, 21> c1, c2;
+  if (!covariance_rtn_at(a.covariance, e.tca_jd, e.state1, c1) ||
+      !covariance_rtn_at(b.covariance, e.tca_jd, e.state2, c2))
+    return out;
+  auto computed = engine.compute_pc(e.state1, e.state2, position_block(c1), position_block(c2),
+                                    e.combined_radius_km);
+  e.pc = computed.pc;
+  e.bplane = computed.bplane;
+  e.cov1 = computed.cov1;
+  e.cov2 = computed.cov2;
+  e.cov6_rtn1 = c1;
+  e.cov6_rtn2 = c2;
+  e.mahalanobis_2d = computed.mahalanobis_2d;
+  e.mahalanobis_3d = computed.mahalanobis_3d;
+  e.has_covariance = true;
+  out.used = true;
+  out.calibrated = a.covariance.calibrated && b.covariance.calibrated;
+  for (const auto *x : {&a.covariance.calibration_reference, &b.covariance.calibration_reference})
+    if (!x->empty())
+      out.reference += (out.reference.empty() ? "" : "; ") + *x;
+  return out;
+}
+// Labels an event whose probability came from the sources' covariance.
+void covarianceLabels(CQREventT &o, const SuppliedCovariance &c) {
+  if (!c.used || !o.PROBABILITY)
+    return;
+  o.PRIMARY_COVARIANCE_BASIS = o.SECONDARY_COVARIANCE_BASIS = cqrCovarianceBasis::SOURCE_EPHEMERIS;
+  o.PROBABILITY->CALIBRATION =
+      c.calibrated ? covarianceCalibration::Calibrated : covarianceCalibration::Uncalibrated;
+  o.PROBABILITY->CALIBRATION_REFERENCE = c.calibrated ? c.reference : std::string();
+  o.PROBABILITY->CROSS_CORRELATION = cqrCovarianceCorrelation::INDEPENDENT;
+}
 // A source's radius in a screen: its own, else half the request's
 // COMBINED_RADIUS_M.
 std::pair<double, cqrHardBodyRadiusBasis> radiusOf(const Source &s, const ScreeningConfig &c) {
@@ -414,6 +501,21 @@ void radii(const std::vector<Source> &sources, ScreeningConfig &c) {
     c.hard_body_radius_m[i] = radius;
     c.radius_basis[i] = static_cast<uint8_t>(basis);
   }
+}
+// Sampled states a Hermite track can use: two or more, finite, increasing.
+bool validSamples(const Source &o) {
+  if (o.samples.size() < 2)
+    return error("invalid-source", "A sampled track needs at least two finite samples.");
+  double previous = 0;
+  for (auto &p : o.samples) {
+    for (double x : {p.jd, p.x, p.y, p.z, p.vx, p.vy, p.vz})
+      if (!isFinite(x))
+        return error("invalid-source", "Sample components must be finite.");
+    if (p.jd <= previous)
+      return error("invalid-source", "Sample epochs must be strictly increasing.");
+    previous = p.jd;
+  }
+  return true;
 }
 bool points(const OEM *r, Source &o) {
   if (!r || !r->EPHEMERIS_DATA_BLOCK() ||
@@ -435,10 +537,26 @@ bool points(const OEM *r, Source &o) {
       return error(
           "unsupported-interpolation",
           "The sampled OEM adapter implements cubic Hermite interpolation.");
-    if (b->COVARIANCE_MATRIX_LINES() && b->COVARIANCE_MATRIX_LINES()->size())
-      return error("unsupported-covariance",
-                   "OEM covariance interpolation is not implemented; use "
-                   "compute_pc with supplied encounter-plane covariance.");
+    if (b->COVARIANCE_MATRIX_LINES() && b->COVARIANCE_MATRIX_LINES()->size()) {
+      CovarianceSeries::Axes axes;
+      if (!covarianceAxes(b->COV_REFERENCE_FRAME(), f, axes))
+        return false;
+      if (!o.covariance.empty() && o.covariance.axes != axes)
+        return error("covariance-frame-mismatch", "All OEM covariance blocks must share one frame.");
+      o.covariance.axes = axes;
+      for (auto c : *b->COVARIANCE_MATRIX_LINES()) {
+        if (!c || text(c->EPOCH()).empty())
+          return error("invalid-covariance", "OEM covariance epoch required.");
+        if (!covarianceRow(iso_to_jd(text(c->EPOCH())),
+                           {c->CX_X(), c->CY_X(), c->CY_Y(), c->CZ_X(), c->CZ_Y(), c->CZ_Z(),
+                            c->CX_DOT_X(), c->CX_DOT_Y(), c->CX_DOT_Z(), c->CX_DOT_X_DOT(),
+                            c->CY_DOT_X(), c->CY_DOT_Y(), c->CY_DOT_Z(), c->CY_DOT_X_DOT(), c->CY_DOT_Y_DOT(),
+                            c->CZ_DOT_X(), c->CZ_DOT_Y(), c->CZ_DOT_Z(), c->CZ_DOT_X_DOT(), c->CZ_DOT_Y_DOT(),
+                            c->CZ_DOT_Z_DOT()},
+                           o.covariance))
+          return false;
+      }
+    }
     if (b->STEP_SIZE() > 0) {
       auto d = b->EPHEMERIS_DATA();
       auto n = b->STATE_VECTOR_SIZE();
@@ -458,18 +576,46 @@ bool points(const OEM *r, Source &o) {
                              p->Z(), p->X_DOT(), p->Y_DOT(), p->Z_DOT()});
       }
   }
-  if (o.samples.size() < 2)
-    return error("invalid-source", "OEM needs at least two finite samples.");
-  double previous = 0;
-  for (auto &p : o.samples) {
-    for (double x : {p.jd, p.x, p.y, p.z, p.vx, p.vy, p.vz})
-      if (!isFinite(x))
-        return error("invalid-source", "OEM sample components must be finite.");
-    if (p.jd <= previous)
-      return error("invalid-source", "OEM epochs must be strictly increasing.");
-    previous = p.jd;
+  return validSamples(o);
+}
+// A Cartesian OCM: uniformly stepped states from METADATA.START_TIME, and its
+// covariance aligned with them.
+bool comprehensive(const OCM *r, Source &o) {
+  if (!r || !r->METADATA())
+    return error("invalid-source", "OCM needs metadata.");
+  if (r->TRAJ_TYPE() != trajectoryType::CARTESIAN_PV && r->TRAJ_TYPE() != trajectoryType::CARTESIAN_PVA)
+    return error("unsupported-source", "OCM sources must carry Cartesian states (CARTESIAN_PV or _PVA).");
+  if (text(r->METADATA()->TIME_SYSTEM()) != "UTC")
+    return error("unsupported-time-system", "OCM sources must explicitly use UTC.");
+  int f = sourceFrame(r->TRAJ_REF_FRAME(), text(r->CENTER_NAME()));
+  if (!f)
+    return false;
+  o.axes = f;
+  auto d = r->STATE_DATA();
+  const unsigned n = r->STATE_VECTOR_SIZE();
+  const double step = r->STATE_STEP_SIZE();
+  if (!d || (n != 6 && n != 9) || d->size() % n || !(step > 0) || text(r->METADATA()->START_TIME()).empty())
+    return error("invalid-source", "Invalid OCM state grid.");
+  const double start = iso_to_jd(text(r->METADATA()->START_TIME()));
+  for (size_t i = 0; i < d->size(); i += n)
+    o.samples.push_back({start + (i / n) * step / 86400., d->Get(i), d->Get(i + 1), d->Get(i + 2),
+                         d->Get(i + 3), d->Get(i + 4), d->Get(i + 5)});
+  if (auto c = r->COVARIANCE_DATA(); c && c->size()) {
+    if (c->size() != o.samples.size() * 21)
+      return error("invalid-covariance", "OCM COVARIANCE_DATA must hold 21 entries per state epoch.");
+    if (!covarianceAxes(r->COV_REF_FRAME(), f, o.covariance.axes))
+      return false;
+    for (size_t k = 0; k < o.samples.size(); ++k) {
+      std::array<double, 21> lower;
+      for (size_t q = 0; q < 21; ++q)
+        lower[q] = c->Get(static_cast<flatbuffers::uoffset_t>(21 * k + q));
+      if (!covarianceRow(o.samples[k].jd, lower, o.covariance))
+        return false;
+    }
+    o.covariance.calibrated = r->COV_CALIBRATION() == covarianceCalibration::Calibrated;
+    o.covariance.calibration_reference = text(r->COV_CALIBRATION_REFERENCE());
   }
-  return true;
+  return validSamples(o);
 }
 // A PPE interval's UTC span. TDB and TT intervals map onto UTC linearly
 // between their converted ends (TDB - UTC curves by ~1e-12 s over an hour);
@@ -611,10 +757,13 @@ bool source(const CQRObjectSource *r, Source &o, const PPE *trajectory = nullptr
     o.polynomial->id = text(r->OBJECT_ID());
     o.polynomial->norad = r->NORAD_CATALOG_ID();
     o.provider = o.polynomial;
-  } else
-    return error("unsupported-source",
-                 "Published OCM Cartesian state data does not declare a frame "
-                 "or state units; supply a host-resolved OEM/PPE record.");
+  } else {
+    if (!comprehensive(r->COMPREHENSIVE_ORBIT(), o))
+      return false;
+    o.provider = std::make_shared<OEMEphemerisSource>(
+        o.samples, text(r->OBJECT_NAME()), text(r->OBJECT_ID()),
+        r->NORAD_CATALOG_ID());
+  }
   if (r->SOURCE_EPOCH()) {
     double declared = 0;
     if (!epoch(r->SOURCE_EPOCH(), declared))
@@ -1116,10 +1265,11 @@ extern "C" int assess_conjunction() {
     e.set_pc_method(algorithm(alg));
     e.set_combined_radius_m(q->PAIR_REQUEST()->PRIMARY_RADIUS_M(),
                             q->PAIR_REQUEST()->SECONDARY_RADIUS_M());
-    out.EVENT_RESULT =
-        event(e.assess(*a.provider, *b.provider, c.start_jd, c.duration_days,
-                       nullptr, nullptr, c.coarse_step_sec, c.fine_tol_sec),
-              alg, a.axes);
+    auto assessed = e.assess(*a.provider, *b.provider, c.start_jd, c.duration_days,
+                             nullptr, nullptr, c.coarse_step_sec, c.fine_tol_sec);
+    const auto supplied = applySourceCovariance(assessed, a, b, e, alg);
+    out.EVENT_RESULT = event(assessed, alg, a.axes);
+    covarianceLabels(*out.EVENT_RESULT, supplied);
   }
   if (!isFinite(out.EVENT_RESULT->MISS_DISTANCE_M) ||
       !isFinite(out.EVENT_RESULT->TCA->JULIAN_DATE))
@@ -1239,6 +1389,8 @@ ConjunctionEvent legacy(const ConjunctionEvent2 &e) {
   l.dse2 = e.dse2;
   if (!e.has_covariance)
     return l;
+  l.cov6_rtn1 = e.cov6_rtn1;
+  l.cov6_rtn2 = e.cov6_rtn2;
   auto c1 = covariance_inertial_to_rtn(e.cov1, e.state1),
        c2 = covariance_inertial_to_rtn(e.cov2, e.state2);
   l.cov_r1 = std::sqrt(std::max(0., c1.data[0])) * 1000.;
@@ -1268,9 +1420,11 @@ bool emit(bool csm) {
     engine.set_pc_method(algorithm(alg));
     engine.set_combined_radius_m(p->PRIMARY_RADIUS_M(),
                                  p->SECONDARY_RADIUS_M());
-    e = legacy(engine.assess(*a.provider, *b.provider, c.start_jd,
-                             c.duration_days, nullptr, nullptr,
-                             c.coarse_step_sec, c.fine_tol_sec));
+    auto assessed = engine.assess(*a.provider, *b.provider, c.start_jd,
+                                  c.duration_days, nullptr, nullptr,
+                                  c.coarse_step_sec, c.fine_tol_sec);
+    applySourceCovariance(assessed, a, b, engine, alg);
+    e = legacy(assessed);
   }
   if (has_error())
     return error("pair-evaluation-failed", error_message());
@@ -1361,6 +1515,7 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
         auto result =
             e.assess(*p[i].provider, *b.provider, c.start_jd, c.duration_days,
                      nullptr, nullptr, c.coarse_step_sec, c.fine_tol_sec);
+        const auto supplied = has_error() ? SuppliedCovariance{} : applySourceCovariance(result, p[i], b, e, alg);
         if (has_error() || !isFinite(result.miss_distance_km) ||
             !isFinite(result.tca_jd)) {
           ++w.failed;
@@ -1371,6 +1526,7 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
           auto output = event(result, alg, p[i].axes);
           output->PRIMARY_RADIUS_BASIS = radius1.second;
           output->SECONDARY_RADIUS_BASIS = radius2.second;
+          covarianceLabels(*output, supplied);
           // Serialization also validates probability metadata. A worker-local
           // failure must not disappear when the next pair clears its status.
           if (has_error()) {

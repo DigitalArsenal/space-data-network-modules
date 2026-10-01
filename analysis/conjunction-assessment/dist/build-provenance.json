@@ -35,8 +35,8 @@
     "browser",
     "wasmedge"
   ],
-  "sourceSha256": "c0f3f5389e908cb07f37fbabbfe3a86e66273dc9c2f929391e9f9ff45c46cb4e",
-  "wasmSha256": "1122141ff3f0d26ebba4e33a6b8433d8626e49225075c58408182c18f0174738",
+  "sourceSha256": "fa764494f22dd2d4f883d14997a57e5618c746e09c0dd2d304d32fbcb843d340",
+  "wasmSha256": "300e5b753de1cce5e4ec64d7d9505b2bf7e7056d0fc80c10e280a46cb01d9373",
   "threadFeatures": {
     "hasSharedMemory": true,
     "sharedMemory": {

@@ -1,25 +1,25 @@
 {
   "ok": true,
   "fixture": "CQR-SDS-1.220.0",
-  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--ca-hard-body-radius-sources-20261001/analysis/conjunction-assessment/dist/isomorphic/module.wasm",
-  "artifactSha256": "7a00d9481fd40e0efcfca2b8e2a8cb90a6c19ba01d8f1c8bc5856c1b57751365",
-  "moduleSha256": "af50da60dead13b21b3ede78c401bcb0ad29bdb6f14b7e3d09c93b54882b142f",
+  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--ca-covariance-input-sources-20261001/analysis/conjunction-assessment/dist/isomorphic/module.wasm",
+  "artifactSha256": "531044d6ed8e9cdfbf6e598490d967ca93b9fc6265178f7d977ae129cfe05760",
+  "moduleSha256": "cd3876f576cbd3ca68231e4e53891bd6d58dcefe989a2a89de40b8aaf62563a2",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 48,
-      "durationMs": 6614
+      "durationMs": 6298
     },
     {
       "lane": "wasmedge",
       "runs": 48,
-      "durationMs": 19763
+      "durationMs": 18724
     },
     {
       "lane": "docker-wasmedge",
       "runs": 48,
-      "durationMs": 29402
+      "durationMs": 28168
     }
   ],
   "cases": [

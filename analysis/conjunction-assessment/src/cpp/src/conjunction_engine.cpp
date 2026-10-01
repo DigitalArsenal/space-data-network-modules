@@ -140,6 +140,57 @@ static Covariance3x3 rotate_covariance(
     return rotated;
 }
 
+Covariance3x3 position_block(const std::array<double, 21>& e) {
+    Covariance3x3 c;
+    c.data[0] = e[0];
+    c.data[1] = c.data[3] = e[1];
+    c.data[4] = e[2];
+    c.data[2] = c.data[6] = e[3];
+    c.data[5] = c.data[7] = e[4];
+    c.data[8] = e[5];
+    return c;
+}
+
+bool covariance_rtn_at(const CovarianceSeries& series, double jd,
+                       const StateVector& state, std::array<double, 21>& rtn) {
+    if (series.jd.empty() || series.jd.size() != series.lower.size()) return false;
+    const double slack = 1e-9;
+    if (jd < series.jd.front() - slack || jd > series.jd.back() + slack) return false;
+    const size_t above = static_cast<size_t>(
+        std::upper_bound(series.jd.begin(), series.jd.end(), jd) - series.jd.begin());
+    const size_t i = above == 0 ? 0 : std::min(above - 1, series.jd.size() - 1);
+    const size_t j = std::min(i + 1, series.jd.size() - 1);
+    const double f = j == i ? 0.0 : std::clamp((jd - series.jd[i]) / (series.jd[j] - series.jd[i]), 0.0, 1.0);
+    std::array<double, 21> e{};
+    for (int n = 0; n < 21; ++n) e[n] = (1.0 - f) * series.lower[i][n] + f * series.lower[j][n];
+    if (series.axes == CovarianceSeries::Axes::Rtn) {
+        rtn = e;
+        return true;
+    }
+    // Evaluation axes to RTN: C' = M C M^T with M = diag(B^T, B^T), B's
+    // columns the R, T, N unit vectors (build_rtn_basis).
+    double basis[9];
+    if (!build_rtn_basis(state, basis)) return false;
+    double full[6][6];
+    for (int r = 0, k = 0; r < 6; ++r)
+        for (int c = 0; c <= r; ++c, ++k) full[r][c] = full[c][r] = e[k];
+    double m[6][6] = {};
+    for (int b = 0; b < 2; ++b)
+        for (int r = 0; r < 3; ++r)
+            for (int c = 0; c < 3; ++c) m[3 * b + r][3 * b + c] = basis[3 * c + r];
+    double mc[6][6] = {};
+    for (int r = 0; r < 6; ++r)
+        for (int c = 0; c < 6; ++c)
+            for (int k = 0; k < 6; ++k) mc[r][c] += m[r][k] * full[k][c];
+    for (int r = 0, k = 0; r < 6; ++r)
+        for (int c = 0; c <= r; ++c, ++k) {
+            double v = 0;
+            for (int q = 0; q < 6; ++q) v += mc[r][q] * m[c][q];
+            rtn[k] = v;
+        }
+    return true;
+}
+
 Covariance3x3 covariance_rtn_to_inertial(
     const Covariance3x3& rtn_covariance,
     const StateVector& state) {
@@ -385,6 +436,7 @@ ConjunctionEvent2 ConjunctionEngine::compute_pc(
     event.cov1 = covariance_rtn_to_inertial(cov1, state1);
     event.cov2 = covariance_rtn_to_inertial(cov2, state2);
     event.combined_radius_km = combined_radius_km;
+    event.radius1_m = event.radius2_m = combined_radius_km * 500.0;
 
     double dx = state1.x - state2.x;
     double dy = state1.y - state2.y;
@@ -400,7 +452,7 @@ ConjunctionEvent2 ConjunctionEngine::compute_pc(
                     event.rel_r, event.rel_t, event.rel_n,
                     event.rel_vr, event.rel_vt, event.rel_vn);
 
-    event.bplane = build_bplane(state1, state2, cov1, cov2, combined_radius_km);
+    event.bplane = build_bplane(state1, state2, event.cov1, event.cov2, combined_radius_km);
     event.pc = pc_method_->compute(event.bplane);
 
     // Mahalanobis distances

@@ -40,16 +40,24 @@ for the exact supported profile and remaining work.
 
 ### Uncertainty and probability
 
-No uncertainty is invented. A TLE or SGP4 element set carries no covariance,
-and no source here supplies one yet, so:
+No uncertainty is invented. A TLE or SGP4 element set carries no covariance:
 
 - events report the Alfano maximum probability (`ALFANO_MAXIMUM`,
-  `MAXIMUM_PROBABILITY_ONLY`) and its dilution threshold, and no RTN sigmas;
+  `MAXIMUM_PROBABILITY_ONLY`) and its dilution threshold, and no RTN sigmas,
+  unless both sources supplied covariance;
 - a covariance method (Foster, Patera, Chan, Alfriend, Alfano 2005, Laas) runs
-  only on covariance the caller supplies (`compute_pc`, `compute_pc_from_cdm`,
-  reported as `SUPPLIED_COVARIANCE`). Requested for sources without it, the
-  event reports the Alfano maximum and says so;
-- `emit_cdm` writes no covariance it cannot back, and `write_cdm_kvn` /
+  only on supplied covariance (`SUPPLIED_COVARIANCE`): `compute_pc`,
+  `compute_pc_from_cdm`, or the sources' own. OEM covariance lines and OCM
+  `COVARIANCE_DATA` are read with their declared axes: RTN (`RSW`) or the
+  source's state frame; anything else fails with `covariance-frame-mismatch`.
+  Each element is interpolated linearly to the TCA between the bracketing
+  epochs; a TCA outside them leaves the Alfano maximum. Such events state
+  `SOURCE_EPHEMERIS`, `INDEPENDENT` errors, and `CALIBRATION` `Calibrated`
+  (with both references) only if both OCMs say `COV_CALIBRATION Calibrated`;
+- CDMs in ITRF are evaluated in the non-rotating frame aligned with ITRF at
+  TCA (v + w x r); the probability is invariant under the common rotation, so
+  no EOP enters. Orekit's real-CDM vectors reproduce to 1e-9;
+- `emit_cdm` writes the sources' 6x6 RTN covariance at TCA, and none it cannot back, and `write_cdm_kvn` /
   `write_cdm_xml` refuse a CDM without covariance (`covariance-unavailable`),
   since CCSDS requires it, as does `compute_pc_from_cdm`.
 

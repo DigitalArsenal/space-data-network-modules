@@ -1008,7 +1008,7 @@ static flatbuffers::Offset<CDMObject> build_cdm_object(
     int obj_num,
     double cov_r, double cov_t, double cov_n,
     const std::string& reference_frame) {
-    (void)obj_num;
+    (void)cov_r; (void)cov_t; (void)cov_n;
 
     // CDM object states are absolute in the explicitly selected evaluation frame.
     // The root relative-state fields separately carry encounter RTN geometry.
@@ -1026,11 +1026,10 @@ static flatbuffers::Offset<CDMObject> build_cdm_object(
     // the position diagonal); none is invented for sources without it.
     flatbuffers::Offset<flatbuffers::Vector<double>> cov_vec;
     if (event.has_covariance) {
-        std::vector<double> cov_data(45, 0.0);
-        cov_data[0] = cov_r * cov_r / 1e6;  // CR_R, m² → km²
-        cov_data[2] = cov_t * cov_t / 1e6;  // CT_T
-        cov_data[5] = cov_n * cov_n / 1e6;  // CN_N
-        cov_vec = builder.CreateVector(cov_data);
+        // The 6x6 RTN position-velocity block (CR_R .. CNDOT_NDOT, km units);
+        // the drag/SRP/thrust rows stay absent.
+        const auto& rtn = obj_num == 1 ? event.cov6_rtn1 : event.cov6_rtn2;
+        cov_vec = builder.CreateVector(std::vector<double>(rtn.begin(), rtn.end()));
     }
 
     auto comment = builder.CreateString(event.has_covariance
@@ -1426,12 +1425,23 @@ PcResult compute_pc_from_cdm(
         state2 = state_from_cdm_object(cdm->OBJECT2());
         const auto frame1 = cdm_object_reference_frame_name(cdm->OBJECT1());
         const auto frame2 = cdm_object_reference_frame_name(cdm->OBJECT2());
-        if (frame1 != frame2 || (frame1 != "TEME" && frame1 != "GCRF" && frame1 != "EME2000")) {
-            set_error("CDM probability requires matching explicit TEME, GCRF or EME2000 frames; Earth-fixed conversion requires EOP data.");
+        const bool earth_fixed = frame1 == "ITRF";
+        if (frame1 != frame2 ||
+            (!earth_fixed && frame1 != "TEME" && frame1 != "GCRF" && frame1 != "EME2000")) {
+            set_error("CDM probability requires both objects in one of ITRF, TEME, GCRF or EME2000.");
             return {};
         }
-        cov1 = covariance_rtn_to_inertial(cov1, state1);
-        cov2 = covariance_rtn_to_inertial(cov2, state2);
+        // Earth-fixed states: evaluate in the non-rotating frame aligned with
+        // ITRF at TCA, v + w x r. The probability is invariant under a rotation
+        // common to both objects, so the Earth's orientation itself (and its
+        // EOP) does not enter; polar motion tilts w by about 1e-6 rad.
+        if (earth_fixed) {
+            constexpr double EARTH_RATE_RAD_S = 7.292115146706979e-5;  // IERS
+            for (StateVector* s : {&state1, &state2}) {
+                s->vx -= EARTH_RATE_RAD_S * s->y;
+                s->vy += EARTH_RATE_RAD_S * s->x;
+            }
+        }
     } else {
         set_error("CDM probability requires both absolute object states to orient their RTN covariances.");
         return {};

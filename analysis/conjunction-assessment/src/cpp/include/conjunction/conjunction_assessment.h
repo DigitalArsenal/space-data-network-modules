@@ -28,6 +28,7 @@
 #include "conjunction/ephemeris_source.h"
 #include "conjunction/pc_method.h"
 #include <optional>
+#include <array>
 #include <vector>
 #include <string>
 
@@ -79,6 +80,9 @@ struct ConjunctionEvent {
     // covariance means none is reported: a TLE carries none.
     double cov_r1 = 0.0, cov_t1 = 0.0, cov_n1 = 0.0;  // Object 1
     double cov_r2 = 0.0, cov_t2 = 0.0, cov_n2 = 0.0;  // Object 2
+    // With has_covariance: each object's position-velocity covariance at TCA
+    // in its RTN axes, 21-element lower triangle (km², km²/s, km²/s²).
+    std::array<double, 21> cov6_rtn1{}, cov6_rtn2{};
 
     // Days since epoch for each object
     double dse1 = 0.0, dse2 = 0.0;
