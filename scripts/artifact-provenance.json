@@ -3523,15 +3523,15 @@
       }
     },
     "analysis/gp-error-model/dist/isomorphic/module.wasm": {
-      "sha256": "f0121188b53654932fbfaf5225cc64d1fa7bbaab7e8b591786815f311a0ecbbe",
-      "bytes": 393561,
+      "sha256": "ccb91ff04893834ed09df658f484d5faec8b73609a0800e8d0385cfca708c4e2",
+      "bytes": 471225,
       "module": "analysis/gp-error-model",
-      "lastCommit": "9ddf5bfba03f47cc92ea8a45d5e1677ad2318919",
-      "lastCommitDate": "2026-10-01T19:04:00-04:00",
+      "lastCommit": "cbdf54b67fcc5ee58046c8f962660b4590b7af17",
+      "lastCommitDate": "2026-10-01T23:37:40-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "7522e27694cc11555aab3388046e24ae24c30ec6",
+        "superRepoCommit": "0b90322d293bdc6daddf0defd97ff9876d586962",
         "sdkCommit": "cf1a1276bdc6f400e13372e34b6ff30882d38f95"
       },
       "declaration": {

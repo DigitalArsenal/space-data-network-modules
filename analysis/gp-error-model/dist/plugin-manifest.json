@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.analysis.gp-error-model",
   "name": "GP prediction-error model",
   "version": "0.1.0",
-  "description": "Empirical SGP4 prediction error by orbit regime and prediction age, in RTN. Element sets are propagated to later element sets of the same object (consecutive-set differences, which are not truth) or to independent reference states (GCRF, from analysis/reference-states). Batches accumulate counts, moments and histograms; finalize gives mean, covariance, quantiles, robust sigma and clipped covariance per stratum. With a model on accumulate (reference mode), each error is also tested against its stratum's model covariance (Mahalanobis d^2 against chi-square with 3 degrees of freedom, every sample counted) and finalize gates each stratum CALIBRATED, FAILED or INSUFFICIENT; scale_model fits per-stratum scale factors to reference-state errors. screening_evaluation scores a probabilistic (Foster Pc), a bounded-set and a possibility (admissible-set) screening rule on independent cases built from reference-state errors with synthetic true misses.",
+  "description": "Empirical SGP4 prediction error by orbit regime and prediction age, in RTN. Element sets are propagated to later element sets of the same object (consecutive-set differences, which are not truth) or to independent reference states (GCRF, from analysis/reference-states). Batches accumulate counts, moments and histograms; finalize gives mean, covariance, quantiles, robust sigma and clipped covariance per stratum. With a model on accumulate (reference mode), each error is also tested against its stratum's model covariance (Mahalanobis d^2 against chi-square with 3 degrees of freedom, every sample counted) and finalize gates each stratum CALIBRATED, FAILED or INSUFFICIENT; scale_model fits per-stratum scale factors to reference-state errors. screening_evaluation scores a probabilistic (Foster Pc), a bounded-set and a possibility (admissible-set) screening rule on independent cases built from reference-state errors with synthetic true misses. hpop_arcs and hpop_coverage calibrate HPOP covariance (P0 at the element-set epoch, white-acceleration process noise) against reference states.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -454,6 +454,264 @@
           "maxStreams": 1,
           "required": true,
           "description": "The evaluation report as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "hpop_arcs",
+      "displayName": "HPOP calibration arcs",
+      "inputPorts": [
+        {
+          "portId": "elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "Size-prefixed $OMM records, concatenated, SGP4 mean elements; every element set of each object in the batch (objects are not split across batches). Epochs within one second are one element set republished: the later record is kept."
+        },
+        {
+          "portId": "reference",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "Independent reference states ($OEM, GCRF, UTC, OBJECT.NORAD_CAT_ID), e.g. analysis/reference-states output. When present, errors are taken against these instead of later element sets."
+        },
+        {
+          "portId": "model",
+          "acceptedTypeSets": [
+            {
+              "setId": "hpop-covariance-model-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per regime P0 (RTN lower triangle, km, km/s) and optional white-acceleration process noise."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "An hpop-covariance-model: with it, each arc carries P0 in GCRF (SI) and its regime's process noise."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "hpop-arcs-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "targetAgesDays, epochToleranceSeconds, targetToleranceSeconds, regimes, ageBinsDays."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Arc settings as JSON; every field optional."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "plan",
+          "acceptedTypeSets": [
+            {
+              "setId": "hpop-arc-plan-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per element set: target epochs at the requested prediction ages, the reference state at each, and optionally P0 and process noise."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The arc plan as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "hpop_coverage",
+      "displayName": "HPOP covariance coverage",
+      "inputPorts": [
+        {
+          "portId": "plan",
+          "acceptedTypeSets": [
+            {
+              "setId": "hpop-arc-plan-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The plan from hpop_arcs."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The arc plan."
+        },
+        {
+          "portId": "predictions",
+          "acceptedTypeSets": [
+            {
+              "setId": "hpop-predictions-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per arc, per target: HPOP state [6] (m, m/s, GCRF) and, with covariance, the position blocks a [6] (P0 alone) and u [3][6] (unit density per R, T, N axis), m^2."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "HPOP predictions at the plan's targets."
+        },
+        {
+          "portId": "model",
+          "acceptedTypeSets": [
+            {
+              "setId": "hpop-covariance-model-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "P0 per regime (fit, test) and process noise (test)."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The hpop-covariance-model; fit and test need it."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "hpop-coverage-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "mode (epoch, fit, test), window [from, to) on target epochs, clipK, discretizationSeconds, gate, regimes, ageBinsDays."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Coverage settings as JSON."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "model",
+          "acceptedTypeSets": [
+            {
+              "setId": "hpop-covariance-model-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "epoch: P0 per regime; fit: the model with process noise per regime."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The model (epoch and fit modes)."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "hpop-covariance-coverage-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "test: coverage with and without process noise by regime and prediction age, with the calibration gate."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The coverage report (test mode)."
         }
       ],
       "maxBatch": 1,

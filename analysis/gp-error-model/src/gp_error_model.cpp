@@ -49,6 +49,8 @@
 // s_k = sqrt(E[e_k^2] / C_kk) from reference-state errors (second moment
 // about zero, clipped), so a scaled model is fitted on one reference window
 // and tested on another.
+// hpop_arcs / hpop_coverage: P0 and process noise for HPOP covariance, fitted and
+// tested against reference states (section below).
 // screening_evaluation: probabilistic, bounded-set and possibility screening
 // scored on cases built from reference-state errors (section below).
 
@@ -85,9 +87,9 @@ int64_t days_from_civil(int64_t y, unsigned m, unsigned d) {
   const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
   return era * 146097 + static_cast<int64_t>(doe) - 719468;
 }
-bool parse_instant(const flatbuffers::String* s, Instant* out, int* ymdhms = nullptr, double* second = nullptr) {
-  if (!s || s->size() < 19) return false;
-  const char* t = s->c_str();
+bool parse_instant(const std::string& text, Instant* out, int* ymdhms = nullptr, double* second = nullptr) {
+  if (text.size() < 19) return false;
+  const char* t = text.c_str();
   int y, mo, d, h, mi;
   double sec;
   if (std::sscanf(t, "%4d-%2d-%2d%*c%2d:%2d:%lf", &y, &mo, &d, &h, &mi, &sec) != 6) return false;
@@ -99,6 +101,9 @@ bool parse_instant(const flatbuffers::String* s, Instant* out, int* ymdhms = nul
     *second = sec;
   }
   return true;
+}
+bool parse_instant(const flatbuffers::String* s, Instant* out, int* ymdhms = nullptr, double* second = nullptr) {
+  return s && parse_instant(s->str(), out, ymdhms, second);
 }
 double seconds_between(const Instant& a, const Instant& b) {  // b - a
   return static_cast<double>(b.day - a.day) * 86400.0 + (b.sec - a.sec);
@@ -140,7 +145,65 @@ struct Coverage {
   uint64_t inside[3] = {};
   uint64_t pit[kPitBins] = {};
   std::set<uint32_t> objects;
+  // One zero-mean Mahalanobis distance; quantile holds the chi-square 3 quantiles at kContainment.
+  void add(double d2, const double quantile[3], uint32_t norad) {
+    ++n;
+    sum_d2 += d2;
+    for (int k = 0; k < 3; ++k) inside[k] += d2 <= quantile[k];
+    ++pit[std::min(kPitBins - 1, static_cast<int>(chi2_cdf3(d2) * kPitBins))];
+    objects.insert(norad);
+  }
 };
+
+// The calibration gate.
+struct Gate {
+  double tolerance = 0.05, tail_limit = 0.01, min_samples = 30, min_objects = 3;
+};
+std::string read_gate(const nlohmann::json& options, Gate* gate) {
+  const nlohmann::json g = options.is_object() && options.contains("gate") ? options["gate"] : nlohmann::json::object();
+  if (!g.is_object()) return "gate must be an object.";
+  for (auto [key, target] : {std::pair<const char*, double*>{"tolerance", &gate->tolerance}, {"tailLimit", &gate->tail_limit},
+                             {"minimumSamples", &gate->min_samples}, {"minimumObjects", &gate->min_objects}}) {
+    if (!g.contains(key)) continue;
+    if (!g[key].is_number() || !(g[key].get<double>() >= 0)) return "gate values are non-negative numbers.";
+    *target = g[key].get<double>();
+  }
+  return {};
+}
+nlohmann::json gate_json(const Gate& gate) {
+  return {{"rule", "CALIBRATED when the fractions inside the 1 and 2 sigma ellipsoids are within the tolerance "
+                   "of nominal and at most the tail limit lies outside 3 sigma, with at least the minimum "
+                   "samples and distinct objects; every sample counts"},
+          {"tolerance", gate.tolerance}, {"tailLimit", gate.tail_limit}, {"minimumSamples", gate.min_samples},
+          {"minimumObjects", gate.min_objects},
+          {"nominal", std::vector<double>(std::begin(kContainment), std::end(kContainment))}};
+}
+// Containment, mean d^2, PIT histogram and the gate's status.
+nlohmann::json coverage_json(const Coverage& c, const Gate& gate) {
+  nlohmann::json g{{"n", c.n}, {"objects", c.objects.size()}};
+  if (!c.n) {
+    g["status"] = c.missing ? "NO_MODEL" : "INSUFFICIENT";
+    return g;
+  }
+  const double n = static_cast<double>(c.n);
+  std::vector<double> inside(3), pit(kPitBins);
+  bool within = true;
+  for (int k = 0; k < 3; ++k) inside[k] = c.inside[k] / n;
+  for (int k = 0; k < 2; ++k) within = within && std::fabs(inside[k] - kContainment[k]) <= gate.tolerance;
+  within = within && 1.0 - inside[2] <= gate.tail_limit;
+  double cum = 0, gap = 0;
+  for (int k = 0; k < kPitBins; ++k) {
+    pit[k] = c.pit[k] / n;
+    cum += pit[k];
+    gap = std::max(gap, std::fabs(cum - (k + 1.0) / kPitBins));
+  }
+  g["meanD2"] = c.sum_d2 / n;
+  g["inside"] = inside;
+  g["pit"] = pit;
+  g["pitMaxCdfGap"] = gap;
+  g["status"] = n < gate.min_samples || c.objects.size() < gate.min_objects ? "INSUFFICIENT" : within ? "CALIBRATED" : "FAILED";
+  return g;
+}
 
 struct Stratum {
   uint64_t n = 0;
@@ -289,6 +352,9 @@ void add_sample(Stratum& s, const double x[kComponents], const std::array<double
 struct ElementSet {
   uint32_t norad = 0;
   Instant epoch;
+  int ymdhm[5] = {};
+  double second = 0;
+  std::string epoch_text;
   uint32_t order = 0;  // input order, the later copy of a duplicate epoch wins
   int regime = -1;
   elsetrec rec;
@@ -328,10 +394,11 @@ bool load_elements(const Options& o, std::vector<ElementSet>& sets, Counts& coun
       bool finite = true;
       for (double x : el) finite = finite && std::isfinite(x);
       if (omm->MEAN_ELEMENT_THEORY() != meanElementSource::SGP4 || !finite || !(omm->MEAN_MOTION() > 0) || !s.norad ||
-          !parse_instant(omm->EPOCH(), &s.epoch)) {
+          !parse_instant(omm->EPOCH(), &s.epoch, s.ymdhm, &s.second)) {
         ++counts.refused;
         continue;
       }
+      s.epoch_text = omm->EPOCH()->str();
       std::memset(&s.rec, 0, sizeof(s.rec));
       const double epoch = static_cast<double>(s.epoch.day) + kSgp4EpochFromUnixDays + s.epoch.sec / 86400.0;
       char satn[9] = "00000";
@@ -422,11 +489,7 @@ void sample(Accumulator& acc, int regime, int age, const double x[6], uint32_t n
   double d2 = 0;
   for (int a = 0; a < 3; ++a)
     for (int b = 0; b < 3; ++b) d2 += x[a] * inv->second[3 * a + b] * x[b];
-  ++c.n;
-  c.sum_d2 += d2;
-  for (int k = 0; k < 3; ++k) c.inside[k] += d2 <= acc.quantile[k];
-  ++c.pit[std::min(kPitBins - 1, static_cast<int>(chi2_cdf3(d2) * kPitBins))];
-  c.objects.insert(norad);
+  c.add(d2, acc.quantile, norad);
 }
 
 // Position block of a lower-triangle 6x6 covariance, inverted; false unless
@@ -496,9 +559,9 @@ void gp_differences(Accumulator& acc, std::vector<ElementSet>& sets) {
   }
 }
 
-std::string reference_errors(Accumulator& acc, std::vector<ElementSet>& sets) {
-  std::map<std::string, fr::Mat3> teme;  // GCRF -> TEME per epoch
-  const double max_s = acc.options.max_age_days * 86400.0;
+// Every reference block, verified: $OEM, GCRF, UTC, a NORAD number and lines.
+template <typename F>
+std::string for_each_reference_block(F block) {
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
     const plugin_input_frame_t* f = plugin_get_input_frame(i);
     if (!f || !f->port_id || std::strcmp(f->port_id, "reference") != 0) continue;
@@ -520,52 +583,62 @@ std::string reference_errors(Accumulator& acc, std::vector<ElementSet>& sets) {
       if (!gcrf || b->TIME_SYSTEM() != timingStandard::UTC || !b->OBJECT() || !b->OBJECT()->NORAD_CAT_ID() ||
           !b->EPHEMERIS_DATA_LINES())
         return "each reference block needs GCRF, UTC, OBJECT.NORAD_CAT_ID and per-epoch lines.";
-      const uint32_t norad = b->OBJECT()->NORAD_CAT_ID();
-      const auto first = std::lower_bound(sets.begin(), sets.end(), norad,
-                                          [](const ElementSet& s, uint32_t id) { return s.norad < id; });
-      bool any = false;
-      Instant kept{};
-      bool have_kept = false;
-      for (const ephemerisDataLine* l : *b->EPHEMERIS_DATA_LINES()) {
-        Instant t;
-        int ymdhm[5];
-        double second;
-        if (!parse_instant(l->EPOCH(), &t, ymdhm, &second)) return "reference epoch is not ISO 8601 UTC.";
-        if (have_kept && seconds_between(kept, t) < acc.options.reference_step_s) continue;
-        kept = t;
-        have_kept = true;
-        ++acc.counts.reference_epochs;
-        const double rc[3] = {l->X(), l->Y(), l->Z()}, vc[3] = {l->X_DOT(), l->Y_DOT(), l->Z_DOT()};
-        auto rot = teme.find(l->EPOCH()->str());
-        if (rot == teme.end()) {
-          fr::EarthOrientation none;  // TEME <-> GCRF needs TT only; UT1 does not enter
-          fr::Epoch e;
-          if (!fr::epochFromUtc(ymdhm[0], ymdhm[1], ymdhm[2], ymdhm[3], ymdhm[4], second, none, &e))
-            return "reference epoch outside the leap-second table.";
-          rot = teme.emplace(l->EPOCH()->str(), fr::gcrfToTeme(e)).first;
-        }
-        const fr::Mat3& m = rot->second;
-        for (auto s = first; s != sets.end() && s->norad == norad; ++s) {
-          const double age_s = seconds_between(s->epoch, t);
-          if (age_s < 0) break;
-          if (age_s > max_s) continue;
-          const int bin = age_of(acc.options, age_s / 86400.0);
-          if (bin < 0) continue;
-          double r[3], v[3], rg[3], vg[3], x[6];
-          if (!propagate(*s, age_s / 60.0, r, v)) { ++acc.counts.failures; continue; }
-          for (int a = 0; a < 3; ++a) {  // TEME -> GCRF: transpose of GCRF -> TEME
-            rg[a] = m.m[0][a] * r[0] + m.m[1][a] * r[1] + m.m[2][a] * r[2];
-            vg[a] = m.m[0][a] * v[0] + m.m[1][a] * v[1] + m.m[2][a] * v[2];
-          }
-          rtn_error(rg, vg, rc, vc, x);
-          sample(acc, s->regime, bin, x, norad);
-          any = true;
-        }
-      }
-      if (!any) ++acc.counts.reference_without_elements;
+      const std::string e = block(b->OBJECT()->NORAD_CAT_ID(), *b->EPHEMERIS_DATA_LINES());
+      if (!e.empty()) return e;
     }
   }
   return {};
+}
+
+std::string reference_errors(Accumulator& acc, std::vector<ElementSet>& sets) {
+  std::map<std::string, fr::Mat3> teme;  // GCRF -> TEME per epoch
+  const double max_s = acc.options.max_age_days * 86400.0;
+  using Lines = flatbuffers::Vector<flatbuffers::Offset<ephemerisDataLine>>;
+  return for_each_reference_block([&](uint32_t norad, const Lines& lines) -> std::string {
+    const auto first = std::lower_bound(sets.begin(), sets.end(), norad,
+                                        [](const ElementSet& s, uint32_t id) { return s.norad < id; });
+    bool any = false;
+    Instant kept{};
+    bool have_kept = false;
+    for (const ephemerisDataLine* l : lines) {
+      Instant t;
+      int ymdhm[5];
+      double second;
+      if (!parse_instant(l->EPOCH(), &t, ymdhm, &second)) return "reference epoch is not ISO 8601 UTC.";
+      if (have_kept && seconds_between(kept, t) < acc.options.reference_step_s) continue;
+      kept = t;
+      have_kept = true;
+      ++acc.counts.reference_epochs;
+      const double rc[3] = {l->X(), l->Y(), l->Z()}, vc[3] = {l->X_DOT(), l->Y_DOT(), l->Z_DOT()};
+      auto rot = teme.find(l->EPOCH()->str());
+      if (rot == teme.end()) {
+        fr::EarthOrientation none;  // TEME <-> GCRF needs TT only; UT1 does not enter
+        fr::Epoch e;
+        if (!fr::epochFromUtc(ymdhm[0], ymdhm[1], ymdhm[2], ymdhm[3], ymdhm[4], second, none, &e))
+          return "reference epoch outside the leap-second table.";
+        rot = teme.emplace(l->EPOCH()->str(), fr::gcrfToTeme(e)).first;
+      }
+      const fr::Mat3& m = rot->second;
+      for (auto s = first; s != sets.end() && s->norad == norad; ++s) {
+        const double age_s = seconds_between(s->epoch, t);
+        if (age_s < 0) break;
+        if (age_s > max_s) continue;
+        const int bin = age_of(acc.options, age_s / 86400.0);
+        if (bin < 0) continue;
+        double r[3], v[3], rg[3], vg[3], x[6];
+        if (!propagate(*s, age_s / 60.0, r, v)) { ++acc.counts.failures; continue; }
+        for (int a = 0; a < 3; ++a) {  // TEME -> GCRF: transpose of GCRF -> TEME
+          rg[a] = m.m[0][a] * r[0] + m.m[1][a] * r[1] + m.m[2][a] * r[2];
+          vg[a] = m.m[0][a] * v[0] + m.m[1][a] * v[1] + m.m[2][a] * v[2];
+        }
+        rtn_error(rg, vg, rc, vc, x);
+        sample(acc, s->regime, bin, x, norad);
+        any = true;
+      }
+    }
+    if (!any) ++acc.counts.reference_without_elements;
+    return {};
+  });
 }
 
 // ── accumulator JSON ──
@@ -761,17 +834,10 @@ extern "C" int finalize() {
   acc.coverage.assign(acc.strata.size(), Coverage());
   e = merge(acc, j);
   if (!e.empty()) return fail("invalid-accumulator", e);
-  double tolerance = 0.05, tail_limit = 0.01, min_samples = 30, min_objects = 3;
+  Gate gate;
   if (input("options")) {
-    const nlohmann::json o = json_input("options");
-    const nlohmann::json g = o.is_object() && o.contains("gate") ? o["gate"] : nlohmann::json::object();
-    if (!g.is_object()) return fail("invalid-options", "gate must be an object.");
-    for (auto [key, target] : {std::pair<const char*, double*>{"tolerance", &tolerance}, {"tailLimit", &tail_limit},
-                               {"minimumSamples", &min_samples}, {"minimumObjects", &min_objects}}) {
-      if (!g.contains(key)) continue;
-      if (!g[key].is_number() || !(g[key].get<double>() >= 0)) return fail("invalid-options", "gate values are non-negative numbers.");
-      *target = g[key].get<double>();
-    }
+    e = read_gate(json_input("options"), &gate);
+    if (!e.empty()) return fail("invalid-options", e);
   }
 
   nlohmann::json out = options_json(acc.options);
@@ -790,12 +856,7 @@ extern "C" int finalize() {
   out["quantileProbabilities"] = std::vector<double>(std::begin(kQuantiles), std::end(kQuantiles));
   if (!acc.coverage_model.empty()) {
     out["coverageModel"] = acc.coverage_model;
-    out["gate"] = {{"rule", "CALIBRATED when the fractions inside the 1 and 2 sigma ellipsoids are within the tolerance "
-                            "of nominal and at most the tail limit lies outside 3 sigma, with at least the minimum "
-                            "samples and distinct objects; every sample counts"},
-                   {"tolerance", tolerance}, {"tailLimit", tail_limit}, {"minimumSamples", min_samples},
-                   {"minimumObjects", min_objects},
-                   {"nominal", std::vector<double>(std::begin(kContainment), std::end(kContainment))}};
+    out["gate"] = gate_json(gate);
   }
   out["strata"] = nlohmann::json::array();
   for (size_t i = 0; i < acc.strata.size(); ++i) {
@@ -837,29 +898,8 @@ extern "C" int finalize() {
       x["clipped"] = c;
     }
     if (!acc.coverage_model.empty()) {
-      const Coverage& c = acc.coverage[i];
-      nlohmann::json g{{"n", c.n}, {"missingModel", c.missing}, {"objects", c.objects.size()}};
-      if (c.n) {
-        const double n = static_cast<double>(c.n);
-        std::vector<double> inside(3), pit(kPitBins);
-        bool within = true;
-        for (int k = 0; k < 3; ++k) inside[k] = c.inside[k] / n;
-        for (int k = 0; k < 2; ++k) within = within && std::fabs(inside[k] - kContainment[k]) <= tolerance;
-        within = within && 1.0 - inside[2] <= tail_limit;
-        double cum = 0, gap = 0;
-        for (int k = 0; k < kPitBins; ++k) {
-          pit[k] = c.pit[k] / n;
-          cum += pit[k];
-          gap = std::max(gap, std::fabs(cum - (k + 1.0) / kPitBins));
-        }
-        g["meanD2"] = c.sum_d2 / n;
-        g["inside"] = inside;
-        g["pit"] = pit;
-        g["pitMaxCdfGap"] = gap;
-        g["status"] = n < min_samples || c.objects.size() < min_objects ? "INSUFFICIENT" : within ? "CALIBRATED" : "FAILED";
-      } else {
-        g["status"] = c.missing ? "NO_MODEL" : "INSUFFICIENT";
-      }
+      nlohmann::json g = coverage_json(acc.coverage[i], gate);
+      g["missingModel"] = acc.coverage[i].missing;
       x["coverage"] = g;
     }
     out["strata"].push_back(x);
@@ -1197,4 +1237,543 @@ extern "C" int screening_evaluation() {
         {"missDistancesM", misses}}},
       {"summary", summary}, {"strata", out_strata}};
   return emit("report", report);
+}
+
+// ── HPOP covariance calibration ──
+// The product calibrated is the CA HPOP screen's: analysis/epoch-state's GCRF
+// state at an element set's epoch, propagated by propagator/hpop's resident
+// force model, with covariance P(t) = Phi P0 Phi^T + Q. The host runs HPOP;
+// these methods choose where to compare, supply P0 and score P(t).
+//   hpop_arcs      per element set (an arc): at each requested prediction age
+//                  the reference epoch nearest it (for age 0, the first
+//                  reference epoch at or after the set's epoch) and the
+//                  reference state there; with a model, P0 in GCRF (SI) and
+//                  the regime's process noise.
+//   hpop_coverage  scores HPOP's states and covariances at those targets.
+//     epoch  P0 per regime: the second moment about zero of the 6-D RTN error
+//            at age 0. Samples beyond k robust sigma (1.4826 x median |x|)
+//            in any component are left out, and counted.
+//     fit    white-acceleration spectral densities (R, T, N) per regime by
+//            maximum likelihood over the position errors at ages above 0:
+//            P = A + sum_k q_k U_k, where A is HPOP's covariance from P0
+//            alone and U_k from P0 = 0 with unit density on axis k (P(t) is
+//            linear in P0 and Q). Coordinate search on log10 q in [-22, -2],
+//            -22 meaning zero. Likelihood and containment can disagree, so
+//            the regime keeps Q = 0 when P0 alone passes the gate in more of
+//            the fit window's strata; the test window plays no part.
+//     test   zero-mean d^2 = e' P^-1 e against chi-square 3, by regime and
+//            prediction age, every sample counted, with the calibration gate;
+//            P0 alone (Q = 0) alongside.
+namespace hpopcal {
+
+struct RefLine {
+  Instant t;
+  std::string iso;
+  double x[6];
+};
+using RefMap = std::map<uint32_t, std::vector<RefLine>>;
+
+std::string load_references(RefMap& refs) {
+  using Lines = flatbuffers::Vector<flatbuffers::Offset<ephemerisDataLine>>;
+  const std::string e = for_each_reference_block([&](uint32_t norad, const Lines& lines) -> std::string {
+    auto& list = refs[norad];
+    for (const ephemerisDataLine* l : lines) {
+      RefLine r;
+      if (!parse_instant(l->EPOCH(), &r.t)) return "reference epoch is not ISO 8601 UTC.";
+      r.iso = l->EPOCH()->str();
+      const double x[6] = {l->X(), l->Y(), l->Z(), l->X_DOT(), l->Y_DOT(), l->Z_DOT()};
+      std::copy(x, x + 6, r.x);
+      list.push_back(r);
+    }
+    return {};
+  });
+  for (auto& entry : refs)
+    std::stable_sort(entry.second.begin(), entry.second.end(),
+                     [](const RefLine& a, const RefLine& b) { return before(a.t, b.t); });
+  return e;
+}
+
+Instant plus_seconds(Instant t, double seconds) {
+  t.sec += seconds;
+  const double days = std::floor(t.sec / 86400.0);
+  t.day += static_cast<int64_t>(days);
+  t.sec -= days * 86400.0;
+  return t;
+}
+
+// SGP4's TEME state at zero elapsed time, in GCRF.
+bool gcrf_epoch_state(const ElementSet& s, double r[3], double v[3]) {
+  fr::EarthOrientation none;  // TEME <-> GCRF needs TT only
+  fr::Epoch e;
+  if (!fr::epochFromUtc(s.ymdhm[0], s.ymdhm[1], s.ymdhm[2], s.ymdhm[3], s.ymdhm[4], s.second, none, &e)) return false;
+  const fr::Mat3 m = fr::gcrfToTeme(e);
+  for (int a = 0; a < 3; ++a) {
+    r[a] = m.m[0][a] * s.r[0] + m.m[1][a] * s.r[1] + m.m[2][a] * s.r[2];
+    v[a] = m.m[0][a] * s.v[0] + m.m[1][a] * s.v[1] + m.m[2][a] * s.v[2];
+  }
+  return true;
+}
+
+// Rows R, T, N of a state's RTN axes (as rtn_error uses them).
+void rtn_axes(const double r[3], const double v[3], double axes[3][3]) {
+  const double rn = std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
+  double n[3] = {r[1] * v[2] - r[2] * v[1], r[2] * v[0] - r[0] * v[2], r[0] * v[1] - r[1] * v[0]};
+  const double nn = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+  for (int k = 0; k < 3; ++k) {
+    axes[0][k] = r[k] / rn;
+    axes[2][k] = n[k] / nn;
+  }
+  axes[1][0] = axes[2][1] * axes[0][2] - axes[2][2] * axes[0][1];
+  axes[1][1] = axes[2][2] * axes[0][0] - axes[2][0] * axes[0][2];
+  axes[1][2] = axes[2][0] * axes[0][1] - axes[2][1] * axes[0][0];
+}
+
+// A lower-triangle RTN covariance (km, km/s) as a row-major 6x6 GCRF one in
+// SI: G = J P J' with J = diag(A', A'), A the RTN rows.
+std::vector<double> rtn_to_gcrf_si(const std::array<double, 21>& lower, const double axes[3][3]) {
+  double p[6][6], j[6][6] = {}, jp[6][6] = {};
+  for (int a = 0, t = 0; a < 6; ++a)
+    for (int b = 0; b <= a; ++b, ++t) p[a][b] = p[b][a] = lower[t];
+  for (int blk = 0; blk < 2; ++blk)
+    for (int i = 0; i < 3; ++i)
+      for (int k = 0; k < 3; ++k) j[3 * blk + i][3 * blk + k] = axes[k][i];
+  for (int a = 0; a < 6; ++a)
+    for (int b = 0; b < 6; ++b)
+      for (int k = 0; k < 6; ++k) jp[a][b] += j[a][k] * p[k][b];
+  std::vector<double> out(36, 0.0);
+  for (int a = 0; a < 6; ++a)
+    for (int b = 0; b <= a; ++b) {  // exactly symmetric: the lower triangle, mirrored
+      double g = 0;
+      for (int k = 0; k < 6; ++k) g += jp[a][k] * j[b][k];
+      out[6 * a + b] = out[6 * b + a] = g * 1e6;  // km^2 -> m^2, (km/s)^2 -> (m/s)^2, km^2/s -> m^2/s
+    }
+  return out;
+}
+
+struct Model {
+  nlohmann::json json;
+  std::map<int, std::array<double, 21>> p0;
+  std::map<int, std::array<double, 3>> q;
+  std::map<int, double> interval;
+};
+std::string read_model(const nlohmann::json& j, const Options& options, Model* m) {
+  if (!j.is_object() || j.value("kind", std::string()) != "hpop-covariance-model" || !j.contains("regimes") ||
+      !j["regimes"].is_array())
+    return "model must be hpop-covariance-model JSON.";
+  m->json = j;
+  for (const auto& r : j["regimes"]) {
+    if (!r.is_object() || !r.contains("regimeIndex") || !r["regimeIndex"].is_number_integer()) return "each model regime needs regimeIndex.";
+    const int index = r["regimeIndex"].get<int>();
+    if (index < 0 || index >= static_cast<int>(options.regimes.size()) || r.value("regime", std::string()) != options.regimes[index].id)
+      return "model regimes differ from these options.";
+    if (r.contains("p0")) {
+      if (!r["p0"].is_array() || r["p0"].size() != 21) return "p0 is a 21-entry lower triangle.";
+      std::array<double, 21> p;
+      for (int k = 0; k < 21; ++k) {
+        if (!r["p0"][k].is_number()) return "p0 entries are numbers.";
+        p[k] = r["p0"][k].get<double>();
+      }
+      m->p0[index] = p;
+    }
+    if (r.contains("processNoise")) {
+      const auto& n = r["processNoise"];
+      if (!n.is_object() || !n.contains("spectralDensityM2S3") || !n["spectralDensityM2S3"].is_array() ||
+          n["spectralDensityM2S3"].size() != 3 || !n.contains("discretizationSeconds") || !n["discretizationSeconds"].is_number() ||
+          !(n["discretizationSeconds"].get<double>() > 0))
+        return "processNoise needs spectralDensityM2S3 [R, T, N] and discretizationSeconds > 0.";
+      std::array<double, 3> q;
+      for (int k = 0; k < 3; ++k) {
+        if (!n["spectralDensityM2S3"][k].is_number() || !(n["spectralDensityM2S3"][k].get<double>() >= 0))
+          return "spectral densities are non-negative numbers.";
+        q[k] = n["spectralDensityM2S3"][k].get<double>();
+      }
+      m->q[index] = q;
+      m->interval[index] = n["discretizationSeconds"].get<double>();
+    }
+  }
+  return {};
+}
+
+double number(const nlohmann::json& o, const char* key, double fallback) {
+  return o.is_object() && o.contains(key) && o[key].is_number() ? o[key].get<double>() : fallback;
+}
+
+// Symmetric 3x3 from (xx, xy, xz, yy, yz, zz): ln det and e' P^-1 e; false unless positive definite.
+bool gauss_terms(const double p[6], const double e[3], double* logdet, double* d2) {
+  const double a = p[0], b = p[1], c = p[2], d = p[3], f = p[4], g = p[5];
+  const double c00 = d * g - f * f, c01 = c * f - b * g, c02 = b * f - c * d;
+  const double det = a * c00 + b * c01 + c * c02;
+  if (!(a > 0) || !(a * d - b * b > 0) || !(det > 0)) return false;
+  const double c11 = a * g - c * c, c12 = b * c - a * f, c22 = a * d - b * b;
+  *d2 = (e[0] * (c00 * e[0] + c01 * e[1] + c02 * e[2]) + e[1] * (c01 * e[0] + c11 * e[1] + c12 * e[2]) +
+         e[2] * (c02 * e[0] + c12 * e[1] + c22 * e[2])) / det;
+  *logdet = std::log(det);
+  return true;
+}
+
+struct Sample {
+  int regime = -1;
+  uint32_t norad = 0;
+  double nominal = 0, age = 0;
+  double rtn[6];       // km, km/s, in the reference state's RTN axes
+  double e[3];         // GCRF position error, m
+  double axes[3][3];   // the reference state's RTN rows
+  bool covariance = false;
+  double a[6], u[3][6];  // position blocks, m^2
+};
+
+}  // namespace hpopcal
+
+extern "C" int hpop_arcs() {
+  using namespace hpopcal;
+  const nlohmann::json opt = input("options") ? json_input("options") : nlohmann::json::object();
+  if (!opt.is_object()) return fail("invalid-options", "options must be a JSON object.");
+  Accumulator acc;
+  std::string e = parse_options(opt, &acc.options);
+  if (!e.empty()) return fail("invalid-options", e);
+  std::vector<double> ages = {0, 0.25, 0.75, 1.5, 2.5, 4, 6};
+  if (opt.contains("targetAgesDays")) {
+    if (!opt["targetAgesDays"].is_array() || opt["targetAgesDays"].empty()) return fail("invalid-options", "targetAgesDays is a non-empty array.");
+    ages.clear();
+    for (const auto& a : opt["targetAgesDays"]) {
+      if (!a.is_number() || !(a.get<double>() >= 0)) return fail("invalid-options", "target ages are non-negative days.");
+      ages.push_back(a.get<double>());
+    }
+  }
+  const double epoch_tol = number(opt, "epochToleranceSeconds", 1800), target_tol = number(opt, "targetToleranceSeconds", 900);
+  Model model;
+  const bool have_model = input("model") != nullptr;
+  if (have_model) {
+    e = read_model(json_input("model"), acc.options, &model);
+    if (!e.empty()) return fail("invalid-model", e);
+  }
+  std::vector<ElementSet> sets;
+  if (!load_elements(acc.options, sets, acc.counts)) return fail("invalid-elements", error_text);
+  RefMap refs;
+  e = load_references(refs);
+  if (!e.empty()) return fail("invalid-reference", e);
+
+  nlohmann::json arcs = nlohmann::json::array();
+  uint64_t targets = 0, without_reference = 0, without_targets = 0, without_model = 0;
+  const auto earlier = [](const RefLine& r, const Instant& t) { return before(r.t, t); };
+  for (const ElementSet& s : sets) {
+    const auto found = refs.find(s.norad);
+    if (found == refs.end()) { ++without_reference; continue; }
+    const std::vector<RefLine>& list = found->second;
+    nlohmann::json list_json = nlohmann::json::array();
+    for (double a : ages) {
+      const RefLine* best = nullptr;
+      if (a == 0) {
+        const auto f = std::lower_bound(list.begin(), list.end(), s.epoch, earlier);
+        if (f != list.end() && seconds_between(s.epoch, f->t) <= epoch_tol) best = &*f;
+      } else {
+        const Instant goal = plus_seconds(s.epoch, a * 86400.0);
+        const auto f = std::lower_bound(list.begin(), list.end(), goal, earlier);
+        double gap = target_tol;
+        for (auto c : {f, f == list.begin() ? list.end() : f - 1}) {
+          if (c == list.end() || !(seconds_between(s.epoch, c->t) > 0)) continue;
+          const double d = std::fabs(seconds_between(goal, c->t));
+          if (d <= gap) { gap = d; best = &*c; }
+        }
+      }
+      if (!best) continue;
+      list_json.push_back({{"nominalDays", a}, {"ageDays", seconds_between(s.epoch, best->t) / 86400.0},
+                           {"epoch", best->iso}, {"truth", std::vector<double>(best->x, best->x + 6)}});
+    }
+    if (list_json.empty()) { ++without_targets; continue; }
+    nlohmann::json arc{{"arc", arcs.size()}, {"norad", s.norad}, {"epoch", s.epoch_text}, {"regimeIndex", s.regime},
+                       {"regime", acc.options.regimes[s.regime].id}, {"targets", list_json}};
+    if (have_model) {
+      const auto p0 = model.p0.find(s.regime);
+      if (p0 == model.p0.end()) {
+        ++without_model;
+      } else {
+        double r[3], v[3], axes[3][3];
+        if (!gcrf_epoch_state(s, r, v)) return fail("invalid-elements", "element-set epoch outside the leap-second table.");
+        rtn_axes(r, v, axes);
+        arc["covariance"] = rtn_to_gcrf_si(p0->second, axes);
+        const auto q = model.q.find(s.regime);
+        if (q != model.q.end())
+          arc["processNoise"] = {{"spectralDensityM2S3", q->second}, {"axes", "RADIAL_TRANSVERSE_NORMAL"},
+                                 {"discretizationSeconds", model.interval[s.regime]}};
+      }
+    }
+    targets += list_json.size();
+    arcs.push_back(arc);
+  }
+  nlohmann::json counts = counts_json(acc.counts);
+  counts["arcs"] = arcs.size();
+  counts["targets"] = targets;
+  counts["setsWithoutReference"] = without_reference;
+  counts["setsWithoutTargets"] = without_targets;
+  counts["arcsWithoutModelRegime"] = without_model;
+  return emit("plan", {{"kind", "hpop-arc-plan"}, {"version", 1}, {"targetAgesDays", ages},
+                       {"epochToleranceSeconds", epoch_tol}, {"targetToleranceSeconds", target_tol},
+                       {"covariance", "row-major 6x6 GCRF, SI (m, m/s), from the model's RTN P0 at the set's epoch"},
+                       {"truth", "reference state, GCRF, km and km/s"}, {"counts", counts}, {"arcs", arcs}});
+}
+
+extern "C" int hpop_coverage() {
+  using namespace hpopcal;
+  const nlohmann::json plan = json_input("plan"), predictions = json_input("predictions");
+  if (!plan.is_object() || plan.value("kind", std::string()) != "hpop-arc-plan" || !plan.contains("arcs"))
+    return fail("invalid-plan", "plan must be hpop-arc-plan JSON.");
+  if (!predictions.is_object() || !predictions.contains("arcs") || !predictions["arcs"].is_array())
+    return fail("invalid-predictions", "predictions need arcs [{arc, samples}].");
+  const nlohmann::json opt = input("options") ? json_input("options") : nlohmann::json::object();
+  if (!opt.is_object()) return fail("invalid-options", "options must be a JSON object.");
+  const std::string mode = opt.value("mode", std::string());
+  if (mode != "epoch" && mode != "fit" && mode != "test") return fail("invalid-options", "mode is epoch, fit or test.");
+  Options options;
+  std::string e = parse_options(opt, &options);
+  if (!e.empty()) return fail("invalid-options", e);
+  Gate gate;
+  e = read_gate(opt, &gate);
+  if (!e.empty()) return fail("invalid-options", e);
+  Instant from, to;
+  if (!opt.contains("window") || !opt["window"].is_array() || opt["window"].size() != 2 || !opt["window"][0].is_string() ||
+      !opt["window"][1].is_string() || !parse_instant(opt["window"][0].get<std::string>(), &from) ||
+      !parse_instant(opt["window"][1].get<std::string>(), &to))
+    return fail("invalid-options", "window is [from, to) as ISO 8601 UTC; it selects targets by epoch.");
+  Model model;
+  if (mode != "epoch") {
+    if (!input("model")) return fail("invalid-model", "fit and test need the model.");
+    e = read_model(json_input("model"), options, &model);
+    if (!e.empty()) return fail("invalid-model", e);
+  }
+
+  // Samples: the plan's targets in the window that have a prediction.
+  std::map<uint64_t, const nlohmann::json*> predicted;
+  for (const auto& a : predictions["arcs"])
+    if (a.is_object() && a.contains("arc") && a["arc"].is_number_unsigned() && a.contains("samples") && a["samples"].is_array())
+      predicted[a["arc"].get<uint64_t>()] = &a;
+  auto numbers = [](const nlohmann::json& j, size_t n, double* out) {
+    if (!j.is_array() || j.size() != n) return false;
+    for (size_t k = 0; k < n; ++k) {
+      if (!j[k].is_number()) return false;
+      out[k] = j[k].get<double>();
+    }
+    return true;
+  };
+  std::vector<Sample> samples;
+  uint64_t outside = 0, unpredicted = 0;
+  for (const auto& arc : plan["arcs"]) {
+    const auto p = predicted.find(arc.value("arc", uint64_t(0)));
+    const nlohmann::json& targets = arc["targets"];
+    for (size_t j = 0; j < targets.size(); ++j) {
+      Instant t;
+      if (!parse_instant(targets[j].value("epoch", std::string()), &t)) return fail("invalid-plan", "target epochs are ISO 8601 UTC.");
+      if (before(t, from) || !before(t, to)) { ++outside; continue; }
+      if (p == predicted.end() || j >= (*p->second)["samples"].size() || (*p->second)["samples"][j].is_null()) { ++unpredicted; continue; }
+      const nlohmann::json& got = (*p->second)["samples"][j];
+      Sample s;
+      s.regime = arc.value("regimeIndex", -1);
+      s.norad = arc.value("norad", 0u);
+      s.nominal = targets[j].value("nominalDays", 0.0);
+      s.age = targets[j].value("ageDays", 0.0);
+      double truth[6], state[6];
+      if (s.regime < 0 || s.regime >= static_cast<int>(options.regimes.size()) || !numbers(targets[j]["truth"], 6, truth) ||
+          !got.contains("state") || !numbers(got["state"], 6, state))
+        return fail("invalid-predictions", "each sample needs state [6] (m, m/s) against the plan's truth.");
+      const double rp[3] = {state[0] / 1e3, state[1] / 1e3, state[2] / 1e3}, vp[3] = {state[3] / 1e3, state[4] / 1e3, state[5] / 1e3};
+      rtn_error(rp, vp, truth, truth + 3, s.rtn);
+      rtn_axes(truth, truth + 3, s.axes);
+      for (int k = 0; k < 3; ++k) s.e[k] = state[k] - truth[k] * 1e3;
+      if (got.contains("a")) {
+        if (!numbers(got["a"], 6, s.a) || !got.contains("u") || !got["u"].is_array() || got["u"].size() != 3 ||
+            !numbers(got["u"][0], 6, s.u[0]) || !numbers(got["u"][1], 6, s.u[1]) || !numbers(got["u"][2], 6, s.u[2]))
+          return fail("invalid-predictions", "covariance samples carry a [6] and u [3][6] position blocks (m^2).");
+        s.covariance = true;
+      }
+      samples.push_back(s);
+    }
+  }
+  nlohmann::json counts{{"samples", samples.size()}, {"targetsOutsideWindow", outside}, {"targetsWithoutPrediction", unpredicted}};
+  nlohmann::json window{opt["window"][0], opt["window"][1]};
+
+  if (mode == "epoch") {
+    const double clip_k = number(opt, "clipK", 5);
+    std::map<int, std::vector<const Sample*>> by;
+    for (const Sample& s : samples)
+      if (s.nominal == 0) by[s.regime].push_back(&s);
+    nlohmann::json regimes = nlohmann::json::array();
+    for (const auto& [regime, list] : by) {
+      double scale[6];
+      for (int k = 0; k < 6; ++k) {
+        std::vector<double> v;
+        for (const Sample* s : list) v.push_back(std::fabs(s->rtn[k]));
+        std::nth_element(v.begin(), v.begin() + v.size() / 2, v.end());
+        scale[k] = 1.4826 * v[v.size() / 2];
+      }
+      std::array<double, 21> p0{};
+      std::set<uint32_t> objects;
+      uint64_t kept = 0;
+      for (const Sample* s : list) {
+        bool in = true;
+        for (int k = 0; k < 6; ++k) in = in && (!(scale[k] > 0) || std::fabs(s->rtn[k]) <= clip_k * scale[k]);
+        if (!in) continue;
+        ++kept;
+        objects.insert(s->norad);
+        for (int a = 0, t = 0; a < 6; ++a)
+          for (int b = 0; b <= a; ++b, ++t) p0[t] += s->rtn[a] * s->rtn[b];
+      }
+      if (kept < 2) continue;
+      for (double& x : p0) x /= static_cast<double>(kept);
+      regimes.push_back({{"regimeIndex", regime}, {"regime", options.regimes[regime].id}, {"n", list.size()}, {"kept", kept},
+                         {"objects", objects.size()}, {"clipK", clip_k}, {"p0", p0}});
+    }
+    return emit("model", {{"kind", "hpop-covariance-model"}, {"version", 1},
+                          {"basis", "P0: second moment about zero of HPOP's error at its first reference epoch after the "
+                                    "element set's epoch, against independent reference states, per regime"},
+                          {"units", {{"p0", "km, km/s; lower triangle, row-major, RTN: RR, TR, TT, NR, NT, NN, dR R, ..."},
+                                     {"spectralDensityM2S3", "m^2/s^3 per R, T, N axis"}}},
+                          {"epochWindow", window}, {"counts", counts}, {"regimes", regimes}});
+  }
+
+  if (mode == "fit") {
+    std::map<int, std::vector<const Sample*>> by, all;
+    for (const Sample& s : samples) {
+      if (s.covariance) all[s.regime].push_back(&s);
+      if (s.nominal > 0 && s.covariance) by[s.regime].push_back(&s);
+    }
+    const double quantile[3] = {chi2_quantile3(kContainment[0]), chi2_quantile3(kContainment[1]), chi2_quantile3(kContainment[2])};
+    // Fit-week strata (every age) that pass the gate with these densities.
+    auto passing = [&](const std::vector<const Sample*>& list, const double q[3]) {
+      std::vector<Coverage> bins(options.ages.size());
+      for (const Sample* s : list) {
+        const int bin = age_of(options, s->age);
+        if (bin < 0) continue;
+        double p[6], logdet, d2;
+        for (int c = 0; c < 6; ++c) p[c] = s->a[c] + q[0] * s->u[0][c] + q[1] * s->u[1][c] + q[2] * s->u[2][c];
+        bins[bin].add(gauss_terms(p, s->e, &logdet, &d2) ? d2 : std::numeric_limits<double>::infinity(), quantile, s->norad);
+      }
+      int n = 0;
+      for (const Coverage& c : bins) n += coverage_json(c, gate)["status"] == "CALIBRATED";
+      return n;
+    };
+    const double interval = number(opt, "discretizationSeconds", 600);
+    nlohmann::json out = model.json;
+    for (auto& r : out["regimes"]) {
+      const int regime = r["regimeIndex"].get<int>();
+      const auto found = by.find(regime);
+      if (found == by.end() || !model.p0.count(regime)) continue;
+      const std::vector<const Sample*>& list = found->second;
+      auto nll = [&](const double x[3]) {
+        double q[3], total = 0;
+        for (int k = 0; k < 3; ++k) q[k] = x[k] <= -22 ? 0 : std::pow(10.0, x[k]);
+        for (const Sample* s : list) {
+          double p[6], logdet, d2;
+          for (int c = 0; c < 6; ++c) p[c] = s->a[c] + q[0] * s->u[0][c] + q[1] * s->u[1][c] + q[2] * s->u[2][c];
+          if (!gauss_terms(p, s->e, &logdet, &d2)) return std::numeric_limits<double>::infinity();
+          total += logdet + d2;
+        }
+        return total;
+      };
+      double x[3] = {-22, -22, -22};
+      const double start = nll(x);
+      for (int sweep = 0; sweep < 6; ++sweep)
+        for (int k = 0; k < 3; ++k) {
+          double best = x[k], value = nll(x);
+          for (double g = -22; g <= -2 + 1e-9; g += 0.5) {
+            x[k] = g;
+            const double v = nll(x);
+            if (v < value) { value = v; best = g; }
+          }
+          double lo = std::max(-22.0, best - 0.5), hi = std::min(-2.0, best + 0.5);
+          const double phi = (std::sqrt(5.0) - 1) / 2;
+          for (int it = 0; it < 60; ++it) {
+            const double m1 = hi - phi * (hi - lo), m2 = lo + phi * (hi - lo);
+            x[k] = m1;
+            const double v1 = nll(x);
+            x[k] = m2;
+            const double v2 = nll(x);
+            (v1 < v2 ? hi : lo) = v1 < v2 ? m2 : m1;
+          }
+          x[k] = 0.5 * (lo + hi);
+          if (!(nll(x) < value)) x[k] = best;
+        }
+      std::set<uint32_t> objects;
+      for (const Sample* s : list) objects.insert(s->norad);
+      double ml[3];
+      for (int k = 0; k < 3; ++k) ml[k] = x[k] <= -22 + 1e-9 ? 0 : std::pow(10.0, x[k]);
+      // Selection, on the fit week only: the maximum-likelihood densities
+      // unless P0 alone passes the gate in more of its strata.
+      const double zero[3] = {0, 0, 0};
+      const int with_q = passing(all[regime], ml), without_q = passing(all[regime], zero);
+      const bool p0_only = without_q > with_q;
+      std::vector<double> q(3);
+      for (int k = 0; k < 3; ++k) q[k] = p0_only ? 0 : ml[k];
+      r["processNoise"] = {{"model", "WHITE_ACCELERATION"}, {"axes", "RADIAL_TRANSVERSE_NORMAL"}, {"spectralDensityM2S3", q},
+                           {"discretizationSeconds", interval},
+                           {"fit", {{"samples", list.size()}, {"objects", objects.size()}, {"window", window},
+                                    {"negativeLogLikelihoodQ0", start}, {"negativeLogLikelihood", nll(x)},
+                                    {"maximumLikelihoodM2S3", std::vector<double>(ml, ml + 3)},
+                                    {"fitStrataCalibrated", {{"maximumLikelihood", with_q}, {"p0Alone", without_q}}},
+                                    {"selected", p0_only ? "P0 alone" : "maximum likelihood"},
+                                    {"rule", "maximum likelihood unless P0 alone passes the gate in more fit-window strata"}}}};
+    }
+    out["basis"] = std::string(model.json.value("basis", std::string())) +
+                   "; Q: white-acceleration spectral densities per regime by maximum likelihood of HPOP's P(t) = "
+                   "Phi P0 Phi' + Q against reference-state position errors at prediction ages above 0";
+    return emit("model", out);
+  }
+
+  // test
+  const double quantile[3] = {chi2_quantile3(kContainment[0]), chi2_quantile3(kContainment[1]), chi2_quantile3(kContainment[2])};
+  const size_t bins = options.ages.size();
+  std::vector<Coverage> with(options.regimes.size() * bins), without(options.regimes.size() * bins);
+  // RMS error and RMS predicted sigma per RTN axis (with Q, and P0 alone), km.
+  std::vector<std::array<double, 9>> rms(with.size(), std::array<double, 9>{});
+  uint64_t no_bin = 0, no_covariance = 0, not_positive = 0;
+  for (const Sample& s : samples) {
+    const int bin = age_of(options, s.age);
+    if (bin < 0) { ++no_bin; continue; }
+    const size_t i = s.regime * bins + bin;
+    if (!s.covariance || !model.p0.count(s.regime)) { ++with[i].missing; ++without[i].missing; ++no_covariance; continue; }
+    const auto q = model.q.find(s.regime);
+    double p[6], logdet, d2;
+    for (int c = 0; c < 6; ++c)
+      p[c] = s.a[c] + (q == model.q.end() ? 0 : q->second[0] * s.u[0][c] + q->second[1] * s.u[1][c] + q->second[2] * s.u[2][c]);
+    // A covariance that is not positive definite cannot contain anything.
+    if (gauss_terms(p, s.e, &logdet, &d2)) with[i].add(d2, quantile, s.norad);
+    else { with[i].add(std::numeric_limits<double>::infinity(), quantile, s.norad); ++not_positive; }
+    if (gauss_terms(s.a, s.e, &logdet, &d2)) without[i].add(d2, quantile, s.norad);
+    else without[i].add(std::numeric_limits<double>::infinity(), quantile, s.norad);
+    for (int k = 0; k < 3; ++k) {
+      const double* u = s.axes[k];
+      auto along = [&](const double m[6]) {
+        const double full[3][3] = {{m[0], m[1], m[2]}, {m[1], m[3], m[4]}, {m[2], m[4], m[5]}};
+        double v = 0;
+        for (int a = 0; a < 3; ++a)
+          for (int b = 0; b < 3; ++b) v += u[a] * full[a][b] * u[b];
+        return v * 1e-6;  // m^2 -> km^2
+      };
+      rms[i][k] += s.rtn[k] * s.rtn[k];
+      rms[i][3 + k] += along(p);
+      rms[i][6 + k] += along(s.a);
+    }
+  }
+  counts["outsideAgeBins"] = no_bin;
+  counts["withoutCovariance"] = no_covariance;
+  counts["notPositiveDefinite"] = not_positive;
+  nlohmann::json strata = nlohmann::json::array();
+  for (size_t i = 0; i < with.size(); ++i) {
+    if (!with[i].n && !with[i].missing) continue;
+    const size_t r = i / bins, a = i % bins;
+    const auto q = model.q.find(static_cast<int>(r));
+    const double n = static_cast<double>(std::max<uint64_t>(1, with[i].n));
+    std::vector<double> error(3), sigma(3), sigma0(3);
+    for (int k = 0; k < 3; ++k) {
+      error[k] = std::sqrt(rms[i][k] / n);
+      sigma[k] = std::sqrt(rms[i][3 + k] / n);
+      sigma0[k] = std::sqrt(rms[i][6 + k] / n);
+    }
+    strata.push_back({{"regime", options.regimes[r].id}, {"regimeIndex", r}, {"ageIndex", a},
+                      {"ageDays", {options.ages[a].first, options.ages[a].second}},
+                      {"rmsErrorRtnKm", error}, {"rmsSigmaRtnKm", sigma}, {"rmsSigmaP0OnlyRtnKm", sigma0},
+                      {"spectralDensityM2S3", q == model.q.end() ? std::vector<double>{0, 0, 0} : std::vector<double>(q->second.begin(), q->second.end())},
+                      {"coverage", coverage_json(with[i], gate)}, {"coverageP0Only", coverage_json(without[i], gate)}});
+  }
+  return emit("report", {{"kind", "hpop-covariance-coverage"}, {"version", 1}, {"window", window}, {"gate", gate_json(gate)},
+                         {"counts", counts}, {"strata", strata}});
 }

@@ -104,6 +104,30 @@ synthetic true misses. Three screening rules are scored on every case:
 It reports alert rates, mean Pc and mean Π(collision) by stratum, geometry and
 miss.
 
+### `hpop_arcs` and `hpop_coverage`
+
+They calibrate HPOP's covariance P(t) = Φ P₀ Φᵀ + Q for the CA HPOP screen's
+product, analysis/epoch-state's GCRF state at an element set's epoch
+propagated by propagator/hpop's resident force model. The host runs HPOP.
+
+- **`hpop_arcs`** takes `elements`, `reference`, an optional `model` and
+  `options`, and outputs a `plan`. For each element set it gives:
+  - the reference epoch nearest each requested prediction age (for age 0,
+    the first epoch after the set's epoch);
+  - the reference state there;
+  - with a model, P₀ rotated from RTN to GCRF (SI) and the regime's
+    process noise.
+- **`hpop_coverage`** takes `plan`, `predictions`, `model` and `options`, and
+  outputs a `model` or a `report`. It has three modes:
+  - `epoch`: P₀ per regime, the second moment about zero of the 6-D RTN
+    errors at age 0, after a 5 robust sigma clip.
+  - `fit`: white-acceleration densities (R, T, N) per regime by maximum
+    likelihood, P = A + Σ qₖ Uₖ. A is HPOP's covariance from P₀ alone, and
+    Uₖ is from P₀ = 0 with unit density on axis k (P(t) is linear in both).
+  - `test`: zero-mean coverage by regime and age under the calibration gate,
+    with P₀ alone alongside, plus RMS error and RMS predicted sigma per RTN
+    axis.
+
 ## Model and validation
 
 `scripts/build-model.mjs` builds the model and its validation from the GP
@@ -168,6 +192,20 @@ In the calibrated strata:
   miss;
 - Pc missed 2.7 % of collisions head-on and 16 % in a crossing (dilution);
 - the bounded set missed 0.2–0.4 %.
+
+## HPOP covariance calibration
+
+`scripts/hpop-calibration.mjs` runs the whole sequence. It measures P₀ on
+the fit week, then runs HPOP four times per arc (P₀ alone, and unit noise on
+each RTN axis). It fits Q on the fit week and tests coverage on the held-out
+week:
+
+```sh
+node scripts/hpop-calibration.mjs --reference <reference-states>/reference \
+  --fit-from 2026-08-02 --fit-to 2026-08-08 --test-from 2026-08-09 --test-to 2026-08-15 --out <dir>
+```
+
+Report: [docs/hpop-calibration-2026-08.md](docs/hpop-calibration-2026-08.md).
 
 ## Build and test
 

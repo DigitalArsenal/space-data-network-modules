@@ -1,0 +1,459 @@
+{
+ "basis": "P0: second moment about zero of HPOP's error at its first reference epoch after the element set's epoch, against independent reference states, per regime; Q: white-acceleration spectral densities per regime by maximum likelihood of HPOP's P(t) = Phi P0 Phi' + Q against reference-state position errors at prediction ages above 0",
+ "counts": {
+  "samples": 483,
+  "targetsOutsideWindow": 600,
+  "targetsWithoutPrediction": 0
+ },
+ "epochWindow": [
+  "2026-08-02T00:00:00Z",
+  "2026-08-09T00:00:00Z"
+ ],
+ "kind": "hpop-covariance-model",
+ "regimes": [
+  {
+   "clipK": 5,
+   "kept": 42,
+   "n": 42,
+   "objects": 2,
+   "p0": [
+    0.017293782388931023,
+    0.05995720903784983,
+    0.4204366055324856,
+    -0.004331526756990671,
+    0.047514378563884505,
+    0.02499178537626477,
+    -0.00006564032939395017,
+    -0.0004349883197881698,
+    -0.00004327118650428698,
+    4.5368152849274284e-7,
+    -0.000018800434736632713,
+    -0.00006382019990323556,
+    0.00000440932104290591,
+    7.044194948839105e-8,
+    2.08173507275416e-8,
+    -0.00001154145007661725,
+    0.000011096799423089963,
+    0.0000150989577889923,
+    -3.355726541180197e-9,
+    1.4636626178346548e-8,
+    3.3708987514523824e-8
+   ],
+   "processNoise": {
+    "axes": "RADIAL_TRANSVERSE_NORMAL",
+    "discretizationSeconds": 600,
+    "fit": {
+     "fitStrataCalibrated": {
+      "maximumLikelihood": 0,
+      "p0Alone": 0
+     },
+     "maximumLikelihoodM2S3": [
+      0.000004967923405774628,
+      4.018399797104876e-22,
+      1.801411509824367e-8
+     ],
+     "negativeLogLikelihood": 11037.89482438874,
+     "negativeLogLikelihoodQ0": 88954.6258357647,
+     "objects": 2,
+     "rule": "maximum likelihood unless P0 alone passes the gate in more fit-window strata",
+     "samples": 228,
+     "selected": "maximum likelihood",
+     "window": [
+      "2026-08-02T00:00:00Z",
+      "2026-08-09T00:00:00Z"
+     ]
+    },
+    "model": "WHITE_ACCELERATION",
+    "spectralDensityM2S3": [
+     0.000004967923405774628,
+     4.018399797104876e-22,
+     1.801411509824367e-8
+    ]
+   },
+   "regime": "LEO below 450 km",
+   "regimeIndex": 0
+  },
+  {
+   "clipK": 5,
+   "kept": 21,
+   "n": 21,
+   "objects": 1,
+   "p0": [
+    0.014381643950100284,
+    0.04758725231634562,
+    0.3704425413085725,
+    -0.007824602573864844,
+    -0.03075814783809852,
+    0.03202195288299574,
+    -0.00005914887642183531,
+    -0.0004351434228037097,
+    0.00004119895813486113,
+    5.168507565227678e-7,
+    -0.000015424109249360504,
+    -0.00005298840465051528,
+    0.000004679088596054161,
+    6.589577566642525e-8,
+    1.744772233633964e-8,
+    -0.00000857278751836292,
+    0.0000012291630206335363,
+    -0.000010379028630290055,
+    6.940218529998836e-9,
+    1.2577637944736206e-8,
+    6.45102239104113e-8
+   ],
+   "processNoise": {
+    "axes": "RADIAL_TRANSVERSE_NORMAL",
+    "discretizationSeconds": 600,
+    "fit": {
+     "fitStrataCalibrated": {
+      "maximumLikelihood": 0,
+      "p0Alone": 0
+     },
+     "maximumLikelihoodM2S3": [
+      4.932022977149669e-7,
+      1.3802138911826908e-16,
+      1e-18
+     ],
+     "negativeLogLikelihood": 5077.985058929591,
+     "negativeLogLikelihoodQ0": 14592.054684999035,
+     "objects": 1,
+     "rule": "maximum likelihood unless P0 alone passes the gate in more fit-window strata",
+     "samples": 114,
+     "selected": "maximum likelihood",
+     "window": [
+      "2026-08-02T00:00:00Z",
+      "2026-08-09T00:00:00Z"
+     ]
+    },
+    "model": "WHITE_ACCELERATION",
+    "spectralDensityM2S3": [
+     4.932022977149669e-7,
+     1.3802138911826908e-16,
+     1e-18
+    ]
+   },
+   "regime": "LEO 450-600 km",
+   "regimeIndex": 1
+  },
+  {
+   "clipK": 5,
+   "kept": 75,
+   "n": 75,
+   "objects": 4,
+   "p0": [
+    0.014044188407165151,
+    0.014362902734676499,
+    0.3146865017114426,
+    0.0063322065757544016,
+    -0.011557065595862049,
+    0.017828661029310744,
+    -0.000016099479233642925,
+    -0.00032609476176211316,
+    0.000012695910228507052,
+    3.4443170619197416e-7,
+    -0.00001573618963218531,
+    -0.000010408699913199327,
+    -0.000007825112659688565,
+    1.1933243388412e-8,
+    1.8279363685210513e-8,
+    -0.000006102930020280187,
+    0.0000023160997160575232,
+    -0.000010140102442341505,
+    -3.5155654641251594e-9,
+    8.549314508911849e-9,
+    4.541434878389586e-8
+   ],
+   "processNoise": {
+    "axes": "RADIAL_TRANSVERSE_NORMAL",
+    "discretizationSeconds": 600,
+    "fit": {
+     "fitStrataCalibrated": {
+      "maximumLikelihood": 1,
+      "p0Alone": 4
+     },
+     "maximumLikelihoodM2S3": [
+      1.7393609584651036e-8,
+      3.021863578672695e-20,
+      3.856635706724814e-8
+     ],
+     "negativeLogLikelihood": 16814.188587801356,
+     "negativeLogLikelihoodQ0": 16887.2124038548,
+     "objects": 4,
+     "rule": "maximum likelihood unless P0 alone passes the gate in more fit-window strata",
+     "samples": 406,
+     "selected": "P0 alone",
+     "window": [
+      "2026-08-02T00:00:00Z",
+      "2026-08-09T00:00:00Z"
+     ]
+    },
+    "model": "WHITE_ACCELERATION",
+    "spectralDensityM2S3": [
+     0,
+     0,
+     0
+    ]
+   },
+   "regime": "LEO 600-800 km",
+   "regimeIndex": 2
+  },
+  {
+   "clipK": 5,
+   "kept": 34,
+   "n": 34,
+   "objects": 2,
+   "p0": [
+    0.011588744499177942,
+    0.000685326348110289,
+    0.14313839402110315,
+    0.008845406283833679,
+    -0.03343814565286639,
+    0.044971831167722,
+    -0.000002560999755673795,
+    -0.0001575995266570852,
+    0.00002960741974576716,
+    1.769528175038785e-7,
+    -0.000012100525087162191,
+    0.0000057273798588132355,
+    -0.000018815112471588275,
+    -2.574639433253017e-9,
+    1.6147584277848796e-8,
+    -0.000008566187380282613,
+    0.000022177548498837527,
+    -0.000027722461522541592,
+    -1.9716025202751614e-8,
+    1.743066853500181e-8,
+    4.675789253765605e-8
+   ],
+   "processNoise": {
+    "axes": "RADIAL_TRANSVERSE_NORMAL",
+    "discretizationSeconds": 600,
+    "fit": {
+     "fitStrataCalibrated": {
+      "maximumLikelihood": 0,
+      "p0Alone": 0
+     },
+     "maximumLikelihoodM2S3": [
+      0.0000010437839758710593,
+      0,
+      1.4436938007729582e-7
+     ],
+     "negativeLogLikelihood": 9351.121117920795,
+     "negativeLogLikelihoodQ0": 23743.389879465336,
+     "objects": 2,
+     "rule": "maximum likelihood unless P0 alone passes the gate in more fit-window strata",
+     "samples": 200,
+     "selected": "maximum likelihood",
+     "window": [
+      "2026-08-02T00:00:00Z",
+      "2026-08-09T00:00:00Z"
+     ]
+    },
+    "model": "WHITE_ACCELERATION",
+    "spectralDensityM2S3": [
+     0.0000010437839758710593,
+     0,
+     1.4436938007729582e-7
+    ]
+   },
+   "regime": "LEO 800-1200 km",
+   "regimeIndex": 3
+  },
+  {
+   "clipK": 5,
+   "kept": 41,
+   "n": 41,
+   "objects": 2,
+   "p0": [
+    0.005958228607069372,
+    -0.0014736130541249124,
+    0.1267226675640589,
+    -0.0005199183688730837,
+    -0.008748595767923502,
+    0.006981038427877777,
+    0.0000018899800950465845,
+    -0.00010194020491396205,
+    0.000007220422638970179,
+    8.410608708356603e-8,
+    -0.000004884818019418595,
+    0.0000017234743471726324,
+    1.0451685176506162e-8,
+    -1.6440841080291498e-9,
+    4.366206493206778e-9,
+    0.0000021286728156707648,
+    0.000014158641499583021,
+    8.914983984926459e-7,
+    -7.749643196211971e-9,
+    -1.3872301685641054e-9,
+    1.5076640001084908e-8
+   ],
+   "processNoise": {
+    "axes": "RADIAL_TRANSVERSE_NORMAL",
+    "discretizationSeconds": 600,
+    "fit": {
+     "fitStrataCalibrated": {
+      "maximumLikelihood": 0,
+      "p0Alone": 0
+     },
+     "maximumLikelihoodM2S3": [
+      1.0567733948298453e-8,
+      1.5132426519947004e-22,
+      8.186535725422648e-8
+     ],
+     "negativeLogLikelihood": 8768.335200351758,
+     "negativeLogLikelihoodQ0": 9035.191155370794,
+     "objects": 2,
+     "rule": "maximum likelihood unless P0 alone passes the gate in more fit-window strata",
+     "samples": 221,
+     "selected": "maximum likelihood",
+     "window": [
+      "2026-08-02T00:00:00Z",
+      "2026-08-09T00:00:00Z"
+     ]
+    },
+    "model": "WHITE_ACCELERATION",
+    "spectralDensityM2S3": [
+     1.0567733948298453e-8,
+     1.5132426519947004e-22,
+     8.186535725422648e-8
+    ]
+   },
+   "regime": "LEO 1200-2000 km",
+   "regimeIndex": 4
+  },
+  {
+   "clipK": 5,
+   "kept": 19,
+   "n": 19,
+   "objects": 3,
+   "p0": [
+    0.0010535648746343134,
+    -0.002544877639699192,
+    0.11252516090942084,
+    0.0001236887196380933,
+    -0.01714555429800359,
+    0.01710430656870609,
+    9.863559775997335e-7,
+    -0.000051283324102872155,
+    0.000007968383790277466,
+    2.3592618083020368e-8,
+    -6.171644661175415e-7,
+    0.0000019675144310558925,
+    -4.270626363280547e-7,
+    -7.895600576771665e-10,
+    4.1702166716975466e-10,
+    3.4523416765843725e-7,
+    -0.0000032086582584949394,
+    4.806285666918896e-7,
+    1.1758371903133667e-9,
+    -3.04571931379724e-10,
+    1.61554947061421e-9
+   ],
+   "processNoise": {
+    "axes": "RADIAL_TRANSVERSE_NORMAL",
+    "discretizationSeconds": 600,
+    "fit": {
+     "fitStrataCalibrated": {
+      "maximumLikelihood": 1,
+      "p0Alone": 1
+     },
+     "maximumLikelihoodM2S3": [
+      1.2201646985629003e-10,
+      6.051300298982993e-11,
+      1.2567412679714993e-7
+     ],
+     "negativeLogLikelihood": 5904.298648916638,
+     "negativeLogLikelihoodQ0": 7621.15505353539,
+     "objects": 3,
+     "rule": "maximum likelihood unless P0 alone passes the gate in more fit-window strata",
+     "samples": 156,
+     "selected": "maximum likelihood",
+     "window": [
+      "2026-08-02T00:00:00Z",
+      "2026-08-09T00:00:00Z"
+     ]
+    },
+    "model": "WHITE_ACCELERATION",
+    "spectralDensityM2S3": [
+     1.2201646985629003e-10,
+     6.051300298982993e-11,
+     1.2567412679714993e-7
+    ]
+   },
+   "regime": "MEO 2000-10000 km",
+   "regimeIndex": 5
+  },
+  {
+   "clipK": 5,
+   "kept": 247,
+   "n": 251,
+   "objects": 34,
+   "p0": [
+    0.029086523825560172,
+    0.0402129397415736,
+    4.3492583108536875,
+    -0.005173222044168187,
+    -0.11550941926078,
+    0.020118130388541988,
+    -0.0000050102485052981005,
+    -0.0006281470395435763,
+    0.000016821921370905102,
+    9.143207852996774e-8,
+    -0.000004482528209910541,
+    -0.000006640573398301556,
+    7.090290620861967e-7,
+    8.325384896104012e-10,
+    7.321024043203025e-10,
+    0.0000013050039616560284,
+    0.000009374840181727686,
+    -9.36583520985538e-7,
+    -1.4104036324265143e-9,
+    -2.005583882034208e-10,
+    3.099155473496647e-10
+   ],
+   "processNoise": {
+    "axes": "RADIAL_TRANSVERSE_NORMAL",
+    "discretizationSeconds": 600,
+    "fit": {
+     "fitStrataCalibrated": {
+      "maximumLikelihood": 2,
+      "p0Alone": 0
+     },
+     "maximumLikelihoodM2S3": [
+      3.4559515313021848e-9,
+      2.6038114613420123e-10,
+      4.126979172228591e-7
+     ],
+     "negativeLogLikelihood": 70094.04741571857,
+     "negativeLogLikelihoodQ0": 366783.2475375506,
+     "objects": 34,
+     "rule": "maximum likelihood unless P0 alone passes the gate in more fit-window strata",
+     "samples": 1497,
+     "selected": "maximum likelihood",
+     "window": [
+      "2026-08-02T00:00:00Z",
+      "2026-08-09T00:00:00Z"
+     ]
+    },
+    "model": "WHITE_ACCELERATION",
+    "spectralDensityM2S3": [
+     3.4559515313021848e-9,
+     2.6038114613420123e-10,
+     4.126979172228591e-7
+    ]
+   },
+   "regime": "MEO 10000-30000 km",
+   "regimeIndex": 6
+  }
+ ],
+ "units": {
+  "p0": "km, km/s; lower triangle, row-major, RTN: RR, TR, TT, NR, NT, NN, dR R, ...",
+  "spectralDensityM2S3": "m^2/s^3 per R, T, N axis"
+ },
+ "version": 1,
+ "fitWindow": [
+  "2026-08-02T00:00:00Z",
+  "2026-08-09T00:00:00Z"
+ ],
+ "product": "analysis/epoch-state GCRF state at the element-set epoch, propagated by propagator/hpop resident (point mass and degree/order 20 field, RK78 60/0.01/600 s, 1e-12, analytic STM)"
+}
