@@ -409,16 +409,16 @@
       }
     },
     "analysis/estimation/dist/isomorphic/module.wasm": {
-      "sha256": "42d10718037289a1e53d70755ee2374cf450e54fee96313be04c55828582cc16",
-      "bytes": 279278,
+      "sha256": "2d4ffddc0516729a42847418dd12cfb7862c0554c36b731a98fcaff01cb8594b",
+      "bytes": 342252,
       "module": "analysis/estimation",
-      "lastCommit": "d5bab704e23a39adaf6baf04dd04c2b2f7b6c2fb",
-      "lastCommitDate": "2026-08-30T13:37:54-04:00",
+      "lastCommit": "2f7fa5d0e6e6a7a3a581dfc5d2edcde15ece92ba",
+      "lastCommitDate": "2026-10-01T23:02:37-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "2b3f2a259264f8aa5615976695eb9322c8419aae",
-        "sdkCommit": "080398e899b13bdfc00770bef696a3b0daa2e939"
+        "superRepoCommit": "4b222c8ae61645b7efcad68de1ea1fb603be1b5c",
+        "sdkCommit": "cf1a1276bdc6f400e13372e34b6ff30882d38f95"
       },
       "declaration": {
         "declares": false,
