@@ -264,15 +264,22 @@ so times are upper bounds.
 | SGP4, 12 × 6 h | module, Node | 19.1 s | 9.7 s | 6.6 s | 292,516 (25 objects excluded) |
 | SGP4 | module, WasmEdge 0.16.4 AOT, SDN patches | 22.9 s | 11.9 s | 8.7 s | 292,516 |
 | SGP4 | GPU | 21.3 s | 6.1 + 2.3 s | 7.2 s | 292,516 |
-| HPOP, 36 × 2 h | GPU | 382.1 s | 4.7 + 1.8 s | 8.3 s | 301,396 |
-| HPOP | module, Node | 437.8 s | 15.2 s | 8.7 s | 301,396 |
+| HPOP, 36 × 2 h | GPU | 482.5 s | 4.4 + 1.7 s | 7.5 s | 285,060 |
+| HPOP | module, Node | 493.4 s | 16.8 s | 9.9 s | 285,060 |
 
 - Each propagator's runs report identical conjunctions (same TCA and miss
   distance) whichever host searched.
 - On the GPU path the module samples (6.1 s) and the GPU searches (2.3 s;
   8.5 s with the all-pairs kernel the grid replaced).
-- HPOP's time is propagation: about 350–400 s of waiting on the farm,
-  including about 120 s of catch-up from element epochs.
+- HPOP's time is propagation: about 454 s of waiting on the farm,
+  including the catch-up from element epochs in the first window.
+- The HPOP rows are from modules 82a566fd (2026-10-02). That build evaluates
+  the Earth's field in Earth-fixed axes and fills the built-in field with
+  EGM2008 to degree and order 20.
+- Before it, HPOP used a partial field in inertial axes and these runs
+  reported 301,396 conjunctions in 382–438 s. Those trajectories drifted
+  kilometres a day from independent reference orbits. See propagator/hpop
+  README, "Gravity field frame".
 - AOT compilation (about 10 s, once per install) is not counted.
 
 ### Step size
@@ -317,7 +324,8 @@ Every row reports the same 292,516 conjunctions.
 
 `screen_catalog` traps out of memory above about 7,000 objects per call.
 
-HPOP's own cost is about 41 ms per object-day for one resident instance
+HPOP's own cost was about 41 ms per object-day for one resident instance
+before the full degree/order 20 field (above), which raised the 3-day farm wait to 454 s
 (200 LEO objects, one day, `conjunction-screening` profile). A day of its
 10-minute intervals is about 90 KB per object, so a full catalog of PPE does
 not fit in one module instance; screen it in time windows.

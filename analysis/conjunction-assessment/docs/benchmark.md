@@ -50,7 +50,7 @@ node scripts/run-all-vs-all-cpu.mjs --runtime node --catalog catalog.OMM.uint32b
 node scripts/run-all-vs-all-gpu.mjs --catalog catalog.OMM.uint32be.bin \
   --start 2461314.5 --days 3 --out gpu-sgp4.json
 
-# HPOP, CPU (slow: propagation dominates, about 7 minutes on 28 cores)
+# HPOP, CPU (slow: propagation dominates, about 8 minutes on 28 cores)
 node scripts/run-all-vs-all-cpu.mjs --runtime node --propagator hpop \
   --catalog catalog.OMM.uint32be.bin --start 2461314.5 --days 3 --out cpu-hpop.json
 ```
@@ -88,6 +88,6 @@ Mac Studio, 28 cores, Space-Track GP catalog of 2026-09-30 (32,514 objects),
 | --- | ---: | ---: |
 | SGP4, CPU, Node | 19.1 s | 292,516 (25 objects excluded) |
 | SGP4, GPU (Metal) | 21.3 s | 292,516 |
-| HPOP, CPU, Node | 437.8 s | 301,396 |
+| HPOP, CPU, Node | 493.4 s | 285,060 |
 
 The numbers of conjunctions match only for the same catalog snapshot.
