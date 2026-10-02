@@ -106,52 +106,6 @@ struct ModulePublication {
   keyMaterialAlgorithm content_key_algorithm = keyMaterialAlgorithm::Aes256Gcm;
 };
 
-// Origin-scoped grant rules, carried in PLG.ALLOWED_XPUBS (owner 2026-10-02:
-// the gallery at orbpro.edgesource.dev serves every module without a login;
-// spaceaware.io is licensed per wallet):
-//   "origin:<host>=open"    any requester whose requested domain is <host>
-//   "origin:<host>=<xpub>"  only that wallet on <host>, with its account key proof
-// A publication carrying any origin rule refuses every host it does not name.
-// Plain xpub entries keep their meaning on publications without origin rules.
-// The node attests the domain: it serves a named host only over HTTPS with a
-// matching Origin header (see the SDN module-delivery exchange endpoint).
-struct OriginGrantRules {
-  bool scoped = false;
-  bool host_listed = false;
-  bool host_open = false;
-  std::vector<std::string> xpubs{};
-};
-
-std::string lower_ascii(std::string_view value) {
-  std::string out(value);
-  for (char& c : out) {
-    if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
-  }
-  return out;
-}
-
-OriginGrantRules origin_grant_rules(const std::vector<std::string>& entries,
-                                    std::string_view requested_domain) {
-  constexpr std::string_view kPrefix = "origin:";
-  OriginGrantRules rules{};
-  const std::string host = lower_ascii(requested_domain);
-  for (const auto& entry : entries) {
-    if (entry.rfind(kPrefix, 0) != 0) continue;
-    rules.scoped = true;
-    const std::size_t eq = entry.find('=', kPrefix.size());
-    if (eq == std::string::npos) continue;
-    if (lower_ascii(std::string_view(entry).substr(kPrefix.size(), eq - kPrefix.size())) != host) continue;
-    rules.host_listed = true;
-    const std::string value = entry.substr(eq + 1);
-    if (value == "open") {
-      rules.host_open = true;
-    } else if (!value.empty()) {
-      rules.xpubs.push_back(value);
-    }
-  }
-  return rules;
-}
-
 struct PendingGrantMessage {
   std::string request_id{};
   std::string publication_key{};
@@ -2356,24 +2310,12 @@ int32_t key_server_handle_message(
     // PKI xpub allowlist: early membership filter on the claimed xpub. The
     // cryptographic binding of that xpub to the requester's proven ed25519 signing
     // key (via the re-sent EPM) is verified at proof time below.
-    const OriginGrantRules origin_rules =
-        origin_grant_rules(publication.descriptor.ALLOWED_XPUBS, requested_domain);
-    bool xpub_allowed = false;
-    if (origin_rules.scoped) {
-      xpub_allowed = origin_rules.host_open;
-      for (const auto& allowed_xpub : origin_rules.xpubs) {
-        if (allowed_xpub == requester_xpub) {
-          xpub_allowed = true;
-          break;
-        }
-      }
-    } else {
-      xpub_allowed = publication.descriptor.ALLOWED_XPUBS.empty();
-      for (const auto& allowed_xpub : publication.descriptor.ALLOWED_XPUBS) {
-        if (allowed_xpub == requester_xpub) {
-          xpub_allowed = true;
-          break;
-        }
+    bool xpub_allowed =
+        publication.descriptor.ALLOWED_XPUBS.empty();
+    for (const auto& allowed_xpub : publication.descriptor.ALLOWED_XPUBS) {
+      if (allowed_xpub == requester_xpub) {
+        xpub_allowed = true;
+        break;
       }
     }
     if (!xpub_allowed) {
@@ -2597,17 +2539,12 @@ int32_t key_server_handle_message(
   // Authoritative PKI gate: when the module declares an xpub allowlist, the re-sent
   // EPM must verify and bind the now-proven ed25519 signing key to the requester's
   // xpub (cross-curve attestation), and that xpub must equal the allowlisted one.
-  const OriginGrantRules origin_rules =
-      origin_grant_rules(publication.descriptor.ALLOWED_XPUBS, pending.requested_domain);
-  const bool needs_wallet_gate =
-      origin_rules.scoped ? !origin_rules.host_open
-                          : !publication.descriptor.ALLOWED_XPUBS.empty();
-  if (needs_wallet_gate) {
+  if (!publication.descriptor.ALLOWED_XPUBS.empty()) {
     const sdn::epm::AuthorizeResult gate = authorize_requester_epm(
         pending.requester_epm.data(),
         pending.requester_epm.size(),
         pending.requester_signing_pubkey.data(),
-        origin_rules.scoped ? origin_rules.xpubs : publication.descriptor.ALLOWED_XPUBS,
+        publication.descriptor.ALLOWED_XPUBS,
         now_ms() / 1000,
         kEpmMaxAgeSeconds,
         pending.requested_domain);
