@@ -63,6 +63,7 @@ export { PRWKeplerianElements, PRWKeplerianElementsT } from './PRWKeplerianEleme
 export { PRWNativeInput, PRWNativeInputT } from './PRWNativeInput.js';
 export { PRWPrepareRequest, PRWPrepareRequestT } from './PRWPrepareRequest.js';
 export { PRWPrepareResult, PRWPrepareResultT } from './PRWPrepareResult.js';
+export { PRWProcessNoise, PRWProcessNoiseT } from './PRWProcessNoise.js';
 export { PRWPropagationSample, PRWPropagationSampleT } from './PRWPropagationSample.js';
 export { PRWResidentRequest, PRWResidentRequestT } from './PRWResidentRequest.js';
 export { PRWResidentState, PRWResidentStateT } from './PRWResidentState.js';
@@ -117,6 +118,8 @@ export { prwDensitySpecies } from './prwDensitySpecies.js';
 export { prwDensityTreatment } from './prwDensityTreatment.js';
 export { prwDerivativeTechnique } from './prwDerivativeTechnique.js';
 export { prwGravitySelection } from './prwGravitySelection.js';
+export { prwProcessNoiseAxes } from './prwProcessNoiseAxes.js';
+export { prwProcessNoiseModel } from './prwProcessNoiseModel.js';
 export { prwQualityEvidence } from './prwQualityEvidence.js';
 export { prwSolverAlgorithm } from './prwSolverAlgorithm.js';
 export { prwSourceKind } from './prwSourceKind.js';

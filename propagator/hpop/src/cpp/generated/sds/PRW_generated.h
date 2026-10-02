@@ -63,6 +63,10 @@ struct PRWStateMatrix;
 struct PRWStateMatrixBuilder;
 struct PRWStateMatrixT;
 
+struct PRWProcessNoise;
+struct PRWProcessNoiseBuilder;
+struct PRWProcessNoiseT;
+
 struct PRWResidentState;
 struct PRWResidentStateBuilder;
 struct PRWResidentStateT;
@@ -633,6 +637,78 @@ inline const char *EnumNameprwQualityEvidence(prwQualityEvidence e) {
   if (::flatbuffers::IsOutRange(e, prwQualityEvidence::UNMEASURED, prwQualityEvidence::PROVEN_BOUND)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesprwQualityEvidence()[index];
+}
+
+/// Process noise added to a propagated covariance. WHITE_ACCELERATION is
+/// zero-mean white acceleration noise (state noise compensation): over each
+/// discretization interval h it adds, per axis with spectral density q,
+/// q * [[h^3/3, h^2/2], [h^2/2, h]] to the position-velocity block, which the
+/// linearized dynamics then carry forward with the covariance.
+enum class prwProcessNoiseModel : uint8_t {
+  UNSPECIFIED = 0,
+  NONE = 1,
+  WHITE_ACCELERATION = 2,
+  MIN = UNSPECIFIED,
+  MAX = WHITE_ACCELERATION
+};
+
+inline const prwProcessNoiseModel (&EnumValuesprwProcessNoiseModel())[3] {
+  static const prwProcessNoiseModel values[] = {
+    prwProcessNoiseModel::UNSPECIFIED,
+    prwProcessNoiseModel::NONE,
+    prwProcessNoiseModel::WHITE_ACCELERATION
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwProcessNoiseModel() {
+  static const char * const names[4] = {
+    "UNSPECIFIED",
+    "NONE",
+    "WHITE_ACCELERATION",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwProcessNoiseModel(prwProcessNoiseModel e) {
+  if (::flatbuffers::IsOutRange(e, prwProcessNoiseModel::UNSPECIFIED, prwProcessNoiseModel::WHITE_ACCELERATION)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwProcessNoiseModel()[index];
+}
+
+/// Axes of the process noise spectral densities.
+enum class prwProcessNoiseAxes : uint8_t {
+  UNSPECIFIED = 0,
+  INERTIAL = 1,
+  RADIAL_TRANSVERSE_NORMAL = 2,
+  MIN = UNSPECIFIED,
+  MAX = RADIAL_TRANSVERSE_NORMAL
+};
+
+inline const prwProcessNoiseAxes (&EnumValuesprwProcessNoiseAxes())[3] {
+  static const prwProcessNoiseAxes values[] = {
+    prwProcessNoiseAxes::UNSPECIFIED,
+    prwProcessNoiseAxes::INERTIAL,
+    prwProcessNoiseAxes::RADIAL_TRANSVERSE_NORMAL
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwProcessNoiseAxes() {
+  static const char * const names[4] = {
+    "UNSPECIFIED",
+    "INERTIAL",
+    "RADIAL_TRANSVERSE_NORMAL",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwProcessNoiseAxes(prwProcessNoiseAxes e) {
+  if (::flatbuffers::IsOutRange(e, prwProcessNoiseAxes::UNSPECIFIED, prwProcessNoiseAxes::RADIAL_TRANSVERSE_NORMAL)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwProcessNoiseAxes()[index];
 }
 
 enum class prwDensitySpecies : uint8_t {
@@ -2277,6 +2353,117 @@ inline ::flatbuffers::Offset<PRWStateMatrix> CreatePRWStateMatrixDirect(
 
 ::flatbuffers::Offset<PRWStateMatrix> CreatePRWStateMatrix(::flatbuffers::FlatBufferBuilder &_fbb, const PRWStateMatrixT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct PRWProcessNoiseT : public ::flatbuffers::NativeTable {
+  typedef PRWProcessNoise TableType;
+  prwProcessNoiseModel MODEL = prwProcessNoiseModel::UNSPECIFIED;
+  prwProcessNoiseAxes AXES = prwProcessNoiseAxes::UNSPECIFIED;
+  std::vector<double> SPECTRAL_DENSITY_M2_S3{};
+  double DISCRETIZATION_SECONDS = 0.0;
+};
+
+/// The process noise a propagated covariance includes: P(t) = Phi P0 Phi^T + Q.
+struct PRWProcessNoise FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWProcessNoiseT NativeTableType;
+  typedef PRWProcessNoiseBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_MODEL = 4,
+    VT_AXES = 6,
+    VT_SPECTRAL_DENSITY_M2_S3 = 8,
+    VT_DISCRETIZATION_SECONDS = 10
+  };
+  prwProcessNoiseModel MODEL() const {
+    return static_cast<prwProcessNoiseModel>(GetField<uint8_t>(VT_MODEL, 0));
+  }
+  prwProcessNoiseAxes AXES() const {
+    return static_cast<prwProcessNoiseAxes>(GetField<uint8_t>(VT_AXES, 0));
+  }
+  /// Acceleration power spectral density per axis (x, y, z or R, T, N), m^2/s^3.
+  const ::flatbuffers::Vector<double> *SPECTRAL_DENSITY_M2_S3() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SPECTRAL_DENSITY_M2_S3);
+  }
+  /// Interval over which each noise increment enters, seconds.
+  double DISCRETIZATION_SECONDS() const {
+    return GetField<double>(VT_DISCRETIZATION_SECONDS, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_MODEL, 1) &&
+           VerifyField<uint8_t>(verifier, VT_AXES, 1) &&
+           VerifyOffset(verifier, VT_SPECTRAL_DENSITY_M2_S3) &&
+           verifier.VerifyVector(SPECTRAL_DENSITY_M2_S3()) &&
+           VerifyField<double>(verifier, VT_DISCRETIZATION_SECONDS, 8) &&
+           verifier.EndTable();
+  }
+  PRWProcessNoiseT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWProcessNoiseT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWProcessNoise> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWProcessNoiseT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWProcessNoiseBuilder {
+  typedef PRWProcessNoise Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_MODEL(prwProcessNoiseModel MODEL) {
+    fbb_.AddElement<uint8_t>(PRWProcessNoise::VT_MODEL, static_cast<uint8_t>(MODEL), 0);
+  }
+  void add_AXES(prwProcessNoiseAxes AXES) {
+    fbb_.AddElement<uint8_t>(PRWProcessNoise::VT_AXES, static_cast<uint8_t>(AXES), 0);
+  }
+  void add_SPECTRAL_DENSITY_M2_S3(::flatbuffers::Offset<::flatbuffers::Vector<double>> SPECTRAL_DENSITY_M2_S3) {
+    fbb_.AddOffset(PRWProcessNoise::VT_SPECTRAL_DENSITY_M2_S3, SPECTRAL_DENSITY_M2_S3);
+  }
+  void add_DISCRETIZATION_SECONDS(double DISCRETIZATION_SECONDS) {
+    fbb_.AddElement<double>(PRWProcessNoise::VT_DISCRETIZATION_SECONDS, DISCRETIZATION_SECONDS, 0.0);
+  }
+  explicit PRWProcessNoiseBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWProcessNoise> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWProcessNoise>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWProcessNoise> CreatePRWProcessNoise(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    prwProcessNoiseModel MODEL = prwProcessNoiseModel::UNSPECIFIED,
+    prwProcessNoiseAxes AXES = prwProcessNoiseAxes::UNSPECIFIED,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> SPECTRAL_DENSITY_M2_S3 = 0,
+    double DISCRETIZATION_SECONDS = 0.0) {
+  PRWProcessNoiseBuilder builder_(_fbb);
+  builder_.add_DISCRETIZATION_SECONDS(DISCRETIZATION_SECONDS);
+  builder_.add_SPECTRAL_DENSITY_M2_S3(SPECTRAL_DENSITY_M2_S3);
+  builder_.add_AXES(AXES);
+  builder_.add_MODEL(MODEL);
+  return builder_.Finish();
+}
+
+struct PRWProcessNoise::Traits {
+  using type = PRWProcessNoise;
+  static auto constexpr Create = CreatePRWProcessNoise;
+};
+
+inline ::flatbuffers::Offset<PRWProcessNoise> CreatePRWProcessNoiseDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    prwProcessNoiseModel MODEL = prwProcessNoiseModel::UNSPECIFIED,
+    prwProcessNoiseAxes AXES = prwProcessNoiseAxes::UNSPECIFIED,
+    const std::vector<double> *SPECTRAL_DENSITY_M2_S3 = nullptr,
+    double DISCRETIZATION_SECONDS = 0.0) {
+  auto SPECTRAL_DENSITY_M2_S3__ = SPECTRAL_DENSITY_M2_S3 ? _fbb.CreateVector<double>(*SPECTRAL_DENSITY_M2_S3) : 0;
+  return CreatePRWProcessNoise(
+      _fbb,
+      MODEL,
+      AXES,
+      SPECTRAL_DENSITY_M2_S3__,
+      DISCRETIZATION_SECONDS);
+}
+
+::flatbuffers::Offset<PRWProcessNoise> CreatePRWProcessNoise(::flatbuffers::FlatBufferBuilder &_fbb, const PRWProcessNoiseT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct PRWResidentStateT : public ::flatbuffers::NativeTable {
   typedef PRWResidentState TableType;
   std::unique_ptr<PRWInstanceT> INSTANCE{};
@@ -2293,6 +2480,7 @@ struct PRWResidentStateT : public ::flatbuffers::NativeTable {
   double SRP_AREA_OVER_MASS_M2_KG = 0.0;
   bool HAS_SRP_AREA_OVER_MASS_M2_KG = false;
   bool VALID = true;
+  std::unique_ptr<PRWProcessNoiseT> PROCESS_NOISE{};
   PRWResidentStateT() = default;
   PRWResidentStateT(const PRWResidentStateT &o);
   PRWResidentStateT(PRWResidentStateT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -2318,7 +2506,8 @@ struct PRWResidentState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_HAS_DRAG_AREA_OVER_MASS_M2_KG = 24,
     VT_SRP_AREA_OVER_MASS_M2_KG = 26,
     VT_HAS_SRP_AREA_OVER_MASS_M2_KG = 28,
-    VT_VALID = 30
+    VT_VALID = 30,
+    VT_PROCESS_NOISE = 32
   };
   const PRWInstance *INSTANCE() const {
     return GetPointer<const PRWInstance *>(VT_INSTANCE);
@@ -2368,6 +2557,11 @@ struct PRWResidentState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   bool VALID() const {
     return GetField<uint8_t>(VT_VALID, 1) != 0;
   }
+  /// Process noise for COVARIANCE: on input, what propagation adds; on
+  /// output, what the propagated COVARIANCE includes. Absent means none.
+  const PRWProcessNoise *PROCESS_NOISE() const {
+    return GetPointer<const PRWProcessNoise *>(VT_PROCESS_NOISE);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -2390,6 +2584,8 @@ struct PRWResidentState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<double>(verifier, VT_SRP_AREA_OVER_MASS_M2_KG, 8) &&
            VerifyField<uint8_t>(verifier, VT_HAS_SRP_AREA_OVER_MASS_M2_KG, 1) &&
            VerifyField<uint8_t>(verifier, VT_VALID, 1) &&
+           VerifyOffset(verifier, VT_PROCESS_NOISE) &&
+           verifier.VerifyTable(PROCESS_NOISE()) &&
            verifier.EndTable();
   }
   PRWResidentStateT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2443,6 +2639,9 @@ struct PRWResidentStateBuilder {
   void add_VALID(bool VALID) {
     fbb_.AddElement<uint8_t>(PRWResidentState::VT_VALID, static_cast<uint8_t>(VALID), 1);
   }
+  void add_PROCESS_NOISE(::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE) {
+    fbb_.AddOffset(PRWResidentState::VT_PROCESS_NOISE, PROCESS_NOISE);
+  }
   explicit PRWResidentStateBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2471,11 +2670,13 @@ inline ::flatbuffers::Offset<PRWResidentState> CreatePRWResidentState(
     bool HAS_DRAG_AREA_OVER_MASS_M2_KG = false,
     double SRP_AREA_OVER_MASS_M2_KG = 0.0,
     bool HAS_SRP_AREA_OVER_MASS_M2_KG = false,
-    bool VALID = true) {
+    bool VALID = true,
+    ::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE = 0) {
   PRWResidentStateBuilder builder_(_fbb);
   builder_.add_SRP_AREA_OVER_MASS_M2_KG(SRP_AREA_OVER_MASS_M2_KG);
   builder_.add_DRAG_AREA_OVER_MASS_M2_KG(DRAG_AREA_OVER_MASS_M2_KG);
   builder_.add_MASS_KG(MASS_KG);
+  builder_.add_PROCESS_NOISE(PROCESS_NOISE);
   builder_.add_COVARIANCE(COVARIANCE);
   builder_.add_COORDINATE_SYSTEM(COORDINATE_SYSTEM);
   builder_.add_STATE(STATE);
@@ -2510,7 +2711,8 @@ inline ::flatbuffers::Offset<PRWResidentState> CreatePRWResidentStateDirect(
     bool HAS_DRAG_AREA_OVER_MASS_M2_KG = false,
     double SRP_AREA_OVER_MASS_M2_KG = 0.0,
     bool HAS_SRP_AREA_OVER_MASS_M2_KG = false,
-    bool VALID = true) {
+    bool VALID = true,
+    ::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE = 0) {
   auto OBJECT_ID__ = OBJECT_ID ? _fbb.CreateString(OBJECT_ID) : 0;
   return CreatePRWResidentState(
       _fbb,
@@ -2527,7 +2729,8 @@ inline ::flatbuffers::Offset<PRWResidentState> CreatePRWResidentStateDirect(
       HAS_DRAG_AREA_OVER_MASS_M2_KG,
       SRP_AREA_OVER_MASS_M2_KG,
       HAS_SRP_AREA_OVER_MASS_M2_KG,
-      VALID);
+      VALID,
+      PROCESS_NOISE);
 }
 
 ::flatbuffers::Offset<PRWResidentState> CreatePRWResidentState(::flatbuffers::FlatBufferBuilder &_fbb, const PRWResidentStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -3026,6 +3229,7 @@ struct PRWExecutionRequestT : public ::flatbuffers::NativeTable {
   std::vector<std::unique_ptr<PRWImpulseT>> IMPULSES{};
   bool INCLUDE_MASS_DYNAMICS = false;
   std::vector<std::unique_ptr<PRWFiniteBurnT>> FINITE_BURNS{};
+  std::unique_ptr<PRWProcessNoiseT> PROCESS_NOISE{};
   PRWExecutionRequestT() = default;
   PRWExecutionRequestT(const PRWExecutionRequestT &o);
   PRWExecutionRequestT(PRWExecutionRequestT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -3050,7 +3254,8 @@ struct PRWExecutionRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
     VT_SAMPLE_EPOCHS = 22,
     VT_IMPULSES = 24,
     VT_INCLUDE_MASS_DYNAMICS = 26,
-    VT_FINITE_BURNS = 28
+    VT_FINITE_BURNS = 28,
+    VT_PROCESS_NOISE = 30
   };
   const PRWResidentState *INITIAL() const {
     return GetPointer<const PRWResidentState *>(VT_INITIAL);
@@ -3092,6 +3297,10 @@ struct PRWExecutionRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   const ::flatbuffers::Vector<::flatbuffers::Offset<PRWFiniteBurn>> *FINITE_BURNS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PRWFiniteBurn>> *>(VT_FINITE_BURNS);
   }
+  /// Process noise added to the propagated covariance. Absent means none.
+  const PRWProcessNoise *PROCESS_NOISE() const {
+    return GetPointer<const PRWProcessNoise *>(VT_PROCESS_NOISE);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -3120,6 +3329,8 @@ struct PRWExecutionRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
            VerifyOffset(verifier, VT_FINITE_BURNS) &&
            verifier.VerifyVector(FINITE_BURNS()) &&
            verifier.VerifyVectorOfTables(FINITE_BURNS()) &&
+           VerifyOffset(verifier, VT_PROCESS_NOISE) &&
+           verifier.VerifyTable(PROCESS_NOISE()) &&
            verifier.EndTable();
   }
   PRWExecutionRequestT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -3170,6 +3381,9 @@ struct PRWExecutionRequestBuilder {
   void add_FINITE_BURNS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWFiniteBurn>>> FINITE_BURNS) {
     fbb_.AddOffset(PRWExecutionRequest::VT_FINITE_BURNS, FINITE_BURNS);
   }
+  void add_PROCESS_NOISE(::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE) {
+    fbb_.AddOffset(PRWExecutionRequest::VT_PROCESS_NOISE, PROCESS_NOISE);
+  }
   explicit PRWExecutionRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -3199,8 +3413,10 @@ inline ::flatbuffers::Offset<PRWExecutionRequest> CreatePRWExecutionRequest(
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<TIMInstant>>> SAMPLE_EPOCHS = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWImpulse>>> IMPULSES = 0,
     bool INCLUDE_MASS_DYNAMICS = false,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWFiniteBurn>>> FINITE_BURNS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWFiniteBurn>>> FINITE_BURNS = 0,
+    ::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE = 0) {
   PRWExecutionRequestBuilder builder_(_fbb);
+  builder_.add_PROCESS_NOISE(PROCESS_NOISE);
   builder_.add_FINITE_BURNS(FINITE_BURNS);
   builder_.add_IMPULSES(IMPULSES);
   builder_.add_SAMPLE_EPOCHS(SAMPLE_EPOCHS);
@@ -3236,7 +3452,8 @@ inline ::flatbuffers::Offset<PRWExecutionRequest> CreatePRWExecutionRequestDirec
     const std::vector<::flatbuffers::Offset<TIMInstant>> *SAMPLE_EPOCHS = nullptr,
     const std::vector<::flatbuffers::Offset<PRWImpulse>> *IMPULSES = nullptr,
     bool INCLUDE_MASS_DYNAMICS = false,
-    const std::vector<::flatbuffers::Offset<PRWFiniteBurn>> *FINITE_BURNS = nullptr) {
+    const std::vector<::flatbuffers::Offset<PRWFiniteBurn>> *FINITE_BURNS = nullptr,
+    ::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE = 0) {
   auto SAMPLE_EPOCHS__ = SAMPLE_EPOCHS ? _fbb.CreateVector<::flatbuffers::Offset<TIMInstant>>(*SAMPLE_EPOCHS) : 0;
   auto IMPULSES__ = IMPULSES ? _fbb.CreateVector<::flatbuffers::Offset<PRWImpulse>>(*IMPULSES) : 0;
   auto FINITE_BURNS__ = FINITE_BURNS ? _fbb.CreateVector<::flatbuffers::Offset<PRWFiniteBurn>>(*FINITE_BURNS) : 0;
@@ -3254,7 +3471,8 @@ inline ::flatbuffers::Offset<PRWExecutionRequest> CreatePRWExecutionRequestDirec
       SAMPLE_EPOCHS__,
       IMPULSES__,
       INCLUDE_MASS_DYNAMICS,
-      FINITE_BURNS__);
+      FINITE_BURNS__,
+      PROCESS_NOISE);
 }
 
 ::flatbuffers::Offset<PRWExecutionRequest> CreatePRWExecutionRequest(::flatbuffers::FlatBufferBuilder &_fbb, const PRWExecutionRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -3470,6 +3688,7 @@ struct PRWPropagationSampleT : public ::flatbuffers::NativeTable {
   uint64_t ACCEPTED_STEPS = 0;
   uint64_t REJECTED_STEPS = 0;
   std::vector<std::unique_ptr<PRWBurnReportT>> BURNS{};
+  std::unique_ptr<PRWProcessNoiseT> PROCESS_NOISE{};
   PRWPropagationSampleT() = default;
   PRWPropagationSampleT(const PRWPropagationSampleT &o);
   PRWPropagationSampleT(PRWPropagationSampleT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -3488,7 +3707,8 @@ struct PRWPropagationSample FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tab
     VT_MASS_COVARIANCE = 12,
     VT_ACCEPTED_STEPS = 14,
     VT_REJECTED_STEPS = 16,
-    VT_BURNS = 18
+    VT_BURNS = 18,
+    VT_PROCESS_NOISE = 20
   };
   const PRWResidentState *STATE() const {
     return GetPointer<const PRWResidentState *>(VT_STATE);
@@ -3515,6 +3735,10 @@ struct PRWPropagationSample FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tab
   const ::flatbuffers::Vector<::flatbuffers::Offset<PRWBurnReport>> *BURNS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PRWBurnReport>> *>(VT_BURNS);
   }
+  /// The process noise COVARIANCE includes. Absent means none.
+  const PRWProcessNoise *PROCESS_NOISE() const {
+    return GetPointer<const PRWProcessNoise *>(VT_PROCESS_NOISE);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -3533,6 +3757,8 @@ struct PRWPropagationSample FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tab
            VerifyOffset(verifier, VT_BURNS) &&
            verifier.VerifyVector(BURNS()) &&
            verifier.VerifyVectorOfTables(BURNS()) &&
+           VerifyOffset(verifier, VT_PROCESS_NOISE) &&
+           verifier.VerifyTable(PROCESS_NOISE()) &&
            verifier.EndTable();
   }
   PRWPropagationSampleT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -3568,6 +3794,9 @@ struct PRWPropagationSampleBuilder {
   void add_BURNS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWBurnReport>>> BURNS) {
     fbb_.AddOffset(PRWPropagationSample::VT_BURNS, BURNS);
   }
+  void add_PROCESS_NOISE(::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE) {
+    fbb_.AddOffset(PRWPropagationSample::VT_PROCESS_NOISE, PROCESS_NOISE);
+  }
   explicit PRWPropagationSampleBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -3589,10 +3818,12 @@ inline ::flatbuffers::Offset<PRWPropagationSample> CreatePRWPropagationSample(
     ::flatbuffers::Offset<PRWStateMatrix> MASS_COVARIANCE = 0,
     uint64_t ACCEPTED_STEPS = 0,
     uint64_t REJECTED_STEPS = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWBurnReport>>> BURNS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWBurnReport>>> BURNS = 0,
+    ::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE = 0) {
   PRWPropagationSampleBuilder builder_(_fbb);
   builder_.add_REJECTED_STEPS(REJECTED_STEPS);
   builder_.add_ACCEPTED_STEPS(ACCEPTED_STEPS);
+  builder_.add_PROCESS_NOISE(PROCESS_NOISE);
   builder_.add_BURNS(BURNS);
   builder_.add_MASS_COVARIANCE(MASS_COVARIANCE);
   builder_.add_COVARIANCE(COVARIANCE);
@@ -3616,7 +3847,8 @@ inline ::flatbuffers::Offset<PRWPropagationSample> CreatePRWPropagationSampleDir
     ::flatbuffers::Offset<PRWStateMatrix> MASS_COVARIANCE = 0,
     uint64_t ACCEPTED_STEPS = 0,
     uint64_t REJECTED_STEPS = 0,
-    const std::vector<::flatbuffers::Offset<PRWBurnReport>> *BURNS = nullptr) {
+    const std::vector<::flatbuffers::Offset<PRWBurnReport>> *BURNS = nullptr,
+    ::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE = 0) {
   auto BURNS__ = BURNS ? _fbb.CreateVector<::flatbuffers::Offset<PRWBurnReport>>(*BURNS) : 0;
   return CreatePRWPropagationSample(
       _fbb,
@@ -3627,7 +3859,8 @@ inline ::flatbuffers::Offset<PRWPropagationSample> CreatePRWPropagationSampleDir
       MASS_COVARIANCE,
       ACCEPTED_STEPS,
       REJECTED_STEPS,
-      BURNS__);
+      BURNS__,
+      PROCESS_NOISE);
 }
 
 ::flatbuffers::Offset<PRWPropagationSample> CreatePRWPropagationSample(::flatbuffers::FlatBufferBuilder &_fbb, const PRWPropagationSampleT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -6323,6 +6556,41 @@ inline ::flatbuffers::Offset<PRWStateMatrix> PRWStateMatrix::Pack(::flatbuffers:
       _VALUES);
 }
 
+inline PRWProcessNoiseT *PRWProcessNoise::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWProcessNoiseT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWProcessNoise::UnPackTo(PRWProcessNoiseT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = MODEL(); _o->MODEL = _e; }
+  { auto _e = AXES(); _o->AXES = _e; }
+  { auto _e = SPECTRAL_DENSITY_M2_S3(); if (_e) { _o->SPECTRAL_DENSITY_M2_S3.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->SPECTRAL_DENSITY_M2_S3[_i] = _e->Get(_i); } } else { _o->SPECTRAL_DENSITY_M2_S3.resize(0); } }
+  { auto _e = DISCRETIZATION_SECONDS(); _o->DISCRETIZATION_SECONDS = _e; }
+}
+
+inline ::flatbuffers::Offset<PRWProcessNoise> CreatePRWProcessNoise(::flatbuffers::FlatBufferBuilder &_fbb, const PRWProcessNoiseT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWProcessNoise::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWProcessNoise> PRWProcessNoise::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWProcessNoiseT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWProcessNoiseT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _MODEL = _o->MODEL;
+  auto _AXES = _o->AXES;
+  auto _SPECTRAL_DENSITY_M2_S3 = _o->SPECTRAL_DENSITY_M2_S3.size() ? _fbb.CreateVector(_o->SPECTRAL_DENSITY_M2_S3) : 0;
+  auto _DISCRETIZATION_SECONDS = _o->DISCRETIZATION_SECONDS;
+  return CreatePRWProcessNoise(
+      _fbb,
+      _MODEL,
+      _AXES,
+      _SPECTRAL_DENSITY_M2_S3,
+      _DISCRETIZATION_SECONDS);
+}
+
 inline PRWResidentStateT::PRWResidentStateT(const PRWResidentStateT &o)
       : INSTANCE((o.INSTANCE) ? new PRWInstanceT(*o.INSTANCE) : nullptr),
         ENTITY_HANDLE(o.ENTITY_HANDLE),
@@ -6337,7 +6605,8 @@ inline PRWResidentStateT::PRWResidentStateT(const PRWResidentStateT &o)
         HAS_DRAG_AREA_OVER_MASS_M2_KG(o.HAS_DRAG_AREA_OVER_MASS_M2_KG),
         SRP_AREA_OVER_MASS_M2_KG(o.SRP_AREA_OVER_MASS_M2_KG),
         HAS_SRP_AREA_OVER_MASS_M2_KG(o.HAS_SRP_AREA_OVER_MASS_M2_KG),
-        VALID(o.VALID) {
+        VALID(o.VALID),
+        PROCESS_NOISE((o.PROCESS_NOISE) ? new PRWProcessNoiseT(*o.PROCESS_NOISE) : nullptr) {
 }
 
 inline PRWResidentStateT &PRWResidentStateT::operator=(PRWResidentStateT o) FLATBUFFERS_NOEXCEPT {
@@ -6355,6 +6624,7 @@ inline PRWResidentStateT &PRWResidentStateT::operator=(PRWResidentStateT o) FLAT
   std::swap(SRP_AREA_OVER_MASS_M2_KG, o.SRP_AREA_OVER_MASS_M2_KG);
   std::swap(HAS_SRP_AREA_OVER_MASS_M2_KG, o.HAS_SRP_AREA_OVER_MASS_M2_KG);
   std::swap(VALID, o.VALID);
+  std::swap(PROCESS_NOISE, o.PROCESS_NOISE);
   return *this;
 }
 
@@ -6381,6 +6651,7 @@ inline void PRWResidentState::UnPackTo(PRWResidentStateT *_o, const ::flatbuffer
   { auto _e = SRP_AREA_OVER_MASS_M2_KG(); _o->SRP_AREA_OVER_MASS_M2_KG = _e; }
   { auto _e = HAS_SRP_AREA_OVER_MASS_M2_KG(); _o->HAS_SRP_AREA_OVER_MASS_M2_KG = _e; }
   { auto _e = VALID(); _o->VALID = _e; }
+  { auto _e = PROCESS_NOISE(); if (_e) { if(_o->PROCESS_NOISE) { _e->UnPackTo(_o->PROCESS_NOISE.get(), _resolver); } else { _o->PROCESS_NOISE = std::unique_ptr<PRWProcessNoiseT>(_e->UnPack(_resolver)); } } else if (_o->PROCESS_NOISE) { _o->PROCESS_NOISE.reset(); } }
 }
 
 inline ::flatbuffers::Offset<PRWResidentState> CreatePRWResidentState(::flatbuffers::FlatBufferBuilder &_fbb, const PRWResidentStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -6405,6 +6676,7 @@ inline ::flatbuffers::Offset<PRWResidentState> PRWResidentState::Pack(::flatbuff
   auto _SRP_AREA_OVER_MASS_M2_KG = _o->SRP_AREA_OVER_MASS_M2_KG;
   auto _HAS_SRP_AREA_OVER_MASS_M2_KG = _o->HAS_SRP_AREA_OVER_MASS_M2_KG;
   auto _VALID = _o->VALID;
+  auto _PROCESS_NOISE = _o->PROCESS_NOISE ? CreatePRWProcessNoise(_fbb, _o->PROCESS_NOISE.get(), _rehasher) : 0;
   return CreatePRWResidentState(
       _fbb,
       _INSTANCE,
@@ -6420,7 +6692,8 @@ inline ::flatbuffers::Offset<PRWResidentState> PRWResidentState::Pack(::flatbuff
       _HAS_DRAG_AREA_OVER_MASS_M2_KG,
       _SRP_AREA_OVER_MASS_M2_KG,
       _HAS_SRP_AREA_OVER_MASS_M2_KG,
-      _VALID);
+      _VALID,
+      _PROCESS_NOISE);
 }
 
 inline PRWImpulseT::PRWImpulseT(const PRWImpulseT &o)
@@ -6643,7 +6916,8 @@ inline PRWExecutionRequestT::PRWExecutionRequestT(const PRWExecutionRequestT &o)
         DENSITY_TREATMENT(o.DENSITY_TREATMENT),
         INITIAL_COVARIANCE((o.INITIAL_COVARIANCE) ? new PRWStateMatrixT(*o.INITIAL_COVARIANCE) : nullptr),
         INITIAL_MASS_COVARIANCE((o.INITIAL_MASS_COVARIANCE) ? new PRWStateMatrixT(*o.INITIAL_MASS_COVARIANCE) : nullptr),
-        INCLUDE_MASS_DYNAMICS(o.INCLUDE_MASS_DYNAMICS) {
+        INCLUDE_MASS_DYNAMICS(o.INCLUDE_MASS_DYNAMICS),
+        PROCESS_NOISE((o.PROCESS_NOISE) ? new PRWProcessNoiseT(*o.PROCESS_NOISE) : nullptr) {
   SAMPLE_EPOCHS.reserve(o.SAMPLE_EPOCHS.size());
   for (const auto &SAMPLE_EPOCHS_ : o.SAMPLE_EPOCHS) { SAMPLE_EPOCHS.emplace_back((SAMPLE_EPOCHS_) ? new TIMInstantT(*SAMPLE_EPOCHS_) : nullptr); }
   IMPULSES.reserve(o.IMPULSES.size());
@@ -6666,6 +6940,7 @@ inline PRWExecutionRequestT &PRWExecutionRequestT::operator=(PRWExecutionRequest
   std::swap(IMPULSES, o.IMPULSES);
   std::swap(INCLUDE_MASS_DYNAMICS, o.INCLUDE_MASS_DYNAMICS);
   std::swap(FINITE_BURNS, o.FINITE_BURNS);
+  std::swap(PROCESS_NOISE, o.PROCESS_NOISE);
   return *this;
 }
 
@@ -6691,6 +6966,7 @@ inline void PRWExecutionRequest::UnPackTo(PRWExecutionRequestT *_o, const ::flat
   { auto _e = IMPULSES(); if (_e) { _o->IMPULSES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->IMPULSES[_i]) { _e->Get(_i)->UnPackTo(_o->IMPULSES[_i].get(), _resolver); } else { _o->IMPULSES[_i] = std::unique_ptr<PRWImpulseT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->IMPULSES.resize(0); } }
   { auto _e = INCLUDE_MASS_DYNAMICS(); _o->INCLUDE_MASS_DYNAMICS = _e; }
   { auto _e = FINITE_BURNS(); if (_e) { _o->FINITE_BURNS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->FINITE_BURNS[_i]) { _e->Get(_i)->UnPackTo(_o->FINITE_BURNS[_i].get(), _resolver); } else { _o->FINITE_BURNS[_i] = std::unique_ptr<PRWFiniteBurnT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->FINITE_BURNS.resize(0); } }
+  { auto _e = PROCESS_NOISE(); if (_e) { if(_o->PROCESS_NOISE) { _e->UnPackTo(_o->PROCESS_NOISE.get(), _resolver); } else { _o->PROCESS_NOISE = std::unique_ptr<PRWProcessNoiseT>(_e->UnPack(_resolver)); } } else if (_o->PROCESS_NOISE) { _o->PROCESS_NOISE.reset(); } }
 }
 
 inline ::flatbuffers::Offset<PRWExecutionRequest> CreatePRWExecutionRequest(::flatbuffers::FlatBufferBuilder &_fbb, const PRWExecutionRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -6714,6 +6990,7 @@ inline ::flatbuffers::Offset<PRWExecutionRequest> PRWExecutionRequest::Pack(::fl
   auto _IMPULSES = _o->IMPULSES.size() ? _fbb.CreateVector<::flatbuffers::Offset<PRWImpulse>> (_o->IMPULSES.size(), [](size_t i, _VectorArgs *__va) { return CreatePRWImpulse(*__va->__fbb, __va->__o->IMPULSES[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _INCLUDE_MASS_DYNAMICS = _o->INCLUDE_MASS_DYNAMICS;
   auto _FINITE_BURNS = _o->FINITE_BURNS.size() ? _fbb.CreateVector<::flatbuffers::Offset<PRWFiniteBurn>> (_o->FINITE_BURNS.size(), [](size_t i, _VectorArgs *__va) { return CreatePRWFiniteBurn(*__va->__fbb, __va->__o->FINITE_BURNS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _PROCESS_NOISE = _o->PROCESS_NOISE ? CreatePRWProcessNoise(_fbb, _o->PROCESS_NOISE.get(), _rehasher) : 0;
   return CreatePRWExecutionRequest(
       _fbb,
       _INITIAL,
@@ -6728,7 +7005,8 @@ inline ::flatbuffers::Offset<PRWExecutionRequest> PRWExecutionRequest::Pack(::fl
       _SAMPLE_EPOCHS,
       _IMPULSES,
       _INCLUDE_MASS_DYNAMICS,
-      _FINITE_BURNS);
+      _FINITE_BURNS,
+      _PROCESS_NOISE);
 }
 
 inline PRWBurnReportT::PRWBurnReportT(const PRWBurnReportT &o)
@@ -6833,7 +7111,8 @@ inline PRWPropagationSampleT::PRWPropagationSampleT(const PRWPropagationSampleT 
         COVARIANCE((o.COVARIANCE) ? new PRWStateMatrixT(*o.COVARIANCE) : nullptr),
         MASS_COVARIANCE((o.MASS_COVARIANCE) ? new PRWStateMatrixT(*o.MASS_COVARIANCE) : nullptr),
         ACCEPTED_STEPS(o.ACCEPTED_STEPS),
-        REJECTED_STEPS(o.REJECTED_STEPS) {
+        REJECTED_STEPS(o.REJECTED_STEPS),
+        PROCESS_NOISE((o.PROCESS_NOISE) ? new PRWProcessNoiseT(*o.PROCESS_NOISE) : nullptr) {
   BURNS.reserve(o.BURNS.size());
   for (const auto &BURNS_ : o.BURNS) { BURNS.emplace_back((BURNS_) ? new PRWBurnReportT(*BURNS_) : nullptr); }
 }
@@ -6847,6 +7126,7 @@ inline PRWPropagationSampleT &PRWPropagationSampleT::operator=(PRWPropagationSam
   std::swap(ACCEPTED_STEPS, o.ACCEPTED_STEPS);
   std::swap(REJECTED_STEPS, o.REJECTED_STEPS);
   std::swap(BURNS, o.BURNS);
+  std::swap(PROCESS_NOISE, o.PROCESS_NOISE);
   return *this;
 }
 
@@ -6867,6 +7147,7 @@ inline void PRWPropagationSample::UnPackTo(PRWPropagationSampleT *_o, const ::fl
   { auto _e = ACCEPTED_STEPS(); _o->ACCEPTED_STEPS = _e; }
   { auto _e = REJECTED_STEPS(); _o->REJECTED_STEPS = _e; }
   { auto _e = BURNS(); if (_e) { _o->BURNS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->BURNS[_i]) { _e->Get(_i)->UnPackTo(_o->BURNS[_i].get(), _resolver); } else { _o->BURNS[_i] = std::unique_ptr<PRWBurnReportT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->BURNS.resize(0); } }
+  { auto _e = PROCESS_NOISE(); if (_e) { if(_o->PROCESS_NOISE) { _e->UnPackTo(_o->PROCESS_NOISE.get(), _resolver); } else { _o->PROCESS_NOISE = std::unique_ptr<PRWProcessNoiseT>(_e->UnPack(_resolver)); } } else if (_o->PROCESS_NOISE) { _o->PROCESS_NOISE.reset(); } }
 }
 
 inline ::flatbuffers::Offset<PRWPropagationSample> CreatePRWPropagationSample(::flatbuffers::FlatBufferBuilder &_fbb, const PRWPropagationSampleT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -6885,6 +7166,7 @@ inline ::flatbuffers::Offset<PRWPropagationSample> PRWPropagationSample::Pack(::
   auto _ACCEPTED_STEPS = _o->ACCEPTED_STEPS;
   auto _REJECTED_STEPS = _o->REJECTED_STEPS;
   auto _BURNS = _o->BURNS.size() ? _fbb.CreateVector<::flatbuffers::Offset<PRWBurnReport>> (_o->BURNS.size(), [](size_t i, _VectorArgs *__va) { return CreatePRWBurnReport(*__va->__fbb, __va->__o->BURNS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _PROCESS_NOISE = _o->PROCESS_NOISE ? CreatePRWProcessNoise(_fbb, _o->PROCESS_NOISE.get(), _rehasher) : 0;
   return CreatePRWPropagationSample(
       _fbb,
       _STATE,
@@ -6894,7 +7176,8 @@ inline ::flatbuffers::Offset<PRWPropagationSample> PRWPropagationSample::Pack(::
       _MASS_COVARIANCE,
       _ACCEPTED_STEPS,
       _REJECTED_STEPS,
-      _BURNS);
+      _BURNS,
+      _PROCESS_NOISE);
 }
 
 inline PRWExecutionResultT::PRWExecutionResultT(const PRWExecutionResultT &o)

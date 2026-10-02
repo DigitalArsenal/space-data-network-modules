@@ -13,6 +13,7 @@
 
 #include "cpp/include/hpop/prw_resident.h"
 #include "cpp/include/hpop/prw_codec.h"
+#include "cpp/include/hpop/prw_covariance.h"
 
 #include "../lib/astrodynamics_types.h"
 #include "../lib/astrodynamics.h"
@@ -3058,6 +3059,10 @@ struct ResidentIdentity {
     uint32_t catalogNumber;
     std::string objectId;
     bool valid;
+    // Initial covariance (km units) and the process noise propagation adds.
+    bool hasCovariance = false;
+    Mat6 covariance{};
+    Integrator::ProcessNoise noise;
 };
 struct PortableSegmentSet {
     uint64_t generation;
@@ -3172,10 +3177,19 @@ bool ingestPortable(const std::vector<std::pair<const uint8_t*, size_t>>& inputs
             incomingInstance->INSTANCE_ID != instance->INSTANCE_ID()->str() ||
             incomingInstance->GENERATION != instance->GENERATION())
             return residentFailure(error, "invalid-instance", "Ingest frames must share one instance and generation.");
-        if (record->COVARIANCE() || record->HAS_MASS_KG() || record->MASS_KG() != 0 ||
+        if (record->HAS_MASS_KG() || record->MASS_KG() != 0 ||
             record->DRAG_AREA_OVER_MASS_M2_KG() != 0 || record->SRP_AREA_OVER_MASS_M2_KG() != 0 ||
             record->HAS_DRAG_AREA_OVER_MASS_M2_KG() || record->HAS_SRP_AREA_OVER_MASS_M2_KG())
-            return residentFailure(error, "unsupported-configuration", "Resident catalog does not propagate covariance, mass, or per-object force coefficients; use EXECUTION_REQUEST.");
+            return residentFailure(error, "unsupported-configuration", "Resident catalog does not propagate mass or per-object force coefficients; use EXECUTION_REQUEST.");
+        ResidentIdentity identity{record->ENTITY_HANDLE(), record->CATALOG_NUMBER(),
+            record->OBJECT_ID() ? record->OBJECT_ID()->str() : std::string(), record->VALID()};
+        if (record->COVARIANCE()) {
+            if (!hpop::prwCovariance(record->COVARIANCE(), 6, &identity.covariance.m[0][0], error)) return false;
+            identity.hasCovariance = true;
+        }
+        if (!hpop::prwProcessNoise(record->PROCESS_NOISE(), identity.noise, error)) return false;
+        if (identity.noise.enabled && !identity.hasCovariance)
+            return residentFailure(error, "invalid-process-noise", "PROCESS_NOISE needs a COVARIANCE to add to.");
         if (!slots.emplace(record->ENTITY_HANDLE(), identities.size()).second)
             return residentFailure(error, "invalid-request", "Ingest entity handles must be unique.");
         astro::StateVector state;
@@ -3187,8 +3201,7 @@ bool ingestPortable(const std::vector<std::pair<const uint8_t*, size_t>>& inputs
             return residentFailure(error, "invalid-state", "A valid resident state requires finite nonzero position magnitude.");
         states.insert(states.end(), {state.epoch, state.position.x, state.position.y,
             state.position.z, state.velocity.x, state.velocity.y, state.velocity.z});
-        identities.push_back({record->ENTITY_HANDLE(), record->CATALOG_NUMBER(),
-            record->OBJECT_ID() ? record->OBJECT_ID()->str() : std::string(), record->VALID()});
+        identities.push_back(std::move(identity));
     }
     const std::string instanceKey = incomingInstance->MODULE_ID + "/" + incomingInstance->INSTANCE_ID;
     const auto seen = prwSeenGenerations.find(instanceKey);
@@ -3245,6 +3258,33 @@ bool propagatePortable(const PRWResidentRequest* request, const uint8_t* data, s
         result.RESIDENT_STATE->CATALOG_NUMBER = prwIdentities[slot].catalogNumber;
         result.RESIDENT_STATE->OBJECT_ID = prwIdentities[slot].objectId;
         result.RESIDENT_STATE->VALID = true;
+        // P(t) = Phi P0 Phi^T + Q with the resident force model and integrator,
+        // the same propagation the execution path's STM covariance uses.
+        const auto& identity = prwIdentities[slot];
+        if (identity.hasCovariance) {
+            if (g_entities[slot].arcCount > 0)
+                return residentFailure(error, "unsupported-configuration", "Resident covariance is not propagated across scheduled burns; use EXECUTION_REQUEST.");
+            Mat6 p = identity.covariance;
+            const double seconds = (targetTdb - initial.epoch) * 86400.0;
+            if (seconds != 0) {
+                const auto value = Integrator::PropagateCovariance(initial, seconds, g_integratorConfig, g_forceSet,
+                    Integrator::STMMethod::Analytic, ForceModel::DensityGradient::Neglected, {}, identity.covariance, identity.noise);
+                if (!value.success) {
+                    error = "propagation-failed: " + value.errorMessage;
+                    return false;
+                }
+                p = value.covariance;
+            }
+            auto matrix = std::make_unique<PRWStateMatrixT>();
+            matrix->DIMENSION = 6;
+            matrix->VALUES.resize(36);
+            for (int i = 0; i < 6; ++i)
+                for (int j = 0; j < 6; ++j) matrix->VALUES[i * 6 + j] = p.m[i][j] * 1e6;  // km -> m
+            for (double v : matrix->VALUES)
+                if (!std::isfinite(v)) return residentFailure(error, "propagation-failed", "Resident covariance propagation is not finite.");
+            result.RESIDENT_STATE->COVARIANCE = std::move(matrix);
+            result.RESIDENT_STATE->PROCESS_NOISE = hpop::prwProcessNoiseRecord(identity.noise);
+        }
         outputs.push_back(residentBytes(result));
     }
     setContinuation(stop, selected.size(), backlog, yielded);

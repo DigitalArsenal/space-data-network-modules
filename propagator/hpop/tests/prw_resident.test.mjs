@@ -1,4 +1,4 @@
-// Portable resident contract, sourced from the published SDS 1.220.0 PRW/FRM/
+// Portable resident contract, sourced from the published SDS 1.232.0 PRW/FRM/
 // PPE/TIM definitions. Numerical fixtures use the zero-duration solution
 // x(t0)=x0 (any regular ODE), SI kilo=10^3, and the independent clock facts below.
 // Physics remains in the C++ guest; JS builds records and checks outcomes only.
@@ -103,7 +103,6 @@ test('PRW replacement is atomic and rejects stale generations and unsupported co
   const h=await harness(t);
   success(await h.invoke(input('ingest_state','RESIDENT_STATE',seed())));
   for (const extra of [
-    {COVARIANCE:makeTable('PRWStateMatrix',{DIMENSION:6,VALUES:Array(36).fill(0)})},
     {HAS_MASS_KG:true,MASS_KG:1000},
     {HAS_DRAG_AREA_OVER_MASS_M2_KG:true,DRAG_AREA_OVER_MASS_M2_KG:0.01},
     {HAS_SRP_AREA_OVER_MASS_M2_KG:true,SRP_AREA_OVER_MASS_M2_KG:0.01},

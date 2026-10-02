@@ -24,4 +24,26 @@ VariationalResult PropagateWithSTM(const StateVector&, double dt,
     ForceModel::DensityGradient = ForceModel::DensityGradient::Neglected,
     const std::vector<ForceModel::ImpulsiveManeuverDef>& maneuvers = {});
 Mat6 TransportCovariance(const Mat6& phi, const Mat6& covariance);
+// White acceleration process noise (state noise compensation): spectral
+// density q per axis (km^2/s^3), inertial or RTN axes, entering every
+// `interval` seconds.
+struct ProcessNoise {
+    bool enabled = false;
+    bool rtn = false;
+    double q[3] = {0, 0, 0};
+    double interval = 0;
+};
+struct CovarianceResult : VariationalResult {
+    Mat6 covariance{};
+};
+// One interval h of white acceleration noise at state s: per axis k,
+// q_k [[h^3/3, h^2/2], [h^2/2, h]] on that axis's position and velocity.
+Mat6 WhiteAccelerationNoise(const ProcessNoise&, double h, const StateVector& s);
+// P(t) = Phi P0 Phi^T, plus Q when noise is enabled: the arc in equal steps no
+// longer than noise.interval, each step's STM carrying P, noise added at its
+// end. stm is the product of the steps' STMs.
+CovarianceResult PropagateCovariance(const StateVector&, double dt,
+    const IntegratorConfig&, ForceModel::ForceModelSet&, STMMethod,
+    ForceModel::DensityGradient, const std::vector<ForceModel::ImpulsiveManeuverDef>&,
+    const Mat6& p0, const ProcessNoise&);
 }}

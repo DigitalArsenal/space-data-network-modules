@@ -1,6 +1,7 @@
 import * as flatbuffers from 'flatbuffers';
 import { FRMStateVector, FRMStateVectorT } from './FRMStateVector.js';
 import { PRWInstance, PRWInstanceT } from './PRWInstance.js';
+import { PRWProcessNoise, PRWProcessNoiseT } from './PRWProcessNoise.js';
 import { PRWStateMatrix, PRWStateMatrixT } from './PRWStateMatrix.js';
 import { RFMCoordinateSystem, RFMCoordinateSystemT } from './RFMCoordinateSystem.js';
 export class PRWResidentState {
@@ -74,8 +75,12 @@ export class PRWResidentState {
         const offset = this.bb.__offset(this.bb_pos, 30);
         return offset ? !!this.bb.readInt8(this.bb_pos + offset) : true;
     }
+    PROCESS_NOISE(obj) {
+        const offset = this.bb.__offset(this.bb_pos, 32);
+        return offset ? (obj || new PRWProcessNoise()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+    }
     static startPRWResidentState(builder) {
-        builder.startObject(14);
+        builder.startObject(15);
     }
     static addInstance(builder, INSTANCEOffset) {
         builder.addFieldOffset(0, INSTANCEOffset, 0);
@@ -119,6 +124,9 @@ export class PRWResidentState {
     static addValid(builder, VALID) {
         builder.addFieldInt8(13, +VALID, +true);
     }
+    static addProcessNoise(builder, PROCESS_NOISEOffset) {
+        builder.addFieldOffset(14, PROCESS_NOISEOffset, 0);
+    }
     static endPRWResidentState(builder) {
         const offset = builder.endObject();
         builder.requiredField(offset, 12);
@@ -126,7 +134,7 @@ export class PRWResidentState {
         return offset;
     }
     unpack() {
-        return new PRWResidentStateT(this.INSTANCE() !== null ? this.INSTANCE().unpack() : null, this.ENTITY_HANDLE(), this.CATALOG_NUMBER(), this.OBJECT_ID(), this.STATE() !== null ? this.STATE().unpack() : null, this.COORDINATE_SYSTEM() !== null ? this.COORDINATE_SYSTEM().unpack() : null, this.COVARIANCE() !== null ? this.COVARIANCE().unpack() : null, this.MASS_KG(), this.HAS_MASS_KG(), this.DRAG_AREA_OVER_MASS_M2_KG(), this.HAS_DRAG_AREA_OVER_MASS_M2_KG(), this.SRP_AREA_OVER_MASS_M2_KG(), this.HAS_SRP_AREA_OVER_MASS_M2_KG(), this.VALID());
+        return new PRWResidentStateT(this.INSTANCE() !== null ? this.INSTANCE().unpack() : null, this.ENTITY_HANDLE(), this.CATALOG_NUMBER(), this.OBJECT_ID(), this.STATE() !== null ? this.STATE().unpack() : null, this.COORDINATE_SYSTEM() !== null ? this.COORDINATE_SYSTEM().unpack() : null, this.COVARIANCE() !== null ? this.COVARIANCE().unpack() : null, this.MASS_KG(), this.HAS_MASS_KG(), this.DRAG_AREA_OVER_MASS_M2_KG(), this.HAS_DRAG_AREA_OVER_MASS_M2_KG(), this.SRP_AREA_OVER_MASS_M2_KG(), this.HAS_SRP_AREA_OVER_MASS_M2_KG(), this.VALID(), this.PROCESS_NOISE() !== null ? this.PROCESS_NOISE().unpack() : null);
     }
     unpackTo(_o) {
         _o.INSTANCE = this.INSTANCE() !== null ? this.INSTANCE().unpack() : null;
@@ -143,6 +151,7 @@ export class PRWResidentState {
         _o.SRP_AREA_OVER_MASS_M2_KG = this.SRP_AREA_OVER_MASS_M2_KG();
         _o.HAS_SRP_AREA_OVER_MASS_M2_KG = this.HAS_SRP_AREA_OVER_MASS_M2_KG();
         _o.VALID = this.VALID();
+        _o.PROCESS_NOISE = this.PROCESS_NOISE() !== null ? this.PROCESS_NOISE().unpack() : null;
     }
 }
 export class PRWResidentStateT {
@@ -160,7 +169,8 @@ export class PRWResidentStateT {
     SRP_AREA_OVER_MASS_M2_KG;
     HAS_SRP_AREA_OVER_MASS_M2_KG;
     VALID;
-    constructor(INSTANCE = null, ENTITY_HANDLE = 0, CATALOG_NUMBER = 0, OBJECT_ID = null, STATE = null, COORDINATE_SYSTEM = null, COVARIANCE = null, MASS_KG = 0.0, HAS_MASS_KG = false, DRAG_AREA_OVER_MASS_M2_KG = 0.0, HAS_DRAG_AREA_OVER_MASS_M2_KG = false, SRP_AREA_OVER_MASS_M2_KG = 0.0, HAS_SRP_AREA_OVER_MASS_M2_KG = false, VALID = true){
+    PROCESS_NOISE;
+    constructor(INSTANCE = null, ENTITY_HANDLE = 0, CATALOG_NUMBER = 0, OBJECT_ID = null, STATE = null, COORDINATE_SYSTEM = null, COVARIANCE = null, MASS_KG = 0.0, HAS_MASS_KG = false, DRAG_AREA_OVER_MASS_M2_KG = 0.0, HAS_DRAG_AREA_OVER_MASS_M2_KG = false, SRP_AREA_OVER_MASS_M2_KG = 0.0, HAS_SRP_AREA_OVER_MASS_M2_KG = false, VALID = true, PROCESS_NOISE = null){
         this.INSTANCE = INSTANCE;
         this.ENTITY_HANDLE = ENTITY_HANDLE;
         this.CATALOG_NUMBER = CATALOG_NUMBER;
@@ -175,6 +185,7 @@ export class PRWResidentStateT {
         this.SRP_AREA_OVER_MASS_M2_KG = SRP_AREA_OVER_MASS_M2_KG;
         this.HAS_SRP_AREA_OVER_MASS_M2_KG = HAS_SRP_AREA_OVER_MASS_M2_KG;
         this.VALID = VALID;
+        this.PROCESS_NOISE = PROCESS_NOISE;
     }
     pack(builder) {
         const INSTANCE = this.INSTANCE !== null ? this.INSTANCE.pack(builder) : 0;
@@ -182,6 +193,7 @@ export class PRWResidentStateT {
         const STATE = this.STATE !== null ? this.STATE.pack(builder) : 0;
         const COORDINATE_SYSTEM = this.COORDINATE_SYSTEM !== null ? this.COORDINATE_SYSTEM.pack(builder) : 0;
         const COVARIANCE = this.COVARIANCE !== null ? this.COVARIANCE.pack(builder) : 0;
+        const PROCESS_NOISE = this.PROCESS_NOISE !== null ? this.PROCESS_NOISE.pack(builder) : 0;
         PRWResidentState.startPRWResidentState(builder);
         PRWResidentState.addInstance(builder, INSTANCE);
         PRWResidentState.addEntityHandle(builder, this.ENTITY_HANDLE);
@@ -197,6 +209,7 @@ export class PRWResidentStateT {
         PRWResidentState.addSrpAreaOverMassM2Kg(builder, this.SRP_AREA_OVER_MASS_M2_KG);
         PRWResidentState.addHasSrpAreaOverMassM2Kg(builder, this.HAS_SRP_AREA_OVER_MASS_M2_KG);
         PRWResidentState.addValid(builder, this.VALID);
+        PRWResidentState.addProcessNoise(builder, PROCESS_NOISE);
         return PRWResidentState.endPRWResidentState(builder);
     }
 }

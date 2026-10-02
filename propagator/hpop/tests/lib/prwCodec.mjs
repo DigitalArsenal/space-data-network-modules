@@ -1,4 +1,4 @@
-// Test transport codec for the published SDS 1.220.0 PRW contract.
+// Test transport codec for the published SDS 1.232.0 PRW contract.
 // Only representation/unit serialization happens here. Propagation, frame and
 // time-scale transformations, events and derivatives run in C++ WASM.
 import * as flatbuffers from 'flatbuffers';
@@ -61,7 +61,14 @@ export function residentState(params) {
 const choice = (enumName, value, fallback) => sds[enumName][value??fallback] ?? 255;
 const basis = x => choice('prwSteeringBasis',({INERTIAL:'INTEGRATION_FRAME',RTN:'RTN_AXES',LVLH:'RTN_AXES',
   VNC:'VNC_AXES',VELOCITY:'ALONG_VELOCITY',ANTI_VELOCITY:'OPPOSITE_VELOCITY'})[x??'INERTIAL']??'INVALID');
-function matrix(values,n) {
+// {axes:'INERTIAL'|'RTN', q:[3] m^2/s^3, intervalSeconds}, or none.
+export function processNoise(noise) {
+  return noise === undefined ? null : makeTable('PRWProcessNoise',{
+    MODEL:sds.prwProcessNoiseModel[noise.model??'WHITE_ACCELERATION'],
+    AXES:noise.axes==='RTN'?sds.prwProcessNoiseAxes.RADIAL_TRANSVERSE_NORMAL:sds.prwProcessNoiseAxes.INERTIAL,
+    SPECTRAL_DENSITY_M2_S3:noise.q,DISCRETIZATION_SECONDS:noise.intervalSeconds});
+}
+export function matrix(values,n) {
   return values === undefined ? null : makeTable('PRWStateMatrix',{DIMENSION:n,
     VALUES:values.map((v,i)=>v*(Math.floor(i/n)<6?1000:1)*(i%n<6?1000:1))});
 }
@@ -135,6 +142,7 @@ export function execution(params,withKernel=false) {
     SAMPLE_EPOCHS:(params.sampleEpochsJD??[]).map(jd=>instant(number(jd))),
     IMPULSES:(params.maneuvers??[]).map(m=>makeTable('PRWImpulse',{EPOCH:instant(m.epochJD),DELTA_V:vec(m.deltaV,1000),VECTOR_BASIS:basis(m.frame)})),
     INCLUDE_MASS_DYNAMICS:seven,FINITE_BURNS:(params.finiteBurns??[]).map(b=>finiteBurn(b,params.epochJD)),
+    PROCESS_NOISE:processNoise(params.processNoise),
   });
 }
 export function nativeInput(bytes) {
@@ -176,7 +184,7 @@ const pv = v=>[v.X,v.Y,v.Z].map(x=>x/1000);
 function unpackState(r) { return {epochJD:jdFromISO(r.STATE.EPOCH),position:pv(r.STATE.POSITION),velocity:pv(r.STATE.VELOCITY),
   frame:r.COORDINATE_SYSTEM.NAME,epochTimeScale:r.STATE.EPOCH_TIME_SYSTEM,positionUnits:'km',velocityUnits:'km/s',
   ...(r.HAS_MASS_KG?{massKg:r.MASS_KG,massUnits:'kg'}:{})}; }
-function unpackMatrix(m,stm=false) {
+export function unpackMatrix(m,stm=false) {
   return m?.VALUES.map((v,i)=>{
     const row=Math.floor(i/m.DIMENSION)<6?1000:1,col=i%m.DIMENSION<6?1000:1;
     return stm?v/row*col:v/row/col;
@@ -186,6 +194,7 @@ function unpackSample(s) {
   const out={...unpackState(s.STATE),integrationSteps:Number(s.ACCEPTED_STEPS),integrationRejections:Number(s.REJECTED_STEPS)};
   for(const [key,field,isSTM] of [['stm','STM',true],['stm7','MASS_STM',true],['covariance','COVARIANCE',false],['covariance7','MASS_COVARIANCE',false]])
     if(s[field]) out[key]=unpackMatrix(s[field],isSTM);
+  if(s.PROCESS_NOISE) out.processNoise=s.PROCESS_NOISE;
   out.burnSummary=s.BURNS.map(b=>({index:b.BURN_INDEX,started:b.STARTED,stopped:b.STOPPED,startByEvent:b.START_BY_EVENT,stopByEvent:b.STOP_BY_EVENT,
     startSeconds:b.HAS_START_SECONDS?b.START_SECONDS:null,stopSeconds:b.HAS_STOP_SECONDS?b.STOP_SECONDS:null,
     startEpochJD:b.START_EPOCH?.JULIAN_DATE??null,stopEpochJD:b.STOP_EPOCH?.JULIAN_DATE??null,deltaVKmS:b.DELTA_V_M_S/1000,propellantKg:b.PROPELLANT_KG}));

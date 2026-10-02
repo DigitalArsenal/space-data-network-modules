@@ -1,5 +1,6 @@
 #include "hpop/prw_execution.h"
 #include "hpop/prw_codec.h"
+#include "hpop/prw_covariance.h"
 #include "astrodynamics.h"
 #include "integrators.h"
 #include "variational.h"
@@ -30,6 +31,7 @@ struct Execution {
     std::vector<double> samples;
     std::vector<ForceModel::ImpulsiveManeuverDef> impulses;
     std::vector<Integrator::FiniteBurn> burns;
+    Integrator::ProcessNoise noise;
 };
 bool positive(double x) {return std::isfinite(x)&&x>0;}
 bool nonnegative(double x) {return std::isfinite(x)&&x>=0;}
@@ -135,30 +137,6 @@ bool parseForces(const PRWForceConfiguration* in,double epoch,ForceModel::ForceM
     const auto source=in->EPHEMERIS_SOURCE()->str();
     if(source=="Analytical")Ephemeris::selectEphemerisSource(Ephemeris::EphemerisSource::Analytical);
     else if(source!=Ephemeris::ephemerisSourceName(Ephemeris::selectedEphemerisSource()))return prwError(error,"ephemeris-source: Requested ephemeris source does not match the supplied kernel.");
-    return true;
-}
-bool parseCovariance(const PRWStateMatrix* in,unsigned n,double* out,std::string& error) {
-    if(!in||in->DIMENSION()!=n||!in->VALUES()||in->VALUES()->size()!=n*n)
-        return prwError(error,"invalid-covariance: Covariance dimension and row-major values must agree.");
-    double scale=0;
-    for(unsigned i=0;i<n;++i)for(unsigned j=0;j<n;++j) {
-        const double a=in->VALUES()->Get(i*n+j),b=in->VALUES()->Get(j*n+i);
-        if(!std::isfinite(a)||!std::isfinite(b)||std::abs(a-b)>1e-12*std::max({1.0,std::abs(a),std::abs(b)}))
-            return prwError(error,"invalid-covariance: Covariance must be finite and symmetric.");
-        out[i*n+j]=a*(i<6?0.001:1)*(j<6?0.001:1);scale=std::max(scale,std::abs(out[i*n+j]));
-    }
-    // Semidefinite LDL^T; a zero pivot requires the residual column to vanish.
-    double l[49]{},d[7]{};const double tol=std::max(1e-30,scale*1e-12);
-    for(unsigned i=0;i<n;++i) {
-        double p=out[i*n+i];for(unsigned k=0;k<i;++k)p-=l[i*n+k]*l[i*n+k]*d[k];
-        if(p < -tol)return prwError(error,"invalid-covariance: Covariance must be positive semidefinite.");
-        d[i]=p>tol?p:0;l[i*n+i]=1;
-        for(unsigned j=i+1;j<n;++j) {
-            double r=out[j*n+i];for(unsigned k=0;k<i;++k)r-=l[j*n+k]*l[i*n+k]*d[k];
-            if(d[i]==0&&std::abs(r)>tol)return prwError(error,"invalid-covariance: Singular covariance has an inconsistent cross term.");
-            l[j*n+i]=d[i]==0?0:r/d[i];
-        }
-    }
     return true;
 }
 bool parseCondition(const PCEParameterCondition* in,const std::string& frame,Integrator::BurnEvent& out,std::string& error) {
@@ -271,11 +249,14 @@ bool parseExecution(const PRWExecutionRequest* in,Execution& out,std::string& er
     if(covariance) {
         if(covariance->DIMENSION()==7) {
             if(in->INITIAL_MASS_COVARIANCE())return prwError(error,"duplicate-covariance: Multiple seven-state initial covariances.");
-            out.massCovariance=true;if(!parseCovariance(covariance,7,out.p7.data(),error))return false;
-        } else {out.covariance=true;if(!parseCovariance(covariance,6,&out.p.m[0][0],error))return false;}
+            out.massCovariance=true;if(!prwCovariance(covariance,7,out.p7.data(),error))return false;
+        } else {out.covariance=true;if(!prwCovariance(covariance,6,&out.p.m[0][0],error))return false;}
     }
-    if(in->INITIAL_MASS_COVARIANCE()){out.massCovariance=true;if(!parseCovariance(in->INITIAL_MASS_COVARIANCE(),7,out.p7.data(),error))return false;}
+    if(in->INITIAL_MASS_COVARIANCE()){out.massCovariance=true;if(!prwCovariance(in->INITIAL_MASS_COVARIANCE(),7,out.p7.data(),error))return false;}
     if(out.massCovariance&&!out.massDynamics)return prwError(error,"invalid-covariance: Seven-state covariance requires INCLUDE_MASS_DYNAMICS.");
+    if(!prwProcessNoise(in->PROCESS_NOISE(),out.noise,error))return false;
+    if(out.noise.enabled&&(!out.covariance||out.massDynamics))
+        return prwError(error,"unsupported-configuration: PROCESS_NOISE applies to a six-state covariance without mass dynamics.");
     if(in->SAMPLE_EPOCHS()) {
         if(in->SAMPLE_EPOCHS()->size()>10000)return prwError(error,"invalid-samples: At most 10000 samples are supported.");
         for(const auto* epoch:*in->SAMPLE_EPOCHS()) {
@@ -338,10 +319,10 @@ bool evaluate(Execution& execution,const PRWExecutionRequest* request,double epo
             report->DELTA_V_M_S=burn.deltaVKmS*1000;report->PROPELLANT_KG=burn.propellantKg;out.BURNS.push_back(std::move(report));
         }
     } else if(execution.variational) {
-        const auto value=Integrator::PropagateWithSTM(execution.initial,seconds,execution.integrator,execution.forces,execution.technique,execution.density,execution.impulses);
+        const auto value=Integrator::PropagateCovariance(execution.initial,seconds,execution.integrator,execution.forces,execution.technique,execution.density,execution.impulses,execution.p,execution.noise);
         if(!value.success){error="invoke-failed: "+value.errorMessage;return false;}
         auto state=value.finalState;state.epoch=epoch;out.STATE=makeState(state,*frame,request->INITIAL());out.STM=matrix(&value.stm.m[0][0],6,false);
-        if(execution.covariance){const auto p=Integrator::TransportCovariance(value.stm,execution.p);out.COVARIANCE=matrix(&p.m[0][0],6,true);}
+        if(execution.covariance){out.COVARIANCE=matrix(&value.covariance.m[0][0],6,true);out.PROCESS_NOISE=prwProcessNoiseRecord(execution.noise);}
         out.ACCEPTED_STEPS=value.steps;out.REJECTED_STEPS=value.rejections;
     } else {
         auto config=execution.integrator;

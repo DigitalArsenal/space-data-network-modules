@@ -83,7 +83,7 @@ Artifacts:
 - `dist/browser/module.js`
 - `dist/browser/module.wasm`
 
-## Portable PRW contract (SDS 1.220.0)
+## Portable PRW contract (SDS 1.232.0)
 
 Every advertised method consumes size-prefixed `$PRW` records through the SDK
 PIV/TAB invoke envelope. The module builds through `compileModuleFromSource` for
@@ -127,12 +127,47 @@ reports them as **GCRF**. Other origins and axes fail. Earth-fixed/TEME requests
 fail with `eop-data-required` because the PRW invocation does not supply the
 required authoritative Earth-orientation data. There is no silent frame fallback.
 
-Resident per-object covariance, dynamical mass, gravity overrides, and drag/SRP
-area-over-mass controls fail with `unsupported-configuration`; use the execution
-request for supported rich dynamics. `VALID=false` is retained on ingest and
+Resident dynamical mass, gravity overrides, and drag/SRP area-over-mass controls
+fail with `unsupported-configuration`; use the execution request for supported
+rich dynamics. Per-object covariance and process noise are accepted (see
+[Covariance and process noise](#covariance-and-process-noise)). `VALID=false` is retained on ingest and
 fails with `invalid-state` when selected for propagation or trajectory export.
 Empty selection means all rows; duplicate and unknown handles fail explicitly.
 `MAXIMUM_COUNT` limits the requested prefix while preserving its order.
+
+### Covariance and process noise
+
+A propagated covariance is `P(t) = Phi P0 Phi^T + Q`, and the record states the
+`Q` it includes (`PRWProcessNoise`, SDS 1.232.0).
+
+- **Resident states.** `ingest_state` takes a six-state `COVARIANCE` (SI;
+  finite, symmetric, positive semidefinite) and optional `PROCESS_NOISE` per
+  object. Noise without a covariance fails with `invalid-process-noise`.
+- **Resident output.** `propagate_state` returns each such object's
+  `COVARIANCE` at the target epoch and echoes the `PROCESS_NOISE` it includes.
+  It uses the resident force model (point mass and the degree/order 20 field)
+  and integrator (RK78, 60/0.01/600 s, 1e-12), with the analytic STM. Objects
+  with scheduled burns refuse covariance (`unsupported-configuration`); use
+  the execution request.
+- **Execution requests.** `INITIAL_COVARIANCE` with `PROCESS_NOISE` returns
+  `FINAL_SAMPLE` and `SAMPLES` covariance including `Q`, and the same
+  `PROCESS_NOISE`. Noise needs a six-state covariance without mass dynamics.
+- **`WHITE_ACCELERATION`.** Zero-mean white acceleration noise (state noise
+  compensation).
+  - **Inputs:** a spectral density per axis (m²/s³), inertial or radial,
+    transverse and normal axes, and `DISCRETIZATION_SECONDS`.
+  - **Steps:** the arc is cut into equal steps no longer than
+    `DISCRETIZATION_SECONDS`. Each step's STM carries P, and the step adds
+    `q [[h³/3, h²/2], [h²/2, h]]` per axis at its end (RTN axes from the state
+    there).
+  - **No noise:** this is the single-integration `Phi P0 Phi^T`.
+
+Tests (`tests/prw_covariance.test.mjs`):
+- the resident covariance against a finite-difference STM of 13 resident
+  trajectories;
+- the added `Q` on both paths;
+- short-arc `Q` against the kinematic closed form;
+- the refusals.
 
 ### Trajectory export and continuation
 
@@ -319,7 +354,8 @@ All calculations execute in C++ WASM. Example request body:
   coordinate conventions are unchanged; this does not add an Earth-fixed
   rotation to its tesseral harmonics.
 - `covariance` is 36 row-major entries in the same Cartesian units. The returned
-  covariance is `Phi * P0 * Phi^T`, with no added process noise.
+  covariance is `Phi * P0 * Phi^T`. On the PRW surface, `PROCESS_NOISE` adds a
+  declared `Q` (see Covariance and process noise).
 - `sampleEpochsJD` returns `samples[]` containing position, velocity, `stm`, and
   optionally covariance. Every sample STM refers to the original `epochJD`.
   Samples are independently propagated from that epoch. The caller may pack

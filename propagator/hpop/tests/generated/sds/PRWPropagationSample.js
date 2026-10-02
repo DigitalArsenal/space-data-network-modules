@@ -1,5 +1,6 @@
 import * as flatbuffers from 'flatbuffers';
 import { PRWBurnReport, PRWBurnReportT } from './PRWBurnReport.js';
+import { PRWProcessNoise, PRWProcessNoiseT } from './PRWProcessNoise.js';
 import { PRWResidentState, PRWResidentStateT } from './PRWResidentState.js';
 import { PRWStateMatrix, PRWStateMatrixT } from './PRWStateMatrix.js';
 export class PRWPropagationSample {
@@ -53,8 +54,12 @@ export class PRWPropagationSample {
         const offset = this.bb.__offset(this.bb_pos, 18);
         return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
     }
+    PROCESS_NOISE(obj) {
+        const offset = this.bb.__offset(this.bb_pos, 20);
+        return offset ? (obj || new PRWProcessNoise()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+    }
     static startPRWPropagationSample(builder) {
-        builder.startObject(8);
+        builder.startObject(9);
     }
     static addState(builder, STATEOffset) {
         builder.addFieldOffset(0, STATEOffset, 0);
@@ -90,13 +95,16 @@ export class PRWPropagationSample {
     static startBurnsVector(builder, numElems) {
         builder.startVector(4, numElems, 4);
     }
+    static addProcessNoise(builder, PROCESS_NOISEOffset) {
+        builder.addFieldOffset(8, PROCESS_NOISEOffset, 0);
+    }
     static endPRWPropagationSample(builder) {
         const offset = builder.endObject();
         builder.requiredField(offset, 4);
         return offset;
     }
     unpack() {
-        return new PRWPropagationSampleT(this.STATE() !== null ? this.STATE().unpack() : null, this.STM() !== null ? this.STM().unpack() : null, this.MASS_STM() !== null ? this.MASS_STM().unpack() : null, this.COVARIANCE() !== null ? this.COVARIANCE().unpack() : null, this.MASS_COVARIANCE() !== null ? this.MASS_COVARIANCE().unpack() : null, this.ACCEPTED_STEPS(), this.REJECTED_STEPS(), this.bb.createObjList(this.BURNS.bind(this), this.burnsLength()));
+        return new PRWPropagationSampleT(this.STATE() !== null ? this.STATE().unpack() : null, this.STM() !== null ? this.STM().unpack() : null, this.MASS_STM() !== null ? this.MASS_STM().unpack() : null, this.COVARIANCE() !== null ? this.COVARIANCE().unpack() : null, this.MASS_COVARIANCE() !== null ? this.MASS_COVARIANCE().unpack() : null, this.ACCEPTED_STEPS(), this.REJECTED_STEPS(), this.bb.createObjList(this.BURNS.bind(this), this.burnsLength()), this.PROCESS_NOISE() !== null ? this.PROCESS_NOISE().unpack() : null);
     }
     unpackTo(_o) {
         _o.STATE = this.STATE() !== null ? this.STATE().unpack() : null;
@@ -107,6 +115,7 @@ export class PRWPropagationSample {
         _o.ACCEPTED_STEPS = this.ACCEPTED_STEPS();
         _o.REJECTED_STEPS = this.REJECTED_STEPS();
         _o.BURNS = this.bb.createObjList(this.BURNS.bind(this), this.burnsLength());
+        _o.PROCESS_NOISE = this.PROCESS_NOISE() !== null ? this.PROCESS_NOISE().unpack() : null;
     }
 }
 export class PRWPropagationSampleT {
@@ -118,7 +127,8 @@ export class PRWPropagationSampleT {
     ACCEPTED_STEPS;
     REJECTED_STEPS;
     BURNS;
-    constructor(STATE = null, STM = null, MASS_STM = null, COVARIANCE = null, MASS_COVARIANCE = null, ACCEPTED_STEPS = BigInt('0'), REJECTED_STEPS = BigInt('0'), BURNS = []){
+    PROCESS_NOISE;
+    constructor(STATE = null, STM = null, MASS_STM = null, COVARIANCE = null, MASS_COVARIANCE = null, ACCEPTED_STEPS = BigInt('0'), REJECTED_STEPS = BigInt('0'), BURNS = [], PROCESS_NOISE = null){
         this.STATE = STATE;
         this.STM = STM;
         this.MASS_STM = MASS_STM;
@@ -127,6 +137,7 @@ export class PRWPropagationSampleT {
         this.ACCEPTED_STEPS = ACCEPTED_STEPS;
         this.REJECTED_STEPS = REJECTED_STEPS;
         this.BURNS = BURNS;
+        this.PROCESS_NOISE = PROCESS_NOISE;
     }
     pack(builder) {
         const STATE = this.STATE !== null ? this.STATE.pack(builder) : 0;
@@ -135,6 +146,7 @@ export class PRWPropagationSampleT {
         const COVARIANCE = this.COVARIANCE !== null ? this.COVARIANCE.pack(builder) : 0;
         const MASS_COVARIANCE = this.MASS_COVARIANCE !== null ? this.MASS_COVARIANCE.pack(builder) : 0;
         const BURNS = PRWPropagationSample.createBurnsVector(builder, builder.createObjectOffsetList(this.BURNS));
+        const PROCESS_NOISE = this.PROCESS_NOISE !== null ? this.PROCESS_NOISE.pack(builder) : 0;
         PRWPropagationSample.startPRWPropagationSample(builder);
         PRWPropagationSample.addState(builder, STATE);
         PRWPropagationSample.addStm(builder, STM);
@@ -144,6 +156,7 @@ export class PRWPropagationSampleT {
         PRWPropagationSample.addAcceptedSteps(builder, this.ACCEPTED_STEPS);
         PRWPropagationSample.addRejectedSteps(builder, this.REJECTED_STEPS);
         PRWPropagationSample.addBurns(builder, BURNS);
+        PRWPropagationSample.addProcessNoise(builder, PROCESS_NOISE);
         return PRWPropagationSample.endPRWPropagationSample(builder);
     }
 }

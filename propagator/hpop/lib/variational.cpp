@@ -229,4 +229,57 @@ Mat6 TransportCovariance(const Mat6& phi,const Mat6& covariance) {
     for(int i=0;i<6;++i)for(int j=0;j<6;++j)transpose.m[i][j]=phi.m[j][i];
     return multiply(tmp,transpose);
 }
+// White acceleration noise over one interval h at state s: per axis k with
+// spectral density q_k, q_k [[h^3/3, h^2/2], [h^2/2, h]] on that axis's
+// position and velocity components; RTN axes from s.
+Mat6 WhiteAccelerationNoise(const ProcessNoise& noise,double h,const StateVector& s) {
+    Vec3 axes[3]={Vec3(1,0,0),Vec3(0,1,0),Vec3(0,0,1)};
+    if(noise.rtn) {
+        const Vec3 r=s.position.normalized(),n=s.position.cross(s.velocity).normalized();
+        axes[0]=r;axes[1]=n.cross(r);axes[2]=n;
+    }
+    Mat6 q{};
+    for(int k=0;k<3;++k) {
+        const double a=noise.q[k]*h*h*h/3,b=noise.q[k]*h*h/2,c=noise.q[k]*h;
+        const double u[3]={axes[k].x,axes[k].y,axes[k].z};
+        for(int i=0;i<3;++i)for(int j=0;j<3;++j) {
+            const double w=u[i]*u[j];
+            q.m[i][j]+=a*w;q.m[i][3+j]+=b*w;q.m[3+i][j]+=b*w;q.m[3+i][3+j]+=c*w;
+        }
+    }
+    return q;
+}
+CovarianceResult PropagateCovariance(const StateVector& initial,double dt,const IntegratorConfig& config,
+    ForceModel::ForceModelSet& forces,STMMethod method,ForceModel::DensityGradient density,
+    const std::vector<ForceModel::ImpulsiveManeuverDef>& burns,const Mat6& p0,const ProcessNoise& noise) {
+    CovarianceResult out;
+    if(!noise.enabled||dt==0) {
+        static_cast<VariationalResult&>(out)=PropagateWithSTM(initial,dt,config,forces,method,density,burns);
+        if(out.success)out.covariance=TransportCovariance(out.stm,p0);
+        return out;
+    }
+    out.finalState=initial;
+    if(!(noise.interval>0)||!std::isfinite(noise.interval)) {
+        out.success=false;out.errorMessage="Process noise needs a positive discretization interval.";return out;
+    }
+    const double intervals=std::ceil(std::abs(dt)/noise.interval-1e-9);
+    if(intervals>100000) {
+        out.success=false;out.errorMessage="Process noise discretization exceeds 100000 intervals for this arc.";return out;
+    }
+    const int n=std::max(1,int(intervals));
+    const double step=dt/n;
+    StateVector state=initial;Mat6 phi=Mat6::identity(),p=p0;
+    for(int k=0;k<n;++k) {
+        const auto v=PropagateWithSTM(state,step,config,forces,method,density,burns);
+        if(!v.success){out.success=false;out.errorMessage=v.errorMessage;return out;}
+        p=TransportCovariance(v.stm,p);
+        const Mat6 q=WhiteAccelerationNoise(noise,std::abs(step),v.finalState);
+        for(int i=0;i<6;++i)for(int j=0;j<6;++j)p.m[i][j]+=q.m[i][j];
+        phi=multiply(v.stm,phi);
+        state=v.finalState;
+        out.steps+=v.steps;out.rejections+=v.rejections;
+    }
+    out.finalState=state;out.stm=phi;out.covariance=p;
+    return out;
+}
 }}
