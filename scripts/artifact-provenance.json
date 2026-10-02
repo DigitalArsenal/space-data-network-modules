@@ -3375,15 +3375,15 @@
       }
     },
     "propagator/hpop/dist/browser/module.wasm": {
-      "sha256": "0c729a51f605cfdd75a62c7c7a8a6d2472eebd2ce2104a8adc12bee296b43c10",
-      "bytes": 1140961,
+      "sha256": "a9821fb553448034673f4f2ce5e409c755f00803f7e8bdd7bc3aaf3e72d35e2c",
+      "bytes": 1151545,
       "module": "propagator/hpop",
-      "lastCommit": "0aa5c4999e19b26fecb45fb02814ce364123a26f",
-      "lastCommitDate": "2026-10-01T10:08:59-04:00",
+      "lastCommit": "a4b2a7e23f82df117d16949a9cbf7b2550e69e23",
+      "lastCommitDate": "2026-10-01T22:53:02-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "5c9069d4f99224dc22490dcec8fd2b257b194eda",
+        "superRepoCommit": "53945b04929f0ebd04753df12193fe4aa1a02e84",
         "sdkCommit": "cf1a1276bdc6f400e13372e34b6ff30882d38f95"
       },
       "declaration": {
@@ -3401,15 +3401,15 @@
       }
     },
     "propagator/hpop/dist/isomorphic/module.wasm": {
-      "sha256": "0c729a51f605cfdd75a62c7c7a8a6d2472eebd2ce2104a8adc12bee296b43c10",
-      "bytes": 1140961,
+      "sha256": "a9821fb553448034673f4f2ce5e409c755f00803f7e8bdd7bc3aaf3e72d35e2c",
+      "bytes": 1151545,
       "module": "propagator/hpop",
-      "lastCommit": "0aa5c4999e19b26fecb45fb02814ce364123a26f",
-      "lastCommitDate": "2026-10-01T10:08:59-04:00",
+      "lastCommit": "a4b2a7e23f82df117d16949a9cbf7b2550e69e23",
+      "lastCommitDate": "2026-10-01T22:53:02-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "5c9069d4f99224dc22490dcec8fd2b257b194eda",
+        "superRepoCommit": "53945b04929f0ebd04753df12193fe4aa1a02e84",
         "sdkCommit": "cf1a1276bdc6f400e13372e34b6ff30882d38f95"
       },
       "declaration": {
