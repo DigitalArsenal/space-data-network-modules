@@ -36,7 +36,8 @@ std::string VerifySessionKeyProof(const EpmFields& epm,
                                   const std::string& account_key_path,
                                   const uint8_t* proven_ed25519,
                                   int64_t now_unix,
-                                  const Secp256k1Verify& verify_secp256k1);
+                                  const Secp256k1Verify& verify_secp256k1,
+                                  const std::string& requested_domain = std::string());
 
 }  // namespace sdn::epm
 

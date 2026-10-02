@@ -34,7 +34,8 @@ AuthorizeResult AuthorizeModuleRequest(const uint8_t* epm_bytes, std::size_t epm
                                        const std::vector<std::string>& allowed_xpubs,
                                        int64_t now_unix, int64_t max_age_seconds,
                                        const Ed25519Verify& verify,
-                                       const Secp256k1Verify& verify_secp256k1) {
+                                       const Secp256k1Verify& verify_secp256k1,
+                                       const std::string& requested_domain) {
   AuthorizeResult r;
 
   EpmFields fields;
@@ -72,7 +73,8 @@ AuthorizeResult AuthorizeModuleRequest(const uint8_t* epm_bytes, std::size_t epm
     // An allowlist is only as strong as the proof that the requester holds the
     // xpub: the account key itself must have authorised this session key.
     const std::string proof_error = VerifySessionKeyProof(
-        fields, v.xpub, v.account_key_path, proven_signing_pubkey, now_unix, verify_secp256k1);
+        fields, v.xpub, v.account_key_path, proven_signing_pubkey, now_unix, verify_secp256k1,
+        requested_domain);
     if (!proof_error.empty()) {
       r.error = proof_error;
       return r;

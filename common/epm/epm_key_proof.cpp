@@ -88,6 +88,16 @@ bool Base58Decode(const std::string& in, std::vector<uint8_t>* out) {
 }
 
 // "name:value" on line `index` of the statement, or false.
+// "https://host[:port][/...]" -> "host", lowercased; "" when malformed.
+std::string OriginHost(const std::string& origin) {
+  const std::size_t scheme = origin.find("://");
+  if (scheme == std::string::npos) return "";
+  const std::size_t start = scheme + 3;
+  std::size_t end = start;
+  while (end < origin.size() && origin[end] != ':' && origin[end] != '/') ++end;
+  return Lower(origin.substr(start, end - start));
+}
+
 bool Field(const std::vector<std::string>& lines, std::size_t index,
            const char* name, std::string* value) {
   if (index >= lines.size()) return false;
@@ -104,7 +114,8 @@ std::string VerifySessionKeyProof(const EpmFields& epm,
                                   const std::string& account_key_path,
                                   const uint8_t* proven_ed25519,
                                   int64_t now_unix,
-                                  const Secp256k1Verify& verify_secp256k1) {
+                                  const Secp256k1Verify& verify_secp256k1,
+                                  const std::string& requested_domain) {
   if (proven_ed25519 == nullptr) return "no proven session key";
   if (!verify_secp256k1) return "no secp256k1 verifier available";
 
@@ -151,6 +162,12 @@ std::string VerifySessionKeyProof(const EpmFields& epm,
   }
   if (Lower(session) != HexEncode(proven_ed25519, 32)) return "account key proof names another session key";
   if (stated_xpub != Trim(xpub)) return "account key proof names another xpub";
+  // The statement is bound to the page origin the wallet signed for; a grant
+  // for another domain cannot reuse it.
+  if (!Trim(requested_domain).empty() &&
+      OriginHost(origin) != Lower(Trim(requested_domain))) {
+    return "account key proof is for another origin";
+  }
   int64_t expires_at = 0;
   for (const char c : expires) {
     if (!std::isdigit(static_cast<unsigned char>(c))) return "malformed account key proof expiry";
