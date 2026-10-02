@@ -137,38 +137,101 @@ Unbounded querying is therefore affordable for a determined adversary.
 request or a maneuver after an alert tells B that A was near B's invented
 trajectory.
 
+**Who enforces.**
+- Every answer about B's object comes from B's node, computed with B's
+  plaintext. Nothing that could reveal the object exists anywhere else.
+- The defenses therefore run on the probed party's node.
+- Open source does not weaken them (Kerckhoffs): it lets each side check
+  what its counterpart's node computes.
+
+**Rules of the exchange.**
+- **Fixed grid.** The protocol sets the grid: UTC-aligned windows, a fixed
+  step Δt, 8,192 steps per encrypted block. Slot j always means
+  t₀ + jΔt, so a requester cannot pick its own sample times.
+- **One answer per pair and window.** B answers once per (counterpart
+  object, window), checking every step of the window.
+- **One response per pair.** A accepts one digitally signed response per
+  pair, so it cannot ask twice and keep the better answer.
+
+**Completeness audit.** Two stages:
+1. **Structure, before answering.** B checks:
+   - the window identifier and start epoch;
+   - the step;
+   - the number of blocks per coordinate (steps ÷ 8,192);
+   - the encryption parameters.
+
+   A short or malformed submission is refused.
+2. **Content, under encryption.** A missing or zero-filled step is still a
+   valid ciphertext. The tube check below tests every step, and a blank or
+   invented step is not near the declared object's track.
+
+**What can be verified under encryption.**
+- **Before answering:** the structure, and whether every step lies inside
+  the tube around the declared object's public track. The tube test uses the
+  screening arithmetic against that track, followed by the comparison; B
+  learns only pass or fail.
+- **Not in real time:** whether the path obeys the equations of motion.
+  Gravity (μr/|r|³) is not a polynomial, and zero-knowledge proofs of
+  orbital dynamics remain research.
+- **After the window:** everything, by opening the ciphertexts that were
+  answered (defense 2).
+
 **Defenses, strongest first.**
 
-1. **Bind queries to real objects.**
-   - With each query, the requester commits to its plaintext trajectory (a
-     hash).
-   - After the window has passed, it reveals the trajectory. Past positions
-     matter far less than planned maneuvers.
-   - An auditor checks the revealed trajectory against independent tracking
-     of the declared object, using the reference and GP comparisons of the
-     uncertainty program.
-   - An invented trajectory is caught after the fact. The same binding
-     applies to the responder.
-2. **Identity cost.** Queries come only from identities with stake or
-   reputation. A failed audit forfeits the stake and suspends screening.
-3. **Rate limits.** Per window, an identity may query no more than its
-   registered objects.
-4. **Plausibility.** At audit, a committed trajectory must obey orbital
-   dynamics. Grid-like or non-Keplerian ephemerides are flagged.
-5. **One-sided noise.** Noise may add false alerts but must never remove a
-   true one, because safety comes first. It slows a prober by a constant
-   factor and costs false-alert resolution.
-   - Two-sided noise before the comparison (Laplace noise on the distance)
-     would drop real conjunctions near the threshold.
-   - Repeated queries average independent noise away unless it is fixed per
-     query.
+1. **Check the question before answering.**
+   - Each query names a declared object that A operates.
+   - B tests, under encryption, that the trajectory stays within a tube
+     around that object's public track: D₀ wide at the start, widening by
+     Δv_max·(t − t_b) after a burn declared at t_b.
+   - An invented sweep is refused before any answer. Probing with its real
+     fleet, A reaches at most D + R′ around its own objects.
+2. **Open the window afterwards.**
+   - Each window is encrypted under a fresh key. B keeps the ciphertexts it
+     answered (34.6 MB per object-day at 1 s).
+   - After the window, A hands over that window's key, and B decrypts
+     exactly what it answered. The ciphertext is the commitment, so no hash
+     is needed and nothing can be swapped. Only past positions are revealed.
+   - B checks every step, orbital dynamics, and agreement with independent
+     tracking (the reference and GP comparisons of the uncertainty program).
+   - Withholding the key is a failed audit.
+3. **Stake and identity.** Queries come only from identities with stake or
+   reputation. A failed audit forfeits the stake and ends screening.
+4. **Per-window budget.** An identity may query no more objects per window
+   than it has registered. With the audit, that bounds what a requester
+   willing to lose its identity learns: one window, inside its own fleet's
+   tubes.
+5. **Laplace noise with a safety offset.**
+   - B adds noise of scale b to each step's distance before the comparison,
+     truncated at ±s, and raises the threshold by s. Noise can add false
+     alerts but never removes a real one.
+   - Positions whose distances differ by Δ change the odds of k answers by at
+     most e^(kΔ/b): (ε, δ) differential privacy, because of the truncation.
+   - Locating the alert boundary to within δ takes about (b/δ)² answers.
+   - The noise is fixed per (requester, object, step), so repeats do not
+     average it away.
+   - It hides precise position, not coarse location. At s = 1.25 km and
+     R = 5 km, there are about 1.6 times as many alerts.
+6. **Partners for untracked objects.** An object missing from the public
+   catalog cannot pass a public-track check. Its owner screens only with
+   counterparties it chooses.
+7. **Decoys.** An owner can submit N candidate orbits, one real, and keep
+   which one under its key.
+   - The bound is P(found) ≤ e^(2ε)/N, given persistent decoys, a prober
+     that cannot observe the object, and gated confirmation of real alerts.
+   - Cost is N times the per-pair cost.
+   - Measured on 3,000 LEO payload histories, no generator is ready: the best
+     hid a real orbit among about 4 of 100 candidates in the published
+     ephemeris (`../../private-screening/docs/decoy-study-2026-08.md`).
+   - Decoys dilute what leaks; they do not replace defenses 1 to 5.
 
 Direct, authenticated streams protect integrity and metadata. The ciphertexts
 are protected by A's key either way. A published Enc_A(a) lets others
 compute, but only A can decrypt.
 
-With binding, a prober learns only what its real objects' real close
-approaches reveal: the exposure measured above.
+With these defenses, a prober learns what its real objects' real close
+approaches reveal: the exposure measured above. If it is willing to lose its
+identity, it learns at most one more window of answers, within its own
+fleet's tubes.
 
 ## What exists today
 
@@ -177,4 +240,5 @@ approaches reveal: the exposure measured above.
 | Homomorphic fields in FlatBuffers (SEAL BFV/BGV, `he_encrypted`, client and server contexts) | Built. It encrypts one value per ciphertext, in slot 0, with a 20-bit plaintext modulus, so metre-scale coordinates wrap silently. It needs batched vectors and CRT moduli, as in the benchmark, before it can carry this protocol. |
 | SDN request surface (`/api/v1/conjunction/screen`: encrypted, grant, channel, assessor) | Built. It returns no result (`pending-module-execution`). |
 | The protocol's arithmetic | Measured here (benchmark). |
-| Screening module; bit-only comparison; noise flooding; commitments and audit; staking; rate limits; plausibility checks | Not built. |
+| Decoy generators and their measurement (`analysis/private-screening`) | Measured: none ready. |
+| Screening module; bit-only comparison; noise flooding; pre-answer tube check; completeness audit; per-window keys and audit; staking; budgets; Laplace noise | Not built. |
