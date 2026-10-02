@@ -3,6 +3,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {compileModuleFromSource} from 'space-data-module-sdk/compiler';
 import {publishedStandardsRoot} from '../terrain-source/sds-headers.mjs';
+import { signBuiltArtifact } from "../../scripts/lib/sign-built-artifact.mjs";
 const root=fileURLToPath(new URL('.',import.meta.url));
 process.env.SPACE_DATA_STANDARDS_ROOT=publishedStandardsRoot(import.meta.url);
 const pieces=['#define JSON_NOEXCEPTION'];
@@ -23,4 +24,5 @@ await fs.writeFile(path.join(guest,'module-link.o'),result.guestLink.objectBytes
 const {format,language,threadModel,symbolPrefix,methodSymbols}=result.guestLink;
 await fs.writeFile(path.join(guest,'metadata.json'),JSON.stringify({version:1,format,language,threadModel,symbolPrefix,methodSymbols},null,2)+'\n');
 await fs.copyFile(path.join(root,'plugin-manifest.json'),path.join(root,'dist/plugin-manifest.json'));
+signBuiltArtifact(outputPath);
 console.log(`PASS SDK build ${manifest.pluginId} -> dist/isomorphic/module.wasm`);

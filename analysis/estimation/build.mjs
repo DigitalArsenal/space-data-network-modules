@@ -9,6 +9,7 @@ import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 import { loadKnownTypeCatalog } from "space-data-module-sdk/standards";
 
 import { generateSdsHeaders } from "./generate-sds-headers.mjs";
+import { signBuiltArtifact } from "../../scripts/lib/sign-built-artifact.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -109,4 +110,5 @@ fsSync.writeFileSync(path.join(packageRoot, "dist", "build-provenance.json"), `$
   threadModel: manifest.threadModel,
 }, null, 2)}\n`);
 
+signBuiltArtifact(outputPath);
 console.log(`Built ${path.relative(packageRoot, outputPath)} against spacedatastandards.org@${sdsVersion}`);

@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import createFlatc from "flatc-wasm/module";
 import { compileModuleFromSource, cleanupCompilation } from "space-data-module-sdk/compiler";
 import { createAccessPluginManifest, createLegacyBuildManifest } from "./manifest.js";
+import { signBuiltArtifact } from "../../scripts/lib/sign-built-artifact.mjs";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const require = createRequire(import.meta.url);
@@ -58,7 +59,8 @@ try {
   metadata.embeddedManifest.fileIdentifier = "$PLG";
   metadata.embeddedManifest.section = "sds.manifest";
   for (const name of ["manifest.json", "dist/manifest.json"]) await fs.writeFile(path.join(root, name), JSON.stringify(metadata, null, 2) + "\n");
-  console.log("Built dist/isomorphic/module.wasm through SDK; compliance PASS (unsigned local build).");
+  signBuiltArtifact(outputPath);
+  console.log("Built dist/isomorphic/module.wasm through SDK; compliance PASS; isomorphic artifact signed.");
 } finally {
   await cleanupCompilation(compilation);
 }

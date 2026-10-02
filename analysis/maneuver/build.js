@@ -34,6 +34,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { signBuiltArtifact } from "../../scripts/lib/sign-built-artifact.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const cppRoot = path.join(packageRoot, "src", "cpp");
@@ -167,6 +168,7 @@ if (!compilation.report?.ok) {
   throw new Error(`Compiled maneuver-planner failed SDK validation:\n${issues}`);
 }
 
+signBuiltArtifact(outputPath);
 const bytes = await fs.readFile(outputPath);
 const { createHash } = await import("node:crypto");
 const digest = createHash("sha256").update(bytes).digest("hex");

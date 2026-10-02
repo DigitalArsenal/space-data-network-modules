@@ -6,6 +6,7 @@ import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {compileModuleFromSource,cleanupCompilation} from 'space-data-module-sdk/compiler';
 import {generateSdsBindings,packageRoot,standardsRoot} from './generate-sds-bindings.mjs';
+import { signBuiltArtifact } from "../../scripts/lib/sign-built-artifact.mjs";
 
 const manifest=JSON.parse(await fs.readFile(path.join(packageRoot,'plugin-manifest.json'),'utf8'));
 await generateSdsBindings();
@@ -45,5 +46,6 @@ try{
   await fs.copyFile(path.join(packageRoot,'browser-factory.mjs'),path.join(packageRoot,'dist/browser/module.js'));
   await fs.writeFile(path.join(packageRoot,'dist/plugin-manifest.json'),JSON.stringify(manifest,null,2)+'\n');
   await fs.writeFile(path.join(packageRoot,'dist/build-provenance.json'),JSON.stringify({sdk:sdkVersion,spacedatastandards:JSON.parse(fsSync.readFileSync(path.join(packageRoot,'node_modules/spacedatastandards.org/package.json'))).version,threadModel:result.threadModel,target:'wasm32-wasip1-threads',sharedMemory:true,sha256:createHash('sha256').update(bytes).digest('hex'),bytes:bytes.length,compiler:result.compiler,clangVersion:execFileSync(config.clangxx,['--version'],{encoding:'utf8'}).trim(),exceptionRuntimeArchives:exceptionLibraries.map(p=>({name:path.basename(p),sha256:createHash('sha256').update(fsSync.readFileSync(p)).digest('hex')})),units:['src/cpp/src/prw_sdk_adapter.cpp',...units.map(p=>path.relative(packageRoot,p))],standardWasmExceptions:true,legacyRuntimeCompiled:false,debugInfo:'stripped',sdkAccommodation:'Public SDN_WASI_CLANGXX driver compiles multiple source units and supplies LLVM exception ABI archives and the preexisting 256 MiB initial memory, idempotent constructor wrapping and per-instance static-object lifetime; SDK owns PIV, allocation, command framing, the __wasm_call_ctors direct-surface initializer, manifest embedding and validation.'},null,2)+'\n');
+  signBuiltArtifact(outputPath);
   console.log(`Built ${bytes.length} bytes; canonical SDK artifact validation passed.`);
 }finally{if(result)await cleanupCompilation(result);}

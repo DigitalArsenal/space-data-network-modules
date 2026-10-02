@@ -8,6 +8,7 @@ import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 import { generateSdsHeaders } from "./generate-sds-headers.mjs";
 import { createAccessEvaluatorSource } from "../../analysis/access/build-source.mjs";
 import { composeErfaTranslationUnit } from "../../foundation/frames/erfa-amalgamation.mjs";
+import { signBuiltArtifact } from "../../scripts/lib/sign-built-artifact.mjs";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -136,6 +137,7 @@ if (!compilation.report?.ok) {
   throw new Error(`Compiled artifact failed SDK validation:\n${issues}`);
 }
 
+signBuiltArtifact(outputPath);
 console.log(
   `Built ${path.relative(packageRoot, outputPath)} against spacedatastandards.org@${sdsVersion} ` +
   `over the ${roster.count}-parameter catalog and ${erfa.fileCount} vendored ERFA sources`,

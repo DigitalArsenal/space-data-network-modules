@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { signBuiltArtifact } from "../../scripts/lib/sign-built-artifact.mjs";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const modulesRoot = path.resolve(root, "../..");
@@ -46,4 +47,5 @@ if (!compilation.report?.ok) {
   throw new Error(JSON.stringify(compilation.report?.issues ?? [], null, 2));
 }
 await fs.copyFile(path.join(root, "plugin-manifest.json"), path.join(root, "dist/plugin-manifest.json"));
+signBuiltArtifact(outputPath);
 console.log(`Built ${path.relative(root, outputPath)} with ${compilation.threadModel}`);

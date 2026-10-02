@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compileModuleFromSource, cleanupCompilation } from 'space-data-module-sdk/compiler';
 import { generateSdsHeaders } from './generate-sds-headers.mjs';
+import { signBuiltArtifact } from "../../scripts/lib/sign-built-artifact.mjs";
 
 const packageRoot = fileURLToPath(new URL('.', import.meta.url));
 const manifestPath = path.join(packageRoot, 'plugin-manifest.json');
@@ -27,6 +28,7 @@ try {
   if (!compilation.report?.ok)
     throw new Error(`Compiled artifact failed SDK validation: ${JSON.stringify(compilation.report?.issues)}`);
   await fs.copyFile(manifestPath, path.join(distRoot,'plugin-manifest.json'));
+  signBuiltArtifact(outputPath);
   console.log('Built dist/isomorphic/module.wasm — SDK validation PASS');
 } finally {
   await cleanupCompilation(compilation);
