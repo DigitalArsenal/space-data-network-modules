@@ -10,6 +10,8 @@
 #include "atmosphere.h"
 #include "atmosphere_winds.h"
 #include "time_convert.h"
+#include "coords.h"
+#include "egm2008_data.h"
 #include <cmath>
 #include <algorithm>
 #include <stdexcept>
@@ -176,8 +178,7 @@ Vec3 J2J4(const Vec3& position, double mu) {
     return acc;
 }
 
-Vec3 SphericalHarmonics(const Vec3& position, const SphericalHarmonicsConfig& config) {
-    // Use existing implementation from astrodynamics.cpp
+GravityFieldCoefficients InlineFieldCoefficients(const SphericalHarmonicsConfig& config) {
     GravityFieldCoefficients coeffs;
     coeffs.mu = config.mu;
     coeffs.referenceRadius = config.referenceRadius;
@@ -196,60 +197,34 @@ Vec3 SphericalHarmonics(const Vec3& position, const SphericalHarmonicsConfig& co
                 coeffs.Snm[n][m] = config.Snm[n * S + m];
             }
         }
-        GravityAcceleration custom = computeSphericalHarmonicGravity(position, coeffs);
-        return custom.total;
+        return coeffs;
     }
 
-    // Initialize with standard Earth coefficients if not provided
-    {
-        // J2-J6 zonal coefficients (normalized)
-        // C̄ₙ₀ = −Jₙ / √(2n+1)
-        //
-        // The gates are honored: a zonal the caller did not ask for is ABSENT.
-        // Before gmat-07 the whole J2-J6 set plus the tesserals below loaded
-        // unconditionally, so `includeJ2 = true, includeJ3 = includeJ4 = false`
-        // — the plugin's "J2 only" setting — returned a J2-J6 tesseral field.
-        if (config.includeJ2) coeffs.Cnm[2][0] = -J2_EARTH / std::sqrt(5.0);
-        if (config.includeJ3) coeffs.Cnm[3][0] = -J3_EARTH / std::sqrt(7.0);
-        if (config.includeJ4) coeffs.Cnm[4][0] = -J4_EARTH / 3.0;
-        if (config.includeHigherZonals) {
-            coeffs.Cnm[5][0] = -2.2727e-7;  // J5
-            coeffs.Cnm[6][0] = 5.4068e-7;   // J6
-        }
-
-        // Add tesseral/sectoral coefficients (EGM2008-derived, low degree)
-        // These represent Earth's non-axisymmetric mass distribution
-        if (coeffs.maxOrder >= 2) {
-            // Degree 2 sectoral (C22, S22) - Earth's equatorial ellipticity
-            coeffs.Cnm[2][2] = 2.43914e-6;
-            coeffs.Snm[2][2] = -1.40017e-6;
-            // Degree 2, order 1 (C21, S21)
-            coeffs.Cnm[2][1] = -2.0e-10;
-            coeffs.Snm[2][1] = 1.4e-9;
-        }
-        if (coeffs.maxOrder >= 3 && coeffs.maxDegree >= 3) {
-            // Degree 3 tesseral
-            coeffs.Cnm[3][1] = 2.03e-6;
-            coeffs.Snm[3][1] = 2.48e-7;
-            coeffs.Cnm[3][2] = 9.05e-7;
-            coeffs.Snm[3][2] = -6.19e-7;
-            coeffs.Cnm[3][3] = 7.21e-7;
-            coeffs.Snm[3][3] = 1.41e-6;
-        }
-        if (coeffs.maxOrder >= 4 && coeffs.maxDegree >= 4) {
-            // Degree 4 tesseral
-            coeffs.Cnm[4][1] = -5.36e-7;
-            coeffs.Snm[4][1] = -4.74e-7;
-            coeffs.Cnm[4][2] = 3.50e-7;
-            coeffs.Snm[4][2] = 6.62e-7;
-            coeffs.Cnm[4][3] = 9.91e-7;
-            coeffs.Snm[4][3] = -2.01e-7;
-            coeffs.Cnm[4][4] = -1.88e-7;
-            coeffs.Snm[4][4] = 3.09e-7;
-        }
+    // The built-in field: EGM2008 (fully normalized, egm2008_data.h) to the
+    // requested degree and order, with J2-J4 from the constants the closed
+    // forms use (tests/zonal_crossvalidation.cpp holds them together).
+    // The gates are honored: a zonal the caller did not ask for is ABSENT.
+    // Before gmat-07 the whole J2-J6 set plus the tesserals loaded
+    // unconditionally, so `includeJ2 = true, includeJ3 = includeJ4 = false`
+    // — the plugin's "J2 only" setting — returned a J2-J6 tesseral field.
+    // Until 2026-10-02 this field held only J2-J6 and the tesserals through
+    // degree 4, whatever the degree asked, and J5 and J6 were unnormalized
+    // values with the wrong sign (C60 +5.4e-7 for EGM2008's -1.5e-7).
+    if (config.includeJ2) coeffs.Cnm[2][0] = -J2_EARTH / std::sqrt(5.0);
+    if (config.includeJ3) coeffs.Cnm[3][0] = -J3_EARTH / std::sqrt(7.0);
+    if (config.includeJ4) coeffs.Cnm[4][0] = -J4_EARTH / 3.0;
+    for (const auto& c : EGM2008Data::COEFFICIENTS) {
+        if (c.n > coeffs.maxDegree) break;
+        if (c.m > coeffs.maxOrder) continue;
+        if (c.m == 0 && (c.n <= 4 || !config.includeHigherZonals)) continue;
+        coeffs.Cnm[c.n][c.m] = c.Cnm;
+        coeffs.Snm[c.n][c.m] = c.Snm;
     }
+    return coeffs;
+}
 
-    GravityAcceleration result = computeSphericalHarmonicGravity(position, coeffs);
+Vec3 SphericalHarmonics(const Vec3& position, const SphericalHarmonicsConfig& config) {
+    GravityAcceleration result = computeSphericalHarmonicGravity(position, InlineFieldCoefficients(config));
     return result.total;
 }
 
@@ -1610,7 +1585,50 @@ Vec3 EvaluateContributions(const ContributionSet& set,
     return sum;
 }
 
-Vec3 CentralBodyGravity(const Vec3& position, const ForceModelSet& forceSet) {
+void GcrfToEarthFixed(double jd, double m[3][3]) {
+    // Precession and nutation move < 0.01 arcsec in an hour; the rotation
+    // angle is evaluated at every call.
+    static double cachedTt = -1e300, eqeq = 0;
+    static coords::Matrix3x3 np;
+    const double jdTt = timesys::tdbToTt(jd);
+    if (std::abs(jdTt - cachedTt) > 1.0 / 24.0) {
+        cachedTt = jdTt;
+        np = coords::nutationMatrix(jdTt) * coords::precession(jdTt);  // GCRF -> MOD -> TOD
+        eqeq = coords::equationOfEquinoxes(jdTt);
+    }
+    const double jdUt = timesys::taiToUtc(timesys::ttToTai(jdTt));
+    const coords::Matrix3x3 r = coords::Matrix3x3::rotateZ(coords::gmst(jdUt) + eqeq) * np;
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j) m[i][j] = r.at(i, j);
+}
+
+bool EarthFixedField(const ForceModelSet& forceSet) {
+    switch (forceSet.gravityMode) {
+        case GravityMode::Infer:
+            return (forceSet.useLoadedField && forceSet.loadedField) || forceSet.useEGM2008 || forceSet.useSphericalHarmonics;
+        case GravityMode::SphericalHarmonics:
+        case GravityMode::EGM2008:
+        case GravityMode::LoadedField:
+            return true;
+        default:
+            return false;  // the point mass, and the J2 / J2-J4 closed forms about inertial z
+    }
+}
+
+Vec3 CentralBodyGravity(const Vec3& position, double jd, const ForceModelSet& forceSet) {
+    if (!EarthFixedField(forceSet)) return EarthFixedGravity(position, forceSet);
+    double m[3][3];
+    GcrfToEarthFixed(jd, m);
+    const Vec3 fixed(m[0][0] * position.x + m[0][1] * position.y + m[0][2] * position.z,
+                     m[1][0] * position.x + m[1][1] * position.y + m[1][2] * position.z,
+                     m[2][0] * position.x + m[2][1] * position.y + m[2][2] * position.z);
+    const Vec3 a = EarthFixedGravity(fixed, forceSet);
+    return Vec3(m[0][0] * a.x + m[1][0] * a.y + m[2][0] * a.z,
+                m[0][1] * a.x + m[1][1] * a.y + m[2][1] * a.z,
+                m[0][2] * a.x + m[1][2] * a.y + m[2][2] * a.z);
+}
+
+Vec3 EarthFixedGravity(const Vec3& position, const ForceModelSet& forceSet) {
     // A stated mode wins outright. `Infer` reproduces the pre-gmat-07
     // precedence exactly, so existing callers are unmoved.
     GravityMode mode = forceSet.gravityMode;
@@ -1667,7 +1685,7 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double
 
     // Central-body gravity: exactly one model answers, and which one is the
     // caller's stated choice whenever it made one.
-    totalAcc += CentralBodyGravity(position, forceSet);
+    totalAcc += CentralBodyGravity(position, jd, forceSet);
 
     // Lunar gravity (separate body, doesn't include Earth point mass)
     if (forceSet.useGRGM1200A) {

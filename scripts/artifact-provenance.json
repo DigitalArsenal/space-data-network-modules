@@ -3375,8 +3375,8 @@
       }
     },
     "propagator/hpop/dist/browser/module.wasm": {
-      "sha256": "a9821fb553448034673f4f2ce5e409c755f00803f7e8bdd7bc3aaf3e72d35e2c",
-      "bytes": 1151545,
+      "sha256": "d78e13cb7aaee2e4fe447650289dd72657577ad9ad55e8e3a0a06b08654169eb",
+      "bytes": 1215883,
       "module": "propagator/hpop",
       "lastCommit": "a4b2a7e23f82df117d16949a9cbf7b2550e69e23",
       "lastCommitDate": "2026-10-01T22:53:02-04:00",
@@ -3401,8 +3401,8 @@
       }
     },
     "propagator/hpop/dist/isomorphic/module.wasm": {
-      "sha256": "a9821fb553448034673f4f2ce5e409c755f00803f7e8bdd7bc3aaf3e72d35e2c",
-      "bytes": 1151545,
+      "sha256": "d78e13cb7aaee2e4fe447650289dd72657577ad9ad55e8e3a0a06b08654169eb",
+      "bytes": 1215883,
       "module": "propagator/hpop",
       "lastCommit": "a4b2a7e23f82df117d16949a9cbf7b2550e69e23",
       "lastCommitDate": "2026-10-01T22:53:02-04:00",

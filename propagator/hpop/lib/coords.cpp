@@ -310,12 +310,13 @@ Matrix3x3 nutationMatrix(double jd) {
     double eps0 = meanObliquity(jd);
     double eps = eps0 + deps;
 
-    // Nutation matrix: N = R1(-eps) * R3(dpsi) * R1(eps0)
+    // Mean of date to true of date (IAU 1980, as ERFA nutm80):
+    // N = R1(-eps) * R3(-dpsi) * R1(eps0)
     Matrix3x3 R1_neg_eps = Matrix3x3::rotateX(-eps);
-    Matrix3x3 R3_dpsi = Matrix3x3::rotateZ(dpsi);  // Note: nutation is about Z
+    Matrix3x3 R3_neg_dpsi = Matrix3x3::rotateZ(-dpsi);
     Matrix3x3 R1_eps0 = Matrix3x3::rotateX(eps0);
 
-    return R1_neg_eps * R3_dpsi * R1_eps0;
+    return R1_neg_eps * R3_neg_dpsi * R1_eps0;
 }
 
 // =============================================================================
@@ -323,8 +324,8 @@ Matrix3x3 nutationMatrix(double jd) {
 // =============================================================================
 
 Matrix3x3 modToGcrf(double jd) {
-    // MOD to GCRF is just the inverse of precession (J2000 to MOD)
-    return precession(jd);
+    // precession() maps GCRF (J2000) to mean of date, as ERFA pmat76.
+    return precession(jd).transpose();
 }
 
 Matrix3x3 todToMod(double jd) {
@@ -357,14 +358,13 @@ Matrix3x3 temeToGcrf(double jd) {
     Matrix3x3 P = precession(jd);
     Matrix3x3 N = nutationMatrix(jd);
 
-    // TEME uses GMST while true equator uses GAST
-    // The difference is the equation of equinoxes applied to the true equator
+    // TEME shares the true equator of date with TOD but measures from the
+    // mean equinox: r_TOD = R3(-eqeq) r_TEME (GAST = GMST + eqeq).
     double eqeq = equationOfEquinoxes(jd);
-    Matrix3x3 E = Matrix3x3::rotateZ(-eqeq);  // Correct from mean to true equinox
+    Matrix3x3 E = Matrix3x3::rotateZ(-eqeq);
 
-    // Combined transformation: GCRF = P * N * E^T * TEME
-    // (E^T because TEME is in mean equinox, need to go to true for nutation)
-    return P * N * E.transpose();
+    // GCRF = P^T * N^T * E * TEME (P: GCRF -> MOD, N: MOD -> TOD)
+    return P.transpose() * N.transpose() * E;
 }
 
 Matrix3x3 gcrfToTeme(double jd) {
@@ -383,8 +383,8 @@ Matrix3x3 gcrfToItrf(double jd, double xp, double yp) {
     // ITRF = W * R * N * P * GCRF
     // where W = polar motion, R = Earth rotation, N = nutation, P = precession
 
-    Matrix3x3 P = precession(jd).transpose();  // GCRF to MOD
-    Matrix3x3 N = nutationMatrix(jd).transpose();  // MOD to TOD
+    Matrix3x3 P = precession(jd);      // GCRF to MOD
+    Matrix3x3 N = nutationMatrix(jd);  // MOD to TOD
 
     // Earth rotation (GAST)
     double theta = gast(jd);

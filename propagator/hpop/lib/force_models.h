@@ -803,10 +803,33 @@ struct ForceModelSet {
 /// `forceSet.gravityMode`, or by the legacy precedence when that is `Infer`.
 /// Callers that need only the gravity term (an acceleration breakdown, a
 /// parity harness) go through this rather than re-deriving the precedence.
-/// @param position Satellite position (km)
+/// The Earth's fields (SphericalHarmonics, EGM2008, a loaded field) are
+/// defined in Earth-fixed axes: each is evaluated at the GCRF position
+/// rotated by GcrfToEarthFixed(jd) and its acceleration rotated back. The
+/// point mass needs no rotation; the J2 and J2-J4 closed forms are
+/// verification models with a fixed inertial symmetry axis z.
+/// @param position Satellite position, GCRF (km)
+/// @param jd Integration clock, TDB Julian date
 /// @param forceSet Force model configuration
-/// @return Gravity acceleration including the central term (km/s^2)
-Vec3 CentralBodyGravity(const Vec3& position, const ForceModelSet& forceSet);
+/// @return Gravity acceleration including the central term, GCRF (km/s^2)
+Vec3 CentralBodyGravity(const Vec3& position, double jd, const ForceModelSet& forceSet);
+
+/// The same model evaluated at an Earth-fixed position, in Earth-fixed axes.
+Vec3 EarthFixedGravity(const Vec3& earthFixed, const ForceModelSet& forceSet);
+
+/// True when the force set's central body field is Earth-fixed (see above).
+bool EarthFixedField(const ForceModelSet& forceSet);
+
+/// The built-in spherical-harmonic field's coefficients for a configuration:
+/// the caller's field when supplied, else EGM2008 to the requested degree and
+/// order (at most 20) with J2-J4 from the closed forms' constants, gates honored.
+GravityFieldCoefficients InlineFieldCoefficients(const SphericalHarmonicsConfig& config);
+
+/// GCRF to Earth-fixed rotation (row-major), jd TDB: IAU 1976 precession and
+/// IAU 1980 nutation (coords.h), held for up to an hour of TT, then Earth
+/// rotation by GAST with UTC standing in for UT1 (|UT1-UTC| < 0.9 s). Polar
+/// motion (under 0.5 arcsec) is not applied: the force set carries no EOP.
+void GcrfToEarthFixed(double jd, double m[3][3]);
 
 /// Evaluate a field loaded from a potential file. Declared here and defined in
 /// environment_models.cpp, which owns ExtendedGravityField.

@@ -49,6 +49,14 @@ std::array<double, 6> DenseOutput::evaluate(double t) const {
 // =============================================================================
 
 namespace {
+// The force model's clock: the typed PRW contract's TDB epoch; else the
+// weather epoch the caller set; else the state's own epoch. A force set built
+// without either used to integrate from JD 0, where the Sun, the Moon and the
+// Earth's orientation are those of 4713 BC.
+double clockEpoch(const ForceModel::ForceModelSet& f, const StateVector& s) {
+    if (f.explicitEpochContract) return f.integrationEpochTDB;
+    return f.weather.epoch != 0 ? f.weather.epoch : s.epoch;
+}
 
 /// Wrapper to use ForceModelSet with standard derivative function signature
 struct ForceModelWrapper {
@@ -58,7 +66,14 @@ struct ForceModelWrapper {
 
 void forceModelDerivative(double t, const double* y, double* dydt, void* params) {
     ForceModelWrapper* fw = static_cast<ForceModelWrapper*>(params);
-    ForceModel::ForceModelDerivative(t, y, dydt, fw->forceSet);
+    const Vec3 position(y[0], y[1], y[2]), velocity(y[3], y[4], y[5]);
+    const Vec3 acc = ForceModel::ComputeTotalAcceleration(position, velocity, fw->epoch + t / 86400.0, *fw->forceSet);
+    dydt[0] = velocity.x;
+    dydt[1] = velocity.y;
+    dydt[2] = velocity.z;
+    dydt[3] = acc.x;
+    dydt[4] = acc.y;
+    dydt[5] = acc.z;
 }
 
 /// Adams-Bashforth coefficients (explicit predictor) for orders 1-8
@@ -192,7 +207,7 @@ StateVector RK4(const StateVector& initialState, double dt, double h,
                 ForceModel::ForceModelSet& forceSet) {
     ForceModelWrapper wrapper;
     wrapper.forceSet = &forceSet;
-    wrapper.epoch = forceSet.explicitEpochContract ? forceSet.integrationEpochTDB : forceSet.weather.epoch;
+    wrapper.epoch = clockEpoch(forceSet, initialState);
 
     PropagateResult res = RK4Propagate(initialState, dt, h, forceModelDerivative, &wrapper);
     return res.finalState;
@@ -333,7 +348,7 @@ StateVector RKF45(const StateVector& initialState, double dt,
                   ForceModel::ForceModelSet& forceSet) {
     ForceModelWrapper wrapper;
     wrapper.forceSet = &forceSet;
-    wrapper.epoch = forceSet.explicitEpochContract ? forceSet.integrationEpochTDB : forceSet.weather.epoch;
+    wrapper.epoch = clockEpoch(forceSet, initialState);
 
     PropagateResult res = RKF45Propagate(initialState, dt, config, forceModelDerivative, &wrapper);
     return res.finalState;
@@ -473,7 +488,7 @@ StateVector ABM(const StateVector& initialState, double dt, double h, int order,
                 ForceModel::ForceModelSet& forceSet) {
     ForceModelWrapper wrapper;
     wrapper.forceSet = &forceSet;
-    wrapper.epoch = forceSet.explicitEpochContract ? forceSet.integrationEpochTDB : forceSet.weather.epoch;
+    wrapper.epoch = clockEpoch(forceSet, initialState);
 
     PropagateResult res = ABMPropagate(initialState, dt, h, order, forceModelDerivative, &wrapper);
     return res.finalState;
@@ -495,7 +510,7 @@ StateVector Cowell(const StateVector& initialState, double dt,
     if (config.method == IntegrationMethod::GaussJackson8) {
         ForceModelWrapper wrapper;
         wrapper.forceSet = &forceSet;
-        wrapper.epoch = forceSet.explicitEpochContract ? forceSet.integrationEpochTDB : forceSet.weather.epoch;
+        wrapper.epoch = clockEpoch(forceSet, initialState);
         PropagateResult res = GaussJackson8Propagate(
             initialState,
             dt,
@@ -525,7 +540,7 @@ PropagateResult CowellEphemeris(const StateVector& initialState, double dt,
 
     ForceModelWrapper wrapper;
     wrapper.forceSet = &forceSet;
-    wrapper.epoch = forceSet.explicitEpochContract ? forceSet.integrationEpochTDB : forceSet.weather.epoch;
+    wrapper.epoch = clockEpoch(forceSet, initialState);
 
     std::array<double, 6> y = {
         initialState.position.x, initialState.position.y, initialState.position.z,
@@ -876,7 +891,7 @@ StateVector RKF78(const StateVector& initialState, double dt,
                   ForceModel::ForceModelSet& forceSet) {
     ForceModelWrapper wrapper;
     wrapper.forceSet = &forceSet;
-    wrapper.epoch = forceSet.explicitEpochContract ? forceSet.integrationEpochTDB : forceSet.weather.epoch;
+    wrapper.epoch = clockEpoch(forceSet, initialState);
 
     PropagateResult res = RKF78Propagate(initialState, dt, config, forceModelDerivative, &wrapper);
     return res.finalState;
@@ -1064,7 +1079,7 @@ StateVector BS(const StateVector& initialState, double dt,
                ForceModel::ForceModelSet& forceSet) {
     ForceModelWrapper wrapper;
     wrapper.forceSet = &forceSet;
-    wrapper.epoch = forceSet.explicitEpochContract ? forceSet.integrationEpochTDB : forceSet.weather.epoch;
+    wrapper.epoch = clockEpoch(forceSet, initialState);
 
     PropagateResult res = BSPropagate(initialState, dt, config, forceModelDerivative, &wrapper);
     return res.finalState;
@@ -1241,7 +1256,7 @@ PropagateResult DromoPropagate(const StateVector& initialState, double targetTim
 
     ForceModelWrapper wrapper;
     wrapper.forceSet = &forceSet;
-    wrapper.epoch = forceSet.explicitEpochContract ? forceSet.integrationEpochTDB : forceSet.weather.epoch;
+    wrapper.epoch = clockEpoch(forceSet, initialState);
 
     DromoState dromoState = DromoInit(initialState, forceSet.mu);
 
@@ -1337,7 +1352,7 @@ PropagateResult StiefelPropagate(const StateVector& initialState, double targetT
 
     ForceModelWrapper wrapper;
     wrapper.forceSet = &forceSet;
-    wrapper.epoch = forceSet.explicitEpochContract ? forceSet.integrationEpochTDB : forceSet.weather.epoch;
+    wrapper.epoch = clockEpoch(forceSet, initialState);
 
     StiefelState stiefelState = StiefelInit(initialState, forceSet.mu);
 
@@ -1606,7 +1621,7 @@ PropagateResult GenerateEphemeris(const StateVector& initialState, double dt,
 
     ForceModelWrapper wrapper;
     wrapper.forceSet = &forceSet;
-    wrapper.epoch = forceSet.explicitEpochContract ? forceSet.integrationEpochTDB : forceSet.weather.epoch;
+    wrapper.epoch = clockEpoch(forceSet, initialState);
 
     std::array<double, 6> y = {
         initialState.position.x, initialState.position.y, initialState.position.z,
@@ -1696,7 +1711,7 @@ PropagateResult GenerateEphemerisDense(const StateVector& initialState, double d
 
     ForceModelWrapper wrapper;
     wrapper.forceSet = &forceSet;
-    wrapper.epoch = forceSet.explicitEpochContract ? forceSet.integrationEpochTDB : forceSet.weather.epoch;
+    wrapper.epoch = clockEpoch(forceSet, initialState);
 
     std::array<double, 6> y = {
         initialState.position.x, initialState.position.y, initialState.position.z,
@@ -1782,7 +1797,7 @@ PropagateResult PropagateWithResult(const StateVector& initialState, double dt,
                                     ForceModel::ForceModelSet& forceSet) {
     ForceModelWrapper wrapper;
     wrapper.forceSet = &forceSet;
-    wrapper.epoch = forceSet.explicitEpochContract ? forceSet.integrationEpochTDB : forceSet.weather.epoch;
+    wrapper.epoch = clockEpoch(forceSet, initialState);
 
     switch (config.method) {
         case IntegrationMethod::RK4:

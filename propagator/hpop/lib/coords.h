@@ -55,7 +55,7 @@ Vec3 transformPosition(const Vec3& position, Frame from, Frame to, double jd);
 // These provide direct access to commonly used transformations for efficiency
 
 /// TEME to GCRF transformation matrix
-/// GCRF = Precession * Nutation * equation_of_equinoxes_correction * TEME
+/// GCRF = P^T * N^T * R3(-eqeq) * TEME (P: GCRF -> MOD, N: MOD -> TOD)
 /// @param jd Julian date
 Matrix3x3 temeToGcrf(double jd);
 
@@ -147,8 +147,8 @@ double meanObliquity(double jd);
 /// @return True obliquity in radians
 double trueObliquity(double jd);
 
-/// Compute precession matrix from J2000 to date (MOD)
-/// Uses IAU 1976 precession angles
+/// Compute precession matrix from J2000 to date (MOD): r_MOD = P r_GCRF
+/// Uses IAU 1976 precession angles (as ERFA pmat76; frame bias neglected)
 /// @param jd Julian date (TT)
 /// @return Precession rotation matrix
 Matrix3x3 precession(double jd);

@@ -19,6 +19,44 @@ Implements a high-fidelity numerical orbit propagator accounting for full geopot
 The typed PRW `ATMOSPHERE_REQUEST` operation exposes only the implemented models
 (`NRLMSISE00`, `USSA1976`, `EXPONENTIAL`).
 
+### Gravity field frame
+
+The force set integrates GCRF. The Earth's fields (`SPHERICAL_HARMONICS`,
+EGM2008, a loaded field) are defined in Earth-fixed axes, so each is evaluated
+at R r and its acceleration returned as R' a, where R is the GCRF to
+Earth-fixed rotation:
+- precession (IAU 1976) and nutation (IAU 1980), held for up to an hour;
+- Earth rotation by GAST from UTC (|UT1 - UTC| < 0.9 s);
+- no polar motion, since the force set carries no EOP.
+
+R matches ERFA `c2t06a` to 0.2 arcsec (`tests/environment_conformance.cpp`
+section 10). The analytic STM rotates the gravity gradient the same way.
+The J2 and J2-J4 closed forms keep a fixed inertial symmetry axis z: they are
+verification models.
+
+The built-in `SPHERICAL_HARMONICS` field is EGM2008 (`lib/egm2008_data.h`)
+to the requested degree and order, at most 20. J2-J4 come from the constants
+the closed forms use.
+
+Two faults were fixed on 2026-10-02:
+- **Inertial axes.** The fields were evaluated at the GCRF position itself,
+  so the tesserals were frozen in inertial space and the pole was off by the
+  precession since J2000.
+- **A partial field.** The built-in field held only J2-J6 and the tesserals
+  through degree 4, whatever degree was asked for. Its J5 and J6 were
+  unnormalized values with the wrong sign.
+
+The effect showed against independent reference orbits. Take a resident HPOP
+arc from an element-set epoch state, LEO 600-800 km, 5-7 days out:
+- the RMS radial error was 5.9 km and is now 0.2 km;
+- the RMS out-of-plane error was 10.9 km and is now 0.2 km.
+
+See `analysis/gp-error-model/docs/hpop-calibration-2026-08.md`.
+
+The force clock is the typed PRW TDB epoch. Otherwise it is the force set's
+weather epoch, or, when that is unset, the state's own epoch. The integrators
+used to ignore this and evaluate an unset clock at JD 0.
+
 ### Drag frame and inputs
 
 The force set integrates GCRF. NRLMSISE-00 (and the JB2008/DTM2020 stand-ins)
@@ -145,7 +183,8 @@ A propagated covariance is `P(t) = Phi P0 Phi^T + Q`, and the record states the
   object. Noise without a covariance fails with `invalid-process-noise`.
 - **Resident output.** `propagate_state` returns each such object's
   `COVARIANCE` at the target epoch and echoes the `PROCESS_NOISE` it includes.
-  It uses the resident force model (point mass and the degree/order 20 field)
+  It uses the resident force model (point mass and the degree/order 20 field,
+  in Earth-fixed axes; no Sun, Moon, drag or radiation pressure)
   and integrator (RK78, 60/0.01/600 s, 1e-12), with the analytic STM. Objects
   with scheduled burns refuse covariance (`unsupported-configuration`); use
   the execution request.

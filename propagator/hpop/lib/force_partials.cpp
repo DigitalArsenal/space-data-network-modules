@@ -71,29 +71,7 @@ V zonal(const V& r,double mu,double radius,int n,double jn) {
     return (r/rr)*(((n+1.0)*p1+u*q1)*common)-V(0,0,1)*(q1*common);
 }
 
-GravityFieldCoefficients inlineCoefficients(const SphericalHarmonicsConfig& c) {
-    GravityFieldCoefficients f;
-    f.mu=c.mu;f.referenceRadius=c.referenceRadius;
-    f.maxDegree=std::min<uint16_t>(c.maxDegree,20);f.maxOrder=std::min(c.maxOrder,f.maxDegree);
-    if(c.Cnm && c.Snm){
-        for(int n=0;n<=f.maxDegree;++n)for(int m=0;m<=std::min<int>(n,f.maxOrder);++m){
-            f.Cnm[n][m]=c.Cnm[n*21+m];f.Snm[n][m]=c.Snm[n*21+m];
-        }
-        return f;
-    }
-    if(c.includeJ2)f.Cnm[2][0]=-J2_EARTH/std::sqrt(5.0);
-    if(c.includeJ3)f.Cnm[3][0]=-J3_EARTH/std::sqrt(7.0);
-    if(c.includeJ4)f.Cnm[4][0]=-J4_EARTH/3.0;
-    if(c.includeHigherZonals){f.Cnm[5][0]=-2.2727e-7;f.Cnm[6][0]=5.4068e-7;}
-    if(f.maxOrder>=2){f.Cnm[2][2]=2.43914e-6;f.Snm[2][2]=-1.40017e-6;f.Cnm[2][1]=-2e-10;f.Snm[2][1]=1.4e-9;}
-    if(f.maxOrder>=3 && f.maxDegree>=3){
-        f.Cnm[3][1]=2.03e-6;f.Snm[3][1]=2.48e-7;f.Cnm[3][2]=9.05e-7;f.Snm[3][2]=-6.19e-7;f.Cnm[3][3]=7.21e-7;f.Snm[3][3]=1.41e-6;
-    }
-    if(f.maxOrder>=4 && f.maxDegree>=4){
-        f.Cnm[4][1]=-5.36e-7;f.Snm[4][1]=-4.74e-7;f.Cnm[4][2]=3.50e-7;f.Snm[4][2]=6.62e-7;f.Cnm[4][3]=9.91e-7;f.Snm[4][3]=-2.01e-7;f.Cnm[4][4]=-1.88e-7;f.Snm[4][4]=3.09e-7;
-    }
-    return f;
-}
+GravityFieldCoefficients inlineCoefficients(const SphericalHarmonicsConfig& c) { return InlineFieldCoefficients(c); }
 
 // Differentiate the same normalized Legendre acceleration used by the inline
 // production model. No added degree truncation: the original model caps at 20.
@@ -168,7 +146,17 @@ V extendedGravity(const V& r,const ExtendedGravityField& f) {
     return a;
 }
 
-V centralGravity(const V& r,const ForceModelSet& f) {
+V earthFixedGravity(const V& r,const ForceModelSet& f);
+// The field in Earth-fixed axes (CentralBodyGravity): a = R' g(R r). R is
+// constant in r, so the chain rule carries through the dual numbers.
+V centralGravity(const V& r,double jd,const ForceModelSet& f) {
+    if(!EarthFixedField(f))return earthFixedGravity(r,f);
+    double m[3][3];GcrfToEarthFixed(jd,m);
+    const V fixed(r.x*m[0][0]+r.y*m[0][1]+r.z*m[0][2],r.x*m[1][0]+r.y*m[1][1]+r.z*m[1][2],r.x*m[2][0]+r.y*m[2][1]+r.z*m[2][2]);
+    const V a=earthFixedGravity(fixed,f);
+    return V(a.x*m[0][0]+a.y*m[1][0]+a.z*m[2][0],a.x*m[0][1]+a.y*m[1][1]+a.z*m[2][1],a.x*m[0][2]+a.y*m[1][2]+a.z*m[2][2]);
+}
+V earthFixedGravity(const V& r,const ForceModelSet& f) {
     GravityMode mode=f.gravityMode;
     if(mode==GravityMode::Infer){
         if(f.useLoadedField && f.loadedField)mode=GravityMode::LoadedField;
@@ -318,7 +306,7 @@ const char* ValidateAccelerationPartials(const Vec3& position,const ForceModelSe
 AccelerationPartials ComputeAccelerationPartials(const Vec3& position,const Vec3& velocity,double jd,ForceModelSet& f,DensityGradient gradient) {
     if(const char* error=ValidateAccelerationPartials(position,f))throw std::invalid_argument(error);
     const V r=positionSeed(position),v=velocitySeed(velocity);
-    V a=centralGravity(r,f);
+    V a=centralGravity(r,jd,f);
     if(f.useGRGM1200A)a=a+inlineGravity(r,initGRGM1200A(std::min<uint16_t>(f.grgm1200a.truncationDegree,20),std::min<uint16_t>(f.grgm1200a.truncationOrder,20)));
     if(f.useThirdBody)a=a+thirdBodies(r,jd,f.thirdBody);
     if(f.useSRP){const Vec3 sun=f.sunPositionProvided?f.sunPosition:getSunPosition(jd).position;a=a+cannonball(r,sun,f.srp);}

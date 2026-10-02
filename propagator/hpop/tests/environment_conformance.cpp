@@ -14,6 +14,7 @@
 //   7. SPAD area tables
 //   8. Schatten-class predicted solar activity
 //   9. Force-model contribution port
+//  10. Earth orientation of the field  — ERFA c2t06a; the force-model clock
 //
 // Exit code 0 iff every band holds.
 
@@ -22,6 +23,8 @@
 #include "environment_models.h"
 #include "force_models.h"
 #include "integrators.h"
+#include "coords.h"
+#include "time_convert.h"
 
 #include <cmath>
 #include <cstdio>
@@ -86,18 +89,18 @@ static void sectionGravityRouting() {
         fs.mu = MU_EARTH;
 
         fs.gravityMode = ForceModel::GravityMode::PointMass;
-        worstPM = std::max(worstPM, relDiff(ForceModel::CentralBodyGravity(p, fs),
+        worstPM = std::max(worstPM, relDiff(ForceModel::EarthFixedGravity(p, fs),
                                             ForceModel::PointMass(p, MU_EARTH)));
 
         fs.gravityMode = ForceModel::GravityMode::J2Only;
         worstJ2 = std::max(worstJ2,
-            relDiff(ForceModel::CentralBodyGravity(p, fs),
+            relDiff(ForceModel::EarthFixedGravity(p, fs),
                     ForceModel::PointMass(p, MU_EARTH) +
                         ForceModel::J2Only(p, MU_EARTH, J2_EARTH, RE_EARTH)));
 
         fs.gravityMode = ForceModel::GravityMode::J2J4;
         worstJ2J4 = std::max(worstJ2J4,
-            relDiff(ForceModel::CentralBodyGravity(p, fs),
+            relDiff(ForceModel::EarthFixedGravity(p, fs),
                     ForceModel::PointMass(p, MU_EARTH) + ForceModel::J2J4(p, MU_EARTH)));
     }
     check(worstPM == 0.0, "GravityMode::PointMass reaches PointMass()",
@@ -862,6 +865,96 @@ static void sectionContributionPort() {
           std::to_string(delta.magnitude()) + " km/s^2");
 }
 
+// ---------------------------------------------------------------------------
+// 10. Earth orientation of the central body's field
+// ---------------------------------------------------------------------------
+// Authority: ERFA 2.0.1 (pyerfa 2.0.1.5) at TDB JD 2461255.5, i.e. TT
+// 2461255.5000000088 and UTC 2461255.4991992679: eraC2t06a (GCRS to ITRS, no
+// polar motion) and eraPnm80' * R3(-eraEqeq94) (TEME to GCRS). HPOP's chain is
+// IAU 1976/1980 without frame bias, so the band is 0.5 arcsec.
+static double angleArcsec(const double a[3][3], const double b[3][3]) {
+    double trace = 0;
+    for (int i = 0; i < 3; ++i)
+        for (int k = 0; k < 3; ++k) trace += a[i][k] * b[i][k];
+    return std::acos(std::max(-1.0, std::min(1.0, (trace - 1) / 2))) * 206264.806247;
+}
+static void sectionEarthOrientation() {
+    std::printf("[10] Earth orientation of the central field\n");
+    const double erfaC2t[3][3] = {{0.655525724113876, -0.755170971990575, -0.001681691942259},
+                                  {0.755168364687116, 0.655527880489931, -0.001984660214043},
+                                  {0.002601153737456, 0.000031035269987, 0.999996616512299}};
+    const double erfaTeme[3][3] = {{0.999978942225442, 0.005945407269437, 0.002601391567318},
+                                   {-0.005945508262722, 0.999982324826214, 0.000031091135925},
+                                   {-0.002601160737805, -0.000046557076273, 0.999996615891901}};
+    const double jdTdb = 2461255.5, jdTt = timesys::tdbToTt(jdTdb);
+    const double jdUt = timesys::taiToUtc(timesys::ttToTai(jdTt));
+    double field[3][3], itrf[3][3], teme[3][3];
+    ForceModel::GcrfToEarthFixed(jdTdb, field);
+    const coords::Matrix3x3 g = coords::gcrfToItrf(jdUt), t = coords::temeToGcrf(jdTt);
+    for (int i = 0; i < 3; ++i)
+        for (int k = 0; k < 3; ++k) { itrf[i][k] = g.at(i, k); teme[i][k] = t.at(i, k); }
+    check(angleArcsec(field, erfaC2t) < 0.5, "the field's GCRF to Earth-fixed rotation matches ERFA c2t06a",
+          sci(angleArcsec(field, erfaC2t)) + " arcsec");
+    check(angleArcsec(itrf, erfaC2t) < 0.5, "coords::gcrfToItrf matches ERFA c2t06a", sci(angleArcsec(itrf, erfaC2t)) + " arcsec");
+    check(angleArcsec(teme, erfaTeme) < 0.5, "coords::temeToGcrf matches ERFA pnm80' R3(-eqeq94)",
+          sci(angleArcsec(teme, erfaTeme)) + " arcsec");
+
+    // The built-in field is EGM2008 to the degree asked (ICGEM EGM2008,
+    // fully normalized: C60 = -1.499539279785270e-7, C20,20 and S20,20 below),
+    // with J2 from the closed forms' constant.
+    {
+        ForceModel::SphericalHarmonicsConfig c;  // degree and order 20
+        const auto f = ForceModel::InlineFieldCoefficients(c);
+        check(f.Cnm[6][0] == -1.499539279785270e-7 && f.Cnm[5][0] == 6.867029137366810e-8,
+              "the built-in J5 and J6 are EGM2008's", sci(f.Cnm[5][0]) + " " + sci(f.Cnm[6][0]));
+        check(f.Cnm[20][20] != 0.0 && f.Snm[20][20] != 0.0 && f.Cnm[12][7] != 0.0,
+              "the built-in field reaches degree and order 20", sci(f.Cnm[20][20]) + " " + sci(f.Snm[20][20]));
+        check(f.Cnm[2][0] == -J2_EARTH / std::sqrt(5.0), "J2 stays the closed forms' constant");
+    }
+
+    // The tesseral field turns with the Earth: one GCRF state integrated for a
+    // day from epochs six hours apart meets a field turned 90 degrees, so the
+    // two arcs differ. The J2 closed form (inertial axis) cannot tell them apart.
+    StateVector s;
+    s.position = Vec3(7000.0, 0.0, 0.0);
+    s.velocity = Vec3(0.0, 4.6, 6.0);
+    IntegratorConfig cfg;
+    cfg.method = IntegrationMethod::RK78;
+    auto arc = [&](ForceModel::GravityMode mode, double epoch) {
+        ForceModel::ForceModelSet fs;
+        fs.mu = MU_EARTH;
+        fs.gravityMode = mode;
+        fs.sphericalHarmonics.maxDegree = 8;
+        fs.sphericalHarmonics.maxOrder = 8;
+        StateVector start = s;
+        start.epoch = epoch;
+        return Integrator::Cowell(start, 86400.0, cfg, fs).position;
+    };
+    const double shift = (arc(ForceModel::GravityMode::SphericalHarmonics, 2461255.5) -
+                          arc(ForceModel::GravityMode::SphericalHarmonics, 2461255.75)).magnitude();
+    const double still = (arc(ForceModel::GravityMode::J2Only, 2461255.5) -
+                          arc(ForceModel::GravityMode::J2Only, 2461255.75)).magnitude();
+    check(shift > 0.01, "the harmonic field turns with the Earth (arcs 6 h apart differ)", sci(shift) + " km");
+    check(still < 1e-9, "the J2 closed form keeps its inertial axis", sci(still) + " km");
+
+    // A force set without a clock integrates on the state's own epoch, not JD 0:
+    // with the Sun and Moon on, leaving weather.epoch unset gives the same arc.
+    auto lunisolar = [&](bool clock) {
+        ForceModel::ForceModelSet fs;
+        fs.mu = MU_EARTH;
+        fs.gravityMode = ForceModel::GravityMode::PointMass;
+        fs.useThirdBody = true;
+        fs.thirdBody.includeSun = true;
+        fs.thirdBody.includeMoon = true;
+        if (clock) fs.weather.epoch = 2461255.5;
+        StateVector start = s;
+        start.epoch = 2461255.5;
+        return Integrator::Cowell(start, 86400.0, cfg, fs).position;
+    };
+    const double clockGap = (lunisolar(true) - lunisolar(false)).magnitude();
+    check(clockGap < 1e-9, "an unset force clock runs on the state's epoch", sci(clockGap) + " km");
+}
+
 int main() {
     std::printf("hpop environment conformance (gmat-07-environment-completeness)\n");
     sectionGravityRouting();
@@ -873,6 +966,7 @@ int main() {
     sectionSpad();
     sectionSchatten();
     sectionContributionPort();
+    sectionEarthOrientation();
 
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

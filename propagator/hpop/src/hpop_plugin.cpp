@@ -2205,7 +2205,7 @@ int plugin_get_acceleration_breakdown(double jd, double* outPtr) {
     // is how a breakdown comes to disagree with the trajectory it explains:
     // this block used to have no gravity-mode case at all, so a closed-form
     // selection was reported as a harmonics field.
-    gravity = ForceModel::CentralBodyGravity(g_state.position, g_forceSet);
+    gravity = ForceModel::CentralBodyGravity(g_state.position, jd, g_forceSet);
 
     if (g_forceSet.useThirdBody)
         thirdBody = ForceModel::ThirdBody(g_state.position, jd, g_forceSet.thirdBody);
