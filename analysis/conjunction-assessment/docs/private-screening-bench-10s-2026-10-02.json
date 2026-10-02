@@ -1,0 +1,22 @@
+{
+  "seal": "4.1.1", "scheme": "BFV", "polyModulusDegree": 8192, "coeffModulusBits": 218,
+  "plainModuli": [1152921504606683137, 1152921504606748673, 1152921504606830593], "security": "128-bit (SEAL tc128)",
+  "days": 3, "stepSeconds": 10, "steps": 25920, "ciphertextsPerCoordinate": 4,
+  "thresholdKm": 5, "vmaxKmS": 15.5, "testedThresholdKm": 77.6611,
+  "keygenMs": 1.7,
+  "requester": {"encryptMs": 65.5, "uploadBytes": 12592224, "perObjectDayMs": 21.8, "perObjectDayBytes": 4197408},
+  "responder": {"perPairMs": 62.2, "perPairDayMs": 20.7, "encodeShareMs": 2.5, "responseBytesPerPair": 3147084},
+  "requesterDecrypt": {"perPairMs": 59.9},
+  "minNoiseBudgetBits": 18, "signMismatches": 0, "alertSteps": 302,
+  "maskLeakage": {"runSteps": 64, "medianErrorBitsInDistanceSquared": 0.91, "withinFactor2InDistance": 0.783, "withinFactor10InDistance": 0.952},
+  "pairs": [
+    {"designedMissKm": 2.0, "trueMinKm": 2.0000, "alertSteps": 41},
+    {"designedMissKm": 2.0, "trueMinKm": 2.0000, "alertSteps": 69},
+    {"designedMissKm": 2.0, "trueMinKm": 2.0000, "alertSteps": 48},
+    {"designedMissKm": 2.0, "trueMinKm": 2.0000, "alertSteps": 55},
+    {"designedMissKm": 2.0, "trueMinKm": 2.0000, "alertSteps": 27},
+    {"designedMissKm": 2.0, "trueMinKm": 2.0000, "alertSteps": 27},
+    {"designedMissKm": 2.0, "trueMinKm": 2.0000, "alertSteps": 33},
+    {"designedMissKm": 60.0, "trueMinKm": 60.0000, "alertSteps": 2}
+  ]
+}
