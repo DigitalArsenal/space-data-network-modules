@@ -3547,6 +3547,32 @@
         ],
         "inferenceHazard": false
       }
+    },
+    "analysis/private-screening/dist/isomorphic/module.wasm": {
+      "sha256": "02f27fd3ae438c9a777b9f81c99ece4481c37d57ff22228265bc7fd1f28d9ed1",
+      "bytes": 386516,
+      "module": "analysis/private-screening",
+      "lastCommit": "2db39855f20bee21b0956a6c950a9a8c04572f57",
+      "lastCommitDate": "2026-10-02T15:39:40-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": {
+        "superRepoCommit": "810a6c69255ded78b820b518d2a3e3f5121c774b",
+        "sdkCommit": "cf1a1276bdc6f400e13372e34b6ff30882d38f95"
+      },
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
     }
   }
 }
