@@ -46,7 +46,7 @@ export function readSets(archive, from, to, keep = () => true) {
     ++files;
     for (const g of JSON.parse(gunzipSync(fs.readFileSync(file)))) {
       const norad = Number(g.NORAD_CAT_ID);
-      if (g.MEAN_ELEMENT_THEORY !== 'SGP4' || String(g.EPHEMERIS_TYPE) !== '0' || !keep(norad)) continue;
+      if (g.MEAN_ELEMENT_THEORY !== 'SGP4' || String(g.EPHEMERIS_TYPE) !== '0' || !keep(norad, g)) continue;
       sets.norad.push(norad);
       sets.epoch.push(g.EPOCH);
       FIELDS.forEach((f, i) => sets.values[i].push(Number(g[f])));

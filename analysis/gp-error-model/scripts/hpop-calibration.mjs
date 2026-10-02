@@ -20,13 +20,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { Worker } from 'node:worker_threads';
-import { fileURLToPath } from 'node:url';
-import * as flatbuffers from 'flatbuffers';
-import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
-import { MPE, meanElementSource } from 'spacedatastandards.org/lib/js/MPE/main.js';
-import { OEM } from 'spacedatastandards.org/lib/js/OEM/main.js';
 import { moduleHarness, readSets, pack, referenceStates, shiftDay, json } from './archive.mjs';
+import { epochStates, propagateArcs, unixSeconds } from './hpop.mjs';
 
 const { values: args } = parseArgs({ options: {
   reference: { type: 'string' },
@@ -39,7 +34,6 @@ const { values: args } = parseArgs({ options: {
 } });
 for (const k of ['reference', 'fit-from', 'fit-to', 'test-from', 'test-to']) if (!args[k]) throw new Error(`--${k} is required`);
 if (Date.parse(args['fit-to']) >= Date.parse(args['test-from'])) throw new Error('the fit window must end before the test window starts');
-const modules = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const out = path.resolve(args.out);
 fs.mkdirSync(out, { recursive: true });
 const write = (name, value) => fs.writeFileSync(path.join(out, name), `${JSON.stringify(value, null, 1)}\n`);
@@ -54,51 +48,11 @@ const elements = pack(sets);
 const index = new Map(sets.norad.map((n, i) => [`${n}|${sets.epoch[i]}`, i]));
 
 // GCRF epoch states from analysis/epoch-state, the HPOP screen's seeds.
-async function seeds(arcs) {
-  const dir = path.join(modules, 'analysis/epoch-state');
-  const harness = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(path.join(dir, 'dist/isomorphic/module.wasm')),
-    manifest: JSON.parse(fs.readFileSync(path.join(dir, 'plugin-manifest.json'), 'utf8')), surface: 'direct' });
-  const FIELDS = ['MEAN_MOTION', 'ECCENTRICITY', 'INCLINATION', 'RA_OF_ASC_NODE', 'ARG_OF_PERICENTER', 'MEAN_ANOMALY', 'BSTAR'];
-  const setters = ['addMeanMotion', 'addEccentricity', 'addInclination', 'addRaOfAscNode', 'addArgOfPericenter', 'addMeanAnomaly', 'addBstar'];
-  const unixSeconds = (text) => {
-    const m = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(\.\d+)?Z?$/.exec(text.trim());
-    return Date.parse(`${m[1]}Z`) / 1000 + (m[2] ? Number(`0${m[2]}`) : 0);
-  };
-  const frames = arcs.map((arc) => {
-    const i = index.get(`${arc.norad}|${arc.epoch}`);
-    if (i === undefined) throw new Error(`no element set for arc ${arc.arc}`);
-    const b = new flatbuffers.Builder(256);
-    const id = b.createString(`ARC:${arc.arc}`);
-    MPE.startMPE(b);
-    MPE.addEntityId(b, id);
-    MPE.addEpoch(b, unixSeconds(sets.epoch[i]));
-    FIELDS.forEach((_, k) => MPE[setters[k]](b, sets.values[k][i]));
-    MPE.addMeanElementTheory(b, meanElementSource.SGP4);
-    MPE.finishSizePrefixedMPEBuffer(b, MPE.endMPE(b));
-    return b.asUint8Array();
-  });
-  const sizes = frames.map((f) => f.length + ((8 - (f.length % 8)) % 8));
-  const payload = new Uint8Array(sizes.reduce((a, b) => a + b, 0));
-  let at = 0;
-  frames.forEach((f, i) => { payload.set(f, at); at += sizes[i]; });
-  const res = await harness.invoke({ methodId: 'derive', inputs: [{ portId: 'elements', payload,
-    typeRef: { schemaName: 'MPE.fbs', fileIdentifier: '$MPE', rootTypeName: 'MPE', wireFormat: 'aligned-binary', requiredAlignment: 8, byteLength: payload.byteLength } }] });
-  await harness.destroy();
-  if (res.statusCode !== 0) throw new Error(`epoch-state: ${res.errorCode}: ${res.errorMessage}`);
-  const states = new Map();
-  const bytes = res.outputs.find((f) => f.portId === 'states')?.payload ?? new Uint8Array();
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  for (let p = 0; p + 4 <= bytes.length;) {
-    const n = view.getUint32(p, true);
-    if (n === 0) { p += 4; continue; }
-    const oem = OEM.getSizePrefixedRootAsOEM(new flatbuffers.ByteBuffer(bytes.slice(p, p + 4 + n))).unpack();
-    const block = oem.EPHEMERIS_DATA_BLOCK[0], line = block.EPHEMERIS_DATA_LINES[0];
-    states.set(Number(/^ARC:(\d+)$/.exec(block.OBJECT.OBJECT_ID)[1]),
-      { epoch: line.EPOCH, position: [line.X, line.Y, line.Z], velocity: [line.X_DOT, line.Y_DOT, line.Z_DOT] });
-    p += 4 + n;
-  }
-  return states;
-}
+const seeds = (arcs) => epochStates(arcs.map((arc) => {
+  const i = index.get(`${arc.norad}|${arc.epoch}`);
+  if (i === undefined) throw new Error(`no element set for arc ${arc.arc}`);
+  return { key: arc.arc, epoch: unixSeconds(sets.epoch[i]), values: sets.values.map((v) => v[i]) };
+}));
 
 const thin = (plan) => {
   const n = Number(args['max-arcs'] ?? 0);
@@ -111,29 +65,10 @@ async function propagate(plan, variants) {
   const states = await seeds(plan.arcs);
   const arcs = plan.arcs.filter((a) => states.has(a.arc)).map((a) => ({ arc: a.arc, norad: a.norad, seed: states.get(a.arc),
     covariance: a.covariance, targets: a.targets.map((t) => t.epoch) }));
-  const count = Math.min(Number(args.workers), arcs.length);
-  const hpop = path.join(modules, 'propagator/hpop');
-  let finished = 0;
-  const started = performance.now();
-  const parts = await Promise.all(Array.from({ length: count }, (_, w) => new Promise((resolve, reject) => {
-    const worker = new Worker(new URL('./hpop-calibration-worker.mjs', import.meta.url));
-    worker.on('message', (m) => {
-      if (m.progress) {
-        if (++finished % 100 === 0) process.stderr.write(`\r${finished}/${arcs.length} arcs, ${((performance.now() - started) / 1000).toFixed(0)} s`);
-        return;
-      }
-      worker.terminate();
-      m.error ? reject(new Error(m.error)) : resolve(m.results);
-    });
-    worker.on('error', reject);
-    worker.postMessage({ wasmPath: path.join(hpop, 'dist/isomorphic/module.wasm'), manifestPath: path.join(hpop, 'plugin-manifest.json'),
-      id: `calibration-${w}`, arcs: arcs.filter((_, i) => i % count === w), variants, interval });
-  })));
-  process.stderr.write('\n');
-  const results = parts.flat();
+  const { results, seconds } = await propagateArcs(arcs, { variants, interval, workers: Number(args.workers) });
   const errors = results.flatMap((r) => r.samples.filter((s) => s.error).map((s) => s.error));
   console.log(`HPOP ${variants.join('+')}: ${results.length} arcs, ${results.reduce((n, r) => n + r.samples.length, 0)} targets, ` +
-    `${errors.length} failed, ${((performance.now() - started) / 1000).toFixed(0)} s`);
+    `${errors.length} failed, ${seconds.toFixed(0)} s`);
   return { arcs: results.map((r) => ({ arc: r.arc, samples: r.samples.map((s) => (s.error ? null : s)) })), errors: errors.slice(0, 20),
     seedsRefused: plan.arcs.length - arcs.length };
 }

@@ -1,0 +1,252 @@
+{
+  "pluginId": "com.digitalarsenal.analysis.private-screening",
+  "name": "Private screening decoys",
+  "version": "0.1.0",
+  "description": "Decoy orbits for private conjunction screening and the experiment that measures how well they hide a real orbit. decoys generates decoy histories from a population of real ones (independent draws, rotated copies, or synthetic histories that follow the population's drag common mode). features computes rotation-invariant features of each history from its element sets (gp view) or from daily HPOP ephemeris windows (hpop view), including the distance to the nearest public object. distinguish trains a gradient-boosted tree classifier, cross-validated by target, and reports AUC, a 95 % lower bound on epsilon, and the probability that the real history scores highest of N.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Deterministic SGP4 evaluation, seeded draws and statistics over caller-supplied histories. No host calls, threads or network access."
+  },
+  "schemasUsed": [],
+  "methods": [
+    {
+      "methodId": "decoys",
+      "displayName": "Generate decoy histories",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "population",
+          "acceptedTypeSets": [
+            {
+              "setId": "private-screening-histories-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Histories {objects: [{id, target?, role (real or decoy), generator?, cls?, t: [unix s], n: [rev/day], e, i, raan, argp, ma: [deg], bstar: [1/earth radii]}]}: SGP4 mean elements, one object per entry."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The real histories decoys are drawn from (the public catalog); each is also a target."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "private-screening-decoy-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "generator (independent, rotated, synthetic, synthetic-flat), window [from, to) unix s, perTarget, targets [ids], donors (population or regime), neighbours, seed."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Generator settings as JSON."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "decoys",
+          "acceptedTypeSets": [
+            {
+              "setId": "private-screening-histories-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Histories {objects: [{id, target?, role (real or decoy), generator?, cls?, t: [unix s], n: [rev/day], e, i, raan, argp, ma: [deg], bstar: [1/earth radii]}]}: SGP4 mean elements, one object per entry. Plus report: counts and the drag common mode per altitude band."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Decoy histories, role decoy, target the real history each one hides."
+        }
+      ]
+    },
+    {
+      "methodId": "features",
+      "displayName": "History features",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "histories",
+          "acceptedTypeSets": [
+            {
+              "setId": "private-screening-histories-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Histories {objects: [{id, target?, role (real or decoy), generator?, cls?, t: [unix s], n: [rev/day], e, i, raan, argp, ma: [deg], bstar: [1/earth radii]}]}: SGP4 mean elements, one object per entry. The hpop view reads windows: [{t, samples: [[t, x, y, z, vx, vy, vz]] (GCRF m, m/s, one orbit), end: [t, ...] (the window's state at the next window's start)}] instead of element arrays."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Real and decoy histories; the real ones are the catalog."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "private-screening-feature-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "view (gp or hpop), window [from, to) unix s, minPoints."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Feature settings as JSON."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "features",
+          "acceptedTypeSets": [
+            {
+              "setId": "private-screening-features-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "{view, names, rows: [{id, target, role, generator, cls, x}], counts}."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One feature row per history."
+        }
+      ]
+    },
+    {
+      "methodId": "distinguish",
+      "displayName": "Distinguish real from decoy",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "features",
+          "acceptedTypeSets": [
+            {
+              "setId": "private-screening-features-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "{names, rows: [{target, role, cls, x}]}: the real rows and one generator's decoy rows."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Feature rows from features."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "private-screening-distinguish-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "folds, depth, rounds, learningRate, lambda, minChildHessian, bins, seed, ranks [N], exclude [feature names]."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Classifier settings as JSON."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "private-screening-distinguish-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "AUC, balanced accuracy, epsilon lower bound, P(real first of N) and N_eff overall and by class, per-feature separation and gain share."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The distinguishing report."
+        }
+      ]
+    }
+  ]
+}
