@@ -1,6 +1,7 @@
 #include "epm_authorize.h"
 
 #include "epm_fb.h"
+#include "epm_key_proof.h"
 
 namespace sdn::epm {
 namespace {
@@ -68,6 +69,14 @@ AuthorizeResult AuthorizeModuleRequest(const uint8_t* epm_bytes, std::size_t epm
   }
 
   if (!allowed_xpubs.empty()) {
+    // An allowlist is only as strong as the proof that the requester holds the
+    // xpub: the account key itself must have authorised this session key.
+    const std::string proof_error = VerifySessionKeyProof(
+        fields, v.xpub, v.account_key_path, proven_signing_pubkey, now_unix, verify_secp256k1);
+    if (!proof_error.empty()) {
+      r.error = proof_error;
+      return r;
+    }
     bool listed = false;
     for (const std::string& a : allowed_xpubs) {
       if (a == v.xpub) { listed = true; break; }

@@ -91,6 +91,7 @@ add_library(
     "${SDN_COMMON_DIR}/epm/epm_verify.cpp"
     "${SDN_COMMON_DIR}/epm/epm_fb.cpp"
     "${SDN_COMMON_DIR}/epm/epm_authorize.cpp"
+    "${SDN_COMMON_DIR}/epm/epm_key_proof.cpp"
 )
 target_compile_definitions(
     licensing_core PRIVATE

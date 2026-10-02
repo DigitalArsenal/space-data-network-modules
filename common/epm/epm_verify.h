@@ -40,6 +40,7 @@ using Secp256k1Verify = std::function<bool(const uint8_t*, std::size_t,
 struct VerifyResult {
   bool ok = false;
   std::string xpub;     // separately declared canonical account xpub on success
+  std::string account_key_path;  // that account key's KEY_PATH
   std::string error;    // reason on failure
 };
 

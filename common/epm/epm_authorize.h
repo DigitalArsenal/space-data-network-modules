@@ -31,8 +31,9 @@ struct AuthorizeResult {
 //  4. freshness: when `max_age_seconds > 0`, require
 //     |now_unix - SIGNATURE_TIMESTAMP| <= max_age_seconds (the EPM is re-sent per
 //     grant, so a stale one is rejected),
-//  5. membership: when `allowed_xpubs` is non-empty, the bound xpub must be in it
-//     (empty list = no allowlist gate).
+//  5. membership: when `allowed_xpubs` is non-empty, the account key must have
+//     authorised the proven session key (epm_key_proof.h) and the bound xpub
+//     must be in the list (empty list = no allowlist gate).
 // `verify_secp256k1` may be empty when only ed25519 identities are supported.
 AuthorizeResult AuthorizeModuleRequest(const uint8_t* epm_bytes, std::size_t epm_len,
                                        const uint8_t* proven_signing_pubkey,
