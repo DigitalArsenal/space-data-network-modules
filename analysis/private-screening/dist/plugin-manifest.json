@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.analysis.private-screening",
   "name": "Private screening decoys",
   "version": "0.1.0",
-  "description": "Decoy orbits for private conjunction screening and the experiment that measures how well they hide a real orbit. decoys generates decoy histories from a population of real ones (independent draws, rotated copies, or synthetic histories that follow the population's drag common mode). features computes rotation-invariant features of each history from its element sets (gp view) or from daily HPOP ephemeris windows (hpop view), including the distance to the nearest public object. distinguish trains a gradient-boosted tree classifier, cross-validated by target, and reports AUC, a 95 % lower bound on epsilon, and the probability that the real history scores highest of N.",
+  "description": "Decoy orbits for private conjunction screening and the experiment that measures how well they hide a real orbit. decoys generates decoy histories from a population of real ones (independent draws, rotated copies, resampled or chained histories, or copies of the target itself). features computes rotation-invariant features of each history from its element sets (gp view) or from daily HPOP ephemeris windows (hpop view), including the distance to the nearest public object. distinguish trains a gradient-boosted tree classifier, cross-validated by target, and reports AUC, a 95 % lower bound on epsilon, and the probability that the real history scores highest of N.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -61,7 +61,7 @@
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "generator (independent, rotated, synthetic, synthetic-flat), window [from, to) unix s, perTarget, targets [ids], donors (population or regime), neighbours, seed."
+                "detail": "generator (independent, rotated, resampled, chained, aligned, fleet), window [from, to) unix s, perTarget, targets [ids], donors (population or regime), neighbours, seed."
               }
             }
           ],
@@ -213,7 +213,7 @@
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "folds, depth, rounds, learningRate, lambda, minChildHessian, bins, seed, ranks [N], exclude [feature names]."
+                "detail": "folds, depth, rounds, learningRate, lambda, minChildHessian, bins, seed, ranks [N], exclude [feature names], relative (features minus each target's median)."
               }
             }
           ],
@@ -237,7 +237,7 @@
               "wildcardJustification": {
                 "kind": "intra-flow-control-frame",
                 "mediaType": "application/json",
-                "detail": "AUC, balanced accuracy, epsilon lower bound, P(real first of N) and N_eff overall and by class, per-feature separation and gain share."
+                "detail": "AUC, balanced accuracy, epsilon lower bound, P(real first of N) and N_eff overall and by class, per-feature separation and gain share, and with many decoys per target the real one's rank within its own set."
               }
             }
           ],

@@ -1,0 +1,833 @@
+{
+ "kind": "decoy-indistinguishability",
+ "version": 1,
+ "population": {
+  "from": "2026-08-02",
+  "to": "2026-08-29",
+  "eligible": 16329,
+  "sampled": 1000,
+  "classes": {
+   "other": 297,
+   "starlink": 660,
+   "oneweb": 43
+  },
+  "seed": 1,
+  "selection": "OBJECT_TYPE PAYLOAD, perigee below 2,000 km, e below 0.1, at least 14 element sets, the first within 2 days of the start and the last within 2 days of the end"
+ },
+ "hpopDays": {
+  "from": "2026-08-09",
+  "days": 14
+ },
+ "donors": "population",
+ "perTarget": 50,
+ "relative": true,
+ "generation": {
+  "fleet": {
+   "decoys": 50000,
+   "donors": "population",
+   "dragCommonMode": [
+    {
+     "altitudeKm": [
+      350,
+      450
+     ],
+     "objects": 21,
+     "relativeDecay": [
+      1.4507412956093744,
+      1.3927709626746332,
+      0.7809021804880858,
+      0.944288528446765,
+      0.7861213363963605,
+      0.6267893495899318,
+      0.9275932835592867,
+      0.9282214636732995,
+      0.6367925826622234,
+      0.6022412963907278,
+      0.8043760487948045,
+      0.6988500609841033,
+      0.7396468305314556,
+      0.8611489238954233,
+      0.8936665385474583,
+      1.1256219891755999,
+      1.0048234975703336,
+      1.4185727754620547,
+      1.1311990586561365,
+      1.1721197310085405,
+      1.2415628146491586,
+      1.1508430851769584,
+      1.0855968308882744,
+      1.0767973634674581,
+      1.225022681878125,
+      1.0789902503359508,
+      1.214699239487475
+     ]
+    },
+    {
+     "altitudeKm": [
+      450,
+      550
+     ],
+     "objects": 70,
+     "relativeDecay": [
+      1.4307350923301037,
+      1.433234991259456,
+      0.6444294329123718,
+      0.9649889344090193,
+      0.83494914783486,
+      0.5026930387310515,
+      0.9039824657867173,
+      0.7928717763233948,
+      0.6322211047768451,
+      0.5519382717853729,
+      0.8198031134405485,
+      0.7382102755450429,
+      0.7044205799800685,
+      0.8715604060788629,
+      0.8738871109207333,
+      1.360090714920108,
+      1.0573121335977895,
+      1.30046665285333,
+      1.1440317410428262,
+      1.0836844669872003,
+      1.182929341649403,
+      1.1693813275784675,
+      1.2717604115019316,
+      1.141378450371806,
+      1.3019529651917499,
+      0.9846588447920565,
+      1.302427207398889
+     ]
+    },
+    {
+     "altitudeKm": [
+      550,
+      650
+     ],
+     "objects": 10,
+     "relativeDecay": [
+      1.7438368101922164,
+      1,
+      1,
+      0.8818014562780933,
+      0.9526603329890816,
+      0.6035599230845834,
+      0.9467000489487285,
+      0.8539515305547551,
+      0.6727638583671152,
+      0.5593399218549209,
+      0.9105243749279951,
+      0.617217292353116,
+      0.7467466878774125,
+      0.6364129685621397,
+      0.9678128523498996,
+      1.2833951779690667,
+      1.1114161357313208,
+      1.2185743439525825,
+      1.1318943638232284,
+      1.0687065451524564,
+      1.022168623821621,
+      1.0680528116681334,
+      1.6528705171061258,
+      1.0553121677924904,
+      1.1822132165640806,
+      0.9947507474211098,
+      1.1173172906577322
+     ]
+    }
+   ],
+   "generator": "fleet",
+   "neighbourOffsets": 1000,
+   "population": 1000,
+   "refused": 0,
+   "targets": 1000
+  }
+ },
+ "views": {
+  "hpop": {
+   "window": [
+    "2026-08-09T00:00:00.000Z",
+    "2026-08-23T00:00:00.000Z"
+   ],
+   "generators": {
+    "fleet": {
+     "counts": {
+      "catalog": 1000,
+      "histories": 51000,
+      "tooFewPoints": 0
+     },
+     "auc": 0.79385885,
+     "balancedAccuracy": 0.71139,
+     "byClass": {
+      "oneweb": {
+       "auc": 0.9590618604651163,
+       "first": [
+        {
+         "n": 2,
+         "nEffective": 1.0426856089502192,
+         "pRealFirst": 0.9590618604651163
+        },
+        {
+         "n": 10,
+         "nEffective": 1.2975985924754694,
+         "pRealFirst": 0.7706543501193761
+        },
+        {
+         "n": 100,
+         "nEffective": 2.369701203012573,
+         "pRealFirst": 0.4219941310443325
+        },
+        {
+         "n": 1000,
+         "nEffective": 6.907527625379115,
+         "pRealFirst": 0.1447695983619198
+        },
+        {
+         "n": 10000,
+         "nEffective": 33.991503129625826,
+         "pRealFirst": 0.029419116777111114
+        }
+       ],
+       "real": 43
+      },
+      "other": {
+       "auc": 0.7008663299663299,
+       "first": [
+        {
+         "n": 2,
+         "nEffective": 1.4268055936544144,
+         "pRealFirst": 0.7008663299663299
+        },
+        {
+         "n": 10,
+         "nEffective": 4.491397713309436,
+         "pRealFirst": 0.2226478401226155
+        },
+        {
+         "n": 100,
+         "nEffective": 30.765069987398473,
+         "pRealFirst": 0.03250439542018286
+        },
+        {
+         "n": 1000,
+         "nEffective": 388.0007433870168,
+         "pRealFirst": 0.0025773146496333795
+        },
+        {
+         "n": 10000,
+         "nEffective": 8264180.315310875,
+         "pRealFirst": 1.2100413614491456e-7
+        }
+       ],
+       "real": 297
+      },
+      "starlink": {
+       "auc": 0.8249422575757576,
+       "first": [
+        {
+         "n": 2,
+         "nEffective": 1.2122060554137197,
+         "pRealFirst": 0.8249422575757593
+        },
+        {
+         "n": 10,
+         "nEffective": 2.2763698123334235,
+         "pRealFirst": 0.43929593275309536
+        },
+        {
+         "n": 100,
+         "nEffective": 10.036915169562375,
+         "pRealFirst": 0.09963220602208213
+        },
+        {
+         "n": 1000,
+         "nEffective": 58.14856114031463,
+         "pRealFirst": 0.01719733008675766
+        },
+        {
+         "n": 10000,
+         "nEffective": 388.04646973970944,
+         "pRealFirst": 0.0025770109458044333
+        }
+       ],
+       "real": 660
+      }
+     },
+     "classifier": {
+      "bins": 32,
+      "depth": 3,
+      "folds": 5,
+      "kind": "gradient-boosted trees, logistic loss",
+      "learningRate": 0.1,
+      "rounds": 200,
+      "split": "by target"
+     },
+     "epsilon": {
+      "epsilonLowerBound95": 0.8926502664243677,
+      "heldOut": {
+       "decoy": {
+        "in": 811,
+        "n": 25900
+       },
+       "real": {
+        "in": 2,
+        "n": 518
+       }
+      },
+      "side": "decoy below",
+      "threshold": -3.4850454267181408
+     },
+     "excluded": [],
+     "features": [
+      {
+       "name": "aKm",
+       "aloneAuc": 0.36343789,
+       "separation": 0.6365621100000001,
+       "gainShare": 0.2255969825489003
+      },
+      {
+       "name": "catalogDistance",
+       "aloneAuc": 0.35723915,
+       "separation": 0.6427608499999999,
+       "gainShare": 0.1862213634821836
+      },
+      {
+       "name": "iDriftDegPerDay",
+       "aloneAuc": 0.50698577,
+       "separation": 0.50698577,
+       "gainShare": 0.08166587123254801
+      },
+      {
+       "name": "jumpTMaxKm",
+       "aloneAuc": 0.59827989,
+       "separation": 0.59827989,
+       "gainShare": 0.06510427349674844
+      },
+      {
+       "name": "e",
+       "aloneAuc": 0.50022082,
+       "separation": 0.50022082,
+       "gainShare": 0.05742027240599166
+      },
+      {
+       "name": "nodeRateResidualDegPerDay",
+       "aloneAuc": 0.53886278,
+       "separation": 0.53886278,
+       "gainShare": 0.04707077836198661
+      },
+      {
+       "name": "jumpTKm",
+       "aloneAuc": 0.62229106,
+       "separation": 0.62229106,
+       "gainShare": 0.045027130999261554
+      },
+      {
+       "name": "iScatterDeg",
+       "aloneAuc": 0.50362902,
+       "separation": 0.50362902,
+       "gainShare": 0.040378435275617616
+      },
+      {
+       "name": "aMaxStepKm",
+       "aloneAuc": 0.49704356,
+       "separation": 0.50295644,
+       "gainShare": 0.03537971395354199
+      },
+      {
+       "name": "iDeg",
+       "aloneAuc": 0.47903968,
+       "separation": 0.5209603199999999,
+       "gainShare": 0.03495967905059303
+      },
+      {
+       "name": "jumpNKm",
+       "aloneAuc": 0.47359803,
+       "separation": 0.52640197,
+       "gainShare": 0.033383375656704746
+      },
+      {
+       "name": "aScatterKm",
+       "aloneAuc": 0.52114523,
+       "separation": 0.52114523,
+       "gainShare": 0.03234454584677718
+      },
+      {
+       "name": "eScatter",
+       "aloneAuc": 0.50749627,
+       "separation": 0.50749627,
+       "gainShare": 0.02643828908914945
+      },
+      {
+       "name": "decayKmPerDay",
+       "aloneAuc": 0.51221377,
+       "separation": 0.51221377,
+       "gainShare": 0.02520871598096761
+      },
+      {
+       "name": "dragCommonModeCorrelation",
+       "aloneAuc": 0.51020622,
+       "separation": 0.51020622,
+       "gainShare": 0.023454346390707505
+      },
+      {
+       "name": "jumpRKm",
+       "aloneAuc": 0.50406863,
+       "separation": 0.50406863,
+       "gainShare": 0.021750870447399175
+      },
+      {
+       "name": "sequenceMatch",
+       "aloneAuc": 0.51316185,
+       "separation": 0.51316185,
+       "gainShare": 0.01859535578092137
+      },
+      {
+       "name": "stepsPerDay",
+       "aloneAuc": 0.51243616,
+       "separation": 0.51243616,
+       "gainShare": 0
+      }
+     ],
+     "first": [
+      {
+       "ideal": 0.5,
+       "n": 2,
+       "nEffective": 1.2596697763084703,
+       "pRealFirst": 0.7938588500000004
+      },
+      {
+       "ideal": 0.1,
+       "n": 10,
+       "nEffective": 2.5693739893587293,
+       "pRealFirst": 0.38919986118859345
+      },
+      {
+       "ideal": 0.01,
+       "n": 100,
+       "nEffective": 10.688692893248602,
+       "pRealFirst": 0.0935568090492748
+      },
+      {
+       "ideal": 0.001,
+       "n": 1000,
+       "nEffective": 54.52326941048833,
+       "pRealFirst": 0.01834079303776372
+      },
+      {
+       "ideal": 0.0001,
+       "n": 10000,
+       "nEffective": 337.16746873303754,
+       "pRealFirst": 0.0029658851838751383
+      }
+     ],
+     "relative": true,
+     "rows": {
+      "decoy": 50000,
+      "real": 1000
+     },
+     "withinTarget": {
+      "fewestDecoys": 50,
+      "first": [
+       {
+        "ideal": 0.5,
+        "n": 2,
+        "nEffective": 1.271957160482831,
+        "pRealFirst": 0.7861900000000024
+       },
+       {
+        "ideal": 0.1,
+        "n": 10,
+        "nEffective": 2.478508815987179,
+        "pRealFirst": 0.40346840549837
+       }
+      ],
+      "firstStandardized": [
+       {
+        "ideal": 0.5,
+        "n": 2,
+        "nEffective": 1.2781764573470784,
+        "pRealFirst": 0.7823645900000004
+       },
+       {
+        "ideal": 0.1,
+        "n": 10,
+        "nEffective": 2.5568892485374164,
+        "pRealFirst": 0.391100240486371
+       },
+       {
+        "ideal": 0.01,
+        "n": 100,
+        "nEffective": 11.551215246855014,
+        "pRealFirst": 0.08657097791267153
+       },
+       {
+        "ideal": 0.001,
+        "n": 1000,
+        "nEffective": 94.34358425830317,
+        "pRealFirst": 0.010599554891428562
+       },
+       {
+        "ideal": 0.0001,
+        "n": 10000,
+        "nEffective": 3491.1624895581003,
+        "pRealFirst": 0.0002864375413607794
+       }
+      ],
+      "pooledDecoys": 50000,
+      "rankHistogram": [
+       26,
+       21,
+       22,
+       31,
+       35,
+       49,
+       57,
+       112,
+       163,
+       484
+      ],
+      "rankKs": 0.465,
+      "targets": 1000
+     },
+     "withoutSequenceMatch": {
+      "auc": 0.7942548,
+      "balancedAccuracy": 0.7159599999999999,
+      "byClass": {
+       "oneweb": {
+        "auc": 0.9577255813953488,
+        "first": [
+         {
+          "n": 2,
+          "nEffective": 1.0441404296030807,
+          "pRealFirst": 0.957725581395349
+         },
+         {
+          "n": 10,
+          "nEffective": 1.3045971982891513,
+          "pRealFirst": 0.7665201192455418
+         },
+         {
+          "n": 100,
+          "nEffective": 2.502642870319819,
+          "pRealFirst": 0.39957758730162224
+         },
+         {
+          "n": 1000,
+          "nEffective": 7.587642922405053,
+          "pRealFirst": 0.13179323410794222
+         },
+         {
+          "n": 10000,
+          "nEffective": 25.441022043480412,
+          "pRealFirst": 0.039306596971258975
+         }
+        ],
+        "real": 43
+       },
+       "other": {
+        "auc": 0.7040801346801346,
+        "first": [
+         {
+          "n": 2,
+          "nEffective": 1.4202928768247411,
+          "pRealFirst": 0.7040801346801349
+         },
+         {
+          "n": 10,
+          "nEffective": 4.3888696453389615,
+          "pRealFirst": 0.22784910029442623
+         },
+         {
+          "n": 100,
+          "nEffective": 31.173966606504507,
+          "pRealFirst": 0.03207804809129898
+         },
+         {
+          "n": 1000,
+          "nEffective": 216.25932395568935,
+          "pRealFirst": 0.004624078082316099
+         },
+         {
+          "n": 10000,
+          "nEffective": 48512.782421453536,
+          "pRealFirst": 0.00002061312400745284
+         }
+        ],
+        "real": 297
+       },
+       "starlink": {
+        "auc": 0.8241830303030303,
+        "first": [
+         {
+          "n": 2,
+          "nEffective": 1.2133227247257425,
+          "pRealFirst": 0.824183030303037
+         },
+         {
+          "n": 10,
+          "nEffective": 2.277897095539495,
+          "pRealFirst": 0.43900139385495857
+         },
+         {
+          "n": 100,
+          "nEffective": 9.994702593172416,
+          "pRealFirst": 0.10005300214566867
+         },
+         {
+          "n": 1000,
+          "nEffective": 56.30506862815717,
+          "pRealFirst": 0.017760390394052687
+         },
+         {
+          "n": 10000,
+          "nEffective": 291.7183683535437,
+          "pRealFirst": 0.0034279637776804817
+         }
+        ],
+        "real": 660
+       }
+      },
+      "classifier": {
+       "bins": 32,
+       "depth": 3,
+       "folds": 5,
+       "kind": "gradient-boosted trees, logistic loss",
+       "learningRate": 0.1,
+       "rounds": 200,
+       "split": "by target"
+      },
+      "epsilon": {
+       "epsilonLowerBound95": 2.0370278098031487,
+       "heldOut": {
+        "decoy": {
+         "in": 43,
+         "n": 25900
+        },
+        "real": {
+         "in": 14,
+         "n": 518
+        }
+       },
+       "side": "real above",
+       "threshold": 2.2682497433818334
+      },
+      "excluded": [
+       "sequenceMatch"
+      ],
+      "features": [
+       {
+        "name": "aKm",
+        "aloneAuc": 0.36343789,
+        "separation": 0.6365621100000001,
+        "gainShare": 0.22451908620562205
+       },
+       {
+        "name": "catalogDistance",
+        "aloneAuc": 0.35723915,
+        "separation": 0.6427608499999999,
+        "gainShare": 0.1881971382230204
+       },
+       {
+        "name": "iDriftDegPerDay",
+        "aloneAuc": 0.50698577,
+        "separation": 0.50698577,
+        "gainShare": 0.08465756799629194
+       },
+       {
+        "name": "jumpTMaxKm",
+        "aloneAuc": 0.59827989,
+        "separation": 0.59827989,
+        "gainShare": 0.06537280830966227
+       },
+       {
+        "name": "e",
+        "aloneAuc": 0.50022082,
+        "separation": 0.50022082,
+        "gainShare": 0.05819717874271468
+       },
+       {
+        "name": "nodeRateResidualDegPerDay",
+        "aloneAuc": 0.53886278,
+        "separation": 0.53886278,
+        "gainShare": 0.04850321446510453
+       },
+       {
+        "name": "jumpTKm",
+        "aloneAuc": 0.62229106,
+        "separation": 0.62229106,
+        "gainShare": 0.046376977870904695
+       },
+       {
+        "name": "iScatterDeg",
+        "aloneAuc": 0.50362902,
+        "separation": 0.50362902,
+        "gainShare": 0.04205503602746976
+       },
+       {
+        "name": "iDeg",
+        "aloneAuc": 0.47903968,
+        "separation": 0.5209603199999999,
+        "gainShare": 0.03668303878767144
+       },
+       {
+        "name": "aMaxStepKm",
+        "aloneAuc": 0.49704356,
+        "separation": 0.50295644,
+        "gainShare": 0.036057894790618605
+       },
+       {
+        "name": "jumpNKm",
+        "aloneAuc": 0.47359803,
+        "separation": 0.52640197,
+        "gainShare": 0.03429387000704266
+       },
+       {
+        "name": "aScatterKm",
+        "aloneAuc": 0.52114523,
+        "separation": 0.52114523,
+        "gainShare": 0.033083281416943666
+       },
+       {
+        "name": "eScatter",
+        "aloneAuc": 0.50749627,
+        "separation": 0.50749627,
+        "gainShare": 0.02952414203194557
+       },
+       {
+        "name": "dragCommonModeCorrelation",
+        "aloneAuc": 0.51020622,
+        "separation": 0.51020622,
+        "gainShare": 0.026605636566381763
+       },
+       {
+        "name": "decayKmPerDay",
+        "aloneAuc": 0.51221377,
+        "separation": 0.51221377,
+        "gainShare": 0.024264053989813177
+       },
+       {
+        "name": "jumpRKm",
+        "aloneAuc": 0.50406863,
+        "separation": 0.50406863,
+        "gainShare": 0.02160907456879297
+       },
+       {
+        "name": "stepsPerDay",
+        "aloneAuc": 0.51243616,
+        "separation": 0.51243616,
+        "gainShare": 0
+       }
+      ],
+      "first": [
+       {
+        "ideal": 0.5,
+        "n": 2,
+        "nEffective": 1.2590418087495259,
+        "pRealFirst": 0.7942548000000056
+       },
+       {
+        "ideal": 0.1,
+        "n": 10,
+        "nEffective": 2.5616560652542906,
+        "pRealFirst": 0.39037246785927604
+       },
+       {
+        "ideal": 0.01,
+        "n": 100,
+        "nEffective": 10.782368908706356,
+        "pRealFirst": 0.09274399795322692
+       },
+       {
+        "ideal": 0.001,
+        "n": 1000,
+        "nEffective": 53.29831870534394,
+        "pRealFirst": 0.018762317917164154
+       },
+       {
+        "ideal": 0.0001,
+        "n": 10000,
+        "nEffective": 252.60423211763603,
+        "pRealFirst": 0.003958761860863467
+       }
+      ],
+      "relative": true,
+      "rows": {
+       "decoy": 50000,
+       "real": 1000
+      },
+      "withinTarget": {
+       "fewestDecoys": 50,
+       "first": [
+        {
+         "ideal": 0.5,
+         "n": 2,
+         "nEffective": 1.269454388503819,
+         "pRealFirst": 0.7877400000000013
+        },
+        {
+         "ideal": 0.1,
+         "n": 10,
+         "nEffective": 2.4818394657552876,
+         "pRealFirst": 0.40292694745091995
+        }
+       ],
+       "firstStandardized": [
+        {
+         "ideal": 0.5,
+         "n": 2,
+         "nEffective": 1.275180121104875,
+         "pRealFirst": 0.7842029400000008
+        },
+        {
+         "ideal": 0.1,
+         "n": 10,
+         "nEffective": 2.569629349051257,
+         "pRealFirst": 0.38916118403193595
+        },
+        {
+         "ideal": 0.01,
+         "n": 100,
+         "nEffective": 11.75165140035068,
+         "pRealFirst": 0.08509442340760373
+        },
+        {
+         "ideal": 0.001,
+         "n": 1000,
+         "nEffective": 88.19820794234701,
+         "pRealFirst": 0.01133809884951036
+        },
+        {
+         "ideal": 0.0001,
+         "n": 10000,
+         "nEffective": 2920.694064842384,
+         "pRealFirst": 0.00034238437090601797
+        }
+       ],
+       "pooledDecoys": 50000,
+       "rankHistogram": [
+        17,
+        26,
+        26,
+        29,
+        33,
+        47,
+        69,
+        99,
+        161,
+        493
+       ],
+       "rankKs": 0.457,
+       "targets": 1000
+      }
+     }
+    }
+   }
+  }
+ },
+ "hpop": {
+  "windows": 713847,
+  "propagated": 713847,
+  "failed": 0,
+  "seconds": 4340,
+  "product": "analysis/epoch-state GCRF state at the latest element set, propagated by propagator/hpop resident (point mass and degree/order 20 field)"
+ }
+}

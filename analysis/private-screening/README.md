@@ -39,6 +39,8 @@ Generators:
   dither that does not carry forward.
 - **`aligned`**: chained, with the changes in the donor's own time order and
   epochs.
+- **`fleet`**: the target's own history, node rotated and epochs shifted by
+  up to half a period: copies of the hidden satellite itself.
 
 Output: `decoys`, histories with role `decoy` and `target` set, plus a report
 with counts and the drag common mode per 100 km band.
@@ -72,7 +74,8 @@ Inputs:
 - `features`: rows from `features`, the real rows plus one generator's
   decoys;
 - `options` (optional): `folds`, `depth`, `rounds`, `learningRate`, `bins`,
-  `seed`, `ranks`, `exclude`.
+  `seed`, `ranks`, `exclude`, and `relative` (each feature minus its median
+  over the target's own candidates).
 
 The classifier is gradient-boosted trees (logistic loss), cross-validated by
 target. The report gives:
@@ -81,13 +84,19 @@ target. The report gives:
   bounded on the other half, with one-sided Clopper–Pearson limits;
 - P(the real history scores highest of N) = E[F(s_real)^(N − 1)], and
   N_eff = 1/P, overall and by class;
-- per-feature AUC and gain share.
+- per-feature AUC and gain share;
+- with 10 or more decoys per target, the real one's rank within its own set
+  (histogram, KS distance from uniform) and P₁(N) from those ranks and from
+  standardized scores pooled over sets.
+
+Ties count as a uniform draw among the tied candidates.
 
 ## Study
 
 ```
 node scripts/decoy-study.mjs [--objects 3000] [--from 2026-08-02 --to 2026-08-29] \
-  [--hpop-from 2026-08-09 --hpop-days 14] [--skip-hpop | --reuse-hpop] [--out DIR]
+  [--hpop-from 2026-08-09 --hpop-days 14] [--generators …] [--per-target 1] \
+  [--relative] [--views gp,gp-28d,hpop] [--reuse-features] [--out DIR]
 ```
 
 It reads the GP archive (`/opt/data/sdn-archive/spacetrack/gp_history/by-creation`).

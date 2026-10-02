@@ -219,9 +219,13 @@ trajectory.
    - The bound is P(found) ≤ e^(2ε)/N, given persistent decoys, a prober
      that cannot observe the object, and gated confirmation of real alerts.
    - Cost is N times the per-pair cost.
-   - Measured on 3,000 LEO payload histories, no generator is ready: the best
-     hid a real orbit among about 4 of 100 candidates in the published
-     ephemeris (`../../private-screening/docs/decoy-study-2026-08.md`).
+   - Measured on LEO payload histories, no generator reaches 1 in 10,000
+     yet (`../../private-screening/docs/decoy-study-2026-08.md`):
+     - decoys built from public histories hid a real orbit among about 4 of
+       100;
+     - copies of the hidden satellite itself did better at large N (about
+       94 of 1,000), but Earth's gravity field marks a copied history as
+       moved.
    - Decoys dilute what leaks; they do not replace defenses 1 to 5.
 
 Direct, authenticated streams protect integrity and metadata. The ciphertexts

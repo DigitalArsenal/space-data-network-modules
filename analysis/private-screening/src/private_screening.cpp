@@ -41,7 +41,12 @@
 //                                order), with fresh dither on each published
 //                                set;
 //                aligned         chained, with the changes in the donor's own
-//                                time order and epochs.
+//                                time order and epochs;
+//                fleet           the target's own history, node shifted by a
+//                                uniform constant and epochs by up to half a
+//                                period: a virtual fleet of the hidden
+//                                satellite itself, which the public catalog
+//                                does not hold.
 // features     rotation-invariant features of each history, real or decoy:
 //                gp    from its element sets (orbit, decay, noise, steps,
 //                      cadence, B*, node-rate residual, agreement between
@@ -723,6 +728,23 @@ History rotated(const History& donor, Rng& rng) {
   return h;
 }
 
+// The target's own history with its node shifted by a uniform constant and
+// every epoch shifted by up to half a period, elements unchanged: the same
+// satellite elsewhere on its shell, phased by time rather than by mean
+// anomaly, so each element set still falls where in the orbit the real
+// one's does (published epochs sit at a preferred argument of latitude).
+History fleet_copy(const History& target, Rng& rng) {
+  History h;
+  const double dr = 360.0 * rng.uniform();
+  const double period = target.sets.empty() ? 0.0 : kDay / target.sets.front().n;
+  const double dt = (rng.uniform() - 0.5) * period;
+  for (Set s : target.sets) {
+    s.t += dt, s.raan = wrap_deg(s.raan + dr);
+    h.sets.push_back(s);
+  }
+  return h;
+}
+
 std::vector<double> cadence(const Donor& d, double w0, double w1, Rng& rng) {
   std::vector<double> t;
   if (d.intervals.empty()) return t;
@@ -1098,8 +1120,9 @@ extern "C" int decoys() {
   if (!options.is_object() || !population.is_object()) return fail("invalid-input", "population and options must be JSON objects");
   GeneratorOptions o;
   o.kind = options.value("generator", std::string());
-  if (o.kind != "independent" && o.kind != "rotated" && o.kind != "resampled" && o.kind != "chained" && o.kind != "aligned")
-    return fail("invalid-options", "generator must be independent, rotated, resampled, chained or aligned");
+  if (o.kind != "independent" && o.kind != "rotated" && o.kind != "resampled" && o.kind != "chained" && o.kind != "aligned" &&
+      o.kind != "fleet")
+    return fail("invalid-options", "generator must be independent, rotated, resampled, chained, aligned or fleet");
   if (!options.contains("window") || options["window"].size() != 2) return fail("invalid-options", "window [from, to) in unix seconds is required");
   o.w0 = options["window"][0].get<double>(), o.w1 = options["window"][1].get<double>();
   o.per_target = options.value("perTarget", 1);
@@ -1170,6 +1193,7 @@ extern "C" int decoys() {
       History h;
       if (o.kind == "independent") h = independent(candidates, o, rng);
       else if (o.kind == "rotated") h = rotated(*rng.pick(candidates)->history, rng);
+      else if (o.kind == "fleet") h = fleet_copy(*pool[it->second]->history, rng);
       else if (o.kind == "resampled") h = resampled(*rng.pick(candidates), offsets, o, rng);
       else h = chained(*rng.pick(candidates), offsets, o, rng);
       if (h.sets.size() < 6) {
@@ -1289,6 +1313,13 @@ extern "C" int features() {
                            {"counts", {{"histories", list.size()}, {"catalog", catalog.sigs.size()}, {"tooFewPoints", skipped}}}});
 }
 
+// P(the real candidate is picked first of n) when a decoy scores below it with
+// probability a and ties it with probability t, ties broken uniformly.
+double p_first(double a, double t, int n) {
+  if (t < 1e-15) return std::pow(a, n - 1);
+  return (std::pow(a + t, n) - std::pow(a, n)) / (n * t);
+}
+
 extern "C" int distinguish() {
   const nlohmann::json options = json_input("options");
   const nlohmann::json input_rows = json_input("features");
@@ -1328,6 +1359,23 @@ extern "C" int distinguish() {
   for (int v : y) nr += v;
   const int nd = static_cast<int>(y.size()) - nr;
   if (nr < 20 || nd < 20) return fail("too-few-rows", "need at least 20 real and 20 decoy rows");
+  std::vector<std::string> target;
+  for (const auto& r : input_rows["rows"]) target.push_back(r.value("target", std::string()));
+  std::map<std::string, std::vector<size_t>> groups;
+  for (size_t r = 0; r < x.size(); ++r) groups[target[r]].push_back(r);
+  // Relative: each feature minus its median over the target's own candidates,
+  // so the classifier compares a set's members with each other (an adversary
+  // facing copies of one orbit).
+  const bool relative = opt.value("relative", false);
+  if (relative)
+    for (const auto& [t, rows] : groups)
+      for (size_t f = 0; f < names.size(); ++f) {
+        std::vector<double> v;
+        for (size_t r : rows) v.push_back(x[r][f]);
+        const double m = median(v);
+        for (size_t r : rows)
+          if (std::isfinite(m)) x[r][f] -= m;
+      }
 
   // Out-of-fold scores.
   std::vector<double> score(x.size(), kNaN), gain(names.size(), 0.0);
@@ -1351,8 +1399,7 @@ extern "C" int distinguish() {
     for (double s : reals) {
       const double below = std::lower_bound(sd.begin(), sd.end(), s) - sd.begin();
       const double ties = (std::upper_bound(sd.begin(), sd.end(), s) - sd.begin()) - below;
-      const double F = (below + 0.5 * ties) / sd.size();
-      p += std::pow(F, n - 1);
+      p += p_first(below / sd.size(), ties / sd.size(), n);
     }
     return p / reals.size();
   };
@@ -1391,7 +1438,73 @@ extern "C" int distinguish() {
   for (size_t r = 0; r < x.size(); ++r) correct += (score[r] > 0) == (y[r] == 1);
   double bal_r = 0, bal_d = 0;
   for (size_t r = 0; r < x.size(); ++r) (y[r] ? bal_r : bal_d) += (score[r] > 0) == (y[r] == 1);
-  return emit("report", {{"rows", {{"real", nr}, {"decoy", nd}}}, {"excluded", exclude},
+  // Within each target's own candidate set, when every target has many
+  // decoys: the real one's rank among its own decoys (uniform when they are
+  // exchangeable), P(first of N) from those ranks, and, for N beyond the set,
+  // from each score standardized by its own set's decoys (median, robust
+  // scale) against all sets' standardized decoys pooled.
+  nlohmann::json within;
+  size_t fewest = SIZE_MAX;
+  for (const auto& [t, rows] : groups) {
+    size_t d = 0;
+    for (size_t r : rows) d += !y[r];
+    fewest = std::min(fewest, d);
+  }
+  if (groups.size() >= 20 && fewest >= 10) {
+    std::vector<double> pooled;
+    std::vector<std::array<double, 3>> reals;   // empirical a, t within the set; standardized score
+    for (const auto& [t, rows] : groups) {
+      std::vector<double> ds;
+      double real = kNaN;
+      for (size_t r : rows) {
+        if (y[r]) real = score[r];
+        else ds.push_back(score[r]);
+      }
+      if (!std::isfinite(real) || ds.empty()) continue;
+      const double m = median(ds);
+      double sc = robust_sigma(ds);
+      if (!(sc > 0)) {
+        double mean = 0, var = 0;
+        for (double v : ds) mean += v;
+        mean /= ds.size();
+        for (double v : ds) var += (v - mean) * (v - mean);
+        sc = std::sqrt(var / ds.size());
+      }
+      auto z = [&](double v) { return sc > 0 ? (v - m) / sc : (v > m ? 1.0 : v < m ? -1.0 : 0.0); };
+      double below = 0, ties = 0;
+      for (double v : ds) below += v < real, ties += v == real, pooled.push_back(z(v));
+      reals.push_back({below / ds.size(), ties / ds.size(), z(real)});
+    }
+    std::sort(pooled.begin(), pooled.end());
+    std::vector<int> histogram(10, 0);
+    std::vector<double> ranks_u;
+    for (const auto& r : reals) {
+      const double u = r[0] + 0.5 * r[1];
+      ranks_u.push_back(u);
+      ++histogram[std::min(9, static_cast<int>(u * 10))];
+    }
+    std::sort(ranks_u.begin(), ranks_u.end());
+    double ks = 0;
+    for (size_t k = 0; k < ranks_u.size(); ++k)
+      ks = std::max({ks, std::fabs((k + 1.0) / ranks_u.size() - ranks_u[k]), std::fabs(static_cast<double>(k) / ranks_u.size() - ranks_u[k])});
+    nlohmann::json empirical = nlohmann::json::array(), standardized = nlohmann::json::array();
+    for (int n : ranks) {
+      double pe = 0, ps = 0;
+      for (const auto& r : reals) {
+        pe += p_first(r[0], r[1], n);
+        const double below = std::lower_bound(pooled.begin(), pooled.end(), r[2]) - pooled.begin();
+        const double ties = (std::upper_bound(pooled.begin(), pooled.end(), r[2]) - pooled.begin()) - below;
+        ps += p_first(below / pooled.size(), ties / pooled.size(), n);
+      }
+      pe /= reals.size(), ps /= reals.size();
+      if (static_cast<size_t>(n) <= fewest + 1)
+        empirical.push_back({{"n", n}, {"pRealFirst", pe}, {"nEffective", number(pe > 0 ? 1.0 / pe : kNaN)}, {"ideal", 1.0 / n}});
+      standardized.push_back({{"n", n}, {"pRealFirst", ps}, {"nEffective", number(ps > 0 ? 1.0 / ps : kNaN)}, {"ideal", 1.0 / n}});
+    }
+    within = {{"targets", reals.size()}, {"fewestDecoys", fewest}, {"pooledDecoys", pooled.size()},
+              {"rankHistogram", histogram}, {"rankKs", ks}, {"first", empirical}, {"firstStandardized", standardized}};
+  }
+  return emit("report", {{"rows", {{"real", nr}, {"decoy", nd}}}, {"excluded", exclude}, {"relative", relative}, {"withinTarget", within},
                          {"classifier", {{"kind", "gradient-boosted trees, logistic loss"}, {"depth", proto.depth},
                                          {"rounds", proto.rounds}, {"learningRate", proto.rate}, {"bins", nbins},
                                          {"folds", folds}, {"split", "by target"}}},

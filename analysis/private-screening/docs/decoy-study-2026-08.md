@@ -8,8 +8,8 @@ answers matter. This note covers:
 - what we measured on real histories: GP element sets and HPOP ephemeris
   windows, from August 2026.
 
-Status: **principle stated, generators measured; no generator is ready to
-hide an orbit.**
+Status: **principle stated, generators measured. None reaches 1 in 10,000
+yet; copies of the hidden satellite itself come closest.**
 
 ## Principle
 
@@ -185,6 +185,48 @@ neighbours closer than any decoy.
    - Decoys must cover every region where a real orbit can be (the bound
      needs p/q bounded everywhere), not just match on average.
 
+### Copies of the hidden satellite itself (fleet)
+
+A hidden satellite's own history is not public, so copies of it cannot be
+matched against the catalog.
+
+**Setup.**
+- Each copy is the target's own element-set history with the node rotated
+  by a uniform angle and every epoch shifted by up to half a period.
+  Shifting time rather than mean anomaly keeps each set where in the orbit
+  the real one's falls; published epochs sit at a preferred argument of
+  latitude, and a mean-anomaly shift moves them.
+- 1,000 targets with 50 copies each, published through the same HPOP
+  pipeline: 713,847 windows in 4,340 s.
+- The adversary compares each set's members with each other: every feature
+  minus its median over the target's own candidates.
+
+**Results** (HPOP view): AUC 0.794.
+
+| Candidates (N) | 10 | 100 | 1,000 | 10,000 |
+| --- | ---: | ---: | ---: | ---: |
+| N_eff, ranks within each set | 2.5 | – | – | – |
+| N_eff, standardized scores pooled over sets | 2.6 | 11.6 | 94 | about 3,500 |
+
+The second row standardizes each score by its own set's decoys and pools the
+50,000 standardized decoy scores. Beyond 50 candidates it is an
+extrapolation.
+
+**Why the real one stands out.**
+- It ranked in the top tenth of its own 50 copies for 484 of 1,000 targets
+  (100 expected).
+- The leading features are the daily mean semi-major axis and the catalog
+  distance (gain 23 % and 19 %).
+- A real orbit is consistent with Earth's gravity field at its own
+  positions. A rotated copy of its history is not, once HPOP propagates it
+  with the Earth-fixed field.
+- By class, AUC was 0.959 for OneWeb, 0.825 for Starlink and 0.701 for other
+  satellites.
+
+In the GP view the copies differ from the real one only in rounding, below a
+millimetre, so that view says nothing here, and the protocol does not
+publish it.
+
 ### What a working generator needs
 
 - **Pipeline equivalence.** Decoy ephemerides should come out of the
@@ -196,7 +238,11 @@ neighbours closer than any decoy.
   to the same space weather and station-keeping as their neighbours.
 - **No public noise.** Noise must be generated fresh, never copied from
   public histories.
-- **Measure before use.** Run this study against the generator, with these
+- **Simulated truths.** Decoy truths must be simulated with the full force
+  model at their own positions, not copied from the real history: the fleet
+  copies show that Earth's gravity field marks a copied history as moved.
+- **Measure before use.** Rank real precise orbits (Swarm, Sentinel-1) among
+  their simulated siblings. Run this study against the generator, with these
   attacks and stronger ones, and require N_eff near N and a small ε before
   relying on it.
 
@@ -218,4 +264,5 @@ to.
   population of hidden satellites.
 
 Reproduce: `node scripts/decoy-study.mjs` (README). Aggregates:
-`decoy-study-2026-08.json`.
+`decoy-study-2026-08.json`; fleet: `fleet-study-2026-08.json`
+(`--generators fleet --per-target 50 --relative --views hpop --objects 1000`).
