@@ -15,6 +15,7 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 
 #include "ATM_generated.h"
 #include "PPE_generated.h"
+#include "RFM_generated.h"
 
 struct Header;
 struct HeaderBuilder;
@@ -70,37 +71,64 @@ enum class trajectoryType : int8_t {
   HERMITE = 4,
   /// Lagrange interpolating polynomial representation.
   LAGRANGE = 5,
+  /// Keplerian classical set in STATE_DATA, 6 values per row: semi-major axis
+  /// [km], eccentricity, inclination, right ascension of the ascending node,
+  /// argument of periapsis and true anomaly [deg]. SANA Orbital Elements
+  /// KEPLERIAN (OID 1.3.112.4.57.5.11).
+  KEPLERIAN = 6,
+  /// As KEPLERIAN with the mean anomaly in place of the true anomaly. SANA
+  /// Orbital Elements KEPLERIANMEAN (OID 1.3.112.4.57.5.12).
+  KEPLERIAN_MEAN = 7,
+  /// Equinoctial set in STATE_DATA, 7 values per row: semi-major axis [km],
+  /// af = e cos(argp + fr RAAN), ag = e sin(argp + fr RAAN), mean longitude
+  /// L = M + argp + fr RAAN [deg], chi = tan(i/2)^fr sin(RAAN),
+  /// psi = tan(i/2)^fr cos(RAAN), and the retrograde factor fr (+1 or -1).
+  /// SANA Orbital Elements EQUINOCTIAL (OID 1.3.112.4.57.5.8).
+  EQUINOCTIAL = 8,
+  /// Modified equinoctial set, 7 values per row: semi-latus rectum
+  /// p = a (1 - e^2) [km], af, ag, true longitude L' = nu + argp + fr RAAN
+  /// [deg], chi, psi, fr. SANA Orbital Elements EQUINOCTIALMOD
+  /// (OID 1.3.112.4.57.5.9).
+  EQUINOCTIAL_MOD = 9,
   MIN = CARTESIAN_PV,
-  MAX = LAGRANGE
+  MAX = EQUINOCTIAL_MOD
 };
 
-inline const trajectoryType (&EnumValuestrajectoryType())[6] {
+inline const trajectoryType (&EnumValuestrajectoryType())[10] {
   static const trajectoryType values[] = {
     trajectoryType::CARTESIAN_PV,
     trajectoryType::CARTESIAN_PVA,
     trajectoryType::POLYNOMIAL_POS,
     trajectoryType::POLYNOMIAL_OE,
     trajectoryType::HERMITE,
-    trajectoryType::LAGRANGE
+    trajectoryType::LAGRANGE,
+    trajectoryType::KEPLERIAN,
+    trajectoryType::KEPLERIAN_MEAN,
+    trajectoryType::EQUINOCTIAL,
+    trajectoryType::EQUINOCTIAL_MOD
   };
   return values;
 }
 
 inline const char * const *EnumNamestrajectoryType() {
-  static const char * const names[7] = {
+  static const char * const names[11] = {
     "CARTESIAN_PV",
     "CARTESIAN_PVA",
     "POLYNOMIAL_POS",
     "POLYNOMIAL_OE",
     "HERMITE",
     "LAGRANGE",
+    "KEPLERIAN",
+    "KEPLERIAN_MEAN",
+    "EQUINOCTIAL",
+    "EQUINOCTIAL_MOD",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNametrajectoryType(trajectoryType e) {
-  if (::flatbuffers::IsOutRange(e, trajectoryType::CARTESIAN_PV, trajectoryType::LAGRANGE)) return "";
+  if (::flatbuffers::IsOutRange(e, trajectoryType::CARTESIAN_PV, trajectoryType::EQUINOCTIAL_MOD)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamestrajectoryType()[index];
 }
@@ -149,6 +177,45 @@ inline const char *EnumNameestimatorCategory(estimatorCategory e) {
   if (::flatbuffers::IsOutRange(e, estimatorCategory::Unknown, estimatorCategory::Smoother)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesestimatorCategory()[index];
+}
+
+/// Whether a covariance's coverage was measured against independent reference
+/// states: the share of reference errors inside its confidence regions matched
+/// what the covariance claims, for the regime and prediction age it covers.
+enum class covarianceCalibration : int8_t {
+  /// Calibration not stated
+  Unspecified = 0,
+  /// Not measured against independent reference states, or measured and failed
+  Uncalibrated = 1,
+  /// Measured against independent reference states and passed
+  Calibrated = 2,
+  MIN = Unspecified,
+  MAX = Calibrated
+};
+
+inline const covarianceCalibration (&EnumValuescovarianceCalibration())[3] {
+  static const covarianceCalibration values[] = {
+    covarianceCalibration::Unspecified,
+    covarianceCalibration::Uncalibrated,
+    covarianceCalibration::Calibrated
+  };
+  return values;
+}
+
+inline const char * const *EnumNamescovarianceCalibration() {
+  static const char * const names[4] = {
+    "Unspecified",
+    "Uncalibrated",
+    "Calibrated",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamecovarianceCalibration(covarianceCalibration e) {
+  if (::flatbuffers::IsOutRange(e, covarianceCalibration::Unspecified, covarianceCalibration::Calibrated)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamescovarianceCalibration()[index];
 }
 
 struct HeaderT : public ::flatbuffers::NativeTable {
@@ -1688,6 +1755,7 @@ struct PerturbationsT : public ::flatbuffers::NativeTable {
   double FIXED_GEOMAG_KP = 0.0;
   double FIXED_F10P7 = 0.0;
   double FIXED_F10P7_MEAN = 0.0;
+  double FIXED_GEOMAG_AP = 0.0;
   PerturbationsT() = default;
   PerturbationsT(const PerturbationsT &o);
   PerturbationsT(PerturbationsT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1717,7 +1785,8 @@ struct Perturbations FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_ATMOSPHERIC_DRAG = 34,
     VT_FIXED_GEOMAG_KP = 36,
     VT_FIXED_F10P7 = 38,
-    VT_FIXED_F10P7_MEAN = 40
+    VT_FIXED_F10P7_MEAN = 40,
+    VT_FIXED_GEOMAG_AP = 42
   };
   /// Comments in the Perturbations section.
   const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *COMMENT() const {
@@ -1795,6 +1864,11 @@ struct Perturbations FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   double FIXED_F10P7_MEAN() const {
     return GetField<double>(VT_FIXED_F10P7_MEAN, 0.0);
   }
+  /// Fixed (time-invariant) geomagnetic index ap used in place of the normal
+  /// time-varying values (CCSDS 502.0-B-3 FIXED_GEOMAG_AP).
+  double FIXED_GEOMAG_AP() const {
+    return GetField<double>(VT_FIXED_GEOMAG_AP, 0.0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1832,6 +1906,7 @@ struct Perturbations FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<double>(verifier, VT_FIXED_GEOMAG_KP, 8) &&
            VerifyField<double>(verifier, VT_FIXED_F10P7, 8) &&
            VerifyField<double>(verifier, VT_FIXED_F10P7_MEAN, 8) &&
+           VerifyField<double>(verifier, VT_FIXED_GEOMAG_AP, 8) &&
            verifier.EndTable();
   }
   PerturbationsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1900,6 +1975,9 @@ struct PerturbationsBuilder {
   void add_FIXED_F10P7_MEAN(double FIXED_F10P7_MEAN) {
     fbb_.AddElement<double>(Perturbations::VT_FIXED_F10P7_MEAN, FIXED_F10P7_MEAN, 0.0);
   }
+  void add_FIXED_GEOMAG_AP(double FIXED_GEOMAG_AP) {
+    fbb_.AddElement<double>(Perturbations::VT_FIXED_GEOMAG_AP, FIXED_GEOMAG_AP, 0.0);
+  }
   explicit PerturbationsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1931,8 +2009,10 @@ inline ::flatbuffers::Offset<Perturbations> CreatePerturbations(
     ::flatbuffers::Offset<::flatbuffers::String> ATMOSPHERIC_DRAG = 0,
     double FIXED_GEOMAG_KP = 0.0,
     double FIXED_F10P7 = 0.0,
-    double FIXED_F10P7_MEAN = 0.0) {
+    double FIXED_F10P7_MEAN = 0.0,
+    double FIXED_GEOMAG_AP = 0.0) {
   PerturbationsBuilder builder_(_fbb);
+  builder_.add_FIXED_GEOMAG_AP(FIXED_GEOMAG_AP);
   builder_.add_FIXED_F10P7_MEAN(FIXED_F10P7_MEAN);
   builder_.add_FIXED_F10P7(FIXED_F10P7);
   builder_.add_FIXED_GEOMAG_KP(FIXED_GEOMAG_KP);
@@ -1980,7 +2060,8 @@ inline ::flatbuffers::Offset<Perturbations> CreatePerturbationsDirect(
     const char *ATMOSPHERIC_DRAG = nullptr,
     double FIXED_GEOMAG_KP = 0.0,
     double FIXED_F10P7 = 0.0,
-    double FIXED_F10P7_MEAN = 0.0) {
+    double FIXED_F10P7_MEAN = 0.0,
+    double FIXED_GEOMAG_AP = 0.0) {
   auto COMMENT__ = COMMENT ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*COMMENT) : 0;
   auto GRAVITY_MODEL__ = GRAVITY_MODEL ? _fbb.CreateString(GRAVITY_MODEL) : 0;
   auto N_BODY_PERTURBATIONS__ = N_BODY_PERTURBATIONS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*N_BODY_PERTURBATIONS) : 0;
@@ -2013,7 +2094,8 @@ inline ::flatbuffers::Offset<Perturbations> CreatePerturbationsDirect(
       ATMOSPHERIC_DRAG__,
       FIXED_GEOMAG_KP,
       FIXED_F10P7,
-      FIXED_F10P7_MEAN);
+      FIXED_F10P7_MEAN,
+      FIXED_GEOMAG_AP);
 }
 
 ::flatbuffers::Offset<Perturbations> CreatePerturbations(::flatbuffers::FlatBufferBuilder &_fbb, const PerturbationsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -2306,6 +2388,8 @@ struct OrbitDeterminationT : public ::flatbuffers::NativeTable {
   std::vector<double> OD_RESIDUAL_EPOCHS{};
   std::string OD_BATCH_BASELINE_ID{};
   double OD_BATCH_BASELINE_RMS = 0.0;
+  double SEDR = 0.0;
+  double WEIGHTED_RMS = 0.0;
 };
 
 struct OrbitDetermination FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -2335,7 +2419,9 @@ struct OrbitDetermination FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
     VT_OD_RESIDUALS_SERIES = 42,
     VT_OD_RESIDUAL_EPOCHS = 44,
     VT_OD_BATCH_BASELINE_ID = 46,
-    VT_OD_BATCH_BASELINE_RMS = 48
+    VT_OD_BATCH_BASELINE_RMS = 48,
+    VT_SEDR = 50,
+    VT_WEIGHTED_RMS = 52
   };
   /// Unique identifier for the orbit determination.
   const ::flatbuffers::String *OD_ID() const {
@@ -2432,6 +2518,15 @@ struct OrbitDetermination FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
   double OD_BATCH_BASELINE_RMS() const {
     return GetField<double>(VT_OD_BATCH_BASELINE_RMS, 0.0);
   }
+  /// Specific energy dissipation rate in W/kg: energy removed from the orbit
+  /// by non-conservative forces, averaged during the OD (CCSDS 502.0-B-3 SEDR).
+  double SEDR() const {
+    return GetField<double>(VT_SEDR, 0.0);
+  }
+  /// Weighted RMS residual ratio of a batch OD (CCSDS 502.0-B-3 WEIGHTED_RMS).
+  double WEIGHTED_RMS() const {
+    return GetField<double>(VT_WEIGHTED_RMS, 0.0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -2478,6 +2573,8 @@ struct OrbitDetermination FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
            VerifyOffset(verifier, VT_OD_BATCH_BASELINE_ID) &&
            verifier.VerifyString(OD_BATCH_BASELINE_ID()) &&
            VerifyField<double>(verifier, VT_OD_BATCH_BASELINE_RMS, 8) &&
+           VerifyField<double>(verifier, VT_SEDR, 8) &&
+           VerifyField<double>(verifier, VT_WEIGHTED_RMS, 8) &&
            verifier.EndTable();
   }
   OrbitDeterminationT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2558,6 +2655,12 @@ struct OrbitDeterminationBuilder {
   void add_OD_BATCH_BASELINE_RMS(double OD_BATCH_BASELINE_RMS) {
     fbb_.AddElement<double>(OrbitDetermination::VT_OD_BATCH_BASELINE_RMS, OD_BATCH_BASELINE_RMS, 0.0);
   }
+  void add_SEDR(double SEDR) {
+    fbb_.AddElement<double>(OrbitDetermination::VT_SEDR, SEDR, 0.0);
+  }
+  void add_WEIGHTED_RMS(double WEIGHTED_RMS) {
+    fbb_.AddElement<double>(OrbitDetermination::VT_WEIGHTED_RMS, WEIGHTED_RMS, 0.0);
+  }
   explicit OrbitDeterminationBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2593,8 +2696,12 @@ inline ::flatbuffers::Offset<OrbitDetermination> CreateOrbitDetermination(
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> OD_RESIDUALS_SERIES = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> OD_RESIDUAL_EPOCHS = 0,
     ::flatbuffers::Offset<::flatbuffers::String> OD_BATCH_BASELINE_ID = 0,
-    double OD_BATCH_BASELINE_RMS = 0.0) {
+    double OD_BATCH_BASELINE_RMS = 0.0,
+    double SEDR = 0.0,
+    double WEIGHTED_RMS = 0.0) {
   OrbitDeterminationBuilder builder_(_fbb);
+  builder_.add_WEIGHTED_RMS(WEIGHTED_RMS);
+  builder_.add_SEDR(SEDR);
   builder_.add_OD_BATCH_BASELINE_RMS(OD_BATCH_BASELINE_RMS);
   builder_.add_OD_RESIDUAL_RMS(OD_RESIDUAL_RMS);
   builder_.add_OD_BATCH_BASELINE_ID(OD_BATCH_BASELINE_ID);
@@ -2650,7 +2757,9 @@ inline ::flatbuffers::Offset<OrbitDetermination> CreateOrbitDeterminationDirect(
     const std::vector<double> *OD_RESIDUALS_SERIES = nullptr,
     const std::vector<double> *OD_RESIDUAL_EPOCHS = nullptr,
     const char *OD_BATCH_BASELINE_ID = nullptr,
-    double OD_BATCH_BASELINE_RMS = 0.0) {
+    double OD_BATCH_BASELINE_RMS = 0.0,
+    double SEDR = 0.0,
+    double WEIGHTED_RMS = 0.0) {
   auto OD_ID__ = OD_ID ? _fbb.CreateString(OD_ID) : 0;
   auto OD_PREV_ID__ = OD_PREV_ID ? _fbb.CreateString(OD_PREV_ID) : 0;
   auto OD_ALGORITHM__ = OD_ALGORITHM ? _fbb.CreateString(OD_ALGORITHM) : 0;
@@ -2693,7 +2802,9 @@ inline ::flatbuffers::Offset<OrbitDetermination> CreateOrbitDeterminationDirect(
       OD_RESIDUALS_SERIES__,
       OD_RESIDUAL_EPOCHS__,
       OD_BATCH_BASELINE_ID__,
-      OD_BATCH_BASELINE_RMS);
+      OD_BATCH_BASELINE_RMS,
+      SEDR,
+      WEIGHTED_RMS);
 }
 
 ::flatbuffers::Offset<OrbitDetermination> CreateOrbitDetermination(::flatbuffers::FlatBufferBuilder &_fbb, const OrbitDeterminationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -2801,6 +2912,14 @@ struct OCMT : public ::flatbuffers::NativeTable {
   std::unique_ptr<PerturbationsT> PERTURBATIONS{};
   std::unique_ptr<OrbitDeterminationT> ORBIT_DETERMINATION{};
   std::vector<std::unique_ptr<UserDefinedParametersT>> USER_DEFINED_PARAMETERS{};
+  std::string CENTER_NAME{};
+  std::unique_ptr<RFMT> TRAJ_REF_FRAME{};
+  std::string TRAJ_FRAME_EPOCH{};
+  std::unique_ptr<RFMT> COV_REF_FRAME{};
+  uint32_t ORB_REVNUM = 0;
+  std::string ORB_AVERAGING{};
+  covarianceCalibration COV_CALIBRATION = covarianceCalibration::Unspecified;
+  std::string COV_CALIBRATION_REFERENCE{};
   OCMT() = default;
   OCMT(const OCMT &o);
   OCMT(OCMT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -2827,7 +2946,15 @@ struct OCM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_MANEUVER_DATA = 26,
     VT_PERTURBATIONS = 28,
     VT_ORBIT_DETERMINATION = 30,
-    VT_USER_DEFINED_PARAMETERS = 32
+    VT_USER_DEFINED_PARAMETERS = 32,
+    VT_CENTER_NAME = 34,
+    VT_TRAJ_REF_FRAME = 36,
+    VT_TRAJ_FRAME_EPOCH = 38,
+    VT_COV_REF_FRAME = 40,
+    VT_ORB_REVNUM = 42,
+    VT_ORB_AVERAGING = 44,
+    VT_COV_CALIBRATION = 46,
+    VT_COV_CALIBRATION_REFERENCE = 48
   };
   /// Header section of the OCM.
   const Header *HEADER() const {
@@ -2856,6 +2983,7 @@ struct OCM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   /// Number of components per state vector.
   /// 6 = position + velocity (X, Y, Z, X_DOT, Y_DOT, Z_DOT)
   /// 9 = position + velocity + acceleration (adds X_DDOT, Y_DDOT, Z_DDOT)
+  /// 6 or 7 for the element sets named by TRAJ_TYPE.
   uint8_t STATE_VECTOR_SIZE() const {
     return GetField<uint8_t>(VT_STATE_VECTOR_SIZE, 6);
   }
@@ -2863,6 +2991,7 @@ struct OCM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   /// Layout: [X0, Y0, Z0, X_DOT0, Y_DOT0, Z_DOT0, X1, Y1, Z1, ...]
   /// Time reconstruction: epoch[i] = METADATA.START_TIME + (i * STATE_STEP_SIZE)
   /// Length must be divisible by STATE_VECTOR_SIZE.
+  /// Units: km, km/s and km/s**2, in TRAJ_REF_FRAME about CENTER_NAME.
   const ::flatbuffers::Vector<double> *STATE_DATA() const {
     return GetPointer<const ::flatbuffers::Vector<double> *>(VT_STATE_DATA);
   }
@@ -2905,6 +3034,42 @@ struct OCM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<UserDefinedParameters>> *USER_DEFINED_PARAMETERS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<UserDefinedParameters>> *>(VT_USER_DEFINED_PARAMETERS);
   }
+  /// Origin of TRAJ_REF_FRAME (EARTH, MOON, ...) (CCSDS 502.0-B-3 CENTER_NAME).
+  const ::flatbuffers::String *CENTER_NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_CENTER_NAME);
+  }
+  /// Reference frame of STATE_DATA and the polynomial records
+  /// (CCSDS 502.0-B-3 TRAJ_REF_FRAME).
+  const RFM *TRAJ_REF_FRAME() const {
+    return GetPointer<const RFM *>(VT_TRAJ_REF_FRAME);
+  }
+  /// Epoch of TRAJ_REF_FRAME when it is not intrinsic to the frame
+  /// (CCSDS 502.0-B-3 TRAJ_FRAME_EPOCH).
+  const ::flatbuffers::String *TRAJ_FRAME_EPOCH() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TRAJ_FRAME_EPOCH);
+  }
+  /// Reference frame of COVARIANCE_DATA (CCSDS 502.0-B-3 COV_REF_FRAME).
+  const RFM *COV_REF_FRAME() const {
+    return GetPointer<const RFM *>(VT_COV_REF_FRAME);
+  }
+  /// Orbit revolution number at the first state (CCSDS 502.0-B-3 ORB_REVNUM).
+  uint32_t ORB_REVNUM() const {
+    return GetField<uint32_t>(VT_ORB_REVNUM, 0);
+  }
+  /// For element sets: OSCULATING, or the mean-element theory used (BROUWER,
+  /// KOZAI, ...) (CCSDS 502.0-B-3 ORB_AVERAGING). Absent means OSCULATING.
+  const ::flatbuffers::String *ORB_AVERAGING() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_ORB_AVERAGING);
+  }
+  /// Whether COVARIANCE_DATA's coverage was measured against independent
+  /// reference states.
+  covarianceCalibration COV_CALIBRATION() const {
+    return static_cast<covarianceCalibration>(GetField<int8_t>(VT_COV_CALIBRATION, 0));
+  }
+  /// Identifier of that calibration evidence (a report or record).
+  const ::flatbuffers::String *COV_CALIBRATION_REFERENCE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_COV_CALIBRATION_REFERENCE);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -2939,6 +3104,20 @@ struct OCM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_USER_DEFINED_PARAMETERS) &&
            verifier.VerifyVector(USER_DEFINED_PARAMETERS()) &&
            verifier.VerifyVectorOfTables(USER_DEFINED_PARAMETERS()) &&
+           VerifyOffset(verifier, VT_CENTER_NAME) &&
+           verifier.VerifyString(CENTER_NAME()) &&
+           VerifyOffset(verifier, VT_TRAJ_REF_FRAME) &&
+           verifier.VerifyTable(TRAJ_REF_FRAME()) &&
+           VerifyOffset(verifier, VT_TRAJ_FRAME_EPOCH) &&
+           verifier.VerifyString(TRAJ_FRAME_EPOCH()) &&
+           VerifyOffset(verifier, VT_COV_REF_FRAME) &&
+           verifier.VerifyTable(COV_REF_FRAME()) &&
+           VerifyField<uint32_t>(verifier, VT_ORB_REVNUM, 4) &&
+           VerifyOffset(verifier, VT_ORB_AVERAGING) &&
+           verifier.VerifyString(ORB_AVERAGING()) &&
+           VerifyField<int8_t>(verifier, VT_COV_CALIBRATION, 1) &&
+           VerifyOffset(verifier, VT_COV_CALIBRATION_REFERENCE) &&
+           verifier.VerifyString(COV_CALIBRATION_REFERENCE()) &&
            verifier.EndTable();
   }
   OCMT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2995,6 +3174,30 @@ struct OCMBuilder {
   void add_USER_DEFINED_PARAMETERS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<UserDefinedParameters>>> USER_DEFINED_PARAMETERS) {
     fbb_.AddOffset(OCM::VT_USER_DEFINED_PARAMETERS, USER_DEFINED_PARAMETERS);
   }
+  void add_CENTER_NAME(::flatbuffers::Offset<::flatbuffers::String> CENTER_NAME) {
+    fbb_.AddOffset(OCM::VT_CENTER_NAME, CENTER_NAME);
+  }
+  void add_TRAJ_REF_FRAME(::flatbuffers::Offset<RFM> TRAJ_REF_FRAME) {
+    fbb_.AddOffset(OCM::VT_TRAJ_REF_FRAME, TRAJ_REF_FRAME);
+  }
+  void add_TRAJ_FRAME_EPOCH(::flatbuffers::Offset<::flatbuffers::String> TRAJ_FRAME_EPOCH) {
+    fbb_.AddOffset(OCM::VT_TRAJ_FRAME_EPOCH, TRAJ_FRAME_EPOCH);
+  }
+  void add_COV_REF_FRAME(::flatbuffers::Offset<RFM> COV_REF_FRAME) {
+    fbb_.AddOffset(OCM::VT_COV_REF_FRAME, COV_REF_FRAME);
+  }
+  void add_ORB_REVNUM(uint32_t ORB_REVNUM) {
+    fbb_.AddElement<uint32_t>(OCM::VT_ORB_REVNUM, ORB_REVNUM, 0);
+  }
+  void add_ORB_AVERAGING(::flatbuffers::Offset<::flatbuffers::String> ORB_AVERAGING) {
+    fbb_.AddOffset(OCM::VT_ORB_AVERAGING, ORB_AVERAGING);
+  }
+  void add_COV_CALIBRATION(covarianceCalibration COV_CALIBRATION) {
+    fbb_.AddElement<int8_t>(OCM::VT_COV_CALIBRATION, static_cast<int8_t>(COV_CALIBRATION), 0);
+  }
+  void add_COV_CALIBRATION_REFERENCE(::flatbuffers::Offset<::flatbuffers::String> COV_CALIBRATION_REFERENCE) {
+    fbb_.AddOffset(OCM::VT_COV_CALIBRATION_REFERENCE, COV_CALIBRATION_REFERENCE);
+  }
   explicit OCMBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -3022,9 +3225,24 @@ inline ::flatbuffers::Offset<OCM> CreateOCM(
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<Maneuver>>> MANEUVER_DATA = 0,
     ::flatbuffers::Offset<Perturbations> PERTURBATIONS = 0,
     ::flatbuffers::Offset<OrbitDetermination> ORBIT_DETERMINATION = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<UserDefinedParameters>>> USER_DEFINED_PARAMETERS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<UserDefinedParameters>>> USER_DEFINED_PARAMETERS = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> CENTER_NAME = 0,
+    ::flatbuffers::Offset<RFM> TRAJ_REF_FRAME = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> TRAJ_FRAME_EPOCH = 0,
+    ::flatbuffers::Offset<RFM> COV_REF_FRAME = 0,
+    uint32_t ORB_REVNUM = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> ORB_AVERAGING = 0,
+    covarianceCalibration COV_CALIBRATION = covarianceCalibration::Unspecified,
+    ::flatbuffers::Offset<::flatbuffers::String> COV_CALIBRATION_REFERENCE = 0) {
   OCMBuilder builder_(_fbb);
   builder_.add_STATE_STEP_SIZE(STATE_STEP_SIZE);
+  builder_.add_COV_CALIBRATION_REFERENCE(COV_CALIBRATION_REFERENCE);
+  builder_.add_ORB_AVERAGING(ORB_AVERAGING);
+  builder_.add_ORB_REVNUM(ORB_REVNUM);
+  builder_.add_COV_REF_FRAME(COV_REF_FRAME);
+  builder_.add_TRAJ_FRAME_EPOCH(TRAJ_FRAME_EPOCH);
+  builder_.add_TRAJ_REF_FRAME(TRAJ_REF_FRAME);
+  builder_.add_CENTER_NAME(CENTER_NAME);
   builder_.add_USER_DEFINED_PARAMETERS(USER_DEFINED_PARAMETERS);
   builder_.add_ORBIT_DETERMINATION(ORBIT_DETERMINATION);
   builder_.add_PERTURBATIONS(PERTURBATIONS);
@@ -3037,6 +3255,7 @@ inline ::flatbuffers::Offset<OCM> CreateOCM(
   builder_.add_TRAJ_TYPE_DESCRIPTION(TRAJ_TYPE_DESCRIPTION);
   builder_.add_METADATA(METADATA);
   builder_.add_HEADER(HEADER);
+  builder_.add_COV_CALIBRATION(COV_CALIBRATION);
   builder_.add_STATE_VECTOR_SIZE(STATE_VECTOR_SIZE);
   builder_.add_TRAJ_TYPE(TRAJ_TYPE);
   return builder_.Finish();
@@ -3063,7 +3282,15 @@ inline ::flatbuffers::Offset<OCM> CreateOCMDirect(
     const std::vector<::flatbuffers::Offset<Maneuver>> *MANEUVER_DATA = nullptr,
     ::flatbuffers::Offset<Perturbations> PERTURBATIONS = 0,
     ::flatbuffers::Offset<OrbitDetermination> ORBIT_DETERMINATION = 0,
-    const std::vector<::flatbuffers::Offset<UserDefinedParameters>> *USER_DEFINED_PARAMETERS = nullptr) {
+    const std::vector<::flatbuffers::Offset<UserDefinedParameters>> *USER_DEFINED_PARAMETERS = nullptr,
+    const char *CENTER_NAME = nullptr,
+    ::flatbuffers::Offset<RFM> TRAJ_REF_FRAME = 0,
+    const char *TRAJ_FRAME_EPOCH = nullptr,
+    ::flatbuffers::Offset<RFM> COV_REF_FRAME = 0,
+    uint32_t ORB_REVNUM = 0,
+    const char *ORB_AVERAGING = nullptr,
+    covarianceCalibration COV_CALIBRATION = covarianceCalibration::Unspecified,
+    const char *COV_CALIBRATION_REFERENCE = nullptr) {
   auto TRAJ_TYPE_DESCRIPTION__ = TRAJ_TYPE_DESCRIPTION ? _fbb.CreateString(TRAJ_TYPE_DESCRIPTION) : 0;
   auto STATE_DATA__ = STATE_DATA ? _fbb.CreateVector<double>(*STATE_DATA) : 0;
   auto COVARIANCE_DATA__ = COVARIANCE_DATA ? _fbb.CreateVector<double>(*COVARIANCE_DATA) : 0;
@@ -3071,6 +3298,10 @@ inline ::flatbuffers::Offset<OCM> CreateOCMDirect(
   auto POLYNOMIAL_OE_RECORDS__ = POLYNOMIAL_OE_RECORDS ? _fbb.CreateVector<::flatbuffers::Offset<PPEOrbitalElementRecord>>(*POLYNOMIAL_OE_RECORDS) : 0;
   auto MANEUVER_DATA__ = MANEUVER_DATA ? _fbb.CreateVector<::flatbuffers::Offset<Maneuver>>(*MANEUVER_DATA) : 0;
   auto USER_DEFINED_PARAMETERS__ = USER_DEFINED_PARAMETERS ? _fbb.CreateVector<::flatbuffers::Offset<UserDefinedParameters>>(*USER_DEFINED_PARAMETERS) : 0;
+  auto CENTER_NAME__ = CENTER_NAME ? _fbb.CreateString(CENTER_NAME) : 0;
+  auto TRAJ_FRAME_EPOCH__ = TRAJ_FRAME_EPOCH ? _fbb.CreateString(TRAJ_FRAME_EPOCH) : 0;
+  auto ORB_AVERAGING__ = ORB_AVERAGING ? _fbb.CreateString(ORB_AVERAGING) : 0;
+  auto COV_CALIBRATION_REFERENCE__ = COV_CALIBRATION_REFERENCE ? _fbb.CreateString(COV_CALIBRATION_REFERENCE) : 0;
   return CreateOCM(
       _fbb,
       HEADER,
@@ -3087,7 +3318,15 @@ inline ::flatbuffers::Offset<OCM> CreateOCMDirect(
       MANEUVER_DATA__,
       PERTURBATIONS,
       ORBIT_DETERMINATION,
-      USER_DEFINED_PARAMETERS__);
+      USER_DEFINED_PARAMETERS__,
+      CENTER_NAME__,
+      TRAJ_REF_FRAME,
+      TRAJ_FRAME_EPOCH__,
+      COV_REF_FRAME,
+      ORB_REVNUM,
+      ORB_AVERAGING__,
+      COV_CALIBRATION,
+      COV_CALIBRATION_REFERENCE__);
 }
 
 ::flatbuffers::Offset<OCM> CreateOCM(::flatbuffers::FlatBufferBuilder &_fbb, const OCMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -3458,7 +3697,8 @@ inline PerturbationsT::PerturbationsT(const PerturbationsT &o)
         ATMOSPHERIC_DRAG(o.ATMOSPHERIC_DRAG),
         FIXED_GEOMAG_KP(o.FIXED_GEOMAG_KP),
         FIXED_F10P7(o.FIXED_F10P7),
-        FIXED_F10P7_MEAN(o.FIXED_F10P7_MEAN) {
+        FIXED_F10P7_MEAN(o.FIXED_F10P7_MEAN),
+        FIXED_GEOMAG_AP(o.FIXED_GEOMAG_AP) {
 }
 
 inline PerturbationsT &PerturbationsT::operator=(PerturbationsT o) FLATBUFFERS_NOEXCEPT {
@@ -3481,6 +3721,7 @@ inline PerturbationsT &PerturbationsT::operator=(PerturbationsT o) FLATBUFFERS_N
   std::swap(FIXED_GEOMAG_KP, o.FIXED_GEOMAG_KP);
   std::swap(FIXED_F10P7, o.FIXED_F10P7);
   std::swap(FIXED_F10P7_MEAN, o.FIXED_F10P7_MEAN);
+  std::swap(FIXED_GEOMAG_AP, o.FIXED_GEOMAG_AP);
   return *this;
 }
 
@@ -3512,6 +3753,7 @@ inline void Perturbations::UnPackTo(PerturbationsT *_o, const ::flatbuffers::res
   { auto _e = FIXED_GEOMAG_KP(); _o->FIXED_GEOMAG_KP = _e; }
   { auto _e = FIXED_F10P7(); _o->FIXED_F10P7 = _e; }
   { auto _e = FIXED_F10P7_MEAN(); _o->FIXED_F10P7_MEAN = _e; }
+  { auto _e = FIXED_GEOMAG_AP(); _o->FIXED_GEOMAG_AP = _e; }
 }
 
 inline ::flatbuffers::Offset<Perturbations> CreatePerturbations(::flatbuffers::FlatBufferBuilder &_fbb, const PerturbationsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -3541,6 +3783,7 @@ inline ::flatbuffers::Offset<Perturbations> Perturbations::Pack(::flatbuffers::F
   auto _FIXED_GEOMAG_KP = _o->FIXED_GEOMAG_KP;
   auto _FIXED_F10P7 = _o->FIXED_F10P7;
   auto _FIXED_F10P7_MEAN = _o->FIXED_F10P7_MEAN;
+  auto _FIXED_GEOMAG_AP = _o->FIXED_GEOMAG_AP;
   return CreatePerturbations(
       _fbb,
       _COMMENT,
@@ -3561,7 +3804,8 @@ inline ::flatbuffers::Offset<Perturbations> Perturbations::Pack(::flatbuffers::F
       _ATMOSPHERIC_DRAG,
       _FIXED_GEOMAG_KP,
       _FIXED_F10P7,
-      _FIXED_F10P7_MEAN);
+      _FIXED_F10P7_MEAN,
+      _FIXED_GEOMAG_AP);
 }
 
 inline ManeuverT *Maneuver::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -3658,6 +3902,8 @@ inline void OrbitDetermination::UnPackTo(OrbitDeterminationT *_o, const ::flatbu
   { auto _e = OD_RESIDUAL_EPOCHS(); if (_e) { _o->OD_RESIDUAL_EPOCHS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->OD_RESIDUAL_EPOCHS[_i] = _e->Get(_i); } } else { _o->OD_RESIDUAL_EPOCHS.resize(0); } }
   { auto _e = OD_BATCH_BASELINE_ID(); if (_e) _o->OD_BATCH_BASELINE_ID = _e->str(); }
   { auto _e = OD_BATCH_BASELINE_RMS(); _o->OD_BATCH_BASELINE_RMS = _e; }
+  { auto _e = SEDR(); _o->SEDR = _e; }
+  { auto _e = WEIGHTED_RMS(); _o->WEIGHTED_RMS = _e; }
 }
 
 inline ::flatbuffers::Offset<OrbitDetermination> CreateOrbitDetermination(::flatbuffers::FlatBufferBuilder &_fbb, const OrbitDeterminationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -3691,6 +3937,8 @@ inline ::flatbuffers::Offset<OrbitDetermination> OrbitDetermination::Pack(::flat
   auto _OD_RESIDUAL_EPOCHS = _o->OD_RESIDUAL_EPOCHS.size() ? _fbb.CreateVector(_o->OD_RESIDUAL_EPOCHS) : 0;
   auto _OD_BATCH_BASELINE_ID = _o->OD_BATCH_BASELINE_ID.empty() ? 0 : _fbb.CreateString(_o->OD_BATCH_BASELINE_ID);
   auto _OD_BATCH_BASELINE_RMS = _o->OD_BATCH_BASELINE_RMS;
+  auto _SEDR = _o->SEDR;
+  auto _WEIGHTED_RMS = _o->WEIGHTED_RMS;
   return CreateOrbitDetermination(
       _fbb,
       _OD_ID,
@@ -3715,7 +3963,9 @@ inline ::flatbuffers::Offset<OrbitDetermination> OrbitDetermination::Pack(::flat
       _OD_RESIDUALS_SERIES,
       _OD_RESIDUAL_EPOCHS,
       _OD_BATCH_BASELINE_ID,
-      _OD_BATCH_BASELINE_RMS);
+      _OD_BATCH_BASELINE_RMS,
+      _SEDR,
+      _WEIGHTED_RMS);
 }
 
 inline UserDefinedParametersT *UserDefinedParameters::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -3758,7 +4008,15 @@ inline OCMT::OCMT(const OCMT &o)
         COVARIANCE_DATA(o.COVARIANCE_DATA),
         PHYSICAL_PROPERTIES((o.PHYSICAL_PROPERTIES) ? new PhysicalPropertiesT(*o.PHYSICAL_PROPERTIES) : nullptr),
         PERTURBATIONS((o.PERTURBATIONS) ? new PerturbationsT(*o.PERTURBATIONS) : nullptr),
-        ORBIT_DETERMINATION((o.ORBIT_DETERMINATION) ? new OrbitDeterminationT(*o.ORBIT_DETERMINATION) : nullptr) {
+        ORBIT_DETERMINATION((o.ORBIT_DETERMINATION) ? new OrbitDeterminationT(*o.ORBIT_DETERMINATION) : nullptr),
+        CENTER_NAME(o.CENTER_NAME),
+        TRAJ_REF_FRAME((o.TRAJ_REF_FRAME) ? new RFMT(*o.TRAJ_REF_FRAME) : nullptr),
+        TRAJ_FRAME_EPOCH(o.TRAJ_FRAME_EPOCH),
+        COV_REF_FRAME((o.COV_REF_FRAME) ? new RFMT(*o.COV_REF_FRAME) : nullptr),
+        ORB_REVNUM(o.ORB_REVNUM),
+        ORB_AVERAGING(o.ORB_AVERAGING),
+        COV_CALIBRATION(o.COV_CALIBRATION),
+        COV_CALIBRATION_REFERENCE(o.COV_CALIBRATION_REFERENCE) {
   POLYNOMIAL_POSITION_RECORDS.reserve(o.POLYNOMIAL_POSITION_RECORDS.size());
   for (const auto &POLYNOMIAL_POSITION_RECORDS_ : o.POLYNOMIAL_POSITION_RECORDS) { POLYNOMIAL_POSITION_RECORDS.emplace_back((POLYNOMIAL_POSITION_RECORDS_) ? new PPEPositionRecordT(*POLYNOMIAL_POSITION_RECORDS_) : nullptr); }
   POLYNOMIAL_OE_RECORDS.reserve(o.POLYNOMIAL_OE_RECORDS.size());
@@ -3785,6 +4043,14 @@ inline OCMT &OCMT::operator=(OCMT o) FLATBUFFERS_NOEXCEPT {
   std::swap(PERTURBATIONS, o.PERTURBATIONS);
   std::swap(ORBIT_DETERMINATION, o.ORBIT_DETERMINATION);
   std::swap(USER_DEFINED_PARAMETERS, o.USER_DEFINED_PARAMETERS);
+  std::swap(CENTER_NAME, o.CENTER_NAME);
+  std::swap(TRAJ_REF_FRAME, o.TRAJ_REF_FRAME);
+  std::swap(TRAJ_FRAME_EPOCH, o.TRAJ_FRAME_EPOCH);
+  std::swap(COV_REF_FRAME, o.COV_REF_FRAME);
+  std::swap(ORB_REVNUM, o.ORB_REVNUM);
+  std::swap(ORB_AVERAGING, o.ORB_AVERAGING);
+  std::swap(COV_CALIBRATION, o.COV_CALIBRATION);
+  std::swap(COV_CALIBRATION_REFERENCE, o.COV_CALIBRATION_REFERENCE);
   return *this;
 }
 
@@ -3812,6 +4078,14 @@ inline void OCM::UnPackTo(OCMT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = PERTURBATIONS(); if (_e) { if(_o->PERTURBATIONS) { _e->UnPackTo(_o->PERTURBATIONS.get(), _resolver); } else { _o->PERTURBATIONS = std::unique_ptr<PerturbationsT>(_e->UnPack(_resolver)); } } else if (_o->PERTURBATIONS) { _o->PERTURBATIONS.reset(); } }
   { auto _e = ORBIT_DETERMINATION(); if (_e) { if(_o->ORBIT_DETERMINATION) { _e->UnPackTo(_o->ORBIT_DETERMINATION.get(), _resolver); } else { _o->ORBIT_DETERMINATION = std::unique_ptr<OrbitDeterminationT>(_e->UnPack(_resolver)); } } else if (_o->ORBIT_DETERMINATION) { _o->ORBIT_DETERMINATION.reset(); } }
   { auto _e = USER_DEFINED_PARAMETERS(); if (_e) { _o->USER_DEFINED_PARAMETERS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->USER_DEFINED_PARAMETERS[_i]) { _e->Get(_i)->UnPackTo(_o->USER_DEFINED_PARAMETERS[_i].get(), _resolver); } else { _o->USER_DEFINED_PARAMETERS[_i] = std::unique_ptr<UserDefinedParametersT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->USER_DEFINED_PARAMETERS.resize(0); } }
+  { auto _e = CENTER_NAME(); if (_e) _o->CENTER_NAME = _e->str(); }
+  { auto _e = TRAJ_REF_FRAME(); if (_e) { if(_o->TRAJ_REF_FRAME) { _e->UnPackTo(_o->TRAJ_REF_FRAME.get(), _resolver); } else { _o->TRAJ_REF_FRAME = std::unique_ptr<RFMT>(_e->UnPack(_resolver)); } } else if (_o->TRAJ_REF_FRAME) { _o->TRAJ_REF_FRAME.reset(); } }
+  { auto _e = TRAJ_FRAME_EPOCH(); if (_e) _o->TRAJ_FRAME_EPOCH = _e->str(); }
+  { auto _e = COV_REF_FRAME(); if (_e) { if(_o->COV_REF_FRAME) { _e->UnPackTo(_o->COV_REF_FRAME.get(), _resolver); } else { _o->COV_REF_FRAME = std::unique_ptr<RFMT>(_e->UnPack(_resolver)); } } else if (_o->COV_REF_FRAME) { _o->COV_REF_FRAME.reset(); } }
+  { auto _e = ORB_REVNUM(); _o->ORB_REVNUM = _e; }
+  { auto _e = ORB_AVERAGING(); if (_e) _o->ORB_AVERAGING = _e->str(); }
+  { auto _e = COV_CALIBRATION(); _o->COV_CALIBRATION = _e; }
+  { auto _e = COV_CALIBRATION_REFERENCE(); if (_e) _o->COV_CALIBRATION_REFERENCE = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<OCM> CreateOCM(::flatbuffers::FlatBufferBuilder &_fbb, const OCMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -3837,6 +4111,14 @@ inline ::flatbuffers::Offset<OCM> OCM::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _PERTURBATIONS = _o->PERTURBATIONS ? CreatePerturbations(_fbb, _o->PERTURBATIONS.get(), _rehasher) : 0;
   auto _ORBIT_DETERMINATION = _o->ORBIT_DETERMINATION ? CreateOrbitDetermination(_fbb, _o->ORBIT_DETERMINATION.get(), _rehasher) : 0;
   auto _USER_DEFINED_PARAMETERS = _o->USER_DEFINED_PARAMETERS.size() ? _fbb.CreateVector<::flatbuffers::Offset<UserDefinedParameters>> (_o->USER_DEFINED_PARAMETERS.size(), [](size_t i, _VectorArgs *__va) { return CreateUserDefinedParameters(*__va->__fbb, __va->__o->USER_DEFINED_PARAMETERS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _CENTER_NAME = _o->CENTER_NAME.empty() ? 0 : _fbb.CreateString(_o->CENTER_NAME);
+  auto _TRAJ_REF_FRAME = _o->TRAJ_REF_FRAME ? CreateRFM(_fbb, _o->TRAJ_REF_FRAME.get(), _rehasher) : 0;
+  auto _TRAJ_FRAME_EPOCH = _o->TRAJ_FRAME_EPOCH.empty() ? 0 : _fbb.CreateString(_o->TRAJ_FRAME_EPOCH);
+  auto _COV_REF_FRAME = _o->COV_REF_FRAME ? CreateRFM(_fbb, _o->COV_REF_FRAME.get(), _rehasher) : 0;
+  auto _ORB_REVNUM = _o->ORB_REVNUM;
+  auto _ORB_AVERAGING = _o->ORB_AVERAGING.empty() ? 0 : _fbb.CreateString(_o->ORB_AVERAGING);
+  auto _COV_CALIBRATION = _o->COV_CALIBRATION;
+  auto _COV_CALIBRATION_REFERENCE = _o->COV_CALIBRATION_REFERENCE.empty() ? 0 : _fbb.CreateString(_o->COV_CALIBRATION_REFERENCE);
   return CreateOCM(
       _fbb,
       _HEADER,
@@ -3853,7 +4135,15 @@ inline ::flatbuffers::Offset<OCM> OCM::Pack(::flatbuffers::FlatBufferBuilder &_f
       _MANEUVER_DATA,
       _PERTURBATIONS,
       _ORBIT_DETERMINATION,
-      _USER_DEFINED_PARAMETERS);
+      _USER_DEFINED_PARAMETERS,
+      _CENTER_NAME,
+      _TRAJ_REF_FRAME,
+      _TRAJ_FRAME_EPOCH,
+      _COV_REF_FRAME,
+      _ORB_REVNUM,
+      _ORB_AVERAGING,
+      _COV_CALIBRATION,
+      _COV_CALIBRATION_REFERENCE);
 }
 
 inline const OCM *GetOCM(const void *buf) {

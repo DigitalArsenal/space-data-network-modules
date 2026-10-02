@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -445,10 +446,26 @@ std::string linked_ocm_id(const core::CartesianState& state, const char* trace) 
   return text;
 }
 
+std::string number_text(double v) {
+  char text[32];
+  std::snprintf(text, sizeof text, "%.6g", v);
+  return text;
+}
+
+// The fit's formal covariance is conditional on these assumptions and has no
+// coverage evidence of its own: the OCM states them and COV_CALIBRATION
+// Uncalibrated (CA uncertainty program; ASO catalog paper section 9).
+struct FitAssumptions {
+  const wire::EstimationConfig* config = nullptr;
+  const std::vector<core::Observation>* observations = nullptr;
+  std::size_t accepted = 0;
+};
+
 std::vector<std::uint8_t> make_ocm(const core::CartesianState& estimate,
                                    const core::Matrix6& covariance,
                                    const std::vector<double>& residuals,
-                                   double rms, bool sequential, wire::EstimatorKind estimator) {
+                                   double rms, bool sequential, wire::EstimatorKind estimator,
+                                   const FitAssumptions& assumptions) {
   OCMT record;
   record.TRAJ_TYPE = trajectoryType::CARTESIAN_PV;
   record.TRAJ_TYPE_DESCRIPTION = sequential ? "FILTERED_ESTIMATE" : "BATCH_ESTIMATE";
@@ -469,6 +486,55 @@ std::vector<std::uint8_t> make_ocm(const core::CartesianState& estimate,
       estimator == wire::EstimatorKind::UNSCENTED_KALMAN_FILTER ? estimatorCategory::UnscentedKalman :
       sequential ? estimatorCategory::ExtendedKalman : estimatorCategory::BatchLeastSquares;
   if (estimator == wire::EstimatorKind::LINEAR_KALMAN_FILTER) record.ORBIT_DETERMINATION->OD_ALGORITHM = "LINEAR_KALMAN_FILTER";
+
+  record.COV_CALIBRATION = covarianceCalibration::Uncalibrated;
+  auto& od = *record.ORBIT_DETERMINATION;
+  const wire::EstimationConfig& config = *assumptions.config;
+  // Measurement noise per observation type, as the fit weighted it.
+  std::map<int, std::pair<double, double>> sigma;
+  for (const core::Observation& o : *assumptions.observations) {
+    auto& range = sigma.emplace(static_cast<int>(o.kind), std::make_pair(o.sigma[0], o.sigma[0])).first->second;
+    for (int i = 0; i < o.value_count; ++i) {
+      range.first = std::min(range.first, o.sigma[i]);
+      range.second = std::max(range.second, o.sigma[i]);
+    }
+  }
+  std::string noise = "Zero-mean Gaussian measurement noise, independent between observations; 1-sigma (SI) by type:";
+  for (const auto& [kind, range] : sigma) {
+    const char* name = wire::EnumNameMeasurementKind(static_cast<wire::MeasurementKind>(kind));
+    od.OD_OBSERVATIONS_TYPE.push_back(name);
+    noise += std::string(" ") + name + " " + number_text(range.first) +
+             (range.second != range.first ? " to " + number_text(range.second) : std::string()) + ";";
+  }
+  od.OD_NOISE_MODELS = noise;
+  od.OD_OBSERVATIONS_USED = static_cast<int>(assumptions.accepted);
+  od.OD_DATA_WEIGHTING = "INVERSE_VARIANCE: each component weighted 1/sigma^2; edit threshold " +
+                         number_text(config.sigma_edit_threshold()) + " sigma";
+  const auto* psd = config.process_noise_spectral_density();
+  if (!sequential || config.process_noise() == wire::ProcessNoiseKind::NONE) {
+    od.OD_PROCESS_NOISE = "NONE";
+  } else {
+    od.OD_PROCESS_NOISE = std::string(wire::EnumNameProcessNoiseKind(config.process_noise())) +
+                          ": white acceleration spectral density (m^2/s^3) " + number_text(psd->Get(0)) + ", " +
+                          number_text(psd->Get(1)) + ", " + number_text(psd->Get(2));
+    if (config.process_noise() == wire::ProcessNoiseKind::DYNAMIC_MODEL_COMPENSATION)
+      od.OD_PROCESS_NOISE += "; correlation time " + number_text(config.dynamic_model_correlation_time_seconds()) + " s";
+  }
+  const auto* p0 = config.initial_covariance();
+  od.OD_APRIORI_DATA = "Request a priori state and covariance; 1-sigma position " + number_text(std::sqrt(p0->Get(0))) +
+                       ", " + number_text(std::sqrt(p0->Get(7))) + ", " + number_text(std::sqrt(p0->Get(14))) +
+                       " m, velocity " + number_text(std::sqrt(p0->Get(21))) + ", " + number_text(std::sqrt(p0->Get(28))) +
+                       ", " + number_text(std::sqrt(p0->Get(35))) + " m/s";
+  if (!sequential)
+    od.OD_CONVERGENCE_CRITERIA = "state correction below " + number_text(config.state_convergence_tolerance()) +
+                                 ", RMS change below " + number_text(config.rms_convergence_tolerance()) + ", at most " +
+                                 std::to_string(config.maximum_iterations()) + " iterations";
+  record.HEADER = std::make_unique<HeaderT>();
+  record.HEADER->COMMENT = {
+      "Formal covariance of this fit: conditional on the stated measurement noise, weights, a priori and dynamics; "
+      "not calibrated against independent evidence (COV_CALIBRATION Uncalibrated).",
+      "Estimated parameters: Cartesian position and velocity. Consider parameters: none. Measurement biases: "
+      "neither estimated nor considered; error-model biases are not applied by the fit."};
   ::flatbuffers::FlatBufferBuilder builder(2048);
   const auto root = CreateOCM(builder, &record);
   FinishOCMBuffer(builder, root);
@@ -733,7 +799,11 @@ extern "C" int run_estimation(void) {
 
   const char* trace = request->trace_id() == nullptr ? nullptr : request->trace_id()->c_str();
   const std::string ocm_id = linked_ocm_id(estimate, trace);
-  const std::vector<std::uint8_t> ocm = make_ocm(estimate, covariance, residuals, rms, !batch_mode, request->config()->estimator());
+  FitAssumptions assumptions;
+  assumptions.config = request->config();
+  assumptions.observations = &observations;
+  assumptions.accepted = observations.size() - rejected.size();
+  const std::vector<std::uint8_t> ocm = make_ocm(estimate, covariance, residuals, rms, !batch_mode, request->config()->estimator(), assumptions);
   const std::vector<std::uint8_t> odr = make_odr(request, estimate, covariance,
                                                  batch_mode ? &batch : nullptr,
                                                  batch_mode ? nullptr : &filter, ocm_id);

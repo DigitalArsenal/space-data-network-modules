@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "family": "estimation",
   "artifact": {
-    "sha256": "2589309c8e7b6260118b8233cecfb8d94f6c781497a2808e09635feb90e21e5f",
+    "sha256": "2d4ffddc0516729a42847418dd12cfb7862c0554c36b731a98fcaff01cb8594b",
     "moduleSdk": "0.8.17",
     "spacedatastandards": "1.203.0"
   },
@@ -18,21 +18,21 @@
   "runtime": {
     "digestEncoding": "SDK command stdout including invoke result bytes",
     "browser": {
-      "outputSha256": "b2266a5d69567a03ba5a72c8daae468ae012966ddb464de3ec48ee6c6eab2586"
+      "outputSha256": "04ebd9c1dad293b10e921a32503def4129020bd5612baf33e25c4bb34e5ae6be"
     },
     "wasmedge": {
       "version": "0.16.4",
-      "outputSha256": "b2266a5d69567a03ba5a72c8daae468ae012966ddb464de3ec48ee6c6eab2586"
+      "outputSha256": "04ebd9c1dad293b10e921a32503def4129020bd5612baf33e25c4bb34e5ae6be"
     },
     "container": {
       "version": "0.16.4",
-      "outputSha256": "b2266a5d69567a03ba5a72c8daae468ae012966ddb464de3ec48ee6c6eab2586"
+      "outputSha256": "04ebd9c1dad293b10e921a32503def4129020bd5612baf33e25c4bb34e5ae6be"
     },
     "threads": {
-      "1": "b2266a5d69567a03ba5a72c8daae468ae012966ddb464de3ec48ee6c6eab2586",
-      "2": "b2266a5d69567a03ba5a72c8daae468ae012966ddb464de3ec48ee6c6eab2586",
-      "4": "b2266a5d69567a03ba5a72c8daae468ae012966ddb464de3ec48ee6c6eab2586",
-      "8": "b2266a5d69567a03ba5a72c8daae468ae012966ddb464de3ec48ee6c6eab2586"
+      "1": "04ebd9c1dad293b10e921a32503def4129020bd5612baf33e25c4bb34e5ae6be",
+      "2": "04ebd9c1dad293b10e921a32503def4129020bd5612baf33e25c4bb34e5ae6be",
+      "4": "04ebd9c1dad293b10e921a32503def4129020bd5612baf33e25c4bb34e5ae6be",
+      "8": "04ebd9c1dad293b10e921a32503def4129020bd5612baf33e25c4bb34e5ae6be"
     }
   },
   "batch": {
@@ -62,7 +62,7 @@
     "nees95Upper": 6.6977,
     "sncCovarianceGrowthRatio": 2.2526389167764123,
     "dmcCovarianceGrowthRatio": 2.4160158413191604,
-    "ekfUkfCovarianceDifference": 6.599655511227065e-09
+    "ekfUkfCovarianceDifference": 6.599655511227065e-9
   },
   "measurements": {
     "implementedKinds": 21,
@@ -78,14 +78,14 @@
     "relayDifferencedDopplerHz": -183121.28877484563
   },
   "media": {
-    "hopfieldSaastamoinenMaxRelativeError": 5.001316318408154e-08,
-    "mariniMaxRelativeError": 1.7722328975526321e-07,
+    "hopfieldSaastamoinenMaxRelativeError": 5.001316318408154e-8,
+    "mariniMaxRelativeError": 1.7722328975526321e-7,
     "p531Table3RangeM": 40.322085601,
     "p531PublishedPrecisionError": 0
   },
   "iod": {
-    "gaussMaxErrorSi": 5.494803190231323e-08,
-    "laplaceMaxErrorSi": 3.725290298461914e-09,
+    "gaussMaxErrorSi": 5.494803190231323e-8,
+    "laplaceMaxErrorSi": 3.725290298461914e-9,
     "gibbsMaxErrorMps": 9.094947017729282e-13,
     "herrickGibbsMaxErrorMps": 6.821210263296962e-12,
     "gaussPrintedPrecisionError": 0,
@@ -103,7 +103,7 @@
   "invariants": {
     "covarianceSymmetric": true,
     "covariancePositiveDefinite": true,
-    "residualOrthogonalityMax": 4.37052531253459e-07,
+    "residualOrthogonalityMax": 4.37052531253459e-7,
     "actualOcmCovariance": true
   },
   "lane05": {

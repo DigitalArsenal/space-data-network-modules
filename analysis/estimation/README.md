@@ -118,6 +118,23 @@ Additions:
 - Optional suffix fields: request `options`/`extended_observations`; result
   `extended_history`/`propagation_requests`; envelope `propagation_answers`.
 
+The OCM publishes the fit's formal covariance with its assumptions and
+`COV_CALIBRATION Uncalibrated` (SDS 1.232.0). The covariance is conditional on
+the assumptions and has no coverage evidence of its own.
+
+- `OD_NOISE_MODELS`: zero-mean Gaussian noise, independent between
+  observations, with the 1-sigma by measurement type as weighted.
+- `OD_DATA_WEIGHTING`: inverse variance, with the edit threshold.
+- `OD_PROCESS_NOISE`: kind and acceleration spectral density.
+- `OD_APRIORI_DATA`: the a priori sigmas.
+- `OD_CONVERGENCE_CRITERIA` (batch).
+- `OD_OBSERVATIONS_TYPE` and `OD_OBSERVATIONS_USED`.
+- The header comment states:
+  - estimated parameters: position and velocity;
+  - consider parameters: none;
+  - measurement biases: neither estimated nor considered, since error-model
+    biases enter simulation only.
+
 ODR/OCM remain six-state **orbit projections**; full clock estimates and adaptive
 settings are in `$EST`. Their existing estimator enums have no linear KF value:
 ODR uses `UNSPECIFIED`, OCM uses `Unknown` with algorithm text

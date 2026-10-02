@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {ByteBuffer} from 'flatbuffers';
 import {OCM} from 'spacedatastandards.org/lib/js/OCM/OCM.js';
+import {covarianceCalibration} from 'spacedatastandards.org/lib/js/OCM/covarianceCalibration.js';
 import test from 'node:test';
 import {createBrowserModuleHarness} from 'space-data-module-sdk/testing/browser';
 import {decode} from './wire.mjs';
@@ -33,7 +34,18 @@ test('WASM validates observations and sample epochs; editing rejects whole vecto
  for(const request of [invalid,invalidCount,wrongEpoch])assert.notEqual((await run(request)).statusCode,0);
 });
 test('WASM EKF/RTS matches 50 published Hipparchus smoother epochs',async()=>{
- const r=result(await run(smoother));let xe=0,pe=0;
+ const response=await run(smoother);
+ const r=result(response);let xe=0,pe=0;
+ // The OCM's formal covariance states its assumptions and no calibration.
+ const ocm=OCM.getRootAsOCM(new ByteBuffer(response.outputs.find(o=>o.portId==='ocm').payload)).unpack();
+ const od=ocm.ORBIT_DETERMINATION;
+ assert.equal(ocm.COV_CALIBRATION,covarianceCalibration.Uncalibrated);
+ assert.equal(od.OD_PROCESS_NOISE,'STATE_NOISE_COMPENSATION: white acceleration spectral density (m^2/s^3) 0.1, 0, 0');
+ assert.match(od.OD_NOISE_MODELS,/POSITION_VECTOR 0\.0316228 to 1;/);
+ assert.deepEqual(od.OD_OBSERVATIONS_TYPE,['POSITION_VECTOR']);
+ assert.equal(od.OD_OBSERVATIONS_USED,50);
+ assert.match(od.OD_APRIORI_DATA,/position 0\.1, 0\.1, 0\.1 m, velocity 0\.5, 0\.5, 0\.5 m\/s/);
+ assert.match(ocm.HEADER.COMMENT[1],/Consider parameters: none\. Measurement biases: neither estimated nor considered/);
  assert.equal(r.filter_history.length,50);
  smootherRows.forEach((row,i)=>{const e=r.filter_history[i];
   xe=Math.max(xe,Math.abs(e.smoothed_state[0]-row[2]),Math.abs(e.smoothed_state[3]-row[3]));
