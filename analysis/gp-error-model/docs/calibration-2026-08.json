@@ -11,7 +11,9 @@
   "products": [
    "IGS",
    "ILRS",
-   "Sentinel-1"
+   "ILRS NSGF",
+   "Sentinel-1",
+   "Swarm"
   ]
  },
  "test": {
@@ -22,7 +24,9 @@
   "products": [
    "IGS",
    "ILRS",
-   "Sentinel-1"
+   "ILRS NSGF",
+   "Sentinel-1",
+   "Swarm"
   ]
  },
  "gate": {
@@ -557,7 +561,7 @@
     "pitMaxCdfGap": 0.09886424371993585
    },
    "label": "CALIBRATED",
-   "reference": "Held-out coverage against reference states 2026-08-09..2026-08-15 (IGS, ILRS, Sentinel-1; 14968 samples, 4 objects): inside 1/2/3 sigma 0.642/0.954/0.997 vs 0.683/0.954/0.997; scale fitted on 2026-08-02..2026-08-08."
+   "reference": "Held-out coverage against reference states 2026-08-09..2026-08-15 (IGS, ILRS, ILRS NSGF, Sentinel-1, Swarm; 14968 samples, 4 objects): inside 1/2/3 sigma 0.642/0.954/0.997 vs 0.683/0.954/0.997; scale fitted on 2026-08-02..2026-08-08."
   },
   {
    "regime": "LEO 600-800 km",
@@ -637,7 +641,7 @@
     "pitMaxCdfGap": 0.06317713154786608
    },
    "label": "CALIBRATED",
-   "reference": "Held-out coverage against reference states 2026-08-09..2026-08-15 (IGS, ILRS, Sentinel-1; 31327 samples, 4 objects): inside 1/2/3 sigma 0.647/0.943/0.997 vs 0.683/0.954/0.997; scale fitted on 2026-08-02..2026-08-08."
+   "reference": "Held-out coverage against reference states 2026-08-09..2026-08-15 (IGS, ILRS, ILRS NSGF, Sentinel-1, Swarm; 31327 samples, 4 objects): inside 1/2/3 sigma 0.647/0.943/0.997 vs 0.683/0.954/0.997; scale fitted on 2026-08-02..2026-08-08."
   },
   {
    "regime": "LEO 600-800 km",
@@ -677,7 +681,7 @@
     "pitMaxCdfGap": 0.05639050463763562
    },
    "label": "CALIBRATED",
-   "reference": "Held-out coverage against reference states 2026-08-09..2026-08-15 (IGS, ILRS, Sentinel-1; 31805 samples, 4 objects): inside 1/2/3 sigma 0.636/0.922/0.994 vs 0.683/0.954/0.997; scale fitted on 2026-08-02..2026-08-08."
+   "reference": "Held-out coverage against reference states 2026-08-09..2026-08-15 (IGS, ILRS, ILRS NSGF, Sentinel-1, Swarm; 31805 samples, 4 objects): inside 1/2/3 sigma 0.636/0.922/0.994 vs 0.683/0.954/0.997; scale fitted on 2026-08-02..2026-08-08."
   },
   {
    "regime": "LEO 600-800 km",
@@ -717,7 +721,7 @@
     "pitMaxCdfGap": 0.022896356453773303
    },
    "label": "CALIBRATED",
-   "reference": "Held-out coverage against reference states 2026-08-09..2026-08-15 (IGS, ILRS, Sentinel-1; 58981 samples, 4 objects): inside 1/2/3 sigma 0.701/0.960/0.997 vs 0.683/0.954/0.997; scale fitted on 2026-08-02..2026-08-08."
+   "reference": "Held-out coverage against reference states 2026-08-09..2026-08-15 (IGS, ILRS, ILRS NSGF, Sentinel-1, Swarm; 58981 samples, 4 objects): inside 1/2/3 sigma 0.701/0.960/0.997 vs 0.683/0.954/0.997; scale fitted on 2026-08-02..2026-08-08."
   },
   {
    "regime": "LEO 600-800 km",
@@ -757,7 +761,7 @@
     "pitMaxCdfGap": 0.04642385183076836
    },
    "label": "CALIBRATED",
-   "reference": "Held-out coverage against reference states 2026-08-09..2026-08-15 (IGS, ILRS, Sentinel-1; 49187 samples, 4 objects): inside 1/2/3 sigma 0.728/0.965/0.991 vs 0.683/0.954/0.997; scale fitted on 2026-08-02..2026-08-08."
+   "reference": "Held-out coverage against reference states 2026-08-09..2026-08-15 (IGS, ILRS, ILRS NSGF, Sentinel-1, Swarm; 49187 samples, 4 objects): inside 1/2/3 sigma 0.728/0.965/0.991 vs 0.683/0.954/0.997; scale fitted on 2026-08-02..2026-08-08."
   },
   {
    "regime": "LEO 800-1200 km",

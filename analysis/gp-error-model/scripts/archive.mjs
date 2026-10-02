@@ -85,6 +85,13 @@ export function batches(sets, size) {
   return list;
 }
 
+const productKinds = [['ilrsa.', 'ILRS'], ['nsgf.', 'ILRS NSGF'], ['IGS', 'IGS'], ['S1', 'Sentinel-1'], ['SW_', 'Swarm']];
+const productKind = (dir) => {
+  const kind = productKinds.find(([prefix]) => dir.startsWith(prefix));
+  if (!kind) throw new Error(`unknown reference product ${dir}`);
+  return kind[1];
+};
+
 // Reference states (analysis/reference-states output) whose span starts in [from, to].
 export function referenceStates(dir, from, to) {
   const frames = [];
@@ -98,7 +105,7 @@ export function referenceStates(dir, from, to) {
       if (!(start >= lo && start < hi)) continue;
       frames.push({ portId: 'reference', payload: fs.readFileSync(path.join(dir, product, o.file)), typeRef: oemType });
       if (!objects.has(o.norad)) objects.set(o.norad, new Set());
-      objects.get(o.norad).add(product.startsWith('ilrsa') ? 'ILRS' : product.startsWith('IGS') ? 'IGS' : 'Sentinel-1');
+      objects.get(o.norad).add(productKind(product));
     }
   }
   return { frames, objects };

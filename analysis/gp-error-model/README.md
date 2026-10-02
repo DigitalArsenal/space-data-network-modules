@@ -88,6 +88,22 @@ It scales each stratum's position covariance by s_k = √(E[e_k²] / C_kk),
 using the clipped second moment of the reference errors about zero. It
 records the factors. Strata with too few reference samples stay unscaled.
 
+### `screening_evaluation`
+
+Inputs: `elements`, `reference`, `model` (usually the scaled model) and
+`options`. Output: `report`.
+
+It pairs reference-state errors of two different objects in each stratum,
+places them in a head-on and a 90° crossing encounter plane, and adds them to
+synthetic true misses. Three screening rules are scored on every case:
+- Foster Pc ≥ `pcThreshold`;
+- the relative ellipse at `boundCoverage`;
+- possibility: the per-object χ²₃ possibility, min-joined, alerting unless
+  N(no collision) ≥ `necessityLevel`.
+
+It reports alert rates, mean Pc and mean Π(collision) by stratum, geometry and
+miss.
+
 ## Model and validation
 
 `scripts/build-model.mjs` builds the model and its validation from the GP
@@ -133,6 +149,25 @@ It writes `calibration.json`, which labels each stratum:
 For 2026-08 ([docs/calibration-2026-08.md](docs/calibration-2026-08.md)),
 five strata pass: LEO 600–800 km at every age except 0.5–1 day. Conjunction
 assessment publishes covariance-based Pc as calibrated only in those strata.
+
+## Screening evaluation
+
+`scripts/screening-evaluation.mjs` runs `screening_evaluation` on a held-out
+reference week and carries each stratum's calibration label:
+
+```sh
+node scripts/screening-evaluation.mjs --model docs/model-2026-08-scaled.json \
+  --calibration docs/calibration-2026-08.json --reference <reference-states>/reference \
+  --from 2026-08-09 --to 2026-08-15 --out <dir>
+```
+
+Results for 2026-08 are in
+[docs/screening-evaluation-2026-08.md](docs/screening-evaluation-2026-08.md).
+In the calibrated strata:
+- possibility missed no collision, but raised 69–89 % false alerts at a 1 km
+  miss;
+- Pc missed 2.7 % of collisions head-on and 16 % in a crossing (dilution);
+- the bounded set missed 0.2–0.4 %.
 
 ## Build and test
 

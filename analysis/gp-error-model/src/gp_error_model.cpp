@@ -49,6 +49,8 @@
 // s_k = sqrt(E[e_k^2] / C_kk) from reference-state errors (second moment
 // about zero, clipped), so a scaled model is fitted on one reference window
 // and tested on another.
+// screening_evaluation: probabilistic, bounded-set and possibility screening
+// scored on cases built from reference-state errors (section below).
 
 namespace {
 
@@ -396,6 +398,14 @@ struct Accumulator {
   std::map<std::pair<int, int>, std::array<double, 9>> inverse;  // position covariance inverses
   std::vector<Coverage> coverage;
   double quantile[3] = {};
+  // Screening evaluation: every reference-mode position error, kept.
+  struct Kept {
+    int regime, age;
+    uint32_t norad;
+    double e[3];
+  };
+  bool keep = false;
+  std::vector<Kept> kept;
   size_t index(int regime, int age) const { return regime * options.ages.size() + age; }
   Stratum& at(int regime, int age) { return strata[index(regime, age)]; }
 };
@@ -404,6 +414,7 @@ void sample(Accumulator& acc, int regime, int age, const double x[6], uint32_t n
   const auto clip = acc.options.clip.find({regime, age});
   add_sample(acc.at(regime, age), x, clip == acc.options.clip.end() ? nullptr : &clip->second, acc.options.clip_k);
   ++acc.counts.samples;
+  if (acc.keep) acc.kept.push_back({regime, age, norad, {x[0], x[1], x[2]}});
   if (acc.coverage_model.empty()) return;
   Coverage& c = acc.coverage[acc.index(regime, age)];
   const auto inv = acc.inverse.find({regime, age});
@@ -912,4 +923,278 @@ extern "C" int scale_model() {
                     {"truthWindow", truth.contains("window") ? truth["window"] : nlohmann::json()},
                     {"minimumSamples", min_samples}};
   return emit("model", model);
+}
+
+// ── Screening evaluation (ASO catalog paper sections 9 and 12) ──
+// Independent cases from real errors: two reference-state errors of different
+// objects in one stratum (regime, prediction age) are one encounter's two
+// objects' errors; the true relative position is a synthetic miss m in the
+// encounter plane, the predicted one is m plus the relative error. Encounter
+// planes: head-on (radial, normal; the secondary's normal reversed) and
+// crossing at 90 degrees (radial and (T+N)/sqrt2 for the primary, (T'-N')/
+// sqrt2 in the secondary's own axes). Each object's 2x2 covariance is its
+// stratum's position covariance projected to the plane. Methods:
+//   probabilistic  Foster's Pc over the hard-body disk with C1 + C2; alert
+//                  when Pc >= pcThreshold.
+//   bounded set    the relative ellipse x' (C1+C2)^-1 x <= k^2 (2 dof, k^2 at
+//                  boundCoverage) around the prediction; alert when it comes
+//                  within the hard-body radius of the origin.
+//   possibility    per object pi(e) = 1 - F_chi2_3(e' C^-1 e) (the Gaussian
+//                  probability-to-possibility transform on the 3D error, so
+//                  its projection keeps chi-square 3 levels), joint
+//                  possibility min(pi1, pi2) for independent objects;
+//                  Pi(collision) = sup over collisions; N(no collision) =
+//                  1 - Pi(collision); alert unless N(no collision) >=
+//                  necessityLevel. The alpha-cut of the joint relative error
+//                  is the Minkowski sum of the two ellipses, whose support
+//                  function is sqrt(q) (|C1^1/2 u| + |C2^1/2 u|).
+// Collision truth: |m| <= hard-body radius. Every case counts.
+namespace screening {
+
+struct Case2 {
+  double p[2];        // predicted relative position, km
+  double c1[3], c2[3];  // per-object plane covariance (xx, xy, yy), km^2
+};
+
+double quad(const double c[3], double ux, double uy) { return c[0] * ux * ux + 2 * c[1] * ux * uy + c[2] * uy * uy; }
+
+// Foster: the 2D Gaussian N(p, C) over the disk |x| <= r, by Gauss-Legendre in
+// radius (8 nodes) and the midpoint rule in angle (32).
+double foster(const double p[2], const double c[3], double r) {
+  static const double gx[8] = {-0.9602898564975363, -0.7966664774136267, -0.5255324099163290, -0.1834346424956498,
+                               0.1834346424956498, 0.5255324099163290, 0.7966664774136267, 0.9602898564975363};
+  static const double gw[8] = {0.1012285362903763, 0.2223810344533745, 0.3137066458778873, 0.3626837833783620,
+                               0.3626837833783620, 0.3137066458778873, 0.2223810344533745, 0.1012285362903763};
+  const double det = c[0] * c[2] - c[1] * c[1];
+  if (!(det > 0)) return 0;
+  const double i00 = c[2] / det, i01 = -c[1] / det, i11 = c[0] / det;
+  double sum = 0;
+  for (int a = 0; a < 8; ++a) {
+    const double rho = 0.5 * r * (gx[a] + 1);
+    for (int b = 0; b < 32; ++b) {
+      const double th = (b + 0.5) * 2 * kPi / 32;
+      const double dx = rho * std::cos(th) - p[0], dy = rho * std::sin(th) - p[1];
+      sum += gw[a] * 0.5 * r * rho * (2 * kPi / 32) * std::exp(-0.5 * (i00 * dx * dx + 2 * i01 * dx * dy + i11 * dy * dy));
+    }
+  }
+  return sum / (2 * kPi * std::sqrt(det));
+}
+
+// max over unit u of f(u), 720 directions then a parabolic step.
+template <typename F>
+double maximize(F f) {
+  double best = -1e300, at = 0;
+  for (int k = 0; k < 720; ++k) {
+    const double th = k * kPi / 360, v = f(std::cos(th), std::sin(th));
+    if (v > best) { best = v; at = th; }
+  }
+  const double h = kPi / 360, a = f(std::cos(at - h), std::sin(at - h)), b = f(std::cos(at + h), std::sin(at + h));
+  const double den = a - 2 * best + b;
+  if (den < 0) {
+    const double t = at + 0.5 * h * (a - b) / den;
+    best = std::max(best, f(std::cos(t), std::sin(t)));
+  }
+  return best;
+}
+
+// Distance from p to the ellipse x' C^-1 x <= k^2 (0 inside).
+double ellipse_distance(const double p[2], const double c[3], double k) {
+  return std::max(0.0, maximize([&](double ux, double uy) { return ux * p[0] + uy * p[1] - k * std::sqrt(quad(c, ux, uy)); }));
+}
+
+// Pi(collision) for the min-joined possibility of two objects, chi-square 3.
+double possibility(const Case2& c, double r) {
+  if (std::hypot(c.p[0], c.p[1]) <= r) return 1.0;
+  const double s = maximize([&](double ux, double uy) {
+    const double g = std::sqrt(quad(c.c1, ux, uy)) + std::sqrt(quad(c.c2, ux, uy));
+    return g > 0 ? (ux * c.p[0] + uy * c.p[1] - r) / g : -1e300;
+  });
+  return s <= 0 ? 1.0 : 1.0 - chi2_cdf3(s * s);
+}
+
+struct Tally {
+  uint64_t cases = 0, pc_alerts = 0, bound_alerts = 0, possibility_alerts = 0;
+  double pc_sum = 0, possibility_sum = 0, brier = 0;
+};
+
+}  // namespace screening
+
+extern "C" int screening_evaluation() {
+  using namespace screening;
+  const nlohmann::json model = json_input("model");
+  if (!model.is_object() || model.value("kind", std::string()) != "gp-error-model" || !model.contains("strata"))
+    return fail("invalid-model", "model must be gp-error-model JSON.");
+  const nlohmann::json opt = input("options") ? json_input("options") : nlohmann::json::object();
+  Accumulator acc;
+  std::string e = parse_options(opt, &acc.options);
+  if (!e.empty()) return fail("invalid-options", e);
+  if (options_signature(model) != options_signature(options_json(acc.options)))
+    return fail("invalid-model", "model regimes or age bins differ from these options.");
+  auto number = [&](const char* key, double fallback) {
+    return opt.is_object() && opt.contains(key) && opt[key].is_number() ? opt[key].get<double>() : fallback;
+  };
+  const double radius = number("hardBodyRadiusM", 20) * 1e-3, pc_threshold = number("pcThreshold", 1e-4);
+  const double necessity_level = number("necessityLevel", 0.9973), bound_coverage = number("boundCoverage", 0.9973);
+  const size_t pairs_per_stratum = static_cast<size_t>(number("pairsPerStratum", 500));
+  const int directions = static_cast<int>(number("directions", 4));
+  uint64_t seed = static_cast<uint64_t>(number("seed", 1));
+  std::vector<double> misses = {0, 10, 50, 100, 500, 1000, 2000, 5000};
+  if (opt.is_object() && opt.contains("missDistancesM") && opt["missDistancesM"].is_array()) {
+    misses.clear();
+    for (const auto& m : opt["missDistancesM"])
+      if (m.is_number()) misses.push_back(m.get<double>());
+  }
+  if (!(radius > 0) || directions < 1 || misses.empty() || !(bound_coverage > 0 && bound_coverage < 1))
+    return fail("invalid-options", "hardBodyRadiusM, directions, missDistancesM and boundCoverage must be valid.");
+  const double bound_k = std::sqrt(-2.0 * std::log(1.0 - bound_coverage));  // chi-square 2 quantile
+
+  acc.strata.assign(acc.options.regimes.size() * acc.options.ages.size(), Stratum());
+  acc.mode = "reference";
+  acc.keep = true;
+  std::vector<ElementSet> sets;
+  if (!load_elements(acc.options, sets, acc.counts)) return fail("invalid-elements", error_text);
+  e = reference_errors(acc, sets);
+  if (!e.empty()) return fail("invalid-reference", e);
+
+  // Stratum covariances (position block, clipped when present).
+  std::map<std::pair<int, int>, std::array<double, 9>> cov;
+  for (const auto& st : model["strata"]) {
+    const nlohmann::json& c = st.contains("clipped") && st["clipped"].contains("covariance") ? st["clipped"]["covariance"]
+                              : st.contains("covariance") ? st["covariance"] : nlohmann::json();
+    if (!c.is_array() || c.size() != 21) continue;
+    const int idx[3][3] = {{0, 1, 3}, {1, 2, 4}, {3, 4, 5}};
+    std::array<double, 9> m;
+    for (int a = 0; a < 3; ++a)
+      for (int b = 0; b < 3; ++b) m[3 * a + b] = c[idx[a][b]].get<double>();
+    cov[{st["regimeIndex"].get<int>(), st["ageIndex"].get<int>()}] = m;
+  }
+  auto project = [](const std::array<double, 9>& m, const double a[2][3], double out[3]) {
+    double t[2][3] = {};
+    for (int i = 0; i < 2; ++i)
+      for (int j = 0; j < 3; ++j)
+        for (int k = 0; k < 3; ++k) t[i][j] += a[i][k] * m[3 * k + j];
+    double r[2][2] = {};
+    for (int i = 0; i < 2; ++i)
+      for (int j = 0; j < 2; ++j)
+        for (int k = 0; k < 3; ++k) r[i][j] += t[i][k] * a[j][k];
+    out[0] = r[0][0]; out[1] = r[0][1]; out[2] = r[1][1];
+  };
+  const double h = 1.0 / std::sqrt(2.0);
+  // geometry -> (primary axes, secondary axes) in each object's own RTN
+  const double geometries[2][2][2][3] = {
+      {{{1, 0, 0}, {0, 0, 1}}, {{1, 0, 0}, {0, 0, -1}}},  // head-on
+      {{{1, 0, 0}, {0, h, h}}, {{1, 0, 0}, {0, h, -h}}},  // crossing at 90 degrees
+  };
+  const char* geometry_names[2] = {"head-on", "crossing-90"};
+
+  std::map<std::pair<int, int>, std::vector<const Accumulator::Kept*>> by_stratum;
+  for (const auto& k : acc.kept) by_stratum[{k.regime, k.age}].push_back(&k);
+  auto next = [&]() {  // splitmix64
+    seed += 0x9e3779b97f4a7c15ULL;
+    uint64_t z = seed;
+    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+    z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+    return z ^ (z >> 31);
+  };
+
+  nlohmann::json out_strata = nlohmann::json::array();
+  std::map<std::string, std::vector<Tally>> overall;  // geometry -> per miss
+  for (auto& [key, samples] : by_stratum) {
+    const auto c = cov.find(key);
+    if (c == cov.end()) continue;
+    std::set<uint32_t> objects;
+    for (const auto* s : samples) objects.insert(s->norad);
+    if (objects.size() < 2) continue;
+    // Pairs of samples of different objects, drawn without replacement order.
+    std::vector<std::pair<const Accumulator::Kept*, const Accumulator::Kept*>> pairs;
+    for (size_t tries = 0; pairs.size() < pairs_per_stratum && tries < pairs_per_stratum * 20; ++tries) {
+      const auto* a = samples[next() % samples.size()];
+      const auto* b = samples[next() % samples.size()];
+      if (a->norad != b->norad) pairs.push_back({a, b});
+    }
+    nlohmann::json geometry_rows = nlohmann::json::array();
+    for (int g = 0; g < 2; ++g) {
+      double c1[3], c2[3];
+      project(c->second, geometries[g][0], c1);
+      project(c->second, geometries[g][1], c2);
+      const double crel[3] = {c1[0] + c2[0], c1[1] + c2[1], c1[2] + c2[2]};
+      std::vector<Tally> tallies(misses.size());
+      for (const auto& [a, b] : pairs) {
+        double e1[2], e2[2];
+        for (int i = 0; i < 2; ++i) {
+          e1[i] = geometries[g][0][i][0] * a->e[0] + geometries[g][0][i][1] * a->e[1] + geometries[g][0][i][2] * a->e[2];
+          e2[i] = geometries[g][1][i][0] * b->e[0] + geometries[g][1][i][1] * b->e[1] + geometries[g][1][i][2] * b->e[2];
+        }
+        for (size_t mi = 0; mi < misses.size(); ++mi) {
+          const double m = misses[mi] * 1e-3;
+          const bool collision = m <= radius;
+          for (int d = 0; d < directions; ++d) {
+            const double phi = (d + 0.5) * 2 * kPi / directions;
+            Case2 cs{{m * std::cos(phi) + e2[0] - e1[0], m * std::sin(phi) + e2[1] - e1[1]},
+                     {c1[0], c1[1], c1[2]}, {c2[0], c2[1], c2[2]}};
+            Tally& t = tallies[mi];
+            const double pc = foster(cs.p, crel, radius);
+            const double pi = possibility(cs, radius);
+            ++t.cases;
+            t.pc_sum += pc;
+            t.brier += (pc - (collision ? 1.0 : 0.0)) * (pc - (collision ? 1.0 : 0.0));
+            t.pc_alerts += pc >= pc_threshold;
+            t.bound_alerts += ellipse_distance(cs.p, crel, bound_k) <= radius;
+            t.possibility_sum += pi;
+            t.possibility_alerts += 1.0 - pi < necessity_level;
+          }
+        }
+      }
+      auto& all = overall[geometry_names[g]];
+      if (all.empty()) all.resize(misses.size());
+      nlohmann::json rows = nlohmann::json::array();
+      for (size_t mi = 0; mi < misses.size(); ++mi) {
+        const Tally& t = tallies[mi];
+        Tally& o = all[mi];
+        o.cases += t.cases; o.pc_alerts += t.pc_alerts; o.bound_alerts += t.bound_alerts;
+        o.possibility_alerts += t.possibility_alerts; o.pc_sum += t.pc_sum; o.possibility_sum += t.possibility_sum;
+        o.brier += t.brier;
+        const double n = t.cases ? double(t.cases) : 1.0;
+        rows.push_back({{"missM", misses[mi]}, {"collision", misses[mi] * 1e-3 <= radius}, {"cases", t.cases},
+                        {"pcAlertRate", t.pc_alerts / n}, {"meanPc", t.pc_sum / n}, {"brier", t.brier / n},
+                        {"boundedSetAlertRate", t.bound_alerts / n}, {"possibilityAlertRate", t.possibility_alerts / n},
+                        {"meanPossibilityOfCollision", t.possibility_sum / n}});
+      }
+      geometry_rows.push_back({{"geometry", geometry_names[g]}, {"rows", rows}});
+    }
+    out_strata.push_back({{"regime", acc.options.regimes[key.first].id}, {"regimeIndex", key.first}, {"ageIndex", key.second},
+                          {"ageDays", {acc.options.ages[key.second].first, acc.options.ages[key.second].second}},
+                          {"objects", objects.size()}, {"samples", samples.size()}, {"pairs", pairs.size()},
+                          {"sigmaRtnKm", {std::sqrt(c->second[0]), std::sqrt(c->second[4]), std::sqrt(c->second[8])}},
+                          {"geometries", geometry_rows}});
+  }
+  nlohmann::json summary = nlohmann::json::object();
+  for (const auto& [name, tallies] : overall) {
+    nlohmann::json rows = nlohmann::json::array();
+    for (size_t mi = 0; mi < misses.size(); ++mi) {
+      const Tally& t = tallies[mi];
+      const double n = t.cases ? double(t.cases) : 1.0;
+      rows.push_back({{"missM", misses[mi]}, {"collision", misses[mi] * 1e-3 <= radius}, {"cases", t.cases},
+                      {"pcAlertRate", t.pc_alerts / n}, {"meanPc", t.pc_sum / n}, {"brier", t.brier / n},
+                      {"boundedSetAlertRate", t.bound_alerts / n}, {"possibilityAlertRate", t.possibility_alerts / n},
+                      {"meanPossibilityOfCollision", t.possibility_sum / n}});
+    }
+    summary[name] = rows;
+  }
+  nlohmann::json report{
+      {"kind", "screening-evaluation"}, {"version", 1}, {"counts", counts_json(acc.counts)},
+      {"definitions",
+       {{"cases", "two reference-state errors of different objects in one stratum; true miss synthetic, predicted = true + relative error"},
+        {"collision", "true miss <= hard-body radius"},
+        {"probabilistic", "alert when Foster Pc >= pcThreshold, relative covariance C1 + C2"},
+        {"boundedSet", "alert when the relative ellipse at boundCoverage (chi-square 2) comes within the radius"},
+        {"possibility", "pi = 1 - F_chi2_3(d^2) per object, joint min; alert unless N(no collision) >= necessityLevel"},
+        {"missedCollision", "a collision case without an alert"},
+        {"falseAlert", "a non-collision case with an alert"}}},
+      {"settings",
+       {{"hardBodyRadiusM", radius * 1e3}, {"pcThreshold", pc_threshold}, {"necessityLevel", necessity_level},
+        {"boundCoverage", bound_coverage}, {"pairsPerStratum", pairs_per_stratum}, {"directions", directions},
+        {"missDistancesM", misses}}},
+      {"summary", summary}, {"strata", out_strata}};
+  return emit("report", report);
 }

@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.analysis.gp-error-model",
   "name": "GP prediction-error model",
   "version": "0.1.0",
-  "description": "Empirical SGP4 prediction error by orbit regime and prediction age, in RTN. Element sets are propagated to later element sets of the same object (consecutive-set differences, which are not truth) or to independent reference states (GCRF, from analysis/reference-states). Batches accumulate counts, moments and histograms; finalize gives mean, covariance, quantiles, robust sigma and clipped covariance per stratum. With a model on accumulate (reference mode), each error is also tested against its stratum's model covariance (Mahalanobis d^2 against chi-square with 3 degrees of freedom, every sample counted) and finalize gates each stratum CALIBRATED, FAILED or INSUFFICIENT; scale_model fits per-stratum scale factors to reference-state errors.",
+  "description": "Empirical SGP4 prediction error by orbit regime and prediction age, in RTN. Element sets are propagated to later element sets of the same object (consecutive-set differences, which are not truth) or to independent reference states (GCRF, from analysis/reference-states). Batches accumulate counts, moments and histograms; finalize gives mean, covariance, quantiles, robust sigma and clipped covariance per stratum. With a model on accumulate (reference mode), each error is also tested against its stratum's model covariance (Mahalanobis d^2 against chi-square with 3 degrees of freedom, every sample counted) and finalize gates each stratum CALIBRATED, FAILED or INSUFFICIENT; scale_model fits per-stratum scale factors to reference-state errors. screening_evaluation scores a probabilistic (Foster Pc), a bounded-set and a possibility (admissible-set) screening rule on independent cases built from reference-state errors with synthetic true misses.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -338,6 +338,122 @@
           "maxStreams": 1,
           "required": true,
           "description": "The model with scaled position covariance and per-stratum factors."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "screening_evaluation",
+      "displayName": "Screening evaluation",
+      "inputPorts": [
+        {
+          "portId": "elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "Size-prefixed $OMM records, concatenated, SGP4 mean elements; every element set of each object in the batch (objects are not split across batches). Epochs within one second are one element set republished: the later record is kept."
+        },
+        {
+          "portId": "reference",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "Independent reference states ($OEM, GCRF, UTC, OBJECT.NORAD_CAT_ID), e.g. analysis/reference-states output. When present, errors are taken against these instead of later element sets."
+        },
+        {
+          "portId": "model",
+          "acceptedTypeSets": [
+            {
+              "setId": "gp-error-model-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per regime and prediction age: count, mean and covariance of the six RTN components, quantiles, robust sigma and the clipped covariance, as finalize writes it."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The gp-error-model whose stratum covariance each case uses (clipped when present), usually the scaled model."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "screening-evaluation-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hardBodyRadiusM, missDistancesM, directions, pairsPerStratum, pcThreshold, necessityLevel, boundCoverage, seed, and the accumulate options (regimes, ageBinsDays, referenceStepSeconds)."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Evaluation settings as JSON; every field optional."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "screening-evaluation-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Alert rates of the probabilistic, bounded-set and possibility methods by stratum, encounter geometry and true miss, with the definitions."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The evaluation report as JSON."
         }
       ],
       "maxBatch": 1,

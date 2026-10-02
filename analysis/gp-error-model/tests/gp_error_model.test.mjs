@@ -40,8 +40,8 @@ function omm(c, epoch = c.epochIso.replace('Z', '')) {
   return Buffer.from(b.asUint8Array());
 }
 // Reference states at the case's epoch: its GCRF state displaced by each
-// RTN offset (taken in the state's own RTN axes).
-function reference(c, offsets) {
+// RTN offset (taken in the state's own RTN axes); `more` adds other objects' blocks.
+function reference(c, offsets, more = []) {
   const [R, T, N] = axes(c.gcrfR, c.gcrfV);
   const lines = offsets.map((o) => {
     const l = new OEM.ephemerisDataLineT();
@@ -55,8 +55,9 @@ function reference(c, offsets) {
   block.OBJECT = Object.assign(new OEM.CATT(), { NORAD_CAT_ID: c.satnum });
   block.REFERENCE_FRAME = Object.assign(new OEM.RFMT(), { NAME: 'GCRF' });
   const b = new flatbuffers.Builder(4096);
-  OEM.OEM.finishSizePrefixedOEMBuffer(b, Object.assign(new OEM.OEMT(), { EPHEMERIS_DATA_BLOCK: [block] }).pack(b));
-  return { portId: 'reference', payload: Buffer.from(b.asUint8Array()), typeRef: { schemaName: 'OEM.fbs', fileIdentifier: '$OEM', rootTypeName: 'OEM', wireFormat: 'flatbuffer' } };
+  const blocks = [block, ...more.map((x) => x.block)];
+  OEM.OEM.finishSizePrefixedOEMBuffer(b, Object.assign(new OEM.OEMT(), { EPHEMERIS_DATA_BLOCK: blocks }).pack(b));
+  return { block, portId: 'reference', payload: Buffer.from(b.asUint8Array()), typeRef: { schemaName: 'OEM.fbs', fileIdentifier: '$OEM', rootTypeName: 'OEM', wireFormat: 'flatbuffer' } };
 }
 // Expected sample: SGP4's GCRF state minus the displaced state, in the displaced state's RTN axes.
 function expectedError(c, o) {
@@ -198,3 +199,71 @@ function normalQuantile(p) {
   const q = p - 0.5, r = q * q;
   return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
 }
+
+test('screening_evaluation: alert rules on designed misses with known errors', async (t) => {
+  // Two objects (06251 and a copy numbered 99999), one reference sample each,
+  // in one stratum with isotropic position covariance 1e-4 km^2 (10 m). The
+  // copy's reference state is displaced 50 m radially, so its error is exactly
+  // (-0.05, 0, 0) km and the relative error is +-50 m radial in both encounter
+  // planes. Per object the plane covariance is s^2 I (s = 10 m), relative
+  // 2 s^2 I. For predicted relative position p (|p| = d), hard-body radius
+  // R = 20 m:
+  //   bounded set   alert iff d - k sqrt2 s <= R, k^2 = -2 ln(1 - 0.9973);
+  //   possibility   alert iff F_chi2_3(((d - R) / 2s)^2) < 0.9973, that is
+  //                 (d - R) / 2s < sqrt(14.1564), and always when d <= R;
+  //   probabilistic Pc = integral of N(p, 2 s^2 I) over the disk (computed
+  //                 here on a 400 x 720 polar grid), alert iff Pc >= 1e-4.
+  const c = caseOf(6251), copy = { ...c, satnum: 99999 };
+  const iso = [1e-4, 0, 1e-4, 0, 0, 1e-4, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1];
+  const model = { kind: 'gp-error-model', mode: 'reference', strata: [{ regimeIndex: 0, ageIndex: 0, covariance: iso }] };
+  const misses = [0, 10, 50, 60, 90, 100, 500];
+  const options = { referenceStepSeconds: 0, hardBodyRadiusM: 20, missDistancesM: misses, directions: 4, pairsPerStratum: 10 };
+  const both = reference(c, [[0, 0, 0]], [reference(copy, [[0.05, 0, 0]])]);
+  const out = await call(t, 'screening_evaluation', [elements(omm(c), omm(copy)), both,
+    json('model', model), json('options', options)]);
+  assert.equal(out.kind, 'screening-evaluation');
+  assert.equal(out.strata.length, 1);
+  assert.equal(out.strata[0].objects, 2);
+  assert.equal(out.strata[0].pairs, 10);
+
+  const e = expectedError(copy, [0.05, 0, 0]);
+  assert.ok(Math.abs(e[0] + 0.05) < 1e-12 && Math.abs(e[1]) < 1e-12 && Math.abs(e[2]) < 1e-12);
+  const s = 0.01, R = 0.02, k = Math.sqrt(-2 * Math.log(1 - 0.9973)), sr = Math.SQRT2 * s;
+  const pc = (px, py) => {
+    let sum = 0;
+    for (let a = 0; a < 400; ++a) {
+      const rho = (a + 0.5) * R / 400;
+      for (let b = 0; b < 720; ++b) {
+        const th = (b + 0.5) * 2 * Math.PI / 720, dx = rho * Math.cos(th) - px, dy = rho * Math.sin(th) - py;
+        sum += rho * (R / 400) * (2 * Math.PI / 720) * Math.exp(-(dx * dx + dy * dy) / (2 * sr * sr));
+      }
+    }
+    return sum / (2 * Math.PI * sr * sr);
+  };
+  for (const geometry of ['head-on', 'crossing-90']) {
+    const rows = out.strata[0].geometries.find((g) => g.geometry === geometry).rows;
+    misses.forEach((m, i) => {
+      // Either pair order gives the same multiset of |p| over the 4 directions.
+      const cases = [0, 1, 2, 3].map((d) => {
+        const phi = (d + 0.5) * Math.PI / 2;
+        const px = m * 1e-3 * Math.cos(phi) + 0.05, py = m * 1e-3 * Math.sin(phi), dist = Math.hypot(px, py);
+        const p = pc(px, py);
+        return { p, bound: dist - k * sr <= R, possible: dist <= R || (dist - R) / (2 * s) < Math.sqrt(14.156413) };
+      });
+      const rate = (f) => cases.filter(f).length / 4;
+      const row = rows[i];
+      assert.equal(row.missM, m);
+      assert.equal(row.collision, m <= 20);
+      assert.equal(row.cases, 40);
+      assert.equal(row.boundedSetAlertRate, rate((x) => x.bound), `${geometry} ${m} m bounded`);
+      assert.equal(row.possibilityAlertRate, rate((x) => x.possible), `${geometry} ${m} m possibility`);
+      assert.equal(row.pcAlertRate, rate((x) => x.p >= 1e-4), `${geometry} ${m} m Pc`);
+      const meanPc = cases.reduce((a, x) => a + x.p, 0) / 4;
+      assert.ok(Math.abs(row.meanPc - meanPc) <= 1e-4 * Math.max(meanPc, 1e-12) + 1e-15, `${geometry} ${m} m mean Pc ${row.meanPc} vs ${meanPc}`);
+    });
+  }
+  // The designed outcome: at 100 m only possibility still alerts, on the two
+  // directions the relative error brings to 74 m.
+  const at100 = out.summary['head-on'][5];
+  assert.deepEqual([at100.pcAlertRate, at100.boundedSetAlertRate, at100.possibilityAlertRate], [0, 0, 0.5]);
+});
