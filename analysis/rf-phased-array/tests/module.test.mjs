@@ -252,6 +252,19 @@ test("ULA array factor, scan loss, grating onset, and white MVDR identity match 
   });
 });
 
+test("a uniform eight-element half-wavelength array reports its first sidelobe about 13 dB down", async () => {
+  await withHarness(async (harness) => {
+    // |AF| = |sin(N psi / 2) / (N sin(psi / 2))|; for N = 8 at d = lambda/2
+    // the first sidelobe peaks at -12.8 dB (the 1-degree grid samples it
+    // within a few tenths of a decibel).
+    for (const steeringCone of [0, 22]) {
+      const pattern = decode(PAP, (await invoke(harness, makeConfig({ count: 8, steeringCone }))).pattern);
+      const sll = pattern.PEAK_SIDELOBE_LEVEL_DB();
+      assert.ok(sll > -13.4 && sll < -12.5, `steering ${steeringCone}: peak sidelobe ${sll} dB`);
+    }
+  });
+});
+
 test("Dolph-Chebyshev, Taylor n-bar, and adaptive null products are recorded in $PAP", async () => {
   await withHarness(async (harness) => {
     const dolph = decode(PAP, (await invoke(harness, makeConfig({ count: 16, taper: papTaperFamily.EQUAL_SIDELOBE, sidelobeDb: -25 }))).pattern);

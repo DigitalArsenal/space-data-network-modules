@@ -346,17 +346,27 @@ double beamwidth_3db(const std::vector<double>& gain, size_t clock_index, double
   return static_cast<double>(hi - lo);
 }
 
-double sidelobe_level(const std::vector<double>& gain, size_t clock_index,
-                      double steer_cone, double width) {
-  const size_t base = clock_index * 91;
-  const double peak = gain[base + static_cast<size_t>(clamp(std::round(steer_cone), 0.0, 90.0))];
-  const double exclude = std::max(2.0, width);
+// Peak sidelobe relative to the main beam in the principal cut through the
+// steering direction: the full great circle of the steering clock cut and the
+// cut opposite it (cone 90 down through boresight and up to 90 again). The
+// main lobe runs from the cut's peak down to the first null on each side; the
+// peak sidelobe is the highest sample beyond them. Searching only the
+// steering half-cut missed every sidelobe on the far side of boresight.
+double sidelobe_level(const std::vector<double>& gain, size_t clock_index) {
+  constexpr size_t kCones = 91;
+  const size_t opposite = (clock_index + 12) % 24;
+  std::vector<double> cut;
+  cut.reserve(2 * kCones - 1);
+  for (size_t cone = kCones - 1; cone > 0; --cone) cut.push_back(gain[opposite * kCones + cone]);
+  for (size_t cone = 0; cone < kCones; ++cone) cut.push_back(gain[clock_index * kCones + cone]);
+  const size_t peak = static_cast<size_t>(std::max_element(cut.begin(), cut.end()) - cut.begin());
+  size_t lo = peak;
+  while (lo > 0 && cut[lo - 1] <= cut[lo]) --lo;
+  size_t hi = peak;
+  while (hi + 1 < cut.size() && cut[hi + 1] <= cut[hi]) ++hi;
   double side = -120.0;
-  for (size_t i = 1; i < 90; ++i) {
-    if (std::abs(static_cast<double>(i) - steer_cone) <= exclude) continue;
-    if (gain[base + i] >= gain[base + i - 1] && gain[base + i] >= gain[base + i + 1]) {
-      side = std::max(side, gain[base + i] - peak);
-    }
+  for (size_t i = 0; i < cut.size(); ++i) {
+    if (i < lo || i > hi) side = std::max(side, cut[i] - cut[peak]);
   }
   return side;
 }
@@ -429,7 +439,7 @@ std::vector<uint8_t> build_pattern(const PAP* config, const BEM* beam,
   const double steering_clock = std::fmod(config->STEERING_CLOCK_DEG() + 360.0, 360.0);
   const size_t clock_index = static_cast<size_t>(std::llround(steering_clock / 15.0)) % 24;
   const double width = beamwidth_3db(gain, clock_index, config->STEERING_CONE_DEG());
-  const double sampled_sll = sidelobe_level(gain, clock_index, config->STEERING_CONE_DEG(), width);
+  const double sampled_sll = sidelobe_level(gain, clock_index);
   // A Dolph-Chebyshev aperture's defining invariant is its exact equiripple
   // sidelobe target. The one-degree display grid can miss an inter-sample
   // ripple peak, so publish the analytic target rather than relabeling that
