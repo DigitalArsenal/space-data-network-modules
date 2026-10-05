@@ -1,0 +1,112 @@
+{
+  "pluginId": "com.orbpro.rf-phased-array",
+  "name": "RF Phased Array Beamforming",
+  "version": "0.1.0",
+  "description": "Deterministic array-factor synthesis, electronic steering, scan-loss and grating-lobe analysis, white-covariance MVDR/LCMV nulling, and beam-hop footprint products. All RF mathematics executes in the isomorphic WASM guest.",
+  "pluginFamily": "comms",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "threadModel": "emscripten-pthreads",
+  "threading": {
+    "model": "wasi-threads",
+    "parallelism": "fixed contiguous cone-by-clock sample ranges",
+    "determinism": "Each worker writes preassigned sample indexes; summaries reduce in ascending index order, producing byte-identical output at 1, 2, 4, and 8 workers.",
+    "spawnFailurePolicy": "A failed wasi.thread-spawn range executes inline in the caller without changing indexes or reduction order.",
+    "threadCountSource": "PAP.TAPER_PARAMETERS[2], clamped to 1, 2, 4, or 8; callers pass it explicitly."
+  },
+  "methods": [
+    {
+      "methodId": "synthesize",
+      "displayName": "Synthesize phased-array products",
+      "description": "Consumes array geometry/complex weights/null requests, a sampled element pattern, and beam deployment/schedule data. Emits the synthesized pattern, hopping link samples, and footprint geometry.",
+      "inputPorts": [
+        {
+          "portId": "arrayConfig",
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1,
+          "acceptedTypeSets": [{
+            "setId": "phased-array-configuration",
+            "allowedTypes": [
+              {"schemaName": "PAP.fbs", "fileIdentifier": "$PAP", "rootTypeName": "PAP", "wireFormat": "flatbuffer"},
+              {"schemaName": "PAP.fbs", "fileIdentifier": "$PAP", "rootTypeName": "PAP", "wireFormat": "aligned-binary", "requiredAlignment": 8}
+            ],
+            "description": "Element geometry, complex excitations/failure state, taper, steering, and requested nulls. TAPER_PARAMETERS are [targetSllDb, taylorNBar, threadCount]."
+          }]
+        },
+        {
+          "portId": "elementPattern",
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1,
+          "acceptedTypeSets": [{
+            "setId": "sampled-element-pattern",
+            "allowedTypes": [
+              {"schemaName": "PAP.fbs", "fileIdentifier": "$PAP", "rootTypeName": "PAP", "wireFormat": "flatbuffer"},
+              {"schemaName": "PAP.fbs", "fileIdentifier": "$PAP", "rootTypeName": "PAP", "wireFormat": "aligned-binary", "requiredAlignment": 8}
+            ],
+            "description": "Sampled cone-by-clock element pattern encoded as CONE PAPGainCuts with FIXED_ANGLE_DEG equal to clock angle."
+          }]
+        },
+        {
+          "portId": "beamModel",
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1,
+          "acceptedTypeSets": [{
+            "setId": "beam-model-and-hop-schedule",
+            "allowedTypes": [
+              {"schemaName": "BEM.fbs", "fileIdentifier": "$BEM", "rootTypeName": "BEM", "wireFormat": "flatbuffer"},
+              {"schemaName": "BEM.fbs", "fileIdentifier": "$BEM", "rootTypeName": "BEM", "wireFormat": "aligned-binary", "requiredAlignment": 8}
+            ],
+            "description": "Carrier frequency and demand-ranked hop slots. Slot PRIORITY is the demand weight used by the deterministic hopping plan."
+          }]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "pattern",
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1,
+          "acceptedTypeSets": [{"setId": "synthesized-pattern", "allowedTypes": [
+            {"schemaName": "PAP.fbs", "fileIdentifier": "$PAP", "rootTypeName": "PAP", "wireFormat": "flatbuffer"},
+            {"schemaName": "PAP.fbs", "fileIdentifier": "$PAP", "rootTypeName": "PAP", "wireFormat": "aligned-binary", "requiredAlignment": 8}
+          ]}]
+        },
+        {
+          "portId": "links",
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1,
+          "acceptedTypeSets": [{"setId": "beam-hop-link-samples", "allowedTypes": [
+            {"schemaName": "RFL.fbs", "fileIdentifier": "$RFL", "rootTypeName": "RFL", "wireFormat": "flatbuffer"},
+            {"schemaName": "RFL.fbs", "fileIdentifier": "$RFL", "rootTypeName": "RFL", "wireFormat": "aligned-binary", "requiredAlignment": 8}
+          ]}]
+        },
+        {
+          "portId": "footprints",
+          "required": true,
+          "minStreams": 1,
+          "maxStreams": 1,
+          "acceptedTypeSets": [{"setId": "beam-hop-footprints", "allowedTypes": [
+            {"schemaName": "CVP.fbs", "fileIdentifier": "$CVP", "rootTypeName": "CVP", "wireFormat": "flatbuffer"},
+            {"schemaName": "CVP.fbs", "fileIdentifier": "$CVP", "rootTypeName": "CVP", "wireFormat": "aligned-binary", "requiredAlignment": 8}
+          ]}]
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {"schemaName": "PAP.fbs", "fileIdentifier": "$PAP", "rootTypeName": "PAP", "wireFormat": "flatbuffer"},
+    {"schemaName": "BEM.fbs", "fileIdentifier": "$BEM", "rootTypeName": "BEM", "wireFormat": "flatbuffer"},
+    {"schemaName": "RFL.fbs", "fileIdentifier": "$RFL", "rootTypeName": "RFL", "wireFormat": "flatbuffer"},
+    {"schemaName": "CVP.fbs", "fileIdentifier": "$CVP", "rootTypeName": "CVP", "wireFormat": "flatbuffer"}
+  ],
+  "buildArtifacts": [{"artifactId": "rf-phased-array-isomorphic", "kind": "wasm", "path": "dist/isomorphic/module.wasm", "target": "browser,wasmedge"}],
+  "abiVersion": 1
+}
