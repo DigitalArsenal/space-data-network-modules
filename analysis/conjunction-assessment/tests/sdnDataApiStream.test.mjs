@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 import { FlatcRunner } from "flatc-wasm";
-import { publishedSchema, encodeCqr, decodeCqr, catalogRequest, catalogInReferenceUnits } from "./lib/cqr.mjs";
+import { publishedSchema, encodeCqr, decodeCqr, catalogRequest, catalogInReferenceUnits, sdnLengthPrefixed } from "./lib/cqr.mjs";
 
 import {
   conjunctionArtifactExists,
@@ -14,7 +14,7 @@ import { buildThreadedWasmEdgeRunner } from "./lib/wasmedgePthreadRunner.mjs";
 const ommSchema = () => publishedSchema('OMM');
 
 function createOmmRecord(flatc, noradCatId, options = {}) {
-  return flatc.generateBinary(
+  const record = flatc.generateBinary(
     ommSchema(),
     JSON.stringify({
       CENTER_NAME: "EARTH",
@@ -38,8 +38,9 @@ function createOmmRecord(flatc, noradCatId, options = {}) {
       MEAN_MOTION_DOT: 0.0,
       MEAN_MOTION_DDOT: 0.0,
     }),
-    { sizePrefix: options.sizePrefix === true },
+    { sizePrefix: false },
   );
+  return options.sizePrefix === true ? sdnLengthPrefixed(record) : record;
 }
 
 function createScreenCatalogRequest(flatc, overrides = {}) {

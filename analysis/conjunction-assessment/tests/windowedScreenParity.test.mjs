@@ -11,9 +11,10 @@
 // conjunction-screening PPE, GCRF, TDB), 2026-09-30T23:45Z UTC for 0.11 day,
 // against four windows. Each window loads only the PPE intervals within 20
 // minutes of it, forwarded as the size-prefixed $PRW DESCRIBE_RESULT records a
-// propagator exports (built by flatc --size-prefixed, as HPOP's
-// FinishSizePrefixed builds them), through prepare_screening_index's
-// trajectories port; the request's sources then carry identity only.
+// propagator exports (built by flatc-wasm's generateBinary, which runs flatc
+// --size-prefixed, as HPOP's FinishSizePrefixed builds them), through
+// prepare_screening_index's trajectories port; the request's sources then
+// carry identity only.
 //
 // The candidate search proposes every pair at every step, so the module's
 // f64 test decides every candidate. Events must match pair for pair, TCAs
@@ -24,7 +25,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 import { createConjunctionCommandHarness } from './lib/conjunctionCommandHarness.mjs';
-import { decodeCqr, earthFrame, encodeCqr, generateSizePrefixed, gpSource, initCqrFlatc, publishedSchema, screeningControls } from './lib/cqr.mjs';
+import { decodeCqr, earthFrame, encodeCqr, gpSource, initCqrFlatc, publishedSchema, screeningControls } from './lib/cqr.mjs';
 import { CA_PARITY_TOLERANCES as T } from './lib/caParityTolerances.mjs';
 import { parseGridFrame } from '../gpu/gpuScreen.mjs';
 import { screenAllVsAllOnGpu, screenWindowsOnGpu } from '../gpu/allVsAll.mjs';
@@ -111,9 +112,9 @@ test('HPOP: four windows of forwarded PRW trajectories report the single-window 
       const records = s.POLYNOMIAL_EPHEMERIS.POSITION_RECORDS.filter((r) =>
         tdbJd(r.EPOCH_MID) + r.EPOCH_HALF_SPAN / 86400 >= w.startJd - margin &&
         tdbJd(r.EPOCH_MID) - r.EPOCH_HALF_SPAN / 86400 <= w.startJd + w.durationDays + margin);
-      return generateSizePrefixed(flatc, publishedSchema('PRW'), { DESCRIBE_RESULT: {
+      return flatc.generateBinary(publishedSchema('PRW'), JSON.stringify({ DESCRIBE_RESULT: {
         INSTANCE: { MODULE_ID: 'com.orbpro.hpop', INSTANCE_ID: 'fixture', GENERATION: 1 }, SEGMENT_SET_HANDLE: 1,
-        SOURCES: [{ SOURCE_HANDLE: s.SOURCE_HANDLE, OBJECT_ID: s.OBJECT_ID, EPHEMERIS: { ...s.POLYNOMIAL_EPHEMERIS, POSITION_RECORDS: records } }] } });
+        SOURCES: [{ SOURCE_HANDLE: s.SOURCE_HANDLE, OBJECT_ID: s.OBJECT_ID, EPHEMERIS: { ...s.POLYNOMIAL_EPHEMERIS, POSITION_RECORDS: records } }] } }), { sizePrefix: true });
     });
 
     const instance = INSTANCE();

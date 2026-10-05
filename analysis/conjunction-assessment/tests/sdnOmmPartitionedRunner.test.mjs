@@ -8,7 +8,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { conjunctionArtifactExists } from "./lib/conjunctionCommandHarness.mjs";
-import { createFlatcRunner, gpRecord, publishedSchema } from "./lib/cqr.mjs";
+import { createFlatcRunner, gpRecord, publishedSchema, sdnLengthPrefixed } from "./lib/cqr.mjs";
 import { buildThreadedWasmEdgeRunner } from "./lib/wasmedgePthreadRunner.mjs";
 import {
   buildPartitionedRunProvenance,
@@ -621,7 +621,7 @@ const ommSchemaSync = () => publishedSchema("OMM");
 const ommSchema = async () => ommSchemaSync();
 
 async function createOmmRecord(flatc, schema, noradCatId) {
-  return flatc.generateBinary(
+  return sdnLengthPrefixed(flatc.generateBinary(
     schema,
     JSON.stringify({
       CENTER_NAME: "EARTH",
@@ -645,8 +645,8 @@ async function createOmmRecord(flatc, schema, noradCatId) {
       MEAN_MOTION_DOT: 0.0,
       MEAN_MOTION_DDOT: 0.0,
     }),
-    { sizePrefix: true },
-  );
+    { sizePrefix: false },
+  ));
 }
 
 function encodeUint32beFramedStream(records) {

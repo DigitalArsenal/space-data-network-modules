@@ -12,7 +12,7 @@
     "space-data-module-sdk": "0.8.25",
     "spacedatastandards.org": "1.202.0",
     "flatbuffers": "25.9.23",
-    "flatc-wasm": "26.1.32",
+    "flatc-wasm": "26.1.38",
     "esbuild": "0.28.0"
   }
 }

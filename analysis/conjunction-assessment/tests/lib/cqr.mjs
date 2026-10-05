@@ -80,22 +80,17 @@ export function flatcWithHeapArgv(runner) {
 export const createFlatcRunner = async () => flatcWithHeapArgv(await FlatcRunner.init());
 let flatcPromise;
 export const initCqrFlatc = () => flatcPromise ??= createFlatcRunner();
-// A size-prefixed record built by flatc itself (--size-prefixed), as a module's
-// FinishSizePrefixed emits it. flatc-wasm's generateBinary({sizePrefix: true})
-// prepends a length to an unprefixed buffer instead, which moves every field
-// 4 bytes off the alignment a size-prefixed finish gives it.
-export function generateSizePrefixed(flatc, schema, record) {
-  const dir = `/size-prefixed-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  flatc._mountSchemaIfNeeded(schema);
-  flatc.Module.FS.mkdirTree(dir);
-  flatc.mountFile(`${dir}/record.json`, new TextEncoder().encode(JSON.stringify(record)));
-  const result = flatc.runCommand(['--binary', '--size-prefixed', '--unknown-json', '-o', dir,
-    ...flatc._cachedIncludeDirs.flatMap((d) => ['-I', d]), schema.entry, `${dir}/record.json`]);
-  if (result.code !== 0 || result.stderr.includes('error:')) throw new Error(`flatc: ${result.stderr || result.stdout}`);
-  const bytes = new Uint8Array(flatc.Module.FS.readFile(`${dir}/record.bin`));
-  for (const name of ['record.json', 'record.bin']) flatc.unlink(`${dir}/${name}`);
-  flatc.rmdir(dir);
-  return bytes;
+// A record as the SDN data API streams it (flatsql-size-prefixed-le-u32): its
+// length written in front of the bare stored record (sdn-server
+// internal/api/data.go flatBufferPayloadStreamBytes). A host strips the length
+// before the catalog port. This is not a size-prefixed finish, which
+// generateBinary({ sizePrefix: true }) runs from flatc-wasm 26.1.38: that
+// record stays aligned only with its prefix in place.
+export function sdnLengthPrefixed(record) {
+  const frame = new Uint8Array(4 + record.length);
+  new DataView(frame.buffer).setUint32(0, record.length, true);
+  frame.set(record, 4);
+  return frame;
 }
 
 export function encodeCqr(flatc, record) {
