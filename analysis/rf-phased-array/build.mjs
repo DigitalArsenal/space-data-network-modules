@@ -59,6 +59,11 @@ const sourceCode = generated
   .concat(implementation)
   .join("\n\n");
 const manifest = JSON.parse(manifestText);
+// The lane is stated here, not inferred, so the build reproduces at the SDK pin.
+const THREAD_MODEL = "emscripten-pthreads";
+if (manifest.threadModel !== THREAD_MODEL) {
+  throw new Error(`plugin-manifest.json declares ${manifest.threadModel}; build.mjs builds ${THREAD_MODEL}`);
+}
 
 await fs.rm(path.join(root, "dist"), { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -68,7 +73,7 @@ const compilation = await compileModuleFromSource({
   sourceCode,
   language: "c++",
   outputPath,
-  threadModel: manifest.threadModel,
+  threadModel: THREAD_MODEL,
   stackSize: 2 * 1024 * 1024,
   // Resolve the catalog from this package's npm-pinned SDS dependency. The
   // SDK's own older nested dependency predates $PAP; using it would validate
@@ -76,7 +81,7 @@ const compilation = await compileModuleFromSource({
   standardsRoot: standardsPackage,
 });
 
-if (compilation.threadModel !== manifest.threadModel) {
+if (compilation.threadModel !== THREAD_MODEL) {
   throw new Error(`thread model drift: ${compilation.threadModel}`);
 }
 if (!compilation.report?.ok) {

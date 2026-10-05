@@ -3573,6 +3573,29 @@
         ],
         "inferenceHazard": false
       }
+    },
+    "analysis/rf-phased-array/dist/isomorphic/module.wasm": {
+      "sha256": "0d2fede222f5abf87187e32709f2ed8b30a8e7288cb49b8b0b5e525d7d6b756e",
+      "bytes": 174704,
+      "module": "analysis/rf-phased-array",
+      "lastCommit": "a82fc541925214555f465bf899191cb06d00e139",
+      "lastCommitDate": "2026-10-05T13:25:22-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "emscripten-pthreads"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
     }
   }
 }
