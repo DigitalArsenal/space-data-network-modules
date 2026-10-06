@@ -466,7 +466,8 @@ SuppliedCovariance applySourceCovariance(ConjunctionEvent2 &e, const Source &a, 
   auto computed = engine.compute_pc(e.state1, e.state2, position_block(c1), position_block(c2),
                                     e.combined_radius_km);
   if (has_error() || !computed.pc.converged || !isFinite(computed.pc.probability) ||
-      computed.pc.probability < 0 || computed.pc.probability > 1) {
+      computed.pc.probability < 0 || computed.pc.probability > 1 ||
+      computed.pc.method.empty() || computed.pc.method == "ALFANO-MAXPROB") {
     e.probability_failure = "Collision probability calculation failed.";
     if (has_error()) e.probability_failure += std::string(" ") + error_message();
     clear_error();
@@ -1594,8 +1595,6 @@ ConjunctionEvent legacy(const ConjunctionEvent2 &e) {
   l.dse2 = e.dse2;
   if (!e.has_covariance)
     return l;
-  l.cov6_rtn1 = e.cov6_rtn1;
-  l.cov6_rtn2 = e.cov6_rtn2;
   auto c1 = covariance_inertial_to_rtn(e.cov1, e.state1),
        c2 = covariance_inertial_to_rtn(e.cov2, e.state2);
   l.cov_r1 = std::sqrt(std::max(0., c1.data[0])) * 1000.;
