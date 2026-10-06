@@ -36,6 +36,7 @@ namespace {
 
 struct ParsedCdmObject {
     std::string label;
+    std::string comment;
     std::string object_designator;
     std::string object_name;
     std::string object_id;
@@ -50,7 +51,7 @@ struct ParsedCdmObject {
     double x_dot = 0.0;
     double y_dot = 0.0;
     double z_dot = 0.0;
-    std::vector<double> covariance = std::vector<double>(45, 0.0);
+    std::vector<double> covariance;
 };
 
 struct ParsedCdm {
@@ -326,7 +327,9 @@ static void parse_xml_object_field(ParsedCdmObject* object, const std::string& k
     if (!object) {
         return;
     }
-    if (key == "OBJECT") {
+    if (key == "COMMENT") {
+        object->comment = entry.value;
+    } else if (key == "OBJECT") {
         object->label = upper(entry.value);
     } else if (key == "OBJECT_DESIGNATOR") {
         object->object_designator = entry.value;
@@ -359,6 +362,7 @@ static void parse_xml_object_field(ParsedCdmObject* object, const std::string& k
     } else {
         const int covariance_index = covariance_index_for_key(key);
         if (covariance_index >= 0) {
+            object->covariance.resize(std::max(object->covariance.size(), static_cast<size_t>(covariance_index + 1)));
             object->covariance[static_cast<size_t>(covariance_index)] =
                 covariance_to_km_units(parse_double_value(entry.value, key), entry.unit);
         }
@@ -424,7 +428,9 @@ static ParsedCdm parse_cdm_kvn(const char* kvn_text, uint32_t kvn_text_size) {
         }
 
         if (current_object) {
-            if (entry.key == "OBJECT_DESIGNATOR") {
+            if (entry.key == "COMMENT") {
+                current_object->comment += (current_object->comment.empty() ? "" : "\n") + entry.value;
+            } else if (entry.key == "OBJECT_DESIGNATOR") {
                 current_object->object_designator = entry.value;
             } else if (entry.key == "OBJECT_NAME") {
                 current_object->object_name = entry.value;
@@ -455,6 +461,7 @@ static ParsedCdm parse_cdm_kvn(const char* kvn_text, uint32_t kvn_text_size) {
             } else {
                 const int covariance_index = covariance_index_for_key(entry.key);
                 if (covariance_index >= 0) {
+                    current_object->covariance.resize(std::max(current_object->covariance.size(), static_cast<size_t>(covariance_index + 1)));
                     current_object->covariance[static_cast<size_t>(covariance_index)] =
                         covariance_to_km_units(parse_double_value(entry.value, entry.key), entry.unit);
                 }
@@ -588,8 +595,9 @@ static ParsedCdm parse_cdm_xml(const char* xml_text, uint32_t xml_text_size) {
         parsed.collision_probability_method = entry.value;
     }
 
-    const std::array<const char*, 15> object_fields = {{
+    const std::array<const char*, 16> object_fields = {{
         "OBJECT",
+        "COMMENT",
         "OBJECT_DESIGNATOR",
         "OBJECT_NAME",
         "INTERNATIONAL_DESIGNATOR",
@@ -653,7 +661,7 @@ static ParsedCdm parse_cdm_xml(const char* xml_text, uint32_t xml_text_size) {
 
 static std::unique_ptr<CDMObjectT> to_native_cdm_object(const ParsedCdmObject& parsed) {
     auto object = std::make_unique<CDMObjectT>();
-    object->COMMENT = parsed.label.empty() ? std::string("CCSDS CDM object") : parsed.label;
+    object->COMMENT = parsed.comment;
     object->OBJECT = std::make_unique<CATT>();
     object->OBJECT->OBJECT_NAME = parsed.object_name;
     object->OBJECT->OBJECT_ID = parsed.object_id;
@@ -709,6 +717,47 @@ static std::string flatbuffer_string(const flatbuffers::String* value) {
     return value ? value->str() : std::string();
 }
 
+static bool object_has_covariance(const CDMObject* object) {
+    return object && object->COVARIANCE() && object->COVARIANCE()->size() >= 6;
+}
+
+static std::string covariance_failure_reason(bool has1, bool has2, bool psd1, bool psd2) {
+    std::string reason;
+    if (!has1 || !has2) {
+        reason = "covariance absent for ";
+        if (!has1) reason += "OBJECT1";
+        if (!has1 && !has2) reason += " and ";
+        if (!has2) reason += "OBJECT2";
+    }
+    if ((has1 && !psd1) || (has2 && !psd2)) {
+        if (!reason.empty()) reason += "; ";
+        reason += "covariance not positive semidefinite (non-PSD) for ";
+        if (has1 && !psd1) reason += "OBJECT1";
+        if (has1 && !psd1 && has2 && !psd2) reason += " and ";
+        if (has2 && !psd2) reason += "OBJECT2";
+    }
+    return reason.empty() ? reason : "Collision probability calculation failed: " + reason + ".";
+}
+
+static std::string cdm_probability_failure(const CDM* cdm) {
+    const auto psd = [](const CDMObject* object) {
+        return object_has_covariance(object) && covariance_is_positive_semidefinite(
+            object->COVARIANCE()->data(), object->COVARIANCE()->size());
+    };
+    auto reason = covariance_failure_reason(object_has_covariance(cdm->OBJECT1()),
+        object_has_covariance(cdm->OBJECT2()), psd(cdm->OBJECT1()), psd(cdm->OBJECT2()));
+    if (reason.empty() && flatbuffer_string(cdm->COLLISION_PROBABILITY_METHOD()) == "ALFANO-MAXPROB")
+        reason = "Collision probability unavailable: only the Alfano maximum was requested.";
+    return reason;
+}
+
+static std::string object_comment(const CDMObject* object, const std::string& reason) {
+    auto comment = object ? flatbuffer_string(object->COMMENT()) : std::string();
+    if (!reason.empty() && comment.find(reason) == std::string::npos)
+        comment += (comment.empty() ? "" : " ") + reason;
+    return comment;
+}
+
 static std::string format_decimal(double value, int precision) {
     std::ostringstream out;
     out << std::fixed << std::setprecision(precision) << value;
@@ -743,11 +792,13 @@ static void append_kvn_line(
     out << '\n';
 }
 
-static void append_kvn_object(std::ostringstream& out, const CDMObject* object, const char* label) {
+static void append_kvn_object(std::ostringstream& out, const CDMObject* object, const char* label, const std::string& reason) {
     append_kvn_line(out, "OBJECT", label ? label : "");
     if (!object) {
         return;
     }
+    const auto comment = object_comment(object, reason);
+    if (!comment.empty()) append_kvn_line(out, "COMMENT", comment);
     const CAT* cat = object->OBJECT();
     if (cat) {
         const uint32_t norad = cat->NORAD_CAT_ID();
@@ -768,7 +819,7 @@ static void append_kvn_object(std::ostringstream& out, const CDMObject* object, 
     if (!ephemeris_name.empty()) {
         append_kvn_line(out, "EPHEMERIS_NAME", ephemeris_name);
     }
-    append_kvn_line(out, "COVARIANCE_METHOD", "CALCULATED");
+    if (object_has_covariance(object)) append_kvn_line(out, "COVARIANCE_METHOD", "CALCULATED");
     append_kvn_line(out, "X", format_decimal(object->X(), 6), "km");
     append_kvn_line(out, "Y", format_decimal(object->Y(), 6), "km");
     append_kvn_line(out, "Z", format_decimal(object->Z(), 6), "km");
@@ -863,13 +914,15 @@ static std::string covariance_xml_unit(size_t index) {
     return "m**2/s**2";
 }
 
-static void append_xml_object(std::ostringstream& out, const CDMObject* object, const char* label) {
+static void append_xml_object(std::ostringstream& out, const CDMObject* object, const char* label, const std::string& reason) {
     append_xml_indent(out, 2);
     out << "<segment>\n";
     append_xml_indent(out, 3);
     out << "<metadata>\n";
     append_xml_element(out, 4, "OBJECT", label ? label : "");
     if (object) {
+        const auto comment = object_comment(object, reason);
+        if (!comment.empty()) append_xml_element(out, 4, "COMMENT", comment);
         const CAT* cat = object->OBJECT();
         if (cat) {
             const uint32_t norad = cat->NORAD_CAT_ID();
@@ -893,7 +946,7 @@ static void append_xml_object(std::ostringstream& out, const CDMObject* object, 
         if (!ephemeris_name.empty()) {
             append_xml_element(out, 4, "EPHEMERIS_NAME", ephemeris_name);
         }
-        append_xml_element(out, 4, "COVARIANCE_METHOD", "CALCULATED");
+        if (object_has_covariance(object)) append_xml_element(out, 4, "COVARIANCE_METHOD", "CALCULATED");
         if (cat) {
             append_xml_element(out, 4, "MANEUVERABLE", cat->MANEUVERABLE() ? "YES" : "NO");
         }
@@ -916,9 +969,9 @@ static void append_xml_object(std::ostringstream& out, const CDMObject* object, 
     append_xml_indent(out, 4);
     out << "</stateVector>\n";
 
-    append_xml_indent(out, 4);
-    out << "<covarianceMatrix>\n";
-    if (object && object->COVARIANCE()) {
+    if (object_has_covariance(object)) {
+        append_xml_indent(out, 4);
+        out << "<covarianceMatrix>\n";
         const auto* covariance = object->COVARIANCE();
         for (const auto& field : kCovarianceFields) {
             if (covariance->size() <= field.index) {
@@ -931,9 +984,9 @@ static void append_xml_object(std::ostringstream& out, const CDMObject* object, 
                 format_scientific(covariance->Get(static_cast<flatbuffers::uoffset_t>(field.index)) * 1000000.0),
                 covariance_xml_unit(field.index));
         }
+        append_xml_indent(out, 4);
+        out << "</covarianceMatrix>\n";
     }
-    append_xml_indent(out, 4);
-    out << "</covarianceMatrix>\n";
     append_xml_indent(out, 3);
     out << "</data>\n";
     append_xml_indent(out, 2);
@@ -1007,7 +1060,7 @@ static flatbuffers::Offset<CDMObject> build_cdm_object(
     const ConjunctionEvent& event,
     int obj_num,
     double cov_r, double cov_t, double cov_n,
-    const std::string& reference_frame) {
+    const std::string& reference_frame, const std::string& probability_comment) {
     (void)cov_r; (void)cov_t; (void)cov_n;
 
     // CDM object states are absolute in the explicitly selected evaluation frame.
@@ -1024,17 +1077,18 @@ static flatbuffers::Offset<CDMObject> build_cdm_object(
 
     // Covariance only from what the sources supplied (lower triangle, km²;
     // the position diagonal); none is invented for sources without it.
+    const bool has_covariance = obj_num == 1 ? event.has_covariance1 : event.has_covariance2;
     flatbuffers::Offset<flatbuffers::Vector<double>> cov_vec;
-    if (event.has_covariance) {
+    if (has_covariance) {
         // The 6x6 RTN position-velocity block (CR_R .. CNDOT_NDOT, km units);
         // the drag/SRP/thrust rows stay absent.
         const auto& rtn = obj_num == 1 ? event.cov6_rtn1 : event.cov6_rtn2;
         cov_vec = builder.CreateVector(std::vector<double>(rtn.begin(), rtn.end()));
     }
 
-    auto comment = builder.CreateString(event.has_covariance
+    auto comment = builder.CreateString(probability_comment.empty()
         ? "Conjunction assessment; RTN covariance supplied by the source"
-        : "Conjunction assessment; no covariance: the source supplied none");
+        : probability_comment);
     const auto frame_kind = reference_frame == "TEME" ? CelestialFrame::TEMEOFDATE :
         reference_frame == "EME2000" ? CelestialFrame::EME2000 : CelestialFrame::GCRF;
     const auto axes = CreateCelestialFrameWrapper(builder, frame_kind);
@@ -1045,14 +1099,14 @@ static flatbuffers::Offset<CDMObject> build_cdm_object(
     obj_builder.add_COMMENT(comment);
     obj_builder.add_OBJECT(cat);
     obj_builder.add_REFERENCE_FRAME(frame);
-    if (event.has_covariance) obj_builder.add_COVARIANCE_METHOD(covarianceAlgorithm::DEFAULT);
+    if (has_covariance) obj_builder.add_COVARIANCE_METHOD(covarianceAlgorithm::DEFAULT);
     obj_builder.add_X(state.x);
     obj_builder.add_Y(state.y);
     obj_builder.add_Z(state.z);
     obj_builder.add_X_DOT(state.vx);
     obj_builder.add_Y_DOT(state.vy);
     obj_builder.add_Z_DOT(state.vz);
-    if (event.has_covariance) obj_builder.add_COVARIANCE(cov_vec);
+    if (has_covariance) obj_builder.add_COVARIANCE(cov_vec);
 
     return obj_builder.Finish();
 }
@@ -1079,13 +1133,20 @@ int32_t conjunction_to_cdm(
         std::to_string(event.obj2.norad_cat_id));
     auto tca_str = builder.CreateString(
         event.tca_iso.empty() ? jd_to_iso(event.tca_jd) : event.tca_iso);
-    auto prob_method = builder.CreateString(event.probability_method);
+    auto probability_comment = covariance_failure_reason(event.has_covariance1, event.has_covariance2,
+        covariance_is_positive_semidefinite(event.cov6_rtn1.data(), event.cov6_rtn1.size()),
+        covariance_is_positive_semidefinite(event.cov6_rtn2.data(), event.cov6_rtn2.size()));
+    if (probability_comment.empty()) probability_comment = event.probability_failure;
+    const bool has_pc = event.has_covariance && probability_comment.empty() &&
+        !event.probability_method.empty() && event.probability_method != "ALFANO-MAXPROB";
+    flatbuffers::Offset<flatbuffers::String> prob_method;
+    if (has_pc) prob_method = builder.CreateString(event.probability_method);
 
     // Build object entries
     auto obj1 = build_cdm_object(builder, event.obj1, event.state1, event,
-                                  1, event.cov_r1, event.cov_t1, event.cov_n1, reference_frame);
+                                  1, event.cov_r1, event.cov_t1, event.cov_n1, reference_frame, probability_comment);
     auto obj2 = build_cdm_object(builder, event.obj2, event.state2, event,
-                                  2, event.cov_r2, event.cov_t2, event.cov_n2, reference_frame);
+                                  2, event.cov_r2, event.cov_t2, event.cov_n2, reference_frame, probability_comment);
 
     // Build CDM
     CDMBuilder cdm_builder(builder);
@@ -1102,9 +1163,10 @@ int32_t conjunction_to_cdm(
     cdm_builder.add_RELATIVE_VELOCITY_R(event.rel_vel_r);
     cdm_builder.add_RELATIVE_VELOCITY_T(event.rel_vel_t);
     cdm_builder.add_RELATIVE_VELOCITY_N(event.rel_vel_n);
-    cdm_builder.add_COLLISION_PROBABILITY(
-        event.has_covariance ? event.covariance_probability : event.max_probability);
-    cdm_builder.add_COLLISION_PROBABILITY_METHOD(prob_method);
+    if (has_pc) {
+        cdm_builder.add_COLLISION_PROBABILITY(event.covariance_probability);
+        cdm_builder.add_COLLISION_PROBABILITY_METHOD(prob_method);
+    }
     cdm_builder.add_OBJECT1(obj1);
     cdm_builder.add_OBJECT2(obj2);
 
@@ -1185,12 +1247,8 @@ int32_t cdm_xml_to_sds(
 }
 
 static bool cdm_objects_have_covariance(const CDM* cdm) {
-    const auto has = [](const CDMObject* object) {
-        return object && object->COVARIANCE() && object->COVARIANCE()->size() >= 6;
-    };
-    if (has(cdm->OBJECT1()) && has(cdm->OBJECT2())) return true;
-    set_error("A CCSDS CDM requires each object's covariance, and this CDM has none: "
-              "its sources supplied no covariance (a TLE carries none).");
+    if (object_has_covariance(cdm->OBJECT1()) && object_has_covariance(cdm->OBJECT2())) return true;
+    set_error("Collision probability requires covariance for both OBJECT1 and OBJECT2.");
     return false;
 }
 
@@ -1222,9 +1280,7 @@ int32_t cdm_sds_to_kvn(
         if (!cdm) {
             return -1;
         }
-        if (!cdm_objects_have_covariance(cdm)) {
-            return -3;
-        }
+        const auto probability_failure = cdm_probability_failure(cdm);
 
         std::ostringstream kvn;
         kvn << std::left;
@@ -1267,15 +1323,13 @@ int32_t cdm_sds_to_kvn(
             append_kvn_line(kvn, "RELATIVE_VELOCITY_T", format_decimal(cdm->RELATIVE_VELOCITY_T() * 1000.0, 6), "m/s");
             append_kvn_line(kvn, "RELATIVE_VELOCITY_N", format_decimal(cdm->RELATIVE_VELOCITY_N() * 1000.0, 6), "m/s");
         }
-        if (cdm->COLLISION_PROBABILITY() != 0.0) {
-            append_kvn_line(kvn, "COLLISION_PROBABILITY", format_scientific(cdm->COLLISION_PROBABILITY()));
-        }
         const auto pc_method = flatbuffer_string(cdm->COLLISION_PROBABILITY_METHOD());
-        if (!pc_method.empty()) {
+        if (!pc_method.empty() && probability_failure.empty()) {
+            append_kvn_line(kvn, "COLLISION_PROBABILITY", format_scientific(cdm->COLLISION_PROBABILITY()));
             append_kvn_line(kvn, "COLLISION_PROBABILITY_METHOD", pc_method);
         }
-        append_kvn_object(kvn, cdm->OBJECT1(), "OBJECT1");
-        append_kvn_object(kvn, cdm->OBJECT2(), "OBJECT2");
+        append_kvn_object(kvn, cdm->OBJECT1(), "OBJECT1", probability_failure);
+        append_kvn_object(kvn, cdm->OBJECT2(), "OBJECT2", probability_failure);
 
         const auto text = kvn.str();
         if (text.size() > output_capacity) {
@@ -1305,9 +1359,7 @@ int32_t cdm_sds_to_xml(
         if (!cdm) {
             return -1;
         }
-        if (!cdm_objects_have_covariance(cdm)) {
-            return -3;
-        }
+        const auto probability_failure = cdm_probability_failure(cdm);
 
         std::ostringstream xml;
         xml << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
@@ -1364,18 +1416,16 @@ int32_t cdm_sds_to_xml(
             append_xml_indent(xml, 3);
             xml << "</relativeStateVector>\n";
         }
-        if (cdm->COLLISION_PROBABILITY() != 0.0) {
-            append_xml_element(xml, 3, "COLLISION_PROBABILITY", format_scientific(cdm->COLLISION_PROBABILITY()));
-        }
         const auto pc_method = flatbuffer_string(cdm->COLLISION_PROBABILITY_METHOD());
-        if (!pc_method.empty()) {
+        if (!pc_method.empty() && probability_failure.empty()) {
+            append_xml_element(xml, 3, "COLLISION_PROBABILITY", format_scientific(cdm->COLLISION_PROBABILITY()));
             append_xml_element(xml, 3, "COLLISION_PROBABILITY_METHOD", pc_method);
         }
         append_xml_indent(xml, 2);
         xml << "</relativeMetadataData>\n";
 
-        append_xml_object(xml, cdm->OBJECT1(), "OBJECT1");
-        append_xml_object(xml, cdm->OBJECT2(), "OBJECT2");
+        append_xml_object(xml, cdm->OBJECT1(), "OBJECT1", probability_failure);
+        append_xml_object(xml, cdm->OBJECT2(), "OBJECT2", probability_failure);
         append_xml_indent(xml, 1);
         xml << "</body>\n";
         xml << "</cdm>\n";

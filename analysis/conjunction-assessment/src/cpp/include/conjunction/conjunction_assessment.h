@@ -72,7 +72,10 @@ struct ConjunctionEvent {
     // The basis codes are the caller's (screening passes them through).
     double radius1_m = 0.0, radius2_m = 0.0;
     uint8_t radius_basis1 = 0, radius_basis2 = 0;
-    bool has_covariance = false;
+    bool has_covariance = false; // A covariance-based Pc was computed successfully.
+    // Source availability is independent of whether Pc can be computed.
+    bool has_covariance1 = false, has_covariance2 = false;
+    std::string probability_failure;
     double covariance_probability = 0.0;
 
     // One-sigma RTN position uncertainty (metres) of each object, from the
@@ -80,7 +83,7 @@ struct ConjunctionEvent {
     // covariance means none is reported: a TLE carries none.
     double cov_r1 = 0.0, cov_t1 = 0.0, cov_n1 = 0.0;  // Object 1
     double cov_r2 = 0.0, cov_t2 = 0.0, cov_n2 = 0.0;  // Object 2
-    // With has_covariance: each object's position-velocity covariance at TCA
+    // With has_covariance1/2: each object's position-velocity covariance at TCA
     // in its RTN axes, 21-element lower triangle (km², km²/s, km²/s²).
     std::array<double, 21> cov6_rtn1{}, cov6_rtn2{};
 

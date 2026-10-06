@@ -405,13 +405,11 @@ bool covarianceAxes(const RFM *f, int state_axes, CovarianceSeries::Axes &axes) 
   return error("covariance-frame-mismatch",
                "Source covariance must be in RTN (RSW) or in the source's own state frame.");
 }
-// One covariance epoch: a positive position diagonal and finite entries.
+// Preserve finite supplied covariance, including non-PSD matrices for CDM output.
 bool covarianceRow(double jd, const std::array<double, 21> &lower, CovarianceSeries &series) {
   for (double x : lower)
     if (!isFinite(x))
       return error("invalid-covariance", "Covariance entries must be finite.");
-  if (!(lower[0] > 0 && lower[2] > 0 && lower[5] > 0))
-    return error("invalid-covariance", "Covariance position variances must be positive.");
   if (!isFinite(jd) || (!series.jd.empty() && jd <= series.jd.back()))
     return error("invalid-covariance", "Covariance epochs must increase strictly.");
   series.jd.push_back(jd);
@@ -451,14 +449,29 @@ SuppliedCovariance applySourceCovariance(ConjunctionEvent2 &e, const Source &a, 
                                          const ConjunctionEngine &engine,
                                          cqrProbabilityAlgorithm alg) {
   SuppliedCovariance out;
-  if (alg == cqrProbabilityAlgorithm::ALFANO_MAXIMUM || a.covariance.empty() || b.covariance.empty())
+  if (has_error()) return out;
+  e.has_covariance1 = covariance_rtn_at(a.covariance, e.tca_jd, e.state1, e.cov6_rtn1);
+  e.has_covariance2 = covariance_rtn_at(b.covariance, e.tca_jd, e.state2, e.cov6_rtn2);
+  if (!e.has_covariance1 || !e.has_covariance2) return out;
+  const auto &c1 = e.cov6_rtn1, &c2 = e.cov6_rtn2;
+  if (!covariance_is_positive_semidefinite(c1.data(), c1.size()) ||
+      !covariance_is_positive_semidefinite(c2.data(), c2.size())) {
+    e.probability_failure = "Collision probability calculation failed: covariance not positive semidefinite (non-PSD).";
     return out;
-  std::array<double, 21> c1, c2;
-  if (!covariance_rtn_at(a.covariance, e.tca_jd, e.state1, c1) ||
-      !covariance_rtn_at(b.covariance, e.tca_jd, e.state2, c2))
+  }
+  if (alg == cqrProbabilityAlgorithm::ALFANO_MAXIMUM) {
+    e.probability_failure = "Collision probability unavailable: only the Alfano maximum was requested.";
     return out;
+  }
   auto computed = engine.compute_pc(e.state1, e.state2, position_block(c1), position_block(c2),
                                     e.combined_radius_km);
+  if (has_error() || !computed.pc.converged || !isFinite(computed.pc.probability) ||
+      computed.pc.probability < 0 || computed.pc.probability > 1) {
+    e.probability_failure = "Collision probability calculation failed.";
+    if (has_error()) e.probability_failure += std::string(" ") + error_message();
+    clear_error();
+    return out;
+  }
   e.pc = computed.pc;
   e.bplane = computed.bplane;
   e.cov1 = computed.cov1;
@@ -1529,8 +1542,6 @@ bool document(bool xml, bool write) {
     if (n == -2)
       data.resize(data.size() * 2);
   }
-  if (n == -3)
-    return error("covariance-unavailable", error_message());
   if (n < 0 || has_error())
     return error(
         "invalid-native-document",
@@ -1565,6 +1576,11 @@ ConjunctionEvent legacy(const ConjunctionEvent2 &e) {
   l.dilution_threshold_km = e.dilution_threshold_km;
   l.probability_method = e.pc.method;
   l.has_covariance = e.has_covariance;
+  l.has_covariance1 = e.has_covariance1;
+  l.has_covariance2 = e.has_covariance2;
+  l.probability_failure = e.probability_failure;
+  l.cov6_rtn1 = e.cov6_rtn1;
+  l.cov6_rtn2 = e.cov6_rtn2;
   l.radius1_m = e.radius1_m;
   l.radius2_m = e.radius2_m;
   l.covariance_probability = e.pc.probability;

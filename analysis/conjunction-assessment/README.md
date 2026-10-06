@@ -57,9 +57,10 @@ No uncertainty is invented. A TLE or SGP4 element set carries no covariance:
 - CDMs in ITRF are evaluated in the non-rotating frame aligned with ITRF at
   TCA (v + w x r); the probability is invariant under the common rotation, so
   no EOP enters. Orekit's real-CDM vectors reproduce to 1e-9;
-- `emit_cdm` writes the sources' 6x6 RTN covariance at TCA, and none it cannot back, and `write_cdm_kvn` /
-  `write_cdm_xml` refuse a CDM without covariance (`covariance-unavailable`),
-  since CCSDS requires it, as does `compute_pc_from_cdm`.
+- CDMs retain each source's supplied covariance. Missing covariance blocks are
+  omitted. Missing or non-PSD covariance, or a failed Pc calculation, leaves Pc
+  absent with a COMMENT explaining why. A computed Pc of zero is written.
+  `compute_pc_from_cdm` refuses missing covariance (`covariance-unavailable`).
 - **Empirical model.** Element sets can take covariance from an empirical
   prediction-error model: `analysis/gp-error-model`, scaled and gated by its
   calibration. `scripts/uncertainty-model.mjs` writes the model as the

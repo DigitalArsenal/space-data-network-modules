@@ -140,6 +140,50 @@ static Covariance3x3 rotate_covariance(
     return rotated;
 }
 
+bool covariance_is_positive_semidefinite(const double* lower, size_t size) {
+    const size_t n = size >= 45 ? 9 : size >= 21 ? 6 : size >= 6 ? 3 : 0;
+    if (!lower || n == 0) return false;
+    double a[9][9] = {}, scale[9] = {};
+    for (size_t r = 0; r < n; ++r) {
+        const double diagonal = lower[r * (r + 1) / 2 + r];
+        if (!std::isfinite(diagonal) || diagonal < 0) return false;
+        scale[r] = std::sqrt(diagonal);
+    }
+    for (size_t r = 0, k = 0; r < n; ++r) {
+        for (size_t c = 0; c <= r; ++c, ++k) {
+            if (!std::isfinite(lower[k])) return false;
+            if (scale[r] == 0 || scale[c] == 0) {
+                if (lower[k] != 0) return false;
+            } else {
+                a[r][c] = a[c][r] = lower[k] / scale[r] / scale[c];
+                if (!std::isfinite(a[r][c])) return false;
+            }
+        }
+    }
+    // Pivoted Schur complements of the correlation matrix. A zero pivot
+    // requires a zero residual row; tolerate only floating-point roundoff.
+    const double tolerance = 64 * n * std::numeric_limits<double>::epsilon();
+    for (size_t k = 0; k < n; ++k) {
+        size_t pivot = k;
+        for (size_t i = k; i < n; ++i) {
+            if (a[i][i] < -tolerance) return false;
+            if (a[i][i] > a[pivot][pivot]) pivot = i;
+        }
+        if (a[pivot][pivot] <= tolerance) {
+            for (size_t i = k; i < n; ++i)
+                for (size_t j = k; j < n; ++j)
+                    if (std::abs(a[i][j]) > tolerance) return false;
+            return true;
+        }
+        for (size_t j = 0; j < n; ++j) std::swap(a[k][j], a[pivot][j]);
+        for (size_t i = 0; i < n; ++i) std::swap(a[i][k], a[i][pivot]);
+        for (size_t i = k + 1; i < n; ++i)
+            for (size_t j = k + 1; j < n; ++j)
+                a[i][j] -= a[i][k] * a[k][j] / a[k][k];
+    }
+    return true;
+}
+
 Covariance3x3 position_block(const std::array<double, 21>& e) {
     Covariance3x3 c;
     c.data[0] = e[0];

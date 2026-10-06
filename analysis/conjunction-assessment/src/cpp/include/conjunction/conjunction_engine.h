@@ -70,6 +70,9 @@ struct CovarianceSeries {
 /// (position and velocity rotated alike).
 bool covariance_rtn_at(const CovarianceSeries &series, double jd,
                        const StateVector &state, std::array<double, 21> &rtn);
+/// Check the supplied symmetric lower triangle (3x3, 6x6 or 9x9), without
+/// repairing it. Diagonal scaling makes the PSD roundoff tolerance unitless.
+bool covariance_is_positive_semidefinite(const double *lower, size_t size);
 /// The position block of a 21-element lower triangle.
 Covariance3x3 position_block(const std::array<double, 21> &lower);
 
@@ -118,11 +121,14 @@ struct ConjunctionEvent2 {
   // only the Alfano maximum (pc.max_probability, pc.method "ALFANO-MAXPROB"):
   // no covariance is assumed, so no covariance-based probability exists.
   PcResult pc;
-  bool has_covariance = false;
+  bool has_covariance = false; // A covariance-based Pc was computed successfully.
+    // Source availability is independent of whether Pc can be computed.
+    bool has_covariance1 = false, has_covariance2 = false;
+    std::string probability_failure;
   double dilution_threshold_km = 0;
 
   Covariance3x3 cov1, cov2;
-  // With has_covariance, when the caller has them: each object's
+  // With has_covariance1/2: each object's
   // position-velocity covariance at TCA in RTN (21-element lower triangle).
   std::array<double, 21> cov6_rtn1{}, cov6_rtn2{};
   double combined_radius_km = 0.01;
