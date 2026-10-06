@@ -233,7 +233,7 @@ bool parse_ephemeris_upload(const std::string &content,
   if (format == "MODIFIED ITC" || format == "ITC" || format == "MEME")
     format = "MODIFIED_ITC";
   out.format = format;
-  if (format == "OCM")
+  if (format == "OCM" || first->rfind("CCSDS_OCM_VERS", 0) == 0)
     return fail("unsupported-format", "OCM is handled by S2", 1);
   if (first->front() == '<' ||
       (format != "OEM" && format != "MODIFIED_ITC" && format != "JSPOC" &&

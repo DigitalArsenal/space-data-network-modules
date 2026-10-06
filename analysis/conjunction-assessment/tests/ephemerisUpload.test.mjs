@@ -4,7 +4,8 @@
 // yp=1.860359247e-6 rad to 1e-12 before generating the UTC fixtures.
 // Straight-line EME2000 trajectories at 2006-01-02T00:01:00Z have closed-form
 // TCA at that epoch and 50 m miss. Cubic Hermite exactly represents each
-// line after transforming its nodes: 1 mm position and 1 um/s velocity
+// line after transforming its nodes: 0.5 mm per position component (3-D
+// error < 1 mm) and 1 um/s velocity
 // allowances cover matrix/stencil roundoff. TCA tolerance 2 ms covers the
 // requested 50 us search resolution and ~40 us binary64 JD quantization;
 // Analytic miss tolerance 5 m bounds the transverse displacement at 2 ms
@@ -66,6 +67,7 @@ for(const runtimeKind of ['browser','wasmedge']) test(`${runtimeKind}: ephemeris
   });
   await t.test('forced format and CAT object identity',async()=>{
     const oem=await good(fixture('A-nasa.txt'),{format:'NASA',object:{OBJECT_ID:'synthetic-id',OBJECT_NAME:'synthetic-name'}});
+    const ocm=await parse(fixture('ocm.txt'),{format:'OEM'});assert.equal(ocm.r.errorCode,'unsupported-format');assert.match(ocm.r.errorMessage,/S2/);
     assert.equal(oem.EPHEMERIS_DATA_BLOCK[0].OBJECT.OBJECT_ID,'synthetic-id');assert.equal(oem.EPHEMERIS_DATA_BLOCK[0].OBJECT.OBJECT_NAME,'synthetic-name');
   });
   for(const [name,options] of Object.entries(failures)) await t.test(`reject ${name}: ${options.error}`,async()=>{
@@ -98,7 +100,7 @@ for(const runtimeKind of ['browser','wasmedge']) test(`${runtimeKind}: ephemeris
       if(!baseline)baseline=event;
       close(event.TCA.JULIAN_DATE,baseline.TCA.JULIAN_DATE,2e-3/86400,'TCA parity');
       const expected=reference.evaluation_grid.find(x=>x.jd===event.TCA.JULIAN_DATE);assert.ok(expected, `Missing independent epoch ${event.TCA.JULIAN_DATE}`);
-      for(const [key,values] of [['POSITION',expected.position_m],['VELOCITY',expected.velocity_m_s]]) for(let i=0;i<3;++i) close(vec(event.PRIMARY_STATE.STATE[key])[i],values[i],key==='POSITION'?.001:1e-6,`${name} ${key}[${i}]`);
+      for(const [key,values] of [['POSITION',expected.position_m],['VELOCITY',expected.velocity_m_s]]) for(let i=0;i<3;++i) close(vec(event.PRIMARY_STATE.STATE[key])[i],values[i],key==='POSITION'?.0005:1e-6,`${name} ${key}[${i}]`);
     }
   });
   await t.test('both ITRF sources screen equivalently, with RTN and transformed ITRF covariance/Pc',async()=>{
@@ -145,7 +147,7 @@ for(const runtimeKind of ['browser','wasmedge']) test(`${runtimeKind}: ephemeris
       {EPOCH:c.stop,X:7130,Y:0,Z:0,X_DOT:1,Y_DOT:0,Z_DOT:0}];
     const {r,event}=await assess(a,b,{frame:'GCRF',startJd:c.start_jd,durationSeconds:.00005,eops:[c.eop]});assert.equal(r.statusCode,0,r.errorMessage);
     const expected=c.grid.find(x=>x.jd===event.TCA.JULIAN_DATE);assert.ok(expected);
-    for(let i=0;i<3;++i)close(vec(event.PRIMARY_STATE.STATE.POSITION)[i],expected.position_m[i],.001,`${c.name} GCRF position[${i}]`);
+    for(let i=0;i<3;++i)close(vec(event.PRIMARY_STATE.STATE.POSITION)[i],expected.position_m[i],.0005,`${c.name} GCRF position[${i}]`);
   });
   await t.test('ITRF to GCRF independent ERFA known answer <=1 mm, including velocity',async()=>{
     const a=structuredClone(parsed['oem-itrf.kvn']),b=structuredClone(a);
@@ -162,7 +164,7 @@ for(const runtimeKind of ['browser','wasmedge']) test(`${runtimeKind}: ephemeris
     close(event.TCA.JULIAN_DATE,reference.start_jd,2e-3/86400,"endpoint TCA");
     const expected=reference.gcrf_grid.find(x=>x.jd===event.TCA.JULIAN_DATE);assert.ok(expected);
     for(let i=0;i<3;++i) {
-      close(vec(event.PRIMARY_STATE.STATE.POSITION)[i],expected.position_m[i],.001,`ERFA GCRF position[${i}]`);
+      close(vec(event.PRIMARY_STATE.STATE.POSITION)[i],expected.position_m[i],.0005,`ERFA GCRF position[${i}]`);
       close(vec(event.PRIMARY_STATE.STATE.VELOCITY)[i],expected.velocity_m_s[i],1e-6,`ERFA GCRF velocity[${i}]`);
     }
   });

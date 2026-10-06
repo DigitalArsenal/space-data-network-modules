@@ -47,6 +47,8 @@ UTC→UT1, polar motion and optional dX/dY. The 6×6 covariance Jacobian include
 Earth-rotation velocity coupling. Text/compact-grid epoch rounding remainders
 are retained for ERFA two-part dates, including leap-day UTC quasi-JD; the
 existing screening/interpolation clock remains binary64 nominal UTC JD.
+Literal leap-second timestamps (`:60`) retain the existing CA `invalid-epoch`
+restriction; ordinary UTC timestamps on leap days are converted correctly.
 Missing EOP returns `eop-required`;
 there is no UT1=UTC screening fallback. ITRF resident indexes normalize to GCRF.
 
