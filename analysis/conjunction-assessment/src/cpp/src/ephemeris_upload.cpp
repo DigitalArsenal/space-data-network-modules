@@ -156,7 +156,7 @@ std::unique_ptr<RFMT> rfm(const std::string &f) {
 }
 struct Row {
   std::string iso, frame;
-  double jd;
+  double jd, rounding_seconds = 0;
   std::array<double, 6> pv;
   size_t line;
 };
@@ -207,7 +207,7 @@ bool parse_ephemeris_upload(const std::string &content,
                             [](auto &x) { return !x.empty(); });
   if (first == lines.end())
     return fail("invalid-native-document", "No ephemeris data", 1);
-  std::string format = upload_upper(opt.format);
+  std::string format = upload_upper(upload_trim(opt.format));
   if (format.empty() || format == "AUTO") {
     if (first->rfind("CCSDS_OEM_VERS", 0) == 0)
       format = "OEM";
@@ -389,6 +389,8 @@ bool parse_ephemeris_upload(const std::string &content,
             double jd;
             if (timestamp(value, false, iso, jd))
               out.oem.CREATION_DATE = iso;
+            else
+              out.oem.CREATION_DATE = value;
           }
         }
       }
@@ -403,7 +405,8 @@ bool parse_ephemeris_upload(const std::string &content,
                   "State requires an epoch and six finite Cartesian components",
                   at + 1);
     std::string stamp = w[0] + (offset == 2 ? " " + w[1] : "");
-    if (!timestamp(stamp, format == "NASA" || format == "JSPOC", r.iso, r.jd))
+    if (!timestamp(stamp, format == "NASA" || format == "JSPOC", r.iso, r.jd,
+                   &r.rounding_seconds))
       return fail("invalid-epoch", "Invalid UTC state epoch", at + 1);
     if (timeSystem != "UTC")
       return fail("unsupported-time-system",
@@ -486,12 +489,13 @@ bool parse_ephemeris_upload(const std::string &content,
                 "epoch; found " +
                     std::to_string(future),
                 rows.back().line);
-  double span = rows.back().jd - rows.front().jd;
-  if (span >= 21)
+  double span = (rows.back().jd - rows.front().jd) * 86400. +
+                rows.back().rounding_seconds - rows.front().rounding_seconds;
+  if (span >= 21 * 86400.)
     return fail("span-too-long",
                 "Ephemeris span must be under 21 days at " + rows.back().iso,
                 rows.back().line);
-  if (span * 86400 < 42 - 0.0001)
+  if (span < 42)
     return fail("span-too-short",
                 "Ephemeris span must be at least 42 seconds at " +
                     rows.back().iso,

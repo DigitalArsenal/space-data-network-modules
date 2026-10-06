@@ -81,6 +81,7 @@ for(const runtimeKind of ['browser','wasmedge']) test(`${runtimeKind}: ephemeris
     assert.equal((await parse(polar.replaceAll(' 6370 ',' 6350 '))).r.errorCode,'below-earth-surface');
     const boundary=['00','07','14','21','28','35','42'].map(sec=>'060020000'+sec+'.000 7000 0 0 0 70 0').join('\n');
     assert.equal((await parse(boundary)).r.statusCode,0);
+    assert.equal((await parse(boundary.replace('06002000042.000','06002000041.999999'))).r.errorCode,'span-too-short');
     const singular=fixture('A-oem-eme2000.kvn').replaceAll('0.01','0').replaceAll('0.089999999999999997','0');
     assert.equal((await parse(singular)).r.statusCode,0);
     const extra='EPOCH = 2006-01-03T00:00:00Z\nCOV_REF_FRAME = RTN\n-1\n0 1\n0 0 1\n0 0 0 1\n0 0 0 0 1\n0 0 0 0 0 1\n';
