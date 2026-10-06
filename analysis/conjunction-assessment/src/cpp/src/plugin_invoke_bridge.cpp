@@ -21,6 +21,9 @@
 #undef DOMAIN
 #endif
 #include "CQR_generated.h"
+#include "EOP_generated.h"
+#include "conjunction/ephemeris_upload.h"
+#include "conjunction/earth_orientation.h"
 #include "space_data_module_invoke.h"
 extern "C" int32_t plugin_set_output_stream_frame(uint32_t, uint64_t, int32_t);
 #include "conjunction/conjunction_assessment.h"
@@ -245,6 +248,11 @@ bool controls(const CQRScreeningControls *c, ScreeningConfig &o) {
 }
 // No frame is inferred from a label. Earth common-frame evaluation needs no
 // transform; unsupported transforms fail before any relative geometry is used.
+bool isItrfName(const std::string& name) {
+  if (name == "ITRF") return true;
+  return name.rfind("ITRF", 0) == 0 && (name.size() == 6 || name.size() == 8) &&
+      std::all_of(name.begin()+4, name.end(), [](char c) { return c >= '0' && c <= '9'; });
+}
 int frame(const RFMCoordinateSystem *f) {
   if (!f || !f->ORIGIN() ||
       f->ORIGIN()->KIND() != rfmOriginKind::CELESTIAL_BODY ||
@@ -256,6 +264,10 @@ int frame(const RFMCoordinateSystem *f) {
   switch (f->AXIS_TYPE()) {
   case rfmAxisType::TRUE_EQUATOR_MEAN_EQUINOX_OF_DATE:
     return 1;
+  case rfmAxisType::BODY_FIXED:
+    if (isItrfName(text(f->NAME()))) return 4;
+    error("unsupported-frame", "Earth body-fixed sources must name an ITRF realization.");
+    return 0;
   case rfmAxisType::ICRF:
     return 2;
   case rfmAxisType::MEAN_EQUATOR_EQUINOX_J2000:
@@ -281,6 +293,10 @@ int sourceFrame(const RFM *f, const std::string &center) {
     return frame(w->COORDINATE_SYSTEM());
   if (auto w = f->REFERENCE_FRAME_as_CelestialFrameWrapper()) {
     switch (w->frame()) {
+    case CelestialFrame::ITRF2000:
+    case CelestialFrame::ITRF93:
+    case CelestialFrame::ITRF97:
+      return 4;
     case CelestialFrame::TEMEOFDATE:
       return 1;
     case CelestialFrame::GCRF:
@@ -380,6 +396,8 @@ struct Source {
   cqrHardBodyRadiusBasis radius_basis = cqrHardBodyRadiusBasis::UNSPECIFIED;
   // The covariance the source's message supplied (OEM, OCM); empty if none.
   CovarianceSeries covariance;
+  std::vector<int> covariance_frames; // OEM per-row: 0=RTN, otherwise sourceFrame code.
+  bool uploaded_oem = false;
 };
 // The axes of a source's covariance: RTN (RSW), or the source's own state
 // frame. Anything else would need a transform the guest does not perform.
@@ -532,6 +550,7 @@ bool validSamples(const Source &o) {
   return true;
 }
 bool points(const OEM *r, Source &o) {
+  o.uploaded_oem = true;
   if (!r || !r->EPHEMERIS_DATA_BLOCK() ||
       r->EPHEMERIS_DATA_BLOCK()->size() == 0)
     return error("invalid-source", "OEM needs ephemeris blocks.");
@@ -553,12 +572,21 @@ bool points(const OEM *r, Source &o) {
           "The sampled OEM adapter implements cubic Hermite interpolation.");
     if (b->COVARIANCE_MATRIX_LINES() && b->COVARIANCE_MATRIX_LINES()->size()) {
       CovarianceSeries::Axes axes;
-      if (!covarianceAxes(b->COV_REFERENCE_FRAME(), f, axes))
-        return false;
-      if (!o.covariance.empty() && o.covariance.axes != axes)
-        return error("covariance-frame-mismatch", "All OEM covariance blocks must share one frame.");
-      o.covariance.axes = axes;
+      int cf = f;
+      const auto* declared = b->COV_REFERENCE_FRAME();
+      if (declared && declared->REFERENCE_FRAME_as_OrbitFrameWrapper()) {
+        if (!covarianceAxes(declared, f, axes)) return false;
+        cf = 0;
+      } else if (declared) {
+        cf = sourceFrame(declared, "EARTH");
+        if (!cf) return false;
+      }
+      // Existing inertial-only sources retain their strict common-frame contract.
+      if (cf && cf != f && cf != 4 && f != 4)
+        return error("covariance-frame-mismatch", "Source covariance must share its state frame or use ITRF with EOP.");
+      o.covariance.axes = cf == 0 ? CovarianceSeries::Axes::Rtn : CovarianceSeries::Axes::Evaluation;
       for (auto c : *b->COVARIANCE_MATRIX_LINES()) {
+        o.covariance_frames.push_back(cf);
         if (!c || text(c->EPOCH()).empty())
           return error("invalid-covariance", "OEM covariance epoch required.");
         if (!covarianceRow(iso_to_jd(text(c->EPOCH())),
@@ -788,7 +816,9 @@ bool source(const CQRObjectSource *r, Source &o, const PPE *trajectory = nullptr
   }
   return true;
 }
-bool window(const Source &s, const ScreeningConfig &c, int f) {
+#include "ephemeris_invoke.inc"
+bool window(Source &s, const ScreeningConfig &c, int f) {
+  if (s.uploaded_oem && !normalizeOem(s, f)) return false;
   if (s.axes != f)
     return error("frame-mismatch",
                  "Scientific sources must already use the declared evaluation "
@@ -1771,6 +1801,7 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
   return true;
 }
 } // namespace ca_cqr
+extern "C" int parse_ephemeris() { return ca_cqr::uploadEphemeris() ? 0 : 400; }
 extern "C" int parse_cdm_kvn() {
   return ca_cqr::document(false, false) ? 0 : 400;
 }
@@ -1993,6 +2024,7 @@ bool prepare(cqrIndexRepresentation expected) {
     Source v;
     if (!source(s, v, t == trajectories.end() ? nullptr : t->second))
       return false;
+    if (v.uploaded_oem && v.axes == 4 && !normalizeOem(v, 2)) return false;
     used += t != trajectories.end();
     if (!v.handle)
       return error("invalid-source-handle",

@@ -23,7 +23,7 @@ export async function generateSdsHeaders() {
     for (const [,dep] of source.matchAll(/include\s+"\.\.\/([A-Z0-9_]+)\/main\.fbs"/g)) visit(dep);
     schemas.set(code, source);
   }
-  for (const code of ['CQR', 'PIV', 'TAB']) visit(code);
+  for (const code of ['CQR', 'PIV', 'TAB', 'EOP']) visit(code);
   const flatc = await createFlatc();
   flatc.FS.mkdir('/schemas'); flatc.FS.mkdir('/headers');
   for (const [code, source] of schemas) {

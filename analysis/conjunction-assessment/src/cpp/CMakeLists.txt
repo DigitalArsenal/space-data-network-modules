@@ -58,6 +58,8 @@ set(CA_SOURCES
     src/screening.cpp
     src/screening_tight.cpp
     src/time_scales.cpp
+    src/earth_orientation.cpp
+    src/ephemeris_upload.cpp
     src/cdm_output.cpp
     src/csm_output.cpp
     src/pc_method.cpp

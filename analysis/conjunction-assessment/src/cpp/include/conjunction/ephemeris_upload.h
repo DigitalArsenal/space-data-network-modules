@@ -3,6 +3,7 @@
 #include <string>
 
 namespace conjunction {
+namespace upload { bool timestamp(const std::string&, bool, std::string&, double&); }
 // Text parsing/validation is independent of the SDK transport adapter.
 struct UploadOptions {
   double reference_jd = 0;
