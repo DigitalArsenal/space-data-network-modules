@@ -82,7 +82,10 @@ test("manifest declares CSM summary command surface", () => {
   const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
   const method = manifest.methods.find((entry) => entry.methodId === "emit_csm");
   assert.ok(method, "emit_csm method is declared");
-  assert.equal(method.inputPorts.length, 1);
+  assert.equal(method.inputPorts.length, 2);
+  const eop = method.inputPorts.find(port => port.portId === "earth_orientation");
+  assert.equal(eop.required, false);
+  assert.equal(eop.acceptedTypeSets[0].allowedTypes[0].fileIdentifier, "$EOP");
   assert.equal(method.inputPorts[0].portId, "request");
   assert.equal(
     method.inputPorts[0].acceptedTypeSets[0].allowedTypes[0].fileIdentifier,

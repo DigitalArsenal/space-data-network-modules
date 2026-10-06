@@ -574,7 +574,10 @@ bool points(const OEM *r, Source &o) {
       CovarianceSeries::Axes axes;
       int cf = f;
       const auto* declared = b->COV_REFERENCE_FRAME();
-      if (declared && declared->REFERENCE_FRAME_as_OrbitFrameWrapper()) {
+      if (declared && (declared->REFERENCE_FRAME_as_OrbitFrameWrapper() ||
+          (declared->REFERENCE_FRAME_as_RFMCoordinateSystemWrapper() &&
+           declared->REFERENCE_FRAME_as_RFMCoordinateSystemWrapper()->COORDINATE_SYSTEM() &&
+           declared->REFERENCE_FRAME_as_RFMCoordinateSystemWrapper()->COORDINATE_SYSTEM()->AXIS_TYPE() == rfmAxisType::ORBITAL_RADIAL_TRANSVERSE_NORMAL))) {
         if (!covarianceAxes(declared, f, axes)) return false;
         cf = 0;
       } else if (declared) {

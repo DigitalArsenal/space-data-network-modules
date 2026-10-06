@@ -68,6 +68,21 @@ for(const runtimeKind of ['browser','wasmedge']) test(`${runtimeKind}: ephemeris
     const {r}=await parse(fixture(`${name}.txt`),options);
     assert.equal(r.statusCode,400,r.errorMessage);assert.equal(r.errorCode,options.error,r.errorMessage);assert.match(r.errorMessage,/line \d+/);assert.equal(r.outputs.length,0);
   });
+  await t.test('WGS-84 polar clearance, inclusive lower span/speed bounds, singular PSD, extra covariance epochs',async()=>{
+    // WGS-84 a=6378.137 km, b=6356.752314245 km (1/f=298.257223563):
+    // z=6370 km is above the polar ellipsoid but inside a sphere of radius a.
+    // Literal states/epochs here are synthetic; no JS frame/time computation.
+    const polar=fixture('A-oem-eme2000.kvn').split('COVARIANCE_START')[0].replace('REF_FRAME = EME2000','REF_FRAME = ITRF2014').split('\n').map(line=>/^2006-/.test(line)?line.split(' ')[0]+' 0 0 6370 0 0 0':line).join('\n');
+    assert.equal((await parse(polar)).r.statusCode,0);
+    assert.equal((await parse(polar.replaceAll(' 6370 ',' 6350 '))).r.errorCode,'below-earth-surface');
+    const boundary=['00','07','14','21','28','35','42'].map(sec=>'060020000'+sec+'.000 7000 0 0 0 70 0').join('\n');
+    assert.equal((await parse(boundary)).r.statusCode,0);
+    const singular=fixture('A-oem-eme2000.kvn').replaceAll('0.01','0').replaceAll('0.089999999999999997','0');
+    assert.equal((await parse(singular)).r.statusCode,0);
+    const extra='EPOCH = 2006-01-03T00:00:00Z\nCOV_REF_FRAME = RTN\n-1\n0 1\n0 0 1\n0 0 0 1\n0 0 0 0 1\n0 0 0 0 0 1\n';
+    const oem=await good(fixture('A-oem-eme2000.kvn').replace('COVARIANCE_STOP',extra+'COVARIANCE_STOP'));
+    assert.equal(oem.EPHEMERIS_DATA_BLOCK[0].COVARIANCE_MATRIX_LINES.length,13);
+  });
   const secondary=await good(fixture('B-oem-eme2000.kvn'));
   await t.test('six formats agree in EME2000 to 1 mm after conversion',async()=>{
     let baseline;
@@ -96,6 +111,23 @@ for(const runtimeKind of ['browser','wasmedge']) test(`${runtimeKind}: ephemeris
     const a=await assess(parsed['oem-itrf.kvn'],secondary,{withEop:false});assert.equal(a.r.errorCode,'eop-required');assert.equal(a.r.outputs.length,0);
     const b=await assess(parsed['oem-itrf.kvn'],secondary,{eops:[{...reference.eop,MJD:53738},{...reference.eop,MJD:53739}]});assert.equal(b.r.errorCode,'eop-coverage');
     const c=await assess(parsed['oem-itrf.kvn'],secondary,{eops:[{...reference.eop,IAU_CONVENTION:'IAU_2000B'}]});assert.equal(c.r.errorCode,'invalid-eop');
+  });
+  await t.test('catalog screening and bracketed EOP records retain pair/Pc equivalence',async()=>{
+    async function screen(a,b,eops) {
+      const pair=pairRequest({PRIMARY:source(a,'A'),SECONDARY:source(b,'B'),EVALUATION_FRAME:earthFrame('EME2000'),startJd:reference.start_jd,durationSeconds:120,fineTolSec:.00005}).PAIR_REQUEST;
+      pair.CONTROLS.ALGORITHM='LAAS_2015';
+      const record={CATALOG_REQUEST:{PRIMARIES:[pair.PRIMARY],SECONDARIES:[pair.SECONDARY],CONTROLS:pair.CONTROLS,EVALUATION_FRAME:pair.EVALUATION_FRAME}};
+      const r=await h.invoke({methodId:'screen_catalog',inputs:[{portId:'request',payload:encodeCqr(f,record)},...eops.map(eop)]});
+      assert.equal(r.statusCode,0,r.errorMessage);const result=decodeCqr(f,r.outputs.find(x=>x.portId==='result').payload).CATALOG_RESULT;assert.equal(result.EVENTS.length,1);return result.EVENTS[0];
+    }
+    const a=await screen(parsed['oem-eme2000.kvn'],secondary,[]);
+    const fixedB=await good(fixture('B-oem-itrf.kvn'));
+    // Legacy fields are deliberately contradictory: every present _HP wins.
+    const precise={...reference.eop,UT1_MINUS_UTC_SECONDS:-.7,X_POLE_WANDER_RADIANS:1e-4,Y_POLE_WANDER_RADIANS:1e-4};
+    const b=await screen(parsed['oem-itrf.kvn'],fixedB,[precise,{...precise,MJD:53738}]);
+    close(a.TCA.JULIAN_DATE,b.TCA.JULIAN_DATE,2e-3/86400,'catalog TCA');close(a.MISS_DISTANCE_M,b.MISS_DISTANCE_M,.001,'catalog miss');
+    close(a.PROBABILITY.PROBABILITY,b.PROBABILITY.PROBABILITY,a.PROBABILITY.PROBABILITY*1e-6,'catalog Pc');
+    const missing=await assess(parsed['oem-itrf.kvn'],secondary,{eops:[{MJD:53737}]});assert.equal(missing.r.errorCode,'invalid-eop');
   });
   await t.test('ITRF to GCRF independent ERFA known answer <=1 mm, including velocity',async()=>{
     const a=structuredClone(parsed['oem-itrf.kvn']),b=structuredClone(a);

@@ -1,11 +1,11 @@
 # Conjunction Assessment Plugin
 
 Conjunction assessment and collision probability implemented in C++/WASM,
-using the canonical SDK invoke contract and published SDS **1.220.0** records.
+using the canonical SDK invoke contract and published SDS **1.231.0** records.
 
 ## Public methods and records
 
-`plugin-manifest.json` advertises all 22 methods. Requests and results use
+`plugin-manifest.json` advertises all 23 methods. Requests and results use
 ordinary, verified FlatBuffers with explicit UTC times, Earth reference frames,
 source provenance, probability algorithms and units.
 
@@ -15,6 +15,7 @@ source provenance, probability algorithms and units.
 | `emit_cdm`, `emit_csm` | CQR pair request | SDS CDM / CSM |
 | `alfano_max_probability`, `compute_pc` | CQR probability request arm for the method | CQR probability result arm |
 | `compute_pc_from_cdm` | SDS CDM | CQR probability result |
+| `parse_ephemeris` | CQR text, TIM reference epoch, optional CAT identity / CQR format | SDS OEM and CQR validation text |
 | `parse_cdm_kvn`, `parse_cdm_xml` | CQR native document | SDS CDM |
 | `write_cdm_kvn`, `write_cdm_xml` | SDS CDM | CQR native document |
 | `screen_catalog` | CQR catalog request plus verified OMM frames | Chunked CQR catalog results, plus one OMM per excluded object |
@@ -33,10 +34,21 @@ OMM/TLE sources select the built-in SGP4 provider explicitly. OEM compact arrays
 OEM explicit samples and Cartesian Chebyshev PPE use native track evaluation.
 They do not require an external SGP4 module. JavaScript adapters preserve the
 native standard records; the guest performs interpolation and physics.
-Published OCM 1.220.0 lacks trajectory frame/unit metadata, so that source fails
-explicitly. Unsupported providers, frame conversions and controls also fail
-explicitly. See the [lane handoff](../../docs/tmpl-lane-14-conjunction-cqr-handoff.md)
+Binary Cartesian OCM sources retain their declared units and frames.
+Unsupported providers, frame conversions and controls fail explicitly. See the [lane handoff](../../docs/tmpl-lane-14-conjunction-cqr-handoff.md)
 for the exact supported profile and remaining work.
+
+## Ephemeris input
+
+`parse_ephemeris` accepts OEM KVN, Modified ITC/MEME, JSpOC, UTC and NASA
+text. Autodetection checks CCSDS headers, UTC field headers, the JSpOC report
+header, NASA's initial two-digit-year epoch, then Modified ITC. OCM text is
+reserved for S2; XML is unsupported. Supply an explicit UTC reference epoch.
+Validation requires six future states, a 42-second to under-21-day span,
+WGS-84 surface clearance, speed ≤70 km/s, supported frames/UTC, and complete
+PSD covariance when any is supplied. ITRF screening requires `$EOP` records
+on `earth_orientation`; without them it fails with `eop-required`.
+See [ports, options, validation codes and EOP conventions](docs/ephemeris-input.md).
 
 ### Uncertainty and probability
 
@@ -49,7 +61,8 @@ No uncertainty is invented. A TLE or SGP4 element set carries no covariance:
   only on supplied covariance (`SUPPLIED_COVARIANCE`): `compute_pc`,
   `compute_pc_from_cdm`, or the sources' own. OEM covariance lines and OCM
   `COVARIANCE_DATA` are read with their declared axes: RTN (`RSW`) or the
-  source's state frame; anything else fails with `covariance-frame-mismatch`.
+  source's state frame; OEM ITRF covariance can also be transformed with EOP.
+  Other unsupported combinations fail with `covariance-frame-mismatch`.
   Each element is interpolated linearly to the TCA between the bracketing
   epochs; a TCA outside them leaves the Alfano maximum. Such events state
   `SOURCE_EPHEMERIS`, `INDEPENDENT` errors, and `CALIBRATION` `Calibrated`

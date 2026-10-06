@@ -50,6 +50,23 @@ bool timestamp(const std::string &input, bool short_year, std::string &iso,
       std::replace(s.begin(), s.end(), '/', '-');
     if (s.size() > 10 && s[10] == ' ')
       s[10] = 'T';
+    if (s.size() < 19 || s[7] != '-' || s[10] != 'T' || s[13] != ':' ||
+        s[16] != ':')
+      return false;
+    for (size_t i : {0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18})
+      if (!std::isdigit(static_cast<unsigned char>(s[i])))
+        return false;
+    size_t end = 19;
+    if (end < s.size() && s[end] == '.') {
+      size_t begin = ++end;
+      while (end < s.size() && std::isdigit(static_cast<unsigned char>(s[end])))
+        ++end;
+      if (end == begin)
+        return false;
+    }
+    const auto suffix = upload_trim(s.substr(end));
+    if (!suffix.empty() && suffix != "Z" && suffix != "UTC")
+      return false;
     if (std::sscanf(s.c_str(), "%4d-%2d-%2dT%2d:%2d:%lf%n", &y, &m, &d, &h,
                     &min, &sec, &n) != 6)
       return false;
@@ -110,6 +127,7 @@ bool rtn(const std::string &f) {
 }
 std::unique_ptr<RFMT> rfm(const std::string &f) {
   auto r = std::make_unique<RFMT>();
+  r->NAME = f;
   if (rtn(f)) {
     OrbitFrameWrapperT w;
     w.frame = OrbitFrame::RSW_INERTIAL;
