@@ -13,11 +13,11 @@ int eraDtf2d(const char*,int,int,int,int,int,double,double*,double*);
 int eraJd2cal(double,double,int*,int*,int*,double*);
 }
 namespace conjunction { namespace upload {
-std::string trim(const std::string& s) {
+std::string upload_trim(const std::string& s) {
   auto a=s.find_first_not_of(" \t\r\n"), b=s.find_last_not_of(" \t\r\n");
   return a==std::string::npos ? "" : s.substr(a,b-a+1);
 }
-std::string upper(std::string s) { for(auto& c:s) c=std::toupper(static_cast<unsigned char>(c)); return s; }
+std::string upload_upper(std::string s) { for(auto& c:s) c=std::toupper(static_cast<unsigned char>(c)); return s; }
 std::vector<std::string> words(std::string s) {
   std::replace(s.begin(),s.end(),',',' ');
   std::istringstream in(s); std::vector<std::string> out; std::string w;
@@ -29,13 +29,13 @@ bool number(std::string s,double& x) {
   return end!=s.c_str() && !*end && std::isfinite(x);
 }
 bool timestamp(const std::string& input, bool short_year, std::string& iso, double& jd) {
-  std::string s=trim(input); int y=0,m=0,d=0,h=0,min=0,n=0; double sec=0;
+  std::string s=upload_trim(input); int y=0,m=0,d=0,h=0,min=0,n=0; double sec=0;
   if(s.size()>10 && (s[4]=='-' || s[4]=='/')) {
     char sep=s[4];
     if(sep=='/') std::replace(s.begin(),s.end(),'/','-');
     if(s.size()>10 && s[10]==' ') s[10]='T';
     if(std::sscanf(s.c_str(),"%4d-%2d-%2dT%2d:%2d:%lf%n",&y,&m,&d,&h,&min,&sec,&n)!=6) return false;
-    auto tail=trim(s.substr(n)); if(!tail.empty() && tail!="Z" && tail!="UTC") return false;
+    auto tail=upload_trim(s.substr(n)); if(!tail.empty() && tail!="Z" && tail!="UTC") return false;
   } else {
     size_t width=short_year?2:4, whole=width+9;
     if(s.size()<whole || (s.size()>whole && s[whole]!='.')) return false;
@@ -92,10 +92,10 @@ bool parse_ephemeris_upload(const std::string& content,const UploadOptions& opt,
   if(!std::isfinite(opt.reference_jd) || opt.reference_jd<=0)
     return fail("reference-epoch-required","An explicit reference UTC epoch is required",1);
   std::vector<std::string> lines; std::istringstream in(content); std::string line;
-  while(std::getline(in,line)) lines.push_back(trim(line));
+  while(std::getline(in,line)) lines.push_back(upload_trim(line));
   auto first=std::find_if(lines.begin(),lines.end(),[](auto& x){return !x.empty();});
   if(first==lines.end()) return fail("invalid-native-document","No ephemeris data",1);
-  std::string format=upper(opt.format);
+  std::string format=upload_upper(opt.format);
   if(format.empty() || format=="AUTO") {
     if(first->rfind("CCSDS_OEM_VERS",0)==0) format="OEM";
     else if(first->rfind("CCSDS_OCM_VERS",0)==0) format="OCM";
@@ -115,7 +115,7 @@ bool parse_ephemeris_upload(const std::string& content,const UploadOptions& opt,
   if(format=="OEM") {stateFrame="";timeSystem="";}
   if(format=="MODIFIED_ITC") {
     if(lines.size()<4) return fail("invalid-state","Modified ITC needs three header lines and a covariance frame",lines.size());
-    covFrame=upper(lines[3]);
+    covFrame=upload_upper(lines[3]);
     if(covFrame!="UVW" && covFrame!="EME2000") return fail("unsupported-covariance-frame","Modified ITC covariance frame must be UVW or EME2000",4);
     at=4;
   }
@@ -128,10 +128,10 @@ bool parse_ephemeris_upload(const std::string& content,const UploadOptions& opt,
       if(l=="COVARIANCE_STOP") {inCov=false;continue;}
       auto eq=l.find('=');
       if(eq!=std::string::npos) {
-        auto key=trim(l.substr(0,eq)), value=trim(l.substr(eq+1));
-        if(key=="REF_FRAME") stateFrame=upper(value);
-        else if(key=="TIME_SYSTEM") timeSystem=upper(value);
-        else if(key=="CENTER_NAME" && upper(value)!="EARTH") return fail("unsupported-frame","OEM center must be EARTH",at+1);
+        auto key=upload_trim(l.substr(0,eq)), value=upload_trim(l.substr(eq+1));
+        if(key=="REF_FRAME") stateFrame=upload_upper(value);
+        else if(key=="TIME_SYSTEM") timeSystem=upload_upper(value);
+        else if(key=="CENTER_NAME" && upload_upper(value)!="EARTH") return fail("unsupported-frame","OEM center must be EARTH",at+1);
         else if(key=="OBJECT_ID" && opt.object_id.empty()) objectId=value;
         else if(key=="OBJECT_NAME" && opt.object_name.empty()) objectName=value;
         else if(key=="CREATION_DATE") out.oem.CREATION_DATE=value;
@@ -142,7 +142,7 @@ bool parse_ephemeris_upload(const std::string& content,const UploadOptions& opt,
           size_t next=at+1; while(next<lines.size() && (lines[next].empty() || lines[next].rfind("COMMENT",0)==0)) ++next;
           if(next<lines.size() && lines[next].rfind("COV_REF_FRAME",0)==0) {
             auto e=lines[next].find('='); if(e==std::string::npos) return fail("invalid-covariance","COV_REF_FRAME needs '='",next+1);
-            c.frame=upper(trim(lines[next].substr(e+1)));c.explicit_frame=true;++next;
+            c.frame=upload_upper(upload_trim(lines[next].substr(e+1)));c.explicit_frame=true;++next;
           }
           if(!rtn(c.frame) && !state_frame(c.frame)) return fail("unsupported-covariance-frame","OEM covariance frame must be RTN/RSW, ITRF or EME2000",c.line);
           size_t k=0;
@@ -163,7 +163,7 @@ bool parse_ephemeris_upload(const std::string& content,const UploadOptions& opt,
     if((format=="UTC" || format=="JSPOC") && !dateLooking && rows.empty()) {
       if(format=="UTC" && at>=21) return fail("invalid-state","UTC permits at most 21 header lines",at+1);
       if(format=="JSPOC") {auto sep=l.find_first_of(":="); if(sep!=std::string::npos) {
-        auto key=upper(trim(l.substr(0,sep))), value=trim(l.substr(sep+1));
+        auto key=upload_upper(upload_trim(l.substr(0,sep))), value=upload_trim(l.substr(sep+1));
         if(key.find("SPACECRAFT")!=std::string::npos && opt.object_name.empty()) objectName=value;
         if(key.find("DATE")!=std::string::npos) {std::string iso;double jd; if(timestamp(value,false,iso,jd)) out.oem.CREATION_DATE=iso;}
       }}

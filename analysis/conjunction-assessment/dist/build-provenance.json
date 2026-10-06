@@ -25,7 +25,8 @@
       "CSM": "7b2066b3bb817159241b34a3a0892b15f069cbb11490d887de4f28cc108b662a",
       "CQR": "c4c6549764c35cdd9f97653591a1332e91e214f9fd2937fb44d7f1126f10bd07",
       "TAB": "90f1baee4963d2e9d7808f1105920015140d5b765e1834123dfcb19e94e89f81",
-      "PIV": "857589cdd5fc3e784baada0f261f1b3d97475361692638447c75ccaee7800eff"
+      "PIV": "857589cdd5fc3e784baada0f261f1b3d97475361692638447c75ccaee7800eff",
+      "EOP": "e48081d70d5090158c6ba5e2a8c4174f213ac35fd56e732f55e69ecffb286904"
     }
   },
   "sdk": "0.8.26",
@@ -35,8 +36,8 @@
     "browser",
     "wasmedge"
   ],
-  "sourceSha256": "e52790b978f6f1b97f4a24ab4fd7a51b6d41a4ae72597705b46772b02ce74a2c",
-  "wasmSha256": "6b94976c9e2669e3a0b79d48b0c8c8a7d04bc8d27936ab74176e95f72b8d125c",
+  "sourceSha256": "6d9fb0fd2d6d15124e63b38add58c373bcbe3417cadd3d965e3b03d6994fa493",
+  "wasmSha256": "40bb6080d61fc3e373391ec240716f25f69fe838e695fbf30bed4f37196d629a",
   "threadFeatures": {
     "hasSharedMemory": true,
     "sharedMemory": {
@@ -44,7 +45,7 @@
       "module": "env",
       "name": "memory",
       "flags": 3,
-      "min": 34,
+      "min": 36,
       "max": 32768,
       "shared": true,
       "growable": true
@@ -55,14 +56,14 @@
         "module": "env",
         "name": "memory",
         "flags": 3,
-        "min": 34,
+        "min": 36,
         "max": 32768,
         "shared": true,
         "growable": true
       }
     ],
     "usesAtomics": true,
-    "atomicInstructionCount": 600,
+    "atomicInstructionCount": 609,
     "declaredFeatures": [
       "atomics",
       "mutable-globals",

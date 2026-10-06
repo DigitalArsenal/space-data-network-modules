@@ -60,6 +60,25 @@
           "maxStreams": 1,
           "required": false,
           "description": "Empirical prediction-error model for element-set sources. With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the model's calibration gate passed; absent, or outside the model, events keep the Alfano maximum."
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 366,
+          "required": false
         }
       ],
       "outputPorts": [
@@ -127,6 +146,25 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 366,
+          "required": false
         }
       ],
       "outputPorts": [
@@ -175,6 +213,25 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 366,
+          "required": false
         }
       ],
       "outputPorts": [
@@ -223,6 +280,25 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 366,
+          "required": false
         }
       ],
       "outputPorts": [
@@ -648,6 +724,25 @@
           "maxStreams": 1,
           "required": false,
           "description": "Empirical prediction-error model for element-set sources. With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the model's calibration gate passed; absent, or outside the model, events keep the Alfano maximum."
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 366,
+          "required": false
         }
       ],
       "outputPorts": [
@@ -755,6 +850,25 @@
           "minStreams": 0,
           "maxStreams": 65535,
           "required": false
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 366,
+          "required": false
         }
       ],
       "outputPorts": [
@@ -803,6 +917,25 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 366,
+          "required": false
         }
       ],
       "outputPorts": [
@@ -851,6 +984,25 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 366,
+          "required": false
         }
       ],
       "outputPorts": [
@@ -921,6 +1073,25 @@
           "maxStreams": 1,
           "required": false,
           "description": "Empirical prediction-error model for element-set sources. With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the model's calibration gate passed; absent, or outside the model, events keep the Alfano maximum."
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 366,
+          "required": false
         }
       ],
       "outputPorts": [
@@ -1011,6 +1182,25 @@
           "maxStreams": 1,
           "required": false,
           "description": "Empirical prediction-error model for element-set sources. With a covariance ALGORITHM, each event between two element sets takes the covariance of its regime and prediction age (TCA minus epoch), labelled EMPIRICAL_MODEL and CALIBRATED only where the model's calibration gate passed; absent, or outside the model, events keep the Alfano maximum."
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 366,
+          "required": false
         }
       ],
       "outputPorts": [
@@ -1460,6 +1650,130 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "parse_ephemeris",
+      "displayName": "Parse and validate ephemeris",
+      "inputPorts": [
+        {
+          "portId": "ephemeris",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cqr",
+              "allowedTypes": [
+                {
+                  "schemaName": "CQR.fbs",
+                  "fileIdentifier": "$CQR",
+                  "rootTypeName": "CQR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "reference_epoch",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-tim",
+              "allowedTypes": [
+                {
+                  "schemaName": "TIM.fbs",
+                  "fileIdentifier": "$TIM",
+                  "rootTypeName": "TIM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "object",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cat",
+              "allowedTypes": [
+                {
+                  "schemaName": "CAT.fbs",
+                  "fileIdentifier": "$CAT",
+                  "rootTypeName": "CAT",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "format",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cqr",
+              "allowedTypes": [
+                {
+                  "schemaName": "CQR.fbs",
+                  "fileIdentifier": "$CQR",
+                  "rootTypeName": "CQR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "oem",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "validation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-cqr",
+              "allowedTypes": [
+                {
+                  "schemaName": "CQR.fbs",
+                  "fileIdentifier": "$CQR",
+                  "rootTypeName": "CQR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
   ],
   "threadModel": "emscripten-pthreads"
