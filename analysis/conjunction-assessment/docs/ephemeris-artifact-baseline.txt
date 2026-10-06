@@ -1,0 +1,86 @@
+Origin/main c3fe2f096e9bf4ffd57814796d4cf6d9cb394530 and task branch: identical diagnostics.
+Command: node --test tests/artifact_reproducibility.test.mjs
+Both: 10 tests, 8 passed, 2 failed.
+Failing tests (verbatim):
+  the ledger accounts for every committed dist artifact
+  every module with a build.mjs declares a thread model
+
+  FAIL — artifact reproducibility (27):
+    - ARTIFACT DRIFT analysis/access/dist/access.wasm
+      ledger  98315481714d59fb2ba03cc032b6ca7764a32b3847c59cd0eaac5675cd73401a (112216 B, inferred, toolchain unknown)
+      on disk 1277308cfb5abafcccc7b6d61dc0ce24085a7c36960229d0013698583007b42e (240305 B)
+      Bytes changed without recording what produced them. Regenerate the ledger in the same commit.
+    - ARTIFACT DRIFT analysis/access/dist/browser/module.wasm
+      ledger  98315481714d59fb2ba03cc032b6ca7764a32b3847c59cd0eaac5675cd73401a (112216 B, inferred, toolchain unknown)
+      on disk 1277308cfb5abafcccc7b6d61dc0ce24085a7c36960229d0013698583007b42e (240305 B)
+      Bytes changed without recording what produced them. Regenerate the ledger in the same commit.
+    - ARTIFACT DRIFT analysis/access/dist/isomorphic/module.wasm
+      ledger  98315481714d59fb2ba03cc032b6ca7764a32b3847c59cd0eaac5675cd73401a (112216 B, inferred, toolchain unknown)
+      on disk 1277308cfb5abafcccc7b6d61dc0ce24085a7c36960229d0013698583007b42e (240305 B)
+      Bytes changed without recording what produced them. Regenerate the ledger in the same commit.
+    - ARTIFACT DRIFT analysis/lambert-izzo/dist/isomorphic/module.wasm
+      ledger  cbb256c91ed03c6623db0974476bfc26c2feaca586a45408a85bb84eb303b242 (111364 B, inferred, toolchain unknown)
+      on disk 2f8e9c05b08e2dab11398aab01e054965772b24cc3a4b1cd9d92336720115f0c (154461 B)
+      Bytes changed without recording what produced them. Regenerate the ledger in the same commit.
+    - UNLEDGERED ARTIFACT analysis/launch-cola/dist/isomorphic/module.wasm (sha256 9c9d39ccac169d896e7b9a5502f62ae899eeb098cb883a28b8d22c55b5a5614a). A committed artifact with no recorded toolchain cannot be audited. Regenerate the ledger in the same commit: node scripts/check-artifact-reproducibility.mjs --write
+    - UNLEDGERED ARTIFACT analysis/launch-trajectory/dist/isomorphic/module.wasm (sha256 89f80f58c8c14e17360b0f6c2763dd7ef6b9aa16671b8eb103636f180bf3c370). A committed artifact with no recorded toolchain cannot be audited. Regenerate the ledger in the same commit: node scripts/check-artifact-reproducibility.mjs --write
+    - ARTIFACT DRIFT analysis/maneuver/dist/isomorphic/module.wasm
+      ledger  5ec29b228968e09ebff481cee386f70f835dc0c8ef1ae07e0a8c26901a5b652d (231542 B, inferred, toolchain unknown)
+      on disk 25e56a6a958b94ca56c1ad14f5e69eda420ac7996c79477a370dee76cd1b3183 (248721 B)
+      Bytes changed without recording what produced them. Regenerate the ledger in the same commit.
+    - ARTIFACT DRIFT analysis/od/dist/browser/module.wasm
+      ledger  680cdeb4ac3d492cbfc4c42e6e6de1f2c134b714c23df4b064caabf17b07ecec (496643 B, inferred, toolchain unknown)
+      on disk 2e2dba0c28ef0465b9cba52066e9b1fbc2fe5515091b9ad8ba3d5abf4a3fa5ae (495992 B)
+      Bytes changed without recording what produced them. Regenerate the ledger in the same commit.
+    - ARTIFACT DRIFT analysis/od/dist/isomorphic/module.command.wasm
+      ledger  389be21dc38fc98b2e804253653f402f976e29d4bead005ed3cc7f5954980583 (497142 B, inferred, toolchain unknown)
+      on disk cfdc406f0014255850c48254263ae7ac9f7320ee3290a7f718ab07aed6412982 (557535 B)
+      Bytes changed without recording what produced them. Regenerate the ledger in the same commit.
+    - ARTIFACT DRIFT analysis/od/dist/isomorphic/module.wasm
+      ledger  0017f5e6b11f312e3047ee6c1acd5ad1186e1bf23cda06fa57c160ce9bd662e9 (490143 B, inferred, toolchain unknown)
+      on disk cfdc406f0014255850c48254263ae7ac9f7320ee3290a7f718ab07aed6412982 (557535 B)
+      Bytes changed without recording what produced them. Regenerate the ledger in the same commit.
+    - UNLEDGERED ARTIFACT analysis/science-http/dist/isomorphic/module.wasm (sha256 97f0f6af13a6b2a3ae9790b0933fe6f351b242f3d29d52da3cb88089886158bc). A committed artifact with no recorded toolchain cannot be audited. Regenerate the ledger in the same commit: node scripts/check-artifact-reproducibility.mjs --write
+    - ARTIFACT DRIFT data-source/bond-attestation-source/dist/bond-attestation-source.wasm
+      ledger  7c7690528f16e4c5c8f4e8b76090edb240dd6b8e7e754984bc46f7f448139ba3 (72180 B, inferred, toolchain unknown)
+      on disk f6edcbdffd8acfcea2c6bfa7f8856209bbcb1f820446299370e8b17f7de32c47 (169671 B)
+      Bytes changed without recording what produced them. Regenerate the ledger in the same commit.
+    - ARTIFACT DRIFT data-source/bond-attestation-source/dist/isomorphic/module.wasm
+      ledger  f5062da801c3fccf3b7c4fa6b9fc7fd296a22774a1fd062ec6df12beb60166d2 (71216 B, inferred, toolchain unknown)
+      on disk 82b68e76067620e290b5f2c923340f0893111d6aa805f675c21d47b3cd495225 (168707 B)
+      Bytes changed without recording what produced them. Regenerate the ledger in the same commit.
+    - UNLEDGERED ARTIFACT data-source/ephemeris-source/dist/isomorphic/module.wasm (sha256 d2cdf0e6f333fc32b7cd679c8fc0fa6ef2c51da67278e183247bd2034f3683c4). A committed artifact with no recorded toolchain cannot be audited. Regenerate the ledger in the same commit: node scripts/check-artifact-reproducibility.mjs --write
+    - UNLEDGERED ARTIFACT data-source/ephemeris-source/host-adapter/dist/isomorphic/module.wasm (sha256 c5ba8c7b778f8a3916b9b3a8e80a115fb8556c3fded6f1b0c0e2194447569648). A committed artifact with no recorded toolchain cannot be audited. Regenerate the ledger in the same commit: node scripts/check-artifact-reproducibility.mjs --write
+    - UNLEDGERED ARTIFACT data-source/launch-schedule/dist/isomorphic/module.wasm (sha256 a5b43a4de713bdecfeeb4728d4318473a918e64e0d91336f469c4bc15850ab33). A committed artifact with no recorded toolchain cannot be audited. Regenerate the ledger in the same commit: node scripts/check-artifact-reproducibility.mjs --write
+    - UNLEDGERED ARTIFACT data-source/launch-schedule/host-adapter/dist/isomorphic/module.wasm (sha256 f7886409eaf6e5c512895ef072b18011ea20c3ca945250ccee789dbc94c4a029). A committed artifact with no recorded toolchain cannot be audited. Regenerate the ledger in the same commit: node scripts/check-artifact-reproducibility.mjs --write
+    - UNLEDGERED ARTIFACT data-source/open-meteo/dist/isomorphic/module.wasm (sha256 00c532c3fa3e0c350f50a7a444da5d7a8236aca9ee3404d377625d19166bbd8b). A committed artifact with no recorded toolchain cannot be audited. Regenerate the ledger in the same commit: node scripts/check-artifact-reproducibility.mjs --write
+    - UNLEDGERED ARTIFACT data-source/open-meteo/host-adapter/dist/isomorphic/module.wasm (sha256 b92365c98307251eb388762be0111c4be2c57860fb138b78bd5e1f0cb46179f4). A committed artifact with no recorded toolchain cannot be audited. Regenerate the ledger in the same commit: node scripts/check-artifact-reproducibility.mjs --write
+    - ARTIFACT DRIFT flows/mlab-connectivity-ingest/dist/cnp/isomorphic/module.wasm
+      ledger  50ae8be7f091e68587f074b420b258be6eaf35d23172947e9397a4d5b3f91562 (147007 B, inferred, toolchain unknown)
+      on disk 4d092d4e03c63af8585aedeb4810eb987b2aa9ffc0759e4cfb28b7d0a81dbf58 (161463 B)
+      Bytes changed without recording what produced them. Regenerate the ledger in the same commit.
+    - ARTIFACT DRIFT flows/mlab-connectivity-ingest/dist/cnp/runtime.wasm
+      ledger  50ae8be7f091e68587f074b420b258be6eaf35d23172947e9397a4d5b3f91562 (147007 B, inferred, toolchain unknown)
+      on disk 4d092d4e03c63af8585aedeb4810eb987b2aa9ffc0759e4cfb28b7d0a81dbf58 (161463 B)
+      Bytes changed without recording what produced them. Regenerate the ledger in the same commit.
+    - UNLEDGERED ARTIFACT network/cloudflare-registrar/dist/isomorphic/module.wasm (sha256 19400238baae79c36c5ceeecf65b9c3966d20789561909fe244c931d5c424292). A committed artifact with no recorded toolchain cannot be audited. Regenerate the ledger in the same commit: node scripts/check-artifact-reproducibility.mjs --write
+    - ARTIFACT DRIFT propagator/events/dist/isomorphic/module.wasm
+      ledger  e3d09bbab47f8e83c60ed5fdb192511afb2f7ebf02271bb3afc7d7d567cfe2f3 (392492 B, inferred, toolchain unknown)
+      on disk 5c32c352874e3cea9a876574088fc593a37ad4429a8e167d6c5a7daab6b57499 (570833 B)
+      Bytes changed without recording what produced them. Regenerate the ledger in the same commit.
+    - ARTIFACT DRIFT propagator/sgp4/dist/browser-shared/module.wasm
+      ledger  4db77cb6ab60ad3e3bdc5753694bf95642d08b399196dec03d8b34a72d5ad019 (1180647 B, inferred, toolchain unknown)
+      on disk 1b20bc871b2bbf6ef6dbb55339d532fa30457760ff3b3445e483c91e8d2b1e0a (1180088 B)
+      Bytes changed without recording what produced them. Regenerate the ledger in the same commit.
+    - ARTIFACT DRIFT propagator/sgp4/dist/browser/module.wasm
+      ledger  c767e1cbceefe14deec9623217ab13ceca135b4b0dcb5e19aeda7232be12384e (1179389 B, inferred, toolchain unknown)
+      on disk debb82d251cfe441e01e1f70f9d735b8878bb820bc48720fff1416ee129647e6 (1178699 B)
+      Bytes changed without recording what produced them. Regenerate the ledger in the same commit.
+    - ARTIFACT DRIFT propagator/sgp4/dist/isomorphic/module.wasm
+      ledger  c767e1cbceefe14deec9623217ab13ceca135b4b0dcb5e19aeda7232be12384e (1179389 B, inferred, toolchain unknown)
+      on disk debb82d251cfe441e01e1f70f9d735b8878bb820bc48720fff1416ee129647e6 (1178699 B)
+      Bytes changed without recording what produced them. Regenerate the ledger in the same commit.
+    - RAW EM++ LANE — LEDGER DISAGREES WITH THE BUILD RECORD:
+        - data-source/bond-attestation-source/dist/bond-attestation-source.wasm: built by em-6.0.1 on disk, but the ledger records no lane toolchain
+        - data-source/bond-attestation-source/dist/isomorphic/module.wasm: built by em-6.0.1 on disk, but the ledger records no lane toolchain
+      Regenerate in the same commit: node scripts/check-artifact-reproducibility.mjs --write

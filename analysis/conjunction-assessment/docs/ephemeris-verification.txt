@@ -1,0 +1,253 @@
+S1 ephemeris input verification — 2026-10-06
+
+Baseline: origin/main c3fe2f096e9bf4ffd57814796d4cf6d9cb394530.
+Final artifact commit: e9893a4d2a1faf6e21ae5a9895bb8d2df92d737e.
+Signed dist/isomorphic/module.wasm: 1214096 bytes,
+SHA-256 72882e9cf0c6fb442011dfea5b2f2b9295c833448d9b708acdcb166f45b4dcb0.
+
+Commands and results (commands run from the module unless noted):
+
+1. npm ci (repository root and module): PASS.
+2. python3 scripts/generate-ephemeris-fixtures.py: PASS, exit 0, no output.
+   Native upstream ERFA reference, all nine published t_c2t06a matrix
+   coefficients checked at 1e-12; synthetic linear trajectories only.
+3. SDN_LOCAL_EMSDK_DIR=/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-modules/analysis/conjunction-assessment/deps/emsdk npm run build
+   Built dist/isomorphic/module.wasm (1212889 bytes), SDS 1.231.0; SDK validation PASS
+   The signer then produced the signed artifact recorded above.
+4. node --test tests/ephemerisUpload.test.mjs tests/sdk_compat.test.mjs
+   68 tests, 68 passed, 0 failed, 0 skipped. Full output below.
+5. npm run check:compliance: PASS, 0 errors, 65 no-aligned-peer warnings,
+   plgRoundTrip=true. The existing script's printed standards label is 1.220.0;
+   the package it validates against and the compiled headers are SDS 1.231.0.
+6. npm test (whole CA suite): 184 tests, 174 passed, 1 failed, 9 skipped;
+   duration_ms 141423.827625. The only failure is Docker's unavailable socket.
+   Full failure and baseline reproduction are below.
+   Nine skips: three missing extracted Aerospace dataset cases, two existing
+   Aerospace replay availability checks, two missing Aerospace archive cases,
+   one missing local SOCRATES dataset case, one missing local real catalog case.
+   New browser and native WasmEdge E2E cases all ran and passed.
+7. node --test tests/artifact_reproducibility.test.mjs (repository root):
+   10 tests, 8 passed, 2 failed. The same command on the origin/main snapshot
+   gives 10 tests, 8 passed, 2 failed. All 27 diagnostics match byte-for-byte;
+   none reference conjunction-assessment. Full diagnostics and failing test
+   names are in ephemeris-artifact-baseline.txt.
+8. git diff --check: PASS.
+
+Baseline reproduction used git archive of the exact origin/main commit under
+.sdk-build/origin-main-snapshot, with installed node_modules linked in. An
+isolated GIT_INDEX_FILE and GIT_WORK_TREE made the root artifact checker read
+origin/main's tracked file inventory. No source changes to the canonical
+checkout or other modules were made. Docker reproduction command in that
+snapshot's module directory:
+  node --test --test-name-pattern='docker-wasmedge' tests/cqrAuthoritative.test.mjs
+
+Numerical evidence:
+- Six format variants of the same synthetic states, both built runtimes.
+- Independent native ERFA GCRF reference and EME2000 frame-bias reference,
+  fixed UTC/EOP, including fractional UTC and leap-day quasi-JD cases.
+- Position tolerance 0.5 mm per coordinate (<1 mm vector norm); velocity
+  tolerance 1 micrometre/s. Exact evaluation-epoch grids avoid masking the
+  existing binary64 Julian-date TCA quantization as frame error.
+- ITRF vs EME2000 screening: TCA <=2 ms, miss distance <=1 mm,
+  Pc relative tolerance 1e-5. Source, units, epoch/frame and interpolation/
+  finite-difference tolerance rationale are in the test and generator headers.
+- Validation negatives check distinct codes, plus inclusive boundaries,
+  singular PSD covariance, extra covariance matrices and WGS-84 polar clearance.
+
+Intentional limitations:
+- OCM text is unsupported-format and delegated to S2; OEM XML is unsupported.
+- Literal UTC leap-second timestamps (:60) retain CA's invalid-epoch restriction.
+  Ordinary timestamps on leap days are tested and correctly transformed.
+- The complete suite cannot be green without Docker and optional local datasets.
+  No live operator ephemerides were fetched or committed.
+
+Focused test output (verbatim):
+
+▶ browser: ephemeris uploads and ITRF screening through built WASM
+  ✔ all six autodetected formats preserve states and covariance declarations (1215.822041ms)
+  ✔ forced format and CAT object identity (218.526708ms)
+  ✔ reject future-states: insufficient-future-states (26.69975ms)
+  ✔ reject span-long: span-too-long (70.778417ms)
+  ✔ reject span-short: span-too-short (26.232166ms)
+  ✔ reject below-surface: below-earth-surface (25.072667ms)
+  ✔ reject speed: speed-limit (122.047417ms)
+  ✔ reject state-frame: unsupported-frame (26.384292ms)
+  ✔ reject time-system: unsupported-time-system (79.945292ms)
+  ✔ reject missing-covariance: missing-covariance (30.824584ms)
+  ✔ reject non-psd: covariance-not-psd (24.505208ms)
+  ✔ reject covariance-frame-presence: covariance-frame-required (18.714167ms)
+  ✔ reject covariance-frame: unsupported-covariance-frame (16.041959ms)
+  ✔ reject epoch-order: non-increasing-epochs (26.464083ms)
+  ✔ reject bad-epoch: invalid-epoch (42.8435ms)
+  ✔ reject bad-state: invalid-state (66.938959ms)
+  ✔ reject ocm: unsupported-format (9.906958ms)
+  ✔ reject xml: unsupported-format (17.170375ms)
+  ✔ reject duplicate-covariance: duplicate-covariance (25.702875ms)
+  ✔ reject truncated-itc: invalid-covariance (18.276333ms)
+  ✔ WGS-84 polar clearance, inclusive lower span/speed bounds, singular PSD, extra covariance epochs (126.408958ms)
+  ✔ six formats agree in EME2000 to 1 mm after conversion (225.553834ms)
+  ✔ both ITRF sources screen equivalently, with RTN and transformed ITRF covariance/Pc (441.77375ms)
+  ✔ ITRF without EOP fails closed, and EOP coverage is enforced (44.62275ms)
+  ✔ catalog screening and bracketed EOP records retain pair/Pc equivalence (93.3805ms)
+  ✔ fractional UTC epoch: ERFA epoch precision preserves 1 mm (32.75ms)
+  ✔ UTC leap day: ERFA epoch precision preserves 1 mm (40.684833ms)
+  ✔ ITRF to GCRF independent ERFA known answer <=1 mm, including velocity (56.497459ms)
+✔ browser: ephemeris uploads and ITRF screening through built WASM (3525.601333ms)
+▶ wasmedge: ephemeris uploads and ITRF screening through built WASM
+  ✔ all six autodetected formats preserve states and covariance declarations (1790.368459ms)
+  ✔ forced format and CAT object identity (440.256083ms)
+  ✔ reject future-states: insufficient-future-states (231.215ms)
+  ✔ reject span-long: span-too-long (192.78825ms)
+  ✔ reject span-short: span-too-short (127.699166ms)
+  ✔ reject below-surface: below-earth-surface (82.370959ms)
+  ✔ reject speed: speed-limit (83.23675ms)
+  ✔ reject state-frame: unsupported-frame (75.90625ms)
+  ✔ reject time-system: unsupported-time-system (92.949542ms)
+  ✔ reject missing-covariance: missing-covariance (286.075583ms)
+  ✔ reject non-psd: covariance-not-psd (227.905542ms)
+  ✔ reject covariance-frame-presence: covariance-frame-required (266.76ms)
+  ✔ reject covariance-frame: unsupported-covariance-frame (87.815209ms)
+  ✔ reject epoch-order: non-increasing-epochs (295.623292ms)
+  ✔ reject bad-epoch: invalid-epoch (91.409375ms)
+  ✔ reject bad-state: invalid-state (87.393166ms)
+  ✔ reject ocm: unsupported-format (63.559542ms)
+  ✔ reject xml: unsupported-format (84.105583ms)
+  ✔ reject duplicate-covariance: duplicate-covariance (313.67ms)
+  ✔ reject truncated-itc: invalid-covariance (66.381333ms)
+  ✔ WGS-84 polar clearance, inclusive lower span/speed bounds, singular PSD, extra covariance epochs (1277.244666ms)
+  ✔ six formats agree in EME2000 to 1 mm after conversion (920.417958ms)
+  ✔ both ITRF sources screen equivalently, with RTN and transformed ITRF covariance/Pc (3781.835917ms)
+  ✔ ITRF without EOP fails closed, and EOP coverage is enforced (227.127041ms)
+  ✔ catalog screening and bracketed EOP records retain pair/Pc equivalence (644.287833ms)
+  ✔ fractional UTC epoch: ERFA epoch precision preserves 1 mm (121.882209ms)
+  ✔ UTC leap day: ERFA epoch precision preserves 1 mm (191.296709ms)
+  ✔ ITRF to GCRF independent ERFA known answer <=1 mm, including velocity (186.336084ms)
+✔ wasmedge: ephemeris uploads and ITRF screening through built WASM (12645.632875ms)
+✔ build publishes canonical browser and isomorphic artifact paths (0.829042ms)
+✔ built artifact passes SDK compliance checks (96.573458ms)
+✔ manifest declares CDM import probability command surface (0.462292ms)
+✔ manifest declares CSM summary command surface (0.206459ms)
+✔ manifest declares Orekit CDM KVN parser/writer command surfaces (0.212333ms)
+✔ manifest declares Orekit CDM XML parser/writer command surfaces (0.198417ms)
+✔ primary artifact exposes canonical wasi-threads imports and exports (9.110459ms)
+✔ built artifact loads through the SDK WasmEdge pthread runner (379.719875ms)
+✔ primary artifact executes through the SDK browser WASI harness (152.411833ms)
+✔ hosted-runtime example is wired to the screen catalog command surface (1.0485ms)
+ℹ tests 68
+ℹ suites 0
+ℹ pass 68
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 18257.031208
+
+Full CA failure (verbatim):
+
+✖ failing tests:
+
+test at tests/cqrAuthoritative.test.mjs:135:71
+✖ CQR docker-wasmedge sampled resident index preserves the linear encounter and invalidates destroyed handles (269.350375ms)
+  Error: Plugin invoke process exited unexpectedly with code 1.
+  failed to connect to the docker API at unix:///Users/tj/.docker/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /Users/tj/.docker/run/docker.sock: connect: no such file or directory
+      at formatProcessFailure (file:///Users/tj/software/worktrees/space-data-network-modules--modules-ca-ephemeris-formats-20261006/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/testing/processInvoke.js:32:50)
+      at ChildProcess.<anonymous> (file:///Users/tj/software/worktrees/space-data-network-modules--modules-ca-ephemeris-formats-20261006/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/testing/processInvoke.js:189:22)
+      at Object.onceWrapper (node:events:623:12)
+      at ChildProcess.emit (node:events:508:20)
+      at maybeClose (node:internal/child_process:1084:16)
+      at Socket.<anonymous> (node:internal/child_process:456:11)
+      at Socket.emit (node:events:508:20)
+      at Pipe.<anonymous> (node:net:346:12)
+
+Origin/main Docker reproduction (verbatim):
+
+✖ CQR docker-wasmedge sampled resident index preserves the linear encounter and invalidates destroyed handles (314.823541ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1118.677458
+
+✖ failing tests:
+
+test at tests/cqrAuthoritative.test.mjs:135:71
+✖ CQR docker-wasmedge sampled resident index preserves the linear encounter and invalidates destroyed handles (314.823541ms)
+  Error: Plugin invoke process exited unexpectedly with code 1.
+  failed to connect to the docker API at unix:///Users/tj/.docker/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /Users/tj/.docker/run/docker.sock: connect: no such file or directory
+      at formatProcessFailure (file:///Users/tj/software/worktrees/space-data-network-modules--modules-ca-ephemeris-formats-20261006/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/testing/processInvoke.js:32:50)
+      at ChildProcess.<anonymous> (file:///Users/tj/software/worktrees/space-data-network-modules--modules-ca-ephemeris-formats-20261006/analysis/conjunction-assessment/node_modules/space-data-module-sdk/src/testing/processInvoke.js:189:22)
+      at Object.onceWrapper (node:events:623:12)
+      at ChildProcess.emit (node:events:508:20)
+      at maybeClose (node:internal/child_process:1084:16)
+      at Socket.<anonymous> (node:internal/child_process:456:11)
+      at Socket.emit (node:events:508:20)
+      at Pipe.<anonymous> (node:net:346:12)
+
+Files changed relative to origin/main:
+
+analysis/conjunction-assessment/README.md
+analysis/conjunction-assessment/build.mjs
+analysis/conjunction-assessment/dist/build-provenance.json
+analysis/conjunction-assessment/dist/guest-link/metadata.json
+analysis/conjunction-assessment/dist/guest-link/module-link.o
+analysis/conjunction-assessment/dist/isomorphic/module.wasm
+analysis/conjunction-assessment/dist/plugin-manifest.json
+analysis/conjunction-assessment/docs/ephemeris-artifact-baseline.txt
+analysis/conjunction-assessment/docs/ephemeris-input.md
+analysis/conjunction-assessment/docs/ephemeris-verification.txt
+analysis/conjunction-assessment/generate-sds-headers.mjs
+analysis/conjunction-assessment/package.json
+analysis/conjunction-assessment/plugin-manifest.json
+analysis/conjunction-assessment/scripts/generate-ephemeris-fixtures.cpp
+analysis/conjunction-assessment/scripts/generate-ephemeris-fixtures.py
+analysis/conjunction-assessment/src/cpp/CMakeLists.txt
+analysis/conjunction-assessment/src/cpp/generated/sds/EOP_generated.h
+analysis/conjunction-assessment/src/cpp/generated/sds/provenance.json
+analysis/conjunction-assessment/src/cpp/include/conjunction/earth_orientation.h
+analysis/conjunction-assessment/src/cpp/include/conjunction/ephemeris_upload.h
+analysis/conjunction-assessment/src/cpp/src/earth_orientation.cpp
+analysis/conjunction-assessment/src/cpp/src/ephemeris_invoke.inc
+analysis/conjunction-assessment/src/cpp/src/ephemeris_upload.cpp
+analysis/conjunction-assessment/src/cpp/src/plugin_invoke_bridge.cpp
+analysis/conjunction-assessment/tests/ephemerisUpload.test.mjs
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/A-itc.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/A-jspoc.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/A-nasa.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/A-oem-eme2000-cov.kvn
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/A-oem-eme2000.kvn
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/A-oem-itrf-cov.kvn
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/A-oem-itrf.kvn
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/A-utc.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/B-itc.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/B-jspoc.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/B-nasa.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/B-oem-eme2000-cov.kvn
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/B-oem-eme2000.kvn
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/B-oem-itrf-cov.kvn
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/B-oem-itrf.kvn
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/B-utc.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/bad-epoch.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/bad-state.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/below-surface.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/covariance-frame-presence.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/covariance-frame.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/duplicate-covariance.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/epoch-order.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/failures.json
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/future-states.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/missing-covariance.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/non-psd.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/ocm.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/reference.json
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/span-long.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/span-short.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/speed.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/state-frame.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/time-system.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/truncated-itc.txt
+analysis/conjunction-assessment/tests/fixtures/ephemeris-upload/xml.txt
+analysis/conjunction-assessment/tests/sdk_compat.test.mjs
+scripts/artifact-provenance.json
