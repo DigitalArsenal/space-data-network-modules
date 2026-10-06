@@ -7,7 +7,11 @@
 // line after transforming its nodes: 1 mm position and 1 um/s velocity
 // allowances cover matrix/stencil roundoff. TCA tolerance 2 ms covers the
 // requested 50 us search resolution and ~40 us binary64 JD quantization;
-// Pc relative tolerance 1e-6 covers the same interpolation/refinement error.
+// Analytic miss tolerance 5 m bounds the transverse displacement at 2 ms
+// (10.607 km/s relative speed); parity comparisons use 1 mm.
+// Pc relative tolerance 1e-5: a 1 mm miss error changes log(Pc) by about
+// d*delta_d/sigma^2=50*.001/20000=2.5e-6 for these covariances; the remaining
+// margin covers covariance-axis interpolation and the neighboring TCA clock.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
@@ -88,7 +92,7 @@ for(const runtimeKind of ['browser','wasmedge']) test(`${runtimeKind}: ephemeris
     let baseline;
     for(const name of formats) {
       const {r,event}=await assess(parsed[name],secondary);assert.equal(r.statusCode,0,r.errorMessage);
-      close(event.MISS_DISTANCE_M,50,4,`${name} closed-form miss (2 ms time tolerance)`);
+      close(event.MISS_DISTANCE_M,50,5,`${name} closed-form miss (2 ms time tolerance)`);
       close(event.TCA.JULIAN_DATE,reference.tca_jd,2e-3/86400,`${name} analytic TCA`);
       if(!baseline)baseline=event;
       close(event.TCA.JULIAN_DATE,baseline.TCA.JULIAN_DATE,2e-3/86400,'TCA parity');
@@ -104,7 +108,7 @@ for(const runtimeKind of ['browser','wasmedge']) test(`${runtimeKind}: ephemeris
       assert.equal(a.r.statusCode,0,a.r.errorMessage);assert.equal(b.r.statusCode,0,b.r.errorMessage);
       close(a.event.TCA.JULIAN_DATE,b.event.TCA.JULIAN_DATE,2e-3/86400,'TCA');close(a.event.MISS_DISTANCE_M,b.event.MISS_DISTANCE_M,.001,'miss');
       assert.ok(a.event.PROBABILITY.PROBABILITY>0);assert.equal(b.event.PROBABILITY.UNCERTAINTY_SOURCE,'SUPPLIED_COVARIANCE');
-      close(a.event.PROBABILITY.PROBABILITY,b.event.PROBABILITY.PROBABILITY,a.event.PROBABILITY.PROBABILITY*1e-6,'Pc');
+      close(a.event.PROBABILITY.PROBABILITY,b.event.PROBABILITY.PROBABILITY,a.event.PROBABILITY.PROBABILITY*1e-5,'Pc');
     }
   });
   await t.test('ITRF without EOP fails closed, and EOP coverage is enforced',async()=>{
@@ -126,8 +130,21 @@ for(const runtimeKind of ['browser','wasmedge']) test(`${runtimeKind}: ephemeris
     const precise={...reference.eop,UT1_MINUS_UTC_SECONDS:-.7,X_POLE_WANDER_RADIANS:1e-4,Y_POLE_WANDER_RADIANS:1e-4};
     const b=await screen(parsed['oem-itrf.kvn'],fixedB,[precise,{...precise,MJD:53738}]);
     close(a.TCA.JULIAN_DATE,b.TCA.JULIAN_DATE,2e-3/86400,'catalog TCA');close(a.MISS_DISTANCE_M,b.MISS_DISTANCE_M,.001,'catalog miss');
-    close(a.PROBABILITY.PROBABILITY,b.PROBABILITY.PROBABILITY,a.PROBABILITY.PROBABILITY*1e-6,'catalog Pc');
+    close(a.PROBABILITY.PROBABILITY,b.PROBABILITY.PROBABILITY,a.PROBABILITY.PROBABILITY*1e-5,'catalog Pc');
     const missing=await assess(parsed['oem-itrf.kvn'],secondary,{eops:[{MJD:53737}]});assert.equal(missing.r.errorCode,'invalid-eop');
+  });
+  for (const c of reference.precision_cases) await t.test(`${c.name}: ERFA epoch precision preserves 1 mm`,async()=>{
+    const a=structuredClone(parsed['oem-itrf.kvn']), b=structuredClone(a);
+    for(const oem of [a,b]) for(const block of oem.EPHEMERIS_DATA_BLOCK) {delete block.COVARIANCE_MATRIX_LINES;delete block.COV_REFERENCE_FRAME;}
+    a.EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES=[
+      {EPOCH:c.start,X:7000,Y:0,Z:0,X_DOT:0,Y_DOT:0,Z_DOT:0},
+      {EPOCH:c.stop,X:7000,Y:0,Z:0,X_DOT:0,Y_DOT:0,Z_DOT:0}];
+    b.EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES=[
+      {EPOCH:c.start,X:7100,Y:0,Z:0,X_DOT:1,Y_DOT:0,Z_DOT:0},
+      {EPOCH:c.stop,X:7130,Y:0,Z:0,X_DOT:1,Y_DOT:0,Z_DOT:0}];
+    const {r,event}=await assess(a,b,{frame:'GCRF',startJd:c.start_jd,durationSeconds:.00005,eops:[c.eop]});assert.equal(r.statusCode,0,r.errorMessage);
+    const expected=c.grid.find(x=>x.jd===event.TCA.JULIAN_DATE);assert.ok(expected);
+    for(let i=0;i<3;++i)close(vec(event.PRIMARY_STATE.STATE.POSITION)[i],expected.position_m[i],.001,`${c.name} GCRF position[${i}]`);
   });
   await t.test('ITRF to GCRF independent ERFA known answer <=1 mm, including velocity',async()=>{
     const a=structuredClone(parsed['oem-itrf.kvn']),b=structuredClone(a);

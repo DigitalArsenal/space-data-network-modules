@@ -40,7 +40,7 @@ bool number(std::string s, double &x) {
   return end != s.c_str() && !*end && std::isfinite(x);
 }
 bool timestamp(const std::string &input, bool short_year, std::string &iso,
-               double &jd) {
+               double &jd, double *rounding_seconds) {
   std::string s = upload_trim(input);
   int y = 0, m = 0, d = 0, h = 0, min = 0, n = 0;
   double sec = 0;
@@ -106,8 +106,13 @@ bool timestamp(const std::string &input, bool short_year, std::string &iso,
       eraCal2jd(y, m, d, &a, &b) != 0)
     return false;
   // Strict UTC calendar dates; subsecond text retained independently of JD.
-  eraDtf2d("UTC", y, m, d, h, min, sec, &a, &b);
-  jd = a + b;
+  // The existing screening clock is nominal UTC JD (86400 s/calendar day).
+  // Preserve its rounding remainder for ERFA's two-part UTC conversion.
+  eraCal2jd(y, m, d, &a, &b);
+  const double midnight = a + b, seconds = h * 3600. + min * 60. + sec;
+  jd = midnight + seconds / 86400.;
+  if (rounding_seconds)
+    *rounding_seconds = (midnight - jd) * 86400. + seconds;
   char buf[64];
   std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%012.9fZ", y, m, d,
                 h, min, sec);

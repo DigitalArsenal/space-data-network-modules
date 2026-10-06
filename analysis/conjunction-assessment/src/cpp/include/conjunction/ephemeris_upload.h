@@ -4,7 +4,8 @@
 
 namespace conjunction {
 namespace upload {
-bool timestamp(const std::string &, bool, std::string &, double &);
+bool timestamp(const std::string &, bool, std::string &, double &,
+               double *rounding_seconds = nullptr);
 }
 // Text parsing/validation is independent of the SDK transport adapter.
 struct UploadOptions {

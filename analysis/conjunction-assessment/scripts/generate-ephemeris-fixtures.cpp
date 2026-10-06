@@ -16,9 +16,8 @@ using json = nlohmann::json;
 const double XP = 2.55060238e-7, YP = 1.860359247e-6, DUT = .3341,
              BASE = 2453737.5;
 using Mat = std::array<std::array<double, 3>, 3>;
-Mat matrix(double jd, double shift, bool eme) {
-  double day = std::floor(jd - .5) + .5, f = jd - day, t1, t2, tt1, tt2, u1, u2,
-         c[3][3], b[3][3], p[3][3], bp[3][3];
+Mat direct_matrix(double day, double f, double shift, bool eme) {
+  double t1, t2, tt1, tt2, u1, u2, c[3][3], b[3][3], p[3][3], bp[3][3];
   eraUtctai(day, f, &t1, &t2);
   eraTaitt(t1, t2, &tt1, &tt2);
   eraUtcut1(day, f, DUT, &u1, &u2);
@@ -34,6 +33,10 @@ Mat matrix(double jd, double shift, bool eme) {
         r[i][j] = c[i][j];
     }
   return r;
+}
+Mat matrix(double jd, double shift, bool eme) {
+  return direct_matrix(std::floor(jd - .5) + .5,
+                       jd - (std::floor(jd - .5) + .5), shift, eme);
 }
 void verify_published() {
   const double expected[3][3] = {
@@ -136,9 +139,10 @@ int main(int argc, char **argv) {
       std::array<double, 6> pv = {body ? 7000.05 : 7000., body ? 0 : 7.5 * t,
                                   body ? 7.5 * t : 0,     0,
                                   body ? 0 : 7.5,         body ? 7.5 : 0};
-      auto a = matrix(jd, 0, true), m2 = matrix(jd, -2, true),
-           m1 = matrix(jd, -1, true), p1 = matrix(jd, 1, true),
-           p2 = matrix(jd, 2, true);
+      double offset = (BASE - jd) * 86400. + sec;
+      auto a = matrix(jd, offset, true), m2 = matrix(jd, offset - 2, true),
+           m1 = matrix(jd, offset - 1, true), p1 = matrix(jd, offset + 1, true),
+           p2 = matrix(jd, offset + 2, true);
       double j[6][6] = {};
       for (int i = 0; i < 3; ++i)
         for (int k = 0; k < 3; ++k) {
@@ -213,17 +217,54 @@ int main(int argc, char **argv) {
     double ulp = std::nextafter(BASE, INFINITY) - BASE;
     double jd = BASE + 60. / 86400. + step * ulp;
     double t = (jd - (BASE + 60. / 86400.)) * 86400.;
-    oracle["evaluation_grid"].push_back({{"jd", jd},
-       {"position_m", {7000000., 7500.*t, 0.}}, {"velocity_m_s", {0.,7500.,0.}}});
+    oracle["evaluation_grid"].push_back(
+        {{"jd", jd},
+         {"position_m", {7000000., 7500. * t, 0.}},
+         {"velocity_m_s", {0., 7500., 0.}}});
     jd = BASE + step * ulp;
-    auto g = matrix(jd, 0, false), g2 = matrix(jd,-2,false),
-         g1 = matrix(jd,-1,false), h1 = matrix(jd,1,false), h2 = matrix(jd,2,false);
-    json pos=json::array(),vel=json::array();
-    for(int k=0;k<3;++k) {
-      pos.push_back(g[0][k]*7000000.);
-      vel.push_back((g2[0][k]-8*g1[0][k]+8*h1[0][k]-h2[0][k])/12.*7000000.);
+    auto g = matrix(jd, 0, false), g2 = matrix(jd, -2, false),
+         g1 = matrix(jd, -1, false), h1 = matrix(jd, 1, false),
+         h2 = matrix(jd, 2, false);
+    json pos = json::array(), vel = json::array();
+    for (int k = 0; k < 3; ++k) {
+      pos.push_back(g[0][k] * 7000000.);
+      vel.push_back((g2[0][k] - 8 * g1[0][k] + 8 * h1[0][k] - h2[0][k]) / 12. *
+                    7000000.);
     }
-    oracle["gcrf_grid"].push_back({{"jd",jd},{"position_m",pos},{"velocity_m_s",vel}});
+    oracle["gcrf_grid"].push_back(
+        {{"jd", jd}, {"position_m", pos}, {"velocity_m_s", vel}});
+  }
+  oracle["precision_cases"] = json::array();
+  for (int kind = 0; kind < 2; ++kind) {
+    int year = kind ? 2016 : 2006, month = kind ? 12 : 1, day = kind ? 31 : 2,
+        hour = kind ? 23 : 0, minute = kind ? 59 : 0;
+    double second = kind ? 0 : 10.123456789, u1, u2, j0, mjd;
+    eraDtf2d("UTC", year, month, day, hour, minute, second, &u1, &u2);
+    eraCal2jd(year, month, day, &j0, &mjd);
+    double start = j0 + mjd + (hour * 3600. + minute * 60. + second) / 86400.;
+    auto epoch = [&](double delta) {
+      char b[64];
+      std::snprintf(b, sizeof(b), "%04d-%02d-%02dT%02d:%02d:%012.9fZ", year,
+                    month, day, hour, minute, second + delta);
+      return std::string(b);
+    };
+    json c = {{"name", kind ? "UTC leap day" : "fractional UTC epoch"},
+              {"start_jd", start},
+              {"start", epoch(0)},
+              {"stop", epoch(30)},
+              {"eop", oracle["eop"]},
+              {"grid", json::array()}};
+    c["eop"]["MJD"] = int(mjd);
+    for (int step = -64; step <= 64; ++step) {
+      double jd = start + step * (std::nextafter(start, INFINITY) - start),
+             shift = (jd - start) * 86400.;
+      auto g = direct_matrix(u1, u2, shift, false);
+      json pos = json::array();
+      for (int k = 0; k < 3; ++k)
+        pos.push_back(g[0][k] * 7000000.);
+      c["grid"].push_back({{"jd", jd}, {"position_m", pos}});
+    }
+    oracle["precision_cases"].push_back(c);
   }
   write("reference.json", oracle.dump(2) + "\n");
 }

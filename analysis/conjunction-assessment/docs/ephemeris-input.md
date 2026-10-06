@@ -44,7 +44,10 @@ on the pair/catalog or index-preparation method. The guest converts sample
 states and Earth-fixed covariance to GCRF/ICRF or EME2000 **before Hermite
 interpolation**, using ERFA IAU 2006/2000A CIO rotation, UTC→TAI→TT,
 UTC→UT1, polar motion and optional dX/dY. The 6×6 covariance Jacobian includes
-Earth-rotation velocity coupling. Missing EOP returns `eop-required`;
+Earth-rotation velocity coupling. Text/compact-grid epoch rounding remainders
+are retained for ERFA two-part dates, including leap-day UTC quasi-JD; the
+existing screening/interpolation clock remains binary64 nominal UTC JD.
+Missing EOP returns `eop-required`;
 there is no UT1=UTC screening fallback. ITRF resident indexes normalize to GCRF.
 
 EOP must explicitly encode UT1−UTC (seconds) and x/y polar motion (radians);

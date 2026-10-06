@@ -2,6 +2,9 @@
 #include <algorithm>
 #include <cmath>
 extern "C" {
+int eraJd2cal(double, double, int *, int *, int *, double *);
+int eraDat(int, int, int, double, double *);
+int eraDtf2d(const char *, int, int, int, int, int, double, double *, double *);
 int eraUtctai(double, double, double *, double *);
 int eraTaitt(double, double, double *, double *);
 int eraUtcut1(double, double, double, double *, double *);
@@ -43,9 +46,11 @@ bool earth_orientation_at(const std::vector<EarthOrientation> &rows, double jd,
   e.lod = a.lod + (b.lod - a.lod) * f;
   // Interpolate UT1-TAI, not the discontinuous UT1-UTC across a leap second.
   auto dat = [](double t) {
-    double t1, t2;
-    eraUtctai(t, 0, &t1, &t2);
-    return ((t1 - t) + t2) * 86400.;
+    int y, m, d;
+    double fraction, value;
+    eraJd2cal(t, 0, &y, &m, &d, &fraction);
+    eraDat(y, m, d, fraction, &value);
+    return value;
   };
   double da = dat(a.jd), db = dat(b.jd);
   e.dut1 = (a.dut1 - da) * (1 - f) + (b.dut1 - db) * f + dat(jd);
@@ -57,10 +62,20 @@ bool earth_matrix(double jd, double offset_seconds, const EarthOrientation &e,
   double tai1, tai2, tt1, tt2, u1, u2;
   // Keep sub-day quantities separate to avoid 40 us JD rounding in the
   // rotation derivative. ERFA owns UTC/leap-second conversion.
-  double day = std::floor(jd - 0.5) + 0.5, fraction = jd - day;
-  if (eraUtctai(day, fraction, &tai1, &tai2) < 0 ||
+  int year, m, d;
+  double fraction, day, utcFraction;
+  if (eraJd2cal(jd, 0, &year, &m, &d, &fraction))
+    return false;
+  const double seconds = fraction * 86400.;
+  int hour = static_cast<int>(seconds / 3600.);
+  int minute = static_cast<int>((seconds - hour * 3600.) / 60.);
+  // Nominal UTC JD -> ERFA quasi-JD, including 86401-second leap days.
+  if (eraDtf2d("UTC", year, m, d, hour, minute,
+               seconds - hour * 3600. - minute * 60., &day, &utcFraction) < 0)
+    return false;
+  if (eraUtctai(day, utcFraction, &tai1, &tai2) < 0 ||
       eraTaitt(tai1, tai2, &tt1, &tt2) < 0 ||
-      eraUtcut1(day, fraction, e.dut1, &u1, &u2) < 0)
+      eraUtcut1(day, utcFraction, e.dut1, &u1, &u2) < 0)
     return false;
   tt2 += offset_seconds / 86400.;
   u2 += offset_seconds * (1 - e.lod / 86400.) / 86400.;
@@ -82,11 +97,11 @@ bool earth_matrix(double jd, double offset_seconds, const EarthOrientation &e,
 }
 } // namespace
 bool itrf_to_inertial(double jd, const EarthOrientation &e, bool eme,
-                      double j[6][6]) {
+                      double j[6][6], double epoch_rounding_seconds) {
   double r[3][3], before[3][3], after[3][3];
-  if (!earth_matrix(jd, 0, e, eme, r) ||
-      !earth_matrix(jd, -.5, e, eme, before) ||
-      !earth_matrix(jd, .5, e, eme, after))
+  if (!earth_matrix(jd, epoch_rounding_seconds, e, eme, r) ||
+      !earth_matrix(jd, epoch_rounding_seconds - .5, e, eme, before) ||
+      !earth_matrix(jd, epoch_rounding_seconds + .5, e, eme, after))
     return false;
   for (int a = 0; a < 6; ++a)
     for (int b = 0; b < 6; ++b)

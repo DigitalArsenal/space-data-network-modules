@@ -97,13 +97,13 @@ bool normalizeOem(Source &s, int target) {
   std::vector<EarthOrientation> eops;
   if (needsEop && !eopRows(eops))
     return false;
-  auto jacobian = [&](double jd, int from, double j[6][6]) {
+  auto jacobian = [&](double jd, int from, double j[6][6], double remainder) {
     if (from == 4) {
       EarthOrientation e;
       if (!earth_orientation_at(eops, jd, e))
         return error("eop-coverage",
                      "EOP table does not bracket UTC JD " + std::to_string(jd));
-      if (!itrf_to_inertial(jd, e, target == 3, j))
+      if (!itrf_to_inertial(jd, e, target == 3, j, remainder))
         return error("invalid-eop", "ERFA time conversion failed at UTC JD " +
                                         std::to_string(jd));
       return true;
@@ -121,9 +121,10 @@ bool normalizeOem(Source &s, int target) {
     return true;
   };
   if (s.axes == 4) {
-    for (auto &p : s.samples) {
+    for (size_t at = 0; at < s.samples.size(); ++at) {
+      auto &p = s.samples[at];
       double j[6][6];
-      if (!jacobian(p.jd, 4, j))
+      if (!jacobian(p.jd, 4, j, s.sample_epoch_remainders[at]))
         return false;
       transform_ephemeris_point(p, j);
     }
@@ -163,7 +164,8 @@ bool normalizeOem(Source &s, int target) {
           j[a][1] = j[a + 3][4] = t[a];
           j[a][2] = j[a + 3][5] = n[a];
         }
-      } else if (!jacobian(s.covariance.jd[i], from, j))
+      } else if (!jacobian(s.covariance.jd[i], from, j,
+                           s.covariance_epoch_remainders[i]))
         return false;
       transform_ephemeris_covariance(s.covariance.lower[i], j);
       s.covariance_frames[i] = target;

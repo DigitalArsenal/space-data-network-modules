@@ -398,6 +398,7 @@ struct Source {
   CovarianceSeries covariance;
   std::vector<int> covariance_frames; // OEM per-row: 0=RTN, otherwise sourceFrame code.
   bool uploaded_oem = false;
+  std::vector<double> sample_epoch_remainders, covariance_epoch_remainders;
 };
 // The axes of a source's covariance: RTN (RSW), or the source's own state
 // frame. Anything else would need a transform the guest does not perform.
@@ -549,6 +550,11 @@ bool validSamples(const Source &o) {
   }
   return true;
 }
+double epochRemainder(const std::string& iso, double nominal_jd) {
+  std::string canonical; double jd=nominal_jd, remainder=0;
+  conjunction::upload::timestamp(iso,false,canonical,jd,&remainder);
+  return remainder + (jd-nominal_jd)*86400.;
+}
 bool points(const OEM *r, Source &o) {
   o.uploaded_oem = true;
   if (!r || !r->EPHEMERIS_DATA_BLOCK() ||
@@ -600,6 +606,7 @@ bool points(const OEM *r, Source &o) {
                             c->CZ_DOT_Z_DOT()},
                            o.covariance))
           return false;
+        o.covariance_epoch_remainders.push_back(epochRemainder(text(c->EPOCH()), o.covariance.jd.back()));
       }
     }
     if (b->STEP_SIZE() > 0) {
@@ -609,16 +616,21 @@ bool points(const OEM *r, Source &o) {
           text(b->START_TIME()).empty())
         return error("invalid-source", "Invalid OEM compact state grid.");
       double start = iso_to_jd(text(b->START_TIME()));
-      for (size_t i = 0; i < d->size(); i += n)
+      for (size_t i = 0; i < d->size(); i += n) {
+        const double seconds = (i/n)*b->STEP_SIZE();
+        const double jd = start + seconds/86400.;
+        o.sample_epoch_remainders.push_back(epochRemainder(text(b->START_TIME()), start) + (start-jd)*86400. + seconds);
         o.samples.push_back({start + (i / n) * b->STEP_SIZE() / 86400.,
                              d->Get(i), d->Get(i + 1), d->Get(i + 2),
                              d->Get(i + 3), d->Get(i + 4), d->Get(i + 5)});
+      }
     } else if (auto lines = b->EPHEMERIS_DATA_LINES())
       for (auto p : *lines) {
         if (!p || text(p->EPOCH()).empty())
           return error("invalid-source", "OEM state epoch required.");
         o.samples.push_back({iso_to_jd(text(p->EPOCH())), p->X(), p->Y(),
                              p->Z(), p->X_DOT(), p->Y_DOT(), p->Z_DOT()});
+        o.sample_epoch_remainders.push_back(epochRemainder(text(p->EPOCH()), o.samples.back().jd));
       }
   }
   return validSamples(o);
