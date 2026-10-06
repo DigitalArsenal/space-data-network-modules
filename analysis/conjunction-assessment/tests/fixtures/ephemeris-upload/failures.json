@@ -1,0 +1,59 @@
+{
+  "future-states": {
+    "error": "insufficient-future-states",
+    "reference": "2006-01-02T00:01:30Z"
+  },
+  "span-long": {
+    "error": "span-too-long"
+  },
+  "span-short": {
+    "error": "span-too-short"
+  },
+  "below-surface": {
+    "error": "below-earth-surface"
+  },
+  "speed": {
+    "error": "speed-limit"
+  },
+  "state-frame": {
+    "error": "unsupported-frame"
+  },
+  "time-system": {
+    "error": "unsupported-time-system"
+  },
+  "missing-covariance": {
+    "error": "missing-covariance"
+  },
+  "non-psd": {
+    "error": "covariance-not-psd"
+  },
+  "covariance-frame-presence": {
+    "error": "covariance-frame-required"
+  },
+  "covariance-frame": {
+    "error": "unsupported-covariance-frame"
+  },
+  "epoch-order": {
+    "error": "non-increasing-epochs"
+  },
+  "bad-epoch": {
+    "error": "invalid-epoch",
+    "format": "NASA"
+  },
+  "bad-state": {
+    "error": "invalid-state",
+    "format": "NASA"
+  },
+  "ocm": {
+    "error": "unsupported-format"
+  },
+  "xml": {
+    "error": "unsupported-format"
+  },
+  "duplicate-covariance": {
+    "error": "duplicate-covariance"
+  },
+  "truncated-itc": {
+    "error": "invalid-covariance"
+  }
+}

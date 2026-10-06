@@ -1,0 +1,6 @@
+synthetic header 1
+synthetic header 2
+synthetic header 3
+UVW
+2006002000000.000 7000 -449.99997317790985 0 0 7.5 0
+0.01 0 0.089999999999999997 0 0 0.01 0

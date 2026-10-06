@@ -3,7 +3,9 @@
 #include <string>
 
 namespace conjunction {
-namespace upload { bool timestamp(const std::string&, bool, std::string&, double&); }
+namespace upload {
+bool timestamp(const std::string &, bool, std::string &, double &);
+}
 // Text parsing/validation is independent of the SDK transport adapter.
 struct UploadOptions {
   double reference_jd = 0;
@@ -14,5 +16,6 @@ struct UploadResult {
   std::string format, code, message;
   size_t states = 0;
 };
-bool parse_ephemeris_upload(const std::string&, const UploadOptions&, UploadResult&);
-}
+bool parse_ephemeris_upload(const std::string &, const UploadOptions &,
+                            UploadResult &);
+} // namespace conjunction

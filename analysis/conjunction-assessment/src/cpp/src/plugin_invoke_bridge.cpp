@@ -253,7 +253,7 @@ bool isItrfName(const std::string& name) {
   return name.rfind("ITRF", 0) == 0 && (name.size() == 6 || name.size() == 8) &&
       std::all_of(name.begin()+4, name.end(), [](char c) { return c >= '0' && c <= '9'; });
 }
-int frame(const RFMCoordinateSystem *f) {
+int frame(const RFMCoordinateSystem *f, bool source_itrf = false) {
   if (!f || !f->ORIGIN() ||
       f->ORIGIN()->KIND() != rfmOriginKind::CELESTIAL_BODY ||
       f->ORIGIN()->CELESTIAL_BODY_ID() != 399) {
@@ -265,7 +265,7 @@ int frame(const RFMCoordinateSystem *f) {
   case rfmAxisType::TRUE_EQUATOR_MEAN_EQUINOX_OF_DATE:
     return 1;
   case rfmAxisType::BODY_FIXED:
-    if (isItrfName(text(f->NAME()))) return 4;
+    if (source_itrf && isItrfName(text(f->NAME()))) return 4;
     error("unsupported-frame", "Earth body-fixed sources must name an ITRF realization.");
     return 0;
   case rfmAxisType::ICRF:
@@ -290,7 +290,7 @@ int sourceFrame(const RFM *f, const std::string &center) {
     return 0;
   }
   if (auto w = f->REFERENCE_FRAME_as_RFMCoordinateSystemWrapper())
-    return frame(w->COORDINATE_SYSTEM());
+    return frame(w->COORDINATE_SYSTEM(), true);
   if (auto w = f->REFERENCE_FRAME_as_CelestialFrameWrapper()) {
     switch (w->frame()) {
     case CelestialFrame::ITRF2000:
