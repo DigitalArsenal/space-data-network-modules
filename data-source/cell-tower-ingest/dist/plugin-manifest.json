@@ -1,0 +1,1124 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.cell-tower-ingest",
+  "name": "Cellular Base-Station Ingest Nodes",
+  "version": "0.1.0",
+  "description": "The INGEST half of the cellular program. cell-tower-source is the REQUEST-scoped browser aggregate - one $HTQ in, one deconflicted $TBS stream straight back to the caller, capabilities [], nothing persisted. That is the right shape for the demo and the wrong shape for ingest, and the two cannot be one flow, so the ingest-only decisions live here, exactly as the credential lane was split into cell-tower-credentials for the same reason. This plugin REUSES cell-tower-source's parse and deconflict unchanged: decoding a provider body and merging sites across providers are the same operations whether the answer is served or stored, and forking them would fork the deconfliction rules. Four pure nodes plan a ranged chunk against a durable resume mark, author the storage attribution, and advance the mark only on a verified store. NO CAPABILITIES: http, storage and flatsql are the generic hostcap connector nodes, so this plugin performs no I/O and needs no new host connector. TILE SERVING LANE (2026-08-24, upstream-modules-2): tile_plan/tile_meta/tile add GET /api/v1/cellular/tiles/meta and /tiles/{z}/{x}/{y} under the existing mount, cache-first from the node store over the same FlatSQL read lane the cache gate uses. Web Mercator XYZ, z 0-18, lat clamp +-85.05112878, per-tile mode by count (<=2048 raw points, <=4096 deterministic sample, else a 16x16 density grid). ZERO new capabilities and zero Go host changes. HTTP 304 Not Modified is accepted on ingest_meta: the method emits a single notice on its 'unchanged' port and nothing else, so no batch is stored or announced and the resume mark does not move.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "All methods are single-pass transforms over the frames the flow hands them: they format a query, a fetch descriptor, an attribution frame or a mark. There is no shared mutable state, no worker pool and no fan-out inside the guest. This guest can never spawn a thread, so it compiles clang/wasi-sequential rather than claiming a wasi-threads contract it does not honour."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "cache_plan",
+      "displayName": "Answer from the store, or pass the request through",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-htq-request",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The $HTQ request envelope from the flow's ONE http trigger.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The $HTQ request envelope from the flow's ONE http trigger."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "passthrough",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-htq-request",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The $HTQ forwarded byte-for-byte to cell-tower-source's route. Emitted ONLY for non-aggregate routes (/providers, /credentials/*) and for an explicit REFRESH request.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The $HTQ forwarded byte-for-byte to cell-tower-source's route. Emitted ONLY for non-aggregate routes (/providers, /credentials/*) and for an explicit REFRESH request."
+        },
+        {
+          "portId": "query",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-cache-query-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The DEFAULT FlatSQL query for this dataset ({sql,params}) reading the cached aggregate out of the store. Emitted only on the cache-served lane.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The DEFAULT FlatSQL query for this dataset ({sql,params}) reading the cached aggregate out of the store. Emitted only on the cache-served lane."
+        },
+        {
+          "portId": "mark_query",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-cache-mark-query-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "A second {sql,params} frame reading the ingest resume marks, so the answer can report its own age.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "A second {sql,params} frame reading the ingest resume marks, so the answer can report its own age."
+        },
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-cache-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The cache run contract for cache_freshness (limit, provider, effective sql).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The cache run contract for cache_freshness (limit, provider, effective sql)."
+        },
+        {
+          "portId": "tile",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-htq-request",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The $HTQ forwarded byte-for-byte to tile_plan. Emitted ONLY for the /tiles routes. Without this branch a tile GET names neither /providers nor /credentials/ and the aggregate lane would claim it, answering a tile request with the whole cached record stream.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The $HTQ forwarded byte-for-byte to tile_plan. Emitted ONLY for the /tiles routes. Without this branch a tile GET names neither /providers nor /credentials/ and the aggregate lane would claim it, answering a tile request with the whole cached record stream."
+        }
+      ],
+      "description": "THE CACHE GATE (owner 2026-08-14: 'the cell towers should load almost instantaneously'). Sits between the flow's one http trigger and cell-tower-source's route. An /aggregate read is answered FROM THE STORE - one FlatSQL SELECT over rows the cellular-network-ingest timer already persisted, streamed back verbatim by hostcap/flatsql-query - instead of fanning out a live GET per provider and merging the bodies while the caller waits (~9s on the live page). Every other route, and any request carrying REFRESH:true, is passed through to route UNCHANGED, so the live provider lane stays intact and reachable; it is simply no longer the default. Provider refresh belongs to the timer flow, never the request path. Emits on exactly ONE lane per request, so two bodies can never race into respond. The SQL is node CONFIG (cell_cache_sql), not a compiled-in constant - this is the first concrete instance of the per-dataset DEFAULT QUERY contract (graph task sdn-dataset-default-query-materialized-cache). A request whose envelope cannot be read is FORWARDED, never answered from cache: serving the last good answer to a request nobody could parse is the one failure this gate must not introduce. NO NEW HOST SURFACE - plugin.getConfig plus flatsql-query frames over existing generic hooks; the plugin stays capabilities []. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned used to destroy every other frame it was handed (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is refused with error code \"batched-input-frames\", naming the port and the count. TILE ROUTING (2026-08-24): a request whose path carries /tiles is forwarded verbatim on the `tile` port to tile_plan and NOTHING else is emitted, so the tile lane and the cache lane remain mutually exclusive answers to one request.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "cache_freshness",
+      "displayName": "Author the cache freshness envelope",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-cache-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The cache run contract from cache_plan.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The cache run contract from cache_plan."
+        },
+        {
+          "portId": "mark",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-ingest-mark-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The durable resume mark: $IRM records read back by hostcap/flatsql-query, or the legacy JSON frame. The two are told apart by the FlatBuffer file identifier versus a leading '{' - an unambiguous discrimination, not a heuristic. Absent before the ingest lane has stored anything.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The durable resume mark: $IRM records read back by hostcap/flatsql-query, or the legacy JSON frame. The two are told apart by the FlatBuffer file identifier versus a leading '{' - an unambiguous discrimination, not a heuristic. Absent before the ingest lane has stored anything."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-cache-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The http-respond decision envelope carrying cacheState, freshness, stale and per-provider ingest progress.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The http-respond decision envelope carrying cacheState, freshness, stale and per-provider ingest progress."
+        }
+      ],
+      "description": "THE HONEST HALF OF THE CACHE. A cache that answers instantly and says nothing about its age is worse than the fetch it replaced, because a stale answer becomes indistinguishable from a current one. This node authors the decision envelope that rides beside the cached record stream so the UI can say WHEN the towers it is drawing were ingested. It reports only what it can establish: cacheState 'empty' when the ingest lane has left no mark (instant AND empty, with the reason named and REFRESH:true offered as the direct route to the providers - the task's 'no fake instant-but-empty answers'); cacheState 'warm' with the provider and byte progress the mark carries; and freshness 'unavailable' when a mark frame is present but not readable as the JSON ingest_plan already expects on this port, because the mark read lane is not yet closed end-to-end and a timestamp guessed at here would be a lie with a number on it. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned used to destroy every other frame it was handed (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "mark_query",
+      "displayName": "Read the resume mark",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Cron timer tick (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick (content ignored)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "query",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-ingest-mark-query-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON for hostcap/flatsql-query reading this provider's resume mark row.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "UTF-8 JSON for hostcap/flatsql-query reading this provider's resume mark row."
+        }
+      ],
+      "description": "Turns a timer tick into the flatsql-query that reads this provider's resume mark. It is a SEPARATE node from ingest_plan on purpose: the plan takes the mark as an INPUT, and a node that emitted its own input would be a cycle in the flow graph. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned used to destroy every other frame it was handed (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "ingest_plan",
+      "displayName": "Plan one ranged chunk",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Cron timer tick (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick (content ignored)."
+        },
+        {
+          "portId": "mark",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-ingest-mark-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The durable resume mark: $IRM records read back by hostcap/flatsql-query, or the legacy JSON frame. The two are told apart by the FlatBuffer file identifier versus a leading '{' - an unambiguous discrimination, not a heuristic. Absent before the ingest lane has stored anything.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The durable resume mark: $IRM records read back by hostcap/flatsql-query, or the legacy JSON frame. The two are told apart by the FlatBuffer file identifier versus a leading '{' - an unambiguous discrimination, not a heuristic. Absent before the ingest lane has stored anything."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/http-request descriptor carrying the Range header for THIS chunk.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "hostcap/http-request descriptor carrying the Range header for THIS chunk."
+        },
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "cell-tower-source run contract for parse/deconflict, plus this chunk's offset/index.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "cell-tower-source run contract for parse/deconflict, plus this chunk's offset/index."
+        }
+      ],
+      "description": "Emits ONE ranged fetch descriptor plus the cell-tower-source run contract for that chunk. The chunk size is clamped to 4 MiB because the Go server host caps an http response body there (hostcap/http-request manifest): a larger ask is TRUNCATED by the host and parses to a plausible short row set with no error anywhere. One chunk per tick rather than an in-guest loop, so the loop's state lives in the durable mark instead of in a guest instance a restart erases. Emits nothing once the mark shows the object complete, and fails closed when no cell_ingest_url is configured. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned used to destroy every other frame it was handed (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is refused with error code \"batched-input-frames\", naming the port and the count. RESUME IS NOW DURABLE AND CARRIES THE DECODE CONTEXT: the mark is an $IRM record, and its IRMDecodeContext.DECODER_STATE is handed to cell-tower-source's parse as `bulk_resume` VERBATIM - GATED ON ITS VERSION STAMP. A mark whose DECODER_STATE_FORMAT this build does not recognise is DISCARDED and the run restarts from the top; handing a foreign blob to the decoder does not fail loudly, it resumes into nonsense that stores cleanly. The CSV header row from chunk 0 rides as `csv_header`, without which a chunk N>0 eats its own first data row as a column contract and reports a clean empty tail.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "ingest_meta",
+      "displayName": "Author the storage attribution",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The run contract from ingest_plan.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The run contract from ingest_plan."
+        },
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-ingest-tbs-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "TBS.fbs",
+                  "fileIdentifier": "$TBS",
+                  "rootTypeName": "TBS",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $TBS FlatBuffer record stream."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Deconflicted size-prefixed $TBS record stream."
+        },
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tower-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "deconflict's run summary; supplies this chunk's record count.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "deconflict's run summary; supplies this chunk's record count."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The raw http response, read ONLY for Content-Range's total.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The raw http response, read ONLY for Content-Range's total."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-storage-ingest-meta-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/storage-ingest meta: schema, attribution, provenance and chunk state.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "hostcap/storage-ingest meta: schema, attribution, provenance and chunk state."
+        },
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-ingest-tbs-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "TBS.fbs",
+                  "fileIdentifier": "$TBS",
+                  "rootTypeName": "TBS",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $TBS FlatBuffer record stream."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The record stream, forwarded untouched."
+        },
+        {
+          "portId": "unchanged",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-ingest-unchanged-notice-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "HTTP 304 notice {status:304,unchanged:true,source_name,source_url,dataset_id} produced when the origin confirms the previously fetched export is current; delivered to the flow's egress sink, never persisted as a record."
+              },
+              "description": "UTF-8 JSON {\"status\":304,\"unchanged\":true,\"source_name\",\"source_url\",\"dataset_id\"}."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Emitted ONLY when the chunk fetch answered HTTP 304 Not Modified (the host sent the recorded ETag / Last-Modified validators): one notice frame and no meta/records frames, so hostcap/storage-ingest never becomes ready, nothing is stored or announced, and the resume mark does not move."
+        }
+      ],
+      "description": "Authors the attribution the storage lane cannot invent (provider, source, batch, $TBS.SOURCES provenance) and forwards the records untouched. Takes the http response because the object's TOTAL SIZE is only knowable from Content-Range's denominator - Content-Length on a 206 describes the chunk, and reading it as the total would end the run after one chunk with every later byte silently unfetched. Uses reconcile=append, NOT the source-batch reconcile the celestrak lane uses: this batch is one CHUNK of the provider's set, not the set, and reconciling would delete every earlier chunk as the next arrived. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned used to destroy every other frame it was handed (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is refused with error code \"batched-input-frames\", naming the port and the count. THE DECODER'S OWN NEXT BYTE WINS OVER THE NEWLINE CORRECTION. Row-boundary correction is right for a plain CSV chunk and WRONG for a compressed one: a deflate stream has no row boundaries in its compressed bytes. When the decoder published its own resume point (bulk_resume_next.next_byte, advanced by what tinfl actually CONSUMED rather than by the chunk length), that is the only authority and it REPLACES the estimate. This node also captures the CSV header row, and only at chunk_offset 0 - taken from a chunk that already carried a header in, it would capture a data row and poison every later chunk. HTTP 304 NOT MODIFIED IS NOT A FAILED FETCH. The host presents the ETag / Last-Modified it recorded from the last 2xx for this URL, so an unchanged bulk export answers 304 with no body; cell-tower-source's parse skips the non-2xx response, deconflict emits an empty record stream, and this node used to refuse that with \"missing-records-frame\" status 400. It now mirrors data-source/celestrak-parser exactly: one notice on the 'unchanged' port, nothing on meta or records, no batch stored or announced, and the resume mark left where it is.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "publish_request",
+      "displayName": "Advance the mark, publish the batch",
+      "inputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-storage-ingest-result-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/storage-ingest result summary.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "hostcap/storage-ingest result summary."
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-storage-ingest-meta-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The meta that produced that result.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The meta that produced that result."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "mark",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-ingest-mark-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The advanced resume mark, for hostcap/flatsql-store.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The advanced resume mark, for hostcap/flatsql-store."
+        },
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Dataset-publication POST; emitted ONLY when a publish URL is configured.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Dataset-publication POST; emitted ONLY when a publish URL is configured."
+        },
+        {
+          "portId": "mark_record",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-ingest-irm-record",
+              "allowedTypes": [
+                {
+                  "schemaName": "IRM.fbs",
+                  "fileIdentifier": "$IRM",
+                  "rootTypeName": "IRM"
+                },
+                {
+                  "schemaName": "IRM.fbs",
+                  "fileIdentifier": "$IRM",
+                  "rootTypeName": "IRM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "THE DURABLE RESUME MARK as an $IRM (Ingest Resume Mark) record, for hostcap/storage-write. Emitted on the same condition as the JSON mark - after a VERIFIED store, never at dispatch - because a mark advanced when a chunk is requested turns a crash between fetch and store into permanently skipped rows."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "THE DURABLE RESUME MARK as an $IRM (Ingest Resume Mark) record, for hostcap/storage-write. Emitted on the same condition as the JSON mark - after a VERIFIED store, never at dispatch - because a mark advanced when a chunk is requested turns a crash between fetch and store into permanently skipped rows."
+        },
+        {
+          "portId": "mark_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-ingest-mark-write-meta-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The storage-write meta for the $IRM record: {\"source\":\"<providerId>\",\"type\":\"IRM\"}. The type is asserted here AND re-derived by storage-write from the buffer's own file identifier, which refuses the pair if they disagree.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The storage-write meta for the $IRM record: {\"source\":\"<providerId>\",\"type\":\"IRM\"}. The type is asserted here AND re-derived by storage-write from the buffer's own file identifier, which refuses the pair if they disagree."
+        }
+      ],
+      "description": "Advances the resume mark from the STORAGE RESULT, never at dispatch: a mark advanced when a chunk is requested turns a crash between fetch and store into permanently skipped rows, invisibly. Catches the silent nop that survives hostcap/storage-ingest's own ok:false check - ok:true with inserted=0 for a chunk that carried records, which is byte-identical to a healthy empty tail - and refuses to advance the mark over rows that were never stored. The mark is NOT gated on the publish URL (a node that stores without publishing must still make progress); publication itself is fail-closed, emitting nothing when unconfigured. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned used to destroy every other frame it was handed (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is refused with error code \"batched-input-frames\", naming the port and the count. DURABLE SINCE 2026-08-24: the mark is now also authored as an $IRM record (Themis minted and ratified it in spacedatastandards.org 1.196.0) and persisted through hostcap/storage-write's storage_write grant - the ONE REAL GAP mod-cell-tower-ingest-flow recorded rather than worked around. It carries the version-stamped opaque decode context (cell-tower-source's own bulk_resume_next frame, verbatim) and the CSV header row from chunk 0, which is what makes a chunk N>0 decode to rows at all. The JSON mark stays on egress for operator readability; it is not the durable one.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "tile_plan",
+      "displayName": "Route a tile request, or refuse it by name",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-htq-request",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The $HTQ tile request forwarded by cache_plan.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The $HTQ tile request forwarded by cache_plan."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "meta_mark_query",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tile-mark-query-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The {sql,params} frame reading the ingest resume marks for the META lane.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The {sql,params} frame reading the ingest resume marks for the META lane."
+        },
+        {
+          "portId": "meta_job",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tile-meta-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The meta run contract for tile_meta. Emitted only for /tiles/meta.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The meta run contract for tile_meta. Emitted only for /tiles/meta."
+        },
+        {
+          "portId": "rows_query",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tile-rows-query-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The TILE-SCOPED {sql,params} frame reading stored $TBS rows for ONE tile. The statement is built here from cell_tile_relation (default TBS) and carries the tile\u0027s own rectangle as four f64 bounds plus the row budget cell_tile_max_rows (default 25000): SELECT _data FROM TBS WHERE LATITUDE >= ?1 AND LATITUDE <= ?2 AND LONGITUDE >= ?3 AND LONGITUDE <= ?4 ORDER BY _rowid DESC LIMIT ?5. The bbox is a PREFILTER - membership is still re-derived per point by the client\u0027s index math - so the read is O(tile) instead of O(store). An explicit cell_tile_sql is still honoured verbatim with the budget as its one parameter, and the envelope then reports scoped:false because an empty tile from an unscoped slice does not mean the tile is empty. The budget is a MEMORY budget: at ~800 bytes per stored site the old default of 100000 rows exceeded a 2048-page mount on the first request and the whole lane served 502.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The TILE-SCOPED {sql,params} frame reading stored $TBS rows for ONE tile. The statement is built here from cell_tile_relation (default TBS) and carries the tile\u0027s own rectangle as four f64 bounds plus the row budget cell_tile_max_rows (default 25000): SELECT _data FROM TBS WHERE LATITUDE >= ?1 AND LATITUDE <= ?2 AND LONGITUDE >= ?3 AND LONGITUDE <= ?4 ORDER BY _rowid DESC LIMIT ?5. The bbox is a PREFILTER - membership is still re-derived per point by the client\u0027s index math - so the read is O(tile) instead of O(store). An explicit cell_tile_sql is still honoured verbatim with the budget as its one parameter, and the envelope then reports scoped:false because an empty tile from an unscoped slice does not mean the tile is empty. The budget is a MEMORY budget: at ~800 bytes per stored site the old default of 100000 rows exceeded a 2048-page mount on the first request and the whole lane served 502."
+        },
+        {
+          "portId": "tile_mark_query",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tile-mark-query-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The {sql,params} frame reading the ingest resume marks for the TILE lane.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The {sql,params} frame reading the ingest resume marks for the TILE lane."
+        },
+        {
+          "portId": "tile_job",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tile-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The tile run contract for `tile` (z/x/y and the scan bound), or a REFUSAL carrying code+reason. Refusals travel this port so exactly one node answers a tile request.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The tile run contract for `tile` (z/x/y and the scan bound), or a REFUSAL carrying code+reason. Refusals travel this port so exactly one node answers a tile request."
+        }
+      ],
+      "description": "THE TILE ROUTER. /tiles/meta and /tiles/{z}/{x}/{y} are the only two shapes; anything else under /tiles is refused with the reason named. BOUNDS ARE REFUSED, NEVER CLAMPED: a z of 19 clamped to 18, or an x of 2^z clamped to 2^z-1, would answer 200 with a DIFFERENT tile's contents under the requested key - a wrong answer no client can detect. z outside [0,18], x or y outside [0,2^z), and any non-canonical integer literal are 400s. Exactly one lane emits per request. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned used to destroy every other frame it was handed (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "tile_meta",
+      "displayName": "The tile layer's capability envelope",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tile-meta-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The meta run contract from tile_plan.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The meta run contract from tile_plan."
+        },
+        {
+          "portId": "mark",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-ingest-mark-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The durable resume mark: $IRM records read back by hostcap/flatsql-query, or the legacy JSON frame. The two are told apart by the FlatBuffer file identifier versus a leading '{' - an unambiguous discrimination, not a heuristic. Absent before the ingest lane has stored anything.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The durable resume mark: $IRM records read back by hostcap/flatsql-query, or the legacy JSON frame. The two are told apart by the FlatBuffer file identifier versus a leading '{' - an unambiguous discrimination, not a heuristic. Absent before the ingest lane has stored anything."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "body",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tile-meta-envelope-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The meta envelope: scheme, minZoom, maxZoom, threshold, budget, densityN, latClamp, the deconfliction statement and the dataset block.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The meta envelope: scheme, minZoom, maxZoom, threshold, budget, densityN, latClamp, the deconfliction statement and the dataset block."
+        },
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tile-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The http-respond decision (format json, status 200) carrying the cache-state header.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The http-respond decision (format json, status 200) carrying the cache-state header."
+        }
+      ],
+      "description": "THE TILE LAYER'S CAPABILITY ENVELOPE, fetched once by the client, which FAILS HARD if it drifts: scheme must be \"xyz\" and minZoom/maxZoom/threshold/budget/densityN must all be integers. It is the server's declaration of the contract it then honours on every tile, so the same constants author both. dataset.records and dataset.epoch come from the resume mark and NOT from a COUNT over the store: counting would read tens of MB back through the guest to answer a question the client asks once. An empty store answers cacheState \"empty\", records 0 and the Unix-epoch sentinel - honest about having ingested nothing, rather than stamping an empty store as freshly current. BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned used to destroy every other frame it was handed (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "tile",
+      "displayName": "Serve one bounded density tile",
+      "inputPorts": [
+        {
+          "portId": "job",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tile-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The tile run contract from tile_plan, or its refusal.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The tile run contract from tile_plan, or its refusal."
+        },
+        {
+          "portId": "rows",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tile-tbs-row-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "TBS.fbs",
+                  "fileIdentifier": "$TBS",
+                  "rootTypeName": "TBS"
+                },
+                {
+                  "schemaName": "TBS.fbs",
+                  "fileIdentifier": "$TBS",
+                  "rootTypeName": "TBS",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "The bounded stored $TBS row stream read back by hostcap/flatsql-query. CONCRETE SDS IDENTITY, not a wildcard: the tile lane's default query selects the stored record column of the cellular dataset, so every element of this stream is a size-prefixed $TBS buffer and the port says so. Absent on an empty store and on a refusal."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The bounded stored $TBS row stream read back by hostcap/flatsql-query. CONCRETE SDS IDENTITY, not a wildcard: the tile lane's default query selects the stored record column of the cellular dataset, so every element of this stream is a size-prefixed $TBS buffer and the port says so. Absent on an empty store and on a refusal."
+        },
+        {
+          "portId": "mark",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-ingest-mark-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The durable resume mark: $IRM records read back by hostcap/flatsql-query, or the legacy JSON frame. The two are told apart by the FlatBuffer file identifier versus a leading '{' - an unambiguous discrimination, not a heuristic. Absent before the ingest lane has stored anything.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The durable resume mark: $IRM records read back by hostcap/flatsql-query, or the legacy JSON frame. The two are told apart by the FlatBuffer file identifier versus a leading '{' - an unambiguous discrimination, not a heuristic. Absent before the ingest lane has stored anything."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "body",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tile-envelope-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The tile envelope: scheme, z/x/y, mode, count, threshold, budget, sampled, deconflicted, dataset, and either points or a density grid.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The tile envelope: scheme, z/x/y, mode, count, threshold, budget, sampled, deconflicted, dataset, and either points or a density grid."
+        },
+        {
+          "portId": "decision",
+          "acceptedTypeSets": [
+            {
+              "setId": "cell-tile-decision-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The http-respond decision (format json, status 200), or the 400 refusal authored by tile_plan.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The http-respond decision (format json, status 200), or the 400 refusal authored by tile_plan."
+        }
+      ],
+      "description": "ONE BOUNDED TILE, AND THE MODE IS THE SERVER'S. count<=2048 ships every point (sampled false); count<=4096 ships a DETERMINISTIC stride sample (sampled true); count>4096 ships a 16x16 density grid (points null). The landed OrbPro client refuses any tile that disagrees with those boundaries, so `count` is always the tile's TRUE population and never the number of points shipped - reporting the shipped count would make a sampled tile look complete and a density tile look like a points tile that lost its rows. DETERMINISM: the stride is ceil(count/threshold) over the rows in query order, so the same store and tile produce byte-identical output on every runtime, every thread count and every request. Tile membership is decided by re-deriving each point's own (x,y) with the client's formulas and its epsilon, not by a west<=lon<east rectangle test, because a rectangle test disagrees with the client on seams and a site both sides claim (or neither) is a duplicate or a hole in the worldwide picture. The density grid is linear in degrees inside the tile bounds because that is how the client rebuilds a cell rectangle from its south-west corner. Empty cells are omitted and the client refuses an empty cells array; count>budget guarantees at least one populated cell, so the two rules cannot collide. AN EMPTY STORE ANSWERS EMPTY, NEVER FABRICATED: count 0, points [], and a dataset block saying cacheState \"empty\". BATCHING: every input port here is single-stream BY CONTRACT and that is ENFORCED IN CODE. maxStreams/maxBatch/drainPolicy are purely DECLARATIVE in the compiled flow runtime, which drains a node's queue port-blind up to a budget of 64, so a node that read ordinal 0 and returned used to destroy every other frame it was handed (live P1 cellular-multiprovider-returns-only-first-provider). A surplus is refused with error code \"batched-input-frames\", naming the port and the count.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "cell-tower-ingest-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
