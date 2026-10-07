@@ -1,0 +1,107 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.osm-source",
+  "name": "OSM Context Epoch Source",
+  "version": "0.1.0",
+  "description": "The serving half of the OpenStreetMap context lane (plan \"OpenStreetMap on SDN\", 2026-09-03; owner decision: hosted as FlatGeobuf). One method, route: a $HTQ HttpRequest enters, and exactly one $HTR HttpResponse leaves. The mount is a PREFIX only (config key osm_mount_path, default /api/v1/osm/); a path that does not start with it is a 404. \"tileset.json\" renders the epoch record the off-fleet builder (space-data-network-modules/tools/osm-context/build-fgb.mjs) wrote for the pinned epoch - the same document, verbatim from config key osm_epoch_record (an object), with PAYLOAD.CID set from osm_epoch_cid and EPOCH_BASE_PATH added as a path RELATIVE to this node's origin (<gateway path>/<cid>/), so no client learns a hostname or hardcodes an epoch; public max-age=60, strong ETag (sha2-256 multihash of the body), 304 on If-None-Match, access-control-allow-origin *. \"\" and \"catalogue.json\" answer the camelCase discovery document (epochId, delivery, cid, datasetEpoch, epochBasePath, recordPath, format osm-context-fgb/1, attribution). Without an epoch configured the record route answers 503 naming the missing keys (osm_epoch_record, osm_epoch_cid) rather than a fabricated record. Anything else is a no-store 404; non-GET/HEAD is 405. The FlatGeobuf bytes never pass through this module: clients range-read <origin>/ipfs/<cid>/<file>.fgb from the gateway. capabilities [], browser + wasmedge, request-scoped, config read once per instance over plugin.getConfig (the sanctioned bridge terrain-source uses) or handed in on the optional \"config\" port.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "route is a single-pass transform over one request frame: parse, match the mount prefix, render one small JSON body from configuration, hash it for the ETag. No shared mutable state beyond the once-per-instance config cache, no worker pool and no fan-out inside the guest, so it compiles single-thread rather than claiming a wasi-threads contract it does not honour."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "route",
+      "displayName": "Route one OSM context HTTP request",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequestAbi.fbs",
+                  "fileIdentifier": "$HTQ",
+                  "rootTypeName": "HttpRequest"
+                }
+              ],
+              "description": "One $HTQ HttpRequest envelope (module-sdk schemas/HttpRequestAbi.fbs)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP request to route."
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "osm-serving-config-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The mount's serving config, the same JSON object plugin.getConfig returns. Optional: absent, route reads it over the host bridge.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "OPTIONAL serving config, handed in instead of read over plugin.getConfig, so a host-bridge-less artifact (parity lanes, tests) can execute the record surface."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-response-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponseAbi.fbs",
+                  "fileIdentifier": "$HTR",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Canonical WASM-served HTTP response envelope ($HTR). The host streams it back verbatim."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The one response: the epoch record, the discovery document, a 304, a 404, a 405 or a 503."
+        }
+      ],
+      "description": "One $HTQ in, exactly one $HTR out. See the plugin description for the routes and the cache policy.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "osm-source-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
