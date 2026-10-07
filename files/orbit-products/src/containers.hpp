@@ -286,12 +286,20 @@ inline Status load_container(const uint8_t* bytes, size_t len, Format format,
             for (const daf::Summary& seg : f.summaries) {
                 Series s;
                 const Status ss = spk::to_series(f, seg, &s);
-                if (ss == Status::UnsupportedVariant) {
+                if (ss == Status::UnsupportedVariant || ss == Status::Unsupported) {
                     /* A kernel may mix segment types. Skipping the ones we do
                      * not evaluate is right — refusing the whole file would
                      * make one Chebyshev planetary segment hide forty perfectly
                      * readable spacecraft segments — but a kernel with NOTHING
-                     * readable must still fail rather than return empty. */
+                     * readable must still fail rather than return empty.
+                     *
+                     * Unsupported is the Chebyshev case (types 2 and 3):
+                     * spk::evaluate reads them at an explicit epoch, but they
+                     * store coefficients, not states, so there are no rows to
+                     * put in a Series. They are skipped exactly like a type
+                     * this reader does not know, and a kernel of nothing else
+                     * is refused as UnsupportedVariant, as it was before
+                     * spk::evaluate learned them. */
                     continue;
                 }
                 if (ss != Status::Ok) return ss;

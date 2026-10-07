@@ -69,15 +69,18 @@ function hexToDouble(hex) {
 }
 
 // The same script on every lane, in this order. The last successful init is
-// the one the propagate calls read.
-const PROBE_JD_HEX = reference.probe.julian_date_hex;
+// the one the propagate calls read. Both probe Julian dates are dyadic
+// fractions of a day, so they map to the CSPICE ET with no rounding.
+const INTERIOR = reference.probes.find((p) => p.label === "interior");
+const NODE = reference.probes.find((p) => p.label === "node");
 const OPS = [
   `init:${CHEBYSHEV_ONLY}:${EphemerisFormat.AUTO}`,
   `init:${CHEBYSHEV_ONLY}:${EphemerisFormat.SPK_DAF}`,
   `init:${MIXED}:${EphemerisFormat.SPK_DAF}`,
   `init:${MIXED}:${EphemerisFormat.AUTO}`,
-  `prop:${PROBE_JD_HEX}:0`,
-  `prop:${PROBE_JD_HEX}:1`,
+  `prop:${INTERIOR.julian_date_hex}:0`,
+  `prop:${INTERIOR.julian_date_hex}:1`,
+  `prop:${NODE.julian_date_hex}:0`,
 ];
 
 function dockerUp() {
@@ -308,18 +311,36 @@ test("a kernel mixing Chebyshev and Hermite segments, on every runtime", async (
       assert.equal(props[1].rc, ErrorCode.BAD_ENTITY_INDEX);
     });
 
-    await t.test(`${lane}: the readable segment's state is CSPICE's`, () => {
-      assert.equal(props[0].index, 0);
-      assert.equal(props[0].rc, ErrorCode.OK);
-      const state = readState(props[0].bytes);
-      const { probe } = reference;
+    const fromCspice = (prop, probe) => {
+      assert.equal(prop.index, 0);
+      assert.equal(prop.rc, ErrorCode.OK);
+      const state = readState(prop.bytes);
       assert.equal(state.epoch, hexToDouble(probe.julian_date_hex));
       assert.equal(state.frame, ReferenceFrame.J2000);
       assert.equal(state.flags, StateFlags.VALID);
+      // The ABI speaks metres; CSPICE speaks kilometres.
       const expected = probe.state_hex.map(hexToDouble);
       const dr = Math.hypot(...state.position.map((v, i) => v - 1000 * expected[i]));
       const dv = Math.hypot(...state.velocity.map((v, i) => v - 1000 * expected[3 + i]));
-      t.diagnostic(`${lane}: |dr| = ${dr.toExponential(3)} m, |dv| = ${dv.toExponential(3)} m/s vs CSPICE spkpvn`);
+      t.diagnostic(`${lane} ${probe.label}: |dr| = ${dr.toExponential(3)} m, ` +
+        `|dv| = ${dv.toExponential(3)} m/s from CSPICE spkpvn`);
+      return { dr, dv };
+    };
+
+    await t.test(`${lane}: between nodes, the position is CSPICE's`, () => {
+      // 33.75 steps in, so the Hermite window is really interpolated. The
+      // Chebyshev body flies 20000 km away, so this also proves WHICH segment
+      // answered. Velocity is not graded here: the propagator's Series takes
+      // type-13 velocity from a Lagrange fit of the stored velocities, where
+      // SPKE13 differentiates the position polynomial (2.3e-3 m/s apart at this
+      // epoch, identical in the pre-regression build) — a separate question
+      // from whether the kernel loads.
+      const { dr } = fromCspice(props[0], INTERIOR);
+      assert.ok(dr <= POSITION_BOUND_M, `position is ${dr} m from CSPICE`);
+    });
+
+    await t.test(`${lane}: at a node, the whole state is CSPICE's`, () => {
+      const { dr, dv } = fromCspice(props[2], NODE);
       assert.ok(dr <= POSITION_BOUND_M, `position is ${dr} m from CSPICE`);
       assert.ok(dv <= VELOCITY_BOUND_M_S, `velocity is ${dv} m/s from CSPICE`);
     });

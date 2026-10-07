@@ -43,10 +43,11 @@ MEO = (26560.0, 55.0)
 T0 = 9618 * 86400.0
 SPAN = 3600.0
 STEP = 60.0
-# 3/128 day = 2025 s: an INTERIOR epoch (33.75 steps in), on the 2^-31-day
-# Julian-date grid, so (jd - 2451545) * 86400 reproduces it with no rounding.
-PROBE_ET = T0 + 2025.0
-PROBE_JD = 2451545.0 + 9618.0 + 3.0 / 128.0
+# Both probes are dyadic fractions of a day, on the 2^-31-day Julian-date grid,
+# so (jd - 2451545) * 86400 reproduces the ET with no rounding.
+#   interior  3/128 day = 2025 s, 33.75 steps in: between nodes
+#   node      1/32 day  = 2700 s, node 45: the stored state itself
+PROBES = [("interior", 3, 128), ("node", 1, 32)]
 
 
 def arc(t, orbit):
@@ -173,18 +174,23 @@ def main(out_dir):
                                    "segments": summaries(path)}
 
     mixed = os.path.join(out_dir, "spk_mixed_t2_t13.bsp")
-    ref, state, center = spkpvn(mixed, 1, PROBE_ET)
-    cheb_ref, cheb_state, cheb_center = spkpvn(mixed, 0, PROBE_ET)
-    report["probe"] = {
-        "kernel": "spk_mixed_t2_t13.bsp",
-        "how": "spiceypy.spkpvn(handle, descr of segment 1, et): the segment's own frame and center",
-        "et": PROBE_ET, "et_hex": hexbits(PROBE_ET),
-        "julian_date": PROBE_JD, "julian_date_hex": hexbits(PROBE_JD),
-        "segment_index": 1, "frame": ref, "center": center,
-        "state_km": state, "state_hex": [hexbits(v) for v in state],
-        "analytic_km": [float(v) for v in arc(PROBE_ET, LEO)],
-        "type2_segment_state_km": cheb_state,
-    }
+    report["probes"] = []
+    for label, num, den in PROBES:
+        et = T0 + 86400.0 * num / den
+        jd = 2451545.0 + 9618.0 + num / den
+        ref, state, center = spkpvn(mixed, 1, et)
+        _, cheb_state, _ = spkpvn(mixed, 0, et)
+        report["probes"].append({
+            "label": label,
+            "kernel": "spk_mixed_t2_t13.bsp",
+            "how": "spiceypy.spkpvn(handle, descr of segment 1, et): the segment's own frame and center",
+            "et": et, "et_hex": hexbits(et),
+            "julian_date": jd, "julian_date_hex": hexbits(jd),
+            "segment_index": 1, "frame": ref, "center": center,
+            "state_km": state, "state_hex": [hexbits(v) for v in state],
+            "analytic_km": [float(v) for v in arc(et, LEO)],
+            "type2_segment_state_km": cheb_state,
+        })
     with open(os.path.join(out_dir, "spk_mixed_reference.json"), "w") as f:
         json.dump(report, f, indent=2)
         f.write("\n")
