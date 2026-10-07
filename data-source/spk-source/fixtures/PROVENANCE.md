@@ -181,3 +181,29 @@ were wrong, which is the shape that survives every state comparison.
 `sources.agree.nodes` passed at 1.3e-12 km with the OEM's epoch axis 305 days
 displaced, because it compares positions row by row. `sources.agree.epochs.sec`
 and `sources.agree.epochs.absolute.sec` exist for that reason and stay.
+
+# The mixed-segment kernels
+
+Two SPK files whose segments are NOT all of a type the propagator reads as state
+rows. Unlike the four-container set above, every byte of these was **written by
+the official NAIF toolkit** (CSPICE N0067 through spiceypy 8.2.0), and the
+reference state is CSPICE's own `spkpvn` on the readable segment. Nothing here
+was produced by the code it tests. Input to `tests/mixed_segment_kernel.test.mjs`.
+
+| file                       | bytes | segments (file order)                                   | SHA-256 |
+| -------------------------- | ----- | ------------------------------------------------------- | ------- |
+| `spk_mixed_t2_t13.bsp`     | 8192  | type 2 Chebyshev (target -961), type 13 Hermite (-960)  | `cc332d1ece2f5f741cb2145ed5f4036ee7bc2281498e23980f09e8d28a55e41e` |
+| `spk_chebyshev_only.bsp`   | 8192  | type 2 Chebyshev (-962), type 3 Chebyshev (-963)        | `b8170ea6329f69fdd74dcc4dfa9be3c8d7faa0897e98158e6cfb907b7ada65e7` |
+| `spk_mixed_reference.json` | —     | what CSPICE wrote and the `spkpvn` reference state      | — |
+
+* **Arcs.** Circular two-body, μ = 398600.4418 km³ s⁻², from ET 830995200 s
+  (2026-05-02T12:00:00 TDB) for 3600 s, center 399, frame J2000. The type-13
+  body flies r = 7000 km, i = 51.6°, 61 states at 60 s, degree 7
+  (`spkw13`). The Chebyshev bodies fly r = 26560 km, i = 55°, 600 s records of
+  degree 9 (`spkw02`, `spkw03`), least-squares fitted on Chebyshev nodes — so a
+  state served from the wrong segment is off by ~20000 km, never by round-off.
+* **Probe.** ET 830997225 s = JD 2461163.0234375 (3/128 day into the day), an
+  interior epoch 33.75 steps in that is exactly representable as a Julian date,
+  so the propagator's JD → ET mapping adds no rounding to the comparison.
+* **Regenerating.** `python3 fixtures/make_mixed_kernels.py fixtures` with
+  spiceypy and numpy installed; two runs write byte-identical files.
