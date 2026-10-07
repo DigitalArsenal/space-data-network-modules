@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.files.orbit-products",
   "name": "Orbit Products Reader",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Reads the four ephemeris CONTAINERS this stack round-trips \u2014 SPK (NAIF DAF, segment types 8, 9 and 13), SP3-c/d, Code-500 and scenario-epoch STK ephemeris \u2014 plus CCSDS-OEM keyword-value notation, and projects them onto SDS $OEM with the container's own facts carried out separately as $NCD. A container is a wire format, not a standard: the state history becomes $OEM and the file-level header, comment area, segment address ranges and accuracy block become the native-container descriptor, so a read-then-write cycle reproduces the source instead of inventing header values. Each container is evaluated by the interpolation rule it declares, never by a rule this module picked, and no time-scale conversion happens here: epochs stay on the scale the container named and that name is carried out with them. A malformed container is a named status, never a trap and never a NaN. Converts public-format Vimpel osculating element tables to analytic J2000 epoch OPM states with source provenance; no differenced velocity or covariance is invented. Converts SP Vector/Covariance Messages, legacy V2.0 text or superseded $VCM records, to $OCM without deriving uncertainty or splitting the ballistic coefficient.",
   "tagline": "SPK, SP3, Code-500, STK and CCSDS-OEM containers in; $OEM states and an $NCD descriptor out.",
   "pluginFamily": "parser",
