@@ -1,0 +1,140 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.imager-observation-parser",
+  "name": "Geostationary Imager Observation Parser Node",
+  "version": "0.1.0",
+  "description": "Parser flow node for geostationary imager observations from the anonymous public open-data buckets (GOES ABI L1b/L2 NetCDF4, NOAA Open Data Dissemination). parse turns each fetched file into its field's world product: the area mean of the native fixed-grid pixels in each cell of a 4096 x 2048 latitude/longitude grid (limb cells the field sampled at the cell centre; cloud phase the pixel nearest the cell centre), at 4096, 2048 and 1024 wide, one size-prefixed $WXF record per 64-row band, quantized at the instrument's precision and coded as SDS 1.238 defines (InlineEncodedChunk delta/zigzag/shuffle for the smooth fields, InlineQuantizedUint16/Uint8 otherwise), with sensor, channel, platform and scan-time fields. One satellite's fields, never blended or corrected (owner 2026-10-07: SDN carries raw per-satellite fields; the display derives the rest). NetCDF4 is read by the vendored hdf5mini (deflate via the vendored miniz 3.1.2, shuffle) with netCDF4's mask-and-scale; a 0.5 km band is reduced to its 2 km block means chunk by chunk. A file fetched as byte ranges arrives as consecutive parts and is joined first. Values match the reference producer (Cesium_Weather tools/raw_satellite.py) in every float and code on full-disk GOES-18/19 files; tests hold its output for real mesoscale files. capabilities: none, so the node runs in the browser and on WasmEdge alike.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "parse is a single-pass transform over the frames the flow hands it: each file is read once, chunk by chunk, into one field and its world product, and each band becomes one record. No shared mutable state, no worker pool and no fan-out inside the guest; the fan-out across files is the flow's, through the http connector node. This guest never spawns a thread, so it compiles the single-thread lane rather than claiming a wasi-threads contract it does not honour."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "parse",
+      "displayName": "Parse Imager Files into $WXF World Bands",
+      "description": "Each file job and its HTTP response (paired by position; byte-range parts of one file consecutive) -> the field's world product at the requested widths as size-prefixed $WXF band records, plus one storage.ingest_with_source meta for the batch. A count mismatch, a missing part, a non-200 (206 for a ranged part) status or an unreadable file is refused with a named error, never guessed.",
+      "inputPorts": [
+        {
+          "portId": "jobs",
+          "acceptedTypeSets": [
+            {
+              "setId": "imager-file-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON file job: satellite, sensor, bucket, key, variable, field, frame_time_ms, part/parts, widths, attribution.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-file fetch-job attribution (satellite, sensor, bucket, key, variable, field, frame time, byte-range part, widths, licence and citation) emitted by the imager-observation-source select node inside the same flow; ingest bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 32,
+          "required": true,
+          "description": "One file job per request frame the select node emitted, in emission order."
+        },
+        {
+          "portId": "responses",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/http-request response, one per job: an aligned-binary $HRB raw-body-v1 frame (status plus verbatim NetCDF4 body) or the legacy JSON {status,headers,bodyB64} lane.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request response frame ($HRB raw-body-v1, or legacy {status,headers,bodyB64}) consumed inside this flow; its shape is defined by that generic connector, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 32,
+          "required": true,
+          "description": "One HTTP response per file job, positionally aligned."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "wxf_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-meta-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON storage.ingest_with_source meta for the $WXF batch (schema/provider/source/batch/reconcile/licence/provenance).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "storage.ingest_with_source meta (schema, provider/source/url/batch attribution, reconcile mode, licence and citation, provenance) consumed by hostcap/storage-ingest inside this flow."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "WXF ingest meta."
+        },
+        {
+          "portId": "wxf_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "WXF.fbs",
+                  "fileIdentifier": "$WXF",
+                  "rootTypeName": "WXF",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $WXF FlatBuffer record stream, one record per world band (64 rows) per width per field."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "WXF record stream."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "WXF.fbs",
+      "fileIdentifier": "$WXF",
+      "rootTypeName": "WXF"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "imager-observation-parser-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

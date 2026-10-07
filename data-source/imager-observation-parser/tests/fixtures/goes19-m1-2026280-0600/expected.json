@@ -1,0 +1,257 @@
+{
+ "brightness_temperature_10um": {
+  "encoding": "InlineEncodedChunk",
+  "file": "OR_ABI-L2-CMIPM1-M6C13_G19_s20262800600285_e20262800600354_c20262800600415.nc",
+  "level_enum": "TopOfAtmosphere",
+  "offset": 150,
+  "platform_height": 35786023.0,
+  "platform_lon0": -75.0,
+  "rows": [
+   704,
+   832
+  ],
+  "scale": 0.1,
+  "scan_end_ms": 1791352835000,
+  "scan_start_ms": 1791352828000,
+  "units": "K",
+  "variable": "CMI",
+  "variable_enum": "BrightnessTemperature",
+  "wavelength_um": 10.33,
+  "widths": {
+   "1024": {
+    "bands": 1,
+    "codes": "brightness_temperature_10um.1024.codes.gz",
+    "l0": 176,
+    "l1": 208,
+    "max": 293.93511962890625,
+    "min": 193.23165893554688,
+    "missing": 31800,
+    "tile_count": 8
+   },
+   "2048": {
+    "bands": 1,
+    "codes": "brightness_temperature_10um.2048.codes.gz",
+    "l0": 352,
+    "l1": 416,
+    "max": 294.2425537109375,
+    "min": 191.52166748046875,
+    "missing": 127354,
+    "tile_count": 16
+   },
+   "4096": {
+    "bands": 2,
+    "codes": "brightness_temperature_10um.4096.codes.gz",
+    "l0": 704,
+    "l1": 832,
+    "max": 294.347900390625,
+    "min": 188.73806762695312,
+    "missing": 509711,
+    "tile_count": 32
+   }
+  }
+ },
+ "cloud_mask": {
+  "encoding": "InlineQuantizedUint8",
+  "file": "OR_ABI-L2-ACMM1-M6_G19_s20262800600285_e20262800600343_c20262800600453.nc",
+  "level_enum": "EntireAtmosphere",
+  "offset": 0,
+  "platform_height": 35786023.0,
+  "platform_lon0": -75.0,
+  "rows": [
+   704,
+   832
+  ],
+  "scale": 0.011811023622047244,
+  "scan_end_ms": 1791352834000,
+  "scan_start_ms": 1791352828000,
+  "units": "1",
+  "variable": "ACM",
+  "variable_enum": "CloudMask",
+  "wavelength_um": 0,
+  "widths": {
+   "1024": {
+    "bands": 1,
+    "codes": "cloud_mask.1024.codes.gz",
+    "l0": 176,
+    "l1": 208,
+    "max": 3.0,
+    "min": 0.0,
+    "missing": 31800,
+    "tile_count": 8
+   },
+   "2048": {
+    "bands": 1,
+    "codes": "cloud_mask.2048.codes.gz",
+    "l0": 352,
+    "l1": 416,
+    "max": 3.0,
+    "min": 0.0,
+    "missing": 127355,
+    "tile_count": 16
+   },
+   "4096": {
+    "bands": 2,
+    "codes": "cloud_mask.4096.codes.gz",
+    "l0": 704,
+    "l1": 832,
+    "max": 3.0,
+    "min": 0.0,
+    "missing": 509701,
+    "tile_count": 32
+   }
+  }
+ },
+ "cloud_phase": {
+  "encoding": "InlineQuantizedUint8",
+  "file": "OR_ABI-L2-ACTPM1-M6_G19_s20262800600285_e20262800600343_c20262800600488.nc",
+  "level_enum": "CloudTop",
+  "offset": 0,
+  "platform_height": 35786023.0,
+  "platform_lon0": -75.0,
+  "rows": [
+   704,
+   832
+  ],
+  "scale": 1,
+  "scan_end_ms": 1791352834000,
+  "scan_start_ms": 1791352828000,
+  "units": "1",
+  "variable": "Phase",
+  "variable_enum": "CloudPhase",
+  "wavelength_um": 0,
+  "widths": {
+   "1024": {
+    "bands": 1,
+    "codes": "cloud_phase.1024.codes.gz",
+    "l0": 176,
+    "l1": 208,
+    "max": 4.0,
+    "min": 0.0,
+    "missing": 31868,
+    "tile_count": 8
+   },
+   "2048": {
+    "bands": 1,
+    "codes": "cloud_phase.2048.codes.gz",
+    "l0": 352,
+    "l1": 416,
+    "max": 4.0,
+    "min": 0.0,
+    "missing": 127473,
+    "tile_count": 16
+   },
+   "4096": {
+    "bands": 2,
+    "codes": "cloud_phase.4096.codes.gz",
+    "l0": 704,
+    "l1": 832,
+    "max": 4.0,
+    "min": 0.0,
+    "missing": 509906,
+    "tile_count": 32
+   }
+  }
+ },
+ "cloud_top_height": {
+  "encoding": "InlineEncodedChunk",
+  "file": "OR_ABI-L2-ACHAM1-M6_G19_s20262800600285_e20262800600343_c20262800601039.nc",
+  "level_enum": "CloudTop",
+  "offset": -500,
+  "platform_height": 35786023.0,
+  "platform_lon0": -75.0,
+  "rows": [
+   704,
+   832
+  ],
+  "scale": 34,
+  "scan_end_ms": 1791352834000,
+  "scan_start_ms": 1791352828000,
+  "units": "m",
+  "variable": "HT",
+  "variable_enum": "GeopotentialHeight",
+  "wavelength_um": 0,
+  "widths": {
+   "1024": {
+    "bands": 1,
+    "codes": "cloud_top_height.1024.codes.gz",
+    "l0": 176,
+    "l1": 208,
+    "max": 16336.4140625,
+    "min": 211.50616455078125,
+    "missing": 31844,
+    "tile_count": 8
+   },
+   "2048": {
+    "bands": 1,
+    "codes": "cloud_top_height.2048.codes.gz",
+    "l0": 352,
+    "l1": 416,
+    "max": 16393.59765625,
+    "min": 191.97312927246094,
+    "missing": 127654,
+    "tile_count": 16
+   },
+   "4096": {
+    "bands": 2,
+    "codes": "cloud_top_height.4096.codes.gz",
+    "l0": 704,
+    "l1": 832,
+    "max": 16823.439453125,
+    "min": 185.8690643310547,
+    "missing": 511500,
+    "tile_count": 32
+   }
+  }
+ },
+ "reflectance_064um": {
+  "encoding": "InlineEncodedChunk",
+  "file": "OR_ABI-L2-CMIPM1-M6C02_G19_s20262800600285_e20262800600343_c20262800600383.nc",
+  "level_enum": "TopOfAtmosphere",
+  "offset": -0.01,
+  "platform_height": 35786023.0,
+  "platform_lon0": -75.0,
+  "rows": [
+   704,
+   832
+  ],
+  "scale": 0.0009765625,
+  "scan_end_ms": 1791352834000,
+  "scan_start_ms": 1791352828000,
+  "units": "1",
+  "variable": "CMI",
+  "variable_enum": "Reflectance",
+  "wavelength_um": 0.64,
+  "widths": {
+   "1024": {
+    "bands": 1,
+    "codes": "reflectance_064um.1024.codes.gz",
+    "l0": 176,
+    "l1": 208,
+    "max": 0.00069444376276806,
+    "min": 0.00033399436506442726,
+    "missing": 31800,
+    "tile_count": 8
+   },
+   "2048": {
+    "bands": 1,
+    "codes": "reflectance_064um.2048.codes.gz",
+    "l0": 352,
+    "l1": 416,
+    "max": 0.00069444376276806,
+    "min": 0.00027777752256952226,
+    "missing": 127354,
+    "tile_count": 16
+   },
+   "4096": {
+    "bands": 2,
+    "codes": "reflectance_064um.4096.codes.gz",
+    "l0": 704,
+    "l1": 832,
+    "max": 0.0007010575500316918,
+    "min": 0.0001388887467328459,
+    "missing": 509711,
+    "tile_count": 32
+   }
+  }
+ }
+}
