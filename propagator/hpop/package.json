@@ -1,6 +1,6 @@
 {
   "name": "@orbpro/plugin-hpop",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "OrbPro High-Precision Orbital Propagator Plugin",
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
