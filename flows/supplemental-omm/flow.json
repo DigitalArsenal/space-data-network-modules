@@ -113,7 +113,7 @@
       "artifact": {
         "path": "./nodes/od/dist/isomorphic/module.wasm",
         "publisher": "./nodes/od/publisher.json",
-        "sha256": "79bc79ab6468adca2dee8e3dcfe66a85bd68dc450f90ed96f08acf2c40492087"
+        "sha256": "563c4d92f385e7e094b82b19fa078cee6bd32e0514ac6b06d4d1bf8f5d13e8d3"
       }
     },
     {
