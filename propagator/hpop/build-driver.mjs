@@ -20,7 +20,7 @@ if(original.includes('--version')){run(config.clangxx,original);process.exit(0);
 const args=original.filter(a=>a!=='-fno-exceptions');
 const compile=args.includes('-c');
 const source=compile?args[args.indexOf('-c')+1]:null;
-const flags=['-fno-c++-static-destructors','-fwasm-exceptions','-mllvm','-wasm-use-legacy-eh=false',...config.includes.map(p=>`-I${p}`)];
+const flags=['-fno-c++-static-destructors','-fwasm-exceptions','-mllvm','-wasm-use-legacy-eh=false',...Object.entries(config.defines??{}).map(([name,value])=>`-D${name}=${JSON.stringify(value)}`),...config.includes.map(p=>`-I${p}`)];
 if(compile&&path.basename(source)==='module.cpp'){
   const output=args[args.indexOf('-o')+1];
   const common=args.filter((a,i)=>a!=='-c'&&a!=='-o'&&i!==args.indexOf('-c')+1&&i!==args.indexOf('-o')+1);

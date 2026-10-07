@@ -27,7 +27,10 @@ const diagnosticExports=[...new Set([...pluginSource.matchAll(/^(?:int|void|doub
 const buildDir=path.join(packageRoot,'.sdk-build');await fs.mkdir(buildDir,{recursive:true});
 const sdkRoot=path.resolve(path.dirname(fileURLToPath(import.meta.resolve('space-data-module-sdk/compiler'))),'../..');
 const sdkVersion=JSON.parse(fsSync.readFileSync(path.join(sdkRoot,'package.json'),'utf8')).version;
-const config={clangxx:path.join(emsdk,'upstream/bin/clang++'),linker:path.join(emsdk,'upstream/bin/wasm-ld'),units,exceptionLibraries,diagnosticExports,includes:[path.join(packageRoot,'lib'),path.join(packageRoot,'src'),path.join(packageRoot,'src/cpp/include'),path.join(packageRoot,'src/cpp/generated'),path.join(packageRoot,'src/cpp/generated/sds'),path.join(packageRoot,'../../third_party/nrlmsise00'),path.join(packageRoot,'../../third_party/hwm14')]};
+// The PRW VERSION_QUERY answer is the manifest's identity: the same object the
+// SDK embeds as $PLG supplies it, so there is no second version string to edit.
+const defines={HPOP_MODULE_ID:manifest.pluginId,HPOP_MODULE_VERSION:manifest.version};
+const config={clangxx:path.join(emsdk,'upstream/bin/clang++'),linker:path.join(emsdk,'upstream/bin/wasm-ld'),units,exceptionLibraries,diagnosticExports,defines,includes:[path.join(packageRoot,'lib'),path.join(packageRoot,'src'),path.join(packageRoot,'src/cpp/include'),path.join(packageRoot,'src/cpp/generated'),path.join(packageRoot,'src/cpp/generated/sds'),path.join(packageRoot,'../../third_party/nrlmsise00'),path.join(packageRoot,'../../third_party/hwm14')]};
 const configPath=path.join(buildDir,'compiler.json');await fs.writeFile(configPath,JSON.stringify(config,null,2));
 process.env.HPOP_SDK_BUILD_CONFIG=configPath;
 process.env.SDN_WASI_CLANGXX=path.join(packageRoot,'build-driver.mjs');

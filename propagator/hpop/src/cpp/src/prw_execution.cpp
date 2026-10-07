@@ -8,6 +8,11 @@
 #include "force_partials.h"
 #include "ephemeris.h"
 #include "../../../../../files/orbit-products/src/sha256.hpp"
+// build.mjs defines both from plugin-manifest.json, the manifest the SDK embeds
+// as $PLG, so VERSION_QUERY and the PLG identity cannot disagree.
+#if !defined(HPOP_MODULE_ID) || !defined(HPOP_MODULE_VERSION)
+#error "HPOP_MODULE_ID and HPOP_MODULE_VERSION come from plugin-manifest.json; build with build.mjs"
+#endif
 #include <algorithm>
 #include <array>
 #include <limits>
@@ -419,7 +424,7 @@ bool processPrwInvoke(const uint8_t* data,size_t size,const uint8_t* kernel,size
     if(request->EXECUTION_REQUEST())ok=execute(request->EXECUTION_REQUEST(),response,error);
     else if(request->EPHEMERIS_REQUEST())ok=ephemeris(request->EPHEMERIS_REQUEST(),response,error);
     else if(request->ATMOSPHERE_REQUEST())ok=atmosphere(request->ATMOSPHERE_REQUEST(),response,error);
-    else if(request->VERSION_QUERY()){response.VERSION_RESULT=std::make_unique<PRWVersionResultT>();response.VERSION_RESULT->VERSION="1.0.0";response.VERSION_RESULT->MODULE_ID="com.orbpro.hpop";ok=true;}
+    else if(request->VERSION_QUERY()){response.VERSION_RESULT=std::make_unique<PRWVersionResultT>();response.VERSION_RESULT->VERSION=HPOP_MODULE_VERSION;response.VERSION_RESULT->MODULE_ID=HPOP_MODULE_ID;ok=true;}
     else return prwError(error,"invalid-prw-arm: invoke requires execution, ephemeris, atmosphere or version query.");
     if(ok)encodePrw(response,output);return ok;
 }
