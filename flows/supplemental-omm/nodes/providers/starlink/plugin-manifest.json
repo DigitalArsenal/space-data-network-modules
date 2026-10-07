@@ -132,8 +132,8 @@
     {
       "schemaName": "DSS.fbs",
       "fileIdentifier": "$DSS",
-      "schemaVersion": "1.99.3",
-      "schemaHash": "3d6e0bcb8da2f8d7f8be6de1ebccdd44b510cf1f603d1cfa0f4098474ece7d42",
+      "schemaVersion": "1.99.0",
+      "schemaHash": "819a40979c746d4e712fb62c1af54592b0067a6e8166afad9d83ed494bff7a37",
       "rootTypeName": "DSS"
     }
   ],
