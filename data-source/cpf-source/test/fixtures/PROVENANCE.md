@@ -42,6 +42,25 @@ A **trimmed** copy of a real ILRS CPF v2 prediction for **LAGEOS-1**.
   `OBJECT_NAME: "lageos1"` (H1). LAGEOS-1 is a permanently-tracked passive
   geodetic retroreflector satellite — always has current CPF predictions.
 
+## `lageos1_cpf_260713_19402.4h.dgf`
+
+A longer trim of the **same** prediction, for the supplemental-OMM OD node's
+LAGEOS-1 known answer (`flows/supplemental-omm/tests/od-node-cpf-lageos.test.mjs`).
+
+- **Upstream:** the same URL as above, re-fetched 2026-10-07 (anonymous HTTPS,
+  `HTTP 200`, `text/plain`, 826801 bytes, MD5
+  `23212dc4226006b53c75f16757b39708`, identical to the 2026-07-13 retrieval).
+- **Trim:** the header (`H1`/`H2`/`H5`/`H9`) and the first **241** type-10
+  position records verbatim (MJD 61234, 0 to 14400 s: 2026-07-13T00:00 to
+  04:00 UTC, 60 s cadence, longer than one 225-minute LAGEOS-1 revolution and
+  than the OD node's 192-minute fit window), then the real `99` trailer. The
+  first 245 lines are byte for byte the upstream file's; LF line endings.
+  SHA-256 `6fd408005b7cc5df80312b56d50fd42f9afd7621d7f64440541d2ffea64a3981`.
+- **Reference it is checked against:** CelesTrak's CPF SupGP row
+  `LAGEOS1 [DGF]` (element set 194, the same DGF prediction sequence, epoch
+  2026-07-13T00:00:00) in
+  `analysis/od/tests/data/supgp-reference/cpf/celestrak_supgp_cpf_2026-07-13.csv`.
+
 ## `listing.sample.html`
 
 A small Apache-style directory index mirroring EDC's per-target year directory
