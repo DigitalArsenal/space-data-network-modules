@@ -1,0 +1,140 @@
+{
+  "programId": "com.digitalarsenal.flows.nwp-field-ingest",
+  "name": "Numerical Weather Prediction Field Ingest Flow",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (isomorphic, emception)",
+  "threadModel": "single-thread",
+  "nodes": 9,
+  "edges": 15,
+  "triggers": 1,
+  "capabilities": [
+    "http",
+    "storage_ingest"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "plan",
+      "pluginId": "com.digitalarsenal.data-source.nwp-field-source",
+      "methodId": "plan",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "http_idx",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "select",
+      "pluginId": "com.digitalarsenal.data-source.nwp-field-source",
+      "methodId": "select_messages",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "http_grib",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.nwp-grib2-parser",
+      "methodId": "parse",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "ingest_wxf",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "publish_wxf",
+      "pluginId": "com.digitalarsenal.data-source.nwp-field-source",
+      "methodId": "publish_request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "publish_http_wxf",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.nwp-field-source",
+      "pluginId": "com.digitalarsenal.data-source.nwp-field-source",
+      "version": "0.1.0",
+      "sha256": "6cd47d2c72d28b00e8644ee48b54b2248e11b280bb48660d63ff6d2b72853c53",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6e77702d6669656c642d736f75726365_",
+      "methodSymbols": {
+        "plan": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6e77702d6669656c642d736f75726365_plan",
+        "select_messages": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6e77702d6669656c642d736f75726365_select_messages",
+        "publish_request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6e77702d6669656c642d736f75726365_publish_request"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.http-request",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "version": "0.1.0",
+      "sha256": "9ce014a53df0e43276d80538b2467d338083a77a09d1f72355d9ea80c11c8710",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_",
+      "methodSymbols": {
+        "request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_request"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.nwp-grib2-parser",
+      "pluginId": "com.digitalarsenal.data-source.nwp-grib2-parser",
+      "version": "0.1.0",
+      "sha256": "3870b08dff733ce2b4ec8ceb2e12b4bc4603cc7a37f159791ca7e117dc61034c",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6e77702d67726962322d706172736572_",
+      "methodSymbols": {
+        "parse": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6e77702d67726962322d706172736572_parse"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.storage-ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "version": "0.1.0",
+      "sha256": "3424f11ab76dfec1a6ee403735fe8a68eaab76095d90a5956168c04d46a1efaf",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_",
+      "methodSymbols": {
+        "ingest": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_ingest"
+      }
+    }
+  ]
+}

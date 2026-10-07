@@ -1,0 +1,6 @@
+{
+  "com.digitalarsenal.data-source.nwp-field-source": "../data-source/nwp-field-source",
+  "com.digitalarsenal.hostcap.http-request": "../hostcap/http-request",
+  "com.digitalarsenal.data-source.nwp-grib2-parser": "../data-source/nwp-grib2-parser",
+  "com.digitalarsenal.hostcap.storage-ingest": "../hostcap/storage-ingest"
+}

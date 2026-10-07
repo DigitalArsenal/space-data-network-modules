@@ -1,0 +1,14 @@
+{
+  "name": "@digitalarsenal/sdn-flow-nwp-field-ingest",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../nwp-field-ingest.flow.json --deps ../nwp-field-ingest.deps.json",
+    "build": "export SPACE_DATA_STANDARDS_ROOT=\"${SPACE_DATA_STANDARDS_ROOT:-$(cd ../../../spacedatastandards.org && pwd)}\"; node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../nwp-field-ingest.flow.json --deps ../nwp-field-ingest.deps.json --out ./dist",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "0.8.25"
+  }
+}
