@@ -187,7 +187,7 @@ test("the bundle owns one self-contained APP status board", () => {
   assert.equal(app.id, "supplemental-omm");
   assert.deepEqual(
     app.modules.map(({ id, pluginId, version, role }) => ({ id, pluginId, version, role })),
-    [{ id: "supplemental-omm", pluginId: programId, version: "1.0.0", role: "primary" }],
+    [{ id: "supplemental-omm", pluginId: programId, version: "1.0.1", role: "primary" }],
   );
   for (const [provider] of providers) {
     assert.match(ui, new RegExp(`data-provider=["']${provider}["']`));

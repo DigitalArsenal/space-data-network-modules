@@ -1,7 +1,7 @@
 {
   "programId": "org.sdn.flows.od-supplemental-omm",
   "name": "Supplemental OMM Orbit Determination",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Signed isomorphic graph: one WASM timer policy fans typed ticks to five independent provider nodes; provider FSB ephemerides feed an independent OD node; fitted FSB records reach independently signed FlatSQL, publication, and status nodes. Hosts expose only application-blind capabilities and never own schedule, storage, status, or publication policy.",
   "nodes": [
     {
@@ -113,7 +113,7 @@
       "artifact": {
         "path": "./nodes/od/dist/isomorphic/module.wasm",
         "publisher": "./nodes/od/publisher.json",
-        "sha256": "82a8fa3c5d11534252ee77fe03eeac328f9b0f754983f108fe79f78a66dc8fa2"
+        "sha256": "79bc79ab6468adca2dee8e3dcfe66a85bd68dc450f90ed96f08acf2c40492087"
       }
     },
     {

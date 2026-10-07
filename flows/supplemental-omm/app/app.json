@@ -1,13 +1,13 @@
 {
   "id": "supplemental-omm",
   "name": "Supplemental OMM",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Five independent ephemeris providers fitted into supplemental OMM, OCM, and OBD records by one composed isomorphic module.",
   "modules": [
     {
       "id": "supplemental-omm",
       "pluginId": "org.sdn.flows.od-supplemental-omm",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "role": "primary",
       "description": "The complete five-provider, full-arc orbit-determination, FlatSQL, publication, and status composition.",
       "maxMemoryPages": 16384,
