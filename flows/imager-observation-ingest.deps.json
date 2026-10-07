@@ -1,0 +1,6 @@
+{
+  "com.digitalarsenal.data-source.imager-observation-source": "../data-source/imager-observation-source",
+  "com.digitalarsenal.hostcap.http-request": "../hostcap/http-request",
+  "com.digitalarsenal.data-source.imager-observation-parser": "../data-source/imager-observation-parser",
+  "com.digitalarsenal.hostcap.storage-ingest": "../hostcap/storage-ingest"
+}

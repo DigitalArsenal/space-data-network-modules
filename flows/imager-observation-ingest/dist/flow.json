@@ -1,0 +1,249 @@
+{
+  "programId": "com.digitalarsenal.flows.imager-observation-ingest",
+  "name": "Geostationary Imager Observation Ingest Flow",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "Hourly ingest of geostationary imager observations from NOAA Open Data Dissemination's anonymous public buckets (GOES-East and GOES-West ABI L1b/L2 NetCDF4) as raw per-satellite $WXF world products (owner 2026-10-07: SDN carries raw per-satellite fields; the world-clouds display derives the rest). timer -> plan (one S3 listing per satellite and product folder of the frame hour) -> http -> select_files (the hour's first full-disk scan of each wanted field; byte ranges above 64 MiB; ONE FILE PER INVOCATION, the rest yielded as backlog) -> http -> parse (the field's world product at 4096/2048/1024 wide, 64-row band records, quantized at the instrument's precision, SDS 1.238 encodings) -> storage-ingest -> publish_request -> http (dataset publication, only when imager_publish_url is set). Nodes are listed in pipeline order: the runtime's fair ready-node cursor then carries each file through parse and storage-ingest before select_files resumes with the next, so the parser holds one file and storage-ingest receives one meta and one record stream at a time. Memory: measured 566 MiB of linear memory for a cycle with the full-disk 0.5 km band (143 MB, three ranges) - run the service with memory_pages 16384 (1 GiB); the default 1024 (64 MiB) cannot hold one full-disk file. Cadence: hourly (set retrieval_interval to 1h; the host's default window is 3 h).",
+  "nodes": [
+    {
+      "nodeId": "plan",
+      "pluginId": "com.digitalarsenal.data-source.imager-observation-source",
+      "methodId": "plan",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "http_list",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "select",
+      "pluginId": "com.digitalarsenal.data-source.imager-observation-source",
+      "methodId": "select_files",
+      "kind": "transform",
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "nodeId": "http_files",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.imager-observation-parser",
+      "methodId": "parse",
+      "kind": "transform",
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "nodeId": "ingest_wxf",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish_wxf",
+      "pluginId": "com.digitalarsenal.data-source.imager-observation-source",
+      "methodId": "publish_request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "publish_http_wxf",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "plan-http-list",
+      "fromNodeId": "plan",
+      "fromPortId": "requests",
+      "toNodeId": "http_list",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 64,
+      "opaque": true
+    },
+    {
+      "edgeId": "plan-select-jobs",
+      "fromNodeId": "plan",
+      "fromPortId": "jobs",
+      "toNodeId": "select",
+      "toPortId": "list_jobs",
+      "backpressurePolicy": "queue",
+      "queueDepth": 64,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-list-select",
+      "fromNodeId": "http_list",
+      "fromPortId": "response",
+      "toNodeId": "select",
+      "toPortId": "listings",
+      "backpressurePolicy": "queue",
+      "queueDepth": 64,
+      "opaque": true
+    },
+    {
+      "edgeId": "select-http-files",
+      "fromNodeId": "select",
+      "fromPortId": "requests",
+      "toNodeId": "http_files",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 32,
+      "opaque": true
+    },
+    {
+      "edgeId": "select-parse-jobs",
+      "fromNodeId": "select",
+      "fromPortId": "jobs",
+      "toNodeId": "parse",
+      "toPortId": "jobs",
+      "backpressurePolicy": "queue",
+      "queueDepth": 32,
+      "opaque": true
+    },
+    {
+      "edgeId": "http-files-parse",
+      "fromNodeId": "http_files",
+      "fromPortId": "response",
+      "toNodeId": "parse",
+      "toPortId": "responses",
+      "backpressurePolicy": "queue",
+      "queueDepth": 32,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-wxf-meta",
+      "fromNodeId": "parse",
+      "fromPortId": "wxf_meta",
+      "toNodeId": "ingest_wxf",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-wxf-records",
+      "fromNodeId": "parse",
+      "fromPortId": "wxf_records",
+      "toNodeId": "ingest_wxf",
+      "toPortId": "records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": false,
+      "_comment": "NOT opaque: both ports resolve the concrete $WXF identity, so the record type is declared on the wire rather than signed away."
+    },
+    {
+      "edgeId": "ingest-wxf-egress",
+      "fromNodeId": "ingest_wxf",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "ingest-wxf-publish",
+      "fromNodeId": "ingest_wxf",
+      "fromPortId": "result",
+      "toNodeId": "publish_wxf",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "parse-wxf-meta-publish",
+      "fromNodeId": "parse",
+      "fromPortId": "wxf_meta",
+      "toNodeId": "publish_wxf",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "publish-wxf-http",
+      "fromNodeId": "publish_wxf",
+      "fromPortId": "request",
+      "toNodeId": "publish_http_wxf",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "publish-wxf-egress",
+      "fromNodeId": "publish_http_wxf",
+      "fromPortId": "response",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "plan-status-egress",
+      "fromNodeId": "plan",
+      "fromPortId": "status",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    },
+    {
+      "edgeId": "select-status-egress",
+      "fromNodeId": "select",
+      "fromPortId": "status",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4,
+      "opaque": true
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "timer-imager",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 3600000,
+      "description": "Imager observation timer (hourly: the hour's first full-disk scan and its L2 products, imager_lag_minutes after the hour)."
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "timer-imager",
+      "targetNodeId": "plan",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.imager-observation-source",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.data-source.imager-observation-parser",
+    "com.digitalarsenal.hostcap.storage-ingest"
+  ]
+}

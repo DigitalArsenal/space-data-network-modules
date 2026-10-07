@@ -1,0 +1,14 @@
+{
+  "name": "@digitalarsenal/sdn-flow-imager-observation-ingest",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow check ../imager-observation-ingest.flow.json --deps ../imager-observation-ingest.deps.json",
+    "build": "export SPACE_DATA_STANDARDS_ROOT=\"${SPACE_DATA_STANDARDS_ROOT:-$(cd ../../../spacedatastandards.org && pwd)}\"; node ../../node_modules/space-data-module-sdk/bin/space-data-module.js flow compile ../imager-observation-ingest.flow.json --deps ../imager-observation-ingest.deps.json --out ./dist",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "0.8.25"
+  }
+}

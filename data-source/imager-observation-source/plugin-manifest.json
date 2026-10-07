@@ -1,0 +1,342 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.imager-observation-source",
+  "name": "Geostationary Imager Observation Request Builder Nodes",
+  "version": "0.1.0",
+  "description": "Request-builder flow nodes for geostationary imager observations in NOAA Open Data Dissemination's anonymous public buckets (GOES-East noaa-goes19 and GOES-West noaa-goes18: ABI L1b/L2 NetCDF4 under <product>/<YYYY>/<DDD>/<HH>/). plan turns a timer tick into one S3 ListObjectsV2 request per (satellite, product folder) of the frame hour; select_files takes the listings and emits, for each wanted field, the hour's first full-disk scan as GET requests - byte ranges when a file is larger than imager_max_part_bytes, each response well under the host's 100 MiB cap - with a parse job per part, ONE FILE PER INVOCATION, yielding the rest as backlog so the parser holds one file and storage-ingest receives one meta and one record stream at a time; publish_request turns a completed storage-ingest result plus the parser's ingest meta into the dataset-publication POST for the node's loopback admin endpoint (nothing when imager_publish_url is unset). Every request sets If-Modified-Since at the epoch so the host never turns a repeat listing or a second byte range into an empty 304. Node CONFIG through plugin.getConfig: imager_live_access (default true), imager_satellites, imager_fields (default the five the world-clouds display reads), imager_widths, imager_frame_time (default the latest hour imager_lag_minutes old), imager_max_part_bytes, timeouts, imager_publish_url. No credentials: capabilities none.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method turns its control frames into request/job frames in one pass: plan reads the node config once and emits listing requests, select_files parses the listings and queues one entry per file, publish_request pairs one result with one meta. The only state is select_files's queue of pending files, drained one per invocation as the compiled runtime resumes the yielded node; no worker pool and no thread."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "plan",
+      "displayName": "Imager Listing Plan",
+      "description": "Timer tick -> one S3 ListObjectsV2 GET per (satellite, product folder) of the frame hour, each with a list job naming the satellite, sensor, bucket, prefix, frame time, fields and widths; one status frame when live access is off. One tick per invocation (a surplus is refused as batched-input-frames).",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Timer tick frame (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Cron timer tick frame produced by the flow runtime and consumed inside this flow only; it carries no payload of its own, so there is no SDS record to name."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON for hostcap/http-request: {\"method\":\"GET\",\"url\",\"headers\",\"timeoutMs\",\"responseWire\":\"raw-body-v1\"}.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request request descriptor ({method,url,headers,timeoutMs,responseWire}) produced and consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 32,
+          "required": false,
+          "description": "One listing request per (satellite, product folder)."
+        },
+        {
+          "portId": "jobs",
+          "acceptedTypeSets": [
+            {
+              "setId": "imager-list-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON list job.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-listing job (satellite, sensor, bucket, prefix, frame time, fields, widths) consumed by select_files inside the same flow; never persisted."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 32,
+          "required": false,
+          "description": "One list job per listing request, in the same order."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "imager-status-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON status frame.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Cycle status ({skipped:<reason>} or {missing:[...]}) reported to the flow egress; diagnostics, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Why a cycle emitted nothing, or which files the listings lacked."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "select_files",
+      "displayName": "Imager File Selection",
+      "description": "Listing responses + list jobs (paired by position) -> for each wanted field the hour's first full-disk scan (scan stamp _s<YYYY><DDD><HH>0, band -M<n>C<band>_ for imagery) as GET requests, byte ranges when the listed size exceeds imager_max_part_bytes, with a parse job per part. One file per invocation; the node yields with the rest as backlog and the runtime resumes it without input. Missing files and failed listings are reported on status; a count mismatch is refused.",
+      "inputPorts": [
+        {
+          "portId": "list_jobs",
+          "acceptedTypeSets": [
+            {
+              "setId": "imager-list-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON list job.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-listing job emitted by plan inside the same flow; never persisted."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 32,
+          "required": true,
+          "description": "List jobs, in plan's order."
+        },
+        {
+          "portId": "listings",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/http-request raw-body-v1 response with the bucket listing XML.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request response frame ($HRB raw-body-v1: status plus the S3 ListObjectsV2 XML body) consumed inside this flow; its shape is defined by that generic connector, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 32,
+          "required": true,
+          "description": "One listing response per list job, positionally aligned."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON for hostcap/http-request: {\"method\":\"GET\",\"url\",\"headers\",\"timeoutMs\",\"responseWire\":\"raw-body-v1\"}.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request request descriptor ({method,url,headers,timeoutMs,responseWire}) produced and consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 32,
+          "required": false,
+          "description": "The GET request(s) of one file (one per byte-range part)."
+        },
+        {
+          "portId": "jobs",
+          "acceptedTypeSets": [
+            {
+              "setId": "imager-file-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON file job, one per request.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-file parse job (satellite, sensor, bucket, key, variable, field, frame time, part, widths, attribution) consumed by imager-observation-parser inside the same flow; never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 32,
+          "required": false,
+          "description": "One parse job per file request, in the same order."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "imager-status-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON status frame.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Cycle status ({skipped:<reason>} or {missing:[...]}) reported to the flow egress; diagnostics, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Why a cycle emitted nothing, or which files the listings lacked."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "methodId": "publish_request",
+      "displayName": "Imager Dataset Publication Request",
+      "description": "A storage-ingest result + the parser's ingest meta -> one dataset-publication POST ({schema, providerId, sourceName, batchId}) to imager_publish_url; nothing when it is unset. One pair per invocation.",
+      "inputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-result-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON storage-ingest result.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/storage-ingest result JSON (schema, inserted, batch_id) consumed inside this flow."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Storage-ingest result."
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-meta-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON ingest meta.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "storage.ingest_with_source meta emitted by the parser inside this flow."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The parser's ingest meta."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON for hostcap/http-request: {\"method\":\"GET\",\"url\",\"headers\",\"timeoutMs\",\"responseWire\":\"raw-body-v1\"}.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request request descriptor ({method,url,headers,timeoutMs,responseWire}) produced and consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The publication POST, or nothing."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [],
+  "buildArtifacts": [
+    {
+      "artifactId": "imager-observation-source-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
