@@ -169,11 +169,16 @@ function createOpaqueStateAdapter() {
   };
 }
 
-function circularStates({ radiusKm, stepSeconds, count, phase = 0 }) {
+// Earth-fixed providers (SP3, ECF, CPF frame 0) see an equatorial circular
+// orbit turn at its inertial rate less the Earth's.
+const earthRotationRadPerSecond = 7.29211514668855e-5;
+
+function circularStates({ radiusKm, stepSeconds, count, phase = 0, earthFixed = false }) {
   const meanMotion = Math.sqrt(398600.4418 / radiusKm ** 3);
+  const angularRate = earthFixed ? meanMotion - earthRotationRadPerSecond : meanMotion;
   return Array.from({ length: count }, (_, index) => {
     const seconds = index * stepSeconds;
-    const angle = phase + meanMotion * seconds;
+    const angle = phase + angularRate * seconds;
     return {
       seconds,
       x: radiusKm * Math.cos(angle),
@@ -233,6 +238,7 @@ function fixtureResponses() {
     radiusKm: 25_510,
     stepSeconds: 900,
     count: 8,
+    earthFixed: true,
   }).entries()) {
     const { hour, minute } = minuteStamp(index, 15);
     glonass.push(
@@ -246,6 +252,7 @@ function fixtureResponses() {
     radiusKm: 42_164,
     stepSeconds: 300,
     count: 8,
+    earthFixed: true,
   }).entries()) {
     const { hour, minute } = minuteStamp(index, 5);
     intelsat.push(
@@ -261,6 +268,7 @@ function fixtureResponses() {
     radiusKm: 12_270,
     stepSeconds: 60,
     count: 8,
+    earthFixed: true,
   })) {
     cpf.push(
       `10 0 61242 ${state.seconds.toFixed(6)} 0 ${(state.x * 1000).toFixed(3)} ${(state.y * 1000).toFixed(3)} ${(state.z * 1000).toFixed(3)}`,

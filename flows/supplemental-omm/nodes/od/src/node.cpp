@@ -486,22 +486,75 @@ flatbuffers::Offset<RFM> build_reference_frame(
 // compact form with STATE_VECTOR_SIZE 3: it marks the series position-only and
 // the fitter seeds the initial velocity from the positions. Compact epochs are
 // START_TIME + i * STEP_SIZE, so each run of evenly spaced states is one block;
-// a gap or a cadence change starts the next. Epochs must strictly increase: the
-// fitter differences neighbouring positions for its seed, and a repeated epoch
-// divides by zero there (the fit then never returns).
+// a gap or a cadence change starts the next.
+//
+// The fitter seeds each local fit from the quadratic derivative of the three
+// positions around its epoch. An arc it cannot fit is refused here instead:
+// epochs must strictly increase (a repeated epoch divides by zero in that
+// derivative), and every such seed must be a bound Earth orbit. An unbound
+// seed has no mean motion; the core's deep-space propagator then loops without
+// end on the NaN elements (a GEO-radius circle traced at the inertial rate in
+// the Earth-fixed frame is one: 6.1 km/s against a 4.3 km/s escape speed).
+bool earth_fixed(CustomFrame frame) { return frame == CustomFrame::ECEF; }
+bool earth_fixed(CelestialFrame) { return false; }
+
+bool position_only_arc_is_fittable(const std::vector<NativeState>& states,
+                                   bool earth_fixed_frame) {
+  constexpr double kCadenceToleranceSeconds = 1e-3;
+  // The fit core's WGS-72 constants (sgp4_fitter.cpp MU_EARTH and
+  // frame_transform.cpp kOmegaEarth).
+  constexpr double kMuEarth = 398600.8;
+  constexpr double kOmegaEarth = 7.29211514668855e-5;
+  const size_t count = states.size();
+  if (count < 3) return false;
+  for (size_t index = 0; index < count; ++index) {
+    const NativeState& state = states[index];
+    if (!std::isfinite(state.seconds) || !std::isfinite(state.x) ||
+        !std::isfinite(state.y) || !std::isfinite(state.z)) {
+      return false;
+    }
+    if (index > 0 && !(state.seconds - states[index - 1].seconds >
+                       kCadenceToleranceSeconds)) {
+      return false;
+    }
+  }
+  for (size_t index = 0; index < count; ++index) {
+    // The fitter's window: the first three, the last three, else centred.
+    const size_t first =
+        index == 0 ? 0 : (index >= count - 1 ? count - 3 : index - 1);
+    const NativeState& p0 = states[first];
+    const NativeState& p1 = states[first + 1];
+    const NativeState& p2 = states[first + 2];
+    const double t1 = p1.seconds - p0.seconds;
+    const double t2 = p2.seconds - p0.seconds;
+    const double te = states[index].seconds - p0.seconds;
+    const double l0 = (2.0 * te - t1 - t2) / (t1 * t2);
+    const double l1 = (2.0 * te - t2) / (t1 * (t1 - t2));
+    const double l2 = (2.0 * te - t1) / (t2 * (t2 - t1));
+    double vx = p0.x * l0 + p1.x * l1 + p2.x * l2;
+    double vy = p0.y * l0 + p1.y * l1 + p2.y * l2;
+    const double vz = p0.z * l0 + p1.z * l1 + p2.z * l2;
+    const NativeState& at = states[index];
+    if (earth_fixed_frame) {
+      // Inertial speed is |v_fixed + omega x r|, whatever the rotation angle.
+      vx -= kOmegaEarth * at.y;
+      vy += kOmegaEarth * at.x;
+    }
+    const double radius = std::sqrt(at.x * at.x + at.y * at.y + at.z * at.z);
+    const double energy =
+        0.5 * (vx * vx + vy * vy + vz * vz) - kMuEarth / radius;
+    if (!(radius > 0.0) || !(energy < 0.0)) return false;
+  }
+  return true;
+}
+
 template <typename Frame>
 std::vector<uint8_t> build_position_only_oem(
     const std::string& object_name, const std::string& object_id,
     uint32_t norad, Frame frame, timingStandard time_system,
     const std::vector<NativeState>& states) {
   constexpr double kCadenceToleranceSeconds = 1e-3;
-  if (states.size() < 3) return {};
-  for (size_t index = 1; index < states.size(); ++index) {
-    if (!(states[index].seconds - states[index - 1].seconds >
-          kCadenceToleranceSeconds)) {
-      return {};
-    }
-  }
+  if (!position_only_arc_is_fittable(states, earth_fixed(frame))) return {};
   flatbuffers::FlatBufferBuilder builder(1 << 16);
   std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks;
   size_t start = 0;

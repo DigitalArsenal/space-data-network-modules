@@ -253,7 +253,9 @@ function makeProductionShapedMemeFixture() {
 
 function makeGlonassSp3Fixture() {
   const radiusKm = 25_510;
-  const meanMotion = Math.sqrt(398_600.4418 / radiusKm ** 3);
+  // SP3 positions are Earth-fixed: the orbit turns at its inertial rate less
+  // the Earth's.
+  const meanMotion = Math.sqrt(398_600.4418 / radiusKm ** 3) - 7.29211514668855e-5;
   const lines = ["#dP2026  7 21  0  0  0.00000000 ORBIT TEST"];
   for (let index = 0; index < 8; index += 1) {
     const seconds = index * 15 * 60;
