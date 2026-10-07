@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
+import { loadKnownTypeCatalog } from "space-data-module-sdk/standards";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const manifestPath = path.join(packageRoot, "plugin-manifest.json");
@@ -15,6 +16,22 @@ process.env.SPACE_DATA_STANDARDS_ROOT ??= standardsRoot;
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
 const sourceCode = await fs.readFile(sourcePath, "utf8");
+
+// DopRequest (DOPQ) and DopResult (DOPR) are this module's own aligned-binary
+// structs (src/dop_module.cpp), not SDS records, so the SDK's compile-time
+// manifest check cannot resolve them from the standards catalog. Register
+// exactly those two identities as module-local, as analysis/estimation does
+// for $EST; the manifest and the wire contract are unchanged.
+async function moduleTypeCatalog() {
+  const catalog = [...(await loadKnownTypeCatalog({ standardsRoot: process.env.SPACE_DATA_STANDARDS_ROOT }))];
+  for (const entry of [
+    { schemaCode: "DOPQ", schemaName: "orbpro.analysis.DopRequest", fileIdentifier: "DOPQ", rootTypeName: "DopRequest", source: "module-local-aligned-binary" },
+    { schemaCode: "DOPR", schemaName: "orbpro.analysis.DopResult", fileIdentifier: "DOPR", rootTypeName: "DopResult", source: "module-local-aligned-binary" },
+  ]) {
+    if (!catalog.some((known) => known.schemaName === entry.schemaName && known.fileIdentifier === entry.fileIdentifier)) catalog.push(entry);
+  }
+  return catalog;
+}
 
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -29,6 +46,7 @@ const compilation = await compileModuleFromSource({
   language: "c++",
   outputPath,
   threadModel: "single-thread",
+  catalog: await moduleTypeCatalog(),
 });
 
 await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));
