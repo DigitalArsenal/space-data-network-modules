@@ -1,7 +1,7 @@
 {
   "pluginId": "hypersonics-propagator",
   "name": "Hypersonics Propagator",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Evaluates hypersonic flight conditions from trajectory samples. Supported atmosphere models: US76 (US Standard Atmosphere 1976, geopotential formulation, 0-86 km) and US76_EXPONENTIAL_EXTENSION (crude isothermal extension above 86 km). NRLMSISE00 requests fail hard \u2014 use the atmosphere or hpop modules for real NRLMSISE-00.",
   "pluginFamily": "propagator",
   "capabilities": [],

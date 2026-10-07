@@ -19,11 +19,16 @@ const sourceCode = await fs.readFile(sourcePath, "utf8");
 await fs.rm(distRoot, { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 
+// The lane is DECLARED, never inferred: without it, SDK 0.8.25 infers
+// "emscripten-pthreads" from runtimeTargets [browser, wasmedge] and its
+// artifact guard refuses this never-threading guest. "single-thread" is the
+// Emscripten STANDALONE_WASM lane the 1.0.0 artifact was built on.
 const compilation = await compileModuleFromSource({
   manifest,
   sourceCode,
   language: "c++",
   outputPath,
+  threadModel: "single-thread",
 });
 
 await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));

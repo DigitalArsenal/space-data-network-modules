@@ -1,7 +1,7 @@
 {
   "pluginId": "com.orbpro.dop",
   "name": "DOP Analysis",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "GNSS dilution-of-precision analysis from receiver and satellite geometry.",
   "pluginFamily": "analysis",
   "capabilities": [],

@@ -1,6 +1,6 @@
 {
   "name": "space-data-network-plugin-dop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Space Data Network GNSS dilution-of-precision analysis module",
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
