@@ -267,4 +267,17 @@ test("OD node refuses a CPF arc the fit core cannot fit", async (t) => {
     95_201n,
     "repeated epoch",
   );
+  // An arc whose fit seed is not a bound orbit (here 20 km/s at 12,270 km) is
+  // refused: the fit core's propagator does not return on its elements.
+  await refuse(
+    [
+      ...header,
+      "10 0 61234      0.000000  0      12270000.000             0.000             0.000",
+      "10 0 61234     60.000000  0      12270000.000       1200000.000             0.000",
+      "10 0 61234    120.000000  0      12270000.000       2400000.000             0.000",
+      "99",
+    ],
+    95_202n,
+    "unbound seed",
+  );
 });
