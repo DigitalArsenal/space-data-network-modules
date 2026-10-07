@@ -1,25 +1,25 @@
 {
   "ok": true,
   "fixture": "TMPL lane05 estimation",
-  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--od-formal-covariance-publication-20261001/analysis/estimation/dist/isomorphic/module.wasm",
-  "artifactSha256": "2d4ffddc0516729a42847418dd12cfb7862c0554c36b731a98fcaff01cb8594b",
-  "moduleSha256": "2d4ffddc0516729a42847418dd12cfb7862c0554c36b731a98fcaff01cb8594b",
+  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--modules-diverged-builds-new-versions-20261007/analysis/estimation/dist/isomorphic/module.wasm",
+  "artifactSha256": "5e97be432e0d58d94110617c4895eed04e4a5ca91a80fd16f22112aa55e12748",
+  "moduleSha256": "5e97be432e0d58d94110617c4895eed04e4a5ca91a80fd16f22112aa55e12748",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 68,
-      "durationMs": 5668
+      "durationMs": 1042
     },
     {
       "lane": "wasmedge",
       "runs": 68,
-      "durationMs": 2048
+      "durationMs": 1889
     },
     {
       "lane": "docker-wasmedge",
       "runs": 68,
-      "durationMs": 11723
+      "durationMs": 11121
     }
   ],
   "cases": [
