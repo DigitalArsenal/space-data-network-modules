@@ -35,7 +35,7 @@
       "artifact": {
         "path": "./nodes/providers/starlink/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/starlink/publisher.json",
-        "sha256": "b6b4ab5c31e3c783d5a80db470539a8a11d652ad8a69ff2907d5085b1bc62851"
+        "sha256": "4daf5825aa324ec9a66b7f5e75677784be1445434bb6da3091eb43c4f56b8a3e"
       }
     },
     {
@@ -51,7 +51,7 @@
       "artifact": {
         "path": "./nodes/providers/glonass/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/glonass/publisher.json",
-        "sha256": "ce738ceb46af1b9252b3fa94720aac64e0e56fd89652630c0d332773ad2055ca"
+        "sha256": "c336ad55142ecafe90d6c72d4ee0c89c4d1cf91f655da21fe8381a747bb2afd3"
       }
     },
     {
@@ -67,7 +67,7 @@
       "artifact": {
         "path": "./nodes/providers/intelsat/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/intelsat/publisher.json",
-        "sha256": "259f6816eff7a5e31c2d9cd4c962a585cc8f01ace03964f2fb014aa800f9fef8"
+        "sha256": "8559c2ae5ca715fa0f56f3c73de665ff154e0a10d90ea36ce2f5a71c9d93bce7"
       }
     },
     {
@@ -83,7 +83,7 @@
       "artifact": {
         "path": "./nodes/providers/cpf/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/cpf/publisher.json",
-        "sha256": "9865efc121a3ac687defb8ff0095c30ec9d92ad78747d7645719622dd1f2b7d4"
+        "sha256": "36af953c3f47f2ced11d1ead9ebd26ee08acabe26d75b3c5b0bc5624b2cd5305"
       }
     },
     {
@@ -99,7 +99,7 @@
       "artifact": {
         "path": "./nodes/providers/iss/dist/isomorphic/module.wasm",
         "publisher": "./nodes/providers/iss/publisher.json",
-        "sha256": "1883a9587c775be307f7b1dc73600ba804ee3348a96720424c789c1285a9b77b"
+        "sha256": "15cdec4f942442b16f9c41a50c1583b25a31d90a6be1685219903ddb1f482158"
       }
     },
     {
