@@ -1,0 +1,35 @@
+{
+ "gfs-1p00-motion.grib2": {
+  "url": "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20261006/00/atmos/gfs.t00z.pgrb2.1p00.f024",
+  "idx": [
+   "349:21646810:d=2026100600:HGT:500 mb:24 hour fcst",
+   "356:22157936:d=2026100600:UGRD:500 mb:24 hour fcst",
+   "357:22209580:d=2026100600:VGRD:500 mb:24 hour fcst",
+   "461:27922359:d=2026100600:HGT:850 mb:24 hour fcst",
+   "468:28472569:d=2026100600:UGRD:850 mb:24 hour fcst",
+   "469:28525379:d=2026100600:VGRD:850 mb:24 hour fcst"
+  ]
+ },
+ "gefs-0p50-spread.grib2": {
+  "url": "https://noaa-gefs-pds.s3.amazonaws.com/gefs.20261006/00/atmos/pgrb2ap5/gespr.t00z.pgrb2a.0p50.f024",
+  "idx": [
+   "34:3945242:d=2026100600:UGRD:500 mb:24 hour fcst",
+   "35:4056911:d=2026100600:VGRD:500 mb:24 hour fcst"
+  ]
+ },
+ "gfs-0p50-clouds.grib2": {
+  "url": "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20261006/00/atmos/gfs.t00z.pgrb2.0p50.f024",
+  "idx": [
+   "630:129076065:d=2026100600:LCDC:low cloud layer:24 hour fcst",
+   "632:129565443:d=2026100600:MCDC:middle cloud layer:24 hour fcst",
+   "634:129949529:d=2026100600:HCDC:high cloud layer:24 hour fcst",
+   "636:130408831:d=2026100600:TCDC:entire atmosphere:24 hour fcst"
+  ]
+ },
+ "gfs-0p25-surface.grib2": {
+  "url": "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20261006/00/atmos/gfs.t00z.pgrb2.0p25.f024",
+  "idx": [
+   "581:409386171:d=2026100600:TMP:2 m above ground:24 hour fcst"
+  ]
+ }
+}

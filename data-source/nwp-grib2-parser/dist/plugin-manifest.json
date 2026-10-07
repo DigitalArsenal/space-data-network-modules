@@ -1,0 +1,140 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.nwp-grib2-parser",
+  "name": "Numerical Weather Prediction GRIB2 Parser Node",
+  "version": "0.1.0",
+  "description": "Parser flow node for numerical-weather-prediction model fields in GRIB2 (NOAA/NCEP GFS and GEFS from NOAA Open Data Dissemination's anonymous public buckets, fetched message by message through the .idx inventory). parse turns each instantaneous field into $WXF record(s) carrying the GRIB2 packing's own integers exactly - value = (R + X 2^E) / 10^D, so SCALE_FACTOR = 2^E / 10^D and ADD_OFFSET = R / 10^D, times 1/100 for a percentage (the fraction $WXF defines) - coded InlineEncodedChunk (delta/zigzag/shuffle), rows south to north and longitude from 0 east, every stride-th point (GEFS 0.5 deg spread at the 1 deg points), whole or in band_rows bands, named as the world-clouds reference names them (wind_east_850hPa, geopotential_height_500hPa, cloud_cover_low, air_temperature_2m, ..._spread). Raw: nothing is resampled or derived (owner 2026-10-02: SDN carries raw feeds; the display derives). GRIB2 is read by the vendored grib2mini (grid 3.0, product 4.0/4.1/4.2, packing 5.0/5.2/5.3, bitmaps), checked against ecCodes on NOAA's own files; interval statistics, other grids or packings, unmapped parameters and integers wider than 16 bits are refused by name. capabilities: none, so the node runs in the browser and on WasmEdge alike.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "parse is a single-pass transform over the frames the flow hands it: each response's GRIB2 messages are read once and each becomes its record(s). No shared mutable state, no worker pool and no fan-out inside the guest; the fan-out across leads and byte ranges is the flow's, through the http connector node. This guest never spawns a thread, so it compiles the single-thread lane rather than claiming a wasi-threads contract it does not honour."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "parse",
+      "displayName": "Parse GRIB2 Fields into $WXF Records",
+      "description": "Each GRIB job and its HTTP response (paired by position; a response is whole GRIB2 messages of one byte range) -> one $WXF record per field (or per band of band_rows rows) with the packing integers, plus one storage.ingest_with_source meta for the batch. A count mismatch, a non-2xx status, an unreadable message or a field this parser does not publish is refused with a named error, never guessed.",
+      "inputPorts": [
+        {
+          "portId": "jobs",
+          "acceptedTypeSets": [
+            {
+              "setId": "nwp-grib-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON GRIB job: url, product, model_key, model_id, model_class, run, lead, stride, band_rows, spread, ensemble_size, attribution.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-range fetch-job attribution (product, model, run, lead, stride, bands, licence and citation) emitted by the nwp-field-source select node inside the same flow; ingest bookkeeping, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 32,
+          "required": true,
+          "description": "One GRIB job per request frame the select node emitted, in emission order."
+        },
+        {
+          "portId": "responses",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/http-request response, one per job: an aligned-binary $HRB raw-body-v1 frame (status plus the GRIB2 bytes of one range) or the legacy JSON {status,headers,bodyB64} lane.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request response frame ($HRB raw-body-v1, or legacy {status,headers,bodyB64}) consumed inside this flow; its shape is defined by that generic connector, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 32,
+          "required": true,
+          "description": "One HTTP response per file job, positionally aligned."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "wxf_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-meta-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON storage.ingest_with_source meta for the $WXF batch (schema/provider/source/batch/reconcile/licence/provenance).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "storage.ingest_with_source meta (schema, provider/source/url/batch attribution, reconcile mode, licence and citation, provenance) consumed by hostcap/storage-ingest inside this flow."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "WXF ingest meta."
+        },
+        {
+          "portId": "wxf_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-record-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "WXF.fbs",
+                  "fileIdentifier": "$WXF",
+                  "rootTypeName": "WXF",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $WXF FlatBuffer record stream, one record per field (or band)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "WXF record stream."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "WXF.fbs",
+      "fileIdentifier": "$WXF",
+      "rootTypeName": "WXF"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "nwp-grib2-parser-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}

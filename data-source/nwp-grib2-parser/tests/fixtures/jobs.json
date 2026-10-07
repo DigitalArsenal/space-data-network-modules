@@ -1,0 +1,6 @@
+{
+  "gfs-1p00-motion.grib2": { "product": "gfs-1p00-motion", "model_key": "gfs", "model_id": "NCEP GFS 1°", "model_class": "NumericalGlobalDeterministic", "stride": 1, "band_rows": 0 },
+  "gefs-0p50-spread.grib2": { "product": "gefs-0p50-spread", "model_key": "gefs", "model_id": "NCEP GEFS 0.5° (every other point)", "model_class": "NumericalGlobalEnsemble", "stride": 2, "band_rows": 0, "spread": true, "ensemble_size": 31 },
+  "gfs-0p50-clouds.grib2": { "product": "gfs-0p50-clouds", "model_key": "gfs", "model_id": "NCEP GFS 0.5°", "model_class": "NumericalGlobalDeterministic", "stride": 1, "band_rows": 0 },
+  "gfs-0p25-surface.grib2": { "product": "gfs-0p25-physics", "model_key": "gfs", "model_id": "NCEP GFS 0.25°", "model_class": "NumericalGlobalDeterministic", "stride": 1, "band_rows": 64 }
+}
