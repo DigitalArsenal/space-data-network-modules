@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -169,6 +170,9 @@ struct OutputRequestIdentity {
 
 struct NativeState {
   std::string epoch;
+  // Position-only providers: the epoch in seconds on the provider's own time
+  // scale, used to group evenly spaced states into compact $OEM blocks.
+  double seconds = 0.0;
   double x = 0.0;
   double y = 0.0;
   double z = 0.0;
@@ -438,17 +442,112 @@ bool parse_starlink_identity(const std::string& schema_name,
   return *norad != 0 && !object_name->empty();
 }
 
-std::vector<uint8_t> build_custom_oem(const std::string& object_name,
-                                      const std::string& object_id,
-                                      uint32_t norad,
-                                      CustomFrame frame,
-                                      timingStandard time_system,
-                                      const std::vector<NativeState>& states) {
+// Seconds from 1970-01-01T00:00:00 to a proleptic Gregorian calendar instant on
+// the caller's time scale (days_from_civil, H. Hinnant).
+double civil_seconds(int year, int month, int day, int hour, int minute,
+                     double seconds) {
+  const int shifted_year = year - (month <= 2 ? 1 : 0);
+  const int era = (shifted_year >= 0 ? shifted_year : shifted_year - 399) / 400;
+  const int year_of_era = shifted_year - era * 400;
+  const int day_of_year =
+      (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1;
+  const int day_of_era = year_of_era * 365 + year_of_era / 4 -
+                         year_of_era / 100 + day_of_year;
+  const double days = static_cast<double>(era) * 146097.0 +
+                      static_cast<double>(day_of_era) - 719468.0;
+  return days * 86400.0 + hour * 3600.0 + minute * 60.0 + seconds;
+}
+
+flatbuffers::Offset<RFM> build_reference_frame(
+    flatbuffers::FlatBufferBuilder* builder, CustomFrame frame) {
+  auto wrapper = CreateCustomFrameWrapper(*builder, frame);
+  RFMBuilder rfm(*builder);
+  rfm.add_REFERENCE_FRAME_type(RFMUnionTraits<CustomFrameWrapper>::enum_value);
+  rfm.add_REFERENCE_FRAME(wrapper.Union());
+  return rfm.Finish();
+}
+
+flatbuffers::Offset<RFM> build_reference_frame(
+    flatbuffers::FlatBufferBuilder* builder, CelestialFrame frame) {
+  auto wrapper = CreateCelestialFrameWrapper(*builder, frame);
+  RFMBuilder rfm(*builder);
+  rfm.add_REFERENCE_FRAME_type(
+      RFMUnionTraits<CelestialFrameWrapper>::enum_value);
+  rfm.add_REFERENCE_FRAME(wrapper.Union());
+  return rfm.Finish();
+}
+
+// Position-only providers (CPF, SP3, ECF) carry no velocity. The fit core's
+// reader takes every EPHEMERIS_DATA_LINES row as a full state, so a row with
+// zero velocity is a body at rest in its source frame: Earth-fixed, it rotates
+// to omega x r in TEME and the fit starts from a near-radial orbit (the
+// LAGEOS-1 CPF arc fitted to e 0.966, n 16.79 rev/day, B* at its bound,
+// instead of e 0.0045, n 6.387). The reader's position-only shape is the
+// compact form with STATE_VECTOR_SIZE 3: it marks the series position-only and
+// the fitter seeds the initial velocity from the positions. Compact epochs are
+// START_TIME + i * STEP_SIZE, so each run of evenly spaced states is one block;
+// a gap or a cadence change starts the next. Epochs must strictly increase.
+template <typename Frame>
+std::vector<uint8_t> build_position_only_oem(
+    const std::string& object_name, const std::string& object_id,
+    uint32_t norad, Frame frame, timingStandard time_system,
+    const std::vector<NativeState>& states) {
+  constexpr double kCadenceToleranceSeconds = 1e-3;
   if (states.size() < 3) return {};
-  const oem_fb::Identity identity{object_name.c_str(), object_id.c_str(), norad};
-  return oem_fb::build_oem_flatbuffer(
-      identity, frame, "EARTH", time_system, states.data(),
-      static_cast<int>(states.size()));
+  flatbuffers::FlatBufferBuilder builder(1 << 16);
+  std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks;
+  size_t start = 0;
+  double step = 0.0;
+  while (start < states.size()) {
+    size_t end = start + 1;
+    if (end < states.size()) {
+      step = states[end].seconds - states[start].seconds;
+      if (!(step > kCadenceToleranceSeconds)) return {};
+      ++end;
+      while (end < states.size() &&
+             std::fabs(states[end].seconds - states[end - 1].seconds - step) <=
+                 kCadenceToleranceSeconds) {
+        ++end;
+      }
+    }
+    std::vector<double> data;
+    data.reserve((end - start) * 3);
+    for (size_t index = start; index < end; ++index) {
+      data.push_back(states[index].x);
+      data.push_back(states[index].y);
+      data.push_back(states[index].z);
+    }
+    auto data_vector = builder.CreateVector(data);
+    auto name = builder.CreateString(object_name);
+    auto id = builder.CreateString(object_id);
+    CATBuilder cat(builder);
+    cat.add_OBJECT_NAME(name);
+    cat.add_OBJECT_ID(id);
+    cat.add_NORAD_CAT_ID(norad);
+    auto object = cat.Finish();
+    auto reference_frame = build_reference_frame(&builder, frame);
+    auto center = builder.CreateString("EARTH");
+    auto start_time = builder.CreateString(states[start].epoch);
+    auto stop_time = builder.CreateString(states[end - 1].epoch);
+    ephemerisDataBlockBuilder block(builder);
+    block.add_OBJECT(object);
+    block.add_CENTER_NAME(center);
+    block.add_REFERENCE_FRAME(reference_frame);
+    block.add_TIME_SYSTEM(time_system);
+    block.add_START_TIME(start_time);
+    block.add_STOP_TIME(stop_time);
+    block.add_STEP_SIZE(step);
+    block.add_STATE_VECTOR_SIZE(3);
+    block.add_EPHEMERIS_DATA(data_vector);
+    blocks.push_back(block.Finish());
+    start = end;
+  }
+  auto block_vector = builder.CreateVector(blocks);
+  OEMBuilder oem(builder);
+  oem.add_EPHEMERIS_DATA_BLOCK(block_vector);
+  FinishOEMBuffer(builder, oem.Finish());
+  const uint8_t* bytes = builder.GetBufferPointer();
+  return std::vector<uint8_t>(bytes, bytes + builder.GetSize());
 }
 
 std::vector<uint8_t> build_celestial_oem(
@@ -500,17 +599,19 @@ std::vector<od::BatchObject> parse_glonass_sp3(const std::string& content) {
   };
   std::vector<Satellite> satellites;
   std::string epoch;
+  double epoch_seconds = 0.0;
   for_each_line(content, [&](const std::string& line) {
     const std::vector<std::string> tokens = split_ws(line);
     if (tokens.empty()) return;
     if (tokens[0] == "*" && tokens.size() >= 7) {
-      epoch = calendar_iso(
-          std::strtol(tokens[1].c_str(), nullptr, 10),
-          std::strtol(tokens[2].c_str(), nullptr, 10),
-          std::strtol(tokens[3].c_str(), nullptr, 10),
-          std::strtol(tokens[4].c_str(), nullptr, 10),
-          std::strtol(tokens[5].c_str(), nullptr, 10),
-          std::strtod(tokens[6].c_str(), nullptr));
+      const int year = std::strtol(tokens[1].c_str(), nullptr, 10);
+      const int month = std::strtol(tokens[2].c_str(), nullptr, 10);
+      const int day = std::strtol(tokens[3].c_str(), nullptr, 10);
+      const int hour = std::strtol(tokens[4].c_str(), nullptr, 10);
+      const int minute = std::strtol(tokens[5].c_str(), nullptr, 10);
+      const double second = std::strtod(tokens[6].c_str(), nullptr);
+      epoch = calendar_iso(year, month, day, hour, minute, second);
+      epoch_seconds = civil_seconds(year, month, day, hour, minute, second);
       return;
     }
     if (tokens[0].size() < 3 || tokens[0][0] != 'P' ||
@@ -531,6 +632,7 @@ std::vector<od::BatchObject> parse_glonass_sp3(const std::string& content) {
     }
     NativeState state;
     state.epoch = epoch;
+    state.seconds = epoch_seconds;
     state.x = std::strtod(tokens[1].c_str(), nullptr);
     state.y = std::strtod(tokens[2].c_str(), nullptr);
     state.z = std::strtod(tokens[3].c_str(), nullptr);
@@ -540,7 +642,7 @@ std::vector<od::BatchObject> parse_glonass_sp3(const std::string& content) {
   });
   std::vector<od::BatchObject> objects;
   for (const Satellite& satellite : satellites) {
-    std::vector<uint8_t> oem = build_custom_oem(
+    std::vector<uint8_t> oem = build_position_only_oem(
         "GLONASS " + satellite.id, "", 0, CustomFrame::ECEF,
         timingStandard::GPS, satellite.states);
     if (!oem.empty()) objects.push_back({std::move(oem)});
@@ -573,12 +675,23 @@ std::vector<od::BatchObject> parse_intelsat_ecf(const std::string& content) {
     state.epoch = tokens[0];
     std::replace(state.epoch.begin(), state.epoch.end(), '/', '-');
     state.epoch += "T" + tokens[1] + "Z";
+    char* cursor = nullptr;
+    const long hour = std::strtol(tokens[1].c_str(), &cursor, 10);
+    if (*cursor != ':') return;
+    const long minute = std::strtol(cursor + 1, &cursor, 10);
+    if (*cursor != ':') return;
+    state.seconds = civil_seconds(
+        std::strtol(tokens[0].substr(0, 4).c_str(), nullptr, 10),
+        std::strtol(tokens[0].substr(5, 2).c_str(), nullptr, 10),
+        std::strtol(tokens[0].substr(8, 2).c_str(), nullptr, 10),
+        static_cast<int>(hour), static_cast<int>(minute),
+        std::strtod(cursor + 1, nullptr));
     state.x = std::strtod(tokens[2].c_str(), nullptr) / 1000.0;
     state.y = std::strtod(tokens[3].c_str(), nullptr) / 1000.0;
     state.z = std::strtod(tokens[4].c_str(), nullptr) / 1000.0;
     states.push_back(std::move(state));
   });
-  std::vector<uint8_t> oem = build_custom_oem(
+  std::vector<uint8_t> oem = build_position_only_oem(
       object_name, "", 0, CustomFrame::ECEF, timingStandard::UTC, states);
   if (oem.empty()) return {};
   return {{std::move(oem)}};
@@ -614,6 +727,7 @@ std::vector<od::BatchObject> parse_cpf(const std::string& content) {
     NativeState state;
     state.epoch = julian_iso(static_cast<double>(mjd) + 2'400'000.5 +
                              seconds / 86'400.0);
+    state.seconds = static_cast<double>(mjd) * 86'400.0 + seconds;
     state.x = std::strtod(tokens[5].c_str(), nullptr) / 1000.0;
     state.y = std::strtod(tokens[6].c_str(), nullptr) / 1000.0;
     state.z = std::strtod(tokens[7].c_str(), nullptr) / 1000.0;
@@ -621,12 +735,13 @@ std::vector<od::BatchObject> parse_cpf(const std::string& content) {
   });
   std::vector<uint8_t> oem;
   if (frame_code == 2) {
-    oem = build_celestial_oem(object_name, object_id, norad,
-                              CelestialFrame::EME2000, timingStandard::UTC,
-                              states);
+    oem = build_position_only_oem(object_name, object_id, norad,
+                                  CelestialFrame::EME2000,
+                                  timingStandard::UTC, states);
   } else if (frame_code == 0) {
-    oem = build_custom_oem(object_name, object_id, norad, CustomFrame::ECEF,
-                           timingStandard::UTC, states);
+    oem = build_position_only_oem(object_name, object_id, norad,
+                                  CustomFrame::ECEF, timingStandard::UTC,
+                                  states);
   }
   if (oem.empty()) return {};
   return {{std::move(oem)}};
