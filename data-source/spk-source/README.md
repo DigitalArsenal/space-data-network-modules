@@ -36,6 +36,13 @@ generated into `include/orbpro/orbpro_propagator_abi.h`), together with
 `OrbProEphemerisFormat` and the `ORBPRO_PROP_*` error codes — which had been
 documented in prose and declared nowhere, so every module hand-typed them.
 
+**Mixed SPK kernels.** Each readable segment (types 8, 9, 13) becomes one
+entity. A segment of any other type — including the Chebyshev types 2 and 3,
+which store coefficients rather than states — is skipped, never allowed to
+hide the readable segments beside it; `plugin_entity_count` says how many were
+kept. A kernel with no readable segment at all is `UNSUPPORTED_FORMAT`, never
+an empty load.
+
 `AUTO` is a real member, not a guess: every container here is self-identifying
 in its first bytes. Code-500 is the residual and is reached under `AUTO` only
 if the buffer also passes Code-500's own header validation — a residual format

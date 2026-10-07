@@ -202,8 +202,14 @@ was produced by the code it tests. Input to `tests/mixed_segment_kernel.test.mjs
   (`spkw13`). The Chebyshev bodies fly r = 26560 km, i = 55°, 600 s records of
   degree 9 (`spkw02`, `spkw03`), least-squares fitted on Chebyshev nodes — so a
   state served from the wrong segment is off by ~20000 km, never by round-off.
-* **Probe.** ET 830997225 s = JD 2461163.0234375 (3/128 day into the day), an
-  interior epoch 33.75 steps in that is exactly representable as a Julian date,
-  so the propagator's JD → ET mapping adds no rounding to the comparison.
+* **Probes.** Two, each a dyadic fraction of a day so the Julian date is exact
+  and the propagator's JD → ET mapping adds no rounding: **interior**, ET
+  830997225 s = JD 2461163.0234375 (33.75 steps in, a real Hermite
+  interpolation), and **node**, ET 830997900 s = JD 2461163.03125 (node 45, the
+  stored state). Measured on the built 0.1.1 module: interior |Δr| = 4.7e-10 m;
+  node |Δr| = 0, |Δv| = 2.3e-13 m/s. Between nodes the propagator's type-13
+  velocity is a Lagrange fit of the stored velocities, not SPKE13's derivative
+  of the position polynomial, and lands 2.3e-3 m/s from CSPICE — so the test
+  grades velocity only at the node.
 * **Regenerating.** `python3 fixtures/make_mixed_kernels.py fixtures` with
   spiceypy and numpy installed; two runs write byte-identical files.
