@@ -486,7 +486,9 @@ flatbuffers::Offset<RFM> build_reference_frame(
 // compact form with STATE_VECTOR_SIZE 3: it marks the series position-only and
 // the fitter seeds the initial velocity from the positions. Compact epochs are
 // START_TIME + i * STEP_SIZE, so each run of evenly spaced states is one block;
-// a gap or a cadence change starts the next. Epochs must strictly increase.
+// a gap or a cadence change starts the next. Epochs must strictly increase: the
+// fitter differences neighbouring positions for its seed, and a repeated epoch
+// divides by zero there (the fit then never returns).
 template <typename Frame>
 std::vector<uint8_t> build_position_only_oem(
     const std::string& object_name, const std::string& object_id,
@@ -494,6 +496,12 @@ std::vector<uint8_t> build_position_only_oem(
     const std::vector<NativeState>& states) {
   constexpr double kCadenceToleranceSeconds = 1e-3;
   if (states.size() < 3) return {};
+  for (size_t index = 1; index < states.size(); ++index) {
+    if (!(states[index].seconds - states[index - 1].seconds >
+          kCadenceToleranceSeconds)) {
+      return {};
+    }
+  }
   flatbuffers::FlatBufferBuilder builder(1 << 16);
   std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks;
   size_t start = 0;
@@ -502,7 +510,6 @@ std::vector<uint8_t> build_position_only_oem(
     size_t end = start + 1;
     if (end < states.size()) {
       step = states[end].seconds - states[start].seconds;
-      if (!(step > kCadenceToleranceSeconds)) return {};
       ++end;
       while (end < states.size() &&
              std::fabs(states[end].seconds - states[end - 1].seconds - step) <=
