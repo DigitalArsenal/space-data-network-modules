@@ -1556,6 +1556,52 @@
         "inferenceHazard": false
       }
     },
+    "data-source/nwp-field-source/dist/isomorphic/module.wasm": {
+      "sha256": "6cd47d2c72d28b00e8644ee48b54b2248e11b280bb48660d63ff6d2b72853c53",
+      "bytes": 140162,
+      "module": "data-source/nwp-field-source",
+      "lastCommit": "38b99ef6c2acfacaeb45f151c07e57b48f345b48",
+      "lastCommitDate": "2026-10-07T17:00:31-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
+    "data-source/nwp-grib2-parser/dist/isomorphic/module.wasm": {
+      "sha256": "3870b08dff733ce2b4ec8ceb2e12b4bc4603cc7a37f159791ca7e117dc61034c",
+      "bytes": 158864,
+      "module": "data-source/nwp-grib2-parser",
+      "lastCommit": "9d26c502f981279a86b9c42308d79c461b1dfd96",
+      "lastCommitDate": "2026-10-07T16:55:58-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
     "data-source/oem-source-iss/dist/isomorphic/module.wasm": {
       "sha256": "4bb3826f257499c6c7666885eb1f4576562da872a5804c2ec152770cf608026f",
       "bytes": 93261,
@@ -2517,6 +2563,28 @@
         "superRepoCommit": "9c27151b95ba644d64c609ef96a5c9c4700b772b",
         "sdkCommit": "2a0fdc7d90b2be05f0135e8dfd795fd73d5404c7"
       },
+      "declaration": null
+    },
+    "flows/nwp-field-ingest/dist/isomorphic/module.wasm": {
+      "sha256": "072c5f5e35d01130e870ffe0b8664800d457e63668deb544fb853787d90b9914",
+      "bytes": 217728,
+      "module": null,
+      "lastCommit": "f9961dcdd24fe2de9d14dfcfbfcaac625183cd4c",
+      "lastCommitDate": "2026-10-07T17:03:20-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": null
+    },
+    "flows/nwp-field-ingest/dist/runtime.wasm": {
+      "sha256": "072c5f5e35d01130e870ffe0b8664800d457e63668deb544fb853787d90b9914",
+      "bytes": 217728,
+      "module": null,
+      "lastCommit": "f9961dcdd24fe2de9d14dfcfbfcaac625183cd4c",
+      "lastCommitDate": "2026-10-07T17:03:20-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
       "declaration": null
     },
     "flows/public-query/dist/query/isomorphic/module.wasm": {

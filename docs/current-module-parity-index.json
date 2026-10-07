@@ -1,13 +1,13 @@
 {
-  "generatedAt": "2026-10-07T20:44:25.849Z",
-  "moduleCount": 113,
+  "generatedAt": "2026-10-07T21:04:05.073Z",
+  "moduleCount": 115,
   "parityScopeModuleCount": 46,
-  "isomorphicWasmCount": 111,
+  "isomorphicWasmCount": 113,
   "missingIsomorphicWasm": [
     "hostcap/flatsql-store",
     "maneuver/star-search"
   ],
-  "browserWasmEdgeTargetCount": 106,
+  "browserWasmEdgeTargetCount": 108,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
@@ -2324,6 +2324,83 @@
         "tests/fixtures/PROVENANCE.md",
         "tests/fixtures/mlab-asn14593-histogram_daily_stats.sample.json",
         "tests/live_smoke.test.mjs",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/nwp-field-source",
+      "pluginId": "com.digitalarsenal.data-source.nwp-field-source",
+      "name": "Numerical Weather Prediction Field Request Builder Nodes",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "plan",
+        "publish_request",
+        "select_messages"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 5,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/nwp_field_source_module.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/gespr.t00z.pgrb2a.0p50.f024.idx",
+        "tests/fixtures/gfs.t00z.pgrb2.0p25.f000.idx",
+        "tests/fixtures/gfs.t00z.pgrb2.0p50.f024.idx",
+        "tests/fixtures/gfs.t00z.pgrb2.1p00.f024.idx",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/nwp-grib2-parser",
+      "pluginId": "com.digitalarsenal.data-source.nwp-grib2-parser",
+      "name": "Numerical Weather Prediction GRIB2 Parser Node",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "parse"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 10,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/nwp_grib2_parser_module.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/generate-expected.py",
+        "tests/fixtures/jobs.json",
+        "tests/fixtures/noaa-2026100600-f024/expected.json",
+        "tests/fixtures/noaa-2026100600-f024/gefs-0p50-spread.grib2",
+        "tests/fixtures/noaa-2026100600-f024/gfs-0p25-surface.grib2",
+        "tests/fixtures/noaa-2026100600-f024/gfs-0p50-clouds.grib2",
+        "tests/fixtures/noaa-2026100600-f024/gfs-1p00-motion.grib2",
+        "tests/fixtures/noaa-2026100600-f024/inventory.json",
         "tests/sdk_compat.test.mjs"
       ]
     },
