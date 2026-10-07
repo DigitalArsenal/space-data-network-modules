@@ -3564,11 +3564,11 @@
       }
     },
     "propagator/hpop/dist/browser/module.wasm": {
-      "sha256": "b26b2590cc968b4afb2c4d1488d51df1457b1cf3d483d8b206396b0903f1e3e5",
+      "sha256": "a7375613287f6b684c3ba772af58f585d31aeaa0f672dd54ceb595bae4218a9e",
       "bytes": 1215883,
       "module": "propagator/hpop",
-      "lastCommit": "9ecf7e353da6a816c4bda07f760c448e90ef7aa8",
-      "lastCommitDate": "2026-10-07T14:26:16-04:00",
+      "lastCommit": "7f36252c9604a436b7845da7237d46e8abe1c204",
+      "lastCommitDate": "2026-10-07T14:40:14-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": null,
@@ -3587,11 +3587,11 @@
       }
     },
     "propagator/hpop/dist/isomorphic/module.wasm": {
-      "sha256": "b26b2590cc968b4afb2c4d1488d51df1457b1cf3d483d8b206396b0903f1e3e5",
+      "sha256": "a7375613287f6b684c3ba772af58f585d31aeaa0f672dd54ceb595bae4218a9e",
       "bytes": 1215883,
       "module": "propagator/hpop",
-      "lastCommit": "9ecf7e353da6a816c4bda07f760c448e90ef7aa8",
-      "lastCommitDate": "2026-10-07T14:26:16-04:00",
+      "lastCommit": "7f36252c9604a436b7845da7237d46e8abe1c204",
+      "lastCommitDate": "2026-10-07T14:40:14-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": null,
