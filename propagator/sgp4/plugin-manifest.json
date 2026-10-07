@@ -1,7 +1,7 @@
 {
   "pluginId": "com.orbpro.sgp4",
   "name": "SGP4/SDP4 Propagator",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "SGP4/SDP4 analytical orbit propagator for TLE-based satellite tracking, ported from OrbPro main with a canonical SDS PIV/TAB invoke surface.",
   "pluginFamily": "propagator",
   "capabilities": [],
