@@ -196,9 +196,11 @@ test('CQR sampled index in the SpaceAware console shape screens TEME grids windo
   const flatc = await initCqrFlatc();
   const harness = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
   t.after(() => harness.destroy());
-  // The console's 0.2.0 request (file identifier CSSM) fails the request
-  // port's $CQR type: the live "PREPARE SAMPLE INDEX FAILED · WASI exit with
-  // code 1" of 2026-10-07 was this refusal behind the command surface.
+  // A port accepts a frame by its declared type. The console sent its 0.2.0
+  // CSSM request with no type at all; typed as CSSM here, or untyped as live,
+  // it is refused the same way, and the live "PREPARE SAMPLE INDEX FAILED ·
+  // WASI exit with code 1" of 2026-10-07 was that refusal behind the command
+  // surface.
   const retired = new flatbuffers.Builder(64);
   retired.startObject(0);
   retired.finish(retired.endObject(), 'CSSM');
