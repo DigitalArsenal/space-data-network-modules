@@ -28,11 +28,6 @@
                   "schemaName": "OEM.fbs",
                   "fileIdentifier": "$OEM",
                   "rootTypeName": "OEM"
-                },
-                {
-                  "schemaName": "OCM.fbs",
-                  "fileIdentifier": "$OCM",
-                  "rootTypeName": "OCM"
                 }
               ]
             }
