@@ -1355,6 +1355,52 @@
         "evidence": "Own deps/emsdk absent; no fallback. Artifact committed 2026-07-13. Unrecoverable."
       }
     },
+    "data-source/imager-observation-parser/dist/isomorphic/module.wasm": {
+      "sha256": "b480176b0a6ffb75a3b662eadb6779d677cfb15a9b087f7ed1387d2ae5a31e00",
+      "bytes": 239863,
+      "module": "data-source/imager-observation-parser",
+      "lastCommit": "b66161e6d40866f0ee26ae241b59e8f75c625604",
+      "lastCommitDate": "2026-10-07T16:25:54-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
+    "data-source/imager-observation-source/dist/isomorphic/module.wasm": {
+      "sha256": "a36a75d7dcb3633fbd1bf2f18f14f822364916ec4ac83ee7c0d26126b6b55ff2",
+      "bytes": 139298,
+      "module": "data-source/imager-observation-source",
+      "lastCommit": "12bea26ead886243896b8e810eaea6c013b1418c",
+      "lastCommitDate": "2026-10-07T16:34:37-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
     "data-source/intelsat-source/dist/intelsat-source.wasm": {
       "sha256": "75815ed5bff7a7b89373ae70a7a2a49e3e446b46d70d03eb7ca8dc2a298954a7",
       "bytes": 65975,
@@ -2365,6 +2411,28 @@
         "superRepoCommit": "91caf03dbdaec13672b8cdaee558b2fdc38fa627",
         "sdkCommit": "3a8ad80595722647435ce865f9539d2ec9c5e3b7"
       },
+      "declaration": null
+    },
+    "flows/imager-observation-ingest/dist/isomorphic/module.wasm": {
+      "sha256": "2d1e858b0a9f160c569e8adde218d25443dda74d6a82e4b7ed61dbaa1ae4e5cf",
+      "bytes": 296966,
+      "module": null,
+      "lastCommit": "12bea26ead886243896b8e810eaea6c013b1418c",
+      "lastCommitDate": "2026-10-07T16:34:37-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": null
+    },
+    "flows/imager-observation-ingest/dist/runtime.wasm": {
+      "sha256": "2d1e858b0a9f160c569e8adde218d25443dda74d6a82e4b7ed61dbaa1ae4e5cf",
+      "bytes": 296966,
+      "module": null,
+      "lastCommit": "12bea26ead886243896b8e810eaea6c013b1418c",
+      "lastCommitDate": "2026-10-07T16:34:37-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
       "declaration": null
     },
     "flows/mlab-connectivity-ingest/dist/cnp/isomorphic/module.wasm": {

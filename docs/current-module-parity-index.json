@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-07T20:35:54.148Z",
+  "generatedAt": "2026-10-07T20:44:25.849Z",
   "moduleCount": 113,
   "parityScopeModuleCount": 46,
   "isomorphicWasmCount": 111,
@@ -3110,10 +3110,10 @@
     },
     {
       "modulePath": "flows/supplemental-omm/nodes/providers/cpf",
-      "pluginId": "com.orbpro.cpf-source",
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-cpf",
       "name": "CPF Complete Ephemeris Provider",
       "pluginFamily": "data_source",
-      "version": "2.0.0",
+      "version": "1.0.0",
       "methodIds": [
         "emit"
       ],
@@ -3139,10 +3139,10 @@
     },
     {
       "modulePath": "flows/supplemental-omm/nodes/providers/glonass",
-      "pluginId": "com.orbpro.glonass-source",
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-glonass",
       "name": "GLONASS Complete Ephemeris Provider",
       "pluginFamily": "data_source",
-      "version": "2.0.0",
+      "version": "1.0.0",
       "methodIds": [
         "emit"
       ],
@@ -3168,10 +3168,10 @@
     },
     {
       "modulePath": "flows/supplemental-omm/nodes/providers/intelsat",
-      "pluginId": "com.orbpro.intelsat-source",
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-intelsat",
       "name": "Intelsat Complete Ephemeris Provider",
       "pluginFamily": "data_source",
-      "version": "2.0.0",
+      "version": "1.0.0",
       "methodIds": [
         "emit"
       ],
@@ -3197,10 +3197,10 @@
     },
     {
       "modulePath": "flows/supplemental-omm/nodes/providers/iss",
-      "pluginId": "com.orbpro.iss-source",
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-iss",
       "name": "ISS Complete Ephemeris Provider",
       "pluginFamily": "data_source",
-      "version": "2.0.0",
+      "version": "1.0.0",
       "methodIds": [
         "emit"
       ],
@@ -3226,10 +3226,10 @@
     },
     {
       "modulePath": "flows/supplemental-omm/nodes/providers/starlink",
-      "pluginId": "com.orbpro.spacex-starlink-source",
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-starlink",
       "name": "Starlink Complete Ephemeris Provider",
       "pluginFamily": "data_source",
-      "version": "2.0.0",
+      "version": "1.0.0",
       "methodIds": [
         "emit"
       ],
