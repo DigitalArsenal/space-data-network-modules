@@ -969,6 +969,29 @@
         "inferenceHazard": false
       }
     },
+    "data-source/cell-tower-ingest/dist/isomorphic/module.wasm": {
+      "sha256": "b6cd19d73e776a337673c0b76eb11e0adaa2664ab7e8320a68818e452ad0c37f",
+      "bytes": 281957,
+      "module": "data-source/cell-tower-ingest",
+      "lastCommit": "047dc7144ecb294441d54e090d0967bc50911f04",
+      "lastCommitDate": "2026-10-07T13:43:59-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
     "data-source/cell-tower-source/dist/isomorphic/module.wasm": {
       "sha256": "e7b535449d98e55d52d98375bb22fd65a1ce54b422426f238917b0d023fab1dc",
       "bytes": 242735,
@@ -1087,6 +1110,86 @@
       "module": "data-source/eop-request",
       "lastCommit": "cfcb2806f0243833d1ead2b41b6ff2e4feaa1329",
       "lastCommitDate": "2026-09-27T22:43:13-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
+    "data-source/ephemeris-source/dist/isomorphic/module.wasm": {
+      "sha256": "bb3318a18842f6a2bf897cacd6881a10edb1daadcddd032125cf08254d9df74b",
+      "bytes": 398593,
+      "module": "data-source/ephemeris-source",
+      "lastCommit": "b11938d608ac2bde3bf3ee7975b8a669173b38c9",
+      "lastCommitDate": "2026-10-07T13:37:49-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "wasi-sequential"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
+    "data-source/ephemeris-source/host-adapter/dist/isomorphic/module.wasm": {
+      "sha256": "31d82c8bde631ef39176db0c049d64b88cfd8020e4ee2756fa986ab5d04def13",
+      "bytes": 462153,
+      "module": null,
+      "lastCommit": "b11938d608ac2bde3bf3ee7975b8a669173b38c9",
+      "lastCommitDate": "2026-10-07T13:37:49-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": null
+    },
+    "data-source/geonames-ingest/dist/isomorphic/module.wasm": {
+      "sha256": "bd26251b4acb4283ccaa355ef3cc6c35d1a05b7baa5135b8dfd240a13611dadb",
+      "bytes": 153669,
+      "module": "data-source/geonames-ingest",
+      "lastCommit": "a1d85bc8d5fecdf52a27eed9177f3fec520a629e",
+      "lastCommitDate": "2026-10-07T13:44:22-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
+    "data-source/geonames-source/dist/isomorphic/module.wasm": {
+      "sha256": "69886c29a8591b7fb5b5067dae92b40bf3da4c2b65e13756a094cc047eced157",
+      "bytes": 170790,
+      "module": "data-source/geonames-source",
+      "lastCommit": "0454fecb1a0e790b2b859ff83f121ad1518962ba",
+      "lastCommitDate": "2026-10-07T13:44:29-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": null,
@@ -1503,6 +1606,29 @@
         "evidence": "Own deps/emsdk absent; no fallback. Artifact committed 2026-07-13. Unrecoverable."
       }
     },
+    "data-source/osm-source/dist/isomorphic/module.wasm": {
+      "sha256": "261d95a6b5e58c8484b07b2c3ec211c88cb9d7c55d1f838fdfb6d5c94939f8dc",
+      "bytes": 100568,
+      "module": "data-source/osm-source",
+      "lastCommit": "3cc27bdefa94ef42a1613a31eeef734240bf4b65",
+      "lastCommitDate": "2026-10-07T13:44:35-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
     "data-source/retrieval/dist/isomorphic/module.wasm": {
       "sha256": "accfd0222cc1e3676383609b65e1247d1e07a6378063deb50176123085077b6a",
       "bytes": 106771,
@@ -1653,6 +1779,75 @@
         "declares": true,
         "threadModels": [
           "wasi-sequential"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
+    "data-source/terrain-ingest/dist/isomorphic/module.wasm": {
+      "sha256": "92fd4309adbfc143874f746228b327319275bb377687bfe589695d1c7b8ed51e",
+      "bytes": 222620,
+      "module": "data-source/terrain-ingest",
+      "lastCommit": "8dd0eaa40765850826ead6c6adc47e0c4e1acdfd",
+      "lastCommitDate": "2026-10-07T13:44:42-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
+    "data-source/terrain-source/dist/isomorphic/module.wasm": {
+      "sha256": "91b58ec039f31efe66a90850bc6af750266acd525c6eb1cd1e90cb4e8b647408",
+      "bytes": 352913,
+      "module": "data-source/terrain-source",
+      "lastCommit": "cae8097f22ea68d4d70ff37c10ff231659238a5d",
+      "lastCommitDate": "2026-10-07T13:44:58-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
+    "data-source/terrain-source/dist/parity/module.wasm": {
+      "sha256": "ee301e9da3f93cb0a3af32a9e729890057db406fe0c761a1863ab1b4b6e316fa",
+      "bytes": 352476,
+      "module": "data-source/terrain-source",
+      "lastCommit": "cae8097f22ea68d4d70ff37c10ff231659238a5d",
+      "lastCommitDate": "2026-10-07T13:44:58-04:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "single-thread"
         ],
         "unknownThreadModels": [],
         "emitsWasm": true,
