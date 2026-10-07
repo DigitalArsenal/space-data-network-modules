@@ -1,19 +1,13 @@
 {
-  "generatedAt": "2026-09-07T17:03:08.051Z",
-  "moduleCount": 91,
-  "parityScopeModuleCount": 36,
-  "isomorphicWasmCount": 83,
+  "generatedAt": "2026-10-07T20:35:54.148Z",
+  "moduleCount": 113,
+  "parityScopeModuleCount": 46,
+  "isomorphicWasmCount": 111,
   "missingIsomorphicWasm": [
-    "data-source/cell-tower-ingest",
-    "data-source/geonames-ingest",
-    "data-source/geonames-source",
-    "data-source/osm-source",
-    "data-source/terrain-ingest",
-    "data-source/terrain-source",
     "hostcap/flatsql-store",
     "maneuver/star-search"
   ],
-  "browserWasmEdgeTargetCount": 85,
+  "browserWasmEdgeTargetCount": 106,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
@@ -23,14 +17,24 @@
     "analysis/conjunction-assessment",
     "analysis/covariance",
     "analysis/dop",
+    "analysis/epoch-state",
     "analysis/estimation",
+    "analysis/gp-error-model",
     "analysis/lambert-izzo",
     "analysis/launch-ascent",
+    "analysis/launch-cola",
+    "analysis/launch-trajectory",
+    "analysis/maneuver-detection",
     "analysis/maneuver",
+    "analysis/observation-simulator",
     "analysis/od/fit-pipeline",
     "analysis/od",
     "analysis/parameters",
+    "analysis/private-screening",
     "analysis/reentry",
+    "analysis/reference-states",
+    "analysis/rf-phased-array",
+    "analysis/science-http",
     "analysis/targeting",
     "basilisk/runtime",
     "files/ccsds-messages",
@@ -74,17 +78,33 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 1,
+      "cxxSourceFileCount": 3,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 16,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
-        "src/access_plugin.cpp"
+        "src/access_plugin.cpp",
+        "src/constraint_engine.cpp.inc",
+        "src/sdk_entrypoint.cpp.inc"
       ],
       "testFiles": [
         "test/accessAnalyzer.test.mjs",
-        "test/manifestContract.test.mjs"
+        "test/manifestContract.test.mjs",
+        "tests/compare-artifacts.mjs",
+        "tests/constraints-fixture.mjs",
+        "tests/constraints-parity.mjs",
+        "tests/constraints.test.mjs",
+        "tests/data/OrekitElevationReference.java",
+        "tests/data/OrekitNightReference.java",
+        "tests/data/orekit-elevation.json",
+        "tests/data/orekit-night.json",
+        "tests/orekit-elevation.test.mjs",
+        "tests/orekit-fixture.mjs",
+        "tests/orekit-night.test.mjs",
+        "tests/orekit-wasm.test.mjs",
+        "tests/parity.mjs",
+        "tests/sdk_compat.test.mjs"
       ]
     },
     {
@@ -92,9 +112,12 @@
       "pluginId": "com.digitalarsenal.analysis.catalog-composer",
       "name": "Catalog Editor",
       "pluginFamily": "analysis",
-      "version": "0.1.3",
+      "version": "0.1.9",
       "methodIds": [
-        "compose"
+        "compose",
+        "fit_epoch_step",
+        "match_catalog",
+        "validate_epoch"
       ],
       "runtimeTargets": [
         "browser",
@@ -106,21 +129,34 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 1,
+      "cxxSourceFileCount": 3,
       "cSourceFileCount": 0,
-      "testFileCount": 6,
+      "testFileCount": 17,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
-        "src/catalog_composer.cpp"
+        "src/catalog_composer.cpp",
+        "src/catalog_match.cpp",
+        "src/epoch_fit.cpp"
       ],
       "testFiles": [
         "tests/catalog-publication.test.mjs",
         "tests/catalog-search.test.mjs",
+        "tests/common-grid.test.mjs",
+        "tests/coverage.test.mjs",
+        "tests/crosswalk.test.mjs",
+        "tests/epoch-fit.test.mjs",
+        "tests/epoch-fixture.mjs",
+        "tests/hpop-epoch-runner.mjs",
+        "tests/matching-fixture.mjs",
+        "tests/matching.test.mjs",
         "tests/parity.test.mjs",
         "tests/read-page.test.mjs",
         "tests/recipe.test.mjs",
-        "tests/sdk_compat.test.mjs"
+        "tests/review.test.mjs",
+        "tests/sdk_compat.test.mjs",
+        "tests/vimpel-live.mjs",
+        "tools/test_vimpel_epoch.py"
       ]
     },
     {
@@ -161,56 +197,70 @@
       "pluginId": "conjunction-assessment",
       "name": "Conjunction Assessment Plugin",
       "pluginFamily": "analysis",
-      "version": "0.2.0",
+      "version": "0.6.0",
       "methodIds": [
         "alfano_max_probability",
         "assess_conjunction",
+        "coarse_grid",
         "compute_pc",
         "compute_pc_from_cdm",
+        "destroy_screening_index",
         "emit_cdm",
         "emit_csm",
         "find_tca",
         "parse_cdm_kvn",
         "parse_cdm_xml",
+        "parse_ephemeris",
+        "prepare_sample_screening_index",
+        "prepare_screening_index",
+        "prepare_segment_screening_index",
+        "refine_candidates",
         "screen_catalog",
+        "screen_segment_window",
+        "screen_window",
+        "search_candidates",
+        "version",
         "write_cdm_kvn",
         "write_cdm_xml"
       ],
       "runtimeTargets": [
         "browser",
-        "wasi",
         "wasmedge"
       ],
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
       "sourceLanguages": [
+        "c",
         "c++"
       ],
-      "cxxSourceFileCount": 26,
-      "cSourceFileCount": 0,
-      "testFileCount": 101,
+      "cxxSourceFileCount": 30,
+      "cSourceFileCount": 1,
+      "testFileCount": 154,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
+        "bench/private-screening/private_screening_bench.cpp",
+        "scripts/generate-ephemeris-fixtures.cpp",
         "src/cpp/src/cdm_output.cpp",
         "src/cpp/src/conjunction_assessment.cpp",
         "src/cpp/src/conjunction_engine.cpp",
+        "src/cpp/src/cqr_initialization.cpp",
         "src/cpp/src/csm_output.cpp",
+        "src/cpp/src/earth_orientation.cpp",
         "src/cpp/src/ephemeris_source.cpp",
+        "src/cpp/src/ephemeris_upload.cpp",
         "src/cpp/src/gp_json.cpp",
         "src/cpp/src/kdtree.cpp",
         "src/cpp/src/pc_method.cpp",
-        "src/cpp/src/plugin_entrypoints.cpp",
         "src/cpp/src/plugin_invoke_bridge.cpp",
-        "src/cpp/src/plugin_runtime.cpp",
         "src/cpp/src/resident_screening_index.cpp",
         "src/cpp/src/screening.cpp",
         "src/cpp/src/screening_internal.cpp",
+        "src/cpp/src/screening_tight.cpp",
         "src/cpp/src/sgp4_propagator.cpp",
-        "src/cpp/tests/test_cdm_output.cpp",
+        "src/cpp/src/time_scales.cpp",
         "src/cpp/tests/test_csm_output.cpp",
-        "src/cpp/tests/test_engine.cpp",
         "src/cpp/tests/test_gp_json.cpp",
         "src/cpp/tests/test_pc_methods.cpp",
         "src/cpp/tests/test_screening.cpp",
@@ -218,13 +268,13 @@
         "src/cpp/tests/test_screening_internal.cpp",
         "src/cpp/tests/test_socrates.cpp",
         "src/cpp/tests/test_socrates_bulk.cpp",
-        "src/cpp/wasm_api.cpp"
+        "src/cpp/tests/test_time_format.cpp",
+        "src/cpp/tests/test_trajectory_bounds.cpp",
+        "tests/native/wasmedge_wasi_threads_runner.c"
       ],
       "testFiles": [
         "src/cpp/tests/fixtures/orekit/cdm/ION_SCV8_vs_STARLINK_1233.txt",
-        "src/cpp/tests/test_cdm_output.cpp",
         "src/cpp/tests/test_csm_output.cpp",
-        "src/cpp/tests/test_engine.cpp",
         "src/cpp/tests/test_gp_json.cpp",
         "src/cpp/tests/test_pc_methods.cpp",
         "src/cpp/tests/test_screening.cpp",
@@ -232,6 +282,8 @@
         "src/cpp/tests/test_screening_internal.cpp",
         "src/cpp/tests/test_socrates.cpp",
         "src/cpp/tests/test_socrates_bulk.cpp",
+        "src/cpp/tests/test_time_format.cpp",
+        "src/cpp/tests/test_trajectory_bounds.cpp",
         "tests/aerospaceDatasetValidation.test.mjs",
         "tests/aerospaceRealWindowParity.test.mjs",
         "tests/aerospaceReplayHarness.test.mjs",
@@ -239,8 +291,13 @@
         "tests/archiveStreamingSmoke.test.mjs",
         "tests/buildTreeHygiene.test.mjs",
         "tests/celestrakFetchCache.test.mjs",
+        "tests/coarseExclusion.test.mjs",
+        "tests/cqrAuthoritative.test.mjs",
+        "tests/cqrStreaming.test.mjs",
         "tests/data/README.md",
         "tests/direct-entry.test.mjs",
+        "tests/empiricalCovariance.test.mjs",
+        "tests/ephemerisUpload.test.mjs",
         "tests/fixtures/aerospace-real-window/README.md",
         "tests/fixtures/aerospace-real-window/answer_key_spherical.csv",
         "tests/fixtures/aerospace-real-window/ocm/04208.ocm",
@@ -297,31 +354,79 @@
         "tests/fixtures/aerospace-synthetic/ocm/90008.ocm",
         "tests/fixtures/aerospace-synthetic/ocm/90009.ocm",
         "tests/fixtures/aerospace-synthetic/ocm/90010.ocm",
+        "tests/fixtures/decaying/gp_2026-07-06.json",
+        "tests/fixtures/ephemeris-upload/A-itc.txt",
+        "tests/fixtures/ephemeris-upload/A-jspoc.txt",
+        "tests/fixtures/ephemeris-upload/A-nasa.txt",
+        "tests/fixtures/ephemeris-upload/A-oem-eme2000-cov.kvn",
+        "tests/fixtures/ephemeris-upload/A-oem-eme2000.kvn",
+        "tests/fixtures/ephemeris-upload/A-oem-itrf-cov.kvn",
+        "tests/fixtures/ephemeris-upload/A-oem-itrf.kvn",
+        "tests/fixtures/ephemeris-upload/A-utc.txt",
+        "tests/fixtures/ephemeris-upload/B-itc.txt",
+        "tests/fixtures/ephemeris-upload/B-jspoc.txt",
+        "tests/fixtures/ephemeris-upload/B-nasa.txt",
+        "tests/fixtures/ephemeris-upload/B-oem-eme2000-cov.kvn",
+        "tests/fixtures/ephemeris-upload/B-oem-eme2000.kvn",
+        "tests/fixtures/ephemeris-upload/B-oem-itrf-cov.kvn",
+        "tests/fixtures/ephemeris-upload/B-oem-itrf.kvn",
+        "tests/fixtures/ephemeris-upload/B-utc.txt",
+        "tests/fixtures/ephemeris-upload/bad-epoch.txt",
+        "tests/fixtures/ephemeris-upload/bad-state.txt",
+        "tests/fixtures/ephemeris-upload/below-surface.txt",
+        "tests/fixtures/ephemeris-upload/covariance-frame-presence.txt",
+        "tests/fixtures/ephemeris-upload/covariance-frame.txt",
+        "tests/fixtures/ephemeris-upload/duplicate-covariance.txt",
+        "tests/fixtures/ephemeris-upload/epoch-order.txt",
+        "tests/fixtures/ephemeris-upload/failures.json",
+        "tests/fixtures/ephemeris-upload/future-states.txt",
+        "tests/fixtures/ephemeris-upload/missing-covariance.txt",
+        "tests/fixtures/ephemeris-upload/non-psd.txt",
+        "tests/fixtures/ephemeris-upload/ocm.txt",
+        "tests/fixtures/ephemeris-upload/reference.json",
+        "tests/fixtures/ephemeris-upload/span-long.txt",
+        "tests/fixtures/ephemeris-upload/span-short.txt",
+        "tests/fixtures/ephemeris-upload/speed.txt",
+        "tests/fixtures/ephemeris-upload/state-frame.txt",
+        "tests/fixtures/ephemeris-upload/time-system.txt",
+        "tests/fixtures/ephemeris-upload/truncated-itc.txt",
+        "tests/fixtures/ephemeris-upload/xml.txt",
         "tests/fixtures/hosted-runtime/conjunction.single-plugin.flow.json",
+        "tests/fixtures/hpop-ppe/crossing-orbits.json",
         "tests/fixtures/request.assess.json",
         "tests/fixtures/socrates/gp_47935,49179.json",
         "tests/fixtures/socrates/gp_48282,58288.json",
         "tests/fixtures/socrates/gp_61721,67298.json",
         "tests/fixtures/socrates/reference.top3.json",
+        "tests/gpuScreenParity.test.mjs",
         "tests/lib/aerospaceDataset.mjs",
         "tests/lib/aerospaceOcm.mjs",
         "tests/lib/aerospaceReplayHarness.mjs",
         "tests/lib/archiveDataset.mjs",
         "tests/lib/caParityTolerances.mjs",
         "tests/lib/conjunctionCommandHarness.mjs",
+        "tests/lib/cqr.mjs",
         "tests/lib/screenCatalogParityHarness.mjs",
         "tests/lib/sgp4TrackHarness.mjs",
+        "tests/lib/tiledPairSolver.mjs",
         "tests/lib/wasmedgePthreadRunner.mjs",
+        "tests/lib/wasmedgeWasiThreadsRunner.mjs",
+        "tests/native/wasmedge_wasi_threads_runner.c",
         "tests/ocmOemTrackAdapter.test.mjs",
+        "tests/pairCallsOneInstance.test.mjs",
         "tests/pivInvokeContract.test.mjs",
+        "tests/realCatalogExclusion.test.mjs",
+        "tests/screeningWindowUnion.test.mjs",
         "tests/sdk_compat.test.mjs",
         "tests/sdnDataApiStream.test.mjs",
         "tests/sdnOmmPartitionedRunner.test.mjs",
         "tests/signedCdmOutput.test.mjs",
         "tests/socratesReplayHarness.test.mjs",
         "tests/socratesScreenCatalogParity.test.mjs",
+        "tests/sourceCovariance.test.mjs",
         "tests/sourceSelectionContract.test.mjs",
-        "tests/wasmedgeStandaloneHarness.test.mjs"
+        "tests/wasmedgeStandaloneHarness.test.mjs",
+        "tests/windowedScreenParity.test.mjs"
       ]
     },
     {
@@ -361,7 +466,7 @@
       "pluginId": "com.orbpro.dop",
       "name": "DOP Analysis",
       "pluginFamily": "analysis",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "methodIds": [
         "compute_dop"
       ],
@@ -388,11 +493,43 @@
       ]
     },
     {
+      "modulePath": "analysis/epoch-state",
+      "pluginId": "com.digitalarsenal.analysis.epoch-state",
+      "name": "SDN Epoch State",
+      "pluginFamily": "analysis",
+      "version": "0.1.0",
+      "methodIds": [
+        "derive"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 2,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/epoch_state_module.cpp"
+      ],
+      "testFiles": [
+        "tests/epoch_state.test.mjs",
+        "tests/vallado-verification.json"
+      ]
+    },
+    {
       "modulePath": "analysis/estimation",
       "pluginId": "com.digitalarsenal.analysis.estimation",
       "name": "Measurement-based Orbit Estimation",
       "pluginFamily": "analysis",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "initial_orbit",
         "run_estimation",
@@ -408,30 +545,62 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 3,
+      "cxxSourceFileCount": 5,
       "cSourceFileCount": 0,
-      "testFileCount": 3,
+      "testFileCount": 28,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/estimation.cpp",
         "src/module.cpp",
-        "tests/native_conformance.cpp"
+        "tests/depth_validation.cpp",
+        "tests/native_conformance.cpp",
+        "tests/sequential_validation.cpp"
       ],
       "testFiles": [
+        "tests/build-provider.mjs",
         "tests/conformance.test.mjs",
+        "tests/depth-fixtures.mjs",
+        "tests/depth-invoke.test.mjs",
+        "tests/depth.test.mjs",
+        "tests/depth_validation.cpp",
+        "tests/fixtures.mjs",
+        "tests/fixtures/DEPTH.md",
+        "tests/fixtures/OrekitReference.java",
+        "tests/fixtures/README.md",
+        "tests/fixtures/circular-fusion.json",
+        "tests/fixtures/generate-cv-inputs.py",
+        "tests/fixtures/hipparchus-LICENSE.txt",
+        "tests/fixtures/hipparchus-NOTICE.txt",
+        "tests/fixtures/hipparchus-cv-inputs.json",
+        "tests/fixtures/hipparchus-cv-smoother.txt",
+        "tests/fixtures/orekit-pv-reference.txt",
+        "tests/invoke.test.mjs",
         "tests/native.test.mjs",
-        "tests/native_conformance.cpp"
+        "tests/native_conformance.cpp",
+        "tests/parity.mjs",
+        "tests/refresh-evidence.mjs",
+        "tests/schema-compat.test.mjs",
+        "tests/sdk_compat.test.mjs",
+        "tests/sequential.test.mjs",
+        "tests/sequential_validation.cpp",
+        "tests/two_body_provider.hpp",
+        "tests/wire.mjs"
       ]
     },
     {
-      "modulePath": "analysis/lambert-izzo",
-      "pluginId": "com.orbpro.lambert-izzo",
-      "name": "Izzo Lambert Solver",
+      "modulePath": "analysis/gp-error-model",
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "name": "GP prediction-error model",
       "pluginFamily": "analysis",
       "version": "0.1.0",
       "methodIds": [
-        "solve_lambert"
+        "accumulate",
+        "finalize",
+        "hpop_arcs",
+        "hpop_coverage",
+        "scale_model",
+        "screening_evaluation"
       ],
       "runtimeTargets": [
         "browser",
@@ -445,17 +614,66 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 4,
+      "testFileCount": 1,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/gp_error_model.cpp"
+      ],
+      "testFiles": [
+        "tests/gp_error_model.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "analysis/lambert-izzo",
+      "pluginId": "com.orbpro.lambert-izzo",
+      "name": "Izzo Lambert Solver",
+      "pluginFamily": "analysis",
+      "version": "0.2.0",
+      "methodIds": [
+        "grid_search",
+        "solve_lambert"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c",
+        "c++"
+      ],
+      "cxxSourceFileCount": 2,
+      "cSourceFileCount": 1,
+      "testFileCount": 18,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
-        "src/lambert_module.cpp"
+        "src/grid_module.cpp",
+        "src/lambert_module.cpp",
+        "tests/planet-states.c"
       ],
       "testFiles": [
+        "tests/VERIFICATION.md",
+        "tests/fixtures/earth-mars-2005.json",
+        "tests/fixtures/earth-mars.pce",
+        "tests/fixtures/grid-parity-receipt.json",
+        "tests/fixtures/grid-parity.json",
+        "tests/fixtures/hohmann.pce",
+        "tests/fixtures/invalid-step.pce",
+        "tests/fixtures/izzo-left.pce",
+        "tests/fixtures/izzo-right.pce",
+        "tests/fixtures/max-grid.pce",
+        "tests/generate-parity.mjs",
+        "tests/grid-fixtures.mjs",
+        "tests/grid.test.mjs",
         "tests/maneuver-parity.test.mjs",
         "tests/manifest-sdk.test.mjs",
         "tests/manifest.test.mjs",
-        "tests/sdk-compat.test.mjs"
+        "tests/planet-states.c",
+        "tests/sdk_compat.test.mjs"
       ]
     },
     {
@@ -489,6 +707,105 @@
         "tests/behavior.test.mjs",
         "tests/crew8Reference.test.mjs",
         "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "analysis/launch-cola",
+      "pluginId": "com.digitalarsenal.analysis.launch-cola",
+      "name": "Launch collision avoidance screening",
+      "pluginFamily": "analysis",
+      "version": "0.1.0",
+      "methodIds": [
+        "screen_launch_window"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/launch_cola.cpp"
+      ],
+      "testFiles": [
+        "tests/launch_cola.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "analysis/launch-trajectory",
+      "pluginId": "com.digitalarsenal.analysis.launch-trajectory",
+      "name": "Launch trajectory tracking and projected insertion",
+      "pluginFamily": "analysis",
+      "version": "0.1.0",
+      "methodIds": [
+        "project_insertion",
+        "track_ascent"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 6,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/launch_trajectory.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/crs14.json",
+        "tests/fixtures/crs16.json",
+        "tests/fixtures/iss-teme-crew13.json",
+        "tests/fixtures/make-fixtures.py",
+        "tests/fixtures/paz.json",
+        "tests/launch_trajectory.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "analysis/maneuver-detection",
+      "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
+      "name": "Maneuver detection",
+      "pluginFamily": "analysis",
+      "version": "0.1.0",
+      "methodIds": [
+        "detect_maneuvers"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/maneuver_detection.cpp"
+      ],
+      "testFiles": [
+        "tests/maneuver_detection.test.mjs"
       ]
     },
     {
@@ -563,6 +880,37 @@
       ]
     },
     {
+      "modulePath": "analysis/observation-simulator",
+      "pluginId": "com.digitalarsenal.analysis.observation-simulator",
+      "name": "Observation simulator",
+      "pluginFamily": "analysis",
+      "version": "0.1.0",
+      "methodIds": [
+        "simulate_observations"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/observation_simulator.cpp"
+      ],
+      "testFiles": [
+        "tests/observation_simulator.test.mjs"
+      ]
+    },
+    {
       "modulePath": "analysis/od/fit-pipeline",
       "pluginId": "com.orbpro.od-fit-pipeline",
       "name": "OD Fit Pipeline",
@@ -598,7 +946,7 @@
       "pluginId": "orbit-determination",
       "name": "Orbit Determination Plugin",
       "pluginFamily": "orbit_determination",
-      "version": "0.1.0",
+      "version": "0.1.2",
       "methodIds": [
         "fit"
       ],
@@ -613,15 +961,16 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 27,
+      "cxxSourceFileCount": 29,
       "cSourceFileCount": 0,
-      "testFileCount": 73,
+      "testFileCount": 76,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
         "fit-pipeline/src/fit_pipeline.cpp",
         "src/cpp/guest-link/od_batch_fit_entry.cpp",
         "src/cpp/guest-link/od_fit_entry.cpp",
+        "src/cpp/src/direct_initialize.cpp",
         "src/cpp/src/frame_transform.cpp",
         "src/cpp/src/meme_parser.cpp",
         "src/cpp/src/noexcept_stubs.cpp",
@@ -640,6 +989,7 @@
         "src/cpp/src/wasm_api.cpp",
         "src/cpp/tests/analyze_outliers.cpp",
         "src/cpp/tests/bench_supgp.cpp",
+        "src/cpp/tests/test_covariance_publication.cpp",
         "src/cpp/tests/test_downsample_accuracy.cpp",
         "src/cpp/tests/test_frame_time_fit.cpp",
         "src/cpp/tests/test_od.cpp",
@@ -652,11 +1002,13 @@
         "src/cpp/tests/analyze_outliers.cpp",
         "src/cpp/tests/bench_supgp.cpp",
         "src/cpp/tests/data/test_meme.txt",
+        "src/cpp/tests/test_covariance_publication.cpp",
         "src/cpp/tests/test_downsample_accuracy.cpp",
         "src/cpp/tests/test_frame_time_fit.cpp",
         "src/cpp/tests/test_od.cpp",
         "src/cpp/tests/test_oem_fb_parity.cpp",
         "src/cpp/tests/test_supgp.cpp",
+        "tests/covariance_publication.test.mjs",
         "tests/data/glonass/PROVENANCE.md",
         "tests/data/glonass/iac_glonass.sp3.glo",
         "tests/data/manifest.txt",
@@ -719,6 +1071,7 @@
         "tests/ocm_emission.test.mjs",
         "tests/sdk_compat.test.mjs",
         "tests/test_wasm.mjs",
+        "tests/wasi_release.test.mjs",
         "tests/wasi_threads_flow_harness.mjs",
         "tests/wasi_threads_harness.mjs"
       ]
@@ -760,6 +1113,39 @@
       ]
     },
     {
+      "modulePath": "analysis/private-screening",
+      "pluginId": "com.digitalarsenal.analysis.private-screening",
+      "name": "Private screening decoys",
+      "pluginFamily": "analysis",
+      "version": "0.1.0",
+      "methodIds": [
+        "decoys",
+        "distinguish",
+        "features"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/private_screening.cpp"
+      ],
+      "testFiles": [
+        "tests/private_screening.test.mjs"
+      ]
+    },
+    {
       "modulePath": "analysis/reentry",
       "pluginId": "reentry-analysis",
       "name": "Reentry Analysis",
@@ -788,6 +1174,100 @@
       ],
       "testFiles": [
         "tests/behavior.test.mjs",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "analysis/reference-states",
+      "pluginId": "com.digitalarsenal.analysis.reference-states",
+      "name": "Reference states",
+      "pluginFamily": "analysis",
+      "version": "0.1.0",
+      "methodIds": [
+        "reference_states"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/reference_states.cpp"
+      ],
+      "testFiles": [
+        "tests/reference_states.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "analysis/rf-phased-array",
+      "pluginId": "com.orbpro.rf-phased-array",
+      "name": "RF Phased Array Beamforming",
+      "pluginFamily": "comms",
+      "version": "0.1.0",
+      "methodIds": [
+        "synthesize"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/phased_array.cpp"
+      ],
+      "testFiles": [
+        "tests/module.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "analysis/science-http",
+      "pluginId": "com.digitalarsenal.analysis.science-http",
+      "name": "Science HTTP envelope adapter",
+      "pluginFamily": "analysis",
+      "version": "0.1.0",
+      "methodIds": [
+        "respond",
+        "route"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/science_http.cpp"
+      ],
+      "testFiles": [
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -952,7 +1432,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 8,
+      "testFileCount": 9,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -966,6 +1446,7 @@
         "tests/fixtures/celestrak-satcat.txt",
         "tests/fixtures/celestrak-socrates-minrange.csv",
         "tests/fixtures/celestrak-sw-all.csv",
+        "tests/parity.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -1137,19 +1618,21 @@
       ],
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": false,
+      "hasIsomorphicWasm": true,
       "sourceLanguages": [
         "c++"
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 0,
+      "testFileCount": 1,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/cell_tower_ingest_module.cpp"
       ],
-      "testFiles": []
+      "testFiles": [
+        "tests/built_artifact.test.mjs"
+      ]
     },
     {
       "modulePath": "data-source/cell-tower-source",
@@ -1243,6 +1726,152 @@
       ]
     },
     {
+      "modulePath": "data-source/eop-parser",
+      "pluginId": "com.digitalarsenal.data-source.eop-parser",
+      "name": "eop-parser",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "parse_c04",
+        "parse_finals2000a",
+        "parse_paris"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 9,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/module.cpp"
+      ],
+      "testFiles": [
+        "tests/authoritative.test.mjs",
+        "tests/fixtures/eopc04.1962-now.excerpt.txt",
+        "tests/fixtures/eopc04_IAU2000.62-now.excerpt.txt",
+        "tests/fixtures/finals2000A.all.excerpt.txt",
+        "tests/fixtures/provenance.json",
+        "tests/full-source-smoke.mjs",
+        "tests/harness.mjs",
+        "tests/parity.test.mjs",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/eop-request",
+      "pluginId": "com.digitalarsenal.data-source.eop-request",
+      "name": "eop-request",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "c04",
+        "finals2000a",
+        "paris"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 3,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/module.cpp"
+      ],
+      "testFiles": [
+        "tests/parity.test.mjs",
+        "tests/request.test.mjs",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/ephemeris-source/host-adapter",
+      "pluginId": "com.digitalarsenal.data-source.ephemeris-source-host",
+      "name": "Ephemeris Scheduled Publication Adapter",
+      "pluginFamily": "data_source",
+      "version": "0.1.5",
+      "methodIds": [
+        "backfill_coverage",
+        "configure",
+        "pull"
+      ],
+      "runtimeTargets": [
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": false,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [],
+      "cxxSourceFileCount": 0,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [],
+      "testFiles": []
+    },
+    {
+      "modulePath": "data-source/ephemeris-source",
+      "pluginId": "com.digitalarsenal.data-source.ephemeris-source",
+      "name": "Ephemeris Source Retriever",
+      "pluginFamily": "data_source",
+      "version": "0.1.5",
+      "methodIds": [
+        "describe_artifact",
+        "describe_coverage",
+        "describe_sources",
+        "discover_sources",
+        "plan_source_requests"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 10,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/ephemeris_source.cpp"
+      ],
+      "testFiles": [
+        "tests/built_artifact.test.mjs",
+        "tests/coverage.test.mjs",
+        "tests/fixtures/discovery.json",
+        "tests/harness.mjs",
+        "tests/live.mjs",
+        "tests/parity.test.mjs",
+        "tests/publication.test.mjs",
+        "tests/reliability-verification.json",
+        "tests/sdk_compat.test.mjs",
+        "tests/verification.json"
+      ]
+    },
+    {
       "modulePath": "data-source/geonames-ingest",
       "pluginId": "com.digitalarsenal.data-source.geonames-ingest",
       "name": "Gazetteer Named Place Ingest Nodes",
@@ -1260,13 +1889,13 @@
       ],
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": false,
+      "hasIsomorphicWasm": true,
       "sourceLanguages": [
         "c++"
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 3,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -1274,6 +1903,7 @@
       ],
       "testFiles": [
         "tests/batched_inputs.test.mjs",
+        "tests/built_artifact.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -1295,14 +1925,14 @@
       ],
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": false,
+      "hasIsomorphicWasm": true,
       "sourceLanguages": [
         "c",
         "c++"
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 1,
-      "testFileCount": 9,
+      "testFileCount": 10,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -1311,6 +1941,7 @@
       ],
       "testFiles": [
         "tests/batched_inputs.test.mjs",
+        "tests/built_artifact.test.mjs",
         "tests/fixtures/PROVENANCE.md",
         "tests/fixtures/admin1CodesASCII.slice.txt",
         "tests/fixtures/admin2Codes.slice.txt",
@@ -1359,6 +1990,41 @@
       ]
     },
     {
+      "modulePath": "data-source/gp-archive-records",
+      "pluginId": "com.digitalarsenal.data-source.gp-archive-records",
+      "name": "SDN GP Archive Records",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "build_cat",
+        "build_mpe"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 4,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/gp_archive_records_module.cpp"
+      ],
+      "testFiles": [
+        "tests/archive-v1-vectors.json",
+        "tests/field-batch.mjs",
+        "tests/gp_archive_records.test.mjs",
+        "tests/parity.test.mjs"
+      ]
+    },
+    {
       "modulePath": "data-source/gps-source",
       "pluginId": "com.orbpro.gps-source",
       "name": "GPS Almanac (NAVCEN SEM/YUMA) Data Source",
@@ -1392,6 +2058,97 @@
         "test/fixtures/supgp-reference-draft/README.md",
         "test/fixtures/supgp-reference-draft/provider.json",
         "test/module.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/imager-observation-parser",
+      "pluginId": "com.digitalarsenal.data-source.imager-observation-parser",
+      "name": "Geostationary Imager Observation Parser Node",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "parse"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c",
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 1,
+      "testFileCount": 24,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/imager_observation_parser_module.cpp",
+        "vendor/miniz-3.1.2/miniz.c"
+      ],
+      "testFiles": [
+        "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/generate-expected.py",
+        "tests/fixtures/goes19-m1-2026280-0600/OR_ABI-L2-ACHAM1-M6_G19_s20262800600285_e20262800600343_c20262800601039.nc",
+        "tests/fixtures/goes19-m1-2026280-0600/OR_ABI-L2-ACMM1-M6_G19_s20262800600285_e20262800600343_c20262800600453.nc",
+        "tests/fixtures/goes19-m1-2026280-0600/OR_ABI-L2-ACTPM1-M6_G19_s20262800600285_e20262800600343_c20262800600488.nc",
+        "tests/fixtures/goes19-m1-2026280-0600/OR_ABI-L2-CMIPM1-M6C02_G19_s20262800600285_e20262800600343_c20262800600383.nc",
+        "tests/fixtures/goes19-m1-2026280-0600/OR_ABI-L2-CMIPM1-M6C13_G19_s20262800600285_e20262800600354_c20262800600415.nc",
+        "tests/fixtures/goes19-m1-2026280-0600/brightness_temperature_10um.1024.codes.gz",
+        "tests/fixtures/goes19-m1-2026280-0600/brightness_temperature_10um.2048.codes.gz",
+        "tests/fixtures/goes19-m1-2026280-0600/brightness_temperature_10um.4096.codes.gz",
+        "tests/fixtures/goes19-m1-2026280-0600/cloud_mask.1024.codes.gz",
+        "tests/fixtures/goes19-m1-2026280-0600/cloud_mask.2048.codes.gz",
+        "tests/fixtures/goes19-m1-2026280-0600/cloud_mask.4096.codes.gz",
+        "tests/fixtures/goes19-m1-2026280-0600/cloud_phase.1024.codes.gz",
+        "tests/fixtures/goes19-m1-2026280-0600/cloud_phase.2048.codes.gz",
+        "tests/fixtures/goes19-m1-2026280-0600/cloud_phase.4096.codes.gz",
+        "tests/fixtures/goes19-m1-2026280-0600/cloud_top_height.1024.codes.gz",
+        "tests/fixtures/goes19-m1-2026280-0600/cloud_top_height.2048.codes.gz",
+        "tests/fixtures/goes19-m1-2026280-0600/cloud_top_height.4096.codes.gz",
+        "tests/fixtures/goes19-m1-2026280-0600/expected.json",
+        "tests/fixtures/goes19-m1-2026280-0600/reflectance_064um.1024.codes.gz",
+        "tests/fixtures/goes19-m1-2026280-0600/reflectance_064um.2048.codes.gz",
+        "tests/fixtures/goes19-m1-2026280-0600/reflectance_064um.4096.codes.gz",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/imager-observation-source",
+      "pluginId": "com.digitalarsenal.data-source.imager-observation-source",
+      "name": "Geostationary Imager Observation Request Builder Nodes",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "plan",
+        "publish_request",
+        "select_files"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 3,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/imager_observation_source_module.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/noaa-goes19-ABI-L2-ACHA2KMF-2026-280-06.xml",
+        "tests/fixtures/noaa-goes19-ABI-L2-CMIPF-2026-280-06.xml",
+        "tests/sdk_compat.test.mjs"
       ]
     },
     {
@@ -1467,6 +2224,71 @@
         "test/fixtures/supgp-reference-draft/README.md",
         "test/fixtures/supgp-reference-draft/provider.json",
         "test/module.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/launch-schedule/host-adapter",
+      "pluginId": "com.digitalarsenal.data-source.launch-schedule-host",
+      "name": "Launch notices scheduled source adapter",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "prepare_scheduled",
+        "receipt_scheduled"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/adapter.cpp"
+      ],
+      "testFiles": []
+    },
+    {
+      "modulePath": "data-source/launch-schedule",
+      "pluginId": "com.digitalarsenal.data-source.launch-schedule",
+      "name": "Upcoming launch notices",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "parse_launches",
+        "plan_launches"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 2,
+      "cSourceFileCount": 0,
+      "testFileCount": 3,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "host-adapter/src/adapter.cpp",
+        "src/launch_schedule.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/ll2-upcoming-2026-09-28.json",
+        "tests/launch_schedule.test.mjs",
+        "tests/scheduled.test.mjs"
       ]
     },
     {
@@ -1571,6 +2393,72 @@
       ]
     },
     {
+      "modulePath": "data-source/open-meteo/host-adapter",
+      "pluginId": "com.digitalarsenal.data-source.open-meteo-host",
+      "name": "Open-Meteo scheduled source adapter",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "prepare_scheduled",
+        "receipt_scheduled"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 0,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/adapter.cpp"
+      ],
+      "testFiles": []
+    },
+    {
+      "modulePath": "data-source/open-meteo",
+      "pluginId": "com.digitalarsenal.data-source.open-meteo",
+      "name": "Open-Meteo weather forecasts",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "parse_forecast",
+        "plan_forecast"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 2,
+      "cSourceFileCount": 0,
+      "testFileCount": 4,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "host-adapter/src/adapter.cpp",
+        "src/open_meteo.cpp"
+      ],
+      "testFiles": [
+        "tests/fixture.mjs",
+        "tests/parity.test.mjs",
+        "tests/scheduled.test.mjs",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
       "modulePath": "data-source/osm-source",
       "pluginId": "com.digitalarsenal.data-source.osm-source",
       "name": "OSM Context Epoch Source",
@@ -1585,19 +2473,20 @@
       ],
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": false,
+      "hasIsomorphicWasm": true,
       "sourceLanguages": [
         "c++"
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 3,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/osm_source_module.cpp"
       ],
       "testFiles": [
+        "tests/built_artifact.test.mjs",
         "tests/sdk_compat.test.mjs",
         "tests/serve.test.mjs"
       ]
@@ -1691,7 +2580,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 5,
+      "testFileCount": 6,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -1702,6 +2591,7 @@
         "tests/fixtures/PROVENANCE.md",
         "tests/fixtures/iqengine-meta.sample.json",
         "tests/live_smoke.test.mjs",
+        "tests/record_cap.test.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -1749,7 +2639,7 @@
       "pluginId": "com.digitalarsenal.propagator.ephemeris",
       "name": "Ephemeris Propagator",
       "pluginFamily": "propagator",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "methodIds": [
         "describe_ephemeris"
       ],
@@ -1761,17 +2651,19 @@
       "isSharedBrowserDirectModule": false,
       "hasIsomorphicWasm": true,
       "sourceLanguages": [
+        "c",
         "c++"
       ],
       "cxxSourceFileCount": 3,
-      "cSourceFileCount": 0,
-      "testFileCount": 6,
+      "cSourceFileCount": 1,
+      "testFileCount": 8,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/ephemeris_propagator_module.cpp",
         "tests/ephemeris_propagator_native.cpp",
-        "tests/make_containers.cpp"
+        "tests/make_containers.cpp",
+        "tests/wasmedge_abi_host.c"
       ],
       "testFiles": [
         "tests/describe_ephemeris.test.mjs",
@@ -1779,7 +2671,9 @@
         "tests/ephemeris_propagator_native.cpp",
         "tests/fixture_arc.hpp",
         "tests/make_containers.cpp",
-        "tests/module_abi.test.mjs"
+        "tests/mixed_segment_kernel.test.mjs",
+        "tests/module_abi.test.mjs",
+        "tests/wasmedge_abi_host.c"
       ]
     },
     {
@@ -1801,13 +2695,13 @@
       ],
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": false,
+      "hasIsomorphicWasm": true,
       "sourceLanguages": [
         "c++"
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 4,
+      "testFileCount": 5,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -1815,6 +2709,7 @@
       ],
       "testFiles": [
         "tests/batched_inputs.test.mjs",
+        "tests/built_artifact.test.mjs",
         "tests/granule_plan.test.mjs",
         "tests/irm_mark.test.mjs",
         "tests/sdk_compat.test.mjs"
@@ -1825,9 +2720,10 @@
       "pluginId": "com.digitalarsenal.data-source.terrain-source",
       "name": "Terrain Tile Source Nodes",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "methodIds": [
         "layer_json",
+        "reduce_parent",
         "respond",
         "route",
         "tile"
@@ -1838,14 +2734,14 @@
       ],
       "hasBrowserWasmEdgeTargets": true,
       "isSharedBrowserDirectModule": false,
-      "hasIsomorphicWasm": false,
+      "hasIsomorphicWasm": true,
       "sourceLanguages": [
         "c",
         "c++"
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 1,
-      "testFileCount": 42,
+      "testFileCount": 51,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -1854,10 +2750,18 @@
       ],
       "testFiles": [
         "tests/amortization.test.mjs",
+        "tests/built_artifact.test.mjs",
         "tests/catalogue.test.mjs",
         "tests/engine-query.test.mjs",
         "tests/fixtures/PROVENANCE.md",
         "tests/fixtures/build-parity-fixture.mjs",
+        "tests/fixtures/parent-lod/README.md",
+        "tests/fixtures/parent-lod/analytic.dttstream",
+        "tests/fixtures/parent-lod/generate.mjs",
+        "tests/fixtures/parent-lod/inputs.json",
+        "tests/fixtures/parent-lod/missing-child.dttstream",
+        "tests/fixtures/parent-lod/ocean.dttstream",
+        "tests/fixtures/parent-lod/parity.json",
         "tests/fixtures/parity/config-catalogue-no-cid.json",
         "tests/fixtures/parity/config-catalogue-no-lineage.json",
         "tests/fixtures/parity/config-catalogue.json",
@@ -1887,6 +2791,7 @@
         "tests/helpers.mjs",
         "tests/memory-bound.test.mjs",
         "tests/miss-synthesis.test.mjs",
+        "tests/parent-lod.test.mjs",
         "tests/parity-artifact.test.mjs",
         "tests/produce-real-dtt.mjs",
         "tests/route-cost.test.mjs",
@@ -2065,10 +2970,13 @@
       "pluginId": "com.digitalarsenal.files.orbit-products",
       "name": "Orbit Products Reader",
       "pluginFamily": "parser",
-      "version": "0.1.0",
+      "version": "0.1.2",
       "methodIds": [
         "describe_container",
-        "read_container"
+        "normalize_vcm",
+        "normalize_vimpel",
+        "read_container",
+        "vcm_to_ocm"
       ],
       "runtimeTargets": [
         "browser",
@@ -2080,28 +2988,59 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 5,
+      "cxxSourceFileCount": 11,
       "cSourceFileCount": 0,
-      "testFileCount": 9,
+      "testFileCount": 34,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/orbit_products_module.cpp",
+        "src/vcm_module.cpp",
+        "src/vimpel_module.cpp",
         "tests/code500_stk_native.cpp",
+        "tests/de440_reference_native.cpp",
         "tests/oem_epoch_native.cpp",
         "tests/sp3_native.cpp",
-        "tests/spk_native.cpp"
+        "tests/spk_chebyshev_native.cpp",
+        "tests/spk_native.cpp",
+        "tests/vcm_native.cpp",
+        "tests/vcm_ocm_native.cpp"
       ],
       "testFiles": [
         "tests/code500_stk.test.mjs",
         "tests/code500_stk_native.cpp",
+        "tests/de440-fixture.mjs",
+        "tests/de440-parity.mjs",
+        "tests/de440_reference.test.mjs",
+        "tests/de440_reference_native.cpp",
+        "tests/fixtures/de440/.gitignore",
+        "tests/fixtures/de440/README.md",
+        "tests/fixtures/de440/cspice-de440.csv",
+        "tests/fixtures/de440/cspice-metadata.json",
+        "tests/fixtures/de440/de440-2026.bsp",
+        "tests/fixtures/de440/download.py",
+        "tests/fixtures/de440/excerpt-metadata.json",
+        "tests/fixtures/de440/extract_2026.py",
+        "tests/fixtures/de440/generate_references.py",
+        "tests/fixtures/de440/horizons-responses.json",
+        "tests/fixtures/de440/horizons.csv",
         "tests/oem_epoch.test.mjs",
         "tests/oem_epoch_native.cpp",
         "tests/orbit_products_module.test.mjs",
+        "tests/sdk_compat.test.mjs",
         "tests/sp3.test.mjs",
         "tests/sp3_native.cpp",
         "tests/spk.test.mjs",
-        "tests/spk_native.cpp"
+        "tests/spk_chebyshev.test.mjs",
+        "tests/spk_chebyshev_native.cpp",
+        "tests/spk_native.cpp",
+        "tests/vcm.test.mjs",
+        "tests/vcm_native.cpp",
+        "tests/vcm_ocm.test.mjs",
+        "tests/vcm_ocm_native.cpp",
+        "tests/vimpel-fixture.mjs",
+        "tests/vimpel-parity.mjs",
+        "tests/vimpel.test.mjs"
       ]
     },
     {
@@ -2522,21 +3461,38 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 2,
+      "cxxSourceFileCount": 3,
       "cSourceFileCount": 0,
-      "testFileCount": 6,
+      "testFileCount": 22,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/frames_module.cpp",
-        "tests/axis_engine_parity.cpp"
+        "tests/axis_engine_parity.cpp",
+        "tests/reference_frame_cases.cpp"
       ],
       "testFiles": [
+        "tests/EOP_VERIFICATION.md",
+        "tests/RFM_SELECTORS_VERIFICATION.md",
         "tests/axis_engine_parity.cpp",
         "tests/axis_engine_parity.test.mjs",
+        "tests/body_fixed.test.mjs",
+        "tests/body_fixed_utc_reference.json",
+        "tests/body_orientation_reference.json",
         "tests/coordinate_systems.test.mjs",
+        "tests/eop_harness.mjs",
+        "tests/eop_interpolation.test.mjs",
+        "tests/eop_parity.test.mjs",
         "tests/frame_transform.test.mjs",
+        "tests/generate_body_orientation_reference.py",
         "tests/native_axis_reference.mjs",
+        "tests/reference_frame_cases.cpp",
+        "tests/reference_frame_completeness.test.mjs",
+        "tests/rfm_selector_harness.mjs",
+        "tests/rfm_selectors.test.mjs",
+        "tests/rfm_selectors_parity.test.mjs",
+        "tests/run_body_fixed_runtimes.mjs",
+        "tests/run_rfm_selector_runtimes.mjs",
         "tests/sdk_compat.test.mjs"
       ]
     },
@@ -3201,7 +4157,7 @@
       "pluginId": "protection-key-server",
       "name": "Protection Key Server",
       "pluginFamily": "infrastructure",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "methodIds": [
         "check_key_rotation",
         "configure_runtime",
@@ -3243,7 +4199,7 @@
       "pluginId": "protection-license-client",
       "name": "Protection License Client",
       "pluginFamily": "infrastructure",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "methodIds": [
         "decrypt",
         "decrypt_and_verify",
@@ -3338,6 +4294,38 @@
       ]
     },
     {
+      "modulePath": "network/cloudflare-registrar",
+      "pluginId": "com.digitalarsenal.network.cloudflare-registrar",
+      "name": "Cloudflare peer routing",
+      "pluginFamily": "infrastructure",
+      "version": "0.1.0",
+      "methodIds": [
+        "plan"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 2,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/registrar.cpp"
+      ],
+      "testFiles": [
+        "tests/parity.test.mjs",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
       "modulePath": "propagator/atmosphere",
       "pluginId": "atmosphere-model",
       "name": "Atmosphere Plugin",
@@ -3346,7 +4334,8 @@
       "methodIds": [
         "invoke",
         "ocm_state_to_drag_acceleration_oem",
-        "query_atmosphere_state_batch"
+        "query_atmosphere_state_batch",
+        "query_wind_field"
       ],
       "runtimeTargets": [
         "browser",
@@ -3359,24 +4348,31 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 8,
+      "cxxSourceFileCount": 13,
       "cSourceFileCount": 0,
-      "testFileCount": 6,
+      "testFileCount": 8,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
+        "src/cpp/src/direct_initialize.cpp",
         "src/cpp/src/nrlmsise00.cpp",
         "src/cpp/src/plugin_entrypoints.cpp",
         "src/cpp/src/plugin_invoke_bridge.cpp",
         "src/cpp/src/plugin_runtime.cpp",
+        "src/cpp/src/space_weather.cpp",
         "src/cpp/src/us76.cpp",
+        "src/cpp/src/winds.cpp",
         "src/cpp/tests/test_atmosphere.cpp",
+        "src/cpp/tests/test_nrlmsise_package.cpp",
         "src/cpp/tests/test_sixdof.cpp",
+        "src/cpp/tests/test_space_weather.cpp",
         "src/cpp/wasm_api.cpp"
       ],
       "testFiles": [
         "src/cpp/tests/test_atmosphere.cpp",
+        "src/cpp/tests/test_nrlmsise_package.cpp",
         "src/cpp/tests/test_sixdof.cpp",
+        "src/cpp/tests/test_space_weather.cpp",
         "tests/behavior.test.mjs",
         "tests/fixtures/hosted-runtime/atmosphere.single-plugin.flow.json",
         "tests/fixtures/request.altitude.json",
@@ -3403,13 +4399,14 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 7,
+      "cxxSourceFileCount": 8,
       "cSourceFileCount": 0,
       "testFileCount": 6,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
         "src/cpp/src/cr3bp.cpp",
+        "src/cpp/src/direct_initialize.cpp",
         "src/cpp/src/plugin_entrypoints.cpp",
         "src/cpp/src/plugin_invoke_bridge.cpp",
         "src/cpp/src/plugin_runtime.cpp",
@@ -3433,6 +4430,7 @@
       "pluginFamily": "propagator",
       "version": "0.1.0",
       "methodIds": [
+        "locate_access_windows",
         "locate_events",
         "propagate_to_condition"
       ],
@@ -3448,7 +4446,7 @@
       ],
       "cxxSourceFileCount": 2,
       "cSourceFileCount": 0,
-      "testFileCount": 3,
+      "testFileCount": 8,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -3456,9 +4454,14 @@
         "tests/event_locator_conformance.cpp"
       ],
       "testFiles": [
+        "tests/access-constraints.test.mjs",
+        "tests/access-fixture.mjs",
         "tests/event_locator_conformance.cpp",
         "tests/event_locator_conformance.test.mjs",
-        "tests/events.test.mjs"
+        "tests/events.test.mjs",
+        "tests/kernel-fixture.mjs",
+        "tests/kernel-parity.mjs",
+        "tests/sdk_compat.test.mjs"
       ]
     },
     {
@@ -3466,7 +4469,7 @@
       "pluginId": "com.orbpro.hpop",
       "name": "HPOP High-Precision Orbit Propagator",
       "pluginFamily": "propagator",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "methodIds": [
         "describe_trajectory_segments",
         "ingest_state",
@@ -3476,7 +4479,6 @@
       ],
       "runtimeTargets": [
         "browser",
-        "wasi",
         "wasmedge"
       ],
       "hasBrowserWasmEdgeTargets": true,
@@ -3485,46 +4487,252 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 18,
+      "cxxSourceFileCount": 30,
       "cSourceFileCount": 0,
-      "testFileCount": 16,
+      "testFileCount": 210,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
         "lib/astrodynamics.cpp",
         "lib/atmosphere_plugin.cpp",
+        "lib/atmosphere_winds.cpp",
         "lib/coords.cpp",
         "lib/environment_models.cpp",
         "lib/ephemeris.cpp",
+        "lib/finite_burn.cpp",
         "lib/force_models.cpp",
+        "lib/force_partials.cpp",
         "lib/integrators.cpp",
         "lib/nrlmsise00.cpp",
         "lib/time_convert.cpp",
         "lib/us76.cpp",
+        "lib/variational.cpp",
         "src/cpp/src/plugin_entrypoints.cpp",
         "src/cpp/src/plugin_invoke_bridge.cpp",
         "src/cpp/src/plugin_runtime.cpp",
+        "src/cpp/src/prw_execution.cpp",
+        "src/cpp/src/prw_sdk_adapter.cpp",
         "src/cpp/wasm_api.cpp",
         "src/cpp/wasm_api_reference.cpp",
         "src/hpop_plugin.cpp",
+        "tests/de440_force_native.cpp",
+        "tests/drag_frame_native.cpp",
         "tests/environment_conformance.cpp",
+        "tests/finite_burn_native.cpp",
+        "tests/force_partials_native.cpp",
+        "tests/variational_controls_native.cpp",
+        "tests/variational_native.cpp",
         "tests/zonal_crossvalidation.cpp"
       ],
       "testFiles": [
         "tests/batch_all_positions.test.mjs",
+        "tests/coverage-rate-bench.mjs",
+        "tests/de440_force.test.mjs",
+        "tests/de440_force_native.cpp",
         "tests/direct-entry.test.mjs",
         "tests/drag_atmosphere.test.mjs",
+        "tests/drag_frame.test.mjs",
+        "tests/drag_frame_native.cpp",
+        "tests/drag_winds_abi.test.mjs",
         "tests/environment_conformance.cpp",
         "tests/environment_conformance.test.mjs",
+        "tests/evidence/lane13/baseline.log",
+        "tests/evidence/lane13/build-final.log",
+        "tests/evidence/lane13/compliance-final.log",
+        "tests/evidence/lane13/finite-burn-parity-final.log",
+        "tests/evidence/lane13/finite-burn-parity.json",
+        "tests/evidence/lane13/improvement-waves.json",
+        "tests/evidence/lane13/kernel-parity-final.log",
+        "tests/evidence/lane13/kernel-parity.json",
+        "tests/evidence/lane13/native-after.log",
+        "tests/evidence/lane13/native-comparison.json",
+        "tests/evidence/lane13/npm-ci-final.log",
+        "tests/evidence/lane13/npm-test-final.log",
+        "tests/evidence/lane13/prw-parity-final.log",
+        "tests/evidence/lane13/prw-parity.json",
+        "tests/evidence/lane13/resident-container-final.log",
+        "tests/evidence/lane13/resident-native-final.log",
+        "tests/evidence/lane13/resident-parity-final.log",
+        "tests/evidence/lane13/resident-stateful-parity.json",
+        "tests/evidence/lane13/sdk-compat-final.log",
+        "tests/evidence/lane13/variational-parity-final.log",
+        "tests/evidence/lane13/variational-parity.json",
+        "tests/finite-burn-fixture.mjs",
+        "tests/finite-burn-parity.mjs",
+        "tests/finite_burn.test.mjs",
+        "tests/finite_burn_invoke.test.mjs",
+        "tests/finite_burn_native.cpp",
         "tests/fixtures/hosted-runtime/hpop.single-plugin.flow.json",
         "tests/fixtures/request.propagate.json",
         "tests/fixtures/tudat.reference.json",
+        "tests/force_partials.test.mjs",
+        "tests/force_partials_native.cpp",
+        "tests/generated/sds/Band.js",
+        "tests/generated/sds/CAT.js",
+        "tests/generated/sds/CelestialFrame.js",
+        "tests/generated/sds/CelestialFrameWrapper.js",
+        "tests/generated/sds/CustomFrame.js",
+        "tests/generated/sds/CustomFrameWrapper.js",
+        "tests/generated/sds/DataMode.js",
+        "tests/generated/sds/DeviceType.js",
+        "tests/generated/sds/FRM.js",
+        "tests/generated/sds/FRMFrameTransformRequest.js",
+        "tests/generated/sds/FRMFrameTransformResult.js",
+        "tests/generated/sds/FRMMatrix3.js",
+        "tests/generated/sds/FRMStateVector.js",
+        "tests/generated/sds/FRMVector3.js",
+        "tests/generated/sds/FrequencyRange.js",
+        "tests/generated/sds/IDM.js",
+        "tests/generated/sds/LCC.js",
+        "tests/generated/sds/NCD.js",
+        "tests/generated/sds/NCDCode500Header.js",
+        "tests/generated/sds/NCDSP3Header.js",
+        "tests/generated/sds/NCDScenarioEpochContainer.js",
+        "tests/generated/sds/NCDSegmentDescriptor.js",
+        "tests/generated/sds/OrbitFrame.js",
+        "tests/generated/sds/OrbitFrameWrapper.js",
+        "tests/generated/sds/PCE.js",
+        "tests/generated/sds/PCEEvaluationContext.js",
+        "tests/generated/sds/PCEEvaluationRequest.js",
+        "tests/generated/sds/PCEEvaluationResult.js",
+        "tests/generated/sds/PCEParameterCatalog.js",
+        "tests/generated/sds/PCEParameterCondition.js",
+        "tests/generated/sds/PCEParameterDescriptor.js",
+        "tests/generated/sds/PCEParameterRef.js",
+        "tests/generated/sds/PCEParameterSample.js",
+        "tests/generated/sds/PCEParameterValue.js",
+        "tests/generated/sds/PCEStopReport.js",
+        "tests/generated/sds/PCEStopRequest.js",
+        "tests/generated/sds/PLD.js",
+        "tests/generated/sds/PPE.js",
+        "tests/generated/sds/PPEOrbitalElementRecord.js",
+        "tests/generated/sds/PPEPositionRecord.js",
+        "tests/generated/sds/PRW.js",
+        "tests/generated/sds/PRWAtmosphereRequest.js",
+        "tests/generated/sds/PRWAtmosphereResult.js",
+        "tests/generated/sds/PRWBatchRequest.js",
+        "tests/generated/sds/PRWBatchResponse.js",
+        "tests/generated/sds/PRWBurnBoundary.js",
+        "tests/generated/sds/PRWBurnReport.js",
+        "tests/generated/sds/PRWDescribeRequest.js",
+        "tests/generated/sds/PRWDescribeResult.js",
+        "tests/generated/sds/PRWEphemerisRequest.js",
+        "tests/generated/sds/PRWEphemerisResult.js",
+        "tests/generated/sds/PRWExecutionRequest.js",
+        "tests/generated/sds/PRWExecutionResult.js",
+        "tests/generated/sds/PRWFiniteBurn.js",
+        "tests/generated/sds/PRWFitQuality.js",
+        "tests/generated/sds/PRWForceConfiguration.js",
+        "tests/generated/sds/PRWImpulse.js",
+        "tests/generated/sds/PRWInit.js",
+        "tests/generated/sds/PRWInitSource.js",
+        "tests/generated/sds/PRWInstance.js",
+        "tests/generated/sds/PRWIntegratorSettings.js",
+        "tests/generated/sds/PRWKeplerianElements.js",
+        "tests/generated/sds/PRWNativeInput.js",
+        "tests/generated/sds/PRWPrepareRequest.js",
+        "tests/generated/sds/PRWPrepareResult.js",
+        "tests/generated/sds/PRWProcessNoise.js",
+        "tests/generated/sds/PRWPropagationSample.js",
+        "tests/generated/sds/PRWResidentRequest.js",
+        "tests/generated/sds/PRWResidentState.js",
+        "tests/generated/sds/PRWSpaceWeather.js",
+        "tests/generated/sds/PRWSpeciesDensity.js",
+        "tests/generated/sds/PRWStateMatrix.js",
+        "tests/generated/sds/PRWThrottlePoint.js",
+        "tests/generated/sds/PRWTleLines.js",
+        "tests/generated/sds/PRWTrajectorySource.js",
+        "tests/generated/sds/PRWVersionResult.js",
+        "tests/generated/sds/PolarizationType.js",
+        "tests/generated/sds/RFM.js",
+        "tests/generated/sds/RFMCoordinateSystem.js",
+        "tests/generated/sds/RFMCoordinateSystemWrapper.js",
+        "tests/generated/sds/RFMLocalAlignedConstrainedAxes.js",
+        "tests/generated/sds/RFMObjectReferencedAxes.js",
+        "tests/generated/sds/RFMOrigin.js",
+        "tests/generated/sds/RFMUnion.js",
+        "tests/generated/sds/SimplePolarization.js",
+        "tests/generated/sds/SpacecraftFrame.js",
+        "tests/generated/sds/SpacecraftFrameWrapper.js",
+        "tests/generated/sds/StokesParameters.js",
+        "tests/generated/sds/TIM.js",
+        "tests/generated/sds/TIMCcsdsTimeCode.js",
+        "tests/generated/sds/TIMConversionRequest.js",
+        "tests/generated/sds/TIMConversionResult.js",
+        "tests/generated/sds/TIMInstant.js",
+        "tests/generated/sds/dataAvailability.js",
+        "tests/generated/sds/frmOperationCode.js",
+        "tests/generated/sds/frmResultStatus.js",
+        "tests/generated/sds/frmStateRepresentation.js",
+        "tests/generated/sds/legacyCountryCode.js",
+        "tests/generated/sds/main.js",
+        "tests/generated/sds/massCategory.js",
+        "tests/generated/sds/ncdContainerFormat.js",
+        "tests/generated/sds/operationalState.js",
+        "tests/generated/sds/orbitRegime.js",
+        "tests/generated/sds/pceAvailability.js",
+        "tests/generated/sds/pceConditionDirection.js",
+        "tests/generated/sds/pceDataType.js",
+        "tests/generated/sds/pceFrameDependency.js",
+        "tests/generated/sds/pceOwnerClass.js",
+        "tests/generated/sds/pceParameter.js",
+        "tests/generated/sds/pcePropagationDirection.js",
+        "tests/generated/sds/pceResultStatus.js",
+        "tests/generated/sds/pceUnit.js",
+        "tests/generated/sds/polynomialBasisType.js",
+        "tests/generated/sds/ppeAnomalyType.js",
+        "tests/generated/sds/propagatorErrorCode.js",
+        "tests/generated/sds/propagatorStateFlags.js",
+        "tests/generated/sds/prwAtmosphereFamily.js",
+        "tests/generated/sds/prwDensitySpecies.js",
+        "tests/generated/sds/prwDensityTreatment.js",
+        "tests/generated/sds/prwDerivativeTechnique.js",
+        "tests/generated/sds/prwGravitySelection.js",
+        "tests/generated/sds/prwProcessNoiseAxes.js",
+        "tests/generated/sds/prwProcessNoiseModel.js",
+        "tests/generated/sds/prwQualityEvidence.js",
+        "tests/generated/sds/prwSolverAlgorithm.js",
+        "tests/generated/sds/prwSourceKind.js",
+        "tests/generated/sds/prwSteeringBasis.js",
+        "tests/generated/sds/prwThrustPrescription.js",
+        "tests/generated/sds/rfmAxisType.js",
+        "tests/generated/sds/rfmLibrationPoint.js",
+        "tests/generated/sds/rfmOriginKind.js",
+        "tests/generated/sds/rfmVectorSpecification.js",
+        "tests/generated/sds/sizeShapeProfile.js",
+        "tests/generated/sds/spaceObjectClass.js",
+        "tests/generated/sds/timCcsdsTimeCodeKind.js",
+        "tests/generated/sds/timConversionStatus.js",
+        "tests/generated/sds/timEpochRepresentation.js",
+        "tests/generated/sds/timingStandard.js",
         "tests/intermodule_sgp4_import.test.mjs",
+        "tests/kernel-parity.mjs",
+        "tests/kernel_invoke.test.mjs",
         "tests/lib/pivInvokeHelper.mjs",
+        "tests/lib/prwCodec.mjs",
+        "tests/lib/residentRuntime.mjs",
         "tests/no_duplicate_sources.test.mjs",
+        "tests/path_state_vectors.test.mjs",
         "tests/pivInvokeContract.test.mjs",
+        "tests/prw-contract-fixture.mjs",
+        "tests/prw-parity.mjs",
+        "tests/prw-resident-parity.mjs",
+        "tests/prw_contract.test.mjs",
+        "tests/prw_covariance.test.mjs",
+        "tests/prw_resident.test.mjs",
+        "tests/sdk-build-preflight.mjs",
         "tests/sdk_compat.test.mjs",
         "tests/tudat_wasm_derived.test.mjs",
+        "tests/variational-benchmark.mjs",
+        "tests/variational-fixture.mjs",
+        "tests/variational-kepler-reference.json",
+        "tests/variational-parity.mjs",
+        "tests/variational.test.mjs",
+        "tests/variational_controls.test.mjs",
+        "tests/variational_controls_native.cpp",
+        "tests/variational_invoke.test.mjs",
+        "tests/variational_native.cpp",
+        "tests/version_query.test.mjs",
         "tests/zonal_crossvalidation.cpp",
         "tests/zonal_crossvalidation.test.mjs"
       ]
@@ -3534,7 +4742,7 @@
       "pluginId": "hypersonics-propagator",
       "name": "Hypersonics Propagator",
       "pluginFamily": "propagator",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "methodIds": [
         "evaluate_hypersonic_state_batch"
       ],
@@ -3602,7 +4810,7 @@
       "pluginId": "com.orbpro.sgp4",
       "name": "SGP4/SDP4 Propagator",
       "pluginFamily": "propagator",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "methodIds": [
         "catalog_query",
         "ingest_omm",
