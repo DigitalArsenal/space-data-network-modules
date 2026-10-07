@@ -1,0 +1,22 @@
+{
+  "name": "@digitalarsenal/sdn-module-nwp-field-source",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "exports": {
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist/",
+    "plugin-manifest.json"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:sdk-compat": "node --test tests/sdk_compat.test.mjs"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "0.8.25"
+  }
+}

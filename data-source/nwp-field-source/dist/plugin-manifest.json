@@ -1,0 +1,342 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.nwp-field-source",
+  "name": "Numerical Weather Prediction Field Request Builder Nodes",
+  "version": "0.1.0",
+  "description": "Request-builder flow nodes for numerical-weather-prediction model fields in NOAA Open Data Dissemination's anonymous public buckets (NCEP GFS noaa-gfs-bdp-pds, GEFS noaa-gefs-pds), fetched message by message through each file's .idx inventory. plan turns a timer tick into the run's inventory requests, product by product and lead by lead, 16 per invocation, the rest yielded as backlog; select_messages reads the inventories and emits each lead-file's wanted messages as byte ranges (adjacent ones merged, each under 64 MiB), with a GRIB job per range, ONE LEAD-FILE PER INVOCATION, the rest yielded as backlog, so the parser holds one file's messages and storage-ingest receives one meta and one record stream at a time; publish_request turns a completed storage-ingest result plus the parser's ingest meta into the dataset-publication POST (nothing when nwp_publish_url is unset). Products are the world-clouds display's, chosen as its reference fetchers choose them: gfs-1p00-motion (winds and, early, heights at 1000-200 hPa), gefs-0p50-spread (the ensemble wind spread at every other point), gfs-0p50-clouds (instantaneous cloud cover, total and by layer), gfs-0p25-physics (2 m temperature/dew point, 10 m wind, boundary-layer height, CAPE, surface height, cloud layers, and the 21-level + tropopause profiles). Every request sets If-Modified-Since at the epoch so the host never turns a repeat inventory or range into an empty 304. Node CONFIG through plugin.getConfig: nwp_live_access, nwp_run, nwp_products, nwp_max_lead, nwp_lead_step, nwp_motion_heights_to, nwp_physics_leads, timeouts, nwp_publish_url. No credentials: capabilities none.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method turns its control frames into request/job frames in one pass: plan reads the node config once and queues one inventory request per lead-file, select_messages parses the inventories and queues one entry per lead-file, publish_request pairs one result with one meta. The only state is the two queues, drained a batch per invocation as the compiled runtime resumes the yielded node; no worker pool and no thread."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "plan",
+      "displayName": "NWP Inventory Plan",
+      "description": "Timer tick -> the run's .idx inventory GETs, one per (product, lead), each with an inventory job naming the product, file URL, run and lead; 16 per invocation, the rest yielded as backlog and resumed without input. One status frame when live access is off. One tick per invocation (a surplus is refused as batched-input-frames).",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-timer-tick",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Timer tick frame (content ignored).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Cron timer tick frame produced by the flow runtime and consumed inside this flow only; it carries no payload of its own, so there is no SDS record to name."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Cron timer tick."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON for hostcap/http-request: {\"method\":\"GET\",\"url\",\"headers\",\"timeoutMs\",\"responseWire\":\"raw-body-v1\"}.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request request descriptor ({method,url,headers,timeoutMs,responseWire}) produced and consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 32,
+          "required": false,
+          "description": "Inventory requests, 16 per invocation."
+        },
+        {
+          "portId": "jobs",
+          "acceptedTypeSets": [
+            {
+              "setId": "nwp-idx-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON inventory job.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-inventory job (product, file URL, run, lead) consumed by select_messages inside the same flow; never persisted."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 32,
+          "required": false,
+          "description": "One inventory job per request, in the same order."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "imager-status-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON status frame.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Cycle status ({skipped:<reason>} or {missing:[...]}) reported to the flow egress; diagnostics, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Why a cycle emitted nothing, or which files the listings lacked."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "methodId": "select_messages",
+      "displayName": "NWP Message Selection",
+      "description": "Inventories + their jobs (paired by position) -> each lead-file's wanted messages (instantaneous fields of the product's variables and levels) as Range GETs, adjacent messages merged, each under 64 MiB, with a GRIB job per range. One lead-file per invocation; the node yields with the rest as backlog and the runtime resumes it without input. A missing inventory (a lead the run lacks) is reported on status; a count mismatch is refused.",
+      "inputPorts": [
+        {
+          "portId": "idx_jobs",
+          "acceptedTypeSets": [
+            {
+              "setId": "nwp-idx-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON inventory job.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-inventory job emitted by plan inside the same flow; never persisted."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 32,
+          "required": true,
+          "description": "Inventory jobs, in plan's order."
+        },
+        {
+          "portId": "inventories",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/http-request raw-body-v1 response with the .idx inventory text.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request response frame ($HRB raw-body-v1: status plus the GRIB2 .idx inventory text) consumed inside this flow; its shape is defined by that generic connector, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 32,
+          "required": true,
+          "description": "One inventory response per inventory job, positionally aligned."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "requests",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON for hostcap/http-request: {\"method\":\"GET\",\"url\",\"headers\",\"timeoutMs\",\"responseWire\":\"raw-body-v1\"}.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request request descriptor ({method,url,headers,timeoutMs,responseWire}) produced and consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 32,
+          "required": false,
+          "description": "The Range GET(s) of one lead-file."
+        },
+        {
+          "portId": "jobs",
+          "acceptedTypeSets": [
+            {
+              "setId": "nwp-grib-job-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON GRIB job, one per request.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-range GRIB job (product, model, run, lead, stride, bands, attribution) consumed by nwp-grib2-parser inside the same flow; never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 32,
+          "required": false,
+          "description": "One parse job per file request, in the same order."
+        },
+        {
+          "portId": "status",
+          "acceptedTypeSets": [
+            {
+              "setId": "imager-status-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON status frame.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Cycle status ({skipped:<reason>} or {missing:[...]}) reported to the flow egress; diagnostics, never persisted as a record."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Why a cycle emitted nothing, or which files the listings lacked."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "methodId": "publish_request",
+      "displayName": "Imager Dataset Publication Request",
+      "description": "A storage-ingest result + the parser's ingest meta -> one dataset-publication POST ({schema, providerId, sourceName, batchId}) to nwp_publish_url; nothing when it is unset. One pair per invocation.",
+      "inputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-result-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON storage-ingest result.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/storage-ingest result JSON (schema, inserted, batch_id) consumed inside this flow."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Storage-ingest result."
+        },
+        {
+          "portId": "meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-ingest-meta-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON ingest meta.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "storage.ingest_with_source meta emitted by the parser inside this flow."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The parser's ingest meta."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-request-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "UTF-8 JSON for hostcap/http-request: {\"method\":\"GET\",\"url\",\"headers\",\"timeoutMs\",\"responseWire\":\"raw-body-v1\"}.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hostcap/http-request request descriptor ({method,url,headers,timeoutMs,responseWire}) produced and consumed inside this flow; its shape is defined by the host http.request op, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The publication POST, or nothing."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [],
+  "buildArtifacts": [
+    {
+      "artifactId": "nwp-field-source-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
