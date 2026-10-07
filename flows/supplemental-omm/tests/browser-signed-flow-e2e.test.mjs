@@ -37,19 +37,19 @@ const trustedReleaseSigner =
 // signed nodes the browser instantiated, rather than trusting source-tree
 // paths that are outside the signed outer artifact.
 const expectedOuterSha256 =
-  "7ade2cf334e174ae06a0898570134376e8d5b657ee15f04f415d50eca47cdcdf";
+  "49ae46de383688477140708c5b2f627e2582d90a41e62c35f4cc31dfeb8593b4";
 const expectedChildSha256 = Object.freeze({
   timer: "c728bfb51644cd8c49d135cfc29ccc7dcf495e051ebd1fa9f58e9afdd66640e8",
   "provider-starlink":
-    "b6b4ab5c31e3c783d5a80db470539a8a11d652ad8a69ff2907d5085b1bc62851",
+    "055442dd34a8e25afecba39145b27ecdb5299c0eb6fc8f1d9c008be2ef10c08c",
   "provider-glonass":
-    "ce738ceb46af1b9252b3fa94720aac64e0e56fd89652630c0d332773ad2055ca",
+    "c336ad55142ecafe90d6c72d4ee0c89c4d1cf91f655da21fe8381a747bb2afd3",
   "provider-intelsat":
-    "259f6816eff7a5e31c2d9cd4c962a585cc8f01ace03964f2fb014aa800f9fef8",
+    "8559c2ae5ca715fa0f56f3c73de665ff154e0a10d90ea36ce2f5a71c9d93bce7",
   "provider-cpf":
-    "9865efc121a3ac687defb8ff0095c30ec9d92ad78747d7645719622dd1f2b7d4",
+    "36af953c3f47f2ced11d1ead9ebd26ee08acabe26d75b3c5b0bc5624b2cd5305",
   "provider-iss":
-    "1883a9587c775be307f7b1dc73600ba804ee3348a96720424c789c1285a9b77b",
+    "15cdec4f942442b16f9c41a50c1583b25a31d90a6be1685219903ddb1f482158",
   od: "82a8fa3c5d11534252ee77fe03eeac328f9b0f754983f108fe79f78a66dc8fa2",
   store:
     "d0a2ca25c08351b6eb939d36adce0be6bba551e27c56b1bc7c4970266f45417a",

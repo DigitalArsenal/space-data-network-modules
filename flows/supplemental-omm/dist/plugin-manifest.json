@@ -18,29 +18,29 @@
       "maxVersion": "1.0.0"
     },
     {
-      "pluginId": "com.orbpro.spacex-starlink-source",
-      "minVersion": "2.0.0",
-      "maxVersion": "2.0.0"
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-starlink",
+      "minVersion": "1.0.0",
+      "maxVersion": "1.0.0"
     },
     {
-      "pluginId": "com.orbpro.glonass-source",
-      "minVersion": "2.0.0",
-      "maxVersion": "2.0.0"
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-glonass",
+      "minVersion": "1.0.0",
+      "maxVersion": "1.0.0"
     },
     {
-      "pluginId": "com.orbpro.intelsat-source",
-      "minVersion": "2.0.0",
-      "maxVersion": "2.0.0"
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-intelsat",
+      "minVersion": "1.0.0",
+      "maxVersion": "1.0.0"
     },
     {
-      "pluginId": "com.orbpro.cpf-source",
-      "minVersion": "2.0.0",
-      "maxVersion": "2.0.0"
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-cpf",
+      "minVersion": "1.0.0",
+      "maxVersion": "1.0.0"
     },
     {
-      "pluginId": "com.orbpro.iss-source",
-      "minVersion": "2.0.0",
-      "maxVersion": "2.0.0"
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-iss",
+      "minVersion": "1.0.0",
+      "maxVersion": "1.0.0"
     },
     {
       "pluginId": "org.sdn.flows.supplemental-omm.od",
@@ -193,7 +193,7 @@
     },
     {
       "nodeId": "provider-starlink",
-      "pluginId": "com.orbpro.spacex-starlink-source",
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-starlink",
       "methodId": "emit",
       "kind": "transform",
       "dispatchModel": "isomorphic",
@@ -202,7 +202,7 @@
     },
     {
       "nodeId": "provider-glonass",
-      "pluginId": "com.orbpro.glonass-source",
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-glonass",
       "methodId": "emit",
       "kind": "transform",
       "dispatchModel": "isomorphic",
@@ -211,7 +211,7 @@
     },
     {
       "nodeId": "provider-intelsat",
-      "pluginId": "com.orbpro.intelsat-source",
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-intelsat",
       "methodId": "emit",
       "kind": "transform",
       "dispatchModel": "isomorphic",
@@ -220,7 +220,7 @@
     },
     {
       "nodeId": "provider-cpf",
-      "pluginId": "com.orbpro.cpf-source",
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-cpf",
       "methodId": "emit",
       "kind": "transform",
       "dispatchModel": "isomorphic",
@@ -229,7 +229,7 @@
     },
     {
       "nodeId": "provider-iss",
-      "pluginId": "com.orbpro.iss-source",
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-iss",
       "methodId": "emit",
       "kind": "transform",
       "dispatchModel": "isomorphic",
