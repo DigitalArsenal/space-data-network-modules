@@ -58,26 +58,6 @@ test("the section walker crosses the exception-handling tag section", () => {
   assert.ok(moduleProperEnd(bytes) > 1_000_000, "the walk must reach the end of the module");
 });
 
-test("DETECTION: the artifact still carrying the old $PLG encoding is REFUSED", () => {
-  // The real defect, on real bytes, rather than a synthesised one. Tampering is
-  // the wrong control here: corrupting the section until it will not decode
-  // produces "declares nothing", which this check deliberately ALLOWS — absent is
-  // unconstrained. The defect is narrower and worse than that. The section decodes
-  // fine; it just decodes into a runtimeTargets array holding raw FlatBuffer, so
-  // the gate refuses every leg while the artifact looks healthy from every other
-  // angle. Only bytes from the era that produced it have that shape.
-  //
-  // When it is finally repaired, this test must be deleted rather than relaxed —
-  // its whole value is that it names bytes known to fail. foundation/orbits was
-  // repaired by its OCM rebuild at the current SDK pin.
-  for (const rel of ["analysis/dop/dist/isomorphic/module.wasm"]) {
-    const verdict = inspectEmbeddedManifest(read(rel), rel);
-    assert.equal(verdict.ok, false, `${rel} should still be carrying the old encoding`);
-    assert.match(verdict.reason, /DECODES INTO GARBAGE/);
-    assert.deepEqual(verdict.targets, [], "a refused artifact reports no usable targets");
-  }
-});
-
 test("an artifact that declares NO manifest is unconstrained, not refused", () => {
   // The gate skips its runtime-target rule on an absent field, and several lanes
   // legitimately ship an artifact with no embedded declaration. A check that
@@ -102,10 +82,8 @@ test("the loadability census is a ratchet with every survivor named", () => {
     ledger.manifestUnreadableBaseline,
     `the recorded baseline must equal what the tree actually carries; unreadable now:\n  ${measured.join("\n  ")}`,
   );
-  // Every survivor has a written reason. analysis/dop is refused at the current
-  // pin by MANIFEST VALIDATION, so a rebuild cannot repair it; that is a
-  // $PLG-byte-changing contract move and belongs to Themis/Janus.
-  // foundation/orbits left the census with its OCM manifest rewrite.
+  // Every survivor has a written reason. foundation/orbits left the census with
+  // its OCM manifest rewrite, analysis/dop with its 1.0.1 rebuild at the pin.
   for (const rel of measured) {
     const moduleDir = rel.slice(0, rel.indexOf("/dist/"));
     assert.ok(
