@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
+import * as flatbuffers from 'flatbuffers';
 import { createConjunctionCommandHarness } from './lib/conjunctionCommandHarness.mjs';
 import { initCqrFlatc, encodeCqr, decodeCqr, earthFrame, screeningControls, gpRecord, publishedSchema } from './lib/cqr.mjs';
 
@@ -181,4 +182,73 @@ test('CQR drains bounded deterministic chunks with a cap of one and reports fail
     decodeCqr(flatc, failedFirst.outputs[0].payload).CATALOG_RESULT.EVENTS);
   assert.deepEqual(decodeCqr(flatc, goodFinal.outputs[0].payload).CATALOG_RESULT.EVENTS,
     decodeCqr(flatc, failedFinal.outputs[0].payload).CATALOG_RESULT.EVENTS);
+});
+
+// The SpaceAware console's resident screen (sdn-js/spaceaware-ui
+// src/orbital-console/modes/cnj): engine TEME km states every 60 s from a
+// whole UTC second, 300 s guard bands, OEM compact grids, source handle =
+// engine entity index + 1, one primary, 30 min windows that overlap by the
+// 10 s coarse step, one direct-surface instance from prepare to destroy.
+// Same rectilinear family as above in TEME, crossing at Tc = window start
+// + 30 min 5 s, inside both windows' overlap: every primary pair i reaches TCA
+// at Tc with miss 100*i m and speed 100*i m/s (OpenStax, as above).
+test('CQR sampled index in the SpaceAware console shape screens TEME grids window by window; its retired request frame is refused', async (t) => {
+  const flatc = await initCqrFlatc();
+  const harness = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
+  t.after(() => harness.destroy());
+  // The console's 0.2.0 request (file identifier CSSM) fails the request
+  // port's $CQR type: the live "PREPARE SAMPLE INDEX FAILED · WASI exit with
+  // code 1" of 2026-10-07 was this refusal behind the command surface.
+  const retired = new flatbuffers.Builder(64);
+  retired.startObject(0);
+  retired.finish(retired.endObject(), 'CSSM');
+  const refused = await harness.invoke({ methodId: 'prepare_sample_screening_index',
+    inputs: [{ portId: 'request', payload: retired.asUint8Array() }] });
+  assert.equal(refused.statusCode, 400);
+  assert.equal(refused.errorCode, 'unsupported-input-type');
+  assert.equal(refused.outputs.length, 0);
+
+  const windowStartJd = 2461320.75; // 2026-10-07T06:00:00Z
+  const tcaSec = 30 * 60 + 5, stepSec = 60, guardSec = 300, count = 72;
+  const source = (i) => ({ OBJECT_ID: `S${String(i).padStart(2, '0')}`, OBJECT_NAME: `S${i}`, NORAD_CATALOG_ID: 90000 + i,
+    SOURCE_HANDLE: i + 1, EPHEMERIS: { EPHEMERIS_DATA_BLOCK: [{ CENTER_NAME: 'EARTH', CENTER_NAIF_ID: 399,
+      REFERENCE_FRAME: { REFERENCE_FRAME_type: 'CelestialFrameWrapper', REFERENCE_FRAME: { frame: 'TEMEOFDATE' } },
+      TIME_SYSTEM: 'UTC', START_TIME: '2026-10-07T05:55:00.000Z', INTERPOLATION: 'HERMITE', INTERPOLATION_DEGREE: 3,
+      STEP_SIZE: stepSec, STATE_VECTOR_SIZE: 6,
+      EPHEMERIS_DATA: Array.from({ length: count }, (_, k) => {
+        const s = k * stepSec - guardSec - tcaSec, v = 7.5 + .1 * i;
+        return [7000 + .1 * i, v * s, 0, 0, v, 0];
+      }).flat() }] } });
+  const INSTANCE = { MODULE_ID: 'conjunction-assessment', INSTANCE_ID: 'spaceaware-console', GENERATION: 1 };
+  const invoke = (methodId, value) => harness.invoke({ methodId, outputStreamCap: 1,
+    inputs: [{ portId: 'request', payload: encodeCqr(flatc, value) }] });
+  const prepared = await invoke('prepare_sample_screening_index', { INDEX_REQUEST: { INSTANCE,
+    INDEX_CONTENT: 'SAMPLED_STATES', REFINEMENT_MODE: 'EXACT_ONLY', PRIMARY_SOURCE_HANDLES: [1], SOURCES: [0, 1, 2, 3].map(source) } });
+  assert.equal(prepared.statusCode, 0, prepared.errorMessage);
+  const index = decodeCqr(flatc, prepared.outputs[0].payload).INDEX_RESULT;
+  assert.equal(index.SOURCE_COUNT, 4);
+  assert.equal(index.CANDIDATE_PAIR_COUNT, 3);
+  const window = (startSec, durationSec) => invoke('screen_window', { WINDOW_REQUEST: { INSTANCE,
+    SCREENING_INDEX_HANDLE: index.SCREENING_INDEX_HANDLE, EVALUATION_FRAME: earthFrame('TEME'), CONTROLS: {
+      START_EPOCH: { TIME_SYSTEM: 'UTC', EPOCH_FORMAT: 'JULIAN_DATE', JULIAN_DATE: windowStartJd + startSec / 86400 },
+      DURATION_SECONDS: durationSec, THRESHOLD_M: 5000, REQUESTED_WORKERS: 1, COARSE_STEP_SECONDS: 10,
+      REFINEMENT_TOLERANCE_SECONDS: .001, COMBINED_RADIUS_M: 10, ALGORITHM: 'ALFANO_MAXIMUM' } } });
+  for (const [startSec, durationSec] of [[0, 1810], [1800, 1800]]) {
+    const response = await window(startSec, durationSec);
+    assert.equal(response.statusCode, 0, response.errorMessage);
+    const result = decodeCqr(flatc, response.outputs[0].payload).CATALOG_RESULT;
+    assert.equal(result.FINAL_CHUNK, true);
+    assert.equal(result.STATISTICS.FAILED_PAIRS, 0);
+    assert.deepEqual(result.EVENTS.map(e => `${e.PRIMARY_ID}-${e.SECONDARY_ID}`).sort(), ['S00-S01', 'S00-S02', 'S00-S03']);
+    for (const event of result.EVENTS) {
+      const i = Number(event.SECONDARY_ID.slice(1));
+      assert.ok(Math.abs((event.TCA.JULIAN_DATE - windowStartJd) * 86400 - tcaSec) <= .01, `${startSec}: TCA`);
+      assert.ok(Math.abs(event.MISS_DISTANCE_M - 100 * i) <= .001, `${startSec}: miss`);
+      assert.ok(Math.abs(event.RELATIVE_SPEED_M_S - 100 * i) <= .005, `${startSec}: speed`);
+    }
+  }
+  const destroyed = await invoke('destroy_screening_index', { DESTROY_REQUEST: { INSTANCE, SCREENING_INDEX_HANDLE: index.SCREENING_INDEX_HANDLE } });
+  assert.equal(destroyed.statusCode, 0, destroyed.errorMessage);
+  const stale = await window(0, 1810);
+  assert.equal(stale.errorCode, 'invalid-index-handle');
 });
