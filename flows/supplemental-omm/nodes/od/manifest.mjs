@@ -79,7 +79,7 @@ function fsoPort(
 export const manifest = {
   pluginId: "org.sdn.flows.supplemental-omm.od",
   name: "Supplemental OMM Native Orbit Determination",
-  version: "1.0.0",
+  version: "1.0.1",
   description:
     "Reassembles complete provider-native response chunks inside WASM, parses each provider format, fits the complete ephemeris with the OD core, and emits multiple epoch-specific OMM, OCM, and OBD record streams.",
   pluginFamily: "orbit_determination",
