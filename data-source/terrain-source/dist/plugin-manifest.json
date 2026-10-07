@@ -1,0 +1,465 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.terrain-source",
+  "name": "Terrain Tile Source Nodes",
+  "version": "0.1.1",
+  "description": "The PURE half of the terrain serving lane: it decodes source DEM GeoTIFF granules into quantized-mesh-1.0 tiles wrapped in $DTT records, and renders the tileset's layer.json, and does nothing else. capabilities [], browser + wasmedge, request-scoped, no state between invocations. Every DEM byte it decodes was fetched by com.digitalarsenal.hostcap.http-request and every record it emits is persisted downstream; scheduling and pyramid orchestration live in the sibling terrain-ingest module, exactly as geonames-source / geonames-ingest are split. The source granules are DEFLATE-compressed Cloud-Optimized GeoTIFFs and there is no host inflate capability (and none may be added), so miniz 3.1.2 is vendored under vendor/miniz-3.1.2 (MIT, SHA-256 pinned and re-verified on every build) - the same vendored copy geonames-source and cell-tower-source use. A minimal little-endian TIFF/BigTIFF reader (tiled or strip layout, DEFLATE via tinfl, predictor 1 and floating-point predictor 3) lives in-guest for the same reason. Heights are redistributed on the source dataset's own vertical datum (a geoid), stated verbatim in VERTICAL_DATUM/VERTICAL_DATUM_NAME, never silently converted.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Both methods are single-pass transforms over the frames the flow hands them: decode the DEM granules covering one output tile and encode one quantized mesh, or render one layer.json body. Tiles are processed one at a time, there is no shared mutable state, no worker pool and no fan-out inside the guest, so it compiles single-thread rather than claiming a wasi-threads contract it does not honour."
+  },
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "reduce_parent",
+      "displayName": "Reduce four recorded terrain siblings to one parent",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "children",
+          "acceptedTypeSets": [{
+            "setId": "terrain-dtt-children",
+            "allowedTypes": [{ "schemaName": "DTT.fbs", "fileIdentifier": "$DTT", "rootTypeName": "DTT", "wireFormat": "flatbuffer" }],
+            "description": "Exactly four size-prefixed DTT siblings in one stream. Geographic WGS84 TMS regular-grid quantized meshes with inline digest-verified payloads and recorded water masks. Maximum 2 MiB per record; no missing-child synthesis."
+          }],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "records",
+          "acceptedTypeSets": [{
+            "setId": "terrain-dtt-parent",
+            "allowedTypes": [{ "schemaName": "DTT.fbs", "fileIdentifier": "$DTT", "rootTypeName": "DTT", "wireFormat": "flatbuffer" }],
+            "description": "One size-prefixed DTT parent: native 65x65 mesh, 256x256 reduced water coverage, ordered full child-record hashes, retained dataset terms, and explicit derived height-bound provenance."
+          }],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ]
+    },
+    {
+      "methodId": "tile",
+      "displayName": "Encode one quantized-mesh terrain tile from source DEM granules",
+      "inputPorts": [
+        {
+          "portId": "plan",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-plan-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The tile plan from terrain-ingest: tileset identity, either one z/x/y address or a tiles[] BLOCK of them, grid size, the water-mask DIRECTIVE (kind + 256x256 geometry + optional mask lineage - never raster bytes), pyramid limits, skipOceanTiles, and the dataset provenance every record must be published under.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the sibling terrain-ingest node, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The tile plan carrying the address, grid size and dataset contract."
+        },
+        {
+          "portId": "dem",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/http-request responses carrying the source DEM GeoTIFF granules intersecting the plan's union extent, over responseWire \"raw-body-v1\" ($HRB: magic, little-endian status, body verbatim). The default JSON/bodyB64 dialect is still read so a recorded fixture stays replayable. A 404 is a granule the dataset does not publish (open ocean), which is data, not an error.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "image/tiff; application=geotiff",
+                "detail": "Intra-flow connector frame produced and consumed inside this flow: hostcap/http-request's responseWire \"raw-body-v1\" $HRB frame (magic, little-endian status, body verbatim) carrying one DEFLATE-compressed Cloud-Optimized GeoTIFF elevation granule, or the same response in the connector's default JSON/bodyB64 dialect. The frame's shape is defined by that host op and the body by the source dataset, neither by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4,
+          "required": true,
+          "description": "One response frame per source elevation granule intersecting the plan's union extent; an extent straddling a 2x2 granule neighbourhood needs four."
+        },
+        {
+          "portId": "water",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-hostcap-http-response-water",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "hostcap/http-request responses carrying the source WATER-BODY granules covering the same extent, over responseWire \"raw-body-v1\" ($HRB). Single-band 8-bit categorical rasters: 0 is no water, any non-zero class is a water body. Sampled NEAREST-NEIGHBOUR - a land/water class is never interpolated, because averaging class ordinals invents a class the source never stated. Absent (404) leaves the tile on the plan's directive.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "image/tiff; application=geotiff",
+                "detail": "Intra-flow connector frame produced and consumed inside this flow: hostcap/http-request's responseWire \"raw-body-v1\" $HRB frame (magic, little-endian status, body verbatim) carrying one DEFLATE-compressed Cloud-Optimized GeoTIFF water-body granule, or the same response in the connector's default JSON/bodyB64 dialect. The frame's shape is defined by that host op and the body by the source dataset, neither by SDS."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4,
+          "required": false,
+          "description": "Water-body granule responses covering the plan's union extent; the mask is classified from these bytes and never fabricated from the directive."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-dtt-records",
+              "allowedTypes": [
+                {
+                  "schemaName": "DTT.fbs",
+                  "fileIdentifier": "$DTT",
+                  "rootTypeName": "DTT",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Size-prefixed $DTT FlatBuffer record stream: one Digital Terrain Tile per address the plan's granule set covers, quantized-mesh payload inline. All-ocean addresses are omitted when the plan sets skipOceanTiles."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Size-prefixed $DTT FlatBuffer record stream, one record per emitted tile."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-tile-report-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Encode summary: sample counts, no-data counts, coverage fraction, height range, payload sizes and the vertical-datum note.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Encode summary for this tile."
+        }
+      ],
+      "description": "Decodes the source granules covering the plan's extent and encodes quantized-mesh-1.0 tiles of the GEOGRAPHIC_WGS84 pyramid (two root tiles, TMS row origin south): ECEF header with bounding sphere and horizon occlusion point, zigzag-delta 16-bit vertex arrays, high-water-mark index encoding, edge index lists, and the watermask extension (id 2). AMORTIZED: a plan may address ONE tile or a tiles[] BLOCK, and a block decodes its granule set ONCE over the union extent and emits every tile the set covers - the per-tile re-decode it replaces spent about 97% of its time inflating the same bytes again. WINDOWED: only the internal chunks intersecting the extent are inflated, so resident memory is proportional to the OUTPUT, not to the granule; a named 256 MiB in-guest decode budget is checked before every raster allocation and against the running total across granules, refusing with \"decode-budget-exceeded\" rather than trapping a pooled flow instance. WATER MASK: classified from the water-body granules on ONE GLOBAL POST LATTICE per level, so the posts two adjacent tiles share are the same global posts and their bytes are equal by construction; 256x256 at every level, row 0 the NORTH edge, 255 water and 0 land, reduced to a single uniform byte where the whole tile agrees. WATER_MASK is set together with its width and height, and carries WATER_MASK_PROVENANCE when the mask's licence differs from the elevation dataset's. The tile bytes ride INLINE in DTTPayloadRef.BYTES (gzip via the vendored deflate, CONTENT_ENCODING \"gzip\"); SIZE_BYTES and DIGEST are stated over those GZIPPED bytes and the record's ETAG is that digest, so a cache revalidates against the bytes it actually holds. A tile past the 32 KiB gzipped per-tile serving ceiling is REFUSED at encode time. HEIGHTS ARE NOT CONVERTED: the source dataset publishes geoid-referenced heights and the record states VERTICAL_DATUM GEOID with the model named verbatim - a consumer that renders them as ellipsoidal accepts a stated, bounded error and the record and report both say so. A granule the dataset does not publish (HTTP 404, open ocean) decodes to height 0 with WATER_MASK_KIND UNIFORM_WATER unless the plan states otherwise; the source NO_DATA value (-32767) decodes to 0 and is counted in DATA_COVERAGE_FRACTION rather than hidden. A plan that cannot state the dataset identity, epoch, retrieval time and licence is REFUSED, never defaulted. BATCHING: the plan port is single-stream and the dem and water ports carry at most four frames each, ENFORCED IN CODE; maxStreams/maxBatch/drainPolicy are purely declarative in the compiled flow runtime, which drains a node's queue port-blind, so any surplus is refused with error code \"batched-input-frames\" rather than silently destroyed.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "layer_json",
+      "displayName": "Render the tileset's layer.json",
+      "inputPorts": [
+        {
+          "portId": "plan",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-plan-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The tileset plan from terrain-ingest: tilesetId, maxzoom, and the available-tile ranges.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the sibling terrain-ingest node, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The tileset plan carrying maxzoom and availability."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-response-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponseAbi.fbs",
+                  "fileIdentifier": "$HTR",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Canonical WASM-served HTTP response envelope ($HTR, module-sdk schemas/HttpResponseAbi.fbs): STATUS 200, content-type application/json, the layer.json body inline. The host streams it back verbatim."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Exactly one HTTP response envelope carrying the complete layer.json body."
+        }
+      ],
+      "description": "SERVING LANE (flows/terrain-serving.flow.json, mount /api/v1/terrain/): renders the complete layer.json body for a quantized-mesh-1.0 tileset - tilejson 2.1.0, format quantized-mesh-1.0, scheme tms, projection EPSG:4326, bounds [-180,-90,180,90], minzoom 0, the plan's maxzoom, extensions [\"watermask\"] (octvertexnormals is omitted until normals ship), and the plan's available ranges passed through VERBATIM - and emits it as the SDK's canonical $HTR HttpResponse envelope with the body inline, never as a JSON control frame. The availability index is the orchestrator's knowledge, not this encoder's, so it is never synthesized here. BATCHING: single-stream by contract, enforced in code; a surplus is refused with error code \"batched-input-frames\".",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "route",
+      "displayName": "Route one terrain HTTP request",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequestAbi.fbs",
+                  "fileIdentifier": "$HTQ",
+                  "rootTypeName": "HttpRequest"
+                }
+              ],
+              "description": "One $HTQ HttpRequest envelope (module-sdk schemas/HttpRequestAbi.fbs)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HTTP request to route."
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-serving-config-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The mount's serving config, the same JSON object plugin.getConfig returns. Optional: absent, route reads it over the host bridge exactly as before.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "OPTIONAL serving config, handed in instead of read over plugin.getConfig. Nothing in the shipped flow wires it; it exists so the tri-runtime parity lane can execute the catalogue surface in an artifact that has no host bridge."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "query",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-tile-query-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "{sql, params} for hostcap/flatsql-query:query - SELECT _data FROM DTT for (TILESET_ID, LEVEL, X, Y), newest row wins.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The record-store query for a {z}/{x}/{y}.terrain request."
+        },
+        {
+          "portId": "context",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-serve-context-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Address + conditional-request state (ifNoneMatch) for respond.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Serve context forwarded to respond."
+        },
+        {
+          "portId": "layer_plan",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-plan-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The layer_json plan composed from the serving config: tilesetId, maxzoom, availability verbatim, attribution.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The plan frame for the layer_json node on a layer.json request."
+        },
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-response-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponseAbi.fbs",
+                  "fileIdentifier": "$HTR",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Canonical WASM-served HTTP response envelope ($HTR). The host streams it back verbatim."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Direct $HTR for requests no other node should see: cacheable 404 for unknown paths, 405 for non-GET/HEAD."
+        }
+      ],
+      "description": "One $HTQ in, exactly ONE downstream path out. THE MOUNT IS A PREFIX AND ONLY A PREFIX: it is owned by the flow's config (terrain_mount_path, default the flow's own basePath /api/v1/terrain/), and a path that does not START with it is a 404. There is no search fallback - the router used to strip up to the LAST \"/terrain/\" segment, which made one tile reachable at unboundedly many distinct publicly cacheable URLs, and the first fix left a fallback that still answered /junk/terrain/8/271/192.terrain whether or not a mount was configured. A tile index is also accepted in exactly ONE decimal spelling: a LEADING ZERO is refused, because \"8\", \"08\" and \"000000008\" all parsing to 8 made one address 441 separate cache keys, each costing a full store query for identical bytes. \"layer.json\" => a layer_plan frame for the sibling layer_json node, composed from plugin.getConfig keys terrain_tileset_id / terrain_maxzoom / terrain_available (VERBATIM availability array; defaults to the two level-0 roots, honest exactly when maxzoom is 0 - a deeper pyramid MUST configure terrain_available) / terrain_attribution / terrain_description / terrain_version. \"{z}/{x}/{y}.terrain\" => a {sql,params} frame for hostcap/flatsql-query:query (SELECT _data FROM DTT WHERE TILESET_ID/LEVEL/X/Y ORDER BY _rowid DESC LIMIT 1) plus a context frame carrying the address, the client's If-None-Match and whether it accepts gzip. _rowid, NOT rowid: on a node the relation named DTT is a unified VIEW over per-source shadow tables and a view has no implicit rowid, so the old spelling was \"no such column\" on every real node and parsed fine everywhere else. AVAILABILITY IS THE CLIENT'S QUESTION: a native provider asks computeMaximumLevelAtPosition(centre of the tile) >= level, not per-level membership, so route evaluates that same rule - an address the client will request is inside availability here and is synthesized by respond rather than 404-ed. The parsed index is CACHED against the exact bytes it came from; parsing it per request cost 5.4 ms at a 318 KB index, before the store was touched. Anything else => a direct, CACHEABLE $HTR 404 (public, max-age=300) because a miss is normal traffic, and 405 for non-GET/HEAD. plugin.getConfig is the module's only hostcall - reading who it was deployed as, the geonames-ingest precedent, not a capability. BATCHING: single-stream by contract, enforced in code; a surplus is refused with error code \"batched-input-frames\". OPTIONAL INPUT \"config\": the same JSON plugin.getConfig returns, handed in on a frame. Absent (the shipped flow) nothing changes. Present, it is the config for that invoke - which is what lets the tri-runtime parity lane execute the $DTT catalogue surface in the bridge-free parity artifact, where plugin.getConfig answers nothing and /tileset.json could only ever be a 503. THE TILESET DIRECTORY IS PAYLOAD.CID: terrain_tileset_cid renders DTT.PAYLOAD.CID, and PROVENANCE.DATASET_CID is a separate key (terrain_source_dataset_cid) naming the SOURCE dataset artifact, never the tileset. VERTICAL_DATUM/VERTICAL_DATUM_NAME are stated on the catalogue record and in layer.json, not only on the tile records.",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "respond",
+      "displayName": "Assemble the terrain tile HTTP response",
+      "inputPorts": [
+        {
+          "portId": "stream",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-dtt-stream",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The flatsql-query stream output: aligned size-prefixed $DTT FlatBuffer frames, verbatim engine bytes (zero rows = empty frame).",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The queried $DTT record stream."
+        },
+        {
+          "portId": "context",
+          "acceptedTypeSets": [
+            {
+              "setId": "terrain-serve-context-json",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "route's serve context: address + ifNoneMatch.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Intra-flow control frame produced and consumed inside this flow; its shape is defined by the host op or the sibling node it feeds, not by SDS."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Serve context from route."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-http-response-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponseAbi.fbs",
+                  "fileIdentifier": "$HTR",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Canonical WASM-served HTTP response envelope ($HTR). The host streams it back verbatim."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Exactly one HTTP response envelope per invoke."
+        }
+      ],
+      "description": "Walks the aligned size-prefixed $DTT stream (zero-length prefixes are alignment padding; size-prefixed verify first, plain-anchored fallback - the foundation/omm-json framing contract) and serves the FIRST record: 200 with the payload BYTES, content-type from the record, cache-control public max-age=86400, x-content-type-options nosniff, vary accept-encoding, and a strong ETag (record ETAG verbatim, else the payload DIGEST quoted, else a weak address+size tag). THE ENCODING IS NEGOTIATED: the stored bytes are gzipped and route reads Accept-Encoding, so a client that refused gzip gets the bytes DECODED in-guest and served identity under its OWN strong ETag - two representations are two entity tags, or a shared cache holding one answers the other's revalidation with 304. It used to state content-encoding: gzip unconditionally with no vary at all. An If-None-Match match answers 304 with no body. An EMPTY stream is answered by the address's position in the PUBLISHED AVAILABILITY, which route decides and passes in the context frame. OUTSIDE it: a cheap CACHEABLE 404 (public, max-age=300) - an unpublished tile is normal traffic, the client's upsampling relies on layer.json availability, and a 404 must never be an error. INSIDE it: the tileset promised the address, so a 404 would be a broken promise the client never asked to handle - the tile is SYNTHESIZED at height 0 by the same encoder that writes stored tiles, served 200 with cache-control public max-age=86400, a strong digest ETag and the header x-terrain-synthesized stating which kind of tile it is (a synthesized tile and a measured one are not the same claim). Its water mask is NOT assumed: only at LEVEL >= terrain_ocean_synth_min_level, the shallowest level the builder actually built, does \"promised but not stored\" mean \"measured all-ocean and skipped\" and the mask read uniform-water; below it, and whenever that key is absent, the synthesized tile is uniform-LAND, because a hemisphere-wide level-0 root claiming water renders every continent as specular ocean once the client upsamples from it. A record whose payload is CID-only (no inline BYTES) is REFUSED loudly rather than served as an empty body that would render as fabricated sea-level terrain - the CID resolution lane is the recorded growth path. BATCHING: single-stream by contract, enforced in code; a surplus is refused with error code \"batched-input-frames\".",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "terrain-source-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1
+}
