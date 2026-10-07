@@ -1,7 +1,7 @@
 {
   "pluginId": "protection-license-client",
   "name": "Protection License Client",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Hosted WASM module for DEK retrieval over protocol.request plus signature verification and AES-256-GCM decryption helpers. Browser clients should use sdn-js transport with the browser-safe decrypt path.",
   "pluginFamily": "infrastructure",
   "capabilities": [

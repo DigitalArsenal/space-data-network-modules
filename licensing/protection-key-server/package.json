@@ -1,7 +1,7 @@
 {
   "name": "space-data-network-plugin-protection-key-server",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
     "build": "bash build.sh",

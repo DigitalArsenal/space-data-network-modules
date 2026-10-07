@@ -1,7 +1,7 @@
 {
   "pluginId": "protection-key-server",
   "name": "Protection Key Server",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ECDH P-256 key broker that manages DEK distribution via a 3-step challenge-response protocol over libp2p streams.",
   "pluginFamily": "infrastructure",
   "capabilities": [
