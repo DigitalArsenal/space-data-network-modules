@@ -7,11 +7,11 @@ import { fileURLToPath } from "node:url";
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const programId = "org.sdn.flows.od-supplemental-omm";
 const providers = [
-  ["starlink", "com.orbpro.spacex-starlink-source"],
-  ["glonass", "com.orbpro.glonass-source"],
-  ["intelsat", "com.orbpro.intelsat-source"],
-  ["cpf", "com.orbpro.cpf-source"],
-  ["iss", "com.orbpro.iss-source"],
+  ["starlink", "org.sdn.flows.supplemental-omm.provider-starlink"],
+  ["glonass", "org.sdn.flows.supplemental-omm.provider-glonass"],
+  ["intelsat", "org.sdn.flows.supplemental-omm.provider-intelsat"],
+  ["cpf", "org.sdn.flows.supplemental-omm.provider-cpf"],
+  ["iss", "org.sdn.flows.supplemental-omm.provider-iss"],
 ];
 const independentNodes = [
   ["timer", "org.sdn.flows.supplemental-omm.timer", "on_wakeup"],

@@ -1,7 +1,7 @@
 {
-  "pluginId": "com.orbpro.glonass-source",
+  "pluginId": "org.sdn.flows.supplemental-omm.provider-glonass",
   "name": "GLONASS Complete Ephemeris Provider",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "description": "Fetches the complete configured GLONASS SP3 response and emits byte-exact provider-native data as paired canonical or aligned FSB chunks.",
   "pluginFamily": "data_source",
   "capabilities": [

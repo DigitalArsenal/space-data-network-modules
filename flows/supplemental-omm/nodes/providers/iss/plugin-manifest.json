@@ -1,7 +1,7 @@
 {
-  "pluginId": "com.orbpro.iss-source",
+  "pluginId": "org.sdn.flows.supplemental-omm.provider-iss",
   "name": "ISS Complete Ephemeris Provider",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "description": "Fetches the complete configured ISS OEM response and emits byte-exact provider-native data as paired canonical or aligned FSB chunks.",
   "pluginFamily": "data_source",
   "capabilities": [

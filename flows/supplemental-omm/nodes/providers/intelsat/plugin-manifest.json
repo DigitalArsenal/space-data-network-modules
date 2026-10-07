@@ -1,7 +1,7 @@
 {
-  "pluginId": "com.orbpro.intelsat-source",
+  "pluginId": "org.sdn.flows.supplemental-omm.provider-intelsat",
   "name": "Intelsat Complete Ephemeris Provider",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "description": "Discovers and fetches the complete configured Intelsat ECF response and emits byte-exact provider-native data as paired canonical or aligned FSB chunks.",
   "pluginFamily": "data_source",
   "capabilities": [

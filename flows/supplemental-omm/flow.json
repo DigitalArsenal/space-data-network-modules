@@ -23,7 +23,7 @@
     },
     {
       "nodeId": "provider-starlink",
-      "pluginId": "com.orbpro.spacex-starlink-source",
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-starlink",
       "methodId": "emit",
       "dispatchModel": "isomorphic",
       "kind": "transform",
@@ -40,7 +40,7 @@
     },
     {
       "nodeId": "provider-glonass",
-      "pluginId": "com.orbpro.glonass-source",
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-glonass",
       "methodId": "emit",
       "dispatchModel": "isomorphic",
       "kind": "transform",
@@ -56,7 +56,7 @@
     },
     {
       "nodeId": "provider-intelsat",
-      "pluginId": "com.orbpro.intelsat-source",
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-intelsat",
       "methodId": "emit",
       "dispatchModel": "isomorphic",
       "kind": "transform",
@@ -72,7 +72,7 @@
     },
     {
       "nodeId": "provider-cpf",
-      "pluginId": "com.orbpro.cpf-source",
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-cpf",
       "methodId": "emit",
       "dispatchModel": "isomorphic",
       "kind": "transform",
@@ -88,7 +88,7 @@
     },
     {
       "nodeId": "provider-iss",
-      "pluginId": "com.orbpro.iss-source",
+      "pluginId": "org.sdn.flows.supplemental-omm.provider-iss",
       "methodId": "emit",
       "dispatchModel": "isomorphic",
       "kind": "transform",
@@ -464,11 +464,11 @@
   ],
   "requiredPlugins": [
     "org.sdn.flows.supplemental-omm.timer",
-    "com.orbpro.spacex-starlink-source",
-    "com.orbpro.glonass-source",
-    "com.orbpro.intelsat-source",
-    "com.orbpro.cpf-source",
-    "com.orbpro.iss-source",
+    "org.sdn.flows.supplemental-omm.provider-starlink",
+    "org.sdn.flows.supplemental-omm.provider-glonass",
+    "org.sdn.flows.supplemental-omm.provider-intelsat",
+    "org.sdn.flows.supplemental-omm.provider-cpf",
+    "org.sdn.flows.supplemental-omm.provider-iss",
     "org.sdn.flows.supplemental-omm.od",
     "com.digitalarsenal.flatsql.store",
     "org.sdn.flows.supplemental-omm.publication",

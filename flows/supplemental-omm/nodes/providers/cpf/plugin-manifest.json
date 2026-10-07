@@ -1,7 +1,7 @@
 {
-  "pluginId": "com.orbpro.cpf-source",
+  "pluginId": "org.sdn.flows.supplemental-omm.provider-cpf",
   "name": "CPF Complete Ephemeris Provider",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "description": "Discovers and fetches the complete configured CPF response and emits byte-exact provider-native data as paired canonical or aligned FSB chunks.",
   "pluginFamily": "data_source",
   "capabilities": [
