@@ -113,9 +113,11 @@ ConjunctionSolution assess_conjunction_solution(
 
 /// Every local minimum of the pair's range inside
 /// [start_jd, start_jd + duration_days] whose refined miss distance is within
-/// threshold_km, in TCA order: the range is sampled every 5 s, each sample
-/// below its neighbours (or a window edge not above its neighbour) brackets
-/// a minimum, and golden section refines it to fine_tol_sec.
+/// threshold_km, in TCA order: the range is sampled on an absolute 5 s grid
+/// (k * 5 s) reaching one sample past each edge, each sample below its
+/// neighbours brackets a minimum, and golden section refines it to
+/// fine_tol_sec. A window edge is never itself a minimum, and windows sharing
+/// an edge refine a minimum there to the same TCA.
 std::vector<ConjunctionSolution> assess_conjunction_solutions_within_threshold(
     const TLE& tle1, const TLE& tle2,
     double start_jd, double duration_days, double threshold_km,

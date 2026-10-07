@@ -200,9 +200,23 @@ within the refinement tolerance, the same miss distances. `KD_TREE_CANDIDATES`
 counts pairs with a coarse hit (per chunk past 10000 coarse steps) and
 `TCA_REFINED` counts encounters, runs of consecutive coarse hits of one pair.
 This holds for SGP4 mean-element sources screened with `ALFANO_MAXIMUM`
-(`screen_catalog` and the resident source-description index). The generic
-engine path (sampled or non-mean polynomial sources, other probability
-algorithms) still reports each pair's closest approach in the window.
+(`screen_catalog` and the resident source-description index).
+
+The generic engine path (sampled or non-mean polynomial sources, primaries on
+`screen_catalog`, other probability algorithms) reports every local minimum of
+each pair's range within the threshold whose TCA lies in `[start, start +
+duration)`. The range is sampled on an absolute 5 s grid (`k * 5 s`) reaching
+one sample past each window edge, and each sample below both neighbours is
+refined as `assess_conjunction` refines (the range-rate root where the range
+provably has one minimum, golden section otherwise), then settled on the
+representable Julian date of least range. A window edge is never itself
+reported, and a minimum refines to the same TCA in every window that sees it,
+the TCA `assess_conjunction` and `emit_cdm` give it as a pair's closest
+approach.
+Windows that abut report each minimum exactly once; windows that overlap report
+a minimum inside the overlap in each of them, with the same TCA and miss
+distance, so a consumer that keeps overlapping windows removes the repeat by
+pair and TCA.
 
 ## Catalog size and partitioned runs
 

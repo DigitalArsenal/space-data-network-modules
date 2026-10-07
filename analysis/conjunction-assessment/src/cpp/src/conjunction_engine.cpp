@@ -378,6 +378,15 @@ ConjunctionEvent2 ConjunctionEngine::assess(
     const Covariance3x3* cov1, const Covariance3x3* cov2,
     double coarse_step_sec, double fine_tol_sec) const
 {
+    const double tca_jd = find_tca(obj1, obj2, start_jd, duration_days, coarse_step_sec, fine_tol_sec);
+    if (has_error()) return {};
+    return assess_at(obj1, obj2, tca_jd, cov1, cov2);
+}
+
+ConjunctionEvent2 ConjunctionEngine::assess_at(
+    const EphemerisSource& obj1, const EphemerisSource& obj2, double tca_jd,
+    const Covariance3x3* cov1, const Covariance3x3* cov2) const
+{
     ConjunctionEvent2 event;
 
     // Metadata
@@ -388,9 +397,7 @@ ConjunctionEvent2 ConjunctionEngine::assess(
     event.obj1_norad = obj1.norad_id();
     event.obj2_norad = obj2.norad_id();
 
-    // Find TCA
-    event.tca_jd = find_tca(obj1, obj2, start_jd, duration_days, coarse_step_sec, fine_tol_sec);
-    if (has_error()) return {};
+    event.tca_jd = tca_jd;
     event.tca_iso = jd_to_iso(event.tca_jd);
 
     // Get states at TCA

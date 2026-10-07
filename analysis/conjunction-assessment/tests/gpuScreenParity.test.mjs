@@ -137,8 +137,11 @@ test('HPOP trajectories (PPE, GCRF, TDB): the GPU path finds every approach', as
   try {
     const startJd = 2461314.5 - 15 / 1440;   // 2026-09-30T23:45Z UTC, inside the TDB-converted coverage
     const windowRecord = await residentWindow(harness, HPOP.sources, startJd, 0.11, 'GCRF');
-    const closest = await drain(harness, 'screen_window', [request(windowRecord)]);
-    assert.equal(closest.events.length, 6, 'every pair meets within the threshold');
+    // screen_window on these trajectories takes the generic engine path,
+    // which reports every minimum of each pair's range within the threshold,
+    // as the candidate path does.
+    const windowed = await drain(harness, 'screen_window', [request(windowRecord)]);
+    assert.equal(new Set(windowed.events.map(pairOf)).size, 6, 'every pair meets within the threshold');
 
     const scan = await drain(harness, 'refine_candidates', [request(windowRecord)]);
     const run = await gpuPath(harness, windowRecord);
@@ -146,9 +149,7 @@ test('HPOP trajectories (PPE, GCRF, TDB): the GPU path finds every approach', as
     const cpu = await gpuPath(harness, windowRecord, null);
     assertSameEvents(cpu.events, scan.events, 'CPU search');
     assert.equal(run.excludedRecords.length, 0);
-    const found = scan.events.filter((e) => closest.events.some((c) => pairOf(c) === pairOf(e) &&
-      Math.abs(c.TCA.JULIAN_DATE - e.TCA.JULIAN_DATE) * 86400 <= T.tca.NLRV.hardFailSec));
-    assertSameEvents(found, closest.events, 'closest approaches');
+    assertSameEvents(windowed.events, scan.events, 'screen_window');
   } finally {
     await harness.destroy?.();
   }

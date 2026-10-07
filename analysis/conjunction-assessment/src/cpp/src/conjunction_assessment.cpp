@@ -463,6 +463,30 @@ static Coverage joint_coverage(const EphemerisSource& obj1, const EphemerisSourc
             std::min(edge(obj1.valid_end_jd(), inf), edge(obj2.valid_end_jd(), inf))};
 }
 
+// The representable Julian date of least range beside a refined TCA, within
+// [low, high]. A refinement stops inside its tolerance, which near JD 2.46e6
+// spans dozens of representable dates (about 40 us apart), so two refinements
+// of one minimum from different brackets stop on different dates. Stepping
+// date by date while the range falls brings both to the same one.
+static double settle_tca(const EphemerisSource& obj1, const EphemerisSource& obj2,
+                         double jd, double low, double high)
+{
+    constexpr int MAX_STEPS = 256;  // about 10 ms either way
+    double d = distance_at_jd(obj1, obj2, jd);
+    if (has_error()) return jd;
+    for (const double toward : {high, low}) {
+        for (int step = 0; step < MAX_STEPS; ++step) {
+            const double next = std::nextafter(jd, toward);
+            if (next == jd || next > high || next < low) break;
+            const double d_next = distance_at_jd(obj1, obj2, next);
+            if (has_error() || !(d_next < d)) break;
+            jd = next;
+            d = d_next;
+        }
+    }
+    return jd;
+}
+
 static double refine_minimum(const EphemerisSource& obj1, const EphemerisSource& obj2,
                             double center_jd, double window_days,
                             double tol_sec)
@@ -470,6 +494,7 @@ static double refine_minimum(const EphemerisSource& obj1, const EphemerisSource&
     const Coverage covered = joint_coverage(obj1, obj2);
     double a = std::max(center_jd - window_days, covered.start);
     double b = std::min(center_jd + window_days, covered.end);
+    const double low = a, high = b;
     double tol = tol_sec / 86400.0;
     const double phi = (std::sqrt(5.0) - 1.0) / 2.0;
 
@@ -487,7 +512,7 @@ static double refine_minimum(const EphemerisSource& obj1, const EphemerisSource&
         }
     }
 
-    return (a + b) / 2.0;
+    return settle_tca(obj1, obj2, (a + b) / 2.0, low, high);
 }
 
 static double clamp_jd_to_range(double value, double min_jd, double max_jd) {
@@ -607,6 +632,8 @@ std::optional<ConjunctionSolution> solve_unimodal_conjunction(
         const bool converged = std::abs(next_jd - tca_jd) <= converged_days;
         tca_jd = next_jd;
         if (converged) {
+            tca_jd = settle_tca(obj1, obj2, tca_jd, span_start, span_end);
+            if (has_error()) return std::nullopt;
             const auto solution = build_conjunction_solution(obj1, obj2, tca_jd);
             if (has_error()) return std::nullopt;
             return solution;
@@ -709,58 +736,57 @@ std::vector<ConjunctionSolution> assess_conjunction_solutions_within_threshold(
     double fine_tol_sec)
 {
     const double end_jd = start_jd + duration_days;
-    // The range sampled every 5 s over the window, the end included. 5 s is
-    // what find_tca samples at: at 12+ km/s a sub-km minimum lasts < 0.1 s,
-    // but the sample below both its neighbours still brackets it.
+    // The range sampled every 5 s. 5 s is what find_tca samples at: at 12+
+    // km/s a sub-km minimum lasts < 0.1 s, but the sample below both its
+    // neighbours still brackets it.
     constexpr double SAMPLE_DAYS = 5.0 / 86400.0;
-    // find_tca's candidate bound: the sample nearest a minimum within the
-    // threshold is at most 2.5 s from it, so no farther than 5 km + 2.5 s of
-    // relative motion (45 km at 16 km/s).
-    constexpr double CANDIDATE_KM = 50.0;
+    // The sample nearest a minimum is at most 2.5 s from it, so no farther
+    // than the minimum plus 2.5 s of relative motion (40 km at 16 km/s): a
+    // sample beyond threshold + 50 km has no minimum within the threshold.
+    constexpr double CANDIDATE_MARGIN_KM = 50.0;
+    // The samples sit on one grid of absolute time, k * 5 s, with one sample
+    // past each window edge: a minimum near an edge is bracketed by samples
+    // on both sides of it, and windows that share an edge bracket and refine
+    // it identically, so the TCA a window reports does not depend on where
+    // the window starts. A window edge is never itself a minimum.
+    const Coverage covered = joint_coverage(obj1, obj2);
+    const double first_k = std::floor(start_jd / SAMPLE_DAYS) - 1.0;
+    const double last_k = std::ceil(end_jd / SAMPLE_DAYS) + 1.0;
     std::vector<double> jds;
     std::vector<double> ranges;
-    for (double jd = start_jd; jd <= end_jd; jd += SAMPLE_DAYS) {
+    for (double k = first_k; k <= last_k; k += 1.0) {
+        const double jd = k * SAMPLE_DAYS;
+        if (jd < covered.start || jd > covered.end) continue;
         jds.push_back(jd);
-    }
-    if (jds.empty() || jds.back() < end_jd) jds.push_back(end_jd);
-    ranges.reserve(jds.size());
-    for (double jd : jds) {
         ranges.push_back(distance_at_jd(obj1, obj2, jd));
         if (has_error()) return {};
     }
 
     // Each sample below its predecessor and not above its successor brackets
-    // a minimum between those two neighbours. A window edge sample not above
-    // its neighbour brackets one within a sample interval of the edge, on
-    // either side of it (a minimum outside the window refines outside it).
+    // a minimum between those two neighbours.
     std::vector<std::pair<double, double>> brackets;
-    const size_t n = jds.size();
-    if (n == 1) {
-        if (ranges[0] < CANDIDATE_KM) brackets.push_back({jds[0] - SAMPLE_DAYS, jds[0] + SAMPLE_DAYS});
-    } else {
-        if (ranges[0] <= ranges[1] && ranges[0] < CANDIDATE_KM) {
-            brackets.push_back({jds[0] - SAMPLE_DAYS, jds[1]});
-        }
-        for (size_t i = 1; i + 1 < n; ++i) {
-            if (ranges[i] < ranges[i - 1] && ranges[i] <= ranges[i + 1] &&
-                ranges[i] < CANDIDATE_KM) {
-                brackets.push_back({jds[i - 1], jds[i + 1]});
-            }
-        }
-        if (ranges[n - 1] <= ranges[n - 2] && ranges[n - 1] < CANDIDATE_KM) {
-            brackets.push_back({jds[n - 2], jds[n - 1] + SAMPLE_DAYS});
+    for (size_t i = 1; i + 1 < jds.size(); ++i) {
+        if (ranges[i] < ranges[i - 1] && ranges[i] <= ranges[i + 1] &&
+            ranges[i] < threshold_km + CANDIDATE_MARGIN_KM) {
+            brackets.push_back({jds[i - 1], jds[i + 1]});
         }
     }
 
-    // Golden section to the refinement tolerance within each bracket. A
-    // minimum that refines outside the window is the tail of one outside it.
-    // Brackets that refine into the same minimum are one conjunction.
+    // Each bracket refines as find_tca refines a window, so an encounter has
+    // one TCA whichever path found it: the range-rate root when the range
+    // provably has one minimum on the bracket, golden section to the
+    // refinement tolerance otherwise. A minimum that refines outside the
+    // window is the tail of one outside it. Brackets that refine into the
+    // same minimum are one conjunction.
     constexpr double SAME_MINIMUM_DAYS = 1.0 / 86400.0;
     const double tolerance_days = std::max(0.001, fine_tol_sec) / 86400.0;
     std::vector<ConjunctionSolution> solutions;
     for (const auto& [low, high] : brackets) {
-        const double tca_jd = refine_minimum(
-            obj1, obj2, 0.5 * (low + high), 0.5 * (high - low), fine_tol_sec);
+        const auto exact = solve_unimodal_conjunction(obj1, obj2, low, high, fine_tol_sec);
+        if (has_error()) return {};
+        const double tca_jd = exact && exact->tca_jd > low && exact->tca_jd < high
+            ? exact->tca_jd
+            : refine_minimum(obj1, obj2, 0.5 * (low + high), 0.5 * (high - low), fine_tol_sec);
         if (has_error()) return {};
         if (!(tca_jd >= start_jd - tolerance_days && tca_jd <= end_jd + tolerance_days)) {
             continue;

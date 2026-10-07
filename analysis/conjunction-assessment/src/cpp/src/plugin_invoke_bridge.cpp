@@ -1767,17 +1767,31 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
         clear_error();
         const auto radius1 = radiusOf(p[i], c), radius2 = radiusOf(b, c);
         e.set_combined_radius_m(radius1.first, radius2.first);
-        auto result =
-            e.assess(*p[i].provider, *b.provider, c.start_jd, c.duration_days,
-                     nullptr, nullptr, c.coarse_step_sec, c.fine_tol_sec);
-        const auto supplied = has_error() ? SuppliedCovariance{} : applySourceCovariance(result, p[i], b, e, alg);
-        if (has_error() || !isFinite(result.miss_distance_km) ||
-            !isFinite(result.tca_jd)) {
+        // Every local minimum of the pair's range within the threshold is a
+        // conjunction, and it belongs to the window holding its TCA, [start,
+        // end): windows that share an edge refine a minimum there to the same
+        // TCA, so exactly one of them reports it. A window edge is never
+        // itself a minimum.
+        const double end_jd = c.start_jd + c.duration_days;
+        auto solutions = assess_conjunction_solutions_within_threshold(
+            *p[i].provider, *b.provider, c.start_jd, c.duration_days,
+            c.threshold_km, c.fine_tol_sec);
+        if (has_error()) {
           ++w.failed;
           clear_error();
           continue;
         }
-        if (result.miss_distance_km <= c.threshold_km) {
+        for (const auto &solution : solutions) {
+          if (!(solution.tca_jd >= c.start_jd && solution.tca_jd < end_jd))
+            continue;
+          auto result = e.assess_at(*p[i].provider, *b.provider, solution.tca_jd);
+          const auto supplied = has_error() ? SuppliedCovariance{} : applySourceCovariance(result, p[i], b, e, alg);
+          if (has_error() || !isFinite(result.miss_distance_km) ||
+              !isFinite(result.tca_jd)) {
+            ++w.failed;
+            clear_error();
+            break;
+          }
           auto output = event(result, alg, p[i].axes);
           output->PRIMARY_RADIUS_BASIS = radius1.second;
           output->SECONDARY_RADIUS_BASIS = radius2.second;
@@ -1793,7 +1807,7 @@ bool screenSources(const std::vector<Source> &p, const std::vector<Source> &s,
           if (has_error()) {
             ++w.failed;
             clear_error();
-            continue;
+            break;
           }
           w.events.push_back(std::move(output));
         }

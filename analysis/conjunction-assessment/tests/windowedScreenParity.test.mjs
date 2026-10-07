@@ -137,3 +137,120 @@ test('HPOP: four windows of forwarded PRW trajectories report the single-window 
     await harness.destroy?.();
   }
 });
+
+// Sampled states in the SpaceAware console's shape (prepare_sample_screening_
+// index: TEME OEM compact grids, 60 s, cubic Hermite, one primary; 30 min
+// windows, 1000 km, 10 s coarse step). Two circular TEME orbits, ISS-like
+// (a 6798 km, i 51.64 deg) and CSS-like (a 6765 km, i 41.47 deg), on one node
+// line, both at the ascending node at 2026-10-09T15:14:50Z: uniform circular
+// motion, r = a (cos u P + sin u Q), u = n (t - t0), n = sqrt(mu / a^3),
+// mu = 398600.4418 km^3/s^2. Their mean motions differ by 8.3e-6 rad/s, so
+// for about five hours either side of that pass every node passage, half an
+// orbit apart, is a local minimum of the range within 1000 km.
+//
+// The reference minima are found here on the same samples with the same
+// cubic Hermite interpolation of position the module applies between them
+// (ephemeris_source.cpp OEMEphemerisSource::state_at): the range at 1 s, each
+// sample below both neighbours refined by golden section to 1 microsecond.
+// Every module TCA must match one within 10 ms (T.tca.NLRV.hardFailSec) and
+// its miss within 1 m, and a window edge must never be reported: the minima a
+// day of 30 min windows reports are the minima the whole day holds, each once
+// when the windows abut; console windows overlapping by the coarse step
+// report a minimum in an overlap twice, with the same TCA.
+test('Sampled TEME tracks (console shape): every minimum within the threshold, once, whatever the windows', async () => {
+  const MU = 398600.4418, STEP_S = 60, THRESHOLD_KM = 1000, DEG = Math.PI / 180;
+  const JD_UNIX = 2440587.5, jdOf = (iso) => Date.parse(iso) / 86400000 + JD_UNIX;
+  const t0 = jdOf('2026-10-09T15:14:50Z'), gridStart = '2026-10-08T23:00:00Z', count = 26 * 60 + 1;
+  const orbit = (a, iDeg, raanDeg) => {
+    const n = Math.sqrt(MU / a ** 3), i = iDeg * DEG, raan = raanDeg * DEG;
+    const P = [Math.cos(raan), Math.sin(raan), 0];
+    const Q = [-Math.sin(raan) * Math.cos(i), Math.cos(raan) * Math.cos(i), Math.sin(i)];
+    const data = [];
+    for (let k = 0; k < count; k++) {
+      const u = n * ((jdOf(gridStart) - t0) * 86400 + k * STEP_S);
+      for (let c = 0; c < 3; c++) data.push(a * (Math.cos(u) * P[c] + Math.sin(u) * Q[c]));
+      for (let c = 0; c < 3; c++) data.push(a * n * (-Math.sin(u) * P[c] + Math.cos(u) * Q[c]));
+    }
+    return data;
+  };
+  const tracks = [{ handle: 17588, id: '1998-067A', name: 'ISS-LIKE', norad: 25544, data: orbit(6798, 51.64, 100) },
+    { handle: 20543, id: '2021-035A', name: 'CSS-LIKE', norad: 48274, data: orbit(6765, 41.47, 100) }];
+
+  // The reference: cubic Hermite on [x, v] at 60 s nodes, scanned and
+  // refined in seconds of the day (a Julian date resolves only 40 us).
+  const day = jdOf('2026-10-09T00:00:00Z'), gridOffsetSec = (day - jdOf(gridStart)) * 86400;
+  const position = (data, sec) => {
+    const s = (sec + gridOffsetSec) / STEP_S, k = Math.min(Math.max(Math.floor(s), 0), count - 2), t = s - k;
+    const h00 = 2 * t ** 3 - 3 * t ** 2 + 1, h10 = t ** 3 - 2 * t ** 2 + t, h01 = -2 * t ** 3 + 3 * t ** 2, h11 = t ** 3 - t ** 2;
+    return [0, 1, 2].map((c) => h00 * data[6 * k + c] + h10 * STEP_S * data[6 * k + 3 + c]
+      + h01 * data[6 * (k + 1) + c] + h11 * STEP_S * data[6 * (k + 1) + 3 + c]);
+  };
+  const range = (sec) => {
+    const a = position(tracks[0].data, sec), b = position(tracks[1].data, sec);
+    return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  };
+  const reference = [];
+  for (let s = -60; s <= 86460; s++) {
+    if (!(range(s) < range(s - 1) && range(s) <= range(s + 1))) continue;
+    let lo = s - 1, hi = s + 1;
+    const g = (Math.sqrt(5) - 1) / 2;
+    while (hi - lo > 1e-6) {
+      const c = hi - g * (hi - lo), d = lo + g * (hi - lo);
+      if (range(c) < range(d)) hi = d; else lo = c;
+    }
+    const sec = (lo + hi) / 2;
+    if (sec >= 0 && sec < 86400 && range(sec) <= THRESHOLD_KM) reference.push({ sec, miss: range(sec) });
+  }
+  assert.ok(reference.length >= 10, `${reference.length} reference minima within ${THRESHOLD_KM} km`);
+  assert.ok(Math.min(...reference.map((m) => m.miss)) < 100);
+
+  const harness = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
+  try {
+    const instance = { MODULE_ID: 'conjunction-assessment', INSTANCE_ID: 'spaceaware-console', GENERATION: ++generation };
+    const prepared = await harness.invoke({ methodId: 'prepare_sample_screening_index', inputs: [request({ INDEX_REQUEST: {
+      INSTANCE: instance, INDEX_CONTENT: 'SAMPLED_STATES', REFINEMENT_MODE: 'EXACT_ONLY', PRIMARY_SOURCE_HANDLES: [17588],
+      SOURCES: tracks.map((x) => ({ OBJECT_ID: x.id, OBJECT_NAME: x.name, NORAD_CATALOG_ID: x.norad, SOURCE_HANDLE: x.handle,
+        EPHEMERIS: { EPHEMERIS_DATA_BLOCK: [{ CENTER_NAME: 'EARTH', CENTER_NAIF_ID: 399,
+          REFERENCE_FRAME: { REFERENCE_FRAME_type: 'CelestialFrameWrapper', REFERENCE_FRAME: { frame: 'TEMEOFDATE' } },
+          TIME_SYSTEM: 'UTC', START_TIME: `${gridStart.slice(0, 19)}.000Z`, INTERPOLATION: 'HERMITE', INTERPOLATION_DEGREE: 3,
+          STEP_SIZE: STEP_S, STATE_VECTOR_SIZE: 6, EPHEMERIS_DATA: x.data }] } })) } })] });
+    const handle = handleOf(prepared);
+    const screen = async (start, durationDays) => {
+      const response = await harness.invoke({ methodId: 'screen_window', inputs: [request({ WINDOW_REQUEST: {
+        INSTANCE: instance, SCREENING_INDEX_HANDLE: handle, EVALUATION_FRAME: earthFrame('TEME'), CONTROLS: {
+          ...screeningControls({ startJd: start, durationDays, coarseStepSec: 10, thresholdKm: THRESHOLD_KM }), ALGORITHM: 'ALFANO_MAXIMUM' } } })] });
+      assert.equal(response.statusCode, 0, response.errorMessage);
+      const result = decodeCatalogResult(response.outputs[0].payload);
+      assert.equal(result.FINAL_CHUNK, true);
+      assert.equal(result.STATISTICS.FAILED_PAIRS, 0);
+      return (result.EVENTS ?? []).map((e) => ({ tca: e.TCA.JULIAN_DATE, miss: e.MISS_DISTANCE_M / 1000, pair: `${e.PRIMARY_ID}-${e.SECONDARY_ID}` }));
+    };
+    const whole = await screen(day, 1);
+    assert.equal(whole.length, reference.length, `whole day: ${whole.length} module, ${reference.length} reference minima`);
+    whole.forEach((e, k) => {
+      assert.equal(e.pair, '1998-067A-2021-035A');
+      const dt = (e.tca - day) * 86400 - reference[k].sec;
+      assert.ok(Math.abs(dt) <= T.tca.NLRV.hardFailSec, `minimum ${k}: TCA ${dt} s`);
+      assert.ok(Math.abs(e.miss - reference[k].miss) * 1000 <= 1, `minimum ${k}: miss ${(e.miss - reference[k].miss) * 1000} m`);
+    });
+
+    // 30 min windows over the day with an edge 3 s before the closest
+    // approach, so that minimum sits just past an abutting edge and inside
+    // the 10 s overlap of two console windows.
+    const closest = reference.reduce((a, b) => (b.miss < a.miss ? b : a));
+    const halfHour = 1800, edgeSec = closest.sec - 3, firstSec = (edgeSec % halfHour) - halfHour;
+    const inDay = (events) => events.filter((e) => e.tca >= day && e.tca < day + 1);
+    const abutting = [], overlapping = [];
+    for (let k = 0; firstSec + k * halfHour < 86400; k++) {
+      const start = day + (firstSec + k * halfHour) / 86400;
+      abutting.push(...await screen(start, halfHour / 86400));
+      overlapping.push(...await screen(start, (halfHour + 10) / 86400));
+    }
+    assert.deepEqual(inDay(abutting), whole, 'abutting windows report each minimum once, as the whole day does');
+    assert.ok(inDay(overlapping).length > whole.length, 'a minimum inside an overlap is in both windows');
+    const once = [...new Map(inDay(overlapping).map((e) => [e.tca, e])).values()];
+    assert.deepEqual(once, whole, 'overlapping windows repeat a minimum only with the same TCA');
+  } finally {
+    await harness.destroy?.();
+  }
+});

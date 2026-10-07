@@ -168,6 +168,12 @@ public:
                            double coarse_step_sec = 5.0,
                            double fine_tol_sec = 0.001) const;
 
+  /// The assessment at a TCA already found (states, geometry, probability).
+  ConjunctionEvent2 assess_at(const EphemerisSource &obj1,
+                              const EphemerisSource &obj2, double tca_jd,
+                              const Covariance3x3 *cov1 = nullptr,
+                              const Covariance3x3 *cov2 = nullptr) const;
+
   /// Assess near a known TCA
   ConjunctionEvent2 assess_near(const EphemerisSource &obj1,
                                 const EphemerisSource &obj2, double tca_hint_jd,
