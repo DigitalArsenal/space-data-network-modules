@@ -2,6 +2,7 @@
 #include "astrodynamics.h"
 #include "environment_models.h"
 #include "time_convert.h"
+#include "shadow.h"
 
 #include <algorithm>
 #include <cmath>
@@ -32,6 +33,7 @@ D sqrt(const D& a) { D c(std::sqrt(a.value)); if(c.value>0)for(int i=0;i<6;++i)c
 D sin(const D& a) { D c(std::sin(a.value)); const double k=std::cos(a.value); for(int i=0;i<6;++i)c.d[i]=k*a.d[i]; return c; }
 D cos(const D& a) { D c(std::cos(a.value)); const double k=-std::sin(a.value); for(int i=0;i<6;++i)c.d[i]=k*a.d[i]; return c; }
 D atan2(const D& a, const D& b) { D c(std::atan2(a.value,b.value)); const double q=a.value*a.value+b.value*b.value; if(q>0)for(int i=0;i<6;++i)c.d[i]=(b.value*a.d[i]-a.value*b.d[i])/q; return c; }
+double scalarValue(const D& a) { return a.value; }
 D powi(D a, int n) { D result(1.0); for(int i=0;i<n;++i)result=result*a; return result; }
 
 struct V {
@@ -115,9 +117,15 @@ V inlineGravity(const V& r,const GravityFieldCoefficients& f) {
 // Differentiate the normalized Cunningham/Pines recursion and its Cartesian
 // acceleration contractions. The degree, order and coefficient cutoffs match
 // computeExtendedGravity exactly; there is no STM-specific truncation.
-V extendedGravity(const V& r,const ExtendedGravityField& f) {
+// This is a dual-number copy of computeExtendedGravity and must stay
+// identical to it: until 2026-10-08 both stopped the column recursion at
+// maxOrder and both had the sign of the y component's m-1 term backwards.
+// (Follow-up: one template for both scalar types.)
+// `central` false leaves out the field's own central term (the force set's
+// EGM2008 mode supplies it with the set's GM).
+V extendedGravity(const V& r,const ExtendedGravityField& f,bool central=true) {
     const D rr=r.norm();if(rr.value<100)return V();
-    V a=pointMass(r,f.mu);if(f.maxDegree<2)return a;
+    V a=central?pointMass(r,f.mu):V();if(f.maxDegree<2)return a;
     const D r2=rr*rr,x=r.x*f.referenceRadius/r2,y=r.y*f.referenceRadius/r2,z=r.z*f.referenceRadius/r2,s=(f.referenceRadius/rr)*(f.referenceRadius/rr);
     const int nmax=f.maxDegree;
     std::vector<std::vector<D>> v(nmax+4),w(nmax+4);
@@ -129,7 +137,8 @@ V extendedGravity(const V& r,const ExtendedGravityField& f) {
         v[n][n]=k*(x*v[n-1][n-1]-y*w[n-1][n-1]);w[n][n]=k*(x*w[n-1][n-1]+y*v[n-1][n-1]);
     }
     for(int n=2;n<=nmax+1;++n){const double k=std::sqrt(2.0*n+1);v[n][n-1]=k*z*v[n-1][n-1];w[n][n-1]=k*z*w[n-1][n-1];}
-    for(int m=0;m<=std::min<int>(f.maxOrder,nmax);++m)for(int n=m+2;n<=nmax+1;++n){
+    // Columns to maxOrder + 1, as computeExtendedGravity (the m+1 reads).
+    for(int m=0;m<=std::min<int>(f.maxOrder+1,nmax+1);++m)for(int n=m+2;n<=nmax+1;++n){
         const double nm=n-m,np=n+m,alpha=std::sqrt((2.0*n-1)*(2.0*n+1)/(nm*np)),beta=std::sqrt((2.0*n+1)*(nm-1)*(np-1)/((2.0*n-3)*nm*np));
         v[n][m]=alpha*z*v[n-1][m]-beta*s*v[n-2][m];w[n][m]=alpha*z*w[n-1][m]-beta*s*w[n-2][m];
     }
@@ -140,7 +149,7 @@ V extendedGravity(const V& r,const ExtendedGravityField& f) {
         if(m==0){const double gp=std::sqrt(u*(n+1)*(n+2)/(2*t)),gz=std::sqrt(u/t);a=a+V(-k*c*gp*v[n+1][1],-k*c*gp*w[n+1][1],-k*(n+1)*gz*c*v[n+1][0]);}
         else{
             const double gp=std::sqrt(u*(n+m+1)*(n+m+2)/t),gm=m==1?std::sqrt(2*u*n*(n+1)/t):std::sqrt(u*(n-m+1)*(n-m+2)/t),gz=(n-m+1)*std::sqrt(u*(n+m+1)/(t*(n-m+1)));
-            a=a+V(0.5*k*(-gp*(c*v[n+1][m+1]+sine*w[n+1][m+1])+gm*(c*v[n+1][m-1]+sine*w[n+1][m-1])),0.5*k*(gp*(sine*v[n+1][m+1]-c*w[n+1][m+1])+gm*(c*w[n+1][m-1]-sine*v[n+1][m-1])),-k*gz*(c*v[n+1][m]+sine*w[n+1][m]));
+            a=a+V(0.5*k*(-gp*(c*v[n+1][m+1]+sine*w[n+1][m+1])+gm*(c*v[n+1][m-1]+sine*w[n+1][m-1])),0.5*k*(gp*(sine*v[n+1][m+1]-c*w[n+1][m+1])+gm*(sine*v[n+1][m-1]-c*w[n+1][m-1])),-k*gz*(c*v[n+1][m]+sine*w[n+1][m]));
         }
     }
     return a;
@@ -151,7 +160,7 @@ V earthFixedGravity(const V& r,const ForceModelSet& f);
 // constant in r, so the chain rule carries through the dual numbers.
 V centralGravity(const V& r,double jd,const ForceModelSet& f) {
     if(!EarthFixedField(f))return earthFixedGravity(r,f);
-    double m[3][3];GcrfToEarthFixed(jd,m);
+    double m[3][3];GcrfToEarthFixed(jd,f,m);
     const V fixed(r.x*m[0][0]+r.y*m[0][1]+r.z*m[0][2],r.x*m[1][0]+r.y*m[1][1]+r.z*m[1][2],r.x*m[2][0]+r.y*m[2][1]+r.z*m[2][2]);
     const V a=earthFixedGravity(fixed,f);
     return V(a.x*m[0][0]+a.y*m[1][0]+a.z*m[2][0],a.x*m[0][1]+a.y*m[1][1]+a.z*m[2][1],a.x*m[0][2]+a.y*m[1][2]+a.z*m[2][2]);
@@ -175,7 +184,7 @@ V earthFixedGravity(const V& r,const ForceModelSet& f) {
             if(degree!=f.egm2008.truncationDegree || order!=f.egm2008.truncationOrder){
                 EGM2008Config c;c.maxDegree=f.egm2008.truncationDegree;c.maxOrder=f.egm2008.truncationOrder;field=initEGM2008Extended(c);degree=c.maxDegree;order=c.maxOrder;
             }
-            return extendedGravity(r,field);
+            return pointMass(r,f.mu)+extendedGravity(r,field,false);
         }
         default:return inlineGravity(r,inlineCoefficients(f.sphericalHarmonics));
     }
@@ -197,33 +206,30 @@ V thirdBodies(const V& r,double jd,const ThirdBodyPerturbConfig& c) {
     return a;
 }
 
+// The same conical shadow as ForceModel::SolarRadiationCannonball
+// (lib/shadow.h), differentiated through the dual numbers.
 V cannonball(const V& r,const Vec3& sun,const SRPForceConfig& c) {
     const V d=V(sun)-r;const D distance=d.norm();const V direction=unit(d);
-    D lit(1);const D projection=-r.dot(direction);
-    if(projection.value>=0){
-        const double sunRadius=696000,sd=sun.magnitude();
-        const double umbraAngle=std::asin((sunRadius-RE_EARTH)/sd),penumbraAngle=std::asin((sunRadius+RE_EARTH)/sd),length=RE_EARTH/std::sin(umbraAngle);
-        if(projection.value<=length){
-            const D perpendicular=(r+direction*projection).norm(),ur=RE_EARTH-projection*std::tan(umbraAngle),pr=RE_EARTH+projection*std::tan(penumbraAngle);
-            if(perpendicular.value<ur.value)lit=D(0);
-            else if(perpendicular.value<pr.value)lit=1-(pr-perpendicular)/(pr-ur);
-        }
-    }
+    const D radius=r.norm();
+    const D lit=shadow::visibleSunFraction(radius,distance,r.cross(d).norm(),-r.dot(d),RE_EARTH);
     if(lit.value<1e-6)return V();
     const D ratio=AU_KM/distance;
     return direction*(-SOLAR_FLUX_1AU*ratio*ratio/299792458.0*c.Cr*c.area/c.mass*1e-3*lit);
 }
 
-double density(const Vec3& r,double jd,const ForceModelSet& f) {
+// Density at a GCRF position, in the force set's Earth-fixed axes (the same
+// axes as ForceModel::ComputeTotalAcceleration).
+double density(const Vec3& r,double jd,const ForceModelSet& f,const EarthAxes& axes) {
     const double alt=r.magnitude()-RE_EARTH;
     const double atmosphereJD=f.explicitEpochContract
         ? timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(jd))) : jd;
+    const Vec3 fixed=axes.fixed(r);
     switch(f.dragModel){
         case DragModelType::Exponential:return alt>2500 ? 0 : exponentialAtmosphereDensity(std::max(0.0,alt));
         case DragModelType::HarrisPriester:{const auto sun=getSunPosition(jd);return computeHarrisPriester(r,sun.valid?sun.position:Vec3(1,0,0),f.harrisPriesterExponent).density;}
         case DragModelType::NRLMSISE00:{
             AtmosphereConfig c;c.model=AtmosphereModelType::NRLMSISE00;c.includeWinds=f.drag.includeWinds;c.coRotatingAtmosphere=f.drag.coRotatingAtmosphere;c.diurnalVariation=f.nrlmsise00.diurnalVariation;c.geomagneticEffects=f.nrlmsise00.geomagneticActivity;c.minAltitude=f.drag.minAltitude;c.maxAltitude=f.drag.maxAltitude;
-            return computeNRLMSISE00(EarthFixedForDensity(r,atmosphereJD),atmosphereJD,f.weather,c).density;
+            return computeNRLMSISE00(fixed,atmosphereJD,f.weather,c).density;
         }
         case DragModelType::USSA1976:
             if(alt<f.drag.minAltitude || alt>f.drag.maxAltitude)return 0;
@@ -232,27 +238,31 @@ double density(const Vec3& r,double jd,const ForceModelSet& f) {
             switch(f.drag.model){
                 case DragModelType::Exponential:return exponentialAtmosphereDensity(alt);
                 case DragModelType::USSA1976:return computeUSSA1976(alt).density;
-                case DragModelType::JB2008:return computeJB2008(EarthFixedForDensity(r,atmosphereJD),atmosphereJD,f.weather).density;
-                case DragModelType::DTM2020:return computeDTM2020(EarthFixedForDensity(r,atmosphereJD),atmosphereJD,f.weather).density;
-                default:{AtmosphereConfig c;c.minAltitude=f.drag.minAltitude;c.maxAltitude=f.drag.maxAltitude;c.coRotatingAtmosphere=f.drag.coRotatingAtmosphere;c.includeWinds=f.drag.includeWinds;return computeNRLMSISE00(EarthFixedForDensity(r,atmosphereJD),atmosphereJD,f.weather,c).density;}
+                case DragModelType::JB2008:return computeJB2008(fixed,atmosphereJD,f.weather).density;
+                case DragModelType::DTM2020:return computeDTM2020(fixed,atmosphereJD,f.weather).density;
+                default:{AtmosphereConfig c;c.minAltitude=f.drag.minAltitude;c.maxAltitude=f.drag.maxAltitude;c.coRotatingAtmosphere=f.drag.coRotatingAtmosphere;c.includeWinds=f.drag.includeWinds;return computeNRLMSISE00(fixed,atmosphereJD,f.weather,c).density;}
             }
-        case DragModelType::JB2008:return computeJB2008(EarthFixedForDensity(r,atmosphereJD),atmosphereJD,f.weather).density;
-        case DragModelType::DTM2020:return computeDTM2020(EarthFixedForDensity(r,atmosphereJD),atmosphereJD,f.weather).density;
+        case DragModelType::JB2008:return computeJB2008(fixed,atmosphereJD,f.weather).density;
+        case DragModelType::DTM2020:return computeDTM2020(fixed,atmosphereJD,f.weather).density;
     }
     return 0;
 }
 V drag(const V& r,const V& v,const Vec3& position,double jd,const ForceModelSet& f,DensityGradient gradient) {
-    D rho=density(position,jd,f);if(rho.value<1e-20)return V();
+    const EarthAxes axes=EarthAxesAt(jd,f);
+    D rho=density(position,jd,f,axes);if(rho.value<1e-20)return V();
     if(gradient==DensityGradient::FiniteDifference){
         constexpr double h=0.001; // km: 1 m, well above density input roundoff.
         for(int i=0;i<3;++i){
             Vec3 hi=position,lo=position;
             if(i==0){hi.x+=h;lo.x-=h;}else if(i==1){hi.y+=h;lo.y-=h;}else{hi.z+=h;lo.z-=h;}
-            rho.d[i]=(density(hi,jd,f)-density(lo,jd,f))/(2*h);
+            rho.d[i]=(density(hi,jd,f,axes)-density(lo,jd,f,axes))/(2*h);
         }
     }
     const bool rotation=f.dragModel==DragModelType::Exponential || f.drag.coRotatingAtmosphere;
-    const V vr=v-(rotation?V(-OMEGA_EARTH*r.y,OMEGA_EARTH*r.x,0):V());
+    // Co-rotation about the spin axis of those axes (GCRF z for the
+    // exponential model, which carries no epoch).
+    const Vec3 w=(f.dragModel==DragModelType::Exponential?Vec3(0,0,1):axes.spin())*OMEGA_EARTH;
+    const V vr=v-(rotation?V(w.y*r.z-w.z*r.y,w.z*r.x-w.x*r.z,w.x*r.y-w.y*r.x):V());
     const D speed=vr.norm();if(speed.value<1e-6)return V();
     return vr*(-500.0*f.drag.Cd*f.drag.area/f.drag.mass*rho*speed);
 }

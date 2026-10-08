@@ -19,53 +19,77 @@ Implements a high-fidelity numerical orbit propagator accounting for full geopot
 The typed PRW `ATMOSPHERE_REQUEST` operation exposes only the implemented models
 (`NRLMSISE00`, `USSA1976`, `EXPONENTIAL`).
 
-### Gravity field frame
+### Gravity field, Earth orientation and clock
 
-The force set integrates GCRF. The Earth's fields (`SPHERICAL_HARMONICS`,
-EGM2008, a loaded field) are defined in Earth-fixed axes, so each is evaluated
-at R r and its acceleration returned as R' a, where R is the GCRF to
-Earth-fixed rotation:
-- precession (IAU 1976) and nutation (IAU 1980), held for up to an hour;
-- Earth rotation by GAST from UTC (|UT1 - UTC| < 0.9 s);
-- no polar motion, since the force set carries no EOP.
+The force set integrates GCRF. The Earth's fields are defined in Earth-fixed
+axes, so each is evaluated at R r and its acceleration returned as R' a, where
+R is the GCRF to Earth-fixed rotation:
+- **With the `earth_orientation` input** (execution requests): ITRF from the
+  supplied SDS `$EOP` rows, through the IAU 2006/2000A CIO-based chain of the
+  vendored ERFA (`eraXy06` and `eraS06` with the rows' dX and dY,
+  `eraC2ixys`, the Earth rotation angle from UT1, `eraPom00` polar motion).
+  The rows are read and interpolated by `foundation/frames/src/eop_series.hpp`,
+  the code foundation/frames uses, and must cover the arc. Precession-nutation
+  is held for an hour of TT; the rotation angle is evaluated at every call.
+- **Without it:** precession IAU 1976, nutation IAU 1980, GAST from UTC, no
+  polar motion; within 0.2 arcsec of ERFA `c2t06a`
+  (`tests/environment_conformance.cpp` section 10).
 
-R matches ERFA `c2t06a` to 0.2 arcsec (`tests/environment_conformance.cpp`
-section 10). The analytic STM rotates the gravity gradient the same way.
-The J2 and J2-J4 closed forms keep a fixed inertial symmetry axis z: they are
-verification models.
+The same axes serve the density models and the co-rotating atmosphere (below).
 
-The built-in `SPHERICAL_HARMONICS` field is EGM2008 (`lib/egm2008_data.h`)
-to the requested degree and order, at most 20. J2-J4 come from the constants
-the closed forms use.
+Gravity selections of the PRW execution request:
 
-Two faults were fixed on 2026-10-02:
-- **Inertial axes.** The fields were evaluated at the GCRF position itself,
-  so the tesserals were frozen in inertial space and the pole was off by the
-  precession since J2000.
-- **A partial field.** The built-in field held only J2-J6 and the tesserals
-  through degree 4, whatever degree was asked for. Its J5 and J6 were
-  unnormalized values with the wrong sign.
+| `GRAVITY_CHOICE` | Field |
+| --- | --- |
+| `POINT_MASS` | `GRAVITATIONAL_PARAMETER` only. |
+| `J2_ONLY`, `J2_TO_J4` | The EGM2008 zonal field to degree 2 or 4 (order 0), in Earth-fixed axes. A degree or order with them is refused. |
+| `SPHERICAL_HARMONICS`, `EGM2008` | The EGM2008 field to the stated `MAXIMUM_DEGREE` and `MAXIMUM_ORDER` (both required, degree 2-70), every coefficient included; the J flags are not consulted. Order above 0 requires `earth_orientation` (`eop-data-required`). |
+| `INFER_FLAGS` | The legacy flag-selected path (inline field to degree 20). |
 
-The effect showed against independent reference orbits. Take a resident HPOP
-arc from an element-set epoch state, LEO 600-800 km, 5-7 days out:
-- the RMS radial error was 5.9 km and is now 0.2 km;
-- the RMS out-of-plane error was 10.9 km and is now 0.2 km.
+The field is the embedded EGM2008 (`lib/egm2008_data.h`) through the
+normalized Pines/Cunningham recursion (Montenbruck & Gill eq. 3.33), with
+EGM2008's own constants: GM 3.986004415e14 m^3/s^2 (the TT-compatible value)
+and radius 6378136.3 m. `GRAVITATIONAL_PARAMETER` sets the central term and
+the field's GM its harmonics, as Orekit separates `NewtonianAttraction` from
+`HolmesFeatherstoneAttractionModel`. Use 3.986004415e14: the
+TCG-compatible 3.986004418e14 is 7.5e-10 larger, about 1 m a day along track
+in LEO.
 
-See `analysis/gp-error-model/docs/hpop-calibration-2026-08.md`.
+**Clock.** Execution requests integrate on TT, with epochs held as exact
+two-part TT seconds from J2000. Request epochs may be `UTC`, `TAI`, `TT` or
+`TDB` ISO strings; UTC goes through the leap-second table. The Sun, Moon and
+planets are read at TDB; outputs report TDB epochs. Proper time on board is
+not modelled; TT is the coordinate time the IAU 2000 conventions pair with
+the TT-compatible GM.
 
-The force clock is the typed PRW TDB epoch. Otherwise it is the force set's
-weather epoch, or, when that is unset, the state's own epoch. The integrators
-used to ignore this and evaluate an unset clock at JD 0.
+Faults fixed on 2026-10-08, found against Orekit 13.1
+(`tests/orekit_reference.test.mjs`):
+- **The recursion's columns.** The column recursion stopped at the maximum
+  order, but the acceleration reads column m+1; an order-0 field lost its x
+  and y zonal terms (290 km in a day in LEO).
+- **The tesseral y sign.** The y component's m-1 term had the wrong sign
+  (37.6 km in a day in LEO). The extended and inline evaluators now agree to
+  1e-12.
+- **`SPHERICAL_HARMONICS` without flags was the point mass.**
+- **The clock.** Epochs were single Julian-date doubles (40 microseconds) on
+  TDB with a TCG-compatible GM.
+
+Earlier, on 2026-10-02, the fields were moved from inertial to Earth-fixed
+axes and the built-in field was completed past degree 4; see
+`analysis/gp-error-model/docs/hpop-calibration-2026-08.md`.
 
 ### Drag frame and inputs
 
-The force set integrates GCRF. NRLMSISE-00 (and the JB2008/DTM2020 stand-ins)
-need an Earth-fixed position, so drag rotates the GCRF position by GMST about
-the GCRF z axis before the geodetic conversion. That fixes the longitude and
-local solar time that place the diurnal bulge. Precession, nutation and polar
-motion are not applied to this density lookup; together they move the pole by
-well under a degree since J2000, below these models' horizontal resolution.
-Relative velocity is `v - omega x r` in GCRF with the same axis.
+NRLMSISE-00 (and the JB2008/DTM2020 stand-ins) take an Earth-fixed position.
+Drag uses the field's Earth-fixed axes (above): ITRF from the
+`earth_orientation` rows when supplied. The geodetic conversion is WGS84,
+exact to a nanometre against ERFA `eraGc2gd`. Local solar time is the mean
+solar time the model was fitted with, UT + longitude/15 (the reference
+driver's `stl = sec/3600 + glong/15`, and Orekit's default from 14.0).
+Relative velocity is `v - omega x r` with omega along the same axes' pole.
+With these, HPOP's density equals Orekit 13.1's NRLMSISE-00 to 1e-8 at the
+same points. Direct C++ callers of the drag functions that pass no axes get
+GMST about the GCRF z axis.
 
 Space-weather inputs follow the NRLMSISE-00 package definitions
 (`third_party/nrlmsise00/nrlmsise-00.h`): `F107` is the **observed** flux (at
@@ -77,7 +101,7 @@ Horizontal winds come from HWM14 (Drob et al. 2015; NRL release
 HWM14.123114, ported bit-exact to C++ in `third_party/hwm14`). With
 `includeWinds` the air velocity is `omega x r` plus the HWM14 wind, evaluated
 at the geodetic latitude, longitude and height of the Earth-fixed position (the
-same GMST axes as the density) and rotated back to GCRF; every drag model and
+same axes as the density) and rotated back to GCRF; every drag model and
 `computeDragAcceleration` use it. HWM14 winds are horizontal only.
 
 - `windDisturbance` (default on) adds the DWM07 storm-time winds, which need
@@ -97,6 +121,22 @@ same GMST axes as the density) and rotated back to GCRF; every drag model and
   `ATMOSPHERE_ERROR_NOT_INITIALIZED` until solar activity is supplied.
 - The analytic STM still refuses winds (their position gradient is not
   analytic here); select the finite-difference STM.
+
+### Radiation pressure
+
+Cannonball radiation pressure uses IAU 2015 Resolution B3's nominal solar
+irradiance, 1361 W/m^2 over c at 1 au, scaled by the inverse square of the
+Sun distance. The Earth's shadow is conical, with the visible fraction of the
+solar disk from the overlap of the apparent disks (Montenbruck & Gill
+eqs. 3.85-3.87; Sun radius 695 700 km, IAU 2015 B3), evaluated as two
+circular segments so that it keeps its digits (`lib/shadow.h`, shared with
+the analytic partials). It equals Orekit 13.1's lighting ratio to 6e-10.
+Until 2026-10-08 the penumbra was a linear ramp in distance from the shadow
+axis.
+
+The visible fraction has a kink at each penumbra boundary, and the
+integrators step across it without locating it. At RK78 1e-13 that is up to
+about 8 cm a day in LEO; 1e-14 brings it to about 3 cm.
 
 ## Installation
 
@@ -139,6 +179,9 @@ artifact uses shared memory; browser hosts need cross-origin isolation.
 
 Each PRW record must populate exactly one payload arm. A supplied `invoke.kernel`
 contains `NATIVE_INPUT`, including the NCD descriptor and checked SPK bytes.
+An optional `invoke.earth_orientation` carries SDS `$EOP`: one row, or one
+size-prefixed stream of up to 366 ordered daily rows covering the arc (see
+[Gravity field, Earth orientation and clock](#gravity-field-earth-orientation-and-clock)).
 Public ports do not accept the historical JSON or private pointer envelopes.
 
 ### Resident states and handles
@@ -274,19 +317,25 @@ That covers:
 - SDK artifact compliance and harness loading in `tests/sdk_compat.test.mjs`
 - PRW resident SI/UTC, handle invalidation, bounded chunks, and PPE quality in
   `tests/prw_resident.test.mjs`
-- Tudat-derived propagation regressions in `tests/tudat_wasm_derived.test.mjs`
-- Stored Tudat reference vectors in `tests/fixtures/tudat.reference.json`
+- HPOP against Orekit 13.1 in `tests/orekit_reference.test.mjs`: five
+  orbits (LEO 400 km, SSO 700 km, GPS, GEO, Molniya) by up to ten force sets
+  (point mass; J2; zonal 20; 20x20; with Sun and Moon, radiation pressure and
+  NRLMSISE-00 drag), 24 h each, compared hourly. Constants, Earth orientation
+  (the same IERS rows on the `earth_orientation` input), time scales and the
+  atmosphere's conventions are shared by construction; the agreement is
+  0.6 mm for the point mass, 1.3 cm with the field and third bodies, and
+  3 cm with radiation pressure and drag. The tolerances and their rationale
+  are in the test's header.
 
-The Tudat-derived cases are copied from:
+The Orekit trajectories are generated by
+`tests/fixtures/orekit/OrekitReference.java` (Orekit 13.1, Hipparchus 4.0.1,
+the orekit-data DE440 and IERS files) from the coefficients HPOP embeds
+(`make-gfc.mjs`); `make-eop.mjs` writes the same IERS rows as `$EOP`. The
+checked-in JSON is what the test reads; nothing in the suite regenerates it.
 
-- `testTwoBodyPropagation` and `testHighFidelityPropagation` in
-  `https://github.com/DigitalArsenal/tudat-wasm/blob/c998d24001af69e60f07cc6a29ddf64c422dd9de/tests/wasm/test_propagation_node.cjs`
-
-The local test preserves the same orbital scenarios and pass/fail thresholds,
-adapted to this package's typed PRW command ABI and run through both the SDK browser
-and WasmEdge harnesses. The checked-in fixture captures the sampled Tudat state
-histories used by the package-local suite, so ordinary verification does not
-need a live `../tudat-wasm` checkout.
+The Tudat-derived regressions (`tests/tudat_wasm_derived.test.mjs`) were
+removed on 2026-10-08. Their high-fidelity case allowed 60 km, and their
+vectors came from a port in this organization rather than a public authority.
 
 ## License
 
@@ -431,17 +480,15 @@ The force Jacobian uses forward analytical chain-rule differentiation, with no
 whole-force differencing in `ANALYTIC` mode. It includes point mass, J2–J6,
 inline spherical harmonics/custom fields, full loaded and embedded EGM
 Cunningham/Pines recursion, nine third-body point masses, atmospheric drag,
-cannonball SRP and its conical shadow, relativistic terms and supported
+cannonball SRP and its conical shadow (lib/shadow.h), relativistic terms and supported
 registered contributions. There is **no additional STM harmonic truncation**;
 the existing embedded EGM field remains degree 70. Loaded-field degree 80 is
 also covered by a Jacobian regression.
 
-The following existing force semantics are preserved: cannonball SRP always
-selects the existing conical/linear-penumbra function; EGM low-degree coefficient
-gates are not applied by its force evaluator; and the loaded/EGM recursion has
-an existing low-order column-coverage defect (for example, order zero omits
-required x/y zonal recurrence terms). These are force-model limitations, not
-additional derivative truncations. Piecewise shadow/density boundaries use the
+The following force semantics are preserved: cannonball SRP always uses the
+conical disk-overlap shadow, and EGM low-degree coefficient gates are not
+applied by its force evaluator. These are force-model choices, not derivative
+truncations. Piecewise shadow/density boundaries use the
 selected branch derivative; a discontinuous threshold has no classical
 Jacobian at the boundary. Inline tesseral gravity refuses its exact polar
 coordinate singularity.

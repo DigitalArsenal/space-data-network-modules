@@ -62,6 +62,12 @@ struct ExtendedGravityField {
     }
 };
 
+/// EGM2008's published constants (Pavlis et al. 2012, JGR 117, B04406). Its GM
+/// is TT-compatible, the value for integration on TT (HPOP's clock); the
+/// TCG-compatible value is 398600.4418 (IERS Conventions 2010, Table 1.1).
+constexpr double EGM2008_GM_KM3_S2 = 398600.4415;
+constexpr double EGM2008_RADIUS_KM = 6378.1363;
+
 /// EGM2008 gravity model configuration
 struct EGM2008Config {
     uint16_t maxDegree{70};        ///< Maximum degree (up to 2190)

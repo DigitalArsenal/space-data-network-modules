@@ -24,6 +24,8 @@ export async function generateSdsBindings() {
   const families = [];
   const visit = family => { if (families.includes(family)) return; for (const dep of dependencies.get(family) ?? []) visit(dep); families.push(family); };
   visit('PRW');
+  // $EOP: the execution request's earth_orientation input.
+  visit('EOP');
   const outDir = path.join(packageRoot, 'src/cpp/generated/sds');
   fs.mkdirSync(outDir, {recursive:true});
   for (const family of families) {

@@ -7,6 +7,7 @@
 #include "finite_burn.h"
 #include "force_partials.h"
 #include "ephemeris.h"
+#include "environment_models.h"
 #include "../../../../../files/orbit-products/src/sha256.hpp"
 // build.mjs defines both from plugin-manifest.json, the manifest the SDK embeds
 // as $PLG, so VERSION_QUERY and the PLG identity cannot disagree.
@@ -19,10 +20,65 @@
 extern "C" {
 #include "nrlmsise-00.h"
 }
+// Earth orientation: the $EOP reading and interpolation of foundation/frames
+// (eop_series.hpp) and its IERS 2010 chain, through the vendored ERFA.
+#include "EOP_generated.h"
+#include "erfa.h"
+#include "erfam.h"
+#include "axis_engine.hpp"
+#include "eop_series.hpp"
+#include <cstdio>
+#include <memory>
 
 namespace hpop {
 namespace {
 using namespace astro;
+
+// GCRF -> ITRF at a TDB Julian date from caller-supplied EOP: IERS
+// Conventions 2010, CIO based, IAU 2006/2000A with the EOP's dX/dY, polar
+// motion and UT1 (the chain of foundation/frames gcrfToItrf). The
+// celestial-to-intermediate matrix and the polar-motion matrix are held for up
+// to an hour of TT (they move by milliarcseconds); the Earth rotation angle is
+// evaluated at every call.
+class EarthRotation {
+public:
+    std::vector<sdn::frames::eop::Row> rows;
+    std::string error;
+    static bool midnight(const char* date,double mjd) {
+        int y=0,m=0,d=0,h=0,mi=0,n=0;double sec=0,jd0=0,day=0;
+        if(std::sscanf(date,"%d-%d-%dT%d:%d:%lf%n",&y,&m,&d,&h,&mi,&sec,&n)!=6)return false;
+        return !h&&!mi&&!sec&&eraCal2jd(y,m,d,&jd0,&day)==0&&day==mjd;
+    }
+    // UTC two-part Julian date at a TT Julian date (ERFA's leap-second table).
+    static bool utcAt(double jdTt,double& u1,double& u2) {
+        double tai1,tai2;
+        return eraTttai(2451545.0,jdTt-2451545.0,&tai1,&tai2)==0&&eraTaiutc(tai1,tai2,&u1,&u2)==0;
+    }
+    bool covers(double jdTdb) {
+        double u1,u2;sdn::frames::EarthOrientation e;
+        if(!utcAt(timesys::tdbToTt(jdTdb),u1,u2)){error="eop-out-of-range: Epoch outside the leap-second table.";return false;}
+        const std::string reason=sdn::frames::eop::at(rows,u1,u2,&e,midnight);
+        if(!reason.empty()){error="invalid-earth-orientation: "+reason;return false;}
+        return true;
+    }
+    void matrix(double jdTdb,double m[3][3]) {
+        const double jdTt=timesys::tdbToTt(jdTdb),tt1=2451545.0,tt2=jdTt-2451545.0;
+        double u1,u2,ut11,ut12;sdn::frames::EarthOrientation e;
+        if(!utcAt(jdTt,u1,u2)||!sdn::frames::eop::at(rows,u1,u2,&e,midnight).empty()||eraUtcut1(u1,u2,e.dut1,&ut11,&ut12)<0) {
+            for(int i=0;i<3;++i)for(int j=0;j<3;++j)m[i][j]=std::numeric_limits<double>::quiet_NaN();
+            return;
+        }
+        if(std::abs(jdTt-cachedTt)>1.0/24.0) {
+            cachedTt=jdTt;double x,y;
+            eraXy06(tt1,tt2,&x,&y);const double s=eraS06(tt1,tt2,x,y);
+            eraC2ixys(x+e.dX,y+e.dY,s,rc2i);eraPom00(e.xPole,e.yPole,eraSp00(tt1,tt2),rpom);
+        }
+        double rc2t[3][3];eraC2tcio(rc2i,eraEra00(ut11,ut12),rpom,rc2t);
+        for(int i=0;i<3;++i)for(int j=0;j<3;++j)m[i][j]=rc2t[i][j];
+    }
+private:
+    double cachedTt=-1e300,rc2i[3][3]{},rpom[3][3]{};
+};
 struct Execution {
     StateVector initial;
     double target = 0, mass = 1000;
@@ -34,6 +90,10 @@ struct Execution {
     Mat6 p{};
     Integrator::Matrix7 p7{};
     std::vector<double> samples;
+    // The integration clock (TT), exact; the doubles above are TDB Julian
+    // dates kept for ephemeris lookups and the legacy integrator interfaces.
+    TTEpoch initialTT, targetTT;
+    std::vector<TTEpoch> samplesTT;
     std::vector<ForceModel::ImpulsiveManeuverDef> impulses;
     std::vector<Integrator::FiniteBurn> burns;
     Integrator::ProcessNoise noise;
@@ -74,41 +134,64 @@ bool parseIntegrator(const PRWIntegratorSettings* in, bool mass, IntegratorConfi
     }
     return true;
 }
-bool parseForces(const PRWForceConfiguration* in,double epoch,ForceModel::ForceModelSet& out,std::string& error) {
+bool parseForces(const PRWForceConfiguration* in,double epoch,bool hasEarthOrientation,ForceModel::ForceModelSet& out,std::string& error) {
     if(!in)return prwError(error,"invalid-forces: Missing force configuration.");
     out.usePointMass=in->ENABLE_POINT_MASS();out.mu=in->GRAVITATIONAL_PARAMETER()*1e-9;
     out.useSphericalHarmonics=in->ENABLE_J2()||in->ENABLE_J3()||in->ENABLE_J4()||in->ENABLE_HIGHER_ZONALS();
     out.sphericalHarmonics.includeJ2=in->ENABLE_J2();out.sphericalHarmonics.includeJ3=in->ENABLE_J3();out.sphericalHarmonics.includeJ4=in->ENABLE_J4();out.sphericalHarmonics.includeHigherZonals=in->ENABLE_HIGHER_ZONALS();out.sphericalHarmonics.mu=out.mu;
+    // One Earth-fixed field evaluates every gravity selection except the point
+    // mass: the embedded EGM2008 coefficients through the Pines/Cunningham
+    // recursion (computeExtendedGravity), in Earth-fixed axes. J2_ONLY and
+    // J2_TO_J4 are that field to degree 2 or 4, order 0 (the closed forms in
+    // force_models.cpp remain as test oracles only; they hold the symmetry axis
+    // at inertial z). SPHERICAL_HARMONICS and EGM2008 are the field to the
+    // stated degree and order, every coefficient included: the zonal flags
+    // gate only INFER_FLAGS, the legacy selection. Before 2026-10-08,
+    // SPHERICAL_HARMONICS without the flags silently returned the point mass.
+    if(!in->HAS_MAXIMUM_DEGREE()&&in->MAXIMUM_DEGREE())return prwError(error,"invalid-presence: MAXIMUM_DEGREE requires HAS_MAXIMUM_DEGREE.");
+    if(!in->HAS_MAXIMUM_ORDER()&&in->MAXIMUM_ORDER())return prwError(error,"invalid-presence: MAXIMUM_ORDER requires HAS_MAXIMUM_ORDER.");
+    const auto field=[&](int degree,int order)->bool{
+        if(degree<2||degree>70)return prwError(error,"unsupported-gravity: The embedded EGM2008 field supports degrees two through seventy.");
+        if(order<0||order>degree)return prwError(error,"unsupported-gravity: Field order must be between zero and the degree.");
+        out.gravityMode=ForceModel::GravityMode::EGM2008;out.egm2008.truncationDegree=degree;out.egm2008.truncationOrder=order;
+        out.useSphericalHarmonics=false;
+        return true;
+    };
+    out.sphericalHarmonics.maxOrder=0;out.egm2008.truncationOrder=0;
     switch(in->GRAVITY_CHOICE()) {
-    case prwGravitySelection::INFER_FLAGS:out.gravityMode=ForceModel::GravityMode::Infer;break;
+    case prwGravitySelection::INFER_FLAGS:
+        out.gravityMode=ForceModel::GravityMode::Infer;
+        if(in->HAS_MAXIMUM_DEGREE())out.sphericalHarmonics.maxDegree=in->MAXIMUM_DEGREE();
+        if(in->HAS_MAXIMUM_ORDER())out.sphericalHarmonics.maxOrder=in->MAXIMUM_ORDER();
+        if(out.useSphericalHarmonics&&out.sphericalHarmonics.maxDegree>20)
+            return prwError(error,"unsupported-gravity: The inline spherical-harmonic field supports degrees zero through twenty.");
+        break;
     case prwGravitySelection::POINT_MASS:out.gravityMode=ForceModel::GravityMode::PointMass;break;
-    case prwGravitySelection::J2_ONLY:out.gravityMode=ForceModel::GravityMode::J2Only;break;
-    case prwGravitySelection::J2_TO_J4:out.gravityMode=ForceModel::GravityMode::J2J4;break;
-    case prwGravitySelection::SPHERICAL_HARMONICS:out.gravityMode=ForceModel::GravityMode::SphericalHarmonics;break;
-    case prwGravitySelection::EGM2008:out.gravityMode=ForceModel::GravityMode::EGM2008;break;
+    case prwGravitySelection::J2_ONLY:
+    case prwGravitySelection::J2_TO_J4:
+        if(in->HAS_MAXIMUM_DEGREE()||in->HAS_MAXIMUM_ORDER())
+            return prwError(error,"invalid-forces: J2_ONLY and J2_TO_J4 fix their own degree; select SPHERICAL_HARMONICS for another truncation.");
+        if(!field(in->GRAVITY_CHOICE()==prwGravitySelection::J2_ONLY?2:4,0))return false;
+        break;
+    case prwGravitySelection::SPHERICAL_HARMONICS:
+    case prwGravitySelection::EGM2008:
+        if(!in->HAS_MAXIMUM_DEGREE()||!in->HAS_MAXIMUM_ORDER())
+            return prwError(error,"invalid-forces: A field selection states both MAXIMUM_DEGREE and MAXIMUM_ORDER.");
+        if(!field(in->MAXIMUM_DEGREE(),in->MAXIMUM_ORDER()))return false;
+        break;
     default:return prwError(error,"unsupported-gravity: Unknown gravity selection.");
     }
     if(!nonnegative(out.mu) || ((out.usePointMass||out.useSphericalHarmonics||out.gravityMode!=ForceModel::GravityMode::Infer)&&out.mu==0))
         return prwError(error,"invalid-forces: Enabled central gravity requires a positive finite SI gravitational parameter.");
-    if(!in->HAS_MAXIMUM_DEGREE()&&in->MAXIMUM_DEGREE())return prwError(error,"invalid-presence: MAXIMUM_DEGREE requires HAS_MAXIMUM_DEGREE.");
-    if(!in->HAS_MAXIMUM_ORDER()&&in->MAXIMUM_ORDER())return prwError(error,"invalid-presence: MAXIMUM_ORDER requires HAS_MAXIMUM_ORDER.");
-    // Body-fixed tesseral coefficients require an EOP-backed rotation that
-    // this invocation profile cannot supply. Zonal fields are axisymmetric.
-    out.sphericalHarmonics.maxOrder=0;out.egm2008.truncationOrder=0;
-    if(in->HAS_MAXIMUM_DEGREE())out.sphericalHarmonics.maxDegree=out.egm2008.truncationDegree=in->MAXIMUM_DEGREE();
-    if(in->HAS_MAXIMUM_ORDER())out.sphericalHarmonics.maxOrder=out.egm2008.truncationOrder=in->MAXIMUM_ORDER();
-    if(in->HAS_MAXIMUM_ORDER()&&in->MAXIMUM_ORDER()>0)
-        return prwError(error,"eop-data-required: Tesseral gravity requires Earth orientation data; this PRW profile supports zonal order zero.");
-    const bool spherical=out.gravityMode==ForceModel::GravityMode::SphericalHarmonics ||
-        (out.gravityMode==ForceModel::GravityMode::Infer&&out.useSphericalHarmonics);
-    if(spherical && out.sphericalHarmonics.maxDegree>20)
-        return prwError(error,"unsupported-gravity: The inline spherical-harmonic field supports degrees zero through twenty.");
-    if(out.gravityMode==ForceModel::GravityMode::EGM2008) {
-        if(out.egm2008.truncationDegree<2||out.egm2008.truncationDegree>70)
-            return prwError(error,"unsupported-gravity: The embedded EGM2008 field supports degrees two through seventy.");
-        if(std::abs(out.mu-MU_EARTH)>MU_EARTH*1e-14)
-            return prwError(error,"unsupported-gravity: Embedded EGM2008 requires its published Earth gravitational parameter.");
-    }
+    // GRAVITATIONAL_PARAMETER is the central term's GM. The field's harmonics
+    // use the field's own, EGM2008's TT-compatible 3.986004415e14 m^3/s^2
+    // (HPOP integrates on TT; the TCG-compatible 3.986004418e14 is 7.5e-10
+    // larger, about 1 m a day along track in LEO).
+    // Tesseral terms are Earth-fixed: they need Earth orientation data.
+    const bool tesseral=(out.gravityMode==ForceModel::GravityMode::EGM2008&&out.egm2008.truncationOrder>0)||
+        (out.gravityMode==ForceModel::GravityMode::Infer&&out.useSphericalHarmonics&&out.sphericalHarmonics.maxOrder>0);
+    if(tesseral&&!hasEarthOrientation)
+        return prwError(error,"eop-data-required: Tesseral gravity requires Earth orientation data on the earth_orientation input.");
     out.useThirdBody=in->ENABLE_THIRD_BODY();
     out.thirdBody.includeSun=out.thirdBody.includeMoon=out.thirdBody.includeMercury=out.thirdBody.includeVenus=out.thirdBody.includeMars=out.thirdBody.includeJupiter=out.thirdBody.includeSaturn=out.thirdBody.includeUranus=out.thirdBody.includeNeptune=false;
     if(in->THIRD_BODY_IDS())for(const auto id:*in->THIRD_BODY_IDS())switch(id) {
@@ -218,20 +301,21 @@ bool parseBurn(const PRWFiniteBurn* in,const std::string& frame,double target,In
     }
     return true;
 }
-bool parseExecution(const PRWExecutionRequest* in,Execution& out,std::string& error) {
+bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execution& out,std::string& error) {
     if(!in||!in->INITIAL()||!in->INITIAL()->VALID())return prwError(error,"invalid-state: Execution requires a valid initial state.");
-    if(!decodeResidentState(in->INITIAL(),out.initial,error))return false;
+    if(!decodeResidentState(in->INITIAL(),out.initial,error)||!decodeStateEpochTT(in->INITIAL(),out.initialTT,error))return false;
     if(!positive(out.initial.position.magnitude())||!std::isfinite(out.initial.velocity.magnitude()))
         return prwError(error,"invalid-state: Initial Cartesian state must have a finite nonzero radius.");
     const auto* initial=in->INITIAL();
     if(initial->HAS_DRAG_AREA_OVER_MASS_M2_KG()||initial->HAS_SRP_AREA_OVER_MASS_M2_KG()||initial->DRAG_AREA_OVER_MASS_M2_KG()!=0||initial->SRP_AREA_OVER_MASS_M2_KG()!=0)
         return prwError(error,"unsupported-state-coefficients: Supply explicit spacecraft force settings; resident ballistic coefficients are not an additional force source.");
-    double utc=0;if(!decodeEpoch(in->TARGET_EPOCH(),out.target,utc,error))return false;
-    if(in->TARGET_EPOCH()->TIME_SYSTEM()!=timingStandard::TDB)return prwError(error,"epoch-time-scale: Execution target and samples require TDB.");
+    double utc=0;
+    if(!decodeEpochTT(in->TARGET_EPOCH(),out.targetTT,error))return false;
+    out.target=timesys::ttToTdb(out.targetTT.jdTt());
     out.massDynamics=in->INCLUDE_MASS_DYNAMICS();
     if(in->FINITE_BURNS()&&in->FINITE_BURNS()->size()&&!out.massDynamics)return prwError(error,"invalid-burn: FINITE_BURNS requires INCLUDE_MASS_DYNAMICS.");
     if(out.massDynamics&&out.target<out.initial.epoch)return prwError(error,"invoke-failed: Finite burns require finite epochs and forward propagation.");
-    if(!parseIntegrator(in->INTEGRATOR(),out.massDynamics,out.integrator,error)||!parseForces(in->FORCES(),out.initial.epoch,out.forces,error))return false;
+    if(!parseIntegrator(in->INTEGRATOR(),out.massDynamics,out.integrator,error)||!parseForces(in->FORCES(),out.initial.epoch,hasEarthOrientation,out.forces,error))return false;
     if(initial->STATE()->GRAVITATIONAL_PARAMETER()!=0 && initial->STATE()->GRAVITATIONAL_PARAMETER()!=in->FORCES()->GRAVITATIONAL_PARAMETER())
         return prwError(error,"invalid-forces: FRM and force gravitational parameters disagree.");
     if(!initial->HAS_MASS_KG()&&initial->MASS_KG()!=0)return prwError(error,"invalid-presence: MASS_KG requires HAS_MASS_KG.");
@@ -265,23 +349,23 @@ bool parseExecution(const PRWExecutionRequest* in,Execution& out,std::string& er
     if(in->SAMPLE_EPOCHS()) {
         if(in->SAMPLE_EPOCHS()->size()>10000)return prwError(error,"invalid-samples: At most 10000 samples are supported.");
         for(const auto* epoch:*in->SAMPLE_EPOCHS()) {
-            double jd=0;if(!decodeEpoch(epoch,jd,utc,error))return false;
-            if(epoch->TIME_SYSTEM()!=timingStandard::TDB)return prwError(error,"epoch-time-scale: Sample epochs must be TDB.");
-            if(out.massDynamics&&jd<out.initial.epoch)return prwError(error,"invoke-failed: Finite-burn sample epochs must not precede the initial epoch.");
-            out.samples.push_back(jd);
+            TTEpoch tt;if(!decodeEpochTT(epoch,tt,error))return false;
+            if(out.massDynamics&&elapsedSeconds(out.initialTT,tt)<0)return prwError(error,"invoke-failed: Finite-burn sample epochs must not precede the initial epoch.");
+            out.samplesTT.push_back(tt);out.samples.push_back(timesys::ttToTdb(tt.jdTt()));
         }
     }
     if(in->IMPULSES())for(const auto* impulse:*in->IMPULSES()) {
         ForceModel::ImpulsiveManeuverDef kick;
-        if(!impulse||!decodeEpoch(impulse->EPOCH(),kick.epoch,utc,error)||!readVector(impulse->DELTA_V(),kick.deltaV,0.001,error))return false;
-        if(impulse->EPOCH()->TIME_SYSTEM()!=timingStandard::TDB)return prwError(error,"epoch-time-scale: Impulse epochs must be TDB.");
+        TTEpoch tt;
+        if(!impulse||!decodeEpochTT(impulse->EPOCH(),tt,error)||!readVector(impulse->DELTA_V(),kick.deltaV,0.001,error))return false;
+        kick.epoch=timesys::ttToTdb(tt.jdTt());
         if(impulse->VECTOR_BASIS()!=prwSteeringBasis::INTEGRATION_FRAME&&impulse->VECTOR_BASIS()!=prwSteeringBasis::RTN_AXES)return prwError(error,"unsupported-impulse-frame: Impulses support integration-frame or RTN components.");
         kick.inRTN=impulse->VECTOR_BASIS()==prwSteeringBasis::RTN_AXES;out.impulses.push_back(kick);
     }
     if(in->FINITE_BURNS()) {
         if(in->FINITE_BURNS()->size()>Integrator::MaxFiniteBurns)return prwError(error,"invalid-burn: At most 16 burns are supported.");
         for(const auto* input:*in->FINITE_BURNS()) {
-            Integrator::FiniteBurn burn;if(!parseBurn(input,initial->COORDINATE_SYSTEM()->NAME()->str(),(out.target-out.initial.epoch)*86400.0,burn,error))return false;
+            Integrator::FiniteBurn burn;if(!parseBurn(input,initial->COORDINATE_SYSTEM()->NAME()->str(),elapsedSeconds(out.initialTT,out.targetTT),burn,error))return false;
             out.burns.push_back(std::move(burn));
         }
     }
@@ -302,10 +386,12 @@ bool preflightKernel(const Execution& in,double target,std::string& error) {
     }
     return true;
 }
-bool evaluate(Execution& execution,const PRWExecutionRequest* request,double epoch,PRWPropagationSampleT& out,std::string& error) {
+bool evaluate(Execution& execution,const PRWExecutionRequest* request,const TTEpoch& epochTT,PRWPropagationSampleT& out,std::string& error) {
+    const double epoch=timesys::ttToTdb(epochTT.jdTt());
     if(!preflightKernel(execution,epoch,error))return false;
     const auto frame=std::unique_ptr<RFMCoordinateSystemT>(request->INITIAL()->COORDINATE_SYSTEM()->UnPack());
-    const double seconds=(epoch-execution.initial.epoch)*86400;
+    // Elapsed time on the integration clock (TT), exact to sub-nanosecond.
+    const double seconds=elapsedSeconds(execution.initialTT,epochTT);
     if(execution.massDynamics) {
         const auto value=Integrator::PropagateFiniteBurns(execution.initial,execution.mass,seconds,execution.integrator,execution.forces,execution.burns,execution.density,execution.impulses);
         if(!value.success){error="invoke-failed: "+value.errorMessage;return false;}
@@ -340,6 +426,7 @@ bool evaluate(Execution& execution,const PRWExecutionRequest* request,double epo
         auto state=value.finalState;state.epoch=epoch;out.STATE=makeState(state,*frame,request->INITIAL());out.ACCEPTED_STEPS=value.steps;out.REJECTED_STEPS=value.rejections;
     }
     if(request->INITIAL()->HAS_MASS_KG()&&!execution.massDynamics){out.STATE->HAS_MASS_KG=true;out.STATE->MASS_KG=execution.mass;}
+    out.STATE->STATE->EPOCH=formatTdb(epochTT);out.STATE->STATE->EPOCH_TIME_SYSTEM="TDB";
     if(!Ephemeris::ephemerisError().empty()){error="ephemeris-failed: "+Ephemeris::ephemerisError();return false;}
     for(const auto* m:{out.STM.get(),out.MASS_STM.get(),out.COVARIANCE.get(),out.MASS_COVARIANCE.get()})
         if(m)for(const double value:m->VALUES)if(!std::isfinite(value))
@@ -350,12 +437,19 @@ bool evaluate(Execution& execution,const PRWExecutionRequest* request,double epo
     if(!std::isfinite(state.POSITION->X)||!std::isfinite(state.POSITION->Y)||!std::isfinite(state.POSITION->Z)||!std::isfinite(state.VELOCITY->X)||!std::isfinite(state.VELOCITY->Y)||!std::isfinite(state.VELOCITY->Z))return prwError(error,"invoke-failed: Integration returned a nonfinite state.");
     return true;
 }
-bool execute(const PRWExecutionRequest* request,PRWT& response,std::string& error) {
-    Execution execution;if(!parseExecution(request,execution,error))return false;
+bool execute(const PRWExecutionRequest* request,const std::shared_ptr<EarthRotation>& earth,PRWT& response,std::string& error) {
+    Execution execution;if(!parseExecution(request,earth!=nullptr,execution,error))return false;
+    if(earth) {
+        // The EOP must bracket the whole arc; nothing is extrapolated.
+        double last=execution.target,first=execution.initial.epoch;
+        for(const double t:execution.samples){last=std::max(last,t);first=std::min(first,t);}
+        if(!earth->covers(first)||!earth->covers(last)){error=earth->error;return false;}
+        execution.forces.earthFixedRotation=[earth](double jdTdb,double m[3][3]){earth->matrix(jdTdb,m);};
+    }
     auto result=std::make_unique<PRWExecutionResultT>();result->FINAL_SAMPLE=std::make_unique<PRWPropagationSampleT>();
-    if(!evaluate(execution,request,execution.target,*result->FINAL_SAMPLE,error))return false;
-    for(const double epoch:execution.samples){auto sample=std::make_unique<PRWPropagationSampleT>();if(!evaluate(execution,request,epoch,*sample,error))return false;result->SAMPLES.push_back(std::move(sample));}
-    result->ELAPSED_SECONDS=(execution.target-execution.initial.epoch)*86400;result->EPHEMERIS_SOURCE=Ephemeris::ephemerisSourceName(Ephemeris::selectedEphemerisSource());
+    if(!evaluate(execution,request,execution.targetTT,*result->FINAL_SAMPLE,error))return false;
+    for(const auto& epoch:execution.samplesTT){auto sample=std::make_unique<PRWPropagationSampleT>();if(!evaluate(execution,request,epoch,*sample,error))return false;result->SAMPLES.push_back(std::move(sample));}
+    result->ELAPSED_SECONDS=elapsedSeconds(execution.initialTT,execution.targetTT);result->EPHEMERIS_SOURCE=Ephemeris::ephemerisSourceName(Ephemeris::selectedEphemerisSource());
     if(execution.variational){result->STM_TECHNIQUE=request->STM_TECHNIQUE();result->DENSITY_TREATMENT=request->DENSITY_TREATMENT();}
     response.EXECUTION_RESULT=std::move(result);return true;
 }
@@ -416,12 +510,20 @@ bool atmosphere(const PRWAtmosphereRequest* request,PRWT& response,std::string& 
     response.ATMOSPHERE_RESULT=std::move(result);return true;
 }
 } // namespace
-bool processPrwInvoke(const uint8_t* data,size_t size,const uint8_t* kernel,size_t kernelSize,std::vector<uint8_t>& output,std::string& error) {
+bool processPrwInvoke(const uint8_t* data,size_t size,const uint8_t* kernel,size_t kernelSize,const uint8_t* eop,size_t eopSize,std::vector<uint8_t>& output,std::string& error) {
     struct KernelLifetime {KernelLifetime(){Ephemeris::clearEphemerisBuffer();}~KernelLifetime(){Ephemeris::clearEphemerisBuffer();}} kernelLifetime;
     const PRW* request=nullptr;if(!verifyPrw(data,size,request,error))return false;
     if(kernelSize&&!loadKernel(kernel,kernelSize,error))return false;
     PRWT response;bool ok=false;
-    if(request->EXECUTION_REQUEST())ok=execute(request->EXECUTION_REQUEST(),response,error);
+    std::shared_ptr<EarthRotation> earth;
+    if(eopSize) {
+        earth=std::make_shared<EarthRotation>();
+        const std::string reason=sdn::frames::eop::addPayload(eop,eopSize,earth->rows);
+        if(!reason.empty())return prwError(error,("invalid-earth-orientation: "+reason).c_str());
+        if(earth->rows.empty())return prwError(error,"invalid-earth-orientation: No EOP rows.");
+    }
+    if(request->EXECUTION_REQUEST())ok=execute(request->EXECUTION_REQUEST(),earth,response,error);
+    else if(earth)return prwError(error,"unsupported-earth-orientation: Earth orientation applies to execution requests.");
     else if(request->EPHEMERIS_REQUEST())ok=ephemeris(request->EPHEMERIS_REQUEST(),response,error);
     else if(request->ATMOSPHERE_REQUEST())ok=atmosphere(request->ATMOSPHERE_REQUEST(),response,error);
     else if(request->VERSION_QUERY()){response.VERSION_RESULT=std::make_unique<PRWVersionResultT>();response.VERSION_RESULT->VERSION=HPOP_MODULE_VERSION;response.VERSION_RESULT->MODULE_ID=HPOP_MODULE_ID;ok=true;}

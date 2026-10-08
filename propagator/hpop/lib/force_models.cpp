@@ -15,6 +15,7 @@
 #include <cmath>
 #include <algorithm>
 #include <stdexcept>
+#include <cstring>
 
 namespace astro {
 namespace ForceModel {
@@ -38,56 +39,76 @@ constexpr double STEFAN_BOLTZMANN = 5.670374419e-8;
 /// G*J/c^2 = 6.674e-20 * 5.86e27 / 8.99e10 = 4.35e-3 km^3/s
 constexpr double EARTH_GJ_C2 = 4.35e-3;  // km^3/s (G*J/c^2 for Earth)
 
-Vec3 atmosphereCoRotationVelocity(const Vec3& position, bool coRotatingAtmosphere) {
-    if (!coRotatingAtmosphere) {
-        return Vec3();
-    }
-    return Vec3(-OMEGA_EARTH * position.y, OMEGA_EARTH * position.x, 0.0);
-}
-
-
 // The force set integrates GCRF, while the geodetic density models
 // (computeNRLMSISE00, computeJB2008, computeDTM2020 and computeDragAcceleration)
-// take an Earth-fixed position (astrodynamics.h). Rotating about the GCRF z
-// axis by GMST supplies the Earth-fixed longitude that sets local solar time
-// and the longitude terms. Precession, nutation and polar motion are not
-// applied: together they tilt the pole by well under a degree since J2000,
-// below the horizontal resolution of these empirical models, and the
-// co-rotation term below already uses the same axis. UT1-UTC (< 0.9 s) is
-// likewise negligible here.
+// take an Earth-fixed position (astrodynamics.h). EarthAxes carries the one
+// rotation a force evaluation uses for all of them, for the co-rotating
+// atmosphere, and for the gravity field: the force set's GcrfToEarthFixed
+// (IERS EOP through the earth_orientation input when supplied).
 } // anonymous namespace
 
-Vec3 EarthFixedForDensity(const Vec3& gcrf, double jdUt) {
+Vec3 EarthAxes::fixed(const Vec3& v) const {
+    return Vec3(m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z,
+                m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z,
+                m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z);
+}
+
+Vec3 EarthAxes::inertial(const Vec3& v) const {
+    return Vec3(m[0][0] * v.x + m[1][0] * v.y + m[2][0] * v.z,
+                m[0][1] * v.x + m[1][1] * v.y + m[2][1] * v.z,
+                m[0][2] * v.x + m[1][2] * v.y + m[2][2] * v.z);
+}
+
+Vec3 EarthAxes::spin() const { return Vec3(m[2][0], m[2][1], m[2][2]); }
+
+EarthAxes EarthAxesAt(double jdTdb, const ForceModelSet& forceSet) {
+    EarthAxes axes;
+    GcrfToEarthFixed(jdTdb, forceSet, axes.m);
+    return axes;
+}
+
+// GMST about the GCRF z axis. Precession, nutation and polar motion are not
+// applied (the pole is off by the precession since J2000, ~0.35 deg in 2026),
+// so this serves only direct callers of the density functions that pass no
+// axes; force-set evaluation always passes EarthAxesAt.
+EarthAxes GmstAxes(double jdUt) {
     const double theta = timesys::ut1ToGmst(jdUt);
     const double c = std::cos(theta);
     const double s = std::sin(theta);
-    return Vec3(c * gcrf.x + s * gcrf.y, -s * gcrf.x + c * gcrf.y, gcrf.z);
+    EarthAxes axes;
+    const double m[3][3] = {{c, s, 0}, {-s, c, 0}, {0, 0, 1}};
+    std::memcpy(axes.m, m, sizeof m);
+    return axes;
+}
+
+Vec3 EarthFixedForDensity(const Vec3& gcrf, double jdUt) {
+    return GmstAxes(jdUt).fixed(gcrf);
 }
 
 namespace {
-Vec3 GcrfFromEarthFixed(const Vec3& earthFixed, double jdUt) {
-    const double theta = timesys::ut1ToGmst(jdUt);
-    const double c = std::cos(theta);
-    const double s = std::sin(theta);
-    return Vec3(c * earthFixed.x - s * earthFixed.y, s * earthFixed.x + c * earthFixed.y, earthFixed.z);
-}
-
-// Velocity of the air relative to GCRF: co-rotation plus, when requested, the
-// HWM14 horizontal wind, evaluated in the same Earth-fixed axes as the density
-// and rotated back. Winds without weather are refused (Harris-Priester and the
-// exponential helper carry none).
-Vec3 relativeAtmosphereVelocity(const Vec3& position, const Vec3& velocity, double jd,
-                                bool coRotatingAtmosphere, bool includeWinds,
-                                const SpaceWeatherData* weather = nullptr, bool windDisturbance = true) {
-    Vec3 vAtm = atmosphereCoRotationVelocity(position, coRotatingAtmosphere);
+// Velocity of the air relative to GCRF: co-rotation about the Earth's spin
+// axis plus, when requested, the HWM14 horizontal wind, evaluated in the same
+// Earth-fixed axes as the density and rotated back. Winds without weather are
+// refused (Harris-Priester and the exponential helper carry none).
+Vec3 relativeAtmosphereVelocity(const Vec3& position, const Vec3& velocity, double jdUt,
+                                const EarthAxes& axes, bool coRotatingAtmosphere,
+                                bool includeWinds, const SpaceWeatherData* weather = nullptr,
+                                bool windDisturbance = true) {
+    Vec3 vAtm = coRotatingAtmosphere ? axes.spin().cross(position) * OMEGA_EARTH : Vec3();
     if (includeWinds) {
         if (weather == nullptr) {
             throw std::invalid_argument("includeWinds: this drag model has no space-weather input for HWM14");
         }
-        vAtm += GcrfFromEarthFixed(
-            HorizontalWindEarthFixed(EarthFixedForDensity(position, jd), jd, *weather, windDisturbance), jd);
+        vAtm += axes.inertial(
+            HorizontalWindEarthFixed(axes.fixed(position), jdUt, *weather, windDisturbance));
     }
     return velocity - vAtm;
+}
+
+const EarthAxes& axesOr(const EarthAxes* axes, EarthAxes& fallback, double jdUt) {
+    if (axes) return *axes;
+    fallback = GmstAxes(jdUt);
+    return fallback;
 }
 }  // namespace
 
@@ -232,13 +253,13 @@ Vec3 SphericalHarmonics(const Vec3& position, const SphericalHarmonicsConfig& co
 // 3. EGM2008 - Earth Gravitational Model 2008
 // =============================================================================
 
-Vec3 EGM2008(const Vec3& position, const EGM2008ForceConfig& config) {
-    // Use extended gravity field with embedded EGM2008 coefficients (degree 2-70)
+namespace {
+// The embedded EGM2008 coefficients (degree 2-70) at the configured
+// truncation, re-initialized only when it changes.
+const ExtendedGravityField& egm2008Field(const EGM2008ForceConfig& config) {
     static ExtendedGravityField field;
     static uint16_t cachedDegree = 0;
     static uint16_t cachedOrder = 0;
-
-    // Re-initialize only if degree/order changed
     if (cachedDegree != config.truncationDegree || cachedOrder != config.truncationOrder) {
         EGM2008Config extConfig;
         extConfig.maxDegree = config.truncationDegree;
@@ -247,9 +268,16 @@ Vec3 EGM2008(const Vec3& position, const EGM2008ForceConfig& config) {
         cachedDegree = config.truncationDegree;
         cachedOrder = config.truncationOrder;
     }
+    return field;
+}
+}  // namespace
 
-    GravityAcceleration result = computeExtendedGravity(position, field);
-    return result.total;
+Vec3 EGM2008(const Vec3& position, const EGM2008ForceConfig& config) {
+    return computeExtendedGravity(position, egm2008Field(config)).total;
+}
+
+Vec3 EGM2008Harmonics(const Vec3& position, const EGM2008ForceConfig& config) {
+    return computeExtendedGravity(position, egm2008Field(config)).zonalHarmonics;
 }
 
 // =============================================================================
@@ -454,7 +482,8 @@ Vec3 AtmosphericDragExponential(const Vec3& position, const Vec3& velocity,
     double density = exponentialAtmosphereDensity(alt);
 
     // Exponential helper keeps legacy co-rotating atmosphere behavior.
-    Vec3 vRel = relativeAtmosphereVelocity(position, velocity, 0.0, true, false);
+    // Co-rotation about the GCRF z axis; this helper carries no epoch.
+    Vec3 vRel = velocity - Vec3(0.0, 0.0, 1.0).cross(position) * OMEGA_EARTH;
     double vRelMag = vRel.magnitude();
 
     if (vRelMag < 1e-6 || density < 1e-20) {
@@ -496,7 +525,8 @@ AtmosphereModelType AtmosphereModelForDrag(DragModelType model) {
 
 Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, double jd,
                     const DragForceConfig& dragConfig, double bulgeExponent,
-                    const SpaceWeatherData* weather, double windJdUtc) {
+                    const SpaceWeatherData* weather, double windJdUtc,
+                    const EarthAxes* axes) {
     // The apex direction needs the Sun in the same frame as `position`: both
     // are GCRF here, and the bulge geometry depends only on their relative
     // direction.
@@ -511,7 +541,10 @@ Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, double jd,
     if (density.density < 1e-20) return Vec3();
 
     // jd is TDB for the Sun; the winds need the UTC day and time.
-    Vec3 vRel = relativeAtmosphereVelocity(position, velocity, windJdUtc > 0.0 ? windJdUtc : jd,
+    const double windJd = windJdUtc > 0.0 ? windJdUtc : jd;
+    EarthAxes fallback;
+    Vec3 vRel = relativeAtmosphereVelocity(position, velocity, windJd,
+                                           axesOr(axes, fallback, windJd),
                                            dragConfig.coRotatingAtmosphere,
                                            dragConfig.includeWinds, weather,
                                            dragConfig.windDisturbance);
@@ -525,7 +558,8 @@ Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, double jd,
 }
 
 Vec3 AtmosphericDrag(const Vec3& position, const Vec3& velocity, double jd,
-                     const SpaceWeatherData& weather, const DragForceConfig& config) {
+                     const SpaceWeatherData& weather, const DragForceConfig& config,
+                     const EarthAxes* axes) {
     double alt = position.magnitude() - RE_EARTH;
 
     if (alt < config.minAltitude || alt > config.maxAltitude) {
@@ -546,10 +580,11 @@ Vec3 AtmosphericDrag(const Vec3& position, const Vec3& velocity, double jd,
     // computeDragAcceleration takes Earth-fixed axes: rotate the GCRF state in
     // (the inertial velocity is only re-expressed; co-rotation is subtracted
     // inside) and the acceleration back out.
+    EarthAxes fallback;
+    const EarthAxes& e = axesOr(axes, fallback, jd);
     DragAccelerationResult result = computeDragAcceleration(
-        EarthFixedForDensity(position, jd), EarthFixedForDensity(velocity, jd), jd,
-        dragCfg, weather);
-    return GcrfFromEarthFixed(result.total, jd);
+        e.fixed(position), e.fixed(velocity), jd, dragCfg, weather);
+    return e.inertial(result.total);
 }
 
 // =============================================================================
@@ -558,7 +593,7 @@ Vec3 AtmosphericDrag(const Vec3& position, const Vec3& velocity, double jd,
 
 Vec3 NRLMSISE00(const Vec3& position, const Vec3& velocity, double jd,
                 const SpaceWeatherData& weather, const DragForceConfig& dragConfig,
-                const NRLMSISE00Config& nrlmsiseConfig) {
+                const NRLMSISE00Config& nrlmsiseConfig, const EarthAxes* axes) {
     AtmosphereConfig atmConfig;
     atmConfig.model = AtmosphereModelType::NRLMSISE00;
     atmConfig.includeWinds = dragConfig.includeWinds;
@@ -568,8 +603,9 @@ Vec3 NRLMSISE00(const Vec3& position, const Vec3& velocity, double jd,
     atmConfig.minAltitude = dragConfig.minAltitude;
     atmConfig.maxAltitude = dragConfig.maxAltitude;
 
-    AtmosphericDensity density =
-        computeNRLMSISE00(EarthFixedForDensity(position, jd), jd, weather, atmConfig);
+    EarthAxes fallback;
+    const EarthAxes& e = axesOr(axes, fallback, jd);
+    AtmosphericDensity density = computeNRLMSISE00(e.fixed(position), jd, weather, atmConfig);
 
     if (density.density < 1e-20) {
         return Vec3();
@@ -580,6 +616,7 @@ Vec3 NRLMSISE00(const Vec3& position, const Vec3& velocity, double jd,
         position,
         velocity,
         jd,
+        e,
         dragConfig.coRotatingAtmosphere,
         dragConfig.includeWinds,
         &weather,
@@ -615,8 +652,10 @@ AtmosphericDensity NRLMSISE00Density(const Vec3& position, double jd,
 
 Vec3 JB2008(const Vec3& position, const Vec3& velocity, double jd,
             const SpaceWeatherData& weather, const DragForceConfig& dragConfig,
-            const JB2008Config& jb2008Config) {
-    AtmosphericDensity density = computeJB2008(EarthFixedForDensity(position, jd), jd, weather);
+            const JB2008Config& jb2008Config, const EarthAxes* axes) {
+    EarthAxes fallback;
+    const EarthAxes& e = axesOr(axes, fallback, jd);
+    AtmosphericDensity density = computeJB2008(e.fixed(position), jd, weather);
 
     if (density.density < 1e-20) {
         return Vec3();
@@ -626,6 +665,7 @@ Vec3 JB2008(const Vec3& position, const Vec3& velocity, double jd,
         position,
         velocity,
         jd,
+        e,
         dragConfig.coRotatingAtmosphere,
         dragConfig.includeWinds,
         &weather,
@@ -656,8 +696,10 @@ AtmosphericDensity JB2008Density(const Vec3& position, double jd,
 
 Vec3 DTM2020(const Vec3& position, const Vec3& velocity, double jd,
              const SpaceWeatherData& weather, const DragForceConfig& dragConfig,
-             const DTM2020Config& dtmConfig) {
-    AtmosphericDensity density = computeDTM2020(EarthFixedForDensity(position, jd), jd, weather);
+             const DTM2020Config& dtmConfig, const EarthAxes* axes) {
+    EarthAxes fallback;
+    const EarthAxes& e = axesOr(axes, fallback, jd);
+    AtmosphericDensity density = computeDTM2020(e.fixed(position), jd, weather);
 
     if (density.density < 1e-20) {
         return Vec3();
@@ -667,6 +709,7 @@ Vec3 DTM2020(const Vec3& position, const Vec3& velocity, double jd,
         position,
         velocity,
         jd,
+        e,
         dragConfig.coRotatingAtmosphere,
         dragConfig.includeWinds,
         &weather,
@@ -1602,6 +1645,11 @@ void GcrfToEarthFixed(double jd, double m[3][3]) {
         for (int j = 0; j < 3; ++j) m[i][j] = r.at(i, j);
 }
 
+void GcrfToEarthFixed(double jd, const ForceModelSet& forceSet, double m[3][3]) {
+    if (forceSet.earthFixedRotation) forceSet.earthFixedRotation(jd, m);
+    else GcrfToEarthFixed(jd, m);
+}
+
 bool EarthFixedField(const ForceModelSet& forceSet) {
     switch (forceSet.gravityMode) {
         case GravityMode::Infer:
@@ -1618,7 +1666,7 @@ bool EarthFixedField(const ForceModelSet& forceSet) {
 Vec3 CentralBodyGravity(const Vec3& position, double jd, const ForceModelSet& forceSet) {
     if (!EarthFixedField(forceSet)) return EarthFixedGravity(position, forceSet);
     double m[3][3];
-    GcrfToEarthFixed(jd, m);
+    GcrfToEarthFixed(jd, forceSet, m);
     const Vec3 fixed(m[0][0] * position.x + m[0][1] * position.y + m[0][2] * position.z,
                      m[1][0] * position.x + m[1][1] * position.y + m[1][2] * position.z,
                      m[2][0] * position.x + m[2][1] * position.y + m[2][2] * position.z);
@@ -1656,8 +1704,11 @@ Vec3 EarthFixedGravity(const Vec3& position, const ForceModelSet& forceSet) {
         case GravityMode::J2J4:
             return PointMass(position, forceSet.mu) + J2J4(position, forceSet.mu);
 
+        // The central term with the force set's GM, the harmonics with the
+        // field's own (EGM2008's TT-compatible 398600.4415 km^3/s^2), as
+        // Orekit separates NewtonianAttraction from HolmesFeatherstone.
         case GravityMode::EGM2008:
-            return EGM2008(position, forceSet.egm2008);
+            return PointMass(position, forceSet.mu) + EGM2008Harmonics(position, forceSet.egm2008);
         case GravityMode::LoadedField:
             if (forceSet.loadedField) return LoadedFieldGravity(position, *forceSet.loadedField);
             return PointMass(position, forceSet.mu);
@@ -1715,27 +1766,30 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double
     if (forceSet.useDrag) {
         const double atmosphereJD = forceSet.explicitEpochContract
             ? timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(jd))) : jd;
+        // The field's Earth-fixed axes, so density, co-rotation and gravity
+        // share one Earth orientation.
+        const EarthAxes axes = EarthAxesAt(jd, forceSet);
         switch (forceSet.dragModel) {
             case DragModelType::NRLMSISE00:
                 totalAcc += NRLMSISE00(position, velocity, atmosphereJD, forceSet.weather,
-                                       forceSet.drag, forceSet.nrlmsise00);
+                                       forceSet.drag, forceSet.nrlmsise00, &axes);
                 break;
             case DragModelType::HarrisPriester:
                 totalAcc += HarrisPriester(position, velocity, jd, forceSet.drag,
                                            forceSet.harrisPriesterExponent, &forceSet.weather,
-                                           atmosphereJD);
+                                           atmosphereJD, &axes);
                 break;
             case DragModelType::USSA1976:
                 totalAcc += AtmosphericDrag(position, velocity, atmosphereJD,
-                                            forceSet.weather, forceSet.drag);
+                                            forceSet.weather, forceSet.drag, &axes);
                 break;
             case DragModelType::JB2008:
                 totalAcc += JB2008(position, velocity, atmosphereJD, forceSet.weather,
-                                   forceSet.drag, forceSet.jb2008);
+                                   forceSet.drag, forceSet.jb2008, &axes);
                 break;
             case DragModelType::DTM2020:
                 totalAcc += DTM2020(position, velocity, atmosphereJD, forceSet.weather,
-                                    forceSet.drag, forceSet.dtm2020);
+                                    forceSet.drag, forceSet.dtm2020, &axes);
                 break;
             case DragModelType::Exponential:
                 totalAcc += AtmosphericDragExponential(position, velocity,

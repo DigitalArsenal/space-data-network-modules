@@ -4,10 +4,10 @@
   "threadModel": "wasi-sequential",
   "target": "wasm32-wasip1-threads",
   "sharedMemory": true,
-  "sha256": "a7375613287f6b684c3ba772af58f585d31aeaa0f672dd54ceb595bae4218a9e",
-  "bytes": 1215883,
+  "sha256": "79c85b6f42aab007ce2bc79aa38a97df31b009bf700c3fa2a9f1049ccff17095",
+  "bytes": 1792242,
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
-  "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/software/spacedatanetwork-stack/repos/main-packages/OrbPro/packages/wasm-engine/deps/emsdk/upstream/bin",
+  "clangVersion": "clang version 23.1.0-wasi-sdk (https://github.com/llvm/llvm-project 895aa2c896ada719451be2e3673c83da8ddf1141)\nTarget: wasm32-unknown-wasip1\nThread model: posix\nInstalledDir: /sessions/rcw-01r7xejvkvmdhcgz1zhpkun8/toolchains/wasi-sdk-34.0-arm64-linux/bin\nConfiguration file: /sessions/rcw-01r7xejvkvmdhcgz1zhpkun8/toolchains/wasi-sdk-34.0-arm64-linux/bin/clang++.cfg",
   "exceptionRuntimeArchives": [
     {
       "name": "libc++abi-ww-wasmexcept.a",
@@ -39,8 +39,13 @@
     "../../third_party/nrlmsise00/nrlmsise-00.c",
     "../../third_party/nrlmsise00/nrlmsise-00_data.c",
     "src/hpop_plugin.cpp",
-    "src/cpp/src/prw_execution.cpp"
+    "src/cpp/src/prw_execution.cpp",
+    ".sdk-build/erfa-amalgamation.cpp"
   ],
+  "erfa": {
+    "sourceFiles": 248,
+    "root": "../../higherpop/third_party/erfa"
+  },
   "standardWasmExceptions": true,
   "legacyRuntimeCompiled": false,
   "debugInfo": "stripped",

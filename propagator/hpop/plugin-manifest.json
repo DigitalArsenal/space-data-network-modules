@@ -57,6 +57,26 @@
           "minStreams": 0,
           "maxStreams": 1,
           "required": false
+        },
+        {
+          "portId": "earth_orientation",
+          "description": "Optional SDS EOP: one row, or one size-prefixed stream of up to 366 ordered daily rows (one series, IAU_2000A or IAU_2006) covering the whole arc, read and interpolated as foundation/frames reads them. With it, execution requests evaluate the gravity field and the atmosphere in ITRF (IAU 2006/2000A CIO-based rotation with polar motion); fields with tesseral terms (order > 0) require it. A single row is used as is over the whole arc.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
         }
       ],
       "outputPorts": [

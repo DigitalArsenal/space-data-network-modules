@@ -113,6 +113,10 @@ struct EGM2008ForceConfig {
 /// @return Acceleration vector in ECEF (km/s^2)
 Vec3 EGM2008(const Vec3& position, const EGM2008ForceConfig& config = EGM2008ForceConfig());
 
+/// EGM2008's harmonic terms alone (degree 2 up), scaled by the field's own GM:
+/// the force set's EGM2008 mode adds its central term with the set's GM.
+Vec3 EGM2008Harmonics(const Vec3& position, const EGM2008ForceConfig& config = EGM2008ForceConfig());
+
 // -----------------------------------------------------------------------------
 // 4. GRGM1200A - Lunar Gravity Model (degree 1200)
 // -----------------------------------------------------------------------------
@@ -255,13 +259,27 @@ AtmosphereModelType AtmosphereModelForDrag(DragModelType model);
 /// @param weather Space weather for HWM14 winds (needed only when includeWinds)
 /// @param windJdUtc UTC Julian date for the winds; 0 uses jd
 /// @return Drag acceleration (km/s^2)
+struct EarthAxes;
 Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, double jd,
                     const DragForceConfig& dragConfig, double bulgeExponent = 4.0,
-                    const SpaceWeatherData* weather = nullptr, double windJdUtc = 0.0);
+                    const SpaceWeatherData* weather = nullptr, double windJdUtc = 0.0,
+                    const EarthAxes* axes = nullptr);
 
-/// GCRF position (km) re-expressed in Earth-fixed axes by a rotation of GMST
-/// about the GCRF z axis, for the geodetic density models. Precession,
-/// nutation and polar motion are not applied (see force_models.cpp).
+/// GCRF -> Earth-fixed axes at one instant: the rotation the density models,
+/// the co-rotating atmosphere and the gravity field share within one force
+/// evaluation (EarthAxesAt). The drag functions below take it as `axes`; with
+/// none they fall back to GmstAxes at their UTC `jd`.
+struct EarthAxes {
+    double m[3][3]{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};  ///< GCRF -> Earth-fixed
+    Vec3 fixed(const Vec3& gcrf) const;               ///< GCRF -> Earth-fixed
+    Vec3 inertial(const Vec3& earthFixed) const;      ///< Earth-fixed -> GCRF
+    Vec3 spin() const;                                ///< Earth-fixed z axis, in GCRF
+};
+
+/// GMST about the GCRF z axis: no precession, nutation or polar motion.
+EarthAxes GmstAxes(double jdUt);
+
+/// GCRF position (km) re-expressed by GmstAxes(jdUt).
 Vec3 EarthFixedForDensity(const Vec3& gcrf, double jdUt);
 
 /// Atmospheric drag acceleration
@@ -272,7 +290,8 @@ Vec3 EarthFixedForDensity(const Vec3& gcrf, double jdUt);
 /// @param config Drag configuration
 /// @return Drag acceleration (km/s^2)
 Vec3 AtmosphericDrag(const Vec3& position, const Vec3& velocity, double jd,
-                     const SpaceWeatherData& weather, const DragForceConfig& config);
+                     const SpaceWeatherData& weather, const DragForceConfig& config,
+                     const EarthAxes* axes = nullptr);
 
 /// Simple exponential drag (convenience function)
 Vec3 AtmosphericDragExponential(const Vec3& position, const Vec3& velocity,
@@ -306,7 +325,8 @@ struct NRLMSISE00Config {
 /// @return Drag acceleration (km/s^2)
 Vec3 NRLMSISE00(const Vec3& position, const Vec3& velocity, double jd,
                 const SpaceWeatherData& weather, const DragForceConfig& dragConfig,
-                const NRLMSISE00Config& nrlmsiseConfig = NRLMSISE00Config());
+                const NRLMSISE00Config& nrlmsiseConfig = NRLMSISE00Config(),
+                const EarthAxes* axes = nullptr);
 
 /// Get NRLMSISE-00 density components at a GCRF position (km)
 AtmosphericDensity NRLMSISE00Density(const Vec3& position, double jd,
@@ -335,7 +355,8 @@ struct JB2008Config {
 /// @return Drag acceleration (km/s^2)
 Vec3 JB2008(const Vec3& position, const Vec3& velocity, double jd,
             const SpaceWeatherData& weather, const DragForceConfig& dragConfig,
-            const JB2008Config& jb2008Config = JB2008Config());
+            const JB2008Config& jb2008Config = JB2008Config(),
+            const EarthAxes* axes = nullptr);
 
 /// Get JB2008 density
 AtmosphericDensity JB2008Density(const Vec3& position, double jd,
@@ -363,7 +384,8 @@ struct DTM2020Config {
 /// @return Drag acceleration (km/s^2)
 Vec3 DTM2020(const Vec3& position, const Vec3& velocity, double jd,
              const SpaceWeatherData& weather, const DragForceConfig& dragConfig,
-             const DTM2020Config& dtmConfig = DTM2020Config());
+             const DTM2020Config& dtmConfig = DTM2020Config(),
+             const EarthAxes* axes = nullptr);
 
 /// Get DTM2020 density
 AtmosphericDensity DTM2020Density(const Vec3& position, double jd,
@@ -711,6 +733,13 @@ enum class GravityMode : uint8_t {
 };
 
 struct ForceModelSet {
+    /// Authoritative GCRF -> Earth-fixed rotation (row-major) at a TDB Julian
+    /// date, supplied by a caller that holds Earth orientation data (the PRW
+    /// execution request's earth_orientation input: IERS 2010, IAU 2006/2000A,
+    /// CIO based, with polar motion and UT1). Empty: the built-in IAU-1976/1980
+    /// + GAST approximation, without polar motion and with UT1 = UTC.
+    std::function<void(double jdTdb, double m[3][3])> earthFixedRotation;
+
     // Gravity
     bool usePointMass{true};
     double mu{MU_EARTH};
@@ -830,6 +859,13 @@ GravityFieldCoefficients InlineFieldCoefficients(const SphericalHarmonicsConfig&
 /// rotation by GAST with UTC standing in for UT1 (|UT1-UTC| < 0.9 s). Polar
 /// motion (under 0.5 arcsec) is not applied: the force set carries no EOP.
 void GcrfToEarthFixed(double jd, double m[3][3]);
+
+/// The force set's GCRF -> Earth-fixed rotation: its earthFixedRotation when
+/// supplied, else GcrfToEarthFixed(jd).
+void GcrfToEarthFixed(double jd, const ForceModelSet& forceSet, double m[3][3]);
+
+/// The force set's Earth-fixed axes at a TDB Julian date (GcrfToEarthFixed).
+EarthAxes EarthAxesAt(double jdTdb, const ForceModelSet& forceSet);
 
 /// Evaluate a field loaded from a potential file. Declared here and defined in
 /// environment_models.cpp, which owns ExtendedGravityField.

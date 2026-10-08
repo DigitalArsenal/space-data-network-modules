@@ -24,9 +24,16 @@ test('artifact passes standards-aware SDK compliance',async()=>{
  const report=await validateArtifactWithStandards({manifest,wasmPath,standardsRoot:fileURLToPath(new URL('../node_modules/spacedatastandards.org',import.meta.url))});
  assert.equal(report.ok,true,JSON.stringify(report.issues,null,2));
 });
-test('all method ports use the ratified canonical PRW identity',()=>{
+// Every port carries the ratified canonical PRW identity, except
+// invoke.earth_orientation, which carries SDS $EOP itself, as foundation/frames'
+// earth_orientation port does: the rows are an SDS record, not a native
+// container to wrap in PRW.NATIVE_INPUT.
+const EOP_TYPE={schemaName:'EOP.fbs',fileIdentifier:'$EOP',rootTypeName:'EOP',wireFormat:'flatbuffer'};
+const typeFor=(methodId,portId)=>methodId==='invoke'&&portId==='earth_orientation'?EOP_TYPE:TYPE;
+test('all method ports use the ratified canonical PRW identity, earth_orientation SDS $EOP',()=>{
  assert.deepEqual(manifest.methods.map(m=>m.methodId),['invoke','ingest_state','propagate_state','prepare_trajectory_segments','describe_trajectory_segments']);
- for(const m of manifest.methods)for(const p of [...m.inputPorts,...m.outputPorts])assert.deepEqual(p.acceptedTypeSets[0].allowedTypes,[TYPE]);
+ for(const m of manifest.methods)for(const p of [...m.inputPorts,...m.outputPorts])assert.deepEqual(p.acceptedTypeSets[0].allowedTypes,[typeFor(m.methodId,p.portId)]);
+ assert.deepEqual(manifest.methods[0].inputPorts.map(p=>p.portId),['request','kernel','earth_orientation']);
  assert.equal(manifest.threadModel,'wasi-sequential');assert.ok(manifest.sequentialJustification.detail.includes('ordered'));
 });
 test('PLG codec round-trips every declared method and port',()=>{
@@ -37,8 +44,8 @@ test('PLG codec round-trips every declared method and port',()=>{
   for(const direction of ['inputPorts','outputPorts'])for(let j=0;j<manifest.methods[i][direction].length;j++){
    const original=manifest.methods[i][direction][j],actual=decoded.methods[i][direction][j];
    assert.equal(actual.portId,original.portId);
-   const type=actual.acceptedTypeSets[0].allowedTypes[0];
-   for(const k of ['schemaName','fileIdentifier','rootTypeName','wireFormat'])assert.equal(type[k],TYPE[k]);
+   const type=actual.acceptedTypeSets[0].allowedTypes[0],expected=typeFor(manifest.methods[i].methodId,original.portId);
+   for(const k of ['schemaName','fileIdentifier','rootTypeName','wireFormat'])assert.equal(type[k],expected[k]);
   }
  }
 });

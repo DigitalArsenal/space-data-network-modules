@@ -50,8 +50,11 @@ namespace GRGM1200ACoefficients {
 ExtendedGravityField initEGM2008Extended(const EGM2008Config& config) {
     ExtendedGravityField field;
     field.model = GravityModelType::EGM2008;
-    field.mu = MU_EARTH;
-    field.referenceRadius = RE_EARTH;
+    // The model's own constants: its coefficients are scaled to them. (Until
+    // 2026-10-08 the field used 398600.4418 and 6378.137, the TCG-compatible
+    // GM and the WGS-84 radius.)
+    field.mu = EGM2008_GM_KM3_S2;
+    field.referenceRadius = EGM2008_RADIUS_KM;
     field.normalized = true;
 
     uint16_t maxDeg = std::min(config.maxDegree,
@@ -196,9 +199,14 @@ void computePinesLegendre(
         W[n][n-1] = cn * zRr2 * W[n-1][n-1];
     }
 
-    // Column recursion: V̄[n][m] for m <= n-2
-    // Normalized factors α, β from fully normalized ALF recursion
-    for (int m = 0; m <= std::min(maxOrder, maxDegree); m++) {
+    // Column recursion: V̄[n][m] for m <= n-2.
+    // Normalized factors α, β from fully normalized ALF recursion.
+    // The acceleration of a degree-n, order-m term reads V̄/W̄[n+1][m+1], so
+    // the columns run to maxOrder + 1. They used to stop at maxOrder, which
+    // dropped the x/y part of every term of order maxOrder whenever
+    // maxOrder < maxDegree: a zonal-only field (order 0) lost the horizontal
+    // pull of every zonal (a 290 km error in a day, found against Orekit).
+    for (int m = 0; m <= std::min(maxOrder + 1, maxDegree + 1); m++) {
         for (int n = m + 2; n <= maxDegree + 1; n++) {
             double nm = (double)(n - m);
             double np = (double)(n + m);
@@ -288,9 +296,14 @@ GravityAcceleration computeExtendedGravity(
                     -gp * (Cnm * V[n+1][m+1] + Snm * W[n+1][m+1])
                     + fgm * (Cnm * V[n+1][m-1] + Snm * W[n+1][m-1])
                 );
+                // Montenbruck & Gill (2000) eq. 3.33: both terms of the y
+                // component are (-C W + S V). The m-1 term carried the
+                // opposite sign until 2026-10-08, which put every tesseral
+                // term's y pull backwards (37 km in a day in LEO, against
+                // Orekit and against the inline evaluator).
                 harmonicAcc.y += muR2 * 0.5 * (
                     gp * (Snm * V[n+1][m+1] - Cnm * W[n+1][m+1])
-                    + fgm * (Cnm * W[n+1][m-1] - Snm * V[n+1][m-1])
+                    + fgm * (Snm * V[n+1][m-1] - Cnm * W[n+1][m-1])
                 );
                 harmonicAcc.z += muR2 * (-nmz * (Cnm * V[n+1][m] + Snm * W[n+1][m]));
             }

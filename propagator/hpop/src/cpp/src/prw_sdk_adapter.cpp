@@ -44,11 +44,15 @@ int resident(const char* method, const char* port) {
 }
 extern "C" int invoke(void) {
   const int index=plugin_find_input_index("request",0);const int kernelIndex=plugin_find_input_index("kernel",0);
+  const int eopIndex=plugin_find_input_index("earth_orientation",0);
   if(index<0)return fail("invalid-request: missing request");
+  if(plugin_find_input_index("earth_orientation",1)>=0)return fail("invalid-earth-orientation: Supply one earth_orientation input (one row or one size-prefixed stream).");
   const auto* request=plugin_get_input_frame(index);const auto* kernel=kernelIndex<0?nullptr:plugin_get_input_frame(kernelIndex);
+  const auto* eop=eopIndex<0?nullptr:plugin_get_input_frame(eopIndex);
   std::vector<uint8_t> output;std::string error;
   try {
-    if(!hpop::processPrwInvoke(request->payload,request->payload_length,kernel?kernel->payload:nullptr,kernel?kernel->payload_length:0,output,error))return fail(error);
+    if(!hpop::processPrwInvoke(request->payload,request->payload_length,kernel?kernel->payload:nullptr,kernel?kernel->payload_length:0,
+                               eop?eop->payload:nullptr,eop?eop->payload_length:0,output,error))return fail(error);
     return emit("response",output,request->sequence,true);
   }catch(const std::exception& e){return fail(std::string("unsupported-configuration: ")+e.what());}
 }

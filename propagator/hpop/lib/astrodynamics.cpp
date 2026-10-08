@@ -10,6 +10,7 @@
 #include "atmosphere_winds.h"
 #include "ephemeris.h"
 #include "atmosphere.h"
+#include "shadow.h"
 #include <cmath>
 #include <stdexcept>
 #include <cstring>
@@ -4494,50 +4495,16 @@ ShadowGeometry computeShadowGeometry(
         return result;
     }
 
-    // Conical shadow model
-    double sunRadius = 696000.0;  // km
-    double sunDist = sunPosition.magnitude();
-
-    // Apparent radii (angles)
-    result.apparentSunAngle = std::asin(sunRadius / satSunDist);
+    // Conical shadow: the overlap of the apparent disks (lib/shadow.h).
+    const double visible = shadow::visibleSunFraction(
+        satDist, satSunDist, satPosition.cross(satSun).magnitude(), -satPosition.dot(satSun),
+        occultingBodyRadius);
+    result.apparentSunAngle = std::asin(shadow::SUN_RADIUS_KM / satSunDist);
     result.apparentBodyAngle = std::asin(occultingBodyRadius / satDist);
-
-    // Umbra cone angle (Sun fully occluded)
-    double umbraAngle = std::asin((sunRadius - occultingBodyRadius) / sunDist);
-    double umbraLength = occultingBodyRadius / std::sin(umbraAngle);
-
-    // Penumbra cone angle (Sun partially occluded)
-    double penumbraAngle = std::asin((sunRadius + occultingBodyRadius) / sunDist);
-
-    // Check if in shadow region
-    double coneDistFromEarth = proj;
-
-    if (coneDistFromEarth > umbraLength) {
-        // Beyond umbra - could be in antumbra, but typically not modeled
-        return result;
-    }
-
-    // Umbra radius at satellite distance
-    double umbraRadius = occultingBodyRadius - coneDistFromEarth * std::tan(umbraAngle);
-
-    // Penumbra radius at satellite distance
-    double penumbraRadius = occultingBodyRadius + coneDistFromEarth * std::tan(penumbraAngle);
-
-    if (perpDist < umbraRadius) {
-        // Full umbra
-        result.shadowFraction = 1.0;
-        result.inUmbra = true;
-    } else if (perpDist < penumbraRadius) {
-        // Penumbra - partial shadowing
-        result.inPenumbra = true;
-
-        // Linear interpolation (simplified)
-        result.penumbraFraction = (penumbraRadius - perpDist) / (penumbraRadius - umbraRadius);
-        result.shadowFraction = result.penumbraFraction;
-
-        // More accurate: use area overlap formula
-        // (Would require solving for intersection of two circles)
-    }
+    result.shadowFraction = 1.0 - visible;
+    result.inUmbra = visible <= 0.0;
+    result.inPenumbra = visible > 0.0 && visible < 1.0;
+    result.penumbraFraction = result.inPenumbra ? result.shadowFraction : 0.0;
 
     return result;
 }
@@ -5219,47 +5186,30 @@ DragAccelerationResult computeDragAcceleration(
 }
 
 void ecefToGeodetic(const Vec3& ecef, double& latitude, double& longitude, double& altitude) {
-    // Bowring's iterative method for geodetic coordinates
+    // WGS84 geodetic coordinates by fixed-point iteration on the geodetic
+    // latitude, tan(lat) = (z + e^2 N sin(lat)) / p, which contracts by about
+    // e^2 per step; the height is then exact at any latitude,
+    // h = p cos(lat) + z sin(lat) - a sqrt(1 - e^2 sin^2(lat)).
+    // Agrees with ERFA eraGc2gd (WGS84) to well under a millimetre.
+    const double a = RE_EARTH;              // Equatorial radius (km)
+    const double f = 1.0 / 298.257223563;  // WGS84 flattening
+    const double e2 = f * (2 - f);          // First eccentricity squared
+    const double x = ecef.x, y = ecef.y, z = ecef.z;
+    const double p = std::sqrt(x * x + y * y);
 
-    double x = ecef.x;
-    double y = ecef.y;
-    double z = ecef.z;
-
-    double a = RE_EARTH;              // Equatorial radius (km)
-    double f = 1.0 / 298.257223563;  // WGS84 flattening
-    double b = a * (1 - f);           // Polar radius
-    double e2 = f * (2 - f);          // First eccentricity squared
-    double ep2 = e2 / (1 - e2);       // Second eccentricity squared
-
-    double p = std::sqrt(x*x + y*y);
-
-    // Longitude
     longitude = std::atan2(y, x);
-
-    // Initial latitude estimate
     latitude = std::atan2(z, p * (1 - e2));
-
-    // Iterate for latitude
-    for (int i = 0; i < 10; i++) {
-        double sinLat = std::sin(latitude);
-        double N = a / std::sqrt(1 - e2 * sinLat * sinLat);
-        double newLat = std::atan2(z + ep2 * b * sinLat * sinLat * sinLat,
-                                   p - e2 * a * std::cos(latitude) * std::cos(latitude) * std::cos(latitude));
-
-        if (std::abs(newLat - latitude) < 1e-12) break;
-        latitude = newLat;
+    for (int i = 0; i < 20; i++) {
+        const double sinLat = std::sin(latitude);
+        const double N = a / std::sqrt(1 - e2 * sinLat * sinLat);
+        const double next = std::atan2(z + e2 * N * sinLat, p);
+        const bool done = std::abs(next - latitude) < 1e-14;
+        latitude = next;
+        if (done) break;
     }
-
-    // Altitude
-    double sinLat = std::sin(latitude);
-    double cosLat = std::cos(latitude);
-    double N = a / std::sqrt(1 - e2 * sinLat * sinLat);
-
-    if (std::abs(cosLat) > 1e-10) {
-        altitude = p / cosLat - N;
-    } else {
-        altitude = std::abs(z) - b;
-    }
+    const double sinLat = std::sin(latitude);
+    const double cosLat = std::cos(latitude);
+    altitude = p * cosLat + z * sinLat - a * std::sqrt(1 - e2 * sinLat * sinLat);
 }
 
 Vec3 geodeticToECEF(double latitude, double longitude, double altitude) {
