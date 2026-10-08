@@ -3524,29 +3524,29 @@
       }
     },
     "licensing/core/dist/browser/module.wasm": {
-      "sha256": "26dd149f4cb43059359357c7bf905ff10ecd4c6686cef75ea14cca67072e3a26",
-      "bytes": 1060359,
+      "sha256": "25294158fa71bda26cb0f66b7ad24e880af71843b0f82d3e66a05b1995d4b5ea",
+      "bytes": 1338085,
       "module": null,
-      "lastCommit": "39c553b8817936ad40632366e6b2f85cbc029e6a",
-      "lastCommitDate": "2026-10-07T23:14:01-04:00",
+      "lastCommit": "349c87755c05cb541b49aece8d25995729b31d06",
+      "lastCommitDate": "2026-10-08T13:39:41-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "4ac19918091a4a05584fd6b5753f7408a57c0c57",
+        "superRepoCommit": "2df4a3155567a6d46304ac954d47d45f0abf59ad",
         "sdkCommit": "79eda3cec943a8b5b2a1f1ddaccd306f9c55003f"
       },
       "declaration": null
     },
     "licensing/core/dist/isomorphic/module.wasm": {
-      "sha256": "26dd149f4cb43059359357c7bf905ff10ecd4c6686cef75ea14cca67072e3a26",
-      "bytes": 1060359,
+      "sha256": "25294158fa71bda26cb0f66b7ad24e880af71843b0f82d3e66a05b1995d4b5ea",
+      "bytes": 1338085,
       "module": null,
-      "lastCommit": "39c553b8817936ad40632366e6b2f85cbc029e6a",
-      "lastCommitDate": "2026-10-07T23:14:01-04:00",
+      "lastCommit": "349c87755c05cb541b49aece8d25995729b31d06",
+      "lastCommitDate": "2026-10-08T13:39:41-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "4ac19918091a4a05584fd6b5753f7408a57c0c57",
+        "superRepoCommit": "2df4a3155567a6d46304ac954d47d45f0abf59ad",
         "sdkCommit": "79eda3cec943a8b5b2a1f1ddaccd306f9c55003f"
       },
       "declaration": null
