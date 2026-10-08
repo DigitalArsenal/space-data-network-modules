@@ -51,6 +51,13 @@
 //   The radiation-pressure column integrates the lit fraction through each
 //   penumbra, whose edges HPOP's steps cross without locating; it moves with
 //   rounding (native and wasm step differently) as the LEO SRP states do.
+// Every case with samples runs HPOP's variational integrator (state and STM
+// under one error control). A request for the final epoch alone runs the
+// plain RK78 path instead; it is checked too ("final epoch only"), at 24 h,
+// with steps of at most 10 s where radiation pressure or drag is on (the
+// penumbra kinks: at 60 s or more LEO400 F6 is 21 cm off, at 30 s 2.2 cm, at
+// 10 s 9.6 mm) and 300 s otherwise; measured <= 2.5 cm (LEO400), each case in
+// about a second.
 // Orekit 13.1's DeSitterRelativity is replaced in the oracle by the same
 // eq. 10.12 with consistent frames (see OrekitReference.java); the Cd*A/m
 // rate is a third drag parameter driver there, so Orekit differentiates it.
@@ -65,6 +72,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
 import { REFERENCE, requestInputs, score, scoreJacobians, toleranceFor } from './lib/orekitCases.mjs';
+import { decodeResult } from './lib/prwCodec.mjs';
 
 const WASM = new URL('../dist/isomorphic/module.wasm', import.meta.url);
 const MANIFEST = new URL('../plugin-manifest.json', import.meta.url);
@@ -91,3 +99,21 @@ for (const c of REFERENCE.cases) {
     }
   });
 }
+
+for (const c of REFERENCE.cases) {
+  if (c.parameters) continue;
+  const label = `${c.orbit} ${c.forces}`;
+  test(`HPOP matches Orekit, final epoch only: ${label}`, async (t) => {
+    const harness = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(WASM), manifest: JSON.parse(fs.readFileSync(MANIFEST, 'utf8')), surface: 'direct' });
+    t.after(() => harness.destroy());
+    const inputs = requestInputs(c, { maxStep: c.srp || c.drag ? 10 : 300, edit: (exec) => { exec.SAMPLE_EPOCHS = []; } });
+    const response = await harness.invoke({ methodId: 'invoke', inputs });
+    assert.equal(response.statusCode, 0, `${label}: ${response.errorCode}: ${response.errorMessage}`);
+    const result = decodeResult(response), [, x, y, z] = c.samples.at(-1);
+    const gap = Math.hypot(result.position[0] * 1000 - x, result.position[1] * 1000 - y, result.position[2] * 1000 - z);
+    const limit = toleranceFor(c);
+    t.diagnostic(`${label}: ${gap.toExponential(3)} m at 24 h (limit ${limit} m)`);
+    assert.ok(gap <= limit, `${label}: ${gap.toExponential(3)} m exceeds ${limit} m`);
+  });
+}
+

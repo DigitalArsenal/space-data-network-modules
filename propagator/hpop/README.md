@@ -142,8 +142,13 @@ Until 2026-10-08 the penumbra was a linear ramp in distance from the shadow
 axis.
 
 The visible fraction has a kink at each penumbra boundary, and the
-integrators step across it without locating it. At RK78 1e-13 that is up to
-about 8 cm a day in LEO; 1e-14 brings it to about 3 cm.
+integrators step across it without locating it. With samples or an STM
+(the variational integrator, whose error control includes the STM's shadow
+derivatives) RK78 1e-13 leaves up to about 8 cm a day in LEO and 1e-14 about
+3 cm. A request for the final epoch alone runs the plain RK78, which does not
+see the kink: in LEO with radiation pressure keep `MAXIMUM_STEP_SECONDS` at
+10 s (measured against Orekit: 60 s or more 21 cm a day, 30 s 2.2 cm, 10 s
+under 1 cm, about a second of computation).
 
 ## Installation
 
