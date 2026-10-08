@@ -410,9 +410,12 @@ struct RelativisticConfig {
 /// @param jd Julian date (TDB) - needed for de Sitter (Sun position)
 /// @param mu Central body GM (km^3/s^2)
 /// @param config Relativistic configuration
+/// @param axes Earth-fixed axes whose z is the Lense-Thirring spin axis
+///        (GCRF z when null)
 /// @return Relativistic acceleration correction (km/s^2)
 Vec3 RelativisticCorrection(const Vec3& position, const Vec3& velocity, double jd,
-                            double mu = MU_EARTH, const RelativisticConfig& config = RelativisticConfig());
+                            double mu = MU_EARTH, const RelativisticConfig& config = RelativisticConfig(),
+                            const EarthAxes* axes = nullptr);
 
 /// Schwarzschild relativistic correction only
 Vec3 SchwarzschildCorrection(const Vec3& position, const Vec3& velocity, double mu = MU_EARTH);
@@ -475,21 +478,41 @@ Vec3 ThermalReradiation(const Vec3& satPosition, const Vec3& sunPosition,
 // 14. Solid Tides - Solid Earth Tides
 // -----------------------------------------------------------------------------
 
-/// Solid tide configuration - IERS 2010 Conventions
+/// Solid Earth tides, IERS Conventions (2010) section 6.2: the changes to
+/// the fully normalized geopotential of degrees 2-4 raised by the Sun and the
+/// Moon (step 1, eqs. 6.6 and 6.7, with Table 6.3's anelastic Love numbers
+/// including their imaginary parts and k+), and the frequency dependence of
+/// k20, k21 and k22 (step 2, eq. 6.8, Tables 6.5a-c; lib/iers2010_tides.h).
+/// The Sun and Moon are placed in the force set's Earth-fixed axes
+/// (EarthAxesAt) and step 2 reads GMST from the force set's UT1 (jdUt1At).
+/// Pole tide is separate (PoleTide).
 struct SolidTideConfig {
-    double k20{0.30190};            ///< Love number k₂₀ (IERS 2010 Table 6.3)
-    double k21{0.29830};            ///< Love number k₂₁
-    double k22{0.30102};            ///< Love number k₂₂
-    double k30{0.093};              ///< Love number k₃₀
     bool includeSunTide{true};      ///< Include solar tide
     bool includeMoonTide{true};     ///< Include lunar tide
-    bool permanentTide{false};      ///< Include permanent tide deformation
     bool frequencyDependent{true};  ///< Include frequency-dependent corrections (Step 2)
+    /// The central field is zero-tide (its C20 already holds the permanent
+    /// tide): remove 4.4228e-8 * -0.31460 * k20 from dC20 (IERS 2010 eq.
+    /// 6.13 and section 6.2.2). EGM2008, HPOP's field, is tide-free: false.
+    bool zeroTideField{false};
 };
 
-/// Solid Earth tides acceleration perturbation
-/// @param satPosition Satellite position (km)
-/// @param jd Julian date
+struct ForceModelSet;
+
+/// The IERS 2010 solid tide field at a TDB Julian date: dC/dS of degrees 2-4
+/// (order <= degree) with the set's GM and EGM2008's reference radius, the
+/// Sun and Moon in `axes`. Evaluate it in those axes without its central term.
+ExtendedGravityField SolidTideField(double jd, const ForceModelSet& forceSet,
+                                    const EarthAxes& axes);
+
+/// Solid Earth tides acceleration (km/s^2) at a GCRF position (km), TDB
+/// Julian date, in the force set's Earth orientation.
+Vec3 SolidTideAcceleration(const Vec3& satPosition, double jd,
+                           const ForceModelSet& forceSet);
+
+/// Solid Earth tides with the built-in Earth orientation (no EOP, UT1 = UTC)
+/// and MU_EARTH; `config` selects bodies and step 2.
+/// @param satPosition Satellite position, GCRF (km)
+/// @param jd Julian date (TDB)
 /// @param config Solid tide configuration
 /// @return Solid tide acceleration (km/s^2)
 Vec3 SolidTides(const Vec3& satPosition, double jd, const SolidTideConfig& config = SolidTideConfig());
@@ -740,6 +763,21 @@ struct ForceModelSet {
     /// + GAST approximation, without polar motion and with UT1 = UTC.
     std::function<void(double jdTdb, double m[3][3])> earthFixedRotation;
 
+    /// Space weather at a UTC Julian date (an execution request's
+    /// space_weather input). When set, drag reads it at every evaluation,
+    /// starting from `weather`, which it then overrides.
+    std::function<void(double jdUtc, SpaceWeatherData& weather)> weatherAt;
+
+    /// UT1 Julian date at a TDB Julian date, from the same Earth orientation
+    /// data as earthFixedRotation (the solid tides' GMST). Empty: UT1 = UTC.
+    std::function<double(double jdTdb)> jdUt1At;
+
+    /// Rate of change of the drag ballistic coefficient Cd*A/m (m^2/kg/s)
+    /// from dragRateEpochTdb (TDB Julian date): drag uses
+    /// Cd*A/m + rate * (t - epoch) (DragAt).
+    double dragAreaOverMassRate{0.0};
+    double dragRateEpochTdb{0.0};
+
     // Gravity
     bool usePointMass{true};
     double mu{MU_EARTH};
@@ -866,6 +904,14 @@ void GcrfToEarthFixed(double jd, const ForceModelSet& forceSet, double m[3][3]);
 
 /// The force set's Earth-fixed axes at a TDB Julian date (GcrfToEarthFixed).
 EarthAxes EarthAxesAt(double jdTdb, const ForceModelSet& forceSet);
+
+/// The space weather drag reads at a UTC Julian date: weatherAt when set,
+/// else the set's `weather`.
+SpaceWeatherData WeatherAt(double jdUtc, const ForceModelSet& forceSet);
+
+/// The drag configuration at a TDB Julian date, with dragAreaOverMassRate
+/// applied to Cd (area and mass unchanged).
+DragForceConfig DragAt(double jdTdb, const ForceModelSet& forceSet);
 
 /// Evaluate a field loaded from a potential file. Declared here and defined in
 /// environment_models.cpp, which owns ExtendedGravityField.

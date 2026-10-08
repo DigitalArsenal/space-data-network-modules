@@ -3179,7 +3179,9 @@ bool ingestPortable(const std::vector<std::pair<const uint8_t*, size_t>>& inputs
             return residentFailure(error, "invalid-instance", "Ingest frames must share one instance and generation.");
         if (record->HAS_MASS_KG() || record->MASS_KG() != 0 ||
             record->DRAG_AREA_OVER_MASS_M2_KG() != 0 || record->SRP_AREA_OVER_MASS_M2_KG() != 0 ||
-            record->HAS_DRAG_AREA_OVER_MASS_M2_KG() || record->HAS_SRP_AREA_OVER_MASS_M2_KG())
+            record->HAS_DRAG_AREA_OVER_MASS_M2_KG() || record->HAS_SRP_AREA_OVER_MASS_M2_KG() ||
+            record->HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S() || record->HAS_IN_TRACK_ACCELERATION_M_S2() ||
+            record->DRAG_AREA_OVER_MASS_RATE_M2_KG_S() != 0 || record->IN_TRACK_ACCELERATION_M_S2() != 0)
             return residentFailure(error, "unsupported-configuration", "Resident catalog does not propagate mass or per-object force coefficients; use EXECUTION_REQUEST.");
         ResidentIdentity identity{record->ENTITY_HANDLE(), record->CATALOG_NUMBER(),
             record->OBJECT_ID() ? record->OBJECT_ID()->str() : std::string(), record->VALID()};

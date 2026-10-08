@@ -224,12 +224,13 @@ double density(const Vec3& r,double jd,const ForceModelSet& f,const EarthAxes& a
     const double atmosphereJD=f.explicitEpochContract
         ? timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(jd))) : jd;
     const Vec3 fixed=axes.fixed(r);
+    const SpaceWeatherData weather=WeatherAt(atmosphereJD,f);
     switch(f.dragModel){
         case DragModelType::Exponential:return alt>2500 ? 0 : exponentialAtmosphereDensity(std::max(0.0,alt));
         case DragModelType::HarrisPriester:{const auto sun=getSunPosition(jd);return computeHarrisPriester(r,sun.valid?sun.position:Vec3(1,0,0),f.harrisPriesterExponent).density;}
         case DragModelType::NRLMSISE00:{
             AtmosphereConfig c;c.model=AtmosphereModelType::NRLMSISE00;c.includeWinds=f.drag.includeWinds;c.coRotatingAtmosphere=f.drag.coRotatingAtmosphere;c.diurnalVariation=f.nrlmsise00.diurnalVariation;c.geomagneticEffects=f.nrlmsise00.geomagneticActivity;c.minAltitude=f.drag.minAltitude;c.maxAltitude=f.drag.maxAltitude;
-            return computeNRLMSISE00(fixed,atmosphereJD,f.weather,c).density;
+            return computeNRLMSISE00(fixed,atmosphereJD,weather,c).density;
         }
         case DragModelType::USSA1976:
             if(alt<f.drag.minAltitude || alt>f.drag.maxAltitude)return 0;
@@ -238,12 +239,12 @@ double density(const Vec3& r,double jd,const ForceModelSet& f,const EarthAxes& a
             switch(f.drag.model){
                 case DragModelType::Exponential:return exponentialAtmosphereDensity(alt);
                 case DragModelType::USSA1976:return computeUSSA1976(alt).density;
-                case DragModelType::JB2008:return computeJB2008(fixed,atmosphereJD,f.weather).density;
-                case DragModelType::DTM2020:return computeDTM2020(fixed,atmosphereJD,f.weather).density;
-                default:{AtmosphereConfig c;c.minAltitude=f.drag.minAltitude;c.maxAltitude=f.drag.maxAltitude;c.coRotatingAtmosphere=f.drag.coRotatingAtmosphere;c.includeWinds=f.drag.includeWinds;return computeNRLMSISE00(fixed,atmosphereJD,f.weather,c).density;}
+                case DragModelType::JB2008:return computeJB2008(fixed,atmosphereJD,weather).density;
+                case DragModelType::DTM2020:return computeDTM2020(fixed,atmosphereJD,weather).density;
+                default:{AtmosphereConfig c;c.minAltitude=f.drag.minAltitude;c.maxAltitude=f.drag.maxAltitude;c.coRotatingAtmosphere=f.drag.coRotatingAtmosphere;c.includeWinds=f.drag.includeWinds;return computeNRLMSISE00(fixed,atmosphereJD,weather,c).density;}
             }
-        case DragModelType::JB2008:return computeJB2008(fixed,atmosphereJD,f.weather).density;
-        case DragModelType::DTM2020:return computeDTM2020(fixed,atmosphereJD,f.weather).density;
+        case DragModelType::JB2008:return computeJB2008(fixed,atmosphereJD,weather).density;
+        case DragModelType::DTM2020:return computeDTM2020(fixed,atmosphereJD,weather).density;
     }
     return 0;
 }
@@ -264,7 +265,8 @@ V drag(const V& r,const V& v,const Vec3& position,double jd,const ForceModelSet&
     const Vec3 w=(f.dragModel==DragModelType::Exponential?Vec3(0,0,1):axes.spin())*OMEGA_EARTH;
     const V vr=v-(rotation?V(w.y*r.z-w.z*r.y,w.z*r.x-w.x*r.z,w.x*r.y-w.y*r.x):V());
     const D speed=vr.norm();if(speed.value<1e-6)return V();
-    return vr*(-500.0*f.drag.Cd*f.drag.area/f.drag.mass*rho*speed);
+    const DragForceConfig d=DragAt(jd,f);
+    return vr*(-500.0*d.Cd*d.area/d.mass*rho*speed);
 }
 
 V rtn(const Vec3& dv,const V& r,const V& v) {
@@ -275,14 +277,27 @@ V rtn(const Vec3& dv,const V& r,const V& v) {
 V relativity(const V& r,const V& v,double jd,const ForceModelSet& f) {
     V a;const D radius=r.norm(),r2=radius*radius,r3=r2*radius;
     if(f.relativistic.schwarzschild){const D k=f.mu/(SPEED_OF_LIGHT*SPEED_OF_LIGHT*r3);a=a+r*((4*f.mu/radius-v.dot(v))*k)+v*(4*r.dot(v)*k);}
-    if(f.relativistic.lenseThirring){const V spin(0,0,1);a=a+(r.cross(v)*(3*r.z/r2)+v.cross(spin))*(2*4.35e-3/r3);}
-    if(f.relativistic.deSitter){const auto sun=getSunPosition(jd);const double radiusSun=sun.position.magnitude();if(sun.valid && radiusSun>1e3){const Vec3 earthV=sun.velocity*(-1),earthA=sun.position*(MU_SUN/(radiusSun*radiusSun*radiusSun));a=a+V(earthV.cross(earthA)).cross(v)*(-3/(2*f.relativistic.c*f.relativistic.c));}}
+    // Lense-Thirring about the Earth-fixed z axis, |J| = 9.8e8 m^2/s (force_models.cpp).
+    if(f.relativistic.lenseThirring){const V spin(EarthAxesAt(jd,f).spin());const D c2=f.relativistic.c*f.relativistic.c;a=a+(r.cross(v)*(3*r.dot(spin)/r2)+v.cross(spin))*(2*f.mu*9.8e2/(c2*r3));}
+    if(f.relativistic.deSitter){const auto sun=getSunPosition(jd);const double radiusSun=sun.position.magnitude();if(sun.valid && radiusSun>1e3){const Vec3 earthV=sun.velocity*(-1),earthA=sun.position*(MU_SUN/(radiusSun*radiusSun*radiusSun));a=a+V(earthV.cross(earthA)).cross(v)*(3/(f.relativistic.c*f.relativistic.c));}}
     return a;
 }
 
+// The IERS 2010 solid tide field (force_models.cpp SolidTideField) in the
+// force set's Earth-fixed axes. Its coefficients depend on time only, so the
+// position partials are those of the degree-2..4 field.
+V solidTides(const V& r,double jd,const ForceModelSet& f) {
+    if(r.norm().value<RE_EARTH)return V();
+    const EarthAxes axes=EarthAxesAt(jd,f);const ExtendedGravityField field=SolidTideField(jd,f,axes);
+    const auto& m=axes.m;
+    const V fixed(r.x*m[0][0]+r.y*m[0][1]+r.z*m[0][2],r.x*m[1][0]+r.y*m[1][1]+r.z*m[1][2],r.x*m[2][0]+r.y*m[2][1]+r.z*m[2][2]);
+    const V a=extendedGravity(fixed,field,false);
+    return V(a.x*m[0][0]+a.y*m[1][0]+a.z*m[2][0],a.x*m[0][1]+a.y*m[1][1]+a.z*m[2][1],a.x*m[0][2]+a.y*m[1][2]+a.z*m[2][2]);
+}
+
 const char* configError(const ForceModelSet& f) {
-    if(f.useEarthAlbedo || f.useThermalReradiation || f.useSolidTides || f.useOceanTides || f.usePoleTide || f.useEmpiricalAccel || f.hasFiniteManeuver)
-        return "ANALYTIC STM: albedo, thermal, tides, empirical and finite-thrust partials are unavailable; select FINITE_DIFFERENCE";
+    if(f.useEarthAlbedo || f.useThermalReradiation || f.useOceanTides || f.usePoleTide || f.useEmpiricalAccel || f.hasFiniteManeuver)
+        return "ANALYTIC STM: albedo, thermal, ocean and pole tide, empirical and finite-thrust partials are unavailable; select FINITE_DIFFERENCE";
     if(f.useSRP && f.srp.model!=SRPModelType::Cannonball)
         return "ANALYTIC STM requires cannonball SRP; select FINITE_DIFFERENCE for attitude-dependent SRP";
     if(f.useDrag && f.drag.includeWinds && f.dragModel!=DragModelType::Exponential)
@@ -322,6 +337,7 @@ AccelerationPartials ComputeAccelerationPartials(const Vec3& position,const Vec3
     if(f.useSRP){const Vec3 sun=f.sunPositionProvided?f.sunPosition:getSunPosition(jd).position;a=a+cannonball(r,sun,f.srp);}
     if(f.useDrag)a=a+drag(r,v,position,jd,f,gradient);
     if(f.useRelativisticCorrection)a=a+relativity(r,v,jd,f);
+    if(f.useSolidTides)a=a+solidTides(r,jd,f);
     if(f.useContributions)for(int i=0;i<std::min(f.contributions.count,ContributionSet::MAX_SLOTS);++i){
         const auto& c=f.contributions.slots[i];if(!c.enabled)continue;
         switch(c.kind){

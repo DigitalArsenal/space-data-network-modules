@@ -29,6 +29,7 @@ extern "C" {
 #include "eop_series.hpp"
 #include <cstdio>
 #include <memory>
+#include <map>
 
 namespace hpop {
 namespace {
@@ -76,8 +77,61 @@ public:
         double rc2t[3][3];eraC2tcio(rc2i,eraEra00(ut11,ut12),rpom,rc2t);
         for(int i=0;i<3;++i)for(int j=0;j<3;++j)m[i][j]=rc2t[i][j];
     }
+    // UT1 Julian date at a TDB Julian date (NaN outside the table).
+    double ut1(double jdTdb) {
+        const double jdTt=timesys::tdbToTt(jdTdb);
+        double u1,u2,a,b;sdn::frames::EarthOrientation e;
+        if(!utcAt(jdTt,u1,u2)||!sdn::frames::eop::at(rows,u1,u2,&e,midnight).empty()||eraUtcut1(u1,u2,e.dut1,&a,&b)<0)
+            return std::numeric_limits<double>::quiet_NaN();
+        return a+b;
+    }
 private:
     double cachedTt=-1e300,rc2i[3][3]{},rpom[3][3]{};
+};
+bool positive(double x) {return std::isfinite(x)&&x>0;}
+bool nonnegative(double x) {return std::isfinite(x)&&x>=0;}
+// Daily space weather from PRW.SPACE_WEATHER ($SPW rows), read as
+// NRLMSISE-00's driver reads its inputs at a UTC instant on day d: F10.7 is the
+// observed flux of day d-1, F10.7a the 81-day centred average of observed flux
+// on day d, Ap the daily Ap of day d, and Kp (the HWM14 storm winds) the
+// three-hour Kp of the interval. These are also Orekit's
+// CssiSpaceWeatherData readings for observed and daily-predicted rows. Each
+// row is used as published (monthly predictions are not interpolated).
+class SpaceWeatherTable {
+public:
+    struct Day {double f107Obs=0,f107ObsCentred81=0,apDaily=0,kp[8]{};};
+    std::map<long,Day> days;  // by MJD (UTC)
+    std::string error;
+    // Empty string = success.
+    std::string add(const flatbuffers::Vector<flatbuffers::Offset<SPW>>* rows) {
+        if(!rows||rows->size()==0)return "No SPW rows.";
+        long previous=0;bool first=true;
+        for(const SPW* row:*rows) {
+            int y=0,m=0,d=0;double jd0=0,mjd=0;
+            if(!row->DATE()||std::sscanf(row->DATE()->c_str(),"%d-%d-%d",&y,&m,&d)!=3||eraCal2jd(y,m,d,&jd0,&mjd)!=0)return "SPW DATE must be an ISO 8601 calendar date.";
+            const long day=long(mjd);
+            if(!first&&day<=previous)return "SPW rows must have strictly increasing DATE.";
+            first=false;previous=day;
+            Day v;v.f107Obs=row->F107_OBS();v.f107ObsCentred81=row->F107_OBS_CENTER81();v.apDaily=row->AP_AVG();
+            const int kp[8]={row->KP1(),row->KP2(),row->KP3(),row->KP4(),row->KP5(),row->KP6(),row->KP7(),row->KP8()};
+            for(int i=0;i<8;++i)v.kp[i]=kp[i]/10.0;
+            if(!positive(v.f107Obs)||!positive(v.f107ObsCentred81)||!nonnegative(v.apDaily))return "SPW F10.7 must be positive and Ap nonnegative.";
+            for(const double k:v.kp)if(!nonnegative(k)||k>9)return "SPW Kp must be within 0 to 9.";
+            days[day]=v;
+        }
+        return "";
+    }
+    // Model inputs at a UTC Julian date; false if a needed day is missing.
+    bool at(double jdUtc,SpaceWeatherData& out) const {
+        const double mjd=jdUtc-2400000.5;const long day=long(std::floor(mjd));
+        const auto today=days.find(day),yesterday=days.find(day-1);
+        if(today==days.end()||yesterday==days.end())return false;
+        out.F107=yesterday->second.f107Obs;out.F107a=today->second.f107ObsCentred81;out.Ap=today->second.apDaily;
+        const int slot=std::min(7,std::max(0,int((mjd-double(day))*8)));
+        out.Kp=out.kp3h=today->second.kp[slot];out.epoch=jdUtc;
+        return true;
+    }
+    bool covers(double jdUtc) const {SpaceWeatherData w;return at(jdUtc,w);}
 };
 struct Execution {
     StateVector initial;
@@ -98,8 +152,6 @@ struct Execution {
     std::vector<Integrator::FiniteBurn> burns;
     Integrator::ProcessNoise noise;
 };
-bool positive(double x) {return std::isfinite(x)&&x>0;}
-bool nonnegative(double x) {return std::isfinite(x)&&x>=0;}
 bool parseIntegrator(const PRWIntegratorSettings* in, bool mass, IntegratorConfig& out, std::string& error) {
     if(!in)return prwError(error,"invalid-integrator: Missing integrator settings.");
     switch(in->ALGORITHM()) {
@@ -221,6 +273,43 @@ bool parseForces(const PRWForceConfiguration* in,double epoch,bool hasEarthOrien
         if(!nonnegative(out.weather.F107)||!nonnegative(out.weather.F107a)||!nonnegative(out.weather.Ap)||!nonnegative(out.weather.Kp)||out.weather.Kp>9)
             return prwError(error,"invalid-weather: Space-weather indices must be finite and within their domain.");
     }
+    // Solid Earth tides (PRW SOLID_TIDES, SDS 1.240.0).
+    switch(in->SOLID_TIDES()) {
+        case prwSolidTideModel::NONE:break;
+        case prwSolidTideModel::IERS_2010:
+            if(!hasEarthOrientation)return prwError(error,"eop-data-required: Solid Earth tides are Earth-fixed; supply earth_orientation.");
+            out.useSolidTides=true;out.solidTides=ForceModel::SolidTideConfig();break;
+        default:return prwError(error,"unsupported-solid-tides: Unknown solid tide model.");
+    }
+    // Post-Newtonian terms, IERS Conventions (2010) eq. 10.12 with beta = gamma = 1.
+    switch(in->RELATIVITY()) {
+        case prwRelativityTerms::NONE:break;
+        case prwRelativityTerms::SCHWARZSCHILD:
+            out.useRelativisticCorrection=true;out.relativistic.schwarzschild=true;out.relativistic.lenseThirring=out.relativistic.deSitter=false;break;
+        case prwRelativityTerms::IERS_2010:
+            out.useRelativisticCorrection=true;out.relativistic.schwarzschild=out.relativistic.lenseThirring=out.relativistic.deSitter=true;break;
+        default:return prwError(error,"unsupported-relativity: Unknown relativity terms.");
+    }
+    // Constant in-track acceleration (the VCM's in-track thrust): T of RTN.
+    if(!in->HAS_IN_TRACK_ACCELERATION_M_S2()&&in->IN_TRACK_ACCELERATION_M_S2()!=0)
+        return prwError(error,"invalid-presence: IN_TRACK_ACCELERATION_M_S2 requires HAS_IN_TRACK_ACCELERATION_M_S2.");
+    if(in->HAS_IN_TRACK_ACCELERATION_M_S2()) {
+        if(!std::isfinite(in->IN_TRACK_ACCELERATION_M_S2()))return prwError(error,"invalid-forces: In-track acceleration must be finite.");
+        // A constant RTN contribution (T = N x R, N along r x v), which has
+        // analytic partials (force_partials.cpp), unlike EmpiricalAccel.
+        out.useContributions=true;out.contributions=ForceModel::ContributionSet();out.contributions.count=1;
+        auto& slot=out.contributions.slots[0];
+        slot.kind=ForceModel::ContributionKind::ConstantRTN;slot.p[1]=in->IN_TRACK_ACCELERATION_M_S2()*1e-3;
+    }
+    // Rate of change of Cd*A/m (the VCM's BDOT), from the initial epoch.
+    if(!in->HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S()&&in->DRAG_AREA_OVER_MASS_RATE_M2_KG_S()!=0)
+        return prwError(error,"invalid-presence: DRAG_AREA_OVER_MASS_RATE_M2_KG_S requires HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S.");
+    if(in->HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S()) {
+        if(!std::isfinite(in->DRAG_AREA_OVER_MASS_RATE_M2_KG_S()))return prwError(error,"invalid-forces: The Cd*A/m rate must be finite.");
+        if(!out.useDrag)return prwError(error,"invalid-forces: DRAG_AREA_OVER_MASS_RATE_M2_KG_S applies to drag; enable drag.");
+        if(!positive(out.drag.area))return prwError(error,"invalid-forces: A Cd*A/m rate needs a positive area.");
+        out.dragAreaOverMassRate=in->DRAG_AREA_OVER_MASS_RATE_M2_KG_S();out.dragRateEpochTdb=epoch;
+    }
     if(!in->EPHEMERIS_SOURCE()||in->EPHEMERIS_SOURCE()->size()==0)return prwError(error,"ephemeris-source: An explicit ephemeris source is required.");
     const auto source=in->EPHEMERIS_SOURCE()->str();
     if(source=="Analytical")Ephemeris::selectEphemerisSource(Ephemeris::EphemerisSource::Analytical);
@@ -307,7 +396,8 @@ bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execu
     if(!positive(out.initial.position.magnitude())||!std::isfinite(out.initial.velocity.magnitude()))
         return prwError(error,"invalid-state: Initial Cartesian state must have a finite nonzero radius.");
     const auto* initial=in->INITIAL();
-    if(initial->HAS_DRAG_AREA_OVER_MASS_M2_KG()||initial->HAS_SRP_AREA_OVER_MASS_M2_KG()||initial->DRAG_AREA_OVER_MASS_M2_KG()!=0||initial->SRP_AREA_OVER_MASS_M2_KG()!=0)
+    if(initial->HAS_DRAG_AREA_OVER_MASS_M2_KG()||initial->HAS_SRP_AREA_OVER_MASS_M2_KG()||initial->DRAG_AREA_OVER_MASS_M2_KG()!=0||initial->SRP_AREA_OVER_MASS_M2_KG()!=0||
+       initial->HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S()||initial->DRAG_AREA_OVER_MASS_RATE_M2_KG_S()!=0||initial->HAS_IN_TRACK_ACCELERATION_M_S2()||initial->IN_TRACK_ACCELERATION_M_S2()!=0)
         return prwError(error,"unsupported-state-coefficients: Supply explicit spacecraft force settings; resident ballistic coefficients are not an additional force source.");
     double utc=0;
     if(!decodeEpochTT(in->TARGET_EPOCH(),out.targetTT,error))return false;
@@ -437,14 +527,26 @@ bool evaluate(Execution& execution,const PRWExecutionRequest* request,const TTEp
     if(!std::isfinite(state.POSITION->X)||!std::isfinite(state.POSITION->Y)||!std::isfinite(state.POSITION->Z)||!std::isfinite(state.VELOCITY->X)||!std::isfinite(state.VELOCITY->Y)||!std::isfinite(state.VELOCITY->Z))return prwError(error,"invoke-failed: Integration returned a nonfinite state.");
     return true;
 }
-bool execute(const PRWExecutionRequest* request,const std::shared_ptr<EarthRotation>& earth,PRWT& response,std::string& error) {
+bool execute(const PRWExecutionRequest* request,const std::shared_ptr<EarthRotation>& earth,const std::shared_ptr<SpaceWeatherTable>& weather,PRWT& response,std::string& error) {
     Execution execution;if(!parseExecution(request,earth!=nullptr,execution,error))return false;
+    if(weather) {
+        if(!execution.forces.useDrag)return prwError(error,"unsupported-space-weather: Space weather applies to drag; enable drag.");
+        if(request->FORCES()->WEATHER())return prwError(error,"invalid-space-weather: Supply WEATHER or the space_weather input, not both.");
+        // Every day the arc touches, and the day before it, must be present.
+        double first=execution.initial.epoch,last=execution.target;
+        for(const double t:execution.samples){last=std::max(last,t);first=std::min(first,t);}
+        const auto utc=[](double jdTdb){return timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(jdTdb)));};
+        for(double t=utc(first);t<utc(last)+1.0;t+=1.0)
+            if(!weather->covers(std::min(t,utc(last))))return prwError(error,"space-weather-out-of-range: The SPW rows must cover every day of the arc and the day before it.");
+        execution.forces.weatherAt=[weather](double jdUtc,SpaceWeatherData& w){weather->at(jdUtc,w);};
+    }
     if(earth) {
         // The EOP must bracket the whole arc; nothing is extrapolated.
         double last=execution.target,first=execution.initial.epoch;
         for(const double t:execution.samples){last=std::max(last,t);first=std::min(first,t);}
         if(!earth->covers(first)||!earth->covers(last)){error=earth->error;return false;}
         execution.forces.earthFixedRotation=[earth](double jdTdb,double m[3][3]){earth->matrix(jdTdb,m);};
+        execution.forces.jdUt1At=[earth](double jdTdb){return earth->ut1(jdTdb);};
     }
     auto result=std::make_unique<PRWExecutionResultT>();result->FINAL_SAMPLE=std::make_unique<PRWPropagationSampleT>();
     if(!evaluate(execution,request,execution.targetTT,*result->FINAL_SAMPLE,error))return false;
@@ -510,20 +612,31 @@ bool atmosphere(const PRWAtmosphereRequest* request,PRWT& response,std::string& 
     response.ATMOSPHERE_RESULT=std::move(result);return true;
 }
 } // namespace
-bool processPrwInvoke(const uint8_t* data,size_t size,const uint8_t* kernel,size_t kernelSize,const uint8_t* eop,size_t eopSize,std::vector<uint8_t>& output,std::string& error) {
+bool processPrwInvoke(const uint8_t* data,size_t size,const uint8_t* kernel,size_t kernelSize,const uint8_t* eop,size_t eopSize,const uint8_t* spaceWeather,size_t spaceWeatherSize,std::vector<uint8_t>& output,std::string& error) {
     struct KernelLifetime {KernelLifetime(){Ephemeris::clearEphemerisBuffer();}~KernelLifetime(){Ephemeris::clearEphemerisBuffer();}} kernelLifetime;
     const PRW* request=nullptr;if(!verifyPrw(data,size,request,error))return false;
     if(kernelSize&&!loadKernel(kernel,kernelSize,error))return false;
     PRWT response;bool ok=false;
     std::shared_ptr<EarthRotation> earth;
+    // The rows point into these PRW buffers, which outlive the invocation.
     if(eopSize) {
+        const PRW* root=nullptr;if(!verifyPrw(eop,eopSize,root,error))return false;
+        if(!root->EARTH_ORIENTATION())return prwError(error,"invalid-prw-arm: earth_orientation requires EARTH_ORIENTATION.");
         earth=std::make_shared<EarthRotation>();
-        const std::string reason=sdn::frames::eop::addPayload(eop,eopSize,earth->rows);
+        const std::string reason=sdn::frames::eop::addRows(root->EARTH_ORIENTATION()->ROWS(),earth->rows);
         if(!reason.empty())return prwError(error,("invalid-earth-orientation: "+reason).c_str());
-        if(earth->rows.empty())return prwError(error,"invalid-earth-orientation: No EOP rows.");
     }
-    if(request->EXECUTION_REQUEST())ok=execute(request->EXECUTION_REQUEST(),earth,response,error);
+    std::shared_ptr<SpaceWeatherTable> weather;
+    if(spaceWeatherSize) {
+        const PRW* root=nullptr;if(!verifyPrw(spaceWeather,spaceWeatherSize,root,error))return false;
+        if(!root->SPACE_WEATHER())return prwError(error,"invalid-prw-arm: space_weather requires SPACE_WEATHER.");
+        weather=std::make_shared<SpaceWeatherTable>();
+        const std::string reason=weather->add(root->SPACE_WEATHER()->ROWS());
+        if(!reason.empty())return prwError(error,("invalid-space-weather: "+reason).c_str());
+    }
+    if(request->EXECUTION_REQUEST())ok=execute(request->EXECUTION_REQUEST(),earth,weather,response,error);
     else if(earth)return prwError(error,"unsupported-earth-orientation: Earth orientation applies to execution requests.");
+    else if(weather)return prwError(error,"unsupported-space-weather: Space weather applies to execution requests.");
     else if(request->EPHEMERIS_REQUEST())ok=ephemeris(request->EPHEMERIS_REQUEST(),response,error);
     else if(request->ATMOSPHERE_REQUEST())ok=atmosphere(request->ATMOSPHERE_REQUEST(),response,error);
     else if(request->VERSION_QUERY()){response.VERSION_RESULT=std::make_unique<PRWVersionResultT>();response.VERSION_RESULT->VERSION=HPOP_MODULE_VERSION;response.VERSION_RESULT->MODULE_ID=HPOP_MODULE_ID;ok=true;}

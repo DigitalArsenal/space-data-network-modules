@@ -29,7 +29,8 @@ inline bool verifyPrw(const uint8_t* data, size_t size, const PRW*& root, std::s
         !!root->RESIDENT_REQUEST() + !!root->PREPARE_REQUEST() + !!root->PREPARE_RESULT() +
         !!root->DESCRIBE_REQUEST() + !!root->DESCRIBE_RESULT() + !!root->NATIVE_INPUT() +
         !!root->EPHEMERIS_REQUEST() + !!root->EPHEMERIS_RESULT() + !!root->ATMOSPHERE_REQUEST() +
-        !!root->ATMOSPHERE_RESULT() + root->VERSION_QUERY() + !!root->VERSION_RESULT();
+        !!root->ATMOSPHERE_RESULT() + root->VERSION_QUERY() + !!root->VERSION_RESULT() +
+        !!root->EARTH_ORIENTATION() + !!root->SPACE_WEATHER();
     return arms == 1 || prwError(error, "invalid-prw-arm: Exactly one PRW payload arm is required.");
 }
 inline bool parseIsoEpoch(const std::string& iso, double& jd, std::string& error) {

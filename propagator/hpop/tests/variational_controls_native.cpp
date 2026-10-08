@@ -53,10 +53,10 @@ int main() {
     check(!incomplete.success&&incomplete.errorMessage.find("did not reach")!=std::string::npos,
           "reject legacy RK4 incomplete backward integration");
 
-    forces.useSolidTides=true;
+    forces.useOceanTides=true;
     check(!PropagateWithSTM(initial,30,config,forces).success,"unsupported force derivative fails");
     check(forces.weather.epoch==savedEpoch,"weather epoch restored after force derivative failure");
-    forces.useSolidTides=false;
+    forces.useOceanTides=false;
     auto limited=config;limited.maxSteps=1;
     check(!PropagateWithSTM(initial,3000,limited,forces,STMMethod::FiniteDifference).success,
           "finite difference exhaustion cannot report success");

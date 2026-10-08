@@ -8,7 +8,7 @@ export const packageRoot = fileURLToPath(new URL('.', import.meta.url));
 export const standardsRoot = path.join(packageRoot, 'node_modules/spacedatastandards.org');
 export async function generateSdsBindings() {
   const version = JSON.parse(fs.readFileSync(path.join(standardsRoot, 'package.json'))).version;
-  if (version !== '1.232.0') throw new Error(`Expected published SDS 1.232.0; installed ${version}. Run npm ci.`);
+  if (version !== '1.240.0') throw new Error(`Expected published SDS 1.240.0; installed ${version}. Run npm ci.`);
   const flatc = await createFlatc();
   const mkdir = p => { try { flatc.FS.mkdir(p); } catch {} };
   for (const p of ['/schemas', '/out_cpp', '/out_ts']) mkdir(p);
@@ -24,8 +24,6 @@ export async function generateSdsBindings() {
   const families = [];
   const visit = family => { if (families.includes(family)) return; for (const dep of dependencies.get(family) ?? []) visit(dep); families.push(family); };
   visit('PRW');
-  // $EOP: the execution request's earth_orientation input.
-  visit('EOP');
   const outDir = path.join(packageRoot, 'src/cpp/generated/sds');
   fs.mkdirSync(outDir, {recursive:true});
   for (const family of families) {

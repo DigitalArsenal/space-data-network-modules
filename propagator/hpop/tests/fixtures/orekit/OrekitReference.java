@@ -41,6 +41,16 @@ import org.hipparchus.CalculusFieldElement;
 import org.hipparchus.geometry.euclidean.threed.FieldVector3D;
 import org.hipparchus.geometry.euclidean.threed.Vector3D;
 import org.hipparchus.ode.nonstiff.DormandPrince853Integrator;
+import org.orekit.attitudes.LofOffset;
+import org.orekit.forces.empirical.ParametricAcceleration;
+import org.orekit.forces.empirical.PolynomialAccelerationModel;
+import org.orekit.forces.gravity.DeSitterRelativity;
+import org.orekit.forces.gravity.LenseThirringRelativity;
+import org.orekit.forces.gravity.Relativity;
+import org.orekit.forces.gravity.SolidTides;
+import org.orekit.forces.gravity.potential.TideSystem;
+import org.orekit.frames.LOFType;
+import org.orekit.models.earth.atmosphere.data.CssiSpaceWeatherData;
 import org.orekit.bodies.CelestialBody;
 import org.orekit.bodies.CelestialBodyFactory;
 import org.orekit.bodies.OneAxisEllipsoid;
@@ -92,8 +102,47 @@ public class OrekitReference {
     }
     static final class Forces {
         final String name; final int degree, order; final boolean thirdBodies, srp, drag;
+        // PRW SDS 1.240.0 additions: relativity 0 none, 1 Schwarzschild, 2 IERS 2010
+        // (+ Lense-Thirring, de Sitter); IERS 2010 solid tides; in-track
+        // acceleration (m/s^2); Cd*A/m rate (m^2/kg/s); CSSI daily space weather.
+        int relativity = 0; boolean tides = false, cssi = false; double inTrack = 0, bdot = 0;
         Forces(String name, int degree, int order, boolean thirdBodies, boolean srp, boolean drag) {
             this.name = name; this.degree = degree; this.order = order; this.thirdBodies = thirdBodies; this.srp = srp; this.drag = drag;
+        }
+        Forces relativity(int r) { relativity = r; return this; }
+        Forces tides() { tides = true; return this; }
+        Forces inTrack(double a) { inTrack = a; return this; }
+        Forces bdot(double rate) { bdot = rate; return this; }
+        Forces cssi() { cssi = true; return this; }
+    }
+
+    // Drag whose Cd*A/m grows linearly from the epoch: Cd*A/m + rate*(t - t0).
+    static final class RateDrag extends IsotropicDrag {
+        final AbsoluteDate t0; final double rate;
+        RateDrag(double area, double cd, AbsoluteDate t0, double rate) { super(area, cd); this.t0 = t0; this.rate = rate; }
+        @Override
+        public Vector3D dragAcceleration(SpacecraftState s, double density, Vector3D relativeVelocity, double[] parameters) {
+            double b0 = CD * AREA / s.getMass();
+            return super.dragAcceleration(s, density, relativeVelocity, parameters).scalarMultiply((b0 + rate * s.getDate().durationFrom(t0)) / b0);
+        }
+    }
+
+    // IERS 2010 eq. 10.12 de Sitter term with every vector in the state's
+    // frame. Orekit 13.1 DeSitterRelativity (and develop as of 2026-10-08)
+    // takes the Earth's position and velocity in the Sun's IAU-pole
+    // "inertially oriented" frame (pole RA 286.13, Dec 63.87 deg) and crosses
+    // them with the satellite velocity in the state's frame, so its result is
+    // rotated by that frame's orientation. Same equation and Sun GM here,
+    // with Earth-from-Sun taken as minus the Sun in the state's frame.
+    static final class FrameConsistentDeSitter extends DeSitterRelativity {
+        final CelestialBody sunBody = CelestialBodyFactory.getSun();
+        @Override
+        public Vector3D acceleration(SpacecraftState s, double[] parameters) {
+            final double c2 = Constants.SPEED_OF_LIGHT * Constants.SPEED_OF_LIGHT;
+            final PVCoordinates sunPv = sunBody.getPVCoordinates(s.getDate(), s.getFrame());
+            final Vector3D pEarth = sunPv.getPosition().negate(), vEarth = sunPv.getVelocity().negate();
+            final double r = pEarth.getNorm();
+            return new Vector3D(-3.0 * parameters[0] / (c2 * r * r * r), vEarth.crossProduct(pEarth).crossProduct(s.getPVCoordinates().getVelocity()));
         }
     }
 
@@ -161,6 +210,21 @@ public class OrekitReference {
             new Forces("F4-field-sun-moon", 20, 20, true, false, false),
             new Forces("F5-field-sun-moon-srp", 20, 20, true, true, false),
             new Forces("F6-field-sun-moon-srp-drag", 20, 20, true, true, true));
+        // Forces added with PRW SDS 1.240.0, on top of F4 or F6.
+        java.util.Map<String, List<Forces>> extra = java.util.Map.of(
+            "LEO400", List.of(
+                new Forces("R1-field-sun-moon-schwarzschild", 20, 20, true, false, false).relativity(1),
+                new Forces("R2-field-sun-moon-relativity-iers2010", 20, 20, true, false, false).relativity(2),
+                new Forces("T1-field-sun-moon-solid-tides", 20, 20, true, false, false).tides(),
+                new Forces("I1-field-sun-moon-in-track", 20, 20, true, false, false).inTrack(5e-8),
+                new Forces("B1-field-sun-moon-srp-drag-bdot", 20, 20, true, true, true).bdot(5e-8),
+                new Forces("W1-field-sun-moon-srp-drag-cssi", 20, 20, true, true, true).cssi()),
+            "SSO700", List.of(
+                new Forces("W1-field-sun-moon-srp-drag-cssi", 20, 20, true, true, true).cssi()),
+            "GPS", List.of(
+                new Forces("R1-field-sun-moon-schwarzschild", 20, 20, true, false, false).relativity(1),
+                new Forces("R2-field-sun-moon-relativity-iers2010", 20, 20, true, false, false).relativity(2),
+                new Forces("T1-field-sun-moon-solid-tides", 20, 20, true, false, false).tides()));
 
         StringBuilder out = new StringBuilder();
         out.append("{\n \"source\": \"Orekit 13.1 (CS GROUP, Apache-2.0), DormandPrince853 (steps <= 10 s), GCRF; NRLMSISE-00 on mean local solar time\",\n");
@@ -173,7 +237,9 @@ public class OrekitReference {
             KeplerianOrbit kep = new KeplerianOrbit(c.aKm * 1000, c.e, Math.toRadians(c.iDeg), Math.toRadians(c.argpDeg),
                 Math.toRadians(c.raanDeg), Math.toRadians(c.mDeg), PositionAngleType.MEAN, gcrf, epoch, GM);
             PVCoordinates pv0 = kep.getPVCoordinates();
-            for (Forces f : sets) {
+            List<Forces> all = new ArrayList<>(sets);
+            all.addAll(extra.getOrDefault(c.name, List.of()));
+            for (Forces f : all) {
                 if (f.drag && !c.drag) continue;
                 CartesianOrbit orbit = new CartesianOrbit(pv0, gcrf, epoch, GM);
                 // Steps of at most 10 s: with longer steps Orekit's own LEO400
@@ -197,8 +263,26 @@ public class OrekitReference {
                     p.addForceModel(new SolarRadiationPressure(AU, SOLAR_PRESSURE, sun, new OneAxisEllipsoid(RE, 0.0, itrf),
                         new IsotropicRadiationSingleCoefficient(AREA, CR)));
                 }
+                if (f.relativity >= 1) p.addForceModel(new Relativity(GM));
+                if (f.relativity >= 2) {
+                    p.addForceModel(new LenseThirringRelativity(GM, itrf));
+                    p.addForceModel(new FrameConsistentDeSitter());
+                }
+                if (f.tides) {
+                    // IERS 2010 section 6.2 only (no pole tide), for the tide-free
+                    // field; tidal coefficients sampled every 60 s.
+                    p.addForceModel(new SolidTides(itrf, FIELD_RADIUS, GM, TideSystem.TIDE_FREE, false, 60.0, 12,
+                        IERSConventions.IERS_2010, TimeScalesFactory.getUT1(IERSConventions.IERS_2010, false), sun, moon));
+                }
+                if (f.inTrack != 0) {
+                    // QSW's S axis is the in-track axis, N x rhat.
+                    p.setAttitudeProvider(new LofOffset(gcrf, LOFType.QSW));
+                    ParametricAcceleration inTrack = new ParametricAcceleration(Vector3D.PLUS_J, false, new PolynomialAccelerationModel("in-track", epoch, 0));
+                    inTrack.getParametersDrivers().get(0).setValue(f.inTrack);
+                    p.addForceModel(inTrack);
+                }
                 if (f.drag) {
-                    NRLMSISE00InputParameters weather = new NRLMSISE00InputParameters() {
+                    NRLMSISE00InputParameters weather = f.cssi ? new CssiSpaceWeatherData(CssiSpaceWeatherData.DEFAULT_SUPPORTED_NAMES) : new NRLMSISE00InputParameters() {
                         public AbsoluteDate getMinDate() { return AbsoluteDate.PAST_INFINITY; }
                         public AbsoluteDate getMaxDate() { return AbsoluteDate.FUTURE_INFINITY; }
                         public double getDailyFlux(AbsoluteDate date) { return F107; }
@@ -207,12 +291,15 @@ public class OrekitReference {
                     };
                     OneAxisEllipsoid earth = new OneAxisEllipsoid(Constants.WGS84_EARTH_EQUATORIAL_RADIUS, Constants.WGS84_EARTH_FLATTENING, itrf);
                     Atmosphere atmosphere = new MeanSolarTimeNRLMSISE00(weather, earth, utc);
-                    p.addForceModel(new DragForce(atmosphere, new IsotropicDrag(AREA, CD)));
+                    p.addForceModel(new DragForce(atmosphere, f.bdot != 0 ? new RateDrag(AREA, CD, epoch, f.bdot) : new IsotropicDrag(AREA, CD)));
                 }
                 if (!first) out.append(",\n");
                 first = false;
                 out.append(String.format("  {\"orbit\": \"%s\", \"forces\": \"%s\", \"degree\": %d, \"order\": %d, \"thirdBodies\": %b, \"srp\": %b, \"drag\": %b,\n",
                     c.name, f.name, f.degree, f.order, f.thirdBodies, f.srp, f.drag));
+                if (f.relativity != 0 || f.tides || f.inTrack != 0 || f.bdot != 0 || f.cssi)
+                    out.append(String.format("   \"relativity\": %d, \"solidTides\": %b, \"inTrackAccelerationMS2\": %.6e, \"dragAreaOverMassRateM2KgS\": %.6e, \"spaceWeather\": \"%s\",\n",
+                        f.relativity, f.tides, f.inTrack, f.bdot, f.cssi ? "cssi" : "constant"));
                 out.append("   \"samples\": [");
                 for (double t = 0; t <= DURATION + 1e-9; t += STEP) {
                     AbsoluteDate date = epoch.shiftedBy(t);

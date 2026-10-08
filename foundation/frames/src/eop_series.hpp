@@ -109,6 +109,21 @@ inline std::string addPayload(const uint8_t* data, size_t size,
   return "";
 }
 
+// Rows inside an enclosing FlatBuffer already verified with it (propagator/
+// hpop's PRW.EARTH_ORIENTATION). They point into that buffer. Empty string =
+// success.
+inline std::string addRows(const flatbuffers::Vector<flatbuffers::Offset<EOP>>* list,
+                           std::vector<Row>& rows) {
+  if (!list || list->size() == 0) return "No EOP rows.";
+  if (rows.size() + list->size() > 366) return "EOP table exceeds 366 rows.";
+  for (const EOP* row : *list) {
+    auto value = values(row);
+    if (!valid(value)) return "Invalid EOP row.";
+    rows.push_back({row, value});
+  }
+  return "";
+}
+
 inline std::string text(const flatbuffers::String* s) {
   return s ? s->str() : "";
 }

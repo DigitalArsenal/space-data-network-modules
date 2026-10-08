@@ -18,6 +18,8 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "PCE_generated.h"
 #include "PPE_generated.h"
 #include "NCD_generated.h"
+#include "EOP_generated.h"
+#include "SPW_generated.h"
 
 struct PRWInit;
 struct PRWInitBuilder;
@@ -135,6 +137,14 @@ struct PRWNativeInput;
 struct PRWNativeInputBuilder;
 struct PRWNativeInputT;
 
+struct PRWEarthOrientation;
+struct PRWEarthOrientationBuilder;
+struct PRWEarthOrientationT;
+
+struct PRWSpaceWeatherTable;
+struct PRWSpaceWeatherTableBuilder;
+struct PRWSpaceWeatherTableT;
+
 struct PRWEphemerisRequest;
 struct PRWEphemerisRequestBuilder;
 struct PRWEphemerisRequestT;
@@ -168,10 +178,10 @@ struct PRWT;
 /// into a shared memory arena.
 ///
 /// Data interchange for the underlying content (state vectors, covariance,
-/// maneuvers, force models, Keplerian / TLE inputs, polynomial ephemeris)
-/// lives in SDS `OCM` + `OMM` + `PPE` + `RFM` + `ATM`. PRW is the runtime
-/// wire that moves those across a JS ↔ WASM boundary, not a substitute for
-/// any of them.
+/// maneuvers, force models, Keplerian / TLE inputs, polynomial ephemeris,
+/// Earth orientation, space weather) lives in SDS `OCM` + `OMM` + `PPE` +
+/// `RFM` + `ATM` + `EOP` + `SPW`. PRW is the runtime wire that moves those
+/// across a JS ↔ WASM boundary, not a substitute for any of them.
 /// Runtime state-flag bitfield (sized to match a single uint).
 /// Data-interchange equivalents: MANEUVERING is subsumed by OCM.Maneuver;
 /// HAS_COVARIANCE is implicit from OCM.COVARIANCE_DATA. The remaining
@@ -760,6 +770,78 @@ inline const char *EnumNameprwDensitySpecies(prwDensitySpecies e) {
   if (::flatbuffers::IsOutRange(e, prwDensitySpecies::UNSPECIFIED, prwDensitySpecies::ANOMALOUS_OXYGEN)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesprwDensitySpecies()[index];
+}
+
+/// Solid Earth tide model for the central body's field. NONE leaves the
+/// tides out. IERS_2010 is IERS Conventions (2010) section 6.2: degree 2 and
+/// 3 tides raised by the Sun and Moon with nominal Love numbers (step 1), the
+/// frequency-dependent corrections (step 2), and the permanent tide handled
+/// for the field's own tide system.
+enum class prwSolidTideModel : uint8_t {
+  NONE = 0,
+  IERS_2010 = 1,
+  MIN = NONE,
+  MAX = IERS_2010
+};
+
+inline const prwSolidTideModel (&EnumValuesprwSolidTideModel())[2] {
+  static const prwSolidTideModel values[] = {
+    prwSolidTideModel::NONE,
+    prwSolidTideModel::IERS_2010
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwSolidTideModel() {
+  static const char * const names[3] = {
+    "NONE",
+    "IERS_2010",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwSolidTideModel(prwSolidTideModel e) {
+  if (::flatbuffers::IsOutRange(e, prwSolidTideModel::NONE, prwSolidTideModel::IERS_2010)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwSolidTideModel()[index];
+}
+
+/// Post-Newtonian corrections to the central body's acceleration (IERS
+/// Conventions (2010) eq. 10.12). NONE leaves them out. SCHWARZSCHILD is the
+/// point-mass term only. IERS_2010 adds Lense-Thirring and de Sitter
+/// (geodesic) precession.
+enum class prwRelativityTerms : uint8_t {
+  NONE = 0,
+  SCHWARZSCHILD = 1,
+  IERS_2010 = 2,
+  MIN = NONE,
+  MAX = IERS_2010
+};
+
+inline const prwRelativityTerms (&EnumValuesprwRelativityTerms())[3] {
+  static const prwRelativityTerms values[] = {
+    prwRelativityTerms::NONE,
+    prwRelativityTerms::SCHWARZSCHILD,
+    prwRelativityTerms::IERS_2010
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwRelativityTerms() {
+  static const char * const names[4] = {
+    "NONE",
+    "SCHWARZSCHILD",
+    "IERS_2010",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwRelativityTerms(prwRelativityTerms e) {
+  if (::flatbuffers::IsOutRange(e, prwRelativityTerms::NONE, prwRelativityTerms::IERS_2010)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwRelativityTerms()[index];
 }
 
 struct PRWInitT : public ::flatbuffers::NativeTable {
@@ -1934,6 +2016,12 @@ struct PRWForceConfigurationT : public ::flatbuffers::NativeTable {
   prwAtmosphereFamily ATMOSPHERE_MODEL = prwAtmosphereFamily::NRLMSISE00;
   std::unique_ptr<PRWSpaceWeatherT> WEATHER{};
   std::string EPHEMERIS_SOURCE{};
+  prwSolidTideModel SOLID_TIDES = prwSolidTideModel::NONE;
+  prwRelativityTerms RELATIVITY = prwRelativityTerms::NONE;
+  double IN_TRACK_ACCELERATION_M_S2 = 0.0;
+  bool HAS_IN_TRACK_ACCELERATION_M_S2 = false;
+  double DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 0.0;
+  bool HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false;
   PRWForceConfigurationT() = default;
   PRWForceConfigurationT(const PRWForceConfigurationT &o);
   PRWForceConfigurationT(PRWForceConfigurationT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1968,7 +2056,13 @@ struct PRWForceConfiguration FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Ta
     VT_DRAG_COEFFICIENT = 40,
     VT_ATMOSPHERE_MODEL = 42,
     VT_WEATHER = 44,
-    VT_EPHEMERIS_SOURCE = 46
+    VT_EPHEMERIS_SOURCE = 46,
+    VT_SOLID_TIDES = 48,
+    VT_RELATIVITY = 50,
+    VT_IN_TRACK_ACCELERATION_M_S2 = 52,
+    VT_HAS_IN_TRACK_ACCELERATION_M_S2 = 54,
+    VT_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 56,
+    VT_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 58
   };
   prwGravitySelection GRAVITY_CHOICE() const {
     return static_cast<prwGravitySelection>(GetField<uint8_t>(VT_GRAVITY_CHOICE, 0));
@@ -2042,6 +2136,32 @@ struct PRWForceConfiguration FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Ta
   const ::flatbuffers::String *EPHEMERIS_SOURCE() const {
     return GetPointer<const ::flatbuffers::String *>(VT_EPHEMERIS_SOURCE);
   }
+  /// Solid Earth tides. Their field is Earth-fixed, so a provider needs Earth
+  /// orientation (PRW.EARTH_ORIENTATION) to apply them.
+  prwSolidTideModel SOLID_TIDES() const {
+    return static_cast<prwSolidTideModel>(GetField<uint8_t>(VT_SOLID_TIDES, 0));
+  }
+  prwRelativityTerms RELATIVITY() const {
+    return static_cast<prwRelativityTerms>(GetField<uint8_t>(VT_RELATIVITY, 0));
+  }
+  /// Constant acceleration along the in-track axis, m/s2: T of RTN,
+  /// N cross rhat with N = unit(r cross v) (the "in-track thrust" of a VCM).
+  double IN_TRACK_ACCELERATION_M_S2() const {
+    return GetField<double>(VT_IN_TRACK_ACCELERATION_M_S2, 0.0);
+  }
+  /// True when IN_TRACK_ACCELERATION_M_S2 carries a value; false means absent.
+  bool HAS_IN_TRACK_ACCELERATION_M_S2() const {
+    return GetField<uint8_t>(VT_HAS_IN_TRACK_ACCELERATION_M_S2, 0) != 0;
+  }
+  /// Rate of change of the drag ballistic coefficient Cd*A/m, m2/kg/s (the
+  /// BDOT of a VCM). Drag uses Cd*A/m + rate * (t - initial epoch).
+  double DRAG_AREA_OVER_MASS_RATE_M2_KG_S() const {
+    return GetField<double>(VT_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 0.0);
+  }
+  /// True when DRAG_AREA_OVER_MASS_RATE_M2_KG_S carries a value; false means absent.
+  bool HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S() const {
+    return GetField<uint8_t>(VT_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 0) != 0;
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -2070,6 +2190,12 @@ struct PRWForceConfiguration FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Ta
            verifier.VerifyTable(WEATHER()) &&
            VerifyOffsetRequired(verifier, VT_EPHEMERIS_SOURCE) &&
            verifier.VerifyString(EPHEMERIS_SOURCE()) &&
+           VerifyField<uint8_t>(verifier, VT_SOLID_TIDES, 1) &&
+           VerifyField<uint8_t>(verifier, VT_RELATIVITY, 1) &&
+           VerifyField<double>(verifier, VT_IN_TRACK_ACCELERATION_M_S2, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_IN_TRACK_ACCELERATION_M_S2, 1) &&
+           VerifyField<double>(verifier, VT_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 1) &&
            verifier.EndTable();
   }
   PRWForceConfigurationT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2147,6 +2273,24 @@ struct PRWForceConfigurationBuilder {
   void add_EPHEMERIS_SOURCE(::flatbuffers::Offset<::flatbuffers::String> EPHEMERIS_SOURCE) {
     fbb_.AddOffset(PRWForceConfiguration::VT_EPHEMERIS_SOURCE, EPHEMERIS_SOURCE);
   }
+  void add_SOLID_TIDES(prwSolidTideModel SOLID_TIDES) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_SOLID_TIDES, static_cast<uint8_t>(SOLID_TIDES), 0);
+  }
+  void add_RELATIVITY(prwRelativityTerms RELATIVITY) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_RELATIVITY, static_cast<uint8_t>(RELATIVITY), 0);
+  }
+  void add_IN_TRACK_ACCELERATION_M_S2(double IN_TRACK_ACCELERATION_M_S2) {
+    fbb_.AddElement<double>(PRWForceConfiguration::VT_IN_TRACK_ACCELERATION_M_S2, IN_TRACK_ACCELERATION_M_S2, 0.0);
+  }
+  void add_HAS_IN_TRACK_ACCELERATION_M_S2(bool HAS_IN_TRACK_ACCELERATION_M_S2) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_HAS_IN_TRACK_ACCELERATION_M_S2, static_cast<uint8_t>(HAS_IN_TRACK_ACCELERATION_M_S2), 0);
+  }
+  void add_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(double DRAG_AREA_OVER_MASS_RATE_M2_KG_S) {
+    fbb_.AddElement<double>(PRWForceConfiguration::VT_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 0.0);
+  }
+  void add_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(bool HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, static_cast<uint8_t>(HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S), 0);
+  }
   explicit PRWForceConfigurationBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2182,8 +2326,16 @@ inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfiguration(
     double DRAG_COEFFICIENT = 2.2,
     prwAtmosphereFamily ATMOSPHERE_MODEL = prwAtmosphereFamily::NRLMSISE00,
     ::flatbuffers::Offset<PRWSpaceWeather> WEATHER = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> EPHEMERIS_SOURCE = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> EPHEMERIS_SOURCE = 0,
+    prwSolidTideModel SOLID_TIDES = prwSolidTideModel::NONE,
+    prwRelativityTerms RELATIVITY = prwRelativityTerms::NONE,
+    double IN_TRACK_ACCELERATION_M_S2 = 0.0,
+    bool HAS_IN_TRACK_ACCELERATION_M_S2 = false,
+    double DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 0.0,
+    bool HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false) {
   PRWForceConfigurationBuilder builder_(_fbb);
+  builder_.add_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
+  builder_.add_IN_TRACK_ACCELERATION_M_S2(IN_TRACK_ACCELERATION_M_S2);
   builder_.add_DRAG_COEFFICIENT(DRAG_COEFFICIENT);
   builder_.add_REFLECTIVITY_COEFFICIENT(REFLECTIVITY_COEFFICIENT);
   builder_.add_AREA_M2(AREA_M2);
@@ -2194,6 +2346,10 @@ inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfiguration(
   builder_.add_THIRD_BODY_IDS(THIRD_BODY_IDS);
   builder_.add_MAXIMUM_ORDER(MAXIMUM_ORDER);
   builder_.add_MAXIMUM_DEGREE(MAXIMUM_DEGREE);
+  builder_.add_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
+  builder_.add_HAS_IN_TRACK_ACCELERATION_M_S2(HAS_IN_TRACK_ACCELERATION_M_S2);
+  builder_.add_RELATIVITY(RELATIVITY);
+  builder_.add_SOLID_TIDES(SOLID_TIDES);
   builder_.add_ATMOSPHERE_MODEL(ATMOSPHERE_MODEL);
   builder_.add_ENABLE_DRAG(ENABLE_DRAG);
   builder_.add_ENABLE_SRP(ENABLE_SRP);
@@ -2237,7 +2393,13 @@ inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfigurationD
     double DRAG_COEFFICIENT = 2.2,
     prwAtmosphereFamily ATMOSPHERE_MODEL = prwAtmosphereFamily::NRLMSISE00,
     ::flatbuffers::Offset<PRWSpaceWeather> WEATHER = 0,
-    const char *EPHEMERIS_SOURCE = nullptr) {
+    const char *EPHEMERIS_SOURCE = nullptr,
+    prwSolidTideModel SOLID_TIDES = prwSolidTideModel::NONE,
+    prwRelativityTerms RELATIVITY = prwRelativityTerms::NONE,
+    double IN_TRACK_ACCELERATION_M_S2 = 0.0,
+    bool HAS_IN_TRACK_ACCELERATION_M_S2 = false,
+    double DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 0.0,
+    bool HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false) {
   auto THIRD_BODY_IDS__ = THIRD_BODY_IDS ? _fbb.CreateVector<int32_t>(*THIRD_BODY_IDS) : 0;
   auto EPHEMERIS_SOURCE__ = EPHEMERIS_SOURCE ? _fbb.CreateString(EPHEMERIS_SOURCE) : 0;
   return CreatePRWForceConfiguration(
@@ -2263,7 +2425,13 @@ inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfigurationD
       DRAG_COEFFICIENT,
       ATMOSPHERE_MODEL,
       WEATHER,
-      EPHEMERIS_SOURCE__);
+      EPHEMERIS_SOURCE__,
+      SOLID_TIDES,
+      RELATIVITY,
+      IN_TRACK_ACCELERATION_M_S2,
+      HAS_IN_TRACK_ACCELERATION_M_S2,
+      DRAG_AREA_OVER_MASS_RATE_M2_KG_S,
+      HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
 }
 
 ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfiguration(::flatbuffers::FlatBufferBuilder &_fbb, const PRWForceConfigurationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -2481,6 +2649,10 @@ struct PRWResidentStateT : public ::flatbuffers::NativeTable {
   bool HAS_SRP_AREA_OVER_MASS_M2_KG = false;
   bool VALID = true;
   std::unique_ptr<PRWProcessNoiseT> PROCESS_NOISE{};
+  double DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 0.0;
+  bool HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false;
+  double IN_TRACK_ACCELERATION_M_S2 = 0.0;
+  bool HAS_IN_TRACK_ACCELERATION_M_S2 = false;
   PRWResidentStateT() = default;
   PRWResidentStateT(const PRWResidentStateT &o);
   PRWResidentStateT(PRWResidentStateT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -2507,7 +2679,11 @@ struct PRWResidentState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_SRP_AREA_OVER_MASS_M2_KG = 26,
     VT_HAS_SRP_AREA_OVER_MASS_M2_KG = 28,
     VT_VALID = 30,
-    VT_PROCESS_NOISE = 32
+    VT_PROCESS_NOISE = 32,
+    VT_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 34,
+    VT_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 36,
+    VT_IN_TRACK_ACCELERATION_M_S2 = 38,
+    VT_HAS_IN_TRACK_ACCELERATION_M_S2 = 40
   };
   const PRWInstance *INSTANCE() const {
     return GetPointer<const PRWInstance *>(VT_INSTANCE);
@@ -2562,6 +2738,23 @@ struct PRWResidentState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const PRWProcessNoise *PROCESS_NOISE() const {
     return GetPointer<const PRWProcessNoise *>(VT_PROCESS_NOISE);
   }
+  /// Rate of change of DRAG_AREA_OVER_MASS_M2_KG, m2/kg/s, from STATE's epoch
+  /// (the BDOT of a VCM).
+  double DRAG_AREA_OVER_MASS_RATE_M2_KG_S() const {
+    return GetField<double>(VT_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 0.0);
+  }
+  /// True when DRAG_AREA_OVER_MASS_RATE_M2_KG_S carries a value; false means absent.
+  bool HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S() const {
+    return GetField<uint8_t>(VT_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 0) != 0;
+  }
+  /// Constant in-track acceleration, m/s2, as PRWForceConfiguration's.
+  double IN_TRACK_ACCELERATION_M_S2() const {
+    return GetField<double>(VT_IN_TRACK_ACCELERATION_M_S2, 0.0);
+  }
+  /// True when IN_TRACK_ACCELERATION_M_S2 carries a value; false means absent.
+  bool HAS_IN_TRACK_ACCELERATION_M_S2() const {
+    return GetField<uint8_t>(VT_HAS_IN_TRACK_ACCELERATION_M_S2, 0) != 0;
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -2586,6 +2779,10 @@ struct PRWResidentState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint8_t>(verifier, VT_VALID, 1) &&
            VerifyOffset(verifier, VT_PROCESS_NOISE) &&
            verifier.VerifyTable(PROCESS_NOISE()) &&
+           VerifyField<double>(verifier, VT_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 1) &&
+           VerifyField<double>(verifier, VT_IN_TRACK_ACCELERATION_M_S2, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_IN_TRACK_ACCELERATION_M_S2, 1) &&
            verifier.EndTable();
   }
   PRWResidentStateT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2642,6 +2839,18 @@ struct PRWResidentStateBuilder {
   void add_PROCESS_NOISE(::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE) {
     fbb_.AddOffset(PRWResidentState::VT_PROCESS_NOISE, PROCESS_NOISE);
   }
+  void add_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(double DRAG_AREA_OVER_MASS_RATE_M2_KG_S) {
+    fbb_.AddElement<double>(PRWResidentState::VT_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 0.0);
+  }
+  void add_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(bool HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S) {
+    fbb_.AddElement<uint8_t>(PRWResidentState::VT_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, static_cast<uint8_t>(HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S), 0);
+  }
+  void add_IN_TRACK_ACCELERATION_M_S2(double IN_TRACK_ACCELERATION_M_S2) {
+    fbb_.AddElement<double>(PRWResidentState::VT_IN_TRACK_ACCELERATION_M_S2, IN_TRACK_ACCELERATION_M_S2, 0.0);
+  }
+  void add_HAS_IN_TRACK_ACCELERATION_M_S2(bool HAS_IN_TRACK_ACCELERATION_M_S2) {
+    fbb_.AddElement<uint8_t>(PRWResidentState::VT_HAS_IN_TRACK_ACCELERATION_M_S2, static_cast<uint8_t>(HAS_IN_TRACK_ACCELERATION_M_S2), 0);
+  }
   explicit PRWResidentStateBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2671,8 +2880,14 @@ inline ::flatbuffers::Offset<PRWResidentState> CreatePRWResidentState(
     double SRP_AREA_OVER_MASS_M2_KG = 0.0,
     bool HAS_SRP_AREA_OVER_MASS_M2_KG = false,
     bool VALID = true,
-    ::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE = 0) {
+    ::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE = 0,
+    double DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 0.0,
+    bool HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false,
+    double IN_TRACK_ACCELERATION_M_S2 = 0.0,
+    bool HAS_IN_TRACK_ACCELERATION_M_S2 = false) {
   PRWResidentStateBuilder builder_(_fbb);
+  builder_.add_IN_TRACK_ACCELERATION_M_S2(IN_TRACK_ACCELERATION_M_S2);
+  builder_.add_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
   builder_.add_SRP_AREA_OVER_MASS_M2_KG(SRP_AREA_OVER_MASS_M2_KG);
   builder_.add_DRAG_AREA_OVER_MASS_M2_KG(DRAG_AREA_OVER_MASS_M2_KG);
   builder_.add_MASS_KG(MASS_KG);
@@ -2684,6 +2899,8 @@ inline ::flatbuffers::Offset<PRWResidentState> CreatePRWResidentState(
   builder_.add_CATALOG_NUMBER(CATALOG_NUMBER);
   builder_.add_ENTITY_HANDLE(ENTITY_HANDLE);
   builder_.add_INSTANCE(INSTANCE);
+  builder_.add_HAS_IN_TRACK_ACCELERATION_M_S2(HAS_IN_TRACK_ACCELERATION_M_S2);
+  builder_.add_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
   builder_.add_VALID(VALID);
   builder_.add_HAS_SRP_AREA_OVER_MASS_M2_KG(HAS_SRP_AREA_OVER_MASS_M2_KG);
   builder_.add_HAS_DRAG_AREA_OVER_MASS_M2_KG(HAS_DRAG_AREA_OVER_MASS_M2_KG);
@@ -2712,7 +2929,11 @@ inline ::flatbuffers::Offset<PRWResidentState> CreatePRWResidentStateDirect(
     double SRP_AREA_OVER_MASS_M2_KG = 0.0,
     bool HAS_SRP_AREA_OVER_MASS_M2_KG = false,
     bool VALID = true,
-    ::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE = 0) {
+    ::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE = 0,
+    double DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 0.0,
+    bool HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false,
+    double IN_TRACK_ACCELERATION_M_S2 = 0.0,
+    bool HAS_IN_TRACK_ACCELERATION_M_S2 = false) {
   auto OBJECT_ID__ = OBJECT_ID ? _fbb.CreateString(OBJECT_ID) : 0;
   return CreatePRWResidentState(
       _fbb,
@@ -2730,7 +2951,11 @@ inline ::flatbuffers::Offset<PRWResidentState> CreatePRWResidentStateDirect(
       SRP_AREA_OVER_MASS_M2_KG,
       HAS_SRP_AREA_OVER_MASS_M2_KG,
       VALID,
-      PROCESS_NOISE);
+      PROCESS_NOISE,
+      DRAG_AREA_OVER_MASS_RATE_M2_KG_S,
+      HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S,
+      IN_TRACK_ACCELERATION_M_S2,
+      HAS_IN_TRACK_ACCELERATION_M_S2);
 }
 
 ::flatbuffers::Offset<PRWResidentState> CreatePRWResidentState(::flatbuffers::FlatBufferBuilder &_fbb, const PRWResidentStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -4979,6 +5204,164 @@ inline ::flatbuffers::Offset<PRWNativeInput> CreatePRWNativeInputDirect(
 
 ::flatbuffers::Offset<PRWNativeInput> CreatePRWNativeInput(::flatbuffers::FlatBufferBuilder &_fbb, const PRWNativeInputT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct PRWEarthOrientationT : public ::flatbuffers::NativeTable {
+  typedef PRWEarthOrientation TableType;
+  std::vector<std::unique_ptr<EOPT>> ROWS{};
+  PRWEarthOrientationT() = default;
+  PRWEarthOrientationT(const PRWEarthOrientationT &o);
+  PRWEarthOrientationT(PRWEarthOrientationT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWEarthOrientationT &operator=(PRWEarthOrientationT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Earth orientation for a propagation: one instantaneous row, or daily rows
+/// of one series (same SERIES, IAU_CONVENTION and data-set provenance) with
+/// strictly increasing MJD that cover the arc. A provider interpolates as
+/// published by the series and does not extrapolate.
+struct PRWEarthOrientation FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWEarthOrientationT NativeTableType;
+  typedef PRWEarthOrientationBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_ROWS = 4
+  };
+  const ::flatbuffers::Vector<::flatbuffers::Offset<EOP>> *ROWS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<EOP>> *>(VT_ROWS);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_ROWS) &&
+           verifier.VerifyVector(ROWS()) &&
+           verifier.VerifyVectorOfTables(ROWS()) &&
+           verifier.EndTable();
+  }
+  PRWEarthOrientationT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWEarthOrientationT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWEarthOrientation> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEarthOrientationT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWEarthOrientationBuilder {
+  typedef PRWEarthOrientation Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_ROWS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<EOP>>> ROWS) {
+    fbb_.AddOffset(PRWEarthOrientation::VT_ROWS, ROWS);
+  }
+  explicit PRWEarthOrientationBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWEarthOrientation> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWEarthOrientation>(end);
+    fbb_.Required(o, PRWEarthOrientation::VT_ROWS);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWEarthOrientation> CreatePRWEarthOrientation(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<EOP>>> ROWS = 0) {
+  PRWEarthOrientationBuilder builder_(_fbb);
+  builder_.add_ROWS(ROWS);
+  return builder_.Finish();
+}
+
+struct PRWEarthOrientation::Traits {
+  using type = PRWEarthOrientation;
+  static auto constexpr Create = CreatePRWEarthOrientation;
+};
+
+inline ::flatbuffers::Offset<PRWEarthOrientation> CreatePRWEarthOrientationDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const std::vector<::flatbuffers::Offset<EOP>> *ROWS = nullptr) {
+  auto ROWS__ = ROWS ? _fbb.CreateVector<::flatbuffers::Offset<EOP>>(*ROWS) : 0;
+  return CreatePRWEarthOrientation(
+      _fbb,
+      ROWS__);
+}
+
+::flatbuffers::Offset<PRWEarthOrientation> CreatePRWEarthOrientation(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEarthOrientationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWSpaceWeatherTableT : public ::flatbuffers::NativeTable {
+  typedef PRWSpaceWeatherTable TableType;
+  std::vector<std::unique_ptr<SPWT>> ROWS{};
+  PRWSpaceWeatherTableT() = default;
+  PRWSpaceWeatherTableT(const PRWSpaceWeatherTableT &o);
+  PRWSpaceWeatherTableT(PRWSpaceWeatherTableT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWSpaceWeatherTableT &operator=(PRWSpaceWeatherTableT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Daily space weather for a propagation, as published (`SPW`), with strictly
+/// increasing DATE covering the arc plus what the atmosphere model reads
+/// before it (NRLMSISE-00 reads the previous day's F10.7). A provider derives
+/// its model inputs from these rows and reports which ones it reads.
+struct PRWSpaceWeatherTable FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWSpaceWeatherTableT NativeTableType;
+  typedef PRWSpaceWeatherTableBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_ROWS = 4
+  };
+  const ::flatbuffers::Vector<::flatbuffers::Offset<SPW>> *ROWS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SPW>> *>(VT_ROWS);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_ROWS) &&
+           verifier.VerifyVector(ROWS()) &&
+           verifier.VerifyVectorOfTables(ROWS()) &&
+           verifier.EndTable();
+  }
+  PRWSpaceWeatherTableT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWSpaceWeatherTableT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWSpaceWeatherTable> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWSpaceWeatherTableT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWSpaceWeatherTableBuilder {
+  typedef PRWSpaceWeatherTable Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_ROWS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SPW>>> ROWS) {
+    fbb_.AddOffset(PRWSpaceWeatherTable::VT_ROWS, ROWS);
+  }
+  explicit PRWSpaceWeatherTableBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWSpaceWeatherTable> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWSpaceWeatherTable>(end);
+    fbb_.Required(o, PRWSpaceWeatherTable::VT_ROWS);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWSpaceWeatherTable> CreatePRWSpaceWeatherTable(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SPW>>> ROWS = 0) {
+  PRWSpaceWeatherTableBuilder builder_(_fbb);
+  builder_.add_ROWS(ROWS);
+  return builder_.Finish();
+}
+
+struct PRWSpaceWeatherTable::Traits {
+  using type = PRWSpaceWeatherTable;
+  static auto constexpr Create = CreatePRWSpaceWeatherTable;
+};
+
+inline ::flatbuffers::Offset<PRWSpaceWeatherTable> CreatePRWSpaceWeatherTableDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const std::vector<::flatbuffers::Offset<SPW>> *ROWS = nullptr) {
+  auto ROWS__ = ROWS ? _fbb.CreateVector<::flatbuffers::Offset<SPW>>(*ROWS) : 0;
+  return CreatePRWSpaceWeatherTable(
+      _fbb,
+      ROWS__);
+}
+
+::flatbuffers::Offset<PRWSpaceWeatherTable> CreatePRWSpaceWeatherTable(::flatbuffers::FlatBufferBuilder &_fbb, const PRWSpaceWeatherTableT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct PRWEphemerisRequestT : public ::flatbuffers::NativeTable {
   typedef PRWEphemerisRequest TableType;
   std::unique_ptr<TIMInstantT> EPOCH{};
@@ -5747,6 +6130,8 @@ struct PRWT : public ::flatbuffers::NativeTable {
   std::unique_ptr<PRWAtmosphereResultT> ATMOSPHERE_RESULT{};
   bool VERSION_QUERY = false;
   std::unique_ptr<PRWVersionResultT> VERSION_RESULT{};
+  std::unique_ptr<PRWEarthOrientationT> EARTH_ORIENTATION{};
+  std::unique_ptr<PRWSpaceWeatherTableT> SPACE_WEATHER{};
   PRWT() = default;
   PRWT(const PRWT &o);
   PRWT(PRWT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -5776,7 +6161,9 @@ struct PRW FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_ATMOSPHERE_REQUEST = 32,
     VT_ATMOSPHERE_RESULT = 34,
     VT_VERSION_QUERY = 36,
-    VT_VERSION_RESULT = 38
+    VT_VERSION_RESULT = 38,
+    VT_EARTH_ORIENTATION = 40,
+    VT_SPACE_WEATHER = 42
   };
   const PRWInit *INIT() const {
     return GetPointer<const PRWInit *>(VT_INIT);
@@ -5833,6 +6220,12 @@ struct PRW FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const PRWVersionResult *VERSION_RESULT() const {
     return GetPointer<const PRWVersionResult *>(VT_VERSION_RESULT);
   }
+  const PRWEarthOrientation *EARTH_ORIENTATION() const {
+    return GetPointer<const PRWEarthOrientation *>(VT_EARTH_ORIENTATION);
+  }
+  const PRWSpaceWeatherTable *SPACE_WEATHER() const {
+    return GetPointer<const PRWSpaceWeatherTable *>(VT_SPACE_WEATHER);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -5871,6 +6264,10 @@ struct PRW FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint8_t>(verifier, VT_VERSION_QUERY, 1) &&
            VerifyOffset(verifier, VT_VERSION_RESULT) &&
            verifier.VerifyTable(VERSION_RESULT()) &&
+           VerifyOffset(verifier, VT_EARTH_ORIENTATION) &&
+           verifier.VerifyTable(EARTH_ORIENTATION()) &&
+           VerifyOffset(verifier, VT_SPACE_WEATHER) &&
+           verifier.VerifyTable(SPACE_WEATHER()) &&
            verifier.EndTable();
   }
   PRWT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -5936,6 +6333,12 @@ struct PRWBuilder {
   void add_VERSION_RESULT(::flatbuffers::Offset<PRWVersionResult> VERSION_RESULT) {
     fbb_.AddOffset(PRW::VT_VERSION_RESULT, VERSION_RESULT);
   }
+  void add_EARTH_ORIENTATION(::flatbuffers::Offset<PRWEarthOrientation> EARTH_ORIENTATION) {
+    fbb_.AddOffset(PRW::VT_EARTH_ORIENTATION, EARTH_ORIENTATION);
+  }
+  void add_SPACE_WEATHER(::flatbuffers::Offset<PRWSpaceWeatherTable> SPACE_WEATHER) {
+    fbb_.AddOffset(PRW::VT_SPACE_WEATHER, SPACE_WEATHER);
+  }
   explicit PRWBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -5966,8 +6369,12 @@ inline ::flatbuffers::Offset<PRW> CreatePRW(
     ::flatbuffers::Offset<PRWAtmosphereRequest> ATMOSPHERE_REQUEST = 0,
     ::flatbuffers::Offset<PRWAtmosphereResult> ATMOSPHERE_RESULT = 0,
     bool VERSION_QUERY = false,
-    ::flatbuffers::Offset<PRWVersionResult> VERSION_RESULT = 0) {
+    ::flatbuffers::Offset<PRWVersionResult> VERSION_RESULT = 0,
+    ::flatbuffers::Offset<PRWEarthOrientation> EARTH_ORIENTATION = 0,
+    ::flatbuffers::Offset<PRWSpaceWeatherTable> SPACE_WEATHER = 0) {
   PRWBuilder builder_(_fbb);
+  builder_.add_SPACE_WEATHER(SPACE_WEATHER);
+  builder_.add_EARTH_ORIENTATION(EARTH_ORIENTATION);
   builder_.add_VERSION_RESULT(VERSION_RESULT);
   builder_.add_ATMOSPHERE_RESULT(ATMOSPHERE_RESULT);
   builder_.add_ATMOSPHERE_REQUEST(ATMOSPHERE_REQUEST);
@@ -6409,7 +6816,13 @@ inline PRWForceConfigurationT::PRWForceConfigurationT(const PRWForceConfiguratio
         DRAG_COEFFICIENT(o.DRAG_COEFFICIENT),
         ATMOSPHERE_MODEL(o.ATMOSPHERE_MODEL),
         WEATHER((o.WEATHER) ? new PRWSpaceWeatherT(*o.WEATHER) : nullptr),
-        EPHEMERIS_SOURCE(o.EPHEMERIS_SOURCE) {
+        EPHEMERIS_SOURCE(o.EPHEMERIS_SOURCE),
+        SOLID_TIDES(o.SOLID_TIDES),
+        RELATIVITY(o.RELATIVITY),
+        IN_TRACK_ACCELERATION_M_S2(o.IN_TRACK_ACCELERATION_M_S2),
+        HAS_IN_TRACK_ACCELERATION_M_S2(o.HAS_IN_TRACK_ACCELERATION_M_S2),
+        DRAG_AREA_OVER_MASS_RATE_M2_KG_S(o.DRAG_AREA_OVER_MASS_RATE_M2_KG_S),
+        HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(o.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S) {
 }
 
 inline PRWForceConfigurationT &PRWForceConfigurationT::operator=(PRWForceConfigurationT o) FLATBUFFERS_NOEXCEPT {
@@ -6435,6 +6848,12 @@ inline PRWForceConfigurationT &PRWForceConfigurationT::operator=(PRWForceConfigu
   std::swap(ATMOSPHERE_MODEL, o.ATMOSPHERE_MODEL);
   std::swap(WEATHER, o.WEATHER);
   std::swap(EPHEMERIS_SOURCE, o.EPHEMERIS_SOURCE);
+  std::swap(SOLID_TIDES, o.SOLID_TIDES);
+  std::swap(RELATIVITY, o.RELATIVITY);
+  std::swap(IN_TRACK_ACCELERATION_M_S2, o.IN_TRACK_ACCELERATION_M_S2);
+  std::swap(HAS_IN_TRACK_ACCELERATION_M_S2, o.HAS_IN_TRACK_ACCELERATION_M_S2);
+  std::swap(DRAG_AREA_OVER_MASS_RATE_M2_KG_S, o.DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
+  std::swap(HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, o.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
   return *this;
 }
 
@@ -6469,6 +6888,12 @@ inline void PRWForceConfiguration::UnPackTo(PRWForceConfigurationT *_o, const ::
   { auto _e = ATMOSPHERE_MODEL(); _o->ATMOSPHERE_MODEL = _e; }
   { auto _e = WEATHER(); if (_e) { if(_o->WEATHER) { _e->UnPackTo(_o->WEATHER.get(), _resolver); } else { _o->WEATHER = std::unique_ptr<PRWSpaceWeatherT>(_e->UnPack(_resolver)); } } else if (_o->WEATHER) { _o->WEATHER.reset(); } }
   { auto _e = EPHEMERIS_SOURCE(); if (_e) _o->EPHEMERIS_SOURCE = _e->str(); }
+  { auto _e = SOLID_TIDES(); _o->SOLID_TIDES = _e; }
+  { auto _e = RELATIVITY(); _o->RELATIVITY = _e; }
+  { auto _e = IN_TRACK_ACCELERATION_M_S2(); _o->IN_TRACK_ACCELERATION_M_S2 = _e; }
+  { auto _e = HAS_IN_TRACK_ACCELERATION_M_S2(); _o->HAS_IN_TRACK_ACCELERATION_M_S2 = _e; }
+  { auto _e = DRAG_AREA_OVER_MASS_RATE_M2_KG_S(); _o->DRAG_AREA_OVER_MASS_RATE_M2_KG_S = _e; }
+  { auto _e = HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(); _o->HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = _e; }
 }
 
 inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfiguration(::flatbuffers::FlatBufferBuilder &_fbb, const PRWForceConfigurationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -6501,6 +6926,12 @@ inline ::flatbuffers::Offset<PRWForceConfiguration> PRWForceConfiguration::Pack(
   auto _ATMOSPHERE_MODEL = _o->ATMOSPHERE_MODEL;
   auto _WEATHER = _o->WEATHER ? CreatePRWSpaceWeather(_fbb, _o->WEATHER.get(), _rehasher) : 0;
   auto _EPHEMERIS_SOURCE = _fbb.CreateString(_o->EPHEMERIS_SOURCE);
+  auto _SOLID_TIDES = _o->SOLID_TIDES;
+  auto _RELATIVITY = _o->RELATIVITY;
+  auto _IN_TRACK_ACCELERATION_M_S2 = _o->IN_TRACK_ACCELERATION_M_S2;
+  auto _HAS_IN_TRACK_ACCELERATION_M_S2 = _o->HAS_IN_TRACK_ACCELERATION_M_S2;
+  auto _DRAG_AREA_OVER_MASS_RATE_M2_KG_S = _o->DRAG_AREA_OVER_MASS_RATE_M2_KG_S;
+  auto _HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = _o->HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S;
   return CreatePRWForceConfiguration(
       _fbb,
       _GRAVITY_CHOICE,
@@ -6524,7 +6955,13 @@ inline ::flatbuffers::Offset<PRWForceConfiguration> PRWForceConfiguration::Pack(
       _DRAG_COEFFICIENT,
       _ATMOSPHERE_MODEL,
       _WEATHER,
-      _EPHEMERIS_SOURCE);
+      _EPHEMERIS_SOURCE,
+      _SOLID_TIDES,
+      _RELATIVITY,
+      _IN_TRACK_ACCELERATION_M_S2,
+      _HAS_IN_TRACK_ACCELERATION_M_S2,
+      _DRAG_AREA_OVER_MASS_RATE_M2_KG_S,
+      _HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
 }
 
 inline PRWStateMatrixT *PRWStateMatrix::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -6606,7 +7043,11 @@ inline PRWResidentStateT::PRWResidentStateT(const PRWResidentStateT &o)
         SRP_AREA_OVER_MASS_M2_KG(o.SRP_AREA_OVER_MASS_M2_KG),
         HAS_SRP_AREA_OVER_MASS_M2_KG(o.HAS_SRP_AREA_OVER_MASS_M2_KG),
         VALID(o.VALID),
-        PROCESS_NOISE((o.PROCESS_NOISE) ? new PRWProcessNoiseT(*o.PROCESS_NOISE) : nullptr) {
+        PROCESS_NOISE((o.PROCESS_NOISE) ? new PRWProcessNoiseT(*o.PROCESS_NOISE) : nullptr),
+        DRAG_AREA_OVER_MASS_RATE_M2_KG_S(o.DRAG_AREA_OVER_MASS_RATE_M2_KG_S),
+        HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(o.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S),
+        IN_TRACK_ACCELERATION_M_S2(o.IN_TRACK_ACCELERATION_M_S2),
+        HAS_IN_TRACK_ACCELERATION_M_S2(o.HAS_IN_TRACK_ACCELERATION_M_S2) {
 }
 
 inline PRWResidentStateT &PRWResidentStateT::operator=(PRWResidentStateT o) FLATBUFFERS_NOEXCEPT {
@@ -6625,6 +7066,10 @@ inline PRWResidentStateT &PRWResidentStateT::operator=(PRWResidentStateT o) FLAT
   std::swap(HAS_SRP_AREA_OVER_MASS_M2_KG, o.HAS_SRP_AREA_OVER_MASS_M2_KG);
   std::swap(VALID, o.VALID);
   std::swap(PROCESS_NOISE, o.PROCESS_NOISE);
+  std::swap(DRAG_AREA_OVER_MASS_RATE_M2_KG_S, o.DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
+  std::swap(HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, o.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
+  std::swap(IN_TRACK_ACCELERATION_M_S2, o.IN_TRACK_ACCELERATION_M_S2);
+  std::swap(HAS_IN_TRACK_ACCELERATION_M_S2, o.HAS_IN_TRACK_ACCELERATION_M_S2);
   return *this;
 }
 
@@ -6652,6 +7097,10 @@ inline void PRWResidentState::UnPackTo(PRWResidentStateT *_o, const ::flatbuffer
   { auto _e = HAS_SRP_AREA_OVER_MASS_M2_KG(); _o->HAS_SRP_AREA_OVER_MASS_M2_KG = _e; }
   { auto _e = VALID(); _o->VALID = _e; }
   { auto _e = PROCESS_NOISE(); if (_e) { if(_o->PROCESS_NOISE) { _e->UnPackTo(_o->PROCESS_NOISE.get(), _resolver); } else { _o->PROCESS_NOISE = std::unique_ptr<PRWProcessNoiseT>(_e->UnPack(_resolver)); } } else if (_o->PROCESS_NOISE) { _o->PROCESS_NOISE.reset(); } }
+  { auto _e = DRAG_AREA_OVER_MASS_RATE_M2_KG_S(); _o->DRAG_AREA_OVER_MASS_RATE_M2_KG_S = _e; }
+  { auto _e = HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(); _o->HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = _e; }
+  { auto _e = IN_TRACK_ACCELERATION_M_S2(); _o->IN_TRACK_ACCELERATION_M_S2 = _e; }
+  { auto _e = HAS_IN_TRACK_ACCELERATION_M_S2(); _o->HAS_IN_TRACK_ACCELERATION_M_S2 = _e; }
 }
 
 inline ::flatbuffers::Offset<PRWResidentState> CreatePRWResidentState(::flatbuffers::FlatBufferBuilder &_fbb, const PRWResidentStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -6677,6 +7126,10 @@ inline ::flatbuffers::Offset<PRWResidentState> PRWResidentState::Pack(::flatbuff
   auto _HAS_SRP_AREA_OVER_MASS_M2_KG = _o->HAS_SRP_AREA_OVER_MASS_M2_KG;
   auto _VALID = _o->VALID;
   auto _PROCESS_NOISE = _o->PROCESS_NOISE ? CreatePRWProcessNoise(_fbb, _o->PROCESS_NOISE.get(), _rehasher) : 0;
+  auto _DRAG_AREA_OVER_MASS_RATE_M2_KG_S = _o->DRAG_AREA_OVER_MASS_RATE_M2_KG_S;
+  auto _HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = _o->HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S;
+  auto _IN_TRACK_ACCELERATION_M_S2 = _o->IN_TRACK_ACCELERATION_M_S2;
+  auto _HAS_IN_TRACK_ACCELERATION_M_S2 = _o->HAS_IN_TRACK_ACCELERATION_M_S2;
   return CreatePRWResidentState(
       _fbb,
       _INSTANCE,
@@ -6693,7 +7146,11 @@ inline ::flatbuffers::Offset<PRWResidentState> PRWResidentState::Pack(::flatbuff
       _SRP_AREA_OVER_MASS_M2_KG,
       _HAS_SRP_AREA_OVER_MASS_M2_KG,
       _VALID,
-      _PROCESS_NOISE);
+      _PROCESS_NOISE,
+      _DRAG_AREA_OVER_MASS_RATE_M2_KG_S,
+      _HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S,
+      _IN_TRACK_ACCELERATION_M_S2,
+      _HAS_IN_TRACK_ACCELERATION_M_S2);
 }
 
 inline PRWImpulseT::PRWImpulseT(const PRWImpulseT &o)
@@ -7642,6 +8099,78 @@ inline ::flatbuffers::Offset<PRWNativeInput> PRWNativeInput::Pack(::flatbuffers:
       _CONTENT);
 }
 
+inline PRWEarthOrientationT::PRWEarthOrientationT(const PRWEarthOrientationT &o) {
+  ROWS.reserve(o.ROWS.size());
+  for (const auto &ROWS_ : o.ROWS) { ROWS.emplace_back((ROWS_) ? new EOPT(*ROWS_) : nullptr); }
+}
+
+inline PRWEarthOrientationT &PRWEarthOrientationT::operator=(PRWEarthOrientationT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(ROWS, o.ROWS);
+  return *this;
+}
+
+inline PRWEarthOrientationT *PRWEarthOrientation::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWEarthOrientationT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWEarthOrientation::UnPackTo(PRWEarthOrientationT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = ROWS(); if (_e) { _o->ROWS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->ROWS[_i]) { _e->Get(_i)->UnPackTo(_o->ROWS[_i].get(), _resolver); } else { _o->ROWS[_i] = std::unique_ptr<EOPT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->ROWS.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<PRWEarthOrientation> CreatePRWEarthOrientation(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEarthOrientationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWEarthOrientation::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWEarthOrientation> PRWEarthOrientation::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEarthOrientationT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWEarthOrientationT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _ROWS = _fbb.CreateVector<::flatbuffers::Offset<EOP>> (_o->ROWS.size(), [](size_t i, _VectorArgs *__va) { return CreateEOP(*__va->__fbb, __va->__o->ROWS[i].get(), __va->__rehasher); }, &_va );
+  return CreatePRWEarthOrientation(
+      _fbb,
+      _ROWS);
+}
+
+inline PRWSpaceWeatherTableT::PRWSpaceWeatherTableT(const PRWSpaceWeatherTableT &o) {
+  ROWS.reserve(o.ROWS.size());
+  for (const auto &ROWS_ : o.ROWS) { ROWS.emplace_back((ROWS_) ? new SPWT(*ROWS_) : nullptr); }
+}
+
+inline PRWSpaceWeatherTableT &PRWSpaceWeatherTableT::operator=(PRWSpaceWeatherTableT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(ROWS, o.ROWS);
+  return *this;
+}
+
+inline PRWSpaceWeatherTableT *PRWSpaceWeatherTable::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWSpaceWeatherTableT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWSpaceWeatherTable::UnPackTo(PRWSpaceWeatherTableT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = ROWS(); if (_e) { _o->ROWS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->ROWS[_i]) { _e->Get(_i)->UnPackTo(_o->ROWS[_i].get(), _resolver); } else { _o->ROWS[_i] = std::unique_ptr<SPWT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->ROWS.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<PRWSpaceWeatherTable> CreatePRWSpaceWeatherTable(::flatbuffers::FlatBufferBuilder &_fbb, const PRWSpaceWeatherTableT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWSpaceWeatherTable::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWSpaceWeatherTable> PRWSpaceWeatherTable::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWSpaceWeatherTableT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWSpaceWeatherTableT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _ROWS = _fbb.CreateVector<::flatbuffers::Offset<SPW>> (_o->ROWS.size(), [](size_t i, _VectorArgs *__va) { return CreateSPW(*__va->__fbb, __va->__o->ROWS[i].get(), __va->__rehasher); }, &_va );
+  return CreatePRWSpaceWeatherTable(
+      _fbb,
+      _ROWS);
+}
+
 inline PRWEphemerisRequestT::PRWEphemerisRequestT(const PRWEphemerisRequestT &o)
       : EPOCH((o.EPOCH) ? new TIMInstantT(*o.EPOCH) : nullptr),
         TARGET_NAIF_ID(o.TARGET_NAIF_ID),
@@ -7984,7 +8513,9 @@ inline PRWT::PRWT(const PRWT &o)
         ATMOSPHERE_REQUEST((o.ATMOSPHERE_REQUEST) ? new PRWAtmosphereRequestT(*o.ATMOSPHERE_REQUEST) : nullptr),
         ATMOSPHERE_RESULT((o.ATMOSPHERE_RESULT) ? new PRWAtmosphereResultT(*o.ATMOSPHERE_RESULT) : nullptr),
         VERSION_QUERY(o.VERSION_QUERY),
-        VERSION_RESULT((o.VERSION_RESULT) ? new PRWVersionResultT(*o.VERSION_RESULT) : nullptr) {
+        VERSION_RESULT((o.VERSION_RESULT) ? new PRWVersionResultT(*o.VERSION_RESULT) : nullptr),
+        EARTH_ORIENTATION((o.EARTH_ORIENTATION) ? new PRWEarthOrientationT(*o.EARTH_ORIENTATION) : nullptr),
+        SPACE_WEATHER((o.SPACE_WEATHER) ? new PRWSpaceWeatherTableT(*o.SPACE_WEATHER) : nullptr) {
 }
 
 inline PRWT &PRWT::operator=(PRWT o) FLATBUFFERS_NOEXCEPT {
@@ -8006,6 +8537,8 @@ inline PRWT &PRWT::operator=(PRWT o) FLATBUFFERS_NOEXCEPT {
   std::swap(ATMOSPHERE_RESULT, o.ATMOSPHERE_RESULT);
   std::swap(VERSION_QUERY, o.VERSION_QUERY);
   std::swap(VERSION_RESULT, o.VERSION_RESULT);
+  std::swap(EARTH_ORIENTATION, o.EARTH_ORIENTATION);
+  std::swap(SPACE_WEATHER, o.SPACE_WEATHER);
   return *this;
 }
 
@@ -8036,6 +8569,8 @@ inline void PRW::UnPackTo(PRWT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = ATMOSPHERE_RESULT(); if (_e) { if(_o->ATMOSPHERE_RESULT) { _e->UnPackTo(_o->ATMOSPHERE_RESULT.get(), _resolver); } else { _o->ATMOSPHERE_RESULT = std::unique_ptr<PRWAtmosphereResultT>(_e->UnPack(_resolver)); } } else if (_o->ATMOSPHERE_RESULT) { _o->ATMOSPHERE_RESULT.reset(); } }
   { auto _e = VERSION_QUERY(); _o->VERSION_QUERY = _e; }
   { auto _e = VERSION_RESULT(); if (_e) { if(_o->VERSION_RESULT) { _e->UnPackTo(_o->VERSION_RESULT.get(), _resolver); } else { _o->VERSION_RESULT = std::unique_ptr<PRWVersionResultT>(_e->UnPack(_resolver)); } } else if (_o->VERSION_RESULT) { _o->VERSION_RESULT.reset(); } }
+  { auto _e = EARTH_ORIENTATION(); if (_e) { if(_o->EARTH_ORIENTATION) { _e->UnPackTo(_o->EARTH_ORIENTATION.get(), _resolver); } else { _o->EARTH_ORIENTATION = std::unique_ptr<PRWEarthOrientationT>(_e->UnPack(_resolver)); } } else if (_o->EARTH_ORIENTATION) { _o->EARTH_ORIENTATION.reset(); } }
+  { auto _e = SPACE_WEATHER(); if (_e) { if(_o->SPACE_WEATHER) { _e->UnPackTo(_o->SPACE_WEATHER.get(), _resolver); } else { _o->SPACE_WEATHER = std::unique_ptr<PRWSpaceWeatherTableT>(_e->UnPack(_resolver)); } } else if (_o->SPACE_WEATHER) { _o->SPACE_WEATHER.reset(); } }
 }
 
 inline ::flatbuffers::Offset<PRW> CreatePRW(::flatbuffers::FlatBufferBuilder &_fbb, const PRWT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -8064,6 +8599,8 @@ inline ::flatbuffers::Offset<PRW> PRW::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _ATMOSPHERE_RESULT = _o->ATMOSPHERE_RESULT ? CreatePRWAtmosphereResult(_fbb, _o->ATMOSPHERE_RESULT.get(), _rehasher) : 0;
   auto _VERSION_QUERY = _o->VERSION_QUERY;
   auto _VERSION_RESULT = _o->VERSION_RESULT ? CreatePRWVersionResult(_fbb, _o->VERSION_RESULT.get(), _rehasher) : 0;
+  auto _EARTH_ORIENTATION = _o->EARTH_ORIENTATION ? CreatePRWEarthOrientation(_fbb, _o->EARTH_ORIENTATION.get(), _rehasher) : 0;
+  auto _SPACE_WEATHER = _o->SPACE_WEATHER ? CreatePRWSpaceWeatherTable(_fbb, _o->SPACE_WEATHER.get(), _rehasher) : 0;
   return CreatePRW(
       _fbb,
       _INIT,
@@ -8083,7 +8620,9 @@ inline ::flatbuffers::Offset<PRW> PRW::Pack(::flatbuffers::FlatBufferBuilder &_f
       _ATMOSPHERE_REQUEST,
       _ATMOSPHERE_RESULT,
       _VERSION_QUERY,
-      _VERSION_RESULT);
+      _VERSION_RESULT,
+      _EARTH_ORIENTATION,
+      _SPACE_WEATHER);
 }
 
 inline const PRW *GetPRW(const void *buf) {

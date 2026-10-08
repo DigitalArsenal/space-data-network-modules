@@ -2,10 +2,12 @@
 // HPOP execution requests, and how a response is scored against them.
 // Representation only: encoding, decoding and differences of positions.
 import fs from 'node:fs';
+import * as flatbuffers from 'flatbuffers';
 import { decodeResult, encodePrw, execution, makeTable, nativeInput, sds, TYPE } from './prwCodec.mjs';
 
 export const REFERENCE = JSON.parse(fs.readFileSync(new URL('../fixtures/orekit/orekit-reference.json', import.meta.url), 'utf8'));
 export const EOP = JSON.parse(fs.readFileSync(new URL('../fixtures/orekit/eop-2026-08.json', import.meta.url), 'utf8'));
+export const SPW = JSON.parse(fs.readFileSync(new URL('../fixtures/orekit/spw-2026-08.json', import.meta.url), 'utf8'));
 const KERNEL = fs.readFileSync(new URL('../../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp', import.meta.url));
 
 // Tolerances on the largest 3D position difference over the 24 h arc. The
@@ -24,9 +26,25 @@ export const integratorTolerance = (c) => (c.srp || c.drag ? 1e-14 : c.degree > 
 const isoUtc = (iso) => makeTable('TIMInstant', { TIME_SYSTEM: sds.timingStandard.UTC, EPOCH_FORMAT: sds.timEpochRepresentation.ISO8601, ISO8601: iso });
 const needsKernel = (c) => c.thirdBodies || c.srp;
 
-// Earth orientation rows for the arc, from the same IERS file Orekit read.
+// Earth orientation rows for the arc, from the same IERS file Orekit read,
+// as PRW.EARTH_ORIENTATION. The fixture keeps them as a size-prefixed $EOP
+// stream (make-eop.mjs); this only re-frames the records.
+const eopRows = () => {
+  const bytes = Buffer.from(EOP.payloadBase64, 'base64'), rows = [];
+  for (let at = 0; at < bytes.length;) {
+    const n = bytes.readUInt32LE(at);
+    rows.push(sds.EOP.getSizePrefixedRootAsEOP(new flatbuffers.ByteBuffer(new Uint8Array(bytes.subarray(at, at + 4 + n)))).unpack());
+    at += 4 + n;
+  }
+  return rows;
+};
 export function eopInput() {
-  return { portId: 'earth_orientation', typeRef: { schemaName: 'EOP.fbs', fileIdentifier: '$EOP', rootTypeName: 'EOP' }, payload: Buffer.from(EOP.payloadBase64, 'base64') };
+  return { portId: 'earth_orientation', typeRef: TYPE, payload: encodePrw('EARTH_ORIENTATION', makeTable('PRWEarthOrientation', { ROWS: eopRows() })) };
+}
+
+// Daily space weather Orekit read (make-spw.mjs), as PRW.SPACE_WEATHER.
+export function spaceWeatherInput() {
+  return { portId: 'space_weather', typeRef: TYPE, payload: encodePrw('SPACE_WEATHER', makeTable('PRWSpaceWeatherTable', { ROWS: SPW.rows.map((row) => makeTable('SPW', row)) })) };
 }
 
 export function requestInputs(c, { tolerance = integratorTolerance(c), maxStep = 300 } = {}) {
@@ -53,10 +71,17 @@ export function requestInputs(c, { tolerance = integratorTolerance(c), maxStep =
   const epochs = c.samples.slice(1).map((s) => s[7]);
   exec.SAMPLE_EPOCHS = epochs.map(isoUtc);
   exec.TARGET_EPOCH = isoUtc(epochs.at(-1));
+  // Forces added with PRW SDS 1.240.0.
+  if (c.relativity) exec.FORCES.RELATIVITY = [sds.prwRelativityTerms.NONE, sds.prwRelativityTerms.SCHWARZSCHILD, sds.prwRelativityTerms.IERS_2010][c.relativity];
+  if (c.solidTides) exec.FORCES.SOLID_TIDES = sds.prwSolidTideModel.IERS_2010;
+  if (c.inTrackAccelerationMS2) Object.assign(exec.FORCES, { IN_TRACK_ACCELERATION_M_S2: c.inTrackAccelerationMS2, HAS_IN_TRACK_ACCELERATION_M_S2: true });
+  if (c.dragAreaOverMassRateM2KgS) Object.assign(exec.FORCES, { DRAG_AREA_OVER_MASS_RATE_M2_KG_S: c.dragAreaOverMassRateM2KgS, HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S: true });
+  if (c.spaceWeather === 'cssi') exec.FORCES.WEATHER = null;
   const inputs = [{ portId: 'request', typeRef: TYPE, payload: encodePrw('EXECUTION_REQUEST', exec) }];
   if (needsKernel(c)) inputs.push({ portId: 'kernel', typeRef: TYPE, payload: nativeInput(KERNEL) });
   // Every Earth-fixed field gets the EOP, so its pole matches Orekit's ITRF.
   if (c.degree > 0 || c.drag) inputs.push(eopInput());
+  if (c.spaceWeather === 'cssi') inputs.push(spaceWeatherInput());
   return inputs;
 }
 

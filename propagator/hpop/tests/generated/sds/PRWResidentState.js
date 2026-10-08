@@ -79,8 +79,24 @@ export class PRWResidentState {
         const offset = this.bb.__offset(this.bb_pos, 32);
         return offset ? (obj || new PRWProcessNoise()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
     }
+    DRAG_AREA_OVER_MASS_RATE_M2_KG_S() {
+        const offset = this.bb.__offset(this.bb_pos, 34);
+        return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.0;
+    }
+    HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S() {
+        const offset = this.bb.__offset(this.bb_pos, 36);
+        return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+    }
+    IN_TRACK_ACCELERATION_M_S2() {
+        const offset = this.bb.__offset(this.bb_pos, 38);
+        return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.0;
+    }
+    HAS_IN_TRACK_ACCELERATION_M_S2() {
+        const offset = this.bb.__offset(this.bb_pos, 40);
+        return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+    }
     static startPRWResidentState(builder) {
-        builder.startObject(15);
+        builder.startObject(19);
     }
     static addInstance(builder, INSTANCEOffset) {
         builder.addFieldOffset(0, INSTANCEOffset, 0);
@@ -127,6 +143,18 @@ export class PRWResidentState {
     static addProcessNoise(builder, PROCESS_NOISEOffset) {
         builder.addFieldOffset(14, PROCESS_NOISEOffset, 0);
     }
+    static addDragAreaOverMassRateM2KgS(builder, DRAG_AREA_OVER_MASS_RATE_M2_KG_S) {
+        builder.addFieldFloat64(15, DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 0.0);
+    }
+    static addHasDragAreaOverMassRateM2KgS(builder, HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S) {
+        builder.addFieldInt8(16, +HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, +false);
+    }
+    static addInTrackAccelerationMS2(builder, IN_TRACK_ACCELERATION_M_S2) {
+        builder.addFieldFloat64(17, IN_TRACK_ACCELERATION_M_S2, 0.0);
+    }
+    static addHasInTrackAccelerationMS2(builder, HAS_IN_TRACK_ACCELERATION_M_S2) {
+        builder.addFieldInt8(18, +HAS_IN_TRACK_ACCELERATION_M_S2, +false);
+    }
     static endPRWResidentState(builder) {
         const offset = builder.endObject();
         builder.requiredField(offset, 12);
@@ -134,7 +162,7 @@ export class PRWResidentState {
         return offset;
     }
     unpack() {
-        return new PRWResidentStateT(this.INSTANCE() !== null ? this.INSTANCE().unpack() : null, this.ENTITY_HANDLE(), this.CATALOG_NUMBER(), this.OBJECT_ID(), this.STATE() !== null ? this.STATE().unpack() : null, this.COORDINATE_SYSTEM() !== null ? this.COORDINATE_SYSTEM().unpack() : null, this.COVARIANCE() !== null ? this.COVARIANCE().unpack() : null, this.MASS_KG(), this.HAS_MASS_KG(), this.DRAG_AREA_OVER_MASS_M2_KG(), this.HAS_DRAG_AREA_OVER_MASS_M2_KG(), this.SRP_AREA_OVER_MASS_M2_KG(), this.HAS_SRP_AREA_OVER_MASS_M2_KG(), this.VALID(), this.PROCESS_NOISE() !== null ? this.PROCESS_NOISE().unpack() : null);
+        return new PRWResidentStateT(this.INSTANCE() !== null ? this.INSTANCE().unpack() : null, this.ENTITY_HANDLE(), this.CATALOG_NUMBER(), this.OBJECT_ID(), this.STATE() !== null ? this.STATE().unpack() : null, this.COORDINATE_SYSTEM() !== null ? this.COORDINATE_SYSTEM().unpack() : null, this.COVARIANCE() !== null ? this.COVARIANCE().unpack() : null, this.MASS_KG(), this.HAS_MASS_KG(), this.DRAG_AREA_OVER_MASS_M2_KG(), this.HAS_DRAG_AREA_OVER_MASS_M2_KG(), this.SRP_AREA_OVER_MASS_M2_KG(), this.HAS_SRP_AREA_OVER_MASS_M2_KG(), this.VALID(), this.PROCESS_NOISE() !== null ? this.PROCESS_NOISE().unpack() : null, this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S(), this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(), this.IN_TRACK_ACCELERATION_M_S2(), this.HAS_IN_TRACK_ACCELERATION_M_S2());
     }
     unpackTo(_o) {
         _o.INSTANCE = this.INSTANCE() !== null ? this.INSTANCE().unpack() : null;
@@ -152,6 +180,10 @@ export class PRWResidentState {
         _o.HAS_SRP_AREA_OVER_MASS_M2_KG = this.HAS_SRP_AREA_OVER_MASS_M2_KG();
         _o.VALID = this.VALID();
         _o.PROCESS_NOISE = this.PROCESS_NOISE() !== null ? this.PROCESS_NOISE().unpack() : null;
+        _o.DRAG_AREA_OVER_MASS_RATE_M2_KG_S = this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S();
+        _o.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S();
+        _o.IN_TRACK_ACCELERATION_M_S2 = this.IN_TRACK_ACCELERATION_M_S2();
+        _o.HAS_IN_TRACK_ACCELERATION_M_S2 = this.HAS_IN_TRACK_ACCELERATION_M_S2();
     }
 }
 export class PRWResidentStateT {
@@ -170,7 +202,11 @@ export class PRWResidentStateT {
     HAS_SRP_AREA_OVER_MASS_M2_KG;
     VALID;
     PROCESS_NOISE;
-    constructor(INSTANCE = null, ENTITY_HANDLE = 0, CATALOG_NUMBER = 0, OBJECT_ID = null, STATE = null, COORDINATE_SYSTEM = null, COVARIANCE = null, MASS_KG = 0.0, HAS_MASS_KG = false, DRAG_AREA_OVER_MASS_M2_KG = 0.0, HAS_DRAG_AREA_OVER_MASS_M2_KG = false, SRP_AREA_OVER_MASS_M2_KG = 0.0, HAS_SRP_AREA_OVER_MASS_M2_KG = false, VALID = true, PROCESS_NOISE = null){
+    DRAG_AREA_OVER_MASS_RATE_M2_KG_S;
+    HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S;
+    IN_TRACK_ACCELERATION_M_S2;
+    HAS_IN_TRACK_ACCELERATION_M_S2;
+    constructor(INSTANCE = null, ENTITY_HANDLE = 0, CATALOG_NUMBER = 0, OBJECT_ID = null, STATE = null, COORDINATE_SYSTEM = null, COVARIANCE = null, MASS_KG = 0.0, HAS_MASS_KG = false, DRAG_AREA_OVER_MASS_M2_KG = 0.0, HAS_DRAG_AREA_OVER_MASS_M2_KG = false, SRP_AREA_OVER_MASS_M2_KG = 0.0, HAS_SRP_AREA_OVER_MASS_M2_KG = false, VALID = true, PROCESS_NOISE = null, DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 0.0, HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false, IN_TRACK_ACCELERATION_M_S2 = 0.0, HAS_IN_TRACK_ACCELERATION_M_S2 = false){
         this.INSTANCE = INSTANCE;
         this.ENTITY_HANDLE = ENTITY_HANDLE;
         this.CATALOG_NUMBER = CATALOG_NUMBER;
@@ -186,6 +222,10 @@ export class PRWResidentStateT {
         this.HAS_SRP_AREA_OVER_MASS_M2_KG = HAS_SRP_AREA_OVER_MASS_M2_KG;
         this.VALID = VALID;
         this.PROCESS_NOISE = PROCESS_NOISE;
+        this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S = DRAG_AREA_OVER_MASS_RATE_M2_KG_S;
+        this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S;
+        this.IN_TRACK_ACCELERATION_M_S2 = IN_TRACK_ACCELERATION_M_S2;
+        this.HAS_IN_TRACK_ACCELERATION_M_S2 = HAS_IN_TRACK_ACCELERATION_M_S2;
     }
     pack(builder) {
         const INSTANCE = this.INSTANCE !== null ? this.INSTANCE.pack(builder) : 0;
@@ -210,6 +250,10 @@ export class PRWResidentStateT {
         PRWResidentState.addHasSrpAreaOverMassM2Kg(builder, this.HAS_SRP_AREA_OVER_MASS_M2_KG);
         PRWResidentState.addValid(builder, this.VALID);
         PRWResidentState.addProcessNoise(builder, PROCESS_NOISE);
+        PRWResidentState.addDragAreaOverMassRateM2KgS(builder, this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
+        PRWResidentState.addHasDragAreaOverMassRateM2KgS(builder, this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
+        PRWResidentState.addInTrackAccelerationMS2(builder, this.IN_TRACK_ACCELERATION_M_S2);
+        PRWResidentState.addHasInTrackAccelerationMS2(builder, this.HAS_IN_TRACK_ACCELERATION_M_S2);
         return PRWResidentState.endPRWResidentState(builder);
     }
 }
