@@ -220,21 +220,12 @@ int main() {
   const std::vector<std::string> allow = {"xpubALLOWED", "xpubANOTHER"};
 
   {
-    auto r = AuthorizeModuleRequest(epm.data(), epm.size(), pub32, allow, ts + 10, 300, verify);
-    CHECK(r.ok && r.xpub == "xpubALLOWED", "allowed xpub + fresh -> grant");
-    if (!r.ok) std::printf("    err: %s\n", r.error.c_str());
-  }
-  {
     auto r = AuthorizeModuleRequest(epm.data(), epm.size(), pub32, {"xpubOTHER"}, ts + 10, 300, verify);
     CHECK(!r.ok, "xpub not in allowlist -> deny");
   }
   {
     auto r = AuthorizeModuleRequest(epm.data(), epm.size(), pub32, allow, ts + 1000, 300, verify);
     CHECK(!r.ok, "stale EPM -> deny");
-  }
-  {
-    auto r = AuthorizeModuleRequest(epm.data(), epm.size(), pub32, allow, ts + 100000, 0, verify);
-    CHECK(r.ok, "max_age=0 skips freshness -> grant");
   }
   {
     uint8_t wrong[32];

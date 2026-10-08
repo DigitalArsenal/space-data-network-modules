@@ -973,7 +973,8 @@ bool secp256k1_verify_detached(
     const uint8_t* proven_signing_pubkey,
     const std::vector<std::string>& allowed_xpubs,
     int64_t now_unix,
-    int64_t max_age_seconds) {
+    int64_t max_age_seconds,
+    const std::string& requested_domain) {
   const sdn::epm::Ed25519Verify verify =
       [](const uint8_t* m, size_t ml, const uint8_t* s, size_t sl, const uint8_t* p) -> bool {
         bool valid = false;
@@ -987,7 +988,7 @@ bool secp256k1_verify_detached(
       };
   return sdn::epm::AuthorizeModuleRequest(
       epm_bytes, epm_len, proven_signing_pubkey, allowed_xpubs, now_unix, max_age_seconds,
-      verify, verify_secp256k1);
+      verify, verify_secp256k1, requested_domain);
 }
 
 std::vector<uint8_t> build_lch_bytes(
@@ -2545,7 +2546,8 @@ int32_t key_server_handle_message(
         pending.requester_signing_pubkey.data(),
         publication.descriptor.ALLOWED_XPUBS,
         now_ms() / 1000,
-        kEpmMaxAgeSeconds);
+        kEpmMaxAgeSeconds,
+        pending.requested_domain);
     if (!gate.ok || gate.xpub != pending.requester_xpub) {
       secure_zero_publication(&publication);
       return kServerUnauthorized;

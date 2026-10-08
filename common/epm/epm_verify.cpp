@@ -197,6 +197,7 @@ VerifyResult VerifyEpm(const EpmFields& epm,
 
   r.ok = true;
   r.xpub = Trim(account_key->xpub);
+  r.account_key_path = Trim(account_key->key_path);
   return r;
 }
 
