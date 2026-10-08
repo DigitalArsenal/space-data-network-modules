@@ -29,6 +29,14 @@ std::vector<uint8_t> HexDecode(const std::string& in) {
 
 }  // namespace
 
+bool XpubAllowed(const std::vector<std::string>& allowed_xpubs, const std::string& xpub) {
+  if (allowed_xpubs.empty()) return true;
+  for (const std::string& a : allowed_xpubs) {
+    if (a == xpub) return true;
+  }
+  return false;
+}
+
 AuthorizeResult AuthorizeModuleRequest(const uint8_t* epm_bytes, std::size_t epm_len,
                                        const uint8_t* proven_signing_pubkey,
                                        const std::vector<std::string>& allowed_xpubs,
@@ -79,14 +87,10 @@ AuthorizeResult AuthorizeModuleRequest(const uint8_t* epm_bytes, std::size_t epm
       r.error = proof_error;
       return r;
     }
-    bool listed = false;
-    for (const std::string& a : allowed_xpubs) {
-      if (a == v.xpub) { listed = true; break; }
-    }
-    if (!listed) {
-      r.error = "xpub not in module allowlist";
-      return r;
-    }
+  }
+  if (!XpubAllowed(allowed_xpubs, v.xpub)) {
+    r.error = "xpub not in module allowlist";
+    return r;
   }
 
   r.ok = true;

@@ -21,6 +21,11 @@ struct AuthorizeResult {
   std::string error;  // reason on failure
 };
 
+// Module allowlist membership, the one rule both the challenge-time filter and
+// the proof-time gate apply: an empty list gates nothing; otherwise `xpub` must
+// be listed.
+bool XpubAllowed(const std::vector<std::string>& allowed_xpubs, const std::string& xpub);
+
 // Steps:
 //  1. parse the $EPM FlatBuffer,
 //  2. verify the attestation per CryptoKey.ALGORITHM. The live gate supplies
@@ -33,7 +38,7 @@ struct AuthorizeResult {
 //     grant, so a stale one is rejected),
 //  5. membership: when `allowed_xpubs` is non-empty, the account key must have
 //     authorised the proven session key (epm_key_proof.h) and the bound xpub
-//     must be in the list (empty list = no allowlist gate).
+//     must pass XpubAllowed (empty list = no allowlist gate).
 // `verify_secp256k1` may be empty when only ed25519 identities are supported.
 AuthorizeResult AuthorizeModuleRequest(const uint8_t* epm_bytes, std::size_t epm_len,
                                        const uint8_t* proven_signing_pubkey,

@@ -2310,15 +2310,7 @@ int32_t key_server_handle_message(
     // PKI xpub allowlist: early membership filter on the claimed xpub. The
     // cryptographic binding of that xpub to the requester's proven ed25519 signing
     // key (via the re-sent EPM) is verified at proof time below.
-    bool xpub_allowed =
-        publication.descriptor.ALLOWED_XPUBS.empty();
-    for (const auto& allowed_xpub : publication.descriptor.ALLOWED_XPUBS) {
-      if (allowed_xpub == requester_xpub) {
-        xpub_allowed = true;
-        break;
-      }
-    }
-    if (!xpub_allowed) {
+    if (!sdn::epm::XpubAllowed(publication.descriptor.ALLOWED_XPUBS, requester_xpub)) {
       secure_zero_publication(&publication);
       response_out = build_lch_bytes(
           licensingChallengeMessageType::Error,
