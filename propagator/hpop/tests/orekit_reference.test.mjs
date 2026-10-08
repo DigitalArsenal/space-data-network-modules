@@ -39,6 +39,9 @@
 //   E1 EME2000 state in and out ............ LEO 1.4 cm, GPS 0.42 mm  (17 cm, 4 mm)
 //   G1 EGM96 36x36 / 70x70 ................. LEO 1.1 cm, GPS 0.43 mm
 //   G2 EGM2008 36Z,24T ..................... LEO 1.2 cm
+//   J1 JB2008 on SET's SOLFSMY/DTCFILE rows
+//      from 2026-06-10 ..................... LEO 6 mm, SSO 6 mm (a one-day
+//      error in the Y10 lag alone moves LEO by 59 m)
 //   C1 with the STM and parameter Jacobians (B, BDOT, AGOM, T; analytic,
 //      density gradient included): largest relative column difference, over
 //      the samples, of the STM .............. LEO 1.1e-5, GPS 3.9e-11 (limit 1e-4)

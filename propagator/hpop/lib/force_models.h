@@ -240,7 +240,8 @@ enum class DragModelType {
     HarrisPriester, ///< Harris-Priester with diurnal bulge
     NRLMSISE00,     ///< NRLMSISE-00 empirical model
     JB2008,         ///< Jacchia-Bowman 2008
-    DTM2020         ///< Drag Temperature Model 2020
+    DTM2020,        ///< Drag Temperature Model 2020
+    Jacchia70       ///< Jacchia 1970 (Roberts' evaluation, lib/jacchia_roberts.h)
 };
 
 /// Atmospheric drag configuration
@@ -372,6 +373,23 @@ Vec3 JB2008(const Vec3& position, const Vec3& velocity, double jd,
             const SpaceWeatherData& weather, const DragForceConfig& dragConfig,
             const JB2008Config& jb2008Config = JB2008Config(),
             const EarthAxes* axes = nullptr);
+
+/// JB2008 (Bowman et al. 2008; lib/jb2008.h, ported from Orekit 13.1) mass
+/// density (kg/m^3) at a GCRF position (km): geodetic WGS84 position and
+/// the true Sun in the given Earth-fixed axes, the Sun at TDB jdTdb, the
+/// model's UTC from jdUtc, drivers from `weather` (F107/F107a, S107/S107a,
+/// M107/M107a, Y107/Y107a, lagged as JB2008 prescribes, and dTc = DSTDTC).
+double JB2008DensityAt(const Vec3& position, double jdTdb, double jdUtc,
+                       const EarthAxes& axes, const SpaceWeatherData& weather);
+
+/// Jacchia 1970 (Jacchia-Roberts; lib/jacchia_roberts.h, ported from NASA
+/// GMAT) mass density (kg/m^3) at a GCRF position (km): WGS84 geodetic
+/// height and latitude, the point and the true Sun in the given Earth-fixed
+/// axes, UTC from jdUtc; drivers from `weather`: F10.7 of the previous day
+/// (F107), the 81-day centred average of the previous day (f107aPreviousDay,
+/// else F107a) and Kp 6.7 h earlier (kpLag67h, else Kp).
+double Jacchia70DensityAt(const Vec3& position, double jdTdb, double jdUtc,
+                          const EarthAxes& axes, const SpaceWeatherData& weather);
 
 /// Get JB2008 density
 AtmosphericDensity JB2008Density(const Vec3& position, double jd,

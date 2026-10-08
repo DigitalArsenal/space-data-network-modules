@@ -80,7 +80,27 @@
         },
         {
           "portId": "space_weather",
-          "description": "Optional PRW.SPACE_WEATHER: daily SDS $SPW rows (CelesTrak space weather) with strictly increasing DATE, covering every day of the arc and the day before it. Drag then reads NRLMSISE-00's inputs at each instant: the previous day's observed F10.7, the day's 81-day centred average of observed F10.7, the day's Ap, and the three-hour Kp. Excludes the request's WEATHER.",
+          "description": "Optional PRW.SPACE_WEATHER: daily SDS $SPW rows (CelesTrak space weather) with strictly increasing DATE, covering every day of the arc and the day before it. Drag then reads the model's inputs at each instant: for NRLMSISE-00 the previous day's observed F10.7, the day's 81-day centred average of observed F10.7, the day's Ap and the three-hour Kp; for JACCHIA_70 the previous day's observed F10.7 and its 81-day centred average and the three-hour Kp 6.7 h earlier. Excludes the request's WEATHER.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "jb2008_indices",
+          "description": "Optional PRW.JB2008_INDICES: consecutive daily rows of Space Environment Technologies' JB2008 drivers (SOLFSMY F10, S10, M10, Y10 with their 81-day centred averages, at 12 UT of DATE; DTCFILE hourly DSTDTC), covering the arc and the days the lags read before it. Required by, and only accepted with, the JB2008 atmosphere: the indices are interpolated linearly in time at the instant less JB2008's lags (1 day for F10 and S10, 2 for M10, 5 for Y10), DSTDTC between hours, as Orekit's JB2008SpaceEnvironmentData reads them.",
           "acceptedTypeSets": [
             {
               "setId": "sds-prw",

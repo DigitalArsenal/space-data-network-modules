@@ -129,7 +129,59 @@ public:
         out.F107=yesterday->second.f107Obs;out.F107a=today->second.f107ObsCentred81;out.Ap=today->second.apDaily;
         const int slot=std::min(7,std::max(0,int((mjd-double(day))*8)));
         out.Kp=out.kp3h=today->second.kp[slot];out.epoch=jdUtc;
+        // Jacchia 1970: Kp 6.7 h earlier, and the previous day's centred F10.7.
+        out.f107aPreviousDay=yesterday->second.f107ObsCentred81;
+        const double lagged=mjd-6.7/24.0;const long lagDay=long(std::floor(lagged));
+        const auto kpDay=days.find(lagDay);
+        if(kpDay==days.end())return false;
+        out.kpLag67h=kpDay->second.kp[std::min(7,std::max(0,int((lagged-double(lagDay))*8)))];
         return true;
+    }
+    bool covers(double jdUtc) const {SpaceWeatherData w;return at(jdUtc,w);}
+};
+// JB2008 drivers from PRW.JB2008_INDICES, as Orekit 13.1's
+// JB2008SpaceEnvironmentData reads SOLFSMY.TXT and DTCFILE.TXT: each day's
+// solar indices stand at 12 UT of DATE (as SET reports them) and are
+// interpolated linearly in time at the instant minus the model's lag (1 day
+// for F10 and S10, 2 for M10, 5 for Y10, the centred values alike); DSTDTC
+// is interpolated linearly between the hourly values (hour h of DATE at h:00
+// UT), without lag. Rows must be consecutive days.
+class JB2008IndicesTable {
+public:
+    struct Day {double f10,f10B,s10,s10B,m10,m10B,y10,y10B;};
+    std::vector<Day> days;std::vector<double> dtc;long firstMjd=0;
+    std::string add(const flatbuffers::Vector<flatbuffers::Offset<PRWJB2008Indices>>* rows) {
+        if(!rows||rows->size()==0)return "No JB2008 rows.";
+        for(const PRWJB2008Indices* row:*rows) {
+            int y=0,m=0,d=0;double jd0=0,mjd=0;
+            if(!row->DATE()||std::sscanf(row->DATE()->c_str(),"%d-%d-%d",&y,&m,&d)!=3||eraCal2jd(y,m,d,&jd0,&mjd)!=0)return "JB2008 DATE must be an ISO 8601 calendar date.";
+            if(days.empty())firstMjd=long(mjd);
+            else if(long(mjd)!=firstMjd+long(days.size()))return "JB2008 rows must be consecutive days.";
+            const Day v{row->F10(),row->F10_CENTRED_81(),row->S10(),row->S10_CENTRED_81(),row->M10(),row->M10_CENTRED_81(),row->Y10(),row->Y10_CENTRED_81()};
+            for(const double x:{v.f10,v.f10B,v.s10,v.s10B,v.m10,v.m10B,v.y10,v.y10B})if(!positive(x))return "JB2008 solar indices must be positive and finite.";
+            if(!row->DTC_HOURLY_K()||row->DTC_HOURLY_K()->size()!=24)return "JB2008 DTC_HOURLY_K needs 24 hourly values.";
+            for(const double x:*row->DTC_HOURLY_K()){if(!std::isfinite(x))return "JB2008 DTC values must be finite.";dtc.push_back(x);}
+            days.push_back(v);
+        }
+        return "";
+    }
+    // Model inputs at a UTC Julian date; false outside the rows.
+    bool at(double jdUtc,SpaceWeatherData& out) const {
+        const double mjd=jdUtc-2400000.5;
+        // Value at (mjd - lag), rows at firstMjd + k + 0.5.
+        const auto sol=[&](double lag,double Day::*member,double& value){
+            const double x=mjd-lag-(double(firstMjd)+0.5);
+            const long k=long(std::ceil(x))-1;  // previous < x <= next
+            if(k<0||k+1>=long(days.size()))return false;
+            const double w=x-double(k);
+            value=days[k].*member*(1-w)+days[k+1].*member*w;return true;
+        };
+        const double h=(mjd-double(firstMjd))*24.0;const long k=long(std::ceil(h))-1;
+        if(k<0||k+1>=long(dtc.size()))return false;
+        const double w=h-double(k);
+        out.dTc=dtc[k]*(1-w)+dtc[k+1]*w;out.epoch=jdUtc;
+        return sol(1,&Day::f10,out.F107)&&sol(1,&Day::f10B,out.F107a)&&sol(1,&Day::s10,out.S107)&&sol(1,&Day::s10B,out.S107a)&&
+               sol(2,&Day::m10,out.M107)&&sol(2,&Day::m10B,out.M107a)&&sol(5,&Day::y10,out.Y107)&&sol(5,&Day::y10B,out.Y107a);
     }
     bool covers(double jdUtc) const {SpaceWeatherData w;return at(jdUtc,w);}
 };
@@ -305,6 +357,17 @@ bool parseForces(const PRWForceConfiguration* in,double epoch,bool hasEarthOrien
         case prwAtmosphereFamily::EXPONENTIAL:out.dragModel=ForceModel::DragModelType::Exponential;break;
         case prwAtmosphereFamily::USSA1976:out.dragModel=ForceModel::DragModelType::USSA1976;break;
         case prwAtmosphereFamily::HARRIS_PRIESTER:out.dragModel=ForceModel::DragModelType::HarrisPriester;break;
+        // JB2008 (lib/jb2008.h): geodetic and Sun-relative, so Earth-fixed;
+        // its drivers come from the jb2008_indices input only.
+        case prwAtmosphereFamily::JB2008:
+            if(out.useDrag&&!hasEarthOrientation)return prwError(error,"eop-data-required: JB2008 is evaluated in Earth-fixed axes; supply earth_orientation.");
+            if(in->WEATHER())return prwError(error,"invalid-weather: JB2008 reads the jb2008_indices input; omit WEATHER.");
+            out.dragModel=ForceModel::DragModelType::JB2008;break;
+        // Jacchia 1970 (lib/jacchia_roberts.h), also Earth-fixed; drivers from
+        // WEATHER or the space_weather input like NRLMSISE-00.
+        case prwAtmosphereFamily::JACCHIA_70:
+            if(out.useDrag&&!hasEarthOrientation)return prwError(error,"eop-data-required: Jacchia 1970 is evaluated in Earth-fixed axes; supply earth_orientation.");
+            out.dragModel=ForceModel::DragModelType::Jacchia70;break;
         default:return prwError(error,"unsupported-atmosphere: Unknown atmosphere selection.");
     }
     out.drag.model=out.dragModel;out.explicitEpochContract=true;out.integrationEpochTDB=epoch;out.weather.epoch=timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(epoch)));
@@ -612,8 +675,20 @@ bool evaluate(Execution& execution,const PRWExecutionRequest* request,const TTEp
     if(!std::isfinite(state.POSITION->X)||!std::isfinite(state.POSITION->Y)||!std::isfinite(state.POSITION->Z)||!std::isfinite(state.VELOCITY->X)||!std::isfinite(state.VELOCITY->Y)||!std::isfinite(state.VELOCITY->Z))return prwError(error,"invoke-failed: Integration returned a nonfinite state.");
     return true;
 }
-bool execute(const PRWExecutionRequest* request,const std::shared_ptr<EarthRotation>& earth,const std::shared_ptr<SpaceWeatherTable>& weather,PRWT& response,std::string& error) {
+bool execute(const PRWExecutionRequest* request,const std::shared_ptr<EarthRotation>& earth,const std::shared_ptr<SpaceWeatherTable>& weather,
+             const std::shared_ptr<JB2008IndicesTable>& jb2008,PRWT& response,std::string& error) {
     Execution execution;if(!parseExecution(request,earth!=nullptr,execution,error))return false;
+    const bool jb2008Model=execution.forces.useDrag&&execution.forces.dragModel==ForceModel::DragModelType::JB2008;
+    if(jb2008Model!=bool(jb2008))return prwError(error,jb2008Model?"jb2008-indices-required: JB2008 reads the jb2008_indices input.":"unsupported-jb2008-indices: jb2008_indices applies to the JB2008 atmosphere.");
+    if(jb2008) {
+        if(weather)return prwError(error,"unsupported-space-weather: JB2008 reads jb2008_indices, not space_weather.");
+        double first=execution.initial.epoch,last=execution.target;
+        for(const double t:execution.samples){last=std::max(last,t);first=std::min(first,t);}
+        const auto utc=[](double jdTdb){return timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(jdTdb)));};
+        if(!jb2008->covers(utc(first))||!jb2008->covers(utc(last)))
+            return prwError(error,"jb2008-indices-out-of-range: The JB2008 rows must cover the arc, five days before it for Y10 and the hours of DTC.");
+        execution.forces.weatherAt=[jb2008](double jdUtc,SpaceWeatherData& w){jb2008->at(jdUtc,w);};
+    }
     if(weather) {
         if(!execution.forces.useDrag)return prwError(error,"unsupported-space-weather: Space weather applies to drag; enable drag.");
         if(request->FORCES()->WEATHER())return prwError(error,"invalid-space-weather: Supply WEATHER or the space_weather input, not both.");
@@ -698,7 +773,9 @@ bool atmosphere(const PRWAtmosphereRequest* request,PRWT& response,std::string& 
     response.ATMOSPHERE_RESULT=std::move(result);return true;
 }
 } // namespace
-bool processPrwInvoke(const uint8_t* data,size_t size,const uint8_t* kernel,size_t kernelSize,const uint8_t* eop,size_t eopSize,const uint8_t* spaceWeather,size_t spaceWeatherSize,std::vector<uint8_t>& output,std::string& error) {
+bool processPrwInvoke(const uint8_t* data,size_t size,const uint8_t* kernel,size_t kernelSize,const PrwEnvironment& environment,std::vector<uint8_t>& output,std::string& error) {
+    const uint8_t* eop=environment.earthOrientation;const size_t eopSize=environment.earthOrientationSize;
+    const uint8_t* spaceWeather=environment.spaceWeather;const size_t spaceWeatherSize=environment.spaceWeatherSize;
     struct KernelLifetime {KernelLifetime(){Ephemeris::clearEphemerisBuffer();}~KernelLifetime(){Ephemeris::clearEphemerisBuffer();}} kernelLifetime;
     const PRW* request=nullptr;if(!verifyPrw(data,size,request,error))return false;
     if(kernelSize&&!loadKernel(kernel,kernelSize,error))return false;
@@ -720,8 +797,17 @@ bool processPrwInvoke(const uint8_t* data,size_t size,const uint8_t* kernel,size
         const std::string reason=weather->add(root->SPACE_WEATHER()->ROWS());
         if(!reason.empty())return prwError(error,("invalid-space-weather: "+reason).c_str());
     }
-    if(request->EXECUTION_REQUEST())ok=execute(request->EXECUTION_REQUEST(),earth,weather,response,error);
+    std::shared_ptr<JB2008IndicesTable> jb2008;
+    if(environment.jb2008IndicesSize) {
+        const PRW* root=nullptr;if(!verifyPrw(environment.jb2008Indices,environment.jb2008IndicesSize,root,error))return false;
+        if(!root->JB2008_INDICES())return prwError(error,"invalid-prw-arm: jb2008_indices requires JB2008_INDICES.");
+        jb2008=std::make_shared<JB2008IndicesTable>();
+        const std::string reason=jb2008->add(root->JB2008_INDICES()->ROWS());
+        if(!reason.empty())return prwError(error,("invalid-jb2008-indices: "+reason).c_str());
+    }
+    if(request->EXECUTION_REQUEST())ok=execute(request->EXECUTION_REQUEST(),earth,weather,jb2008,response,error);
     else if(earth)return prwError(error,"unsupported-earth-orientation: Earth orientation applies to execution requests.");
+    else if(jb2008)return prwError(error,"unsupported-jb2008-indices: JB2008 indices apply to execution requests.");
     else if(weather)return prwError(error,"unsupported-space-weather: Space weather applies to execution requests.");
     else if(request->EPHEMERIS_REQUEST())ok=ephemeris(request->EPHEMERIS_REQUEST(),response,error);
     else if(request->ATMOSPHERE_REQUEST())ok=atmosphere(request->ATMOSPHERE_REQUEST(),response,error);

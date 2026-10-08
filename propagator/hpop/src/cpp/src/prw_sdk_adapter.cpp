@@ -45,15 +45,22 @@ int resident(const char* method, const char* port) {
 extern "C" int invoke(void) {
   const int index=plugin_find_input_index("request",0);const int kernelIndex=plugin_find_input_index("kernel",0);
   const int eopIndex=plugin_find_input_index("earth_orientation",0);const int weatherIndex=plugin_find_input_index("space_weather",0);
+  const int jb2008Index=plugin_find_input_index("jb2008_indices",0);
   if(index<0)return fail("invalid-request: missing request");
   if(plugin_find_input_index("earth_orientation",1)>=0)return fail("invalid-earth-orientation: Supply one earth_orientation record.");
   if(plugin_find_input_index("space_weather",1)>=0)return fail("invalid-space-weather: Supply one space_weather record.");
+  if(plugin_find_input_index("jb2008_indices",1)>=0)return fail("invalid-jb2008-indices: Supply one jb2008_indices record.");
   const auto* request=plugin_get_input_frame(index);const auto* kernel=kernelIndex<0?nullptr:plugin_get_input_frame(kernelIndex);
   const auto* eop=eopIndex<0?nullptr:plugin_get_input_frame(eopIndex);const auto* weather=weatherIndex<0?nullptr:plugin_get_input_frame(weatherIndex);
+  const auto* jb2008=jb2008Index<0?nullptr:plugin_get_input_frame(jb2008Index);
+  hpop::PrwEnvironment environment;
+  if(eop){environment.earthOrientation=eop->payload;environment.earthOrientationSize=eop->payload_length;}
+  if(weather){environment.spaceWeather=weather->payload;environment.spaceWeatherSize=weather->payload_length;}
+  if(jb2008){environment.jb2008Indices=jb2008->payload;environment.jb2008IndicesSize=jb2008->payload_length;}
   std::vector<uint8_t> output;std::string error;
   try {
     if(!hpop::processPrwInvoke(request->payload,request->payload_length,kernel?kernel->payload:nullptr,kernel?kernel->payload_length:0,
-                               eop?eop->payload:nullptr,eop?eop->payload_length:0,weather?weather->payload:nullptr,weather?weather->payload_length:0,output,error))return fail(error);
+                               environment,output,error))return fail(error);
     return emit("response",output,request->sequence,true);
   }catch(const std::exception& e){return fail(std::string("unsupported-configuration: ")+e.what());}
 }

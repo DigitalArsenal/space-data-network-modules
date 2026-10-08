@@ -58,6 +58,8 @@ import org.orekit.utils.ParameterDriver;
 import org.hipparchus.linear.RealMatrix;
 import org.orekit.frames.LOFType;
 import org.orekit.models.earth.atmosphere.data.CssiSpaceWeatherData;
+import org.orekit.models.earth.atmosphere.data.JB2008SpaceEnvironmentData;
+import org.orekit.models.earth.atmosphere.JB2008;
 import org.orekit.bodies.CelestialBody;
 import org.orekit.bodies.CelestialBodyFactory;
 import org.orekit.bodies.OneAxisEllipsoid;
@@ -116,6 +118,10 @@ public class OrekitReference {
         // VCM parity: EME2000 ("J2K") states in and out; the embedded EGM96
         // set; tesseral and sectorial terms only to tesseralDegree ("nnT").
         String frame = "GCRF", model = "EGM2008"; int tesseralDegree = -1;
+        // JB2008 on SET's SOLFSMY.TXT and DTCFILE.TXT (Orekit's
+        // JB2008SpaceEnvironmentData), from `epochUtc` (the indices file in
+        // the data directory ends mid-June 2026).
+        boolean jb2008 = false; String epochUtc = null;
         // Write the STM and the Jacobian for each active VCM parameter (B,
         // BDOT, AGOM, T) at every sample.
         boolean jacobians = false;
@@ -131,6 +137,7 @@ public class OrekitReference {
         Forces egm96() { model = "EGM96"; return this; }
         Forces tesseral(int degree) { tesseralDegree = degree; return this; }
         Forces jacobians() { jacobians = true; return this; }
+        Forces jb2008(String start) { jb2008 = true; epochUtc = start; return this; }
     }
 
     // The field with its tesseral and sectorial terms (order >= 1) above
@@ -290,9 +297,11 @@ public class OrekitReference {
                 new Forces("E1-field-sun-moon-eme2000", 20, 20, true, false, false).eme2000(),
                 new Forces("G1-egm96-36x36-sun-moon", 36, 36, true, false, false).egm96(),
                 new Forces("G2-egm2008-36z24t-sun-moon", 36, 24, true, false, false).tesseral(24),
-                new Forces("C1-field-sun-moon-srp-drag-intrack-bdot-jacobians", 20, 20, true, true, true).inTrack(5e-8).bdot(5e-8).jacobians()),
+                new Forces("C1-field-sun-moon-srp-drag-intrack-bdot-jacobians", 20, 20, true, true, true).inTrack(5e-8).bdot(5e-8).jacobians(),
+                new Forces("J1-field-sun-moon-srp-drag-jb2008", 20, 20, true, true, true).jb2008("2026-06-10T00:00:00")),
             "SSO700", List.of(
-                new Forces("W1-field-sun-moon-srp-drag-cssi", 20, 20, true, true, true).cssi()),
+                new Forces("W1-field-sun-moon-srp-drag-cssi", 20, 20, true, true, true).cssi(),
+                new Forces("J1-field-sun-moon-srp-drag-jb2008", 20, 20, true, true, true).jb2008("2026-06-10T00:00:00")),
             "GPS", List.of(
                 new Forces("R1-field-sun-moon-schwarzschild", 20, 20, true, false, false).relativity(1),
                 new Forces("R2-field-sun-moon-relativity-iers2010", 20, 20, true, false, false).relativity(2),
@@ -320,7 +329,11 @@ public class OrekitReference {
                 // An EME2000 case states the same numbers in EME2000 and is
                 // integrated and sampled there.
                 final Frame frame = f.frame.equals("EME2000") ? FramesFactory.getEME2000() : gcrf;
-                CartesianOrbit orbit = new CartesianOrbit(pv0, frame, epoch, GM);
+                // A case with its own epoch has the same elements there.
+                final AbsoluteDate caseEpoch = f.epochUtc == null ? epoch : new AbsoluteDate(f.epochUtc, utc);
+                final PVCoordinates casePv = f.epochUtc == null ? pv0 : new KeplerianOrbit(c.aKm * 1000, c.e, Math.toRadians(c.iDeg), Math.toRadians(c.argpDeg),
+                    Math.toRadians(c.raanDeg), Math.toRadians(c.mDeg), PositionAngleType.MEAN, gcrf, caseEpoch, GM).getPVCoordinates();
+                CartesianOrbit orbit = new CartesianOrbit(casePv, frame, caseEpoch, GM);
                 // Steps of at most 10 s: with longer steps Orekit's own LEO400
                 // radiation-pressure trajectory moves by up to 0.4 m with the
                 // step limit (30 s: 0.11 m, 120 s and 300 s: 0.40 m), the ~9 s
@@ -360,7 +373,7 @@ public class OrekitReference {
                 if (f.inTrack != 0) {
                     // QSW's S axis is the in-track axis, N x rhat.
                     p.setAttitudeProvider(new LofOffset(gcrf, LOFType.QSW));
-                    ParametricAcceleration inTrack = new ParametricAcceleration(Vector3D.PLUS_J, false, new PolynomialAccelerationModel("in-track", epoch, 0));
+                    ParametricAcceleration inTrack = new ParametricAcceleration(Vector3D.PLUS_J, false, new PolynomialAccelerationModel("in-track", caseEpoch, 0));
                     inTrack.getParametersDrivers().get(0).setValue(f.inTrack);
                     p.addForceModel(inTrack);
                 }
@@ -373,8 +386,10 @@ public class OrekitReference {
                         public double[] getAp(AbsoluteDate date) { return new double[] {AP, AP, AP, AP, AP, AP, AP}; }
                     };
                     OneAxisEllipsoid earth = new OneAxisEllipsoid(Constants.WGS84_EARTH_EQUATORIAL_RADIUS, Constants.WGS84_EARTH_FLATTENING, itrf);
-                    Atmosphere atmosphere = new MeanSolarTimeNRLMSISE00(weather, earth, utc);
-                    p.addForceModel(new DragForce(atmosphere, f.bdot != 0 || f.jacobians ? new RateDrag(AREA, CD, epoch, bdotValue) : new IsotropicDrag(AREA, CD)));
+                    Atmosphere atmosphere = f.jb2008
+                        ? new JB2008(new JB2008SpaceEnvironmentData(JB2008SpaceEnvironmentData.DEFAULT_SUPPORTED_NAMES_SOLFSMY, JB2008SpaceEnvironmentData.DEFAULT_SUPPORTED_NAMES_DTC), sun, earth)
+                        : new MeanSolarTimeNRLMSISE00(weather, earth, utc);
+                    p.addForceModel(new DragForce(atmosphere, f.bdot != 0 || f.jacobians ? new RateDrag(AREA, CD, caseEpoch, bdotValue) : new IsotropicDrag(AREA, CD)));
                 }
                 return p;
                 };
@@ -399,6 +414,8 @@ public class OrekitReference {
                 first = false;
                 out.append(String.format("  {\"orbit\": \"%s\", \"forces\": \"%s\", \"degree\": %d, \"order\": %d, \"thirdBodies\": %b, \"srp\": %b, \"drag\": %b,\n",
                     c.name, f.name, f.degree, f.order, f.thirdBodies, f.srp, f.drag));
+                if (f.jb2008)
+                    out.append(String.format("   \"epochUtc\": \"%s\", \"atmosphere\": \"JB2008\",\n", caseEpoch.toString(utc)));
                 if (!f.frame.equals("GCRF") || !f.model.equals("EGM2008") || f.tesseralDegree >= 0)
                     out.append(String.format("   \"frame\": \"%s\", \"gravityModel\": \"%s\",%s\n", f.frame, f.model,
                         f.tesseralDegree >= 0 ? String.format(" \"tesseralDegree\": %d,", f.tesseralDegree) : ""));
@@ -409,7 +426,7 @@ public class OrekitReference {
                 StringBuilder stms = new StringBuilder(), jacobians = new StringBuilder();
                 out.append("   \"samples\": [");
                 for (double t = 0; t <= DURATION + 1e-9; t += STEP) {
-                    AbsoluteDate date = epoch.shiftedBy(t);
+                    AbsoluteDate date = caseEpoch.shiftedBy(t);
                     SpacecraftState state = p.propagate(date);
                     PVCoordinates pv = state.getPVCoordinates(frame);
                     if (f.jacobians) {

@@ -7,6 +7,10 @@ import { decodePrw, decodeResult, encodePrw, execution, makeTable, nativeInput, 
 
 export const REFERENCE = JSON.parse(fs.readFileSync(new URL('../fixtures/orekit/orekit-reference.json', import.meta.url), 'utf8'));
 export const EOP = JSON.parse(fs.readFileSync(new URL('../fixtures/orekit/eop-2026-08.json', import.meta.url), 'utf8'));
+// The JB2008 cases start on 2026-06-10 (SET's indices in Orekit's data
+// directory end on 2026-06-17): their Earth orientation and drivers.
+export const EOP_JUNE = JSON.parse(fs.readFileSync(new URL('../fixtures/orekit/eop-2026-06.json', import.meta.url), 'utf8'));
+export const JB2008 = JSON.parse(fs.readFileSync(new URL('../fixtures/orekit/jb2008-2026-06.json', import.meta.url), 'utf8'));
 export const SPW = JSON.parse(fs.readFileSync(new URL('../fixtures/orekit/spw-2026-08.json', import.meta.url), 'utf8'));
 const KERNEL = fs.readFileSync(new URL('../../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp', import.meta.url));
 
@@ -29,8 +33,8 @@ const needsKernel = (c) => c.thirdBodies || c.srp;
 // Earth orientation rows for the arc, from the same IERS file Orekit read,
 // as PRW.EARTH_ORIENTATION. The fixture keeps them as a size-prefixed $EOP
 // stream (make-eop.mjs); this only re-frames the records.
-const eopRows = () => {
-  const bytes = Buffer.from(EOP.payloadBase64, 'base64'), rows = [];
+const eopRows = (fixture = EOP) => {
+  const bytes = Buffer.from(fixture.payloadBase64, 'base64'), rows = [];
   for (let at = 0; at < bytes.length;) {
     const n = bytes.readUInt32LE(at);
     rows.push(sds.EOP.getSizePrefixedRootAsEOP(new flatbuffers.ByteBuffer(new Uint8Array(bytes.subarray(at, at + 4 + n)))).unpack());
@@ -38,8 +42,14 @@ const eopRows = () => {
   }
   return rows;
 };
-export function eopInput() {
-  return { portId: 'earth_orientation', typeRef: TYPE, payload: encodePrw('EARTH_ORIENTATION', makeTable('PRWEarthOrientation', { ROWS: eopRows() })) };
+export function eopInput(c) {
+  const fixture = c?.epochUtc?.startsWith('2026-06') ? EOP_JUNE : EOP;
+  return { portId: 'earth_orientation', typeRef: TYPE, payload: encodePrw('EARTH_ORIENTATION', makeTable('PRWEarthOrientation', { ROWS: eopRows(fixture) })) };
+}
+
+// SET's JB2008 drivers Orekit read (make-jb2008.mjs), as PRW.JB2008_INDICES.
+export function jb2008Input() {
+  return { portId: 'jb2008_indices', typeRef: TYPE, payload: encodePrw('JB2008_INDICES', makeTable('PRWJB2008IndicesTable', { ROWS: JB2008.rows.map((row) => makeTable('PRWJB2008Indices', row)) })) };
 }
 
 // Daily space weather Orekit read (make-spw.mjs), as PRW.SPACE_WEATHER.
@@ -66,7 +76,7 @@ export function requestInputs(c, { tolerance = integratorTolerance(c), maxStep =
     frame: c.frame ?? 'GCRF',
   }, needsKernel(c));
   // Exact ISO epochs on UTC, as Orekit wrote them; both sides integrate on TT.
-  exec.INITIAL.STATE.EPOCH = REFERENCE.epochUtc;
+  exec.INITIAL.STATE.EPOCH = c.epochUtc ?? REFERENCE.epochUtc;
   exec.INITIAL.STATE.EPOCH_TIME_SYSTEM = 'UTC';
   exec.INITIAL.STATE.POSITION = makeTable('FRMVector3', { X: x, Y: y, Z: z });
   exec.INITIAL.STATE.VELOCITY = makeTable('FRMVector3', { X: vx, Y: vy, Z: vz });
@@ -79,6 +89,7 @@ export function requestInputs(c, { tolerance = integratorTolerance(c), maxStep =
   if (c.inTrackAccelerationMS2) Object.assign(exec.FORCES, { IN_TRACK_ACCELERATION_M_S2: c.inTrackAccelerationMS2, HAS_IN_TRACK_ACCELERATION_M_S2: true });
   if (c.dragAreaOverMassRateM2KgS) Object.assign(exec.FORCES, { DRAG_AREA_OVER_MASS_RATE_M2_KG_S: c.dragAreaOverMassRateM2KgS, HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S: true });
   if (c.spaceWeather === 'cssi') exec.FORCES.WEATHER = null;
+  if (c.atmosphere === 'JB2008') Object.assign(exec.FORCES, { ATMOSPHERE_MODEL: sds.prwAtmosphereFamily.JB2008, WEATHER: null });
   if (c.tesseralDegree !== undefined) Object.assign(exec.FORCES, { MAXIMUM_TESSERAL_DEGREE: c.tesseralDegree, HAS_MAXIMUM_TESSERAL_DEGREE: true });
   // Jacobian cases: the STM with the VCM parameters appended, analytic, with
   // the density gradient (Orekit differentiates the density too).
@@ -90,8 +101,9 @@ export function requestInputs(c, { tolerance = integratorTolerance(c), maxStep =
   const inputs = [{ portId: 'request', typeRef: TYPE, payload: encodePrw('EXECUTION_REQUEST', exec) }];
   if (needsKernel(c)) inputs.push({ portId: 'kernel', typeRef: TYPE, payload: nativeInput(KERNEL) });
   // Every Earth-fixed field gets the EOP, so its pole matches Orekit's ITRF.
-  if (c.degree > 0 || c.drag) inputs.push(eopInput());
+  if (c.degree > 0 || c.drag) inputs.push(eopInput(c));
   if (c.spaceWeather === 'cssi') inputs.push(spaceWeatherInput());
+  if (c.atmosphere === 'JB2008') inputs.push(jb2008Input());
   return inputs;
 }
 

@@ -13,6 +13,8 @@
 #include "coords.h"
 #include "egm2008_data.h"
 #include "iers2010_tides.h"
+#include "jb2008.h"
+#include "jacchia_roberts.h"
 #include <cmath>
 #include <algorithm>
 #include <stdexcept>
@@ -553,6 +555,7 @@ AtmosphereModelType AtmosphereModelForDrag(DragModelType model) {
         case DragModelType::NRLMSISE00:     return AtmosphereModelType::NRLMSISE00;
         case DragModelType::JB2008:         return AtmosphereModelType::JB2008;
         case DragModelType::DTM2020:        return AtmosphereModelType::DTM2020;
+        case DragModelType::Jacchia70:      break;  // force-set path only (DragAccelerationWith)
     }
     return AtmosphereModelType::NRLMSISE00;
 }
@@ -683,6 +686,18 @@ AtmosphericDensity NRLMSISE00Density(const Vec3& position, double jd,
 // =============================================================================
 // 9. JB2008 - Jacchia-Bowman 2008
 // =============================================================================
+
+double JB2008DensityAt(const Vec3& position, double jdTdb, double jdUtc,
+                       const EarthAxes& axes, const SpaceWeatherData& weather) {
+    double lat = 0, lon = 0, alt = 0, sunLat = 0, sunLon = 0, sunAlt = 0;
+    ecefToGeodetic(axes.fixed(position), lat, lon, alt);
+    const EphemerisState sun = getSunPosition(jdTdb);
+    if (!sun.valid) return 0.0;
+    ecefToGeodetic(axes.fixed(sun.position), sunLat, sunLon, sunAlt);
+    const jb2008::Inputs in{weather.F107, weather.F107a, weather.S107, weather.S107a,
+                            weather.M107, weather.M107a, weather.Y107, weather.Y107a, weather.dTc};
+    return jb2008::density(jdUtc - 2400000.5, sunLon, sunLat, lon, lat, alt * 1000.0, in);
+}
 
 Vec3 JB2008(const Vec3& position, const Vec3& velocity, double jd,
             const SpaceWeatherData& weather, const DragForceConfig& dragConfig,
@@ -1728,9 +1743,21 @@ Vec3 DragAccelerationWith(const Vec3& position, const Vec3& velocity, double jd,
                                         weather, drag, &axes);
             break;
         case DragModelType::JB2008:
-            totalAcc += JB2008(position, velocity, atmosphereJD, weather,
-                               drag, forceSet.jb2008, &axes);
+        case DragModelType::Jacchia70: {
+            // The real JB2008 (lib/jb2008.h; the JB2008() function above is
+            // the legacy stand-in kept for its direct callers) and Jacchia
+            // 1970 (lib/jacchia_roberts.h).
+            const double rho = forceSet.dragModel == DragModelType::JB2008
+                ? JB2008DensityAt(position, jd, atmosphereJD, axes, weather)
+                : Jacchia70DensityAt(position, jd, atmosphereJD, axes, weather);
+            const Vec3 vRel = relativeAtmosphereVelocity(position, velocity, atmosphereJD, axes,
+                drag.coRotatingAtmosphere, drag.includeWinds, &weather, drag.windDisturbance);
+            const double vRelMag = vRel.magnitude();
+            if (rho < 1e-20 || vRelMag < 1e-6) break;
+            const double vRelMs = vRelMag * 1000.0;
+            totalAcc += vRel.normalized() * (-0.5 * rho * vRelMs * vRelMs * drag.Cd * drag.area / drag.mass * 1e-3);
             break;
+        }
         case DragModelType::DTM2020:
             totalAcc += DTM2020(position, velocity, atmosphereJD, weather,
                                 drag, forceSet.dtm2020, &axes);
@@ -1741,6 +1768,23 @@ Vec3 DragAccelerationWith(const Vec3& position, const Vec3& velocity, double jd,
             break;
     }
     return totalAcc;
+}
+
+double Jacchia70DensityAt(const Vec3& position, double jdTdb, double jdUtc,
+                          const EarthAxes& axes, const SpaceWeatherData& weather) {
+    double lat = 0, lon = 0, alt = 0;
+    const Vec3 fixed = axes.fixed(position);
+    ecefToGeodetic(fixed, lat, lon, alt);
+    const EphemerisState sun = getSunPosition(jdTdb);
+    if (!sun.valid) return 0.0;
+    const Vec3 s = axes.fixed(sun.position);
+    const double point[3] = {fixed.x, fixed.y, fixed.z}, sunv[3] = {s.x, s.y, s.z};
+    const double polarRadius = RE_EARTH * (1.0 - 1.0 / 298.257223563);  // WGS84
+    const jacchia_roberts::Inputs in{weather.F107,
+        weather.f107aPreviousDay >= 0 ? weather.f107aPreviousDay : weather.F107a,
+        weather.kpLag67h >= 0 ? weather.kpLag67h : weather.Kp};
+    const double rho = jacchia_roberts::density(alt, lat, point, sunv, jdUtc - 2400000.5, polarRadius, in);
+    return rho > 0 ? rho : 0.0;
 }
 
 Vec3 SrpAcceleration(const Vec3& position, double jd, const ForceModelSet& forceSet,
