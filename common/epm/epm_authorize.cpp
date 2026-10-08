@@ -32,6 +32,7 @@ std::vector<uint8_t> HexDecode(const std::string& in) {
 bool XpubAllowed(const std::vector<std::string>& allowed_xpubs, const std::string& xpub) {
   if (allowed_xpubs.empty()) return true;
   for (const std::string& a : allowed_xpubs) {
+    if (a == kAnyAccountXpub && !xpub.empty()) return true;
     if (a == xpub) return true;
   }
   return false;

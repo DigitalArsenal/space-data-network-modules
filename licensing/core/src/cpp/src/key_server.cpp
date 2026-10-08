@@ -2307,9 +2307,10 @@ int32_t key_server_handle_message(
       return 0;
     }
 
-    // PKI xpub allowlist: early membership filter on the claimed xpub. The
-    // cryptographic binding of that xpub to the requester's proven ed25519 signing
-    // key (via the re-sent EPM) is verified at proof time below.
+    // PKI xpub allowlist: early membership filter on the claimed xpub ("*" admits
+    // any non-empty one). The cryptographic binding of that xpub to the
+    // requester's proven ed25519 signing key (via the re-sent EPM) is verified at
+    // proof time below.
     if (!sdn::epm::XpubAllowed(publication.descriptor.ALLOWED_XPUBS, requester_xpub)) {
       secure_zero_publication(&publication);
       response_out = build_lch_bytes(
@@ -2530,7 +2531,10 @@ int32_t key_server_handle_message(
 
   // Authoritative PKI gate: when the module declares an xpub allowlist, the re-sent
   // EPM must verify and bind the now-proven ed25519 signing key to the requester's
-  // xpub (cross-curve attestation), and that xpub must equal the allowlisted one.
+  // xpub (cross-curve attestation), the account key must have authorised that
+  // session key, and the xpub must be listed. An allowlist of "*" waives only the
+  // listing: any account that passes the rest is granted, still encrypted to its
+  // own session key, and the bound xpub must still equal the claimed one.
   if (!publication.descriptor.ALLOWED_XPUBS.empty()) {
     const sdn::epm::AuthorizeResult gate = authorize_requester_epm(
         pending.requester_epm.data(),

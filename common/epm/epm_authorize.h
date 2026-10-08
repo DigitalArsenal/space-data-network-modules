@@ -21,9 +21,16 @@ struct AuthorizeResult {
   std::string error;  // reason on failure
 };
 
+// The allowlist entry that admits any account: a module whose ALLOWED_XPUBS
+// holds "*" is leased to every requester that proves an account (steps 1-4 and
+// the account key's proof below), each grant encrypted to that requester's own
+// session key. Explicit xpubs beside it change nothing: "*" admits any account.
+inline constexpr const char* kAnyAccountXpub = "*";
+
 // Module allowlist membership, the one rule both the challenge-time filter and
 // the proof-time gate apply: an empty list gates nothing; otherwise `xpub` must
-// be listed.
+// be listed, or the list must hold kAnyAccountXpub and `xpub` must name an
+// account (non-empty).
 bool XpubAllowed(const std::vector<std::string>& allowed_xpubs, const std::string& xpub);
 
 // Steps:
@@ -38,7 +45,8 @@ bool XpubAllowed(const std::vector<std::string>& allowed_xpubs, const std::strin
 //     grant, so a stale one is rejected),
 //  5. membership: when `allowed_xpubs` is non-empty, the account key must have
 //     authorised the proven session key (epm_key_proof.h) and the bound xpub
-//     must pass XpubAllowed (empty list = no allowlist gate).
+//     must pass XpubAllowed (empty list = no allowlist gate). Under ["*"] the
+//     key proof and steps 1-4 are still required; only the listing is waived.
 // `verify_secp256k1` may be empty when only ed25519 identities are supported.
 AuthorizeResult AuthorizeModuleRequest(const uint8_t* epm_bytes, std::size_t epm_len,
                                        const uint8_t* proven_signing_pubkey,
