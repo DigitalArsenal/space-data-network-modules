@@ -68,6 +68,10 @@ struct ExtendedGravityField {
 constexpr double EGM2008_GM_KM3_S2 = 398600.4415;
 constexpr double EGM2008_RADIUS_KM = 6378.1363;
 
+/// EGM96's constants (Lemoine et al. 1998; NGA egm96_to360.ascii header).
+constexpr double EGM96_GM_KM3_S2 = 398600.4415;
+constexpr double EGM96_RADIUS_KM = 6378.1363;
+
 /// EGM2008 gravity model configuration
 struct EGM2008Config {
     uint16_t maxDegree{70};        ///< Maximum degree (up to 2190)
@@ -94,6 +98,10 @@ struct GRGM1200AConfig {
 /// @param config Configuration for degree/order and drift
 /// @return Extended gravity field with coefficients
 ExtendedGravityField initEGM2008Extended(const EGM2008Config& config);
+
+/// Initialize the embedded EGM96 field (degree 2-70, lib/egm96_data.h) to
+/// config.maxDegree / maxOrder; the drift settings do not apply.
+ExtendedGravityField initEGM96Extended(const EGM2008Config& config);
 
 /// Initialize GRGM1200A lunar gravity field
 /// @param config Configuration for degree/order

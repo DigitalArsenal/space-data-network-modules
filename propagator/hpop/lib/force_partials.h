@@ -31,6 +31,30 @@ AccelerationPartials ComputeAccelerationPartials(
     ForceModelSet& forceSet,
     DensityGradient densityGradient = DensityGradient::Neglected);
 
+/// Dynamical model parameters a sensitivity can carry (PRW
+/// prwDynamicParameter): Cd*A/m (m^2/kg), its rate (m^2/kg/s), Cr*A/m
+/// (m^2/kg) and the constant in-track acceleration (m/s^2).
+enum class DynamicParameter : uint8_t {
+    DragAreaOverMass = 1, DragAreaOverMassRate = 2, SrpAreaOverMass = 3, InTrackAcceleration = 4
+};
+
+/// Returns nullptr when `parameter` is active in the force set, otherwise a
+/// static error message.
+const char* ValidateParameter(DynamicParameter parameter, const ForceModelSet& forceSet);
+
+/// d(acceleration)/d(parameter) at a state (jd TDB), km/s^2 per SI unit of
+/// the parameter. Drag and radiation pressure are linear in their
+/// coefficients: the force at a unit Cd*A/m or Cr*A/m (times t - t0 for the
+/// rate); the in-track acceleration enters along T of RTN.
+Vec3 AccelerationParameterPartial(DynamicParameter parameter, const Vec3& position,
+                                  const Vec3& velocity, double jd, const ForceModelSet& forceSet);
+
+/// Adds `delta` (SI) to the parameter in the force set (finite differences).
+void PerturbParameter(ForceModelSet& forceSet, DynamicParameter parameter, double delta);
+
+/// The parameter's value in the force set (SI).
+double ParameterValue(const ForceModelSet& forceSet, DynamicParameter parameter);
+
 /// Fixed-epoch jump Jacobian d(r+,v+)/d(r-,v-). Inertial delta-v has an identity
 /// Jacobian; RTN delta-v includes derivatives of all three moving basis axes.
 Mat6 ImpulsiveManeuverJacobian(const Vec3& position, const Vec3& velocity,

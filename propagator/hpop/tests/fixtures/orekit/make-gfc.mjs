@@ -5,14 +5,15 @@
 // evaluated, never in which numbers were used. (Whether the embedded numbers
 // are EGM2008's is a separate check against the published ICGEM file.)
 //
-//   node tests/fixtures/orekit/make-gfc.mjs <out.gfc> [maxDegree] [gmM3S2] [radiusM]
+//   node tests/fixtures/orekit/make-gfc.mjs <out.gfc> [maxDegree] [gmM3S2] [radiusM] [egm2008|egm96]
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const header = fs.readFileSync(path.resolve(here, '../../../lib/egm2008_data.h'), 'utf8');
-const [out, maxDegree = '70', gm = '3.986004418e14', radius = '6378137.0'] = process.argv.slice(2);
+const [out, maxDegree = '70', gm = '3.986004418e14', radius = '6378137.0', model = 'egm2008'] = process.argv.slice(2);
+if (!['egm2008', 'egm96'].includes(model)) throw new Error(`Unknown embedded model ${model}`);
+const header = fs.readFileSync(path.resolve(here, `../../../lib/${model}_data.h`), 'utf8');
 if (!out) throw new Error('usage: make-gfc.mjs <out.gfc> [maxDegree] [gmM3S2] [radiusM]');
 const records = [...header.matchAll(/\{\s*(\d+),\s*(\d+),\s*([-+0-9.eE]+),\s*([-+0-9.eE]+)\s*\}/g)]
   .map((m) => ({ n: Number(m[1]), m: Number(m[2]), c: m[3], s: m[4] }))
@@ -20,7 +21,7 @@ const records = [...header.matchAll(/\{\s*(\d+),\s*(\d+),\s*([-+0-9.eE]+),\s*([-
 const lines = [
   'begin_of_head ==================================================================',
   'product_type              gravity_field',
-  'modelname                 EGM2008-as-embedded-in-hpop',
+  `modelname                 ${model.toUpperCase()}-as-embedded-in-hpop`,
   `earth_gravity_constant    ${gm}`,
   `radius                    ${radius}`,
   `max_degree                ${maxDegree}`,

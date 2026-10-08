@@ -60,15 +60,35 @@
         },
         {
           "portId": "earth_orientation",
-          "description": "Optional SDS EOP: one row, or one size-prefixed stream of up to 366 ordered daily rows (one series, IAU_2000A or IAU_2006) covering the whole arc, read and interpolated as foundation/frames reads them. With it, execution requests evaluate the gravity field and the atmosphere in ITRF (IAU 2006/2000A CIO-based rotation with polar motion); fields with tesseral terms (order > 0) require it. A single row is used as is over the whole arc.",
+          "description": "Optional PRW.EARTH_ORIENTATION: IERS $EOP rows, one row or up to 366 ordered daily rows of one series (IAU_2000A or IAU_2006) covering the whole arc, read and interpolated as foundation/frames reads them. With it, execution requests evaluate the gravity field, solid tides and the atmosphere in ITRF (IAU 2006/2000A CIO-based rotation with polar motion); tesseral fields and solid tides require it. A single row is used as is over the whole arc.",
           "acceptedTypeSets": [
             {
-              "setId": "sds-eop",
+              "setId": "sds-prw",
               "allowedTypes": [
                 {
-                  "schemaName": "EOP.fbs",
-                  "fileIdentifier": "$EOP",
-                  "rootTypeName": "EOP",
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "space_weather",
+          "description": "Optional PRW.SPACE_WEATHER: daily SDS $SPW rows (CelesTrak space weather) with strictly increasing DATE, covering every day of the arc and the day before it. Drag then reads NRLMSISE-00's inputs at each instant: the previous day's observed F10.7, the day's 81-day centred average of observed F10.7, the day's Ap, and the three-hour Kp. Excludes the request's WEATHER.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
                   "wireFormat": "flatbuffer"
                 }
               ]

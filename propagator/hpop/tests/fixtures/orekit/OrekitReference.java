@@ -6,7 +6,8 @@
 // initial states and force sets and compare.
 //
 // Run (single-file source launch, Java 11+):
-//   java -cp "<jars>/*" OrekitReference.java <orekit-data dir> <gfc dir> <out.json>
+//   java -cp "<jars>/*" OrekitReference.java <orekit-data dir> <gfc dir> <out.json> [only]
+// (`only`, for development: just the cases whose "orbit forces" contains it.)
 //
 // Physical constants are set to the values HPOP uses, so that a difference is
 // a difference of implementation, not of constants:
@@ -49,6 +50,12 @@ import org.orekit.forces.gravity.LenseThirringRelativity;
 import org.orekit.forces.gravity.Relativity;
 import org.orekit.forces.gravity.SolidTides;
 import org.orekit.forces.gravity.potential.TideSystem;
+import org.orekit.forces.drag.DragSensitive;
+import org.orekit.forces.radiation.RadiationSensitive;
+import org.orekit.propagation.MatricesHarvester;
+import org.orekit.propagation.FieldSpacecraftState;
+import org.orekit.utils.ParameterDriver;
+import org.hipparchus.linear.RealMatrix;
 import org.orekit.frames.LOFType;
 import org.orekit.models.earth.atmosphere.data.CssiSpaceWeatherData;
 import org.orekit.bodies.CelestialBody;
@@ -106,6 +113,12 @@ public class OrekitReference {
         // (+ Lense-Thirring, de Sitter); IERS 2010 solid tides; in-track
         // acceleration (m/s^2); Cd*A/m rate (m^2/kg/s); CSSI daily space weather.
         int relativity = 0; boolean tides = false, cssi = false; double inTrack = 0, bdot = 0;
+        // VCM parity: EME2000 ("J2K") states in and out; the embedded EGM96
+        // set; tesseral and sectorial terms only to tesseralDegree ("nnT").
+        String frame = "GCRF", model = "EGM2008"; int tesseralDegree = -1;
+        // Write the STM and the Jacobian for each active VCM parameter (B,
+        // BDOT, AGOM, T) at every sample.
+        boolean jacobians = false;
         Forces(String name, int degree, int order, boolean thirdBodies, boolean srp, boolean drag) {
             this.name = name; this.degree = degree; this.order = order; this.thirdBodies = thirdBodies; this.srp = srp; this.drag = drag;
         }
@@ -114,16 +127,63 @@ public class OrekitReference {
         Forces inTrack(double a) { inTrack = a; return this; }
         Forces bdot(double rate) { bdot = rate; return this; }
         Forces cssi() { cssi = true; return this; }
+        Forces eme2000() { frame = "EME2000"; return this; }
+        Forces egm96() { model = "EGM96"; return this; }
+        Forces tesseral(int degree) { tesseralDegree = degree; return this; }
+        Forces jacobians() { jacobians = true; return this; }
     }
 
-    // Drag whose Cd*A/m grows linearly from the epoch: Cd*A/m + rate*(t - t0).
+    // The field with its tesseral and sectorial terms (order >= 1) above
+    // `tesseral` removed: zonals to the provider's degree, the rest to
+    // `tesseral` (a VCM's "mmZ,nnT").
+    static final class TesseralTruncated implements NormalizedSphericalHarmonicsProvider {
+        final NormalizedSphericalHarmonicsProvider raw; final int tesseral;
+        TesseralTruncated(NormalizedSphericalHarmonicsProvider raw, int tesseral) { this.raw = raw; this.tesseral = tesseral; }
+        public int getMaxDegree() { return raw.getMaxDegree(); }
+        public int getMaxOrder() { return raw.getMaxOrder(); }
+        public double getMu() { return raw.getMu(); }
+        public double getAe() { return raw.getAe(); }
+        public AbsoluteDate getReferenceDate() { return raw.getReferenceDate(); }
+        public TideSystem getTideSystem() { return raw.getTideSystem(); }
+        public NormalizedSphericalHarmonicsProvider.NormalizedSphericalHarmonics onDate(AbsoluteDate date) {
+            final NormalizedSphericalHarmonicsProvider.NormalizedSphericalHarmonics h = raw.onDate(date);
+            return new NormalizedSphericalHarmonicsProvider.NormalizedSphericalHarmonics() {
+                public AbsoluteDate getDate() { return h.getDate(); }
+                public double getNormalizedCnm(int n, int m) { return m > 0 && n > tesseral ? 0.0 : h.getNormalizedCnm(n, m); }
+                public double getNormalizedSnm(int n, int m) { return m > 0 && n > tesseral ? 0.0 : h.getNormalizedSnm(n, m); }
+            };
+        }
+    }
+
+    // Drag whose Cd*A/m grows linearly from the epoch: Cd*A/m + rate*(t - t0),
+    // Cd the drag coefficient driver's value times the global drag factor
+    // (IsotropicDrag's parameters, one time span), so the Cd column of the
+    // Jacobian is the derivative with respect to Cd*A/m at the epoch, times A/m.
+    // The rate is a third drag driver, "drag area over mass rate", so Orekit
+    // differentiates with respect to it as well.
+    static final String RATE_DRIVER = "drag area over mass rate";
     static final class RateDrag extends IsotropicDrag {
-        final AbsoluteDate t0; final double rate;
-        RateDrag(double area, double cd, AbsoluteDate t0, double rate) { super(area, cd); this.t0 = t0; this.rate = rate; }
+        final AbsoluteDate t0; final ParameterDriver rate;
+        RateDrag(double area, double cd, AbsoluteDate t0, double rate) {
+            super(area, cd); this.t0 = t0;
+            this.rate = new ParameterDriver(RATE_DRIVER, rate, 1e-9, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY);
+        }
+        @Override
+        public List<ParameterDriver> getDragParametersDrivers() {
+            List<ParameterDriver> drivers = new ArrayList<>(super.getDragParametersDrivers());
+            drivers.add(rate);
+            return drivers;
+        }
         @Override
         public Vector3D dragAcceleration(SpacecraftState s, double density, Vector3D relativeVelocity, double[] parameters) {
-            double b0 = CD * AREA / s.getMass();
-            return super.dragAcceleration(s, density, relativeVelocity, parameters).scalarMultiply((b0 + rate * s.getDate().durationFrom(t0)) / b0);
+            double b = parameters[0] * parameters[1] * AREA / s.getMass() + parameters[2] * s.getDate().durationFrom(t0);
+            return new Vector3D(relativeVelocity.getNorm() * density * b / 2, relativeVelocity);
+        }
+        @Override
+        public <T extends CalculusFieldElement<T>> FieldVector3D<T> dragAcceleration(FieldSpacecraftState<T> s, T density,
+                FieldVector3D<T> relativeVelocity, T[] parameters) {
+            T b = parameters[0].multiply(parameters[1]).multiply(AREA).divide(s.getMass()).add(s.getDate().durationFrom(t0).multiply(parameters[2]));
+            return new FieldVector3D<>(relativeVelocity.getNorm().multiply(density).multiply(b).divide(2), relativeVelocity);
         }
     }
 
@@ -163,8 +223,9 @@ public class OrekitReference {
                     Vector3D inItrf = new Vector3D(au * Math.cos(lambda), au * Math.sin(lambda), 0);
                     return itrf.getStaticTransformTo(frame, date).transformPosition(inItrf);
                 }
+                // The mean Sun depends on time only (no state derivatives).
                 public <T extends CalculusFieldElement<T>> FieldVector3D<T> getPosition(FieldAbsoluteDate<T> date, Frame frame) {
-                    throw new UnsupportedOperationException("double precision only");
+                    return new FieldVector3D<>(date.getField(), getPosition(date.toAbsoluteDate(), frame));
                 }
             };
             // Switch 9 = 1: the daily Ap only, as HPOP evaluates NRLMSISE-00.
@@ -175,8 +236,15 @@ public class OrekitReference {
             return model.getDensity(date, frame.getStaticTransformTo(itrf, date).transformPosition(position), itrf);
         }
         public <T extends CalculusFieldElement<T>> T getDensity(FieldAbsoluteDate<T> date, FieldVector3D<T> position, Frame frame) {
-            throw new UnsupportedOperationException("double precision only");
+            return model.getDensity(date, frame.getStaticTransformTo(itrf, date).transformPosition(position), itrf);
         }
+    }
+
+    // The Jacobian column whose name contains the driver name (single-span
+    // drivers may carry a span prefix), row i.
+    static double column(RealMatrix jac, List<String> columns, String driver, int i) {
+        for (int k = 0; k < columns.size(); ++k) if (columns.get(k).contains(driver)) return jac.getEntry(i, k);
+        throw new IllegalStateException("No Jacobian column for " + driver + " in " + columns);
     }
 
     public static void main(String[] args) throws Exception {
@@ -218,13 +286,20 @@ public class OrekitReference {
                 new Forces("T1-field-sun-moon-solid-tides", 20, 20, true, false, false).tides(),
                 new Forces("I1-field-sun-moon-in-track", 20, 20, true, false, false).inTrack(5e-8),
                 new Forces("B1-field-sun-moon-srp-drag-bdot", 20, 20, true, true, true).bdot(5e-8),
-                new Forces("W1-field-sun-moon-srp-drag-cssi", 20, 20, true, true, true).cssi()),
+                new Forces("W1-field-sun-moon-srp-drag-cssi", 20, 20, true, true, true).cssi(),
+                new Forces("E1-field-sun-moon-eme2000", 20, 20, true, false, false).eme2000(),
+                new Forces("G1-egm96-36x36-sun-moon", 36, 36, true, false, false).egm96(),
+                new Forces("G2-egm2008-36z24t-sun-moon", 36, 24, true, false, false).tesseral(24),
+                new Forces("C1-field-sun-moon-srp-drag-intrack-bdot-jacobians", 20, 20, true, true, true).inTrack(5e-8).bdot(5e-8).jacobians()),
             "SSO700", List.of(
                 new Forces("W1-field-sun-moon-srp-drag-cssi", 20, 20, true, true, true).cssi()),
             "GPS", List.of(
                 new Forces("R1-field-sun-moon-schwarzschild", 20, 20, true, false, false).relativity(1),
                 new Forces("R2-field-sun-moon-relativity-iers2010", 20, 20, true, false, false).relativity(2),
-                new Forces("T1-field-sun-moon-solid-tides", 20, 20, true, false, false).tides()));
+                new Forces("T1-field-sun-moon-solid-tides", 20, 20, true, false, false).tides(),
+                new Forces("E1-field-sun-moon-eme2000", 20, 20, true, false, false).eme2000(),
+                new Forces("G1-egm96-70x70-sun-moon", 70, 70, true, false, false).egm96(),
+                new Forces("C1-field-sun-moon-srp-intrack-jacobians", 20, 20, true, true, false).inTrack(5e-8).jacobians()));
 
         StringBuilder out = new StringBuilder();
         out.append("{\n \"source\": \"Orekit 13.1 (CS GROUP, Apache-2.0), DormandPrince853 (steps <= 10 s), GCRF; NRLMSISE-00 on mean local solar time\",\n");
@@ -241,18 +316,26 @@ public class OrekitReference {
             all.addAll(extra.getOrDefault(c.name, List.of()));
             for (Forces f : all) {
                 if (f.drag && !c.drag) continue;
-                CartesianOrbit orbit = new CartesianOrbit(pv0, gcrf, epoch, GM);
+                if (args.length > 3 && !(c.name + " " + f.name).contains(args[3])) continue;
+                // An EME2000 case states the same numbers in EME2000 and is
+                // integrated and sampled there.
+                final Frame frame = f.frame.equals("EME2000") ? FramesFactory.getEME2000() : gcrf;
+                CartesianOrbit orbit = new CartesianOrbit(pv0, frame, epoch, GM);
                 // Steps of at most 10 s: with longer steps Orekit's own LEO400
                 // radiation-pressure trajectory moves by up to 0.4 m with the
                 // step limit (30 s: 0.11 m, 120 s and 300 s: 0.40 m), the ~9 s
                 // penumbra crossings being stepped over; at 10 s it agrees with
                 // a 1e-15 / 10 s run to 0.4 mm.
+                java.util.function.DoubleFunction<NumericalPropagator> build = (bdotValue) -> {
                 DormandPrince853Integrator integrator = new DormandPrince853Integrator(1e-3, 10, 1e-7, 1e-14);
                 NumericalPropagator p = new NumericalPropagator(integrator);
                 p.setOrbitType(OrbitType.CARTESIAN);
                 p.setInitialState(new SpacecraftState(orbit).withMass(MASS));
                 if (f.degree > 0) {
+                    GravityFieldFactory.clearPotentialCoefficientsReaders();
+                    GravityFieldFactory.addPotentialCoefficientsReader(new ICGEMFormatReader(f.model + "-hpop.gfc", false));
                     NormalizedSphericalHarmonicsProvider field = GravityFieldFactory.getNormalizedProvider(f.degree, f.order);
+                    if (f.tesseralDegree >= 0) field = new TesseralTruncated(field, f.tesseralDegree);
                     p.addForceModel(new HolmesFeatherstoneAttractionModel(itrf, field));
                 }
                 if (f.thirdBodies) {
@@ -291,26 +374,71 @@ public class OrekitReference {
                     };
                     OneAxisEllipsoid earth = new OneAxisEllipsoid(Constants.WGS84_EARTH_EQUATORIAL_RADIUS, Constants.WGS84_EARTH_FLATTENING, itrf);
                     Atmosphere atmosphere = new MeanSolarTimeNRLMSISE00(weather, earth, utc);
-                    p.addForceModel(new DragForce(atmosphere, f.bdot != 0 ? new RateDrag(AREA, CD, epoch, f.bdot) : new IsotropicDrag(AREA, CD)));
+                    p.addForceModel(new DragForce(atmosphere, f.bdot != 0 || f.jacobians ? new RateDrag(AREA, CD, epoch, bdotValue) : new IsotropicDrag(AREA, CD)));
+                }
+                return p;
+                };
+                NumericalPropagator p = build.apply(f.bdot);
+                // Jacobians: Orekit's own state transition matrix and parameter
+                // Jacobians (MatricesHarvester) for Cd, the Cd*A/m rate, Cr and
+                // the in-track acceleration, Cd and Cr converted to Cd*A/m and
+                // Cr*A/m (times m/A).
+                MatricesHarvester harvester = null;
+                List<String> parameterNames = new ArrayList<>();
+                if (f.jacobians) {
+                    for (org.orekit.forces.ForceModel model : p.getAllForceModels())
+                        for (ParameterDriver d : model.getParametersDrivers())
+                            if (d.getName().equals(DragSensitive.DRAG_COEFFICIENT) || d.getName().equals(RATE_DRIVER) || d.getName().equals(RadiationSensitive.REFLECTION_COEFFICIENT) || d.getName().equals("in-track[0]"))
+                                d.setSelected(true);
+                    harvester = p.setupMatricesComputation("stm", null, null);
+                    if (f.drag) { parameterNames.add("DRAG_AREA_OVER_MASS"); parameterNames.add("DRAG_AREA_OVER_MASS_RATE"); }
+                    if (f.srp) parameterNames.add("SRP_AREA_OVER_MASS");
+                    if (f.inTrack != 0) parameterNames.add("IN_TRACK_ACCELERATION");
                 }
                 if (!first) out.append(",\n");
                 first = false;
                 out.append(String.format("  {\"orbit\": \"%s\", \"forces\": \"%s\", \"degree\": %d, \"order\": %d, \"thirdBodies\": %b, \"srp\": %b, \"drag\": %b,\n",
                     c.name, f.name, f.degree, f.order, f.thirdBodies, f.srp, f.drag));
+                if (!f.frame.equals("GCRF") || !f.model.equals("EGM2008") || f.tesseralDegree >= 0)
+                    out.append(String.format("   \"frame\": \"%s\", \"gravityModel\": \"%s\",%s\n", f.frame, f.model,
+                        f.tesseralDegree >= 0 ? String.format(" \"tesseralDegree\": %d,", f.tesseralDegree) : ""));
                 if (f.relativity != 0 || f.tides || f.inTrack != 0 || f.bdot != 0 || f.cssi)
                     out.append(String.format("   \"relativity\": %d, \"solidTides\": %b, \"inTrackAccelerationMS2\": %.6e, \"dragAreaOverMassRateM2KgS\": %.6e, \"spaceWeather\": \"%s\",\n",
                         f.relativity, f.tides, f.inTrack, f.bdot, f.cssi ? "cssi" : "constant"));
+                if (f.jacobians) out.append("   \"parameters\": [\"" + String.join("\", \"", parameterNames) + "\"],\n");
+                StringBuilder stms = new StringBuilder(), jacobians = new StringBuilder();
                 out.append("   \"samples\": [");
                 for (double t = 0; t <= DURATION + 1e-9; t += STEP) {
                     AbsoluteDate date = epoch.shiftedBy(t);
-                    PVCoordinates pv = p.propagate(date).getPVCoordinates(gcrf);
+                    SpacecraftState state = p.propagate(date);
+                    PVCoordinates pv = state.getPVCoordinates(frame);
+                    if (f.jacobians) {
+                        RealMatrix phi = harvester.getStateTransitionMatrix(state);
+                        RealMatrix jac = harvester.getParametersJacobian(state);
+                        List<String> columns = harvester.getJacobiansColumnsNames();
+                        StringBuilder row = new StringBuilder();
+                        for (int i = 0; i < 6; ++i) for (int j = 0; j < 6; ++j) row.append(row.length() == 0 ? "" : ", ").append(String.format("%.12e", phi.getEntry(i, j)));
+                        stms.append(t == 0 ? "\n    [" : ",\n    [").append(row).append("]");
+                        StringBuilder jrow = new StringBuilder();
+                        for (int i = 0; i < 6; ++i) for (String name : parameterNames) {
+                            double value = 0;
+                            if (name.equals("DRAG_AREA_OVER_MASS")) value = column(jac, columns, DragSensitive.DRAG_COEFFICIENT, i) * MASS / AREA;
+                            else if (name.equals("SRP_AREA_OVER_MASS")) value = column(jac, columns, RadiationSensitive.REFLECTION_COEFFICIENT, i) * MASS / AREA;
+                            else if (name.equals("IN_TRACK_ACCELERATION")) value = column(jac, columns, "in-track[0]", i);
+                            else if (name.equals("DRAG_AREA_OVER_MASS_RATE")) value = column(jac, columns, RATE_DRIVER, i);
+                            jrow.append(jrow.length() == 0 ? "" : ", ").append(String.format("%.12e", value));
+                        }
+                        jacobians.append(t == 0 ? "\n    [" : ",\n    [").append(jrow).append("]");
+                    }
                     Vector3D r = pv.getPosition(), v = pv.getVelocity();
                     // Each sample carries its UTC epoch (exact: whole seconds here), which HPOP is
                     // asked for; both convert it to TT, the integration clock.
                     out.append(String.format("%s\n    [%.1f, %.6f, %.6f, %.6f, %.9f, %.9f, %.9f, \"%s\"]", t == 0 ? "" : ",", t,
                         r.getX(), r.getY(), r.getZ(), v.getX(), v.getY(), v.getZ(), date.toString(utc)));
                 }
-                out.append("]}");
+                out.append("]");
+                if (f.jacobians) out.append(",\n   \"stm\": [").append(stms).append("],\n   \"parameterJacobian\": [").append(jacobians).append("]");
+                out.append("}");
                 System.err.println(c.name + " " + f.name + " done");
             }
         }

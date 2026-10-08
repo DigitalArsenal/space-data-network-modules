@@ -1,6 +1,7 @@
 // HPOP against Orekit 13.1 on identical initial states, force sets and
-// constants: five orbits (LEO400, SSO700, GPS, GEO, MOLNIYA) by up to ten
-// force sets, each propagated for 24 h and compared hourly.
+// constants: five orbits (LEO400, SSO700, GPS, GEO, MOLNIYA) by ten force
+// sets, plus the PRW SDS 1.240.0 additions on LEO400, SSO700 and GPS, each
+// propagated for 24 h and compared hourly.
 //
 // Authority: Orekit (CS GROUP, Apache-2.0), the parity authority this repo
 // already uses for foundation/time. tests/fixtures/orekit/OrekitReference.java
@@ -27,6 +28,29 @@
 //   Sun and Moon, at 1e-13 ................. 5 cm    measured <= 1.3 cm (LEO400)
 //   + radiation pressure, at 1e-14 ......... 10 cm   measured <= 3.0 cm (MOLNIYA)
 //   + drag, at 1e-14 ....................... 10 cm   measured <= 2.2 cm (LEO400)
+// The PRW SDS 1.240.0 cases, on top of F4 (field 20x20, Sun, Moon) or F6
+// (+ radiation pressure, drag), with the effect each has over the day:
+//   R1 Schwarzschild ....................... LEO 1.3 cm, GPS 0.42 mm  (effect 2.6 m, 0.34 m)
+//   R2 IERS 2010 relativity ................ LEO 1.2 cm, GPS 0.42 mm  (2.6 m, 0.33 m)
+//   T1 IERS 2010 solid tides ............... LEO 1.3 cm, GPS 0.41 mm  (15 m, 0.6 m)
+//   I1 in-track 5e-8 m/s^2 ................. LEO 1.3 cm               (560 m)
+//   B1 Cd*A/m rate 5e-8 m^2/kg/s ........... LEO 1.1 cm               (1.4 km)
+//   W1 daily CSSI space weather ............ LEO 2.2 cm, SSO 2.9 mm   (4.4 km, 50 m)
+//   E1 EME2000 state in and out ............ LEO 1.4 cm, GPS 0.42 mm  (17 cm, 4 mm)
+//   G1 EGM96 36x36 / 70x70 ................. LEO 1.1 cm, GPS 0.43 mm
+//   G2 EGM2008 36Z,24T ..................... LEO 1.2 cm
+//   C1 with the STM and parameter Jacobians (B, BDOT, AGOM, T; analytic,
+//      density gradient included): largest relative column difference, over
+//      the samples, of the STM .............. LEO 1.1e-5, GPS 3.9e-11 (limit 1e-4)
+//   and of the parameter columns ........... LEO B 5.0e-6, BDOT 3.6e-6,
+//      T 5.0e-6; GPS AGOM 5.2e-10, T 1.7e-11 (limit 1e-3)
+//   LEO AGOM ............................... 3.4e-4 native, 3.9e-3 wasm (limit 1e-2)
+//   The radiation-pressure column integrates the lit fraction through each
+//   penumbra, whose edges HPOP's steps cross without locating; it moves with
+//   rounding (native and wasm step differently) as the LEO SRP states do.
+// Orekit 13.1's DeSitterRelativity is replaced in the oracle by the same
+// eq. 10.12 with consistent frames (see OrekitReference.java); the Cd*A/m
+// rate is a third drag parameter driver there, so Orekit differentiates it.
 // What remains is integration error on both sides, at about 1e-11 of the
 // distance flown. Radiation pressure has a kink at each penumbra boundary
 // that HPOP's steps cross without locating (Orekit needs steps of at most
@@ -37,7 +61,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
-import { REFERENCE, requestInputs, score, toleranceFor } from './lib/orekitCases.mjs';
+import { REFERENCE, requestInputs, score, scoreJacobians, toleranceFor } from './lib/orekitCases.mjs';
 
 const WASM = new URL('../dist/isomorphic/module.wasm', import.meta.url);
 const MANIFEST = new URL('../plugin-manifest.json', import.meta.url);
@@ -53,5 +77,14 @@ for (const c of REFERENCE.cases) {
     const limit = toleranceFor(c);
     t.diagnostic(`${label}: largest difference ${worst.toExponential(3)} m at ${worstAt / 3600} h (limit ${limit} m)`);
     assert.ok(worst <= limit, `${label}: ${worst.toExponential(3)} m at ${worstAt / 3600} h exceeds ${limit} m`);
+    if (c.parameters) {
+      const { stm, parameters } = scoreJacobians(c, response);
+      t.diagnostic(`${label}: STM ${stm.toExponential(2)}; ${Object.entries(parameters).map(([k, v]) => `${k} ${v.toExponential(2)}`).join(', ')}`);
+      assert.ok(stm <= 1e-4, `${label}: STM columns differ by ${stm.toExponential(2)} (relative)`);
+      for (const [name, value] of Object.entries(parameters)) {
+        const limit = name === 'SRP_AREA_OVER_MASS' ? 1e-2 : 1e-3;
+        assert.ok(value <= limit, `${label}: ${name} column differs by ${value.toExponential(2)} (relative, limit ${limit})`);
+      }
+    }
   });
 }

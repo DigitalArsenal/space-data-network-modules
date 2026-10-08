@@ -7,6 +7,7 @@
 
 #include "environment_models.h"
 #include "egm2008_data.h"
+#include "egm96_data.h"
 #include "astrodynamics.h"
 #include <cmath>
 #include <algorithm>
@@ -83,6 +84,26 @@ ExtendedGravityField initEGM2008Extended(const EGM2008Config& config) {
         field.Snm[rec.n][rec.m] = rec.Snm;
     }
 
+    return field;
+}
+
+ExtendedGravityField initEGM96Extended(const EGM2008Config& config) {
+    ExtendedGravityField field;
+    field.model = GravityModelType::EGM96;
+    field.mu = EGM96_GM_KM3_S2;
+    field.referenceRadius = EGM96_RADIUS_KM;
+    field.normalized = true;
+    const uint16_t maxDeg = std::min<uint16_t>(config.maxDegree, EGM96Data::MAX_EMBEDDED_DEGREE);
+    const uint16_t maxOrd = std::min(config.maxOrder, maxDeg);
+    field.allocate(maxDeg, maxOrd);
+    field.Cnm[0][0] = 1.0;
+    for (int i = 0; i < EGM96Data::NUM_COEFFICIENTS; i++) {
+        const auto& rec = EGM96Data::COEFFICIENTS[i];
+        if (rec.n > maxDeg) break;
+        if (rec.m > maxOrd) continue;
+        field.Cnm[rec.n][rec.m] = rec.Cnm;
+        field.Snm[rec.n][rec.m] = rec.Snm;
+    }
     return field;
 }
 

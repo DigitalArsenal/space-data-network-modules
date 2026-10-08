@@ -179,13 +179,8 @@ V earthFixedGravity(const V& r,const ForceModelSet& f) {
         case GravityMode::J2Only:return pointMass(r,f.mu)+zonal(r,f.mu,RE_EARTH,2,J2_EARTH);
         case GravityMode::J2J4:return pointMass(r,f.mu)+zonal(r,f.mu,RE_EARTH,2,J2_EARTH)+zonal(r,f.mu,RE_EARTH,3,J3_EARTH)+zonal(r,f.mu,RE_EARTH,4,J4_EARTH);
         case GravityMode::LoadedField:return f.loadedField ? extendedGravity(r,*f.loadedField):pointMass(r,f.mu);
-        case GravityMode::EGM2008:{
-            static ExtendedGravityField field;static uint16_t degree=0,order=0;
-            if(degree!=f.egm2008.truncationDegree || order!=f.egm2008.truncationOrder){
-                EGM2008Config c;c.maxDegree=f.egm2008.truncationDegree;c.maxOrder=f.egm2008.truncationOrder;field=initEGM2008Extended(c);degree=c.maxDegree;order=c.maxOrder;
-            }
-            return pointMass(r,f.mu)+extendedGravity(r,field,false);
-        }
+        case GravityMode::EGM2008:
+            return pointMass(r,f.mu)+extendedGravity(r,EmbeddedEarthGravityField(f.egm2008),false);
         default:return inlineGravity(r,inlineCoefficients(f.sphericalHarmonics));
     }
 }
@@ -305,6 +300,71 @@ const char* configError(const ForceModelSet& f) {
     return nullptr;
 }
 } // namespace
+
+namespace {
+// The force set's in-track contribution (a ConstantRTN slot), or null.
+ForceContribution* inTrackSlot(ForceModelSet& f) {
+    if(!f.useContributions)return nullptr;
+    for(int i=0;i<std::min(f.contributions.count,ContributionSet::MAX_SLOTS);++i)
+        if(f.contributions.slots[i].enabled&&f.contributions.slots[i].kind==ContributionKind::ConstantRTN)return &f.contributions.slots[i];
+    return nullptr;
+}
+}
+
+const char* ValidateParameter(DynamicParameter p,const ForceModelSet& f) {
+    switch(p) {
+        case DynamicParameter::DragAreaOverMass:
+        case DynamicParameter::DragAreaOverMassRate:
+            if(!f.useDrag||!(f.drag.area>0)||!(f.drag.mass>0))return "Drag parameters need drag with a positive area and mass.";
+            return nullptr;
+        case DynamicParameter::SrpAreaOverMass:
+            if(!f.useSRP||f.srp.model!=SRPModelType::Cannonball||!(f.srp.area>0)||!(f.srp.mass>0))return "SRP_AREA_OVER_MASS needs cannonball radiation pressure with a positive area and mass.";
+            return nullptr;
+        case DynamicParameter::InTrackAcceleration:
+            if(!inTrackSlot(const_cast<ForceModelSet&>(f)))return "IN_TRACK_ACCELERATION needs IN_TRACK_ACCELERATION_M_S2.";
+            return nullptr;
+    }
+    return "Unknown dynamic parameter.";
+}
+
+Vec3 AccelerationParameterPartial(DynamicParameter p,const Vec3& r,const Vec3& v,double jd,const ForceModelSet& f) {
+    switch(p) {
+        case DynamicParameter::DragAreaOverMass:
+        case DynamicParameter::DragAreaOverMassRate: {
+            DragForceConfig unit=f.drag;unit.Cd=unit.mass/unit.area;  // Cd*A/m = 1 m^2/kg
+            const Vec3 a=DragAccelerationWith(r,v,jd,f,unit);
+            return p==DynamicParameter::DragAreaOverMass?a:a*((jd-f.dragRateEpochTdb)*86400.0);
+        }
+        case DynamicParameter::SrpAreaOverMass: {
+            SRPForceConfig unit=f.srp;unit.Cr=unit.mass/unit.area;    // Cr*A/m = 1 m^2/kg
+            return SrpAcceleration(r,jd,f,unit);
+        }
+        case DynamicParameter::InTrackAcceleration: {
+            const Vec3 h=r.cross(v);if(h.magnitude()<=0)return Vec3();
+            return h.normalized().cross(r.normalized())*1e-3;          // km/s^2 per m/s^2
+        }
+    }
+    return Vec3();
+}
+
+void PerturbParameter(ForceModelSet& f,DynamicParameter p,double delta) {
+    switch(p) {
+        case DynamicParameter::DragAreaOverMass:f.drag.Cd+=delta*f.drag.mass/f.drag.area;break;
+        case DynamicParameter::DragAreaOverMassRate:f.dragAreaOverMassRate+=delta;break;
+        case DynamicParameter::SrpAreaOverMass:f.srp.Cr+=delta*f.srp.mass/f.srp.area;break;
+        case DynamicParameter::InTrackAcceleration:if(auto* slot=inTrackSlot(f))slot->p[1]+=delta*1e-3;break;
+    }
+}
+
+double ParameterValue(const ForceModelSet& f,DynamicParameter p) {
+    switch(p) {
+        case DynamicParameter::DragAreaOverMass:return f.drag.Cd*f.drag.area/f.drag.mass;
+        case DynamicParameter::DragAreaOverMassRate:return f.dragAreaOverMassRate;
+        case DynamicParameter::SrpAreaOverMass:return f.srp.Cr*f.srp.area/f.srp.mass;
+        case DynamicParameter::InTrackAcceleration:{auto* slot=inTrackSlot(const_cast<ForceModelSet&>(f));return slot?slot->p[1]*1e3:0;}
+    }
+    return 0;
+}
 
 const char* ValidateAccelerationPartials(const Vec3& position,const ForceModelSet& f) {
     if(const char* error=configError(f))return error;

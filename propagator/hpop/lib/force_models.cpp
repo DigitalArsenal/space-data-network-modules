@@ -272,22 +272,37 @@ Vec3 SphericalHarmonics(const Vec3& position, const SphericalHarmonicsConfig& co
 // 3. EGM2008 - Earth Gravitational Model 2008
 // =============================================================================
 
-namespace {
-// The embedded EGM2008 coefficients (degree 2-70) at the configured
-// truncation, re-initialized only when it changes.
-const ExtendedGravityField& egm2008Field(const EGM2008ForceConfig& config) {
+// The embedded EGM2008 or EGM96 coefficients (degree 2-70) at the configured
+// truncation, re-initialized only when it changes. Tesseral and sectorial
+// terms above maxTesseralDegree are zeroed, which the evaluation (and the
+// partials' copy of it) then skips.
+const ExtendedGravityField& EmbeddedEarthGravityField(const EGM2008ForceConfig& config) {
     static ExtendedGravityField field;
-    static uint16_t cachedDegree = 0;
-    static uint16_t cachedOrder = 0;
-    if (cachedDegree != config.truncationDegree || cachedOrder != config.truncationOrder) {
+    static bool cached = false;
+    static uint16_t cachedDegree = 0, cachedOrder = 0, cachedTesseral = 0;
+    static EmbeddedEarthField cachedField = EmbeddedEarthField::EGM2008;
+    if (!cached || cachedDegree != config.truncationDegree || cachedOrder != config.truncationOrder ||
+        cachedTesseral != config.maxTesseralDegree || cachedField != config.field) {
         EGM2008Config extConfig;
         extConfig.maxDegree = config.truncationDegree;
         extConfig.maxOrder = config.truncationOrder;
-        field = initEGM2008Extended(extConfig);
+        field = config.field == EmbeddedEarthField::EGM96 ? initEGM96Extended(extConfig)
+                                                          : initEGM2008Extended(extConfig);
+        for (uint16_t n = 0; n <= field.maxDegree; ++n)
+            for (uint16_t m = 1; m <= std::min(n, field.maxOrder); ++m)
+                if (n > config.maxTesseralDegree) field.Cnm[n][m] = field.Snm[n][m] = 0.0;
+        cached = true;
         cachedDegree = config.truncationDegree;
         cachedOrder = config.truncationOrder;
+        cachedTesseral = config.maxTesseralDegree;
+        cachedField = config.field;
     }
     return field;
+}
+
+namespace {
+const ExtendedGravityField& egm2008Field(const EGM2008ForceConfig& config) {
+    return EmbeddedEarthGravityField(config);
 }
 }  // namespace
 
@@ -1689,6 +1704,51 @@ Vec3 EarthFixedGravity(const Vec3& position, const ForceModelSet& forceSet) {
     }
 }
 
+Vec3 DragAccelerationWith(const Vec3& position, const Vec3& velocity, double jd,
+                          const ForceModelSet& forceSet, const DragForceConfig& drag) {
+    Vec3 totalAcc;
+    const double atmosphereJD = forceSet.explicitEpochContract
+        ? timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(jd))) : jd;
+    // The field's Earth-fixed axes, so density, co-rotation and gravity
+    // share one Earth orientation; the weather of this instant.
+    const EarthAxes axes = EarthAxesAt(jd, forceSet);
+    const SpaceWeatherData weather = WeatherAt(atmosphereJD, forceSet);
+    switch (forceSet.dragModel) {
+        case DragModelType::NRLMSISE00:
+            totalAcc += NRLMSISE00(position, velocity, atmosphereJD, weather,
+                                   drag, forceSet.nrlmsise00, &axes);
+            break;
+        case DragModelType::HarrisPriester:
+            totalAcc += HarrisPriester(position, velocity, jd, drag,
+                                       forceSet.harrisPriesterExponent, &weather,
+                                       atmosphereJD, &axes);
+            break;
+        case DragModelType::USSA1976:
+            totalAcc += AtmosphericDrag(position, velocity, atmosphereJD,
+                                        weather, drag, &axes);
+            break;
+        case DragModelType::JB2008:
+            totalAcc += JB2008(position, velocity, atmosphereJD, weather,
+                               drag, forceSet.jb2008, &axes);
+            break;
+        case DragModelType::DTM2020:
+            totalAcc += DTM2020(position, velocity, atmosphereJD, weather,
+                                drag, forceSet.dtm2020, &axes);
+            break;
+        case DragModelType::Exponential:
+            totalAcc += AtmosphericDragExponential(position, velocity,
+                                                   drag.mass, drag.area, drag.Cd);
+            break;
+    }
+    return totalAcc;
+}
+
+Vec3 SrpAcceleration(const Vec3& position, double jd, const ForceModelSet& forceSet,
+                     const SRPForceConfig& srp) {
+    const Vec3 sunPos = forceSet.sunPositionProvided ? forceSet.sunPosition : getSunPosition(jd).position;
+    return SolarRadiation(position, sunPos, srp);
+}
+
 Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double jd,
                               ForceModelSet& forceSet) {
     Vec3 totalAcc;
@@ -1735,40 +1795,7 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double
     // functions they reach carry their own "simplified stand-in, not the
     // published model" banner at their definitions.
     if (forceSet.useDrag) {
-        const double atmosphereJD = forceSet.explicitEpochContract
-            ? timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(jd))) : jd;
-        // The field's Earth-fixed axes, so density, co-rotation and gravity
-        // share one Earth orientation; the weather and Cd*A/m of this instant.
-        const EarthAxes axes = EarthAxesAt(jd, forceSet);
-        const SpaceWeatherData weather = WeatherAt(atmosphereJD, forceSet);
-        const DragForceConfig drag = DragAt(jd, forceSet);
-        switch (forceSet.dragModel) {
-            case DragModelType::NRLMSISE00:
-                totalAcc += NRLMSISE00(position, velocity, atmosphereJD, weather,
-                                       drag, forceSet.nrlmsise00, &axes);
-                break;
-            case DragModelType::HarrisPriester:
-                totalAcc += HarrisPriester(position, velocity, jd, drag,
-                                           forceSet.harrisPriesterExponent, &weather,
-                                           atmosphereJD, &axes);
-                break;
-            case DragModelType::USSA1976:
-                totalAcc += AtmosphericDrag(position, velocity, atmosphereJD,
-                                            weather, drag, &axes);
-                break;
-            case DragModelType::JB2008:
-                totalAcc += JB2008(position, velocity, atmosphereJD, weather,
-                                   drag, forceSet.jb2008, &axes);
-                break;
-            case DragModelType::DTM2020:
-                totalAcc += DTM2020(position, velocity, atmosphereJD, weather,
-                                    drag, forceSet.dtm2020, &axes);
-                break;
-            case DragModelType::Exponential:
-                totalAcc += AtmosphericDragExponential(position, velocity,
-                                                       drag.mass, drag.area, drag.Cd);
-                break;
-        }
+        totalAcc += DragAccelerationWith(position, velocity, jd, forceSet, DragAt(jd, forceSet));
     }
 
     // 11. Relativistic Correction

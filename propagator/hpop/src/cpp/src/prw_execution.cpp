@@ -151,7 +151,36 @@ struct Execution {
     std::vector<ForceModel::ImpulsiveManeuverDef> impulses;
     std::vector<Integrator::FiniteBurn> burns;
     Integrator::ProcessNoise noise;
+    // The request's axes are EME2000 (mean equator and equinox of J2000.0):
+    // HPOP integrates in GCRF and rotates inputs and outputs by the IAU 2000
+    // frame bias (ERFA eraBp00 rb, GCRF -> EME2000; constant).
+    bool meanJ2000 = false;
+    double bias[3][3] = {{1,0,0},{0,1,0},{0,0,1}};
+    // DYNAMIC_PARAMETERS, and the (6 + parameters)^2 initial covariance in km
+    // units when they are given with one.
+    std::vector<ForceModel::DynamicParameter> parameters;
+    std::vector<double> pParameters;
 };
+// GCRF <-> request axes.
+Vec3 toRequestAxes(const Execution& e,const Vec3& v) {
+    if(!e.meanJ2000)return v;const auto& b=e.bias;
+    return Vec3(b[0][0]*v.x+b[0][1]*v.y+b[0][2]*v.z,b[1][0]*v.x+b[1][1]*v.y+b[1][2]*v.z,b[2][0]*v.x+b[2][1]*v.y+b[2][2]*v.z);
+}
+Vec3 toGcrf(const Execution& e,const Vec3& v) {
+    if(!e.meanJ2000)return v;const auto& b=e.bias;
+    return Vec3(b[0][0]*v.x+b[1][0]*v.y+b[2][0]*v.z,b[0][1]*v.x+b[1][1]*v.y+b[2][1]*v.z,b[0][2]*v.x+b[1][2]*v.y+b[2][2]*v.z);
+}
+// M <- R M R^T for an n x n row-major covariance or STM on [r, v, rest],
+// R = diag(B, B, I) with B the bias (toRequest) or its transpose.
+void rotateMatrix(const Execution& e,double* m,unsigned n,bool toRequest) {
+    if(!e.meanJ2000)return;
+    double r[3][3];for(int i=0;i<3;++i)for(int j=0;j<3;++j)r[i][j]=toRequest?e.bias[i][j]:e.bias[j][i];
+    std::vector<double> big(n*n,0.0),tmp(n*n,0.0);
+    for(unsigned i=0;i<n;++i)big[i*n+i]=1;
+    for(int k=0;k<2;++k)for(int i=0;i<3;++i)for(int j=0;j<3;++j)big[(3*k+i)*n+3*k+j]=r[i][j];
+    for(unsigned i=0;i<n;++i)for(unsigned j=0;j<n;++j){double v=0;for(unsigned k=0;k<n;++k)v+=big[i*n+k]*m[k*n+j];tmp[i*n+j]=v;}
+    for(unsigned i=0;i<n;++i)for(unsigned j=0;j<n;++j){double v=0;for(unsigned k=0;k<n;++k)v+=tmp[i*n+k]*big[j*n+k];m[i*n+j]=v;}
+}
 bool parseIntegrator(const PRWIntegratorSettings* in, bool mass, IntegratorConfig& out, std::string& error) {
     if(!in)return prwError(error,"invalid-integrator: Missing integrator settings.");
     switch(in->ALGORITHM()) {
@@ -202,34 +231,47 @@ bool parseForces(const PRWForceConfiguration* in,double epoch,bool hasEarthOrien
     // SPHERICAL_HARMONICS without the flags silently returned the point mass.
     if(!in->HAS_MAXIMUM_DEGREE()&&in->MAXIMUM_DEGREE())return prwError(error,"invalid-presence: MAXIMUM_DEGREE requires HAS_MAXIMUM_DEGREE.");
     if(!in->HAS_MAXIMUM_ORDER()&&in->MAXIMUM_ORDER())return prwError(error,"invalid-presence: MAXIMUM_ORDER requires HAS_MAXIMUM_ORDER.");
-    const auto field=[&](int degree,int order)->bool{
-        if(degree<2||degree>70)return prwError(error,"unsupported-gravity: The embedded EGM2008 field supports degrees two through seventy.");
+    // EGM96 is the same evaluation of the embedded EGM96 set (lib/egm96_data.h).
+    // MAXIMUM_TESSERAL_DEGREE (a VCM's "nnT") drops tesseral and sectorial
+    // terms above that degree; the zonals run to MAXIMUM_DEGREE.
+    if(!in->HAS_MAXIMUM_TESSERAL_DEGREE()&&in->MAXIMUM_TESSERAL_DEGREE())return prwError(error,"invalid-presence: MAXIMUM_TESSERAL_DEGREE requires HAS_MAXIMUM_TESSERAL_DEGREE.");
+    const auto field=[&](int degree,int order,ForceModel::EmbeddedEarthField model)->bool{
+        if(degree<2||degree>70)return prwError(error,"unsupported-gravity: The embedded EGM2008 and EGM96 fields support degrees two through seventy.");
         if(order<0||order>degree)return prwError(error,"unsupported-gravity: Field order must be between zero and the degree.");
         out.gravityMode=ForceModel::GravityMode::EGM2008;out.egm2008.truncationDegree=degree;out.egm2008.truncationOrder=order;
+        out.egm2008.field=model;out.egm2008.maxTesseralDegree=UINT16_MAX;
+        if(in->HAS_MAXIMUM_TESSERAL_DEGREE()) {
+            if(in->MAXIMUM_TESSERAL_DEGREE()>degree)return prwError(error,"invalid-forces: MAXIMUM_TESSERAL_DEGREE must not exceed MAXIMUM_DEGREE.");
+            out.egm2008.maxTesseralDegree=in->MAXIMUM_TESSERAL_DEGREE();
+        }
         out.useSphericalHarmonics=false;
         return true;
     };
     out.sphericalHarmonics.maxOrder=0;out.egm2008.truncationOrder=0;
     switch(in->GRAVITY_CHOICE()) {
     case prwGravitySelection::INFER_FLAGS:
+        if(in->HAS_MAXIMUM_TESSERAL_DEGREE())return prwError(error,"invalid-forces: MAXIMUM_TESSERAL_DEGREE applies to SPHERICAL_HARMONICS, EGM2008 and EGM96.");
         out.gravityMode=ForceModel::GravityMode::Infer;
         if(in->HAS_MAXIMUM_DEGREE())out.sphericalHarmonics.maxDegree=in->MAXIMUM_DEGREE();
         if(in->HAS_MAXIMUM_ORDER())out.sphericalHarmonics.maxOrder=in->MAXIMUM_ORDER();
         if(out.useSphericalHarmonics&&out.sphericalHarmonics.maxDegree>20)
             return prwError(error,"unsupported-gravity: The inline spherical-harmonic field supports degrees zero through twenty.");
         break;
-    case prwGravitySelection::POINT_MASS:out.gravityMode=ForceModel::GravityMode::PointMass;break;
+    case prwGravitySelection::POINT_MASS:
+        if(in->HAS_MAXIMUM_TESSERAL_DEGREE())return prwError(error,"invalid-forces: MAXIMUM_TESSERAL_DEGREE applies to SPHERICAL_HARMONICS, EGM2008 and EGM96.");
+        out.gravityMode=ForceModel::GravityMode::PointMass;break;
     case prwGravitySelection::J2_ONLY:
     case prwGravitySelection::J2_TO_J4:
-        if(in->HAS_MAXIMUM_DEGREE()||in->HAS_MAXIMUM_ORDER())
+        if(in->HAS_MAXIMUM_DEGREE()||in->HAS_MAXIMUM_ORDER()||in->HAS_MAXIMUM_TESSERAL_DEGREE())
             return prwError(error,"invalid-forces: J2_ONLY and J2_TO_J4 fix their own degree; select SPHERICAL_HARMONICS for another truncation.");
-        if(!field(in->GRAVITY_CHOICE()==prwGravitySelection::J2_ONLY?2:4,0))return false;
+        if(!field(in->GRAVITY_CHOICE()==prwGravitySelection::J2_ONLY?2:4,0,ForceModel::EmbeddedEarthField::EGM2008))return false;
         break;
     case prwGravitySelection::SPHERICAL_HARMONICS:
     case prwGravitySelection::EGM2008:
+    case prwGravitySelection::EGM96:
         if(!in->HAS_MAXIMUM_DEGREE()||!in->HAS_MAXIMUM_ORDER())
             return prwError(error,"invalid-forces: A field selection states both MAXIMUM_DEGREE and MAXIMUM_ORDER.");
-        if(!field(in->MAXIMUM_DEGREE(),in->MAXIMUM_ORDER()))return false;
+        if(!field(in->MAXIMUM_DEGREE(),in->MAXIMUM_ORDER(),in->GRAVITY_CHOICE()==prwGravitySelection::EGM96?ForceModel::EmbeddedEarthField::EGM96:ForceModel::EmbeddedEarthField::EGM2008))return false;
         break;
     default:return prwError(error,"unsupported-gravity: Unknown gravity selection.");
     }
@@ -301,7 +343,9 @@ bool parseForces(const PRWForceConfiguration* in,double epoch,bool hasEarthOrien
         auto& slot=out.contributions.slots[0];
         slot.kind=ForceModel::ContributionKind::ConstantRTN;slot.p[1]=in->IN_TRACK_ACCELERATION_M_S2()*1e-3;
     }
-    // Rate of change of Cd*A/m (the VCM's BDOT), from the initial epoch.
+    // Rate of change of Cd*A/m (the VCM's BDOT), from the initial epoch (also
+    // the reference of the rate's sensitivity when the rate is zero).
+    out.dragRateEpochTdb=epoch;
     if(!in->HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S()&&in->DRAG_AREA_OVER_MASS_RATE_M2_KG_S()!=0)
         return prwError(error,"invalid-presence: DRAG_AREA_OVER_MASS_RATE_M2_KG_S requires HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S.");
     if(in->HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S()) {
@@ -392,7 +436,12 @@ bool parseBurn(const PRWFiniteBurn* in,const std::string& frame,double target,In
 }
 bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execution& out,std::string& error) {
     if(!in||!in->INITIAL()||!in->INITIAL()->VALID())return prwError(error,"invalid-state: Execution requires a valid initial state.");
-    if(!decodeResidentState(in->INITIAL(),out.initial,error)||!decodeStateEpochTT(in->INITIAL(),out.initialTT,error))return false;
+    coords::Frame axes=coords::Frame::GCRF;
+    if(!decodeResidentState(in->INITIAL(),out.initial,error,&axes)||!decodeStateEpochTT(in->INITIAL(),out.initialTT,error))return false;
+    if(axes==coords::Frame::J2000) {
+        out.meanJ2000=true;double rp[3][3],rbp[3][3];eraBp00(2451545.0,0.0,out.bias,rp,rbp);
+        out.initial.position=toGcrf(out,out.initial.position);out.initial.velocity=toGcrf(out,out.initial.velocity);
+    }
     if(!positive(out.initial.position.magnitude())||!std::isfinite(out.initial.velocity.magnitude()))
         return prwError(error,"invalid-state: Initial Cartesian state must have a finite nonzero radius.");
     const auto* initial=in->INITIAL();
@@ -423,15 +472,40 @@ bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execu
         case prwDensityTreatment::FINITE_DIFFERENCE:out.density=ForceModel::DensityGradient::FiniteDifference;break;
         default:return prwError(error,"unsupported-derivatives: Explicit density treatment is required.");
     }
+    // Dynamic parameters carried after the state (a VCM's B, BDOT, AGOM, T).
+    if(in->DYNAMIC_PARAMETERS())for(const auto p:*in->DYNAMIC_PARAMETERS()) {
+        ForceModel::DynamicParameter q;
+        switch(p) {
+            case prwDynamicParameter::DRAG_AREA_OVER_MASS:q=ForceModel::DynamicParameter::DragAreaOverMass;break;
+            case prwDynamicParameter::DRAG_AREA_OVER_MASS_RATE:q=ForceModel::DynamicParameter::DragAreaOverMassRate;break;
+            case prwDynamicParameter::SRP_AREA_OVER_MASS:q=ForceModel::DynamicParameter::SrpAreaOverMass;break;
+            case prwDynamicParameter::IN_TRACK_ACCELERATION:q=ForceModel::DynamicParameter::InTrackAcceleration;break;
+            default:return prwError(error,"unsupported-parameter: Unknown dynamic parameter.");
+        }
+        if(std::find(out.parameters.begin(),out.parameters.end(),q)!=out.parameters.end())return prwError(error,"invalid-parameters: DYNAMIC_PARAMETERS must not repeat.");
+        if(const char* reason=ForceModel::ValidateParameter(q,out.forces)){error=std::string("invalid-parameters: ")+reason;return false;}
+        out.parameters.push_back(q);
+    }
+    if(!out.parameters.empty()&&(out.massDynamics||in->INITIAL_MASS_COVARIANCE()))
+        return prwError(error,"unsupported-configuration: DYNAMIC_PARAMETERS apply to the six-state propagation without mass dynamics.");
     if(initial->COVARIANCE()&&in->INITIAL_COVARIANCE())return prwError(error,"duplicate-covariance: INITIAL.COVARIANCE and INITIAL_COVARIANCE are mutually exclusive.");
     const auto* covariance=in->INITIAL_COVARIANCE()?in->INITIAL_COVARIANCE():initial->COVARIANCE();
-    if(covariance) {
+    if(covariance&&!out.parameters.empty()) {
+        const unsigned n=6+unsigned(out.parameters.size());
+        if(covariance->DIMENSION()!=n)return prwError(error,"invalid-covariance: With DYNAMIC_PARAMETERS the covariance is six plus their number square.");
+        out.covariance=true;out.pParameters.assign(n*n,0.0);
+        if(!prwCovariance(covariance,n,out.pParameters.data(),error))return false;
+        rotateMatrix(out,out.pParameters.data(),n,false);
+    } else if(covariance) {
         if(covariance->DIMENSION()==7) {
             if(in->INITIAL_MASS_COVARIANCE())return prwError(error,"duplicate-covariance: Multiple seven-state initial covariances.");
             out.massCovariance=true;if(!prwCovariance(covariance,7,out.p7.data(),error))return false;
         } else {out.covariance=true;if(!prwCovariance(covariance,6,&out.p.m[0][0],error))return false;}
     }
     if(in->INITIAL_MASS_COVARIANCE()){out.massCovariance=true;if(!prwCovariance(in->INITIAL_MASS_COVARIANCE(),7,out.p7.data(),error))return false;}
+    // Covariances arrive in the request's axes.
+    if(out.covariance&&out.parameters.empty())rotateMatrix(out,&out.p.m[0][0],6,false);
+    if(out.massCovariance)rotateMatrix(out,out.p7.data(),7,false);
     if(out.massCovariance&&!out.massDynamics)return prwError(error,"invalid-covariance: Seven-state covariance requires INCLUDE_MASS_DYNAMICS.");
     if(!prwProcessNoise(in->PROCESS_NOISE(),out.noise,error))return false;
     if(out.noise.enabled&&(!out.covariance||out.massDynamics))
@@ -450,12 +524,14 @@ bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execu
         if(!impulse||!decodeEpochTT(impulse->EPOCH(),tt,error)||!readVector(impulse->DELTA_V(),kick.deltaV,0.001,error))return false;
         kick.epoch=timesys::ttToTdb(tt.jdTt());
         if(impulse->VECTOR_BASIS()!=prwSteeringBasis::INTEGRATION_FRAME&&impulse->VECTOR_BASIS()!=prwSteeringBasis::RTN_AXES)return prwError(error,"unsupported-impulse-frame: Impulses support integration-frame or RTN components.");
-        kick.inRTN=impulse->VECTOR_BASIS()==prwSteeringBasis::RTN_AXES;out.impulses.push_back(kick);
+        kick.inRTN=impulse->VECTOR_BASIS()==prwSteeringBasis::RTN_AXES;if(!kick.inRTN)kick.deltaV=toGcrf(out,kick.deltaV);
+        out.impulses.push_back(kick);
     }
     if(in->FINITE_BURNS()) {
         if(in->FINITE_BURNS()->size()>Integrator::MaxFiniteBurns)return prwError(error,"invalid-burn: At most 16 burns are supported.");
         for(const auto* input:*in->FINITE_BURNS()) {
             Integrator::FiniteBurn burn;if(!parseBurn(input,initial->COORDINATE_SYSTEM()->NAME()->str(),elapsedSeconds(out.initialTT,out.targetTT),burn,error))return false;
+            if(burn.frame==Integrator::BurnFrame::Inertial){burn.direction=toGcrf(out,burn.direction);burn.steeringRate=toGcrf(out,burn.steeringRate);}
             out.burns.push_back(std::move(burn));
         }
     }
@@ -480,16 +556,19 @@ bool evaluate(Execution& execution,const PRWExecutionRequest* request,const TTEp
     const double epoch=timesys::ttToTdb(epochTT.jdTt());
     if(!preflightKernel(execution,epoch,error))return false;
     const auto frame=std::unique_ptr<RFMCoordinateSystemT>(request->INITIAL()->COORDINATE_SYSTEM()->UnPack());
+    // States and matrices leave in the request's axes.
+    const auto stateOut=[&](StateVector state){state.position=toRequestAxes(execution,state.position);state.velocity=toRequestAxes(execution,state.velocity);return makeState(state,*frame,request->INITIAL());};
+    const auto matrixOut=[&](const double* values,unsigned n,bool covariance){std::vector<double> m(values,values+n*n);rotateMatrix(execution,m.data(),n,true);return matrix(m.data(),n,covariance);};
     // Elapsed time on the integration clock (TT), exact to sub-nanosecond.
     const double seconds=elapsedSeconds(execution.initialTT,epochTT);
     if(execution.massDynamics) {
         const auto value=Integrator::PropagateFiniteBurns(execution.initial,execution.mass,seconds,execution.integrator,execution.forces,execution.burns,execution.density,execution.impulses);
         if(!value.success){error="invoke-failed: "+value.errorMessage;return false;}
-        auto state=value.finalState;state.epoch=epoch;out.STATE=makeState(state,*frame,request->INITIAL());out.STATE->HAS_MASS_KG=true;out.STATE->MASS_KG=value.massKg;
+        auto state=value.finalState;state.epoch=epoch;out.STATE=stateOut(state);out.STATE->HAS_MASS_KG=true;out.STATE->MASS_KG=value.massKg;
         Mat6 phi{};for(int i=0;i<6;++i)for(int j=0;j<6;++j)phi.m[i][j]=value.stm[i*7+j];
-        out.STM=matrix(&phi.m[0][0],6,false);out.MASS_STM=matrix(value.stm.data(),7,false);
-        if(execution.covariance){const auto p=Integrator::TransportCovariance(phi,execution.p);out.COVARIANCE=matrix(&p.m[0][0],6,true);}
-        if(execution.massCovariance){const auto p=Integrator::TransportFiniteCovariance(value.stm,execution.p7);out.MASS_COVARIANCE=matrix(p.data(),7,true);}
+        out.STM=matrixOut(&phi.m[0][0],6,false);out.MASS_STM=matrixOut(value.stm.data(),7,false);
+        if(execution.covariance){const auto p=Integrator::TransportCovariance(phi,execution.p);out.COVARIANCE=matrixOut(&p.m[0][0],6,true);}
+        if(execution.massCovariance){const auto p=Integrator::TransportFiniteCovariance(value.stm,execution.p7);out.MASS_COVARIANCE=matrixOut(p.data(),7,true);}
         out.ACCEPTED_STEPS=value.steps;out.REJECTED_STEPS=value.rejections;
         for(size_t i=0;i<value.burns.size();++i) {
             const auto& burn=value.burns[i];auto report=std::make_unique<PRWBurnReportT>();
@@ -499,11 +578,17 @@ bool evaluate(Execution& execution,const PRWExecutionRequest* request,const TTEp
             if(burn.stopped){report->STOP_SECONDS=burn.stopSeconds;report->STOP_EPOCH=makeInstant(execution.initial.epoch+burn.stopSeconds/86400);}
             report->DELTA_V_M_S=burn.deltaVKmS*1000;report->PROPELLANT_KG=burn.propellantKg;out.BURNS.push_back(std::move(report));
         }
+    } else if(execution.variational&&!execution.parameters.empty()) {
+        const auto value=Integrator::PropagateParameterCovariance(execution.initial,seconds,execution.integrator,execution.forces,execution.technique,execution.density,execution.impulses,execution.parameters,execution.pParameters,execution.noise);
+        if(!value.success){error="invoke-failed: "+value.errorMessage;return false;}
+        auto state=value.finalState;state.epoch=epoch;out.STATE=stateOut(state);out.STM=matrixOut(value.phi.data(),value.dimension,false);
+        if(execution.covariance){out.COVARIANCE=matrixOut(value.covariance.data(),value.dimension,true);out.PROCESS_NOISE=prwProcessNoiseRecord(execution.noise);}
+        out.ACCEPTED_STEPS=value.steps;out.REJECTED_STEPS=value.rejections;
     } else if(execution.variational) {
         const auto value=Integrator::PropagateCovariance(execution.initial,seconds,execution.integrator,execution.forces,execution.technique,execution.density,execution.impulses,execution.p,execution.noise);
         if(!value.success){error="invoke-failed: "+value.errorMessage;return false;}
-        auto state=value.finalState;state.epoch=epoch;out.STATE=makeState(state,*frame,request->INITIAL());out.STM=matrix(&value.stm.m[0][0],6,false);
-        if(execution.covariance){out.COVARIANCE=matrix(&value.covariance.m[0][0],6,true);out.PROCESS_NOISE=prwProcessNoiseRecord(execution.noise);}
+        auto state=value.finalState;state.epoch=epoch;out.STATE=stateOut(state);out.STM=matrixOut(&value.stm.m[0][0],6,false);
+        if(execution.covariance){out.COVARIANCE=matrixOut(&value.covariance.m[0][0],6,true);out.PROCESS_NOISE=prwProcessNoiseRecord(execution.noise);}
         out.ACCEPTED_STEPS=value.steps;out.REJECTED_STEPS=value.rejections;
     } else {
         auto config=execution.integrator;
@@ -513,7 +598,7 @@ bool evaluate(Execution& execution,const PRWExecutionRequest* request,const TTEp
             return prwError(error,"invoke-failed: RK4 request exceeds MAXIMUM_STEPS.");
         const auto value=Integrator::PropagateWithResult(execution.initial,seconds,config,execution.forces);
         if(!value.success){error="invoke-failed: "+value.errorMessage;return false;}
-        auto state=value.finalState;state.epoch=epoch;out.STATE=makeState(state,*frame,request->INITIAL());out.ACCEPTED_STEPS=value.steps;out.REJECTED_STEPS=value.rejections;
+        auto state=value.finalState;state.epoch=epoch;out.STATE=stateOut(state);out.ACCEPTED_STEPS=value.steps;out.REJECTED_STEPS=value.rejections;
     }
     if(request->INITIAL()->HAS_MASS_KG()&&!execution.massDynamics){out.STATE->HAS_MASS_KG=true;out.STATE->MASS_KG=execution.mass;}
     out.STATE->STATE->EPOCH=formatTdb(epochTT);out.STATE->STATE->EPOCH_TIME_SYSTEM="TDB";
@@ -553,6 +638,7 @@ bool execute(const PRWExecutionRequest* request,const std::shared_ptr<EarthRotat
     for(const auto& epoch:execution.samplesTT){auto sample=std::make_unique<PRWPropagationSampleT>();if(!evaluate(execution,request,epoch,*sample,error))return false;result->SAMPLES.push_back(std::move(sample));}
     result->ELAPSED_SECONDS=elapsedSeconds(execution.initialTT,execution.targetTT);result->EPHEMERIS_SOURCE=Ephemeris::ephemerisSourceName(Ephemeris::selectedEphemerisSource());
     if(execution.variational){result->STM_TECHNIQUE=request->STM_TECHNIQUE();result->DENSITY_TREATMENT=request->DENSITY_TREATMENT();}
+    if(request->DYNAMIC_PARAMETERS())for(const auto p:*request->DYNAMIC_PARAMETERS())result->DYNAMIC_PARAMETERS.push_back(p);
     response.EXECUTION_RESULT=std::move(result);return true;
 }
 bool loadKernel(const uint8_t* data,size_t size,std::string& error) {

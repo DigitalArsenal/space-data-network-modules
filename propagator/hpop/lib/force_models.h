@@ -96,9 +96,19 @@ Vec3 J2J4(const Vec3& position, double mu = MU_EARTH);
 // -----------------------------------------------------------------------------
 
 /// EGM2008 gravity model configuration for ForceModel API
+/// The embedded Earth fields (degree 2-70 each): EGM2008 (lib/egm2008_data.h)
+/// and EGM96 (lib/egm96_data.h).
+enum class EmbeddedEarthField : uint8_t { EGM2008 = 0, EGM96 = 1 };
+
 struct EGM2008ForceConfig {
     uint16_t truncationDegree{70};  ///< Truncation degree (2-2190)
     uint16_t truncationOrder{70};   ///< Truncation order (0-degree)
+    /// Which embedded coefficient set (EGM2008 unless stated).
+    EmbeddedEarthField field{EmbeddedEarthField::EGM2008};
+    /// Highest degree kept for the tesseral and sectorial terms (order >= 1):
+    /// a VCM's "mmZ,nnT" is truncationDegree mm, truncationOrder nn and
+    /// maxTesseralDegree nn. The zonals run to truncationDegree.
+    uint16_t maxTesseralDegree{UINT16_MAX};
     bool normalized{true};          ///< Use normalized coefficients
     // Gate low-degree zonal terms from the EGM coefficient set so UI J2/J3/J4
     // toggles can still take effect in EGM mode.
@@ -116,6 +126,11 @@ Vec3 EGM2008(const Vec3& position, const EGM2008ForceConfig& config = EGM2008For
 /// EGM2008's harmonic terms alone (degree 2 up), scaled by the field's own GM:
 /// the force set's EGM2008 mode adds its central term with the set's GM.
 Vec3 EGM2008Harmonics(const Vec3& position, const EGM2008ForceConfig& config = EGM2008ForceConfig());
+
+/// The embedded field `config` selects, truncated as it states (degree,
+/// order, tesseral degree), cached until the selection changes. Shared by the
+/// force evaluation and its partials (force_partials.cpp).
+const ExtendedGravityField& EmbeddedEarthGravityField(const EGM2008ForceConfig& config);
 
 // -----------------------------------------------------------------------------
 // 4. GRGM1200A - Lunar Gravity Model (degree 1200)
@@ -912,6 +927,16 @@ SpaceWeatherData WeatherAt(double jdUtc, const ForceModelSet& forceSet);
 /// The drag configuration at a TDB Julian date, with dragAreaOverMassRate
 /// applied to Cd (area and mass unchanged).
 DragForceConfig DragAt(double jdTdb, const ForceModelSet& forceSet);
+
+/// The force set's drag acceleration (km/s^2) with a given drag
+/// configuration (ComputeTotalAcceleration passes DragAt(jd)).
+Vec3 DragAccelerationWith(const Vec3& position, const Vec3& velocity, double jd,
+                          const ForceModelSet& forceSet, const DragForceConfig& drag);
+
+/// The force set's radiation pressure acceleration (km/s^2) with a given SRP
+/// configuration, the Sun from forceSet.sunPosition when provided.
+Vec3 SrpAcceleration(const Vec3& position, double jd, const ForceModelSet& forceSet,
+                     const SRPForceConfig& srp);
 
 /// Evaluate a field loaded from a potential file. Declared here and defined in
 /// environment_models.cpp, which owns ExtendedGravityField.

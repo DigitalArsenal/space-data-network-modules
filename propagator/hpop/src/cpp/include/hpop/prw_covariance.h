@@ -5,13 +5,15 @@
 #include <cmath>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "hpop/prw_codec.h"
 #include "variational.h"
 
 namespace hpop {
 
-// A row-major SI covariance (m, m/s; mass in kg) in km units, verified finite,
+// A row-major SI covariance (m, m/s; then mass in kg or dynamic parameters in
+// their SI units, unscaled) in km units, verified finite,
 // symmetric and positive semidefinite (LDL^T; a zero pivot requires the
 // residual column to vanish).
 inline bool prwCovariance(const PRWStateMatrix* in, unsigned n, double* out, std::string& error) {
@@ -30,7 +32,7 @@ inline bool prwCovariance(const PRWStateMatrix* in, unsigned n, double* out, std
             out[i * n + j] = a * (i < 6 ? 0.001 : 1) * (j < 6 ? 0.001 : 1);
             scale = std::max(scale, std::abs(out[i * n + j]));
         }
-    double l[49]{}, d[7]{};
+    std::vector<double> l(n * n, 0.0), d(n, 0.0);
     const double tol = std::max(1e-30, scale * 1e-12);
     for (unsigned i = 0; i < n; ++i) {
         double p = out[i * n + i];

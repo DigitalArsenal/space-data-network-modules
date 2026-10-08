@@ -5,5 +5,6 @@ export var prwGravitySelection = /*#__PURE__*/ function(prwGravitySelection) {
     prwGravitySelection[prwGravitySelection["J2_TO_J4"] = 3] = "J2_TO_J4";
     prwGravitySelection[prwGravitySelection["SPHERICAL_HARMONICS"] = 4] = "SPHERICAL_HARMONICS";
     prwGravitySelection[prwGravitySelection["EGM2008"] = 5] = "EGM2008";
+    prwGravitySelection[prwGravitySelection["EGM96"] = 6] = "EGM96";
     return prwGravitySelection;
 }({});

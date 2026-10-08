@@ -3,7 +3,7 @@
 // Representation only: encoding, decoding and differences of positions.
 import fs from 'node:fs';
 import * as flatbuffers from 'flatbuffers';
-import { decodeResult, encodePrw, execution, makeTable, nativeInput, sds, TYPE } from './prwCodec.mjs';
+import { decodePrw, decodeResult, encodePrw, execution, makeTable, nativeInput, sds, TYPE } from './prwCodec.mjs';
 
 export const REFERENCE = JSON.parse(fs.readFileSync(new URL('../fixtures/orekit/orekit-reference.json', import.meta.url), 'utf8'));
 export const EOP = JSON.parse(fs.readFileSync(new URL('../fixtures/orekit/eop-2026-08.json', import.meta.url), 'utf8'));
@@ -47,14 +47,15 @@ export function spaceWeatherInput() {
   return { portId: 'space_weather', typeRef: TYPE, payload: encodePrw('SPACE_WEATHER', makeTable('PRWSpaceWeatherTable', { ROWS: SPW.rows.map((row) => makeTable('SPW', row)) })) };
 }
 
-export function requestInputs(c, { tolerance = integratorTolerance(c), maxStep = 300 } = {}) {
+// `edit(exec)` may change the request before it is encoded (tests).
+export function requestInputs(c, { tolerance = integratorTolerance(c), maxStep = 300, technique = 'ANALYTIC', edit } = {}) {
   const [, x, y, z, vx, vy, vz] = c.samples[0];
   const k = REFERENCE.constants;
   const forces = {
     mu: k.gm / 1e9, pointMass: true, j2: false, j3: false, j4: false, higherZonals: false,
     thirdBody: c.thirdBodies, sun: c.thirdBodies, moon: c.thirdBodies, srp: c.srp, drag: c.drag,
     massKg: k.massKg, areaM2: k.areaM2, cr: k.cr, cd: k.cd, dragModel: 'NRLMSISE00',
-    gravityMode: c.degree > 0 ? 'SPHERICAL_HARMONICS' : 'POINT_MASS',
+    gravityMode: c.degree > 0 ? (c.gravityModel === 'EGM96' ? 'EGM96' : 'SPHERICAL_HARMONICS') : 'POINT_MASS',
     ...(c.degree > 0 ? { maxDegree: c.degree, maxOrder: c.order } : {}),
   };
   const exec = execution({
@@ -62,6 +63,7 @@ export function requestInputs(c, { tolerance = integratorTolerance(c), maxStep =
     massKg: k.massKg, integrator: { method: 'RK78', tolerance, initialStep: 30, minStep: 1e-3, maxStep, maxSteps: 1000000 },
     forces, weather: c.drag ? { epochUTCJD: 2461254.5, F107: k.f107, F107a: k.f107a, Ap: k.ap, Kp: 3 } : undefined,
     ephemerisSource: needsKernel(c) ? 'JPL_SPK' : 'Analytical',
+    frame: c.frame ?? 'GCRF',
   }, needsKernel(c));
   // Exact ISO epochs on UTC, as Orekit wrote them; both sides integrate on TT.
   exec.INITIAL.STATE.EPOCH = REFERENCE.epochUtc;
@@ -77,6 +79,14 @@ export function requestInputs(c, { tolerance = integratorTolerance(c), maxStep =
   if (c.inTrackAccelerationMS2) Object.assign(exec.FORCES, { IN_TRACK_ACCELERATION_M_S2: c.inTrackAccelerationMS2, HAS_IN_TRACK_ACCELERATION_M_S2: true });
   if (c.dragAreaOverMassRateM2KgS) Object.assign(exec.FORCES, { DRAG_AREA_OVER_MASS_RATE_M2_KG_S: c.dragAreaOverMassRateM2KgS, HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S: true });
   if (c.spaceWeather === 'cssi') exec.FORCES.WEATHER = null;
+  if (c.tesseralDegree !== undefined) Object.assign(exec.FORCES, { MAXIMUM_TESSERAL_DEGREE: c.tesseralDegree, HAS_MAXIMUM_TESSERAL_DEGREE: true });
+  // Jacobian cases: the STM with the VCM parameters appended, analytic, with
+  // the density gradient (Orekit differentiates the density too).
+  if (c.parameters) Object.assign(exec, {
+    INCLUDE_STM: true, STM_TECHNIQUE: sds.prwDerivativeTechnique[technique], DENSITY_TREATMENT: sds.prwDensityTreatment.FINITE_DIFFERENCE,
+    DYNAMIC_PARAMETERS: c.parameters.map((name) => sds.prwDynamicParameter[name]),
+  });
+  if (edit) edit(exec);
   const inputs = [{ portId: 'request', typeRef: TYPE, payload: encodePrw('EXECUTION_REQUEST', exec) }];
   if (needsKernel(c)) inputs.push({ portId: 'kernel', typeRef: TYPE, payload: nativeInput(KERNEL) });
   // Every Earth-fixed field gets the EOP, so its pole matches Orekit's ITRF.
@@ -96,3 +106,25 @@ export function score(c, response) {
   });
   return { worst, worstAt };
 }
+
+// Jacobian cases: the largest relative difference of a column of the STM
+// (position and velocity rows apart) and of each parameter column, over the
+// samples, from the raw SI matrices (n = 6 + parameters).
+export function scoreJacobians(c, response) {
+  const root = decodePrw(response.outputs.find((o) => o.portId === 'response').payload).EXECUTION_RESULT;
+  const np = c.parameters.length, n = 6 + np;
+  const rel = (a, b) => { const d = Math.hypot(...a.map((x, i) => x - b[i])), r = Math.hypot(...b); return r > 0 ? d / r : d; };
+  let stm = 0; const parameters = Object.fromEntries(c.parameters.map((p) => [p, 0]));
+  root.SAMPLES.forEach((sample, k) => {
+    const m = sample.STM.VALUES, ref = c.stm[k + 1], jac = c.parameterJacobian[k + 1];
+    if (sample.STM.DIMENSION !== n) throw new Error(`STM dimension ${sample.STM.DIMENSION}, expected ${n}`);
+    for (let j = 0; j < 6; ++j) for (const rows of [[0, 1, 2], [3, 4, 5]])
+      stm = Math.max(stm, rel(rows.map((i) => m[i * n + j]), rows.map((i) => ref[i * 6 + j])));
+    c.parameters.forEach((p, q) => {
+      for (const rows of [[0, 1, 2], [3, 4, 5]])
+        parameters[p] = Math.max(parameters[p], rel(rows.map((i) => m[i * n + 6 + q]), rows.map((i) => jac[i * np + q])));
+    });
+  });
+  return { stm, parameters };
+}
+

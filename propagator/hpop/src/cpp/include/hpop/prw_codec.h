@@ -30,7 +30,7 @@ inline bool verifyPrw(const uint8_t* data, size_t size, const PRW*& root, std::s
         !!root->DESCRIBE_REQUEST() + !!root->DESCRIBE_RESULT() + !!root->NATIVE_INPUT() +
         !!root->EPHEMERIS_REQUEST() + !!root->EPHEMERIS_RESULT() + !!root->ATMOSPHERE_REQUEST() +
         !!root->ATMOSPHERE_RESULT() + root->VERSION_QUERY() + !!root->VERSION_RESULT() +
-        !!root->EARTH_ORIENTATION() + !!root->SPACE_WEATHER();
+        !!root->EARTH_ORIENTATION() + !!root->SPACE_WEATHER() + !!root->JB2008_INDICES();
     return arms == 1 || prwError(error, "invalid-prw-arm: Exactly one PRW payload arm is required.");
 }
 inline bool parseIsoEpoch(const std::string& iso, double& jd, std::string& error) {
@@ -217,7 +217,9 @@ inline bool decodeEpoch(const TIMInstant* instant, double& tdb, double& utc, std
     jd+=instant->SUBSECOND_NANOS()/86400e9;
     return convertEpoch(jd,instant->TIME_SYSTEM(),tdb,utc,error);
 }
-inline bool decodeFrame(const RFMCoordinateSystem* frame, coords::Frame& result, std::string& error) {
+// meanJ2000: also accept mean equator and equinox of J2000.0 axes (EME2000,
+// a VCM's "J2K"), as coords::Frame::J2000; the caller rotates by the frame bias.
+inline bool decodeFrame(const RFMCoordinateSystem* frame, coords::Frame& result, std::string& error, bool meanJ2000 = false) {
     if(!frame || !frame->NAME() || frame->NAME()->size()==0 || !frame->ORIGIN())
         return prwError(error,"invalid-frame: A named coordinate system and explicit origin are required.");
     if(frame->ORIGIN()->KIND()!=rfmOriginKind::CELESTIAL_BODY || frame->ORIGIN()->CELESTIAL_BODY_ID()!=399)
@@ -225,19 +227,23 @@ inline bool decodeFrame(const RFMCoordinateSystem* frame, coords::Frame& result,
     if(frame->OBJECT_REFERENCED_AXES() || frame->LOCAL_ALIGNED_CONSTRAINED_AXES() || frame->KERNEL_FRAME_NAME() || frame->KERNEL_FRAME_ID() || frame->EOP_DATA_SET_CID())
         return prwError(error,"unsupported-frame: Additional axis-definition controls are unsupported.");
     if(frame->AXIS_TYPE()==rfmAxisType::ICRF) {result=coords::Frame::GCRF;return true;}
+    if(meanJ2000 && frame->AXIS_TYPE()==rfmAxisType::MEAN_EQUATOR_EQUINOX_J2000) {result=coords::Frame::J2000;return true;}
     if(frame->AXIS_TYPE()==rfmAxisType::BODY_FIXED || frame->AXIS_TYPE()==rfmAxisType::TRUE_EQUATOR_MEAN_EQUINOX_OF_DATE)
         return prwError(error,"eop-data-required: This invocation has no authoritative Earth orientation data for the requested axes.");
-    return prwError(error,"unsupported-frame: This profile requires Earth-centered ICRF axes (GCRF).");
+    return prwError(error,meanJ2000?"unsupported-frame: This profile requires Earth-centered ICRF (GCRF) or mean J2000 (EME2000) axes.":"unsupported-frame: This profile requires Earth-centered ICRF axes (GCRF).");
 }
 inline bool readVector(const FRMVector3* in, astro::Vec3& out, double scale, std::string& error) {
     if(!in || !std::isfinite(in->X()) || !std::isfinite(in->Y()) || !std::isfinite(in->Z()))
         return prwError(error,"invalid-state: Three finite vector components are required.");
     out=astro::Vec3(in->X()*scale,in->Y()*scale,in->Z()*scale);return true;
 }
-inline bool decodeResidentState(const PRWResidentState* in, astro::StateVector& out, std::string& error) {
+// axes: when given, EME2000 is accepted too and the decoded axes are stored
+// there; the state is returned as given, in those axes.
+inline bool decodeResidentState(const PRWResidentState* in, astro::StateVector& out, std::string& error, coords::Frame* axes = nullptr) {
     if(!in || !in->STATE())return prwError(error,"invalid-state: Missing FRM state.");
     coords::Frame frame;
-    if(!decodeFrame(in->COORDINATE_SYSTEM(),frame,error))return false;
+    if(!decodeFrame(in->COORDINATE_SYSTEM(),frame,error,axes!=nullptr))return false;
+    if(axes)*axes=frame;
     const auto* s=in->STATE();
     if(s->REPRESENTATION()!=frmStateRepresentation::CARTESIAN || (s->ELEMENTS() && s->ELEMENTS()->size()))
         return prwError(error,"unsupported-state: Supply Cartesian POSITION and VELOCITY without duplicate ELEMENTS.");
