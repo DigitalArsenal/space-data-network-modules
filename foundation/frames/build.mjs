@@ -55,7 +55,13 @@ const axisEngine = (await fs.readFile(axisEnginePath, "utf8"))
     /extern "C" \{\n#include "erfa\.h"\n#include "erfam\.h"\n\}\n/,
     "// ERFA declarations are amalgamated ahead of this header by build.mjs.\n",
   );
-const implementationSource = (await fs.readFile(sourcePath, "utf8")).replace('#include "eop_table.hpp"', await fs.readFile(path.join(packageRoot, "src/eop_table.hpp"), "utf8"));
+// eop_table.hpp reads $EOP through eop_series.hpp (shared with propagator/hpop).
+// eop_table.hpp is inlined at its include site, inside frames_module.cpp's
+// anonymous namespace; eop_series.hpp declares ::sdn::frames::eop, so it goes
+// at file scope after the axis engine it builds on.
+const eopSeries = (await fs.readFile(path.join(packageRoot, "src/eop_series.hpp"), "utf8")).replace("#pragma once", "");
+const eopTable = (await fs.readFile(path.join(packageRoot, "src/eop_table.hpp"), "utf8")).replace('#include "eop_series.hpp"', "// eop_series.hpp is placed at file scope by build.mjs.");
+const implementationSource = (await fs.readFile(sourcePath, "utf8")).replace('#include "eop_table.hpp"', eopTable);
 process.env.SPACE_DATA_STANDARDS_ROOT ??= path.join(packageRoot, "node_modules/spacedatastandards.org");
 
 const sourceCode = [
@@ -65,6 +71,7 @@ const sourceCode = [
   erfa.source,
   bodyModels,
   axisEngine,
+  eopSeries,
   stateRepresentations,
   implementationSource,
 ].join("\n\n");
