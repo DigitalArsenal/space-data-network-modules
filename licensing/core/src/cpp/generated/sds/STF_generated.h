@@ -13,6 +13,8 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
               FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
+#include "CCT_generated.h"
+
 struct GrantFieldStreamPolicy;
 struct GrantFieldStreamPolicyBuilder;
 struct GrantFieldStreamPolicyT;
@@ -144,34 +146,81 @@ inline const char *EnumNamepaymentMethod(paymentMethod e) {
 }
 
 /// Listing kind for marketplace entries.
+///
+/// This is the listing's DELIVERY KIND, not its capability category, and the
+/// two are not interchangeable. A storefront shelf, a browse row and a search
+/// facet are driven by `$CCT` `capabilityClass` via STF.PRIMARY_CATEGORY /
+/// STF.CATEGORIES; `listingCategory` only says whether the offering is
+/// delivered as a data stream or as a module artifact.
 enum class listingCategory : int8_t {
   DataStream = 0,
   WasmModule = 1,
+  /// Provider-operated service.
+  Service = 2,
   MIN = DataStream,
-  MAX = WasmModule
+  MAX = Service
 };
 
-inline const listingCategory (&EnumValueslistingCategory())[2] {
+inline const listingCategory (&EnumValueslistingCategory())[3] {
   static const listingCategory values[] = {
     listingCategory::DataStream,
-    listingCategory::WasmModule
+    listingCategory::WasmModule,
+    listingCategory::Service
   };
   return values;
 }
 
 inline const char * const *EnumNameslistingCategory() {
-  static const char * const names[3] = {
+  static const char * const names[4] = {
     "DataStream",
     "WasmModule",
+    "Service",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamelistingCategory(listingCategory e) {
-  if (::flatbuffers::IsOutRange(e, listingCategory::DataStream, listingCategory::WasmModule)) return "";
+  if (::flatbuffers::IsOutRange(e, listingCategory::DataStream, listingCategory::Service)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNameslistingCategory()[index];
+}
+
+/// Storefront Listing - Data marketplace listing
+/// Retention rule a publisher recommends for a dataset listing. Append new
+/// values only; never reorder or reuse existing values.
+enum class stfRetentionPolicy : int8_t {
+  ReplaceCurrent = 0,
+  ArchiveAll = 1,
+  /// Every publication stays in the store; nothing is superseded or pinned.
+  KeepAll = 2,
+  MIN = ReplaceCurrent,
+  MAX = KeepAll
+};
+
+inline const stfRetentionPolicy (&EnumValuesstfRetentionPolicy())[3] {
+  static const stfRetentionPolicy values[] = {
+    stfRetentionPolicy::ReplaceCurrent,
+    stfRetentionPolicy::ArchiveAll,
+    stfRetentionPolicy::KeepAll
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesstfRetentionPolicy() {
+  static const char * const names[4] = {
+    "ReplaceCurrent",
+    "ArchiveAll",
+    "KeepAll",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamestfRetentionPolicy(stfRetentionPolicy e) {
+  if (::flatbuffers::IsOutRange(e, stfRetentionPolicy::ReplaceCurrent, stfRetentionPolicy::KeepAll)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesstfRetentionPolicy()[index];
 }
 
 struct GrantFieldStreamPolicyT : public ::flatbuffers::NativeTable {
@@ -1279,13 +1328,15 @@ struct STFT : public ::flatbuffers::NativeTable {
   std::string TERMS_CID{};
   std::string LICENSE{};
   std::string SOURCE_PEER_ID{};
+  capabilityClass PRIMARY_CATEGORY = capabilityClass::UNSPECIFIED;
+  std::vector<capabilityClass> CATEGORIES{};
+  stfRetentionPolicy RECOMMENDED_RETENTION = stfRetentionPolicy::ReplaceCurrent;
   STFT() = default;
   STFT(const STFT &o);
   STFT(STFT&&) FLATBUFFERS_NOEXCEPT = default;
   STFT &operator=(STFT o) FLATBUFFERS_NOEXCEPT;
 };
 
-/// Storefront Listing - Data marketplace listing
 struct STF FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef STFT NativeTableType;
   typedef STFBuilder Builder;
@@ -1317,7 +1368,10 @@ struct STF FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_EXPIRES_AT = 50,
     VT_TERMS_CID = 52,
     VT_LICENSE = 54,
-    VT_SOURCE_PEER_ID = 56
+    VT_SOURCE_PEER_ID = 56,
+    VT_PRIMARY_CATEGORY = 58,
+    VT_CATEGORIES = 60,
+    VT_RECOMMENDED_RETENTION = 62
   };
   /// Unique identifier for the listing
   const ::flatbuffers::String *LISTING_ID() const {
@@ -1427,6 +1481,35 @@ struct STF FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *SOURCE_PEER_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_SOURCE_PEER_ID);
   }
+  /// The one ratified `$CCT` category this listing is shelved under, using the
+  /// same vocabulary and semantics as PLG.PRIMARY_CATEGORY and
+  /// APP.PRIMARY_CATEGORY. Before this field existed a listing carried no
+  /// capability category at all — only DATA_TYPES and TAGS — so a storefront
+  /// shelf and a library shelf were grouped by two unrelated systems. A
+  /// consumer MUST group listings by this field and MUST NOT re-derive a
+  /// category from DATA_TYPES, TAGS or TITLE, none of which are a controlled
+  /// vocabulary.
+  ///
+  /// Distinct from LISTING_KIND, which is the delivery kind (data stream vs
+  /// module artifact), and from ACCESS_TYPE, which is the commercial access
+  /// model. UNSPECIFIED means the provider did not classify the listing; a
+  /// consumer renders it ungrouped and never guesses.
+  capabilityClass PRIMARY_CATEGORY() const {
+    return static_cast<capabilityClass>(GetField<uint8_t>(VT_PRIMARY_CATEGORY, 0));
+  }
+  /// Every ratified `$CCT` category this listing belongs to, for browse,
+  /// filter and per-category counting. A listing MAY carry several. If
+  /// nonempty it MUST include PRIMARY_CATEGORY. Codes MUST NOT repeat.
+  const ::flatbuffers::Vector<capabilityClass> *CATEGORIES() const {
+    return GetPointer<const ::flatbuffers::Vector<capabilityClass> *>(VT_CATEGORIES);
+  }
+  /// Retention rule the publisher recommends to subscribers of a dataset
+  /// listing: ReplaceCurrent when each publication is a complete current set,
+  /// KeepAll when publications accumulate history the store should keep,
+  /// ArchiveAll when that history should also stay pinned.
+  stfRetentionPolicy RECOMMENDED_RETENTION() const {
+    return static_cast<stfRetentionPolicy>(GetField<int8_t>(VT_RECOMMENDED_RETENTION, 0));
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1479,6 +1562,10 @@ struct STF FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyString(LICENSE()) &&
            VerifyOffset(verifier, VT_SOURCE_PEER_ID) &&
            verifier.VerifyString(SOURCE_PEER_ID()) &&
+           VerifyField<uint8_t>(verifier, VT_PRIMARY_CATEGORY, 1) &&
+           VerifyOffset(verifier, VT_CATEGORIES) &&
+           verifier.VerifyVector(CATEGORIES()) &&
+           VerifyField<int8_t>(verifier, VT_RECOMMENDED_RETENTION, 1) &&
            verifier.EndTable();
   }
   STFT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1571,6 +1658,15 @@ struct STFBuilder {
   void add_SOURCE_PEER_ID(::flatbuffers::Offset<::flatbuffers::String> SOURCE_PEER_ID) {
     fbb_.AddOffset(STF::VT_SOURCE_PEER_ID, SOURCE_PEER_ID);
   }
+  void add_PRIMARY_CATEGORY(capabilityClass PRIMARY_CATEGORY) {
+    fbb_.AddElement<uint8_t>(STF::VT_PRIMARY_CATEGORY, static_cast<uint8_t>(PRIMARY_CATEGORY), 0);
+  }
+  void add_CATEGORIES(::flatbuffers::Offset<::flatbuffers::Vector<capabilityClass>> CATEGORIES) {
+    fbb_.AddOffset(STF::VT_CATEGORIES, CATEGORIES);
+  }
+  void add_RECOMMENDED_RETENTION(stfRetentionPolicy RECOMMENDED_RETENTION) {
+    fbb_.AddElement<int8_t>(STF::VT_RECOMMENDED_RETENTION, static_cast<int8_t>(RECOMMENDED_RETENTION), 0);
+  }
   explicit STFBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1613,11 +1709,15 @@ inline ::flatbuffers::Offset<STF> CreateSTF(
     uint64_t EXPIRES_AT = 0,
     ::flatbuffers::Offset<::flatbuffers::String> TERMS_CID = 0,
     ::flatbuffers::Offset<::flatbuffers::String> LICENSE = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> SOURCE_PEER_ID = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> SOURCE_PEER_ID = 0,
+    capabilityClass PRIMARY_CATEGORY = capabilityClass::UNSPECIFIED,
+    ::flatbuffers::Offset<::flatbuffers::Vector<capabilityClass>> CATEGORIES = 0,
+    stfRetentionPolicy RECOMMENDED_RETENTION = stfRetentionPolicy::ReplaceCurrent) {
   STFBuilder builder_(_fbb);
   builder_.add_EXPIRES_AT(EXPIRES_AT);
   builder_.add_UPDATED_AT(UPDATED_AT);
   builder_.add_CREATED_AT(CREATED_AT);
+  builder_.add_CATEGORIES(CATEGORIES);
   builder_.add_SOURCE_PEER_ID(SOURCE_PEER_ID);
   builder_.add_LICENSE(LICENSE);
   builder_.add_TERMS_CID(TERMS_CID);
@@ -1638,6 +1738,8 @@ inline ::flatbuffers::Offset<STF> CreateSTF(
   builder_.add_PROVIDER_EPM_CID(PROVIDER_EPM_CID);
   builder_.add_PROVIDER_PEER_ID(PROVIDER_PEER_ID);
   builder_.add_LISTING_ID(LISTING_ID);
+  builder_.add_RECOMMENDED_RETENTION(RECOMMENDED_RETENTION);
+  builder_.add_PRIMARY_CATEGORY(PRIMARY_CATEGORY);
   builder_.add_LISTING_KIND(LISTING_KIND);
   builder_.add_ACTIVE(ACTIVE);
   builder_.add_ENCRYPTION_REQUIRED(ENCRYPTION_REQUIRED);
@@ -1678,7 +1780,10 @@ inline ::flatbuffers::Offset<STF> CreateSTFDirect(
     uint64_t EXPIRES_AT = 0,
     const char *TERMS_CID = nullptr,
     const char *LICENSE = nullptr,
-    const char *SOURCE_PEER_ID = nullptr) {
+    const char *SOURCE_PEER_ID = nullptr,
+    capabilityClass PRIMARY_CATEGORY = capabilityClass::UNSPECIFIED,
+    const std::vector<capabilityClass> *CATEGORIES = nullptr,
+    stfRetentionPolicy RECOMMENDED_RETENTION = stfRetentionPolicy::ReplaceCurrent) {
   auto LISTING_ID__ = LISTING_ID ? _fbb.CreateString(LISTING_ID) : 0;
   auto PROVIDER_PEER_ID__ = PROVIDER_PEER_ID ? _fbb.CreateString(PROVIDER_PEER_ID) : 0;
   auto PROVIDER_EPM_CID__ = PROVIDER_EPM_CID ? _fbb.CreateString(PROVIDER_EPM_CID) : 0;
@@ -1694,6 +1799,7 @@ inline ::flatbuffers::Offset<STF> CreateSTFDirect(
   auto TERMS_CID__ = TERMS_CID ? _fbb.CreateString(TERMS_CID) : 0;
   auto LICENSE__ = LICENSE ? _fbb.CreateString(LICENSE) : 0;
   auto SOURCE_PEER_ID__ = SOURCE_PEER_ID ? _fbb.CreateString(SOURCE_PEER_ID) : 0;
+  auto CATEGORIES__ = CATEGORIES ? _fbb.CreateVector<capabilityClass>(*CATEGORIES) : 0;
   return CreateSTF(
       _fbb,
       LISTING_ID__,
@@ -1722,7 +1828,10 @@ inline ::flatbuffers::Offset<STF> CreateSTFDirect(
       EXPIRES_AT,
       TERMS_CID__,
       LICENSE__,
-      SOURCE_PEER_ID__);
+      SOURCE_PEER_ID__,
+      PRIMARY_CATEGORY,
+      CATEGORIES__,
+      RECOMMENDED_RETENTION);
 }
 
 ::flatbuffers::Offset<STF> CreateSTF(::flatbuffers::FlatBufferBuilder &_fbb, const STFT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -2098,7 +2207,10 @@ inline STFT::STFT(const STFT &o)
         EXPIRES_AT(o.EXPIRES_AT),
         TERMS_CID(o.TERMS_CID),
         LICENSE(o.LICENSE),
-        SOURCE_PEER_ID(o.SOURCE_PEER_ID) {
+        SOURCE_PEER_ID(o.SOURCE_PEER_ID),
+        PRIMARY_CATEGORY(o.PRIMARY_CATEGORY),
+        CATEGORIES(o.CATEGORIES),
+        RECOMMENDED_RETENTION(o.RECOMMENDED_RETENTION) {
   PRICING.reserve(o.PRICING.size());
   for (const auto &PRICING_ : o.PRICING) { PRICING.emplace_back((PRICING_) ? new PricingTierT(*PRICING_) : nullptr); }
 }
@@ -2131,6 +2243,9 @@ inline STFT &STFT::operator=(STFT o) FLATBUFFERS_NOEXCEPT {
   std::swap(TERMS_CID, o.TERMS_CID);
   std::swap(LICENSE, o.LICENSE);
   std::swap(SOURCE_PEER_ID, o.SOURCE_PEER_ID);
+  std::swap(PRIMARY_CATEGORY, o.PRIMARY_CATEGORY);
+  std::swap(CATEGORIES, o.CATEGORIES);
+  std::swap(RECOMMENDED_RETENTION, o.RECOMMENDED_RETENTION);
   return *this;
 }
 
@@ -2170,6 +2285,9 @@ inline void STF::UnPackTo(STFT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = TERMS_CID(); if (_e) _o->TERMS_CID = _e->str(); }
   { auto _e = LICENSE(); if (_e) _o->LICENSE = _e->str(); }
   { auto _e = SOURCE_PEER_ID(); if (_e) _o->SOURCE_PEER_ID = _e->str(); }
+  { auto _e = PRIMARY_CATEGORY(); _o->PRIMARY_CATEGORY = _e; }
+  { auto _e = CATEGORIES(); if (_e) { _o->CATEGORIES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->CATEGORIES[_i] = static_cast<capabilityClass>(_e->Get(_i)); } } else { _o->CATEGORIES.resize(0); } }
+  { auto _e = RECOMMENDED_RETENTION(); _o->RECOMMENDED_RETENTION = _e; }
 }
 
 inline ::flatbuffers::Offset<STF> CreateSTF(::flatbuffers::FlatBufferBuilder &_fbb, const STFT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -2207,6 +2325,9 @@ inline ::flatbuffers::Offset<STF> STF::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _TERMS_CID = _o->TERMS_CID.empty() ? 0 : _fbb.CreateString(_o->TERMS_CID);
   auto _LICENSE = _o->LICENSE.empty() ? 0 : _fbb.CreateString(_o->LICENSE);
   auto _SOURCE_PEER_ID = _o->SOURCE_PEER_ID.empty() ? 0 : _fbb.CreateString(_o->SOURCE_PEER_ID);
+  auto _PRIMARY_CATEGORY = _o->PRIMARY_CATEGORY;
+  auto _CATEGORIES = _o->CATEGORIES.size() ? _fbb.CreateVector(_o->CATEGORIES) : 0;
+  auto _RECOMMENDED_RETENTION = _o->RECOMMENDED_RETENTION;
   return CreateSTF(
       _fbb,
       _LISTING_ID,
@@ -2235,7 +2356,10 @@ inline ::flatbuffers::Offset<STF> STF::Pack(::flatbuffers::FlatBufferBuilder &_f
       _EXPIRES_AT,
       _TERMS_CID,
       _LICENSE,
-      _SOURCE_PEER_ID);
+      _SOURCE_PEER_ID,
+      _PRIMARY_CATEGORY,
+      _CATEGORIES,
+      _RECOMMENDED_RETENTION);
 }
 
 inline const STF *GetSTF(const void *buf) {

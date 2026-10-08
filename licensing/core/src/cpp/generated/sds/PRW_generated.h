@@ -13,6 +13,12 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
               FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
+#include "FRM_generated.h"
+#include "TIM_generated.h"
+#include "PCE_generated.h"
+#include "PPE_generated.h"
+#include "NCD_generated.h"
+
 struct PRWInit;
 struct PRWInitBuilder;
 struct PRWInitT;
@@ -36,6 +42,122 @@ struct PRWBatchRequestT;
 struct PRWBatchResponse;
 struct PRWBatchResponseBuilder;
 struct PRWBatchResponseT;
+
+struct PRWInstance;
+struct PRWInstanceBuilder;
+struct PRWInstanceT;
+
+struct PRWIntegratorSettings;
+struct PRWIntegratorSettingsBuilder;
+struct PRWIntegratorSettingsT;
+
+struct PRWSpaceWeather;
+struct PRWSpaceWeatherBuilder;
+struct PRWSpaceWeatherT;
+
+struct PRWForceConfiguration;
+struct PRWForceConfigurationBuilder;
+struct PRWForceConfigurationT;
+
+struct PRWStateMatrix;
+struct PRWStateMatrixBuilder;
+struct PRWStateMatrixT;
+
+struct PRWProcessNoise;
+struct PRWProcessNoiseBuilder;
+struct PRWProcessNoiseT;
+
+struct PRWResidentState;
+struct PRWResidentStateBuilder;
+struct PRWResidentStateT;
+
+struct PRWImpulse;
+struct PRWImpulseBuilder;
+struct PRWImpulseT;
+
+struct PRWThrottlePoint;
+struct PRWThrottlePointBuilder;
+struct PRWThrottlePointT;
+
+struct PRWBurnBoundary;
+struct PRWBurnBoundaryBuilder;
+struct PRWBurnBoundaryT;
+
+struct PRWFiniteBurn;
+struct PRWFiniteBurnBuilder;
+struct PRWFiniteBurnT;
+
+struct PRWExecutionRequest;
+struct PRWExecutionRequestBuilder;
+struct PRWExecutionRequestT;
+
+struct PRWBurnReport;
+struct PRWBurnReportBuilder;
+struct PRWBurnReportT;
+
+struct PRWPropagationSample;
+struct PRWPropagationSampleBuilder;
+struct PRWPropagationSampleT;
+
+struct PRWExecutionResult;
+struct PRWExecutionResultBuilder;
+struct PRWExecutionResultT;
+
+struct PRWResidentRequest;
+struct PRWResidentRequestBuilder;
+struct PRWResidentRequestT;
+
+struct PRWPrepareRequest;
+struct PRWPrepareRequestBuilder;
+struct PRWPrepareRequestT;
+
+struct PRWFitQuality;
+struct PRWFitQualityBuilder;
+struct PRWFitQualityT;
+
+struct PRWPrepareResult;
+struct PRWPrepareResultBuilder;
+struct PRWPrepareResultT;
+
+struct PRWDescribeRequest;
+struct PRWDescribeRequestBuilder;
+struct PRWDescribeRequestT;
+
+struct PRWTrajectorySource;
+struct PRWTrajectorySourceBuilder;
+struct PRWTrajectorySourceT;
+
+struct PRWDescribeResult;
+struct PRWDescribeResultBuilder;
+struct PRWDescribeResultT;
+
+struct PRWNativeInput;
+struct PRWNativeInputBuilder;
+struct PRWNativeInputT;
+
+struct PRWEphemerisRequest;
+struct PRWEphemerisRequestBuilder;
+struct PRWEphemerisRequestT;
+
+struct PRWEphemerisResult;
+struct PRWEphemerisResultBuilder;
+struct PRWEphemerisResultT;
+
+struct PRWAtmosphereRequest;
+struct PRWAtmosphereRequestBuilder;
+struct PRWAtmosphereRequestT;
+
+struct PRWSpeciesDensity;
+struct PRWSpeciesDensityBuilder;
+struct PRWSpeciesDensityT;
+
+struct PRWAtmosphereResult;
+struct PRWAtmosphereResultBuilder;
+struct PRWAtmosphereResultT;
+
+struct PRWVersionResult;
+struct PRWVersionResultBuilder;
+struct PRWVersionResultT;
 
 struct PRW;
 struct PRWBuilder;
@@ -200,6 +322,444 @@ inline const char *EnumNameprwSourceKind(prwSourceKind e) {
   if (::flatbuffers::IsOutRange(e, prwSourceKind::OMM, prwSourceKind::KEPLERIAN)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesprwSourceKind()[index];
+}
+
+/// Propagator Runtime Wire — envelope that carries either an init request,
+/// a batch request, or a batch response across a runtime boundary.
+/// New numeric choices are append-only and are not legacy C++ enum ordinals.
+enum class prwSolverAlgorithm : uint8_t {
+  UNSPECIFIED = 0,
+  RK4 = 1,
+  RKF45 = 2,
+  RKF78 = 3,
+  RK78 = 4,
+  RKDP87 = 5,
+  ABM = 6,
+  BS = 7,
+  COWELL = 8,
+  ENCKE = 9,
+  EQUINOCTIAL_VOP = 10,
+  MIN = UNSPECIFIED,
+  MAX = EQUINOCTIAL_VOP
+};
+
+inline const prwSolverAlgorithm (&EnumValuesprwSolverAlgorithm())[11] {
+  static const prwSolverAlgorithm values[] = {
+    prwSolverAlgorithm::UNSPECIFIED,
+    prwSolverAlgorithm::RK4,
+    prwSolverAlgorithm::RKF45,
+    prwSolverAlgorithm::RKF78,
+    prwSolverAlgorithm::RK78,
+    prwSolverAlgorithm::RKDP87,
+    prwSolverAlgorithm::ABM,
+    prwSolverAlgorithm::BS,
+    prwSolverAlgorithm::COWELL,
+    prwSolverAlgorithm::ENCKE,
+    prwSolverAlgorithm::EQUINOCTIAL_VOP
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwSolverAlgorithm() {
+  static const char * const names[12] = {
+    "UNSPECIFIED",
+    "RK4",
+    "RKF45",
+    "RKF78",
+    "RK78",
+    "RKDP87",
+    "ABM",
+    "BS",
+    "COWELL",
+    "ENCKE",
+    "EQUINOCTIAL_VOP",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwSolverAlgorithm(prwSolverAlgorithm e) {
+  if (::flatbuffers::IsOutRange(e, prwSolverAlgorithm::UNSPECIFIED, prwSolverAlgorithm::EQUINOCTIAL_VOP)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwSolverAlgorithm()[index];
+}
+
+enum class prwGravitySelection : uint8_t {
+  INFER_FLAGS = 0,
+  POINT_MASS = 1,
+  J2_ONLY = 2,
+  J2_TO_J4 = 3,
+  SPHERICAL_HARMONICS = 4,
+  EGM2008 = 5,
+  MIN = INFER_FLAGS,
+  MAX = EGM2008
+};
+
+inline const prwGravitySelection (&EnumValuesprwGravitySelection())[6] {
+  static const prwGravitySelection values[] = {
+    prwGravitySelection::INFER_FLAGS,
+    prwGravitySelection::POINT_MASS,
+    prwGravitySelection::J2_ONLY,
+    prwGravitySelection::J2_TO_J4,
+    prwGravitySelection::SPHERICAL_HARMONICS,
+    prwGravitySelection::EGM2008
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwGravitySelection() {
+  static const char * const names[7] = {
+    "INFER_FLAGS",
+    "POINT_MASS",
+    "J2_ONLY",
+    "J2_TO_J4",
+    "SPHERICAL_HARMONICS",
+    "EGM2008",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwGravitySelection(prwGravitySelection e) {
+  if (::flatbuffers::IsOutRange(e, prwGravitySelection::INFER_FLAGS, prwGravitySelection::EGM2008)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwGravitySelection()[index];
+}
+
+enum class prwAtmosphereFamily : uint8_t {
+  UNSPECIFIED = 0,
+  NRLMSISE00 = 1,
+  EXPONENTIAL = 2,
+  USSA1976 = 3,
+  HARRIS_PRIESTER = 4,
+  MIN = UNSPECIFIED,
+  MAX = HARRIS_PRIESTER
+};
+
+inline const prwAtmosphereFamily (&EnumValuesprwAtmosphereFamily())[5] {
+  static const prwAtmosphereFamily values[] = {
+    prwAtmosphereFamily::UNSPECIFIED,
+    prwAtmosphereFamily::NRLMSISE00,
+    prwAtmosphereFamily::EXPONENTIAL,
+    prwAtmosphereFamily::USSA1976,
+    prwAtmosphereFamily::HARRIS_PRIESTER
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwAtmosphereFamily() {
+  static const char * const names[6] = {
+    "UNSPECIFIED",
+    "NRLMSISE00",
+    "EXPONENTIAL",
+    "USSA1976",
+    "HARRIS_PRIESTER",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwAtmosphereFamily(prwAtmosphereFamily e) {
+  if (::flatbuffers::IsOutRange(e, prwAtmosphereFamily::UNSPECIFIED, prwAtmosphereFamily::HARRIS_PRIESTER)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwAtmosphereFamily()[index];
+}
+
+enum class prwDerivativeTechnique : uint8_t {
+  UNSPECIFIED = 0,
+  ANALYTIC = 1,
+  FINITE_DIFFERENCE = 2,
+  MIN = UNSPECIFIED,
+  MAX = FINITE_DIFFERENCE
+};
+
+inline const prwDerivativeTechnique (&EnumValuesprwDerivativeTechnique())[3] {
+  static const prwDerivativeTechnique values[] = {
+    prwDerivativeTechnique::UNSPECIFIED,
+    prwDerivativeTechnique::ANALYTIC,
+    prwDerivativeTechnique::FINITE_DIFFERENCE
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwDerivativeTechnique() {
+  static const char * const names[4] = {
+    "UNSPECIFIED",
+    "ANALYTIC",
+    "FINITE_DIFFERENCE",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwDerivativeTechnique(prwDerivativeTechnique e) {
+  if (::flatbuffers::IsOutRange(e, prwDerivativeTechnique::UNSPECIFIED, prwDerivativeTechnique::FINITE_DIFFERENCE)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwDerivativeTechnique()[index];
+}
+
+enum class prwDensityTreatment : uint8_t {
+  UNSPECIFIED = 0,
+  NEGLECTED = 1,
+  FINITE_DIFFERENCE = 2,
+  MIN = UNSPECIFIED,
+  MAX = FINITE_DIFFERENCE
+};
+
+inline const prwDensityTreatment (&EnumValuesprwDensityTreatment())[3] {
+  static const prwDensityTreatment values[] = {
+    prwDensityTreatment::UNSPECIFIED,
+    prwDensityTreatment::NEGLECTED,
+    prwDensityTreatment::FINITE_DIFFERENCE
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwDensityTreatment() {
+  static const char * const names[4] = {
+    "UNSPECIFIED",
+    "NEGLECTED",
+    "FINITE_DIFFERENCE",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwDensityTreatment(prwDensityTreatment e) {
+  if (::flatbuffers::IsOutRange(e, prwDensityTreatment::UNSPECIFIED, prwDensityTreatment::FINITE_DIFFERENCE)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwDensityTreatment()[index];
+}
+
+enum class prwSteeringBasis : uint8_t {
+  UNSPECIFIED = 0,
+  INTEGRATION_FRAME = 1,
+  RTN_AXES = 2,
+  VNC_AXES = 3,
+  ALONG_VELOCITY = 4,
+  OPPOSITE_VELOCITY = 5,
+  MIN = UNSPECIFIED,
+  MAX = OPPOSITE_VELOCITY
+};
+
+inline const prwSteeringBasis (&EnumValuesprwSteeringBasis())[6] {
+  static const prwSteeringBasis values[] = {
+    prwSteeringBasis::UNSPECIFIED,
+    prwSteeringBasis::INTEGRATION_FRAME,
+    prwSteeringBasis::RTN_AXES,
+    prwSteeringBasis::VNC_AXES,
+    prwSteeringBasis::ALONG_VELOCITY,
+    prwSteeringBasis::OPPOSITE_VELOCITY
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwSteeringBasis() {
+  static const char * const names[7] = {
+    "UNSPECIFIED",
+    "INTEGRATION_FRAME",
+    "RTN_AXES",
+    "VNC_AXES",
+    "ALONG_VELOCITY",
+    "OPPOSITE_VELOCITY",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwSteeringBasis(prwSteeringBasis e) {
+  if (::flatbuffers::IsOutRange(e, prwSteeringBasis::UNSPECIFIED, prwSteeringBasis::OPPOSITE_VELOCITY)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwSteeringBasis()[index];
+}
+
+enum class prwThrustPrescription : uint8_t {
+  UNSPECIFIED = 0,
+  FORCE = 1,
+  ACCELERATION = 2,
+  MIN = UNSPECIFIED,
+  MAX = ACCELERATION
+};
+
+inline const prwThrustPrescription (&EnumValuesprwThrustPrescription())[3] {
+  static const prwThrustPrescription values[] = {
+    prwThrustPrescription::UNSPECIFIED,
+    prwThrustPrescription::FORCE,
+    prwThrustPrescription::ACCELERATION
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwThrustPrescription() {
+  static const char * const names[4] = {
+    "UNSPECIFIED",
+    "FORCE",
+    "ACCELERATION",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwThrustPrescription(prwThrustPrescription e) {
+  if (::flatbuffers::IsOutRange(e, prwThrustPrescription::UNSPECIFIED, prwThrustPrescription::ACCELERATION)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwThrustPrescription()[index];
+}
+
+enum class prwQualityEvidence : uint8_t {
+  UNMEASURED = 0,
+  SAMPLED_RESIDUAL = 1,
+  PROVEN_BOUND = 2,
+  MIN = UNMEASURED,
+  MAX = PROVEN_BOUND
+};
+
+inline const prwQualityEvidence (&EnumValuesprwQualityEvidence())[3] {
+  static const prwQualityEvidence values[] = {
+    prwQualityEvidence::UNMEASURED,
+    prwQualityEvidence::SAMPLED_RESIDUAL,
+    prwQualityEvidence::PROVEN_BOUND
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwQualityEvidence() {
+  static const char * const names[4] = {
+    "UNMEASURED",
+    "SAMPLED_RESIDUAL",
+    "PROVEN_BOUND",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwQualityEvidence(prwQualityEvidence e) {
+  if (::flatbuffers::IsOutRange(e, prwQualityEvidence::UNMEASURED, prwQualityEvidence::PROVEN_BOUND)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwQualityEvidence()[index];
+}
+
+/// Process noise added to a propagated covariance. WHITE_ACCELERATION is
+/// zero-mean white acceleration noise (state noise compensation): over each
+/// discretization interval h it adds, per axis with spectral density q,
+/// q * [[h^3/3, h^2/2], [h^2/2, h]] to the position-velocity block, which the
+/// linearized dynamics then carry forward with the covariance.
+enum class prwProcessNoiseModel : uint8_t {
+  UNSPECIFIED = 0,
+  NONE = 1,
+  WHITE_ACCELERATION = 2,
+  MIN = UNSPECIFIED,
+  MAX = WHITE_ACCELERATION
+};
+
+inline const prwProcessNoiseModel (&EnumValuesprwProcessNoiseModel())[3] {
+  static const prwProcessNoiseModel values[] = {
+    prwProcessNoiseModel::UNSPECIFIED,
+    prwProcessNoiseModel::NONE,
+    prwProcessNoiseModel::WHITE_ACCELERATION
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwProcessNoiseModel() {
+  static const char * const names[4] = {
+    "UNSPECIFIED",
+    "NONE",
+    "WHITE_ACCELERATION",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwProcessNoiseModel(prwProcessNoiseModel e) {
+  if (::flatbuffers::IsOutRange(e, prwProcessNoiseModel::UNSPECIFIED, prwProcessNoiseModel::WHITE_ACCELERATION)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwProcessNoiseModel()[index];
+}
+
+/// Axes of the process noise spectral densities.
+enum class prwProcessNoiseAxes : uint8_t {
+  UNSPECIFIED = 0,
+  INERTIAL = 1,
+  RADIAL_TRANSVERSE_NORMAL = 2,
+  MIN = UNSPECIFIED,
+  MAX = RADIAL_TRANSVERSE_NORMAL
+};
+
+inline const prwProcessNoiseAxes (&EnumValuesprwProcessNoiseAxes())[3] {
+  static const prwProcessNoiseAxes values[] = {
+    prwProcessNoiseAxes::UNSPECIFIED,
+    prwProcessNoiseAxes::INERTIAL,
+    prwProcessNoiseAxes::RADIAL_TRANSVERSE_NORMAL
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwProcessNoiseAxes() {
+  static const char * const names[4] = {
+    "UNSPECIFIED",
+    "INERTIAL",
+    "RADIAL_TRANSVERSE_NORMAL",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwProcessNoiseAxes(prwProcessNoiseAxes e) {
+  if (::flatbuffers::IsOutRange(e, prwProcessNoiseAxes::UNSPECIFIED, prwProcessNoiseAxes::RADIAL_TRANSVERSE_NORMAL)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwProcessNoiseAxes()[index];
+}
+
+enum class prwDensitySpecies : uint8_t {
+  UNSPECIFIED = 0,
+  HELIUM = 1,
+  ATOMIC_OXYGEN = 2,
+  MOLECULAR_NITROGEN = 3,
+  MOLECULAR_OXYGEN = 4,
+  ARGON = 5,
+  HYDROGEN = 6,
+  ATOMIC_NITROGEN = 7,
+  ANOMALOUS_OXYGEN = 8,
+  MIN = UNSPECIFIED,
+  MAX = ANOMALOUS_OXYGEN
+};
+
+inline const prwDensitySpecies (&EnumValuesprwDensitySpecies())[9] {
+  static const prwDensitySpecies values[] = {
+    prwDensitySpecies::UNSPECIFIED,
+    prwDensitySpecies::HELIUM,
+    prwDensitySpecies::ATOMIC_OXYGEN,
+    prwDensitySpecies::MOLECULAR_NITROGEN,
+    prwDensitySpecies::MOLECULAR_OXYGEN,
+    prwDensitySpecies::ARGON,
+    prwDensitySpecies::HYDROGEN,
+    prwDensitySpecies::ATOMIC_NITROGEN,
+    prwDensitySpecies::ANOMALOUS_OXYGEN
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwDensitySpecies() {
+  static const char * const names[10] = {
+    "UNSPECIFIED",
+    "HELIUM",
+    "ATOMIC_OXYGEN",
+    "MOLECULAR_NITROGEN",
+    "MOLECULAR_OXYGEN",
+    "ARGON",
+    "HYDROGEN",
+    "ATOMIC_NITROGEN",
+    "ANOMALOUS_OXYGEN",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwDensitySpecies(prwDensitySpecies e) {
+  if (::flatbuffers::IsOutRange(e, prwDensitySpecies::UNSPECIFIED, prwDensitySpecies::ANOMALOUS_OXYGEN)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwDensitySpecies()[index];
 }
 
 struct PRWInitT : public ::flatbuffers::NativeTable {
@@ -988,19 +1548,4212 @@ inline ::flatbuffers::Offset<PRWBatchResponse> CreatePRWBatchResponseDirect(
 
 ::flatbuffers::Offset<PRWBatchResponse> CreatePRWBatchResponse(::flatbuffers::FlatBufferBuilder &_fbb, const PRWBatchResponseT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct PRWInstanceT : public ::flatbuffers::NativeTable {
+  typedef PRWInstance TableType;
+  std::string MODULE_ID{};
+  std::string INSTANCE_ID{};
+  uint64_t GENERATION = 0;
+};
+
+/// Instance identity is host-provided, opaque, and not a physical quantity.
+struct PRWInstance FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWInstanceT NativeTableType;
+  typedef PRWInstanceBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_MODULE_ID = 4,
+    VT_INSTANCE_ID = 6,
+    VT_GENERATION = 8
+  };
+  const ::flatbuffers::String *MODULE_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MODULE_ID);
+  }
+  const ::flatbuffers::String *INSTANCE_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_INSTANCE_ID);
+  }
+  /// Incremented on reinitialization or configuration invalidation.
+  uint64_t GENERATION() const {
+    return GetField<uint64_t>(VT_GENERATION, 0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_MODULE_ID) &&
+           verifier.VerifyString(MODULE_ID()) &&
+           VerifyOffsetRequired(verifier, VT_INSTANCE_ID) &&
+           verifier.VerifyString(INSTANCE_ID()) &&
+           VerifyField<uint64_t>(verifier, VT_GENERATION, 8) &&
+           verifier.EndTable();
+  }
+  PRWInstanceT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWInstanceT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWInstance> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWInstanceT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWInstanceBuilder {
+  typedef PRWInstance Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_MODULE_ID(::flatbuffers::Offset<::flatbuffers::String> MODULE_ID) {
+    fbb_.AddOffset(PRWInstance::VT_MODULE_ID, MODULE_ID);
+  }
+  void add_INSTANCE_ID(::flatbuffers::Offset<::flatbuffers::String> INSTANCE_ID) {
+    fbb_.AddOffset(PRWInstance::VT_INSTANCE_ID, INSTANCE_ID);
+  }
+  void add_GENERATION(uint64_t GENERATION) {
+    fbb_.AddElement<uint64_t>(PRWInstance::VT_GENERATION, GENERATION, 0);
+  }
+  explicit PRWInstanceBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWInstance> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWInstance>(end);
+    fbb_.Required(o, PRWInstance::VT_MODULE_ID);
+    fbb_.Required(o, PRWInstance::VT_INSTANCE_ID);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWInstance> CreatePRWInstance(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> MODULE_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> INSTANCE_ID = 0,
+    uint64_t GENERATION = 0) {
+  PRWInstanceBuilder builder_(_fbb);
+  builder_.add_GENERATION(GENERATION);
+  builder_.add_INSTANCE_ID(INSTANCE_ID);
+  builder_.add_MODULE_ID(MODULE_ID);
+  return builder_.Finish();
+}
+
+struct PRWInstance::Traits {
+  using type = PRWInstance;
+  static auto constexpr Create = CreatePRWInstance;
+};
+
+inline ::flatbuffers::Offset<PRWInstance> CreatePRWInstanceDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *MODULE_ID = nullptr,
+    const char *INSTANCE_ID = nullptr,
+    uint64_t GENERATION = 0) {
+  auto MODULE_ID__ = MODULE_ID ? _fbb.CreateString(MODULE_ID) : 0;
+  auto INSTANCE_ID__ = INSTANCE_ID ? _fbb.CreateString(INSTANCE_ID) : 0;
+  return CreatePRWInstance(
+      _fbb,
+      MODULE_ID__,
+      INSTANCE_ID__,
+      GENERATION);
+}
+
+::flatbuffers::Offset<PRWInstance> CreatePRWInstance(::flatbuffers::FlatBufferBuilder &_fbb, const PRWInstanceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWIntegratorSettingsT : public ::flatbuffers::NativeTable {
+  typedef PRWIntegratorSettings TableType;
+  prwSolverAlgorithm ALGORITHM = prwSolverAlgorithm::UNSPECIFIED;
+  double INITIAL_STEP_SECONDS = 60.0;
+  double MINIMUM_STEP_SECONDS = 1.0;
+  double MAXIMUM_STEP_SECONDS = 3600.0;
+  std::vector<double> ABSOLUTE_TOLERANCES{};
+  double RELATIVE_TOLERANCE = 1e-12;
+  uint32_t MAXIMUM_STEPS = 100000;
+};
+
+/// Units are SI. A scalar legacy tolerance must be expanded by the adapter.
+struct PRWIntegratorSettings FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWIntegratorSettingsT NativeTableType;
+  typedef PRWIntegratorSettingsBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_ALGORITHM = 4,
+    VT_INITIAL_STEP_SECONDS = 6,
+    VT_MINIMUM_STEP_SECONDS = 8,
+    VT_MAXIMUM_STEP_SECONDS = 10,
+    VT_ABSOLUTE_TOLERANCES = 12,
+    VT_RELATIVE_TOLERANCE = 14,
+    VT_MAXIMUM_STEPS = 16
+  };
+  prwSolverAlgorithm ALGORITHM() const {
+    return static_cast<prwSolverAlgorithm>(GetField<uint8_t>(VT_ALGORITHM, 0));
+  }
+  double INITIAL_STEP_SECONDS() const {
+    return GetField<double>(VT_INITIAL_STEP_SECONDS, 60.0);
+  }
+  double MINIMUM_STEP_SECONDS() const {
+    return GetField<double>(VT_MINIMUM_STEP_SECONDS, 1.0);
+  }
+  double MAXIMUM_STEP_SECONDS() const {
+    return GetField<double>(VT_MAXIMUM_STEP_SECONDS, 3600.0);
+  }
+  /// Six or seven positive tolerances, respectively m, m/s and optional kg.
+  const ::flatbuffers::Vector<double> *ABSOLUTE_TOLERANCES() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_ABSOLUTE_TOLERANCES);
+  }
+  double RELATIVE_TOLERANCE() const {
+    return GetField<double>(VT_RELATIVE_TOLERANCE, 1e-12);
+  }
+  uint32_t MAXIMUM_STEPS() const {
+    return GetField<uint32_t>(VT_MAXIMUM_STEPS, 100000);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_ALGORITHM, 1) &&
+           VerifyField<double>(verifier, VT_INITIAL_STEP_SECONDS, 8) &&
+           VerifyField<double>(verifier, VT_MINIMUM_STEP_SECONDS, 8) &&
+           VerifyField<double>(verifier, VT_MAXIMUM_STEP_SECONDS, 8) &&
+           VerifyOffsetRequired(verifier, VT_ABSOLUTE_TOLERANCES) &&
+           verifier.VerifyVector(ABSOLUTE_TOLERANCES()) &&
+           VerifyField<double>(verifier, VT_RELATIVE_TOLERANCE, 8) &&
+           VerifyField<uint32_t>(verifier, VT_MAXIMUM_STEPS, 4) &&
+           verifier.EndTable();
+  }
+  PRWIntegratorSettingsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWIntegratorSettingsT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWIntegratorSettings> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWIntegratorSettingsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWIntegratorSettingsBuilder {
+  typedef PRWIntegratorSettings Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_ALGORITHM(prwSolverAlgorithm ALGORITHM) {
+    fbb_.AddElement<uint8_t>(PRWIntegratorSettings::VT_ALGORITHM, static_cast<uint8_t>(ALGORITHM), 0);
+  }
+  void add_INITIAL_STEP_SECONDS(double INITIAL_STEP_SECONDS) {
+    fbb_.AddElement<double>(PRWIntegratorSettings::VT_INITIAL_STEP_SECONDS, INITIAL_STEP_SECONDS, 60.0);
+  }
+  void add_MINIMUM_STEP_SECONDS(double MINIMUM_STEP_SECONDS) {
+    fbb_.AddElement<double>(PRWIntegratorSettings::VT_MINIMUM_STEP_SECONDS, MINIMUM_STEP_SECONDS, 1.0);
+  }
+  void add_MAXIMUM_STEP_SECONDS(double MAXIMUM_STEP_SECONDS) {
+    fbb_.AddElement<double>(PRWIntegratorSettings::VT_MAXIMUM_STEP_SECONDS, MAXIMUM_STEP_SECONDS, 3600.0);
+  }
+  void add_ABSOLUTE_TOLERANCES(::flatbuffers::Offset<::flatbuffers::Vector<double>> ABSOLUTE_TOLERANCES) {
+    fbb_.AddOffset(PRWIntegratorSettings::VT_ABSOLUTE_TOLERANCES, ABSOLUTE_TOLERANCES);
+  }
+  void add_RELATIVE_TOLERANCE(double RELATIVE_TOLERANCE) {
+    fbb_.AddElement<double>(PRWIntegratorSettings::VT_RELATIVE_TOLERANCE, RELATIVE_TOLERANCE, 1e-12);
+  }
+  void add_MAXIMUM_STEPS(uint32_t MAXIMUM_STEPS) {
+    fbb_.AddElement<uint32_t>(PRWIntegratorSettings::VT_MAXIMUM_STEPS, MAXIMUM_STEPS, 100000);
+  }
+  explicit PRWIntegratorSettingsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWIntegratorSettings> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWIntegratorSettings>(end);
+    fbb_.Required(o, PRWIntegratorSettings::VT_ABSOLUTE_TOLERANCES);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWIntegratorSettings> CreatePRWIntegratorSettings(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    prwSolverAlgorithm ALGORITHM = prwSolverAlgorithm::UNSPECIFIED,
+    double INITIAL_STEP_SECONDS = 60.0,
+    double MINIMUM_STEP_SECONDS = 1.0,
+    double MAXIMUM_STEP_SECONDS = 3600.0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> ABSOLUTE_TOLERANCES = 0,
+    double RELATIVE_TOLERANCE = 1e-12,
+    uint32_t MAXIMUM_STEPS = 100000) {
+  PRWIntegratorSettingsBuilder builder_(_fbb);
+  builder_.add_RELATIVE_TOLERANCE(RELATIVE_TOLERANCE);
+  builder_.add_MAXIMUM_STEP_SECONDS(MAXIMUM_STEP_SECONDS);
+  builder_.add_MINIMUM_STEP_SECONDS(MINIMUM_STEP_SECONDS);
+  builder_.add_INITIAL_STEP_SECONDS(INITIAL_STEP_SECONDS);
+  builder_.add_MAXIMUM_STEPS(MAXIMUM_STEPS);
+  builder_.add_ABSOLUTE_TOLERANCES(ABSOLUTE_TOLERANCES);
+  builder_.add_ALGORITHM(ALGORITHM);
+  return builder_.Finish();
+}
+
+struct PRWIntegratorSettings::Traits {
+  using type = PRWIntegratorSettings;
+  static auto constexpr Create = CreatePRWIntegratorSettings;
+};
+
+inline ::flatbuffers::Offset<PRWIntegratorSettings> CreatePRWIntegratorSettingsDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    prwSolverAlgorithm ALGORITHM = prwSolverAlgorithm::UNSPECIFIED,
+    double INITIAL_STEP_SECONDS = 60.0,
+    double MINIMUM_STEP_SECONDS = 1.0,
+    double MAXIMUM_STEP_SECONDS = 3600.0,
+    const std::vector<double> *ABSOLUTE_TOLERANCES = nullptr,
+    double RELATIVE_TOLERANCE = 1e-12,
+    uint32_t MAXIMUM_STEPS = 100000) {
+  auto ABSOLUTE_TOLERANCES__ = ABSOLUTE_TOLERANCES ? _fbb.CreateVector<double>(*ABSOLUTE_TOLERANCES) : 0;
+  return CreatePRWIntegratorSettings(
+      _fbb,
+      ALGORITHM,
+      INITIAL_STEP_SECONDS,
+      MINIMUM_STEP_SECONDS,
+      MAXIMUM_STEP_SECONDS,
+      ABSOLUTE_TOLERANCES__,
+      RELATIVE_TOLERANCE,
+      MAXIMUM_STEPS);
+}
+
+::flatbuffers::Offset<PRWIntegratorSettings> CreatePRWIntegratorSettings(::flatbuffers::FlatBufferBuilder &_fbb, const PRWIntegratorSettingsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWSpaceWeatherT : public ::flatbuffers::NativeTable {
+  typedef PRWSpaceWeather TableType;
+  std::unique_ptr<TIMInstantT> EPOCH{};
+  double F107 = 150.0;
+  double F107_AVERAGE = 150.0;
+  double AP_INDEX = 15.0;
+  double KP_INDEX = 3.0;
+  PRWSpaceWeatherT() = default;
+  PRWSpaceWeatherT(const PRWSpaceWeatherT &o);
+  PRWSpaceWeatherT(PRWSpaceWeatherT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWSpaceWeatherT &operator=(PRWSpaceWeatherT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Instantaneous space weather. TIM epoch is UTC; flux in SFU (1e-22 W/m2/Hz).
+struct PRWSpaceWeather FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWSpaceWeatherT NativeTableType;
+  typedef PRWSpaceWeatherBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_EPOCH = 4,
+    VT_F107 = 6,
+    VT_F107_AVERAGE = 8,
+    VT_AP_INDEX = 10,
+    VT_KP_INDEX = 12
+  };
+  const TIMInstant *EPOCH() const {
+    return GetPointer<const TIMInstant *>(VT_EPOCH);
+  }
+  double F107() const {
+    return GetField<double>(VT_F107, 150.0);
+  }
+  double F107_AVERAGE() const {
+    return GetField<double>(VT_F107_AVERAGE, 150.0);
+  }
+  /// Conventional daily Ap and three-hour Kp index values; not accelerations.
+  double AP_INDEX() const {
+    return GetField<double>(VT_AP_INDEX, 15.0);
+  }
+  double KP_INDEX() const {
+    return GetField<double>(VT_KP_INDEX, 3.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_EPOCH) &&
+           verifier.VerifyTable(EPOCH()) &&
+           VerifyField<double>(verifier, VT_F107, 8) &&
+           VerifyField<double>(verifier, VT_F107_AVERAGE, 8) &&
+           VerifyField<double>(verifier, VT_AP_INDEX, 8) &&
+           VerifyField<double>(verifier, VT_KP_INDEX, 8) &&
+           verifier.EndTable();
+  }
+  PRWSpaceWeatherT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWSpaceWeatherT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWSpaceWeather> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWSpaceWeatherT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWSpaceWeatherBuilder {
+  typedef PRWSpaceWeather Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_EPOCH(::flatbuffers::Offset<TIMInstant> EPOCH) {
+    fbb_.AddOffset(PRWSpaceWeather::VT_EPOCH, EPOCH);
+  }
+  void add_F107(double F107) {
+    fbb_.AddElement<double>(PRWSpaceWeather::VT_F107, F107, 150.0);
+  }
+  void add_F107_AVERAGE(double F107_AVERAGE) {
+    fbb_.AddElement<double>(PRWSpaceWeather::VT_F107_AVERAGE, F107_AVERAGE, 150.0);
+  }
+  void add_AP_INDEX(double AP_INDEX) {
+    fbb_.AddElement<double>(PRWSpaceWeather::VT_AP_INDEX, AP_INDEX, 15.0);
+  }
+  void add_KP_INDEX(double KP_INDEX) {
+    fbb_.AddElement<double>(PRWSpaceWeather::VT_KP_INDEX, KP_INDEX, 3.0);
+  }
+  explicit PRWSpaceWeatherBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWSpaceWeather> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWSpaceWeather>(end);
+    fbb_.Required(o, PRWSpaceWeather::VT_EPOCH);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWSpaceWeather> CreatePRWSpaceWeather(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<TIMInstant> EPOCH = 0,
+    double F107 = 150.0,
+    double F107_AVERAGE = 150.0,
+    double AP_INDEX = 15.0,
+    double KP_INDEX = 3.0) {
+  PRWSpaceWeatherBuilder builder_(_fbb);
+  builder_.add_KP_INDEX(KP_INDEX);
+  builder_.add_AP_INDEX(AP_INDEX);
+  builder_.add_F107_AVERAGE(F107_AVERAGE);
+  builder_.add_F107(F107);
+  builder_.add_EPOCH(EPOCH);
+  return builder_.Finish();
+}
+
+struct PRWSpaceWeather::Traits {
+  using type = PRWSpaceWeather;
+  static auto constexpr Create = CreatePRWSpaceWeather;
+};
+
+::flatbuffers::Offset<PRWSpaceWeather> CreatePRWSpaceWeather(::flatbuffers::FlatBufferBuilder &_fbb, const PRWSpaceWeatherT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWForceConfigurationT : public ::flatbuffers::NativeTable {
+  typedef PRWForceConfiguration TableType;
+  prwGravitySelection GRAVITY_CHOICE = prwGravitySelection::INFER_FLAGS;
+  bool ENABLE_POINT_MASS = true;
+  double GRAVITATIONAL_PARAMETER = 0.0;
+  bool ENABLE_J2 = true;
+  bool ENABLE_J3 = false;
+  bool ENABLE_J4 = false;
+  bool ENABLE_HIGHER_ZONALS = false;
+  uint16_t MAXIMUM_DEGREE = 0;
+  bool HAS_MAXIMUM_DEGREE = false;
+  uint16_t MAXIMUM_ORDER = 0;
+  bool HAS_MAXIMUM_ORDER = false;
+  bool ENABLE_THIRD_BODY = false;
+  std::vector<int32_t> THIRD_BODY_IDS{};
+  bool ENABLE_SRP = false;
+  bool ENABLE_DRAG = false;
+  double INITIAL_MASS_KG = 1000.0;
+  double AREA_M2 = 10.0;
+  double REFLECTIVITY_COEFFICIENT = 1.5;
+  double DRAG_COEFFICIENT = 2.2;
+  prwAtmosphereFamily ATMOSPHERE_MODEL = prwAtmosphereFamily::NRLMSISE00;
+  std::unique_ptr<PRWSpaceWeatherT> WEATHER{};
+  std::string EPHEMERIS_SOURCE{};
+  PRWForceConfigurationT() = default;
+  PRWForceConfigurationT(const PRWForceConfigurationT &o);
+  PRWForceConfigurationT(PRWForceConfigurationT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWForceConfigurationT &operator=(PRWForceConfigurationT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Executable subset currently reachable through HPOP invoke. No implied
+/// support for coefficients, drag models or bodies the provider cannot supply.
+struct PRWForceConfiguration FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWForceConfigurationT NativeTableType;
+  typedef PRWForceConfigurationBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_GRAVITY_CHOICE = 4,
+    VT_ENABLE_POINT_MASS = 6,
+    VT_GRAVITATIONAL_PARAMETER = 8,
+    VT_ENABLE_J2 = 10,
+    VT_ENABLE_J3 = 12,
+    VT_ENABLE_J4 = 14,
+    VT_ENABLE_HIGHER_ZONALS = 16,
+    VT_MAXIMUM_DEGREE = 18,
+    VT_HAS_MAXIMUM_DEGREE = 20,
+    VT_MAXIMUM_ORDER = 22,
+    VT_HAS_MAXIMUM_ORDER = 24,
+    VT_ENABLE_THIRD_BODY = 26,
+    VT_THIRD_BODY_IDS = 28,
+    VT_ENABLE_SRP = 30,
+    VT_ENABLE_DRAG = 32,
+    VT_INITIAL_MASS_KG = 34,
+    VT_AREA_M2 = 36,
+    VT_REFLECTIVITY_COEFFICIENT = 38,
+    VT_DRAG_COEFFICIENT = 40,
+    VT_ATMOSPHERE_MODEL = 42,
+    VT_WEATHER = 44,
+    VT_EPHEMERIS_SOURCE = 46
+  };
+  prwGravitySelection GRAVITY_CHOICE() const {
+    return static_cast<prwGravitySelection>(GetField<uint8_t>(VT_GRAVITY_CHOICE, 0));
+  }
+  bool ENABLE_POINT_MASS() const {
+    return GetField<uint8_t>(VT_ENABLE_POINT_MASS, 1) != 0;
+  }
+  /// m3/s2; required positive when a central gravity term is enabled.
+  double GRAVITATIONAL_PARAMETER() const {
+    return GetField<double>(VT_GRAVITATIONAL_PARAMETER, 0.0);
+  }
+  bool ENABLE_J2() const {
+    return GetField<uint8_t>(VT_ENABLE_J2, 1) != 0;
+  }
+  bool ENABLE_J3() const {
+    return GetField<uint8_t>(VT_ENABLE_J3, 0) != 0;
+  }
+  bool ENABLE_J4() const {
+    return GetField<uint8_t>(VT_ENABLE_J4, 0) != 0;
+  }
+  bool ENABLE_HIGHER_ZONALS() const {
+    return GetField<uint8_t>(VT_ENABLE_HIGHER_ZONALS, 0) != 0;
+  }
+  /// Optional truncations; absent selects the explicitly reported model default.
+  uint16_t MAXIMUM_DEGREE() const {
+    return GetField<uint16_t>(VT_MAXIMUM_DEGREE, 0);
+  }
+  /// True when MAXIMUM_DEGREE carries a value; false means absent.
+  bool HAS_MAXIMUM_DEGREE() const {
+    return GetField<uint8_t>(VT_HAS_MAXIMUM_DEGREE, 0) != 0;
+  }
+  uint16_t MAXIMUM_ORDER() const {
+    return GetField<uint16_t>(VT_MAXIMUM_ORDER, 0);
+  }
+  /// True when MAXIMUM_ORDER carries a value; false means absent.
+  bool HAS_MAXIMUM_ORDER() const {
+    return GetField<uint8_t>(VT_HAS_MAXIMUM_ORDER, 0) != 0;
+  }
+  bool ENABLE_THIRD_BODY() const {
+    return GetField<uint8_t>(VT_ENABLE_THIRD_BODY, 0) != 0;
+  }
+  /// NAIF IDs; explicit vector, e.g. [10,301]. Empty means no third bodies.
+  const ::flatbuffers::Vector<int32_t> *THIRD_BODY_IDS() const {
+    return GetPointer<const ::flatbuffers::Vector<int32_t> *>(VT_THIRD_BODY_IDS);
+  }
+  bool ENABLE_SRP() const {
+    return GetField<uint8_t>(VT_ENABLE_SRP, 0) != 0;
+  }
+  bool ENABLE_DRAG() const {
+    return GetField<uint8_t>(VT_ENABLE_DRAG, 0) != 0;
+  }
+  double INITIAL_MASS_KG() const {
+    return GetField<double>(VT_INITIAL_MASS_KG, 1000.0);
+  }
+  double AREA_M2() const {
+    return GetField<double>(VT_AREA_M2, 10.0);
+  }
+  double REFLECTIVITY_COEFFICIENT() const {
+    return GetField<double>(VT_REFLECTIVITY_COEFFICIENT, 1.5);
+  }
+  double DRAG_COEFFICIENT() const {
+    return GetField<double>(VT_DRAG_COEFFICIENT, 2.2);
+  }
+  prwAtmosphereFamily ATMOSPHERE_MODEL() const {
+    return static_cast<prwAtmosphereFamily>(GetField<uint8_t>(VT_ATMOSPHERE_MODEL, 1));
+  }
+  const PRWSpaceWeather *WEATHER() const {
+    return GetPointer<const PRWSpaceWeather *>(VT_WEATHER);
+  }
+  /// Actual configured source name, e.g. an analytic series or a planetary SPK kernel.
+  const ::flatbuffers::String *EPHEMERIS_SOURCE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_EPHEMERIS_SOURCE);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_GRAVITY_CHOICE, 1) &&
+           VerifyField<uint8_t>(verifier, VT_ENABLE_POINT_MASS, 1) &&
+           VerifyField<double>(verifier, VT_GRAVITATIONAL_PARAMETER, 8) &&
+           VerifyField<uint8_t>(verifier, VT_ENABLE_J2, 1) &&
+           VerifyField<uint8_t>(verifier, VT_ENABLE_J3, 1) &&
+           VerifyField<uint8_t>(verifier, VT_ENABLE_J4, 1) &&
+           VerifyField<uint8_t>(verifier, VT_ENABLE_HIGHER_ZONALS, 1) &&
+           VerifyField<uint16_t>(verifier, VT_MAXIMUM_DEGREE, 2) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_MAXIMUM_DEGREE, 1) &&
+           VerifyField<uint16_t>(verifier, VT_MAXIMUM_ORDER, 2) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_MAXIMUM_ORDER, 1) &&
+           VerifyField<uint8_t>(verifier, VT_ENABLE_THIRD_BODY, 1) &&
+           VerifyOffset(verifier, VT_THIRD_BODY_IDS) &&
+           verifier.VerifyVector(THIRD_BODY_IDS()) &&
+           VerifyField<uint8_t>(verifier, VT_ENABLE_SRP, 1) &&
+           VerifyField<uint8_t>(verifier, VT_ENABLE_DRAG, 1) &&
+           VerifyField<double>(verifier, VT_INITIAL_MASS_KG, 8) &&
+           VerifyField<double>(verifier, VT_AREA_M2, 8) &&
+           VerifyField<double>(verifier, VT_REFLECTIVITY_COEFFICIENT, 8) &&
+           VerifyField<double>(verifier, VT_DRAG_COEFFICIENT, 8) &&
+           VerifyField<uint8_t>(verifier, VT_ATMOSPHERE_MODEL, 1) &&
+           VerifyOffset(verifier, VT_WEATHER) &&
+           verifier.VerifyTable(WEATHER()) &&
+           VerifyOffsetRequired(verifier, VT_EPHEMERIS_SOURCE) &&
+           verifier.VerifyString(EPHEMERIS_SOURCE()) &&
+           verifier.EndTable();
+  }
+  PRWForceConfigurationT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWForceConfigurationT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWForceConfiguration> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWForceConfigurationT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWForceConfigurationBuilder {
+  typedef PRWForceConfiguration Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_GRAVITY_CHOICE(prwGravitySelection GRAVITY_CHOICE) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_GRAVITY_CHOICE, static_cast<uint8_t>(GRAVITY_CHOICE), 0);
+  }
+  void add_ENABLE_POINT_MASS(bool ENABLE_POINT_MASS) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_ENABLE_POINT_MASS, static_cast<uint8_t>(ENABLE_POINT_MASS), 1);
+  }
+  void add_GRAVITATIONAL_PARAMETER(double GRAVITATIONAL_PARAMETER) {
+    fbb_.AddElement<double>(PRWForceConfiguration::VT_GRAVITATIONAL_PARAMETER, GRAVITATIONAL_PARAMETER, 0.0);
+  }
+  void add_ENABLE_J2(bool ENABLE_J2) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_ENABLE_J2, static_cast<uint8_t>(ENABLE_J2), 1);
+  }
+  void add_ENABLE_J3(bool ENABLE_J3) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_ENABLE_J3, static_cast<uint8_t>(ENABLE_J3), 0);
+  }
+  void add_ENABLE_J4(bool ENABLE_J4) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_ENABLE_J4, static_cast<uint8_t>(ENABLE_J4), 0);
+  }
+  void add_ENABLE_HIGHER_ZONALS(bool ENABLE_HIGHER_ZONALS) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_ENABLE_HIGHER_ZONALS, static_cast<uint8_t>(ENABLE_HIGHER_ZONALS), 0);
+  }
+  void add_MAXIMUM_DEGREE(uint16_t MAXIMUM_DEGREE) {
+    fbb_.AddElement<uint16_t>(PRWForceConfiguration::VT_MAXIMUM_DEGREE, MAXIMUM_DEGREE, 0);
+  }
+  void add_HAS_MAXIMUM_DEGREE(bool HAS_MAXIMUM_DEGREE) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_HAS_MAXIMUM_DEGREE, static_cast<uint8_t>(HAS_MAXIMUM_DEGREE), 0);
+  }
+  void add_MAXIMUM_ORDER(uint16_t MAXIMUM_ORDER) {
+    fbb_.AddElement<uint16_t>(PRWForceConfiguration::VT_MAXIMUM_ORDER, MAXIMUM_ORDER, 0);
+  }
+  void add_HAS_MAXIMUM_ORDER(bool HAS_MAXIMUM_ORDER) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_HAS_MAXIMUM_ORDER, static_cast<uint8_t>(HAS_MAXIMUM_ORDER), 0);
+  }
+  void add_ENABLE_THIRD_BODY(bool ENABLE_THIRD_BODY) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_ENABLE_THIRD_BODY, static_cast<uint8_t>(ENABLE_THIRD_BODY), 0);
+  }
+  void add_THIRD_BODY_IDS(::flatbuffers::Offset<::flatbuffers::Vector<int32_t>> THIRD_BODY_IDS) {
+    fbb_.AddOffset(PRWForceConfiguration::VT_THIRD_BODY_IDS, THIRD_BODY_IDS);
+  }
+  void add_ENABLE_SRP(bool ENABLE_SRP) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_ENABLE_SRP, static_cast<uint8_t>(ENABLE_SRP), 0);
+  }
+  void add_ENABLE_DRAG(bool ENABLE_DRAG) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_ENABLE_DRAG, static_cast<uint8_t>(ENABLE_DRAG), 0);
+  }
+  void add_INITIAL_MASS_KG(double INITIAL_MASS_KG) {
+    fbb_.AddElement<double>(PRWForceConfiguration::VT_INITIAL_MASS_KG, INITIAL_MASS_KG, 1000.0);
+  }
+  void add_AREA_M2(double AREA_M2) {
+    fbb_.AddElement<double>(PRWForceConfiguration::VT_AREA_M2, AREA_M2, 10.0);
+  }
+  void add_REFLECTIVITY_COEFFICIENT(double REFLECTIVITY_COEFFICIENT) {
+    fbb_.AddElement<double>(PRWForceConfiguration::VT_REFLECTIVITY_COEFFICIENT, REFLECTIVITY_COEFFICIENT, 1.5);
+  }
+  void add_DRAG_COEFFICIENT(double DRAG_COEFFICIENT) {
+    fbb_.AddElement<double>(PRWForceConfiguration::VT_DRAG_COEFFICIENT, DRAG_COEFFICIENT, 2.2);
+  }
+  void add_ATMOSPHERE_MODEL(prwAtmosphereFamily ATMOSPHERE_MODEL) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_ATMOSPHERE_MODEL, static_cast<uint8_t>(ATMOSPHERE_MODEL), 1);
+  }
+  void add_WEATHER(::flatbuffers::Offset<PRWSpaceWeather> WEATHER) {
+    fbb_.AddOffset(PRWForceConfiguration::VT_WEATHER, WEATHER);
+  }
+  void add_EPHEMERIS_SOURCE(::flatbuffers::Offset<::flatbuffers::String> EPHEMERIS_SOURCE) {
+    fbb_.AddOffset(PRWForceConfiguration::VT_EPHEMERIS_SOURCE, EPHEMERIS_SOURCE);
+  }
+  explicit PRWForceConfigurationBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWForceConfiguration> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWForceConfiguration>(end);
+    fbb_.Required(o, PRWForceConfiguration::VT_EPHEMERIS_SOURCE);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfiguration(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    prwGravitySelection GRAVITY_CHOICE = prwGravitySelection::INFER_FLAGS,
+    bool ENABLE_POINT_MASS = true,
+    double GRAVITATIONAL_PARAMETER = 0.0,
+    bool ENABLE_J2 = true,
+    bool ENABLE_J3 = false,
+    bool ENABLE_J4 = false,
+    bool ENABLE_HIGHER_ZONALS = false,
+    uint16_t MAXIMUM_DEGREE = 0,
+    bool HAS_MAXIMUM_DEGREE = false,
+    uint16_t MAXIMUM_ORDER = 0,
+    bool HAS_MAXIMUM_ORDER = false,
+    bool ENABLE_THIRD_BODY = false,
+    ::flatbuffers::Offset<::flatbuffers::Vector<int32_t>> THIRD_BODY_IDS = 0,
+    bool ENABLE_SRP = false,
+    bool ENABLE_DRAG = false,
+    double INITIAL_MASS_KG = 1000.0,
+    double AREA_M2 = 10.0,
+    double REFLECTIVITY_COEFFICIENT = 1.5,
+    double DRAG_COEFFICIENT = 2.2,
+    prwAtmosphereFamily ATMOSPHERE_MODEL = prwAtmosphereFamily::NRLMSISE00,
+    ::flatbuffers::Offset<PRWSpaceWeather> WEATHER = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> EPHEMERIS_SOURCE = 0) {
+  PRWForceConfigurationBuilder builder_(_fbb);
+  builder_.add_DRAG_COEFFICIENT(DRAG_COEFFICIENT);
+  builder_.add_REFLECTIVITY_COEFFICIENT(REFLECTIVITY_COEFFICIENT);
+  builder_.add_AREA_M2(AREA_M2);
+  builder_.add_INITIAL_MASS_KG(INITIAL_MASS_KG);
+  builder_.add_GRAVITATIONAL_PARAMETER(GRAVITATIONAL_PARAMETER);
+  builder_.add_EPHEMERIS_SOURCE(EPHEMERIS_SOURCE);
+  builder_.add_WEATHER(WEATHER);
+  builder_.add_THIRD_BODY_IDS(THIRD_BODY_IDS);
+  builder_.add_MAXIMUM_ORDER(MAXIMUM_ORDER);
+  builder_.add_MAXIMUM_DEGREE(MAXIMUM_DEGREE);
+  builder_.add_ATMOSPHERE_MODEL(ATMOSPHERE_MODEL);
+  builder_.add_ENABLE_DRAG(ENABLE_DRAG);
+  builder_.add_ENABLE_SRP(ENABLE_SRP);
+  builder_.add_ENABLE_THIRD_BODY(ENABLE_THIRD_BODY);
+  builder_.add_HAS_MAXIMUM_ORDER(HAS_MAXIMUM_ORDER);
+  builder_.add_HAS_MAXIMUM_DEGREE(HAS_MAXIMUM_DEGREE);
+  builder_.add_ENABLE_HIGHER_ZONALS(ENABLE_HIGHER_ZONALS);
+  builder_.add_ENABLE_J4(ENABLE_J4);
+  builder_.add_ENABLE_J3(ENABLE_J3);
+  builder_.add_ENABLE_J2(ENABLE_J2);
+  builder_.add_ENABLE_POINT_MASS(ENABLE_POINT_MASS);
+  builder_.add_GRAVITY_CHOICE(GRAVITY_CHOICE);
+  return builder_.Finish();
+}
+
+struct PRWForceConfiguration::Traits {
+  using type = PRWForceConfiguration;
+  static auto constexpr Create = CreatePRWForceConfiguration;
+};
+
+inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfigurationDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    prwGravitySelection GRAVITY_CHOICE = prwGravitySelection::INFER_FLAGS,
+    bool ENABLE_POINT_MASS = true,
+    double GRAVITATIONAL_PARAMETER = 0.0,
+    bool ENABLE_J2 = true,
+    bool ENABLE_J3 = false,
+    bool ENABLE_J4 = false,
+    bool ENABLE_HIGHER_ZONALS = false,
+    uint16_t MAXIMUM_DEGREE = 0,
+    bool HAS_MAXIMUM_DEGREE = false,
+    uint16_t MAXIMUM_ORDER = 0,
+    bool HAS_MAXIMUM_ORDER = false,
+    bool ENABLE_THIRD_BODY = false,
+    const std::vector<int32_t> *THIRD_BODY_IDS = nullptr,
+    bool ENABLE_SRP = false,
+    bool ENABLE_DRAG = false,
+    double INITIAL_MASS_KG = 1000.0,
+    double AREA_M2 = 10.0,
+    double REFLECTIVITY_COEFFICIENT = 1.5,
+    double DRAG_COEFFICIENT = 2.2,
+    prwAtmosphereFamily ATMOSPHERE_MODEL = prwAtmosphereFamily::NRLMSISE00,
+    ::flatbuffers::Offset<PRWSpaceWeather> WEATHER = 0,
+    const char *EPHEMERIS_SOURCE = nullptr) {
+  auto THIRD_BODY_IDS__ = THIRD_BODY_IDS ? _fbb.CreateVector<int32_t>(*THIRD_BODY_IDS) : 0;
+  auto EPHEMERIS_SOURCE__ = EPHEMERIS_SOURCE ? _fbb.CreateString(EPHEMERIS_SOURCE) : 0;
+  return CreatePRWForceConfiguration(
+      _fbb,
+      GRAVITY_CHOICE,
+      ENABLE_POINT_MASS,
+      GRAVITATIONAL_PARAMETER,
+      ENABLE_J2,
+      ENABLE_J3,
+      ENABLE_J4,
+      ENABLE_HIGHER_ZONALS,
+      MAXIMUM_DEGREE,
+      HAS_MAXIMUM_DEGREE,
+      MAXIMUM_ORDER,
+      HAS_MAXIMUM_ORDER,
+      ENABLE_THIRD_BODY,
+      THIRD_BODY_IDS__,
+      ENABLE_SRP,
+      ENABLE_DRAG,
+      INITIAL_MASS_KG,
+      AREA_M2,
+      REFLECTIVITY_COEFFICIENT,
+      DRAG_COEFFICIENT,
+      ATMOSPHERE_MODEL,
+      WEATHER,
+      EPHEMERIS_SOURCE__);
+}
+
+::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfiguration(::flatbuffers::FlatBufferBuilder &_fbb, const PRWForceConfigurationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWStateMatrixT : public ::flatbuffers::NativeTable {
+  typedef PRWStateMatrix TableType;
+  uint8_t DIMENSION = 0;
+  std::vector<double> VALUES{};
+};
+
+/// Row-major square matrix on [x,y,z,vx,vy,vz,(mass)], SI state units.
+/// Covariance entries have row*column units; STM entries row/column units.
+struct PRWStateMatrix FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWStateMatrixT NativeTableType;
+  typedef PRWStateMatrixBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_DIMENSION = 4,
+    VT_VALUES = 6
+  };
+  uint8_t DIMENSION() const {
+    return GetField<uint8_t>(VT_DIMENSION, 0);
+  }
+  const ::flatbuffers::Vector<double> *VALUES() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_VALUES);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_DIMENSION, 1) &&
+           VerifyOffsetRequired(verifier, VT_VALUES) &&
+           verifier.VerifyVector(VALUES()) &&
+           verifier.EndTable();
+  }
+  PRWStateMatrixT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWStateMatrixT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWStateMatrix> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWStateMatrixT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWStateMatrixBuilder {
+  typedef PRWStateMatrix Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_DIMENSION(uint8_t DIMENSION) {
+    fbb_.AddElement<uint8_t>(PRWStateMatrix::VT_DIMENSION, DIMENSION, 0);
+  }
+  void add_VALUES(::flatbuffers::Offset<::flatbuffers::Vector<double>> VALUES) {
+    fbb_.AddOffset(PRWStateMatrix::VT_VALUES, VALUES);
+  }
+  explicit PRWStateMatrixBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWStateMatrix> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWStateMatrix>(end);
+    fbb_.Required(o, PRWStateMatrix::VT_VALUES);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWStateMatrix> CreatePRWStateMatrix(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint8_t DIMENSION = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> VALUES = 0) {
+  PRWStateMatrixBuilder builder_(_fbb);
+  builder_.add_VALUES(VALUES);
+  builder_.add_DIMENSION(DIMENSION);
+  return builder_.Finish();
+}
+
+struct PRWStateMatrix::Traits {
+  using type = PRWStateMatrix;
+  static auto constexpr Create = CreatePRWStateMatrix;
+};
+
+inline ::flatbuffers::Offset<PRWStateMatrix> CreatePRWStateMatrixDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint8_t DIMENSION = 0,
+    const std::vector<double> *VALUES = nullptr) {
+  auto VALUES__ = VALUES ? _fbb.CreateVector<double>(*VALUES) : 0;
+  return CreatePRWStateMatrix(
+      _fbb,
+      DIMENSION,
+      VALUES__);
+}
+
+::flatbuffers::Offset<PRWStateMatrix> CreatePRWStateMatrix(::flatbuffers::FlatBufferBuilder &_fbb, const PRWStateMatrixT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWProcessNoiseT : public ::flatbuffers::NativeTable {
+  typedef PRWProcessNoise TableType;
+  prwProcessNoiseModel MODEL = prwProcessNoiseModel::UNSPECIFIED;
+  prwProcessNoiseAxes AXES = prwProcessNoiseAxes::UNSPECIFIED;
+  std::vector<double> SPECTRAL_DENSITY_M2_S3{};
+  double DISCRETIZATION_SECONDS = 0.0;
+};
+
+/// The process noise a propagated covariance includes: P(t) = Phi P0 Phi^T + Q.
+struct PRWProcessNoise FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWProcessNoiseT NativeTableType;
+  typedef PRWProcessNoiseBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_MODEL = 4,
+    VT_AXES = 6,
+    VT_SPECTRAL_DENSITY_M2_S3 = 8,
+    VT_DISCRETIZATION_SECONDS = 10
+  };
+  prwProcessNoiseModel MODEL() const {
+    return static_cast<prwProcessNoiseModel>(GetField<uint8_t>(VT_MODEL, 0));
+  }
+  prwProcessNoiseAxes AXES() const {
+    return static_cast<prwProcessNoiseAxes>(GetField<uint8_t>(VT_AXES, 0));
+  }
+  /// Acceleration power spectral density per axis (x, y, z or R, T, N), m^2/s^3.
+  const ::flatbuffers::Vector<double> *SPECTRAL_DENSITY_M2_S3() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SPECTRAL_DENSITY_M2_S3);
+  }
+  /// Interval over which each noise increment enters, seconds.
+  double DISCRETIZATION_SECONDS() const {
+    return GetField<double>(VT_DISCRETIZATION_SECONDS, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_MODEL, 1) &&
+           VerifyField<uint8_t>(verifier, VT_AXES, 1) &&
+           VerifyOffset(verifier, VT_SPECTRAL_DENSITY_M2_S3) &&
+           verifier.VerifyVector(SPECTRAL_DENSITY_M2_S3()) &&
+           VerifyField<double>(verifier, VT_DISCRETIZATION_SECONDS, 8) &&
+           verifier.EndTable();
+  }
+  PRWProcessNoiseT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWProcessNoiseT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWProcessNoise> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWProcessNoiseT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWProcessNoiseBuilder {
+  typedef PRWProcessNoise Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_MODEL(prwProcessNoiseModel MODEL) {
+    fbb_.AddElement<uint8_t>(PRWProcessNoise::VT_MODEL, static_cast<uint8_t>(MODEL), 0);
+  }
+  void add_AXES(prwProcessNoiseAxes AXES) {
+    fbb_.AddElement<uint8_t>(PRWProcessNoise::VT_AXES, static_cast<uint8_t>(AXES), 0);
+  }
+  void add_SPECTRAL_DENSITY_M2_S3(::flatbuffers::Offset<::flatbuffers::Vector<double>> SPECTRAL_DENSITY_M2_S3) {
+    fbb_.AddOffset(PRWProcessNoise::VT_SPECTRAL_DENSITY_M2_S3, SPECTRAL_DENSITY_M2_S3);
+  }
+  void add_DISCRETIZATION_SECONDS(double DISCRETIZATION_SECONDS) {
+    fbb_.AddElement<double>(PRWProcessNoise::VT_DISCRETIZATION_SECONDS, DISCRETIZATION_SECONDS, 0.0);
+  }
+  explicit PRWProcessNoiseBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWProcessNoise> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWProcessNoise>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWProcessNoise> CreatePRWProcessNoise(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    prwProcessNoiseModel MODEL = prwProcessNoiseModel::UNSPECIFIED,
+    prwProcessNoiseAxes AXES = prwProcessNoiseAxes::UNSPECIFIED,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> SPECTRAL_DENSITY_M2_S3 = 0,
+    double DISCRETIZATION_SECONDS = 0.0) {
+  PRWProcessNoiseBuilder builder_(_fbb);
+  builder_.add_DISCRETIZATION_SECONDS(DISCRETIZATION_SECONDS);
+  builder_.add_SPECTRAL_DENSITY_M2_S3(SPECTRAL_DENSITY_M2_S3);
+  builder_.add_AXES(AXES);
+  builder_.add_MODEL(MODEL);
+  return builder_.Finish();
+}
+
+struct PRWProcessNoise::Traits {
+  using type = PRWProcessNoise;
+  static auto constexpr Create = CreatePRWProcessNoise;
+};
+
+inline ::flatbuffers::Offset<PRWProcessNoise> CreatePRWProcessNoiseDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    prwProcessNoiseModel MODEL = prwProcessNoiseModel::UNSPECIFIED,
+    prwProcessNoiseAxes AXES = prwProcessNoiseAxes::UNSPECIFIED,
+    const std::vector<double> *SPECTRAL_DENSITY_M2_S3 = nullptr,
+    double DISCRETIZATION_SECONDS = 0.0) {
+  auto SPECTRAL_DENSITY_M2_S3__ = SPECTRAL_DENSITY_M2_S3 ? _fbb.CreateVector<double>(*SPECTRAL_DENSITY_M2_S3) : 0;
+  return CreatePRWProcessNoise(
+      _fbb,
+      MODEL,
+      AXES,
+      SPECTRAL_DENSITY_M2_S3__,
+      DISCRETIZATION_SECONDS);
+}
+
+::flatbuffers::Offset<PRWProcessNoise> CreatePRWProcessNoise(::flatbuffers::FlatBufferBuilder &_fbb, const PRWProcessNoiseT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWResidentStateT : public ::flatbuffers::NativeTable {
+  typedef PRWResidentState TableType;
+  std::unique_ptr<PRWInstanceT> INSTANCE{};
+  uint32_t ENTITY_HANDLE = 0;
+  uint32_t CATALOG_NUMBER = 0;
+  std::string OBJECT_ID{};
+  std::unique_ptr<FRMStateVectorT> STATE{};
+  std::unique_ptr<RFMCoordinateSystemT> COORDINATE_SYSTEM{};
+  std::unique_ptr<PRWStateMatrixT> COVARIANCE{};
+  double MASS_KG = 0.0;
+  bool HAS_MASS_KG = false;
+  double DRAG_AREA_OVER_MASS_M2_KG = 0.0;
+  bool HAS_DRAG_AREA_OVER_MASS_M2_KG = false;
+  double SRP_AREA_OVER_MASS_M2_KG = 0.0;
+  bool HAS_SRP_AREA_OVER_MASS_M2_KG = false;
+  bool VALID = true;
+  std::unique_ptr<PRWProcessNoiseT> PROCESS_NOISE{};
+  PRWResidentStateT() = default;
+  PRWResidentStateT(const PRWResidentStateT &o);
+  PRWResidentStateT(PRWResidentStateT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWResidentStateT &operator=(PRWResidentStateT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Identity/state at one epoch. FRM state is m/m/s with named frame/time scale.
+struct PRWResidentState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWResidentStateT NativeTableType;
+  typedef PRWResidentStateBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_INSTANCE = 4,
+    VT_ENTITY_HANDLE = 6,
+    VT_CATALOG_NUMBER = 8,
+    VT_OBJECT_ID = 10,
+    VT_STATE = 12,
+    VT_COORDINATE_SYSTEM = 14,
+    VT_COVARIANCE = 16,
+    VT_MASS_KG = 18,
+    VT_HAS_MASS_KG = 20,
+    VT_DRAG_AREA_OVER_MASS_M2_KG = 22,
+    VT_HAS_DRAG_AREA_OVER_MASS_M2_KG = 24,
+    VT_SRP_AREA_OVER_MASS_M2_KG = 26,
+    VT_HAS_SRP_AREA_OVER_MASS_M2_KG = 28,
+    VT_VALID = 30,
+    VT_PROCESS_NOISE = 32
+  };
+  const PRWInstance *INSTANCE() const {
+    return GetPointer<const PRWInstance *>(VT_INSTANCE);
+  }
+  uint32_t ENTITY_HANDLE() const {
+    return GetField<uint32_t>(VT_ENTITY_HANDLE, 0);
+  }
+  uint32_t CATALOG_NUMBER() const {
+    return GetField<uint32_t>(VT_CATALOG_NUMBER, 0);
+  }
+  const ::flatbuffers::String *OBJECT_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_OBJECT_ID);
+  }
+  const FRMStateVector *STATE() const {
+    return GetPointer<const FRMStateVector *>(VT_STATE);
+  }
+  const RFMCoordinateSystem *COORDINATE_SYSTEM() const {
+    return GetPointer<const RFMCoordinateSystem *>(VT_COORDINATE_SYSTEM);
+  }
+  const PRWStateMatrix *COVARIANCE() const {
+    return GetPointer<const PRWStateMatrix *>(VT_COVARIANCE);
+  }
+  /// Optional initial dynamical mass in kg; distinct from a missing mass.
+  double MASS_KG() const {
+    return GetField<double>(VT_MASS_KG, 0.0);
+  }
+  /// True when MASS_KG carries a value; false means absent.
+  bool HAS_MASS_KG() const {
+    return GetField<uint8_t>(VT_HAS_MASS_KG, 0) != 0;
+  }
+  /// Explicit SI concepts Cd*A/m and Cr*A/m. Do not infer these from legacy
+  /// ignored/underspecified coefficients; require a caller-provided mapping.
+  double DRAG_AREA_OVER_MASS_M2_KG() const {
+    return GetField<double>(VT_DRAG_AREA_OVER_MASS_M2_KG, 0.0);
+  }
+  /// True when DRAG_AREA_OVER_MASS_M2_KG carries a value; false means absent.
+  bool HAS_DRAG_AREA_OVER_MASS_M2_KG() const {
+    return GetField<uint8_t>(VT_HAS_DRAG_AREA_OVER_MASS_M2_KG, 0) != 0;
+  }
+  double SRP_AREA_OVER_MASS_M2_KG() const {
+    return GetField<double>(VT_SRP_AREA_OVER_MASS_M2_KG, 0.0);
+  }
+  /// True when SRP_AREA_OVER_MASS_M2_KG carries a value; false means absent.
+  bool HAS_SRP_AREA_OVER_MASS_M2_KG() const {
+    return GetField<uint8_t>(VT_HAS_SRP_AREA_OVER_MASS_M2_KG, 0) != 0;
+  }
+  bool VALID() const {
+    return GetField<uint8_t>(VT_VALID, 1) != 0;
+  }
+  /// Process noise for COVARIANCE: on input, what propagation adds; on
+  /// output, what the propagated COVARIANCE includes. Absent means none.
+  const PRWProcessNoise *PROCESS_NOISE() const {
+    return GetPointer<const PRWProcessNoise *>(VT_PROCESS_NOISE);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_INSTANCE) &&
+           verifier.VerifyTable(INSTANCE()) &&
+           VerifyField<uint32_t>(verifier, VT_ENTITY_HANDLE, 4) &&
+           VerifyField<uint32_t>(verifier, VT_CATALOG_NUMBER, 4) &&
+           VerifyOffset(verifier, VT_OBJECT_ID) &&
+           verifier.VerifyString(OBJECT_ID()) &&
+           VerifyOffsetRequired(verifier, VT_STATE) &&
+           verifier.VerifyTable(STATE()) &&
+           VerifyOffsetRequired(verifier, VT_COORDINATE_SYSTEM) &&
+           verifier.VerifyTable(COORDINATE_SYSTEM()) &&
+           VerifyOffset(verifier, VT_COVARIANCE) &&
+           verifier.VerifyTable(COVARIANCE()) &&
+           VerifyField<double>(verifier, VT_MASS_KG, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_MASS_KG, 1) &&
+           VerifyField<double>(verifier, VT_DRAG_AREA_OVER_MASS_M2_KG, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_DRAG_AREA_OVER_MASS_M2_KG, 1) &&
+           VerifyField<double>(verifier, VT_SRP_AREA_OVER_MASS_M2_KG, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_SRP_AREA_OVER_MASS_M2_KG, 1) &&
+           VerifyField<uint8_t>(verifier, VT_VALID, 1) &&
+           VerifyOffset(verifier, VT_PROCESS_NOISE) &&
+           verifier.VerifyTable(PROCESS_NOISE()) &&
+           verifier.EndTable();
+  }
+  PRWResidentStateT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWResidentStateT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWResidentState> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWResidentStateT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWResidentStateBuilder {
+  typedef PRWResidentState Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_INSTANCE(::flatbuffers::Offset<PRWInstance> INSTANCE) {
+    fbb_.AddOffset(PRWResidentState::VT_INSTANCE, INSTANCE);
+  }
+  void add_ENTITY_HANDLE(uint32_t ENTITY_HANDLE) {
+    fbb_.AddElement<uint32_t>(PRWResidentState::VT_ENTITY_HANDLE, ENTITY_HANDLE, 0);
+  }
+  void add_CATALOG_NUMBER(uint32_t CATALOG_NUMBER) {
+    fbb_.AddElement<uint32_t>(PRWResidentState::VT_CATALOG_NUMBER, CATALOG_NUMBER, 0);
+  }
+  void add_OBJECT_ID(::flatbuffers::Offset<::flatbuffers::String> OBJECT_ID) {
+    fbb_.AddOffset(PRWResidentState::VT_OBJECT_ID, OBJECT_ID);
+  }
+  void add_STATE(::flatbuffers::Offset<FRMStateVector> STATE) {
+    fbb_.AddOffset(PRWResidentState::VT_STATE, STATE);
+  }
+  void add_COORDINATE_SYSTEM(::flatbuffers::Offset<RFMCoordinateSystem> COORDINATE_SYSTEM) {
+    fbb_.AddOffset(PRWResidentState::VT_COORDINATE_SYSTEM, COORDINATE_SYSTEM);
+  }
+  void add_COVARIANCE(::flatbuffers::Offset<PRWStateMatrix> COVARIANCE) {
+    fbb_.AddOffset(PRWResidentState::VT_COVARIANCE, COVARIANCE);
+  }
+  void add_MASS_KG(double MASS_KG) {
+    fbb_.AddElement<double>(PRWResidentState::VT_MASS_KG, MASS_KG, 0.0);
+  }
+  void add_HAS_MASS_KG(bool HAS_MASS_KG) {
+    fbb_.AddElement<uint8_t>(PRWResidentState::VT_HAS_MASS_KG, static_cast<uint8_t>(HAS_MASS_KG), 0);
+  }
+  void add_DRAG_AREA_OVER_MASS_M2_KG(double DRAG_AREA_OVER_MASS_M2_KG) {
+    fbb_.AddElement<double>(PRWResidentState::VT_DRAG_AREA_OVER_MASS_M2_KG, DRAG_AREA_OVER_MASS_M2_KG, 0.0);
+  }
+  void add_HAS_DRAG_AREA_OVER_MASS_M2_KG(bool HAS_DRAG_AREA_OVER_MASS_M2_KG) {
+    fbb_.AddElement<uint8_t>(PRWResidentState::VT_HAS_DRAG_AREA_OVER_MASS_M2_KG, static_cast<uint8_t>(HAS_DRAG_AREA_OVER_MASS_M2_KG), 0);
+  }
+  void add_SRP_AREA_OVER_MASS_M2_KG(double SRP_AREA_OVER_MASS_M2_KG) {
+    fbb_.AddElement<double>(PRWResidentState::VT_SRP_AREA_OVER_MASS_M2_KG, SRP_AREA_OVER_MASS_M2_KG, 0.0);
+  }
+  void add_HAS_SRP_AREA_OVER_MASS_M2_KG(bool HAS_SRP_AREA_OVER_MASS_M2_KG) {
+    fbb_.AddElement<uint8_t>(PRWResidentState::VT_HAS_SRP_AREA_OVER_MASS_M2_KG, static_cast<uint8_t>(HAS_SRP_AREA_OVER_MASS_M2_KG), 0);
+  }
+  void add_VALID(bool VALID) {
+    fbb_.AddElement<uint8_t>(PRWResidentState::VT_VALID, static_cast<uint8_t>(VALID), 1);
+  }
+  void add_PROCESS_NOISE(::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE) {
+    fbb_.AddOffset(PRWResidentState::VT_PROCESS_NOISE, PROCESS_NOISE);
+  }
+  explicit PRWResidentStateBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWResidentState> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWResidentState>(end);
+    fbb_.Required(o, PRWResidentState::VT_STATE);
+    fbb_.Required(o, PRWResidentState::VT_COORDINATE_SYSTEM);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWResidentState> CreatePRWResidentState(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PRWInstance> INSTANCE = 0,
+    uint32_t ENTITY_HANDLE = 0,
+    uint32_t CATALOG_NUMBER = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> OBJECT_ID = 0,
+    ::flatbuffers::Offset<FRMStateVector> STATE = 0,
+    ::flatbuffers::Offset<RFMCoordinateSystem> COORDINATE_SYSTEM = 0,
+    ::flatbuffers::Offset<PRWStateMatrix> COVARIANCE = 0,
+    double MASS_KG = 0.0,
+    bool HAS_MASS_KG = false,
+    double DRAG_AREA_OVER_MASS_M2_KG = 0.0,
+    bool HAS_DRAG_AREA_OVER_MASS_M2_KG = false,
+    double SRP_AREA_OVER_MASS_M2_KG = 0.0,
+    bool HAS_SRP_AREA_OVER_MASS_M2_KG = false,
+    bool VALID = true,
+    ::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE = 0) {
+  PRWResidentStateBuilder builder_(_fbb);
+  builder_.add_SRP_AREA_OVER_MASS_M2_KG(SRP_AREA_OVER_MASS_M2_KG);
+  builder_.add_DRAG_AREA_OVER_MASS_M2_KG(DRAG_AREA_OVER_MASS_M2_KG);
+  builder_.add_MASS_KG(MASS_KG);
+  builder_.add_PROCESS_NOISE(PROCESS_NOISE);
+  builder_.add_COVARIANCE(COVARIANCE);
+  builder_.add_COORDINATE_SYSTEM(COORDINATE_SYSTEM);
+  builder_.add_STATE(STATE);
+  builder_.add_OBJECT_ID(OBJECT_ID);
+  builder_.add_CATALOG_NUMBER(CATALOG_NUMBER);
+  builder_.add_ENTITY_HANDLE(ENTITY_HANDLE);
+  builder_.add_INSTANCE(INSTANCE);
+  builder_.add_VALID(VALID);
+  builder_.add_HAS_SRP_AREA_OVER_MASS_M2_KG(HAS_SRP_AREA_OVER_MASS_M2_KG);
+  builder_.add_HAS_DRAG_AREA_OVER_MASS_M2_KG(HAS_DRAG_AREA_OVER_MASS_M2_KG);
+  builder_.add_HAS_MASS_KG(HAS_MASS_KG);
+  return builder_.Finish();
+}
+
+struct PRWResidentState::Traits {
+  using type = PRWResidentState;
+  static auto constexpr Create = CreatePRWResidentState;
+};
+
+inline ::flatbuffers::Offset<PRWResidentState> CreatePRWResidentStateDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PRWInstance> INSTANCE = 0,
+    uint32_t ENTITY_HANDLE = 0,
+    uint32_t CATALOG_NUMBER = 0,
+    const char *OBJECT_ID = nullptr,
+    ::flatbuffers::Offset<FRMStateVector> STATE = 0,
+    ::flatbuffers::Offset<RFMCoordinateSystem> COORDINATE_SYSTEM = 0,
+    ::flatbuffers::Offset<PRWStateMatrix> COVARIANCE = 0,
+    double MASS_KG = 0.0,
+    bool HAS_MASS_KG = false,
+    double DRAG_AREA_OVER_MASS_M2_KG = 0.0,
+    bool HAS_DRAG_AREA_OVER_MASS_M2_KG = false,
+    double SRP_AREA_OVER_MASS_M2_KG = 0.0,
+    bool HAS_SRP_AREA_OVER_MASS_M2_KG = false,
+    bool VALID = true,
+    ::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE = 0) {
+  auto OBJECT_ID__ = OBJECT_ID ? _fbb.CreateString(OBJECT_ID) : 0;
+  return CreatePRWResidentState(
+      _fbb,
+      INSTANCE,
+      ENTITY_HANDLE,
+      CATALOG_NUMBER,
+      OBJECT_ID__,
+      STATE,
+      COORDINATE_SYSTEM,
+      COVARIANCE,
+      MASS_KG,
+      HAS_MASS_KG,
+      DRAG_AREA_OVER_MASS_M2_KG,
+      HAS_DRAG_AREA_OVER_MASS_M2_KG,
+      SRP_AREA_OVER_MASS_M2_KG,
+      HAS_SRP_AREA_OVER_MASS_M2_KG,
+      VALID,
+      PROCESS_NOISE);
+}
+
+::flatbuffers::Offset<PRWResidentState> CreatePRWResidentState(::flatbuffers::FlatBufferBuilder &_fbb, const PRWResidentStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWImpulseT : public ::flatbuffers::NativeTable {
+  typedef PRWImpulse TableType;
+  std::unique_ptr<TIMInstantT> EPOCH{};
+  std::unique_ptr<FRMVector3T> DELTA_V{};
+  prwSteeringBasis VECTOR_BASIS = prwSteeringBasis::UNSPECIFIED;
+  PRWImpulseT() = default;
+  PRWImpulseT(const PRWImpulseT &o);
+  PRWImpulseT(PRWImpulseT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWImpulseT &operator=(PRWImpulseT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Impulsive change at TDB epoch; delta velocity is m/s in the named basis.
+struct PRWImpulse FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWImpulseT NativeTableType;
+  typedef PRWImpulseBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_EPOCH = 4,
+    VT_DELTA_V = 6,
+    VT_VECTOR_BASIS = 8
+  };
+  const TIMInstant *EPOCH() const {
+    return GetPointer<const TIMInstant *>(VT_EPOCH);
+  }
+  const FRMVector3 *DELTA_V() const {
+    return GetPointer<const FRMVector3 *>(VT_DELTA_V);
+  }
+  prwSteeringBasis VECTOR_BASIS() const {
+    return static_cast<prwSteeringBasis>(GetField<uint8_t>(VT_VECTOR_BASIS, 0));
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_EPOCH) &&
+           verifier.VerifyTable(EPOCH()) &&
+           VerifyOffsetRequired(verifier, VT_DELTA_V) &&
+           verifier.VerifyTable(DELTA_V()) &&
+           VerifyField<uint8_t>(verifier, VT_VECTOR_BASIS, 1) &&
+           verifier.EndTable();
+  }
+  PRWImpulseT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWImpulseT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWImpulse> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWImpulseT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWImpulseBuilder {
+  typedef PRWImpulse Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_EPOCH(::flatbuffers::Offset<TIMInstant> EPOCH) {
+    fbb_.AddOffset(PRWImpulse::VT_EPOCH, EPOCH);
+  }
+  void add_DELTA_V(::flatbuffers::Offset<FRMVector3> DELTA_V) {
+    fbb_.AddOffset(PRWImpulse::VT_DELTA_V, DELTA_V);
+  }
+  void add_VECTOR_BASIS(prwSteeringBasis VECTOR_BASIS) {
+    fbb_.AddElement<uint8_t>(PRWImpulse::VT_VECTOR_BASIS, static_cast<uint8_t>(VECTOR_BASIS), 0);
+  }
+  explicit PRWImpulseBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWImpulse> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWImpulse>(end);
+    fbb_.Required(o, PRWImpulse::VT_EPOCH);
+    fbb_.Required(o, PRWImpulse::VT_DELTA_V);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWImpulse> CreatePRWImpulse(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<TIMInstant> EPOCH = 0,
+    ::flatbuffers::Offset<FRMVector3> DELTA_V = 0,
+    prwSteeringBasis VECTOR_BASIS = prwSteeringBasis::UNSPECIFIED) {
+  PRWImpulseBuilder builder_(_fbb);
+  builder_.add_DELTA_V(DELTA_V);
+  builder_.add_EPOCH(EPOCH);
+  builder_.add_VECTOR_BASIS(VECTOR_BASIS);
+  return builder_.Finish();
+}
+
+struct PRWImpulse::Traits {
+  using type = PRWImpulse;
+  static auto constexpr Create = CreatePRWImpulse;
+};
+
+::flatbuffers::Offset<PRWImpulse> CreatePRWImpulse(::flatbuffers::FlatBufferBuilder &_fbb, const PRWImpulseT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWThrottlePointT : public ::flatbuffers::NativeTable {
+  typedef PRWThrottlePoint TableType;
+  double ELAPSED_SECONDS = 0.0;
+  double FRACTION = 0.0;
+};
+
+/// Piecewise-linear throttle. Clock is seconds from initial propagation epoch.
+struct PRWThrottlePoint FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWThrottlePointT NativeTableType;
+  typedef PRWThrottlePointBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_ELAPSED_SECONDS = 4,
+    VT_FRACTION = 6
+  };
+  double ELAPSED_SECONDS() const {
+    return GetField<double>(VT_ELAPSED_SECONDS, 0.0);
+  }
+  double FRACTION() const {
+    return GetField<double>(VT_FRACTION, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<double>(verifier, VT_ELAPSED_SECONDS, 8) &&
+           VerifyField<double>(verifier, VT_FRACTION, 8) &&
+           verifier.EndTable();
+  }
+  PRWThrottlePointT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWThrottlePointT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWThrottlePoint> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWThrottlePointT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWThrottlePointBuilder {
+  typedef PRWThrottlePoint Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_ELAPSED_SECONDS(double ELAPSED_SECONDS) {
+    fbb_.AddElement<double>(PRWThrottlePoint::VT_ELAPSED_SECONDS, ELAPSED_SECONDS, 0.0);
+  }
+  void add_FRACTION(double FRACTION) {
+    fbb_.AddElement<double>(PRWThrottlePoint::VT_FRACTION, FRACTION, 0.0);
+  }
+  explicit PRWThrottlePointBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWThrottlePoint> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWThrottlePoint>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWThrottlePoint> CreatePRWThrottlePoint(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    double ELAPSED_SECONDS = 0.0,
+    double FRACTION = 0.0) {
+  PRWThrottlePointBuilder builder_(_fbb);
+  builder_.add_FRACTION(FRACTION);
+  builder_.add_ELAPSED_SECONDS(ELAPSED_SECONDS);
+  return builder_.Finish();
+}
+
+struct PRWThrottlePoint::Traits {
+  using type = PRWThrottlePoint;
+  static auto constexpr Create = CreatePRWThrottlePoint;
+};
+
+::flatbuffers::Offset<PRWThrottlePoint> CreatePRWThrottlePoint(::flatbuffers::FlatBufferBuilder &_fbb, const PRWThrottlePointT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWBurnBoundaryT : public ::flatbuffers::NativeTable {
+  typedef PRWBurnBoundary TableType;
+  double ELAPSED_SECONDS = 0.0;
+  bool HAS_ELAPSED_SECONDS = false;
+  std::unique_ptr<PCEParameterConditionT> CONDITION{};
+  PRWBurnBoundaryT() = default;
+  PRWBurnBoundaryT(const PRWBurnBoundaryT &o);
+  PRWBurnBoundaryT(PRWBurnBoundaryT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWBurnBoundaryT &operator=(PRWBurnBoundaryT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Scheduled time gates an optional condition. At least one must be present.
+struct PRWBurnBoundary FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWBurnBoundaryT NativeTableType;
+  typedef PRWBurnBoundaryBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_ELAPSED_SECONDS = 4,
+    VT_HAS_ELAPSED_SECONDS = 6,
+    VT_CONDITION = 8
+  };
+  double ELAPSED_SECONDS() const {
+    return GetField<double>(VT_ELAPSED_SECONDS, 0.0);
+  }
+  /// True when ELAPSED_SECONDS carries a value; false means absent.
+  bool HAS_ELAPSED_SECONDS() const {
+    return GetField<uint8_t>(VT_HAS_ELAPSED_SECONDS, 0) != 0;
+  }
+  /// SI PCE predicate; direction and goal tolerance explicitly populated.
+  const PCEParameterCondition *CONDITION() const {
+    return GetPointer<const PCEParameterCondition *>(VT_CONDITION);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<double>(verifier, VT_ELAPSED_SECONDS, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_ELAPSED_SECONDS, 1) &&
+           VerifyOffset(verifier, VT_CONDITION) &&
+           verifier.VerifyTable(CONDITION()) &&
+           verifier.EndTable();
+  }
+  PRWBurnBoundaryT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWBurnBoundaryT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWBurnBoundary> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWBurnBoundaryT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWBurnBoundaryBuilder {
+  typedef PRWBurnBoundary Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_ELAPSED_SECONDS(double ELAPSED_SECONDS) {
+    fbb_.AddElement<double>(PRWBurnBoundary::VT_ELAPSED_SECONDS, ELAPSED_SECONDS, 0.0);
+  }
+  void add_HAS_ELAPSED_SECONDS(bool HAS_ELAPSED_SECONDS) {
+    fbb_.AddElement<uint8_t>(PRWBurnBoundary::VT_HAS_ELAPSED_SECONDS, static_cast<uint8_t>(HAS_ELAPSED_SECONDS), 0);
+  }
+  void add_CONDITION(::flatbuffers::Offset<PCEParameterCondition> CONDITION) {
+    fbb_.AddOffset(PRWBurnBoundary::VT_CONDITION, CONDITION);
+  }
+  explicit PRWBurnBoundaryBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWBurnBoundary> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWBurnBoundary>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWBurnBoundary> CreatePRWBurnBoundary(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    double ELAPSED_SECONDS = 0.0,
+    bool HAS_ELAPSED_SECONDS = false,
+    ::flatbuffers::Offset<PCEParameterCondition> CONDITION = 0) {
+  PRWBurnBoundaryBuilder builder_(_fbb);
+  builder_.add_ELAPSED_SECONDS(ELAPSED_SECONDS);
+  builder_.add_CONDITION(CONDITION);
+  builder_.add_HAS_ELAPSED_SECONDS(HAS_ELAPSED_SECONDS);
+  return builder_.Finish();
+}
+
+struct PRWBurnBoundary::Traits {
+  using type = PRWBurnBoundary;
+  static auto constexpr Create = CreatePRWBurnBoundary;
+};
+
+::flatbuffers::Offset<PRWBurnBoundary> CreatePRWBurnBoundary(::flatbuffers::FlatBufferBuilder &_fbb, const PRWBurnBoundaryT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWFiniteBurnT : public ::flatbuffers::NativeTable {
+  typedef PRWFiniteBurn TableType;
+  std::unique_ptr<PRWBurnBoundaryT> START{};
+  std::unique_ptr<PRWBurnBoundaryT> STOP{};
+  prwThrustPrescription THRUST_LAW = prwThrustPrescription::UNSPECIFIED;
+  double FORCE_NEWTONS = 0.0;
+  bool HAS_FORCE_NEWTONS = false;
+  double ACCELERATION_M_S2 = 0.0;
+  bool HAS_ACCELERATION_M_S2 = false;
+  double SPECIFIC_IMPULSE_SECONDS = 0.0;
+  prwSteeringBasis VECTOR_BASIS = prwSteeringBasis::UNSPECIFIED;
+  std::unique_ptr<FRMVector3T> DIRECTION{};
+  std::unique_ptr<FRMVector3T> DIRECTION_RATE{};
+  std::vector<std::unique_ptr<PRWThrottlePointT>> THROTTLE{};
+  PRWFiniteBurnT() = default;
+  PRWFiniteBurnT(const PRWFiniteBurnT &o);
+  PRWFiniteBurnT(PRWFiniteBurnT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWFiniteBurnT &operator=(PRWFiniteBurnT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Finite thrust. RTN=(rhat, N cross rhat, N), N=unit(r cross v).
+/// VNC=(vhat, unit(r cross v), vhat cross unit(r cross v)).
+struct PRWFiniteBurn FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWFiniteBurnT NativeTableType;
+  typedef PRWFiniteBurnBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_START = 4,
+    VT_STOP = 6,
+    VT_THRUST_LAW = 8,
+    VT_FORCE_NEWTONS = 10,
+    VT_HAS_FORCE_NEWTONS = 12,
+    VT_ACCELERATION_M_S2 = 14,
+    VT_HAS_ACCELERATION_M_S2 = 16,
+    VT_SPECIFIC_IMPULSE_SECONDS = 18,
+    VT_VECTOR_BASIS = 20,
+    VT_DIRECTION = 22,
+    VT_DIRECTION_RATE = 24,
+    VT_THROTTLE = 26
+  };
+  const PRWBurnBoundary *START() const {
+    return GetPointer<const PRWBurnBoundary *>(VT_START);
+  }
+  const PRWBurnBoundary *STOP() const {
+    return GetPointer<const PRWBurnBoundary *>(VT_STOP);
+  }
+  prwThrustPrescription THRUST_LAW() const {
+    return static_cast<prwThrustPrescription>(GetField<uint8_t>(VT_THRUST_LAW, 0));
+  }
+  double FORCE_NEWTONS() const {
+    return GetField<double>(VT_FORCE_NEWTONS, 0.0);
+  }
+  /// True when FORCE_NEWTONS carries a value; false means absent.
+  bool HAS_FORCE_NEWTONS() const {
+    return GetField<uint8_t>(VT_HAS_FORCE_NEWTONS, 0) != 0;
+  }
+  double ACCELERATION_M_S2() const {
+    return GetField<double>(VT_ACCELERATION_M_S2, 0.0);
+  }
+  /// True when ACCELERATION_M_S2 carries a value; false means absent.
+  bool HAS_ACCELERATION_M_S2() const {
+    return GetField<uint8_t>(VT_HAS_ACCELERATION_M_S2, 0) != 0;
+  }
+  double SPECIFIC_IMPULSE_SECONDS() const {
+    return GetField<double>(VT_SPECIFIC_IMPULSE_SECONDS, 0.0);
+  }
+  prwSteeringBasis VECTOR_BASIS() const {
+    return static_cast<prwSteeringBasis>(GetField<uint8_t>(VT_VECTOR_BASIS, 0));
+  }
+  /// Dimensionless components; normalized after adding elapsed*time rate.
+  const FRMVector3 *DIRECTION() const {
+    return GetPointer<const FRMVector3 *>(VT_DIRECTION);
+  }
+  /// Direction-component change per second, not radians/second.
+  const FRMVector3 *DIRECTION_RATE() const {
+    return GetPointer<const FRMVector3 *>(VT_DIRECTION_RATE);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<PRWThrottlePoint>> *THROTTLE() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PRWThrottlePoint>> *>(VT_THROTTLE);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_START) &&
+           verifier.VerifyTable(START()) &&
+           VerifyOffsetRequired(verifier, VT_STOP) &&
+           verifier.VerifyTable(STOP()) &&
+           VerifyField<uint8_t>(verifier, VT_THRUST_LAW, 1) &&
+           VerifyField<double>(verifier, VT_FORCE_NEWTONS, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_FORCE_NEWTONS, 1) &&
+           VerifyField<double>(verifier, VT_ACCELERATION_M_S2, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_ACCELERATION_M_S2, 1) &&
+           VerifyField<double>(verifier, VT_SPECIFIC_IMPULSE_SECONDS, 8) &&
+           VerifyField<uint8_t>(verifier, VT_VECTOR_BASIS, 1) &&
+           VerifyOffset(verifier, VT_DIRECTION) &&
+           verifier.VerifyTable(DIRECTION()) &&
+           VerifyOffset(verifier, VT_DIRECTION_RATE) &&
+           verifier.VerifyTable(DIRECTION_RATE()) &&
+           VerifyOffset(verifier, VT_THROTTLE) &&
+           verifier.VerifyVector(THROTTLE()) &&
+           verifier.VerifyVectorOfTables(THROTTLE()) &&
+           verifier.EndTable();
+  }
+  PRWFiniteBurnT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWFiniteBurnT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWFiniteBurn> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWFiniteBurnT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWFiniteBurnBuilder {
+  typedef PRWFiniteBurn Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_START(::flatbuffers::Offset<PRWBurnBoundary> START) {
+    fbb_.AddOffset(PRWFiniteBurn::VT_START, START);
+  }
+  void add_STOP(::flatbuffers::Offset<PRWBurnBoundary> STOP) {
+    fbb_.AddOffset(PRWFiniteBurn::VT_STOP, STOP);
+  }
+  void add_THRUST_LAW(prwThrustPrescription THRUST_LAW) {
+    fbb_.AddElement<uint8_t>(PRWFiniteBurn::VT_THRUST_LAW, static_cast<uint8_t>(THRUST_LAW), 0);
+  }
+  void add_FORCE_NEWTONS(double FORCE_NEWTONS) {
+    fbb_.AddElement<double>(PRWFiniteBurn::VT_FORCE_NEWTONS, FORCE_NEWTONS, 0.0);
+  }
+  void add_HAS_FORCE_NEWTONS(bool HAS_FORCE_NEWTONS) {
+    fbb_.AddElement<uint8_t>(PRWFiniteBurn::VT_HAS_FORCE_NEWTONS, static_cast<uint8_t>(HAS_FORCE_NEWTONS), 0);
+  }
+  void add_ACCELERATION_M_S2(double ACCELERATION_M_S2) {
+    fbb_.AddElement<double>(PRWFiniteBurn::VT_ACCELERATION_M_S2, ACCELERATION_M_S2, 0.0);
+  }
+  void add_HAS_ACCELERATION_M_S2(bool HAS_ACCELERATION_M_S2) {
+    fbb_.AddElement<uint8_t>(PRWFiniteBurn::VT_HAS_ACCELERATION_M_S2, static_cast<uint8_t>(HAS_ACCELERATION_M_S2), 0);
+  }
+  void add_SPECIFIC_IMPULSE_SECONDS(double SPECIFIC_IMPULSE_SECONDS) {
+    fbb_.AddElement<double>(PRWFiniteBurn::VT_SPECIFIC_IMPULSE_SECONDS, SPECIFIC_IMPULSE_SECONDS, 0.0);
+  }
+  void add_VECTOR_BASIS(prwSteeringBasis VECTOR_BASIS) {
+    fbb_.AddElement<uint8_t>(PRWFiniteBurn::VT_VECTOR_BASIS, static_cast<uint8_t>(VECTOR_BASIS), 0);
+  }
+  void add_DIRECTION(::flatbuffers::Offset<FRMVector3> DIRECTION) {
+    fbb_.AddOffset(PRWFiniteBurn::VT_DIRECTION, DIRECTION);
+  }
+  void add_DIRECTION_RATE(::flatbuffers::Offset<FRMVector3> DIRECTION_RATE) {
+    fbb_.AddOffset(PRWFiniteBurn::VT_DIRECTION_RATE, DIRECTION_RATE);
+  }
+  void add_THROTTLE(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWThrottlePoint>>> THROTTLE) {
+    fbb_.AddOffset(PRWFiniteBurn::VT_THROTTLE, THROTTLE);
+  }
+  explicit PRWFiniteBurnBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWFiniteBurn> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWFiniteBurn>(end);
+    fbb_.Required(o, PRWFiniteBurn::VT_START);
+    fbb_.Required(o, PRWFiniteBurn::VT_STOP);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWFiniteBurn> CreatePRWFiniteBurn(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PRWBurnBoundary> START = 0,
+    ::flatbuffers::Offset<PRWBurnBoundary> STOP = 0,
+    prwThrustPrescription THRUST_LAW = prwThrustPrescription::UNSPECIFIED,
+    double FORCE_NEWTONS = 0.0,
+    bool HAS_FORCE_NEWTONS = false,
+    double ACCELERATION_M_S2 = 0.0,
+    bool HAS_ACCELERATION_M_S2 = false,
+    double SPECIFIC_IMPULSE_SECONDS = 0.0,
+    prwSteeringBasis VECTOR_BASIS = prwSteeringBasis::UNSPECIFIED,
+    ::flatbuffers::Offset<FRMVector3> DIRECTION = 0,
+    ::flatbuffers::Offset<FRMVector3> DIRECTION_RATE = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWThrottlePoint>>> THROTTLE = 0) {
+  PRWFiniteBurnBuilder builder_(_fbb);
+  builder_.add_SPECIFIC_IMPULSE_SECONDS(SPECIFIC_IMPULSE_SECONDS);
+  builder_.add_ACCELERATION_M_S2(ACCELERATION_M_S2);
+  builder_.add_FORCE_NEWTONS(FORCE_NEWTONS);
+  builder_.add_THROTTLE(THROTTLE);
+  builder_.add_DIRECTION_RATE(DIRECTION_RATE);
+  builder_.add_DIRECTION(DIRECTION);
+  builder_.add_STOP(STOP);
+  builder_.add_START(START);
+  builder_.add_VECTOR_BASIS(VECTOR_BASIS);
+  builder_.add_HAS_ACCELERATION_M_S2(HAS_ACCELERATION_M_S2);
+  builder_.add_HAS_FORCE_NEWTONS(HAS_FORCE_NEWTONS);
+  builder_.add_THRUST_LAW(THRUST_LAW);
+  return builder_.Finish();
+}
+
+struct PRWFiniteBurn::Traits {
+  using type = PRWFiniteBurn;
+  static auto constexpr Create = CreatePRWFiniteBurn;
+};
+
+inline ::flatbuffers::Offset<PRWFiniteBurn> CreatePRWFiniteBurnDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PRWBurnBoundary> START = 0,
+    ::flatbuffers::Offset<PRWBurnBoundary> STOP = 0,
+    prwThrustPrescription THRUST_LAW = prwThrustPrescription::UNSPECIFIED,
+    double FORCE_NEWTONS = 0.0,
+    bool HAS_FORCE_NEWTONS = false,
+    double ACCELERATION_M_S2 = 0.0,
+    bool HAS_ACCELERATION_M_S2 = false,
+    double SPECIFIC_IMPULSE_SECONDS = 0.0,
+    prwSteeringBasis VECTOR_BASIS = prwSteeringBasis::UNSPECIFIED,
+    ::flatbuffers::Offset<FRMVector3> DIRECTION = 0,
+    ::flatbuffers::Offset<FRMVector3> DIRECTION_RATE = 0,
+    const std::vector<::flatbuffers::Offset<PRWThrottlePoint>> *THROTTLE = nullptr) {
+  auto THROTTLE__ = THROTTLE ? _fbb.CreateVector<::flatbuffers::Offset<PRWThrottlePoint>>(*THROTTLE) : 0;
+  return CreatePRWFiniteBurn(
+      _fbb,
+      START,
+      STOP,
+      THRUST_LAW,
+      FORCE_NEWTONS,
+      HAS_FORCE_NEWTONS,
+      ACCELERATION_M_S2,
+      HAS_ACCELERATION_M_S2,
+      SPECIFIC_IMPULSE_SECONDS,
+      VECTOR_BASIS,
+      DIRECTION,
+      DIRECTION_RATE,
+      THROTTLE__);
+}
+
+::flatbuffers::Offset<PRWFiniteBurn> CreatePRWFiniteBurn(::flatbuffers::FlatBufferBuilder &_fbb, const PRWFiniteBurnT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWExecutionRequestT : public ::flatbuffers::NativeTable {
+  typedef PRWExecutionRequest TableType;
+  std::unique_ptr<PRWResidentStateT> INITIAL{};
+  std::unique_ptr<TIMInstantT> TARGET_EPOCH{};
+  std::unique_ptr<PRWIntegratorSettingsT> INTEGRATOR{};
+  std::unique_ptr<PRWForceConfigurationT> FORCES{};
+  bool INCLUDE_STM = false;
+  prwDerivativeTechnique STM_TECHNIQUE = prwDerivativeTechnique::ANALYTIC;
+  prwDensityTreatment DENSITY_TREATMENT = prwDensityTreatment::NEGLECTED;
+  std::unique_ptr<PRWStateMatrixT> INITIAL_COVARIANCE{};
+  std::unique_ptr<PRWStateMatrixT> INITIAL_MASS_COVARIANCE{};
+  std::vector<std::unique_ptr<TIMInstantT>> SAMPLE_EPOCHS{};
+  std::vector<std::unique_ptr<PRWImpulseT>> IMPULSES{};
+  bool INCLUDE_MASS_DYNAMICS = false;
+  std::vector<std::unique_ptr<PRWFiniteBurnT>> FINITE_BURNS{};
+  std::unique_ptr<PRWProcessNoiseT> PROCESS_NOISE{};
+  PRWExecutionRequestT() = default;
+  PRWExecutionRequestT(const PRWExecutionRequestT &o);
+  PRWExecutionRequestT(PRWExecutionRequestT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWExecutionRequestT &operator=(PRWExecutionRequestT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Fixed endpoint propagation. Provider selected by the host's connected port.
+struct PRWExecutionRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWExecutionRequestT NativeTableType;
+  typedef PRWExecutionRequestBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_INITIAL = 4,
+    VT_TARGET_EPOCH = 6,
+    VT_INTEGRATOR = 8,
+    VT_FORCES = 10,
+    VT_INCLUDE_STM = 12,
+    VT_STM_TECHNIQUE = 14,
+    VT_DENSITY_TREATMENT = 16,
+    VT_INITIAL_COVARIANCE = 18,
+    VT_INITIAL_MASS_COVARIANCE = 20,
+    VT_SAMPLE_EPOCHS = 22,
+    VT_IMPULSES = 24,
+    VT_INCLUDE_MASS_DYNAMICS = 26,
+    VT_FINITE_BURNS = 28,
+    VT_PROCESS_NOISE = 30
+  };
+  const PRWResidentState *INITIAL() const {
+    return GetPointer<const PRWResidentState *>(VT_INITIAL);
+  }
+  const TIMInstant *TARGET_EPOCH() const {
+    return GetPointer<const TIMInstant *>(VT_TARGET_EPOCH);
+  }
+  const PRWIntegratorSettings *INTEGRATOR() const {
+    return GetPointer<const PRWIntegratorSettings *>(VT_INTEGRATOR);
+  }
+  const PRWForceConfiguration *FORCES() const {
+    return GetPointer<const PRWForceConfiguration *>(VT_FORCES);
+  }
+  bool INCLUDE_STM() const {
+    return GetField<uint8_t>(VT_INCLUDE_STM, 0) != 0;
+  }
+  prwDerivativeTechnique STM_TECHNIQUE() const {
+    return static_cast<prwDerivativeTechnique>(GetField<uint8_t>(VT_STM_TECHNIQUE, 1));
+  }
+  prwDensityTreatment DENSITY_TREATMENT() const {
+    return static_cast<prwDensityTreatment>(GetField<uint8_t>(VT_DENSITY_TREATMENT, 1));
+  }
+  const PRWStateMatrix *INITIAL_COVARIANCE() const {
+    return GetPointer<const PRWStateMatrix *>(VT_INITIAL_COVARIANCE);
+  }
+  const PRWStateMatrix *INITIAL_MASS_COVARIANCE() const {
+    return GetPointer<const PRWStateMatrix *>(VT_INITIAL_MASS_COVARIANCE);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<TIMInstant>> *SAMPLE_EPOCHS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<TIMInstant>> *>(VT_SAMPLE_EPOCHS);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<PRWImpulse>> *IMPULSES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PRWImpulse>> *>(VT_IMPULSES);
+  }
+  /// Explicitly selects 7-state integration even if FINITE_BURNS is empty.
+  bool INCLUDE_MASS_DYNAMICS() const {
+    return GetField<uint8_t>(VT_INCLUDE_MASS_DYNAMICS, 0) != 0;
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<PRWFiniteBurn>> *FINITE_BURNS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PRWFiniteBurn>> *>(VT_FINITE_BURNS);
+  }
+  /// Process noise added to the propagated covariance. Absent means none.
+  const PRWProcessNoise *PROCESS_NOISE() const {
+    return GetPointer<const PRWProcessNoise *>(VT_PROCESS_NOISE);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_INITIAL) &&
+           verifier.VerifyTable(INITIAL()) &&
+           VerifyOffsetRequired(verifier, VT_TARGET_EPOCH) &&
+           verifier.VerifyTable(TARGET_EPOCH()) &&
+           VerifyOffsetRequired(verifier, VT_INTEGRATOR) &&
+           verifier.VerifyTable(INTEGRATOR()) &&
+           VerifyOffsetRequired(verifier, VT_FORCES) &&
+           verifier.VerifyTable(FORCES()) &&
+           VerifyField<uint8_t>(verifier, VT_INCLUDE_STM, 1) &&
+           VerifyField<uint8_t>(verifier, VT_STM_TECHNIQUE, 1) &&
+           VerifyField<uint8_t>(verifier, VT_DENSITY_TREATMENT, 1) &&
+           VerifyOffset(verifier, VT_INITIAL_COVARIANCE) &&
+           verifier.VerifyTable(INITIAL_COVARIANCE()) &&
+           VerifyOffset(verifier, VT_INITIAL_MASS_COVARIANCE) &&
+           verifier.VerifyTable(INITIAL_MASS_COVARIANCE()) &&
+           VerifyOffset(verifier, VT_SAMPLE_EPOCHS) &&
+           verifier.VerifyVector(SAMPLE_EPOCHS()) &&
+           verifier.VerifyVectorOfTables(SAMPLE_EPOCHS()) &&
+           VerifyOffset(verifier, VT_IMPULSES) &&
+           verifier.VerifyVector(IMPULSES()) &&
+           verifier.VerifyVectorOfTables(IMPULSES()) &&
+           VerifyField<uint8_t>(verifier, VT_INCLUDE_MASS_DYNAMICS, 1) &&
+           VerifyOffset(verifier, VT_FINITE_BURNS) &&
+           verifier.VerifyVector(FINITE_BURNS()) &&
+           verifier.VerifyVectorOfTables(FINITE_BURNS()) &&
+           VerifyOffset(verifier, VT_PROCESS_NOISE) &&
+           verifier.VerifyTable(PROCESS_NOISE()) &&
+           verifier.EndTable();
+  }
+  PRWExecutionRequestT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWExecutionRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWExecutionRequest> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWExecutionRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWExecutionRequestBuilder {
+  typedef PRWExecutionRequest Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_INITIAL(::flatbuffers::Offset<PRWResidentState> INITIAL) {
+    fbb_.AddOffset(PRWExecutionRequest::VT_INITIAL, INITIAL);
+  }
+  void add_TARGET_EPOCH(::flatbuffers::Offset<TIMInstant> TARGET_EPOCH) {
+    fbb_.AddOffset(PRWExecutionRequest::VT_TARGET_EPOCH, TARGET_EPOCH);
+  }
+  void add_INTEGRATOR(::flatbuffers::Offset<PRWIntegratorSettings> INTEGRATOR) {
+    fbb_.AddOffset(PRWExecutionRequest::VT_INTEGRATOR, INTEGRATOR);
+  }
+  void add_FORCES(::flatbuffers::Offset<PRWForceConfiguration> FORCES) {
+    fbb_.AddOffset(PRWExecutionRequest::VT_FORCES, FORCES);
+  }
+  void add_INCLUDE_STM(bool INCLUDE_STM) {
+    fbb_.AddElement<uint8_t>(PRWExecutionRequest::VT_INCLUDE_STM, static_cast<uint8_t>(INCLUDE_STM), 0);
+  }
+  void add_STM_TECHNIQUE(prwDerivativeTechnique STM_TECHNIQUE) {
+    fbb_.AddElement<uint8_t>(PRWExecutionRequest::VT_STM_TECHNIQUE, static_cast<uint8_t>(STM_TECHNIQUE), 1);
+  }
+  void add_DENSITY_TREATMENT(prwDensityTreatment DENSITY_TREATMENT) {
+    fbb_.AddElement<uint8_t>(PRWExecutionRequest::VT_DENSITY_TREATMENT, static_cast<uint8_t>(DENSITY_TREATMENT), 1);
+  }
+  void add_INITIAL_COVARIANCE(::flatbuffers::Offset<PRWStateMatrix> INITIAL_COVARIANCE) {
+    fbb_.AddOffset(PRWExecutionRequest::VT_INITIAL_COVARIANCE, INITIAL_COVARIANCE);
+  }
+  void add_INITIAL_MASS_COVARIANCE(::flatbuffers::Offset<PRWStateMatrix> INITIAL_MASS_COVARIANCE) {
+    fbb_.AddOffset(PRWExecutionRequest::VT_INITIAL_MASS_COVARIANCE, INITIAL_MASS_COVARIANCE);
+  }
+  void add_SAMPLE_EPOCHS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<TIMInstant>>> SAMPLE_EPOCHS) {
+    fbb_.AddOffset(PRWExecutionRequest::VT_SAMPLE_EPOCHS, SAMPLE_EPOCHS);
+  }
+  void add_IMPULSES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWImpulse>>> IMPULSES) {
+    fbb_.AddOffset(PRWExecutionRequest::VT_IMPULSES, IMPULSES);
+  }
+  void add_INCLUDE_MASS_DYNAMICS(bool INCLUDE_MASS_DYNAMICS) {
+    fbb_.AddElement<uint8_t>(PRWExecutionRequest::VT_INCLUDE_MASS_DYNAMICS, static_cast<uint8_t>(INCLUDE_MASS_DYNAMICS), 0);
+  }
+  void add_FINITE_BURNS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWFiniteBurn>>> FINITE_BURNS) {
+    fbb_.AddOffset(PRWExecutionRequest::VT_FINITE_BURNS, FINITE_BURNS);
+  }
+  void add_PROCESS_NOISE(::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE) {
+    fbb_.AddOffset(PRWExecutionRequest::VT_PROCESS_NOISE, PROCESS_NOISE);
+  }
+  explicit PRWExecutionRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWExecutionRequest> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWExecutionRequest>(end);
+    fbb_.Required(o, PRWExecutionRequest::VT_INITIAL);
+    fbb_.Required(o, PRWExecutionRequest::VT_TARGET_EPOCH);
+    fbb_.Required(o, PRWExecutionRequest::VT_INTEGRATOR);
+    fbb_.Required(o, PRWExecutionRequest::VT_FORCES);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWExecutionRequest> CreatePRWExecutionRequest(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PRWResidentState> INITIAL = 0,
+    ::flatbuffers::Offset<TIMInstant> TARGET_EPOCH = 0,
+    ::flatbuffers::Offset<PRWIntegratorSettings> INTEGRATOR = 0,
+    ::flatbuffers::Offset<PRWForceConfiguration> FORCES = 0,
+    bool INCLUDE_STM = false,
+    prwDerivativeTechnique STM_TECHNIQUE = prwDerivativeTechnique::ANALYTIC,
+    prwDensityTreatment DENSITY_TREATMENT = prwDensityTreatment::NEGLECTED,
+    ::flatbuffers::Offset<PRWStateMatrix> INITIAL_COVARIANCE = 0,
+    ::flatbuffers::Offset<PRWStateMatrix> INITIAL_MASS_COVARIANCE = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<TIMInstant>>> SAMPLE_EPOCHS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWImpulse>>> IMPULSES = 0,
+    bool INCLUDE_MASS_DYNAMICS = false,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWFiniteBurn>>> FINITE_BURNS = 0,
+    ::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE = 0) {
+  PRWExecutionRequestBuilder builder_(_fbb);
+  builder_.add_PROCESS_NOISE(PROCESS_NOISE);
+  builder_.add_FINITE_BURNS(FINITE_BURNS);
+  builder_.add_IMPULSES(IMPULSES);
+  builder_.add_SAMPLE_EPOCHS(SAMPLE_EPOCHS);
+  builder_.add_INITIAL_MASS_COVARIANCE(INITIAL_MASS_COVARIANCE);
+  builder_.add_INITIAL_COVARIANCE(INITIAL_COVARIANCE);
+  builder_.add_FORCES(FORCES);
+  builder_.add_INTEGRATOR(INTEGRATOR);
+  builder_.add_TARGET_EPOCH(TARGET_EPOCH);
+  builder_.add_INITIAL(INITIAL);
+  builder_.add_INCLUDE_MASS_DYNAMICS(INCLUDE_MASS_DYNAMICS);
+  builder_.add_DENSITY_TREATMENT(DENSITY_TREATMENT);
+  builder_.add_STM_TECHNIQUE(STM_TECHNIQUE);
+  builder_.add_INCLUDE_STM(INCLUDE_STM);
+  return builder_.Finish();
+}
+
+struct PRWExecutionRequest::Traits {
+  using type = PRWExecutionRequest;
+  static auto constexpr Create = CreatePRWExecutionRequest;
+};
+
+inline ::flatbuffers::Offset<PRWExecutionRequest> CreatePRWExecutionRequestDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PRWResidentState> INITIAL = 0,
+    ::flatbuffers::Offset<TIMInstant> TARGET_EPOCH = 0,
+    ::flatbuffers::Offset<PRWIntegratorSettings> INTEGRATOR = 0,
+    ::flatbuffers::Offset<PRWForceConfiguration> FORCES = 0,
+    bool INCLUDE_STM = false,
+    prwDerivativeTechnique STM_TECHNIQUE = prwDerivativeTechnique::ANALYTIC,
+    prwDensityTreatment DENSITY_TREATMENT = prwDensityTreatment::NEGLECTED,
+    ::flatbuffers::Offset<PRWStateMatrix> INITIAL_COVARIANCE = 0,
+    ::flatbuffers::Offset<PRWStateMatrix> INITIAL_MASS_COVARIANCE = 0,
+    const std::vector<::flatbuffers::Offset<TIMInstant>> *SAMPLE_EPOCHS = nullptr,
+    const std::vector<::flatbuffers::Offset<PRWImpulse>> *IMPULSES = nullptr,
+    bool INCLUDE_MASS_DYNAMICS = false,
+    const std::vector<::flatbuffers::Offset<PRWFiniteBurn>> *FINITE_BURNS = nullptr,
+    ::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE = 0) {
+  auto SAMPLE_EPOCHS__ = SAMPLE_EPOCHS ? _fbb.CreateVector<::flatbuffers::Offset<TIMInstant>>(*SAMPLE_EPOCHS) : 0;
+  auto IMPULSES__ = IMPULSES ? _fbb.CreateVector<::flatbuffers::Offset<PRWImpulse>>(*IMPULSES) : 0;
+  auto FINITE_BURNS__ = FINITE_BURNS ? _fbb.CreateVector<::flatbuffers::Offset<PRWFiniteBurn>>(*FINITE_BURNS) : 0;
+  return CreatePRWExecutionRequest(
+      _fbb,
+      INITIAL,
+      TARGET_EPOCH,
+      INTEGRATOR,
+      FORCES,
+      INCLUDE_STM,
+      STM_TECHNIQUE,
+      DENSITY_TREATMENT,
+      INITIAL_COVARIANCE,
+      INITIAL_MASS_COVARIANCE,
+      SAMPLE_EPOCHS__,
+      IMPULSES__,
+      INCLUDE_MASS_DYNAMICS,
+      FINITE_BURNS__,
+      PROCESS_NOISE);
+}
+
+::flatbuffers::Offset<PRWExecutionRequest> CreatePRWExecutionRequest(::flatbuffers::FlatBufferBuilder &_fbb, const PRWExecutionRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWBurnReportT : public ::flatbuffers::NativeTable {
+  typedef PRWBurnReport TableType;
+  uint32_t BURN_INDEX = 0;
+  bool STARTED = false;
+  bool STOPPED = false;
+  bool START_BY_EVENT = false;
+  bool STOP_BY_EVENT = false;
+  double START_SECONDS = 0.0;
+  bool HAS_START_SECONDS = false;
+  double STOP_SECONDS = 0.0;
+  bool HAS_STOP_SECONDS = false;
+  std::unique_ptr<TIMInstantT> START_EPOCH{};
+  std::unique_ptr<TIMInstantT> STOP_EPOCH{};
+  double DELTA_V_M_S = 0.0;
+  double PROPELLANT_KG = 0.0;
+  PRWBurnReportT() = default;
+  PRWBurnReportT(const PRWBurnReportT &o);
+  PRWBurnReportT(PRWBurnReportT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWBurnReportT &operator=(PRWBurnReportT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Burn times absent until reached; zero means an actual edge at initial epoch.
+struct PRWBurnReport FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWBurnReportT NativeTableType;
+  typedef PRWBurnReportBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_BURN_INDEX = 4,
+    VT_STARTED = 6,
+    VT_STOPPED = 8,
+    VT_START_BY_EVENT = 10,
+    VT_STOP_BY_EVENT = 12,
+    VT_START_SECONDS = 14,
+    VT_HAS_START_SECONDS = 16,
+    VT_STOP_SECONDS = 18,
+    VT_HAS_STOP_SECONDS = 20,
+    VT_START_EPOCH = 22,
+    VT_STOP_EPOCH = 24,
+    VT_DELTA_V_M_S = 26,
+    VT_PROPELLANT_KG = 28
+  };
+  uint32_t BURN_INDEX() const {
+    return GetField<uint32_t>(VT_BURN_INDEX, 0);
+  }
+  bool STARTED() const {
+    return GetField<uint8_t>(VT_STARTED, 0) != 0;
+  }
+  bool STOPPED() const {
+    return GetField<uint8_t>(VT_STOPPED, 0) != 0;
+  }
+  bool START_BY_EVENT() const {
+    return GetField<uint8_t>(VT_START_BY_EVENT, 0) != 0;
+  }
+  bool STOP_BY_EVENT() const {
+    return GetField<uint8_t>(VT_STOP_BY_EVENT, 0) != 0;
+  }
+  double START_SECONDS() const {
+    return GetField<double>(VT_START_SECONDS, 0.0);
+  }
+  /// True when START_SECONDS carries a value; false means absent.
+  bool HAS_START_SECONDS() const {
+    return GetField<uint8_t>(VT_HAS_START_SECONDS, 0) != 0;
+  }
+  double STOP_SECONDS() const {
+    return GetField<double>(VT_STOP_SECONDS, 0.0);
+  }
+  /// True when STOP_SECONDS carries a value; false means absent.
+  bool HAS_STOP_SECONDS() const {
+    return GetField<uint8_t>(VT_HAS_STOP_SECONDS, 0) != 0;
+  }
+  const TIMInstant *START_EPOCH() const {
+    return GetPointer<const TIMInstant *>(VT_START_EPOCH);
+  }
+  const TIMInstant *STOP_EPOCH() const {
+    return GetPointer<const TIMInstant *>(VT_STOP_EPOCH);
+  }
+  /// Integral of thrust acceleration magnitude, m/s; not vector net delta-v.
+  double DELTA_V_M_S() const {
+    return GetField<double>(VT_DELTA_V_M_S, 0.0);
+  }
+  double PROPELLANT_KG() const {
+    return GetField<double>(VT_PROPELLANT_KG, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint32_t>(verifier, VT_BURN_INDEX, 4) &&
+           VerifyField<uint8_t>(verifier, VT_STARTED, 1) &&
+           VerifyField<uint8_t>(verifier, VT_STOPPED, 1) &&
+           VerifyField<uint8_t>(verifier, VT_START_BY_EVENT, 1) &&
+           VerifyField<uint8_t>(verifier, VT_STOP_BY_EVENT, 1) &&
+           VerifyField<double>(verifier, VT_START_SECONDS, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_START_SECONDS, 1) &&
+           VerifyField<double>(verifier, VT_STOP_SECONDS, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_STOP_SECONDS, 1) &&
+           VerifyOffset(verifier, VT_START_EPOCH) &&
+           verifier.VerifyTable(START_EPOCH()) &&
+           VerifyOffset(verifier, VT_STOP_EPOCH) &&
+           verifier.VerifyTable(STOP_EPOCH()) &&
+           VerifyField<double>(verifier, VT_DELTA_V_M_S, 8) &&
+           VerifyField<double>(verifier, VT_PROPELLANT_KG, 8) &&
+           verifier.EndTable();
+  }
+  PRWBurnReportT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWBurnReportT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWBurnReport> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWBurnReportT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWBurnReportBuilder {
+  typedef PRWBurnReport Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_BURN_INDEX(uint32_t BURN_INDEX) {
+    fbb_.AddElement<uint32_t>(PRWBurnReport::VT_BURN_INDEX, BURN_INDEX, 0);
+  }
+  void add_STARTED(bool STARTED) {
+    fbb_.AddElement<uint8_t>(PRWBurnReport::VT_STARTED, static_cast<uint8_t>(STARTED), 0);
+  }
+  void add_STOPPED(bool STOPPED) {
+    fbb_.AddElement<uint8_t>(PRWBurnReport::VT_STOPPED, static_cast<uint8_t>(STOPPED), 0);
+  }
+  void add_START_BY_EVENT(bool START_BY_EVENT) {
+    fbb_.AddElement<uint8_t>(PRWBurnReport::VT_START_BY_EVENT, static_cast<uint8_t>(START_BY_EVENT), 0);
+  }
+  void add_STOP_BY_EVENT(bool STOP_BY_EVENT) {
+    fbb_.AddElement<uint8_t>(PRWBurnReport::VT_STOP_BY_EVENT, static_cast<uint8_t>(STOP_BY_EVENT), 0);
+  }
+  void add_START_SECONDS(double START_SECONDS) {
+    fbb_.AddElement<double>(PRWBurnReport::VT_START_SECONDS, START_SECONDS, 0.0);
+  }
+  void add_HAS_START_SECONDS(bool HAS_START_SECONDS) {
+    fbb_.AddElement<uint8_t>(PRWBurnReport::VT_HAS_START_SECONDS, static_cast<uint8_t>(HAS_START_SECONDS), 0);
+  }
+  void add_STOP_SECONDS(double STOP_SECONDS) {
+    fbb_.AddElement<double>(PRWBurnReport::VT_STOP_SECONDS, STOP_SECONDS, 0.0);
+  }
+  void add_HAS_STOP_SECONDS(bool HAS_STOP_SECONDS) {
+    fbb_.AddElement<uint8_t>(PRWBurnReport::VT_HAS_STOP_SECONDS, static_cast<uint8_t>(HAS_STOP_SECONDS), 0);
+  }
+  void add_START_EPOCH(::flatbuffers::Offset<TIMInstant> START_EPOCH) {
+    fbb_.AddOffset(PRWBurnReport::VT_START_EPOCH, START_EPOCH);
+  }
+  void add_STOP_EPOCH(::flatbuffers::Offset<TIMInstant> STOP_EPOCH) {
+    fbb_.AddOffset(PRWBurnReport::VT_STOP_EPOCH, STOP_EPOCH);
+  }
+  void add_DELTA_V_M_S(double DELTA_V_M_S) {
+    fbb_.AddElement<double>(PRWBurnReport::VT_DELTA_V_M_S, DELTA_V_M_S, 0.0);
+  }
+  void add_PROPELLANT_KG(double PROPELLANT_KG) {
+    fbb_.AddElement<double>(PRWBurnReport::VT_PROPELLANT_KG, PROPELLANT_KG, 0.0);
+  }
+  explicit PRWBurnReportBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWBurnReport> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWBurnReport>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWBurnReport> CreatePRWBurnReport(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t BURN_INDEX = 0,
+    bool STARTED = false,
+    bool STOPPED = false,
+    bool START_BY_EVENT = false,
+    bool STOP_BY_EVENT = false,
+    double START_SECONDS = 0.0,
+    bool HAS_START_SECONDS = false,
+    double STOP_SECONDS = 0.0,
+    bool HAS_STOP_SECONDS = false,
+    ::flatbuffers::Offset<TIMInstant> START_EPOCH = 0,
+    ::flatbuffers::Offset<TIMInstant> STOP_EPOCH = 0,
+    double DELTA_V_M_S = 0.0,
+    double PROPELLANT_KG = 0.0) {
+  PRWBurnReportBuilder builder_(_fbb);
+  builder_.add_PROPELLANT_KG(PROPELLANT_KG);
+  builder_.add_DELTA_V_M_S(DELTA_V_M_S);
+  builder_.add_STOP_SECONDS(STOP_SECONDS);
+  builder_.add_START_SECONDS(START_SECONDS);
+  builder_.add_STOP_EPOCH(STOP_EPOCH);
+  builder_.add_START_EPOCH(START_EPOCH);
+  builder_.add_BURN_INDEX(BURN_INDEX);
+  builder_.add_HAS_STOP_SECONDS(HAS_STOP_SECONDS);
+  builder_.add_HAS_START_SECONDS(HAS_START_SECONDS);
+  builder_.add_STOP_BY_EVENT(STOP_BY_EVENT);
+  builder_.add_START_BY_EVENT(START_BY_EVENT);
+  builder_.add_STOPPED(STOPPED);
+  builder_.add_STARTED(STARTED);
+  return builder_.Finish();
+}
+
+struct PRWBurnReport::Traits {
+  using type = PRWBurnReport;
+  static auto constexpr Create = CreatePRWBurnReport;
+};
+
+::flatbuffers::Offset<PRWBurnReport> CreatePRWBurnReport(::flatbuffers::FlatBufferBuilder &_fbb, const PRWBurnReportT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWPropagationSampleT : public ::flatbuffers::NativeTable {
+  typedef PRWPropagationSample TableType;
+  std::unique_ptr<PRWResidentStateT> STATE{};
+  std::unique_ptr<PRWStateMatrixT> STM{};
+  std::unique_ptr<PRWStateMatrixT> MASS_STM{};
+  std::unique_ptr<PRWStateMatrixT> COVARIANCE{};
+  std::unique_ptr<PRWStateMatrixT> MASS_COVARIANCE{};
+  uint64_t ACCEPTED_STEPS = 0;
+  uint64_t REJECTED_STEPS = 0;
+  std::vector<std::unique_ptr<PRWBurnReportT>> BURNS{};
+  std::unique_ptr<PRWProcessNoiseT> PROCESS_NOISE{};
+  PRWPropagationSampleT() = default;
+  PRWPropagationSampleT(const PRWPropagationSampleT &o);
+  PRWPropagationSampleT(PRWPropagationSampleT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWPropagationSampleT &operator=(PRWPropagationSampleT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct PRWPropagationSample FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWPropagationSampleT NativeTableType;
+  typedef PRWPropagationSampleBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_STATE = 4,
+    VT_STM = 6,
+    VT_MASS_STM = 8,
+    VT_COVARIANCE = 10,
+    VT_MASS_COVARIANCE = 12,
+    VT_ACCEPTED_STEPS = 14,
+    VT_REJECTED_STEPS = 16,
+    VT_BURNS = 18,
+    VT_PROCESS_NOISE = 20
+  };
+  const PRWResidentState *STATE() const {
+    return GetPointer<const PRWResidentState *>(VT_STATE);
+  }
+  /// Both STMs cumulative from request initial epoch; SI state units.
+  const PRWStateMatrix *STM() const {
+    return GetPointer<const PRWStateMatrix *>(VT_STM);
+  }
+  const PRWStateMatrix *MASS_STM() const {
+    return GetPointer<const PRWStateMatrix *>(VT_MASS_STM);
+  }
+  const PRWStateMatrix *COVARIANCE() const {
+    return GetPointer<const PRWStateMatrix *>(VT_COVARIANCE);
+  }
+  const PRWStateMatrix *MASS_COVARIANCE() const {
+    return GetPointer<const PRWStateMatrix *>(VT_MASS_COVARIANCE);
+  }
+  uint64_t ACCEPTED_STEPS() const {
+    return GetField<uint64_t>(VT_ACCEPTED_STEPS, 0);
+  }
+  uint64_t REJECTED_STEPS() const {
+    return GetField<uint64_t>(VT_REJECTED_STEPS, 0);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<PRWBurnReport>> *BURNS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PRWBurnReport>> *>(VT_BURNS);
+  }
+  /// The process noise COVARIANCE includes. Absent means none.
+  const PRWProcessNoise *PROCESS_NOISE() const {
+    return GetPointer<const PRWProcessNoise *>(VT_PROCESS_NOISE);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_STATE) &&
+           verifier.VerifyTable(STATE()) &&
+           VerifyOffset(verifier, VT_STM) &&
+           verifier.VerifyTable(STM()) &&
+           VerifyOffset(verifier, VT_MASS_STM) &&
+           verifier.VerifyTable(MASS_STM()) &&
+           VerifyOffset(verifier, VT_COVARIANCE) &&
+           verifier.VerifyTable(COVARIANCE()) &&
+           VerifyOffset(verifier, VT_MASS_COVARIANCE) &&
+           verifier.VerifyTable(MASS_COVARIANCE()) &&
+           VerifyField<uint64_t>(verifier, VT_ACCEPTED_STEPS, 8) &&
+           VerifyField<uint64_t>(verifier, VT_REJECTED_STEPS, 8) &&
+           VerifyOffset(verifier, VT_BURNS) &&
+           verifier.VerifyVector(BURNS()) &&
+           verifier.VerifyVectorOfTables(BURNS()) &&
+           VerifyOffset(verifier, VT_PROCESS_NOISE) &&
+           verifier.VerifyTable(PROCESS_NOISE()) &&
+           verifier.EndTable();
+  }
+  PRWPropagationSampleT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWPropagationSampleT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWPropagationSample> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWPropagationSampleT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWPropagationSampleBuilder {
+  typedef PRWPropagationSample Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_STATE(::flatbuffers::Offset<PRWResidentState> STATE) {
+    fbb_.AddOffset(PRWPropagationSample::VT_STATE, STATE);
+  }
+  void add_STM(::flatbuffers::Offset<PRWStateMatrix> STM) {
+    fbb_.AddOffset(PRWPropagationSample::VT_STM, STM);
+  }
+  void add_MASS_STM(::flatbuffers::Offset<PRWStateMatrix> MASS_STM) {
+    fbb_.AddOffset(PRWPropagationSample::VT_MASS_STM, MASS_STM);
+  }
+  void add_COVARIANCE(::flatbuffers::Offset<PRWStateMatrix> COVARIANCE) {
+    fbb_.AddOffset(PRWPropagationSample::VT_COVARIANCE, COVARIANCE);
+  }
+  void add_MASS_COVARIANCE(::flatbuffers::Offset<PRWStateMatrix> MASS_COVARIANCE) {
+    fbb_.AddOffset(PRWPropagationSample::VT_MASS_COVARIANCE, MASS_COVARIANCE);
+  }
+  void add_ACCEPTED_STEPS(uint64_t ACCEPTED_STEPS) {
+    fbb_.AddElement<uint64_t>(PRWPropagationSample::VT_ACCEPTED_STEPS, ACCEPTED_STEPS, 0);
+  }
+  void add_REJECTED_STEPS(uint64_t REJECTED_STEPS) {
+    fbb_.AddElement<uint64_t>(PRWPropagationSample::VT_REJECTED_STEPS, REJECTED_STEPS, 0);
+  }
+  void add_BURNS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWBurnReport>>> BURNS) {
+    fbb_.AddOffset(PRWPropagationSample::VT_BURNS, BURNS);
+  }
+  void add_PROCESS_NOISE(::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE) {
+    fbb_.AddOffset(PRWPropagationSample::VT_PROCESS_NOISE, PROCESS_NOISE);
+  }
+  explicit PRWPropagationSampleBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWPropagationSample> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWPropagationSample>(end);
+    fbb_.Required(o, PRWPropagationSample::VT_STATE);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWPropagationSample> CreatePRWPropagationSample(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PRWResidentState> STATE = 0,
+    ::flatbuffers::Offset<PRWStateMatrix> STM = 0,
+    ::flatbuffers::Offset<PRWStateMatrix> MASS_STM = 0,
+    ::flatbuffers::Offset<PRWStateMatrix> COVARIANCE = 0,
+    ::flatbuffers::Offset<PRWStateMatrix> MASS_COVARIANCE = 0,
+    uint64_t ACCEPTED_STEPS = 0,
+    uint64_t REJECTED_STEPS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWBurnReport>>> BURNS = 0,
+    ::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE = 0) {
+  PRWPropagationSampleBuilder builder_(_fbb);
+  builder_.add_REJECTED_STEPS(REJECTED_STEPS);
+  builder_.add_ACCEPTED_STEPS(ACCEPTED_STEPS);
+  builder_.add_PROCESS_NOISE(PROCESS_NOISE);
+  builder_.add_BURNS(BURNS);
+  builder_.add_MASS_COVARIANCE(MASS_COVARIANCE);
+  builder_.add_COVARIANCE(COVARIANCE);
+  builder_.add_MASS_STM(MASS_STM);
+  builder_.add_STM(STM);
+  builder_.add_STATE(STATE);
+  return builder_.Finish();
+}
+
+struct PRWPropagationSample::Traits {
+  using type = PRWPropagationSample;
+  static auto constexpr Create = CreatePRWPropagationSample;
+};
+
+inline ::flatbuffers::Offset<PRWPropagationSample> CreatePRWPropagationSampleDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PRWResidentState> STATE = 0,
+    ::flatbuffers::Offset<PRWStateMatrix> STM = 0,
+    ::flatbuffers::Offset<PRWStateMatrix> MASS_STM = 0,
+    ::flatbuffers::Offset<PRWStateMatrix> COVARIANCE = 0,
+    ::flatbuffers::Offset<PRWStateMatrix> MASS_COVARIANCE = 0,
+    uint64_t ACCEPTED_STEPS = 0,
+    uint64_t REJECTED_STEPS = 0,
+    const std::vector<::flatbuffers::Offset<PRWBurnReport>> *BURNS = nullptr,
+    ::flatbuffers::Offset<PRWProcessNoise> PROCESS_NOISE = 0) {
+  auto BURNS__ = BURNS ? _fbb.CreateVector<::flatbuffers::Offset<PRWBurnReport>>(*BURNS) : 0;
+  return CreatePRWPropagationSample(
+      _fbb,
+      STATE,
+      STM,
+      MASS_STM,
+      COVARIANCE,
+      MASS_COVARIANCE,
+      ACCEPTED_STEPS,
+      REJECTED_STEPS,
+      BURNS__,
+      PROCESS_NOISE);
+}
+
+::flatbuffers::Offset<PRWPropagationSample> CreatePRWPropagationSample(::flatbuffers::FlatBufferBuilder &_fbb, const PRWPropagationSampleT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWExecutionResultT : public ::flatbuffers::NativeTable {
+  typedef PRWExecutionResult TableType;
+  std::unique_ptr<PRWPropagationSampleT> FINAL_SAMPLE{};
+  std::vector<std::unique_ptr<PRWPropagationSampleT>> SAMPLES{};
+  double ELAPSED_SECONDS = 0.0;
+  std::string EPHEMERIS_SOURCE{};
+  prwDerivativeTechnique STM_TECHNIQUE = prwDerivativeTechnique::UNSPECIFIED;
+  prwDensityTreatment DENSITY_TREATMENT = prwDensityTreatment::UNSPECIFIED;
+  PRWExecutionResultT() = default;
+  PRWExecutionResultT(const PRWExecutionResultT &o);
+  PRWExecutionResultT(PRWExecutionResultT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWExecutionResultT &operator=(PRWExecutionResultT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct PRWExecutionResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWExecutionResultT NativeTableType;
+  typedef PRWExecutionResultBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_FINAL_SAMPLE = 4,
+    VT_SAMPLES = 6,
+    VT_ELAPSED_SECONDS = 8,
+    VT_EPHEMERIS_SOURCE = 10,
+    VT_STM_TECHNIQUE = 12,
+    VT_DENSITY_TREATMENT = 14
+  };
+  const PRWPropagationSample *FINAL_SAMPLE() const {
+    return GetPointer<const PRWPropagationSample *>(VT_FINAL_SAMPLE);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<PRWPropagationSample>> *SAMPLES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PRWPropagationSample>> *>(VT_SAMPLES);
+  }
+  double ELAPSED_SECONDS() const {
+    return GetField<double>(VT_ELAPSED_SECONDS, 0.0);
+  }
+  const ::flatbuffers::String *EPHEMERIS_SOURCE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_EPHEMERIS_SOURCE);
+  }
+  prwDerivativeTechnique STM_TECHNIQUE() const {
+    return static_cast<prwDerivativeTechnique>(GetField<uint8_t>(VT_STM_TECHNIQUE, 0));
+  }
+  prwDensityTreatment DENSITY_TREATMENT() const {
+    return static_cast<prwDensityTreatment>(GetField<uint8_t>(VT_DENSITY_TREATMENT, 0));
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_FINAL_SAMPLE) &&
+           verifier.VerifyTable(FINAL_SAMPLE()) &&
+           VerifyOffset(verifier, VT_SAMPLES) &&
+           verifier.VerifyVector(SAMPLES()) &&
+           verifier.VerifyVectorOfTables(SAMPLES()) &&
+           VerifyField<double>(verifier, VT_ELAPSED_SECONDS, 8) &&
+           VerifyOffsetRequired(verifier, VT_EPHEMERIS_SOURCE) &&
+           verifier.VerifyString(EPHEMERIS_SOURCE()) &&
+           VerifyField<uint8_t>(verifier, VT_STM_TECHNIQUE, 1) &&
+           VerifyField<uint8_t>(verifier, VT_DENSITY_TREATMENT, 1) &&
+           verifier.EndTable();
+  }
+  PRWExecutionResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWExecutionResultT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWExecutionResult> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWExecutionResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWExecutionResultBuilder {
+  typedef PRWExecutionResult Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_FINAL_SAMPLE(::flatbuffers::Offset<PRWPropagationSample> FINAL_SAMPLE) {
+    fbb_.AddOffset(PRWExecutionResult::VT_FINAL_SAMPLE, FINAL_SAMPLE);
+  }
+  void add_SAMPLES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWPropagationSample>>> SAMPLES) {
+    fbb_.AddOffset(PRWExecutionResult::VT_SAMPLES, SAMPLES);
+  }
+  void add_ELAPSED_SECONDS(double ELAPSED_SECONDS) {
+    fbb_.AddElement<double>(PRWExecutionResult::VT_ELAPSED_SECONDS, ELAPSED_SECONDS, 0.0);
+  }
+  void add_EPHEMERIS_SOURCE(::flatbuffers::Offset<::flatbuffers::String> EPHEMERIS_SOURCE) {
+    fbb_.AddOffset(PRWExecutionResult::VT_EPHEMERIS_SOURCE, EPHEMERIS_SOURCE);
+  }
+  void add_STM_TECHNIQUE(prwDerivativeTechnique STM_TECHNIQUE) {
+    fbb_.AddElement<uint8_t>(PRWExecutionResult::VT_STM_TECHNIQUE, static_cast<uint8_t>(STM_TECHNIQUE), 0);
+  }
+  void add_DENSITY_TREATMENT(prwDensityTreatment DENSITY_TREATMENT) {
+    fbb_.AddElement<uint8_t>(PRWExecutionResult::VT_DENSITY_TREATMENT, static_cast<uint8_t>(DENSITY_TREATMENT), 0);
+  }
+  explicit PRWExecutionResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWExecutionResult> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWExecutionResult>(end);
+    fbb_.Required(o, PRWExecutionResult::VT_FINAL_SAMPLE);
+    fbb_.Required(o, PRWExecutionResult::VT_EPHEMERIS_SOURCE);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWExecutionResult> CreatePRWExecutionResult(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PRWPropagationSample> FINAL_SAMPLE = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWPropagationSample>>> SAMPLES = 0,
+    double ELAPSED_SECONDS = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::String> EPHEMERIS_SOURCE = 0,
+    prwDerivativeTechnique STM_TECHNIQUE = prwDerivativeTechnique::UNSPECIFIED,
+    prwDensityTreatment DENSITY_TREATMENT = prwDensityTreatment::UNSPECIFIED) {
+  PRWExecutionResultBuilder builder_(_fbb);
+  builder_.add_ELAPSED_SECONDS(ELAPSED_SECONDS);
+  builder_.add_EPHEMERIS_SOURCE(EPHEMERIS_SOURCE);
+  builder_.add_SAMPLES(SAMPLES);
+  builder_.add_FINAL_SAMPLE(FINAL_SAMPLE);
+  builder_.add_DENSITY_TREATMENT(DENSITY_TREATMENT);
+  builder_.add_STM_TECHNIQUE(STM_TECHNIQUE);
+  return builder_.Finish();
+}
+
+struct PRWExecutionResult::Traits {
+  using type = PRWExecutionResult;
+  static auto constexpr Create = CreatePRWExecutionResult;
+};
+
+inline ::flatbuffers::Offset<PRWExecutionResult> CreatePRWExecutionResultDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PRWPropagationSample> FINAL_SAMPLE = 0,
+    const std::vector<::flatbuffers::Offset<PRWPropagationSample>> *SAMPLES = nullptr,
+    double ELAPSED_SECONDS = 0.0,
+    const char *EPHEMERIS_SOURCE = nullptr,
+    prwDerivativeTechnique STM_TECHNIQUE = prwDerivativeTechnique::UNSPECIFIED,
+    prwDensityTreatment DENSITY_TREATMENT = prwDensityTreatment::UNSPECIFIED) {
+  auto SAMPLES__ = SAMPLES ? _fbb.CreateVector<::flatbuffers::Offset<PRWPropagationSample>>(*SAMPLES) : 0;
+  auto EPHEMERIS_SOURCE__ = EPHEMERIS_SOURCE ? _fbb.CreateString(EPHEMERIS_SOURCE) : 0;
+  return CreatePRWExecutionResult(
+      _fbb,
+      FINAL_SAMPLE,
+      SAMPLES__,
+      ELAPSED_SECONDS,
+      EPHEMERIS_SOURCE__,
+      STM_TECHNIQUE,
+      DENSITY_TREATMENT);
+}
+
+::flatbuffers::Offset<PRWExecutionResult> CreatePRWExecutionResult(::flatbuffers::FlatBufferBuilder &_fbb, const PRWExecutionResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWResidentRequestT : public ::flatbuffers::NativeTable {
+  typedef PRWResidentRequest TableType;
+  std::unique_ptr<PRWInstanceT> INSTANCE{};
+  std::unique_ptr<TIMInstantT> TARGET_EPOCH{};
+  std::vector<uint32_t> ENTITY_HANDLES{};
+  uint32_t MAXIMUM_COUNT = 0;
+  std::unique_ptr<RFMCoordinateSystemT> TARGET_COORDINATE_SYSTEM{};
+  PRWResidentRequestT() = default;
+  PRWResidentRequestT(const PRWResidentRequestT &o);
+  PRWResidentRequestT(PRWResidentRequestT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWResidentRequestT &operator=(PRWResidentRequestT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Portable batch request: no output pointer; state records returned via TAB.
+struct PRWResidentRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWResidentRequestT NativeTableType;
+  typedef PRWResidentRequestBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_INSTANCE = 4,
+    VT_TARGET_EPOCH = 6,
+    VT_ENTITY_HANDLES = 8,
+    VT_MAXIMUM_COUNT = 10,
+    VT_TARGET_COORDINATE_SYSTEM = 12
+  };
+  const PRWInstance *INSTANCE() const {
+    return GetPointer<const PRWInstance *>(VT_INSTANCE);
+  }
+  const TIMInstant *TARGET_EPOCH() const {
+    return GetPointer<const TIMInstant *>(VT_TARGET_EPOCH);
+  }
+  const ::flatbuffers::Vector<uint32_t> *ENTITY_HANDLES() const {
+    return GetPointer<const ::flatbuffers::Vector<uint32_t> *>(VT_ENTITY_HANDLES);
+  }
+  uint32_t MAXIMUM_COUNT() const {
+    return GetField<uint32_t>(VT_MAXIMUM_COUNT, 0);
+  }
+  const RFMCoordinateSystem *TARGET_COORDINATE_SYSTEM() const {
+    return GetPointer<const RFMCoordinateSystem *>(VT_TARGET_COORDINATE_SYSTEM);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_INSTANCE) &&
+           verifier.VerifyTable(INSTANCE()) &&
+           VerifyOffsetRequired(verifier, VT_TARGET_EPOCH) &&
+           verifier.VerifyTable(TARGET_EPOCH()) &&
+           VerifyOffset(verifier, VT_ENTITY_HANDLES) &&
+           verifier.VerifyVector(ENTITY_HANDLES()) &&
+           VerifyField<uint32_t>(verifier, VT_MAXIMUM_COUNT, 4) &&
+           VerifyOffsetRequired(verifier, VT_TARGET_COORDINATE_SYSTEM) &&
+           verifier.VerifyTable(TARGET_COORDINATE_SYSTEM()) &&
+           verifier.EndTable();
+  }
+  PRWResidentRequestT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWResidentRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWResidentRequest> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWResidentRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWResidentRequestBuilder {
+  typedef PRWResidentRequest Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_INSTANCE(::flatbuffers::Offset<PRWInstance> INSTANCE) {
+    fbb_.AddOffset(PRWResidentRequest::VT_INSTANCE, INSTANCE);
+  }
+  void add_TARGET_EPOCH(::flatbuffers::Offset<TIMInstant> TARGET_EPOCH) {
+    fbb_.AddOffset(PRWResidentRequest::VT_TARGET_EPOCH, TARGET_EPOCH);
+  }
+  void add_ENTITY_HANDLES(::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> ENTITY_HANDLES) {
+    fbb_.AddOffset(PRWResidentRequest::VT_ENTITY_HANDLES, ENTITY_HANDLES);
+  }
+  void add_MAXIMUM_COUNT(uint32_t MAXIMUM_COUNT) {
+    fbb_.AddElement<uint32_t>(PRWResidentRequest::VT_MAXIMUM_COUNT, MAXIMUM_COUNT, 0);
+  }
+  void add_TARGET_COORDINATE_SYSTEM(::flatbuffers::Offset<RFMCoordinateSystem> TARGET_COORDINATE_SYSTEM) {
+    fbb_.AddOffset(PRWResidentRequest::VT_TARGET_COORDINATE_SYSTEM, TARGET_COORDINATE_SYSTEM);
+  }
+  explicit PRWResidentRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWResidentRequest> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWResidentRequest>(end);
+    fbb_.Required(o, PRWResidentRequest::VT_INSTANCE);
+    fbb_.Required(o, PRWResidentRequest::VT_TARGET_EPOCH);
+    fbb_.Required(o, PRWResidentRequest::VT_TARGET_COORDINATE_SYSTEM);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWResidentRequest> CreatePRWResidentRequest(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PRWInstance> INSTANCE = 0,
+    ::flatbuffers::Offset<TIMInstant> TARGET_EPOCH = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> ENTITY_HANDLES = 0,
+    uint32_t MAXIMUM_COUNT = 0,
+    ::flatbuffers::Offset<RFMCoordinateSystem> TARGET_COORDINATE_SYSTEM = 0) {
+  PRWResidentRequestBuilder builder_(_fbb);
+  builder_.add_TARGET_COORDINATE_SYSTEM(TARGET_COORDINATE_SYSTEM);
+  builder_.add_MAXIMUM_COUNT(MAXIMUM_COUNT);
+  builder_.add_ENTITY_HANDLES(ENTITY_HANDLES);
+  builder_.add_TARGET_EPOCH(TARGET_EPOCH);
+  builder_.add_INSTANCE(INSTANCE);
+  return builder_.Finish();
+}
+
+struct PRWResidentRequest::Traits {
+  using type = PRWResidentRequest;
+  static auto constexpr Create = CreatePRWResidentRequest;
+};
+
+inline ::flatbuffers::Offset<PRWResidentRequest> CreatePRWResidentRequestDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PRWInstance> INSTANCE = 0,
+    ::flatbuffers::Offset<TIMInstant> TARGET_EPOCH = 0,
+    const std::vector<uint32_t> *ENTITY_HANDLES = nullptr,
+    uint32_t MAXIMUM_COUNT = 0,
+    ::flatbuffers::Offset<RFMCoordinateSystem> TARGET_COORDINATE_SYSTEM = 0) {
+  auto ENTITY_HANDLES__ = ENTITY_HANDLES ? _fbb.CreateVector<uint32_t>(*ENTITY_HANDLES) : 0;
+  return CreatePRWResidentRequest(
+      _fbb,
+      INSTANCE,
+      TARGET_EPOCH,
+      ENTITY_HANDLES__,
+      MAXIMUM_COUNT,
+      TARGET_COORDINATE_SYSTEM);
+}
+
+::flatbuffers::Offset<PRWResidentRequest> CreatePRWResidentRequest(::flatbuffers::FlatBufferBuilder &_fbb, const PRWResidentRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWPrepareRequestT : public ::flatbuffers::NativeTable {
+  typedef PRWPrepareRequest TableType;
+  std::unique_ptr<PRWInstanceT> INSTANCE{};
+  uint32_t CATALOG_HANDLE = 0;
+  std::vector<uint32_t> SOURCE_HANDLES{};
+  std::unique_ptr<TIMInstantT> START_EPOCH{};
+  double DURATION_SECONDS = 0.0;
+  std::string PROFILE{};
+  PRWPrepareRequestT() = default;
+  PRWPrepareRequestT(const PRWPrepareRequestT &o);
+  PRWPrepareRequestT(PRWPrepareRequestT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWPrepareRequestT &operator=(PRWPrepareRequestT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// All epochs explicit; duration seconds >=0; empty handles means all resident.
+struct PRWPrepareRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWPrepareRequestT NativeTableType;
+  typedef PRWPrepareRequestBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_INSTANCE = 4,
+    VT_CATALOG_HANDLE = 6,
+    VT_SOURCE_HANDLES = 8,
+    VT_START_EPOCH = 10,
+    VT_DURATION_SECONDS = 12,
+    VT_PROFILE = 14
+  };
+  const PRWInstance *INSTANCE() const {
+    return GetPointer<const PRWInstance *>(VT_INSTANCE);
+  }
+  uint32_t CATALOG_HANDLE() const {
+    return GetField<uint32_t>(VT_CATALOG_HANDLE, 0);
+  }
+  const ::flatbuffers::Vector<uint32_t> *SOURCE_HANDLES() const {
+    return GetPointer<const ::flatbuffers::Vector<uint32_t> *>(VT_SOURCE_HANDLES);
+  }
+  const TIMInstant *START_EPOCH() const {
+    return GetPointer<const TIMInstant *>(VT_START_EPOCH);
+  }
+  double DURATION_SECONDS() const {
+    return GetField<double>(VT_DURATION_SECONDS, 0.0);
+  }
+  /// Provider-advertised profile name; unrecognized nonempty values fail.
+  const ::flatbuffers::String *PROFILE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PROFILE);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_INSTANCE) &&
+           verifier.VerifyTable(INSTANCE()) &&
+           VerifyField<uint32_t>(verifier, VT_CATALOG_HANDLE, 4) &&
+           VerifyOffset(verifier, VT_SOURCE_HANDLES) &&
+           verifier.VerifyVector(SOURCE_HANDLES()) &&
+           VerifyOffsetRequired(verifier, VT_START_EPOCH) &&
+           verifier.VerifyTable(START_EPOCH()) &&
+           VerifyField<double>(verifier, VT_DURATION_SECONDS, 8) &&
+           VerifyOffset(verifier, VT_PROFILE) &&
+           verifier.VerifyString(PROFILE()) &&
+           verifier.EndTable();
+  }
+  PRWPrepareRequestT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWPrepareRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWPrepareRequest> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWPrepareRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWPrepareRequestBuilder {
+  typedef PRWPrepareRequest Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_INSTANCE(::flatbuffers::Offset<PRWInstance> INSTANCE) {
+    fbb_.AddOffset(PRWPrepareRequest::VT_INSTANCE, INSTANCE);
+  }
+  void add_CATALOG_HANDLE(uint32_t CATALOG_HANDLE) {
+    fbb_.AddElement<uint32_t>(PRWPrepareRequest::VT_CATALOG_HANDLE, CATALOG_HANDLE, 0);
+  }
+  void add_SOURCE_HANDLES(::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> SOURCE_HANDLES) {
+    fbb_.AddOffset(PRWPrepareRequest::VT_SOURCE_HANDLES, SOURCE_HANDLES);
+  }
+  void add_START_EPOCH(::flatbuffers::Offset<TIMInstant> START_EPOCH) {
+    fbb_.AddOffset(PRWPrepareRequest::VT_START_EPOCH, START_EPOCH);
+  }
+  void add_DURATION_SECONDS(double DURATION_SECONDS) {
+    fbb_.AddElement<double>(PRWPrepareRequest::VT_DURATION_SECONDS, DURATION_SECONDS, 0.0);
+  }
+  void add_PROFILE(::flatbuffers::Offset<::flatbuffers::String> PROFILE) {
+    fbb_.AddOffset(PRWPrepareRequest::VT_PROFILE, PROFILE);
+  }
+  explicit PRWPrepareRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWPrepareRequest> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWPrepareRequest>(end);
+    fbb_.Required(o, PRWPrepareRequest::VT_INSTANCE);
+    fbb_.Required(o, PRWPrepareRequest::VT_START_EPOCH);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWPrepareRequest> CreatePRWPrepareRequest(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PRWInstance> INSTANCE = 0,
+    uint32_t CATALOG_HANDLE = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> SOURCE_HANDLES = 0,
+    ::flatbuffers::Offset<TIMInstant> START_EPOCH = 0,
+    double DURATION_SECONDS = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::String> PROFILE = 0) {
+  PRWPrepareRequestBuilder builder_(_fbb);
+  builder_.add_DURATION_SECONDS(DURATION_SECONDS);
+  builder_.add_PROFILE(PROFILE);
+  builder_.add_START_EPOCH(START_EPOCH);
+  builder_.add_SOURCE_HANDLES(SOURCE_HANDLES);
+  builder_.add_CATALOG_HANDLE(CATALOG_HANDLE);
+  builder_.add_INSTANCE(INSTANCE);
+  return builder_.Finish();
+}
+
+struct PRWPrepareRequest::Traits {
+  using type = PRWPrepareRequest;
+  static auto constexpr Create = CreatePRWPrepareRequest;
+};
+
+inline ::flatbuffers::Offset<PRWPrepareRequest> CreatePRWPrepareRequestDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PRWInstance> INSTANCE = 0,
+    uint32_t CATALOG_HANDLE = 0,
+    const std::vector<uint32_t> *SOURCE_HANDLES = nullptr,
+    ::flatbuffers::Offset<TIMInstant> START_EPOCH = 0,
+    double DURATION_SECONDS = 0.0,
+    const char *PROFILE = nullptr) {
+  auto SOURCE_HANDLES__ = SOURCE_HANDLES ? _fbb.CreateVector<uint32_t>(*SOURCE_HANDLES) : 0;
+  auto PROFILE__ = PROFILE ? _fbb.CreateString(PROFILE) : 0;
+  return CreatePRWPrepareRequest(
+      _fbb,
+      INSTANCE,
+      CATALOG_HANDLE,
+      SOURCE_HANDLES__,
+      START_EPOCH,
+      DURATION_SECONDS,
+      PROFILE__);
+}
+
+::flatbuffers::Offset<PRWPrepareRequest> CreatePRWPrepareRequest(::flatbuffers::FlatBufferBuilder &_fbb, const PRWPrepareRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWFitQualityT : public ::flatbuffers::NativeTable {
+  typedef PRWFitQuality TableType;
+  prwQualityEvidence EVIDENCE_KIND = prwQualityEvidence::UNMEASURED;
+  double MAXIMUM_POSITION_ERROR_M = 0.0;
+  bool HAS_MAXIMUM_POSITION_ERROR_M = false;
+  double MAXIMUM_VELOCITY_ERROR_M_S = 0.0;
+  bool HAS_MAXIMUM_VELOCITY_ERROR_M_S = false;
+  std::string METHOD{};
+  std::string REFERENCE_CONTENT_ID{};
+};
+
+struct PRWFitQuality FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWFitQualityT NativeTableType;
+  typedef PRWFitQualityBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_EVIDENCE_KIND = 4,
+    VT_MAXIMUM_POSITION_ERROR_M = 6,
+    VT_HAS_MAXIMUM_POSITION_ERROR_M = 8,
+    VT_MAXIMUM_VELOCITY_ERROR_M_S = 10,
+    VT_HAS_MAXIMUM_VELOCITY_ERROR_M_S = 12,
+    VT_METHOD = 14,
+    VT_REFERENCE_CONTENT_ID = 16
+  };
+  prwQualityEvidence EVIDENCE_KIND() const {
+    return static_cast<prwQualityEvidence>(GetField<uint8_t>(VT_EVIDENCE_KIND, 0));
+  }
+  /// SI metres and metres/second; absent when UNMEASURED.
+  double MAXIMUM_POSITION_ERROR_M() const {
+    return GetField<double>(VT_MAXIMUM_POSITION_ERROR_M, 0.0);
+  }
+  /// True when MAXIMUM_POSITION_ERROR_M carries a value; false means absent.
+  bool HAS_MAXIMUM_POSITION_ERROR_M() const {
+    return GetField<uint8_t>(VT_HAS_MAXIMUM_POSITION_ERROR_M, 0) != 0;
+  }
+  double MAXIMUM_VELOCITY_ERROR_M_S() const {
+    return GetField<double>(VT_MAXIMUM_VELOCITY_ERROR_M_S, 0.0);
+  }
+  /// True when MAXIMUM_VELOCITY_ERROR_M_S carries a value; false means absent.
+  bool HAS_MAXIMUM_VELOCITY_ERROR_M_S() const {
+    return GetField<uint8_t>(VT_HAS_MAXIMUM_VELOCITY_ERROR_M_S, 0) != 0;
+  }
+  const ::flatbuffers::String *METHOD() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_METHOD);
+  }
+  const ::flatbuffers::String *REFERENCE_CONTENT_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_REFERENCE_CONTENT_ID);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_EVIDENCE_KIND, 1) &&
+           VerifyField<double>(verifier, VT_MAXIMUM_POSITION_ERROR_M, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_MAXIMUM_POSITION_ERROR_M, 1) &&
+           VerifyField<double>(verifier, VT_MAXIMUM_VELOCITY_ERROR_M_S, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_MAXIMUM_VELOCITY_ERROR_M_S, 1) &&
+           VerifyOffset(verifier, VT_METHOD) &&
+           verifier.VerifyString(METHOD()) &&
+           VerifyOffset(verifier, VT_REFERENCE_CONTENT_ID) &&
+           verifier.VerifyString(REFERENCE_CONTENT_ID()) &&
+           verifier.EndTable();
+  }
+  PRWFitQualityT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWFitQualityT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWFitQuality> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWFitQualityT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWFitQualityBuilder {
+  typedef PRWFitQuality Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_EVIDENCE_KIND(prwQualityEvidence EVIDENCE_KIND) {
+    fbb_.AddElement<uint8_t>(PRWFitQuality::VT_EVIDENCE_KIND, static_cast<uint8_t>(EVIDENCE_KIND), 0);
+  }
+  void add_MAXIMUM_POSITION_ERROR_M(double MAXIMUM_POSITION_ERROR_M) {
+    fbb_.AddElement<double>(PRWFitQuality::VT_MAXIMUM_POSITION_ERROR_M, MAXIMUM_POSITION_ERROR_M, 0.0);
+  }
+  void add_HAS_MAXIMUM_POSITION_ERROR_M(bool HAS_MAXIMUM_POSITION_ERROR_M) {
+    fbb_.AddElement<uint8_t>(PRWFitQuality::VT_HAS_MAXIMUM_POSITION_ERROR_M, static_cast<uint8_t>(HAS_MAXIMUM_POSITION_ERROR_M), 0);
+  }
+  void add_MAXIMUM_VELOCITY_ERROR_M_S(double MAXIMUM_VELOCITY_ERROR_M_S) {
+    fbb_.AddElement<double>(PRWFitQuality::VT_MAXIMUM_VELOCITY_ERROR_M_S, MAXIMUM_VELOCITY_ERROR_M_S, 0.0);
+  }
+  void add_HAS_MAXIMUM_VELOCITY_ERROR_M_S(bool HAS_MAXIMUM_VELOCITY_ERROR_M_S) {
+    fbb_.AddElement<uint8_t>(PRWFitQuality::VT_HAS_MAXIMUM_VELOCITY_ERROR_M_S, static_cast<uint8_t>(HAS_MAXIMUM_VELOCITY_ERROR_M_S), 0);
+  }
+  void add_METHOD(::flatbuffers::Offset<::flatbuffers::String> METHOD) {
+    fbb_.AddOffset(PRWFitQuality::VT_METHOD, METHOD);
+  }
+  void add_REFERENCE_CONTENT_ID(::flatbuffers::Offset<::flatbuffers::String> REFERENCE_CONTENT_ID) {
+    fbb_.AddOffset(PRWFitQuality::VT_REFERENCE_CONTENT_ID, REFERENCE_CONTENT_ID);
+  }
+  explicit PRWFitQualityBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWFitQuality> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWFitQuality>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWFitQuality> CreatePRWFitQuality(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    prwQualityEvidence EVIDENCE_KIND = prwQualityEvidence::UNMEASURED,
+    double MAXIMUM_POSITION_ERROR_M = 0.0,
+    bool HAS_MAXIMUM_POSITION_ERROR_M = false,
+    double MAXIMUM_VELOCITY_ERROR_M_S = 0.0,
+    bool HAS_MAXIMUM_VELOCITY_ERROR_M_S = false,
+    ::flatbuffers::Offset<::flatbuffers::String> METHOD = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> REFERENCE_CONTENT_ID = 0) {
+  PRWFitQualityBuilder builder_(_fbb);
+  builder_.add_MAXIMUM_VELOCITY_ERROR_M_S(MAXIMUM_VELOCITY_ERROR_M_S);
+  builder_.add_MAXIMUM_POSITION_ERROR_M(MAXIMUM_POSITION_ERROR_M);
+  builder_.add_REFERENCE_CONTENT_ID(REFERENCE_CONTENT_ID);
+  builder_.add_METHOD(METHOD);
+  builder_.add_HAS_MAXIMUM_VELOCITY_ERROR_M_S(HAS_MAXIMUM_VELOCITY_ERROR_M_S);
+  builder_.add_HAS_MAXIMUM_POSITION_ERROR_M(HAS_MAXIMUM_POSITION_ERROR_M);
+  builder_.add_EVIDENCE_KIND(EVIDENCE_KIND);
+  return builder_.Finish();
+}
+
+struct PRWFitQuality::Traits {
+  using type = PRWFitQuality;
+  static auto constexpr Create = CreatePRWFitQuality;
+};
+
+inline ::flatbuffers::Offset<PRWFitQuality> CreatePRWFitQualityDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    prwQualityEvidence EVIDENCE_KIND = prwQualityEvidence::UNMEASURED,
+    double MAXIMUM_POSITION_ERROR_M = 0.0,
+    bool HAS_MAXIMUM_POSITION_ERROR_M = false,
+    double MAXIMUM_VELOCITY_ERROR_M_S = 0.0,
+    bool HAS_MAXIMUM_VELOCITY_ERROR_M_S = false,
+    const char *METHOD = nullptr,
+    const char *REFERENCE_CONTENT_ID = nullptr) {
+  auto METHOD__ = METHOD ? _fbb.CreateString(METHOD) : 0;
+  auto REFERENCE_CONTENT_ID__ = REFERENCE_CONTENT_ID ? _fbb.CreateString(REFERENCE_CONTENT_ID) : 0;
+  return CreatePRWFitQuality(
+      _fbb,
+      EVIDENCE_KIND,
+      MAXIMUM_POSITION_ERROR_M,
+      HAS_MAXIMUM_POSITION_ERROR_M,
+      MAXIMUM_VELOCITY_ERROR_M_S,
+      HAS_MAXIMUM_VELOCITY_ERROR_M_S,
+      METHOD__,
+      REFERENCE_CONTENT_ID__);
+}
+
+::flatbuffers::Offset<PRWFitQuality> CreatePRWFitQuality(::flatbuffers::FlatBufferBuilder &_fbb, const PRWFitQualityT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWPrepareResultT : public ::flatbuffers::NativeTable {
+  typedef PRWPrepareResult TableType;
+  std::unique_ptr<PRWInstanceT> INSTANCE{};
+  uint32_t SEGMENT_SET_HANDLE = 0;
+  bool COVERAGE_COMPLETE = false;
+  std::unique_ptr<PRWFitQualityT> QUALITY{};
+  PRWPrepareResultT() = default;
+  PRWPrepareResultT(const PRWPrepareResultT &o);
+  PRWPrepareResultT(PRWPrepareResultT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWPrepareResultT &operator=(PRWPrepareResultT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct PRWPrepareResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWPrepareResultT NativeTableType;
+  typedef PRWPrepareResultBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_INSTANCE = 4,
+    VT_SEGMENT_SET_HANDLE = 6,
+    VT_COVERAGE_COMPLETE = 8,
+    VT_QUALITY = 10
+  };
+  const PRWInstance *INSTANCE() const {
+    return GetPointer<const PRWInstance *>(VT_INSTANCE);
+  }
+  uint32_t SEGMENT_SET_HANDLE() const {
+    return GetField<uint32_t>(VT_SEGMENT_SET_HANDLE, 0);
+  }
+  bool COVERAGE_COMPLETE() const {
+    return GetField<uint8_t>(VT_COVERAGE_COMPLETE, 0) != 0;
+  }
+  const PRWFitQuality *QUALITY() const {
+    return GetPointer<const PRWFitQuality *>(VT_QUALITY);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_INSTANCE) &&
+           verifier.VerifyTable(INSTANCE()) &&
+           VerifyField<uint32_t>(verifier, VT_SEGMENT_SET_HANDLE, 4) &&
+           VerifyField<uint8_t>(verifier, VT_COVERAGE_COMPLETE, 1) &&
+           VerifyOffsetRequired(verifier, VT_QUALITY) &&
+           verifier.VerifyTable(QUALITY()) &&
+           verifier.EndTable();
+  }
+  PRWPrepareResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWPrepareResultT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWPrepareResult> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWPrepareResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWPrepareResultBuilder {
+  typedef PRWPrepareResult Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_INSTANCE(::flatbuffers::Offset<PRWInstance> INSTANCE) {
+    fbb_.AddOffset(PRWPrepareResult::VT_INSTANCE, INSTANCE);
+  }
+  void add_SEGMENT_SET_HANDLE(uint32_t SEGMENT_SET_HANDLE) {
+    fbb_.AddElement<uint32_t>(PRWPrepareResult::VT_SEGMENT_SET_HANDLE, SEGMENT_SET_HANDLE, 0);
+  }
+  void add_COVERAGE_COMPLETE(bool COVERAGE_COMPLETE) {
+    fbb_.AddElement<uint8_t>(PRWPrepareResult::VT_COVERAGE_COMPLETE, static_cast<uint8_t>(COVERAGE_COMPLETE), 0);
+  }
+  void add_QUALITY(::flatbuffers::Offset<PRWFitQuality> QUALITY) {
+    fbb_.AddOffset(PRWPrepareResult::VT_QUALITY, QUALITY);
+  }
+  explicit PRWPrepareResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWPrepareResult> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWPrepareResult>(end);
+    fbb_.Required(o, PRWPrepareResult::VT_INSTANCE);
+    fbb_.Required(o, PRWPrepareResult::VT_QUALITY);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWPrepareResult> CreatePRWPrepareResult(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PRWInstance> INSTANCE = 0,
+    uint32_t SEGMENT_SET_HANDLE = 0,
+    bool COVERAGE_COMPLETE = false,
+    ::flatbuffers::Offset<PRWFitQuality> QUALITY = 0) {
+  PRWPrepareResultBuilder builder_(_fbb);
+  builder_.add_QUALITY(QUALITY);
+  builder_.add_SEGMENT_SET_HANDLE(SEGMENT_SET_HANDLE);
+  builder_.add_INSTANCE(INSTANCE);
+  builder_.add_COVERAGE_COMPLETE(COVERAGE_COMPLETE);
+  return builder_.Finish();
+}
+
+struct PRWPrepareResult::Traits {
+  using type = PRWPrepareResult;
+  static auto constexpr Create = CreatePRWPrepareResult;
+};
+
+::flatbuffers::Offset<PRWPrepareResult> CreatePRWPrepareResult(::flatbuffers::FlatBufferBuilder &_fbb, const PRWPrepareResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWDescribeRequestT : public ::flatbuffers::NativeTable {
+  typedef PRWDescribeRequest TableType;
+  std::unique_ptr<PRWInstanceT> INSTANCE{};
+  uint32_t SEGMENT_SET_HANDLE = 0;
+  std::vector<uint32_t> SOURCE_HANDLES{};
+  PRWDescribeRequestT() = default;
+  PRWDescribeRequestT(const PRWDescribeRequestT &o);
+  PRWDescribeRequestT(PRWDescribeRequestT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWDescribeRequestT &operator=(PRWDescribeRequestT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct PRWDescribeRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWDescribeRequestT NativeTableType;
+  typedef PRWDescribeRequestBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_INSTANCE = 4,
+    VT_SEGMENT_SET_HANDLE = 6,
+    VT_SOURCE_HANDLES = 8
+  };
+  const PRWInstance *INSTANCE() const {
+    return GetPointer<const PRWInstance *>(VT_INSTANCE);
+  }
+  uint32_t SEGMENT_SET_HANDLE() const {
+    return GetField<uint32_t>(VT_SEGMENT_SET_HANDLE, 0);
+  }
+  const ::flatbuffers::Vector<uint32_t> *SOURCE_HANDLES() const {
+    return GetPointer<const ::flatbuffers::Vector<uint32_t> *>(VT_SOURCE_HANDLES);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_INSTANCE) &&
+           verifier.VerifyTable(INSTANCE()) &&
+           VerifyField<uint32_t>(verifier, VT_SEGMENT_SET_HANDLE, 4) &&
+           VerifyOffset(verifier, VT_SOURCE_HANDLES) &&
+           verifier.VerifyVector(SOURCE_HANDLES()) &&
+           verifier.EndTable();
+  }
+  PRWDescribeRequestT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWDescribeRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWDescribeRequest> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWDescribeRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWDescribeRequestBuilder {
+  typedef PRWDescribeRequest Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_INSTANCE(::flatbuffers::Offset<PRWInstance> INSTANCE) {
+    fbb_.AddOffset(PRWDescribeRequest::VT_INSTANCE, INSTANCE);
+  }
+  void add_SEGMENT_SET_HANDLE(uint32_t SEGMENT_SET_HANDLE) {
+    fbb_.AddElement<uint32_t>(PRWDescribeRequest::VT_SEGMENT_SET_HANDLE, SEGMENT_SET_HANDLE, 0);
+  }
+  void add_SOURCE_HANDLES(::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> SOURCE_HANDLES) {
+    fbb_.AddOffset(PRWDescribeRequest::VT_SOURCE_HANDLES, SOURCE_HANDLES);
+  }
+  explicit PRWDescribeRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWDescribeRequest> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWDescribeRequest>(end);
+    fbb_.Required(o, PRWDescribeRequest::VT_INSTANCE);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWDescribeRequest> CreatePRWDescribeRequest(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PRWInstance> INSTANCE = 0,
+    uint32_t SEGMENT_SET_HANDLE = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> SOURCE_HANDLES = 0) {
+  PRWDescribeRequestBuilder builder_(_fbb);
+  builder_.add_SOURCE_HANDLES(SOURCE_HANDLES);
+  builder_.add_SEGMENT_SET_HANDLE(SEGMENT_SET_HANDLE);
+  builder_.add_INSTANCE(INSTANCE);
+  return builder_.Finish();
+}
+
+struct PRWDescribeRequest::Traits {
+  using type = PRWDescribeRequest;
+  static auto constexpr Create = CreatePRWDescribeRequest;
+};
+
+inline ::flatbuffers::Offset<PRWDescribeRequest> CreatePRWDescribeRequestDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PRWInstance> INSTANCE = 0,
+    uint32_t SEGMENT_SET_HANDLE = 0,
+    const std::vector<uint32_t> *SOURCE_HANDLES = nullptr) {
+  auto SOURCE_HANDLES__ = SOURCE_HANDLES ? _fbb.CreateVector<uint32_t>(*SOURCE_HANDLES) : 0;
+  return CreatePRWDescribeRequest(
+      _fbb,
+      INSTANCE,
+      SEGMENT_SET_HANDLE,
+      SOURCE_HANDLES__);
+}
+
+::flatbuffers::Offset<PRWDescribeRequest> CreatePRWDescribeRequest(::flatbuffers::FlatBufferBuilder &_fbb, const PRWDescribeRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWTrajectorySourceT : public ::flatbuffers::NativeTable {
+  typedef PRWTrajectorySource TableType;
+  uint32_t SOURCE_HANDLE = 0;
+  std::string OBJECT_ID{};
+  std::unique_ptr<PPET> EPHEMERIS{};
+  std::vector<std::unique_ptr<PRWFitQualityT>> SEGMENT_QUALITY{};
+  PRWTrajectorySourceT() = default;
+  PRWTrajectorySourceT(const PRWTrajectorySourceT &o);
+  PRWTrajectorySourceT(PRWTrajectorySourceT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWTrajectorySourceT &operator=(PRWTrajectorySourceT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Existing PPE retains km/km/s, midpoint/time-system and coefficient meaning.
+struct PRWTrajectorySource FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWTrajectorySourceT NativeTableType;
+  typedef PRWTrajectorySourceBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SOURCE_HANDLE = 4,
+    VT_OBJECT_ID = 6,
+    VT_EPHEMERIS = 8,
+    VT_SEGMENT_QUALITY = 10
+  };
+  uint32_t SOURCE_HANDLE() const {
+    return GetField<uint32_t>(VT_SOURCE_HANDLE, 0);
+  }
+  const ::flatbuffers::String *OBJECT_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_OBJECT_ID);
+  }
+  const PPE *EPHEMERIS() const {
+    return GetPointer<const PPE *>(VT_EPHEMERIS);
+  }
+  /// One quality record per PPE.POSITION_RECORDS entry, same order.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<PRWFitQuality>> *SEGMENT_QUALITY() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PRWFitQuality>> *>(VT_SEGMENT_QUALITY);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint32_t>(verifier, VT_SOURCE_HANDLE, 4) &&
+           VerifyOffset(verifier, VT_OBJECT_ID) &&
+           verifier.VerifyString(OBJECT_ID()) &&
+           VerifyOffsetRequired(verifier, VT_EPHEMERIS) &&
+           verifier.VerifyTable(EPHEMERIS()) &&
+           VerifyOffset(verifier, VT_SEGMENT_QUALITY) &&
+           verifier.VerifyVector(SEGMENT_QUALITY()) &&
+           verifier.VerifyVectorOfTables(SEGMENT_QUALITY()) &&
+           verifier.EndTable();
+  }
+  PRWTrajectorySourceT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWTrajectorySourceT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWTrajectorySource> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWTrajectorySourceT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWTrajectorySourceBuilder {
+  typedef PRWTrajectorySource Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_SOURCE_HANDLE(uint32_t SOURCE_HANDLE) {
+    fbb_.AddElement<uint32_t>(PRWTrajectorySource::VT_SOURCE_HANDLE, SOURCE_HANDLE, 0);
+  }
+  void add_OBJECT_ID(::flatbuffers::Offset<::flatbuffers::String> OBJECT_ID) {
+    fbb_.AddOffset(PRWTrajectorySource::VT_OBJECT_ID, OBJECT_ID);
+  }
+  void add_EPHEMERIS(::flatbuffers::Offset<PPE> EPHEMERIS) {
+    fbb_.AddOffset(PRWTrajectorySource::VT_EPHEMERIS, EPHEMERIS);
+  }
+  void add_SEGMENT_QUALITY(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWFitQuality>>> SEGMENT_QUALITY) {
+    fbb_.AddOffset(PRWTrajectorySource::VT_SEGMENT_QUALITY, SEGMENT_QUALITY);
+  }
+  explicit PRWTrajectorySourceBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWTrajectorySource> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWTrajectorySource>(end);
+    fbb_.Required(o, PRWTrajectorySource::VT_EPHEMERIS);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWTrajectorySource> CreatePRWTrajectorySource(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t SOURCE_HANDLE = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> OBJECT_ID = 0,
+    ::flatbuffers::Offset<PPE> EPHEMERIS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWFitQuality>>> SEGMENT_QUALITY = 0) {
+  PRWTrajectorySourceBuilder builder_(_fbb);
+  builder_.add_SEGMENT_QUALITY(SEGMENT_QUALITY);
+  builder_.add_EPHEMERIS(EPHEMERIS);
+  builder_.add_OBJECT_ID(OBJECT_ID);
+  builder_.add_SOURCE_HANDLE(SOURCE_HANDLE);
+  return builder_.Finish();
+}
+
+struct PRWTrajectorySource::Traits {
+  using type = PRWTrajectorySource;
+  static auto constexpr Create = CreatePRWTrajectorySource;
+};
+
+inline ::flatbuffers::Offset<PRWTrajectorySource> CreatePRWTrajectorySourceDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t SOURCE_HANDLE = 0,
+    const char *OBJECT_ID = nullptr,
+    ::flatbuffers::Offset<PPE> EPHEMERIS = 0,
+    const std::vector<::flatbuffers::Offset<PRWFitQuality>> *SEGMENT_QUALITY = nullptr) {
+  auto OBJECT_ID__ = OBJECT_ID ? _fbb.CreateString(OBJECT_ID) : 0;
+  auto SEGMENT_QUALITY__ = SEGMENT_QUALITY ? _fbb.CreateVector<::flatbuffers::Offset<PRWFitQuality>>(*SEGMENT_QUALITY) : 0;
+  return CreatePRWTrajectorySource(
+      _fbb,
+      SOURCE_HANDLE,
+      OBJECT_ID__,
+      EPHEMERIS,
+      SEGMENT_QUALITY__);
+}
+
+::flatbuffers::Offset<PRWTrajectorySource> CreatePRWTrajectorySource(::flatbuffers::FlatBufferBuilder &_fbb, const PRWTrajectorySourceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWDescribeResultT : public ::flatbuffers::NativeTable {
+  typedef PRWDescribeResult TableType;
+  std::unique_ptr<PRWInstanceT> INSTANCE{};
+  uint32_t SEGMENT_SET_HANDLE = 0;
+  std::vector<std::unique_ptr<PRWTrajectorySourceT>> SOURCES{};
+  uint64_t SOURCE_OFFSET = 0;
+  bool FINAL_CHUNK = true;
+  PRWDescribeResultT() = default;
+  PRWDescribeResultT(const PRWDescribeResultT &o);
+  PRWDescribeResultT(PRWDescribeResultT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWDescribeResultT &operator=(PRWDescribeResultT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct PRWDescribeResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWDescribeResultT NativeTableType;
+  typedef PRWDescribeResultBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_INSTANCE = 4,
+    VT_SEGMENT_SET_HANDLE = 6,
+    VT_SOURCES = 8,
+    VT_SOURCE_OFFSET = 10,
+    VT_FINAL_CHUNK = 12
+  };
+  const PRWInstance *INSTANCE() const {
+    return GetPointer<const PRWInstance *>(VT_INSTANCE);
+  }
+  uint32_t SEGMENT_SET_HANDLE() const {
+    return GetField<uint32_t>(VT_SEGMENT_SET_HANDLE, 0);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<PRWTrajectorySource>> *SOURCES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PRWTrajectorySource>> *>(VT_SOURCES);
+  }
+  /// Chunking indexes SOURCES; no partial polynomial coefficient vector.
+  uint64_t SOURCE_OFFSET() const {
+    return GetField<uint64_t>(VT_SOURCE_OFFSET, 0);
+  }
+  bool FINAL_CHUNK() const {
+    return GetField<uint8_t>(VT_FINAL_CHUNK, 1) != 0;
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_INSTANCE) &&
+           verifier.VerifyTable(INSTANCE()) &&
+           VerifyField<uint32_t>(verifier, VT_SEGMENT_SET_HANDLE, 4) &&
+           VerifyOffset(verifier, VT_SOURCES) &&
+           verifier.VerifyVector(SOURCES()) &&
+           verifier.VerifyVectorOfTables(SOURCES()) &&
+           VerifyField<uint64_t>(verifier, VT_SOURCE_OFFSET, 8) &&
+           VerifyField<uint8_t>(verifier, VT_FINAL_CHUNK, 1) &&
+           verifier.EndTable();
+  }
+  PRWDescribeResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWDescribeResultT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWDescribeResult> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWDescribeResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWDescribeResultBuilder {
+  typedef PRWDescribeResult Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_INSTANCE(::flatbuffers::Offset<PRWInstance> INSTANCE) {
+    fbb_.AddOffset(PRWDescribeResult::VT_INSTANCE, INSTANCE);
+  }
+  void add_SEGMENT_SET_HANDLE(uint32_t SEGMENT_SET_HANDLE) {
+    fbb_.AddElement<uint32_t>(PRWDescribeResult::VT_SEGMENT_SET_HANDLE, SEGMENT_SET_HANDLE, 0);
+  }
+  void add_SOURCES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWTrajectorySource>>> SOURCES) {
+    fbb_.AddOffset(PRWDescribeResult::VT_SOURCES, SOURCES);
+  }
+  void add_SOURCE_OFFSET(uint64_t SOURCE_OFFSET) {
+    fbb_.AddElement<uint64_t>(PRWDescribeResult::VT_SOURCE_OFFSET, SOURCE_OFFSET, 0);
+  }
+  void add_FINAL_CHUNK(bool FINAL_CHUNK) {
+    fbb_.AddElement<uint8_t>(PRWDescribeResult::VT_FINAL_CHUNK, static_cast<uint8_t>(FINAL_CHUNK), 1);
+  }
+  explicit PRWDescribeResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWDescribeResult> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWDescribeResult>(end);
+    fbb_.Required(o, PRWDescribeResult::VT_INSTANCE);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWDescribeResult> CreatePRWDescribeResult(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PRWInstance> INSTANCE = 0,
+    uint32_t SEGMENT_SET_HANDLE = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWTrajectorySource>>> SOURCES = 0,
+    uint64_t SOURCE_OFFSET = 0,
+    bool FINAL_CHUNK = true) {
+  PRWDescribeResultBuilder builder_(_fbb);
+  builder_.add_SOURCE_OFFSET(SOURCE_OFFSET);
+  builder_.add_SOURCES(SOURCES);
+  builder_.add_SEGMENT_SET_HANDLE(SEGMENT_SET_HANDLE);
+  builder_.add_INSTANCE(INSTANCE);
+  builder_.add_FINAL_CHUNK(FINAL_CHUNK);
+  return builder_.Finish();
+}
+
+struct PRWDescribeResult::Traits {
+  using type = PRWDescribeResult;
+  static auto constexpr Create = CreatePRWDescribeResult;
+};
+
+inline ::flatbuffers::Offset<PRWDescribeResult> CreatePRWDescribeResultDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PRWInstance> INSTANCE = 0,
+    uint32_t SEGMENT_SET_HANDLE = 0,
+    const std::vector<::flatbuffers::Offset<PRWTrajectorySource>> *SOURCES = nullptr,
+    uint64_t SOURCE_OFFSET = 0,
+    bool FINAL_CHUNK = true) {
+  auto SOURCES__ = SOURCES ? _fbb.CreateVector<::flatbuffers::Offset<PRWTrajectorySource>>(*SOURCES) : 0;
+  return CreatePRWDescribeResult(
+      _fbb,
+      INSTANCE,
+      SEGMENT_SET_HANDLE,
+      SOURCES__,
+      SOURCE_OFFSET,
+      FINAL_CHUNK);
+}
+
+::flatbuffers::Offset<PRWDescribeResult> CreatePRWDescribeResult(::flatbuffers::FlatBufferBuilder &_fbb, const PRWDescribeResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWNativeInputT : public ::flatbuffers::NativeTable {
+  typedef PRWNativeInput TableType;
+  std::unique_ptr<NCDT> DESCRIPTOR{};
+  std::vector<uint8_t> CONTENT{};
+  PRWNativeInputT() = default;
+  PRWNativeInputT(const PRWNativeInputT &o);
+  PRWNativeInputT(PRWNativeInputT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWNativeInputT &operator=(PRWNativeInputT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Native container bytes wholly inside the FlatBuffer; not an NCD trailer.
+struct PRWNativeInput FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWNativeInputT NativeTableType;
+  typedef PRWNativeInputBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_DESCRIPTOR = 4,
+    VT_CONTENT = 6
+  };
+  const NCD *DESCRIPTOR() const {
+    return GetPointer<const NCD *>(VT_DESCRIPTOR);
+  }
+  /// Exactly DESCRIPTOR.SOURCE_BYTE_LENGTH bytes; verify declared hash.
+  const ::flatbuffers::Vector<uint8_t> *CONTENT() const {
+    return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_CONTENT);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_DESCRIPTOR) &&
+           verifier.VerifyTable(DESCRIPTOR()) &&
+           VerifyOffsetRequired(verifier, VT_CONTENT) &&
+           verifier.VerifyVector(CONTENT()) &&
+           verifier.EndTable();
+  }
+  PRWNativeInputT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWNativeInputT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWNativeInput> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWNativeInputT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWNativeInputBuilder {
+  typedef PRWNativeInput Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_DESCRIPTOR(::flatbuffers::Offset<NCD> DESCRIPTOR) {
+    fbb_.AddOffset(PRWNativeInput::VT_DESCRIPTOR, DESCRIPTOR);
+  }
+  void add_CONTENT(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> CONTENT) {
+    fbb_.AddOffset(PRWNativeInput::VT_CONTENT, CONTENT);
+  }
+  explicit PRWNativeInputBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWNativeInput> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWNativeInput>(end);
+    fbb_.Required(o, PRWNativeInput::VT_DESCRIPTOR);
+    fbb_.Required(o, PRWNativeInput::VT_CONTENT);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWNativeInput> CreatePRWNativeInput(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<NCD> DESCRIPTOR = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> CONTENT = 0) {
+  PRWNativeInputBuilder builder_(_fbb);
+  builder_.add_CONTENT(CONTENT);
+  builder_.add_DESCRIPTOR(DESCRIPTOR);
+  return builder_.Finish();
+}
+
+struct PRWNativeInput::Traits {
+  using type = PRWNativeInput;
+  static auto constexpr Create = CreatePRWNativeInput;
+};
+
+inline ::flatbuffers::Offset<PRWNativeInput> CreatePRWNativeInputDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<NCD> DESCRIPTOR = 0,
+    const std::vector<uint8_t> *CONTENT = nullptr) {
+  auto CONTENT__ = CONTENT ? _fbb.CreateVector<uint8_t>(*CONTENT) : 0;
+  return CreatePRWNativeInput(
+      _fbb,
+      DESCRIPTOR,
+      CONTENT__);
+}
+
+::flatbuffers::Offset<PRWNativeInput> CreatePRWNativeInput(::flatbuffers::FlatBufferBuilder &_fbb, const PRWNativeInputT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWEphemerisRequestT : public ::flatbuffers::NativeTable {
+  typedef PRWEphemerisRequest TableType;
+  std::unique_ptr<TIMInstantT> EPOCH{};
+  int32_t TARGET_NAIF_ID = 0;
+  int32_t CENTER_NAIF_ID = 399;
+  PRWEphemerisRequestT() = default;
+  PRWEphemerisRequestT(const PRWEphemerisRequestT &o);
+  PRWEphemerisRequestT(PRWEphemerisRequestT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWEphemerisRequestT &operator=(PRWEphemerisRequestT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Geometric SPK state query, TDB; NAIF IDs state origin and target explicitly.
+struct PRWEphemerisRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWEphemerisRequestT NativeTableType;
+  typedef PRWEphemerisRequestBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_EPOCH = 4,
+    VT_TARGET_NAIF_ID = 6,
+    VT_CENTER_NAIF_ID = 8
+  };
+  const TIMInstant *EPOCH() const {
+    return GetPointer<const TIMInstant *>(VT_EPOCH);
+  }
+  int32_t TARGET_NAIF_ID() const {
+    return GetField<int32_t>(VT_TARGET_NAIF_ID, 0);
+  }
+  int32_t CENTER_NAIF_ID() const {
+    return GetField<int32_t>(VT_CENTER_NAIF_ID, 399);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_EPOCH) &&
+           verifier.VerifyTable(EPOCH()) &&
+           VerifyField<int32_t>(verifier, VT_TARGET_NAIF_ID, 4) &&
+           VerifyField<int32_t>(verifier, VT_CENTER_NAIF_ID, 4) &&
+           verifier.EndTable();
+  }
+  PRWEphemerisRequestT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWEphemerisRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWEphemerisRequest> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEphemerisRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWEphemerisRequestBuilder {
+  typedef PRWEphemerisRequest Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_EPOCH(::flatbuffers::Offset<TIMInstant> EPOCH) {
+    fbb_.AddOffset(PRWEphemerisRequest::VT_EPOCH, EPOCH);
+  }
+  void add_TARGET_NAIF_ID(int32_t TARGET_NAIF_ID) {
+    fbb_.AddElement<int32_t>(PRWEphemerisRequest::VT_TARGET_NAIF_ID, TARGET_NAIF_ID, 0);
+  }
+  void add_CENTER_NAIF_ID(int32_t CENTER_NAIF_ID) {
+    fbb_.AddElement<int32_t>(PRWEphemerisRequest::VT_CENTER_NAIF_ID, CENTER_NAIF_ID, 399);
+  }
+  explicit PRWEphemerisRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWEphemerisRequest> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWEphemerisRequest>(end);
+    fbb_.Required(o, PRWEphemerisRequest::VT_EPOCH);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWEphemerisRequest> CreatePRWEphemerisRequest(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<TIMInstant> EPOCH = 0,
+    int32_t TARGET_NAIF_ID = 0,
+    int32_t CENTER_NAIF_ID = 399) {
+  PRWEphemerisRequestBuilder builder_(_fbb);
+  builder_.add_CENTER_NAIF_ID(CENTER_NAIF_ID);
+  builder_.add_TARGET_NAIF_ID(TARGET_NAIF_ID);
+  builder_.add_EPOCH(EPOCH);
+  return builder_.Finish();
+}
+
+struct PRWEphemerisRequest::Traits {
+  using type = PRWEphemerisRequest;
+  static auto constexpr Create = CreatePRWEphemerisRequest;
+};
+
+::flatbuffers::Offset<PRWEphemerisRequest> CreatePRWEphemerisRequest(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEphemerisRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWEphemerisResultT : public ::flatbuffers::NativeTable {
+  typedef PRWEphemerisResult TableType;
+  int32_t TARGET_NAIF_ID = 0;
+  int32_t CENTER_NAIF_ID = 0;
+  std::unique_ptr<PRWResidentStateT> STATE{};
+  std::string EPHEMERIS_SOURCE{};
+  PRWEphemerisResultT() = default;
+  PRWEphemerisResultT(const PRWEphemerisResultT &o);
+  PRWEphemerisResultT(PRWEphemerisResultT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWEphemerisResultT &operator=(PRWEphemerisResultT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct PRWEphemerisResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWEphemerisResultT NativeTableType;
+  typedef PRWEphemerisResultBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_TARGET_NAIF_ID = 4,
+    VT_CENTER_NAIF_ID = 6,
+    VT_STATE = 8,
+    VT_EPHEMERIS_SOURCE = 10
+  };
+  int32_t TARGET_NAIF_ID() const {
+    return GetField<int32_t>(VT_TARGET_NAIF_ID, 0);
+  }
+  int32_t CENTER_NAIF_ID() const {
+    return GetField<int32_t>(VT_CENTER_NAIF_ID, 0);
+  }
+  /// Explicit ICRF axes and named NAIF origin; FRM state in SI m/m/s.
+  const PRWResidentState *STATE() const {
+    return GetPointer<const PRWResidentState *>(VT_STATE);
+  }
+  const ::flatbuffers::String *EPHEMERIS_SOURCE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_EPHEMERIS_SOURCE);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int32_t>(verifier, VT_TARGET_NAIF_ID, 4) &&
+           VerifyField<int32_t>(verifier, VT_CENTER_NAIF_ID, 4) &&
+           VerifyOffsetRequired(verifier, VT_STATE) &&
+           verifier.VerifyTable(STATE()) &&
+           VerifyOffsetRequired(verifier, VT_EPHEMERIS_SOURCE) &&
+           verifier.VerifyString(EPHEMERIS_SOURCE()) &&
+           verifier.EndTable();
+  }
+  PRWEphemerisResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWEphemerisResultT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWEphemerisResult> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEphemerisResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWEphemerisResultBuilder {
+  typedef PRWEphemerisResult Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_TARGET_NAIF_ID(int32_t TARGET_NAIF_ID) {
+    fbb_.AddElement<int32_t>(PRWEphemerisResult::VT_TARGET_NAIF_ID, TARGET_NAIF_ID, 0);
+  }
+  void add_CENTER_NAIF_ID(int32_t CENTER_NAIF_ID) {
+    fbb_.AddElement<int32_t>(PRWEphemerisResult::VT_CENTER_NAIF_ID, CENTER_NAIF_ID, 0);
+  }
+  void add_STATE(::flatbuffers::Offset<PRWResidentState> STATE) {
+    fbb_.AddOffset(PRWEphemerisResult::VT_STATE, STATE);
+  }
+  void add_EPHEMERIS_SOURCE(::flatbuffers::Offset<::flatbuffers::String> EPHEMERIS_SOURCE) {
+    fbb_.AddOffset(PRWEphemerisResult::VT_EPHEMERIS_SOURCE, EPHEMERIS_SOURCE);
+  }
+  explicit PRWEphemerisResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWEphemerisResult> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWEphemerisResult>(end);
+    fbb_.Required(o, PRWEphemerisResult::VT_STATE);
+    fbb_.Required(o, PRWEphemerisResult::VT_EPHEMERIS_SOURCE);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWEphemerisResult> CreatePRWEphemerisResult(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    int32_t TARGET_NAIF_ID = 0,
+    int32_t CENTER_NAIF_ID = 0,
+    ::flatbuffers::Offset<PRWResidentState> STATE = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> EPHEMERIS_SOURCE = 0) {
+  PRWEphemerisResultBuilder builder_(_fbb);
+  builder_.add_EPHEMERIS_SOURCE(EPHEMERIS_SOURCE);
+  builder_.add_STATE(STATE);
+  builder_.add_CENTER_NAIF_ID(CENTER_NAIF_ID);
+  builder_.add_TARGET_NAIF_ID(TARGET_NAIF_ID);
+  return builder_.Finish();
+}
+
+struct PRWEphemerisResult::Traits {
+  using type = PRWEphemerisResult;
+  static auto constexpr Create = CreatePRWEphemerisResult;
+};
+
+inline ::flatbuffers::Offset<PRWEphemerisResult> CreatePRWEphemerisResultDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    int32_t TARGET_NAIF_ID = 0,
+    int32_t CENTER_NAIF_ID = 0,
+    ::flatbuffers::Offset<PRWResidentState> STATE = 0,
+    const char *EPHEMERIS_SOURCE = nullptr) {
+  auto EPHEMERIS_SOURCE__ = EPHEMERIS_SOURCE ? _fbb.CreateString(EPHEMERIS_SOURCE) : 0;
+  return CreatePRWEphemerisResult(
+      _fbb,
+      TARGET_NAIF_ID,
+      CENTER_NAIF_ID,
+      STATE,
+      EPHEMERIS_SOURCE__);
+}
+
+::flatbuffers::Offset<PRWEphemerisResult> CreatePRWEphemerisResult(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEphemerisResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWAtmosphereRequestT : public ::flatbuffers::NativeTable {
+  typedef PRWAtmosphereRequest TableType;
+  prwAtmosphereFamily ATMOSPHERE_MODEL = prwAtmosphereFamily::NRLMSISE00;
+  std::unique_ptr<TIMInstantT> EPOCH{};
+  double ALTITUDE_M = 0.0;
+  double LATITUDE_RAD = 0.0;
+  double LONGITUDE_RAD = 0.0;
+  double LOCAL_SOLAR_TIME_HOURS = 0.0;
+  bool HAS_LOCAL_SOLAR_TIME_HOURS = false;
+  double F107 = 150.0;
+  double F107_AVERAGE = 150.0;
+  double AP_INDEX = 4.0;
+  bool INCLUDE_ANOMALOUS_OXYGEN = false;
+  PRWAtmosphereRequestT() = default;
+  PRWAtmosphereRequestT(const PRWAtmosphereRequestT &o);
+  PRWAtmosphereRequestT(PRWAtmosphereRequestT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWAtmosphereRequestT &operator=(PRWAtmosphereRequestT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Diagnostic atmosphere request; UTC instant replaces ambiguous DOY/year=0.
+struct PRWAtmosphereRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWAtmosphereRequestT NativeTableType;
+  typedef PRWAtmosphereRequestBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_ATMOSPHERE_MODEL = 4,
+    VT_EPOCH = 6,
+    VT_ALTITUDE_M = 8,
+    VT_LATITUDE_RAD = 10,
+    VT_LONGITUDE_RAD = 12,
+    VT_LOCAL_SOLAR_TIME_HOURS = 14,
+    VT_HAS_LOCAL_SOLAR_TIME_HOURS = 16,
+    VT_F107 = 18,
+    VT_F107_AVERAGE = 20,
+    VT_AP_INDEX = 22,
+    VT_INCLUDE_ANOMALOUS_OXYGEN = 24
+  };
+  prwAtmosphereFamily ATMOSPHERE_MODEL() const {
+    return static_cast<prwAtmosphereFamily>(GetField<uint8_t>(VT_ATMOSPHERE_MODEL, 1));
+  }
+  const TIMInstant *EPOCH() const {
+    return GetPointer<const TIMInstant *>(VT_EPOCH);
+  }
+  double ALTITUDE_M() const {
+    return GetField<double>(VT_ALTITUDE_M, 0.0);
+  }
+  double LATITUDE_RAD() const {
+    return GetField<double>(VT_LATITUDE_RAD, 0.0);
+  }
+  double LONGITUDE_RAD() const {
+    return GetField<double>(VT_LONGITUDE_RAD, 0.0);
+  }
+  /// Optional local solar time; hours [0,24); absent derives from UTC/longitude.
+  double LOCAL_SOLAR_TIME_HOURS() const {
+    return GetField<double>(VT_LOCAL_SOLAR_TIME_HOURS, 0.0);
+  }
+  /// True when LOCAL_SOLAR_TIME_HOURS carries a value; false means absent.
+  bool HAS_LOCAL_SOLAR_TIME_HOURS() const {
+    return GetField<uint8_t>(VT_HAS_LOCAL_SOLAR_TIME_HOURS, 0) != 0;
+  }
+  double F107() const {
+    return GetField<double>(VT_F107, 150.0);
+  }
+  double F107_AVERAGE() const {
+    return GetField<double>(VT_F107_AVERAGE, 150.0);
+  }
+  double AP_INDEX() const {
+    return GetField<double>(VT_AP_INDEX, 4.0);
+  }
+  bool INCLUDE_ANOMALOUS_OXYGEN() const {
+    return GetField<uint8_t>(VT_INCLUDE_ANOMALOUS_OXYGEN, 0) != 0;
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_ATMOSPHERE_MODEL, 1) &&
+           VerifyOffsetRequired(verifier, VT_EPOCH) &&
+           verifier.VerifyTable(EPOCH()) &&
+           VerifyField<double>(verifier, VT_ALTITUDE_M, 8) &&
+           VerifyField<double>(verifier, VT_LATITUDE_RAD, 8) &&
+           VerifyField<double>(verifier, VT_LONGITUDE_RAD, 8) &&
+           VerifyField<double>(verifier, VT_LOCAL_SOLAR_TIME_HOURS, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_LOCAL_SOLAR_TIME_HOURS, 1) &&
+           VerifyField<double>(verifier, VT_F107, 8) &&
+           VerifyField<double>(verifier, VT_F107_AVERAGE, 8) &&
+           VerifyField<double>(verifier, VT_AP_INDEX, 8) &&
+           VerifyField<uint8_t>(verifier, VT_INCLUDE_ANOMALOUS_OXYGEN, 1) &&
+           verifier.EndTable();
+  }
+  PRWAtmosphereRequestT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWAtmosphereRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWAtmosphereRequest> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWAtmosphereRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWAtmosphereRequestBuilder {
+  typedef PRWAtmosphereRequest Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_ATMOSPHERE_MODEL(prwAtmosphereFamily ATMOSPHERE_MODEL) {
+    fbb_.AddElement<uint8_t>(PRWAtmosphereRequest::VT_ATMOSPHERE_MODEL, static_cast<uint8_t>(ATMOSPHERE_MODEL), 1);
+  }
+  void add_EPOCH(::flatbuffers::Offset<TIMInstant> EPOCH) {
+    fbb_.AddOffset(PRWAtmosphereRequest::VT_EPOCH, EPOCH);
+  }
+  void add_ALTITUDE_M(double ALTITUDE_M) {
+    fbb_.AddElement<double>(PRWAtmosphereRequest::VT_ALTITUDE_M, ALTITUDE_M, 0.0);
+  }
+  void add_LATITUDE_RAD(double LATITUDE_RAD) {
+    fbb_.AddElement<double>(PRWAtmosphereRequest::VT_LATITUDE_RAD, LATITUDE_RAD, 0.0);
+  }
+  void add_LONGITUDE_RAD(double LONGITUDE_RAD) {
+    fbb_.AddElement<double>(PRWAtmosphereRequest::VT_LONGITUDE_RAD, LONGITUDE_RAD, 0.0);
+  }
+  void add_LOCAL_SOLAR_TIME_HOURS(double LOCAL_SOLAR_TIME_HOURS) {
+    fbb_.AddElement<double>(PRWAtmosphereRequest::VT_LOCAL_SOLAR_TIME_HOURS, LOCAL_SOLAR_TIME_HOURS, 0.0);
+  }
+  void add_HAS_LOCAL_SOLAR_TIME_HOURS(bool HAS_LOCAL_SOLAR_TIME_HOURS) {
+    fbb_.AddElement<uint8_t>(PRWAtmosphereRequest::VT_HAS_LOCAL_SOLAR_TIME_HOURS, static_cast<uint8_t>(HAS_LOCAL_SOLAR_TIME_HOURS), 0);
+  }
+  void add_F107(double F107) {
+    fbb_.AddElement<double>(PRWAtmosphereRequest::VT_F107, F107, 150.0);
+  }
+  void add_F107_AVERAGE(double F107_AVERAGE) {
+    fbb_.AddElement<double>(PRWAtmosphereRequest::VT_F107_AVERAGE, F107_AVERAGE, 150.0);
+  }
+  void add_AP_INDEX(double AP_INDEX) {
+    fbb_.AddElement<double>(PRWAtmosphereRequest::VT_AP_INDEX, AP_INDEX, 4.0);
+  }
+  void add_INCLUDE_ANOMALOUS_OXYGEN(bool INCLUDE_ANOMALOUS_OXYGEN) {
+    fbb_.AddElement<uint8_t>(PRWAtmosphereRequest::VT_INCLUDE_ANOMALOUS_OXYGEN, static_cast<uint8_t>(INCLUDE_ANOMALOUS_OXYGEN), 0);
+  }
+  explicit PRWAtmosphereRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWAtmosphereRequest> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWAtmosphereRequest>(end);
+    fbb_.Required(o, PRWAtmosphereRequest::VT_EPOCH);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWAtmosphereRequest> CreatePRWAtmosphereRequest(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    prwAtmosphereFamily ATMOSPHERE_MODEL = prwAtmosphereFamily::NRLMSISE00,
+    ::flatbuffers::Offset<TIMInstant> EPOCH = 0,
+    double ALTITUDE_M = 0.0,
+    double LATITUDE_RAD = 0.0,
+    double LONGITUDE_RAD = 0.0,
+    double LOCAL_SOLAR_TIME_HOURS = 0.0,
+    bool HAS_LOCAL_SOLAR_TIME_HOURS = false,
+    double F107 = 150.0,
+    double F107_AVERAGE = 150.0,
+    double AP_INDEX = 4.0,
+    bool INCLUDE_ANOMALOUS_OXYGEN = false) {
+  PRWAtmosphereRequestBuilder builder_(_fbb);
+  builder_.add_AP_INDEX(AP_INDEX);
+  builder_.add_F107_AVERAGE(F107_AVERAGE);
+  builder_.add_F107(F107);
+  builder_.add_LOCAL_SOLAR_TIME_HOURS(LOCAL_SOLAR_TIME_HOURS);
+  builder_.add_LONGITUDE_RAD(LONGITUDE_RAD);
+  builder_.add_LATITUDE_RAD(LATITUDE_RAD);
+  builder_.add_ALTITUDE_M(ALTITUDE_M);
+  builder_.add_EPOCH(EPOCH);
+  builder_.add_INCLUDE_ANOMALOUS_OXYGEN(INCLUDE_ANOMALOUS_OXYGEN);
+  builder_.add_HAS_LOCAL_SOLAR_TIME_HOURS(HAS_LOCAL_SOLAR_TIME_HOURS);
+  builder_.add_ATMOSPHERE_MODEL(ATMOSPHERE_MODEL);
+  return builder_.Finish();
+}
+
+struct PRWAtmosphereRequest::Traits {
+  using type = PRWAtmosphereRequest;
+  static auto constexpr Create = CreatePRWAtmosphereRequest;
+};
+
+::flatbuffers::Offset<PRWAtmosphereRequest> CreatePRWAtmosphereRequest(::flatbuffers::FlatBufferBuilder &_fbb, const PRWAtmosphereRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWSpeciesDensityT : public ::flatbuffers::NativeTable {
+  typedef PRWSpeciesDensity TableType;
+  prwDensitySpecies CONSTITUENT = prwDensitySpecies::UNSPECIFIED;
+  double NUMBER_PER_M3 = 0.0;
+};
+
+struct PRWSpeciesDensity FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWSpeciesDensityT NativeTableType;
+  typedef PRWSpeciesDensityBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_CONSTITUENT = 4,
+    VT_NUMBER_PER_M3 = 6
+  };
+  prwDensitySpecies CONSTITUENT() const {
+    return static_cast<prwDensitySpecies>(GetField<uint8_t>(VT_CONSTITUENT, 0));
+  }
+  double NUMBER_PER_M3() const {
+    return GetField<double>(VT_NUMBER_PER_M3, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_CONSTITUENT, 1) &&
+           VerifyField<double>(verifier, VT_NUMBER_PER_M3, 8) &&
+           verifier.EndTable();
+  }
+  PRWSpeciesDensityT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWSpeciesDensityT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWSpeciesDensity> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWSpeciesDensityT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWSpeciesDensityBuilder {
+  typedef PRWSpeciesDensity Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_CONSTITUENT(prwDensitySpecies CONSTITUENT) {
+    fbb_.AddElement<uint8_t>(PRWSpeciesDensity::VT_CONSTITUENT, static_cast<uint8_t>(CONSTITUENT), 0);
+  }
+  void add_NUMBER_PER_M3(double NUMBER_PER_M3) {
+    fbb_.AddElement<double>(PRWSpeciesDensity::VT_NUMBER_PER_M3, NUMBER_PER_M3, 0.0);
+  }
+  explicit PRWSpeciesDensityBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWSpeciesDensity> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWSpeciesDensity>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWSpeciesDensity> CreatePRWSpeciesDensity(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    prwDensitySpecies CONSTITUENT = prwDensitySpecies::UNSPECIFIED,
+    double NUMBER_PER_M3 = 0.0) {
+  PRWSpeciesDensityBuilder builder_(_fbb);
+  builder_.add_NUMBER_PER_M3(NUMBER_PER_M3);
+  builder_.add_CONSTITUENT(CONSTITUENT);
+  return builder_.Finish();
+}
+
+struct PRWSpeciesDensity::Traits {
+  using type = PRWSpeciesDensity;
+  static auto constexpr Create = CreatePRWSpeciesDensity;
+};
+
+::flatbuffers::Offset<PRWSpeciesDensity> CreatePRWSpeciesDensity(::flatbuffers::FlatBufferBuilder &_fbb, const PRWSpeciesDensityT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWAtmosphereResultT : public ::flatbuffers::NativeTable {
+  typedef PRWAtmosphereResult TableType;
+  prwAtmosphereFamily ATMOSPHERE_MODEL = prwAtmosphereFamily::UNSPECIFIED;
+  std::string VARIANT{};
+  double ALTITUDE_M = 0.0;
+  double DENSITY_KG_M3 = 0.0;
+  double TEMPERATURE_K = 0.0;
+  bool HAS_TEMPERATURE_K = false;
+  double EXOSPHERIC_TEMPERATURE_K = 0.0;
+  bool HAS_EXOSPHERIC_TEMPERATURE_K = false;
+  double SCALE_HEIGHT_M = 0.0;
+  bool HAS_SCALE_HEIGHT_M = false;
+  std::vector<std::unique_ptr<PRWSpeciesDensityT>> NUMBER_DENSITIES{};
+  PRWAtmosphereResultT() = default;
+  PRWAtmosphereResultT(const PRWAtmosphereResultT &o);
+  PRWAtmosphereResultT(PRWAtmosphereResultT&&) FLATBUFFERS_NOEXCEPT = default;
+  PRWAtmosphereResultT &operator=(PRWAtmosphereResultT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct PRWAtmosphereResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWAtmosphereResultT NativeTableType;
+  typedef PRWAtmosphereResultBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_ATMOSPHERE_MODEL = 4,
+    VT_VARIANT = 6,
+    VT_ALTITUDE_M = 8,
+    VT_DENSITY_KG_M3 = 10,
+    VT_TEMPERATURE_K = 12,
+    VT_HAS_TEMPERATURE_K = 14,
+    VT_EXOSPHERIC_TEMPERATURE_K = 16,
+    VT_HAS_EXOSPHERIC_TEMPERATURE_K = 18,
+    VT_SCALE_HEIGHT_M = 20,
+    VT_HAS_SCALE_HEIGHT_M = 22,
+    VT_NUMBER_DENSITIES = 24
+  };
+  prwAtmosphereFamily ATMOSPHERE_MODEL() const {
+    return static_cast<prwAtmosphereFamily>(GetField<uint8_t>(VT_ATMOSPHERE_MODEL, 0));
+  }
+  const ::flatbuffers::String *VARIANT() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_VARIANT);
+  }
+  double ALTITUDE_M() const {
+    return GetField<double>(VT_ALTITUDE_M, 0.0);
+  }
+  double DENSITY_KG_M3() const {
+    return GetField<double>(VT_DENSITY_KG_M3, 0.0);
+  }
+  double TEMPERATURE_K() const {
+    return GetField<double>(VT_TEMPERATURE_K, 0.0);
+  }
+  /// True when TEMPERATURE_K carries a value; false means absent.
+  bool HAS_TEMPERATURE_K() const {
+    return GetField<uint8_t>(VT_HAS_TEMPERATURE_K, 0) != 0;
+  }
+  double EXOSPHERIC_TEMPERATURE_K() const {
+    return GetField<double>(VT_EXOSPHERIC_TEMPERATURE_K, 0.0);
+  }
+  /// True when EXOSPHERIC_TEMPERATURE_K carries a value; false means absent.
+  bool HAS_EXOSPHERIC_TEMPERATURE_K() const {
+    return GetField<uint8_t>(VT_HAS_EXOSPHERIC_TEMPERATURE_K, 0) != 0;
+  }
+  double SCALE_HEIGHT_M() const {
+    return GetField<double>(VT_SCALE_HEIGHT_M, 0.0);
+  }
+  /// True when SCALE_HEIGHT_M carries a value; false means absent.
+  bool HAS_SCALE_HEIGHT_M() const {
+    return GetField<uint8_t>(VT_HAS_SCALE_HEIGHT_M, 0) != 0;
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<PRWSpeciesDensity>> *NUMBER_DENSITIES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<PRWSpeciesDensity>> *>(VT_NUMBER_DENSITIES);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_ATMOSPHERE_MODEL, 1) &&
+           VerifyOffset(verifier, VT_VARIANT) &&
+           verifier.VerifyString(VARIANT()) &&
+           VerifyField<double>(verifier, VT_ALTITUDE_M, 8) &&
+           VerifyField<double>(verifier, VT_DENSITY_KG_M3, 8) &&
+           VerifyField<double>(verifier, VT_TEMPERATURE_K, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_TEMPERATURE_K, 1) &&
+           VerifyField<double>(verifier, VT_EXOSPHERIC_TEMPERATURE_K, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_EXOSPHERIC_TEMPERATURE_K, 1) &&
+           VerifyField<double>(verifier, VT_SCALE_HEIGHT_M, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_SCALE_HEIGHT_M, 1) &&
+           VerifyOffset(verifier, VT_NUMBER_DENSITIES) &&
+           verifier.VerifyVector(NUMBER_DENSITIES()) &&
+           verifier.VerifyVectorOfTables(NUMBER_DENSITIES()) &&
+           verifier.EndTable();
+  }
+  PRWAtmosphereResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWAtmosphereResultT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWAtmosphereResult> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWAtmosphereResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWAtmosphereResultBuilder {
+  typedef PRWAtmosphereResult Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_ATMOSPHERE_MODEL(prwAtmosphereFamily ATMOSPHERE_MODEL) {
+    fbb_.AddElement<uint8_t>(PRWAtmosphereResult::VT_ATMOSPHERE_MODEL, static_cast<uint8_t>(ATMOSPHERE_MODEL), 0);
+  }
+  void add_VARIANT(::flatbuffers::Offset<::flatbuffers::String> VARIANT) {
+    fbb_.AddOffset(PRWAtmosphereResult::VT_VARIANT, VARIANT);
+  }
+  void add_ALTITUDE_M(double ALTITUDE_M) {
+    fbb_.AddElement<double>(PRWAtmosphereResult::VT_ALTITUDE_M, ALTITUDE_M, 0.0);
+  }
+  void add_DENSITY_KG_M3(double DENSITY_KG_M3) {
+    fbb_.AddElement<double>(PRWAtmosphereResult::VT_DENSITY_KG_M3, DENSITY_KG_M3, 0.0);
+  }
+  void add_TEMPERATURE_K(double TEMPERATURE_K) {
+    fbb_.AddElement<double>(PRWAtmosphereResult::VT_TEMPERATURE_K, TEMPERATURE_K, 0.0);
+  }
+  void add_HAS_TEMPERATURE_K(bool HAS_TEMPERATURE_K) {
+    fbb_.AddElement<uint8_t>(PRWAtmosphereResult::VT_HAS_TEMPERATURE_K, static_cast<uint8_t>(HAS_TEMPERATURE_K), 0);
+  }
+  void add_EXOSPHERIC_TEMPERATURE_K(double EXOSPHERIC_TEMPERATURE_K) {
+    fbb_.AddElement<double>(PRWAtmosphereResult::VT_EXOSPHERIC_TEMPERATURE_K, EXOSPHERIC_TEMPERATURE_K, 0.0);
+  }
+  void add_HAS_EXOSPHERIC_TEMPERATURE_K(bool HAS_EXOSPHERIC_TEMPERATURE_K) {
+    fbb_.AddElement<uint8_t>(PRWAtmosphereResult::VT_HAS_EXOSPHERIC_TEMPERATURE_K, static_cast<uint8_t>(HAS_EXOSPHERIC_TEMPERATURE_K), 0);
+  }
+  void add_SCALE_HEIGHT_M(double SCALE_HEIGHT_M) {
+    fbb_.AddElement<double>(PRWAtmosphereResult::VT_SCALE_HEIGHT_M, SCALE_HEIGHT_M, 0.0);
+  }
+  void add_HAS_SCALE_HEIGHT_M(bool HAS_SCALE_HEIGHT_M) {
+    fbb_.AddElement<uint8_t>(PRWAtmosphereResult::VT_HAS_SCALE_HEIGHT_M, static_cast<uint8_t>(HAS_SCALE_HEIGHT_M), 0);
+  }
+  void add_NUMBER_DENSITIES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWSpeciesDensity>>> NUMBER_DENSITIES) {
+    fbb_.AddOffset(PRWAtmosphereResult::VT_NUMBER_DENSITIES, NUMBER_DENSITIES);
+  }
+  explicit PRWAtmosphereResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWAtmosphereResult> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWAtmosphereResult>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWAtmosphereResult> CreatePRWAtmosphereResult(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    prwAtmosphereFamily ATMOSPHERE_MODEL = prwAtmosphereFamily::UNSPECIFIED,
+    ::flatbuffers::Offset<::flatbuffers::String> VARIANT = 0,
+    double ALTITUDE_M = 0.0,
+    double DENSITY_KG_M3 = 0.0,
+    double TEMPERATURE_K = 0.0,
+    bool HAS_TEMPERATURE_K = false,
+    double EXOSPHERIC_TEMPERATURE_K = 0.0,
+    bool HAS_EXOSPHERIC_TEMPERATURE_K = false,
+    double SCALE_HEIGHT_M = 0.0,
+    bool HAS_SCALE_HEIGHT_M = false,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PRWSpeciesDensity>>> NUMBER_DENSITIES = 0) {
+  PRWAtmosphereResultBuilder builder_(_fbb);
+  builder_.add_SCALE_HEIGHT_M(SCALE_HEIGHT_M);
+  builder_.add_EXOSPHERIC_TEMPERATURE_K(EXOSPHERIC_TEMPERATURE_K);
+  builder_.add_TEMPERATURE_K(TEMPERATURE_K);
+  builder_.add_DENSITY_KG_M3(DENSITY_KG_M3);
+  builder_.add_ALTITUDE_M(ALTITUDE_M);
+  builder_.add_NUMBER_DENSITIES(NUMBER_DENSITIES);
+  builder_.add_VARIANT(VARIANT);
+  builder_.add_HAS_SCALE_HEIGHT_M(HAS_SCALE_HEIGHT_M);
+  builder_.add_HAS_EXOSPHERIC_TEMPERATURE_K(HAS_EXOSPHERIC_TEMPERATURE_K);
+  builder_.add_HAS_TEMPERATURE_K(HAS_TEMPERATURE_K);
+  builder_.add_ATMOSPHERE_MODEL(ATMOSPHERE_MODEL);
+  return builder_.Finish();
+}
+
+struct PRWAtmosphereResult::Traits {
+  using type = PRWAtmosphereResult;
+  static auto constexpr Create = CreatePRWAtmosphereResult;
+};
+
+inline ::flatbuffers::Offset<PRWAtmosphereResult> CreatePRWAtmosphereResultDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    prwAtmosphereFamily ATMOSPHERE_MODEL = prwAtmosphereFamily::UNSPECIFIED,
+    const char *VARIANT = nullptr,
+    double ALTITUDE_M = 0.0,
+    double DENSITY_KG_M3 = 0.0,
+    double TEMPERATURE_K = 0.0,
+    bool HAS_TEMPERATURE_K = false,
+    double EXOSPHERIC_TEMPERATURE_K = 0.0,
+    bool HAS_EXOSPHERIC_TEMPERATURE_K = false,
+    double SCALE_HEIGHT_M = 0.0,
+    bool HAS_SCALE_HEIGHT_M = false,
+    const std::vector<::flatbuffers::Offset<PRWSpeciesDensity>> *NUMBER_DENSITIES = nullptr) {
+  auto VARIANT__ = VARIANT ? _fbb.CreateString(VARIANT) : 0;
+  auto NUMBER_DENSITIES__ = NUMBER_DENSITIES ? _fbb.CreateVector<::flatbuffers::Offset<PRWSpeciesDensity>>(*NUMBER_DENSITIES) : 0;
+  return CreatePRWAtmosphereResult(
+      _fbb,
+      ATMOSPHERE_MODEL,
+      VARIANT__,
+      ALTITUDE_M,
+      DENSITY_KG_M3,
+      TEMPERATURE_K,
+      HAS_TEMPERATURE_K,
+      EXOSPHERIC_TEMPERATURE_K,
+      HAS_EXOSPHERIC_TEMPERATURE_K,
+      SCALE_HEIGHT_M,
+      HAS_SCALE_HEIGHT_M,
+      NUMBER_DENSITIES__);
+}
+
+::flatbuffers::Offset<PRWAtmosphereResult> CreatePRWAtmosphereResult(::flatbuffers::FlatBufferBuilder &_fbb, const PRWAtmosphereResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct PRWVersionResultT : public ::flatbuffers::NativeTable {
+  typedef PRWVersionResult TableType;
+  std::string VERSION{};
+  std::string MODULE_ID{};
+};
+
+/// Runtime diagnostic version; PLG remains the authoritative manifest identity.
+struct PRWVersionResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWVersionResultT NativeTableType;
+  typedef PRWVersionResultBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_VERSION = 4,
+    VT_MODULE_ID = 6
+  };
+  const ::flatbuffers::String *VERSION() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_VERSION);
+  }
+  const ::flatbuffers::String *MODULE_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MODULE_ID);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_VERSION) &&
+           verifier.VerifyString(VERSION()) &&
+           VerifyOffsetRequired(verifier, VT_MODULE_ID) &&
+           verifier.VerifyString(MODULE_ID()) &&
+           verifier.EndTable();
+  }
+  PRWVersionResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWVersionResultT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWVersionResult> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWVersionResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWVersionResultBuilder {
+  typedef PRWVersionResult Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_VERSION(::flatbuffers::Offset<::flatbuffers::String> VERSION) {
+    fbb_.AddOffset(PRWVersionResult::VT_VERSION, VERSION);
+  }
+  void add_MODULE_ID(::flatbuffers::Offset<::flatbuffers::String> MODULE_ID) {
+    fbb_.AddOffset(PRWVersionResult::VT_MODULE_ID, MODULE_ID);
+  }
+  explicit PRWVersionResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWVersionResult> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWVersionResult>(end);
+    fbb_.Required(o, PRWVersionResult::VT_VERSION);
+    fbb_.Required(o, PRWVersionResult::VT_MODULE_ID);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWVersionResult> CreatePRWVersionResult(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> VERSION = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MODULE_ID = 0) {
+  PRWVersionResultBuilder builder_(_fbb);
+  builder_.add_MODULE_ID(MODULE_ID);
+  builder_.add_VERSION(VERSION);
+  return builder_.Finish();
+}
+
+struct PRWVersionResult::Traits {
+  using type = PRWVersionResult;
+  static auto constexpr Create = CreatePRWVersionResult;
+};
+
+inline ::flatbuffers::Offset<PRWVersionResult> CreatePRWVersionResultDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *VERSION = nullptr,
+    const char *MODULE_ID = nullptr) {
+  auto VERSION__ = VERSION ? _fbb.CreateString(VERSION) : 0;
+  auto MODULE_ID__ = MODULE_ID ? _fbb.CreateString(MODULE_ID) : 0;
+  return CreatePRWVersionResult(
+      _fbb,
+      VERSION__,
+      MODULE_ID__);
+}
+
+::flatbuffers::Offset<PRWVersionResult> CreatePRWVersionResult(::flatbuffers::FlatBufferBuilder &_fbb, const PRWVersionResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct PRWT : public ::flatbuffers::NativeTable {
   typedef PRW TableType;
   std::unique_ptr<PRWInitT> INIT{};
   std::unique_ptr<PRWBatchRequestT> BATCH_REQUEST{};
   std::unique_ptr<PRWBatchResponseT> BATCH_RESPONSE{};
+  std::unique_ptr<PRWExecutionRequestT> EXECUTION_REQUEST{};
+  std::unique_ptr<PRWExecutionResultT> EXECUTION_RESULT{};
+  std::unique_ptr<PRWResidentStateT> RESIDENT_STATE{};
+  std::unique_ptr<PRWResidentRequestT> RESIDENT_REQUEST{};
+  std::unique_ptr<PRWPrepareRequestT> PREPARE_REQUEST{};
+  std::unique_ptr<PRWPrepareResultT> PREPARE_RESULT{};
+  std::unique_ptr<PRWDescribeRequestT> DESCRIBE_REQUEST{};
+  std::unique_ptr<PRWDescribeResultT> DESCRIBE_RESULT{};
+  std::unique_ptr<PRWNativeInputT> NATIVE_INPUT{};
+  std::unique_ptr<PRWEphemerisRequestT> EPHEMERIS_REQUEST{};
+  std::unique_ptr<PRWEphemerisResultT> EPHEMERIS_RESULT{};
+  std::unique_ptr<PRWAtmosphereRequestT> ATMOSPHERE_REQUEST{};
+  std::unique_ptr<PRWAtmosphereResultT> ATMOSPHERE_RESULT{};
+  bool VERSION_QUERY = false;
+  std::unique_ptr<PRWVersionResultT> VERSION_RESULT{};
   PRWT() = default;
   PRWT(const PRWT &o);
   PRWT(PRWT&&) FLATBUFFERS_NOEXCEPT = default;
   PRWT &operator=(PRWT o) FLATBUFFERS_NOEXCEPT;
 };
 
-/// Propagator Runtime Wire — envelope that carries either an init request,
-/// a batch request, or a batch response across a runtime boundary.
+/// Exactly one arm per envelope. Existing three arms keep their ordinals.
 struct PRW FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef PRWT NativeTableType;
   typedef PRWBuilder Builder;
@@ -1008,7 +5761,22 @@ struct PRW FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_INIT = 4,
     VT_BATCH_REQUEST = 6,
-    VT_BATCH_RESPONSE = 8
+    VT_BATCH_RESPONSE = 8,
+    VT_EXECUTION_REQUEST = 10,
+    VT_EXECUTION_RESULT = 12,
+    VT_RESIDENT_STATE = 14,
+    VT_RESIDENT_REQUEST = 16,
+    VT_PREPARE_REQUEST = 18,
+    VT_PREPARE_RESULT = 20,
+    VT_DESCRIBE_REQUEST = 22,
+    VT_DESCRIBE_RESULT = 24,
+    VT_NATIVE_INPUT = 26,
+    VT_EPHEMERIS_REQUEST = 28,
+    VT_EPHEMERIS_RESULT = 30,
+    VT_ATMOSPHERE_REQUEST = 32,
+    VT_ATMOSPHERE_RESULT = 34,
+    VT_VERSION_QUERY = 36,
+    VT_VERSION_RESULT = 38
   };
   const PRWInit *INIT() const {
     return GetPointer<const PRWInit *>(VT_INIT);
@@ -1019,6 +5787,52 @@ struct PRW FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const PRWBatchResponse *BATCH_RESPONSE() const {
     return GetPointer<const PRWBatchResponse *>(VT_BATCH_RESPONSE);
   }
+  /// Appended portable arms; each method names its permitted arm.
+  const PRWExecutionRequest *EXECUTION_REQUEST() const {
+    return GetPointer<const PRWExecutionRequest *>(VT_EXECUTION_REQUEST);
+  }
+  const PRWExecutionResult *EXECUTION_RESULT() const {
+    return GetPointer<const PRWExecutionResult *>(VT_EXECUTION_RESULT);
+  }
+  const PRWResidentState *RESIDENT_STATE() const {
+    return GetPointer<const PRWResidentState *>(VT_RESIDENT_STATE);
+  }
+  const PRWResidentRequest *RESIDENT_REQUEST() const {
+    return GetPointer<const PRWResidentRequest *>(VT_RESIDENT_REQUEST);
+  }
+  const PRWPrepareRequest *PREPARE_REQUEST() const {
+    return GetPointer<const PRWPrepareRequest *>(VT_PREPARE_REQUEST);
+  }
+  const PRWPrepareResult *PREPARE_RESULT() const {
+    return GetPointer<const PRWPrepareResult *>(VT_PREPARE_RESULT);
+  }
+  const PRWDescribeRequest *DESCRIBE_REQUEST() const {
+    return GetPointer<const PRWDescribeRequest *>(VT_DESCRIBE_REQUEST);
+  }
+  const PRWDescribeResult *DESCRIBE_RESULT() const {
+    return GetPointer<const PRWDescribeResult *>(VT_DESCRIBE_RESULT);
+  }
+  const PRWNativeInput *NATIVE_INPUT() const {
+    return GetPointer<const PRWNativeInput *>(VT_NATIVE_INPUT);
+  }
+  const PRWEphemerisRequest *EPHEMERIS_REQUEST() const {
+    return GetPointer<const PRWEphemerisRequest *>(VT_EPHEMERIS_REQUEST);
+  }
+  const PRWEphemerisResult *EPHEMERIS_RESULT() const {
+    return GetPointer<const PRWEphemerisResult *>(VT_EPHEMERIS_RESULT);
+  }
+  const PRWAtmosphereRequest *ATMOSPHERE_REQUEST() const {
+    return GetPointer<const PRWAtmosphereRequest *>(VT_ATMOSPHERE_REQUEST);
+  }
+  const PRWAtmosphereResult *ATMOSPHERE_RESULT() const {
+    return GetPointer<const PRWAtmosphereResult *>(VT_ATMOSPHERE_RESULT);
+  }
+  bool VERSION_QUERY() const {
+    return GetField<uint8_t>(VT_VERSION_QUERY, 0) != 0;
+  }
+  const PRWVersionResult *VERSION_RESULT() const {
+    return GetPointer<const PRWVersionResult *>(VT_VERSION_RESULT);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1028,6 +5842,35 @@ struct PRW FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyTable(BATCH_REQUEST()) &&
            VerifyOffset(verifier, VT_BATCH_RESPONSE) &&
            verifier.VerifyTable(BATCH_RESPONSE()) &&
+           VerifyOffset(verifier, VT_EXECUTION_REQUEST) &&
+           verifier.VerifyTable(EXECUTION_REQUEST()) &&
+           VerifyOffset(verifier, VT_EXECUTION_RESULT) &&
+           verifier.VerifyTable(EXECUTION_RESULT()) &&
+           VerifyOffset(verifier, VT_RESIDENT_STATE) &&
+           verifier.VerifyTable(RESIDENT_STATE()) &&
+           VerifyOffset(verifier, VT_RESIDENT_REQUEST) &&
+           verifier.VerifyTable(RESIDENT_REQUEST()) &&
+           VerifyOffset(verifier, VT_PREPARE_REQUEST) &&
+           verifier.VerifyTable(PREPARE_REQUEST()) &&
+           VerifyOffset(verifier, VT_PREPARE_RESULT) &&
+           verifier.VerifyTable(PREPARE_RESULT()) &&
+           VerifyOffset(verifier, VT_DESCRIBE_REQUEST) &&
+           verifier.VerifyTable(DESCRIBE_REQUEST()) &&
+           VerifyOffset(verifier, VT_DESCRIBE_RESULT) &&
+           verifier.VerifyTable(DESCRIBE_RESULT()) &&
+           VerifyOffset(verifier, VT_NATIVE_INPUT) &&
+           verifier.VerifyTable(NATIVE_INPUT()) &&
+           VerifyOffset(verifier, VT_EPHEMERIS_REQUEST) &&
+           verifier.VerifyTable(EPHEMERIS_REQUEST()) &&
+           VerifyOffset(verifier, VT_EPHEMERIS_RESULT) &&
+           verifier.VerifyTable(EPHEMERIS_RESULT()) &&
+           VerifyOffset(verifier, VT_ATMOSPHERE_REQUEST) &&
+           verifier.VerifyTable(ATMOSPHERE_REQUEST()) &&
+           VerifyOffset(verifier, VT_ATMOSPHERE_RESULT) &&
+           verifier.VerifyTable(ATMOSPHERE_RESULT()) &&
+           VerifyField<uint8_t>(verifier, VT_VERSION_QUERY, 1) &&
+           VerifyOffset(verifier, VT_VERSION_RESULT) &&
+           verifier.VerifyTable(VERSION_RESULT()) &&
            verifier.EndTable();
   }
   PRWT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1048,6 +5891,51 @@ struct PRWBuilder {
   void add_BATCH_RESPONSE(::flatbuffers::Offset<PRWBatchResponse> BATCH_RESPONSE) {
     fbb_.AddOffset(PRW::VT_BATCH_RESPONSE, BATCH_RESPONSE);
   }
+  void add_EXECUTION_REQUEST(::flatbuffers::Offset<PRWExecutionRequest> EXECUTION_REQUEST) {
+    fbb_.AddOffset(PRW::VT_EXECUTION_REQUEST, EXECUTION_REQUEST);
+  }
+  void add_EXECUTION_RESULT(::flatbuffers::Offset<PRWExecutionResult> EXECUTION_RESULT) {
+    fbb_.AddOffset(PRW::VT_EXECUTION_RESULT, EXECUTION_RESULT);
+  }
+  void add_RESIDENT_STATE(::flatbuffers::Offset<PRWResidentState> RESIDENT_STATE) {
+    fbb_.AddOffset(PRW::VT_RESIDENT_STATE, RESIDENT_STATE);
+  }
+  void add_RESIDENT_REQUEST(::flatbuffers::Offset<PRWResidentRequest> RESIDENT_REQUEST) {
+    fbb_.AddOffset(PRW::VT_RESIDENT_REQUEST, RESIDENT_REQUEST);
+  }
+  void add_PREPARE_REQUEST(::flatbuffers::Offset<PRWPrepareRequest> PREPARE_REQUEST) {
+    fbb_.AddOffset(PRW::VT_PREPARE_REQUEST, PREPARE_REQUEST);
+  }
+  void add_PREPARE_RESULT(::flatbuffers::Offset<PRWPrepareResult> PREPARE_RESULT) {
+    fbb_.AddOffset(PRW::VT_PREPARE_RESULT, PREPARE_RESULT);
+  }
+  void add_DESCRIBE_REQUEST(::flatbuffers::Offset<PRWDescribeRequest> DESCRIBE_REQUEST) {
+    fbb_.AddOffset(PRW::VT_DESCRIBE_REQUEST, DESCRIBE_REQUEST);
+  }
+  void add_DESCRIBE_RESULT(::flatbuffers::Offset<PRWDescribeResult> DESCRIBE_RESULT) {
+    fbb_.AddOffset(PRW::VT_DESCRIBE_RESULT, DESCRIBE_RESULT);
+  }
+  void add_NATIVE_INPUT(::flatbuffers::Offset<PRWNativeInput> NATIVE_INPUT) {
+    fbb_.AddOffset(PRW::VT_NATIVE_INPUT, NATIVE_INPUT);
+  }
+  void add_EPHEMERIS_REQUEST(::flatbuffers::Offset<PRWEphemerisRequest> EPHEMERIS_REQUEST) {
+    fbb_.AddOffset(PRW::VT_EPHEMERIS_REQUEST, EPHEMERIS_REQUEST);
+  }
+  void add_EPHEMERIS_RESULT(::flatbuffers::Offset<PRWEphemerisResult> EPHEMERIS_RESULT) {
+    fbb_.AddOffset(PRW::VT_EPHEMERIS_RESULT, EPHEMERIS_RESULT);
+  }
+  void add_ATMOSPHERE_REQUEST(::flatbuffers::Offset<PRWAtmosphereRequest> ATMOSPHERE_REQUEST) {
+    fbb_.AddOffset(PRW::VT_ATMOSPHERE_REQUEST, ATMOSPHERE_REQUEST);
+  }
+  void add_ATMOSPHERE_RESULT(::flatbuffers::Offset<PRWAtmosphereResult> ATMOSPHERE_RESULT) {
+    fbb_.AddOffset(PRW::VT_ATMOSPHERE_RESULT, ATMOSPHERE_RESULT);
+  }
+  void add_VERSION_QUERY(bool VERSION_QUERY) {
+    fbb_.AddElement<uint8_t>(PRW::VT_VERSION_QUERY, static_cast<uint8_t>(VERSION_QUERY), 0);
+  }
+  void add_VERSION_RESULT(::flatbuffers::Offset<PRWVersionResult> VERSION_RESULT) {
+    fbb_.AddOffset(PRW::VT_VERSION_RESULT, VERSION_RESULT);
+  }
   explicit PRWBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1063,11 +5951,41 @@ inline ::flatbuffers::Offset<PRW> CreatePRW(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<PRWInit> INIT = 0,
     ::flatbuffers::Offset<PRWBatchRequest> BATCH_REQUEST = 0,
-    ::flatbuffers::Offset<PRWBatchResponse> BATCH_RESPONSE = 0) {
+    ::flatbuffers::Offset<PRWBatchResponse> BATCH_RESPONSE = 0,
+    ::flatbuffers::Offset<PRWExecutionRequest> EXECUTION_REQUEST = 0,
+    ::flatbuffers::Offset<PRWExecutionResult> EXECUTION_RESULT = 0,
+    ::flatbuffers::Offset<PRWResidentState> RESIDENT_STATE = 0,
+    ::flatbuffers::Offset<PRWResidentRequest> RESIDENT_REQUEST = 0,
+    ::flatbuffers::Offset<PRWPrepareRequest> PREPARE_REQUEST = 0,
+    ::flatbuffers::Offset<PRWPrepareResult> PREPARE_RESULT = 0,
+    ::flatbuffers::Offset<PRWDescribeRequest> DESCRIBE_REQUEST = 0,
+    ::flatbuffers::Offset<PRWDescribeResult> DESCRIBE_RESULT = 0,
+    ::flatbuffers::Offset<PRWNativeInput> NATIVE_INPUT = 0,
+    ::flatbuffers::Offset<PRWEphemerisRequest> EPHEMERIS_REQUEST = 0,
+    ::flatbuffers::Offset<PRWEphemerisResult> EPHEMERIS_RESULT = 0,
+    ::flatbuffers::Offset<PRWAtmosphereRequest> ATMOSPHERE_REQUEST = 0,
+    ::flatbuffers::Offset<PRWAtmosphereResult> ATMOSPHERE_RESULT = 0,
+    bool VERSION_QUERY = false,
+    ::flatbuffers::Offset<PRWVersionResult> VERSION_RESULT = 0) {
   PRWBuilder builder_(_fbb);
+  builder_.add_VERSION_RESULT(VERSION_RESULT);
+  builder_.add_ATMOSPHERE_RESULT(ATMOSPHERE_RESULT);
+  builder_.add_ATMOSPHERE_REQUEST(ATMOSPHERE_REQUEST);
+  builder_.add_EPHEMERIS_RESULT(EPHEMERIS_RESULT);
+  builder_.add_EPHEMERIS_REQUEST(EPHEMERIS_REQUEST);
+  builder_.add_NATIVE_INPUT(NATIVE_INPUT);
+  builder_.add_DESCRIBE_RESULT(DESCRIBE_RESULT);
+  builder_.add_DESCRIBE_REQUEST(DESCRIBE_REQUEST);
+  builder_.add_PREPARE_RESULT(PREPARE_RESULT);
+  builder_.add_PREPARE_REQUEST(PREPARE_REQUEST);
+  builder_.add_RESIDENT_REQUEST(RESIDENT_REQUEST);
+  builder_.add_RESIDENT_STATE(RESIDENT_STATE);
+  builder_.add_EXECUTION_RESULT(EXECUTION_RESULT);
+  builder_.add_EXECUTION_REQUEST(EXECUTION_REQUEST);
   builder_.add_BATCH_RESPONSE(BATCH_RESPONSE);
   builder_.add_BATCH_REQUEST(BATCH_REQUEST);
   builder_.add_INIT(INIT);
+  builder_.add_VERSION_QUERY(VERSION_QUERY);
   return builder_.Finish();
 }
 
@@ -1338,16 +6256,1756 @@ inline ::flatbuffers::Offset<PRWBatchResponse> PRWBatchResponse::Pack(::flatbuff
       _ERROR_MESSAGE);
 }
 
+inline PRWInstanceT *PRWInstance::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWInstanceT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWInstance::UnPackTo(PRWInstanceT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = MODULE_ID(); if (_e) _o->MODULE_ID = _e->str(); }
+  { auto _e = INSTANCE_ID(); if (_e) _o->INSTANCE_ID = _e->str(); }
+  { auto _e = GENERATION(); _o->GENERATION = _e; }
+}
+
+inline ::flatbuffers::Offset<PRWInstance> CreatePRWInstance(::flatbuffers::FlatBufferBuilder &_fbb, const PRWInstanceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWInstance::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWInstance> PRWInstance::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWInstanceT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWInstanceT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _MODULE_ID = _fbb.CreateString(_o->MODULE_ID);
+  auto _INSTANCE_ID = _fbb.CreateString(_o->INSTANCE_ID);
+  auto _GENERATION = _o->GENERATION;
+  return CreatePRWInstance(
+      _fbb,
+      _MODULE_ID,
+      _INSTANCE_ID,
+      _GENERATION);
+}
+
+inline PRWIntegratorSettingsT *PRWIntegratorSettings::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWIntegratorSettingsT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWIntegratorSettings::UnPackTo(PRWIntegratorSettingsT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = ALGORITHM(); _o->ALGORITHM = _e; }
+  { auto _e = INITIAL_STEP_SECONDS(); _o->INITIAL_STEP_SECONDS = _e; }
+  { auto _e = MINIMUM_STEP_SECONDS(); _o->MINIMUM_STEP_SECONDS = _e; }
+  { auto _e = MAXIMUM_STEP_SECONDS(); _o->MAXIMUM_STEP_SECONDS = _e; }
+  { auto _e = ABSOLUTE_TOLERANCES(); if (_e) { _o->ABSOLUTE_TOLERANCES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->ABSOLUTE_TOLERANCES[_i] = _e->Get(_i); } } else { _o->ABSOLUTE_TOLERANCES.resize(0); } }
+  { auto _e = RELATIVE_TOLERANCE(); _o->RELATIVE_TOLERANCE = _e; }
+  { auto _e = MAXIMUM_STEPS(); _o->MAXIMUM_STEPS = _e; }
+}
+
+inline ::flatbuffers::Offset<PRWIntegratorSettings> CreatePRWIntegratorSettings(::flatbuffers::FlatBufferBuilder &_fbb, const PRWIntegratorSettingsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWIntegratorSettings::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWIntegratorSettings> PRWIntegratorSettings::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWIntegratorSettingsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWIntegratorSettingsT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _ALGORITHM = _o->ALGORITHM;
+  auto _INITIAL_STEP_SECONDS = _o->INITIAL_STEP_SECONDS;
+  auto _MINIMUM_STEP_SECONDS = _o->MINIMUM_STEP_SECONDS;
+  auto _MAXIMUM_STEP_SECONDS = _o->MAXIMUM_STEP_SECONDS;
+  auto _ABSOLUTE_TOLERANCES = _fbb.CreateVector(_o->ABSOLUTE_TOLERANCES);
+  auto _RELATIVE_TOLERANCE = _o->RELATIVE_TOLERANCE;
+  auto _MAXIMUM_STEPS = _o->MAXIMUM_STEPS;
+  return CreatePRWIntegratorSettings(
+      _fbb,
+      _ALGORITHM,
+      _INITIAL_STEP_SECONDS,
+      _MINIMUM_STEP_SECONDS,
+      _MAXIMUM_STEP_SECONDS,
+      _ABSOLUTE_TOLERANCES,
+      _RELATIVE_TOLERANCE,
+      _MAXIMUM_STEPS);
+}
+
+inline PRWSpaceWeatherT::PRWSpaceWeatherT(const PRWSpaceWeatherT &o)
+      : EPOCH((o.EPOCH) ? new TIMInstantT(*o.EPOCH) : nullptr),
+        F107(o.F107),
+        F107_AVERAGE(o.F107_AVERAGE),
+        AP_INDEX(o.AP_INDEX),
+        KP_INDEX(o.KP_INDEX) {
+}
+
+inline PRWSpaceWeatherT &PRWSpaceWeatherT::operator=(PRWSpaceWeatherT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(EPOCH, o.EPOCH);
+  std::swap(F107, o.F107);
+  std::swap(F107_AVERAGE, o.F107_AVERAGE);
+  std::swap(AP_INDEX, o.AP_INDEX);
+  std::swap(KP_INDEX, o.KP_INDEX);
+  return *this;
+}
+
+inline PRWSpaceWeatherT *PRWSpaceWeather::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWSpaceWeatherT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWSpaceWeather::UnPackTo(PRWSpaceWeatherT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = EPOCH(); if (_e) { if(_o->EPOCH) { _e->UnPackTo(_o->EPOCH.get(), _resolver); } else { _o->EPOCH = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->EPOCH) { _o->EPOCH.reset(); } }
+  { auto _e = F107(); _o->F107 = _e; }
+  { auto _e = F107_AVERAGE(); _o->F107_AVERAGE = _e; }
+  { auto _e = AP_INDEX(); _o->AP_INDEX = _e; }
+  { auto _e = KP_INDEX(); _o->KP_INDEX = _e; }
+}
+
+inline ::flatbuffers::Offset<PRWSpaceWeather> CreatePRWSpaceWeather(::flatbuffers::FlatBufferBuilder &_fbb, const PRWSpaceWeatherT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWSpaceWeather::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWSpaceWeather> PRWSpaceWeather::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWSpaceWeatherT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWSpaceWeatherT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _EPOCH = _o->EPOCH ? CreateTIMInstant(_fbb, _o->EPOCH.get(), _rehasher) : 0;
+  auto _F107 = _o->F107;
+  auto _F107_AVERAGE = _o->F107_AVERAGE;
+  auto _AP_INDEX = _o->AP_INDEX;
+  auto _KP_INDEX = _o->KP_INDEX;
+  return CreatePRWSpaceWeather(
+      _fbb,
+      _EPOCH,
+      _F107,
+      _F107_AVERAGE,
+      _AP_INDEX,
+      _KP_INDEX);
+}
+
+inline PRWForceConfigurationT::PRWForceConfigurationT(const PRWForceConfigurationT &o)
+      : GRAVITY_CHOICE(o.GRAVITY_CHOICE),
+        ENABLE_POINT_MASS(o.ENABLE_POINT_MASS),
+        GRAVITATIONAL_PARAMETER(o.GRAVITATIONAL_PARAMETER),
+        ENABLE_J2(o.ENABLE_J2),
+        ENABLE_J3(o.ENABLE_J3),
+        ENABLE_J4(o.ENABLE_J4),
+        ENABLE_HIGHER_ZONALS(o.ENABLE_HIGHER_ZONALS),
+        MAXIMUM_DEGREE(o.MAXIMUM_DEGREE),
+        HAS_MAXIMUM_DEGREE(o.HAS_MAXIMUM_DEGREE),
+        MAXIMUM_ORDER(o.MAXIMUM_ORDER),
+        HAS_MAXIMUM_ORDER(o.HAS_MAXIMUM_ORDER),
+        ENABLE_THIRD_BODY(o.ENABLE_THIRD_BODY),
+        THIRD_BODY_IDS(o.THIRD_BODY_IDS),
+        ENABLE_SRP(o.ENABLE_SRP),
+        ENABLE_DRAG(o.ENABLE_DRAG),
+        INITIAL_MASS_KG(o.INITIAL_MASS_KG),
+        AREA_M2(o.AREA_M2),
+        REFLECTIVITY_COEFFICIENT(o.REFLECTIVITY_COEFFICIENT),
+        DRAG_COEFFICIENT(o.DRAG_COEFFICIENT),
+        ATMOSPHERE_MODEL(o.ATMOSPHERE_MODEL),
+        WEATHER((o.WEATHER) ? new PRWSpaceWeatherT(*o.WEATHER) : nullptr),
+        EPHEMERIS_SOURCE(o.EPHEMERIS_SOURCE) {
+}
+
+inline PRWForceConfigurationT &PRWForceConfigurationT::operator=(PRWForceConfigurationT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(GRAVITY_CHOICE, o.GRAVITY_CHOICE);
+  std::swap(ENABLE_POINT_MASS, o.ENABLE_POINT_MASS);
+  std::swap(GRAVITATIONAL_PARAMETER, o.GRAVITATIONAL_PARAMETER);
+  std::swap(ENABLE_J2, o.ENABLE_J2);
+  std::swap(ENABLE_J3, o.ENABLE_J3);
+  std::swap(ENABLE_J4, o.ENABLE_J4);
+  std::swap(ENABLE_HIGHER_ZONALS, o.ENABLE_HIGHER_ZONALS);
+  std::swap(MAXIMUM_DEGREE, o.MAXIMUM_DEGREE);
+  std::swap(HAS_MAXIMUM_DEGREE, o.HAS_MAXIMUM_DEGREE);
+  std::swap(MAXIMUM_ORDER, o.MAXIMUM_ORDER);
+  std::swap(HAS_MAXIMUM_ORDER, o.HAS_MAXIMUM_ORDER);
+  std::swap(ENABLE_THIRD_BODY, o.ENABLE_THIRD_BODY);
+  std::swap(THIRD_BODY_IDS, o.THIRD_BODY_IDS);
+  std::swap(ENABLE_SRP, o.ENABLE_SRP);
+  std::swap(ENABLE_DRAG, o.ENABLE_DRAG);
+  std::swap(INITIAL_MASS_KG, o.INITIAL_MASS_KG);
+  std::swap(AREA_M2, o.AREA_M2);
+  std::swap(REFLECTIVITY_COEFFICIENT, o.REFLECTIVITY_COEFFICIENT);
+  std::swap(DRAG_COEFFICIENT, o.DRAG_COEFFICIENT);
+  std::swap(ATMOSPHERE_MODEL, o.ATMOSPHERE_MODEL);
+  std::swap(WEATHER, o.WEATHER);
+  std::swap(EPHEMERIS_SOURCE, o.EPHEMERIS_SOURCE);
+  return *this;
+}
+
+inline PRWForceConfigurationT *PRWForceConfiguration::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWForceConfigurationT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWForceConfiguration::UnPackTo(PRWForceConfigurationT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = GRAVITY_CHOICE(); _o->GRAVITY_CHOICE = _e; }
+  { auto _e = ENABLE_POINT_MASS(); _o->ENABLE_POINT_MASS = _e; }
+  { auto _e = GRAVITATIONAL_PARAMETER(); _o->GRAVITATIONAL_PARAMETER = _e; }
+  { auto _e = ENABLE_J2(); _o->ENABLE_J2 = _e; }
+  { auto _e = ENABLE_J3(); _o->ENABLE_J3 = _e; }
+  { auto _e = ENABLE_J4(); _o->ENABLE_J4 = _e; }
+  { auto _e = ENABLE_HIGHER_ZONALS(); _o->ENABLE_HIGHER_ZONALS = _e; }
+  { auto _e = MAXIMUM_DEGREE(); _o->MAXIMUM_DEGREE = _e; }
+  { auto _e = HAS_MAXIMUM_DEGREE(); _o->HAS_MAXIMUM_DEGREE = _e; }
+  { auto _e = MAXIMUM_ORDER(); _o->MAXIMUM_ORDER = _e; }
+  { auto _e = HAS_MAXIMUM_ORDER(); _o->HAS_MAXIMUM_ORDER = _e; }
+  { auto _e = ENABLE_THIRD_BODY(); _o->ENABLE_THIRD_BODY = _e; }
+  { auto _e = THIRD_BODY_IDS(); if (_e) { _o->THIRD_BODY_IDS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->THIRD_BODY_IDS[_i] = _e->Get(_i); } } else { _o->THIRD_BODY_IDS.resize(0); } }
+  { auto _e = ENABLE_SRP(); _o->ENABLE_SRP = _e; }
+  { auto _e = ENABLE_DRAG(); _o->ENABLE_DRAG = _e; }
+  { auto _e = INITIAL_MASS_KG(); _o->INITIAL_MASS_KG = _e; }
+  { auto _e = AREA_M2(); _o->AREA_M2 = _e; }
+  { auto _e = REFLECTIVITY_COEFFICIENT(); _o->REFLECTIVITY_COEFFICIENT = _e; }
+  { auto _e = DRAG_COEFFICIENT(); _o->DRAG_COEFFICIENT = _e; }
+  { auto _e = ATMOSPHERE_MODEL(); _o->ATMOSPHERE_MODEL = _e; }
+  { auto _e = WEATHER(); if (_e) { if(_o->WEATHER) { _e->UnPackTo(_o->WEATHER.get(), _resolver); } else { _o->WEATHER = std::unique_ptr<PRWSpaceWeatherT>(_e->UnPack(_resolver)); } } else if (_o->WEATHER) { _o->WEATHER.reset(); } }
+  { auto _e = EPHEMERIS_SOURCE(); if (_e) _o->EPHEMERIS_SOURCE = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfiguration(::flatbuffers::FlatBufferBuilder &_fbb, const PRWForceConfigurationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWForceConfiguration::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWForceConfiguration> PRWForceConfiguration::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWForceConfigurationT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWForceConfigurationT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _GRAVITY_CHOICE = _o->GRAVITY_CHOICE;
+  auto _ENABLE_POINT_MASS = _o->ENABLE_POINT_MASS;
+  auto _GRAVITATIONAL_PARAMETER = _o->GRAVITATIONAL_PARAMETER;
+  auto _ENABLE_J2 = _o->ENABLE_J2;
+  auto _ENABLE_J3 = _o->ENABLE_J3;
+  auto _ENABLE_J4 = _o->ENABLE_J4;
+  auto _ENABLE_HIGHER_ZONALS = _o->ENABLE_HIGHER_ZONALS;
+  auto _MAXIMUM_DEGREE = _o->MAXIMUM_DEGREE;
+  auto _HAS_MAXIMUM_DEGREE = _o->HAS_MAXIMUM_DEGREE;
+  auto _MAXIMUM_ORDER = _o->MAXIMUM_ORDER;
+  auto _HAS_MAXIMUM_ORDER = _o->HAS_MAXIMUM_ORDER;
+  auto _ENABLE_THIRD_BODY = _o->ENABLE_THIRD_BODY;
+  auto _THIRD_BODY_IDS = _o->THIRD_BODY_IDS.size() ? _fbb.CreateVector(_o->THIRD_BODY_IDS) : 0;
+  auto _ENABLE_SRP = _o->ENABLE_SRP;
+  auto _ENABLE_DRAG = _o->ENABLE_DRAG;
+  auto _INITIAL_MASS_KG = _o->INITIAL_MASS_KG;
+  auto _AREA_M2 = _o->AREA_M2;
+  auto _REFLECTIVITY_COEFFICIENT = _o->REFLECTIVITY_COEFFICIENT;
+  auto _DRAG_COEFFICIENT = _o->DRAG_COEFFICIENT;
+  auto _ATMOSPHERE_MODEL = _o->ATMOSPHERE_MODEL;
+  auto _WEATHER = _o->WEATHER ? CreatePRWSpaceWeather(_fbb, _o->WEATHER.get(), _rehasher) : 0;
+  auto _EPHEMERIS_SOURCE = _fbb.CreateString(_o->EPHEMERIS_SOURCE);
+  return CreatePRWForceConfiguration(
+      _fbb,
+      _GRAVITY_CHOICE,
+      _ENABLE_POINT_MASS,
+      _GRAVITATIONAL_PARAMETER,
+      _ENABLE_J2,
+      _ENABLE_J3,
+      _ENABLE_J4,
+      _ENABLE_HIGHER_ZONALS,
+      _MAXIMUM_DEGREE,
+      _HAS_MAXIMUM_DEGREE,
+      _MAXIMUM_ORDER,
+      _HAS_MAXIMUM_ORDER,
+      _ENABLE_THIRD_BODY,
+      _THIRD_BODY_IDS,
+      _ENABLE_SRP,
+      _ENABLE_DRAG,
+      _INITIAL_MASS_KG,
+      _AREA_M2,
+      _REFLECTIVITY_COEFFICIENT,
+      _DRAG_COEFFICIENT,
+      _ATMOSPHERE_MODEL,
+      _WEATHER,
+      _EPHEMERIS_SOURCE);
+}
+
+inline PRWStateMatrixT *PRWStateMatrix::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWStateMatrixT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWStateMatrix::UnPackTo(PRWStateMatrixT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = DIMENSION(); _o->DIMENSION = _e; }
+  { auto _e = VALUES(); if (_e) { _o->VALUES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->VALUES[_i] = _e->Get(_i); } } else { _o->VALUES.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<PRWStateMatrix> CreatePRWStateMatrix(::flatbuffers::FlatBufferBuilder &_fbb, const PRWStateMatrixT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWStateMatrix::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWStateMatrix> PRWStateMatrix::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWStateMatrixT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWStateMatrixT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _DIMENSION = _o->DIMENSION;
+  auto _VALUES = _fbb.CreateVector(_o->VALUES);
+  return CreatePRWStateMatrix(
+      _fbb,
+      _DIMENSION,
+      _VALUES);
+}
+
+inline PRWProcessNoiseT *PRWProcessNoise::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWProcessNoiseT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWProcessNoise::UnPackTo(PRWProcessNoiseT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = MODEL(); _o->MODEL = _e; }
+  { auto _e = AXES(); _o->AXES = _e; }
+  { auto _e = SPECTRAL_DENSITY_M2_S3(); if (_e) { _o->SPECTRAL_DENSITY_M2_S3.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->SPECTRAL_DENSITY_M2_S3[_i] = _e->Get(_i); } } else { _o->SPECTRAL_DENSITY_M2_S3.resize(0); } }
+  { auto _e = DISCRETIZATION_SECONDS(); _o->DISCRETIZATION_SECONDS = _e; }
+}
+
+inline ::flatbuffers::Offset<PRWProcessNoise> CreatePRWProcessNoise(::flatbuffers::FlatBufferBuilder &_fbb, const PRWProcessNoiseT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWProcessNoise::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWProcessNoise> PRWProcessNoise::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWProcessNoiseT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWProcessNoiseT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _MODEL = _o->MODEL;
+  auto _AXES = _o->AXES;
+  auto _SPECTRAL_DENSITY_M2_S3 = _o->SPECTRAL_DENSITY_M2_S3.size() ? _fbb.CreateVector(_o->SPECTRAL_DENSITY_M2_S3) : 0;
+  auto _DISCRETIZATION_SECONDS = _o->DISCRETIZATION_SECONDS;
+  return CreatePRWProcessNoise(
+      _fbb,
+      _MODEL,
+      _AXES,
+      _SPECTRAL_DENSITY_M2_S3,
+      _DISCRETIZATION_SECONDS);
+}
+
+inline PRWResidentStateT::PRWResidentStateT(const PRWResidentStateT &o)
+      : INSTANCE((o.INSTANCE) ? new PRWInstanceT(*o.INSTANCE) : nullptr),
+        ENTITY_HANDLE(o.ENTITY_HANDLE),
+        CATALOG_NUMBER(o.CATALOG_NUMBER),
+        OBJECT_ID(o.OBJECT_ID),
+        STATE((o.STATE) ? new FRMStateVectorT(*o.STATE) : nullptr),
+        COORDINATE_SYSTEM((o.COORDINATE_SYSTEM) ? new RFMCoordinateSystemT(*o.COORDINATE_SYSTEM) : nullptr),
+        COVARIANCE((o.COVARIANCE) ? new PRWStateMatrixT(*o.COVARIANCE) : nullptr),
+        MASS_KG(o.MASS_KG),
+        HAS_MASS_KG(o.HAS_MASS_KG),
+        DRAG_AREA_OVER_MASS_M2_KG(o.DRAG_AREA_OVER_MASS_M2_KG),
+        HAS_DRAG_AREA_OVER_MASS_M2_KG(o.HAS_DRAG_AREA_OVER_MASS_M2_KG),
+        SRP_AREA_OVER_MASS_M2_KG(o.SRP_AREA_OVER_MASS_M2_KG),
+        HAS_SRP_AREA_OVER_MASS_M2_KG(o.HAS_SRP_AREA_OVER_MASS_M2_KG),
+        VALID(o.VALID),
+        PROCESS_NOISE((o.PROCESS_NOISE) ? new PRWProcessNoiseT(*o.PROCESS_NOISE) : nullptr) {
+}
+
+inline PRWResidentStateT &PRWResidentStateT::operator=(PRWResidentStateT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(INSTANCE, o.INSTANCE);
+  std::swap(ENTITY_HANDLE, o.ENTITY_HANDLE);
+  std::swap(CATALOG_NUMBER, o.CATALOG_NUMBER);
+  std::swap(OBJECT_ID, o.OBJECT_ID);
+  std::swap(STATE, o.STATE);
+  std::swap(COORDINATE_SYSTEM, o.COORDINATE_SYSTEM);
+  std::swap(COVARIANCE, o.COVARIANCE);
+  std::swap(MASS_KG, o.MASS_KG);
+  std::swap(HAS_MASS_KG, o.HAS_MASS_KG);
+  std::swap(DRAG_AREA_OVER_MASS_M2_KG, o.DRAG_AREA_OVER_MASS_M2_KG);
+  std::swap(HAS_DRAG_AREA_OVER_MASS_M2_KG, o.HAS_DRAG_AREA_OVER_MASS_M2_KG);
+  std::swap(SRP_AREA_OVER_MASS_M2_KG, o.SRP_AREA_OVER_MASS_M2_KG);
+  std::swap(HAS_SRP_AREA_OVER_MASS_M2_KG, o.HAS_SRP_AREA_OVER_MASS_M2_KG);
+  std::swap(VALID, o.VALID);
+  std::swap(PROCESS_NOISE, o.PROCESS_NOISE);
+  return *this;
+}
+
+inline PRWResidentStateT *PRWResidentState::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWResidentStateT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWResidentState::UnPackTo(PRWResidentStateT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = INSTANCE(); if (_e) { if(_o->INSTANCE) { _e->UnPackTo(_o->INSTANCE.get(), _resolver); } else { _o->INSTANCE = std::unique_ptr<PRWInstanceT>(_e->UnPack(_resolver)); } } else if (_o->INSTANCE) { _o->INSTANCE.reset(); } }
+  { auto _e = ENTITY_HANDLE(); _o->ENTITY_HANDLE = _e; }
+  { auto _e = CATALOG_NUMBER(); _o->CATALOG_NUMBER = _e; }
+  { auto _e = OBJECT_ID(); if (_e) _o->OBJECT_ID = _e->str(); }
+  { auto _e = STATE(); if (_e) { if(_o->STATE) { _e->UnPackTo(_o->STATE.get(), _resolver); } else { _o->STATE = std::unique_ptr<FRMStateVectorT>(_e->UnPack(_resolver)); } } else if (_o->STATE) { _o->STATE.reset(); } }
+  { auto _e = COORDINATE_SYSTEM(); if (_e) { if(_o->COORDINATE_SYSTEM) { _e->UnPackTo(_o->COORDINATE_SYSTEM.get(), _resolver); } else { _o->COORDINATE_SYSTEM = std::unique_ptr<RFMCoordinateSystemT>(_e->UnPack(_resolver)); } } else if (_o->COORDINATE_SYSTEM) { _o->COORDINATE_SYSTEM.reset(); } }
+  { auto _e = COVARIANCE(); if (_e) { if(_o->COVARIANCE) { _e->UnPackTo(_o->COVARIANCE.get(), _resolver); } else { _o->COVARIANCE = std::unique_ptr<PRWStateMatrixT>(_e->UnPack(_resolver)); } } else if (_o->COVARIANCE) { _o->COVARIANCE.reset(); } }
+  { auto _e = MASS_KG(); _o->MASS_KG = _e; }
+  { auto _e = HAS_MASS_KG(); _o->HAS_MASS_KG = _e; }
+  { auto _e = DRAG_AREA_OVER_MASS_M2_KG(); _o->DRAG_AREA_OVER_MASS_M2_KG = _e; }
+  { auto _e = HAS_DRAG_AREA_OVER_MASS_M2_KG(); _o->HAS_DRAG_AREA_OVER_MASS_M2_KG = _e; }
+  { auto _e = SRP_AREA_OVER_MASS_M2_KG(); _o->SRP_AREA_OVER_MASS_M2_KG = _e; }
+  { auto _e = HAS_SRP_AREA_OVER_MASS_M2_KG(); _o->HAS_SRP_AREA_OVER_MASS_M2_KG = _e; }
+  { auto _e = VALID(); _o->VALID = _e; }
+  { auto _e = PROCESS_NOISE(); if (_e) { if(_o->PROCESS_NOISE) { _e->UnPackTo(_o->PROCESS_NOISE.get(), _resolver); } else { _o->PROCESS_NOISE = std::unique_ptr<PRWProcessNoiseT>(_e->UnPack(_resolver)); } } else if (_o->PROCESS_NOISE) { _o->PROCESS_NOISE.reset(); } }
+}
+
+inline ::flatbuffers::Offset<PRWResidentState> CreatePRWResidentState(::flatbuffers::FlatBufferBuilder &_fbb, const PRWResidentStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWResidentState::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWResidentState> PRWResidentState::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWResidentStateT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWResidentStateT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _INSTANCE = _o->INSTANCE ? CreatePRWInstance(_fbb, _o->INSTANCE.get(), _rehasher) : 0;
+  auto _ENTITY_HANDLE = _o->ENTITY_HANDLE;
+  auto _CATALOG_NUMBER = _o->CATALOG_NUMBER;
+  auto _OBJECT_ID = _o->OBJECT_ID.empty() ? 0 : _fbb.CreateString(_o->OBJECT_ID);
+  auto _STATE = _o->STATE ? CreateFRMStateVector(_fbb, _o->STATE.get(), _rehasher) : 0;
+  auto _COORDINATE_SYSTEM = _o->COORDINATE_SYSTEM ? CreateRFMCoordinateSystem(_fbb, _o->COORDINATE_SYSTEM.get(), _rehasher) : 0;
+  auto _COVARIANCE = _o->COVARIANCE ? CreatePRWStateMatrix(_fbb, _o->COVARIANCE.get(), _rehasher) : 0;
+  auto _MASS_KG = _o->MASS_KG;
+  auto _HAS_MASS_KG = _o->HAS_MASS_KG;
+  auto _DRAG_AREA_OVER_MASS_M2_KG = _o->DRAG_AREA_OVER_MASS_M2_KG;
+  auto _HAS_DRAG_AREA_OVER_MASS_M2_KG = _o->HAS_DRAG_AREA_OVER_MASS_M2_KG;
+  auto _SRP_AREA_OVER_MASS_M2_KG = _o->SRP_AREA_OVER_MASS_M2_KG;
+  auto _HAS_SRP_AREA_OVER_MASS_M2_KG = _o->HAS_SRP_AREA_OVER_MASS_M2_KG;
+  auto _VALID = _o->VALID;
+  auto _PROCESS_NOISE = _o->PROCESS_NOISE ? CreatePRWProcessNoise(_fbb, _o->PROCESS_NOISE.get(), _rehasher) : 0;
+  return CreatePRWResidentState(
+      _fbb,
+      _INSTANCE,
+      _ENTITY_HANDLE,
+      _CATALOG_NUMBER,
+      _OBJECT_ID,
+      _STATE,
+      _COORDINATE_SYSTEM,
+      _COVARIANCE,
+      _MASS_KG,
+      _HAS_MASS_KG,
+      _DRAG_AREA_OVER_MASS_M2_KG,
+      _HAS_DRAG_AREA_OVER_MASS_M2_KG,
+      _SRP_AREA_OVER_MASS_M2_KG,
+      _HAS_SRP_AREA_OVER_MASS_M2_KG,
+      _VALID,
+      _PROCESS_NOISE);
+}
+
+inline PRWImpulseT::PRWImpulseT(const PRWImpulseT &o)
+      : EPOCH((o.EPOCH) ? new TIMInstantT(*o.EPOCH) : nullptr),
+        DELTA_V((o.DELTA_V) ? new FRMVector3T(*o.DELTA_V) : nullptr),
+        VECTOR_BASIS(o.VECTOR_BASIS) {
+}
+
+inline PRWImpulseT &PRWImpulseT::operator=(PRWImpulseT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(EPOCH, o.EPOCH);
+  std::swap(DELTA_V, o.DELTA_V);
+  std::swap(VECTOR_BASIS, o.VECTOR_BASIS);
+  return *this;
+}
+
+inline PRWImpulseT *PRWImpulse::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWImpulseT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWImpulse::UnPackTo(PRWImpulseT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = EPOCH(); if (_e) { if(_o->EPOCH) { _e->UnPackTo(_o->EPOCH.get(), _resolver); } else { _o->EPOCH = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->EPOCH) { _o->EPOCH.reset(); } }
+  { auto _e = DELTA_V(); if (_e) { if(_o->DELTA_V) { _e->UnPackTo(_o->DELTA_V.get(), _resolver); } else { _o->DELTA_V = std::unique_ptr<FRMVector3T>(_e->UnPack(_resolver)); } } else if (_o->DELTA_V) { _o->DELTA_V.reset(); } }
+  { auto _e = VECTOR_BASIS(); _o->VECTOR_BASIS = _e; }
+}
+
+inline ::flatbuffers::Offset<PRWImpulse> CreatePRWImpulse(::flatbuffers::FlatBufferBuilder &_fbb, const PRWImpulseT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWImpulse::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWImpulse> PRWImpulse::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWImpulseT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWImpulseT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _EPOCH = _o->EPOCH ? CreateTIMInstant(_fbb, _o->EPOCH.get(), _rehasher) : 0;
+  auto _DELTA_V = _o->DELTA_V ? CreateFRMVector3(_fbb, _o->DELTA_V.get(), _rehasher) : 0;
+  auto _VECTOR_BASIS = _o->VECTOR_BASIS;
+  return CreatePRWImpulse(
+      _fbb,
+      _EPOCH,
+      _DELTA_V,
+      _VECTOR_BASIS);
+}
+
+inline PRWThrottlePointT *PRWThrottlePoint::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWThrottlePointT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWThrottlePoint::UnPackTo(PRWThrottlePointT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = ELAPSED_SECONDS(); _o->ELAPSED_SECONDS = _e; }
+  { auto _e = FRACTION(); _o->FRACTION = _e; }
+}
+
+inline ::flatbuffers::Offset<PRWThrottlePoint> CreatePRWThrottlePoint(::flatbuffers::FlatBufferBuilder &_fbb, const PRWThrottlePointT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWThrottlePoint::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWThrottlePoint> PRWThrottlePoint::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWThrottlePointT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWThrottlePointT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _ELAPSED_SECONDS = _o->ELAPSED_SECONDS;
+  auto _FRACTION = _o->FRACTION;
+  return CreatePRWThrottlePoint(
+      _fbb,
+      _ELAPSED_SECONDS,
+      _FRACTION);
+}
+
+inline PRWBurnBoundaryT::PRWBurnBoundaryT(const PRWBurnBoundaryT &o)
+      : ELAPSED_SECONDS(o.ELAPSED_SECONDS),
+        HAS_ELAPSED_SECONDS(o.HAS_ELAPSED_SECONDS),
+        CONDITION((o.CONDITION) ? new PCEParameterConditionT(*o.CONDITION) : nullptr) {
+}
+
+inline PRWBurnBoundaryT &PRWBurnBoundaryT::operator=(PRWBurnBoundaryT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(ELAPSED_SECONDS, o.ELAPSED_SECONDS);
+  std::swap(HAS_ELAPSED_SECONDS, o.HAS_ELAPSED_SECONDS);
+  std::swap(CONDITION, o.CONDITION);
+  return *this;
+}
+
+inline PRWBurnBoundaryT *PRWBurnBoundary::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWBurnBoundaryT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWBurnBoundary::UnPackTo(PRWBurnBoundaryT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = ELAPSED_SECONDS(); _o->ELAPSED_SECONDS = _e; }
+  { auto _e = HAS_ELAPSED_SECONDS(); _o->HAS_ELAPSED_SECONDS = _e; }
+  { auto _e = CONDITION(); if (_e) { if(_o->CONDITION) { _e->UnPackTo(_o->CONDITION.get(), _resolver); } else { _o->CONDITION = std::unique_ptr<PCEParameterConditionT>(_e->UnPack(_resolver)); } } else if (_o->CONDITION) { _o->CONDITION.reset(); } }
+}
+
+inline ::flatbuffers::Offset<PRWBurnBoundary> CreatePRWBurnBoundary(::flatbuffers::FlatBufferBuilder &_fbb, const PRWBurnBoundaryT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWBurnBoundary::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWBurnBoundary> PRWBurnBoundary::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWBurnBoundaryT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWBurnBoundaryT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _ELAPSED_SECONDS = _o->ELAPSED_SECONDS;
+  auto _HAS_ELAPSED_SECONDS = _o->HAS_ELAPSED_SECONDS;
+  auto _CONDITION = _o->CONDITION ? CreatePCEParameterCondition(_fbb, _o->CONDITION.get(), _rehasher) : 0;
+  return CreatePRWBurnBoundary(
+      _fbb,
+      _ELAPSED_SECONDS,
+      _HAS_ELAPSED_SECONDS,
+      _CONDITION);
+}
+
+inline PRWFiniteBurnT::PRWFiniteBurnT(const PRWFiniteBurnT &o)
+      : START((o.START) ? new PRWBurnBoundaryT(*o.START) : nullptr),
+        STOP((o.STOP) ? new PRWBurnBoundaryT(*o.STOP) : nullptr),
+        THRUST_LAW(o.THRUST_LAW),
+        FORCE_NEWTONS(o.FORCE_NEWTONS),
+        HAS_FORCE_NEWTONS(o.HAS_FORCE_NEWTONS),
+        ACCELERATION_M_S2(o.ACCELERATION_M_S2),
+        HAS_ACCELERATION_M_S2(o.HAS_ACCELERATION_M_S2),
+        SPECIFIC_IMPULSE_SECONDS(o.SPECIFIC_IMPULSE_SECONDS),
+        VECTOR_BASIS(o.VECTOR_BASIS),
+        DIRECTION((o.DIRECTION) ? new FRMVector3T(*o.DIRECTION) : nullptr),
+        DIRECTION_RATE((o.DIRECTION_RATE) ? new FRMVector3T(*o.DIRECTION_RATE) : nullptr) {
+  THROTTLE.reserve(o.THROTTLE.size());
+  for (const auto &THROTTLE_ : o.THROTTLE) { THROTTLE.emplace_back((THROTTLE_) ? new PRWThrottlePointT(*THROTTLE_) : nullptr); }
+}
+
+inline PRWFiniteBurnT &PRWFiniteBurnT::operator=(PRWFiniteBurnT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(START, o.START);
+  std::swap(STOP, o.STOP);
+  std::swap(THRUST_LAW, o.THRUST_LAW);
+  std::swap(FORCE_NEWTONS, o.FORCE_NEWTONS);
+  std::swap(HAS_FORCE_NEWTONS, o.HAS_FORCE_NEWTONS);
+  std::swap(ACCELERATION_M_S2, o.ACCELERATION_M_S2);
+  std::swap(HAS_ACCELERATION_M_S2, o.HAS_ACCELERATION_M_S2);
+  std::swap(SPECIFIC_IMPULSE_SECONDS, o.SPECIFIC_IMPULSE_SECONDS);
+  std::swap(VECTOR_BASIS, o.VECTOR_BASIS);
+  std::swap(DIRECTION, o.DIRECTION);
+  std::swap(DIRECTION_RATE, o.DIRECTION_RATE);
+  std::swap(THROTTLE, o.THROTTLE);
+  return *this;
+}
+
+inline PRWFiniteBurnT *PRWFiniteBurn::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWFiniteBurnT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWFiniteBurn::UnPackTo(PRWFiniteBurnT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = START(); if (_e) { if(_o->START) { _e->UnPackTo(_o->START.get(), _resolver); } else { _o->START = std::unique_ptr<PRWBurnBoundaryT>(_e->UnPack(_resolver)); } } else if (_o->START) { _o->START.reset(); } }
+  { auto _e = STOP(); if (_e) { if(_o->STOP) { _e->UnPackTo(_o->STOP.get(), _resolver); } else { _o->STOP = std::unique_ptr<PRWBurnBoundaryT>(_e->UnPack(_resolver)); } } else if (_o->STOP) { _o->STOP.reset(); } }
+  { auto _e = THRUST_LAW(); _o->THRUST_LAW = _e; }
+  { auto _e = FORCE_NEWTONS(); _o->FORCE_NEWTONS = _e; }
+  { auto _e = HAS_FORCE_NEWTONS(); _o->HAS_FORCE_NEWTONS = _e; }
+  { auto _e = ACCELERATION_M_S2(); _o->ACCELERATION_M_S2 = _e; }
+  { auto _e = HAS_ACCELERATION_M_S2(); _o->HAS_ACCELERATION_M_S2 = _e; }
+  { auto _e = SPECIFIC_IMPULSE_SECONDS(); _o->SPECIFIC_IMPULSE_SECONDS = _e; }
+  { auto _e = VECTOR_BASIS(); _o->VECTOR_BASIS = _e; }
+  { auto _e = DIRECTION(); if (_e) { if(_o->DIRECTION) { _e->UnPackTo(_o->DIRECTION.get(), _resolver); } else { _o->DIRECTION = std::unique_ptr<FRMVector3T>(_e->UnPack(_resolver)); } } else if (_o->DIRECTION) { _o->DIRECTION.reset(); } }
+  { auto _e = DIRECTION_RATE(); if (_e) { if(_o->DIRECTION_RATE) { _e->UnPackTo(_o->DIRECTION_RATE.get(), _resolver); } else { _o->DIRECTION_RATE = std::unique_ptr<FRMVector3T>(_e->UnPack(_resolver)); } } else if (_o->DIRECTION_RATE) { _o->DIRECTION_RATE.reset(); } }
+  { auto _e = THROTTLE(); if (_e) { _o->THROTTLE.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->THROTTLE[_i]) { _e->Get(_i)->UnPackTo(_o->THROTTLE[_i].get(), _resolver); } else { _o->THROTTLE[_i] = std::unique_ptr<PRWThrottlePointT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->THROTTLE.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<PRWFiniteBurn> CreatePRWFiniteBurn(::flatbuffers::FlatBufferBuilder &_fbb, const PRWFiniteBurnT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWFiniteBurn::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWFiniteBurn> PRWFiniteBurn::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWFiniteBurnT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWFiniteBurnT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _START = _o->START ? CreatePRWBurnBoundary(_fbb, _o->START.get(), _rehasher) : 0;
+  auto _STOP = _o->STOP ? CreatePRWBurnBoundary(_fbb, _o->STOP.get(), _rehasher) : 0;
+  auto _THRUST_LAW = _o->THRUST_LAW;
+  auto _FORCE_NEWTONS = _o->FORCE_NEWTONS;
+  auto _HAS_FORCE_NEWTONS = _o->HAS_FORCE_NEWTONS;
+  auto _ACCELERATION_M_S2 = _o->ACCELERATION_M_S2;
+  auto _HAS_ACCELERATION_M_S2 = _o->HAS_ACCELERATION_M_S2;
+  auto _SPECIFIC_IMPULSE_SECONDS = _o->SPECIFIC_IMPULSE_SECONDS;
+  auto _VECTOR_BASIS = _o->VECTOR_BASIS;
+  auto _DIRECTION = _o->DIRECTION ? CreateFRMVector3(_fbb, _o->DIRECTION.get(), _rehasher) : 0;
+  auto _DIRECTION_RATE = _o->DIRECTION_RATE ? CreateFRMVector3(_fbb, _o->DIRECTION_RATE.get(), _rehasher) : 0;
+  auto _THROTTLE = _o->THROTTLE.size() ? _fbb.CreateVector<::flatbuffers::Offset<PRWThrottlePoint>> (_o->THROTTLE.size(), [](size_t i, _VectorArgs *__va) { return CreatePRWThrottlePoint(*__va->__fbb, __va->__o->THROTTLE[i].get(), __va->__rehasher); }, &_va ) : 0;
+  return CreatePRWFiniteBurn(
+      _fbb,
+      _START,
+      _STOP,
+      _THRUST_LAW,
+      _FORCE_NEWTONS,
+      _HAS_FORCE_NEWTONS,
+      _ACCELERATION_M_S2,
+      _HAS_ACCELERATION_M_S2,
+      _SPECIFIC_IMPULSE_SECONDS,
+      _VECTOR_BASIS,
+      _DIRECTION,
+      _DIRECTION_RATE,
+      _THROTTLE);
+}
+
+inline PRWExecutionRequestT::PRWExecutionRequestT(const PRWExecutionRequestT &o)
+      : INITIAL((o.INITIAL) ? new PRWResidentStateT(*o.INITIAL) : nullptr),
+        TARGET_EPOCH((o.TARGET_EPOCH) ? new TIMInstantT(*o.TARGET_EPOCH) : nullptr),
+        INTEGRATOR((o.INTEGRATOR) ? new PRWIntegratorSettingsT(*o.INTEGRATOR) : nullptr),
+        FORCES((o.FORCES) ? new PRWForceConfigurationT(*o.FORCES) : nullptr),
+        INCLUDE_STM(o.INCLUDE_STM),
+        STM_TECHNIQUE(o.STM_TECHNIQUE),
+        DENSITY_TREATMENT(o.DENSITY_TREATMENT),
+        INITIAL_COVARIANCE((o.INITIAL_COVARIANCE) ? new PRWStateMatrixT(*o.INITIAL_COVARIANCE) : nullptr),
+        INITIAL_MASS_COVARIANCE((o.INITIAL_MASS_COVARIANCE) ? new PRWStateMatrixT(*o.INITIAL_MASS_COVARIANCE) : nullptr),
+        INCLUDE_MASS_DYNAMICS(o.INCLUDE_MASS_DYNAMICS),
+        PROCESS_NOISE((o.PROCESS_NOISE) ? new PRWProcessNoiseT(*o.PROCESS_NOISE) : nullptr) {
+  SAMPLE_EPOCHS.reserve(o.SAMPLE_EPOCHS.size());
+  for (const auto &SAMPLE_EPOCHS_ : o.SAMPLE_EPOCHS) { SAMPLE_EPOCHS.emplace_back((SAMPLE_EPOCHS_) ? new TIMInstantT(*SAMPLE_EPOCHS_) : nullptr); }
+  IMPULSES.reserve(o.IMPULSES.size());
+  for (const auto &IMPULSES_ : o.IMPULSES) { IMPULSES.emplace_back((IMPULSES_) ? new PRWImpulseT(*IMPULSES_) : nullptr); }
+  FINITE_BURNS.reserve(o.FINITE_BURNS.size());
+  for (const auto &FINITE_BURNS_ : o.FINITE_BURNS) { FINITE_BURNS.emplace_back((FINITE_BURNS_) ? new PRWFiniteBurnT(*FINITE_BURNS_) : nullptr); }
+}
+
+inline PRWExecutionRequestT &PRWExecutionRequestT::operator=(PRWExecutionRequestT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(INITIAL, o.INITIAL);
+  std::swap(TARGET_EPOCH, o.TARGET_EPOCH);
+  std::swap(INTEGRATOR, o.INTEGRATOR);
+  std::swap(FORCES, o.FORCES);
+  std::swap(INCLUDE_STM, o.INCLUDE_STM);
+  std::swap(STM_TECHNIQUE, o.STM_TECHNIQUE);
+  std::swap(DENSITY_TREATMENT, o.DENSITY_TREATMENT);
+  std::swap(INITIAL_COVARIANCE, o.INITIAL_COVARIANCE);
+  std::swap(INITIAL_MASS_COVARIANCE, o.INITIAL_MASS_COVARIANCE);
+  std::swap(SAMPLE_EPOCHS, o.SAMPLE_EPOCHS);
+  std::swap(IMPULSES, o.IMPULSES);
+  std::swap(INCLUDE_MASS_DYNAMICS, o.INCLUDE_MASS_DYNAMICS);
+  std::swap(FINITE_BURNS, o.FINITE_BURNS);
+  std::swap(PROCESS_NOISE, o.PROCESS_NOISE);
+  return *this;
+}
+
+inline PRWExecutionRequestT *PRWExecutionRequest::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWExecutionRequestT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWExecutionRequest::UnPackTo(PRWExecutionRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = INITIAL(); if (_e) { if(_o->INITIAL) { _e->UnPackTo(_o->INITIAL.get(), _resolver); } else { _o->INITIAL = std::unique_ptr<PRWResidentStateT>(_e->UnPack(_resolver)); } } else if (_o->INITIAL) { _o->INITIAL.reset(); } }
+  { auto _e = TARGET_EPOCH(); if (_e) { if(_o->TARGET_EPOCH) { _e->UnPackTo(_o->TARGET_EPOCH.get(), _resolver); } else { _o->TARGET_EPOCH = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->TARGET_EPOCH) { _o->TARGET_EPOCH.reset(); } }
+  { auto _e = INTEGRATOR(); if (_e) { if(_o->INTEGRATOR) { _e->UnPackTo(_o->INTEGRATOR.get(), _resolver); } else { _o->INTEGRATOR = std::unique_ptr<PRWIntegratorSettingsT>(_e->UnPack(_resolver)); } } else if (_o->INTEGRATOR) { _o->INTEGRATOR.reset(); } }
+  { auto _e = FORCES(); if (_e) { if(_o->FORCES) { _e->UnPackTo(_o->FORCES.get(), _resolver); } else { _o->FORCES = std::unique_ptr<PRWForceConfigurationT>(_e->UnPack(_resolver)); } } else if (_o->FORCES) { _o->FORCES.reset(); } }
+  { auto _e = INCLUDE_STM(); _o->INCLUDE_STM = _e; }
+  { auto _e = STM_TECHNIQUE(); _o->STM_TECHNIQUE = _e; }
+  { auto _e = DENSITY_TREATMENT(); _o->DENSITY_TREATMENT = _e; }
+  { auto _e = INITIAL_COVARIANCE(); if (_e) { if(_o->INITIAL_COVARIANCE) { _e->UnPackTo(_o->INITIAL_COVARIANCE.get(), _resolver); } else { _o->INITIAL_COVARIANCE = std::unique_ptr<PRWStateMatrixT>(_e->UnPack(_resolver)); } } else if (_o->INITIAL_COVARIANCE) { _o->INITIAL_COVARIANCE.reset(); } }
+  { auto _e = INITIAL_MASS_COVARIANCE(); if (_e) { if(_o->INITIAL_MASS_COVARIANCE) { _e->UnPackTo(_o->INITIAL_MASS_COVARIANCE.get(), _resolver); } else { _o->INITIAL_MASS_COVARIANCE = std::unique_ptr<PRWStateMatrixT>(_e->UnPack(_resolver)); } } else if (_o->INITIAL_MASS_COVARIANCE) { _o->INITIAL_MASS_COVARIANCE.reset(); } }
+  { auto _e = SAMPLE_EPOCHS(); if (_e) { _o->SAMPLE_EPOCHS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->SAMPLE_EPOCHS[_i]) { _e->Get(_i)->UnPackTo(_o->SAMPLE_EPOCHS[_i].get(), _resolver); } else { _o->SAMPLE_EPOCHS[_i] = std::unique_ptr<TIMInstantT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->SAMPLE_EPOCHS.resize(0); } }
+  { auto _e = IMPULSES(); if (_e) { _o->IMPULSES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->IMPULSES[_i]) { _e->Get(_i)->UnPackTo(_o->IMPULSES[_i].get(), _resolver); } else { _o->IMPULSES[_i] = std::unique_ptr<PRWImpulseT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->IMPULSES.resize(0); } }
+  { auto _e = INCLUDE_MASS_DYNAMICS(); _o->INCLUDE_MASS_DYNAMICS = _e; }
+  { auto _e = FINITE_BURNS(); if (_e) { _o->FINITE_BURNS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->FINITE_BURNS[_i]) { _e->Get(_i)->UnPackTo(_o->FINITE_BURNS[_i].get(), _resolver); } else { _o->FINITE_BURNS[_i] = std::unique_ptr<PRWFiniteBurnT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->FINITE_BURNS.resize(0); } }
+  { auto _e = PROCESS_NOISE(); if (_e) { if(_o->PROCESS_NOISE) { _e->UnPackTo(_o->PROCESS_NOISE.get(), _resolver); } else { _o->PROCESS_NOISE = std::unique_ptr<PRWProcessNoiseT>(_e->UnPack(_resolver)); } } else if (_o->PROCESS_NOISE) { _o->PROCESS_NOISE.reset(); } }
+}
+
+inline ::flatbuffers::Offset<PRWExecutionRequest> CreatePRWExecutionRequest(::flatbuffers::FlatBufferBuilder &_fbb, const PRWExecutionRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWExecutionRequest::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWExecutionRequest> PRWExecutionRequest::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWExecutionRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWExecutionRequestT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _INITIAL = _o->INITIAL ? CreatePRWResidentState(_fbb, _o->INITIAL.get(), _rehasher) : 0;
+  auto _TARGET_EPOCH = _o->TARGET_EPOCH ? CreateTIMInstant(_fbb, _o->TARGET_EPOCH.get(), _rehasher) : 0;
+  auto _INTEGRATOR = _o->INTEGRATOR ? CreatePRWIntegratorSettings(_fbb, _o->INTEGRATOR.get(), _rehasher) : 0;
+  auto _FORCES = _o->FORCES ? CreatePRWForceConfiguration(_fbb, _o->FORCES.get(), _rehasher) : 0;
+  auto _INCLUDE_STM = _o->INCLUDE_STM;
+  auto _STM_TECHNIQUE = _o->STM_TECHNIQUE;
+  auto _DENSITY_TREATMENT = _o->DENSITY_TREATMENT;
+  auto _INITIAL_COVARIANCE = _o->INITIAL_COVARIANCE ? CreatePRWStateMatrix(_fbb, _o->INITIAL_COVARIANCE.get(), _rehasher) : 0;
+  auto _INITIAL_MASS_COVARIANCE = _o->INITIAL_MASS_COVARIANCE ? CreatePRWStateMatrix(_fbb, _o->INITIAL_MASS_COVARIANCE.get(), _rehasher) : 0;
+  auto _SAMPLE_EPOCHS = _o->SAMPLE_EPOCHS.size() ? _fbb.CreateVector<::flatbuffers::Offset<TIMInstant>> (_o->SAMPLE_EPOCHS.size(), [](size_t i, _VectorArgs *__va) { return CreateTIMInstant(*__va->__fbb, __va->__o->SAMPLE_EPOCHS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _IMPULSES = _o->IMPULSES.size() ? _fbb.CreateVector<::flatbuffers::Offset<PRWImpulse>> (_o->IMPULSES.size(), [](size_t i, _VectorArgs *__va) { return CreatePRWImpulse(*__va->__fbb, __va->__o->IMPULSES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _INCLUDE_MASS_DYNAMICS = _o->INCLUDE_MASS_DYNAMICS;
+  auto _FINITE_BURNS = _o->FINITE_BURNS.size() ? _fbb.CreateVector<::flatbuffers::Offset<PRWFiniteBurn>> (_o->FINITE_BURNS.size(), [](size_t i, _VectorArgs *__va) { return CreatePRWFiniteBurn(*__va->__fbb, __va->__o->FINITE_BURNS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _PROCESS_NOISE = _o->PROCESS_NOISE ? CreatePRWProcessNoise(_fbb, _o->PROCESS_NOISE.get(), _rehasher) : 0;
+  return CreatePRWExecutionRequest(
+      _fbb,
+      _INITIAL,
+      _TARGET_EPOCH,
+      _INTEGRATOR,
+      _FORCES,
+      _INCLUDE_STM,
+      _STM_TECHNIQUE,
+      _DENSITY_TREATMENT,
+      _INITIAL_COVARIANCE,
+      _INITIAL_MASS_COVARIANCE,
+      _SAMPLE_EPOCHS,
+      _IMPULSES,
+      _INCLUDE_MASS_DYNAMICS,
+      _FINITE_BURNS,
+      _PROCESS_NOISE);
+}
+
+inline PRWBurnReportT::PRWBurnReportT(const PRWBurnReportT &o)
+      : BURN_INDEX(o.BURN_INDEX),
+        STARTED(o.STARTED),
+        STOPPED(o.STOPPED),
+        START_BY_EVENT(o.START_BY_EVENT),
+        STOP_BY_EVENT(o.STOP_BY_EVENT),
+        START_SECONDS(o.START_SECONDS),
+        HAS_START_SECONDS(o.HAS_START_SECONDS),
+        STOP_SECONDS(o.STOP_SECONDS),
+        HAS_STOP_SECONDS(o.HAS_STOP_SECONDS),
+        START_EPOCH((o.START_EPOCH) ? new TIMInstantT(*o.START_EPOCH) : nullptr),
+        STOP_EPOCH((o.STOP_EPOCH) ? new TIMInstantT(*o.STOP_EPOCH) : nullptr),
+        DELTA_V_M_S(o.DELTA_V_M_S),
+        PROPELLANT_KG(o.PROPELLANT_KG) {
+}
+
+inline PRWBurnReportT &PRWBurnReportT::operator=(PRWBurnReportT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(BURN_INDEX, o.BURN_INDEX);
+  std::swap(STARTED, o.STARTED);
+  std::swap(STOPPED, o.STOPPED);
+  std::swap(START_BY_EVENT, o.START_BY_EVENT);
+  std::swap(STOP_BY_EVENT, o.STOP_BY_EVENT);
+  std::swap(START_SECONDS, o.START_SECONDS);
+  std::swap(HAS_START_SECONDS, o.HAS_START_SECONDS);
+  std::swap(STOP_SECONDS, o.STOP_SECONDS);
+  std::swap(HAS_STOP_SECONDS, o.HAS_STOP_SECONDS);
+  std::swap(START_EPOCH, o.START_EPOCH);
+  std::swap(STOP_EPOCH, o.STOP_EPOCH);
+  std::swap(DELTA_V_M_S, o.DELTA_V_M_S);
+  std::swap(PROPELLANT_KG, o.PROPELLANT_KG);
+  return *this;
+}
+
+inline PRWBurnReportT *PRWBurnReport::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWBurnReportT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWBurnReport::UnPackTo(PRWBurnReportT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = BURN_INDEX(); _o->BURN_INDEX = _e; }
+  { auto _e = STARTED(); _o->STARTED = _e; }
+  { auto _e = STOPPED(); _o->STOPPED = _e; }
+  { auto _e = START_BY_EVENT(); _o->START_BY_EVENT = _e; }
+  { auto _e = STOP_BY_EVENT(); _o->STOP_BY_EVENT = _e; }
+  { auto _e = START_SECONDS(); _o->START_SECONDS = _e; }
+  { auto _e = HAS_START_SECONDS(); _o->HAS_START_SECONDS = _e; }
+  { auto _e = STOP_SECONDS(); _o->STOP_SECONDS = _e; }
+  { auto _e = HAS_STOP_SECONDS(); _o->HAS_STOP_SECONDS = _e; }
+  { auto _e = START_EPOCH(); if (_e) { if(_o->START_EPOCH) { _e->UnPackTo(_o->START_EPOCH.get(), _resolver); } else { _o->START_EPOCH = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->START_EPOCH) { _o->START_EPOCH.reset(); } }
+  { auto _e = STOP_EPOCH(); if (_e) { if(_o->STOP_EPOCH) { _e->UnPackTo(_o->STOP_EPOCH.get(), _resolver); } else { _o->STOP_EPOCH = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->STOP_EPOCH) { _o->STOP_EPOCH.reset(); } }
+  { auto _e = DELTA_V_M_S(); _o->DELTA_V_M_S = _e; }
+  { auto _e = PROPELLANT_KG(); _o->PROPELLANT_KG = _e; }
+}
+
+inline ::flatbuffers::Offset<PRWBurnReport> CreatePRWBurnReport(::flatbuffers::FlatBufferBuilder &_fbb, const PRWBurnReportT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWBurnReport::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWBurnReport> PRWBurnReport::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWBurnReportT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWBurnReportT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _BURN_INDEX = _o->BURN_INDEX;
+  auto _STARTED = _o->STARTED;
+  auto _STOPPED = _o->STOPPED;
+  auto _START_BY_EVENT = _o->START_BY_EVENT;
+  auto _STOP_BY_EVENT = _o->STOP_BY_EVENT;
+  auto _START_SECONDS = _o->START_SECONDS;
+  auto _HAS_START_SECONDS = _o->HAS_START_SECONDS;
+  auto _STOP_SECONDS = _o->STOP_SECONDS;
+  auto _HAS_STOP_SECONDS = _o->HAS_STOP_SECONDS;
+  auto _START_EPOCH = _o->START_EPOCH ? CreateTIMInstant(_fbb, _o->START_EPOCH.get(), _rehasher) : 0;
+  auto _STOP_EPOCH = _o->STOP_EPOCH ? CreateTIMInstant(_fbb, _o->STOP_EPOCH.get(), _rehasher) : 0;
+  auto _DELTA_V_M_S = _o->DELTA_V_M_S;
+  auto _PROPELLANT_KG = _o->PROPELLANT_KG;
+  return CreatePRWBurnReport(
+      _fbb,
+      _BURN_INDEX,
+      _STARTED,
+      _STOPPED,
+      _START_BY_EVENT,
+      _STOP_BY_EVENT,
+      _START_SECONDS,
+      _HAS_START_SECONDS,
+      _STOP_SECONDS,
+      _HAS_STOP_SECONDS,
+      _START_EPOCH,
+      _STOP_EPOCH,
+      _DELTA_V_M_S,
+      _PROPELLANT_KG);
+}
+
+inline PRWPropagationSampleT::PRWPropagationSampleT(const PRWPropagationSampleT &o)
+      : STATE((o.STATE) ? new PRWResidentStateT(*o.STATE) : nullptr),
+        STM((o.STM) ? new PRWStateMatrixT(*o.STM) : nullptr),
+        MASS_STM((o.MASS_STM) ? new PRWStateMatrixT(*o.MASS_STM) : nullptr),
+        COVARIANCE((o.COVARIANCE) ? new PRWStateMatrixT(*o.COVARIANCE) : nullptr),
+        MASS_COVARIANCE((o.MASS_COVARIANCE) ? new PRWStateMatrixT(*o.MASS_COVARIANCE) : nullptr),
+        ACCEPTED_STEPS(o.ACCEPTED_STEPS),
+        REJECTED_STEPS(o.REJECTED_STEPS),
+        PROCESS_NOISE((o.PROCESS_NOISE) ? new PRWProcessNoiseT(*o.PROCESS_NOISE) : nullptr) {
+  BURNS.reserve(o.BURNS.size());
+  for (const auto &BURNS_ : o.BURNS) { BURNS.emplace_back((BURNS_) ? new PRWBurnReportT(*BURNS_) : nullptr); }
+}
+
+inline PRWPropagationSampleT &PRWPropagationSampleT::operator=(PRWPropagationSampleT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(STATE, o.STATE);
+  std::swap(STM, o.STM);
+  std::swap(MASS_STM, o.MASS_STM);
+  std::swap(COVARIANCE, o.COVARIANCE);
+  std::swap(MASS_COVARIANCE, o.MASS_COVARIANCE);
+  std::swap(ACCEPTED_STEPS, o.ACCEPTED_STEPS);
+  std::swap(REJECTED_STEPS, o.REJECTED_STEPS);
+  std::swap(BURNS, o.BURNS);
+  std::swap(PROCESS_NOISE, o.PROCESS_NOISE);
+  return *this;
+}
+
+inline PRWPropagationSampleT *PRWPropagationSample::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWPropagationSampleT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWPropagationSample::UnPackTo(PRWPropagationSampleT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = STATE(); if (_e) { if(_o->STATE) { _e->UnPackTo(_o->STATE.get(), _resolver); } else { _o->STATE = std::unique_ptr<PRWResidentStateT>(_e->UnPack(_resolver)); } } else if (_o->STATE) { _o->STATE.reset(); } }
+  { auto _e = STM(); if (_e) { if(_o->STM) { _e->UnPackTo(_o->STM.get(), _resolver); } else { _o->STM = std::unique_ptr<PRWStateMatrixT>(_e->UnPack(_resolver)); } } else if (_o->STM) { _o->STM.reset(); } }
+  { auto _e = MASS_STM(); if (_e) { if(_o->MASS_STM) { _e->UnPackTo(_o->MASS_STM.get(), _resolver); } else { _o->MASS_STM = std::unique_ptr<PRWStateMatrixT>(_e->UnPack(_resolver)); } } else if (_o->MASS_STM) { _o->MASS_STM.reset(); } }
+  { auto _e = COVARIANCE(); if (_e) { if(_o->COVARIANCE) { _e->UnPackTo(_o->COVARIANCE.get(), _resolver); } else { _o->COVARIANCE = std::unique_ptr<PRWStateMatrixT>(_e->UnPack(_resolver)); } } else if (_o->COVARIANCE) { _o->COVARIANCE.reset(); } }
+  { auto _e = MASS_COVARIANCE(); if (_e) { if(_o->MASS_COVARIANCE) { _e->UnPackTo(_o->MASS_COVARIANCE.get(), _resolver); } else { _o->MASS_COVARIANCE = std::unique_ptr<PRWStateMatrixT>(_e->UnPack(_resolver)); } } else if (_o->MASS_COVARIANCE) { _o->MASS_COVARIANCE.reset(); } }
+  { auto _e = ACCEPTED_STEPS(); _o->ACCEPTED_STEPS = _e; }
+  { auto _e = REJECTED_STEPS(); _o->REJECTED_STEPS = _e; }
+  { auto _e = BURNS(); if (_e) { _o->BURNS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->BURNS[_i]) { _e->Get(_i)->UnPackTo(_o->BURNS[_i].get(), _resolver); } else { _o->BURNS[_i] = std::unique_ptr<PRWBurnReportT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->BURNS.resize(0); } }
+  { auto _e = PROCESS_NOISE(); if (_e) { if(_o->PROCESS_NOISE) { _e->UnPackTo(_o->PROCESS_NOISE.get(), _resolver); } else { _o->PROCESS_NOISE = std::unique_ptr<PRWProcessNoiseT>(_e->UnPack(_resolver)); } } else if (_o->PROCESS_NOISE) { _o->PROCESS_NOISE.reset(); } }
+}
+
+inline ::flatbuffers::Offset<PRWPropagationSample> CreatePRWPropagationSample(::flatbuffers::FlatBufferBuilder &_fbb, const PRWPropagationSampleT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWPropagationSample::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWPropagationSample> PRWPropagationSample::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWPropagationSampleT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWPropagationSampleT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _STATE = _o->STATE ? CreatePRWResidentState(_fbb, _o->STATE.get(), _rehasher) : 0;
+  auto _STM = _o->STM ? CreatePRWStateMatrix(_fbb, _o->STM.get(), _rehasher) : 0;
+  auto _MASS_STM = _o->MASS_STM ? CreatePRWStateMatrix(_fbb, _o->MASS_STM.get(), _rehasher) : 0;
+  auto _COVARIANCE = _o->COVARIANCE ? CreatePRWStateMatrix(_fbb, _o->COVARIANCE.get(), _rehasher) : 0;
+  auto _MASS_COVARIANCE = _o->MASS_COVARIANCE ? CreatePRWStateMatrix(_fbb, _o->MASS_COVARIANCE.get(), _rehasher) : 0;
+  auto _ACCEPTED_STEPS = _o->ACCEPTED_STEPS;
+  auto _REJECTED_STEPS = _o->REJECTED_STEPS;
+  auto _BURNS = _o->BURNS.size() ? _fbb.CreateVector<::flatbuffers::Offset<PRWBurnReport>> (_o->BURNS.size(), [](size_t i, _VectorArgs *__va) { return CreatePRWBurnReport(*__va->__fbb, __va->__o->BURNS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _PROCESS_NOISE = _o->PROCESS_NOISE ? CreatePRWProcessNoise(_fbb, _o->PROCESS_NOISE.get(), _rehasher) : 0;
+  return CreatePRWPropagationSample(
+      _fbb,
+      _STATE,
+      _STM,
+      _MASS_STM,
+      _COVARIANCE,
+      _MASS_COVARIANCE,
+      _ACCEPTED_STEPS,
+      _REJECTED_STEPS,
+      _BURNS,
+      _PROCESS_NOISE);
+}
+
+inline PRWExecutionResultT::PRWExecutionResultT(const PRWExecutionResultT &o)
+      : FINAL_SAMPLE((o.FINAL_SAMPLE) ? new PRWPropagationSampleT(*o.FINAL_SAMPLE) : nullptr),
+        ELAPSED_SECONDS(o.ELAPSED_SECONDS),
+        EPHEMERIS_SOURCE(o.EPHEMERIS_SOURCE),
+        STM_TECHNIQUE(o.STM_TECHNIQUE),
+        DENSITY_TREATMENT(o.DENSITY_TREATMENT) {
+  SAMPLES.reserve(o.SAMPLES.size());
+  for (const auto &SAMPLES_ : o.SAMPLES) { SAMPLES.emplace_back((SAMPLES_) ? new PRWPropagationSampleT(*SAMPLES_) : nullptr); }
+}
+
+inline PRWExecutionResultT &PRWExecutionResultT::operator=(PRWExecutionResultT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(FINAL_SAMPLE, o.FINAL_SAMPLE);
+  std::swap(SAMPLES, o.SAMPLES);
+  std::swap(ELAPSED_SECONDS, o.ELAPSED_SECONDS);
+  std::swap(EPHEMERIS_SOURCE, o.EPHEMERIS_SOURCE);
+  std::swap(STM_TECHNIQUE, o.STM_TECHNIQUE);
+  std::swap(DENSITY_TREATMENT, o.DENSITY_TREATMENT);
+  return *this;
+}
+
+inline PRWExecutionResultT *PRWExecutionResult::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWExecutionResultT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWExecutionResult::UnPackTo(PRWExecutionResultT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = FINAL_SAMPLE(); if (_e) { if(_o->FINAL_SAMPLE) { _e->UnPackTo(_o->FINAL_SAMPLE.get(), _resolver); } else { _o->FINAL_SAMPLE = std::unique_ptr<PRWPropagationSampleT>(_e->UnPack(_resolver)); } } else if (_o->FINAL_SAMPLE) { _o->FINAL_SAMPLE.reset(); } }
+  { auto _e = SAMPLES(); if (_e) { _o->SAMPLES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->SAMPLES[_i]) { _e->Get(_i)->UnPackTo(_o->SAMPLES[_i].get(), _resolver); } else { _o->SAMPLES[_i] = std::unique_ptr<PRWPropagationSampleT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->SAMPLES.resize(0); } }
+  { auto _e = ELAPSED_SECONDS(); _o->ELAPSED_SECONDS = _e; }
+  { auto _e = EPHEMERIS_SOURCE(); if (_e) _o->EPHEMERIS_SOURCE = _e->str(); }
+  { auto _e = STM_TECHNIQUE(); _o->STM_TECHNIQUE = _e; }
+  { auto _e = DENSITY_TREATMENT(); _o->DENSITY_TREATMENT = _e; }
+}
+
+inline ::flatbuffers::Offset<PRWExecutionResult> CreatePRWExecutionResult(::flatbuffers::FlatBufferBuilder &_fbb, const PRWExecutionResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWExecutionResult::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWExecutionResult> PRWExecutionResult::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWExecutionResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWExecutionResultT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _FINAL_SAMPLE = _o->FINAL_SAMPLE ? CreatePRWPropagationSample(_fbb, _o->FINAL_SAMPLE.get(), _rehasher) : 0;
+  auto _SAMPLES = _o->SAMPLES.size() ? _fbb.CreateVector<::flatbuffers::Offset<PRWPropagationSample>> (_o->SAMPLES.size(), [](size_t i, _VectorArgs *__va) { return CreatePRWPropagationSample(*__va->__fbb, __va->__o->SAMPLES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _ELAPSED_SECONDS = _o->ELAPSED_SECONDS;
+  auto _EPHEMERIS_SOURCE = _fbb.CreateString(_o->EPHEMERIS_SOURCE);
+  auto _STM_TECHNIQUE = _o->STM_TECHNIQUE;
+  auto _DENSITY_TREATMENT = _o->DENSITY_TREATMENT;
+  return CreatePRWExecutionResult(
+      _fbb,
+      _FINAL_SAMPLE,
+      _SAMPLES,
+      _ELAPSED_SECONDS,
+      _EPHEMERIS_SOURCE,
+      _STM_TECHNIQUE,
+      _DENSITY_TREATMENT);
+}
+
+inline PRWResidentRequestT::PRWResidentRequestT(const PRWResidentRequestT &o)
+      : INSTANCE((o.INSTANCE) ? new PRWInstanceT(*o.INSTANCE) : nullptr),
+        TARGET_EPOCH((o.TARGET_EPOCH) ? new TIMInstantT(*o.TARGET_EPOCH) : nullptr),
+        ENTITY_HANDLES(o.ENTITY_HANDLES),
+        MAXIMUM_COUNT(o.MAXIMUM_COUNT),
+        TARGET_COORDINATE_SYSTEM((o.TARGET_COORDINATE_SYSTEM) ? new RFMCoordinateSystemT(*o.TARGET_COORDINATE_SYSTEM) : nullptr) {
+}
+
+inline PRWResidentRequestT &PRWResidentRequestT::operator=(PRWResidentRequestT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(INSTANCE, o.INSTANCE);
+  std::swap(TARGET_EPOCH, o.TARGET_EPOCH);
+  std::swap(ENTITY_HANDLES, o.ENTITY_HANDLES);
+  std::swap(MAXIMUM_COUNT, o.MAXIMUM_COUNT);
+  std::swap(TARGET_COORDINATE_SYSTEM, o.TARGET_COORDINATE_SYSTEM);
+  return *this;
+}
+
+inline PRWResidentRequestT *PRWResidentRequest::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWResidentRequestT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWResidentRequest::UnPackTo(PRWResidentRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = INSTANCE(); if (_e) { if(_o->INSTANCE) { _e->UnPackTo(_o->INSTANCE.get(), _resolver); } else { _o->INSTANCE = std::unique_ptr<PRWInstanceT>(_e->UnPack(_resolver)); } } else if (_o->INSTANCE) { _o->INSTANCE.reset(); } }
+  { auto _e = TARGET_EPOCH(); if (_e) { if(_o->TARGET_EPOCH) { _e->UnPackTo(_o->TARGET_EPOCH.get(), _resolver); } else { _o->TARGET_EPOCH = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->TARGET_EPOCH) { _o->TARGET_EPOCH.reset(); } }
+  { auto _e = ENTITY_HANDLES(); if (_e) { _o->ENTITY_HANDLES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->ENTITY_HANDLES[_i] = _e->Get(_i); } } else { _o->ENTITY_HANDLES.resize(0); } }
+  { auto _e = MAXIMUM_COUNT(); _o->MAXIMUM_COUNT = _e; }
+  { auto _e = TARGET_COORDINATE_SYSTEM(); if (_e) { if(_o->TARGET_COORDINATE_SYSTEM) { _e->UnPackTo(_o->TARGET_COORDINATE_SYSTEM.get(), _resolver); } else { _o->TARGET_COORDINATE_SYSTEM = std::unique_ptr<RFMCoordinateSystemT>(_e->UnPack(_resolver)); } } else if (_o->TARGET_COORDINATE_SYSTEM) { _o->TARGET_COORDINATE_SYSTEM.reset(); } }
+}
+
+inline ::flatbuffers::Offset<PRWResidentRequest> CreatePRWResidentRequest(::flatbuffers::FlatBufferBuilder &_fbb, const PRWResidentRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWResidentRequest::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWResidentRequest> PRWResidentRequest::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWResidentRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWResidentRequestT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _INSTANCE = _o->INSTANCE ? CreatePRWInstance(_fbb, _o->INSTANCE.get(), _rehasher) : 0;
+  auto _TARGET_EPOCH = _o->TARGET_EPOCH ? CreateTIMInstant(_fbb, _o->TARGET_EPOCH.get(), _rehasher) : 0;
+  auto _ENTITY_HANDLES = _o->ENTITY_HANDLES.size() ? _fbb.CreateVector(_o->ENTITY_HANDLES) : 0;
+  auto _MAXIMUM_COUNT = _o->MAXIMUM_COUNT;
+  auto _TARGET_COORDINATE_SYSTEM = _o->TARGET_COORDINATE_SYSTEM ? CreateRFMCoordinateSystem(_fbb, _o->TARGET_COORDINATE_SYSTEM.get(), _rehasher) : 0;
+  return CreatePRWResidentRequest(
+      _fbb,
+      _INSTANCE,
+      _TARGET_EPOCH,
+      _ENTITY_HANDLES,
+      _MAXIMUM_COUNT,
+      _TARGET_COORDINATE_SYSTEM);
+}
+
+inline PRWPrepareRequestT::PRWPrepareRequestT(const PRWPrepareRequestT &o)
+      : INSTANCE((o.INSTANCE) ? new PRWInstanceT(*o.INSTANCE) : nullptr),
+        CATALOG_HANDLE(o.CATALOG_HANDLE),
+        SOURCE_HANDLES(o.SOURCE_HANDLES),
+        START_EPOCH((o.START_EPOCH) ? new TIMInstantT(*o.START_EPOCH) : nullptr),
+        DURATION_SECONDS(o.DURATION_SECONDS),
+        PROFILE(o.PROFILE) {
+}
+
+inline PRWPrepareRequestT &PRWPrepareRequestT::operator=(PRWPrepareRequestT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(INSTANCE, o.INSTANCE);
+  std::swap(CATALOG_HANDLE, o.CATALOG_HANDLE);
+  std::swap(SOURCE_HANDLES, o.SOURCE_HANDLES);
+  std::swap(START_EPOCH, o.START_EPOCH);
+  std::swap(DURATION_SECONDS, o.DURATION_SECONDS);
+  std::swap(PROFILE, o.PROFILE);
+  return *this;
+}
+
+inline PRWPrepareRequestT *PRWPrepareRequest::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWPrepareRequestT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWPrepareRequest::UnPackTo(PRWPrepareRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = INSTANCE(); if (_e) { if(_o->INSTANCE) { _e->UnPackTo(_o->INSTANCE.get(), _resolver); } else { _o->INSTANCE = std::unique_ptr<PRWInstanceT>(_e->UnPack(_resolver)); } } else if (_o->INSTANCE) { _o->INSTANCE.reset(); } }
+  { auto _e = CATALOG_HANDLE(); _o->CATALOG_HANDLE = _e; }
+  { auto _e = SOURCE_HANDLES(); if (_e) { _o->SOURCE_HANDLES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->SOURCE_HANDLES[_i] = _e->Get(_i); } } else { _o->SOURCE_HANDLES.resize(0); } }
+  { auto _e = START_EPOCH(); if (_e) { if(_o->START_EPOCH) { _e->UnPackTo(_o->START_EPOCH.get(), _resolver); } else { _o->START_EPOCH = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->START_EPOCH) { _o->START_EPOCH.reset(); } }
+  { auto _e = DURATION_SECONDS(); _o->DURATION_SECONDS = _e; }
+  { auto _e = PROFILE(); if (_e) _o->PROFILE = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<PRWPrepareRequest> CreatePRWPrepareRequest(::flatbuffers::FlatBufferBuilder &_fbb, const PRWPrepareRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWPrepareRequest::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWPrepareRequest> PRWPrepareRequest::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWPrepareRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWPrepareRequestT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _INSTANCE = _o->INSTANCE ? CreatePRWInstance(_fbb, _o->INSTANCE.get(), _rehasher) : 0;
+  auto _CATALOG_HANDLE = _o->CATALOG_HANDLE;
+  auto _SOURCE_HANDLES = _o->SOURCE_HANDLES.size() ? _fbb.CreateVector(_o->SOURCE_HANDLES) : 0;
+  auto _START_EPOCH = _o->START_EPOCH ? CreateTIMInstant(_fbb, _o->START_EPOCH.get(), _rehasher) : 0;
+  auto _DURATION_SECONDS = _o->DURATION_SECONDS;
+  auto _PROFILE = _o->PROFILE.empty() ? 0 : _fbb.CreateString(_o->PROFILE);
+  return CreatePRWPrepareRequest(
+      _fbb,
+      _INSTANCE,
+      _CATALOG_HANDLE,
+      _SOURCE_HANDLES,
+      _START_EPOCH,
+      _DURATION_SECONDS,
+      _PROFILE);
+}
+
+inline PRWFitQualityT *PRWFitQuality::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWFitQualityT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWFitQuality::UnPackTo(PRWFitQualityT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = EVIDENCE_KIND(); _o->EVIDENCE_KIND = _e; }
+  { auto _e = MAXIMUM_POSITION_ERROR_M(); _o->MAXIMUM_POSITION_ERROR_M = _e; }
+  { auto _e = HAS_MAXIMUM_POSITION_ERROR_M(); _o->HAS_MAXIMUM_POSITION_ERROR_M = _e; }
+  { auto _e = MAXIMUM_VELOCITY_ERROR_M_S(); _o->MAXIMUM_VELOCITY_ERROR_M_S = _e; }
+  { auto _e = HAS_MAXIMUM_VELOCITY_ERROR_M_S(); _o->HAS_MAXIMUM_VELOCITY_ERROR_M_S = _e; }
+  { auto _e = METHOD(); if (_e) _o->METHOD = _e->str(); }
+  { auto _e = REFERENCE_CONTENT_ID(); if (_e) _o->REFERENCE_CONTENT_ID = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<PRWFitQuality> CreatePRWFitQuality(::flatbuffers::FlatBufferBuilder &_fbb, const PRWFitQualityT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWFitQuality::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWFitQuality> PRWFitQuality::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWFitQualityT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWFitQualityT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _EVIDENCE_KIND = _o->EVIDENCE_KIND;
+  auto _MAXIMUM_POSITION_ERROR_M = _o->MAXIMUM_POSITION_ERROR_M;
+  auto _HAS_MAXIMUM_POSITION_ERROR_M = _o->HAS_MAXIMUM_POSITION_ERROR_M;
+  auto _MAXIMUM_VELOCITY_ERROR_M_S = _o->MAXIMUM_VELOCITY_ERROR_M_S;
+  auto _HAS_MAXIMUM_VELOCITY_ERROR_M_S = _o->HAS_MAXIMUM_VELOCITY_ERROR_M_S;
+  auto _METHOD = _o->METHOD.empty() ? 0 : _fbb.CreateString(_o->METHOD);
+  auto _REFERENCE_CONTENT_ID = _o->REFERENCE_CONTENT_ID.empty() ? 0 : _fbb.CreateString(_o->REFERENCE_CONTENT_ID);
+  return CreatePRWFitQuality(
+      _fbb,
+      _EVIDENCE_KIND,
+      _MAXIMUM_POSITION_ERROR_M,
+      _HAS_MAXIMUM_POSITION_ERROR_M,
+      _MAXIMUM_VELOCITY_ERROR_M_S,
+      _HAS_MAXIMUM_VELOCITY_ERROR_M_S,
+      _METHOD,
+      _REFERENCE_CONTENT_ID);
+}
+
+inline PRWPrepareResultT::PRWPrepareResultT(const PRWPrepareResultT &o)
+      : INSTANCE((o.INSTANCE) ? new PRWInstanceT(*o.INSTANCE) : nullptr),
+        SEGMENT_SET_HANDLE(o.SEGMENT_SET_HANDLE),
+        COVERAGE_COMPLETE(o.COVERAGE_COMPLETE),
+        QUALITY((o.QUALITY) ? new PRWFitQualityT(*o.QUALITY) : nullptr) {
+}
+
+inline PRWPrepareResultT &PRWPrepareResultT::operator=(PRWPrepareResultT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(INSTANCE, o.INSTANCE);
+  std::swap(SEGMENT_SET_HANDLE, o.SEGMENT_SET_HANDLE);
+  std::swap(COVERAGE_COMPLETE, o.COVERAGE_COMPLETE);
+  std::swap(QUALITY, o.QUALITY);
+  return *this;
+}
+
+inline PRWPrepareResultT *PRWPrepareResult::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWPrepareResultT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWPrepareResult::UnPackTo(PRWPrepareResultT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = INSTANCE(); if (_e) { if(_o->INSTANCE) { _e->UnPackTo(_o->INSTANCE.get(), _resolver); } else { _o->INSTANCE = std::unique_ptr<PRWInstanceT>(_e->UnPack(_resolver)); } } else if (_o->INSTANCE) { _o->INSTANCE.reset(); } }
+  { auto _e = SEGMENT_SET_HANDLE(); _o->SEGMENT_SET_HANDLE = _e; }
+  { auto _e = COVERAGE_COMPLETE(); _o->COVERAGE_COMPLETE = _e; }
+  { auto _e = QUALITY(); if (_e) { if(_o->QUALITY) { _e->UnPackTo(_o->QUALITY.get(), _resolver); } else { _o->QUALITY = std::unique_ptr<PRWFitQualityT>(_e->UnPack(_resolver)); } } else if (_o->QUALITY) { _o->QUALITY.reset(); } }
+}
+
+inline ::flatbuffers::Offset<PRWPrepareResult> CreatePRWPrepareResult(::flatbuffers::FlatBufferBuilder &_fbb, const PRWPrepareResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWPrepareResult::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWPrepareResult> PRWPrepareResult::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWPrepareResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWPrepareResultT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _INSTANCE = _o->INSTANCE ? CreatePRWInstance(_fbb, _o->INSTANCE.get(), _rehasher) : 0;
+  auto _SEGMENT_SET_HANDLE = _o->SEGMENT_SET_HANDLE;
+  auto _COVERAGE_COMPLETE = _o->COVERAGE_COMPLETE;
+  auto _QUALITY = _o->QUALITY ? CreatePRWFitQuality(_fbb, _o->QUALITY.get(), _rehasher) : 0;
+  return CreatePRWPrepareResult(
+      _fbb,
+      _INSTANCE,
+      _SEGMENT_SET_HANDLE,
+      _COVERAGE_COMPLETE,
+      _QUALITY);
+}
+
+inline PRWDescribeRequestT::PRWDescribeRequestT(const PRWDescribeRequestT &o)
+      : INSTANCE((o.INSTANCE) ? new PRWInstanceT(*o.INSTANCE) : nullptr),
+        SEGMENT_SET_HANDLE(o.SEGMENT_SET_HANDLE),
+        SOURCE_HANDLES(o.SOURCE_HANDLES) {
+}
+
+inline PRWDescribeRequestT &PRWDescribeRequestT::operator=(PRWDescribeRequestT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(INSTANCE, o.INSTANCE);
+  std::swap(SEGMENT_SET_HANDLE, o.SEGMENT_SET_HANDLE);
+  std::swap(SOURCE_HANDLES, o.SOURCE_HANDLES);
+  return *this;
+}
+
+inline PRWDescribeRequestT *PRWDescribeRequest::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWDescribeRequestT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWDescribeRequest::UnPackTo(PRWDescribeRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = INSTANCE(); if (_e) { if(_o->INSTANCE) { _e->UnPackTo(_o->INSTANCE.get(), _resolver); } else { _o->INSTANCE = std::unique_ptr<PRWInstanceT>(_e->UnPack(_resolver)); } } else if (_o->INSTANCE) { _o->INSTANCE.reset(); } }
+  { auto _e = SEGMENT_SET_HANDLE(); _o->SEGMENT_SET_HANDLE = _e; }
+  { auto _e = SOURCE_HANDLES(); if (_e) { _o->SOURCE_HANDLES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->SOURCE_HANDLES[_i] = _e->Get(_i); } } else { _o->SOURCE_HANDLES.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<PRWDescribeRequest> CreatePRWDescribeRequest(::flatbuffers::FlatBufferBuilder &_fbb, const PRWDescribeRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWDescribeRequest::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWDescribeRequest> PRWDescribeRequest::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWDescribeRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWDescribeRequestT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _INSTANCE = _o->INSTANCE ? CreatePRWInstance(_fbb, _o->INSTANCE.get(), _rehasher) : 0;
+  auto _SEGMENT_SET_HANDLE = _o->SEGMENT_SET_HANDLE;
+  auto _SOURCE_HANDLES = _o->SOURCE_HANDLES.size() ? _fbb.CreateVector(_o->SOURCE_HANDLES) : 0;
+  return CreatePRWDescribeRequest(
+      _fbb,
+      _INSTANCE,
+      _SEGMENT_SET_HANDLE,
+      _SOURCE_HANDLES);
+}
+
+inline PRWTrajectorySourceT::PRWTrajectorySourceT(const PRWTrajectorySourceT &o)
+      : SOURCE_HANDLE(o.SOURCE_HANDLE),
+        OBJECT_ID(o.OBJECT_ID),
+        EPHEMERIS((o.EPHEMERIS) ? new PPET(*o.EPHEMERIS) : nullptr) {
+  SEGMENT_QUALITY.reserve(o.SEGMENT_QUALITY.size());
+  for (const auto &SEGMENT_QUALITY_ : o.SEGMENT_QUALITY) { SEGMENT_QUALITY.emplace_back((SEGMENT_QUALITY_) ? new PRWFitQualityT(*SEGMENT_QUALITY_) : nullptr); }
+}
+
+inline PRWTrajectorySourceT &PRWTrajectorySourceT::operator=(PRWTrajectorySourceT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(SOURCE_HANDLE, o.SOURCE_HANDLE);
+  std::swap(OBJECT_ID, o.OBJECT_ID);
+  std::swap(EPHEMERIS, o.EPHEMERIS);
+  std::swap(SEGMENT_QUALITY, o.SEGMENT_QUALITY);
+  return *this;
+}
+
+inline PRWTrajectorySourceT *PRWTrajectorySource::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWTrajectorySourceT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWTrajectorySource::UnPackTo(PRWTrajectorySourceT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = SOURCE_HANDLE(); _o->SOURCE_HANDLE = _e; }
+  { auto _e = OBJECT_ID(); if (_e) _o->OBJECT_ID = _e->str(); }
+  { auto _e = EPHEMERIS(); if (_e) { if(_o->EPHEMERIS) { _e->UnPackTo(_o->EPHEMERIS.get(), _resolver); } else { _o->EPHEMERIS = std::unique_ptr<PPET>(_e->UnPack(_resolver)); } } else if (_o->EPHEMERIS) { _o->EPHEMERIS.reset(); } }
+  { auto _e = SEGMENT_QUALITY(); if (_e) { _o->SEGMENT_QUALITY.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->SEGMENT_QUALITY[_i]) { _e->Get(_i)->UnPackTo(_o->SEGMENT_QUALITY[_i].get(), _resolver); } else { _o->SEGMENT_QUALITY[_i] = std::unique_ptr<PRWFitQualityT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->SEGMENT_QUALITY.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<PRWTrajectorySource> CreatePRWTrajectorySource(::flatbuffers::FlatBufferBuilder &_fbb, const PRWTrajectorySourceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWTrajectorySource::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWTrajectorySource> PRWTrajectorySource::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWTrajectorySourceT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWTrajectorySourceT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _SOURCE_HANDLE = _o->SOURCE_HANDLE;
+  auto _OBJECT_ID = _o->OBJECT_ID.empty() ? 0 : _fbb.CreateString(_o->OBJECT_ID);
+  auto _EPHEMERIS = _o->EPHEMERIS ? CreatePPE(_fbb, _o->EPHEMERIS.get(), _rehasher) : 0;
+  auto _SEGMENT_QUALITY = _o->SEGMENT_QUALITY.size() ? _fbb.CreateVector<::flatbuffers::Offset<PRWFitQuality>> (_o->SEGMENT_QUALITY.size(), [](size_t i, _VectorArgs *__va) { return CreatePRWFitQuality(*__va->__fbb, __va->__o->SEGMENT_QUALITY[i].get(), __va->__rehasher); }, &_va ) : 0;
+  return CreatePRWTrajectorySource(
+      _fbb,
+      _SOURCE_HANDLE,
+      _OBJECT_ID,
+      _EPHEMERIS,
+      _SEGMENT_QUALITY);
+}
+
+inline PRWDescribeResultT::PRWDescribeResultT(const PRWDescribeResultT &o)
+      : INSTANCE((o.INSTANCE) ? new PRWInstanceT(*o.INSTANCE) : nullptr),
+        SEGMENT_SET_HANDLE(o.SEGMENT_SET_HANDLE),
+        SOURCE_OFFSET(o.SOURCE_OFFSET),
+        FINAL_CHUNK(o.FINAL_CHUNK) {
+  SOURCES.reserve(o.SOURCES.size());
+  for (const auto &SOURCES_ : o.SOURCES) { SOURCES.emplace_back((SOURCES_) ? new PRWTrajectorySourceT(*SOURCES_) : nullptr); }
+}
+
+inline PRWDescribeResultT &PRWDescribeResultT::operator=(PRWDescribeResultT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(INSTANCE, o.INSTANCE);
+  std::swap(SEGMENT_SET_HANDLE, o.SEGMENT_SET_HANDLE);
+  std::swap(SOURCES, o.SOURCES);
+  std::swap(SOURCE_OFFSET, o.SOURCE_OFFSET);
+  std::swap(FINAL_CHUNK, o.FINAL_CHUNK);
+  return *this;
+}
+
+inline PRWDescribeResultT *PRWDescribeResult::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWDescribeResultT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWDescribeResult::UnPackTo(PRWDescribeResultT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = INSTANCE(); if (_e) { if(_o->INSTANCE) { _e->UnPackTo(_o->INSTANCE.get(), _resolver); } else { _o->INSTANCE = std::unique_ptr<PRWInstanceT>(_e->UnPack(_resolver)); } } else if (_o->INSTANCE) { _o->INSTANCE.reset(); } }
+  { auto _e = SEGMENT_SET_HANDLE(); _o->SEGMENT_SET_HANDLE = _e; }
+  { auto _e = SOURCES(); if (_e) { _o->SOURCES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->SOURCES[_i]) { _e->Get(_i)->UnPackTo(_o->SOURCES[_i].get(), _resolver); } else { _o->SOURCES[_i] = std::unique_ptr<PRWTrajectorySourceT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->SOURCES.resize(0); } }
+  { auto _e = SOURCE_OFFSET(); _o->SOURCE_OFFSET = _e; }
+  { auto _e = FINAL_CHUNK(); _o->FINAL_CHUNK = _e; }
+}
+
+inline ::flatbuffers::Offset<PRWDescribeResult> CreatePRWDescribeResult(::flatbuffers::FlatBufferBuilder &_fbb, const PRWDescribeResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWDescribeResult::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWDescribeResult> PRWDescribeResult::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWDescribeResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWDescribeResultT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _INSTANCE = _o->INSTANCE ? CreatePRWInstance(_fbb, _o->INSTANCE.get(), _rehasher) : 0;
+  auto _SEGMENT_SET_HANDLE = _o->SEGMENT_SET_HANDLE;
+  auto _SOURCES = _o->SOURCES.size() ? _fbb.CreateVector<::flatbuffers::Offset<PRWTrajectorySource>> (_o->SOURCES.size(), [](size_t i, _VectorArgs *__va) { return CreatePRWTrajectorySource(*__va->__fbb, __va->__o->SOURCES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _SOURCE_OFFSET = _o->SOURCE_OFFSET;
+  auto _FINAL_CHUNK = _o->FINAL_CHUNK;
+  return CreatePRWDescribeResult(
+      _fbb,
+      _INSTANCE,
+      _SEGMENT_SET_HANDLE,
+      _SOURCES,
+      _SOURCE_OFFSET,
+      _FINAL_CHUNK);
+}
+
+inline PRWNativeInputT::PRWNativeInputT(const PRWNativeInputT &o)
+      : DESCRIPTOR((o.DESCRIPTOR) ? new NCDT(*o.DESCRIPTOR) : nullptr),
+        CONTENT(o.CONTENT) {
+}
+
+inline PRWNativeInputT &PRWNativeInputT::operator=(PRWNativeInputT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(DESCRIPTOR, o.DESCRIPTOR);
+  std::swap(CONTENT, o.CONTENT);
+  return *this;
+}
+
+inline PRWNativeInputT *PRWNativeInput::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWNativeInputT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWNativeInput::UnPackTo(PRWNativeInputT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = DESCRIPTOR(); if (_e) { if(_o->DESCRIPTOR) { _e->UnPackTo(_o->DESCRIPTOR.get(), _resolver); } else { _o->DESCRIPTOR = std::unique_ptr<NCDT>(_e->UnPack(_resolver)); } } else if (_o->DESCRIPTOR) { _o->DESCRIPTOR.reset(); } }
+  { auto _e = CONTENT(); if (_e) { _o->CONTENT.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->CONTENT.begin()); } }
+}
+
+inline ::flatbuffers::Offset<PRWNativeInput> CreatePRWNativeInput(::flatbuffers::FlatBufferBuilder &_fbb, const PRWNativeInputT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWNativeInput::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWNativeInput> PRWNativeInput::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWNativeInputT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWNativeInputT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _DESCRIPTOR = _o->DESCRIPTOR ? CreateNCD(_fbb, _o->DESCRIPTOR.get(), _rehasher) : 0;
+  auto _CONTENT = _fbb.CreateVector(_o->CONTENT);
+  return CreatePRWNativeInput(
+      _fbb,
+      _DESCRIPTOR,
+      _CONTENT);
+}
+
+inline PRWEphemerisRequestT::PRWEphemerisRequestT(const PRWEphemerisRequestT &o)
+      : EPOCH((o.EPOCH) ? new TIMInstantT(*o.EPOCH) : nullptr),
+        TARGET_NAIF_ID(o.TARGET_NAIF_ID),
+        CENTER_NAIF_ID(o.CENTER_NAIF_ID) {
+}
+
+inline PRWEphemerisRequestT &PRWEphemerisRequestT::operator=(PRWEphemerisRequestT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(EPOCH, o.EPOCH);
+  std::swap(TARGET_NAIF_ID, o.TARGET_NAIF_ID);
+  std::swap(CENTER_NAIF_ID, o.CENTER_NAIF_ID);
+  return *this;
+}
+
+inline PRWEphemerisRequestT *PRWEphemerisRequest::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWEphemerisRequestT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWEphemerisRequest::UnPackTo(PRWEphemerisRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = EPOCH(); if (_e) { if(_o->EPOCH) { _e->UnPackTo(_o->EPOCH.get(), _resolver); } else { _o->EPOCH = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->EPOCH) { _o->EPOCH.reset(); } }
+  { auto _e = TARGET_NAIF_ID(); _o->TARGET_NAIF_ID = _e; }
+  { auto _e = CENTER_NAIF_ID(); _o->CENTER_NAIF_ID = _e; }
+}
+
+inline ::flatbuffers::Offset<PRWEphemerisRequest> CreatePRWEphemerisRequest(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEphemerisRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWEphemerisRequest::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWEphemerisRequest> PRWEphemerisRequest::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEphemerisRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWEphemerisRequestT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _EPOCH = _o->EPOCH ? CreateTIMInstant(_fbb, _o->EPOCH.get(), _rehasher) : 0;
+  auto _TARGET_NAIF_ID = _o->TARGET_NAIF_ID;
+  auto _CENTER_NAIF_ID = _o->CENTER_NAIF_ID;
+  return CreatePRWEphemerisRequest(
+      _fbb,
+      _EPOCH,
+      _TARGET_NAIF_ID,
+      _CENTER_NAIF_ID);
+}
+
+inline PRWEphemerisResultT::PRWEphemerisResultT(const PRWEphemerisResultT &o)
+      : TARGET_NAIF_ID(o.TARGET_NAIF_ID),
+        CENTER_NAIF_ID(o.CENTER_NAIF_ID),
+        STATE((o.STATE) ? new PRWResidentStateT(*o.STATE) : nullptr),
+        EPHEMERIS_SOURCE(o.EPHEMERIS_SOURCE) {
+}
+
+inline PRWEphemerisResultT &PRWEphemerisResultT::operator=(PRWEphemerisResultT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(TARGET_NAIF_ID, o.TARGET_NAIF_ID);
+  std::swap(CENTER_NAIF_ID, o.CENTER_NAIF_ID);
+  std::swap(STATE, o.STATE);
+  std::swap(EPHEMERIS_SOURCE, o.EPHEMERIS_SOURCE);
+  return *this;
+}
+
+inline PRWEphemerisResultT *PRWEphemerisResult::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWEphemerisResultT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWEphemerisResult::UnPackTo(PRWEphemerisResultT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = TARGET_NAIF_ID(); _o->TARGET_NAIF_ID = _e; }
+  { auto _e = CENTER_NAIF_ID(); _o->CENTER_NAIF_ID = _e; }
+  { auto _e = STATE(); if (_e) { if(_o->STATE) { _e->UnPackTo(_o->STATE.get(), _resolver); } else { _o->STATE = std::unique_ptr<PRWResidentStateT>(_e->UnPack(_resolver)); } } else if (_o->STATE) { _o->STATE.reset(); } }
+  { auto _e = EPHEMERIS_SOURCE(); if (_e) _o->EPHEMERIS_SOURCE = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<PRWEphemerisResult> CreatePRWEphemerisResult(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEphemerisResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWEphemerisResult::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWEphemerisResult> PRWEphemerisResult::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEphemerisResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWEphemerisResultT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _TARGET_NAIF_ID = _o->TARGET_NAIF_ID;
+  auto _CENTER_NAIF_ID = _o->CENTER_NAIF_ID;
+  auto _STATE = _o->STATE ? CreatePRWResidentState(_fbb, _o->STATE.get(), _rehasher) : 0;
+  auto _EPHEMERIS_SOURCE = _fbb.CreateString(_o->EPHEMERIS_SOURCE);
+  return CreatePRWEphemerisResult(
+      _fbb,
+      _TARGET_NAIF_ID,
+      _CENTER_NAIF_ID,
+      _STATE,
+      _EPHEMERIS_SOURCE);
+}
+
+inline PRWAtmosphereRequestT::PRWAtmosphereRequestT(const PRWAtmosphereRequestT &o)
+      : ATMOSPHERE_MODEL(o.ATMOSPHERE_MODEL),
+        EPOCH((o.EPOCH) ? new TIMInstantT(*o.EPOCH) : nullptr),
+        ALTITUDE_M(o.ALTITUDE_M),
+        LATITUDE_RAD(o.LATITUDE_RAD),
+        LONGITUDE_RAD(o.LONGITUDE_RAD),
+        LOCAL_SOLAR_TIME_HOURS(o.LOCAL_SOLAR_TIME_HOURS),
+        HAS_LOCAL_SOLAR_TIME_HOURS(o.HAS_LOCAL_SOLAR_TIME_HOURS),
+        F107(o.F107),
+        F107_AVERAGE(o.F107_AVERAGE),
+        AP_INDEX(o.AP_INDEX),
+        INCLUDE_ANOMALOUS_OXYGEN(o.INCLUDE_ANOMALOUS_OXYGEN) {
+}
+
+inline PRWAtmosphereRequestT &PRWAtmosphereRequestT::operator=(PRWAtmosphereRequestT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(ATMOSPHERE_MODEL, o.ATMOSPHERE_MODEL);
+  std::swap(EPOCH, o.EPOCH);
+  std::swap(ALTITUDE_M, o.ALTITUDE_M);
+  std::swap(LATITUDE_RAD, o.LATITUDE_RAD);
+  std::swap(LONGITUDE_RAD, o.LONGITUDE_RAD);
+  std::swap(LOCAL_SOLAR_TIME_HOURS, o.LOCAL_SOLAR_TIME_HOURS);
+  std::swap(HAS_LOCAL_SOLAR_TIME_HOURS, o.HAS_LOCAL_SOLAR_TIME_HOURS);
+  std::swap(F107, o.F107);
+  std::swap(F107_AVERAGE, o.F107_AVERAGE);
+  std::swap(AP_INDEX, o.AP_INDEX);
+  std::swap(INCLUDE_ANOMALOUS_OXYGEN, o.INCLUDE_ANOMALOUS_OXYGEN);
+  return *this;
+}
+
+inline PRWAtmosphereRequestT *PRWAtmosphereRequest::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWAtmosphereRequestT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWAtmosphereRequest::UnPackTo(PRWAtmosphereRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = ATMOSPHERE_MODEL(); _o->ATMOSPHERE_MODEL = _e; }
+  { auto _e = EPOCH(); if (_e) { if(_o->EPOCH) { _e->UnPackTo(_o->EPOCH.get(), _resolver); } else { _o->EPOCH = std::unique_ptr<TIMInstantT>(_e->UnPack(_resolver)); } } else if (_o->EPOCH) { _o->EPOCH.reset(); } }
+  { auto _e = ALTITUDE_M(); _o->ALTITUDE_M = _e; }
+  { auto _e = LATITUDE_RAD(); _o->LATITUDE_RAD = _e; }
+  { auto _e = LONGITUDE_RAD(); _o->LONGITUDE_RAD = _e; }
+  { auto _e = LOCAL_SOLAR_TIME_HOURS(); _o->LOCAL_SOLAR_TIME_HOURS = _e; }
+  { auto _e = HAS_LOCAL_SOLAR_TIME_HOURS(); _o->HAS_LOCAL_SOLAR_TIME_HOURS = _e; }
+  { auto _e = F107(); _o->F107 = _e; }
+  { auto _e = F107_AVERAGE(); _o->F107_AVERAGE = _e; }
+  { auto _e = AP_INDEX(); _o->AP_INDEX = _e; }
+  { auto _e = INCLUDE_ANOMALOUS_OXYGEN(); _o->INCLUDE_ANOMALOUS_OXYGEN = _e; }
+}
+
+inline ::flatbuffers::Offset<PRWAtmosphereRequest> CreatePRWAtmosphereRequest(::flatbuffers::FlatBufferBuilder &_fbb, const PRWAtmosphereRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWAtmosphereRequest::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWAtmosphereRequest> PRWAtmosphereRequest::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWAtmosphereRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWAtmosphereRequestT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _ATMOSPHERE_MODEL = _o->ATMOSPHERE_MODEL;
+  auto _EPOCH = _o->EPOCH ? CreateTIMInstant(_fbb, _o->EPOCH.get(), _rehasher) : 0;
+  auto _ALTITUDE_M = _o->ALTITUDE_M;
+  auto _LATITUDE_RAD = _o->LATITUDE_RAD;
+  auto _LONGITUDE_RAD = _o->LONGITUDE_RAD;
+  auto _LOCAL_SOLAR_TIME_HOURS = _o->LOCAL_SOLAR_TIME_HOURS;
+  auto _HAS_LOCAL_SOLAR_TIME_HOURS = _o->HAS_LOCAL_SOLAR_TIME_HOURS;
+  auto _F107 = _o->F107;
+  auto _F107_AVERAGE = _o->F107_AVERAGE;
+  auto _AP_INDEX = _o->AP_INDEX;
+  auto _INCLUDE_ANOMALOUS_OXYGEN = _o->INCLUDE_ANOMALOUS_OXYGEN;
+  return CreatePRWAtmosphereRequest(
+      _fbb,
+      _ATMOSPHERE_MODEL,
+      _EPOCH,
+      _ALTITUDE_M,
+      _LATITUDE_RAD,
+      _LONGITUDE_RAD,
+      _LOCAL_SOLAR_TIME_HOURS,
+      _HAS_LOCAL_SOLAR_TIME_HOURS,
+      _F107,
+      _F107_AVERAGE,
+      _AP_INDEX,
+      _INCLUDE_ANOMALOUS_OXYGEN);
+}
+
+inline PRWSpeciesDensityT *PRWSpeciesDensity::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWSpeciesDensityT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWSpeciesDensity::UnPackTo(PRWSpeciesDensityT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = CONSTITUENT(); _o->CONSTITUENT = _e; }
+  { auto _e = NUMBER_PER_M3(); _o->NUMBER_PER_M3 = _e; }
+}
+
+inline ::flatbuffers::Offset<PRWSpeciesDensity> CreatePRWSpeciesDensity(::flatbuffers::FlatBufferBuilder &_fbb, const PRWSpeciesDensityT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWSpeciesDensity::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWSpeciesDensity> PRWSpeciesDensity::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWSpeciesDensityT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWSpeciesDensityT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _CONSTITUENT = _o->CONSTITUENT;
+  auto _NUMBER_PER_M3 = _o->NUMBER_PER_M3;
+  return CreatePRWSpeciesDensity(
+      _fbb,
+      _CONSTITUENT,
+      _NUMBER_PER_M3);
+}
+
+inline PRWAtmosphereResultT::PRWAtmosphereResultT(const PRWAtmosphereResultT &o)
+      : ATMOSPHERE_MODEL(o.ATMOSPHERE_MODEL),
+        VARIANT(o.VARIANT),
+        ALTITUDE_M(o.ALTITUDE_M),
+        DENSITY_KG_M3(o.DENSITY_KG_M3),
+        TEMPERATURE_K(o.TEMPERATURE_K),
+        HAS_TEMPERATURE_K(o.HAS_TEMPERATURE_K),
+        EXOSPHERIC_TEMPERATURE_K(o.EXOSPHERIC_TEMPERATURE_K),
+        HAS_EXOSPHERIC_TEMPERATURE_K(o.HAS_EXOSPHERIC_TEMPERATURE_K),
+        SCALE_HEIGHT_M(o.SCALE_HEIGHT_M),
+        HAS_SCALE_HEIGHT_M(o.HAS_SCALE_HEIGHT_M) {
+  NUMBER_DENSITIES.reserve(o.NUMBER_DENSITIES.size());
+  for (const auto &NUMBER_DENSITIES_ : o.NUMBER_DENSITIES) { NUMBER_DENSITIES.emplace_back((NUMBER_DENSITIES_) ? new PRWSpeciesDensityT(*NUMBER_DENSITIES_) : nullptr); }
+}
+
+inline PRWAtmosphereResultT &PRWAtmosphereResultT::operator=(PRWAtmosphereResultT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(ATMOSPHERE_MODEL, o.ATMOSPHERE_MODEL);
+  std::swap(VARIANT, o.VARIANT);
+  std::swap(ALTITUDE_M, o.ALTITUDE_M);
+  std::swap(DENSITY_KG_M3, o.DENSITY_KG_M3);
+  std::swap(TEMPERATURE_K, o.TEMPERATURE_K);
+  std::swap(HAS_TEMPERATURE_K, o.HAS_TEMPERATURE_K);
+  std::swap(EXOSPHERIC_TEMPERATURE_K, o.EXOSPHERIC_TEMPERATURE_K);
+  std::swap(HAS_EXOSPHERIC_TEMPERATURE_K, o.HAS_EXOSPHERIC_TEMPERATURE_K);
+  std::swap(SCALE_HEIGHT_M, o.SCALE_HEIGHT_M);
+  std::swap(HAS_SCALE_HEIGHT_M, o.HAS_SCALE_HEIGHT_M);
+  std::swap(NUMBER_DENSITIES, o.NUMBER_DENSITIES);
+  return *this;
+}
+
+inline PRWAtmosphereResultT *PRWAtmosphereResult::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWAtmosphereResultT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWAtmosphereResult::UnPackTo(PRWAtmosphereResultT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = ATMOSPHERE_MODEL(); _o->ATMOSPHERE_MODEL = _e; }
+  { auto _e = VARIANT(); if (_e) _o->VARIANT = _e->str(); }
+  { auto _e = ALTITUDE_M(); _o->ALTITUDE_M = _e; }
+  { auto _e = DENSITY_KG_M3(); _o->DENSITY_KG_M3 = _e; }
+  { auto _e = TEMPERATURE_K(); _o->TEMPERATURE_K = _e; }
+  { auto _e = HAS_TEMPERATURE_K(); _o->HAS_TEMPERATURE_K = _e; }
+  { auto _e = EXOSPHERIC_TEMPERATURE_K(); _o->EXOSPHERIC_TEMPERATURE_K = _e; }
+  { auto _e = HAS_EXOSPHERIC_TEMPERATURE_K(); _o->HAS_EXOSPHERIC_TEMPERATURE_K = _e; }
+  { auto _e = SCALE_HEIGHT_M(); _o->SCALE_HEIGHT_M = _e; }
+  { auto _e = HAS_SCALE_HEIGHT_M(); _o->HAS_SCALE_HEIGHT_M = _e; }
+  { auto _e = NUMBER_DENSITIES(); if (_e) { _o->NUMBER_DENSITIES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->NUMBER_DENSITIES[_i]) { _e->Get(_i)->UnPackTo(_o->NUMBER_DENSITIES[_i].get(), _resolver); } else { _o->NUMBER_DENSITIES[_i] = std::unique_ptr<PRWSpeciesDensityT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->NUMBER_DENSITIES.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<PRWAtmosphereResult> CreatePRWAtmosphereResult(::flatbuffers::FlatBufferBuilder &_fbb, const PRWAtmosphereResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWAtmosphereResult::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWAtmosphereResult> PRWAtmosphereResult::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWAtmosphereResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWAtmosphereResultT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _ATMOSPHERE_MODEL = _o->ATMOSPHERE_MODEL;
+  auto _VARIANT = _o->VARIANT.empty() ? 0 : _fbb.CreateString(_o->VARIANT);
+  auto _ALTITUDE_M = _o->ALTITUDE_M;
+  auto _DENSITY_KG_M3 = _o->DENSITY_KG_M3;
+  auto _TEMPERATURE_K = _o->TEMPERATURE_K;
+  auto _HAS_TEMPERATURE_K = _o->HAS_TEMPERATURE_K;
+  auto _EXOSPHERIC_TEMPERATURE_K = _o->EXOSPHERIC_TEMPERATURE_K;
+  auto _HAS_EXOSPHERIC_TEMPERATURE_K = _o->HAS_EXOSPHERIC_TEMPERATURE_K;
+  auto _SCALE_HEIGHT_M = _o->SCALE_HEIGHT_M;
+  auto _HAS_SCALE_HEIGHT_M = _o->HAS_SCALE_HEIGHT_M;
+  auto _NUMBER_DENSITIES = _o->NUMBER_DENSITIES.size() ? _fbb.CreateVector<::flatbuffers::Offset<PRWSpeciesDensity>> (_o->NUMBER_DENSITIES.size(), [](size_t i, _VectorArgs *__va) { return CreatePRWSpeciesDensity(*__va->__fbb, __va->__o->NUMBER_DENSITIES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  return CreatePRWAtmosphereResult(
+      _fbb,
+      _ATMOSPHERE_MODEL,
+      _VARIANT,
+      _ALTITUDE_M,
+      _DENSITY_KG_M3,
+      _TEMPERATURE_K,
+      _HAS_TEMPERATURE_K,
+      _EXOSPHERIC_TEMPERATURE_K,
+      _HAS_EXOSPHERIC_TEMPERATURE_K,
+      _SCALE_HEIGHT_M,
+      _HAS_SCALE_HEIGHT_M,
+      _NUMBER_DENSITIES);
+}
+
+inline PRWVersionResultT *PRWVersionResult::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWVersionResultT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWVersionResult::UnPackTo(PRWVersionResultT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = VERSION(); if (_e) _o->VERSION = _e->str(); }
+  { auto _e = MODULE_ID(); if (_e) _o->MODULE_ID = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<PRWVersionResult> CreatePRWVersionResult(::flatbuffers::FlatBufferBuilder &_fbb, const PRWVersionResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWVersionResult::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWVersionResult> PRWVersionResult::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWVersionResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWVersionResultT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _VERSION = _fbb.CreateString(_o->VERSION);
+  auto _MODULE_ID = _fbb.CreateString(_o->MODULE_ID);
+  return CreatePRWVersionResult(
+      _fbb,
+      _VERSION,
+      _MODULE_ID);
+}
+
 inline PRWT::PRWT(const PRWT &o)
       : INIT((o.INIT) ? new PRWInitT(*o.INIT) : nullptr),
         BATCH_REQUEST((o.BATCH_REQUEST) ? new PRWBatchRequestT(*o.BATCH_REQUEST) : nullptr),
-        BATCH_RESPONSE((o.BATCH_RESPONSE) ? new PRWBatchResponseT(*o.BATCH_RESPONSE) : nullptr) {
+        BATCH_RESPONSE((o.BATCH_RESPONSE) ? new PRWBatchResponseT(*o.BATCH_RESPONSE) : nullptr),
+        EXECUTION_REQUEST((o.EXECUTION_REQUEST) ? new PRWExecutionRequestT(*o.EXECUTION_REQUEST) : nullptr),
+        EXECUTION_RESULT((o.EXECUTION_RESULT) ? new PRWExecutionResultT(*o.EXECUTION_RESULT) : nullptr),
+        RESIDENT_STATE((o.RESIDENT_STATE) ? new PRWResidentStateT(*o.RESIDENT_STATE) : nullptr),
+        RESIDENT_REQUEST((o.RESIDENT_REQUEST) ? new PRWResidentRequestT(*o.RESIDENT_REQUEST) : nullptr),
+        PREPARE_REQUEST((o.PREPARE_REQUEST) ? new PRWPrepareRequestT(*o.PREPARE_REQUEST) : nullptr),
+        PREPARE_RESULT((o.PREPARE_RESULT) ? new PRWPrepareResultT(*o.PREPARE_RESULT) : nullptr),
+        DESCRIBE_REQUEST((o.DESCRIBE_REQUEST) ? new PRWDescribeRequestT(*o.DESCRIBE_REQUEST) : nullptr),
+        DESCRIBE_RESULT((o.DESCRIBE_RESULT) ? new PRWDescribeResultT(*o.DESCRIBE_RESULT) : nullptr),
+        NATIVE_INPUT((o.NATIVE_INPUT) ? new PRWNativeInputT(*o.NATIVE_INPUT) : nullptr),
+        EPHEMERIS_REQUEST((o.EPHEMERIS_REQUEST) ? new PRWEphemerisRequestT(*o.EPHEMERIS_REQUEST) : nullptr),
+        EPHEMERIS_RESULT((o.EPHEMERIS_RESULT) ? new PRWEphemerisResultT(*o.EPHEMERIS_RESULT) : nullptr),
+        ATMOSPHERE_REQUEST((o.ATMOSPHERE_REQUEST) ? new PRWAtmosphereRequestT(*o.ATMOSPHERE_REQUEST) : nullptr),
+        ATMOSPHERE_RESULT((o.ATMOSPHERE_RESULT) ? new PRWAtmosphereResultT(*o.ATMOSPHERE_RESULT) : nullptr),
+        VERSION_QUERY(o.VERSION_QUERY),
+        VERSION_RESULT((o.VERSION_RESULT) ? new PRWVersionResultT(*o.VERSION_RESULT) : nullptr) {
 }
 
 inline PRWT &PRWT::operator=(PRWT o) FLATBUFFERS_NOEXCEPT {
   std::swap(INIT, o.INIT);
   std::swap(BATCH_REQUEST, o.BATCH_REQUEST);
   std::swap(BATCH_RESPONSE, o.BATCH_RESPONSE);
+  std::swap(EXECUTION_REQUEST, o.EXECUTION_REQUEST);
+  std::swap(EXECUTION_RESULT, o.EXECUTION_RESULT);
+  std::swap(RESIDENT_STATE, o.RESIDENT_STATE);
+  std::swap(RESIDENT_REQUEST, o.RESIDENT_REQUEST);
+  std::swap(PREPARE_REQUEST, o.PREPARE_REQUEST);
+  std::swap(PREPARE_RESULT, o.PREPARE_RESULT);
+  std::swap(DESCRIBE_REQUEST, o.DESCRIBE_REQUEST);
+  std::swap(DESCRIBE_RESULT, o.DESCRIBE_RESULT);
+  std::swap(NATIVE_INPUT, o.NATIVE_INPUT);
+  std::swap(EPHEMERIS_REQUEST, o.EPHEMERIS_REQUEST);
+  std::swap(EPHEMERIS_RESULT, o.EPHEMERIS_RESULT);
+  std::swap(ATMOSPHERE_REQUEST, o.ATMOSPHERE_REQUEST);
+  std::swap(ATMOSPHERE_RESULT, o.ATMOSPHERE_RESULT);
+  std::swap(VERSION_QUERY, o.VERSION_QUERY);
+  std::swap(VERSION_RESULT, o.VERSION_RESULT);
   return *this;
 }
 
@@ -1363,6 +8021,21 @@ inline void PRW::UnPackTo(PRWT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = INIT(); if (_e) { if(_o->INIT) { _e->UnPackTo(_o->INIT.get(), _resolver); } else { _o->INIT = std::unique_ptr<PRWInitT>(_e->UnPack(_resolver)); } } else if (_o->INIT) { _o->INIT.reset(); } }
   { auto _e = BATCH_REQUEST(); if (_e) { if(_o->BATCH_REQUEST) { _e->UnPackTo(_o->BATCH_REQUEST.get(), _resolver); } else { _o->BATCH_REQUEST = std::unique_ptr<PRWBatchRequestT>(_e->UnPack(_resolver)); } } else if (_o->BATCH_REQUEST) { _o->BATCH_REQUEST.reset(); } }
   { auto _e = BATCH_RESPONSE(); if (_e) { if(_o->BATCH_RESPONSE) { _e->UnPackTo(_o->BATCH_RESPONSE.get(), _resolver); } else { _o->BATCH_RESPONSE = std::unique_ptr<PRWBatchResponseT>(_e->UnPack(_resolver)); } } else if (_o->BATCH_RESPONSE) { _o->BATCH_RESPONSE.reset(); } }
+  { auto _e = EXECUTION_REQUEST(); if (_e) { if(_o->EXECUTION_REQUEST) { _e->UnPackTo(_o->EXECUTION_REQUEST.get(), _resolver); } else { _o->EXECUTION_REQUEST = std::unique_ptr<PRWExecutionRequestT>(_e->UnPack(_resolver)); } } else if (_o->EXECUTION_REQUEST) { _o->EXECUTION_REQUEST.reset(); } }
+  { auto _e = EXECUTION_RESULT(); if (_e) { if(_o->EXECUTION_RESULT) { _e->UnPackTo(_o->EXECUTION_RESULT.get(), _resolver); } else { _o->EXECUTION_RESULT = std::unique_ptr<PRWExecutionResultT>(_e->UnPack(_resolver)); } } else if (_o->EXECUTION_RESULT) { _o->EXECUTION_RESULT.reset(); } }
+  { auto _e = RESIDENT_STATE(); if (_e) { if(_o->RESIDENT_STATE) { _e->UnPackTo(_o->RESIDENT_STATE.get(), _resolver); } else { _o->RESIDENT_STATE = std::unique_ptr<PRWResidentStateT>(_e->UnPack(_resolver)); } } else if (_o->RESIDENT_STATE) { _o->RESIDENT_STATE.reset(); } }
+  { auto _e = RESIDENT_REQUEST(); if (_e) { if(_o->RESIDENT_REQUEST) { _e->UnPackTo(_o->RESIDENT_REQUEST.get(), _resolver); } else { _o->RESIDENT_REQUEST = std::unique_ptr<PRWResidentRequestT>(_e->UnPack(_resolver)); } } else if (_o->RESIDENT_REQUEST) { _o->RESIDENT_REQUEST.reset(); } }
+  { auto _e = PREPARE_REQUEST(); if (_e) { if(_o->PREPARE_REQUEST) { _e->UnPackTo(_o->PREPARE_REQUEST.get(), _resolver); } else { _o->PREPARE_REQUEST = std::unique_ptr<PRWPrepareRequestT>(_e->UnPack(_resolver)); } } else if (_o->PREPARE_REQUEST) { _o->PREPARE_REQUEST.reset(); } }
+  { auto _e = PREPARE_RESULT(); if (_e) { if(_o->PREPARE_RESULT) { _e->UnPackTo(_o->PREPARE_RESULT.get(), _resolver); } else { _o->PREPARE_RESULT = std::unique_ptr<PRWPrepareResultT>(_e->UnPack(_resolver)); } } else if (_o->PREPARE_RESULT) { _o->PREPARE_RESULT.reset(); } }
+  { auto _e = DESCRIBE_REQUEST(); if (_e) { if(_o->DESCRIBE_REQUEST) { _e->UnPackTo(_o->DESCRIBE_REQUEST.get(), _resolver); } else { _o->DESCRIBE_REQUEST = std::unique_ptr<PRWDescribeRequestT>(_e->UnPack(_resolver)); } } else if (_o->DESCRIBE_REQUEST) { _o->DESCRIBE_REQUEST.reset(); } }
+  { auto _e = DESCRIBE_RESULT(); if (_e) { if(_o->DESCRIBE_RESULT) { _e->UnPackTo(_o->DESCRIBE_RESULT.get(), _resolver); } else { _o->DESCRIBE_RESULT = std::unique_ptr<PRWDescribeResultT>(_e->UnPack(_resolver)); } } else if (_o->DESCRIBE_RESULT) { _o->DESCRIBE_RESULT.reset(); } }
+  { auto _e = NATIVE_INPUT(); if (_e) { if(_o->NATIVE_INPUT) { _e->UnPackTo(_o->NATIVE_INPUT.get(), _resolver); } else { _o->NATIVE_INPUT = std::unique_ptr<PRWNativeInputT>(_e->UnPack(_resolver)); } } else if (_o->NATIVE_INPUT) { _o->NATIVE_INPUT.reset(); } }
+  { auto _e = EPHEMERIS_REQUEST(); if (_e) { if(_o->EPHEMERIS_REQUEST) { _e->UnPackTo(_o->EPHEMERIS_REQUEST.get(), _resolver); } else { _o->EPHEMERIS_REQUEST = std::unique_ptr<PRWEphemerisRequestT>(_e->UnPack(_resolver)); } } else if (_o->EPHEMERIS_REQUEST) { _o->EPHEMERIS_REQUEST.reset(); } }
+  { auto _e = EPHEMERIS_RESULT(); if (_e) { if(_o->EPHEMERIS_RESULT) { _e->UnPackTo(_o->EPHEMERIS_RESULT.get(), _resolver); } else { _o->EPHEMERIS_RESULT = std::unique_ptr<PRWEphemerisResultT>(_e->UnPack(_resolver)); } } else if (_o->EPHEMERIS_RESULT) { _o->EPHEMERIS_RESULT.reset(); } }
+  { auto _e = ATMOSPHERE_REQUEST(); if (_e) { if(_o->ATMOSPHERE_REQUEST) { _e->UnPackTo(_o->ATMOSPHERE_REQUEST.get(), _resolver); } else { _o->ATMOSPHERE_REQUEST = std::unique_ptr<PRWAtmosphereRequestT>(_e->UnPack(_resolver)); } } else if (_o->ATMOSPHERE_REQUEST) { _o->ATMOSPHERE_REQUEST.reset(); } }
+  { auto _e = ATMOSPHERE_RESULT(); if (_e) { if(_o->ATMOSPHERE_RESULT) { _e->UnPackTo(_o->ATMOSPHERE_RESULT.get(), _resolver); } else { _o->ATMOSPHERE_RESULT = std::unique_ptr<PRWAtmosphereResultT>(_e->UnPack(_resolver)); } } else if (_o->ATMOSPHERE_RESULT) { _o->ATMOSPHERE_RESULT.reset(); } }
+  { auto _e = VERSION_QUERY(); _o->VERSION_QUERY = _e; }
+  { auto _e = VERSION_RESULT(); if (_e) { if(_o->VERSION_RESULT) { _e->UnPackTo(_o->VERSION_RESULT.get(), _resolver); } else { _o->VERSION_RESULT = std::unique_ptr<PRWVersionResultT>(_e->UnPack(_resolver)); } } else if (_o->VERSION_RESULT) { _o->VERSION_RESULT.reset(); } }
 }
 
 inline ::flatbuffers::Offset<PRW> CreatePRW(::flatbuffers::FlatBufferBuilder &_fbb, const PRWT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1376,11 +8049,41 @@ inline ::flatbuffers::Offset<PRW> PRW::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _INIT = _o->INIT ? CreatePRWInit(_fbb, _o->INIT.get(), _rehasher) : 0;
   auto _BATCH_REQUEST = _o->BATCH_REQUEST ? CreatePRWBatchRequest(_fbb, _o->BATCH_REQUEST.get(), _rehasher) : 0;
   auto _BATCH_RESPONSE = _o->BATCH_RESPONSE ? CreatePRWBatchResponse(_fbb, _o->BATCH_RESPONSE.get(), _rehasher) : 0;
+  auto _EXECUTION_REQUEST = _o->EXECUTION_REQUEST ? CreatePRWExecutionRequest(_fbb, _o->EXECUTION_REQUEST.get(), _rehasher) : 0;
+  auto _EXECUTION_RESULT = _o->EXECUTION_RESULT ? CreatePRWExecutionResult(_fbb, _o->EXECUTION_RESULT.get(), _rehasher) : 0;
+  auto _RESIDENT_STATE = _o->RESIDENT_STATE ? CreatePRWResidentState(_fbb, _o->RESIDENT_STATE.get(), _rehasher) : 0;
+  auto _RESIDENT_REQUEST = _o->RESIDENT_REQUEST ? CreatePRWResidentRequest(_fbb, _o->RESIDENT_REQUEST.get(), _rehasher) : 0;
+  auto _PREPARE_REQUEST = _o->PREPARE_REQUEST ? CreatePRWPrepareRequest(_fbb, _o->PREPARE_REQUEST.get(), _rehasher) : 0;
+  auto _PREPARE_RESULT = _o->PREPARE_RESULT ? CreatePRWPrepareResult(_fbb, _o->PREPARE_RESULT.get(), _rehasher) : 0;
+  auto _DESCRIBE_REQUEST = _o->DESCRIBE_REQUEST ? CreatePRWDescribeRequest(_fbb, _o->DESCRIBE_REQUEST.get(), _rehasher) : 0;
+  auto _DESCRIBE_RESULT = _o->DESCRIBE_RESULT ? CreatePRWDescribeResult(_fbb, _o->DESCRIBE_RESULT.get(), _rehasher) : 0;
+  auto _NATIVE_INPUT = _o->NATIVE_INPUT ? CreatePRWNativeInput(_fbb, _o->NATIVE_INPUT.get(), _rehasher) : 0;
+  auto _EPHEMERIS_REQUEST = _o->EPHEMERIS_REQUEST ? CreatePRWEphemerisRequest(_fbb, _o->EPHEMERIS_REQUEST.get(), _rehasher) : 0;
+  auto _EPHEMERIS_RESULT = _o->EPHEMERIS_RESULT ? CreatePRWEphemerisResult(_fbb, _o->EPHEMERIS_RESULT.get(), _rehasher) : 0;
+  auto _ATMOSPHERE_REQUEST = _o->ATMOSPHERE_REQUEST ? CreatePRWAtmosphereRequest(_fbb, _o->ATMOSPHERE_REQUEST.get(), _rehasher) : 0;
+  auto _ATMOSPHERE_RESULT = _o->ATMOSPHERE_RESULT ? CreatePRWAtmosphereResult(_fbb, _o->ATMOSPHERE_RESULT.get(), _rehasher) : 0;
+  auto _VERSION_QUERY = _o->VERSION_QUERY;
+  auto _VERSION_RESULT = _o->VERSION_RESULT ? CreatePRWVersionResult(_fbb, _o->VERSION_RESULT.get(), _rehasher) : 0;
   return CreatePRW(
       _fbb,
       _INIT,
       _BATCH_REQUEST,
-      _BATCH_RESPONSE);
+      _BATCH_RESPONSE,
+      _EXECUTION_REQUEST,
+      _EXECUTION_RESULT,
+      _RESIDENT_STATE,
+      _RESIDENT_REQUEST,
+      _PREPARE_REQUEST,
+      _PREPARE_RESULT,
+      _DESCRIBE_REQUEST,
+      _DESCRIBE_RESULT,
+      _NATIVE_INPUT,
+      _EPHEMERIS_REQUEST,
+      _EPHEMERIS_RESULT,
+      _ATMOSPHERE_REQUEST,
+      _ATMOSPHERE_RESULT,
+      _VERSION_QUERY,
+      _VERSION_RESULT);
 }
 
 inline const PRW *GetPRW(const void *buf) {

@@ -13,6 +13,18 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
               FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
+struct RFEEmissionMaskPoint;
+struct RFEEmissionMaskPointBuilder;
+struct RFEEmissionMaskPointT;
+
+struct RFEProvenance;
+struct RFEProvenanceBuilder;
+struct RFEProvenanceT;
+
+struct RFEEmissionMask;
+struct RFEEmissionMaskBuilder;
+struct RFEEmissionMaskT;
+
 struct rfEmitterDetail;
 struct rfEmitterDetailBuilder;
 struct rfEmitterDetailT;
@@ -20,6 +32,104 @@ struct rfEmitterDetailT;
 struct RFE;
 struct RFEBuilder;
 struct RFET;
+
+/// Capability class represented by an emission-limit curve.
+enum class rfeEmissionMaskClass : int8_t {
+  UNSPECIFIED = 0,
+  IN_BAND = 1,
+  OUT_OF_BAND = 2,
+  SPURIOUS = 3,
+  HARMONIC = 4,
+  BROADBAND_NOISE = 5,
+  CONDUCTED = 6,
+  RADIATED = 7,
+  SUSCEPTIBILITY = 8,
+  MIN = UNSPECIFIED,
+  MAX = SUSCEPTIBILITY
+};
+
+inline const rfeEmissionMaskClass (&EnumValuesrfeEmissionMaskClass())[9] {
+  static const rfeEmissionMaskClass values[] = {
+    rfeEmissionMaskClass::UNSPECIFIED,
+    rfeEmissionMaskClass::IN_BAND,
+    rfeEmissionMaskClass::OUT_OF_BAND,
+    rfeEmissionMaskClass::SPURIOUS,
+    rfeEmissionMaskClass::HARMONIC,
+    rfeEmissionMaskClass::BROADBAND_NOISE,
+    rfeEmissionMaskClass::CONDUCTED,
+    rfeEmissionMaskClass::RADIATED,
+    rfeEmissionMaskClass::SUSCEPTIBILITY
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesrfeEmissionMaskClass() {
+  static const char * const names[10] = {
+    "UNSPECIFIED",
+    "IN_BAND",
+    "OUT_OF_BAND",
+    "SPURIOUS",
+    "HARMONIC",
+    "BROADBAND_NOISE",
+    "CONDUCTED",
+    "RADIATED",
+    "SUSCEPTIBILITY",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamerfeEmissionMaskClass(rfeEmissionMaskClass e) {
+  if (::flatbuffers::IsOutRange(e, rfeEmissionMaskClass::UNSPECIFIED, rfeEmissionMaskClass::SUSCEPTIBILITY)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesrfeEmissionMaskClass()[index];
+}
+
+/// Physical path to which an emission-limit curve applies.
+enum class rfeEmissionPath : int8_t {
+  UNSPECIFIED = 0,
+  ANTENNA_PORT = 1,
+  POWER_LEAD = 2,
+  SIGNAL_LEAD = 3,
+  ENCLOSURE = 4,
+  FREE_SPACE = 5,
+  STRUCTURE = 6,
+  MIN = UNSPECIFIED,
+  MAX = STRUCTURE
+};
+
+inline const rfeEmissionPath (&EnumValuesrfeEmissionPath())[7] {
+  static const rfeEmissionPath values[] = {
+    rfeEmissionPath::UNSPECIFIED,
+    rfeEmissionPath::ANTENNA_PORT,
+    rfeEmissionPath::POWER_LEAD,
+    rfeEmissionPath::SIGNAL_LEAD,
+    rfeEmissionPath::ENCLOSURE,
+    rfeEmissionPath::FREE_SPACE,
+    rfeEmissionPath::STRUCTURE
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesrfeEmissionPath() {
+  static const char * const names[8] = {
+    "UNSPECIFIED",
+    "ANTENNA_PORT",
+    "POWER_LEAD",
+    "SIGNAL_LEAD",
+    "ENCLOSURE",
+    "FREE_SPACE",
+    "STRUCTURE",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamerfeEmissionPath(rfeEmissionPath e) {
+  if (::flatbuffers::IsOutRange(e, rfeEmissionPath::UNSPECIFIED, rfeEmissionPath::STRUCTURE)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesrfeEmissionPath()[index];
+}
 
 enum class emitterType : int8_t {
   RADAR = 0,
@@ -138,6 +248,462 @@ inline const char *EnumNamesignalModulation(signalModulation e) {
   return EnumNamessignalModulation()[index];
 }
 
+struct RFEEmissionMaskPointT : public ::flatbuffers::NativeTable {
+  typedef RFEEmissionMaskPoint TableType;
+  double FREQUENCY_OFFSET_HZ = 0.0;
+  double VALUE = 0.0;
+};
+
+/// One point of an emission-limit curve. FREQUENCY_OFFSET_HZ is signed and is
+/// relative to RFEEmissionMask.REFERENCE_FREQUENCY_HZ. VALUE is expressed in
+/// the mask's required UNITS.
+struct RFEEmissionMaskPoint FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef RFEEmissionMaskPointT NativeTableType;
+  typedef RFEEmissionMaskPointBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_FREQUENCY_OFFSET_HZ = 4,
+    VT_VALUE = 6
+  };
+  double FREQUENCY_OFFSET_HZ() const {
+    return GetField<double>(VT_FREQUENCY_OFFSET_HZ, 0.0);
+  }
+  double VALUE() const {
+    return GetField<double>(VT_VALUE, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<double>(verifier, VT_FREQUENCY_OFFSET_HZ, 8) &&
+           VerifyField<double>(verifier, VT_VALUE, 8) &&
+           verifier.EndTable();
+  }
+  RFEEmissionMaskPointT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(RFEEmissionMaskPointT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<RFEEmissionMaskPoint> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RFEEmissionMaskPointT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct RFEEmissionMaskPointBuilder {
+  typedef RFEEmissionMaskPoint Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_FREQUENCY_OFFSET_HZ(double FREQUENCY_OFFSET_HZ) {
+    fbb_.AddElement<double>(RFEEmissionMaskPoint::VT_FREQUENCY_OFFSET_HZ, FREQUENCY_OFFSET_HZ, 0.0);
+  }
+  void add_VALUE(double VALUE) {
+    fbb_.AddElement<double>(RFEEmissionMaskPoint::VT_VALUE, VALUE, 0.0);
+  }
+  explicit RFEEmissionMaskPointBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<RFEEmissionMaskPoint> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<RFEEmissionMaskPoint>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<RFEEmissionMaskPoint> CreateRFEEmissionMaskPoint(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    double FREQUENCY_OFFSET_HZ = 0.0,
+    double VALUE = 0.0) {
+  RFEEmissionMaskPointBuilder builder_(_fbb);
+  builder_.add_VALUE(VALUE);
+  builder_.add_FREQUENCY_OFFSET_HZ(FREQUENCY_OFFSET_HZ);
+  return builder_.Finish();
+}
+
+struct RFEEmissionMaskPoint::Traits {
+  using type = RFEEmissionMaskPoint;
+  static auto constexpr Create = CreateRFEEmissionMaskPoint;
+};
+
+::flatbuffers::Offset<RFEEmissionMaskPoint> CreateRFEEmissionMaskPoint(::flatbuffers::FlatBufferBuilder &_fbb, const RFEEmissionMaskPointT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct RFEProvenanceT : public ::flatbuffers::NativeTable {
+  typedef RFEProvenance TableType;
+  std::string SOURCE{};
+  std::string SOURCE_QUERY{};
+  std::string MODEL_NAME{};
+  std::string MODEL_VERSION{};
+  std::string CITATION{};
+  std::string MODULE_ID{};
+  std::string MODULE_VERSION{};
+  std::string MODULE_CONTENT_HASH{};
+  uint64_t COMPUTED_AT = 0;
+};
+
+/// Provenance of an emitter descriptor or emission mask. Capability schemas
+/// carry model names and citations as data so the IDL remains provider-neutral.
+struct RFEProvenance FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef RFEProvenanceT NativeTableType;
+  typedef RFEProvenanceBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SOURCE = 4,
+    VT_SOURCE_QUERY = 6,
+    VT_MODEL_NAME = 8,
+    VT_MODEL_VERSION = 10,
+    VT_CITATION = 12,
+    VT_MODULE_ID = 14,
+    VT_MODULE_VERSION = 16,
+    VT_MODULE_CONTENT_HASH = 18,
+    VT_COMPUTED_AT = 20
+  };
+  const ::flatbuffers::String *SOURCE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SOURCE);
+  }
+  const ::flatbuffers::String *SOURCE_QUERY() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SOURCE_QUERY);
+  }
+  const ::flatbuffers::String *MODEL_NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MODEL_NAME);
+  }
+  const ::flatbuffers::String *MODEL_VERSION() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MODEL_VERSION);
+  }
+  const ::flatbuffers::String *CITATION() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_CITATION);
+  }
+  const ::flatbuffers::String *MODULE_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MODULE_ID);
+  }
+  const ::flatbuffers::String *MODULE_VERSION() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MODULE_VERSION);
+  }
+  const ::flatbuffers::String *MODULE_CONTENT_HASH() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MODULE_CONTENT_HASH);
+  }
+  uint64_t COMPUTED_AT() const {
+    return GetField<uint64_t>(VT_COMPUTED_AT, 0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_SOURCE) &&
+           verifier.VerifyString(SOURCE()) &&
+           VerifyOffset(verifier, VT_SOURCE_QUERY) &&
+           verifier.VerifyString(SOURCE_QUERY()) &&
+           VerifyOffset(verifier, VT_MODEL_NAME) &&
+           verifier.VerifyString(MODEL_NAME()) &&
+           VerifyOffset(verifier, VT_MODEL_VERSION) &&
+           verifier.VerifyString(MODEL_VERSION()) &&
+           VerifyOffset(verifier, VT_CITATION) &&
+           verifier.VerifyString(CITATION()) &&
+           VerifyOffset(verifier, VT_MODULE_ID) &&
+           verifier.VerifyString(MODULE_ID()) &&
+           VerifyOffset(verifier, VT_MODULE_VERSION) &&
+           verifier.VerifyString(MODULE_VERSION()) &&
+           VerifyOffset(verifier, VT_MODULE_CONTENT_HASH) &&
+           verifier.VerifyString(MODULE_CONTENT_HASH()) &&
+           VerifyField<uint64_t>(verifier, VT_COMPUTED_AT, 8) &&
+           verifier.EndTable();
+  }
+  RFEProvenanceT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(RFEProvenanceT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<RFEProvenance> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RFEProvenanceT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct RFEProvenanceBuilder {
+  typedef RFEProvenance Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_SOURCE(::flatbuffers::Offset<::flatbuffers::String> SOURCE) {
+    fbb_.AddOffset(RFEProvenance::VT_SOURCE, SOURCE);
+  }
+  void add_SOURCE_QUERY(::flatbuffers::Offset<::flatbuffers::String> SOURCE_QUERY) {
+    fbb_.AddOffset(RFEProvenance::VT_SOURCE_QUERY, SOURCE_QUERY);
+  }
+  void add_MODEL_NAME(::flatbuffers::Offset<::flatbuffers::String> MODEL_NAME) {
+    fbb_.AddOffset(RFEProvenance::VT_MODEL_NAME, MODEL_NAME);
+  }
+  void add_MODEL_VERSION(::flatbuffers::Offset<::flatbuffers::String> MODEL_VERSION) {
+    fbb_.AddOffset(RFEProvenance::VT_MODEL_VERSION, MODEL_VERSION);
+  }
+  void add_CITATION(::flatbuffers::Offset<::flatbuffers::String> CITATION) {
+    fbb_.AddOffset(RFEProvenance::VT_CITATION, CITATION);
+  }
+  void add_MODULE_ID(::flatbuffers::Offset<::flatbuffers::String> MODULE_ID) {
+    fbb_.AddOffset(RFEProvenance::VT_MODULE_ID, MODULE_ID);
+  }
+  void add_MODULE_VERSION(::flatbuffers::Offset<::flatbuffers::String> MODULE_VERSION) {
+    fbb_.AddOffset(RFEProvenance::VT_MODULE_VERSION, MODULE_VERSION);
+  }
+  void add_MODULE_CONTENT_HASH(::flatbuffers::Offset<::flatbuffers::String> MODULE_CONTENT_HASH) {
+    fbb_.AddOffset(RFEProvenance::VT_MODULE_CONTENT_HASH, MODULE_CONTENT_HASH);
+  }
+  void add_COMPUTED_AT(uint64_t COMPUTED_AT) {
+    fbb_.AddElement<uint64_t>(RFEProvenance::VT_COMPUTED_AT, COMPUTED_AT, 0);
+  }
+  explicit RFEProvenanceBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<RFEProvenance> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<RFEProvenance>(end);
+    fbb_.Required(o, RFEProvenance::VT_SOURCE);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<RFEProvenance> CreateRFEProvenance(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> SOURCE = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> SOURCE_QUERY = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MODEL_NAME = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MODEL_VERSION = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> CITATION = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MODULE_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MODULE_VERSION = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MODULE_CONTENT_HASH = 0,
+    uint64_t COMPUTED_AT = 0) {
+  RFEProvenanceBuilder builder_(_fbb);
+  builder_.add_COMPUTED_AT(COMPUTED_AT);
+  builder_.add_MODULE_CONTENT_HASH(MODULE_CONTENT_HASH);
+  builder_.add_MODULE_VERSION(MODULE_VERSION);
+  builder_.add_MODULE_ID(MODULE_ID);
+  builder_.add_CITATION(CITATION);
+  builder_.add_MODEL_VERSION(MODEL_VERSION);
+  builder_.add_MODEL_NAME(MODEL_NAME);
+  builder_.add_SOURCE_QUERY(SOURCE_QUERY);
+  builder_.add_SOURCE(SOURCE);
+  return builder_.Finish();
+}
+
+struct RFEProvenance::Traits {
+  using type = RFEProvenance;
+  static auto constexpr Create = CreateRFEProvenance;
+};
+
+inline ::flatbuffers::Offset<RFEProvenance> CreateRFEProvenanceDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *SOURCE = nullptr,
+    const char *SOURCE_QUERY = nullptr,
+    const char *MODEL_NAME = nullptr,
+    const char *MODEL_VERSION = nullptr,
+    const char *CITATION = nullptr,
+    const char *MODULE_ID = nullptr,
+    const char *MODULE_VERSION = nullptr,
+    const char *MODULE_CONTENT_HASH = nullptr,
+    uint64_t COMPUTED_AT = 0) {
+  auto SOURCE__ = SOURCE ? _fbb.CreateString(SOURCE) : 0;
+  auto SOURCE_QUERY__ = SOURCE_QUERY ? _fbb.CreateString(SOURCE_QUERY) : 0;
+  auto MODEL_NAME__ = MODEL_NAME ? _fbb.CreateString(MODEL_NAME) : 0;
+  auto MODEL_VERSION__ = MODEL_VERSION ? _fbb.CreateString(MODEL_VERSION) : 0;
+  auto CITATION__ = CITATION ? _fbb.CreateString(CITATION) : 0;
+  auto MODULE_ID__ = MODULE_ID ? _fbb.CreateString(MODULE_ID) : 0;
+  auto MODULE_VERSION__ = MODULE_VERSION ? _fbb.CreateString(MODULE_VERSION) : 0;
+  auto MODULE_CONTENT_HASH__ = MODULE_CONTENT_HASH ? _fbb.CreateString(MODULE_CONTENT_HASH) : 0;
+  return CreateRFEProvenance(
+      _fbb,
+      SOURCE__,
+      SOURCE_QUERY__,
+      MODEL_NAME__,
+      MODEL_VERSION__,
+      CITATION__,
+      MODULE_ID__,
+      MODULE_VERSION__,
+      MODULE_CONTENT_HASH__,
+      COMPUTED_AT);
+}
+
+::flatbuffers::Offset<RFEProvenance> CreateRFEProvenance(::flatbuffers::FlatBufferBuilder &_fbb, const RFEProvenanceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct RFEEmissionMaskT : public ::flatbuffers::NativeTable {
+  typedef RFEEmissionMask TableType;
+  std::string MASK_ID{};
+  std::string NAME{};
+  rfeEmissionMaskClass CLASS = rfeEmissionMaskClass::UNSPECIFIED;
+  rfeEmissionPath PATH = rfeEmissionPath::UNSPECIFIED;
+  std::string UNITS{};
+  double REFERENCE_FREQUENCY_HZ = 0.0;
+  double REFERENCE_BANDWIDTH_HZ = 0.0;
+  std::vector<std::unique_ptr<RFEEmissionMaskPointT>> POINTS{};
+  std::unique_ptr<RFEProvenanceT> PROVENANCE{};
+  RFEEmissionMaskT() = default;
+  RFEEmissionMaskT(const RFEEmissionMaskT &o);
+  RFEEmissionMaskT(RFEEmissionMaskT&&) FLATBUFFERS_NOEXCEPT = default;
+  RFEEmissionMaskT &operator=(RFEEmissionMaskT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// A replayable spurious, harmonic, out-of-band, noise, conducted, radiated,
+/// or susceptibility limit curve.
+struct RFEEmissionMask FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef RFEEmissionMaskT NativeTableType;
+  typedef RFEEmissionMaskBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_MASK_ID = 4,
+    VT_NAME = 6,
+    VT_CLASS = 8,
+    VT_PATH = 10,
+    VT_UNITS = 12,
+    VT_REFERENCE_FREQUENCY_HZ = 14,
+    VT_REFERENCE_BANDWIDTH_HZ = 16,
+    VT_POINTS = 18,
+    VT_PROVENANCE = 20
+  };
+  const ::flatbuffers::String *MASK_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MASK_ID);
+  }
+  const ::flatbuffers::String *NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_NAME);
+  }
+  rfeEmissionMaskClass CLASS() const {
+    return static_cast<rfeEmissionMaskClass>(GetField<int8_t>(VT_CLASS, 0));
+  }
+  rfeEmissionPath PATH() const {
+    return static_cast<rfeEmissionPath>(GetField<int8_t>(VT_PATH, 0));
+  }
+  /// Unit token applying to every point VALUE, for example dBW, dBW/Hz, dBuV,
+  /// or dBuA. A point with no unit is not publishable.
+  const ::flatbuffers::String *UNITS() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_UNITS);
+  }
+  double REFERENCE_FREQUENCY_HZ() const {
+    return GetField<double>(VT_REFERENCE_FREQUENCY_HZ, 0.0);
+  }
+  double REFERENCE_BANDWIDTH_HZ() const {
+    return GetField<double>(VT_REFERENCE_BANDWIDTH_HZ, 0.0);
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<RFEEmissionMaskPoint>> *POINTS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<RFEEmissionMaskPoint>> *>(VT_POINTS);
+  }
+  const RFEProvenance *PROVENANCE() const {
+    return GetPointer<const RFEProvenance *>(VT_PROVENANCE);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_MASK_ID) &&
+           verifier.VerifyString(MASK_ID()) &&
+           VerifyOffset(verifier, VT_NAME) &&
+           verifier.VerifyString(NAME()) &&
+           VerifyField<int8_t>(verifier, VT_CLASS, 1) &&
+           VerifyField<int8_t>(verifier, VT_PATH, 1) &&
+           VerifyOffsetRequired(verifier, VT_UNITS) &&
+           verifier.VerifyString(UNITS()) &&
+           VerifyField<double>(verifier, VT_REFERENCE_FREQUENCY_HZ, 8) &&
+           VerifyField<double>(verifier, VT_REFERENCE_BANDWIDTH_HZ, 8) &&
+           VerifyOffsetRequired(verifier, VT_POINTS) &&
+           verifier.VerifyVector(POINTS()) &&
+           verifier.VerifyVectorOfTables(POINTS()) &&
+           VerifyOffsetRequired(verifier, VT_PROVENANCE) &&
+           verifier.VerifyTable(PROVENANCE()) &&
+           verifier.EndTable();
+  }
+  RFEEmissionMaskT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(RFEEmissionMaskT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<RFEEmissionMask> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RFEEmissionMaskT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct RFEEmissionMaskBuilder {
+  typedef RFEEmissionMask Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_MASK_ID(::flatbuffers::Offset<::flatbuffers::String> MASK_ID) {
+    fbb_.AddOffset(RFEEmissionMask::VT_MASK_ID, MASK_ID);
+  }
+  void add_NAME(::flatbuffers::Offset<::flatbuffers::String> NAME) {
+    fbb_.AddOffset(RFEEmissionMask::VT_NAME, NAME);
+  }
+  void add_CLASS(rfeEmissionMaskClass CLASS) {
+    fbb_.AddElement<int8_t>(RFEEmissionMask::VT_CLASS, static_cast<int8_t>(CLASS), 0);
+  }
+  void add_PATH(rfeEmissionPath PATH) {
+    fbb_.AddElement<int8_t>(RFEEmissionMask::VT_PATH, static_cast<int8_t>(PATH), 0);
+  }
+  void add_UNITS(::flatbuffers::Offset<::flatbuffers::String> UNITS) {
+    fbb_.AddOffset(RFEEmissionMask::VT_UNITS, UNITS);
+  }
+  void add_REFERENCE_FREQUENCY_HZ(double REFERENCE_FREQUENCY_HZ) {
+    fbb_.AddElement<double>(RFEEmissionMask::VT_REFERENCE_FREQUENCY_HZ, REFERENCE_FREQUENCY_HZ, 0.0);
+  }
+  void add_REFERENCE_BANDWIDTH_HZ(double REFERENCE_BANDWIDTH_HZ) {
+    fbb_.AddElement<double>(RFEEmissionMask::VT_REFERENCE_BANDWIDTH_HZ, REFERENCE_BANDWIDTH_HZ, 0.0);
+  }
+  void add_POINTS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<RFEEmissionMaskPoint>>> POINTS) {
+    fbb_.AddOffset(RFEEmissionMask::VT_POINTS, POINTS);
+  }
+  void add_PROVENANCE(::flatbuffers::Offset<RFEProvenance> PROVENANCE) {
+    fbb_.AddOffset(RFEEmissionMask::VT_PROVENANCE, PROVENANCE);
+  }
+  explicit RFEEmissionMaskBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<RFEEmissionMask> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<RFEEmissionMask>(end);
+    fbb_.Required(o, RFEEmissionMask::VT_MASK_ID);
+    fbb_.Required(o, RFEEmissionMask::VT_UNITS);
+    fbb_.Required(o, RFEEmissionMask::VT_POINTS);
+    fbb_.Required(o, RFEEmissionMask::VT_PROVENANCE);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<RFEEmissionMask> CreateRFEEmissionMask(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> MASK_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> NAME = 0,
+    rfeEmissionMaskClass CLASS = rfeEmissionMaskClass::UNSPECIFIED,
+    rfeEmissionPath PATH = rfeEmissionPath::UNSPECIFIED,
+    ::flatbuffers::Offset<::flatbuffers::String> UNITS = 0,
+    double REFERENCE_FREQUENCY_HZ = 0.0,
+    double REFERENCE_BANDWIDTH_HZ = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<RFEEmissionMaskPoint>>> POINTS = 0,
+    ::flatbuffers::Offset<RFEProvenance> PROVENANCE = 0) {
+  RFEEmissionMaskBuilder builder_(_fbb);
+  builder_.add_REFERENCE_BANDWIDTH_HZ(REFERENCE_BANDWIDTH_HZ);
+  builder_.add_REFERENCE_FREQUENCY_HZ(REFERENCE_FREQUENCY_HZ);
+  builder_.add_PROVENANCE(PROVENANCE);
+  builder_.add_POINTS(POINTS);
+  builder_.add_UNITS(UNITS);
+  builder_.add_NAME(NAME);
+  builder_.add_MASK_ID(MASK_ID);
+  builder_.add_PATH(PATH);
+  builder_.add_CLASS(CLASS);
+  return builder_.Finish();
+}
+
+struct RFEEmissionMask::Traits {
+  using type = RFEEmissionMask;
+  static auto constexpr Create = CreateRFEEmissionMask;
+};
+
+inline ::flatbuffers::Offset<RFEEmissionMask> CreateRFEEmissionMaskDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *MASK_ID = nullptr,
+    const char *NAME = nullptr,
+    rfeEmissionMaskClass CLASS = rfeEmissionMaskClass::UNSPECIFIED,
+    rfeEmissionPath PATH = rfeEmissionPath::UNSPECIFIED,
+    const char *UNITS = nullptr,
+    double REFERENCE_FREQUENCY_HZ = 0.0,
+    double REFERENCE_BANDWIDTH_HZ = 0.0,
+    const std::vector<::flatbuffers::Offset<RFEEmissionMaskPoint>> *POINTS = nullptr,
+    ::flatbuffers::Offset<RFEProvenance> PROVENANCE = 0) {
+  auto MASK_ID__ = MASK_ID ? _fbb.CreateString(MASK_ID) : 0;
+  auto NAME__ = NAME ? _fbb.CreateString(NAME) : 0;
+  auto UNITS__ = UNITS ? _fbb.CreateString(UNITS) : 0;
+  auto POINTS__ = POINTS ? _fbb.CreateVector<::flatbuffers::Offset<RFEEmissionMaskPoint>>(*POINTS) : 0;
+  return CreateRFEEmissionMask(
+      _fbb,
+      MASK_ID__,
+      NAME__,
+      CLASS,
+      PATH,
+      UNITS__,
+      REFERENCE_FREQUENCY_HZ,
+      REFERENCE_BANDWIDTH_HZ,
+      POINTS__,
+      PROVENANCE);
+}
+
+::flatbuffers::Offset<RFEEmissionMask> CreateRFEEmissionMask(::flatbuffers::FlatBufferBuilder &_fbb, const RFEEmissionMaskT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct rfEmitterDetailT : public ::flatbuffers::NativeTable {
   typedef rfEmitterDetail TableType;
   std::string MODE_NAME{};
@@ -155,6 +721,11 @@ struct rfEmitterDetailT : public ::flatbuffers::NativeTable {
   signalModulation MODULATION = signalModulation::CW;
   std::string ANTENNA_PATTERN{};
   double BEAMWIDTH = 0.0;
+  std::vector<std::unique_ptr<RFEEmissionMaskT>> EMISSION_MASKS{};
+  rfEmitterDetailT() = default;
+  rfEmitterDetailT(const rfEmitterDetailT &o);
+  rfEmitterDetailT(rfEmitterDetailT&&) FLATBUFFERS_NOEXCEPT = default;
+  rfEmitterDetailT &operator=(rfEmitterDetailT o) FLATBUFFERS_NOEXCEPT;
 };
 
 /// RF Emitter Detail Record
@@ -177,7 +748,8 @@ struct rfEmitterDetail FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_ERP = 26,
     VT_MODULATION = 28,
     VT_ANTENNA_PATTERN = 30,
-    VT_BEAMWIDTH = 32
+    VT_BEAMWIDTH = 32,
+    VT_EMISSION_MASKS = 34
   };
   /// Mode name or identifier
   const ::flatbuffers::String *MODE_NAME() const {
@@ -239,6 +811,11 @@ struct rfEmitterDetail FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   double BEAMWIDTH() const {
     return GetField<double>(VT_BEAMWIDTH, 0.0);
   }
+  /// Emission and susceptibility limit curves applicable to this operating
+  /// mode. Curves are evaluated in point order after sorting by frequency.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<RFEEmissionMask>> *EMISSION_MASKS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<RFEEmissionMask>> *>(VT_EMISSION_MASKS);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -259,6 +836,9 @@ struct rfEmitterDetail FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_ANTENNA_PATTERN) &&
            verifier.VerifyString(ANTENNA_PATTERN()) &&
            VerifyField<double>(verifier, VT_BEAMWIDTH, 8) &&
+           VerifyOffset(verifier, VT_EMISSION_MASKS) &&
+           verifier.VerifyVector(EMISSION_MASKS()) &&
+           verifier.VerifyVectorOfTables(EMISSION_MASKS()) &&
            verifier.EndTable();
   }
   rfEmitterDetailT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -315,6 +895,9 @@ struct rfEmitterDetailBuilder {
   void add_BEAMWIDTH(double BEAMWIDTH) {
     fbb_.AddElement<double>(rfEmitterDetail::VT_BEAMWIDTH, BEAMWIDTH, 0.0);
   }
+  void add_EMISSION_MASKS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<RFEEmissionMask>>> EMISSION_MASKS) {
+    fbb_.AddOffset(rfEmitterDetail::VT_EMISSION_MASKS, EMISSION_MASKS);
+  }
   explicit rfEmitterDetailBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -342,7 +925,8 @@ inline ::flatbuffers::Offset<rfEmitterDetail> CreaterfEmitterDetail(
     double ERP = 0.0,
     signalModulation MODULATION = signalModulation::CW,
     ::flatbuffers::Offset<::flatbuffers::String> ANTENNA_PATTERN = 0,
-    double BEAMWIDTH = 0.0) {
+    double BEAMWIDTH = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<RFEEmissionMask>>> EMISSION_MASKS = 0) {
   rfEmitterDetailBuilder builder_(_fbb);
   builder_.add_BEAMWIDTH(BEAMWIDTH);
   builder_.add_ERP(ERP);
@@ -356,6 +940,7 @@ inline ::flatbuffers::Offset<rfEmitterDetail> CreaterfEmitterDetail(
   builder_.add_FREQ_MAX(FREQ_MAX);
   builder_.add_FREQ_MIN(FREQ_MIN);
   builder_.add_FREQUENCY(FREQUENCY);
+  builder_.add_EMISSION_MASKS(EMISSION_MASKS);
   builder_.add_ANTENNA_PATTERN(ANTENNA_PATTERN);
   builder_.add_MODE_NAME(MODE_NAME);
   builder_.add_MODULATION(MODULATION);
@@ -383,9 +968,11 @@ inline ::flatbuffers::Offset<rfEmitterDetail> CreaterfEmitterDetailDirect(
     double ERP = 0.0,
     signalModulation MODULATION = signalModulation::CW,
     const char *ANTENNA_PATTERN = nullptr,
-    double BEAMWIDTH = 0.0) {
+    double BEAMWIDTH = 0.0,
+    const std::vector<::flatbuffers::Offset<RFEEmissionMask>> *EMISSION_MASKS = nullptr) {
   auto MODE_NAME__ = MODE_NAME ? _fbb.CreateString(MODE_NAME) : 0;
   auto ANTENNA_PATTERN__ = ANTENNA_PATTERN ? _fbb.CreateString(ANTENNA_PATTERN) : 0;
+  auto EMISSION_MASKS__ = EMISSION_MASKS ? _fbb.CreateVector<::flatbuffers::Offset<RFEEmissionMask>>(*EMISSION_MASKS) : 0;
   return CreaterfEmitterDetail(
       _fbb,
       MODE_NAME__,
@@ -402,7 +989,8 @@ inline ::flatbuffers::Offset<rfEmitterDetail> CreaterfEmitterDetailDirect(
       ERP,
       MODULATION,
       ANTENNA_PATTERN__,
-      BEAMWIDTH);
+      BEAMWIDTH,
+      EMISSION_MASKS__);
 }
 
 ::flatbuffers::Offset<rfEmitterDetail> CreaterfEmitterDetail(::flatbuffers::FlatBufferBuilder &_fbb, const rfEmitterDetailT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -429,6 +1017,11 @@ struct RFET : public ::flatbuffers::NativeTable {
   std::vector<std::unique_ptr<rfEmitterDetailT>> RF_EMITTER_DETAILS{};
   std::string THREAT_LEVEL{};
   std::string NOTES{};
+  std::unique_ptr<RFEProvenanceT> PROVENANCE{};
+  uint64_t COMPUTED_AT = 0;
+  std::string PRODUCER_ID{};
+  std::vector<uint8_t> SIGNATURE{};
+  std::vector<uint8_t> CANONICAL_JSON_SIGNATURE{};
   RFET() = default;
   RFET(const RFET &o);
   RFET(RFET&&) FLATBUFFERS_NOEXCEPT = default;
@@ -460,7 +1053,12 @@ struct RFE FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_NUM_MODES = 36,
     VT_RF_EMITTER_DETAILS = 38,
     VT_THREAT_LEVEL = 40,
-    VT_NOTES = 42
+    VT_NOTES = 42,
+    VT_PROVENANCE = 44,
+    VT_COMPUTED_AT = 46,
+    VT_PRODUCER_ID = 48,
+    VT_SIGNATURE = 50,
+    VT_CANONICAL_JSON_SIGNATURE = 52
   };
   /// Unique emitter identifier
   const ::flatbuffers::String *ID() const {
@@ -542,6 +1140,29 @@ struct RFE FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *NOTES() const {
     return GetPointer<const ::flatbuffers::String *>(VT_NOTES);
   }
+  /// Provenance of the root emitter descriptor.
+  const RFEProvenance *PROVENANCE() const {
+    return GetPointer<const RFEProvenance *>(VT_PROVENANCE);
+  }
+  /// Unix ms this record was serialized.
+  uint64_t COMPUTED_AT() const {
+    return GetField<uint64_t>(VT_COMPUTED_AT, 0);
+  }
+  /// `$EPM` identifier of the producing node.
+  const ::flatbuffers::String *PRODUCER_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PRODUCER_ID);
+  }
+  /// Ed25519 signature over the size-prefixed FlatBuffer with both 64-byte
+  /// signature payloads zeroed while preserving their vectors and offsets.
+  const ::flatbuffers::Vector<uint8_t> *SIGNATURE() const {
+    return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_SIGNATURE);
+  }
+  /// Ed25519 signature over canonical JSON with IDL field order and
+  /// capitalization, no insignificant whitespace, and both signature fields
+  /// omitted.
+  const ::flatbuffers::Vector<uint8_t> *CANONICAL_JSON_SIGNATURE() const {
+    return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_CANONICAL_JSON_SIGNATURE);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -579,6 +1200,15 @@ struct RFE FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyString(THREAT_LEVEL()) &&
            VerifyOffset(verifier, VT_NOTES) &&
            verifier.VerifyString(NOTES()) &&
+           VerifyOffset(verifier, VT_PROVENANCE) &&
+           verifier.VerifyTable(PROVENANCE()) &&
+           VerifyField<uint64_t>(verifier, VT_COMPUTED_AT, 8) &&
+           VerifyOffset(verifier, VT_PRODUCER_ID) &&
+           verifier.VerifyString(PRODUCER_ID()) &&
+           VerifyOffset(verifier, VT_SIGNATURE) &&
+           verifier.VerifyVector(SIGNATURE()) &&
+           VerifyOffset(verifier, VT_CANONICAL_JSON_SIGNATURE) &&
+           verifier.VerifyVector(CANONICAL_JSON_SIGNATURE()) &&
            verifier.EndTable();
   }
   RFET *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -650,6 +1280,21 @@ struct RFEBuilder {
   void add_NOTES(::flatbuffers::Offset<::flatbuffers::String> NOTES) {
     fbb_.AddOffset(RFE::VT_NOTES, NOTES);
   }
+  void add_PROVENANCE(::flatbuffers::Offset<RFEProvenance> PROVENANCE) {
+    fbb_.AddOffset(RFE::VT_PROVENANCE, PROVENANCE);
+  }
+  void add_COMPUTED_AT(uint64_t COMPUTED_AT) {
+    fbb_.AddElement<uint64_t>(RFE::VT_COMPUTED_AT, COMPUTED_AT, 0);
+  }
+  void add_PRODUCER_ID(::flatbuffers::Offset<::flatbuffers::String> PRODUCER_ID) {
+    fbb_.AddOffset(RFE::VT_PRODUCER_ID, PRODUCER_ID);
+  }
+  void add_SIGNATURE(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> SIGNATURE) {
+    fbb_.AddOffset(RFE::VT_SIGNATURE, SIGNATURE);
+  }
+  void add_CANONICAL_JSON_SIGNATURE(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> CANONICAL_JSON_SIGNATURE) {
+    fbb_.AddOffset(RFE::VT_CANONICAL_JSON_SIGNATURE, CANONICAL_JSON_SIGNATURE);
+  }
   explicit RFEBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -682,13 +1327,23 @@ inline ::flatbuffers::Offset<RFE> CreateRFE(
     uint32_t NUM_MODES = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<rfEmitterDetail>>> RF_EMITTER_DETAILS = 0,
     ::flatbuffers::Offset<::flatbuffers::String> THREAT_LEVEL = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> NOTES = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> NOTES = 0,
+    ::flatbuffers::Offset<RFEProvenance> PROVENANCE = 0,
+    uint64_t COMPUTED_AT = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> PRODUCER_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> SIGNATURE = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> CANONICAL_JSON_SIGNATURE = 0) {
   RFEBuilder builder_(_fbb);
+  builder_.add_COMPUTED_AT(COMPUTED_AT);
   builder_.add_ANTENNA_GAIN(ANTENNA_GAIN);
   builder_.add_AVG_POWER(AVG_POWER);
   builder_.add_PEAK_POWER(PEAK_POWER);
   builder_.add_FREQ_MAX(FREQ_MAX);
   builder_.add_FREQ_MIN(FREQ_MIN);
+  builder_.add_CANONICAL_JSON_SIGNATURE(CANONICAL_JSON_SIGNATURE);
+  builder_.add_SIGNATURE(SIGNATURE);
+  builder_.add_PRODUCER_ID(PRODUCER_ID);
+  builder_.add_PROVENANCE(PROVENANCE);
   builder_.add_NOTES(NOTES);
   builder_.add_THREAT_LEVEL(THREAT_LEVEL);
   builder_.add_RF_EMITTER_DETAILS(RF_EMITTER_DETAILS);
@@ -733,7 +1388,12 @@ inline ::flatbuffers::Offset<RFE> CreateRFEDirect(
     uint32_t NUM_MODES = 0,
     const std::vector<::flatbuffers::Offset<rfEmitterDetail>> *RF_EMITTER_DETAILS = nullptr,
     const char *THREAT_LEVEL = nullptr,
-    const char *NOTES = nullptr) {
+    const char *NOTES = nullptr,
+    ::flatbuffers::Offset<RFEProvenance> PROVENANCE = 0,
+    uint64_t COMPUTED_AT = 0,
+    const char *PRODUCER_ID = nullptr,
+    const std::vector<uint8_t> *SIGNATURE = nullptr,
+    const std::vector<uint8_t> *CANONICAL_JSON_SIGNATURE = nullptr) {
   auto ID__ = ID ? _fbb.CreateString(ID) : 0;
   auto ID_ENTITY__ = ID_ENTITY ? _fbb.CreateString(ID_ENTITY) : 0;
   auto NAME__ = NAME ? _fbb.CreateString(NAME) : 0;
@@ -747,6 +1407,9 @@ inline ::flatbuffers::Offset<RFE> CreateRFEDirect(
   auto RF_EMITTER_DETAILS__ = RF_EMITTER_DETAILS ? _fbb.CreateVector<::flatbuffers::Offset<rfEmitterDetail>>(*RF_EMITTER_DETAILS) : 0;
   auto THREAT_LEVEL__ = THREAT_LEVEL ? _fbb.CreateString(THREAT_LEVEL) : 0;
   auto NOTES__ = NOTES ? _fbb.CreateString(NOTES) : 0;
+  auto PRODUCER_ID__ = PRODUCER_ID ? _fbb.CreateString(PRODUCER_ID) : 0;
+  auto SIGNATURE__ = SIGNATURE ? _fbb.CreateVector<uint8_t>(*SIGNATURE) : 0;
+  auto CANONICAL_JSON_SIGNATURE__ = CANONICAL_JSON_SIGNATURE ? _fbb.CreateVector<uint8_t>(*CANONICAL_JSON_SIGNATURE) : 0;
   return CreateRFE(
       _fbb,
       ID__,
@@ -768,10 +1431,210 @@ inline ::flatbuffers::Offset<RFE> CreateRFEDirect(
       NUM_MODES,
       RF_EMITTER_DETAILS__,
       THREAT_LEVEL__,
-      NOTES__);
+      NOTES__,
+      PROVENANCE,
+      COMPUTED_AT,
+      PRODUCER_ID__,
+      SIGNATURE__,
+      CANONICAL_JSON_SIGNATURE__);
 }
 
 ::flatbuffers::Offset<RFE> CreateRFE(::flatbuffers::FlatBufferBuilder &_fbb, const RFET *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+inline RFEEmissionMaskPointT *RFEEmissionMaskPoint::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<RFEEmissionMaskPointT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void RFEEmissionMaskPoint::UnPackTo(RFEEmissionMaskPointT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = FREQUENCY_OFFSET_HZ(); _o->FREQUENCY_OFFSET_HZ = _e; }
+  { auto _e = VALUE(); _o->VALUE = _e; }
+}
+
+inline ::flatbuffers::Offset<RFEEmissionMaskPoint> CreateRFEEmissionMaskPoint(::flatbuffers::FlatBufferBuilder &_fbb, const RFEEmissionMaskPointT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return RFEEmissionMaskPoint::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<RFEEmissionMaskPoint> RFEEmissionMaskPoint::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RFEEmissionMaskPointT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const RFEEmissionMaskPointT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _FREQUENCY_OFFSET_HZ = _o->FREQUENCY_OFFSET_HZ;
+  auto _VALUE = _o->VALUE;
+  return CreateRFEEmissionMaskPoint(
+      _fbb,
+      _FREQUENCY_OFFSET_HZ,
+      _VALUE);
+}
+
+inline RFEProvenanceT *RFEProvenance::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<RFEProvenanceT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void RFEProvenance::UnPackTo(RFEProvenanceT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = SOURCE(); if (_e) _o->SOURCE = _e->str(); }
+  { auto _e = SOURCE_QUERY(); if (_e) _o->SOURCE_QUERY = _e->str(); }
+  { auto _e = MODEL_NAME(); if (_e) _o->MODEL_NAME = _e->str(); }
+  { auto _e = MODEL_VERSION(); if (_e) _o->MODEL_VERSION = _e->str(); }
+  { auto _e = CITATION(); if (_e) _o->CITATION = _e->str(); }
+  { auto _e = MODULE_ID(); if (_e) _o->MODULE_ID = _e->str(); }
+  { auto _e = MODULE_VERSION(); if (_e) _o->MODULE_VERSION = _e->str(); }
+  { auto _e = MODULE_CONTENT_HASH(); if (_e) _o->MODULE_CONTENT_HASH = _e->str(); }
+  { auto _e = COMPUTED_AT(); _o->COMPUTED_AT = _e; }
+}
+
+inline ::flatbuffers::Offset<RFEProvenance> CreateRFEProvenance(::flatbuffers::FlatBufferBuilder &_fbb, const RFEProvenanceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return RFEProvenance::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<RFEProvenance> RFEProvenance::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RFEProvenanceT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const RFEProvenanceT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _SOURCE = _fbb.CreateString(_o->SOURCE);
+  auto _SOURCE_QUERY = _o->SOURCE_QUERY.empty() ? 0 : _fbb.CreateString(_o->SOURCE_QUERY);
+  auto _MODEL_NAME = _o->MODEL_NAME.empty() ? 0 : _fbb.CreateString(_o->MODEL_NAME);
+  auto _MODEL_VERSION = _o->MODEL_VERSION.empty() ? 0 : _fbb.CreateString(_o->MODEL_VERSION);
+  auto _CITATION = _o->CITATION.empty() ? 0 : _fbb.CreateString(_o->CITATION);
+  auto _MODULE_ID = _o->MODULE_ID.empty() ? 0 : _fbb.CreateString(_o->MODULE_ID);
+  auto _MODULE_VERSION = _o->MODULE_VERSION.empty() ? 0 : _fbb.CreateString(_o->MODULE_VERSION);
+  auto _MODULE_CONTENT_HASH = _o->MODULE_CONTENT_HASH.empty() ? 0 : _fbb.CreateString(_o->MODULE_CONTENT_HASH);
+  auto _COMPUTED_AT = _o->COMPUTED_AT;
+  return CreateRFEProvenance(
+      _fbb,
+      _SOURCE,
+      _SOURCE_QUERY,
+      _MODEL_NAME,
+      _MODEL_VERSION,
+      _CITATION,
+      _MODULE_ID,
+      _MODULE_VERSION,
+      _MODULE_CONTENT_HASH,
+      _COMPUTED_AT);
+}
+
+inline RFEEmissionMaskT::RFEEmissionMaskT(const RFEEmissionMaskT &o)
+      : MASK_ID(o.MASK_ID),
+        NAME(o.NAME),
+        CLASS(o.CLASS),
+        PATH(o.PATH),
+        UNITS(o.UNITS),
+        REFERENCE_FREQUENCY_HZ(o.REFERENCE_FREQUENCY_HZ),
+        REFERENCE_BANDWIDTH_HZ(o.REFERENCE_BANDWIDTH_HZ),
+        PROVENANCE((o.PROVENANCE) ? new RFEProvenanceT(*o.PROVENANCE) : nullptr) {
+  POINTS.reserve(o.POINTS.size());
+  for (const auto &POINTS_ : o.POINTS) { POINTS.emplace_back((POINTS_) ? new RFEEmissionMaskPointT(*POINTS_) : nullptr); }
+}
+
+inline RFEEmissionMaskT &RFEEmissionMaskT::operator=(RFEEmissionMaskT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(MASK_ID, o.MASK_ID);
+  std::swap(NAME, o.NAME);
+  std::swap(CLASS, o.CLASS);
+  std::swap(PATH, o.PATH);
+  std::swap(UNITS, o.UNITS);
+  std::swap(REFERENCE_FREQUENCY_HZ, o.REFERENCE_FREQUENCY_HZ);
+  std::swap(REFERENCE_BANDWIDTH_HZ, o.REFERENCE_BANDWIDTH_HZ);
+  std::swap(POINTS, o.POINTS);
+  std::swap(PROVENANCE, o.PROVENANCE);
+  return *this;
+}
+
+inline RFEEmissionMaskT *RFEEmissionMask::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<RFEEmissionMaskT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void RFEEmissionMask::UnPackTo(RFEEmissionMaskT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = MASK_ID(); if (_e) _o->MASK_ID = _e->str(); }
+  { auto _e = NAME(); if (_e) _o->NAME = _e->str(); }
+  { auto _e = CLASS(); _o->CLASS = _e; }
+  { auto _e = PATH(); _o->PATH = _e; }
+  { auto _e = UNITS(); if (_e) _o->UNITS = _e->str(); }
+  { auto _e = REFERENCE_FREQUENCY_HZ(); _o->REFERENCE_FREQUENCY_HZ = _e; }
+  { auto _e = REFERENCE_BANDWIDTH_HZ(); _o->REFERENCE_BANDWIDTH_HZ = _e; }
+  { auto _e = POINTS(); if (_e) { _o->POINTS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->POINTS[_i]) { _e->Get(_i)->UnPackTo(_o->POINTS[_i].get(), _resolver); } else { _o->POINTS[_i] = std::unique_ptr<RFEEmissionMaskPointT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->POINTS.resize(0); } }
+  { auto _e = PROVENANCE(); if (_e) { if(_o->PROVENANCE) { _e->UnPackTo(_o->PROVENANCE.get(), _resolver); } else { _o->PROVENANCE = std::unique_ptr<RFEProvenanceT>(_e->UnPack(_resolver)); } } else if (_o->PROVENANCE) { _o->PROVENANCE.reset(); } }
+}
+
+inline ::flatbuffers::Offset<RFEEmissionMask> CreateRFEEmissionMask(::flatbuffers::FlatBufferBuilder &_fbb, const RFEEmissionMaskT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return RFEEmissionMask::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<RFEEmissionMask> RFEEmissionMask::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const RFEEmissionMaskT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const RFEEmissionMaskT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _MASK_ID = _fbb.CreateString(_o->MASK_ID);
+  auto _NAME = _o->NAME.empty() ? 0 : _fbb.CreateString(_o->NAME);
+  auto _CLASS = _o->CLASS;
+  auto _PATH = _o->PATH;
+  auto _UNITS = _fbb.CreateString(_o->UNITS);
+  auto _REFERENCE_FREQUENCY_HZ = _o->REFERENCE_FREQUENCY_HZ;
+  auto _REFERENCE_BANDWIDTH_HZ = _o->REFERENCE_BANDWIDTH_HZ;
+  auto _POINTS = _fbb.CreateVector<::flatbuffers::Offset<RFEEmissionMaskPoint>> (_o->POINTS.size(), [](size_t i, _VectorArgs *__va) { return CreateRFEEmissionMaskPoint(*__va->__fbb, __va->__o->POINTS[i].get(), __va->__rehasher); }, &_va );
+  auto _PROVENANCE = _o->PROVENANCE ? CreateRFEProvenance(_fbb, _o->PROVENANCE.get(), _rehasher) : 0;
+  return CreateRFEEmissionMask(
+      _fbb,
+      _MASK_ID,
+      _NAME,
+      _CLASS,
+      _PATH,
+      _UNITS,
+      _REFERENCE_FREQUENCY_HZ,
+      _REFERENCE_BANDWIDTH_HZ,
+      _POINTS,
+      _PROVENANCE);
+}
+
+inline rfEmitterDetailT::rfEmitterDetailT(const rfEmitterDetailT &o)
+      : MODE_NAME(o.MODE_NAME),
+        FREQUENCY(o.FREQUENCY),
+        FREQ_MIN(o.FREQ_MIN),
+        FREQ_MAX(o.FREQ_MAX),
+        PRI(o.PRI),
+        PRI_MIN(o.PRI_MIN),
+        PRI_MAX(o.PRI_MAX),
+        PULSE_WIDTH(o.PULSE_WIDTH),
+        PW_MIN(o.PW_MIN),
+        PW_MAX(o.PW_MAX),
+        SCAN_PERIOD(o.SCAN_PERIOD),
+        ERP(o.ERP),
+        MODULATION(o.MODULATION),
+        ANTENNA_PATTERN(o.ANTENNA_PATTERN),
+        BEAMWIDTH(o.BEAMWIDTH) {
+  EMISSION_MASKS.reserve(o.EMISSION_MASKS.size());
+  for (const auto &EMISSION_MASKS_ : o.EMISSION_MASKS) { EMISSION_MASKS.emplace_back((EMISSION_MASKS_) ? new RFEEmissionMaskT(*EMISSION_MASKS_) : nullptr); }
+}
+
+inline rfEmitterDetailT &rfEmitterDetailT::operator=(rfEmitterDetailT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(MODE_NAME, o.MODE_NAME);
+  std::swap(FREQUENCY, o.FREQUENCY);
+  std::swap(FREQ_MIN, o.FREQ_MIN);
+  std::swap(FREQ_MAX, o.FREQ_MAX);
+  std::swap(PRI, o.PRI);
+  std::swap(PRI_MIN, o.PRI_MIN);
+  std::swap(PRI_MAX, o.PRI_MAX);
+  std::swap(PULSE_WIDTH, o.PULSE_WIDTH);
+  std::swap(PW_MIN, o.PW_MIN);
+  std::swap(PW_MAX, o.PW_MAX);
+  std::swap(SCAN_PERIOD, o.SCAN_PERIOD);
+  std::swap(ERP, o.ERP);
+  std::swap(MODULATION, o.MODULATION);
+  std::swap(ANTENNA_PATTERN, o.ANTENNA_PATTERN);
+  std::swap(BEAMWIDTH, o.BEAMWIDTH);
+  std::swap(EMISSION_MASKS, o.EMISSION_MASKS);
+  return *this;
+}
 
 inline rfEmitterDetailT *rfEmitterDetail::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<rfEmitterDetailT>();
@@ -797,6 +1660,7 @@ inline void rfEmitterDetail::UnPackTo(rfEmitterDetailT *_o, const ::flatbuffers:
   { auto _e = MODULATION(); _o->MODULATION = _e; }
   { auto _e = ANTENNA_PATTERN(); if (_e) _o->ANTENNA_PATTERN = _e->str(); }
   { auto _e = BEAMWIDTH(); _o->BEAMWIDTH = _e; }
+  { auto _e = EMISSION_MASKS(); if (_e) { _o->EMISSION_MASKS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->EMISSION_MASKS[_i]) { _e->Get(_i)->UnPackTo(_o->EMISSION_MASKS[_i].get(), _resolver); } else { _o->EMISSION_MASKS[_i] = std::unique_ptr<RFEEmissionMaskT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->EMISSION_MASKS.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<rfEmitterDetail> CreaterfEmitterDetail(::flatbuffers::FlatBufferBuilder &_fbb, const rfEmitterDetailT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -822,6 +1686,7 @@ inline ::flatbuffers::Offset<rfEmitterDetail> rfEmitterDetail::Pack(::flatbuffer
   auto _MODULATION = _o->MODULATION;
   auto _ANTENNA_PATTERN = _o->ANTENNA_PATTERN.empty() ? 0 : _fbb.CreateString(_o->ANTENNA_PATTERN);
   auto _BEAMWIDTH = _o->BEAMWIDTH;
+  auto _EMISSION_MASKS = _o->EMISSION_MASKS.size() ? _fbb.CreateVector<::flatbuffers::Offset<RFEEmissionMask>> (_o->EMISSION_MASKS.size(), [](size_t i, _VectorArgs *__va) { return CreateRFEEmissionMask(*__va->__fbb, __va->__o->EMISSION_MASKS[i].get(), __va->__rehasher); }, &_va ) : 0;
   return CreaterfEmitterDetail(
       _fbb,
       _MODE_NAME,
@@ -838,7 +1703,8 @@ inline ::flatbuffers::Offset<rfEmitterDetail> rfEmitterDetail::Pack(::flatbuffer
       _ERP,
       _MODULATION,
       _ANTENNA_PATTERN,
-      _BEAMWIDTH);
+      _BEAMWIDTH,
+      _EMISSION_MASKS);
 }
 
 inline RFET::RFET(const RFET &o)
@@ -860,7 +1726,12 @@ inline RFET::RFET(const RFET &o)
         ANTENNA_GAIN(o.ANTENNA_GAIN),
         NUM_MODES(o.NUM_MODES),
         THREAT_LEVEL(o.THREAT_LEVEL),
-        NOTES(o.NOTES) {
+        NOTES(o.NOTES),
+        PROVENANCE((o.PROVENANCE) ? new RFEProvenanceT(*o.PROVENANCE) : nullptr),
+        COMPUTED_AT(o.COMPUTED_AT),
+        PRODUCER_ID(o.PRODUCER_ID),
+        SIGNATURE(o.SIGNATURE),
+        CANONICAL_JSON_SIGNATURE(o.CANONICAL_JSON_SIGNATURE) {
   RF_EMITTER_DETAILS.reserve(o.RF_EMITTER_DETAILS.size());
   for (const auto &RF_EMITTER_DETAILS_ : o.RF_EMITTER_DETAILS) { RF_EMITTER_DETAILS.emplace_back((RF_EMITTER_DETAILS_) ? new rfEmitterDetailT(*RF_EMITTER_DETAILS_) : nullptr); }
 }
@@ -886,6 +1757,11 @@ inline RFET &RFET::operator=(RFET o) FLATBUFFERS_NOEXCEPT {
   std::swap(RF_EMITTER_DETAILS, o.RF_EMITTER_DETAILS);
   std::swap(THREAT_LEVEL, o.THREAT_LEVEL);
   std::swap(NOTES, o.NOTES);
+  std::swap(PROVENANCE, o.PROVENANCE);
+  std::swap(COMPUTED_AT, o.COMPUTED_AT);
+  std::swap(PRODUCER_ID, o.PRODUCER_ID);
+  std::swap(SIGNATURE, o.SIGNATURE);
+  std::swap(CANONICAL_JSON_SIGNATURE, o.CANONICAL_JSON_SIGNATURE);
   return *this;
 }
 
@@ -918,6 +1794,11 @@ inline void RFE::UnPackTo(RFET *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = RF_EMITTER_DETAILS(); if (_e) { _o->RF_EMITTER_DETAILS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->RF_EMITTER_DETAILS[_i]) { _e->Get(_i)->UnPackTo(_o->RF_EMITTER_DETAILS[_i].get(), _resolver); } else { _o->RF_EMITTER_DETAILS[_i] = std::unique_ptr<rfEmitterDetailT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->RF_EMITTER_DETAILS.resize(0); } }
   { auto _e = THREAT_LEVEL(); if (_e) _o->THREAT_LEVEL = _e->str(); }
   { auto _e = NOTES(); if (_e) _o->NOTES = _e->str(); }
+  { auto _e = PROVENANCE(); if (_e) { if(_o->PROVENANCE) { _e->UnPackTo(_o->PROVENANCE.get(), _resolver); } else { _o->PROVENANCE = std::unique_ptr<RFEProvenanceT>(_e->UnPack(_resolver)); } } else if (_o->PROVENANCE) { _o->PROVENANCE.reset(); } }
+  { auto _e = COMPUTED_AT(); _o->COMPUTED_AT = _e; }
+  { auto _e = PRODUCER_ID(); if (_e) _o->PRODUCER_ID = _e->str(); }
+  { auto _e = SIGNATURE(); if (_e) { _o->SIGNATURE.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->SIGNATURE.begin()); } }
+  { auto _e = CANONICAL_JSON_SIGNATURE(); if (_e) { _o->CANONICAL_JSON_SIGNATURE.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->CANONICAL_JSON_SIGNATURE.begin()); } }
 }
 
 inline ::flatbuffers::Offset<RFE> CreateRFE(::flatbuffers::FlatBufferBuilder &_fbb, const RFET *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -948,6 +1829,11 @@ inline ::flatbuffers::Offset<RFE> RFE::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _RF_EMITTER_DETAILS = _o->RF_EMITTER_DETAILS.size() ? _fbb.CreateVector<::flatbuffers::Offset<rfEmitterDetail>> (_o->RF_EMITTER_DETAILS.size(), [](size_t i, _VectorArgs *__va) { return CreaterfEmitterDetail(*__va->__fbb, __va->__o->RF_EMITTER_DETAILS[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _THREAT_LEVEL = _o->THREAT_LEVEL.empty() ? 0 : _fbb.CreateString(_o->THREAT_LEVEL);
   auto _NOTES = _o->NOTES.empty() ? 0 : _fbb.CreateString(_o->NOTES);
+  auto _PROVENANCE = _o->PROVENANCE ? CreateRFEProvenance(_fbb, _o->PROVENANCE.get(), _rehasher) : 0;
+  auto _COMPUTED_AT = _o->COMPUTED_AT;
+  auto _PRODUCER_ID = _o->PRODUCER_ID.empty() ? 0 : _fbb.CreateString(_o->PRODUCER_ID);
+  auto _SIGNATURE = _o->SIGNATURE.size() ? _fbb.CreateVector(_o->SIGNATURE) : 0;
+  auto _CANONICAL_JSON_SIGNATURE = _o->CANONICAL_JSON_SIGNATURE.size() ? _fbb.CreateVector(_o->CANONICAL_JSON_SIGNATURE) : 0;
   return CreateRFE(
       _fbb,
       _ID,
@@ -969,7 +1855,12 @@ inline ::flatbuffers::Offset<RFE> RFE::Pack(::flatbuffers::FlatBufferBuilder &_f
       _NUM_MODES,
       _RF_EMITTER_DETAILS,
       _THREAT_LEVEL,
-      _NOTES);
+      _NOTES,
+      _PROVENANCE,
+      _COMPUTED_AT,
+      _PRODUCER_ID,
+      _SIGNATURE,
+      _CANONICAL_JSON_SIGNATURE);
 }
 
 inline const RFE *GetRFE(const void *buf) {

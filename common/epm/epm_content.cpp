@@ -48,6 +48,9 @@ JsonValue BuildSigningContent(const EpmFields& epm) {
   AddStr(&content, "OCCUPATION", epm.occupation);
   AddStr(&content, "EMAIL", epm.email);
   AddStr(&content, "TELEPHONE", epm.telephone);
+  // SDS 1.239.0 annex rule 7: the photo is signed like the name it pictures
+  // (the Go projection, sdn-server internal/epm/signature.go, does the same).
+  AddStr(&content, "PHOTO", epm.photo);
 
   {
     JsonValue address = JsonValue::Obj();

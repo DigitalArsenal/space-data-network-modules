@@ -26,6 +26,14 @@ struct SRIT : public ::flatbuffers::NativeTable {
   std::string PAYLOAD_KIND{};
   double UPDATED_AT_MS = 0.0;
   std::vector<uint8_t> RESERVED{};
+  std::string CID{};
+  uint64_t BYTE_OFFSET = 0;
+  uint32_t BYTE_LENGTH = 0;
+  uint64_t EPOCH_MS = 0;
+  std::string ENTITY_KEY{};
+  std::string PROVIDER_ID{};
+  std::string SOURCE_NAME{};
+  std::string BATCH_ID{};
 };
 
 /// Standards Record Index — local wrapper for a standards payload's identity
@@ -42,7 +50,15 @@ struct SRI FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_ATTACHED_VIA = 10,
     VT_PAYLOAD_KIND = 12,
     VT_UPDATED_AT_MS = 14,
-    VT_RESERVED = 16
+    VT_RESERVED = 16,
+    VT_CID = 18,
+    VT_BYTE_OFFSET = 20,
+    VT_BYTE_LENGTH = 22,
+    VT_EPOCH_MS = 24,
+    VT_ENTITY_KEY = 26,
+    VT_PROVIDER_ID = 28,
+    VT_SOURCE_NAME = 30,
+    VT_BATCH_ID = 32
   };
   /// Stable host-local record key for one standards payload.
   const ::flatbuffers::String *RECORD_KEY() const {
@@ -72,6 +88,35 @@ struct SRI FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<uint8_t> *RESERVED() const {
     return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_RESERVED);
   }
+  /// Content identifier of the record bytes.
+  const ::flatbuffers::String *CID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_CID);
+  }
+  /// Byte offset of the record frame within its export or archive stream.
+  uint64_t BYTE_OFFSET() const {
+    return GetField<uint64_t>(VT_BYTE_OFFSET, 0);
+  }
+  /// Byte length of the record frame.
+  uint32_t BYTE_LENGTH() const {
+    return GetField<uint32_t>(VT_BYTE_LENGTH, 0);
+  }
+  /// Epoch of the record, Unix milliseconds; 0 = none.
+  uint64_t EPOCH_MS() const {
+    return GetField<uint64_t>(VT_EPOCH_MS, 0);
+  }
+  /// Entity key of the record within its standard, e.g. a catalogue number.
+  const ::flatbuffers::String *ENTITY_KEY() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_ENTITY_KEY);
+  }
+  const ::flatbuffers::String *PROVIDER_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PROVIDER_ID);
+  }
+  const ::flatbuffers::String *SOURCE_NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SOURCE_NAME);
+  }
+  const ::flatbuffers::String *BATCH_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_BATCH_ID);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -88,6 +133,19 @@ struct SRI FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<double>(verifier, VT_UPDATED_AT_MS, 8) &&
            VerifyOffset(verifier, VT_RESERVED) &&
            verifier.VerifyVector(RESERVED()) &&
+           VerifyOffset(verifier, VT_CID) &&
+           verifier.VerifyString(CID()) &&
+           VerifyField<uint64_t>(verifier, VT_BYTE_OFFSET, 8) &&
+           VerifyField<uint32_t>(verifier, VT_BYTE_LENGTH, 4) &&
+           VerifyField<uint64_t>(verifier, VT_EPOCH_MS, 8) &&
+           VerifyOffset(verifier, VT_ENTITY_KEY) &&
+           verifier.VerifyString(ENTITY_KEY()) &&
+           VerifyOffset(verifier, VT_PROVIDER_ID) &&
+           verifier.VerifyString(PROVIDER_ID()) &&
+           VerifyOffset(verifier, VT_SOURCE_NAME) &&
+           verifier.VerifyString(SOURCE_NAME()) &&
+           VerifyOffset(verifier, VT_BATCH_ID) &&
+           verifier.VerifyString(BATCH_ID()) &&
            verifier.EndTable();
   }
   SRIT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -120,6 +178,30 @@ struct SRIBuilder {
   void add_RESERVED(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> RESERVED) {
     fbb_.AddOffset(SRI::VT_RESERVED, RESERVED);
   }
+  void add_CID(::flatbuffers::Offset<::flatbuffers::String> CID) {
+    fbb_.AddOffset(SRI::VT_CID, CID);
+  }
+  void add_BYTE_OFFSET(uint64_t BYTE_OFFSET) {
+    fbb_.AddElement<uint64_t>(SRI::VT_BYTE_OFFSET, BYTE_OFFSET, 0);
+  }
+  void add_BYTE_LENGTH(uint32_t BYTE_LENGTH) {
+    fbb_.AddElement<uint32_t>(SRI::VT_BYTE_LENGTH, BYTE_LENGTH, 0);
+  }
+  void add_EPOCH_MS(uint64_t EPOCH_MS) {
+    fbb_.AddElement<uint64_t>(SRI::VT_EPOCH_MS, EPOCH_MS, 0);
+  }
+  void add_ENTITY_KEY(::flatbuffers::Offset<::flatbuffers::String> ENTITY_KEY) {
+    fbb_.AddOffset(SRI::VT_ENTITY_KEY, ENTITY_KEY);
+  }
+  void add_PROVIDER_ID(::flatbuffers::Offset<::flatbuffers::String> PROVIDER_ID) {
+    fbb_.AddOffset(SRI::VT_PROVIDER_ID, PROVIDER_ID);
+  }
+  void add_SOURCE_NAME(::flatbuffers::Offset<::flatbuffers::String> SOURCE_NAME) {
+    fbb_.AddOffset(SRI::VT_SOURCE_NAME, SOURCE_NAME);
+  }
+  void add_BATCH_ID(::flatbuffers::Offset<::flatbuffers::String> BATCH_ID) {
+    fbb_.AddOffset(SRI::VT_BATCH_ID, BATCH_ID);
+  }
   explicit SRIBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -139,9 +221,25 @@ inline ::flatbuffers::Offset<SRI> CreateSRI(
     ::flatbuffers::Offset<::flatbuffers::String> ATTACHED_VIA = 0,
     ::flatbuffers::Offset<::flatbuffers::String> PAYLOAD_KIND = 0,
     double UPDATED_AT_MS = 0.0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> RESERVED = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> RESERVED = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> CID = 0,
+    uint64_t BYTE_OFFSET = 0,
+    uint32_t BYTE_LENGTH = 0,
+    uint64_t EPOCH_MS = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> ENTITY_KEY = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> PROVIDER_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> SOURCE_NAME = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> BATCH_ID = 0) {
   SRIBuilder builder_(_fbb);
+  builder_.add_EPOCH_MS(EPOCH_MS);
+  builder_.add_BYTE_OFFSET(BYTE_OFFSET);
   builder_.add_UPDATED_AT_MS(UPDATED_AT_MS);
+  builder_.add_BATCH_ID(BATCH_ID);
+  builder_.add_SOURCE_NAME(SOURCE_NAME);
+  builder_.add_PROVIDER_ID(PROVIDER_ID);
+  builder_.add_ENTITY_KEY(ENTITY_KEY);
+  builder_.add_BYTE_LENGTH(BYTE_LENGTH);
+  builder_.add_CID(CID);
   builder_.add_RESERVED(RESERVED);
   builder_.add_PAYLOAD_KIND(PAYLOAD_KIND);
   builder_.add_ATTACHED_VIA(ATTACHED_VIA);
@@ -164,13 +262,26 @@ inline ::flatbuffers::Offset<SRI> CreateSRIDirect(
     const char *ATTACHED_VIA = nullptr,
     const char *PAYLOAD_KIND = nullptr,
     double UPDATED_AT_MS = 0.0,
-    const std::vector<uint8_t> *RESERVED = nullptr) {
+    const std::vector<uint8_t> *RESERVED = nullptr,
+    const char *CID = nullptr,
+    uint64_t BYTE_OFFSET = 0,
+    uint32_t BYTE_LENGTH = 0,
+    uint64_t EPOCH_MS = 0,
+    const char *ENTITY_KEY = nullptr,
+    const char *PROVIDER_ID = nullptr,
+    const char *SOURCE_NAME = nullptr,
+    const char *BATCH_ID = nullptr) {
   auto RECORD_KEY__ = RECORD_KEY ? _fbb.CreateString(RECORD_KEY) : 0;
   auto SCHEMA_NAME__ = SCHEMA_NAME ? _fbb.CreateString(SCHEMA_NAME) : 0;
   auto ROLE__ = ROLE ? _fbb.CreateString(ROLE) : 0;
   auto ATTACHED_VIA__ = ATTACHED_VIA ? _fbb.CreateString(ATTACHED_VIA) : 0;
   auto PAYLOAD_KIND__ = PAYLOAD_KIND ? _fbb.CreateString(PAYLOAD_KIND) : 0;
   auto RESERVED__ = RESERVED ? _fbb.CreateVector<uint8_t>(*RESERVED) : 0;
+  auto CID__ = CID ? _fbb.CreateString(CID) : 0;
+  auto ENTITY_KEY__ = ENTITY_KEY ? _fbb.CreateString(ENTITY_KEY) : 0;
+  auto PROVIDER_ID__ = PROVIDER_ID ? _fbb.CreateString(PROVIDER_ID) : 0;
+  auto SOURCE_NAME__ = SOURCE_NAME ? _fbb.CreateString(SOURCE_NAME) : 0;
+  auto BATCH_ID__ = BATCH_ID ? _fbb.CreateString(BATCH_ID) : 0;
   return CreateSRI(
       _fbb,
       RECORD_KEY__,
@@ -179,7 +290,15 @@ inline ::flatbuffers::Offset<SRI> CreateSRIDirect(
       ATTACHED_VIA__,
       PAYLOAD_KIND__,
       UPDATED_AT_MS,
-      RESERVED__);
+      RESERVED__,
+      CID__,
+      BYTE_OFFSET,
+      BYTE_LENGTH,
+      EPOCH_MS,
+      ENTITY_KEY__,
+      PROVIDER_ID__,
+      SOURCE_NAME__,
+      BATCH_ID__);
 }
 
 ::flatbuffers::Offset<SRI> CreateSRI(::flatbuffers::FlatBufferBuilder &_fbb, const SRIT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -200,6 +319,14 @@ inline void SRI::UnPackTo(SRIT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = PAYLOAD_KIND(); if (_e) _o->PAYLOAD_KIND = _e->str(); }
   { auto _e = UPDATED_AT_MS(); _o->UPDATED_AT_MS = _e; }
   { auto _e = RESERVED(); if (_e) { _o->RESERVED.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->RESERVED.begin()); } }
+  { auto _e = CID(); if (_e) _o->CID = _e->str(); }
+  { auto _e = BYTE_OFFSET(); _o->BYTE_OFFSET = _e; }
+  { auto _e = BYTE_LENGTH(); _o->BYTE_LENGTH = _e; }
+  { auto _e = EPOCH_MS(); _o->EPOCH_MS = _e; }
+  { auto _e = ENTITY_KEY(); if (_e) _o->ENTITY_KEY = _e->str(); }
+  { auto _e = PROVIDER_ID(); if (_e) _o->PROVIDER_ID = _e->str(); }
+  { auto _e = SOURCE_NAME(); if (_e) _o->SOURCE_NAME = _e->str(); }
+  { auto _e = BATCH_ID(); if (_e) _o->BATCH_ID = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<SRI> CreateSRI(::flatbuffers::FlatBufferBuilder &_fbb, const SRIT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -217,6 +344,14 @@ inline ::flatbuffers::Offset<SRI> SRI::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _PAYLOAD_KIND = _o->PAYLOAD_KIND.empty() ? 0 : _fbb.CreateString(_o->PAYLOAD_KIND);
   auto _UPDATED_AT_MS = _o->UPDATED_AT_MS;
   auto _RESERVED = _o->RESERVED.size() ? _fbb.CreateVector(_o->RESERVED) : 0;
+  auto _CID = _o->CID.empty() ? 0 : _fbb.CreateString(_o->CID);
+  auto _BYTE_OFFSET = _o->BYTE_OFFSET;
+  auto _BYTE_LENGTH = _o->BYTE_LENGTH;
+  auto _EPOCH_MS = _o->EPOCH_MS;
+  auto _ENTITY_KEY = _o->ENTITY_KEY.empty() ? 0 : _fbb.CreateString(_o->ENTITY_KEY);
+  auto _PROVIDER_ID = _o->PROVIDER_ID.empty() ? 0 : _fbb.CreateString(_o->PROVIDER_ID);
+  auto _SOURCE_NAME = _o->SOURCE_NAME.empty() ? 0 : _fbb.CreateString(_o->SOURCE_NAME);
+  auto _BATCH_ID = _o->BATCH_ID.empty() ? 0 : _fbb.CreateString(_o->BATCH_ID);
   return CreateSRI(
       _fbb,
       _RECORD_KEY,
@@ -225,7 +360,15 @@ inline ::flatbuffers::Offset<SRI> SRI::Pack(::flatbuffers::FlatBufferBuilder &_f
       _ATTACHED_VIA,
       _PAYLOAD_KIND,
       _UPDATED_AT_MS,
-      _RESERVED);
+      _RESERVED,
+      _CID,
+      _BYTE_OFFSET,
+      _BYTE_LENGTH,
+      _EPOCH_MS,
+      _ENTITY_KEY,
+      _PROVIDER_ID,
+      _SOURCE_NAME,
+      _BATCH_ID);
 }
 
 inline const SRI *GetSRI(const void *buf) {

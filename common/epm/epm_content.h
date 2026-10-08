@@ -61,6 +61,8 @@ struct EpmFields {
   std::string occupation;
   std::string email;
   std::string telephone;
+  /// RFC 2397 data URI (SDS 1.239.0 EPM.PHOTO); signed under annex rule 7.
+  std::string photo;
   Address address;
   std::vector<std::string> alternate_names;
   std::vector<CryptoKey> keys;

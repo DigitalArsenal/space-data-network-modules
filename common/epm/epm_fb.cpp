@@ -44,6 +44,7 @@ bool EpmFieldsFromBytes(const uint8_t* bytes, std::size_t len, EpmFields* out,
   f.occupation = Str(epm->OCCUPATION());
   f.email = Str(epm->EMAIL());
   f.telephone = Str(epm->TELEPHONE());
+  f.photo = Str(epm->PHOTO());
 
   if (const ::Address* a = epm->ADDRESS()) {
     f.address.country = Str(a->COUNTRY());
