@@ -2,15 +2,13 @@
 
 ## `spacetrack-gp-current-sample.json`
 
-Verbatim copy of the SDN repo fixture
-`space-data-network/sdn-server/internal/ingest/testdata/spacetrack/gp-current-sample.json`
-(read-only source; copied here so this module's test is self-contained).
-
-Per that fixture's own `PROVENANCE.md`: a **real trimmed Space-Track**
-`basicspacedata/query/class/gp` response, captured live **2026-07-13**
-(`orderby NORAD_CAT_ID asc / limit 3`), ORIGINATOR **"18 SPCS"**, schema-exact
-CCSDS OMM (v3.0) JSON keys. Three objects: VANGUARD 1 (NORAD 5), VANGUARD 2
-(NORAD 11), VANGUARD R/B (NORAD 12).
+**Synthetic.** Three records shaped like a Space-Track `class/gp` response
+(schema-exact CCSDS OMM v3.0 JSON keys) for VANGUARD 1 (NORAD 5), VANGUARD 2
+(NORAD 11) and VANGUARD R/B (NORAD 12). Identity and epochs are kept so the
+precedence cases have something to order; the element values are invented,
+ORIGINATOR is "SYNTHETIC", and nothing in the file comes from Space-Track.
+(The earlier real trimmed response was removed from this repository's history
+on 2026-10-09: Space-Track data is not redistributed.)
 
 The catalog-synthesis test encodes these gp rows into `$OMM` **FlatBuffer**
 records via the SDS OMM binding — the same on-the-wire form the Go current-gp
