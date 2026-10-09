@@ -68,6 +68,14 @@ struct PropagationAnswer;
 struct PropagationAnswerBuilder;
 struct PropagationAnswerT;
 
+struct BatchFitOptions;
+struct BatchFitOptionsBuilder;
+struct BatchFitOptionsT;
+
+struct BatchFitResult;
+struct BatchFitResultBuilder;
+struct BatchFitResultT;
+
 enum class EstimatorKind : uint8_t {
   BATCH_WEIGHTED_LEAST_SQUARES = 0,
   EXTENDED_KALMAN_FILTER = 1,
@@ -1283,6 +1291,7 @@ struct EstimationRequestT : public ::flatbuffers::NativeTable {
   std::string trace_id{};
   std::unique_ptr<orbpro::estimation::SequentialOptionsT> options{};
   std::vector<std::unique_ptr<orbpro::estimation::ExtendedObservationT>> extended_observations{};
+  std::unique_ptr<orbpro::estimation::BatchFitOptionsT> batch_options{};
   EstimationRequestT() = default;
   EstimationRequestT(const EstimationRequestT &o);
   EstimationRequestT(EstimationRequestT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1305,7 +1314,8 @@ struct EstimationRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
     VT_PROPAGATOR_CAPABILITY = 14,
     VT_TRACE_ID = 16,
     VT_OPTIONS = 18,
-    VT_EXTENDED_OBSERVATIONS = 20
+    VT_EXTENDED_OBSERVATIONS = 20,
+    VT_BATCH_OPTIONS = 22
   };
   const orbpro::estimation::EstimationConfig *config() const {
     return GetStruct<const orbpro::estimation::EstimationConfig *>(VT_CONFIG);
@@ -1334,6 +1344,9 @@ struct EstimationRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
   const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::ExtendedObservation>> *extended_observations() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::ExtendedObservation>> *>(VT_EXTENDED_OBSERVATIONS);
   }
+  const orbpro::estimation::BatchFitOptions *batch_options() const {
+    return GetPointer<const orbpro::estimation::BatchFitOptions *>(VT_BATCH_OPTIONS);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1356,6 +1369,8 @@ struct EstimationRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
            VerifyOffset(verifier, VT_EXTENDED_OBSERVATIONS) &&
            verifier.VerifyVector(extended_observations()) &&
            verifier.VerifyVectorOfTables(extended_observations()) &&
+           VerifyOffset(verifier, VT_BATCH_OPTIONS) &&
+           verifier.VerifyTable(batch_options()) &&
            verifier.EndTable();
   }
   EstimationRequestT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1394,6 +1409,9 @@ struct EstimationRequestBuilder {
   void add_extended_observations(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::ExtendedObservation>>> extended_observations) {
     fbb_.AddOffset(EstimationRequest::VT_EXTENDED_OBSERVATIONS, extended_observations);
   }
+  void add_batch_options(::flatbuffers::Offset<orbpro::estimation::BatchFitOptions> batch_options) {
+    fbb_.AddOffset(EstimationRequest::VT_BATCH_OPTIONS, batch_options);
+  }
   explicit EstimationRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1417,8 +1435,10 @@ inline ::flatbuffers::Offset<EstimationRequest> CreateEstimationRequest(
     ::flatbuffers::Offset<::flatbuffers::String> propagator_capability = 0,
     ::flatbuffers::Offset<::flatbuffers::String> trace_id = 0,
     ::flatbuffers::Offset<orbpro::estimation::SequentialOptions> options = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::ExtendedObservation>>> extended_observations = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::ExtendedObservation>>> extended_observations = 0,
+    ::flatbuffers::Offset<orbpro::estimation::BatchFitOptions> batch_options = 0) {
   EstimationRequestBuilder builder_(_fbb);
+  builder_.add_batch_options(batch_options);
   builder_.add_extended_observations(extended_observations);
   builder_.add_options(options);
   builder_.add_trace_id(trace_id);
@@ -1446,7 +1466,8 @@ inline ::flatbuffers::Offset<EstimationRequest> CreateEstimationRequestDirect(
     const char *propagator_capability = nullptr,
     const char *trace_id = nullptr,
     ::flatbuffers::Offset<orbpro::estimation::SequentialOptions> options = 0,
-    const std::vector<::flatbuffers::Offset<orbpro::estimation::ExtendedObservation>> *extended_observations = nullptr) {
+    const std::vector<::flatbuffers::Offset<orbpro::estimation::ExtendedObservation>> *extended_observations = nullptr,
+    ::flatbuffers::Offset<orbpro::estimation::BatchFitOptions> batch_options = 0) {
   auto observations__ = observations ? _fbb.CreateVectorOfStructs<orbpro::estimation::EstimationObservation>(*observations) : 0;
   auto error_models__ = error_models ? _fbb.CreateVectorOfStructs<orbpro::estimation::EstimationErrorModel>(*error_models) : 0;
   auto source_record_ids__ = source_record_ids ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*source_record_ids) : 0;
@@ -1464,7 +1485,8 @@ inline ::flatbuffers::Offset<EstimationRequest> CreateEstimationRequestDirect(
       propagator_capability__,
       trace_id__,
       options,
-      extended_observations__);
+      extended_observations__,
+      batch_options);
 }
 
 ::flatbuffers::Offset<EstimationRequest> CreateEstimationRequest(::flatbuffers::FlatBufferBuilder &_fbb, const EstimationRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1483,6 +1505,7 @@ struct EstimationResultT : public ::flatbuffers::NativeTable {
   std::string trace_id{};
   std::vector<std::unique_ptr<orbpro::estimation::ExtendedFilterEpochT>> extended_history{};
   std::vector<std::unique_ptr<orbpro::estimation::PropagationQueryT>> propagation_requests{};
+  std::unique_ptr<orbpro::estimation::BatchFitResultT> batch_fit{};
   EstimationResultT() = default;
   EstimationResultT(const EstimationResultT &o);
   EstimationResultT(EstimationResultT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1505,7 +1528,8 @@ struct EstimationResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_ERROR_MESSAGE = 20,
     VT_TRACE_ID = 22,
     VT_EXTENDED_HISTORY = 24,
-    VT_PROPAGATION_REQUESTS = 26
+    VT_PROPAGATION_REQUESTS = 26,
+    VT_BATCH_FIT = 28
   };
   orbpro::estimation::EstimationStatus status() const {
     return static_cast<orbpro::estimation::EstimationStatus>(GetField<int32_t>(VT_STATUS, 0));
@@ -1545,6 +1569,9 @@ struct EstimationResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::PropagationQuery>> *propagation_requests() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::PropagationQuery>> *>(VT_PROPAGATION_REQUESTS);
   }
+  const orbpro::estimation::BatchFitResult *batch_fit() const {
+    return GetPointer<const orbpro::estimation::BatchFitResult *>(VT_BATCH_FIT);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1572,6 +1599,8 @@ struct EstimationResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_PROPAGATION_REQUESTS) &&
            verifier.VerifyVector(propagation_requests()) &&
            verifier.VerifyVectorOfTables(propagation_requests()) &&
+           VerifyOffset(verifier, VT_BATCH_FIT) &&
+           verifier.VerifyTable(batch_fit()) &&
            verifier.EndTable();
   }
   EstimationResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1619,6 +1648,9 @@ struct EstimationResultBuilder {
   void add_propagation_requests(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::PropagationQuery>>> propagation_requests) {
     fbb_.AddOffset(EstimationResult::VT_PROPAGATION_REQUESTS, propagation_requests);
   }
+  void add_batch_fit(::flatbuffers::Offset<orbpro::estimation::BatchFitResult> batch_fit) {
+    fbb_.AddOffset(EstimationResult::VT_BATCH_FIT, batch_fit);
+  }
   explicit EstimationResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1643,8 +1675,10 @@ inline ::flatbuffers::Offset<EstimationResult> CreateEstimationResult(
     ::flatbuffers::Offset<::flatbuffers::String> error_message = 0,
     ::flatbuffers::Offset<::flatbuffers::String> trace_id = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::ExtendedFilterEpoch>>> extended_history = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::PropagationQuery>>> propagation_requests = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::PropagationQuery>>> propagation_requests = 0,
+    ::flatbuffers::Offset<orbpro::estimation::BatchFitResult> batch_fit = 0) {
   EstimationResultBuilder builder_(_fbb);
+  builder_.add_batch_fit(batch_fit);
   builder_.add_propagation_requests(propagation_requests);
   builder_.add_extended_history(extended_history);
   builder_.add_trace_id(trace_id);
@@ -1678,7 +1712,8 @@ inline ::flatbuffers::Offset<EstimationResult> CreateEstimationResultDirect(
     const char *error_message = nullptr,
     const char *trace_id = nullptr,
     const std::vector<::flatbuffers::Offset<orbpro::estimation::ExtendedFilterEpoch>> *extended_history = nullptr,
-    const std::vector<::flatbuffers::Offset<orbpro::estimation::PropagationQuery>> *propagation_requests = nullptr) {
+    const std::vector<::flatbuffers::Offset<orbpro::estimation::PropagationQuery>> *propagation_requests = nullptr,
+    ::flatbuffers::Offset<orbpro::estimation::BatchFitResult> batch_fit = 0) {
   auto filter_history__ = filter_history ? _fbb.CreateVectorOfStructs<orbpro::estimation::FilterEpoch>(*filter_history) : 0;
   auto residuals__ = residuals ? _fbb.CreateVector<double>(*residuals) : 0;
   auto iteration_covariances__ = iteration_covariances ? _fbb.CreateVector<double>(*iteration_covariances) : 0;
@@ -1702,7 +1737,8 @@ inline ::flatbuffers::Offset<EstimationResult> CreateEstimationResultDirect(
       error_message__,
       trace_id__,
       extended_history__,
-      propagation_requests__);
+      propagation_requests__,
+      batch_fit);
 }
 
 ::flatbuffers::Offset<EstimationResult> CreateEstimationResult(::flatbuffers::FlatBufferBuilder &_fbb, const EstimationResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -2490,6 +2526,7 @@ struct PropagationQueryT : public ::flatbuffers::NativeTable {
   uint32_t sequence = 0;
   std::unique_ptr<orbpro::estimation::EstimationState> seed{};
   std::unique_ptr<orbpro::estimation::EstimationEpoch> target_epoch{};
+  std::vector<double> parameter_values{};
   PropagationQueryT() = default;
   PropagationQueryT(const PropagationQueryT &o);
   PropagationQueryT(PropagationQueryT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -2503,7 +2540,8 @@ struct PropagationQuery FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_SEQUENCE = 4,
     VT_SEED = 6,
-    VT_TARGET_EPOCH = 8
+    VT_TARGET_EPOCH = 8,
+    VT_PARAMETER_VALUES = 10
   };
   uint32_t sequence() const {
     return GetField<uint32_t>(VT_SEQUENCE, 0);
@@ -2514,12 +2552,17 @@ struct PropagationQuery FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const orbpro::estimation::EstimationEpoch *target_epoch() const {
     return GetStruct<const orbpro::estimation::EstimationEpoch *>(VT_TARGET_EPOCH);
   }
+  const ::flatbuffers::Vector<double> *parameter_values() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_PARAMETER_VALUES);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_SEQUENCE, 4) &&
            VerifyFieldRequired<orbpro::estimation::EstimationState>(verifier, VT_SEED, 8) &&
            VerifyFieldRequired<orbpro::estimation::EstimationEpoch>(verifier, VT_TARGET_EPOCH, 8) &&
+           VerifyOffset(verifier, VT_PARAMETER_VALUES) &&
+           verifier.VerifyVector(parameter_values()) &&
            verifier.EndTable();
   }
   PropagationQueryT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2540,6 +2583,9 @@ struct PropagationQueryBuilder {
   void add_target_epoch(const orbpro::estimation::EstimationEpoch *target_epoch) {
     fbb_.AddStruct(PropagationQuery::VT_TARGET_EPOCH, target_epoch);
   }
+  void add_parameter_values(::flatbuffers::Offset<::flatbuffers::Vector<double>> parameter_values) {
+    fbb_.AddOffset(PropagationQuery::VT_PARAMETER_VALUES, parameter_values);
+  }
   explicit PropagationQueryBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2557,8 +2603,10 @@ inline ::flatbuffers::Offset<PropagationQuery> CreatePropagationQuery(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     uint32_t sequence = 0,
     const orbpro::estimation::EstimationState *seed = nullptr,
-    const orbpro::estimation::EstimationEpoch *target_epoch = nullptr) {
+    const orbpro::estimation::EstimationEpoch *target_epoch = nullptr,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> parameter_values = 0) {
   PropagationQueryBuilder builder_(_fbb);
+  builder_.add_parameter_values(parameter_values);
   builder_.add_target_epoch(target_epoch);
   builder_.add_seed(seed);
   builder_.add_sequence(sequence);
@@ -2570,12 +2618,28 @@ struct PropagationQuery::Traits {
   static auto constexpr Create = CreatePropagationQuery;
 };
 
+inline ::flatbuffers::Offset<PropagationQuery> CreatePropagationQueryDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t sequence = 0,
+    const orbpro::estimation::EstimationState *seed = nullptr,
+    const orbpro::estimation::EstimationEpoch *target_epoch = nullptr,
+    const std::vector<double> *parameter_values = nullptr) {
+  auto parameter_values__ = parameter_values ? _fbb.CreateVector<double>(*parameter_values) : 0;
+  return orbpro::estimation::CreatePropagationQuery(
+      _fbb,
+      sequence,
+      seed,
+      target_epoch,
+      parameter_values__);
+}
+
 ::flatbuffers::Offset<PropagationQuery> CreatePropagationQuery(::flatbuffers::FlatBufferBuilder &_fbb, const PropagationQueryT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 struct PropagationAnswerT : public ::flatbuffers::NativeTable {
   typedef PropagationAnswer TableType;
   std::unique_ptr<orbpro::estimation::PropagationQueryT> query{};
   std::unique_ptr<orbpro::estimation::EstimationPropagatorSample> sample{};
+  std::vector<double> sensitivity{};
   PropagationAnswerT() = default;
   PropagationAnswerT(const PropagationAnswerT &o);
   PropagationAnswerT(PropagationAnswerT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -2588,7 +2652,8 @@ struct PropagationAnswer FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
   struct Traits;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_QUERY = 4,
-    VT_SAMPLE = 6
+    VT_SAMPLE = 6,
+    VT_SENSITIVITY = 8
   };
   const orbpro::estimation::PropagationQuery *query() const {
     return GetPointer<const orbpro::estimation::PropagationQuery *>(VT_QUERY);
@@ -2596,12 +2661,17 @@ struct PropagationAnswer FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
   const orbpro::estimation::EstimationPropagatorSample *sample() const {
     return GetStruct<const orbpro::estimation::EstimationPropagatorSample *>(VT_SAMPLE);
   }
+  const ::flatbuffers::Vector<double> *sensitivity() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SENSITIVITY);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffsetRequired(verifier, VT_QUERY) &&
            verifier.VerifyTable(query()) &&
            VerifyFieldRequired<orbpro::estimation::EstimationPropagatorSample>(verifier, VT_SAMPLE, 8) &&
+           VerifyOffset(verifier, VT_SENSITIVITY) &&
+           verifier.VerifyVector(sensitivity()) &&
            verifier.EndTable();
   }
   PropagationAnswerT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2619,6 +2689,9 @@ struct PropagationAnswerBuilder {
   void add_sample(const orbpro::estimation::EstimationPropagatorSample *sample) {
     fbb_.AddStruct(PropagationAnswer::VT_SAMPLE, sample);
   }
+  void add_sensitivity(::flatbuffers::Offset<::flatbuffers::Vector<double>> sensitivity) {
+    fbb_.AddOffset(PropagationAnswer::VT_SENSITIVITY, sensitivity);
+  }
   explicit PropagationAnswerBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2635,8 +2708,10 @@ struct PropagationAnswerBuilder {
 inline ::flatbuffers::Offset<PropagationAnswer> CreatePropagationAnswer(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<orbpro::estimation::PropagationQuery> query = 0,
-    const orbpro::estimation::EstimationPropagatorSample *sample = nullptr) {
+    const orbpro::estimation::EstimationPropagatorSample *sample = nullptr,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> sensitivity = 0) {
   PropagationAnswerBuilder builder_(_fbb);
+  builder_.add_sensitivity(sensitivity);
   builder_.add_sample(sample);
   builder_.add_query(query);
   return builder_.Finish();
@@ -2647,7 +2722,434 @@ struct PropagationAnswer::Traits {
   static auto constexpr Create = CreatePropagationAnswer;
 };
 
+inline ::flatbuffers::Offset<PropagationAnswer> CreatePropagationAnswerDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<orbpro::estimation::PropagationQuery> query = 0,
+    const orbpro::estimation::EstimationPropagatorSample *sample = nullptr,
+    const std::vector<double> *sensitivity = nullptr) {
+  auto sensitivity__ = sensitivity ? _fbb.CreateVector<double>(*sensitivity) : 0;
+  return orbpro::estimation::CreatePropagationAnswer(
+      _fbb,
+      query,
+      sample,
+      sensitivity__);
+}
+
 ::flatbuffers::Offset<PropagationAnswer> CreatePropagationAnswer(::flatbuffers::FlatBufferBuilder &_fbb, const PropagationAnswerT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct BatchFitOptionsT : public ::flatbuffers::NativeTable {
+  typedef BatchFitOptions TableType;
+  std::vector<uint8_t> parameter_kinds{};
+  std::vector<double> parameter_values{};
+  std::vector<double> apriori_covariance{};
+  std::vector<double> observation_covariances{};
+  uint32_t maximum_iterations = 20;
+  double correction_tolerance = 1e-3;
+  double sigma_edit_threshold = 0.0;
+  uint8_t covariance_axes = 0;
+};
+
+struct BatchFitOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef BatchFitOptionsT NativeTableType;
+  typedef BatchFitOptionsBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_PARAMETER_KINDS = 4,
+    VT_PARAMETER_VALUES = 6,
+    VT_APRIORI_COVARIANCE = 8,
+    VT_OBSERVATION_COVARIANCES = 10,
+    VT_MAXIMUM_ITERATIONS = 12,
+    VT_CORRECTION_TOLERANCE = 14,
+    VT_SIGMA_EDIT_THRESHOLD = 16,
+    VT_COVARIANCE_AXES = 18
+  };
+  const ::flatbuffers::Vector<uint8_t> *parameter_kinds() const {
+    return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_PARAMETER_KINDS);
+  }
+  const ::flatbuffers::Vector<double> *parameter_values() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_PARAMETER_VALUES);
+  }
+  const ::flatbuffers::Vector<double> *apriori_covariance() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_APRIORI_COVARIANCE);
+  }
+  const ::flatbuffers::Vector<double> *observation_covariances() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_OBSERVATION_COVARIANCES);
+  }
+  uint32_t maximum_iterations() const {
+    return GetField<uint32_t>(VT_MAXIMUM_ITERATIONS, 20);
+  }
+  double correction_tolerance() const {
+    return GetField<double>(VT_CORRECTION_TOLERANCE, 1e-3);
+  }
+  double sigma_edit_threshold() const {
+    return GetField<double>(VT_SIGMA_EDIT_THRESHOLD, 0.0);
+  }
+  uint8_t covariance_axes() const {
+    return GetField<uint8_t>(VT_COVARIANCE_AXES, 0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_PARAMETER_KINDS) &&
+           verifier.VerifyVector(parameter_kinds()) &&
+           VerifyOffset(verifier, VT_PARAMETER_VALUES) &&
+           verifier.VerifyVector(parameter_values()) &&
+           VerifyOffset(verifier, VT_APRIORI_COVARIANCE) &&
+           verifier.VerifyVector(apriori_covariance()) &&
+           VerifyOffset(verifier, VT_OBSERVATION_COVARIANCES) &&
+           verifier.VerifyVector(observation_covariances()) &&
+           VerifyField<uint32_t>(verifier, VT_MAXIMUM_ITERATIONS, 4) &&
+           VerifyField<double>(verifier, VT_CORRECTION_TOLERANCE, 8) &&
+           VerifyField<double>(verifier, VT_SIGMA_EDIT_THRESHOLD, 8) &&
+           VerifyField<uint8_t>(verifier, VT_COVARIANCE_AXES, 1) &&
+           verifier.EndTable();
+  }
+  BatchFitOptionsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(BatchFitOptionsT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<BatchFitOptions> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const BatchFitOptionsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct BatchFitOptionsBuilder {
+  typedef BatchFitOptions Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_parameter_kinds(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> parameter_kinds) {
+    fbb_.AddOffset(BatchFitOptions::VT_PARAMETER_KINDS, parameter_kinds);
+  }
+  void add_parameter_values(::flatbuffers::Offset<::flatbuffers::Vector<double>> parameter_values) {
+    fbb_.AddOffset(BatchFitOptions::VT_PARAMETER_VALUES, parameter_values);
+  }
+  void add_apriori_covariance(::flatbuffers::Offset<::flatbuffers::Vector<double>> apriori_covariance) {
+    fbb_.AddOffset(BatchFitOptions::VT_APRIORI_COVARIANCE, apriori_covariance);
+  }
+  void add_observation_covariances(::flatbuffers::Offset<::flatbuffers::Vector<double>> observation_covariances) {
+    fbb_.AddOffset(BatchFitOptions::VT_OBSERVATION_COVARIANCES, observation_covariances);
+  }
+  void add_maximum_iterations(uint32_t maximum_iterations) {
+    fbb_.AddElement<uint32_t>(BatchFitOptions::VT_MAXIMUM_ITERATIONS, maximum_iterations, 20);
+  }
+  void add_correction_tolerance(double correction_tolerance) {
+    fbb_.AddElement<double>(BatchFitOptions::VT_CORRECTION_TOLERANCE, correction_tolerance, 1e-3);
+  }
+  void add_sigma_edit_threshold(double sigma_edit_threshold) {
+    fbb_.AddElement<double>(BatchFitOptions::VT_SIGMA_EDIT_THRESHOLD, sigma_edit_threshold, 0.0);
+  }
+  void add_covariance_axes(uint8_t covariance_axes) {
+    fbb_.AddElement<uint8_t>(BatchFitOptions::VT_COVARIANCE_AXES, covariance_axes, 0);
+  }
+  explicit BatchFitOptionsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<BatchFitOptions> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<BatchFitOptions>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<BatchFitOptions> CreateBatchFitOptions(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> parameter_kinds = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> parameter_values = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> apriori_covariance = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> observation_covariances = 0,
+    uint32_t maximum_iterations = 20,
+    double correction_tolerance = 1e-3,
+    double sigma_edit_threshold = 0.0,
+    uint8_t covariance_axes = 0) {
+  BatchFitOptionsBuilder builder_(_fbb);
+  builder_.add_sigma_edit_threshold(sigma_edit_threshold);
+  builder_.add_correction_tolerance(correction_tolerance);
+  builder_.add_maximum_iterations(maximum_iterations);
+  builder_.add_observation_covariances(observation_covariances);
+  builder_.add_apriori_covariance(apriori_covariance);
+  builder_.add_parameter_values(parameter_values);
+  builder_.add_parameter_kinds(parameter_kinds);
+  builder_.add_covariance_axes(covariance_axes);
+  return builder_.Finish();
+}
+
+struct BatchFitOptions::Traits {
+  using type = BatchFitOptions;
+  static auto constexpr Create = CreateBatchFitOptions;
+};
+
+inline ::flatbuffers::Offset<BatchFitOptions> CreateBatchFitOptionsDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const std::vector<uint8_t> *parameter_kinds = nullptr,
+    const std::vector<double> *parameter_values = nullptr,
+    const std::vector<double> *apriori_covariance = nullptr,
+    const std::vector<double> *observation_covariances = nullptr,
+    uint32_t maximum_iterations = 20,
+    double correction_tolerance = 1e-3,
+    double sigma_edit_threshold = 0.0,
+    uint8_t covariance_axes = 0) {
+  auto parameter_kinds__ = parameter_kinds ? _fbb.CreateVector<uint8_t>(*parameter_kinds) : 0;
+  auto parameter_values__ = parameter_values ? _fbb.CreateVector<double>(*parameter_values) : 0;
+  auto apriori_covariance__ = apriori_covariance ? _fbb.CreateVector<double>(*apriori_covariance) : 0;
+  auto observation_covariances__ = observation_covariances ? _fbb.CreateVector<double>(*observation_covariances) : 0;
+  return orbpro::estimation::CreateBatchFitOptions(
+      _fbb,
+      parameter_kinds__,
+      parameter_values__,
+      apriori_covariance__,
+      observation_covariances__,
+      maximum_iterations,
+      correction_tolerance,
+      sigma_edit_threshold,
+      covariance_axes);
+}
+
+::flatbuffers::Offset<BatchFitOptions> CreateBatchFitOptions(::flatbuffers::FlatBufferBuilder &_fbb, const BatchFitOptionsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct BatchFitResultT : public ::flatbuffers::NativeTable {
+  typedef BatchFitResult TableType;
+  uint8_t state_dimension = 0;
+  std::vector<uint8_t> parameter_kinds{};
+  std::vector<double> estimate{};
+  std::vector<double> covariance{};
+  std::vector<double> scaled_covariance{};
+  double chi_square = 0.0;
+  double reduced_chi_square = 0.0;
+  double weighted_rms = 0.0;
+  uint32_t measurement_count = 0;
+  uint32_t degrees_of_freedom = 0;
+  uint32_t iterations = 0;
+  bool converged = false;
+  std::vector<double> whitened_residuals{};
+  std::vector<uint32_t> rejected_observation_indices{};
+};
+
+struct BatchFitResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef BatchFitResultT NativeTableType;
+  typedef BatchFitResultBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_STATE_DIMENSION = 4,
+    VT_PARAMETER_KINDS = 6,
+    VT_ESTIMATE = 8,
+    VT_COVARIANCE = 10,
+    VT_SCALED_COVARIANCE = 12,
+    VT_CHI_SQUARE = 14,
+    VT_REDUCED_CHI_SQUARE = 16,
+    VT_WEIGHTED_RMS = 18,
+    VT_MEASUREMENT_COUNT = 20,
+    VT_DEGREES_OF_FREEDOM = 22,
+    VT_ITERATIONS = 24,
+    VT_CONVERGED = 26,
+    VT_WHITENED_RESIDUALS = 28,
+    VT_REJECTED_OBSERVATION_INDICES = 30
+  };
+  uint8_t state_dimension() const {
+    return GetField<uint8_t>(VT_STATE_DIMENSION, 0);
+  }
+  const ::flatbuffers::Vector<uint8_t> *parameter_kinds() const {
+    return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_PARAMETER_KINDS);
+  }
+  const ::flatbuffers::Vector<double> *estimate() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_ESTIMATE);
+  }
+  const ::flatbuffers::Vector<double> *covariance() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_COVARIANCE);
+  }
+  const ::flatbuffers::Vector<double> *scaled_covariance() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SCALED_COVARIANCE);
+  }
+  double chi_square() const {
+    return GetField<double>(VT_CHI_SQUARE, 0.0);
+  }
+  double reduced_chi_square() const {
+    return GetField<double>(VT_REDUCED_CHI_SQUARE, 0.0);
+  }
+  double weighted_rms() const {
+    return GetField<double>(VT_WEIGHTED_RMS, 0.0);
+  }
+  uint32_t measurement_count() const {
+    return GetField<uint32_t>(VT_MEASUREMENT_COUNT, 0);
+  }
+  uint32_t degrees_of_freedom() const {
+    return GetField<uint32_t>(VT_DEGREES_OF_FREEDOM, 0);
+  }
+  uint32_t iterations() const {
+    return GetField<uint32_t>(VT_ITERATIONS, 0);
+  }
+  bool converged() const {
+    return GetField<uint8_t>(VT_CONVERGED, 0) != 0;
+  }
+  const ::flatbuffers::Vector<double> *whitened_residuals() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_WHITENED_RESIDUALS);
+  }
+  const ::flatbuffers::Vector<uint32_t> *rejected_observation_indices() const {
+    return GetPointer<const ::flatbuffers::Vector<uint32_t> *>(VT_REJECTED_OBSERVATION_INDICES);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_STATE_DIMENSION, 1) &&
+           VerifyOffset(verifier, VT_PARAMETER_KINDS) &&
+           verifier.VerifyVector(parameter_kinds()) &&
+           VerifyOffset(verifier, VT_ESTIMATE) &&
+           verifier.VerifyVector(estimate()) &&
+           VerifyOffset(verifier, VT_COVARIANCE) &&
+           verifier.VerifyVector(covariance()) &&
+           VerifyOffset(verifier, VT_SCALED_COVARIANCE) &&
+           verifier.VerifyVector(scaled_covariance()) &&
+           VerifyField<double>(verifier, VT_CHI_SQUARE, 8) &&
+           VerifyField<double>(verifier, VT_REDUCED_CHI_SQUARE, 8) &&
+           VerifyField<double>(verifier, VT_WEIGHTED_RMS, 8) &&
+           VerifyField<uint32_t>(verifier, VT_MEASUREMENT_COUNT, 4) &&
+           VerifyField<uint32_t>(verifier, VT_DEGREES_OF_FREEDOM, 4) &&
+           VerifyField<uint32_t>(verifier, VT_ITERATIONS, 4) &&
+           VerifyField<uint8_t>(verifier, VT_CONVERGED, 1) &&
+           VerifyOffset(verifier, VT_WHITENED_RESIDUALS) &&
+           verifier.VerifyVector(whitened_residuals()) &&
+           VerifyOffset(verifier, VT_REJECTED_OBSERVATION_INDICES) &&
+           verifier.VerifyVector(rejected_observation_indices()) &&
+           verifier.EndTable();
+  }
+  BatchFitResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(BatchFitResultT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<BatchFitResult> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const BatchFitResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct BatchFitResultBuilder {
+  typedef BatchFitResult Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_state_dimension(uint8_t state_dimension) {
+    fbb_.AddElement<uint8_t>(BatchFitResult::VT_STATE_DIMENSION, state_dimension, 0);
+  }
+  void add_parameter_kinds(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> parameter_kinds) {
+    fbb_.AddOffset(BatchFitResult::VT_PARAMETER_KINDS, parameter_kinds);
+  }
+  void add_estimate(::flatbuffers::Offset<::flatbuffers::Vector<double>> estimate) {
+    fbb_.AddOffset(BatchFitResult::VT_ESTIMATE, estimate);
+  }
+  void add_covariance(::flatbuffers::Offset<::flatbuffers::Vector<double>> covariance) {
+    fbb_.AddOffset(BatchFitResult::VT_COVARIANCE, covariance);
+  }
+  void add_scaled_covariance(::flatbuffers::Offset<::flatbuffers::Vector<double>> scaled_covariance) {
+    fbb_.AddOffset(BatchFitResult::VT_SCALED_COVARIANCE, scaled_covariance);
+  }
+  void add_chi_square(double chi_square) {
+    fbb_.AddElement<double>(BatchFitResult::VT_CHI_SQUARE, chi_square, 0.0);
+  }
+  void add_reduced_chi_square(double reduced_chi_square) {
+    fbb_.AddElement<double>(BatchFitResult::VT_REDUCED_CHI_SQUARE, reduced_chi_square, 0.0);
+  }
+  void add_weighted_rms(double weighted_rms) {
+    fbb_.AddElement<double>(BatchFitResult::VT_WEIGHTED_RMS, weighted_rms, 0.0);
+  }
+  void add_measurement_count(uint32_t measurement_count) {
+    fbb_.AddElement<uint32_t>(BatchFitResult::VT_MEASUREMENT_COUNT, measurement_count, 0);
+  }
+  void add_degrees_of_freedom(uint32_t degrees_of_freedom) {
+    fbb_.AddElement<uint32_t>(BatchFitResult::VT_DEGREES_OF_FREEDOM, degrees_of_freedom, 0);
+  }
+  void add_iterations(uint32_t iterations) {
+    fbb_.AddElement<uint32_t>(BatchFitResult::VT_ITERATIONS, iterations, 0);
+  }
+  void add_converged(bool converged) {
+    fbb_.AddElement<uint8_t>(BatchFitResult::VT_CONVERGED, static_cast<uint8_t>(converged), 0);
+  }
+  void add_whitened_residuals(::flatbuffers::Offset<::flatbuffers::Vector<double>> whitened_residuals) {
+    fbb_.AddOffset(BatchFitResult::VT_WHITENED_RESIDUALS, whitened_residuals);
+  }
+  void add_rejected_observation_indices(::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> rejected_observation_indices) {
+    fbb_.AddOffset(BatchFitResult::VT_REJECTED_OBSERVATION_INDICES, rejected_observation_indices);
+  }
+  explicit BatchFitResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<BatchFitResult> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<BatchFitResult>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<BatchFitResult> CreateBatchFitResult(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint8_t state_dimension = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> parameter_kinds = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> estimate = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> covariance = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> scaled_covariance = 0,
+    double chi_square = 0.0,
+    double reduced_chi_square = 0.0,
+    double weighted_rms = 0.0,
+    uint32_t measurement_count = 0,
+    uint32_t degrees_of_freedom = 0,
+    uint32_t iterations = 0,
+    bool converged = false,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> whitened_residuals = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> rejected_observation_indices = 0) {
+  BatchFitResultBuilder builder_(_fbb);
+  builder_.add_weighted_rms(weighted_rms);
+  builder_.add_reduced_chi_square(reduced_chi_square);
+  builder_.add_chi_square(chi_square);
+  builder_.add_rejected_observation_indices(rejected_observation_indices);
+  builder_.add_whitened_residuals(whitened_residuals);
+  builder_.add_iterations(iterations);
+  builder_.add_degrees_of_freedom(degrees_of_freedom);
+  builder_.add_measurement_count(measurement_count);
+  builder_.add_scaled_covariance(scaled_covariance);
+  builder_.add_covariance(covariance);
+  builder_.add_estimate(estimate);
+  builder_.add_parameter_kinds(parameter_kinds);
+  builder_.add_converged(converged);
+  builder_.add_state_dimension(state_dimension);
+  return builder_.Finish();
+}
+
+struct BatchFitResult::Traits {
+  using type = BatchFitResult;
+  static auto constexpr Create = CreateBatchFitResult;
+};
+
+inline ::flatbuffers::Offset<BatchFitResult> CreateBatchFitResultDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint8_t state_dimension = 0,
+    const std::vector<uint8_t> *parameter_kinds = nullptr,
+    const std::vector<double> *estimate = nullptr,
+    const std::vector<double> *covariance = nullptr,
+    const std::vector<double> *scaled_covariance = nullptr,
+    double chi_square = 0.0,
+    double reduced_chi_square = 0.0,
+    double weighted_rms = 0.0,
+    uint32_t measurement_count = 0,
+    uint32_t degrees_of_freedom = 0,
+    uint32_t iterations = 0,
+    bool converged = false,
+    const std::vector<double> *whitened_residuals = nullptr,
+    const std::vector<uint32_t> *rejected_observation_indices = nullptr) {
+  auto parameter_kinds__ = parameter_kinds ? _fbb.CreateVector<uint8_t>(*parameter_kinds) : 0;
+  auto estimate__ = estimate ? _fbb.CreateVector<double>(*estimate) : 0;
+  auto covariance__ = covariance ? _fbb.CreateVector<double>(*covariance) : 0;
+  auto scaled_covariance__ = scaled_covariance ? _fbb.CreateVector<double>(*scaled_covariance) : 0;
+  auto whitened_residuals__ = whitened_residuals ? _fbb.CreateVector<double>(*whitened_residuals) : 0;
+  auto rejected_observation_indices__ = rejected_observation_indices ? _fbb.CreateVector<uint32_t>(*rejected_observation_indices) : 0;
+  return orbpro::estimation::CreateBatchFitResult(
+      _fbb,
+      state_dimension,
+      parameter_kinds__,
+      estimate__,
+      covariance__,
+      scaled_covariance__,
+      chi_square,
+      reduced_chi_square,
+      weighted_rms,
+      measurement_count,
+      degrees_of_freedom,
+      iterations,
+      converged,
+      whitened_residuals__,
+      rejected_observation_indices__);
+}
+
+::flatbuffers::Offset<BatchFitResult> CreateBatchFitResult(::flatbuffers::FlatBufferBuilder &_fbb, const BatchFitResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 inline EstimationRequestT::EstimationRequestT(const EstimationRequestT &o)
       : config((o.config) ? new orbpro::estimation::EstimationConfig(*o.config) : nullptr),
@@ -2657,7 +3159,8 @@ inline EstimationRequestT::EstimationRequestT(const EstimationRequestT &o)
         propagator_port_id(o.propagator_port_id),
         propagator_capability(o.propagator_capability),
         trace_id(o.trace_id),
-        options((o.options) ? new orbpro::estimation::SequentialOptionsT(*o.options) : nullptr) {
+        options((o.options) ? new orbpro::estimation::SequentialOptionsT(*o.options) : nullptr),
+        batch_options((o.batch_options) ? new orbpro::estimation::BatchFitOptionsT(*o.batch_options) : nullptr) {
   extended_observations.reserve(o.extended_observations.size());
   for (const auto &extended_observations_ : o.extended_observations) { extended_observations.emplace_back((extended_observations_) ? new orbpro::estimation::ExtendedObservationT(*extended_observations_) : nullptr); }
 }
@@ -2672,6 +3175,7 @@ inline EstimationRequestT &EstimationRequestT::operator=(EstimationRequestT o) F
   std::swap(trace_id, o.trace_id);
   std::swap(options, o.options);
   std::swap(extended_observations, o.extended_observations);
+  std::swap(batch_options, o.batch_options);
   return *this;
 }
 
@@ -2693,6 +3197,7 @@ inline void EstimationRequest::UnPackTo(EstimationRequestT *_o, const ::flatbuff
   { auto _e = trace_id(); if (_e) _o->trace_id = _e->str(); }
   { auto _e = options(); if (_e) { if(_o->options) { _e->UnPackTo(_o->options.get(), _resolver); } else { _o->options = std::unique_ptr<orbpro::estimation::SequentialOptionsT>(_e->UnPack(_resolver)); } } else if (_o->options) { _o->options.reset(); } }
   { auto _e = extended_observations(); if (_e) { _o->extended_observations.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->extended_observations[_i]) { _e->Get(_i)->UnPackTo(_o->extended_observations[_i].get(), _resolver); } else { _o->extended_observations[_i] = std::unique_ptr<orbpro::estimation::ExtendedObservationT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->extended_observations.resize(0); } }
+  { auto _e = batch_options(); if (_e) { if(_o->batch_options) { _e->UnPackTo(_o->batch_options.get(), _resolver); } else { _o->batch_options = std::unique_ptr<orbpro::estimation::BatchFitOptionsT>(_e->UnPack(_resolver)); } } else if (_o->batch_options) { _o->batch_options.reset(); } }
 }
 
 inline ::flatbuffers::Offset<EstimationRequest> CreateEstimationRequest(::flatbuffers::FlatBufferBuilder &_fbb, const EstimationRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -2712,6 +3217,7 @@ inline ::flatbuffers::Offset<EstimationRequest> EstimationRequest::Pack(::flatbu
   auto _trace_id = _o->trace_id.empty() ? 0 : _fbb.CreateString(_o->trace_id);
   auto _options = _o->options ? CreateSequentialOptions(_fbb, _o->options.get(), _rehasher) : 0;
   auto _extended_observations = _o->extended_observations.size() ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::ExtendedObservation>> (_o->extended_observations.size(), [](size_t i, _VectorArgs *__va) { return CreateExtendedObservation(*__va->__fbb, __va->__o->extended_observations[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _batch_options = _o->batch_options ? CreateBatchFitOptions(_fbb, _o->batch_options.get(), _rehasher) : 0;
   return orbpro::estimation::CreateEstimationRequest(
       _fbb,
       _config,
@@ -2722,7 +3228,8 @@ inline ::flatbuffers::Offset<EstimationRequest> EstimationRequest::Pack(::flatbu
       _propagator_capability,
       _trace_id,
       _options,
-      _extended_observations);
+      _extended_observations,
+      _batch_options);
 }
 
 inline EstimationResultT::EstimationResultT(const EstimationResultT &o)
@@ -2735,7 +3242,8 @@ inline EstimationResultT::EstimationResultT(const EstimationResultT &o)
         odr_record(o.odr_record),
         ocm_record(o.ocm_record),
         error_message(o.error_message),
-        trace_id(o.trace_id) {
+        trace_id(o.trace_id),
+        batch_fit((o.batch_fit) ? new orbpro::estimation::BatchFitResultT(*o.batch_fit) : nullptr) {
   extended_history.reserve(o.extended_history.size());
   for (const auto &extended_history_ : o.extended_history) { extended_history.emplace_back((extended_history_) ? new orbpro::estimation::ExtendedFilterEpochT(*extended_history_) : nullptr); }
   propagation_requests.reserve(o.propagation_requests.size());
@@ -2755,6 +3263,7 @@ inline EstimationResultT &EstimationResultT::operator=(EstimationResultT o) FLAT
   std::swap(trace_id, o.trace_id);
   std::swap(extended_history, o.extended_history);
   std::swap(propagation_requests, o.propagation_requests);
+  std::swap(batch_fit, o.batch_fit);
   return *this;
 }
 
@@ -2779,6 +3288,7 @@ inline void EstimationResult::UnPackTo(EstimationResultT *_o, const ::flatbuffer
   { auto _e = trace_id(); if (_e) _o->trace_id = _e->str(); }
   { auto _e = extended_history(); if (_e) { _o->extended_history.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->extended_history[_i]) { _e->Get(_i)->UnPackTo(_o->extended_history[_i].get(), _resolver); } else { _o->extended_history[_i] = std::unique_ptr<orbpro::estimation::ExtendedFilterEpochT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->extended_history.resize(0); } }
   { auto _e = propagation_requests(); if (_e) { _o->propagation_requests.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->propagation_requests[_i]) { _e->Get(_i)->UnPackTo(_o->propagation_requests[_i].get(), _resolver); } else { _o->propagation_requests[_i] = std::unique_ptr<orbpro::estimation::PropagationQueryT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->propagation_requests.resize(0); } }
+  { auto _e = batch_fit(); if (_e) { if(_o->batch_fit) { _e->UnPackTo(_o->batch_fit.get(), _resolver); } else { _o->batch_fit = std::unique_ptr<orbpro::estimation::BatchFitResultT>(_e->UnPack(_resolver)); } } else if (_o->batch_fit) { _o->batch_fit.reset(); } }
 }
 
 inline ::flatbuffers::Offset<EstimationResult> CreateEstimationResult(::flatbuffers::FlatBufferBuilder &_fbb, const EstimationResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -2801,6 +3311,7 @@ inline ::flatbuffers::Offset<EstimationResult> EstimationResult::Pack(::flatbuff
   auto _trace_id = _o->trace_id.empty() ? 0 : _fbb.CreateString(_o->trace_id);
   auto _extended_history = _o->extended_history.size() ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::ExtendedFilterEpoch>> (_o->extended_history.size(), [](size_t i, _VectorArgs *__va) { return CreateExtendedFilterEpoch(*__va->__fbb, __va->__o->extended_history[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _propagation_requests = _o->propagation_requests.size() ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::PropagationQuery>> (_o->propagation_requests.size(), [](size_t i, _VectorArgs *__va) { return CreatePropagationQuery(*__va->__fbb, __va->__o->propagation_requests[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _batch_fit = _o->batch_fit ? CreateBatchFitResult(_fbb, _o->batch_fit.get(), _rehasher) : 0;
   return orbpro::estimation::CreateEstimationResult(
       _fbb,
       _status,
@@ -2814,7 +3325,8 @@ inline ::flatbuffers::Offset<EstimationResult> EstimationResult::Pack(::flatbuff
       _error_message,
       _trace_id,
       _extended_history,
-      _propagation_requests);
+      _propagation_requests,
+      _batch_fit);
 }
 
 inline EstimationEnvelopeT::EstimationEnvelopeT(const EstimationEnvelopeT &o)
@@ -3100,13 +3612,15 @@ inline ::flatbuffers::Offset<ExtendedFilterEpoch> ExtendedFilterEpoch::Pack(::fl
 inline PropagationQueryT::PropagationQueryT(const PropagationQueryT &o)
       : sequence(o.sequence),
         seed((o.seed) ? new orbpro::estimation::EstimationState(*o.seed) : nullptr),
-        target_epoch((o.target_epoch) ? new orbpro::estimation::EstimationEpoch(*o.target_epoch) : nullptr) {
+        target_epoch((o.target_epoch) ? new orbpro::estimation::EstimationEpoch(*o.target_epoch) : nullptr),
+        parameter_values(o.parameter_values) {
 }
 
 inline PropagationQueryT &PropagationQueryT::operator=(PropagationQueryT o) FLATBUFFERS_NOEXCEPT {
   std::swap(sequence, o.sequence);
   std::swap(seed, o.seed);
   std::swap(target_epoch, o.target_epoch);
+  std::swap(parameter_values, o.parameter_values);
   return *this;
 }
 
@@ -3122,6 +3636,7 @@ inline void PropagationQuery::UnPackTo(PropagationQueryT *_o, const ::flatbuffer
   { auto _e = sequence(); _o->sequence = _e; }
   { auto _e = seed(); if (_e) _o->seed = std::unique_ptr<orbpro::estimation::EstimationState>(new orbpro::estimation::EstimationState(*_e)); }
   { auto _e = target_epoch(); if (_e) _o->target_epoch = std::unique_ptr<orbpro::estimation::EstimationEpoch>(new orbpro::estimation::EstimationEpoch(*_e)); }
+  { auto _e = parameter_values(); if (_e) { _o->parameter_values.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->parameter_values[_i] = _e->Get(_i); } } else { _o->parameter_values.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<PropagationQuery> CreatePropagationQuery(::flatbuffers::FlatBufferBuilder &_fbb, const PropagationQueryT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -3135,21 +3650,25 @@ inline ::flatbuffers::Offset<PropagationQuery> PropagationQuery::Pack(::flatbuff
   auto _sequence = _o->sequence;
   auto _seed = _o->seed ? _o->seed.get() : nullptr;
   auto _target_epoch = _o->target_epoch ? _o->target_epoch.get() : nullptr;
+  auto _parameter_values = _o->parameter_values.size() ? _fbb.CreateVector(_o->parameter_values) : 0;
   return orbpro::estimation::CreatePropagationQuery(
       _fbb,
       _sequence,
       _seed,
-      _target_epoch);
+      _target_epoch,
+      _parameter_values);
 }
 
 inline PropagationAnswerT::PropagationAnswerT(const PropagationAnswerT &o)
       : query((o.query) ? new orbpro::estimation::PropagationQueryT(*o.query) : nullptr),
-        sample((o.sample) ? new orbpro::estimation::EstimationPropagatorSample(*o.sample) : nullptr) {
+        sample((o.sample) ? new orbpro::estimation::EstimationPropagatorSample(*o.sample) : nullptr),
+        sensitivity(o.sensitivity) {
 }
 
 inline PropagationAnswerT &PropagationAnswerT::operator=(PropagationAnswerT o) FLATBUFFERS_NOEXCEPT {
   std::swap(query, o.query);
   std::swap(sample, o.sample);
+  std::swap(sensitivity, o.sensitivity);
   return *this;
 }
 
@@ -3164,6 +3683,7 @@ inline void PropagationAnswer::UnPackTo(PropagationAnswerT *_o, const ::flatbuff
   (void)_resolver;
   { auto _e = query(); if (_e) { if(_o->query) { _e->UnPackTo(_o->query.get(), _resolver); } else { _o->query = std::unique_ptr<orbpro::estimation::PropagationQueryT>(_e->UnPack(_resolver)); } } else if (_o->query) { _o->query.reset(); } }
   { auto _e = sample(); if (_e) _o->sample = std::unique_ptr<orbpro::estimation::EstimationPropagatorSample>(new orbpro::estimation::EstimationPropagatorSample(*_e)); }
+  { auto _e = sensitivity(); if (_e) { _o->sensitivity.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->sensitivity[_i] = _e->Get(_i); } } else { _o->sensitivity.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<PropagationAnswer> CreatePropagationAnswer(::flatbuffers::FlatBufferBuilder &_fbb, const PropagationAnswerT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -3176,10 +3696,124 @@ inline ::flatbuffers::Offset<PropagationAnswer> PropagationAnswer::Pack(::flatbu
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PropagationAnswerT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
   auto _query = _o->query ? CreatePropagationQuery(_fbb, _o->query.get(), _rehasher) : 0;
   auto _sample = _o->sample ? _o->sample.get() : nullptr;
+  auto _sensitivity = _o->sensitivity.size() ? _fbb.CreateVector(_o->sensitivity) : 0;
   return orbpro::estimation::CreatePropagationAnswer(
       _fbb,
       _query,
-      _sample);
+      _sample,
+      _sensitivity);
+}
+
+inline BatchFitOptionsT *BatchFitOptions::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<BatchFitOptionsT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void BatchFitOptions::UnPackTo(BatchFitOptionsT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = parameter_kinds(); if (_e) { _o->parameter_kinds.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->parameter_kinds.begin()); } }
+  { auto _e = parameter_values(); if (_e) { _o->parameter_values.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->parameter_values[_i] = _e->Get(_i); } } else { _o->parameter_values.resize(0); } }
+  { auto _e = apriori_covariance(); if (_e) { _o->apriori_covariance.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->apriori_covariance[_i] = _e->Get(_i); } } else { _o->apriori_covariance.resize(0); } }
+  { auto _e = observation_covariances(); if (_e) { _o->observation_covariances.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->observation_covariances[_i] = _e->Get(_i); } } else { _o->observation_covariances.resize(0); } }
+  { auto _e = maximum_iterations(); _o->maximum_iterations = _e; }
+  { auto _e = correction_tolerance(); _o->correction_tolerance = _e; }
+  { auto _e = sigma_edit_threshold(); _o->sigma_edit_threshold = _e; }
+  { auto _e = covariance_axes(); _o->covariance_axes = _e; }
+}
+
+inline ::flatbuffers::Offset<BatchFitOptions> CreateBatchFitOptions(::flatbuffers::FlatBufferBuilder &_fbb, const BatchFitOptionsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return BatchFitOptions::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<BatchFitOptions> BatchFitOptions::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const BatchFitOptionsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const BatchFitOptionsT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _parameter_kinds = _o->parameter_kinds.size() ? _fbb.CreateVector(_o->parameter_kinds) : 0;
+  auto _parameter_values = _o->parameter_values.size() ? _fbb.CreateVector(_o->parameter_values) : 0;
+  auto _apriori_covariance = _o->apriori_covariance.size() ? _fbb.CreateVector(_o->apriori_covariance) : 0;
+  auto _observation_covariances = _o->observation_covariances.size() ? _fbb.CreateVector(_o->observation_covariances) : 0;
+  auto _maximum_iterations = _o->maximum_iterations;
+  auto _correction_tolerance = _o->correction_tolerance;
+  auto _sigma_edit_threshold = _o->sigma_edit_threshold;
+  auto _covariance_axes = _o->covariance_axes;
+  return orbpro::estimation::CreateBatchFitOptions(
+      _fbb,
+      _parameter_kinds,
+      _parameter_values,
+      _apriori_covariance,
+      _observation_covariances,
+      _maximum_iterations,
+      _correction_tolerance,
+      _sigma_edit_threshold,
+      _covariance_axes);
+}
+
+inline BatchFitResultT *BatchFitResult::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<BatchFitResultT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void BatchFitResult::UnPackTo(BatchFitResultT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = state_dimension(); _o->state_dimension = _e; }
+  { auto _e = parameter_kinds(); if (_e) { _o->parameter_kinds.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->parameter_kinds.begin()); } }
+  { auto _e = estimate(); if (_e) { _o->estimate.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->estimate[_i] = _e->Get(_i); } } else { _o->estimate.resize(0); } }
+  { auto _e = covariance(); if (_e) { _o->covariance.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->covariance[_i] = _e->Get(_i); } } else { _o->covariance.resize(0); } }
+  { auto _e = scaled_covariance(); if (_e) { _o->scaled_covariance.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->scaled_covariance[_i] = _e->Get(_i); } } else { _o->scaled_covariance.resize(0); } }
+  { auto _e = chi_square(); _o->chi_square = _e; }
+  { auto _e = reduced_chi_square(); _o->reduced_chi_square = _e; }
+  { auto _e = weighted_rms(); _o->weighted_rms = _e; }
+  { auto _e = measurement_count(); _o->measurement_count = _e; }
+  { auto _e = degrees_of_freedom(); _o->degrees_of_freedom = _e; }
+  { auto _e = iterations(); _o->iterations = _e; }
+  { auto _e = converged(); _o->converged = _e; }
+  { auto _e = whitened_residuals(); if (_e) { _o->whitened_residuals.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->whitened_residuals[_i] = _e->Get(_i); } } else { _o->whitened_residuals.resize(0); } }
+  { auto _e = rejected_observation_indices(); if (_e) { _o->rejected_observation_indices.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->rejected_observation_indices[_i] = _e->Get(_i); } } else { _o->rejected_observation_indices.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<BatchFitResult> CreateBatchFitResult(::flatbuffers::FlatBufferBuilder &_fbb, const BatchFitResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return BatchFitResult::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<BatchFitResult> BatchFitResult::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const BatchFitResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const BatchFitResultT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _state_dimension = _o->state_dimension;
+  auto _parameter_kinds = _o->parameter_kinds.size() ? _fbb.CreateVector(_o->parameter_kinds) : 0;
+  auto _estimate = _o->estimate.size() ? _fbb.CreateVector(_o->estimate) : 0;
+  auto _covariance = _o->covariance.size() ? _fbb.CreateVector(_o->covariance) : 0;
+  auto _scaled_covariance = _o->scaled_covariance.size() ? _fbb.CreateVector(_o->scaled_covariance) : 0;
+  auto _chi_square = _o->chi_square;
+  auto _reduced_chi_square = _o->reduced_chi_square;
+  auto _weighted_rms = _o->weighted_rms;
+  auto _measurement_count = _o->measurement_count;
+  auto _degrees_of_freedom = _o->degrees_of_freedom;
+  auto _iterations = _o->iterations;
+  auto _converged = _o->converged;
+  auto _whitened_residuals = _o->whitened_residuals.size() ? _fbb.CreateVector(_o->whitened_residuals) : 0;
+  auto _rejected_observation_indices = _o->rejected_observation_indices.size() ? _fbb.CreateVector(_o->rejected_observation_indices) : 0;
+  return orbpro::estimation::CreateBatchFitResult(
+      _fbb,
+      _state_dimension,
+      _parameter_kinds,
+      _estimate,
+      _covariance,
+      _scaled_covariance,
+      _chi_square,
+      _reduced_chi_square,
+      _weighted_rms,
+      _measurement_count,
+      _degrees_of_freedom,
+      _iterations,
+      _converged,
+      _whitened_residuals,
+      _rejected_observation_indices);
 }
 
 inline const orbpro::estimation::EstimationEnvelope *GetEstimationEnvelope(const void *buf) {

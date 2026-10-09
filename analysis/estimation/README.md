@@ -100,6 +100,51 @@ leave them enabled fail rather than apply the tracking model with reversed
 transmitter/receiver roles. This is a corrected-code observation model, not a
 raw navigation-message decoder, transmit-time solver or carrier-phase solver.
 
+## Batch fit with dynamic parameters (`fit_batch`)
+
+Weighted batch least squares of the state at the configuration epoch plus
+dynamic parameters (for propagator/hpop: B = Cd·A/m, BDOT, AGOM = Cr·A/m, the
+in-track acceleration), Gauss–Newton on whitened residuals (Tapley, Schutz &
+Born 2004, §4.3–4.6). The module holds no force model.
+
+- **Request:** a `BATCH_WEIGHTED_LEAST_SQUARES` configuration (epoch, initial
+  state), legacy observations or extended observations (1–6 lanes, e.g.
+  `POSITION_VELOCITY` for a catalog element set's state at its epoch), and
+  `batch_options`: `parameter_kinds` (the caller's
+  vocabulary, e.g. PRW `DYNAMIC_PARAMETERS` ordinals, echoed), initial
+  `parameter_values`, optional `apriori_covariance` ((6+p)², empty = none),
+  optional `observation_covariances` (value_count² per observation, whitened
+  by its Cholesky factor; `covariance_axes` 1 states them in the radial,
+  transverse and normal axes of each observed `POSITION_VELOCITY` state),
+  `maximum_iterations`,
+  `correction_tolerance` (√(dxᵀN dx/n)) and `sigma_edit_threshold` (edit an
+  observation whose whitened RMS exceeds k × max(1, previous weighted RMS)).
+- **Inverted port:** each iteration returns `NEEDS_PROPAGATION` with one
+  `PropagationQuery` per observation from one seed (state and
+  `parameter_values`). The caller propagates once with the parameters as
+  `DYNAMIC_PARAMETERS`, answers each query with the sample state, its 6×6
+  STM and the 6×p `sensitivity` (the S block of [[Φ, S], [0, I]]), and
+  replays the unchanged request with every answer so far.
+- **Result:** `batch_fit`: the estimate [state, parameters], the formal
+  covariance (JᵀWJ + P₀⁻¹)⁻¹, the same times the reduced χ²
+  (`scaled_covariance`), χ², degrees of freedom, weighted RMS, whitened
+  post-fit residuals and edits; status `OK` or `NOT_CONVERGED` in the record
+  (the invocation itself succeeds). `estimate` carries the six-state part.
+  Process noise is applied when the result is propagated (propagator/hpop
+  `PROCESS_NOISE` with the full covariance as `INITIAL_COVARIANCE`).
+
+Authority ([batch_fit.test.mjs](tests/batch_fit.test.mjs)): Orekit 13.1
+`BatchLSEstimator` on the same noisy positions
+([OrekitBatchReference.java](tests/fixtures/OrekitBatchReference.java)),
+with propagator/hpop's WASM answering the queries: LEO 400 km with drag
+(state + B, positions), GPS (state + AGOM, positions with per-axis
+variances as full 3×3 matrices) and GPS with full-state measurements (with
+sigmas, and with RTN covariances rotated by Orekit's QSW frame). The
+estimate agrees within 1.1e-3 of a formal sigma (0.8 mm), the covariance
+within 2.2e-6 of √(PᵢᵢPⱼⱼ) and χ² within 1.2e-6. Orekit's batch estimator
+weights components by their sigmas alone, so a covariance correlated in the
+request axes has no Orekit reference.
+
 ## Append-only invoke contract v1
 
 [`schemas/Estimation.fbs`](schemas/Estimation.fbs) is the module-local invoke

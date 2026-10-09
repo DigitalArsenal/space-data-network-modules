@@ -1,25 +1,25 @@
 {
   "ok": true,
   "fixture": "TMPL lane05 estimation",
-  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--modules-diverged-builds-new-versions-20261007/analysis/estimation/dist/isomorphic/module.wasm",
-  "artifactSha256": "5e97be432e0d58d94110617c4895eed04e4a5ca91a80fd16f22112aa55e12748",
-  "moduleSha256": "5e97be432e0d58d94110617c4895eed04e4a5ca91a80fd16f22112aa55e12748",
+  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--modules-estimation-batch-fit-20261009/analysis/estimation/dist/isomorphic/module.wasm",
+  "artifactSha256": "f2e322784fd4876c7728376d0ba3b4b0d641bb2858a41083e73b8631c6cdebb0",
+  "moduleSha256": "f2e322784fd4876c7728376d0ba3b4b0d641bb2858a41083e73b8631c6cdebb0",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
-      "runs": 68,
-      "durationMs": 1042
+      "runs": 92,
+      "durationMs": 1366
     },
     {
       "lane": "wasmedge",
-      "runs": 68,
-      "durationMs": 1889
+      "runs": 92,
+      "durationMs": 3503
     },
     {
       "lane": "docker-wasmedge",
-      "runs": 68,
-      "durationMs": 11121
+      "runs": 92,
+      "durationMs": 23461
     }
   ],
   "cases": [
@@ -39,9 +39,15 @@
     "nonlinear-kind-2-query-0",
     "nonlinear-kind-2-query-5",
     "nonlinear-kind-2-complete",
-    "nonlinear-stale-seed-rejection"
+    "nonlinear-stale-seed-rejection",
+    "fit-batch-LEO400-drag-query",
+    "fit-batch-LEO400-drag-complete",
+    "fit-batch-GPS-srp-query",
+    "fit-batch-GPS-srp-complete",
+    "fit-batch-GPS-pv-query",
+    "fit-batch-GPS-pv-complete"
   ],
-  "comparisons": 391,
+  "comparisons": 529,
   "failures": [],
   "runs": [
     {
@@ -725,6 +731,246 @@
       "stdoutLength": 184
     },
     {
+      "lane": "browser",
+      "caseId": "fit-batch-LEO400-drag-query",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "493f916ec808e0979c956340c62ffb6d3089ef5d0da35fb00c217a6e0d72d941",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-LEO400-drag-query",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "493f916ec808e0979c956340c62ffb6d3089ef5d0da35fb00c217a6e0d72d941",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-LEO400-drag-query",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "493f916ec808e0979c956340c62ffb6d3089ef5d0da35fb00c217a6e0d72d941",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-LEO400-drag-query",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "493f916ec808e0979c956340c62ffb6d3089ef5d0da35fb00c217a6e0d72d941",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-LEO400-drag-complete",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f51775fae1a6863e1d06e52881d3bf1b007a60939884b3e1d5fb943a106ffc0c",
+      "stdoutLength": 8568
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-LEO400-drag-complete",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f51775fae1a6863e1d06e52881d3bf1b007a60939884b3e1d5fb943a106ffc0c",
+      "stdoutLength": 8568
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-LEO400-drag-complete",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f51775fae1a6863e1d06e52881d3bf1b007a60939884b3e1d5fb943a106ffc0c",
+      "stdoutLength": 8568
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-LEO400-drag-complete",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f51775fae1a6863e1d06e52881d3bf1b007a60939884b3e1d5fb943a106ffc0c",
+      "stdoutLength": 8568
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-srp-query",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "522c0a5ecc3c48a09c44b21fffe2d172fc2ccc87044adf9c989a1a5565f69fb3",
+      "stdoutLength": 41392
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-srp-query",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "522c0a5ecc3c48a09c44b21fffe2d172fc2ccc87044adf9c989a1a5565f69fb3",
+      "stdoutLength": 41392
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-srp-query",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "522c0a5ecc3c48a09c44b21fffe2d172fc2ccc87044adf9c989a1a5565f69fb3",
+      "stdoutLength": 41392
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-srp-query",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "522c0a5ecc3c48a09c44b21fffe2d172fc2ccc87044adf9c989a1a5565f69fb3",
+      "stdoutLength": 41392
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-srp-complete",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "25da215b72bd3da94613bd4f7118ec405bc0cc79d72e155bd6670d574e661005",
+      "stdoutLength": 3960
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-srp-complete",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "25da215b72bd3da94613bd4f7118ec405bc0cc79d72e155bd6670d574e661005",
+      "stdoutLength": 3960
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-srp-complete",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "25da215b72bd3da94613bd4f7118ec405bc0cc79d72e155bd6670d574e661005",
+      "stdoutLength": 3960
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-srp-complete",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "25da215b72bd3da94613bd4f7118ec405bc0cc79d72e155bd6670d574e661005",
+      "stdoutLength": 3960
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
       "lane": "wasmedge",
       "caseId": "correlated-vector",
       "threadCount": 1,
@@ -1405,6 +1651,246 @@
       "stdoutLength": 184
     },
     {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-LEO400-drag-query",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "493f916ec808e0979c956340c62ffb6d3089ef5d0da35fb00c217a6e0d72d941",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-LEO400-drag-query",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "493f916ec808e0979c956340c62ffb6d3089ef5d0da35fb00c217a6e0d72d941",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-LEO400-drag-query",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "493f916ec808e0979c956340c62ffb6d3089ef5d0da35fb00c217a6e0d72d941",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-LEO400-drag-query",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "493f916ec808e0979c956340c62ffb6d3089ef5d0da35fb00c217a6e0d72d941",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-LEO400-drag-complete",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f51775fae1a6863e1d06e52881d3bf1b007a60939884b3e1d5fb943a106ffc0c",
+      "stdoutLength": 8568
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-LEO400-drag-complete",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f51775fae1a6863e1d06e52881d3bf1b007a60939884b3e1d5fb943a106ffc0c",
+      "stdoutLength": 8568
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-LEO400-drag-complete",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f51775fae1a6863e1d06e52881d3bf1b007a60939884b3e1d5fb943a106ffc0c",
+      "stdoutLength": 8568
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-LEO400-drag-complete",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f51775fae1a6863e1d06e52881d3bf1b007a60939884b3e1d5fb943a106ffc0c",
+      "stdoutLength": 8568
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-srp-query",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "522c0a5ecc3c48a09c44b21fffe2d172fc2ccc87044adf9c989a1a5565f69fb3",
+      "stdoutLength": 41392
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-srp-query",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "522c0a5ecc3c48a09c44b21fffe2d172fc2ccc87044adf9c989a1a5565f69fb3",
+      "stdoutLength": 41392
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-srp-query",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "522c0a5ecc3c48a09c44b21fffe2d172fc2ccc87044adf9c989a1a5565f69fb3",
+      "stdoutLength": 41392
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-srp-query",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "522c0a5ecc3c48a09c44b21fffe2d172fc2ccc87044adf9c989a1a5565f69fb3",
+      "stdoutLength": 41392
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-srp-complete",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "25da215b72bd3da94613bd4f7118ec405bc0cc79d72e155bd6670d574e661005",
+      "stdoutLength": 3960
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-srp-complete",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "25da215b72bd3da94613bd4f7118ec405bc0cc79d72e155bd6670d574e661005",
+      "stdoutLength": 3960
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-srp-complete",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "25da215b72bd3da94613bd4f7118ec405bc0cc79d72e155bd6670d574e661005",
+      "stdoutLength": 3960
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-srp-complete",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "25da215b72bd3da94613bd4f7118ec405bc0cc79d72e155bd6670d574e661005",
+      "stdoutLength": 3960
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
       "lane": "docker-wasmedge",
       "caseId": "correlated-vector",
       "threadCount": 1,
@@ -2083,6 +2569,246 @@
       "spawnCount": null,
       "stdoutSha256": "e14efa25abf3aec0caf36ab52464e3130ac989d5b713362924f422902b7742f3",
       "stdoutLength": 184
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-LEO400-drag-query",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "493f916ec808e0979c956340c62ffb6d3089ef5d0da35fb00c217a6e0d72d941",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-LEO400-drag-query",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "493f916ec808e0979c956340c62ffb6d3089ef5d0da35fb00c217a6e0d72d941",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-LEO400-drag-query",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "493f916ec808e0979c956340c62ffb6d3089ef5d0da35fb00c217a6e0d72d941",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-LEO400-drag-query",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "493f916ec808e0979c956340c62ffb6d3089ef5d0da35fb00c217a6e0d72d941",
+      "stdoutLength": 123568
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-LEO400-drag-complete",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f51775fae1a6863e1d06e52881d3bf1b007a60939884b3e1d5fb943a106ffc0c",
+      "stdoutLength": 8568
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-LEO400-drag-complete",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f51775fae1a6863e1d06e52881d3bf1b007a60939884b3e1d5fb943a106ffc0c",
+      "stdoutLength": 8568
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-LEO400-drag-complete",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f51775fae1a6863e1d06e52881d3bf1b007a60939884b3e1d5fb943a106ffc0c",
+      "stdoutLength": 8568
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-LEO400-drag-complete",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f51775fae1a6863e1d06e52881d3bf1b007a60939884b3e1d5fb943a106ffc0c",
+      "stdoutLength": 8568
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-srp-query",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "522c0a5ecc3c48a09c44b21fffe2d172fc2ccc87044adf9c989a1a5565f69fb3",
+      "stdoutLength": 41392
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-srp-query",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "522c0a5ecc3c48a09c44b21fffe2d172fc2ccc87044adf9c989a1a5565f69fb3",
+      "stdoutLength": 41392
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-srp-query",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "522c0a5ecc3c48a09c44b21fffe2d172fc2ccc87044adf9c989a1a5565f69fb3",
+      "stdoutLength": 41392
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-srp-query",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "522c0a5ecc3c48a09c44b21fffe2d172fc2ccc87044adf9c989a1a5565f69fb3",
+      "stdoutLength": 41392
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-srp-complete",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "25da215b72bd3da94613bd4f7118ec405bc0cc79d72e155bd6670d574e661005",
+      "stdoutLength": 3960
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-srp-complete",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "25da215b72bd3da94613bd4f7118ec405bc0cc79d72e155bd6670d574e661005",
+      "stdoutLength": 3960
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-srp-complete",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "25da215b72bd3da94613bd4f7118ec405bc0cc79d72e155bd6670d574e661005",
+      "stdoutLength": 3960
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-srp-complete",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "25da215b72bd3da94613bd4f7118ec405bc0cc79d72e155bd6670d574e661005",
+      "stdoutLength": 3960
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
     }
   ]
 }

@@ -4,8 +4,8 @@
   "family": "estimation",
   "invokeContract": {
     "path": "schemas/Estimation.fbs",
-    "extension": 1,
-    "sha256": "08efb240a304635b6c86fe5ad1aa88eeefc0c5f9a1387ac921e32430e1e33d88"
+    "extension": 2,
+    "sha256": "47023c63eb84409b2b819eb38e0eff65f04095dbed781a8cea4446136c672ce6"
   },
   "propagatorContract": [
     "plugin_propagate",
