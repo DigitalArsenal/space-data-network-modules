@@ -128,6 +128,50 @@ propagated by propagator/hpop's resident force model. The host runs HPOP.
     with P₀ alone alongside, plus RMS error and RMS predicted sigma per RTN
     axis.
 
+### `screening_cases`
+
+Inputs: `cases` (JSON: `pairs` of `{e1, c1, e2, c2}`, RTN position errors in
+km and positive definite position covariances as lower triangles RR, TR, TT,
+NR, NT, NN in km²) and `options` (as `screening_evaluation`). Output:
+`report`. The same rules and geometries as `screening_evaluation`, on pairs
+the caller draws, each object with its own covariance.
+
+### `common_epoch`
+
+Inputs: `elements`, `reference` (optional) and `options` (JSON `targets`).
+Output: `differences`. For each target, the listed element sets of one object
+are propagated by SGP4 to its epoch (backwards for a set after it), and each
+one's difference from an origin is given in the origin's RTN axes (GCRF, km,
+km/s, prediction minus origin), with its age. The origin is:
+
+- `reference`: the object's reference state at the target; with
+  `afterSeconds`, the first reference epoch in [epoch, epoch + afterSeconds];
+- `mean`: the mean of the propagated states;
+- `set`: one element set's propagated state (`originSet`).
+
+### `map_covariance`
+
+Inputs: `elements` (the anchor sets) and `options` (JSON `requests`). Output:
+`covariance`. Each request maps a 6×6 RTN covariance (lower triangle, km,
+km/s, in the RTN axes of the anchor's SGP4 state at `from`) to the `to`
+epochs, C(t) = B Φ B₀ᵀ C₀ B₀ Φᵀ Bᵀ, B the RTN rotations of the anchor's
+SGP4 state (TEME). Φ by `method`:
+
+- `sgp4`: J(t) J(t₀)⁻¹, J the Jacobian of SGP4's state with respect to the
+  nonsingular mean elements (n, e cos ω, e sin ω, i, Ω, M + ω) by central
+  differences, B* held (the linearized SGP4 STM);
+- `two-body`: Keplerian motion from the anchor's SGP4 state at t₀,
+  complex-step differentiation of the universal-variable Kepler solution;
+- `lambert`: Thompson, Gossner, Sais and Cunningham (2019): the two-body arc
+  through SGP4's positions at the two epochs (Izzo's solver from
+  `analysis/lambert-izzo`), N = floor(Δt / P) revolutions from SGP4's state
+  at the earlier epoch, the branch whose energy is nearest SGP4's; Φ is the
+  two-body STM on that arc. Within a degree of the start inside the first
+  revolution the arc is SGP4's osculating one; within a degree of 0 or 180
+  degrees otherwise the target is refused.
+
+With `stm: true` each target also carries Φ (TEME, row-major).
+
 ## Model and validation
 
 `scripts/build-model.mjs` builds the model and its validation from the GP
@@ -224,3 +268,15 @@ Each test has an expected value that does not come from this module:
 - Coverage: designed offsets with d² computed here, against χ²₃ table
   quantiles.
 - Scaling: hand-built model and truth.
+- `common_epoch` and `map_covariance` (`tests/covariance_mapping.test.mjs`):
+  `tests/stm-reference.json`, written by `tests/stm-reference.py` from
+  python-sgp4's pure-Python SGP4, pyerfa frames, a two-body propagator in the
+  eccentric anomaly with Richardson-extrapolated central differences, and
+  Newton shooting for the Lambert arc. SGP4 STMs agree to 1e-7, two-body and
+  Lambert STMs to 1e-7 and 1e-6, common-epoch differences to 2 mm.
+- `screening_cases`: Foster Pc in closed form at zero miss, and a fine polar
+  grid for an offset anisotropic pair.
+
+Tri-runtime parity of these methods: `PATH=$HOME/.wasmedge/bin:$PATH node
+tests/parity.mjs` (browser, WasmEdge, Docker WasmEdge; report in
+`conformance/parity.json`).
