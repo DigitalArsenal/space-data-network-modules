@@ -22,7 +22,10 @@
 // GCRF (IAU 2006/2000A, CIO based, with the request's EOP) and every error
 // model's measurement is predicted by the estimation module's
 // predict_measurement, the model the estimator inverts: downleg light time,
-// receiver time tag, optional troposphere. Noise per component: a first-order
+// receiver time tag, optional troposphere. A RADAR DOPPLER is the echo's
+// two-way shift of the sensor's TRANSMIT_FREQUENCY_HZ, twice the one-way
+// shift ($RDO DOPPLER, SDS 1.242.0); a PASSIVE_RF one is the one-way shift of
+// the target's emission. Noise per component: a first-order
 // Gauss-Markov sequence with the model's CORRELATION_TIME_SECONDS within a
 // track (white when 0) plus one bias per sensor and model, BIAS +
 // BIAS_SIGMA * N(0, 1), for the whole run.
@@ -359,7 +362,7 @@ void emit(const Obs& o) {
   double lon, lat, height;
   geodetic(o.g.hostF, lat, lon, height);
   double az = NAN, el = NAN, range = NAN, rate = NAN, doppler = NAN, ra = NAN, dec = NAN;
-  double azSigma = NAN, elSigma = NAN, rangeSigma = NAN, rateSigma = NAN, raSigma = NAN, decSigma = NAN;
+  double azSigma = NAN, elSigma = NAN, rangeSigma = NAN, rateSigma = NAN, dopplerSigma = NAN, raSigma = NAN, decSigma = NAN;
   for (const auto& [model, p] : o.values) {
     const double sigma = model->record->NOISE_SIGMA();
     switch (model->kind) {
@@ -367,7 +370,7 @@ void emit(const Obs& o) {
       case est::MeasurementKind::RIGHT_ASCENSION_DECLINATION: ra = p.value[0]; dec = p.value[1]; raSigma = decSigma = sigma; break;
       case est::MeasurementKind::RANGE: case est::MeasurementKind::LASER_RANGE: range = p.value[0]; rangeSigma = sigma; break;
       case est::MeasurementKind::RANGE_RATE: rate = p.value[0]; rateSigma = sigma; break;
-      case est::MeasurementKind::DOPPLER: doppler = p.value[0]; break;
+      case est::MeasurementKind::DOPPLER: doppler = p.value[0]; dopplerSigma = sigma; break;
       default: break;
     }
   }
@@ -390,7 +393,8 @@ void emit(const Obs& o) {
     if (std::isfinite(az)) { b.add_AZIMUTH(deg(az)); b.add_ELEVATION(deg(el)); b.add_AZIMUTH_UNC(deg(azSigma)); b.add_ELEVATION_UNC(deg(elSigma)); }
     if (std::isfinite(range)) { b.add_RANGE(range / 1000.0); b.add_RANGE_UNC(rangeSigma / 1000.0); }
     if (std::isfinite(rate)) { b.add_RANGE_RATE(rate / 1000.0); b.add_RANGE_RATE_UNC(rateSigma / 1000.0); }
-    if (std::isfinite(doppler)) b.add_DOPPLER(doppler);
+    // Two-way Doppler of the transmitted carrier, with that carrier.
+    if (std::isfinite(doppler)) { b.add_DOPPLER(doppler); b.add_DOPPLER_UNC(dopplerSigma); b.add_DOPPLER_FREQUENCY(s->TRANSMIT_FREQUENCY_HZ()); }
     b.add_SENX(o.g.hostF.x / 1000.0); b.add_SENY(o.g.hostF.y / 1000.0); b.add_SENZ(o.g.hostF.z / 1000.0);
     if (std::isfinite(o.snr)) b.add_SNR(o.snr);
     b.add_DESCRIPTOR(descriptorOff); b.add_TAGS(tags);
@@ -407,7 +411,11 @@ void emit(const Obs& o) {
     if (std::isfinite(az)) { b.add_AZIMUTH(deg(az)); b.add_ELEVATION(deg(el)); b.add_AZIMUTH_UNC(deg(azSigma)); b.add_ELEVATION_UNC(deg(elSigma)); }
     if (std::isfinite(range)) { b.add_RANGE(range / 1000.0); b.add_RANGE_UNC(rangeSigma / 1000.0); }
     if (std::isfinite(rate)) { b.add_RANGE_RATE(rate / 1000.0); b.add_RANGE_RATE_UNC(rateSigma / 1000.0); }
-    if (std::isfinite(o.frequency)) { b.add_FREQUENCY(o.frequency / 1e6); b.add_NOMINAL_FREQUENCY((uct ? o.frequency : o.target->frequency) / 1e6); }
+    if (std::isfinite(o.frequency)) {
+      b.add_FREQUENCY(o.frequency / 1e6); b.add_NOMINAL_FREQUENCY((uct ? o.frequency : o.target->frequency) / 1e6);
+      // A DOPPLER model measures FREQUENCY: its sigma, in MHz as FREQUENCY.
+      if (std::isfinite(dopplerSigma)) b.add_FREQUENCY_UNC(dopplerSigma / 1e6);
+    }
     if (std::isfinite(o.snr)) b.add_SNR(o.snr);
     if (!uct) b.add_EIRP(o.target->eirp);
     b.add_SENLAT(deg(lat)); b.add_SENLON(deg(lon)); b.add_SENALT(height / 1000.0);
@@ -465,7 +473,11 @@ bool measure(Obs& o, const Target& truthLike, Random& random, std::vector<NoiseS
     geodetic(o.g.hostF, lat, lon, height);
     obs.media.latitude_rad = lat;
     obs.media.height_m = height;
-    if (model.kind == est::MeasurementKind::DOPPLER && o.target && o.target->frequency > 0) obs.media.frequency_hz = o.target->frequency;
+    // DOPPLER: a monostatic radar measures the echo's shift of its own
+    // carrier, out and back; passive RF the one-way shift of the emission.
+    const bool twoWay = model.kind == est::MeasurementKind::DOPPLER && o.sensor->record->PHENOMENOLOGY() == acwSensorPhenomenology::RADAR;
+    if (twoWay) obs.media.frequency_hz = o.sensor->record->TRANSMIT_FREQUENCY_HZ();
+    else if (model.kind == est::MeasurementKind::DOPPLER && o.target && o.target->frequency > 0) obs.media.frequency_hz = o.target->frequency;
     switch (rec->TROPOSPHERE_MODEL()) {
       case memTroposphereModel::HOPFIELD_SAASTAMOINEN: obs.troposphere = est::TroposphereModel::HOPFIELD_SAASTAMOINEN; break;
       case memTroposphereModel::MARINI: obs.troposphere = est::TroposphereModel::MARINI; break;
@@ -476,6 +488,8 @@ bool measure(Obs& o, const Target& truthLike, Random& random, std::vector<NoiseS
     state.value = {o.g.targetP.x, o.g.targetP.y, o.g.targetP.z, o.g.targetV.x, o.g.targetV.y, o.g.targetV.z};
     est::MeasurementPrediction p = est::predict_measurement(obs, state);
     if (p.count == 0) { error = "A measurement type cannot be predicted from this geometry."; return false; }
+    // Two-way: twice the one-way shift, -2 f rdot / c to first order.
+    if (twoWay) p.value[0] *= 2.0;
     if (addNoise) {
       const double sigma = rec->NOISE_SIGMA(), tau = rec->CORRELATION_TIME_SECONDS();
       NoiseState& n = noise[k];
@@ -569,6 +583,10 @@ bool simulate(const ACW* root, std::vector<uint8_t>& resultBytes) {
     if (kind == acwSensorPhenomenology::OPTICAL && sensor.host->ground && !haveSun) { error = "Ground optical sensors need SUN_STATES for darkness."; return false; }
     if (kind == acwSensorPhenomenology::OPTICAL && request->TARGETS()->size() && !haveSun) { error = "OPTICAL magnitudes need SUN_STATES."; return false; }
     if (kind == acwSensorPhenomenology::PASSIVE_RF && !(s->RECEIVER_BANDWIDTH_HZ() > 0)) { error = "Sensor " + sensor.id + " needs RECEIVER_BANDWIDTH_HZ > 0."; return false; }
+    const bool dopplerModel = std::any_of(sensor.models.begin(), sensor.models.end(), [](const Model& m) { return m.kind == est::MeasurementKind::DOPPLER; });
+    if (kind == acwSensorPhenomenology::RADAR && dopplerModel && !(s->TRANSMIT_FREQUENCY_HZ() > 0 && std::isfinite(s->TRANSMIT_FREQUENCY_HZ()))) {
+      error = "Sensor " + sensor.id + ": a RADAR DOPPLER model needs TRANSMIT_FREQUENCY_HZ > 0, the carrier its two-way shift is measured against."; return false;
+    }
     sensors.push_back(sensor);
   }
 
