@@ -39,38 +39,41 @@ propagation result becomes a VCM.
   the Cartesian 6×6 covariance. The schema has no fields for B, BDOT, AGOM,
   T or the parameter rows; those travel in the request and the report.
 
-Options: `meanMotionUnit` (`rad/ks`, default, `rad/s`, `rad/min`,
-`rev/day`), `scaleCovarianceByWeightedRms` (default true), `arcSeconds`
-(default 86400), `ephemerisSource` (default `JPL_SPK`: attach a DE440 kernel
-on HPOP's kernel port), `parameterRows` (`absolute`, default, or
-`fractional`; see below).
+Options: `meanMotionUnit` (`fraction`, default: the covariance's n row as
+dn/n; or `rad/ks`, `rad/s`, `rad/min`, `rev/day`), `scaleCovarianceByWeightedRms`
+(default true: times max(1, WTD RMS)^2), `arcSeconds` (default 86400),
+`ephemerisSource` (default `JPL_SPK`: attach a DE440 kernel on HPOP's kernel
+port), `parameterRows` (`fractional`, default, or `absolute`; see below).
 
-## The units of n
+## The units of the covariance
 
-The format does not state them. The survey's sample is a real ISS message
-(epoch revolution 37693), so its printed U, V, W sigmas (8.4, 40.2, 7.4 m)
-are SP's own evaluation of its covariance. Transformed with n in radians per
-1000 s and scaled by the weighted RMS, the covariance reproduces them to the
-printed digits (8.40, 40.23, 7.42 m); with rad/s the radial sigma is 1.4 km,
-rad/min 26 m, rev/day 8.0 m and the canonical time unit 8.5 m. The V and W
-sigmas do not depend on n's unit and match in every case, which is what
-identifies the weighted-RMS scaling. Every read reports the recomputed
-sigmas beside the stated ones, so a message in other units shows itself.
+The format states none. Four messages settle the mean-motion row: the
+survey's sample (an ISS solution) and three SP messages on hand that are not
+redistributed (a geostationary orbit, a GPS satellite, and an orbit of
+eccentricity 0.59 with perigee in the atmosphere). With the n row and column
+read as dn/n and the covariance scaled by max(1, WTD RMS)^2, every printed
+U, V and W sigma of all four is reproduced within 1 % (the printed covariance
+has five digits). No absolute unit does: the eccentric message's radial
+sigma is 45.8 m printed, 45.8 m as dn/n, 36.9 m with n in rad per 1000 s and
+51.1 m in rev/day; rad per 1000 s, which fits the ISS sample alone (8.40 m
+against 8.4), misses the geostationary and GPS radial sigmas by factors of
+2.0 and 1.7. The V and W sigmas do not depend on n's reading; they identify
+the scaling: the eccentric message (WTD RMS 0.86) matches unscaled, the
+others (1.09 to 1.15) only scaled. Every read reports the recomputed sigmas
+beside the stated ones. `tests/vcm_adapter.test.mjs` checks the sample, and
+the private messages when `VCM_PRIVATE_DIR` names a directory of them.
 
-## The units of the parameter rows
-
-Not stated either, and the printed sigmas cannot settle them: they cover the
-six elements only. `parameterRows: "absolute"` (the default) takes the B,
-BDOT, AGOM and T rows in the units printed on the model lines (m²/kg,
-m²/kg/s, m/s²); `"fractional"` takes the B and AGOM rows as fractions of B
-and AGOM (BDOT and T rows still as printed). The sample tells the two apart
-only by plausibility: as printed, its B sigma is 5.1 times B itself, which
-propagates to an in-track sigma of tens of kilometres after a day for an
-orbit fitted to 40 m; as a fraction it is 4.3 % of B. Every read reports the
-parameter sigmas it carried (`parameterSigmas`), and `write` takes the same
-key in its header so a message goes back out the way it came in. A VCM for
-an object with a precise orbit to check it against, or the format's
-interface document, will settle it.
+The parameter rows (B, BDOT, AGOM, T) are not covered by the printed sigmas.
+Read like the n row, as fractions of their values (`parameterRows:
+"fractional"`, the default), the four messages give sigmas of 1.5 % to 9.7 %
+of B or AGOM; read as printed in m^2/kg (`"absolute"`), 0.38 to 5.6 times the
+parameter itself, which fits of tens of metres would hardly leave. B and
+AGOM rows are scaled by their values when fractional; BDOT and T rows are
+taken as printed. Every read reports the parameter sigmas it carried
+(`parameterSigmas`), and `write` takes the same keys in its header so a
+message goes back out the way it came in. The reading is inferred, not yet
+measured: a message for an object with a precise orbit, propagated against
+it, would measure it.
 
 ## What `write` writes
 
@@ -82,14 +85,17 @@ with B, BDOT, AGOM and T in their slots (the size is the last slot used).
 
 ## Verification
 
-`tests/vcm_adapter.test.mjs`: the sample's sigmas reproduced (and not with
-the other units); the Cartesian covariance against an independent
-finite-difference Jacobian written in the test (2.3e-7 of the sigmas); the
-request run through HPOP for an hour with B as a parameter; and the result
-written as a VCM and read back (state to the printed digits, covariance to
-3.5e-6 of the sigmas); `parameterRows` both ways (the six element rows
-identical, the B sigma 5.14 × B as printed and 4.25 % as a fraction, and a
-fractional B row written back unchanged).
+`tests/vcm_adapter.test.mjs`: the sample's sigmas reproduced within 1 % (and
+not with rad/s, rad/min or rev/day); the Cartesian covariance against an
+independent finite-difference Jacobian written in the test (2.3e-7 of the
+sigmas); the private messages when `VCM_PRIVATE_DIR` is set (all within 1 %,
+the scaling rule, and rad/ks excluded); the request run through HPOP for an
+hour with B as a parameter; the result written as a VCM in SP's Fortran
+number format and read back (state to the printed digits, covariance to
+1.8e-5 of the sigmas, with and without a weighted RMS above 1); and
+`parameterRows` both ways (the six element rows identical, the B sigma
+5.14 x B as printed and 4.25 % as a fraction, and a fractional B row written
+back unchanged).
 
 ```sh
 npm run build   # SDN_WASI_* toolchain environment as for propagator/hpop

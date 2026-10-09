@@ -2,10 +2,11 @@
 // epoch revolution 37693; spacedatastandards.org
 // survey/legacy-messages/vcm/sample/vcm.txt) and propagator/hpop.
 //
-// (1) The equinoctial covariance transformed to Cartesian reproduces the UVW
-//     sigmas the VCM prints, to their printed digits (with n in rad per
-//     1000 s; the other units do not), and agrees with an independent
-//     finite-difference Jacobian written here.
+// (1) The equinoctial covariance transformed to Cartesian, with the n row as
+//     dn/n, reproduces the UVW sigmas the VCM prints within 1 % (rad/s,
+//     rad/min and rev/day do not), and agrees with an independent
+//     finite-difference Jacobian written here. SP messages that cannot be
+//     redistributed are checked when VCM_PRIVATE_DIR names them.
 // (2) The PRW request it builds runs in HPOP, with B as a dynamic parameter.
 // (3) write turns HPOP's result back into a VCM that read recovers: the
 //     state to the printed digits and the covariance to its five.
@@ -49,34 +50,64 @@ const lowerTriangle = (text) => {
 
 test('read: the transformed covariance reproduces the VCM\'s own sigmas', async (t) => {
   const h = await load('..'); t.after(() => h.destroy());
-  const report = (unit) => h.invoke({ methodId: 'read', inputs: [{ portId: 'message', payload: SAMPLE }, json('options', { meanMotionUnit: unit })] }).then((r) => JSON.parse(Buffer.from(out(ok(r), 'report')).toString()));
-  const r = await report('rad/ks');
+  const report = (options) => h.invoke({ methodId: 'read', inputs: [{ portId: 'message', payload: SAMPLE }, json('options', options)] }).then((r) => JSON.parse(Buffer.from(out(ok(r), 'report')).toString()));
+  const r = await report({});
+  assert.equal(r.meanMotionUnit, 'fraction');
   t.diagnostic(`stated ${r.statedUvwSigmasKm.slice(0, 3).map((x) => (x * 1000).toFixed(1))} m, recomputed ${r.recomputedUvwSigmasKm.slice(0, 3).map((x) => (x * 1000).toFixed(2))} m`);
-  for (let i = 0; i < 3; ++i) assert.ok(Math.abs(r.recomputedUvwSigmasKm[i] - r.statedUvwSigmasKm[i]) <= 0.06e-3, `axis ${i}`);
+  // Within 1 % (the printed covariance has five digits); see sigmasOf below
+  // for the messages that settle the mean-motion row.
+  for (let i = 0; i < 3; ++i) assert.ok(Math.abs(r.recomputedUvwSigmasKm[i] / r.statedUvwSigmasKm[i] - 1) < 0.01, `axis ${i}`);
   assert.ok(r.equinoctialRoundTripKm < 1e-9, `round trip ${r.equinoctialRoundTripKm}`);
   assert.deepEqual(r.dynamicParameters, ['DRAG_AREA_OVER_MASS']);
+  assert.ok(Math.abs(r.covarianceScale - r.weightedRms ** 2) < 1e-12, 'WTD RMS above 1 scales the covariance');
   for (const unit of ['rad/s', 'rad/min', 'rev/day']) {
-    const other = await report(unit);
-    assert.ok(Math.abs(other.recomputedUvwSigmasKm[0] - r.statedUvwSigmasKm[0]) > 0.3e-3, `${unit} would also reproduce the radial sigma`);
+    const other = await report({ meanMotionUnit: unit });
+    assert.ok(Math.abs(other.recomputedUvwSigmasKm[0] / r.statedUvwSigmasKm[0] - 1) > 0.04, `${unit} would also reproduce the radial sigma`);
   }
-  // The Jacobian against central differences of the independent conversion.
+  // The Jacobian against central differences of the independent conversion,
+  // with the n row taken as dn/n.
   const { n, p } = lowerTriangle(SAMPLE.toString());
   const e = r.equinoctial, J = [];
   for (let k = 0; k < 6; ++k) {
     const d = 1e-6 * Math.max(1e-3, Math.abs(e[k])), plus = e.slice(), minus = e.slice();
     plus[k] += d; minus[k] -= d;
     const a = toCartesian(plus, r.gmKm3S2, r.retrogradeFactor, 1000), b = toCartesian(minus, r.gmKm3S2, r.retrogradeFactor, 1000);
-    J.push(a.map((x, i) => (x - b[i]) / (2 * d)));
+    J.push(a.map((x, i) => ((x - b[i]) / (2 * d)) * (k === 3 ? e[3] : 1)));
   }
-  const rms2 = r.weightedRms ** 2, m = 7;
+  const scale = r.covarianceScale, m = 7;
   let worst = 0;
   for (let i = 0; i < 6; ++i) for (let j = 0; j < 6; ++j) {
     let s = 0;
     for (let a = 0; a < 6; ++a) for (let b = 0; b < 6; ++b) s += J[a][i] * p[a * n + b] * J[b][j];
-    worst = Math.max(worst, Math.abs(r.cartesianCovarianceKm[i * m + j] - s * rms2) / Math.sqrt(r.cartesianCovarianceKm[i * m + i] * r.cartesianCovarianceKm[j * m + j]));
+    worst = Math.max(worst, Math.abs(r.cartesianCovarianceKm[i * m + j] - s * scale) / Math.sqrt(r.cartesianCovarianceKm[i * m + i] * r.cartesianCovarianceKm[j * m + j]));
   }
   t.diagnostic(`Cartesian covariance against finite differences: ${worst.toExponential(2)} of the sigmas`);
   assert.ok(worst < 1e-6, `${worst}`);
+});
+
+// SP messages that cannot be redistributed: set VCM_PRIVATE_DIR to a
+// directory of *.vcm files to check them. Every printed sigma must be
+// reproduced within 1 % with the defaults; a message with a weighted RMS
+// below 1 must match unscaled; and some message must rule out rad/ks, the
+// unit the survey's sample alone cannot tell from dn/n.
+test('read: private SP messages (VCM_PRIVATE_DIR)', { skip: !process.env.VCM_PRIVATE_DIR && 'VCM_PRIVATE_DIR not set' }, async (t) => {
+  const h = await load('..'); t.after(() => h.destroy());
+  const dir = process.env.VCM_PRIVATE_DIR;
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.vcm'));
+  assert.ok(files.length > 0, 'no .vcm files');
+  let radKsExcluded = false;
+  for (const f of files) {
+    const text = fs.readFileSync(`${dir}/${f}`);
+    const read = (options) => h.invoke({ methodId: 'read', inputs: [{ portId: 'message', payload: text }, json('options', options)] }).then((r) => JSON.parse(Buffer.from(out(ok(r), 'report')).toString()));
+    const r = await read({ ephemerisSource: 'Analytical' });
+    const dev = r.statedUvwSigmasKm.slice(0, 3).map((s, i) => r.recomputedUvwSigmasKm[i] / s - 1);
+    t.diagnostic(`${f}: deviations ${dev.map((d) => (d * 100).toFixed(2)).join('/')} %, scale ${r.covarianceScale.toFixed(3)}, ${r.parameterSigmas.map((p) => `${p.name} ${(100 * p.sigma / p.value).toFixed(1)} %`).join(', ')}`);
+    for (const d of dev) assert.ok(Math.abs(d) < 0.01, `${f}: ${dev}`);
+    if (r.weightedRms < 1) assert.equal(r.covarianceScale, 1);
+    const ks = await read({ ephemerisSource: 'Analytical', meanMotionUnit: 'rad/ks' });
+    if (Math.abs(ks.recomputedUvwSigmasKm[0] / ks.statedUvwSigmasKm[0] - 1) > 0.1) radKsExcluded = true;
+  }
+  assert.ok(radKsExcluded, 'no message rules out rad/ks');
 });
 
 test('read -> HPOP -> write -> read round trip', async (t) => {
@@ -117,6 +148,20 @@ test('read -> HPOP -> write -> read round trip', async (t) => {
   }
   t.diagnostic(`covariance through VCM text and back: ${worst.toExponential(2)} of the sigmas`);
   assert.ok(worst < 2e-4, `${worst}`);
+  // With the message's own weighted RMS (above 1) in the header, the text
+  // carries the covariance divided by RMS^2 and prints the sigmas of the
+  // result; a default read restores the result's covariance.
+  const scaled = Buffer.from(out(ok(await vcm.invoke({ methodId: 'write', inputs: [{ portId: 'result', typeRef: PRW, payload: out(run, 'response') }, json('header', { ...header, weightedRms: report.weightedRms })] })), 'message')).toString();
+  assert.match(scaled, /WTD RMS:\s+0\.11498E\+01/);
+  const again = JSON.parse(Buffer.from(out(ok(await vcm.invoke({ methodId: 'read', inputs: [{ portId: 'message', payload: Buffer.from(scaled) }, json('options', options)] })), 'report')).toString());
+  let worstScaled = 0;
+  for (let i = 0; i < m; ++i) for (let j = 0; j < m; ++j) {
+    const si = i < 6 ? 1e3 : 1, sj = j < 6 ? 1e3 : 1;
+    const expected = P[i * m + j] / (si * sj), scaleIJ = Math.sqrt((P[i * m + i] / (si * si)) * (P[j * m + j] / (sj * sj)));
+    worstScaled = Math.max(worstScaled, Math.abs(again.cartesianCovarianceKm[i * m + j] - expected) / scaleIJ);
+  }
+  assert.ok(worstScaled < 2e-4, `${worstScaled}`);
+  for (let i = 0; i < 3; ++i) assert.ok(Math.abs(again.recomputedUvwSigmasKm[i] / again.statedUvwSigmasKm[i] - 1) < 0.01, `printed sigma ${i}`);
 });
 
 // (4) The parameter rows' units are not stated in the format; parameterRows

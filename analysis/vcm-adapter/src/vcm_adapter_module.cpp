@@ -32,27 +32,38 @@
 // Cefola 1972; Vallado 2013 sec. 2.4.3), the parameter rows carried by J on
 // one side.
 //
-// The units of n are not stated in the format. The survey's sample (an ISS
-// VCM, epoch revolution 37693) settles them: its stated U, V, W sigmas
-// (8.4, 40.2, 7.4 m) are reproduced to the printed digits, as the VCM prints
-// them (times the weighted RMS of the fit), only with n in radians per
-// 1000 s (rad/s: 1.4 km radial; rad/min: 26 m; rev/day: 8.0 m; canonical
-// time unit: 8.5 m). That is the default; meanMotionUnit overrides it, and
-// every read reports the recomputed sigmas so a wrong unit shows.
+// The format does not state the units of the covariance. Four messages
+// settle the mean-motion row: the n row and column are relative, dn/n. With
+// that reading the printed U, V, W sigmas of all four (the survey's sample,
+// an ISS solution, and three SP messages on hand, which are not
+// redistributed: a geostationary orbit, a GPS satellite and an orbit of
+// eccentricity 0.59) are reproduced within 1 %; no absolute unit reproduces
+// the eccentric message's radial sigma (rad/1000 s gives 36.9 m against a
+// printed 45.8 m, rev/day 51.1 m; dn/n 45.8 m), and rad/1000 s, which fits
+// the ISS sample alone, misses the geostationary and GPS radial sigmas by
+// factors of 2.0 and 1.7. meanMotionUnit "fraction" is the default; the
+// absolute units remain as options, and every read reports the recomputed
+// sigmas so a wrong reading shows.
 //
-// The units of the parameter rows are not stated either, and the stated
-// sigmas cannot settle them (they cover the six elements only). Read as
-// printed ("absolute", the default), the sample's B row gives a sigma of
-// 5.1 times B itself; read as a fraction of B ("fractional"), 4.3 %. The
-// option parameterRows chooses; B and AGOM rows are scaled by their values
-// when fractional, BDOT and T rows are taken as printed, and every read
-// reports the parameter sigmas it carried. write takes the same key in its
-// header and prints the rows back the same way.
+// The printed sigmas are those of the covariance times max(1, WTD RMS)^2:
+// the eccentric message, with a weighted RMS of 0.86, matches unscaled, the
+// others (1.09 to 1.15) only scaled.
+//
+// The parameter rows (B, BDOT, AGOM, T) cannot be checked against printed
+// sigmas, which cover the elements only. As fractions of their values
+// (parameterRows "fractional", the default, like the n row) the messages on
+// hand give sigmas of 1.5 % to 9.7 %; as printed in m^2/kg ("absolute") they
+// give 0.38 to 5.6 times the parameter itself, which fits of tens of metres
+// would hardly leave. B and AGOM rows are scaled by their values when
+// fractional, BDOT and T rows are taken as printed, and every read reports
+// the parameter sigmas it carried. write takes the same keys in its header
+// and prints the rows back the same way.
 //
 // Pure compute: output bytes depend only on input bytes.
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -402,10 +413,20 @@ std::string parseVcm(const std::string& text, Vcm& m) {
     if (!numbers(after(lines, "J2K POS (KM):"), m.j2kPos, 3) || !numbers(after(lines, "J2K VEL (KM/S):"), m.j2kVel, 3))
         return "invalid-state: J2K POS (KM) and J2K VEL (KM/S) are required";
     const std::string geo = field(lines, "GEOPOTENTIAL:", {"DRAG:"});
-    {   // "EGM-96 70Z,70T"
-        const size_t space = geo.rfind(' ');
-        m.geopotential = trim(space == std::string::npos ? geo : geo.substr(0, space));
-        const std::string trunc = space == std::string::npos ? "" : geo.substr(space + 1);
+    {   // "EGM-96 70Z,70T", "EGM-96  8Z, 8T" (SP pads the degrees to two places)
+        size_t z = geo.find('Z');
+        while (z != std::string::npos) {
+            size_t d = z;
+            while (d > 0 && geo[d - 1] == ' ') --d;
+            const size_t digitsEnd = d;
+            while (d > 0 && std::isdigit(static_cast<unsigned char>(geo[d - 1]))) --d;
+            if (d < digitsEnd) { z = d; break; }
+            z = geo.find('Z', z + 1);
+        }
+        if (z == std::string::npos) return "invalid-geopotential: expected <model> mmZ,nnT";
+        m.geopotential = trim(geo.substr(0, z));
+        std::string trunc;
+        for (const char c : geo.substr(z)) if (c != ' ') trunc += c;
         if (std::sscanf(trunc.c_str(), "%dZ,%dT", &m.zonals, &m.tesserals) != 2) return "invalid-geopotential: expected <model> mmZ,nnT";
     }
     m.drag = field(lines, "DRAG:", {"LUNAR/SOLAR:"});
@@ -485,12 +506,13 @@ std::string parseVcm(const std::string& text, Vcm& m) {
 // ---------------------------------------------------------------------------
 // Options (a flat JSON object; unknown keys are refused).
 struct Options {
-    double nScale = 1000.0;
-    std::string meanMotionUnit = "rad/ks";
-    bool scaleByWeightedRms = true;
+    double nScale = 1000.0;              // elements carry n in rad per nScale s
+    std::string meanMotionUnit = "fraction";
+    bool fractionalMeanMotion = true;    // the covariance's n row is dn/n
+    bool scaleByWeightedRms = true;      // by max(1, WTD RMS)^2, as SP prints its sigmas
     double arcSeconds = 86400.0;
     std::string ephemerisSource = "JPL_SPK";
-    bool fractionalParameterRows = false;
+    bool fractionalParameterRows = true;
 };
 // A minimal reader for {"key": value, ...} with string, number and boolean
 // values.
@@ -533,7 +555,24 @@ const std::string* lookup(const std::vector<std::pair<std::string, std::string>>
     for (const auto& p : kv) if (p.first == key) return &p.second;
     return nullptr;
 }
-bool unitScale(const std::string& unit, double& scale) {
+// SP's Fortran E format: 0.ddddddE+xx (a leading zero, `digits` digits).
+std::string fortranE(double x, int digits) {
+    char buf[48];
+    if (x == 0 || !std::isfinite(x)) { std::snprintf(buf, sizeof buf, "0.%0*dE+00", digits, 0); return buf; }
+    int e = int(std::floor(std::log10(std::fabs(x)))) + 1;
+    const long long scale = std::llround(std::pow(10.0, digits));
+    long long mantissa = std::llround(std::fabs(x) / std::pow(10.0, e) * double(scale));
+    if (mantissa >= scale) { mantissa = scale / 10; ++e; }
+    if (mantissa < scale / 10) { mantissa *= 10; --e; }
+    std::snprintf(buf, sizeof buf, "%s0.%0*lldE%c%02d", x < 0 ? "-" : "", digits, mantissa, e < 0 ? '-' : '+', std::abs(e));
+    return buf;
+}
+
+// The covariance's mean-motion row: "fraction" (dn/n, the default) or n in
+// an absolute unit. Elements are carried with n in rad per `scale` seconds.
+bool meanMotionRow(const std::string& unit, double& scale, bool& fraction) {
+    fraction = unit == "fraction";
+    if (fraction) { scale = 1000.0; return true; }
     if (unit == "rad/ks") scale = 1000.0;
     else if (unit == "rad/s") scale = 1.0;
     else if (unit == "rad/min") scale = 60.0;
@@ -551,7 +590,7 @@ std::string parseOptions(const plugin_input_frame_t* frame, Options& o) {
         const std::string& v = p.second;
         if (k == "meanMotionUnit") {
             o.meanMotionUnit = v.empty() || v[0] != '"' ? v : v.substr(1);
-            if (!unitScale(o.meanMotionUnit, o.nScale)) return "invalid-options: meanMotionUnit is rad/ks, rad/s, rad/min or rev/day";
+            if (!meanMotionRow(o.meanMotionUnit, o.nScale, o.fractionalMeanMotion)) return "invalid-options: meanMotionUnit is fraction, rad/ks, rad/s, rad/min or rev/day";
         } else if (k == "scaleCovarianceByWeightedRms") {
             if (v != "true" && v != "false") return "invalid-options: scaleCovarianceByWeightedRms is a boolean";
             o.scaleByWeightedRms = v == "true";
@@ -672,10 +711,12 @@ int read(void) {
     std::vector<double> cartesian, eq6(36, 0.0);
     double recomputed[6] = {};
     const double rms = m.weightedRms > 0 ? m.weightedRms : 1.0;
-    const double variance = o.scaleByWeightedRms ? rms * rms : 1.0;
+    const double printedScale = std::max(1.0, rms) * std::max(1.0, rms);  // SP's sigmas: covariance times max(1, RMS)^2
+    const double variance = o.scaleByWeightedRms ? printedScale : 1.0;
     // Parameter rows in the force's own units: as printed, or B and AGOM as
     // fractions of their values.
     std::vector<double> rowScale(n, 1.0);
+    if (o.fractionalMeanMotion) rowScale[3] = elements[3];  // dn/n -> dn in rad per nScale s
     for (unsigned k = 0; k < np; ++k) {
         const unsigned row = parameters.rows[k];
         if (o.fractionalParameterRows && row == 6) rowScale[6 + k] = m.b;
@@ -694,7 +735,7 @@ int read(void) {
         cartesian = transform(reduced, n, j6);
         // The VCM prints its sigmas from the covariance times the weighted RMS.
         std::vector<double> asPrinted = cartesian;
-        if (!o.scaleByWeightedRms) for (double& x : asPrinted) x *= rms * rms;
+        if (!o.scaleByWeightedRms) for (double& x : asPrinted) x *= printedScale;
         uvwSigmasOf(rv, asPrinted, n, recomputed);
     } else {
         notes.push_back("the VCM carries no covariance (0x0)");
@@ -924,7 +965,8 @@ int read(void) {
     r += ",\"equinoctial\":"; jsonArray(r, elements, 6);
     r += ",\"equinoctialRoundTripKm\":" + fmt(roundTrip);
     r += ",\"covarianceSize\":" + std::to_string(m.n) + ",\"weightedRms\":" + fmt(m.weightedRms);
-    r += std::string(",\"covarianceScaledByWeightedRms\":") + (o.scaleByWeightedRms ? "true" : "false");
+    r += std::string(",\"covarianceScaledByWeightedRms\":") + (o.scaleByWeightedRms ? "true" : "false") + ",\"covarianceScale\":" + fmt(variance);
+    r += ",\"equinoctialMeanMotionUnit\":\"rad/ks\"";
     r += ",\"dynamicParameters\":[";
     for (size_t i = 0; i < kept.size(); ++i) { if (i) r += ','; jsonString(r, EnumNameprwDynamicParameter(kept[i])); }
     r += "],\"parameterRows\":";
@@ -995,7 +1037,8 @@ int write(void) {
     auto text = [&](const char* key, const char* fallback) { const std::string* v = lookup(h, key); return v ? (v->size() && (*v)[0] == '"' ? v->substr(1) : *v) : std::string(fallback); };
     auto num = [&](const char* key, double fallback) { const std::string* v = lookup(h, key); double x = fallback; if (v) number(*v, &x); return x; };
     double nScale = 1000.0;
-    if (!unitScale(text("meanMotionUnit", "rad/ks"), nScale)) { plugin_set_error("invalid-header", "meanMotionUnit is rad/ks, rad/s, rad/min or rev/day"); return 400; }
+    bool fractionalMeanMotion = true;
+    if (!meanMotionRow(text("meanMotionUnit", "fraction"), nScale, fractionalMeanMotion)) { plugin_set_error("invalid-header", "meanMotionUnit is fraction, rad/ks, rad/s, rad/min or rev/day"); return 400; }
     const std::string geopotential = text("geopotential", "EGM-96");
     const double mu = gmFor(geopotential);
     const double rv[6] = {state->POSITION()->X() / 1000, state->POSITION()->Y() / 1000, state->POSITION()->Z() / 1000,
@@ -1069,8 +1112,9 @@ int write(void) {
         if (!cov->VALUES() || cov->VALUES()->size() != n * n || n < 6) { plugin_set_error("invalid-result", "Covariance dimension and values disagree."); return 400; }
         std::vector<double> p(n * n);
         for (unsigned i = 0; i < n; ++i) for (unsigned j = 0; j < n; ++j) p[i * n + j] = cov->VALUES()->Get(i * n + j) / ((i < 6 ? 1000.0 : 1.0) * (j < 6 ? 1000.0 : 1.0));
+        // The result's covariance is the one the sigmas are printed from;
+        // the message carries it divided by max(1, RMS)^2 (read's inverse).
         uvwSigmasOf(rv, p, n, sig);
-        for (double& x : sig) x *= rms;
         double tj[36];
         jacobianToEquinoctial(rv, mu, fr, nScale, tj);
         const std::vector<double> q = transform(p, n, tj);
@@ -1091,7 +1135,7 @@ int write(void) {
         eqCov.assign(size * size, 0.0);
         for (unsigned i = 0; i < n; ++i) for (unsigned j = 0; j < n; ++j) eqCov[slot[i] * size + slot[j]] = q[i * n + j];
         // Parameter rows back as fractions when asked (the read's option).
-        const std::string rows = text("parameterRows", "absolute");
+        const std::string rows = text("parameterRows", "fractional");
         if (rows != "absolute" && rows != "fractional") { plugin_set_error("invalid-header", "parameterRows is absolute or fractional"); return 400; }
         if (rows == "fractional") {
             const double b = num("ballisticCoefficient", 0.0), agom = num("agom", 0.0);
@@ -1099,6 +1143,17 @@ int write(void) {
             if (size > 6) { if (!(b > 0)) { plugin_set_error("invalid-header", "fractional parameter rows need ballisticCoefficient > 0"); return 400; } scaleOf[6] = 1.0 / b; }
             if (size > 8 && agom > 0) scaleOf[8] = 1.0 / agom;
             for (unsigned i = 0; i < size; ++i) for (unsigned j = 0; j < size; ++j) eqCov[i * size + j] *= scaleOf[i] * scaleOf[j];
+        }
+        {
+            double ew[6];
+            cartesianToEquinoctial(rv, mu, fr, nScale, ew);
+            const double unscale = 1.0 / (std::max(1.0, rms) * std::max(1.0, rms));
+            for (unsigned i = 0; i < size; ++i) for (unsigned j = 0; j < size; ++j) {
+                double f = unscale;
+                if (fractionalMeanMotion && i == 3) f /= ew[3];
+                if (fractionalMeanMotion && j == 3) f /= ew[3];
+                eqCov[i * size + j] *= f;
+            }
         }
     }
 
@@ -1118,30 +1173,30 @@ int write(void) {
     posLine("J2K POS (KM):", rv); velLine("J2K VEL (KM/S):", rv + 3);
     posLine("ECI POS (KM):", teme); velLine("ECI VEL (KM/S):", teme + 3);
     posLine("EFG POS (KM):", efg); velLine("EFG VEL (KM/S):", efg + 3);
-    std::snprintf(line, sizeof line, "GEOPOTENTIAL: %s %02ldZ,%02ldT  DRAG: %s  LUNAR/SOLAR: %3s", geopotential.c_str(), std::lround(num("zonals", 0)), std::lround(num("tesserals", 0)), text("drag", "NONE").c_str(), text("lunarSolar", "OFF").c_str()); put(line);
+    std::snprintf(line, sizeof line, "GEOPOTENTIAL: %s %2ldZ,%2ldT  DRAG: %12s  LUNAR/SOLAR: %3s", geopotential.c_str(), std::lround(num("zonals", 0)), std::lround(num("tesserals", 0)), text("drag", "NONE").c_str(), text("lunarSolar", "OFF").c_str()); put(line);
     std::snprintf(line, sizeof line, "SOLAR RAD PRESS: %3s  SOLID EARTH TIDES: %3s  IN-TRACK THRUST: %3s", text("solarRadiationPressure", "OFF").c_str(), text("solidEarthTides", "OFF").c_str(), text("inTrackThrust", "OFF").c_str()); put(line);
-    std::snprintf(line, sizeof line, "BALLISTIC COEF (M2/KG): %13.6E BDOT (M2/KG-S): %13.6E", num("ballisticCoefficient", 0), num("bdot", 0)); put(line);
-    std::snprintf(line, sizeof line, "SOLAR RAD PRESS COEFF (M2/KG): %13.6E  EDR(W/KG): %9.2E", num("agom", 0), num("edr", 0)); put(line);
-    std::snprintf(line, sizeof line, "THRUST ACCEL (M/S2): %13.6E  C.M. OFFSET (M): %13.6E", num("thrustAcceleration", 0), num("centerOfMassOffset", 0)); put(line);
+    std::snprintf(line, sizeof line, "BALLISTIC COEF (M2/KG): %13s BDOT (M2/KG-S): %12s", fortranE(num("ballisticCoefficient", 0), 6).c_str(), fortranE(num("bdot", 0), 6).c_str()); put(line);
+    std::snprintf(line, sizeof line, "SOLAR RAD PRESS COEFF (M2/KG): %13s  EDR(W/KG): %9s", fortranE(num("agom", 0), 6).c_str(), fortranE(num("edr", 0), 2).c_str()); put(line);
+    std::snprintf(line, sizeof line, "THRUST ACCEL (M/S2): %13s  C.M. OFFSET (M): %13s", fortranE(num("thrustAcceleration", 0), 6).c_str(), fortranE(num("centerOfMassOffset", 0), 6).c_str()); put(line);
     std::snprintf(line, sizeof line, "SOLAR FLUX: F10: %3ld  AVERAGE F10: %3ld  AVERAGE AP: %5.1f", std::lround(num("f10", 0)), std::lround(num("averageF10", 0)), num("averageAp", 0)); put(line);
     std::snprintf(line, sizeof line, "TAI-UTC (S): %2ld  UT1-UTC (S): %8.5f  UT1 RATE (MS/DAY): %6.3f", std::lround(num("taiMinusUtcS", 37)), ut1Utc, num("ut1RateMsPerDay", 0)); put(line);
     std::snprintf(line, sizeof line, "POLAR MOT X,Y (ARCSEC): %7.4f %7.4f IAU 1980 NUTAT: %3ld TERMS", num("polarX", 0), num("polarY", 0), std::lround(num("nutationTerms", 106))); put(line);
     put("TIME CONST LEAP SECOND TIME (UTC): " + text("leapSecondTime", "2049 365 (31 DEC) 23:59:59.999"));
     std::snprintf(line, sizeof line, "INTEGRATOR MODE: %-12s COORD SYS: %-5s  PARTIALS: %s", text("integratorMode", "SDN HPOP").c_str(), "J2000", text("partials", "ANALYTIC").c_str()); put(line);
     std::snprintf(line, sizeof line, "STEP MODE: %s  FIXED STEP: %s  STEP SIZE SELECTION: %s", text("stepMode", "AUTO").c_str(), text("fixedStep", "OFF").c_str(), text("stepSizeSelection", "AUTO").c_str()); put(line);
-    std::snprintf(line, sizeof line, "INITIAL STEP SIZE (S): %8.3f  ERROR CONTROL: %9.3E", num("initialStepSize", 30), num("errorControl", 1e-13)); put(line);
+    std::snprintf(line, sizeof line, "INITIAL STEP SIZE (S): %8.3f  ERROR CONTROL: %9s", num("initialStepSize", 30), fortranE(num("errorControl", 1e-13), 3).c_str()); put(line);
     std::snprintf(line, sizeof line, "VECTOR U,V,W SIGMAS (KM):        %10.4f %10.4f %10.4f", sig[0], sig[1], sig[2]); put(line);
     std::snprintf(line, sizeof line, "VECTOR UD,VD,WD SIGMAS (KM/S):    %10.4f %10.4f %10.4f", sig[3], sig[4], sig[5]); put(line);
-    std::snprintf(line, sizeof line, "COVARIANCE MATRIX (EQUINOCTIAL ELS): (%2ux%2u) WTD RMS: %12.5E", size, size, rms); put(line);
+    std::snprintf(line, sizeof line, "COVARIANCE MATRIX (EQUINOCTIAL ELS): (%2ux%2u) WTD RMS: %12s", size, size, fortranE(rms, 5).c_str()); put(line);
     std::string row;
     int count = 0;
     for (unsigned i = 0; i < size; ++i)
         for (unsigned j = 0; j <= i; ++j) {
-            std::snprintf(line, sizeof line, " %12.5E", eqCov[i * size + j]);
+            std::snprintf(line, sizeof line, "%s%12s", row.empty() ? "" : " ", fortranE(eqCov[i * size + j], 5).c_str());
             row += line;
-            if (++count % 5 == 0) { put(trim(row)); row.clear(); }
+            if (++count % 5 == 0) { put(row); row.clear(); }
         }
-    if (!row.empty()) put(trim(row));
+    if (!row.empty()) put(row);
     if (plugin_push_output_ex("message", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1, reinterpret_cast<const uint8_t*>(out.data()), uint32_t(out.size())) < 0) return 500;
     return 0;
 }

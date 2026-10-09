@@ -33,7 +33,7 @@
           "acceptedTypeSets": [{
             "setId": "vcm-read-options-v1",
             "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
-            "description": "JSON: {\"meanMotionUnit\": \"rad/ks\"|\"rad/s\"|\"rad/min\"|\"rev/day\", \"scaleCovarianceByWeightedRms\": true, \"arcSeconds\": 86400, \"ephemerisSource\": \"JPL_SPK\", \"parameterRows\": \"absolute\"|\"fractional\"}; every key optional.",
+            "description": "JSON: {\"meanMotionUnit\": \"fraction\"|\"rad/ks\"|\"rad/s\"|\"rad/min\"|\"rev/day\", \"scaleCovarianceByWeightedRms\": true, \"arcSeconds\": 86400, \"ephemerisSource\": \"JPL_SPK\", \"parameterRows\": \"fractional\"|\"absolute\"}; every key optional, the first value of each the default.",
             "wildcardJustification": { "kind": "intra-flow-control-frame", "mediaType": "application/json", "detail": "Interpretation options for the legacy message; never persisted." }
           }],
           "minStreams": 0, "maxStreams": 1, "required": false,
