@@ -69,7 +69,9 @@ The module needs no propagator and computes no visibility:
     (pi R^2) (1 au / d_sun)^2], in the Gaia G band of `EOO.MAG`, and must
     not exceed `LIMITING_MAGNITUDE` (0 = no limit).
   - Passive RF: SNR = EIRP - 20 log10(4 pi R f / c) + G/T - 10 log10(k)
-    - 10 log10(B). The reported frequency is f (1 - rdot / c).
+    - 10 log10(B). The reported frequency is f (1 - rdot / c); with a
+    `DOPPLER` error model it is f plus the Doppler as measured, bias and
+    noise included.
   - Laser ranging: always detected.
 - **False alarms.** A Poisson number per track at
   `FALSE_ALARM_RATE_PER_HOUR`. Each lands at a uniform time within 5 deg of
@@ -94,7 +96,9 @@ The module needs no propagator and computes no visibility:
 - Radar SNR (R^-4, RCS) and the threshold.
 - Optical: the diffuse-sphere magnitude at 90 deg phase (to float32),
   umbra and daylight losses.
-- Passive RF: link-budget SNR and the Doppler-shifted frequency.
+- Passive RF: link-budget SNR and the Doppler-shifted frequency; a
+  `DOPPLER` model's bias and noise in `FREQUENCY` over 2,000 observations,
+  each within 4 standard errors.
 - Noise statistics over 2,000 observations: bias, sigma and the
   Gauss-Markov lag-1 autocorrelation, each within 4 standard errors.
 - The exact earliest-deadline-first schedule of two targets with one slot

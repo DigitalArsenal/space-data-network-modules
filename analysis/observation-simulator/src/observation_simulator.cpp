@@ -679,6 +679,11 @@ bool simulate(const ACW* root, std::vector<uint8_t>& resultBytes) {
             est::CartesianState st;
             st.value = {o.g.targetP.x, o.g.targetP.y, o.g.targetP.z, o.g.targetV.x, o.g.targetV.y, o.g.targetV.z};
             o.frequency = target.frequency * (1.0 - est::predict_measurement(rr, st).value[0] / est::kSpeedOfLight);
+            // A DOPPLER error model measures that shift: the received
+            // frequency is the emitted one plus the Doppler as measured,
+            // with its bias and noise.
+            for (const auto& [model, p] : o.values)
+              if (model->kind == est::MeasurementKind::DOPPLER) o.frequency = target.frequency + p.value[0];
           }
           if (!loss.empty()) { ++losses[loss]; continue; }
           ++detected;

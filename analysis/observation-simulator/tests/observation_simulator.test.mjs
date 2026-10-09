@@ -272,6 +272,30 @@ test('passive RF: link-budget SNR and the Doppler-shifted frequency', async (t) 
   assert.equal(o.DETECTION_STATUS, RFO.rfDetectionStatus.DETECTED);
 });
 
+test('passive RF: a DOPPLER error model puts its bias and noise in FREQUENCY', async (t) => {
+  // The same receding emitter (true received f0 (1 - 1000 / c)) observed
+  // 2000 times with a DOPPLER model of 20 Hz bias and 50 Hz white noise:
+  // the mean error is the bias within 4 standard errors (50 / sqrt(2000) =
+  // 1.1 Hz) and the spread is 50 Hz within 4 standard errors (sigma /
+  // sqrt(2 (N - 1)) = 0.79 Hz).
+  const f0 = 2.2e9;
+  const los = mul(OFFSET, 1 / norm(OFFSET)), v = mul(los, 1000);
+  const out = await simulate(t, request({
+    GROUND_STATIONS: [station('site', 30, 0, 100)],
+    TARGETS: [target('emitter', straight(T0, FIXED, v, 21000, 600), { EMITTER_FREQUENCY_HZ: f0, EMITTER_EIRP_DBW: 30 })],
+    SENSORS: [sensor('rf', 'site', 'PASSIVE_RF', [model('DOPPLER', 50, { BIAS: 20 })], { RECEIVER_G_OVER_T_DB_PER_K: 20, RECEIVER_BANDWIDTH_HZ: 1e6, DETECTION_THRESHOLD_DB: -100 })],
+    ACCESS: [access('rf', 'emitter', [[T0, T0 + 19990 / 86400]])],
+  }));
+  assert.equal(out.error, undefined, out.error);
+  const e = out.rf.map((o) => o.FREQUENCY * 1e6 - f0 * (1 - 1000 / C));
+  assert.equal(e.length, 2000);
+  const mean = e.reduce((s, x) => s + x, 0) / e.length;
+  const sigma = Math.sqrt(e.reduce((s, x) => s + (x - mean) ** 2, 0) / (e.length - 1));
+  assert.ok(Math.abs(mean - 20) < 4 * 50 / Math.sqrt(e.length), `mean ${mean} Hz`);
+  assert.ok(Math.abs(sigma - 50) < 4 * 50 / Math.sqrt(2 * (e.length - 1)), `sigma ${sigma} Hz`);
+  assert.equal(out.rf[0].NOMINAL_FREQUENCY, f0 / 1e6);
+});
+
 test('noise: bias plus Gauss-Markov noise with the stated sigma and correlation time', async (t) => {
   // A target fixed on the Earth has a constant true range, 707106.781 m. Over
   // 2000 observations 10 s apart: the mean error is the 5 m bias within
