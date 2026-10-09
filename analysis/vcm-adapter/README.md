@@ -68,9 +68,9 @@ only by plausibility: as printed, its B sigma is 5.1 times B itself, which
 propagates to an in-track sigma of tens of kilometres after a day for an
 orbit fitted to 40 m; as a fraction it is 4.3 % of B. Every read reports the
 parameter sigmas it carried (`parameterSigmas`), and `write` takes the same
-key in its header so a message goes back out the way it came in. A VCM with
-a precise orbit to check it against (E2 in orbit-accuracy-experiments) is
-what will settle it.
+key in its header so a message goes back out the way it came in. A VCM for
+an object with a precise orbit to check it against, or the format's
+interface document, will settle it.
 
 ## What `write` writes
 
