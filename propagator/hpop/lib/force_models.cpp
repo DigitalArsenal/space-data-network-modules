@@ -473,12 +473,23 @@ Vec3 SolarRadiationCannonball(const Vec3& satPosition, const Vec3& sunPosition,
     return sunDir * (-aMag);
 }
 
-Vec3 SolarRadiation(const Vec3& satPosition, const Vec3& sunPosition,
-                    const SRPForceConfig& config) {
+namespace {
+// The configured model without ECOM2 (each applies the Earth's shadow).
+Vec3 SolarRadiationModel(const Vec3& satPosition, const Vec3& sunPosition, const SRPForceConfig& config) {
     if (config.model == SRPModelType::Cannonball) {
         double shadowFactor;
         return SolarRadiationCannonball(satPosition, sunPosition,
                                         config.mass, config.area, config.Cr, shadowFactor);
+    }
+    if (config.model == SRPModelType::GnssBoxWing) {
+        // lib/gnss_srp.h, under the conical shadow of lib/shadow.h.
+        using gnss_srp::V3;
+        const V3<double> r(satPosition.x, satPosition.y, satPosition.z), sun(sunPosition.x, sunPosition.y, sunPosition.z);
+        const double lit = gnss_srp::Lit(r, sun, RE_EARTH);
+        if (lit < 1e-6) return Vec3();
+        const double pressure = computeSolarFlux(gnss_srp::norm(sun - r)) / 299792458.0;  // N/m^2
+        const V3<double> a = gnss_srp::BoxWingAcceleration(r, sun, pressure, config.mass, config.gnssBoxWing);
+        return Vec3(a.x * lit, a.y * lit, a.z * lit);
     }
 
     // Box-wing model
@@ -503,6 +514,24 @@ Vec3 SolarRadiation(const Vec3& satPosition, const Vec3& sunPosition,
     // Default to cannonball
     SRPAcceleration result = computeSRPCannonball(satPosition, sunPosition, srpConfig);
     return result.total;
+}
+}  // namespace
+
+Vec3 SolarRadiation(const Vec3& satPosition, const Vec3& satVelocity, const Vec3& sunPosition,
+                    const SRPForceConfig& config) {
+    Vec3 a = SolarRadiationModel(satPosition, sunPosition, config);
+    if (config.ecom2.enabled) {
+        // CODE's empirical accelerations on top, under the same conical shadow.
+        using gnss_srp::V3;
+        const V3<double> r(satPosition.x, satPosition.y, satPosition.z), v(satVelocity.x, satVelocity.y, satVelocity.z),
+            sun(sunPosition.x, sunPosition.y, sunPosition.z);
+        const double lit = gnss_srp::Lit(r, sun, RE_EARTH);
+        if (lit >= 1e-6) {
+            const V3<double> e = gnss_srp::Ecom2Acceleration(r, v, sun, config.ecom2);
+            a += Vec3(e.x * lit, e.y * lit, e.z * lit);
+        }
+    }
+    return a;
 }
 
 // =============================================================================
@@ -1773,10 +1802,10 @@ double JacchiaRobertsDensityAt(const Vec3& position, double jdTdb, double jdUtc,
     return rho > 0 ? rho : 0.0;
 }
 
-Vec3 SrpAcceleration(const Vec3& position, double jd, const ForceModelSet& forceSet,
+Vec3 SrpAcceleration(const Vec3& position, const Vec3& velocity, double jd, const ForceModelSet& forceSet,
                      const SRPForceConfig& srp) {
     const Vec3 sunPos = forceSet.sunPositionProvided ? forceSet.sunPosition : getSunPosition(jd).position;
-    return SolarRadiation(position, sunPos, srp);
+    return SolarRadiation(position, velocity, sunPos, srp);
 }
 
 Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double jd,
@@ -1811,7 +1840,7 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double
 
     // 6. Solar Radiation Pressure
     if (forceSet.useSRP) {
-        totalAcc += SolarRadiation(position, sunPos, forceSet.srp);
+        totalAcc += SolarRadiation(position, velocity, sunPos, forceSet.srp);
     }
 
     // 7-10. Atmospheric Drag

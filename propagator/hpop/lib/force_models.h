@@ -7,6 +7,7 @@
 #pragma once
 
 #include "astrodynamics_types.h"
+#include "gnss_srp.h"
 #include <functional>
 #include <memory>
 
@@ -193,7 +194,8 @@ enum class SRPModelType {
     Cannonball,     ///< Simple spherical model
     FlatPlate,      ///< Single flat plate
     BoxWing,        ///< Box body + solar panels
-    NPlate          ///< Multiple plates with orientations
+    NPlate,         ///< Multiple plates with orientations
+    GnssBoxWing     ///< GNSS box-wing in nominal yaw steering (lib/gnss_srp.h)
 };
 
 /// Solar radiation pressure configuration
@@ -215,14 +217,21 @@ struct SRPForceConfig {
 
     // Satellite attitude (for non-cannonball models)
     Vec3 sunPointingAxis{0, 0, 1};  ///< Body axis pointing toward Sun
+
+    /// GnssBoxWing: the surfaces (gnss_srp::GpsBoxWing for a GPS block).
+    gnss_srp::BoxWing gnssBoxWing;
+    /// CODE's extended empirical model, added to the model above under the
+    /// same shadow when enabled (Cannonball with Cr 0 leaves it alone).
+    gnss_srp::Ecom2 ecom2;
 };
 
 /// Solar radiation pressure acceleration
 /// @param satPosition Satellite position (km)
+/// @param satVelocity Satellite velocity (km/s; ECOM2's orbital plane)
 /// @param sunPosition Sun position (km, same frame)
 /// @param config SRP configuration
 /// @return SRP acceleration (km/s^2)
-Vec3 SolarRadiation(const Vec3& satPosition, const Vec3& sunPosition,
+Vec3 SolarRadiation(const Vec3& satPosition, const Vec3& satVelocity, const Vec3& sunPosition,
                     const SRPForceConfig& config);
 
 /// Cannonball SRP with shadow factor output
@@ -953,7 +962,7 @@ Vec3 DragAccelerationWith(const Vec3& position, const Vec3& velocity, double jd,
 
 /// The force set's radiation pressure acceleration (km/s^2) with a given SRP
 /// configuration, the Sun from forceSet.sunPosition when provided.
-Vec3 SrpAcceleration(const Vec3& position, double jd, const ForceModelSet& forceSet,
+Vec3 SrpAcceleration(const Vec3& position, const Vec3& velocity, double jd, const ForceModelSet& forceSet,
                      const SRPForceConfig& srp);
 
 /// Evaluate a field loaded from a potential file. Declared here and defined in

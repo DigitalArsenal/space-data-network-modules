@@ -3,6 +3,7 @@
 #include "environment_models.h"
 #include "time_convert.h"
 #include "shadow.h"
+#include "gnss_srp.h"
 
 #include <algorithm>
 #include <cmath>
@@ -212,6 +213,25 @@ V cannonball(const V& r,const Vec3& sun,const SRPForceConfig& c) {
     return direction*(-SOLAR_FLUX_1AU*ratio*ratio/299792458.0*c.Cr*c.area/c.mass*1e-3*lit);
 }
 
+// The GNSS box-wing and ECOM2 of ForceModel::SolarRadiation (lib/gnss_srp.h),
+// through the dual numbers: one generic evaluation for both.
+gnss_srp::V3<D> toV3(const V& a){return gnss_srp::V3<D>(a.x,a.y,a.z);}
+V fromV3(const gnss_srp::V3<D>& a){return V(a.x,a.y,a.z);}
+V gnssRadiation(const V& r,const V& v,const Vec3& sunPosition,const SRPForceConfig& c,bool boxWing) {
+    const gnss_srp::V3<D> rr=toV3(r),vv=toV3(v),sun(D(sunPosition.x),D(sunPosition.y),D(sunPosition.z));
+    const D lit=gnss_srp::Lit(rr,sun,RE_EARTH);
+    if(lit.value<1e-6)return V();
+    V a;
+    if(boxWing) {
+        const double pressure=computeSolarFlux((sunPosition-Vec3(r.x.value,r.y.value,r.z.value)).magnitude())/299792458.0;
+        // The pressure's 1/d^2 with the Sun's distance d from the satellite.
+        const D d=gnss_srp::norm(sun-rr),d0(d.value);
+        a=fromV3(gnss_srp::BoxWingAcceleration(rr,sun,pressure,c.mass,c.gnssBoxWing))*(d0*d0/(d*d));
+    }
+    if(c.ecom2.enabled)a=a+fromV3(gnss_srp::Ecom2Acceleration(rr,vv,sun,c.ecom2));
+    return a*lit;
+}
+
 // Density at a GCRF position, in the force set's Earth-fixed axes (the same
 // axes as ForceModel::ComputeTotalAcceleration).
 double density(const Vec3& r,double jd,const ForceModelSet& f,const EarthAxes& axes) {
@@ -294,8 +314,8 @@ V solidTides(const V& r,double jd,const ForceModelSet& f) {
 const char* configError(const ForceModelSet& f) {
     if(f.useEarthAlbedo || f.useThermalReradiation || f.useOceanTides || f.usePoleTide || f.useEmpiricalAccel || f.hasFiniteManeuver)
         return "ANALYTIC STM: albedo, thermal, ocean and pole tide, empirical and finite-thrust partials are unavailable; select FINITE_DIFFERENCE";
-    if(f.useSRP && f.srp.model!=SRPModelType::Cannonball)
-        return "ANALYTIC STM requires cannonball SRP; select FINITE_DIFFERENCE for attitude-dependent SRP";
+    if(f.useSRP && f.srp.model!=SRPModelType::Cannonball && f.srp.model!=SRPModelType::GnssBoxWing)
+        return "ANALYTIC STM requires cannonball or GNSS box-wing SRP; select FINITE_DIFFERENCE for other attitude-dependent SRP";
     if(f.useDrag && f.drag.includeWinds && f.dragModel!=DragModelType::Exponential)
         return "ANALYTIC STM does not support atmosphere wind gradients; select FINITE_DIFFERENCE";
     return nullptr;
@@ -324,6 +344,11 @@ const char* ValidateParameter(DynamicParameter p,const ForceModelSet& f) {
         case DynamicParameter::InTrackAcceleration:
             if(!inTrackSlot(const_cast<ForceModelSet&>(f)))return "IN_TRACK_ACCELERATION needs IN_TRACK_ACCELERATION_M_S2.";
             return nullptr;
+        default:
+            if(Ecom2TermOf(p)){
+                if(!f.useSRP||!f.srp.ecom2.enabled)return "ECOM2 parameters need radiation pressure with ECOM2 enabled.";
+                return nullptr;
+            }
     }
     return "Unknown dynamic parameter.";
 }
@@ -338,12 +363,22 @@ Vec3 AccelerationParameterPartial(DynamicParameter p,const Vec3& r,const Vec3& v
         }
         case DynamicParameter::SrpAreaOverMass: {
             SRPForceConfig unit=f.srp;unit.Cr=unit.mass/unit.area;    // Cr*A/m = 1 m^2/kg
-            return SrpAcceleration(r,jd,f,unit);
+            return SrpAcceleration(r,v,jd,f,unit);
         }
         case DynamicParameter::InTrackAcceleration: {
             const Vec3 h=r.cross(v);if(h.magnitude()<=0)return Vec3();
             return h.normalized().cross(r.normalized())*1e-3;          // km/s^2 per m/s^2
         }
+        default:
+            if(const auto term=Ecom2TermOf(p)) {
+                // ECOM2 is linear in its coefficients: the lit basis function.
+                const Vec3 s=f.sunPositionProvided?f.sunPosition:getSunPosition(jd).position;
+                const gnss_srp::V3<double> rr(r.x,r.y,r.z),vv(v.x,v.y,v.z),sun(s.x,s.y,s.z);
+                const double lit=gnss_srp::Lit(rr,sun,RE_EARTH);
+                if(lit<1e-6)return Vec3();
+                const auto b=gnss_srp::Ecom2Basis(*term,rr,vv,sun);
+                return Vec3(b.x,b.y,b.z)*(lit*1e-3);                  // km/s^2 per m/s^2
+            }
     }
     return Vec3();
 }
@@ -354,6 +389,7 @@ void PerturbParameter(ForceModelSet& f,DynamicParameter p,double delta) {
         case DynamicParameter::DragAreaOverMassRate:f.dragAreaOverMassRate+=delta;break;
         case DynamicParameter::SrpAreaOverMass:f.srp.Cr+=delta*f.srp.mass/f.srp.area;break;
         case DynamicParameter::InTrackAcceleration:if(auto* slot=inTrackSlot(f))slot->p[1]+=delta*1e-3;break;
+        default:if(const auto term=Ecom2TermOf(p))gnss_srp::Ecom2Coefficient(f.srp.ecom2,*term)+=delta;break;
     }
 }
 
@@ -363,6 +399,7 @@ double ParameterValue(const ForceModelSet& f,DynamicParameter p) {
         case DynamicParameter::DragAreaOverMassRate:return f.dragAreaOverMassRate;
         case DynamicParameter::SrpAreaOverMass:return f.srp.Cr*f.srp.area/f.srp.mass;
         case DynamicParameter::InTrackAcceleration:{auto* slot=inTrackSlot(const_cast<ForceModelSet&>(f));return slot?slot->p[1]*1e3:0;}
+        default:if(const auto term=Ecom2TermOf(p))return gnss_srp::Ecom2Coefficient(const_cast<ForceModelSet&>(f).srp.ecom2,*term);break;
     }
     return 0;
 }
@@ -395,7 +432,13 @@ AccelerationPartials ComputeAccelerationPartials(const Vec3& position,const Vec3
     V a=centralGravity(r,jd,f);
     if(f.useGRGM1200A)a=a+inlineGravity(r,initGRGM1200A(std::min<uint16_t>(f.grgm1200a.truncationDegree,20),std::min<uint16_t>(f.grgm1200a.truncationOrder,20)));
     if(f.useThirdBody)a=a+thirdBodies(r,jd,f.thirdBody);
-    if(f.useSRP){const Vec3 sun=f.sunPositionProvided?f.sunPosition:getSunPosition(jd).position;a=a+cannonball(r,sun,f.srp);}
+    if(f.useSRP){
+        const Vec3 sun=f.sunPositionProvided?f.sunPosition:getSunPosition(jd).position;
+        if(f.srp.model==SRPModelType::Cannonball)a=a+cannonball(r,sun,f.srp);
+        if(f.srp.model==SRPModelType::GnssBoxWing||f.srp.ecom2.enabled){
+            a=a+gnssRadiation(r,v,sun,f.srp,f.srp.model==SRPModelType::GnssBoxWing);
+        }
+    }
     if(f.useDrag)a=a+drag(r,v,position,jd,f,gradient);
     if(f.useRelativisticCorrection)a=a+relativity(r,v,jd,f);
     if(f.useSolidTides)a=a+solidTides(r,jd,f);

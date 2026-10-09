@@ -1580,7 +1580,7 @@ int plugin_get_acceleration_breakdown(double jd, double* outPtr) {
     }
 
     if (g_forceSet.useSRP)
-        srp = ForceModel::SolarRadiation(g_state.position, sunPos, g_forceSet.srp);
+        srp = ForceModel::SolarRadiation(g_state.position, g_state.velocity, sunPos, g_forceSet.srp);
 
     if (g_forceSet.useRelativisticCorrection)
         relativity = ForceModel::RelativisticCorrection(g_state.position, g_state.velocity,

@@ -154,6 +154,66 @@ epoch alone. Until 2026-10-08 the boundaries were crossed without being
 located, and the plain path needed steps of 10 s or less (21 cm a day at
 60 s). RK4 steps at its fixed size.
 
+#### GNSS box-wing and ECOM2 (`lib/gnss_srp.h`)
+
+Two GNSS radiation-pressure models sit beside the cannonball, under the same
+conical shadow:
+
+- **GPS box-wing a priori**: the flat-plate model of Rodriguez-Solano,
+  Hugentobler and Steigenberger (2012), "Adjustable box-wing model for solar
+  radiation pressure impacting GPS satellites", Adv. Space Res. 49(7),
+  doi:10.1016/j.asr.2012.01.016: eq. (6) for the solar arrays, eq. (9) (the
+  absorbed energy re-emitted at once as Lambertian heat) for the bus. The
+  surfaces are Rodriguez-Solano (2014), *Impact of non-conservative force
+  modeling on GNSS satellite orbits and global solutions*, dissertation, TU
+  Munich, Appendix Tables 5.4 (GPS IIR, also used for IIR-M) and 5.5 (GPS
+  IIF). Attitude is nominal yaw steering (+Z to the Earth, Y = unit(s x r),
+  arrays turned about Y to the Sun); the eclipse-season noon and midnight
+  turns are not modelled. GPS III has no published box-wing surface set that
+  could be checked, so none is provided.
+- **ECOM2**: CODE's extended empirical model, Arnold et al. (2015), "CODE's
+  new solar radiation pressure model for GNSS orbit determination", J. Geod.
+  89:775-791, doi:10.1007/s00190-015-0814-4, eqs. (1), (2) and (5): D0, Y0,
+  B0 and the cosine and sine terms of orders 2 and 4 in D and 1 and 3 in B,
+  in m/s^2, with the angle du = u - u_sun from the Sun in the orbital plane.
+  It is added to whichever a priori model is selected (a cannonball with Cr 0
+  for ECOM2 alone) and scaled by the visible fraction of the Sun. Its eleven
+  coefficients are dynamic parameters (`ForceModel::DynamicParameter::Ecom2*`)
+  with analytic STM sensitivities, so a batch fit can estimate them.
+
+Both have analytic position and velocity partials (the same generic
+evaluation through dual numbers). Against Orekit 13.1
+(`tests/gnss_srp.test.mjs`, `tests/fixtures/orekit/OrekitGnssSrpReference.java`:
+`BoxAndSolarArraySpacecraft` under `GPSBlockIIF`/`GPSBlockIIR` attitude, and
+`ECOM2`): accelerations agree to 1e-10 relative, 24 h trajectories to 0.6 mm
+(through eclipses included), the STM to 4e-8 and the ECOM2 sensitivities to
+1.6e-9 relative. The masses come from the IGS satellite metadata SINEX
+(Steigenberger and Montenbruck 2024, doi:10.57677/metadata-sinex) in use.
+
+GPS prediction accuracy on E3's test window (orbit-accuracy-experiments,
+2026-09-07..26, 32 GPS satellites, 636 issues; HPOP from the ESA ultra-rapid
+orbit, scored against ESA final orbits; median 3D error with E3's two-way
+object x day bootstrap 95 % interval; `tests/gps-srp-accuracy-*.mjs`,
+`tests/gps_srp_accuracy_native.cpp`, results in
+`tests/evidence/gps-srp-accuracy/score-test-window.json`):
+
+| Variant | 1 d | 3 d | 7 d |
+| --- | ---: | ---: | ---: |
+| A: E3 as run (cannonball 1500 kg, 20 m^2, Cr 1.3, URA state at T) | 29.8 m [21.0, 44.6] | 102 m [78, 142] | 336 m [258, 417] |
+| B: A with the box-wing a priori (IIR, IIR-M, IIF) | 12.9 m [10.1, 16.6] | 46.4 m [36.4, 57.5] | 168 m [126, 218] |
+| C: cannonball, state and Cr*A/m fitted to the URA observed day | 8.1 m [3.7, 11.4] | 37.0 m [17.7, 52.2] | 160 m [81, 234] |
+| D: box-wing + ECOM2 D2B1, state and 7 coefficients fitted | 0.7 m [0.5, 0.9] | 3.0 m [2.3, 4.0] | 13.8 m [10.5, 17.9] |
+| E: ECOM2 D2B1 alone, fitted | 0.7 m [0.5, 0.9] | 3.1 m [2.2, 4.1] | 14.1 m [11.0, 18.7] |
+
+Variant A reproduces E3's published HPOP-URA errors to 3 mm. The fitted
+ECOM2 does the work; with it, the box-wing a priori changes nothing
+measurable over a one-day fit arc (D/E 0.96-1.01, intervals across 1).
+
+PRW (SDS 1.240.0) cannot select these models or name the ECOM2 parameters:
+until SDS carries them, they are reachable from C++ only, and every PRW
+request runs exactly as before (all Orekit cases return byte-identical
+responses).
+
 ## Installation
 
 ```bash
@@ -582,7 +642,7 @@ coordinate singularity.
 
 The six-state analytic STM explicitly refuses albedo, thermal reradiation,
 tides, empirical accelerations, the legacy fixed-mass finite-thrust force,
-non-cannonball SRP and atmosphere winds. Select the finite-difference path for
+SRP other than the cannonball, the GNSS box-wing and ECOM2, and atmosphere winds. Select the finite-difference path for
 those legacy forces. Mass-aware finite burns use the seven-state path below.
 Cd/Cr are configurable force inputs;
 there is no existing parameter-sensitivity matrix plumbing, and this lane does
