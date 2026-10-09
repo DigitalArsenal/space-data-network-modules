@@ -13,9 +13,9 @@ struct Context {
     ForceModel::DensityGradient density;
     const char* error = nullptr;
     const std::vector<DynamicParameter>* parameters = nullptr;
-    int size = 42;  // the augmented vector's length: 42, or 66 with parameters
+    int size = 42;  // the augmented vector's length: 42, or ParameterSize with parameters
 };
-constexpr int ParameterSize = 42 + 6 * 4;
+constexpr int ParameterSize = 42 + 6 * MaxDynamicParameters;
 void derivative(double t, const double* y, double* f, void* opaque) {
     auto& c = *static_cast<Context*>(opaque);
     if(!c.error)c.error=ForceModel::ValidateAccelerationPartials(Vec3(y[0],y[1],y[2]),*c.forces);
@@ -248,7 +248,7 @@ VariationalResult integrateVariational(const StateVector& initial,double dt,
 VariationalResult PropagateVariational(const StateVector& initial,double dt,
     const IntegratorConfig& config,ForceModel::ForceModelSet& forces,ForceModel::DensityGradient density,
     const std::vector<DynamicParameter>& parameters) {
-    if(parameters.size()>4){VariationalResult out;out.finalState=initial;return fail(out,"At most four dynamic parameters.");}
+    if(parameters.size()>MaxDynamicParameters){VariationalResult out;out.finalState=initial;return fail(out,"At most sixteen dynamic parameters.");}
     for(const auto p:parameters)if(const char* error=ForceModel::ValidateParameter(p,forces)){VariationalResult out;out.finalState=initial;return fail(out,error);}
     return parameters.empty()?integrateVariational<42>(initial,dt,config,forces,density,parameters)
                              :integrateVariational<ParameterSize>(initial,dt,config,forces,density,parameters);
@@ -262,7 +262,7 @@ VariationalResult PropagateWithSTM(const StateVector& initial,double dt,const In
         if(const char* error=validateInputs(initial,dt,config))return fail(out,error);
         if(method!=STMMethod::Analytic&&method!=STMMethod::FiniteDifference)
             return fail(out,"Unknown STM method.");
-        if(parameters.size()>4)return fail(out,"At most four dynamic parameters.");
+        if(parameters.size()>MaxDynamicParameters)return fail(out,"At most sixteen dynamic parameters.");
         for(size_t k=0;k<parameters.size();++k) {
             if(const char* error=ForceModel::ValidateParameter(parameters[k],forces))return fail(out,error);
             for(size_t j=0;j<k;++j)if(parameters[j]==parameters[k])return fail(out,"Dynamic parameters must not repeat.");

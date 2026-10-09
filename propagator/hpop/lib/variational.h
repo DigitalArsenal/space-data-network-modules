@@ -5,6 +5,8 @@
 namespace astro { namespace Integrator {
 enum class STMMethod { Analytic, FiniteDifference };
 using ForceModel::DynamicParameter;
+/// Dynamic parameters a sensitivity carries at most (PRW's four plus ECOM2's eleven, rounded up).
+constexpr size_t MaxDynamicParameters = 16;
 struct VariationalResult {
     StateVector finalState;
     Mat6 stm = Mat6::identity();

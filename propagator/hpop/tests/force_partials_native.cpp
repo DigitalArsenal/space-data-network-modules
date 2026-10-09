@@ -6,6 +6,9 @@
 //    https://www.orekit.org/static/apidocs/org/orekit/forces/gravity/NewtonianAttraction.html
 //  * Cannonball photon momentum P=flux/c; force proportional to inverse square
 //    distance. SOLAR_FLUX_1AU=1361 W/m^2, c=299792458 m/s, AU=149597870.7 km.
+//  * GNSS box-wing and ECOM2 (lib/gnss_srp.h): their analytic partials against
+//    differences of the production force; the forces themselves are checked
+//    against Orekit 13.1 by tests/gnss_srp_native.cpp.
 //  * ForceModel's existing atmosphere/ephemeris authorities are tested by
 //    environment_conformance.cpp and de440_force_native.cpp. The differences
 //    here test the new Jacobian against those separately tested evaluators;
@@ -25,6 +28,7 @@
 // closed-form inverse-square checks use a 2e-14 relative roundoff bound.
 #include "force_partials.h"
 #include "environment_models.h"
+#include "gnss_srp.h"
 
 #include <algorithm>
 #include <cmath>
@@ -180,6 +184,21 @@ int main(){
     const auto umbra=ComputeAccelerationPartials(Vec3(-7000,0,0),defaultV,jd,f);
     double zero=umbra.acceleration.magnitude();for(int i=0;i<3;++i)for(int j=0;j<3;++j)zero+=std::abs(umbra.dr[i][j])+std::abs(umbra.dv[i][j]);
     result("cannonball_SRP_umbra",zero,0);
+    // GNSS box-wing (GPS IIF) and ECOM2 (lib/gnss_srp.h) at a GPS-like state,
+    // the Sun off the orbital plane: lit and in the penumbra (the Sun along x,
+    // the satellite behind the Earth's limb). The ECOM2 terms depend on the
+    // velocity through the orbital plane.
+    f=ForceModelSet();f.usePointMass=false;f.useSRP=true;f.sunPositionProvided=true;f.sunPosition=Vec3(AU_KM*0.8,AU_KM*0.5,AU_KM*0.3);
+    f.srp.model=SRPModelType::GnssBoxWing;f.srp.mass=1633;f.srp.gnssBoxWing=gnss_srp::GpsBoxWing(gnss_srp::GpsBlock::IIF);
+    const Vec3 gpsR(15000,-20000,5000),gpsV(2.9,1.8,-1.5);
+    forceDifference("gnss_boxwing_SRP_lit_FD",f,gpsR,gpsV,1);
+    f.srp.ecom2.enabled=true;f.srp.ecom2.D0=-1e-7;f.srp.ecom2.Y0=5e-10;f.srp.ecom2.B0=1e-9;f.srp.ecom2.Dc[0]=4e-9;f.srp.ecom2.Ds[0]=-1e-9;
+    f.srp.ecom2.Dc[1]=1e-9;f.srp.ecom2.Ds[1]=7e-10;f.srp.ecom2.Bc[0]=3e-9;f.srp.ecom2.Bs[0]=-2e-9;f.srp.ecom2.Bc[1]=8e-10;f.srp.ecom2.Bs[1]=-5e-10;
+    forceDifference("gnss_boxwing_ECOM2_lit_FD",f,gpsR,gpsV,1);
+    f.sunPosition=Vec3(AU_KM,0,0);
+    forceDifference("gnss_boxwing_ECOM2_penumbra_FD",f,Vec3(-26000,6370,1000),Vec3(-0.5,-2.9,2.5));
+    f.srp.model=SRPModelType::Cannonball;f.srp.Cr=0;f.sunPosition=Vec3(AU_KM*0.8,AU_KM*0.5,AU_KM*0.3);
+    forceDifference("ECOM2_alone_lit_FD",f,gpsR,gpsV,1);
     f=ForceModelSet();f.usePointMass=false;f.useRelativisticCorrection=true;f.relativistic.lenseThirring=true;f.relativistic.deSitter=true;
     forceDifference("relativity_FD",f);
     impulseChecks();densityModes();rejectionChecks();

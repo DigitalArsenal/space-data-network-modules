@@ -2,6 +2,8 @@
 
 #include "force_models.h"
 
+#include <optional>
+
 namespace astro {
 namespace ForceModel {
 
@@ -35,8 +37,17 @@ AccelerationPartials ComputeAccelerationPartials(
 /// prwDynamicParameter): Cd*A/m (m^2/kg), its rate (m^2/kg/s), Cr*A/m
 /// (m^2/kg) and the constant in-track acceleration (m/s^2).
 enum class DynamicParameter : uint8_t {
-    DragAreaOverMass = 1, DragAreaOverMassRate = 2, SrpAreaOverMass = 3, InTrackAcceleration = 4
+    DragAreaOverMass = 1, DragAreaOverMassRate = 2, SrpAreaOverMass = 3, InTrackAcceleration = 4,
+    /// ECOM2 coefficients (lib/gnss_srp.h), m/s^2, in gnss_srp::Ecom2Term order.
+    Ecom2D0 = 5, Ecom2Y0, Ecom2B0, Ecom2D2c, Ecom2D2s, Ecom2D4c, Ecom2D4s, Ecom2B1c, Ecom2B1s, Ecom2B3c, Ecom2B3s
 };
+
+/// The ECOM2 term a parameter names, or none.
+inline std::optional<gnss_srp::Ecom2Term> Ecom2TermOf(DynamicParameter p) {
+    const int k = int(p) - int(DynamicParameter::Ecom2D0);
+    if (k < 0 || k > int(gnss_srp::Ecom2Term::B3s)) return std::nullopt;
+    return static_cast<gnss_srp::Ecom2Term>(k);
+}
 
 /// Returns nullptr when `parameter` is active in the force set, otherwise a
 /// static error message.
