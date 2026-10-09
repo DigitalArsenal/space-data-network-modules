@@ -141,14 +141,18 @@ the analytic partials). It equals Orekit 13.1's lighting ratio to 6e-10.
 Until 2026-10-08 the penumbra was a linear ramp in distance from the shadow
 axis.
 
-The visible fraction has a kink at each penumbra boundary, and the
-integrators step across it without locating it. With samples or an STM
-(the variational integrator, whose error control includes the STM's shadow
-derivatives) RK78 1e-13 leaves up to about 8 cm a day in LEO and 1e-14 about
-3 cm. A request for the final epoch alone runs the plain RK78, which does not
-see the kink: in LEO with radiation pressure keep `MAXIMUM_STEP_SECONDS` at
-10 s (measured against Orekit: 60 s or more 21 cm a day, 30 s 2.2 cm, 10 s
-under 1 cm, about a second of computation).
+The visible fraction has a kink at each penumbra boundary. The adaptive
+integrators (RKF45, RK78/RKF78, RKDP87, BS and the variational integrator)
+end a step on each boundary they would cross: the umbra and penumbra edges
+are switching functions of the state, a step across one is shortened by the
+secant until it ends within 1 ms past it, and the next step resumes at the
+size proposed before (`lib/shadow_events.h`), as Orekit's eclipse detectors
+do. Radiation pressure therefore needs no special step limit or tolerance:
+against Orekit, LEO with radiation pressure and drag at RK78 1e-13 and 300 s
+steps is within 1.6 cm after a day with samples and 2.8 cm for the final
+epoch alone. Until 2026-10-08 the boundaries were crossed without being
+located, and the plain path needed steps of 10 s or less (21 cm a day at
+60 s). RK4 steps at its fixed size.
 
 ## Installation
 
@@ -233,8 +237,18 @@ field and an implementation checked against Orekit 13.1 or GMAT
   the STM ([[Phi, S], [0, I]]) and to `INITIAL_COVARIANCE` and the propagated
   covariances, SI units; S is integrated with the state (ANALYTIC) or by
   central differences of the force set (FINITE_DIFFERENCE). Against Orekit's
-  Jacobians: STM 1e-5 (LEO) to 4e-11 (GPS), B/BDOT/T 5e-6, AGOM up to 4e-3 in
-  LEO (penumbra edges are not located).
+  Jacobians: STM 1e-5 (LEO) to 4e-11 (GPS), B/BDOT/T 5e-6, AGOM 1.4e-4 in
+  LEO and 5e-10 at GPS.
+- **Samples** are visited in time order, forward and backward of the initial
+  epoch separately, and each span between consecutive epochs is integrated
+  once; the state, the STM (with parameter columns) and the covariance carry
+  from one sample to the next, so a day of hourly samples costs about one day
+  of integration rather than 25 (about ten times faster for LEO). Each
+  sample's STM and covariance still refer to the initial epoch. A sample
+  agrees with a request for its epoch alone to the integration tolerance
+  (3 mm after a day in LEO, `tests/prw_sequence.test.mjs`). Finite burns,
+  whose burn state runs along the arc, still integrate each epoch from the
+  initial state.
 
 A VCM's equinoctial covariance must be transformed to Cartesian (with its
 B/AGOM rows) by the caller; its single EOP point becomes daily
@@ -383,8 +397,13 @@ That covers:
   hourly. Constants, Earth orientation (the same IERS rows on the
   `earth_orientation` input), time scales and the atmosphere's conventions
   are shared by construction; the agreement is 0.6 mm for the point mass,
-  1.4 cm with the field and third bodies, and 3 cm with radiation pressure
-  and drag. The tolerances and their rationale are in the test's header.
+  9 mm with the field and third bodies, and 1.6 cm with radiation pressure
+  and drag (2.8 cm for a final epoch alone at 300 s steps). The tolerances
+  and their rationale are in the test's header.
+- Samples in any order, repeated or before the initial epoch, against
+  requests for each epoch alone; the plain path through LEO penumbrae at
+  300 s steps; backward requests on forward-only integrators refused, in
+  `tests/prw_sequence.test.mjs`.
 - The JB2008 and Jacchia 1970 ports against Orekit and GMAT in
   `tests/atmosphere_ports.test.mjs`; their PRW inputs in
   `tests/prw_atmospheres.test.mjs`; dynamic parameters and EME2000 in

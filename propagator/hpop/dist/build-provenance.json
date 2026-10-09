@@ -4,8 +4,8 @@
   "threadModel": "wasi-sequential",
   "target": "wasm32-wasip1-threads",
   "sharedMemory": true,
-  "sha256": "fae3e2c5e996fa5bf9f85b00ec9ca8a59ec6d4994d1c4bf7d58b768094f6e145",
-  "bytes": 1991017,
+  "sha256": "42c5453f591d40f0d00c5bf74cb1932fa5d9b4de76818a53a4f61986e5e9a410",
+  "bytes": 2008552,
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
   "clangVersion": "clang version 23.1.0-wasi-sdk (https://github.com/llvm/llvm-project 895aa2c896ada719451be2e3673c83da8ddf1141)\nTarget: wasm32-unknown-wasip1\nThread model: posix\nInstalledDir: /sessions/rcw-01r7xejvkvmdhcgz1zhpkun8/toolchains/wasi-sdk-34.0-arm64-linux/bin\nConfiguration file: /sessions/rcw-01r7xejvkvmdhcgz1zhpkun8/toolchains/wasi-sdk-34.0-arm64-linux/bin/clang++.cfg",
   "exceptionRuntimeArchives": [

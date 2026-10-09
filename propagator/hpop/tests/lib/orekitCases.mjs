@@ -21,13 +21,13 @@ export const TOLERANCE_M = { pointMass: 1e-3, gravity: 0.05, srp: 0.1, drag: 0.1
 export const toleranceFor = (c) => (c.drag ? TOLERANCE_M.drag : c.srp ? TOLERANCE_M.srp : c.degree > 0 || c.thirdBodies ? TOLERANCE_M.gravity : TOLERANCE_M.pointMass);
 // HPOP's RK78 tolerance. The point-mass cases compare the integration itself
 // and run at 1e-15 (at 1e-13 HPOP's own truncation is 6.5 mm a day in LEO).
-// Radiation pressure has a kink at every penumbra boundary, which HPOP's
-// steps cross without locating it; at 1e-13 that leaves up to ~8 cm a day in
-// LEO that moves with any rounding change, at 1e-14 up to ~3 cm. Those cases
-// run at 1e-14, the field and third-body cases at 1e-13.
-export const integratorTolerance = (c) => (c.srp || c.drag ? 1e-14 : c.degree > 0 || c.thirdBodies ? 1e-13 : 1e-15);
+// Every other case runs at 1e-13. Radiation pressure has a kink at every
+// penumbra boundary; HPOP's adaptive steps end on those boundaries
+// (lib/shadow_events.h), so these cases need no tighter tolerance and no
+// shorter steps (before the boundaries were located they needed 1e-14).
+export const integratorTolerance = (c) => (c.degree > 0 || c.thirdBodies || c.srp || c.drag ? 1e-13 : 1e-15);
 
-const isoUtc = (iso) => makeTable('TIMInstant', { TIME_SYSTEM: sds.timingStandard.UTC, EPOCH_FORMAT: sds.timEpochRepresentation.ISO8601, ISO8601: iso });
+export const isoUtc = (iso) => makeTable('TIMInstant', { TIME_SYSTEM: sds.timingStandard.UTC, EPOCH_FORMAT: sds.timEpochRepresentation.ISO8601, ISO8601: iso });
 const needsKernel = (c) => c.thirdBodies || c.srp;
 
 // Earth orientation rows for the arc, from the same IERS file Orekit read,

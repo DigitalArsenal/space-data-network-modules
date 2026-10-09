@@ -1,5 +1,6 @@
 #include "variational.h"
 #include "rk_augmented.h"
+#include "shadow_events.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -202,6 +203,8 @@ VariationalResult integrateVariational(const StateVector& initial,double dt,
         double scales[]={r,r,r,v,v,v};
         double t=0, sign=dt<0?-1:1;
         double h=sign*std::clamp(config.initialStep,config.minStep,config.maxStep);
+        // Adaptive steps end on the Earth's shadow boundaries (lib/shadow_events.h).
+        shadow::BoundaryEvents events(forces,initial.epoch,0.0,y);
         uint64_t attempts=0;
         while(sign*(dt-t)>0) {
             if(out.steps>=config.maxSteps||++attempts>uint64_t(config.maxSteps)*10)
@@ -219,10 +222,13 @@ VariationalResult integrateVariational(const StateVector& initial,double dt,
                 const double scale=config.absTolerance+config.relTolerance*std::abs(next[i]*unit);
                 norm=std::max(norm,std::abs(error[i]*unit)/scale);
             }
+            if(!fixed&&norm<=1&&events.active())
+                if(const double shorter=events.cut(t,h,next)){h=shorter;continue;}
             if(fixed||norm<=1) {
                 std::copy(next,next+N,y);t+=h;++out.steps;
+                events.taken(t,y);
                 const double proposed=fixed?config.initialStep:ComputeOptimalStep(std::abs(h),norm,ck?5:8);
-                h=sign*std::clamp(proposed,config.minStep,config.maxStep);
+                h=events.next(sign*std::clamp(proposed,config.minStep,config.maxStep));
             } else {
                 ++out.rejections;
                 if(std::abs(h)<=config.minStep*(1+1e-12))

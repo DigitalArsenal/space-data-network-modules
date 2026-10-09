@@ -615,13 +615,23 @@ bool preflightKernel(const Execution& in,double target,std::string& error) {
     }
     return true;
 }
+// States and matrices leave in the request's axes.
+std::unique_ptr<PRWResidentStateT> sampleState(const Execution& execution,const PRWExecutionRequest* request,StateVector state) {
+    const auto frame=std::unique_ptr<RFMCoordinateSystemT>(request->INITIAL()->COORDINATE_SYSTEM()->UnPack());
+    state.position=toRequestAxes(execution,state.position);state.velocity=toRequestAxes(execution,state.velocity);
+    return makeState(state,*frame,request->INITIAL());
+}
+std::unique_ptr<PRWStateMatrixT> sampleMatrix(const Execution& execution,const double* values,unsigned n,bool covariance) {
+    std::vector<double> m(values,values+n*n);rotateMatrix(execution,m.data(),n,true);return matrix(m.data(),n,covariance);
+}
+bool finish(const Execution& execution,const PRWExecutionRequest* request,const TTEpoch& epochTT,PRWPropagationSampleT& out,std::string& error);
+// One epoch integrated from the initial state: finite burns (whose burn state
+// runs along the arc) and the plain path without STM or samples.
 bool evaluate(Execution& execution,const PRWExecutionRequest* request,const TTEpoch& epochTT,PRWPropagationSampleT& out,std::string& error) {
     const double epoch=timesys::ttToTdb(epochTT.jdTt());
     if(!preflightKernel(execution,epoch,error))return false;
-    const auto frame=std::unique_ptr<RFMCoordinateSystemT>(request->INITIAL()->COORDINATE_SYSTEM()->UnPack());
-    // States and matrices leave in the request's axes.
-    const auto stateOut=[&](StateVector state){state.position=toRequestAxes(execution,state.position);state.velocity=toRequestAxes(execution,state.velocity);return makeState(state,*frame,request->INITIAL());};
-    const auto matrixOut=[&](const double* values,unsigned n,bool covariance){std::vector<double> m(values,values+n*n);rotateMatrix(execution,m.data(),n,true);return matrix(m.data(),n,covariance);};
+    const auto stateOut=[&](StateVector state){return sampleState(execution,request,state);};
+    const auto matrixOut=[&](const double* values,unsigned n,bool covariance){return sampleMatrix(execution,values,n,covariance);};
     // Elapsed time on the integration clock (TT), exact to sub-nanosecond.
     const double seconds=elapsedSeconds(execution.initialTT,epochTT);
     if(execution.massDynamics) {
@@ -641,18 +651,6 @@ bool evaluate(Execution& execution,const PRWExecutionRequest* request,const TTEp
             if(burn.stopped){report->STOP_SECONDS=burn.stopSeconds;report->STOP_EPOCH=makeInstant(execution.initial.epoch+burn.stopSeconds/86400);}
             report->DELTA_V_M_S=burn.deltaVKmS*1000;report->PROPELLANT_KG=burn.propellantKg;out.BURNS.push_back(std::move(report));
         }
-    } else if(execution.variational&&!execution.parameters.empty()) {
-        const auto value=Integrator::PropagateParameterCovariance(execution.initial,seconds,execution.integrator,execution.forces,execution.technique,execution.density,execution.impulses,execution.parameters,execution.pParameters,execution.noise);
-        if(!value.success){error="invoke-failed: "+value.errorMessage;return false;}
-        auto state=value.finalState;state.epoch=epoch;out.STATE=stateOut(state);out.STM=matrixOut(value.phi.data(),value.dimension,false);
-        if(execution.covariance){out.COVARIANCE=matrixOut(value.covariance.data(),value.dimension,true);out.PROCESS_NOISE=prwProcessNoiseRecord(execution.noise);}
-        out.ACCEPTED_STEPS=value.steps;out.REJECTED_STEPS=value.rejections;
-    } else if(execution.variational) {
-        const auto value=Integrator::PropagateCovariance(execution.initial,seconds,execution.integrator,execution.forces,execution.technique,execution.density,execution.impulses,execution.p,execution.noise);
-        if(!value.success){error="invoke-failed: "+value.errorMessage;return false;}
-        auto state=value.finalState;state.epoch=epoch;out.STATE=stateOut(state);out.STM=matrixOut(&value.stm.m[0][0],6,false);
-        if(execution.covariance){out.COVARIANCE=matrixOut(&value.covariance.m[0][0],6,true);out.PROCESS_NOISE=prwProcessNoiseRecord(execution.noise);}
-        out.ACCEPTED_STEPS=value.steps;out.REJECTED_STEPS=value.rejections;
     } else {
         auto config=execution.integrator;
         if(config.method==IntegrationMethod::Cowell)config.method=IntegrationMethod::RKF45;
@@ -661,8 +659,16 @@ bool evaluate(Execution& execution,const PRWExecutionRequest* request,const TTEp
             return prwError(error,"invoke-failed: RK4 request exceeds MAXIMUM_STEPS.");
         const auto value=Integrator::PropagateWithResult(execution.initial,seconds,config,execution.forces);
         if(!value.success){error="invoke-failed: "+value.errorMessage;return false;}
+        // RK4, RKDP87 and BS step forward only; a backward request must not
+        // come back as the initial state.
+        if(!std::isfinite(value.totalTime)||std::abs(value.totalTime-seconds)>32*std::numeric_limits<double>::epsilon()*std::max(1.0,std::abs(seconds)))
+            return prwError(error,"invoke-failed: The integrator did not reach the target epoch (RK4, RKDP87 and BS integrate forward only).");
         auto state=value.finalState;state.epoch=epoch;out.STATE=stateOut(state);out.ACCEPTED_STEPS=value.steps;out.REJECTED_STEPS=value.rejections;
     }
+    return finish(execution,request,epochTT,out,error);
+}
+// The tail every sample shares: mass echo, epoch label and finiteness.
+bool finish(const Execution& execution,const PRWExecutionRequest* request,const TTEpoch& epochTT,PRWPropagationSampleT& out,std::string& error) {
     if(request->INITIAL()->HAS_MASS_KG()&&!execution.massDynamics){out.STATE->HAS_MASS_KG=true;out.STATE->MASS_KG=execution.mass;}
     out.STATE->STATE->EPOCH=formatTdb(epochTT);out.STATE->STATE->EPOCH_TIME_SYSTEM="TDB";
     if(!Ephemeris::ephemerisError().empty()){error="ephemeris-failed: "+Ephemeris::ephemerisError();return false;}
@@ -673,6 +679,77 @@ bool evaluate(Execution& execution,const PRWExecutionRequest* request,const TTEp
         return prwError(error,"invoke-failed: Propagation returned a nonpositive or nonfinite mass.");
     const auto& state=*out.STATE->STATE;
     if(!std::isfinite(state.POSITION->X)||!std::isfinite(state.POSITION->Y)||!std::isfinite(state.POSITION->Z)||!std::isfinite(state.VELOCITY->X)||!std::isfinite(state.VELOCITY->Y)||!std::isfinite(state.VELOCITY->Z))return prwError(error,"invoke-failed: Integration returned a nonfinite state.");
+    return true;
+}
+// The variational path without mass dynamics visits the request's epochs in
+// time order, forward and backward of the initial epoch separately, and
+// integrates each span between consecutive epochs once. The state, the
+// (6 + parameters) transition matrix and the covariance carry from one epoch to
+// the next: Phi(t_k, t_0) = Phi(t_k, t_k-1) Phi(t_k-1, t_0), and P is
+// transported span by span with process noise added on each span as on a
+// single arc. The work grows with the arc, not with the arc times the samples.
+// A request without samples is one span, computed as before.
+struct Cursor {
+    StateVector state;
+    TTEpoch tt;
+    std::vector<double> phi, p;  // n x n, n = 6 + parameters
+    uint32_t steps = 0, rejections = 0;
+};
+bool advance(Execution& execution,Cursor& c,const TTEpoch& to,std::string& error) {
+    const double seconds=elapsedSeconds(c.tt,to);
+    if(seconds==0)return true;
+    const unsigned n=6+unsigned(execution.parameters.size());
+    std::vector<double> span(n*n,0.0),p;
+    StateVector state;uint32_t steps=0,rejections=0;
+    if(!execution.parameters.empty()) {
+        const auto v=Integrator::PropagateParameterCovariance(c.state,seconds,execution.integrator,execution.forces,execution.technique,execution.density,execution.impulses,execution.parameters,c.p,execution.noise);
+        if(!v.success){error="invoke-failed: "+v.errorMessage;return false;}
+        span=v.phi;p=v.covariance;state=v.finalState;steps=v.steps;rejections=v.rejections;
+    } else {
+        Mat6 p0{};if(c.p.size()==36)std::copy(c.p.begin(),c.p.end(),&p0.m[0][0]);
+        const auto v=Integrator::PropagateCovariance(c.state,seconds,execution.integrator,execution.forces,execution.technique,execution.density,execution.impulses,p0,execution.noise);
+        if(!v.success){error="invoke-failed: "+v.errorMessage;return false;}
+        std::copy(&v.stm.m[0][0],&v.stm.m[0][0]+36,span.begin());
+        if(execution.covariance)p.assign(&v.covariance.m[0][0],&v.covariance.m[0][0]+36);
+        state=v.finalState;steps=v.steps;rejections=v.rejections;
+    }
+    std::vector<double> phi(n*n,0.0);
+    for(unsigned i=0;i<n;++i)for(unsigned k=0;k<n;++k){const double x=span[i*n+k];if(x==0)continue;for(unsigned j=0;j<n;++j)phi[i*n+j]+=x*c.phi[k*n+j];}
+    c.phi.swap(phi);c.p.swap(p);
+    c.state=state;c.state.epoch=timesys::ttToTdb(to.jdTt());c.tt=to;
+    c.steps+=steps;c.rejections+=rejections;
+    return true;
+}
+bool evaluateInOrder(Execution& execution,const PRWExecutionRequest* request,PRWExecutionResultT& result,std::string& error) {
+    // Index 0 is the target epoch, k > 0 the k-th sample.
+    std::vector<TTEpoch> epochs{execution.targetTT};
+    epochs.insert(epochs.end(),execution.samplesTT.begin(),execution.samplesTT.end());
+    std::vector<std::pair<double,size_t>> forward,backward;
+    for(size_t k=0;k<epochs.size();++k) {
+        const double seconds=elapsedSeconds(execution.initialTT,epochs[k]);
+        (seconds<0?backward:forward).push_back({std::abs(seconds),k});
+    }
+    std::stable_sort(forward.begin(),forward.end());std::stable_sort(backward.begin(),backward.end());
+    const unsigned n=6+unsigned(execution.parameters.size());
+    std::vector<std::unique_ptr<PRWPropagationSampleT>> samples(epochs.size());
+    for(const auto* group:{&forward,&backward}) {
+        Cursor c;c.state=execution.initial;c.tt=execution.initialTT;
+        c.phi.assign(n*n,0.0);for(unsigned i=0;i<n;++i)c.phi[i*n+i]=1;
+        if(execution.covariance)c.p=execution.parameters.empty()?std::vector<double>(&execution.p.m[0][0],&execution.p.m[0][0]+36):execution.pParameters;
+        for(const auto& entry:*group) {
+            const TTEpoch& epochTT=epochs[entry.second];
+            if(!preflightKernel(execution,timesys::ttToTdb(epochTT.jdTt()),error))return false;
+            if(!advance(execution,c,epochTT,error))return false;
+            auto out=std::make_unique<PRWPropagationSampleT>();
+            out->STATE=sampleState(execution,request,c.state);out->STM=sampleMatrix(execution,c.phi.data(),n,false);
+            if(execution.covariance){out->COVARIANCE=sampleMatrix(execution,c.p.data(),n,true);out->PROCESS_NOISE=prwProcessNoiseRecord(execution.noise);}
+            out->ACCEPTED_STEPS=c.steps;out->REJECTED_STEPS=c.rejections;
+            if(!finish(execution,request,epochTT,*out,error))return false;
+            samples[entry.second]=std::move(out);
+        }
+    }
+    result.FINAL_SAMPLE=std::move(samples[0]);
+    for(size_t k=1;k<samples.size();++k)result.SAMPLES.push_back(std::move(samples[k]));
     return true;
 }
 bool execute(const PRWExecutionRequest* request,const std::shared_ptr<EarthRotation>& earth,const std::shared_ptr<SpaceWeatherTable>& weather,
@@ -708,9 +785,16 @@ bool execute(const PRWExecutionRequest* request,const std::shared_ptr<EarthRotat
         execution.forces.earthFixedRotation=[earth](double jdTdb,double m[3][3]){earth->matrix(jdTdb,m);};
         execution.forces.jdUt1At=[earth](double jdTdb){return earth->ut1(jdTdb);};
     }
-    auto result=std::make_unique<PRWExecutionResultT>();result->FINAL_SAMPLE=std::make_unique<PRWPropagationSampleT>();
-    if(!evaluate(execution,request,execution.targetTT,*result->FINAL_SAMPLE,error))return false;
-    for(const auto& epoch:execution.samplesTT){auto sample=std::make_unique<PRWPropagationSampleT>();if(!evaluate(execution,request,epoch,*sample,error))return false;result->SAMPLES.push_back(std::move(sample));}
+    auto result=std::make_unique<PRWExecutionResultT>();
+    if(execution.variational&&!execution.massDynamics) {
+        if(!evaluateInOrder(execution,request,*result,error))return false;
+    } else {
+        // Finite burns carry burn state along the arc; each epoch is integrated
+        // from the initial state.
+        result->FINAL_SAMPLE=std::make_unique<PRWPropagationSampleT>();
+        if(!evaluate(execution,request,execution.targetTT,*result->FINAL_SAMPLE,error))return false;
+        for(const auto& epoch:execution.samplesTT){auto sample=std::make_unique<PRWPropagationSampleT>();if(!evaluate(execution,request,epoch,*sample,error))return false;result->SAMPLES.push_back(std::move(sample));}
+    }
     result->ELAPSED_SECONDS=elapsedSeconds(execution.initialTT,execution.targetTT);result->EPHEMERIS_SOURCE=Ephemeris::ephemerisSourceName(Ephemeris::selectedEphemerisSource());
     if(execution.variational){result->STM_TECHNIQUE=request->STM_TECHNIQUE();result->DENSITY_TREATMENT=request->DENSITY_TREATMENT();}
     if(request->DYNAMIC_PARAMETERS())for(const auto p:*request->DYNAMIC_PARAMETERS())result->DYNAMIC_PARAMETERS.push_back(p);
