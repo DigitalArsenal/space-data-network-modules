@@ -8,6 +8,7 @@
 
 #include "integrators.h"
 #include "astrodynamics.h"
+#include "shadow_events.h"
 #include <cmath>
 #include <algorithm>
 #include <stdexcept>
@@ -262,7 +263,8 @@ StepResult RKF45WithDense(const std::array<double, 6>& state, double t, double h
 
 PropagateResult RKF45Propagate(const StateVector& initialState, double targetTime,
                                const IntegratorConfig& config,
-                               DerivativeFunc deriv, void* params) {
+                               DerivativeFunc deriv, void* params,
+                               shadow::BoundaryEvents* events) {
     PropagateResult result;
     result.finalState = initialState;
 
@@ -303,10 +305,18 @@ PropagateResult RKF45Propagate(const StateVector& initialState, double targetTim
             errNorm = std::max(errNorm, stepRes.error[i] / scale);
         }
 
+        // A step across a shadow boundary is shortened to end on it.
+        if (errNorm <= 1.0 && events) {
+            if (const double shorter = events->cut(t, h, stepRes.state.data())) {
+                h = shorter;
+                continue;
+            }
+        }
         if (errNorm <= 1.0) {
             // Accept step
             y = stepRes.state;
             t = stepRes.time;
+            if (events) events->taken(t, y.data());
             result.steps++;
             result.maxError = std::max(result.maxError, errNorm);
 
@@ -316,6 +326,7 @@ PropagateResult RKF45Propagate(const StateVector& initialState, double targetTim
             double absH = std::abs(h) * factor;
             absH = std::min(config.maxStep, absH);
             h = backward ? -absH : absH;
+            if (events) h = events->next(h);
         } else {
             // Reject step
             result.rejections++;
@@ -328,6 +339,7 @@ PropagateResult RKF45Propagate(const StateVector& initialState, double targetTim
             if (absH <= config.minStep * 1.01 && result.rejections > 10) {
                 y = stepRes.state;
                 t = stepRes.time;
+                if (events) events->taken(t, y.data());
                 result.steps++;
                 result.maxError = std::max(result.maxError, errNorm);
             }
@@ -811,7 +823,8 @@ StepResult RKF78WithDense(const std::array<double, 6>& state, double t, double h
 
 PropagateResult RKF78Propagate(const StateVector& initialState, double targetTime,
                                const IntegratorConfig& config,
-                               DerivativeFunc deriv, void* params) {
+                               DerivativeFunc deriv, void* params,
+                               shadow::BoundaryEvents* events) {
     PropagateResult result;
     result.finalState = initialState;
 
@@ -849,10 +862,18 @@ PropagateResult RKF78Propagate(const StateVector& initialState, double targetTim
         double errNorm = ComputeErrorNorm(stepRes.error, stepRes.state,
                                           config.absTolerance, config.relTolerance);
 
+        // A step across a shadow boundary is shortened to end on it.
+        if (errNorm <= 1.0 && events) {
+            if (const double shorter = events->cut(t, h, stepRes.state.data())) {
+                h = shorter;
+                continue;
+            }
+        }
         if (errNorm <= 1.0) {
             // Accept step
             y = stepRes.state;
             t = stepRes.time;
+            if (events) events->taken(t, y.data());
             result.steps++;
             result.maxError = std::max(result.maxError, errNorm);
 
@@ -860,6 +881,7 @@ PropagateResult RKF78Propagate(const StateVector& initialState, double targetTim
             double optStep = ComputeOptimalStep(std::abs(h), errNorm, 8);
             optStep = std::min(config.maxStep, std::max(config.minStep, optStep));
             h = backward ? -optStep : optStep;
+            if (events) h = events->next(h);
         } else {
             // Reject step
             result.rejections++;
@@ -871,6 +893,7 @@ PropagateResult RKF78Propagate(const StateVector& initialState, double targetTim
             if (optStep <= config.minStep * 1.01 && result.rejections > 10) {
                 y = stepRes.state;
                 t = stepRes.time;
+                if (events) events->taken(t, y.data());
                 result.steps++;
                 result.maxError = std::max(result.maxError, errNorm);
             }
@@ -918,7 +941,8 @@ StepResult RKDP87(const std::array<double, 6>& state, double t, double h,
 
 PropagateResult RKDP87Propagate(const StateVector& initialState, double targetTime,
                                 const IntegratorConfig& config,
-                                DerivativeFunc deriv, void* params) {
+                                DerivativeFunc deriv, void* params,
+                               shadow::BoundaryEvents* events) {
     PropagateResult result;
     result.finalState = initialState;
 
@@ -946,16 +970,25 @@ PropagateResult RKDP87Propagate(const StateVector& initialState, double targetTi
         double errNorm = ComputeErrorNorm(stepRes.error, stepRes.state,
                                           config.absTolerance, config.relTolerance);
 
+        // A step across a shadow boundary is shortened to end on it.
+        if (errNorm <= 1.0 && events) {
+            if (const double shorter = events->cut(t, h, stepRes.state.data())) {
+                h = shorter;
+                continue;
+            }
+        }
         if (errNorm <= 1.0) {
             // Accept step
             y = stepRes.state;
             t = stepRes.time;
+            if (events) events->taken(t, y.data());
             result.steps++;
             result.maxError = std::max(result.maxError, errNorm);
 
             // Compute optimal step size (order 8)
             h = ComputeOptimalStep(h, errNorm, 8);
             h = std::min(config.maxStep, std::max(config.minStep, h));
+            if (events) h = events->next(h);
         } else {
             // Reject step
             result.rejections++;
@@ -966,6 +999,7 @@ PropagateResult RKDP87Propagate(const StateVector& initialState, double targetTi
             if (h <= config.minStep * 1.01 && result.rejections > 10) {
                 y = stepRes.state;
                 t = stepRes.time;
+                if (events) events->taken(t, y.data());
                 result.steps++;
                 result.maxError = std::max(result.maxError, errNorm);
             }
@@ -1009,7 +1043,8 @@ StepResult BS(const std::array<double, 6>& state, double t, double h,
 PropagateResult BSPropagate(const StateVector& initialState, double targetTime,
                             const IntegratorConfig& config,
                             DerivativeFunc deriv, void* params,
-                            const BSConfig& bsConfig) {
+                            const BSConfig& bsConfig,
+                               shadow::BoundaryEvents* events) {
     PropagateResult result;
     result.finalState = initialState;
 
@@ -1037,10 +1072,18 @@ PropagateResult BSPropagate(const StateVector& initialState, double targetTime,
         double errNorm = ComputeErrorNorm(stepRes.error, stepRes.state,
                                           config.absTolerance, config.relTolerance);
 
+        // A step across a shadow boundary is shortened to end on it.
+        if (errNorm <= 1.0 && events) {
+            if (const double shorter = events->cut(t, h, stepRes.state.data())) {
+                h = shorter;
+                continue;
+            }
+        }
         if (errNorm <= 1.0) {
             // Accept step
             y = stepRes.state;
             t = stepRes.time;
+            if (events) events->taken(t, y.data());
             result.steps++;
             result.maxError = std::max(result.maxError, errNorm);
 
@@ -1048,6 +1091,7 @@ PropagateResult BSPropagate(const StateVector& initialState, double targetTime,
             double factor = bsConfig.safetyFactor * std::pow(errNorm, -1.0 / (bsConfig.maxSubdivisions + 1));
             factor = std::min(bsConfig.maxStepFactor, std::max(bsConfig.minStepFactor, factor));
             h = std::min(config.maxStep, h * factor);
+            if (events) h = events->next(h);
         } else {
             // Reject step
             result.rejections++;
@@ -1059,6 +1103,7 @@ PropagateResult BSPropagate(const StateVector& initialState, double targetTime,
             if (h <= config.minStep * 1.01 && result.rejections > 10) {
                 y = stepRes.state;
                 t = stepRes.time;
+                if (events) events->taken(t, y.data());
                 result.steps++;
                 result.maxError = std::max(result.maxError, errNorm);
             }
@@ -1799,26 +1844,31 @@ PropagateResult PropagateWithResult(const StateVector& initialState, double dt,
     wrapper.forceSet = &forceSet;
     wrapper.epoch = clockEpoch(forceSet, initialState);
 
+    // The adaptive methods end their steps on the Earth's shadow boundaries.
+    const double y0[6] = {initialState.position.x, initialState.position.y, initialState.position.z,
+                          initialState.velocity.x, initialState.velocity.y, initialState.velocity.z};
+    shadow::BoundaryEvents events(forceSet, wrapper.epoch, 0.0, y0);
+    shadow::BoundaryEvents* boundaries = events.active() ? &events : nullptr;
     switch (config.method) {
         case IntegrationMethod::RK4:
             return RK4Propagate(initialState, dt, config.initialStep,
                                forceModelDerivative, &wrapper);
 
         case IntegrationMethod::RKF45:
-            return RKF45Propagate(initialState, dt, config, forceModelDerivative, &wrapper);
+            return RKF45Propagate(initialState, dt, config, forceModelDerivative, &wrapper, boundaries);
 
         case IntegrationMethod::RKF78:
         case IntegrationMethod::RK78:
-            return RKF78Propagate(initialState, dt, config, forceModelDerivative, &wrapper);
+            return RKF78Propagate(initialState, dt, config, forceModelDerivative, &wrapper, boundaries);
 
         case IntegrationMethod::RKDP87:
-            return RKDP87Propagate(initialState, dt, config, forceModelDerivative, &wrapper);
+            return RKDP87Propagate(initialState, dt, config, forceModelDerivative, &wrapper, boundaries);
 
         case IntegrationMethod::BS:
-            return BSPropagate(initialState, dt, config, forceModelDerivative, &wrapper);
+            return BSPropagate(initialState, dt, config, forceModelDerivative, &wrapper, BSConfig(), boundaries);
 
         default:
-            return RKF78Propagate(initialState, dt, config, forceModelDerivative, &wrapper);
+            return RKF78Propagate(initialState, dt, config, forceModelDerivative, &wrapper, boundaries);
     }
 }
 

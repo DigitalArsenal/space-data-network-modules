@@ -12,9 +12,13 @@
 #include "time_convert.h"
 #include "coords.h"
 #include "egm2008_data.h"
+#include "iers2010_tides.h"
+#include "jb2008.h"
+#include "jacchia_roberts.h"
 #include <cmath>
 #include <algorithm>
 #include <stdexcept>
+#include <cstring>
 
 namespace astro {
 namespace ForceModel {
@@ -31,63 +35,101 @@ constexpr double G_C2 = 8.87e-10;  // km^3/kg/s^2 / c^2
 /// Stefan-Boltzmann constant (W/m^2/K^4)
 constexpr double STEFAN_BOLTZMANN = 5.670374419e-8;
 
-/// Earth's angular momentum factor for Lense-Thirring (G*J/c^2 in km^3/s)
-/// J_earth = 5.86e33 kg*m^2/s = 5.86e27 kg*km^2/s
-/// G = 6.674e-11 m^3/(kg*s^2) = 6.674e-20 km^3/(kg*s^2)
-/// c^2 = (2.998e5 km/s)^2 = 8.99e10 km^2/s^2
-/// G*J/c^2 = 6.674e-20 * 5.86e27 / 8.99e10 = 4.35e-3 km^3/s
-constexpr double EARTH_GJ_C2 = 4.35e-3;  // km^3/s (G*J/c^2 for Earth)
-
-Vec3 atmosphereCoRotationVelocity(const Vec3& position, bool coRotatingAtmosphere) {
-    if (!coRotatingAtmosphere) {
-        return Vec3();
-    }
-    return Vec3(-OMEGA_EARTH * position.y, OMEGA_EARTH * position.x, 0.0);
-}
-
+/// Earth's angular momentum per unit mass for Lense-Thirring, |J| = 9.8e8
+/// m^2/s (IERS Conventions 2010, section 10.3, eq. 10.12), in km^2/s. The
+/// term's coefficient is (1 + gamma) GM |J| / c^2 with the request's GM.
+/// Until 2026-10-08 a fixed G*J/c^2 of 4.35e-3 km^3/s about the GCRF z axis
+/// was used (0.08 % from GM*9.8e8/c^2, and the pole off by the precession
+/// since J2000).
+constexpr double EARTH_J_PER_MASS_KM2_S = 9.8e2;
 
 // The force set integrates GCRF, while the geodetic density models
 // (computeNRLMSISE00, computeJB2008, computeDTM2020 and computeDragAcceleration)
-// take an Earth-fixed position (astrodynamics.h). Rotating about the GCRF z
-// axis by GMST supplies the Earth-fixed longitude that sets local solar time
-// and the longitude terms. Precession, nutation and polar motion are not
-// applied: together they tilt the pole by well under a degree since J2000,
-// below the horizontal resolution of these empirical models, and the
-// co-rotation term below already uses the same axis. UT1-UTC (< 0.9 s) is
-// likewise negligible here.
+// take an Earth-fixed position (astrodynamics.h). EarthAxes carries the one
+// rotation a force evaluation uses for all of them, for the co-rotating
+// atmosphere, and for the gravity field: the force set's GcrfToEarthFixed
+// (IERS EOP through the earth_orientation input when supplied).
 } // anonymous namespace
 
-Vec3 EarthFixedForDensity(const Vec3& gcrf, double jdUt) {
+Vec3 EarthAxes::fixed(const Vec3& v) const {
+    return Vec3(m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z,
+                m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z,
+                m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z);
+}
+
+Vec3 EarthAxes::inertial(const Vec3& v) const {
+    return Vec3(m[0][0] * v.x + m[1][0] * v.y + m[2][0] * v.z,
+                m[0][1] * v.x + m[1][1] * v.y + m[2][1] * v.z,
+                m[0][2] * v.x + m[1][2] * v.y + m[2][2] * v.z);
+}
+
+Vec3 EarthAxes::spin() const { return Vec3(m[2][0], m[2][1], m[2][2]); }
+
+EarthAxes EarthAxesAt(double jdTdb, const ForceModelSet& forceSet) {
+    EarthAxes axes;
+    GcrfToEarthFixed(jdTdb, forceSet, axes.m);
+    return axes;
+}
+
+SpaceWeatherData WeatherAt(double jdUtc, const ForceModelSet& forceSet) {
+    if (!forceSet.weatherAt) return forceSet.weather;
+    SpaceWeatherData weather = forceSet.weather;
+    forceSet.weatherAt(jdUtc, weather);
+    return weather;
+}
+
+DragForceConfig DragAt(double jdTdb, const ForceModelSet& forceSet) {
+    DragForceConfig drag = forceSet.drag;
+    if (forceSet.dragAreaOverMassRate != 0.0 && drag.area > 0.0 && drag.mass > 0.0) {
+        const double seconds = (jdTdb - forceSet.dragRateEpochTdb) * 86400.0;
+        const double areaOverMass = drag.Cd * drag.area / drag.mass + forceSet.dragAreaOverMassRate * seconds;
+        drag.Cd = areaOverMass * drag.mass / drag.area;
+    }
+    return drag;
+}
+
+// GMST about the GCRF z axis. Precession, nutation and polar motion are not
+// applied (the pole is off by the precession since J2000, ~0.35 deg in 2026),
+// so this serves only direct callers of the density functions that pass no
+// axes; force-set evaluation always passes EarthAxesAt.
+EarthAxes GmstAxes(double jdUt) {
     const double theta = timesys::ut1ToGmst(jdUt);
     const double c = std::cos(theta);
     const double s = std::sin(theta);
-    return Vec3(c * gcrf.x + s * gcrf.y, -s * gcrf.x + c * gcrf.y, gcrf.z);
+    EarthAxes axes;
+    const double m[3][3] = {{c, s, 0}, {-s, c, 0}, {0, 0, 1}};
+    std::memcpy(axes.m, m, sizeof m);
+    return axes;
+}
+
+Vec3 EarthFixedForDensity(const Vec3& gcrf, double jdUt) {
+    return GmstAxes(jdUt).fixed(gcrf);
 }
 
 namespace {
-Vec3 GcrfFromEarthFixed(const Vec3& earthFixed, double jdUt) {
-    const double theta = timesys::ut1ToGmst(jdUt);
-    const double c = std::cos(theta);
-    const double s = std::sin(theta);
-    return Vec3(c * earthFixed.x - s * earthFixed.y, s * earthFixed.x + c * earthFixed.y, earthFixed.z);
-}
-
-// Velocity of the air relative to GCRF: co-rotation plus, when requested, the
-// HWM14 horizontal wind, evaluated in the same Earth-fixed axes as the density
-// and rotated back. Winds without weather are refused (Harris-Priester and the
-// exponential helper carry none).
-Vec3 relativeAtmosphereVelocity(const Vec3& position, const Vec3& velocity, double jd,
-                                bool coRotatingAtmosphere, bool includeWinds,
-                                const SpaceWeatherData* weather = nullptr, bool windDisturbance = true) {
-    Vec3 vAtm = atmosphereCoRotationVelocity(position, coRotatingAtmosphere);
+// Velocity of the air relative to GCRF: co-rotation about the Earth's spin
+// axis plus, when requested, the HWM14 horizontal wind, evaluated in the same
+// Earth-fixed axes as the density and rotated back. Winds without weather are
+// refused (Harris-Priester and the exponential helper carry none).
+Vec3 relativeAtmosphereVelocity(const Vec3& position, const Vec3& velocity, double jdUt,
+                                const EarthAxes& axes, bool coRotatingAtmosphere,
+                                bool includeWinds, const SpaceWeatherData* weather = nullptr,
+                                bool windDisturbance = true) {
+    Vec3 vAtm = coRotatingAtmosphere ? axes.spin().cross(position) * OMEGA_EARTH : Vec3();
     if (includeWinds) {
         if (weather == nullptr) {
             throw std::invalid_argument("includeWinds: this drag model has no space-weather input for HWM14");
         }
-        vAtm += GcrfFromEarthFixed(
-            HorizontalWindEarthFixed(EarthFixedForDensity(position, jd), jd, *weather, windDisturbance), jd);
+        vAtm += axes.inertial(
+            HorizontalWindEarthFixed(axes.fixed(position), jdUt, *weather, windDisturbance));
     }
     return velocity - vAtm;
+}
+
+const EarthAxes& axesOr(const EarthAxes* axes, EarthAxes& fallback, double jdUt) {
+    if (axes) return *axes;
+    fallback = GmstAxes(jdUt);
+    return fallback;
 }
 }  // namespace
 
@@ -232,24 +274,46 @@ Vec3 SphericalHarmonics(const Vec3& position, const SphericalHarmonicsConfig& co
 // 3. EGM2008 - Earth Gravitational Model 2008
 // =============================================================================
 
-Vec3 EGM2008(const Vec3& position, const EGM2008ForceConfig& config) {
-    // Use extended gravity field with embedded EGM2008 coefficients (degree 2-70)
+// The embedded EGM2008 or EGM96 coefficients (degree 2-70) at the configured
+// truncation, re-initialized only when it changes. Tesseral and sectorial
+// terms above maxTesseralDegree are zeroed, which the evaluation (and the
+// partials' copy of it) then skips.
+const ExtendedGravityField& EmbeddedEarthGravityField(const EGM2008ForceConfig& config) {
     static ExtendedGravityField field;
-    static uint16_t cachedDegree = 0;
-    static uint16_t cachedOrder = 0;
-
-    // Re-initialize only if degree/order changed
-    if (cachedDegree != config.truncationDegree || cachedOrder != config.truncationOrder) {
+    static bool cached = false;
+    static uint16_t cachedDegree = 0, cachedOrder = 0, cachedTesseral = 0;
+    static EmbeddedEarthField cachedField = EmbeddedEarthField::EGM2008;
+    if (!cached || cachedDegree != config.truncationDegree || cachedOrder != config.truncationOrder ||
+        cachedTesseral != config.maxTesseralDegree || cachedField != config.field) {
         EGM2008Config extConfig;
         extConfig.maxDegree = config.truncationDegree;
         extConfig.maxOrder = config.truncationOrder;
-        field = initEGM2008Extended(extConfig);
+        field = config.field == EmbeddedEarthField::EGM96 ? initEGM96Extended(extConfig)
+                                                          : initEGM2008Extended(extConfig);
+        for (uint16_t n = 0; n <= field.maxDegree; ++n)
+            for (uint16_t m = 1; m <= std::min(n, field.maxOrder); ++m)
+                if (n > config.maxTesseralDegree) field.Cnm[n][m] = field.Snm[n][m] = 0.0;
+        cached = true;
         cachedDegree = config.truncationDegree;
         cachedOrder = config.truncationOrder;
+        cachedTesseral = config.maxTesseralDegree;
+        cachedField = config.field;
     }
+    return field;
+}
 
-    GravityAcceleration result = computeExtendedGravity(position, field);
-    return result.total;
+namespace {
+const ExtendedGravityField& egm2008Field(const EGM2008ForceConfig& config) {
+    return EmbeddedEarthGravityField(config);
+}
+}  // namespace
+
+Vec3 EGM2008(const Vec3& position, const EGM2008ForceConfig& config) {
+    return computeExtendedGravity(position, egm2008Field(config)).total;
+}
+
+Vec3 EGM2008Harmonics(const Vec3& position, const EGM2008ForceConfig& config) {
+    return computeExtendedGravity(position, egm2008Field(config)).zonalHarmonics;
 }
 
 // =============================================================================
@@ -454,7 +518,8 @@ Vec3 AtmosphericDragExponential(const Vec3& position, const Vec3& velocity,
     double density = exponentialAtmosphereDensity(alt);
 
     // Exponential helper keeps legacy co-rotating atmosphere behavior.
-    Vec3 vRel = relativeAtmosphereVelocity(position, velocity, 0.0, true, false);
+    // Co-rotation about the GCRF z axis; this helper carries no epoch.
+    Vec3 vRel = velocity - Vec3(0.0, 0.0, 1.0).cross(position) * OMEGA_EARTH;
     double vRelMag = vRel.magnitude();
 
     if (vRelMag < 1e-6 || density < 1e-20) {
@@ -490,13 +555,15 @@ AtmosphereModelType AtmosphereModelForDrag(DragModelType model) {
         case DragModelType::NRLMSISE00:     return AtmosphereModelType::NRLMSISE00;
         case DragModelType::JB2008:         return AtmosphereModelType::JB2008;
         case DragModelType::DTM2020:        return AtmosphereModelType::DTM2020;
+        case DragModelType::JacchiaRoberts:      break;  // force-set path only (DragAccelerationWith)
     }
     return AtmosphereModelType::NRLMSISE00;
 }
 
 Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, double jd,
                     const DragForceConfig& dragConfig, double bulgeExponent,
-                    const SpaceWeatherData* weather, double windJdUtc) {
+                    const SpaceWeatherData* weather, double windJdUtc,
+                    const EarthAxes* axes) {
     // The apex direction needs the Sun in the same frame as `position`: both
     // are GCRF here, and the bulge geometry depends only on their relative
     // direction.
@@ -511,7 +578,10 @@ Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, double jd,
     if (density.density < 1e-20) return Vec3();
 
     // jd is TDB for the Sun; the winds need the UTC day and time.
-    Vec3 vRel = relativeAtmosphereVelocity(position, velocity, windJdUtc > 0.0 ? windJdUtc : jd,
+    const double windJd = windJdUtc > 0.0 ? windJdUtc : jd;
+    EarthAxes fallback;
+    Vec3 vRel = relativeAtmosphereVelocity(position, velocity, windJd,
+                                           axesOr(axes, fallback, windJd),
                                            dragConfig.coRotatingAtmosphere,
                                            dragConfig.includeWinds, weather,
                                            dragConfig.windDisturbance);
@@ -525,12 +595,16 @@ Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, double jd,
 }
 
 Vec3 AtmosphericDrag(const Vec3& position, const Vec3& velocity, double jd,
-                     const SpaceWeatherData& weather, const DragForceConfig& config) {
+                     const SpaceWeatherData& weather, const DragForceConfig& config,
+                     const EarthAxes* axes) {
     double alt = position.magnitude() - RE_EARTH;
 
     if (alt < config.minAltitude || alt > config.maxAltitude) {
         return Vec3();
     }
+
+    // JB2008 needs the Sun in the same Earth-fixed axes as the point.
+    if (config.model == DragModelType::JB2008) return JB2008(position, velocity, jd, weather, config, JB2008Config(), axes);
 
     DragConfig dragCfg;
     dragCfg.mass = config.mass;
@@ -546,10 +620,11 @@ Vec3 AtmosphericDrag(const Vec3& position, const Vec3& velocity, double jd,
     // computeDragAcceleration takes Earth-fixed axes: rotate the GCRF state in
     // (the inertial velocity is only re-expressed; co-rotation is subtracted
     // inside) and the acceleration back out.
+    EarthAxes fallback;
+    const EarthAxes& e = axesOr(axes, fallback, jd);
     DragAccelerationResult result = computeDragAcceleration(
-        EarthFixedForDensity(position, jd), EarthFixedForDensity(velocity, jd), jd,
-        dragCfg, weather);
-    return GcrfFromEarthFixed(result.total, jd);
+        e.fixed(position), e.fixed(velocity), jd, dragCfg, weather);
+    return e.inertial(result.total);
 }
 
 // =============================================================================
@@ -558,7 +633,7 @@ Vec3 AtmosphericDrag(const Vec3& position, const Vec3& velocity, double jd,
 
 Vec3 NRLMSISE00(const Vec3& position, const Vec3& velocity, double jd,
                 const SpaceWeatherData& weather, const DragForceConfig& dragConfig,
-                const NRLMSISE00Config& nrlmsiseConfig) {
+                const NRLMSISE00Config& nrlmsiseConfig, const EarthAxes* axes) {
     AtmosphereConfig atmConfig;
     atmConfig.model = AtmosphereModelType::NRLMSISE00;
     atmConfig.includeWinds = dragConfig.includeWinds;
@@ -568,8 +643,9 @@ Vec3 NRLMSISE00(const Vec3& position, const Vec3& velocity, double jd,
     atmConfig.minAltitude = dragConfig.minAltitude;
     atmConfig.maxAltitude = dragConfig.maxAltitude;
 
-    AtmosphericDensity density =
-        computeNRLMSISE00(EarthFixedForDensity(position, jd), jd, weather, atmConfig);
+    EarthAxes fallback;
+    const EarthAxes& e = axesOr(axes, fallback, jd);
+    AtmosphericDensity density = computeNRLMSISE00(e.fixed(position), jd, weather, atmConfig);
 
     if (density.density < 1e-20) {
         return Vec3();
@@ -580,6 +656,7 @@ Vec3 NRLMSISE00(const Vec3& position, const Vec3& velocity, double jd,
         position,
         velocity,
         jd,
+        e,
         dragConfig.coRotatingAtmosphere,
         dragConfig.includeWinds,
         &weather,
@@ -613,40 +690,45 @@ AtmosphericDensity NRLMSISE00Density(const Vec3& position, double jd,
 // 9. JB2008 - Jacchia-Bowman 2008
 // =============================================================================
 
+double JB2008DensityAt(const Vec3& position, double jdTdb, double jdUtc,
+                       const EarthAxes& axes, const SpaceWeatherData& weather) {
+    double lat = 0, lon = 0, alt = 0, sunLat = 0, sunLon = 0, sunAlt = 0;
+    ecefToGeodetic(axes.fixed(position), lat, lon, alt);
+    const EphemerisState sun = getSunPosition(jdTdb);
+    if (!sun.valid) return 0.0;
+    ecefToGeodetic(axes.fixed(sun.position), sunLat, sunLon, sunAlt);
+    const jb2008::Inputs in{weather.F107, weather.F107a, weather.S107, weather.S107a,
+                            weather.M107, weather.M107a, weather.Y107, weather.Y107a, weather.dTc};
+    return jb2008::density(jdUtc - 2400000.5, sunLon, sunLat, lon, lat, alt * 1000.0, in);
+}
+
+// Drag from a density at the point: the air's velocity (co-rotation and
+// winds as configured, in the same axes) and 1/2 rho v^2 Cd A/m along -v_rel.
+static Vec3 DragFromDensity(double rho, const Vec3& position, const Vec3& velocity, double jdUt,
+                     const EarthAxes& axes, const DragForceConfig& drag,
+                     const SpaceWeatherData& weather) {
+    const Vec3 vRel = relativeAtmosphereVelocity(position, velocity, jdUt, axes,
+        drag.coRotatingAtmosphere, drag.includeWinds, &weather, drag.windDisturbance);
+    const double vRelMag = vRel.magnitude();
+    if (rho < 1e-20 || vRelMag < 1e-6) return Vec3();
+    const double vRelMs = vRelMag * 1000.0;
+    return vRel.normalized() * (-0.5 * rho * vRelMs * vRelMs * drag.Cd * drag.area / drag.mass * 1e-3);
+}
+
+// The published model (JB2008DensityAt), on the given axes or GMST axes.
+// The Sun is taken at jd as given (UTC here; 69 s from TDB moves it 0.0008
+// degrees).
 Vec3 JB2008(const Vec3& position, const Vec3& velocity, double jd,
             const SpaceWeatherData& weather, const DragForceConfig& dragConfig,
-            const JB2008Config& jb2008Config) {
-    AtmosphericDensity density = computeJB2008(EarthFixedForDensity(position, jd), jd, weather);
-
-    if (density.density < 1e-20) {
-        return Vec3();
-    }
-
-    Vec3 vRel = relativeAtmosphereVelocity(
-        position,
-        velocity,
-        jd,
-        dragConfig.coRotatingAtmosphere,
-        dragConfig.includeWinds,
-        &weather,
-        dragConfig.windDisturbance
-    );
-    double vRelMag = vRel.magnitude();
-
-    if (vRelMag < 1e-6) {
-        return Vec3();
-    }
-
-    double vRel_ms = vRelMag * 1000.0;
-    double B = dragConfig.Cd * dragConfig.area / dragConfig.mass;
-    double aMag = 0.5 * density.density * vRel_ms * vRel_ms * B * 1e-3;
-
-    return vRel.normalized() * (-aMag);
+            const JB2008Config&, const EarthAxes* axes) {
+    EarthAxes fallback;
+    const EarthAxes& e = axesOr(axes, fallback, jd);
+    return DragFromDensity(JB2008DensityAt(position, jd, jd, e, weather), position, velocity, jd, e, dragConfig, weather);
 }
 
 AtmosphericDensity JB2008Density(const Vec3& position, double jd,
                                  const SpaceWeatherData& weather,
-                                 const JB2008Config& config) {
+                                 const JB2008Config&) {
     return computeJB2008(EarthFixedForDensity(position, jd), jd, weather);
 }
 
@@ -656,8 +738,10 @@ AtmosphericDensity JB2008Density(const Vec3& position, double jd,
 
 Vec3 DTM2020(const Vec3& position, const Vec3& velocity, double jd,
              const SpaceWeatherData& weather, const DragForceConfig& dragConfig,
-             const DTM2020Config& dtmConfig) {
-    AtmosphericDensity density = computeDTM2020(EarthFixedForDensity(position, jd), jd, weather);
+             const DTM2020Config& dtmConfig, const EarthAxes* axes) {
+    EarthAxes fallback;
+    const EarthAxes& e = axesOr(axes, fallback, jd);
+    AtmosphericDensity density = computeDTM2020(e.fixed(position), jd, weather);
 
     if (density.density < 1e-20) {
         return Vec3();
@@ -667,6 +751,7 @@ Vec3 DTM2020(const Vec3& position, const Vec3& velocity, double jd,
         position,
         velocity,
         jd,
+        e,
         dragConfig.coRotatingAtmosphere,
         dragConfig.includeWinds,
         &weather,
@@ -716,7 +801,8 @@ Vec3 SchwarzschildCorrection(const Vec3& position, const Vec3& velocity, double 
 }
 
 Vec3 RelativisticCorrection(const Vec3& position, const Vec3& velocity, double jd,
-                            double mu, const RelativisticConfig& config) {
+                            double mu, const RelativisticConfig& config,
+                            const EarthAxes* axes) {
     Vec3 totalAcc;
 
     double c2 = config.c * config.c;
@@ -726,21 +812,22 @@ Vec3 RelativisticCorrection(const Vec3& position, const Vec3& velocity, double j
     }
 
     if (config.lenseThirring) {
-        // Lense-Thirring (frame dragging) effect
-        // IERS Conventions 2010, Eq. 10.12 second term
-        // a_LT = (2*G*J/(c^2*r^3)) * [3/r^2 * (r × v)(r · Ŝ) + (v × Ŝ)]
+        // Lense-Thirring (frame dragging), IERS Conventions 2010 eq. 10.12
+        // second term with gamma = 1:
+        // a_LT = 2 GM/(c^2 r^3) [3/r^2 (r x v)(r . J) + v x J],
+        // J = |J| times the Earth's spin axis: the Earth-fixed z axis of the
+        // force set's Earth orientation (EOP when supplied), in GCRF.
         double r = position.magnitude();
         double r2 = r * r;
         double r3 = r2 * r;
 
-        // Earth's spin axis (along z in J2000/GCRF)
-        Vec3 spinAxis(0, 0, 1);
+        Vec3 spinAxis = axes ? axes->spin() : Vec3(0, 0, 1);
 
         double rDotSpin = position.dot(spinAxis);
         Vec3 rCrossV = position.cross(velocity);
         Vec3 vCrossSpin = velocity.cross(spinAxis);
 
-        double factor = 2.0 * EARTH_GJ_C2 / r3;
+        double factor = 2.0 * mu * EARTH_J_PER_MASS_KM2_S / (c2 * r3);
         Vec3 term1 = rCrossV * (3.0 * rDotSpin / r2);
         Vec3 term2 = vCrossSpin;
 
@@ -768,7 +855,11 @@ Vec3 RelativisticCorrection(const Vec3& position, const Vec3& velocity, double j
 
                 // de Sitter: a = -3/(2c²) · (v_E × a_E) × v_sat
                 Vec3 vE_cross_aE = vE.cross(aE);
-                totalAcc += vE_cross_aE.cross(velocity) * (-3.0 / (2.0 * c2));
+                // IERS Conventions (2010) eq. 10.12, third term with gamma = 1:
+                // (1 + 2 gamma) [Rdot x (-GM_S R / (c^2 R^3))] x v, R the Earth
+                // from the Sun. aE is that bracket's -GM_S R / R^3. Until
+                // 2026-10-08 the coefficient was -3/2 instead of 3.
+                totalAcc += vE_cross_aE.cross(velocity) * (3.0 / c2);
             }
         }
     }
@@ -923,199 +1014,145 @@ Vec3 ThermalReradiation(const Vec3& satPosition, const Vec3& sunPosition,
 // 14. Solid Tides - Solid Earth Tides
 // =============================================================================
 
-/// Compute solid tide contribution from a single body (IERS 2010 Eq. 6.6)
-/// Uses degree-2 and degree-3 Love numbers to compute ΔCnm/ΔSnm
-/// then converts to acceleration perturbation on the satellite.
-static Vec3 solidTideSingleBody(const Vec3& satPosition, const Vec3& bodyPosition,
-                                 double muBody, double k20, double k21, double k22, double k30) {
-    Vec3 totalAcc;
-    double r = satPosition.magnitude();
-    double rBody = bodyPosition.magnitude();
-    if (r < RE_EARTH || rBody < 1.0) return Vec3();
+namespace {
 
-    double Re = RE_EARTH;
-    double Re2 = Re * Re;
-    double r2 = r * r;
-    double r3 = r2 * r;
-    double rBody2 = rBody * rBody;
-    double rBody3 = rBody2 * rBody;
+constexpr double ARCSEC_TO_RAD = PI / 648000.0;
 
-    // Unit vectors
-    Vec3 rHat = satPosition.normalized();
-    Vec3 rBodyHat = bodyPosition.normalized();
+// GMST, IERS Conventions (2010) eq. 5.32: the Earth rotation angle (eq.
+// 5.15) at UT1 plus the IAU 2006 polynomial in TT (ERFA eraGmst06).
+double gmst2006(double jdUt1, double jdTt) {
+    const double du = jdUt1 - 2451545.0;
+    const double era = TWO_PI * (std::fmod(jdUt1, 1.0) + 0.7790572732640 + 0.00273781191135448 * du);
+    const double t = (jdTt - 2451545.0) / 36525.0;
+    const double poly = 0.014506 + t * (4612.156534 + t * (1.3915817 + t * (-0.00000044 +
+                        t * (-0.000029956 + t * -0.0000000368))));
+    return std::fmod(era, TWO_PI) + poly * ARCSEC_TO_RAD;
+}
 
-    // Geocentric latitude and longitude of satellite
-    double sinLatSat = satPosition.z / r;
-    double cosLatSat = std::sqrt(satPosition.x * satPosition.x + satPosition.y * satPosition.y) / r;
-    double lonSat = std::atan2(satPosition.y, satPosition.x);
+// Delaunay arguments l, l', F, D, Omega (IERS Conventions 2010 eq. 5.43;
+// ERFA eraFal03, eraFalp03, eraFaf03, eraFad03, eraFaom03), radians.
+void delaunayArguments(double jdTt, double a[5]) {
+    const double t = (jdTt - 2451545.0) / 36525.0;
+    const double turn = 1296000.0;
+    a[0] = std::fmod(485868.249036 + t * (1717915923.2178 + t * (31.8792 + t * (0.051635 + t * -0.00024470))), turn);
+    a[1] = std::fmod(1287104.793048 + t * (129596581.0481 + t * (-0.5532 + t * (0.000136 + t * -0.00001149))), turn);
+    a[2] = std::fmod(335779.526232 + t * (1739527262.8478 + t * (-12.7512 + t * (-0.001037 + t * 0.00000417))), turn);
+    a[3] = std::fmod(1072260.703692 + t * (1602961601.2090 + t * (-6.3706 + t * (0.006593 + t * -0.00003169))), turn);
+    a[4] = std::fmod(450160.398036 + t * (-6962890.5431 + t * (7.4722 + t * (0.007702 + t * -0.00005939))), turn);
+    for (int i = 0; i < 5; ++i) a[i] *= ARCSEC_TO_RAD;
+}
 
-    // Geocentric latitude and longitude of perturbing body
-    double sinLatBody = bodyPosition.z / rBody;
-    double cosLatBody = std::sqrt(bodyPosition.x * bodyPosition.x + bodyPosition.y * bodyPosition.y) / rBody;
-    double lonBody = std::atan2(bodyPosition.y, bodyPosition.x);
+// Fully normalized associated Legendre functions of degrees 2 and 3 at
+// t = sin(latitude), u = cos(latitude): the geodetic normalization
+// sqrt((2 - delta_m0)(2n + 1)(n - m)!/(n + m)!), no Condon-Shortley phase.
+void normalizedLegendre3(double t, double u, double p[4][4]) {
+    p[2][0] = std::sqrt(5.0) * 0.5 * (3.0 * t * t - 1.0);
+    p[2][1] = std::sqrt(15.0) * t * u;
+    p[2][2] = std::sqrt(15.0) * 0.5 * u * u;
+    p[3][0] = std::sqrt(7.0) * 0.5 * t * (5.0 * t * t - 3.0);
+    p[3][1] = std::sqrt(42.0) * 0.25 * (5.0 * t * t - 1.0) * u;
+    p[3][2] = std::sqrt(105.0) * 0.5 * t * u * u;
+    p[3][3] = std::sqrt(70.0) * 0.25 * u * u * u;
+}
 
-    // Degree-2 solid tide: ΔC₂ₘ and ΔS₂ₘ from IERS 2010 Eq. 6.6
-    // The effect on potential coefficients is:
-    // ΔC₂ₘ - iΔS₂ₘ = k₂ₘ/(2n+1) * (μⱼ/μ_E) * (Re/rⱼ)³ * P₂ₘ(sinφⱼ) * e^(-imλⱼ)
+double ut1At(double jd, const ForceModelSet& forceSet) {
+    if (forceSet.jdUt1At) return forceSet.jdUt1At(jd);
+    return timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(jd)));
+}
 
-    double bodyRatio3 = muBody / MU_EARTH * std::pow(Re / rBody, 3);
+}  // namespace
 
-    // m=0: ΔC₂₀ = k₂₀/5 * (μⱼ/μ_E)(Re/rⱼ)³ * P₂₀(sinφⱼ)
-    double P20_body = 0.5 * (3.0 * sinLatBody * sinLatBody - 1.0);
-    double dC20 = k20 / 5.0 * bodyRatio3 * P20_body;
+// IERS Conventions (2010) section 6.2.1. Until 2026-10-08 this was degree 2
+// and 3 only, with unnormalized P21/P22 weighted as if normalized (dC21/dS21
+// off by 5/3, dC22/dS22 by 5/12), real Love numbers, no k+ degree-4 terms,
+// step 2 as the K1 line alone on an approximate GMST, and the pole and
+// longitudes taken in GCRF rather than in the Earth-fixed frame.
+ExtendedGravityField SolidTideField(double jd, const ForceModelSet& forceSet,
+                                    const EarthAxes& axes) {
+    using namespace iers2010;
+    const SolidTideConfig& config = forceSet.solidTides;
+    ExtendedGravityField field;
+    field.mu = forceSet.mu;
+    field.referenceRadius = EGM2008_RADIUS_KM;
+    field.allocate(4, 4);
 
-    // m=1: ΔC₂₁ = k₂₁/5 * (μⱼ/μ_E)(Re/rⱼ)³ * P₂₁(sinφⱼ) * cos(λⱼ)
-    //       ΔS₂₁ = k₂₁/5 * (μⱼ/μ_E)(Re/rⱼ)³ * P₂₁(sinφⱼ) * sin(λⱼ)
-    double P21_body = 3.0 * sinLatBody * cosLatBody;
-    double dC21 = k21 / 5.0 * bodyRatio3 * P21_body * std::cos(lonBody);
-    double dS21 = k21 / 5.0 * bodyRatio3 * P21_body * std::sin(lonBody);
+    // Step 1 (eqs. 6.6, 6.7): each body's degree-2 and -3 tide with the
+    // complex anelastic k_nm, and degree 4 through k+_2m.
+    for (int body = 0; body < 2; ++body) {
+        if (body == 0 ? !config.includeMoonTide : !config.includeSunTide) continue;
+        const EphemerisState state = body == 0 ? getMoonPosition(jd) : getSunPosition(jd);
+        if (!state.valid) continue;
+        const double gm = body == 0 ? MU_MOON : MU_SUN;
+        const Vec3 p = axes.fixed(state.position);
+        const double r = p.magnitude(), rho = std::sqrt(p.x * p.x + p.y * p.y);
+        if (r <= 0.0 || rho <= 0.0) continue;
+        double legendre[4][4] = {};
+        normalizedLegendre3(p.z / r, rho / r, legendre);
+        const double ratio = field.referenceRadius / r;
+        const double cosL = p.x / rho, sinL = p.y / rho;
+        for (int n = 2; n <= 3; ++n) {
+            double cm = 1.0, sm = 0.0;
+            for (int m = 0; m <= n; ++m) {
+                const double coeff = gm / field.mu * std::pow(ratio, n + 1) * legendre[n][m] / (2.0 * n + 1.0);
+                const double kR = LOVE_RE[n][m], kI = LOVE_IM[n][m];
+                field.Cnm[n][m] += coeff * (kR * cm + kI * sm);
+                field.Snm[n][m] += coeff * (kR * sm - kI * cm);
+                if (n == 2) {
+                    field.Cnm[4][m] += LOVE_PLUS[m] * coeff * cm;
+                    field.Snm[4][m] += LOVE_PLUS[m] * coeff * sm;
+                }
+                const double next = cm * cosL - sm * sinL;
+                sm = sm * cosL + cm * sinL;
+                cm = next;
+            }
+        }
+    }
 
-    // m=2: ΔC₂₂ = k₂₂/5 * (μⱼ/μ_E)(Re/rⱼ)³ * P₂₂(sinφⱼ) * cos(2λⱼ)
-    //       ΔS₂₂ = k₂₂/5 * (μⱼ/μ_E)(Re/rⱼ)³ * P₂₂(sinφⱼ) * sin(2λⱼ)
-    double P22_body = 3.0 * cosLatBody * cosLatBody;
-    double dC22 = k22 / 5.0 * bodyRatio3 * P22_body * std::cos(2.0 * lonBody);
-    double dS22 = k22 / 5.0 * bodyRatio3 * P22_body * std::sin(2.0 * lonBody);
+    // Step 2 (eq. 6.8): frequency dependence of k20, k21, k22, with
+    // theta_f = m (GMST + pi) - N . F.
+    if (config.frequencyDependent) {
+        const double jdTt = timesys::tdbToTt(jd);
+        const double gamma = gmst2006(ut1At(jd, forceSet), jdTt) + PI;
+        double fundamental[5];
+        delaunayArguments(jdTt, fundamental);
+        auto theta = [&](const TideFrequencyTerm& w) {
+            double a = w.m * gamma;
+            for (int i = 0; i < 5; ++i) a -= w.delaunay[i] * fundamental[i];
+            return a;
+        };
+        constexpr double PICO = 1e-12;
+        for (const auto& w : K20_TERMS) {
+            const double a = theta(w);
+            field.Cnm[2][0] += (w.inPhase * std::cos(a) - w.outOfPhase * std::sin(a)) * PICO;
+        }
+        for (const auto& w : K21_TERMS) {
+            const double a = theta(w), c = std::cos(a), s = std::sin(a);
+            field.Cnm[2][1] += (w.inPhase * s + w.outOfPhase * c) * PICO;
+            field.Snm[2][1] += (w.inPhase * c - w.outOfPhase * s) * PICO;
+        }
+        for (const auto& w : K22_TERMS) {
+            const double a = theta(w);
+            field.Cnm[2][2] += w.inPhase * std::cos(a) * PICO;
+            field.Snm[2][2] -= w.inPhase * std::sin(a) * PICO;
+        }
+    }
 
-    // Degree-3 solid tide: ΔC₃₀
-    double bodyRatio4 = muBody / MU_EARTH * std::pow(Re / rBody, 4);
-    double P30_body = 0.5 * sinLatBody * (5.0 * sinLatBody * sinLatBody - 3.0);
-    double dC30 = k30 / 7.0 * bodyRatio4 * P30_body;
+    // A zero-tide central field already holds the permanent tide (eq. 6.13).
+    if (config.zeroTideField) field.Cnm[2][0] -= 4.4228e-8 * -0.31460 * LOVE_RE[2][0];
+    return field;
+}
 
-    // Convert ΔCnm/ΔSnm to acceleration perturbation on satellite
-    // Using gradient of the disturbing potential R = μ/r Σ(Re/r)^n Σ(ΔCnm cos(mλ) + ΔSnm sin(mλ)) Pnm(sinφ)
-    // Radial: dR/dr, Latitude: (1/r)dR/dφ, Longitude: (1/r cosφ)dR/dλ
-
-    double Re_r = Re / r;
-    double Re_r2 = Re_r * Re_r;
-    double Re_r3 = Re_r2 * Re_r;
-    double mu_r2 = MU_EARTH / r2;
-
-    // --- Degree 2 contributions ---
-    // P20, P21, P22 at satellite position
-    double P20_sat = 0.5 * (3.0 * sinLatSat * sinLatSat - 1.0);
-    double P21_sat = 3.0 * sinLatSat * cosLatSat;
-    double P22_sat = 3.0 * cosLatSat * cosLatSat;
-
-    // dP20/dφ = -3 sinφ cosφ, dP21/dφ = 3(cos²φ - sin²φ), dP22/dφ = -6 sinφ cosφ
-    double dP20_dphi = -3.0 * sinLatSat * cosLatSat;
-    double dP21_dphi = 3.0 * (cosLatSat * cosLatSat - sinLatSat * sinLatSat);
-    double dP22_dphi = -6.0 * sinLatSat * cosLatSat;
-
-    double cosLon = std::cos(lonSat);
-    double sinLon = std::sin(lonSat);
-    double cos2Lon = std::cos(2.0 * lonSat);
-    double sin2Lon = std::sin(2.0 * lonSat);
-
-    // Radial acceleration: ar = -μ/r² Σ (n+1)(Re/r)^n [ΔCnm cos(mλ) + ΔSnm sin(mλ)] Pnm
-    double ar = -mu_r2 * Re_r2 * 3.0 * (
-        dC20 * P20_sat +
-        (dC21 * cosLon + dS21 * sinLon) * P21_sat +
-        (dC22 * cos2Lon + dS22 * sin2Lon) * P22_sat
-    );
-    // Degree-3 radial: evaluate P₃₀ at satellite position, not at body
-    double P30_sat = 0.5 * sinLatSat * (5.0 * sinLatSat * sinLatSat - 3.0);
-    ar -= mu_r2 * Re_r3 * 4.0 * dC30 * P30_sat;
-
-    // Latitude acceleration: aφ = μ/r² (Re/r)^n [ΔCnm cos(mλ) + ΔSnm sin(mλ)] dPnm/dφ
-    double aphi = mu_r2 * Re_r2 * (
-        dC20 * dP20_dphi +
-        (dC21 * cosLon + dS21 * sinLon) * dP21_dphi +
-        (dC22 * cos2Lon + dS22 * sin2Lon) * dP22_dphi
-    );
-
-    // Longitude acceleration: aλ = μ/(r² cosφ) (Re/r)^n m [-ΔCnm sin(mλ) + ΔSnm cos(mλ)] Pnm
-    double safe_cosLat = std::max(cosLatSat, 1e-10);
-    double alon = mu_r2 / safe_cosLat * Re_r2 * (
-        1.0 * (-dC21 * sinLon + dS21 * cosLon) * P21_sat +
-        2.0 * (-dC22 * sin2Lon + dS22 * cos2Lon) * P22_sat
-    );
-
-    // Convert spherical to Cartesian acceleration
-    double cosLat = cosLatSat;
-    double sinLat = sinLatSat;
-    double cLon = cosLon;
-    double sLon = sinLon;
-
-    Vec3 rHatLocal(cosLat * cLon, cosLat * sLon, sinLat);
-    Vec3 phiHat(-sinLat * cLon, -sinLat * sLon, cosLat);
-    Vec3 lonHat(-sLon, cLon, 0.0);
-
-    totalAcc = rHatLocal * ar + phiHat * aphi + lonHat * alon;
-
-    return totalAcc;
+Vec3 SolidTideAcceleration(const Vec3& satPosition, double jd, const ForceModelSet& forceSet) {
+    if (satPosition.magnitude() < RE_EARTH) return Vec3();
+    const EarthAxes axes = EarthAxesAt(jd, forceSet);
+    const ExtendedGravityField field = SolidTideField(jd, forceSet, axes);
+    return axes.inertial(computeExtendedGravity(axes.fixed(satPosition), field).zonalHarmonics);
 }
 
 Vec3 SolidTides(const Vec3& satPosition, double jd, const SolidTideConfig& config) {
-    Vec3 totalAcc;
-
-    double r = satPosition.magnitude();
-    if (r < RE_EARTH) return Vec3();
-
-    if (config.includeMoonTide) {
-        EphemerisState moon = getMoonPosition(jd);
-        if (moon.valid) {
-            totalAcc += solidTideSingleBody(satPosition, moon.position,
-                MU_MOON, config.k20, config.k21, config.k22, config.k30);
-        }
-    }
-
-    if (config.includeSunTide) {
-        EphemerisState sun = getSunPosition(jd);
-        if (sun.valid) {
-            totalAcc += solidTideSingleBody(satPosition, sun.position,
-                MU_SUN, config.k20, config.k21, config.k22, config.k30);
-        }
-    }
-
-    // Frequency-dependent corrections (Step 2 of IERS 2010)
-    // K1 tide correction to C21/S21
-    if (config.frequencyDependent) {
-        // GMST approximation for K1 frequency argument
-        double T = (jd - 2451545.0) / 36525.0;
-        double gmst = 4.894961212823059 + 6.300388098984957 * (jd - 2451545.0);
-        gmst = std::fmod(gmst, TWO_PI);
-        if (gmst < 0) gmst += TWO_PI;
-
-        // K1 correction amplitudes from IERS 2010 Table 6.5a
-        // ΔC₂₁ = 470.9e-12 * sin(θ+π) - 30.2e-12 * cos(θ+π)
-        // ΔS₂₁ = -470.9e-12 * cos(θ+π) - 30.2e-12 * sin(θ+π)
-        double theta_pi = gmst + PI;
-        double dC21_k1 = 470.9e-12 * std::sin(theta_pi) - 30.2e-12 * std::cos(theta_pi);
-        double dS21_k1 = -470.9e-12 * std::cos(theta_pi) - 30.2e-12 * std::sin(theta_pi);
-
-        // Convert to acceleration (same as degree-2 pattern above)
-        double r2 = r * r;
-        double Re_r = RE_EARTH / r;
-        double Re_r2 = Re_r * Re_r;
-        double mu_r2 = MU_EARTH / r2;
-
-        double sinLatSat = satPosition.z / r;
-        double cosLatSat = std::sqrt(satPosition.x * satPosition.x + satPosition.y * satPosition.y) / r;
-        double lonSat = std::atan2(satPosition.y, satPosition.x);
-
-        double P21_sat = 3.0 * sinLatSat * cosLatSat;
-        double cosLon = std::cos(lonSat);
-        double sinLon = std::sin(lonSat);
-
-        double ar_k1 = -mu_r2 * Re_r2 * 3.0 *
-            (dC21_k1 * cosLon + dS21_k1 * sinLon) * P21_sat;
-
-        double dP21_dphi = 3.0 * (cosLatSat * cosLatSat - sinLatSat * sinLatSat);
-        double aphi_k1 = mu_r2 * Re_r2 *
-            (dC21_k1 * cosLon + dS21_k1 * sinLon) * dP21_dphi;
-
-        double safe_cosLat = std::max(cosLatSat, 1e-10);
-        double alon_k1 = mu_r2 / safe_cosLat * Re_r2 *
-            (-dC21_k1 * sinLon + dS21_k1 * cosLon) * P21_sat;
-
-        Vec3 rHat(cosLatSat * cosLon, cosLatSat * sinLon, sinLatSat);
-        Vec3 phiHat(-sinLatSat * cosLon, -sinLatSat * sinLon, cosLatSat);
-        Vec3 lonHat(-sinLon, cosLon, 0.0);
-
-        totalAcc += rHat * ar_k1 + phiHat * aphi_k1 + lonHat * alon_k1;
-    }
-
-    return totalAcc;
+    ForceModelSet forceSet;
+    forceSet.solidTides = config;
+    return SolidTideAcceleration(satPosition, jd, forceSet);
 }
 
 // =============================================================================
@@ -1602,6 +1639,11 @@ void GcrfToEarthFixed(double jd, double m[3][3]) {
         for (int j = 0; j < 3; ++j) m[i][j] = r.at(i, j);
 }
 
+void GcrfToEarthFixed(double jd, const ForceModelSet& forceSet, double m[3][3]) {
+    if (forceSet.earthFixedRotation) forceSet.earthFixedRotation(jd, m);
+    else GcrfToEarthFixed(jd, m);
+}
+
 bool EarthFixedField(const ForceModelSet& forceSet) {
     switch (forceSet.gravityMode) {
         case GravityMode::Infer:
@@ -1618,7 +1660,7 @@ bool EarthFixedField(const ForceModelSet& forceSet) {
 Vec3 CentralBodyGravity(const Vec3& position, double jd, const ForceModelSet& forceSet) {
     if (!EarthFixedField(forceSet)) return EarthFixedGravity(position, forceSet);
     double m[3][3];
-    GcrfToEarthFixed(jd, m);
+    GcrfToEarthFixed(jd, forceSet, m);
     const Vec3 fixed(m[0][0] * position.x + m[0][1] * position.y + m[0][2] * position.z,
                      m[1][0] * position.x + m[1][1] * position.y + m[1][2] * position.z,
                      m[2][0] * position.x + m[2][1] * position.y + m[2][2] * position.z);
@@ -1656,8 +1698,11 @@ Vec3 EarthFixedGravity(const Vec3& position, const ForceModelSet& forceSet) {
         case GravityMode::J2J4:
             return PointMass(position, forceSet.mu) + J2J4(position, forceSet.mu);
 
+        // The central term with the force set's GM, the harmonics with the
+        // field's own (EGM2008's TT-compatible 398600.4415 km^3/s^2), as
+        // Orekit separates NewtonianAttraction from HolmesFeatherstone.
         case GravityMode::EGM2008:
-            return EGM2008(position, forceSet.egm2008);
+            return PointMass(position, forceSet.mu) + EGM2008Harmonics(position, forceSet.egm2008);
         case GravityMode::LoadedField:
             if (forceSet.loadedField) return LoadedFieldGravity(position, *forceSet.loadedField);
             return PointMass(position, forceSet.mu);
@@ -1665,6 +1710,73 @@ Vec3 EarthFixedGravity(const Vec3& position, const ForceModelSet& forceSet) {
         default:
             return SphericalHarmonics(position, forceSet.sphericalHarmonics);
     }
+}
+
+Vec3 DragAccelerationWith(const Vec3& position, const Vec3& velocity, double jd,
+                          const ForceModelSet& forceSet, const DragForceConfig& drag) {
+    Vec3 totalAcc;
+    const double atmosphereJD = forceSet.explicitEpochContract
+        ? timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(jd))) : jd;
+    // The field's Earth-fixed axes, so density, co-rotation and gravity
+    // share one Earth orientation; the weather of this instant.
+    const EarthAxes axes = EarthAxesAt(jd, forceSet);
+    const SpaceWeatherData weather = WeatherAt(atmosphereJD, forceSet);
+    switch (forceSet.dragModel) {
+        case DragModelType::NRLMSISE00:
+            totalAcc += NRLMSISE00(position, velocity, atmosphereJD, weather,
+                                   drag, forceSet.nrlmsise00, &axes);
+            break;
+        case DragModelType::HarrisPriester:
+            totalAcc += HarrisPriester(position, velocity, jd, drag,
+                                       forceSet.harrisPriesterExponent, &weather,
+                                       atmosphereJD, &axes);
+            break;
+        case DragModelType::USSA1976:
+            totalAcc += AtmosphericDrag(position, velocity, atmosphereJD,
+                                        weather, drag, &axes);
+            break;
+        case DragModelType::JB2008:
+        case DragModelType::JacchiaRoberts: {
+            // JB2008 (lib/jb2008.h) and Jacchia-Roberts (lib/jacchia_roberts.h).
+            const double rho = forceSet.dragModel == DragModelType::JB2008
+                ? JB2008DensityAt(position, jd, atmosphereJD, axes, weather)
+                : JacchiaRobertsDensityAt(position, jd, atmosphereJD, axes, weather);
+            totalAcc += DragFromDensity(rho, position, velocity, atmosphereJD, axes, drag, weather);
+            break;
+        }
+        case DragModelType::DTM2020:
+            totalAcc += DTM2020(position, velocity, atmosphereJD, weather,
+                                drag, forceSet.dtm2020, &axes);
+            break;
+        case DragModelType::Exponential:
+            totalAcc += AtmosphericDragExponential(position, velocity,
+                                                   drag.mass, drag.area, drag.Cd);
+            break;
+    }
+    return totalAcc;
+}
+
+double JacchiaRobertsDensityAt(const Vec3& position, double jdTdb, double jdUtc,
+                          const EarthAxes& axes, const SpaceWeatherData& weather) {
+    double lat = 0, lon = 0, alt = 0;
+    const Vec3 fixed = axes.fixed(position);
+    ecefToGeodetic(fixed, lat, lon, alt);
+    const EphemerisState sun = getSunPosition(jdTdb);
+    if (!sun.valid) return 0.0;
+    const Vec3 s = axes.fixed(sun.position);
+    const double point[3] = {fixed.x, fixed.y, fixed.z}, sunv[3] = {s.x, s.y, s.z};
+    const double polarRadius = RE_EARTH * (1.0 - 1.0 / 298.257223563);  // WGS84
+    const jacchia_roberts::Inputs in{weather.F107,
+        weather.f107aPreviousDay >= 0 ? weather.f107aPreviousDay : weather.F107a,
+        weather.kpLag67h >= 0 ? weather.kpLag67h : weather.Kp};
+    const double rho = jacchia_roberts::density(alt, lat, point, sunv, jdUtc - 2400000.5, polarRadius, in);
+    return rho > 0 ? rho : 0.0;
+}
+
+Vec3 SrpAcceleration(const Vec3& position, double jd, const ForceModelSet& forceSet,
+                     const SRPForceConfig& srp) {
+    const Vec3 sunPos = forceSet.sunPositionProvided ? forceSet.sunPosition : getSunPosition(jd).position;
+    return SolarRadiation(position, sunPos, srp);
 }
 
 Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double jd,
@@ -1713,43 +1825,15 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double
     // functions they reach carry their own "simplified stand-in, not the
     // published model" banner at their definitions.
     if (forceSet.useDrag) {
-        const double atmosphereJD = forceSet.explicitEpochContract
-            ? timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(jd))) : jd;
-        switch (forceSet.dragModel) {
-            case DragModelType::NRLMSISE00:
-                totalAcc += NRLMSISE00(position, velocity, atmosphereJD, forceSet.weather,
-                                       forceSet.drag, forceSet.nrlmsise00);
-                break;
-            case DragModelType::HarrisPriester:
-                totalAcc += HarrisPriester(position, velocity, jd, forceSet.drag,
-                                           forceSet.harrisPriesterExponent, &forceSet.weather,
-                                           atmosphereJD);
-                break;
-            case DragModelType::USSA1976:
-                totalAcc += AtmosphericDrag(position, velocity, atmosphereJD,
-                                            forceSet.weather, forceSet.drag);
-                break;
-            case DragModelType::JB2008:
-                totalAcc += JB2008(position, velocity, atmosphereJD, forceSet.weather,
-                                   forceSet.drag, forceSet.jb2008);
-                break;
-            case DragModelType::DTM2020:
-                totalAcc += DTM2020(position, velocity, atmosphereJD, forceSet.weather,
-                                    forceSet.drag, forceSet.dtm2020);
-                break;
-            case DragModelType::Exponential:
-                totalAcc += AtmosphericDragExponential(position, velocity,
-                                                       forceSet.drag.mass,
-                                                       forceSet.drag.area,
-                                                       forceSet.drag.Cd);
-                break;
-        }
+        totalAcc += DragAccelerationWith(position, velocity, jd, forceSet, DragAt(jd, forceSet));
     }
 
     // 11. Relativistic Correction
     if (forceSet.useRelativisticCorrection) {
+        // The Lense-Thirring spin axis is the field's Earth-fixed z axis.
+        const EarthAxes axes = EarthAxesAt(jd, forceSet);
         totalAcc += RelativisticCorrection(position, velocity, jd, forceSet.mu,
-                                           forceSet.relativistic);
+                                           forceSet.relativistic, &axes);
     }
 
     // 12. Earth Albedo
@@ -1764,7 +1848,7 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double
 
     // 14. Solid Tides
     if (forceSet.useSolidTides) {
-        totalAcc += SolidTides(position, jd, forceSet.solidTides);
+        totalAcc += SolidTideAcceleration(position, jd, forceSet);
     }
 
     // 15. Ocean Tides

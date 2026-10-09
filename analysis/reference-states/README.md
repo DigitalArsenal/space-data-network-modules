@@ -52,7 +52,7 @@ products. Output goes outside the repository, by default
 
 | Product | Objects | Spacing | Uncertainty |
 | --- | --- | --- | --- |
-| IGS final orbits (`IGS0OPSFIN`) | GPS, identified from the IGS satellite metadata SINEX (PRN → SVN → COSPAR, catalog number) at the file's midpoint | 15 min | SP3 record standard deviations |
+| IGS final orbits (`IGS0OPSFIN`; ESA's `ESA0OPSFIN`, 5 min, for days BKG no longer holds) | GPS, identified from the IGS satellite metadata SINEX (PRN → SVN → COSPAR, catalog number) at the file's midpoint | 15 min | SP3 record standard deviations |
 | ILRS combined weekly arcs (`ilrsa`) | LAGEOS-1/2, ETALON-1/2 | 2 / 15 min | per-axis RMS of the analysis centres' orbits about the combination over the arc (precision; a lower bound, because the centres share data) |
 | ILRS analysis-centre 4-day fitted arcs (NSGF), one every 4 days, non-overlapping | Ajisai, Starlette, Stella, LARETS, WESTPAC, LARES, LARES-2 | 2–3 min | per-axis RMS of the arc's 3-day overlap with the next day's arc |
 | Sentinel-1 `AUX_POEORB`, transcribed to SP3-c | Sentinel-1C/1D (1A when published) | 10 s | the mission's 5 cm 3D RMS precise-orbit requirement, as 2.9 cm per axis |

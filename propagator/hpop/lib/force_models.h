@@ -96,9 +96,19 @@ Vec3 J2J4(const Vec3& position, double mu = MU_EARTH);
 // -----------------------------------------------------------------------------
 
 /// EGM2008 gravity model configuration for ForceModel API
+/// The embedded Earth fields (degree 2-70 each): EGM2008 (lib/egm2008_data.h)
+/// and EGM96 (lib/egm96_data.h).
+enum class EmbeddedEarthField : uint8_t { EGM2008 = 0, EGM96 = 1 };
+
 struct EGM2008ForceConfig {
     uint16_t truncationDegree{70};  ///< Truncation degree (2-2190)
     uint16_t truncationOrder{70};   ///< Truncation order (0-degree)
+    /// Which embedded coefficient set (EGM2008 unless stated).
+    EmbeddedEarthField field{EmbeddedEarthField::EGM2008};
+    /// Highest degree kept for the tesseral and sectorial terms (order >= 1):
+    /// a VCM's "mmZ,nnT" is truncationDegree mm, truncationOrder nn and
+    /// maxTesseralDegree nn. The zonals run to truncationDegree.
+    uint16_t maxTesseralDegree{UINT16_MAX};
     bool normalized{true};          ///< Use normalized coefficients
     // Gate low-degree zonal terms from the EGM coefficient set so UI J2/J3/J4
     // toggles can still take effect in EGM mode.
@@ -112,6 +122,15 @@ struct EGM2008ForceConfig {
 /// @param config EGM2008 configuration
 /// @return Acceleration vector in ECEF (km/s^2)
 Vec3 EGM2008(const Vec3& position, const EGM2008ForceConfig& config = EGM2008ForceConfig());
+
+/// EGM2008's harmonic terms alone (degree 2 up), scaled by the field's own GM:
+/// the force set's EGM2008 mode adds its central term with the set's GM.
+Vec3 EGM2008Harmonics(const Vec3& position, const EGM2008ForceConfig& config = EGM2008ForceConfig());
+
+/// The embedded field `config` selects, truncated as it states (degree,
+/// order, tesseral degree), cached until the selection changes. Shared by the
+/// force evaluation and its partials (force_partials.cpp).
+const ExtendedGravityField& EmbeddedEarthGravityField(const EGM2008ForceConfig& config);
 
 // -----------------------------------------------------------------------------
 // 4. GRGM1200A - Lunar Gravity Model (degree 1200)
@@ -221,7 +240,8 @@ enum class DragModelType {
     HarrisPriester, ///< Harris-Priester with diurnal bulge
     NRLMSISE00,     ///< NRLMSISE-00 empirical model
     JB2008,         ///< Jacchia-Bowman 2008
-    DTM2020         ///< Drag Temperature Model 2020
+    DTM2020,        ///< Drag Temperature Model 2020
+    JacchiaRoberts  ///< Jacchia-Roberts (Roberts 1971, J71 constants; lib/jacchia_roberts.h)
 };
 
 /// Atmospheric drag configuration
@@ -255,13 +275,27 @@ AtmosphereModelType AtmosphereModelForDrag(DragModelType model);
 /// @param weather Space weather for HWM14 winds (needed only when includeWinds)
 /// @param windJdUtc UTC Julian date for the winds; 0 uses jd
 /// @return Drag acceleration (km/s^2)
+struct EarthAxes;
 Vec3 HarrisPriester(const Vec3& position, const Vec3& velocity, double jd,
                     const DragForceConfig& dragConfig, double bulgeExponent = 4.0,
-                    const SpaceWeatherData* weather = nullptr, double windJdUtc = 0.0);
+                    const SpaceWeatherData* weather = nullptr, double windJdUtc = 0.0,
+                    const EarthAxes* axes = nullptr);
 
-/// GCRF position (km) re-expressed in Earth-fixed axes by a rotation of GMST
-/// about the GCRF z axis, for the geodetic density models. Precession,
-/// nutation and polar motion are not applied (see force_models.cpp).
+/// GCRF -> Earth-fixed axes at one instant: the rotation the density models,
+/// the co-rotating atmosphere and the gravity field share within one force
+/// evaluation (EarthAxesAt). The drag functions below take it as `axes`; with
+/// none they fall back to GmstAxes at their UTC `jd`.
+struct EarthAxes {
+    double m[3][3]{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};  ///< GCRF -> Earth-fixed
+    Vec3 fixed(const Vec3& gcrf) const;               ///< GCRF -> Earth-fixed
+    Vec3 inertial(const Vec3& earthFixed) const;      ///< Earth-fixed -> GCRF
+    Vec3 spin() const;                                ///< Earth-fixed z axis, in GCRF
+};
+
+/// GMST about the GCRF z axis: no precession, nutation or polar motion.
+EarthAxes GmstAxes(double jdUt);
+
+/// GCRF position (km) re-expressed by GmstAxes(jdUt).
 Vec3 EarthFixedForDensity(const Vec3& gcrf, double jdUt);
 
 /// Atmospheric drag acceleration
@@ -272,7 +306,8 @@ Vec3 EarthFixedForDensity(const Vec3& gcrf, double jdUt);
 /// @param config Drag configuration
 /// @return Drag acceleration (km/s^2)
 Vec3 AtmosphericDrag(const Vec3& position, const Vec3& velocity, double jd,
-                     const SpaceWeatherData& weather, const DragForceConfig& config);
+                     const SpaceWeatherData& weather, const DragForceConfig& config,
+                     const EarthAxes* axes = nullptr);
 
 /// Simple exponential drag (convenience function)
 Vec3 AtmosphericDragExponential(const Vec3& position, const Vec3& velocity,
@@ -306,7 +341,8 @@ struct NRLMSISE00Config {
 /// @return Drag acceleration (km/s^2)
 Vec3 NRLMSISE00(const Vec3& position, const Vec3& velocity, double jd,
                 const SpaceWeatherData& weather, const DragForceConfig& dragConfig,
-                const NRLMSISE00Config& nrlmsiseConfig = NRLMSISE00Config());
+                const NRLMSISE00Config& nrlmsiseConfig = NRLMSISE00Config(),
+                const EarthAxes* axes = nullptr);
 
 /// Get NRLMSISE-00 density components at a GCRF position (km)
 AtmosphericDensity NRLMSISE00Density(const Vec3& position, double jd,
@@ -335,7 +371,25 @@ struct JB2008Config {
 /// @return Drag acceleration (km/s^2)
 Vec3 JB2008(const Vec3& position, const Vec3& velocity, double jd,
             const SpaceWeatherData& weather, const DragForceConfig& dragConfig,
-            const JB2008Config& jb2008Config = JB2008Config());
+            const JB2008Config& jb2008Config = JB2008Config(),
+            const EarthAxes* axes = nullptr);
+
+/// JB2008 (Bowman et al. 2008; lib/jb2008.h, ported from Orekit 13.1) mass
+/// density (kg/m^3) at a GCRF position (km): geodetic WGS84 position and
+/// the true Sun in the given Earth-fixed axes, the Sun at TDB jdTdb, the
+/// model's UTC from jdUtc, drivers from `weather` (F107/F107a, S107/S107a,
+/// M107/M107a, Y107/Y107a, lagged as JB2008 prescribes, and dTc = DSTDTC).
+double JB2008DensityAt(const Vec3& position, double jdTdb, double jdUtc,
+                       const EarthAxes& axes, const SpaceWeatherData& weather);
+
+/// Jacchia-Roberts (lib/jacchia_roberts.h, ported from NASA
+/// GMAT) mass density (kg/m^3) at a GCRF position (km): WGS84 geodetic
+/// height and latitude, the point and the true Sun in the given Earth-fixed
+/// axes, UTC from jdUtc; drivers from `weather`: F10.7 of the previous day
+/// (F107), the 81-day centred average of the previous day (f107aPreviousDay,
+/// else F107a) and Kp 6.7 h earlier (kpLag67h, else Kp).
+double JacchiaRobertsDensityAt(const Vec3& position, double jdTdb, double jdUtc,
+                          const EarthAxes& axes, const SpaceWeatherData& weather);
 
 /// Get JB2008 density
 AtmosphericDensity JB2008Density(const Vec3& position, double jd,
@@ -363,7 +417,8 @@ struct DTM2020Config {
 /// @return Drag acceleration (km/s^2)
 Vec3 DTM2020(const Vec3& position, const Vec3& velocity, double jd,
              const SpaceWeatherData& weather, const DragForceConfig& dragConfig,
-             const DTM2020Config& dtmConfig = DTM2020Config());
+             const DTM2020Config& dtmConfig = DTM2020Config(),
+             const EarthAxes* axes = nullptr);
 
 /// Get DTM2020 density
 AtmosphericDensity DTM2020Density(const Vec3& position, double jd,
@@ -388,9 +443,12 @@ struct RelativisticConfig {
 /// @param jd Julian date (TDB) - needed for de Sitter (Sun position)
 /// @param mu Central body GM (km^3/s^2)
 /// @param config Relativistic configuration
+/// @param axes Earth-fixed axes whose z is the Lense-Thirring spin axis
+///        (GCRF z when null)
 /// @return Relativistic acceleration correction (km/s^2)
 Vec3 RelativisticCorrection(const Vec3& position, const Vec3& velocity, double jd,
-                            double mu = MU_EARTH, const RelativisticConfig& config = RelativisticConfig());
+                            double mu = MU_EARTH, const RelativisticConfig& config = RelativisticConfig(),
+                            const EarthAxes* axes = nullptr);
 
 /// Schwarzschild relativistic correction only
 Vec3 SchwarzschildCorrection(const Vec3& position, const Vec3& velocity, double mu = MU_EARTH);
@@ -453,21 +511,41 @@ Vec3 ThermalReradiation(const Vec3& satPosition, const Vec3& sunPosition,
 // 14. Solid Tides - Solid Earth Tides
 // -----------------------------------------------------------------------------
 
-/// Solid tide configuration - IERS 2010 Conventions
+/// Solid Earth tides, IERS Conventions (2010) section 6.2: the changes to
+/// the fully normalized geopotential of degrees 2-4 raised by the Sun and the
+/// Moon (step 1, eqs. 6.6 and 6.7, with Table 6.3's anelastic Love numbers
+/// including their imaginary parts and k+), and the frequency dependence of
+/// k20, k21 and k22 (step 2, eq. 6.8, Tables 6.5a-c; lib/iers2010_tides.h).
+/// The Sun and Moon are placed in the force set's Earth-fixed axes
+/// (EarthAxesAt) and step 2 reads GMST from the force set's UT1 (jdUt1At).
+/// Pole tide is separate (PoleTide).
 struct SolidTideConfig {
-    double k20{0.30190};            ///< Love number k₂₀ (IERS 2010 Table 6.3)
-    double k21{0.29830};            ///< Love number k₂₁
-    double k22{0.30102};            ///< Love number k₂₂
-    double k30{0.093};              ///< Love number k₃₀
     bool includeSunTide{true};      ///< Include solar tide
     bool includeMoonTide{true};     ///< Include lunar tide
-    bool permanentTide{false};      ///< Include permanent tide deformation
     bool frequencyDependent{true};  ///< Include frequency-dependent corrections (Step 2)
+    /// The central field is zero-tide (its C20 already holds the permanent
+    /// tide): remove 4.4228e-8 * -0.31460 * k20 from dC20 (IERS 2010 eq.
+    /// 6.13 and section 6.2.2). EGM2008, HPOP's field, is tide-free: false.
+    bool zeroTideField{false};
 };
 
-/// Solid Earth tides acceleration perturbation
-/// @param satPosition Satellite position (km)
-/// @param jd Julian date
+struct ForceModelSet;
+
+/// The IERS 2010 solid tide field at a TDB Julian date: dC/dS of degrees 2-4
+/// (order <= degree) with the set's GM and EGM2008's reference radius, the
+/// Sun and Moon in `axes`. Evaluate it in those axes without its central term.
+ExtendedGravityField SolidTideField(double jd, const ForceModelSet& forceSet,
+                                    const EarthAxes& axes);
+
+/// Solid Earth tides acceleration (km/s^2) at a GCRF position (km), TDB
+/// Julian date, in the force set's Earth orientation.
+Vec3 SolidTideAcceleration(const Vec3& satPosition, double jd,
+                           const ForceModelSet& forceSet);
+
+/// Solid Earth tides with the built-in Earth orientation (no EOP, UT1 = UTC)
+/// and MU_EARTH; `config` selects bodies and step 2.
+/// @param satPosition Satellite position, GCRF (km)
+/// @param jd Julian date (TDB)
 /// @param config Solid tide configuration
 /// @return Solid tide acceleration (km/s^2)
 Vec3 SolidTides(const Vec3& satPosition, double jd, const SolidTideConfig& config = SolidTideConfig());
@@ -711,6 +789,28 @@ enum class GravityMode : uint8_t {
 };
 
 struct ForceModelSet {
+    /// Authoritative GCRF -> Earth-fixed rotation (row-major) at a TDB Julian
+    /// date, supplied by a caller that holds Earth orientation data (the PRW
+    /// execution request's earth_orientation input: IERS 2010, IAU 2006/2000A,
+    /// CIO based, with polar motion and UT1). Empty: the built-in IAU-1976/1980
+    /// + GAST approximation, without polar motion and with UT1 = UTC.
+    std::function<void(double jdTdb, double m[3][3])> earthFixedRotation;
+
+    /// Space weather at a UTC Julian date (an execution request's
+    /// space_weather input). When set, drag reads it at every evaluation,
+    /// starting from `weather`, which it then overrides.
+    std::function<void(double jdUtc, SpaceWeatherData& weather)> weatherAt;
+
+    /// UT1 Julian date at a TDB Julian date, from the same Earth orientation
+    /// data as earthFixedRotation (the solid tides' GMST). Empty: UT1 = UTC.
+    std::function<double(double jdTdb)> jdUt1At;
+
+    /// Rate of change of the drag ballistic coefficient Cd*A/m (m^2/kg/s)
+    /// from dragRateEpochTdb (TDB Julian date): drag uses
+    /// Cd*A/m + rate * (t - epoch) (DragAt).
+    double dragAreaOverMassRate{0.0};
+    double dragRateEpochTdb{0.0};
+
     // Gravity
     bool usePointMass{true};
     double mu{MU_EARTH};
@@ -830,6 +930,31 @@ GravityFieldCoefficients InlineFieldCoefficients(const SphericalHarmonicsConfig&
 /// rotation by GAST with UTC standing in for UT1 (|UT1-UTC| < 0.9 s). Polar
 /// motion (under 0.5 arcsec) is not applied: the force set carries no EOP.
 void GcrfToEarthFixed(double jd, double m[3][3]);
+
+/// The force set's GCRF -> Earth-fixed rotation: its earthFixedRotation when
+/// supplied, else GcrfToEarthFixed(jd).
+void GcrfToEarthFixed(double jd, const ForceModelSet& forceSet, double m[3][3]);
+
+/// The force set's Earth-fixed axes at a TDB Julian date (GcrfToEarthFixed).
+EarthAxes EarthAxesAt(double jdTdb, const ForceModelSet& forceSet);
+
+/// The space weather drag reads at a UTC Julian date: weatherAt when set,
+/// else the set's `weather`.
+SpaceWeatherData WeatherAt(double jdUtc, const ForceModelSet& forceSet);
+
+/// The drag configuration at a TDB Julian date, with dragAreaOverMassRate
+/// applied to Cd (area and mass unchanged).
+DragForceConfig DragAt(double jdTdb, const ForceModelSet& forceSet);
+
+/// The force set's drag acceleration (km/s^2) with a given drag
+/// configuration (ComputeTotalAcceleration passes DragAt(jd)).
+Vec3 DragAccelerationWith(const Vec3& position, const Vec3& velocity, double jd,
+                          const ForceModelSet& forceSet, const DragForceConfig& drag);
+
+/// The force set's radiation pressure acceleration (km/s^2) with a given SRP
+/// configuration, the Sun from forceSet.sunPosition when provided.
+Vec3 SrpAcceleration(const Vec3& position, double jd, const ForceModelSet& forceSet,
+                     const SRPForceConfig& srp);
 
 /// Evaluate a field loaded from a potential file. Declared here and defined in
 /// environment_models.cpp, which owns ExtendedGravityField.

@@ -39,7 +39,8 @@ function jdFromISO(iso) {
 export function coordinateSystem(frame='GCRF', center=399) {
   return makeTable('RFMCoordinateSystem', {NAME:frame,
     AXIS_TYPE:frame==='TEME'?sds.rfmAxisType.TRUE_EQUATOR_MEAN_EQUINOX_OF_DATE:
-      ['ECEF','ITRF'].includes(frame)?sds.rfmAxisType.BODY_FIXED:sds.rfmAxisType.ICRF,
+      ['ECEF','ITRF'].includes(frame)?sds.rfmAxisType.BODY_FIXED:
+      ['EME2000','J2000'].includes(frame)?sds.rfmAxisType.MEAN_EQUATOR_EQUINOX_J2000:sds.rfmAxisType.ICRF,
     AXIS_REFERENCE_BODY_ID:center,
     ORIGIN:makeTable('RFMOrigin',{KIND:sds.rfmOriginKind.CELESTIAL_BODY,CELESTIAL_BODY_ID:center}),
   });

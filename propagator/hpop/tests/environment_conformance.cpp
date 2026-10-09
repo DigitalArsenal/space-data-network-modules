@@ -533,7 +533,7 @@ static void sectionLabelHonesty() {
         {AtmosphereModelType::USSA1976,       AtmosphereImplementation::Published},
         {AtmosphereModelType::NRLMSISE00,     AtmosphereImplementation::Published},
         {AtmosphereModelType::HarrisPriester, AtmosphereImplementation::Published},
-        {AtmosphereModelType::JB2008,         AtmosphereImplementation::NotImplemented},
+        {AtmosphereModelType::JB2008,         AtmosphereImplementation::Published},
         {AtmosphereModelType::DTM2020,        AtmosphereImplementation::NotImplemented},
         {AtmosphereModelType::GOST2004,       AtmosphereImplementation::NotImplemented},
     };

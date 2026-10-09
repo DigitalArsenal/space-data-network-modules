@@ -644,6 +644,13 @@ std::string propagate_json(const json& params, std::string& operation_error) {
             ? "Integration failed to reach target epoch." : result.errorMessage;
         return "{}";
     }
+    // RK4, RKDP87 and BS step forward only; a backward request must not come
+    // back as the initial state.
+    if (!std::isfinite(result.totalTime) ||
+        std::abs(result.totalTime - dt_sec) > 32 * std::numeric_limits<double>::epsilon() * std::max(1.0, std::abs(dt_sec))) {
+        operation_error = "The integrator did not reach the target epoch (RK4, RKDP87 and BS integrate forward only).";
+        return "{}";
+    }
 
     json output = {
         {"epochJD", target_jd},

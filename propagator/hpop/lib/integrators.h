@@ -14,6 +14,7 @@
 #include <vector>
 
 namespace astro {
+namespace shadow { class BoundaryEvents; }
 
 // =============================================================================
 // Integrator Namespace - Clean API for All Integration Methods
@@ -157,7 +158,8 @@ StepResult RKF45WithDense(const std::array<double, 6>& state, double t, double h
 /// @return Propagation result
 PropagateResult RKF45Propagate(const StateVector& initialState, double targetTime,
                                const IntegratorConfig& config,
-                               DerivativeFunc deriv, void* params);
+                               DerivativeFunc deriv, void* params,
+                               shadow::BoundaryEvents* events = nullptr);
 
 /// RKF45 propagation with ForceModel
 /// @param initialState Initial Cartesian state
@@ -413,7 +415,8 @@ StepResult RKF78WithDense(const std::array<double, 6>& state, double t, double h
 /// @return Propagation result
 PropagateResult RKF78Propagate(const StateVector& initialState, double targetTime,
                                const IntegratorConfig& config,
-                               DerivativeFunc deriv, void* params);
+                               DerivativeFunc deriv, void* params,
+                               shadow::BoundaryEvents* events = nullptr);
 
 /// RKF78 propagation with ForceModel
 /// @param initialState Initial Cartesian state
@@ -445,7 +448,8 @@ StepResult RKDP87(const std::array<double, 6>& state, double t, double h,
 /// @return Propagation result
 PropagateResult RKDP87Propagate(const StateVector& initialState, double targetTime,
                                 const IntegratorConfig& config,
-                                DerivativeFunc deriv, void* params);
+                                DerivativeFunc deriv, void* params,
+                                shadow::BoundaryEvents* events = nullptr);
 
 /// Bulirsch-Stoer extrapolation method - single step
 /// Very high accuracy through polynomial/rational extrapolation
@@ -482,7 +486,8 @@ StepResult BS(const std::array<double, 6>& state, double t, double h,
 PropagateResult BSPropagate(const StateVector& initialState, double targetTime,
                             const IntegratorConfig& config,
                             DerivativeFunc deriv, void* params,
-                            const BSConfig& bsConfig = BSConfig());
+                            const BSConfig& bsConfig = BSConfig(),
+                            shadow::BoundaryEvents* events = nullptr);
 
 /// BS propagation with ForceModel
 /// @param initialState Initial Cartesian state

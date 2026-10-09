@@ -1,0 +1,126 @@
+{
+  "pluginId": "com.digitalarsenal.analysis.vcm-adapter",
+  "name": "SDN VCM Adapter",
+  "version": "0.1.0",
+  "description": "Vector Covariance Messages in and out of the stack: reads an SP VECTOR/COVARIANCE MESSAGE V2.0 into a propagator/hpop PRW execution request (EME2000 state, the VCM's force model, B/BDOT/AGOM/T as dynamic parameters, the equinoctial covariance transformed exactly to Cartesian SI), daily $EOP rows and a $VCM record; writes a PRW execution result back as VCM text with the equinoctial covariance. Pure compute; output bytes depend only on input bytes.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": ["direct", "command"],
+  "runtimeTargets": ["browser", "wasmedge"],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "One message per invocation in one bounded pass; the module starts no workers."
+  },
+  "methods": [
+    {
+      "methodId": "read",
+      "displayName": "Read a VCM",
+      "inputPorts": [
+        {
+          "portId": "message",
+          "acceptedTypeSets": [{
+            "setId": "vcm-text",
+            "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+            "description": "One VCM as text: the JANAP-128 narrative lines prefixed \"<>\" (spacedatastandards.org survey/legacy-messages/vcm). Other lines are ignored.",
+            "wildcardJustification": { "kind": "foreign-wire-format", "mediaType": "text/x-sp-vcm", "detail": "The legacy fixed-format ASCII message this module exists to translate into SDS records." }
+          }],
+          "minStreams": 1, "maxStreams": 1, "required": true,
+          "description": "The VCM."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [{
+            "setId": "vcm-read-options-v1",
+            "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+            "description": "JSON: {\"meanMotionUnit\": \"fraction\"|\"rad/ks\"|\"rad/s\"|\"rad/min\"|\"rev/day\", \"scaleCovarianceByWeightedRms\": true, \"arcSeconds\": 86400, \"ephemerisSource\": \"JPL_SPK\", \"parameterRows\": \"fractional\"|\"absolute\"}; every key optional, the first value of each the default.",
+            "wildcardJustification": { "kind": "intra-flow-control-frame", "mediaType": "application/json", "detail": "Interpretation options for the legacy message; never persisted." }
+          }],
+          "minStreams": 0, "maxStreams": 1, "required": false,
+          "description": "Read options."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [{ "setId": "sds-prw", "allowedTypes": [{ "schemaName": "PRW.fbs", "fileIdentifier": "$PRW", "rootTypeName": "PRW" }], "description": "Size-prefixed $PRW EXECUTION_REQUEST for propagator/hpop's request port." }],
+          "minStreams": 1, "maxStreams": 1, "required": true,
+          "description": "The propagation the VCM describes, to arcSeconds after its epoch."
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [{ "setId": "sds-prw-eop", "allowedTypes": [{ "schemaName": "PRW.fbs", "fileIdentifier": "$PRW", "rootTypeName": "PRW" }], "description": "Size-prefixed $PRW EARTH_ORIENTATION with daily $EOP rows from the VCM's single point: UT1-UTC moving at the stated rate (and stepping at the stated leap second), polar motion held." }],
+          "minStreams": 1, "maxStreams": 1, "required": true,
+          "description": "Earth orientation for propagator/hpop's earth_orientation port."
+        },
+        {
+          "portId": "vcm",
+          "acceptedTypeSets": [{ "setId": "sds-vcm", "allowedTypes": [{ "schemaName": "VCM.fbs", "fileIdentifier": "$VCM", "rootTypeName": "VCM" }], "description": "Size-prefixed $VCM: identity, the J2K state as EME2000, equinoctial elements (N as the schema states it, semi-major axis in km), model flags, the stated UVW sigmas and the Cartesian 6x6 covariance (km units, lower triangle)." }],
+          "minStreams": 1, "maxStreams": 1, "required": true,
+          "description": "The message as an SDS record."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [{
+            "setId": "vcm-read-report-v1",
+            "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+            "description": "JSON: every field read, the equinoctial elements and their round trip, the dynamic parameters carried, the Cartesian covariance, the stated UVW sigmas and the ones recomputed from the transformed covariance, and notes on what could not be carried.",
+            "wildcardJustification": { "kind": "intra-flow-control-frame", "mediaType": "application/json", "detail": "Translation accounting; diagnostic metadata." }
+          }],
+          "minStreams": 1, "maxStreams": 1, "required": true,
+          "description": "Read report."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Translates one VCM. A message that is not a VCM, has no epoch or J2K state, or has a malformed covariance is refused."
+    },
+    {
+      "methodId": "write",
+      "displayName": "Write a VCM",
+      "inputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [{ "setId": "sds-prw", "allowedTypes": [{ "schemaName": "PRW.fbs", "fileIdentifier": "$PRW", "rootTypeName": "PRW" }], "description": "Size-prefixed $PRW EXECUTION_RESULT from propagator/hpop; FINAL_SAMPLE in EME2000, with a covariance over the state and DYNAMIC_PARAMETERS when one is to be written." }],
+          "minStreams": 1, "maxStreams": 1, "required": true,
+          "description": "The state to write."
+        },
+        {
+          "portId": "header",
+          "acceptedTypeSets": [{
+            "setId": "vcm-write-header-v1",
+            "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+            "description": "JSON: identity (satelliteNumber, internationalDesignator, commonName, center, messageTime, epochRev), model lines (geopotential, zonals, tesserals, drag, lunarSolar, solarRadiationPressure, solidEarthTides, inTrackThrust, ballisticCoefficient, bdot, agom, thrustAcceleration, f10, averageF10, averageAp), Earth orientation (taiMinusUtcS, ut1MinusUtcS, ut1RateMsPerDay, polarX, polarY), weightedRms, meanMotionUnit and parameterRows (as read took them).",
+            "wildcardJustification": { "kind": "intra-flow-control-frame", "mediaType": "application/json", "detail": "Message metadata the propagation result does not carry." }
+          }],
+          "minStreams": 0, "maxStreams": 1, "required": false,
+          "description": "Message header."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "message",
+          "acceptedTypeSets": [{
+            "setId": "vcm-text",
+            "allowedTypes": [{ "acceptsAnyFlatbuffer": true }],
+            "description": "The VCM text, \"<>\"-prefixed lines.",
+            "wildcardJustification": { "kind": "foreign-wire-format", "mediaType": "text/x-sp-vcm", "detail": "The legacy fixed-format ASCII message." }
+          }],
+          "minStreams": 1, "maxStreams": 1, "required": true,
+          "description": "The VCM."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Writes one VCM: J2K (EME2000), ECI (TEME of date) and EFG (GMST 1982 of UT1, no polar motion) states, model lines from the header, UVW sigmas and the equinoctial covariance with B, BDOT, AGOM and T in their slots."
+    }
+  ],
+  "schemasUsed": [
+    { "schemaName": "PRW.fbs", "fileIdentifier": "$PRW", "rootTypeName": "PRW" },
+    { "schemaName": "VCM.fbs", "fileIdentifier": "$VCM", "rootTypeName": "VCM" }
+  ],
+  "buildArtifacts": [
+    { "artifactId": "analysis-vcm-adapter-isomorphic", "kind": "wasm", "path": "dist/isomorphic/module.wasm", "target": "browser,wasmedge" }
+  ],
+  "abiVersion": 1
+}

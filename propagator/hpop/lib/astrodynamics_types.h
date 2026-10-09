@@ -862,6 +862,10 @@ struct SpaceWeatherData {
     double S107{150.0};         ///< 26-34 nm EUV index (for JB2008)
     double M107{150.0};         ///< MgII core-to-wing ratio index
     double Y107{150.0};         ///< Lyman-alpha composite index
+    /// 81-day centred averages of S10, M10 and Y10 (JB2008's S10B, M10B, Y10B).
+    double S107a{150.0};
+    double M107a{150.0};
+    double Y107a{150.0};
 
     // Geomagnetic indices
     double Ap{15.0};            ///< Daily Ap index (0-400)
@@ -870,6 +874,11 @@ struct SpaceWeatherData {
     /// real input (PRW KP_INDEX, an explicit JSON Kp, or ap_a[1] of
     /// plugin_set_solar_activity); negative when not supplied.
     double kp3h{-1.0};
+    /// Jacchia-Roberts' drivers from a daily table: the three-hour Kp 6.7 h
+    /// before the epoch and the 81-day centred F10.7 of the previous day;
+    /// negative when not supplied (then Kp and F107a).
+    double kpLag67h{-1.0};
+    double f107aPreviousDay{-1.0};
     double ap3h[8] = {};        ///< 3-hourly ap values for day
     double Dst{0};              ///< Disturbance storm time (nT)
 

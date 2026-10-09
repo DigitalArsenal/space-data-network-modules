@@ -2,6 +2,8 @@ import * as flatbuffers from 'flatbuffers';
 import { PRWSpaceWeather, PRWSpaceWeatherT } from './PRWSpaceWeather.js';
 import { prwAtmosphereFamily } from './prwAtmosphereFamily.js';
 import { prwGravitySelection } from './prwGravitySelection.js';
+import { prwRelativityTerms } from './prwRelativityTerms.js';
+import { prwSolidTideModel } from './prwSolidTideModel.js';
 export class PRWForceConfiguration {
     bb = null;
     bb_pos = 0;
@@ -113,8 +115,40 @@ export class PRWForceConfiguration {
         const offset = this.bb.__offset(this.bb_pos, 46);
         return this.bb.__string(this.bb_pos + offset, optionalEncoding);
     }
+    SOLID_TIDES() {
+        const offset = this.bb.__offset(this.bb_pos, 48);
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : prwSolidTideModel.NONE;
+    }
+    RELATIVITY() {
+        const offset = this.bb.__offset(this.bb_pos, 50);
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : prwRelativityTerms.NONE;
+    }
+    IN_TRACK_ACCELERATION_M_S2() {
+        const offset = this.bb.__offset(this.bb_pos, 52);
+        return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.0;
+    }
+    HAS_IN_TRACK_ACCELERATION_M_S2() {
+        const offset = this.bb.__offset(this.bb_pos, 54);
+        return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+    }
+    DRAG_AREA_OVER_MASS_RATE_M2_KG_S() {
+        const offset = this.bb.__offset(this.bb_pos, 56);
+        return offset ? this.bb.readFloat64(this.bb_pos + offset) : 0.0;
+    }
+    HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S() {
+        const offset = this.bb.__offset(this.bb_pos, 58);
+        return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+    }
+    MAXIMUM_TESSERAL_DEGREE() {
+        const offset = this.bb.__offset(this.bb_pos, 60);
+        return offset ? this.bb.readUint16(this.bb_pos + offset) : 0;
+    }
+    HAS_MAXIMUM_TESSERAL_DEGREE() {
+        const offset = this.bb.__offset(this.bb_pos, 62);
+        return offset ? !!this.bb.readInt8(this.bb_pos + offset) : false;
+    }
     static startPRWForceConfiguration(builder) {
-        builder.startObject(22);
+        builder.startObject(30);
     }
     static addGravityChoice(builder, GRAVITY_CHOICE) {
         builder.addFieldInt8(0, GRAVITY_CHOICE, prwGravitySelection.INFER_FLAGS);
@@ -192,13 +226,37 @@ export class PRWForceConfiguration {
     static addEphemerisSource(builder, EPHEMERIS_SOURCEOffset) {
         builder.addFieldOffset(21, EPHEMERIS_SOURCEOffset, 0);
     }
+    static addSolidTides(builder, SOLID_TIDES) {
+        builder.addFieldInt8(22, SOLID_TIDES, prwSolidTideModel.NONE);
+    }
+    static addRelativity(builder, RELATIVITY) {
+        builder.addFieldInt8(23, RELATIVITY, prwRelativityTerms.NONE);
+    }
+    static addInTrackAccelerationMS2(builder, IN_TRACK_ACCELERATION_M_S2) {
+        builder.addFieldFloat64(24, IN_TRACK_ACCELERATION_M_S2, 0.0);
+    }
+    static addHasInTrackAccelerationMS2(builder, HAS_IN_TRACK_ACCELERATION_M_S2) {
+        builder.addFieldInt8(25, +HAS_IN_TRACK_ACCELERATION_M_S2, +false);
+    }
+    static addDragAreaOverMassRateM2KgS(builder, DRAG_AREA_OVER_MASS_RATE_M2_KG_S) {
+        builder.addFieldFloat64(26, DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 0.0);
+    }
+    static addHasDragAreaOverMassRateM2KgS(builder, HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S) {
+        builder.addFieldInt8(27, +HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, +false);
+    }
+    static addMaximumTesseralDegree(builder, MAXIMUM_TESSERAL_DEGREE) {
+        builder.addFieldInt16(28, MAXIMUM_TESSERAL_DEGREE, 0);
+    }
+    static addHasMaximumTesseralDegree(builder, HAS_MAXIMUM_TESSERAL_DEGREE) {
+        builder.addFieldInt8(29, +HAS_MAXIMUM_TESSERAL_DEGREE, +false);
+    }
     static endPRWForceConfiguration(builder) {
         const offset = builder.endObject();
         builder.requiredField(offset, 46);
         return offset;
     }
     unpack() {
-        return new PRWForceConfigurationT(this.GRAVITY_CHOICE(), this.ENABLE_POINT_MASS(), this.GRAVITATIONAL_PARAMETER(), this.ENABLE_J2(), this.ENABLE_J3(), this.ENABLE_J4(), this.ENABLE_HIGHER_ZONALS(), this.MAXIMUM_DEGREE(), this.HAS_MAXIMUM_DEGREE(), this.MAXIMUM_ORDER(), this.HAS_MAXIMUM_ORDER(), this.ENABLE_THIRD_BODY(), this.bb.createScalarList(this.THIRD_BODY_IDS.bind(this), this.thirdBodyIdsLength()), this.ENABLE_SRP(), this.ENABLE_DRAG(), this.INITIAL_MASS_KG(), this.AREA_M2(), this.REFLECTIVITY_COEFFICIENT(), this.DRAG_COEFFICIENT(), this.ATMOSPHERE_MODEL(), this.WEATHER() !== null ? this.WEATHER().unpack() : null, this.EPHEMERIS_SOURCE());
+        return new PRWForceConfigurationT(this.GRAVITY_CHOICE(), this.ENABLE_POINT_MASS(), this.GRAVITATIONAL_PARAMETER(), this.ENABLE_J2(), this.ENABLE_J3(), this.ENABLE_J4(), this.ENABLE_HIGHER_ZONALS(), this.MAXIMUM_DEGREE(), this.HAS_MAXIMUM_DEGREE(), this.MAXIMUM_ORDER(), this.HAS_MAXIMUM_ORDER(), this.ENABLE_THIRD_BODY(), this.bb.createScalarList(this.THIRD_BODY_IDS.bind(this), this.thirdBodyIdsLength()), this.ENABLE_SRP(), this.ENABLE_DRAG(), this.INITIAL_MASS_KG(), this.AREA_M2(), this.REFLECTIVITY_COEFFICIENT(), this.DRAG_COEFFICIENT(), this.ATMOSPHERE_MODEL(), this.WEATHER() !== null ? this.WEATHER().unpack() : null, this.EPHEMERIS_SOURCE(), this.SOLID_TIDES(), this.RELATIVITY(), this.IN_TRACK_ACCELERATION_M_S2(), this.HAS_IN_TRACK_ACCELERATION_M_S2(), this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S(), this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(), this.MAXIMUM_TESSERAL_DEGREE(), this.HAS_MAXIMUM_TESSERAL_DEGREE());
     }
     unpackTo(_o) {
         _o.GRAVITY_CHOICE = this.GRAVITY_CHOICE();
@@ -223,6 +281,14 @@ export class PRWForceConfiguration {
         _o.ATMOSPHERE_MODEL = this.ATMOSPHERE_MODEL();
         _o.WEATHER = this.WEATHER() !== null ? this.WEATHER().unpack() : null;
         _o.EPHEMERIS_SOURCE = this.EPHEMERIS_SOURCE();
+        _o.SOLID_TIDES = this.SOLID_TIDES();
+        _o.RELATIVITY = this.RELATIVITY();
+        _o.IN_TRACK_ACCELERATION_M_S2 = this.IN_TRACK_ACCELERATION_M_S2();
+        _o.HAS_IN_TRACK_ACCELERATION_M_S2 = this.HAS_IN_TRACK_ACCELERATION_M_S2();
+        _o.DRAG_AREA_OVER_MASS_RATE_M2_KG_S = this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S();
+        _o.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S();
+        _o.MAXIMUM_TESSERAL_DEGREE = this.MAXIMUM_TESSERAL_DEGREE();
+        _o.HAS_MAXIMUM_TESSERAL_DEGREE = this.HAS_MAXIMUM_TESSERAL_DEGREE();
     }
 }
 export class PRWForceConfigurationT {
@@ -248,7 +314,15 @@ export class PRWForceConfigurationT {
     ATMOSPHERE_MODEL;
     WEATHER;
     EPHEMERIS_SOURCE;
-    constructor(GRAVITY_CHOICE = prwGravitySelection.INFER_FLAGS, ENABLE_POINT_MASS = true, GRAVITATIONAL_PARAMETER = 0.0, ENABLE_J2 = true, ENABLE_J3 = false, ENABLE_J4 = false, ENABLE_HIGHER_ZONALS = false, MAXIMUM_DEGREE = 0, HAS_MAXIMUM_DEGREE = false, MAXIMUM_ORDER = 0, HAS_MAXIMUM_ORDER = false, ENABLE_THIRD_BODY = false, THIRD_BODY_IDS = [], ENABLE_SRP = false, ENABLE_DRAG = false, INITIAL_MASS_KG = 1000.0, AREA_M2 = 10.0, REFLECTIVITY_COEFFICIENT = 1.5, DRAG_COEFFICIENT = 2.2, ATMOSPHERE_MODEL = prwAtmosphereFamily.NRLMSISE00, WEATHER = null, EPHEMERIS_SOURCE = null){
+    SOLID_TIDES;
+    RELATIVITY;
+    IN_TRACK_ACCELERATION_M_S2;
+    HAS_IN_TRACK_ACCELERATION_M_S2;
+    DRAG_AREA_OVER_MASS_RATE_M2_KG_S;
+    HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S;
+    MAXIMUM_TESSERAL_DEGREE;
+    HAS_MAXIMUM_TESSERAL_DEGREE;
+    constructor(GRAVITY_CHOICE = prwGravitySelection.INFER_FLAGS, ENABLE_POINT_MASS = true, GRAVITATIONAL_PARAMETER = 0.0, ENABLE_J2 = true, ENABLE_J3 = false, ENABLE_J4 = false, ENABLE_HIGHER_ZONALS = false, MAXIMUM_DEGREE = 0, HAS_MAXIMUM_DEGREE = false, MAXIMUM_ORDER = 0, HAS_MAXIMUM_ORDER = false, ENABLE_THIRD_BODY = false, THIRD_BODY_IDS = [], ENABLE_SRP = false, ENABLE_DRAG = false, INITIAL_MASS_KG = 1000.0, AREA_M2 = 10.0, REFLECTIVITY_COEFFICIENT = 1.5, DRAG_COEFFICIENT = 2.2, ATMOSPHERE_MODEL = prwAtmosphereFamily.NRLMSISE00, WEATHER = null, EPHEMERIS_SOURCE = null, SOLID_TIDES = prwSolidTideModel.NONE, RELATIVITY = prwRelativityTerms.NONE, IN_TRACK_ACCELERATION_M_S2 = 0.0, HAS_IN_TRACK_ACCELERATION_M_S2 = false, DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 0.0, HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false, MAXIMUM_TESSERAL_DEGREE = 0, HAS_MAXIMUM_TESSERAL_DEGREE = false){
         this.GRAVITY_CHOICE = GRAVITY_CHOICE;
         this.ENABLE_POINT_MASS = ENABLE_POINT_MASS;
         this.GRAVITATIONAL_PARAMETER = GRAVITATIONAL_PARAMETER;
@@ -271,6 +345,14 @@ export class PRWForceConfigurationT {
         this.ATMOSPHERE_MODEL = ATMOSPHERE_MODEL;
         this.WEATHER = WEATHER;
         this.EPHEMERIS_SOURCE = EPHEMERIS_SOURCE;
+        this.SOLID_TIDES = SOLID_TIDES;
+        this.RELATIVITY = RELATIVITY;
+        this.IN_TRACK_ACCELERATION_M_S2 = IN_TRACK_ACCELERATION_M_S2;
+        this.HAS_IN_TRACK_ACCELERATION_M_S2 = HAS_IN_TRACK_ACCELERATION_M_S2;
+        this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S = DRAG_AREA_OVER_MASS_RATE_M2_KG_S;
+        this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S;
+        this.MAXIMUM_TESSERAL_DEGREE = MAXIMUM_TESSERAL_DEGREE;
+        this.HAS_MAXIMUM_TESSERAL_DEGREE = HAS_MAXIMUM_TESSERAL_DEGREE;
     }
     pack(builder) {
         const THIRD_BODY_IDS = PRWForceConfiguration.createThirdBodyIdsVector(builder, this.THIRD_BODY_IDS);
@@ -299,6 +381,14 @@ export class PRWForceConfigurationT {
         PRWForceConfiguration.addAtmosphereModel(builder, this.ATMOSPHERE_MODEL);
         PRWForceConfiguration.addWeather(builder, WEATHER);
         PRWForceConfiguration.addEphemerisSource(builder, EPHEMERIS_SOURCE);
+        PRWForceConfiguration.addSolidTides(builder, this.SOLID_TIDES);
+        PRWForceConfiguration.addRelativity(builder, this.RELATIVITY);
+        PRWForceConfiguration.addInTrackAccelerationMS2(builder, this.IN_TRACK_ACCELERATION_M_S2);
+        PRWForceConfiguration.addHasInTrackAccelerationMS2(builder, this.HAS_IN_TRACK_ACCELERATION_M_S2);
+        PRWForceConfiguration.addDragAreaOverMassRateM2KgS(builder, this.DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
+        PRWForceConfiguration.addHasDragAreaOverMassRateM2KgS(builder, this.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
+        PRWForceConfiguration.addMaximumTesseralDegree(builder, this.MAXIMUM_TESSERAL_DEGREE);
+        PRWForceConfiguration.addHasMaximumTesseralDegree(builder, this.HAS_MAXIMUM_TESSERAL_DEGREE);
         return PRWForceConfiguration.endPRWForceConfiguration(builder);
     }
 }

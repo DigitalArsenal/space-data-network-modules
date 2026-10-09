@@ -27,6 +27,7 @@ test('artifact passes standards-aware SDK compliance',async()=>{
 test('all method ports use the ratified canonical PRW identity',()=>{
  assert.deepEqual(manifest.methods.map(m=>m.methodId),['invoke','ingest_state','propagate_state','prepare_trajectory_segments','describe_trajectory_segments']);
  for(const m of manifest.methods)for(const p of [...m.inputPorts,...m.outputPorts])assert.deepEqual(p.acceptedTypeSets[0].allowedTypes,[TYPE]);
+ assert.deepEqual(manifest.methods[0].inputPorts.map(p=>p.portId),['request','kernel','earth_orientation','space_weather','jb2008_indices']);
  assert.equal(manifest.threadModel,'wasi-sequential');assert.ok(manifest.sequentialJustification.detail.includes('ordered'));
 });
 test('PLG codec round-trips every declared method and port',()=>{

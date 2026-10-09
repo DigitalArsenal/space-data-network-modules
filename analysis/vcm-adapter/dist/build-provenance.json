@@ -1,0 +1,23 @@
+{
+  "spacedatastandards": "1.240.0",
+  "sdsFamilies": [
+    "RFM",
+    "FRM",
+    "TIM",
+    "PCE",
+    "IDM",
+    "PLD",
+    "LCC",
+    "CAT",
+    "PPE",
+    "NCD",
+    "EOP",
+    "SPW",
+    "PRW",
+    "MET",
+    "VCM"
+  ],
+  "erfaSourceFiles": 248,
+  "axisEngine": "foundation/frames/src/axis_engine.hpp",
+  "threadModel": "wasi-sequential"
+}

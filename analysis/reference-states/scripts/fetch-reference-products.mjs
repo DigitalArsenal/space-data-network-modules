@@ -7,7 +7,8 @@
 //     [--products gps,slr,sentinel1,swarm] [--out DIR]
 //
 // Products (all public):
-//   gps        IGS final orbits (IGS0OPSFIN, 15 min, IGS20), satellite
+//   gps        IGS final orbits (IGS0OPSFIN, 15 min, IGS20; ESA0OPSFIN, 5 min,
+//              where BKG no longer holds the day), satellite
 //              identity from the IGS satellite metadata SINEX (PRN -> SVN ->
 //              COSPAR and catalog number, valid at the file's midpoint).
 //   slr        ILRS combined orbits (ilrsa, weekly arcs) of LAGEOS-1/2 and
@@ -189,10 +190,19 @@ async function gnssIdentities(midMs) {
 async function gps(day) {
   const d = new Date(day), doy = Math.round((day - Date.UTC(d.getUTCFullYear(), 0, 1)) / DAY) + 1;
   const week = Math.floor((day - Date.UTC(1980, 0, 6)) / (7 * DAY));
-  const name = `IGS0OPSFIN_${d.getUTCFullYear()}${String(doy).padStart(3, '0')}0000_01D_15M_ORB.SP3.gz`;
-  const url = `https://igs.bkg.bund.de/root_ftp/IGS/products/${week}/${name}`;
-  const gz = await fetchCached(url);
-  if (!gz) return console.warn(`gps: ${name} not published`);
+  // The IGS combined final orbit from BKG's mirror; where BKG no longer holds
+  // the day (older weeks), ESA's final orbit (an IGS analysis centre, 5 min).
+  const day3 = `${d.getUTCFullYear()}${String(doy).padStart(3, '0')}`;
+  let name = `IGS0OPSFIN_${day3}0000_01D_15M_ORB.SP3.gz`;
+  let url = `https://igs.bkg.bund.de/root_ftp/IGS/products/${week}/${name}`;
+  let gz = await fetchCached(url);
+  if (!gz) {
+    const esa = `ESA0OPSFIN_${day3}0000_01D_05M_ORB.SP3.gz`;
+    const esaUrl = `https://navigation-office.esa.int/products/gnss-products/${week}/${esa}`;
+    gz = await fetchCached(esaUrl);
+    if (gz) { console.warn(`gps: ${name} not at BKG; using ${esa}`); name = esa; url = esaUrl; }
+  }
+  if (!gz) return console.warn(`gps: ${name} not published (BKG, ESA)`);
   const sp3 = gunzipSync(gz);
   const { satellites, sinexSha256 } = await gnssIdentities(day + DAY / 2);
   await referenceStates(name.replace('.SP3.gz', ''), sp3, { product: name, source: url, satellites },
