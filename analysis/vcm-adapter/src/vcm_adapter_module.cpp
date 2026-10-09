@@ -40,6 +40,15 @@
 // time unit: 8.5 m). That is the default; meanMotionUnit overrides it, and
 // every read reports the recomputed sigmas so a wrong unit shows.
 //
+// The units of the parameter rows are not stated either, and the stated
+// sigmas cannot settle them (they cover the six elements only). Read as
+// printed ("absolute", the default), the sample's B row gives a sigma of
+// 5.1 times B itself; read as a fraction of B ("fractional"), 4.3 %. The
+// option parameterRows chooses; B and AGOM rows are scaled by their values
+// when fractional, BDOT and T rows are taken as printed, and every read
+// reports the parameter sigmas it carried. write takes the same key in its
+// header and prints the rows back the same way.
+//
 // Pure compute: output bytes depend only on input bytes.
 
 #include <algorithm>
@@ -481,6 +490,7 @@ struct Options {
     bool scaleByWeightedRms = true;
     double arcSeconds = 86400.0;
     std::string ephemerisSource = "JPL_SPK";
+    bool fractionalParameterRows = false;
 };
 // A minimal reader for {"key": value, ...} with string, number and boolean
 // values.
@@ -549,6 +559,10 @@ std::string parseOptions(const plugin_input_frame_t* frame, Options& o) {
             if (!number(v, &o.arcSeconds) || !(o.arcSeconds > 0) || o.arcSeconds > 30 * 86400.0) return "invalid-options: arcSeconds in (0, 30 days]";
         } else if (k == "ephemerisSource") {
             o.ephemerisSource = v.empty() || v[0] != '"' ? v : v.substr(1);
+        } else if (k == "parameterRows") {
+            const std::string rows = v.empty() || v[0] != '"' ? v : v.substr(1);
+            if (rows != "absolute" && rows != "fractional") return "invalid-options: parameterRows is absolute or fractional";
+            o.fractionalParameterRows = rows == "fractional";
         } else {
             return "invalid-options: unknown key " + k;
         }
@@ -659,11 +673,22 @@ int read(void) {
     double recomputed[6] = {};
     const double rms = m.weightedRms > 0 ? m.weightedRms : 1.0;
     const double variance = o.scaleByWeightedRms ? rms * rms : 1.0;
+    // Parameter rows in the force's own units: as printed, or B and AGOM as
+    // fractions of their values.
+    std::vector<double> rowScale(n, 1.0);
+    for (unsigned k = 0; k < np; ++k) {
+        const unsigned row = parameters.rows[k];
+        if (o.fractionalParameterRows && row == 6) rowScale[6 + k] = m.b;
+        if (o.fractionalParameterRows && row == 8) rowScale[6 + k] = m.agom;
+    }
+    if (o.fractionalParameterRows) notes.push_back("parameter rows read as fractions: B and AGOM rows scaled by their values; BDOT and T rows as printed");
+    std::vector<double> parameterSigma(np, 0.0);
     if (m.n >= 6) {
         std::vector<double> reduced(n * n, 0.0);
         std::vector<unsigned> rows{0, 1, 2, 3, 4, 5};
         rows.insert(rows.end(), parameters.rows.begin(), parameters.rows.end());
-        for (unsigned i = 0; i < n; ++i) for (unsigned j = 0; j < n; ++j) reduced[i * n + j] = m.covariance[rows[i] * m.n + rows[j]] * variance;
+        for (unsigned i = 0; i < n; ++i) for (unsigned j = 0; j < n; ++j) reduced[i * n + j] = m.covariance[rows[i] * m.n + rows[j]] * variance * rowScale[i] * rowScale[j];
+        for (unsigned k = 0; k < np; ++k) parameterSigma[k] = std::sqrt(reduced[(6 + k) * n + 6 + k]);
         double j6[36];
         jacobianToCartesian(elements, mu, fr, o.nScale, j6);
         cartesian = transform(reduced, n, j6);
@@ -902,6 +927,21 @@ int read(void) {
     r += std::string(",\"covarianceScaledByWeightedRms\":") + (o.scaleByWeightedRms ? "true" : "false");
     r += ",\"dynamicParameters\":[";
     for (size_t i = 0; i < kept.size(); ++i) { if (i) r += ','; jsonString(r, EnumNameprwDynamicParameter(kept[i])); }
+    r += "],\"parameterRows\":";
+    jsonString(r, o.fractionalParameterRows ? "fractional" : "absolute");
+    r += ",\"parameterSigmas\":[";
+    {
+        const char* names[4] = {"B", "BDOT", "AGOM", "T"};
+        const double values[4] = {m.b, m.bdot, m.agom, m.thrust};
+        const char* units[4] = {"m2/kg", "m2/kg/s", "m2/kg", "m/s2"};
+        for (unsigned k = 0; k < np; ++k) {
+            const unsigned slot = parameters.rows[k] - 6;
+            if (k) r += ',';
+            r += "{\"name\":"; jsonString(r, names[slot]);
+            r += ",\"unit\":"; jsonString(r, units[slot]);
+            r += ",\"value\":" + fmt(values[slot]) + ",\"sigma\":" + fmt(parameterSigma[k]) + "}";
+        }
+    }
     r += "],\"cartesianCovarianceKm\":";
     if (cartesian.empty()) r += "null"; else jsonArray(r, cartesian.data(), cartesian.size());
     r += ",\"statedUvwSigmasKm\":"; jsonArray(r, m.sigmas, 6);
@@ -1050,6 +1090,16 @@ int write(void) {
         }
         eqCov.assign(size * size, 0.0);
         for (unsigned i = 0; i < n; ++i) for (unsigned j = 0; j < n; ++j) eqCov[slot[i] * size + slot[j]] = q[i * n + j];
+        // Parameter rows back as fractions when asked (the read's option).
+        const std::string rows = text("parameterRows", "absolute");
+        if (rows != "absolute" && rows != "fractional") { plugin_set_error("invalid-header", "parameterRows is absolute or fractional"); return 400; }
+        if (rows == "fractional") {
+            const double b = num("ballisticCoefficient", 0.0), agom = num("agom", 0.0);
+            std::vector<double> scaleOf(size, 1.0);
+            if (size > 6) { if (!(b > 0)) { plugin_set_error("invalid-header", "fractional parameter rows need ballisticCoefficient > 0"); return 400; } scaleOf[6] = 1.0 / b; }
+            if (size > 8 && agom > 0) scaleOf[8] = 1.0 / agom;
+            for (unsigned i = 0; i < size; ++i) for (unsigned j = 0; j < size; ++j) eqCov[i * size + j] *= scaleOf[i] * scaleOf[j];
+        }
     }
 
     char line[160];

@@ -118,3 +118,37 @@ test('read -> HPOP -> write -> read round trip', async (t) => {
   t.diagnostic(`covariance through VCM text and back: ${worst.toExponential(2)} of the sigmas`);
   assert.ok(worst < 2e-4, `${worst}`);
 });
+
+// (4) The parameter rows' units are not stated in the format; parameterRows
+//     chooses. Read as printed, the sample's B sigma is 5.1 times B; read as
+//     a fraction of B, 4.3 %. Fractional rows go back out as fractions.
+test('parameterRows: B row as printed or as a fraction of B', async (t) => {
+  const vcm = await load('..'), hpop = await load('../../../propagator/hpop');
+  t.after(() => { vcm.destroy(); hpop.destroy(); });
+  const options = { ephemerisSource: 'Analytical', arcSeconds: 3600 };
+  const read = async (rows) => ok(await vcm.invoke({ methodId: 'read', inputs: [{ portId: 'message', payload: SAMPLE }, json('options', { ...options, parameterRows: rows })] }));
+  const reportOf = (r) => JSON.parse(Buffer.from(out(r, 'report')).toString());
+  const absolute = reportOf(await read('absolute')), fractional = reportOf(await read('fractional'));
+  const printed = Math.sqrt(0.13665e-2) * 0.11498e1, b = 0.826455e-2;
+  assert.equal(absolute.parameterRows, 'absolute');
+  assert.equal(fractional.parameterRows, 'fractional');
+  assert.ok(Math.abs(absolute.parameterSigmas[0].sigma - printed) < 1e-9 * printed);
+  assert.ok(Math.abs(fractional.parameterSigmas[0].sigma - printed * b) < 1e-9 * printed * b);
+  t.diagnostic(`B sigma as printed ${(printed / b).toFixed(2)} x B; as a fraction ${(100 * printed).toFixed(2)} % of B`);
+  // The six element rows are the same either way.
+  for (let i = 0; i < 6; ++i) for (let j = 0; j < 6; ++j)
+    assert.equal(absolute.cartesianCovarianceKm[i * 7 + j], fractional.cartesianCovarianceKm[i * 7 + j]);
+  assert.deepEqual(fractional.recomputedUvwSigmasKm, absolute.recomputedUvwSigmasKm);
+  // Fractional rows written back as fractions: the B variance survives the
+  // round trip through HPOP at zero arc length's worth of drift (1 h here).
+  const r = await read('fractional');
+  const run = ok(await hpop.invoke({ methodId: 'invoke', inputs: [{ portId: 'request', typeRef: PRW, payload: out(r, 'request') }, { portId: 'earth_orientation', typeRef: PRW, payload: out(r, 'earth_orientation') }] }));
+  const header = { geopotential: fractional.geopotential, zonals: fractional.zonals, tesserals: fractional.tesserals, drag: fractional.drag, ballisticCoefficient: b, weightedRms: 1, parameterRows: 'fractional' };
+  const text = Buffer.from(out(ok(await vcm.invoke({ methodId: 'write', inputs: [{ portId: 'result', typeRef: PRW, payload: out(run, 'response') }, json('header', header)] })), 'message')).toString();
+  const { n, p } = lowerTriangle(text);
+  assert.equal(n, 7);
+  // B is a constant of the motion: its variance is unchanged by propagation.
+  assert.ok(Math.abs(p[6 * 7 + 6] - printed ** 2) < 1e-4 * printed ** 2, `${p[6 * 7 + 6]} vs ${printed ** 2}`);
+  const bad = await vcm.invoke({ methodId: 'read', inputs: [{ portId: 'message', payload: SAMPLE }, json('options', { parameterRows: 'percent' })] });
+  assert.notEqual(bad.statusCode, 0);
+});

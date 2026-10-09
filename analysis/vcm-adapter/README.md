@@ -42,7 +42,8 @@ propagation result becomes a VCM.
 Options: `meanMotionUnit` (`rad/ks`, default, `rad/s`, `rad/min`,
 `rev/day`), `scaleCovarianceByWeightedRms` (default true), `arcSeconds`
 (default 86400), `ephemerisSource` (default `JPL_SPK`: attach a DE440 kernel
-on HPOP's kernel port).
+on HPOP's kernel port), `parameterRows` (`absolute`, default, or
+`fractional`; see below).
 
 ## The units of n
 
@@ -55,8 +56,21 @@ rad/min 26 m, rev/day 8.0 m and the canonical time unit 8.5 m. The V and W
 sigmas do not depend on n's unit and match in every case, which is what
 identifies the weighted-RMS scaling. Every read reports the recomputed
 sigmas beside the stated ones, so a message in other units shows itself.
-The units of the B, BDOT, AGOM and T rows are taken as printed on the model
-lines (m²/kg, m²/kg/s, m/s²); the sample cannot confirm them.
+
+## The units of the parameter rows
+
+Not stated either, and the printed sigmas cannot settle them: they cover the
+six elements only. `parameterRows: "absolute"` (the default) takes the B,
+BDOT, AGOM and T rows in the units printed on the model lines (m²/kg,
+m²/kg/s, m/s²); `"fractional"` takes the B and AGOM rows as fractions of B
+and AGOM (BDOT and T rows still as printed). The sample tells the two apart
+only by plausibility: as printed, its B sigma is 5.1 times B itself, which
+propagates to an in-track sigma of tens of kilometres after a day for an
+orbit fitted to 40 m; as a fraction it is 4.3 % of B. Every read reports the
+parameter sigmas it carried (`parameterSigmas`), and `write` takes the same
+key in its header so a message goes back out the way it came in. A VCM with
+a precise orbit to check it against (E2 in orbit-accuracy-experiments) is
+what will settle it.
 
 ## What `write` writes
 
@@ -73,7 +87,9 @@ the other units); the Cartesian covariance against an independent
 finite-difference Jacobian written in the test (2.3e-7 of the sigmas); the
 request run through HPOP for an hour with B as a parameter; and the result
 written as a VCM and read back (state to the printed digits, covariance to
-3.5e-6 of the sigmas).
+3.5e-6 of the sigmas); `parameterRows` both ways (the six element rows
+identical, the B sigma 5.14 × B as printed and 4.25 % as a fraction, and a
+fractional B row written back unchanged).
 
 ```sh
 npm run build   # SDN_WASI_* toolchain environment as for propagator/hpop
