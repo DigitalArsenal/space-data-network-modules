@@ -4,5 +4,6 @@
     "OEM",
     "MNV"
   ],
+  "sgp4": "propagator/sgp4/src/cpp/src/SGP4.cpp",
   "threadModel": "single-thread"
 }

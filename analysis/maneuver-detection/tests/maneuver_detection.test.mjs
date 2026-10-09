@@ -277,3 +277,74 @@ test('Earth-fixed ephemerides are refused', async (t) => {
   const { error } = await detect(t, oem([block(0, LEO(), { frame: f }), block(1, LEO(), { frame: f })]));
   assert.match(error, /inertial/);
 });
+
+// Element sets on the elements port: the module propagates each with
+// Vallado's SGP4 itself. A synthetic history of one LEO object, a set every
+// 8 h, whose mean anomaly, argument of perigee and node advance at SGP4's
+// first-order J2 secular rates (Hoots and Roehrich 1980, Spacetrack Report
+// No. 3, WGS-72), so consecutive sets describe one orbit. A burn changes the
+// mean motion of every later set: dv = 1 m/s in-track raises a by
+// 2 a^2 v dv / mu, i.e. n by -3/2 n da / a, with the mean anomaly continuous
+// at the burn.
+async function detectElements(t, objects, options) {
+  const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
+  t.after(() => h.destroy());
+  const inputs = [{ portId: 'elements', payload: Buffer.from(JSON.stringify({ objects })), typeRef: { schemaName: 'application/json' } }];
+  if (options) inputs.push({ portId: 'options', payload: Buffer.from(JSON.stringify(options)), typeRef: { schemaName: 'application/json' } });
+  const result = await h.invoke({ methodId: 'detect_maneuvers', inputs });
+  if (result.statusCode !== 0) return { error: result.errorMessage };
+  const events = result.outputs.filter((f) => f.portId === 'maneuvers')
+    .map((f) => MNV.MNV.getRootAsMNV(new flatbuffers.ByteBuffer(new Uint8Array(f.payload))).unpack());
+  return { events, report: JSON.parse(Buffer.from(result.outputs.find((f) => f.portId === 'report').payload).toString()) };
+}
+function gpHistory(burnDv) {
+  const XKE = 60 / Math.sqrt(6378.135 ** 3 / 398600.8), K2 = 0.5 * 0.001082616, RE = 6378.135, deg = Math.PI / 180;
+  const inc = 51.6, e = 0.0008, ci = Math.cos(inc * deg), b = Math.sqrt(1 - e * e);
+  // Brouwer mean motion (rad/min) of a Kozai mean motion n (rev/day), and J2 secular rates (deg/day).
+  const brouwer = (nRevDay) => {
+    const n0 = nRevDay * 2 * Math.PI / 1440, a1 = (XKE / n0) ** (2 / 3), d1 = 1.5 * K2 / a1 ** 2 * (3 * ci * ci - 1) / b ** 3;
+    const a0 = a1 * (1 - d1 / 3 - d1 * d1 - 134 / 81 * d1 ** 3), d0 = 1.5 * K2 / a0 ** 2 * (3 * ci * ci - 1) / b ** 3;
+    return { n: n0 / (1 + d0), a: a0 / (1 - d0) };
+  };
+  const rates = (nRevDay) => {
+    const { n, a } = brouwer(nRevDay), p2 = (a * b * b) ** 2, perDay = 1440 / deg;
+    return { M: n * (1 + 1.5 * K2 * b * (3 * ci * ci - 1) / p2) * perDay, w: 0.75 * K2 * n * (5 * ci * ci - 1) / p2 * perDay, O: -1.5 * K2 * n * ci / p2 * perDay, aKm: a * RE };
+  };
+  const t0 = 61285, n0 = 15.5, tb = t0 + 5 + 1 / 6;  // 2026-09-01, the burn at 04:00 on day 5
+  const pre = rates(n0);
+  const v = Math.sqrt(398600.4418 / pre.aKm);
+  const da = 2 * pre.aKm ** 2 * v * burnDv / 398600.4418 / 1000;  // km, burnDv in m/s
+  const n1 = n0 * (1 - 1.5 * da / pre.aKm), post = rates(n1);
+  const sets = [];
+  for (let k = 0; k < 31; ++k) {
+    const t = t0 + k / 3, after = burnDv && t > tb;
+    const r = after ? post : pre, n = after ? n1 : n0;
+    const dt = t - t0, M = after ? pre.M * (tb - t0) + post.M * (t - tb) : pre.M * dt;
+    sets.push({ mjd: t, MEAN_MOTION: n, ECCENTRICITY: e, INCLINATION: inc, RA_OF_ASC_NODE: (30 + r.O * dt) % 360, ARG_OF_PERICENTER: (90 + r.w * dt + 360) % 360,
+      MEAN_ANOMALY: (M % 360 + 360) % 360, BSTAR: 0 });
+  }
+  return { tb, sets };
+}
+
+test('element sets propagated by the module: an unburned GP history yields no event', async (t) => {
+  const { sets } = gpHistory(0);
+  const { events, report, error } = await detectElements(t, [{ norad: 99999, sets }]);
+  assert.equal(error, undefined, error);
+  assert.equal(events.length, 0, JSON.stringify(report.objects[0].events));
+  assert.equal(report.objects[0].element_sets, 31);
+  assert.equal(report.objects[0].frame, 'TEME');
+});
+
+test('element sets propagated by the module: a 1 m/s in-track burn between two sets is found', async (t) => {
+  const { tb, sets } = gpHistory(1);
+  const { events, report, error } = await detectElements(t, [{ norad: 99999, sets }]);
+  assert.equal(error, undefined, error);
+  assert.equal(events.length, 1, JSON.stringify(report.objects[0].events));
+  const [m] = events;
+  assert.equal(MNV.maneuverCharacterization[m.CHARACTERIZATION], 'ORBIT_RAISING');
+  // The impulse sits between the two sets that bracket the burn.
+  const tStar = Date.parse(m.EVENT_START_TIME) / 86400000 + 40587;
+  assert.ok(tStar > tb - 1 / 3 && tStar < tb + 1 / 3, `event at ${m.EVENT_START_TIME}`);
+  // Mean-element changes map to the osculating jump only to first order in J2.
+  assert.ok(Math.abs(m.DELTA_VEL_U * 1000 - 1) < 0.1, `in-track delta-V ${m.DELTA_VEL_U * 1000} m/s`);
+});
