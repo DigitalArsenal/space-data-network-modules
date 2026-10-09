@@ -54,7 +54,9 @@
 // (parameterRows "fractional", the default, like the n row) the messages on
 // hand give sigmas of 1.5 % to 9.7 %; as printed in m^2/kg ("absolute") they
 // give 0.38 to 5.6 times the parameter itself, which fits of tens of metres
-// would hardly leave. B and AGOM rows are scaled by their values when
+// would hardly leave. Against a precise orbit (the GPS message, one day,
+// ESA's final orbit) the fractional reading's radial and in-track sigmas
+// are about twice the errors; the absolute reading's, 7 to 20 times. B and AGOM rows are scaled by their values when
 // fractional, BDOT and T rows are taken as printed, and every read reports
 // the parameter sigmas it carried. write takes the same keys in its header
 // and prints the rows back the same way.

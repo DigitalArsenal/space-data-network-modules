@@ -71,9 +71,14 @@ parameter itself, which fits of tens of metres would hardly leave. B and
 AGOM rows are scaled by their values when fractional; BDOT and T rows are
 taken as printed. Every read reports the parameter sigmas it carried
 (`parameterSigmas`), and `write` takes the same keys in its header so a
-message goes back out the way it came in. The reading is inferred, not yet
-measured: a message for an object with a precise orbit, propagated against
-it, would measure it.
+message goes back out the way it came in. One measurement supports the
+fractional reading: the GPS message, propagated a day by HPOP and compared
+with ESA's final orbit for the satellite, has radial and in-track errors
+with RMS 0.46 and 0.64 of their sigmas when its AGOM row is read as a
+fraction; read as printed, the sigmas overstate the radial error about 20
+times and the in-track error about 7 times after half a day (in-track sigma
+1.29 km at 24 h against an error of 93 m). One satellite over one day is
+evidence, not a calibration of either reading.
 
 ## What `write` writes
 
