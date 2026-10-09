@@ -5,7 +5,7 @@
   "invokeContract": {
     "path": "schemas/Estimation.fbs",
     "extension": 2,
-    "sha256": "071dcd347968c5e27831f7a95982bbe0efea4cdc049c6d2aeedfcb4b1aea80d9"
+    "sha256": "47023c63eb84409b2b819eb38e0eff65f04095dbed781a8cea4446136c672ce6"
   },
   "propagatorContract": [
     "plugin_propagate",

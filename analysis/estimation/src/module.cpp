@@ -861,10 +861,12 @@ extern "C" int fit_batch(void) {
     return fail("bad-estimation-request", "request must be a valid $EST envelope with configuration and a named propagator port");
   const auto* options = request->batch_options();
   if (options == nullptr) return fail("bad-estimation-request", "fit_batch requires batch_options");
-  if (request->config()->estimator() != wire::EstimatorKind::BATCH_WEIGHTED_LEAST_SQUARES || request->options() || (request->extended_observations() && request->extended_observations()->size()))
-    return fail("bad-estimation-request", "fit_batch takes a BATCH_WEIGHTED_LEAST_SQUARES configuration and legacy observations only");
-  if (request->observations() == nullptr || request->observations()->size() == 0)
-    return fail("bad-estimation-request", "fit_batch requires observations");
+  const bool extended = request->extended_observations() && request->extended_observations()->size();
+  const bool legacy = request->observations() && request->observations()->size();
+  if (request->config()->estimator() != wire::EstimatorKind::BATCH_WEIGHTED_LEAST_SQUARES || request->options())
+    return fail("bad-estimation-request", "fit_batch takes a BATCH_WEIGHTED_LEAST_SQUARES configuration without sequential options");
+  if (extended == legacy)
+    return fail("bad-estimation-request", "fit_batch takes either legacy or extended observations");
   const auto kinds_size = options->parameter_kinds() ? options->parameter_kinds()->size() : 0;
   const auto values_size = options->parameter_values() ? options->parameter_values()->size() : 0;
   if (kinds_size != values_size) return fail("bad-estimation-request", "parameter_kinds and parameter_values differ in length");
@@ -872,18 +874,44 @@ extern "C" int fit_batch(void) {
   const wire::EstimationEpoch& reference = request->config()->initial_epoch();
   std::vector<core::Observation> observations;
   std::vector<wire::EstimationEpoch> epochs;
-  for (const wire::EstimationObservation* source : *request->observations()) {
-    if (source == nullptr || source->value_count() < 1 || source->value_count() > 4)
-      return fail("bad-estimation-request", "observations need 1..4 values");
-    observations.push_back(observation_from_wire(*source, reference, true));
-    epochs.push_back(source->epoch());
+  if (legacy) {
+    for (const wire::EstimationObservation* source : *request->observations()) {
+      if (source == nullptr || source->value_count() < 1 || source->value_count() > 4)
+        return fail("bad-estimation-request", "legacy observations need 1..4 values");
+      observations.push_back(observation_from_wire(*source, reference, true));
+      epochs.push_back(source->epoch());
+    }
+  } else {
+    for (const auto* source : *request->extended_observations()) {
+      if (!source || !source->observation() || !source->values() || !source->sigmas())
+        return fail("bad-estimation-request", "extended observation is incomplete");
+      const auto count = source->observation()->value_count();
+      if (count < 1 || count > 6 || source->values()->size() != count || source->sigmas()->size() != count)
+        return fail("bad-estimation-request", "extended observation must have 1..6 matching value/sigma lanes");
+      auto o = observation_from_wire(*source->observation(), reference, true);
+      for (unsigned i = 0; i < count; ++i) { o.value[i] = source->values()->Get(i); o.sigma[i] = source->sigmas()->Get(i); }
+      observations.push_back(o);
+      epochs.push_back(source->observation()->epoch());
+    }
   }
 
   core::BatchFitConfig config;
   for (int i = 0; i < 6; ++i) config.initial_state[i] = request->config()->initial_state()->Get(i);
   if (options->parameter_values()) config.initial_parameters.assign(options->parameter_values()->begin(), options->parameter_values()->end());
   if (options->apriori_covariance()) config.apriori_covariance.assign(options->apriori_covariance()->begin(), options->apriori_covariance()->end());
-  if (options->observation_covariances()) config.observation_covariances.assign(options->observation_covariances()->begin(), options->observation_covariances()->end());
+  if (options->observation_covariances() && options->observation_covariances()->size()) {
+    const auto* all = options->observation_covariances();
+    std::size_t at = 0;
+    for (const core::Observation& o : observations) {
+      const std::size_t size = static_cast<std::size_t>(o.value_count) * o.value_count;
+      if (at + size > all->size()) return fail("bad-estimation-request", "observation_covariances needs value_count squared entries per observation");
+      config.observation_covariances.emplace_back(all->begin() + at, all->begin() + at + size);
+      at += size;
+    }
+    if (at != all->size()) return fail("bad-estimation-request", "observation_covariances has entries beyond the observations");
+  }
+  if (options->covariance_axes() > 1) return fail("bad-estimation-request", "covariance_axes is 0 (request axes) or 1 (RTN of the observed state)");
+  config.rtn_axes = options->covariance_axes() == 1;
   config.maximum_iterations = static_cast<int>(options->maximum_iterations());
   config.correction_tolerance = options->correction_tolerance();
   config.sigma_edit_threshold = options->sigma_edit_threshold();

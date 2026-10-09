@@ -333,8 +333,8 @@ table BatchFitOptions {
   // Optional row-major (6 + p)^2 a priori covariance of
   // [config.initial_state, parameter_values]; empty: no a priori information.
   apriori_covariance:[double];
-  // Optional 3x3 row-major covariance per observation (POSITION_VECTOR only),
-  // 9 values per observation, replacing its sigmas.
+  // Optional covariance per observation, value_count^2 row-major values
+  // each, concatenated in observation order, replacing the sigmas.
   observation_covariances:[double];
   maximum_iterations:uint = 20;
   // Converged when the correction's length under the normal matrix,
@@ -343,6 +343,9 @@ table BatchFitOptions {
   // Edit an observation whose whitened residual RMS exceeds this many times
   // the previous iteration's weighted RMS (at least 1); 0 disables editing.
   sigma_edit_threshold:double = 0;
+  // Axes of observation_covariances: 0 the request axes, 1 the radial,
+  // transverse and normal axes of each observed state (POSITION_VELOCITY).
+  covariance_axes:ubyte = 0;
 }
 
 table BatchFitResult {

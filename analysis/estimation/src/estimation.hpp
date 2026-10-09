@@ -296,8 +296,11 @@ struct BatchFitConfig {
   std::vector<double> initial_parameters;
   // (6 + p)^2 row-major, or empty for no a priori information.
   std::vector<double> apriori_covariance;
-  // 9 per observation (POSITION_VECTOR), or empty: per-component sigmas.
-  std::vector<double> observation_covariances;
+  // Per observation, value_count^2 row-major (empty: its sigmas). With
+  // rtn_axes the matrix is in the radial, transverse, normal axes of the
+  // observed state itself (POSITION_VELOCITY observations).
+  std::vector<std::vector<double>> observation_covariances;
+  bool rtn_axes{false};
   int maximum_iterations{20};
   double correction_tolerance{1.0e-3};
   double sigma_edit_threshold{0.0};

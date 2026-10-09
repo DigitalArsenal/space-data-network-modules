@@ -80,22 +80,42 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
   if (!config.apriori_covariance.empty() && config.apriori_covariance.size() != static_cast<std::size_t>(n * n))
     return fail("the a priori covariance must be (6 + p)^2");
   const bool full = !config.observation_covariances.empty();
-  if (full && config.observation_covariances.size() != 9 * count) return fail("observation covariances must be 9 per observation");
+  if (full && config.observation_covariances.size() != count) return fail("observation covariances must be given for every observation");
 
-  // Per-observation whitening: the Cholesky factor of the 3x3 covariance, or
-  // the component sigmas.
+  // Per-observation whitening: the Cholesky factor of its covariance (in
+  // the request axes), or its component sigmas.
   std::vector<Matrix> factors(full ? count : 0);
   for (std::size_t j = 0; j < count; ++j) {
     const Observation& o = observations[j];
+    const int m = o.value_count;
     if (full) {
-      if (o.kind != MeasurementKind::POSITION_VECTOR) return fail("observation covariances apply to POSITION_VECTOR observations");
-      Matrix c(config.observation_covariances.begin() + 9 * j, config.observation_covariances.begin() + 9 * (j + 1));
-      for (int a = 0; a < 3; ++a)
+      Matrix c = config.observation_covariances[j];
+      if (c.size() != static_cast<std::size_t>(m * m)) return fail("an observation covariance must be value_count squared");
+      for (int a = 0; a < m; ++a)
         for (int b = 0; b < a; ++b)
-          if (std::abs(c[a * 3 + b] - c[b * 3 + a]) > 1e-12 * std::max(std::abs(c[a * 3 + b]), 1.0)) return fail("observation covariance is not symmetric");
-      if (!cholesky(c, 3, &factors[j])) return fail("observation covariance is not positive definite");
+          if (std::abs(c[a * m + b] - c[b * m + a]) > 1e-12 * std::max(std::abs(c[a * m + b]), 1.0)) return fail("observation covariance is not symmetric");
+      if (config.rtn_axes) {
+        if (o.kind != MeasurementKind::POSITION_VELOCITY || m != 6) return fail("RTN covariances need POSITION_VELOCITY observations");
+        // Rows of D are the observed state's R, T, N axes in request axes;
+        // C = D' C_rtn D on position and velocity alike.
+        const Vec3 r{o.value[0], o.value[1], o.value[2]}, v{o.value[3], o.value[4], o.value[5]};
+        const Vec3 h = cross(r, v);
+        if (!(norm(r) > 0.0) || !(norm(h) > 0.0)) return fail("RTN axes need a nonzero, non-radial observed state");
+        const Vec3 R = scale(r, 1.0 / norm(r)), N = scale(h, 1.0 / norm(h)), T = cross(N, R);
+        const double d[3][3] = {{R.x, R.y, R.z}, {T.x, T.y, T.z}, {N.x, N.y, N.z}};
+        Matrix rotated(36, 0.0);
+        for (int a = 0; a < 6; ++a)
+          for (int b = 0; b < 6; ++b) {
+            double sum = 0.0;
+            for (int k = 0; k < 3; ++k)
+              for (int l = 0; l < 3; ++l) sum += d[k][a % 3] * c[(a / 3 * 3 + k) * 6 + (b / 3 * 3 + l)] * d[l][b % 3];
+            rotated[a * 6 + b] = sum;
+          }
+        c.swap(rotated);
+      }
+      if (!cholesky(c, m, &factors[j])) return fail("observation covariance is not positive definite");
     } else {
-      for (int k = 0; k < o.value_count && k < 6; ++k)
+      for (int k = 0; k < m && k < 6; ++k)
         if (!(o.sigma[k] > 0.0) || !std::isfinite(o.sigma[k])) return fail("observation sigmas must be positive and finite");
     }
   }
@@ -133,6 +153,7 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
       const MeasurementPrediction predicted = predict_measurement(o, s.state);
       const int m = predicted.count;
       if (m == 0) return fail("unsupported measurement kind");
+      if (m != o.value_count) return fail("value_count does not match the measurement kind");
       Whitened& w = rows[j];
       w.count = m;
       w.design.assign(static_cast<std::size_t>(m) * n, 0.0);
@@ -149,15 +170,15 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
         }
       }
       if (full) {
-        // Forward substitution with the 3x3 factor, residual and columns alike.
+        // Forward substitution with the factor, residual and columns alike.
         const Matrix& l = factors[j];
-        for (int c = 0; c < 3; ++c) {
+        for (int c = 0; c < m; ++c) {
           for (int k = 0; k < c; ++k) {
-            w.residual[c] -= l[c * 3 + k] * w.residual[k];
-            for (int col = 0; col < n; ++col) w.design[c * n + col] -= l[c * 3 + k] * w.design[k * n + col];
+            w.residual[c] -= l[c * m + k] * w.residual[k];
+            for (int col = 0; col < n; ++col) w.design[c * n + col] -= l[c * m + k] * w.design[k * n + col];
           }
-          w.residual[c] /= l[c * 3 + c];
-          for (int col = 0; col < n; ++col) w.design[c * n + col] /= l[c * 3 + c];
+          w.residual[c] /= l[c * m + c];
+          for (int col = 0; col < n; ++col) w.design[c * n + col] /= l[c * m + c];
         }
       } else {
         for (int c = 0; c < m; ++c) {

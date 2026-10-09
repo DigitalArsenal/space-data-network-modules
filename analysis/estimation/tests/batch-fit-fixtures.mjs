@@ -17,31 +17,38 @@ export const harness = async (url) => {
   return createBrowserModuleHarness({ wasmSource: fs.readFileSync(new URL('dist/isomorphic/module.wasm', dir)), manifest: JSON.parse(fs.readFileSync(new URL('plugin-manifest.json', dir), 'utf8')), surface: 'direct' });
 };
 
-export function fitRequest(c) {
+// variant 'rtn' (POSITION_VELOCITY cases): the measurement covariances in
+// the RTN axes of each measured state, as Orekit rotated them.
+export function fitRequest(c, variant = 'sigmas') {
   const kind = sds.prwDynamicParameter[c.parameter];
-  const full = c.name.startsWith('GPS');
+  const pv = c.measurement === 'POSITION_VELOCITY';
+  const full = c.name === 'GPS-srp';
   const observations = c.observations.map(([t]) => ({
     epoch: { jd_day: EPOCH_JD, seconds: t }, value: [0, 0, 0, 0], sigma: full ? [1, 1, 1, 0] : [5, 5, 5, 0],
     station_position_m: [0, 0, 0], station_velocity_mps: [0, 0, 0], station_east: [0, 0, 0], station_north: [0, 0, 0], station_up: [0, 0, 0],
     remote_position_m: [0, 0, 0], remote_velocity_mps: [0, 0, 0], frequency_hz: 0, transmitter_delay_seconds: 0, receiver_delay_seconds: 0,
     transponder_delay_seconds: 0, elevation_rad: 0, station_latitude_rad: 0, station_height_m: 0, pressure_hpa: 0, temperature_k: 0,
     relative_humidity: 0, wavelength_m: 0, total_electron_content: 0, total_electron_content_rate_per_second: 0,
-    turnaround_numerator: 1, turnaround_denominator: 1, kind: 'POSITION_VECTOR', value_count: 3, flags: 3, transmitter_index: 0, receiver_index: 0,
+    turnaround_numerator: 1, turnaround_denominator: 1, kind: pv ? 'POSITION_VELOCITY' : 'POSITION_VECTOR', value_count: pv ? 6 : 3, flags: 3, transmitter_index: 0, receiver_index: 0,
   }));
   const zero36 = Array(36).fill(0);
+  const sigmas = pv ? [0, 7, 14, 21, 28, 35].map((k) => Math.sqrt(c.measurementCovariance[k])) : [];
   const envelope = unpack(encode({ request: {
     config: { initial_epoch: { jd_day: EPOCH_JD, seconds: 0 }, initial_state: [0, 0, 0, 0, 0, 0], initial_covariance: zero36, process_noise_spectral_density: [0, 0, 0, 0, 0, 0],
       state_convergence_tolerance: 0, rms_convergence_tolerance: 0, sigma_edit_threshold: 0, dynamic_model_correlation_time_seconds: 0, maximum_iterations: 0,
       reference_frame: 'ICRF', estimator: 'BATCH_WEIGHTED_LEAST_SQUARES', process_noise: 'NONE', flags: 0 },
-    observations, propagator_port_id: 'propagator/hpop', propagator_capability: 'plugin_propagate plugin_compute_stm', trace_id: c.name,
+    ...(pv ? { extended_observations: observations.map((observation) => ({ observation, values: [0, 0, 0, 0, 0, 0], sigmas })) } : { observations }),
+    propagator_port_id: 'propagator/hpop', propagator_capability: 'plugin_propagate plugin_compute_stm', trace_id: c.name,
     batch_options: { parameter_kinds: [kind], parameter_values: [0], maximum_iterations: 20, correction_tolerance: 1e-3 },
   } }));
   // Exact doubles: set through the object API, not JSON text.
   const r = envelope.request;
   r.config.initialState = [...c.apriori];
   r.batchOptions.parameterValues = [c.aprioriParameter];
-  c.observations.forEach(([, , x, y, z], i) => { r.observations[i].value = [x, y, z, 0]; });
+  if (pv) c.observations.forEach((row, i) => { r.extendedObservations[i].values = row.slice(2, 8); });
+  else c.observations.forEach(([, , x, y, z], i) => { r.observations[i].value = [x, y, z, 0]; });
   if (full) r.batchOptions.observationCovariances = c.observations.flatMap(() => c.measurementCovariance);
+  if (variant === 'rtn') Object.assign(r.batchOptions, { observationCovariances: c.rtnCovariances.flat(), covarianceAxes: 1 });
   return envelope;
 }
 
@@ -100,7 +107,7 @@ export async function batchFitCases() {
   try {
     for (const c of REFERENCE.cases) {
       const requests = [];
-      await fit(estimator, hpop, c, fitRequest(c), requests);
+      await fit(estimator, hpop, c, fitRequest(c, c.rtnCovariances ? 'rtn' : 'sigmas'), requests);
       cases.push({ id: `fit-batch-${c.name}-query`, request: requests[0] }, { id: `fit-batch-${c.name}-complete`, request: requests.at(-1) });
     }
   } finally { estimator.destroy?.(); hpop.destroy?.(); }

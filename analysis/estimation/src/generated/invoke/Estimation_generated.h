@@ -2746,6 +2746,7 @@ struct BatchFitOptionsT : public ::flatbuffers::NativeTable {
   uint32_t maximum_iterations = 20;
   double correction_tolerance = 1e-3;
   double sigma_edit_threshold = 0.0;
+  uint8_t covariance_axes = 0;
 };
 
 struct BatchFitOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -2759,7 +2760,8 @@ struct BatchFitOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_OBSERVATION_COVARIANCES = 10,
     VT_MAXIMUM_ITERATIONS = 12,
     VT_CORRECTION_TOLERANCE = 14,
-    VT_SIGMA_EDIT_THRESHOLD = 16
+    VT_SIGMA_EDIT_THRESHOLD = 16,
+    VT_COVARIANCE_AXES = 18
   };
   const ::flatbuffers::Vector<uint8_t> *parameter_kinds() const {
     return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_PARAMETER_KINDS);
@@ -2782,6 +2784,9 @@ struct BatchFitOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   double sigma_edit_threshold() const {
     return GetField<double>(VT_SIGMA_EDIT_THRESHOLD, 0.0);
   }
+  uint8_t covariance_axes() const {
+    return GetField<uint8_t>(VT_COVARIANCE_AXES, 0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -2796,6 +2801,7 @@ struct BatchFitOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint32_t>(verifier, VT_MAXIMUM_ITERATIONS, 4) &&
            VerifyField<double>(verifier, VT_CORRECTION_TOLERANCE, 8) &&
            VerifyField<double>(verifier, VT_SIGMA_EDIT_THRESHOLD, 8) &&
+           VerifyField<uint8_t>(verifier, VT_COVARIANCE_AXES, 1) &&
            verifier.EndTable();
   }
   BatchFitOptionsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2828,6 +2834,9 @@ struct BatchFitOptionsBuilder {
   void add_sigma_edit_threshold(double sigma_edit_threshold) {
     fbb_.AddElement<double>(BatchFitOptions::VT_SIGMA_EDIT_THRESHOLD, sigma_edit_threshold, 0.0);
   }
+  void add_covariance_axes(uint8_t covariance_axes) {
+    fbb_.AddElement<uint8_t>(BatchFitOptions::VT_COVARIANCE_AXES, covariance_axes, 0);
+  }
   explicit BatchFitOptionsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2847,7 +2856,8 @@ inline ::flatbuffers::Offset<BatchFitOptions> CreateBatchFitOptions(
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> observation_covariances = 0,
     uint32_t maximum_iterations = 20,
     double correction_tolerance = 1e-3,
-    double sigma_edit_threshold = 0.0) {
+    double sigma_edit_threshold = 0.0,
+    uint8_t covariance_axes = 0) {
   BatchFitOptionsBuilder builder_(_fbb);
   builder_.add_sigma_edit_threshold(sigma_edit_threshold);
   builder_.add_correction_tolerance(correction_tolerance);
@@ -2856,6 +2866,7 @@ inline ::flatbuffers::Offset<BatchFitOptions> CreateBatchFitOptions(
   builder_.add_apriori_covariance(apriori_covariance);
   builder_.add_parameter_values(parameter_values);
   builder_.add_parameter_kinds(parameter_kinds);
+  builder_.add_covariance_axes(covariance_axes);
   return builder_.Finish();
 }
 
@@ -2872,7 +2883,8 @@ inline ::flatbuffers::Offset<BatchFitOptions> CreateBatchFitOptionsDirect(
     const std::vector<double> *observation_covariances = nullptr,
     uint32_t maximum_iterations = 20,
     double correction_tolerance = 1e-3,
-    double sigma_edit_threshold = 0.0) {
+    double sigma_edit_threshold = 0.0,
+    uint8_t covariance_axes = 0) {
   auto parameter_kinds__ = parameter_kinds ? _fbb.CreateVector<uint8_t>(*parameter_kinds) : 0;
   auto parameter_values__ = parameter_values ? _fbb.CreateVector<double>(*parameter_values) : 0;
   auto apriori_covariance__ = apriori_covariance ? _fbb.CreateVector<double>(*apriori_covariance) : 0;
@@ -2885,7 +2897,8 @@ inline ::flatbuffers::Offset<BatchFitOptions> CreateBatchFitOptionsDirect(
       observation_covariances__,
       maximum_iterations,
       correction_tolerance,
-      sigma_edit_threshold);
+      sigma_edit_threshold,
+      covariance_axes);
 }
 
 ::flatbuffers::Offset<BatchFitOptions> CreateBatchFitOptions(::flatbuffers::FlatBufferBuilder &_fbb, const BatchFitOptionsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -3707,6 +3720,7 @@ inline void BatchFitOptions::UnPackTo(BatchFitOptionsT *_o, const ::flatbuffers:
   { auto _e = maximum_iterations(); _o->maximum_iterations = _e; }
   { auto _e = correction_tolerance(); _o->correction_tolerance = _e; }
   { auto _e = sigma_edit_threshold(); _o->sigma_edit_threshold = _e; }
+  { auto _e = covariance_axes(); _o->covariance_axes = _e; }
 }
 
 inline ::flatbuffers::Offset<BatchFitOptions> CreateBatchFitOptions(::flatbuffers::FlatBufferBuilder &_fbb, const BatchFitOptionsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -3724,6 +3738,7 @@ inline ::flatbuffers::Offset<BatchFitOptions> BatchFitOptions::Pack(::flatbuffer
   auto _maximum_iterations = _o->maximum_iterations;
   auto _correction_tolerance = _o->correction_tolerance;
   auto _sigma_edit_threshold = _o->sigma_edit_threshold;
+  auto _covariance_axes = _o->covariance_axes;
   return orbpro::estimation::CreateBatchFitOptions(
       _fbb,
       _parameter_kinds,
@@ -3732,7 +3747,8 @@ inline ::flatbuffers::Offset<BatchFitOptions> BatchFitOptions::Pack(::flatbuffer
       _observation_covariances,
       _maximum_iterations,
       _correction_tolerance,
-      _sigma_edit_threshold);
+      _sigma_edit_threshold,
+      _covariance_axes);
 }
 
 inline BatchFitResultT *BatchFitResult::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {

@@ -108,12 +108,15 @@ in-track acceleration), Gauss–Newton on whitened residuals (Tapley, Schutz &
 Born 2004, §4.3–4.6). The module holds no force model.
 
 - **Request:** a `BATCH_WEIGHTED_LEAST_SQUARES` configuration (epoch, initial
-  state), legacy observations (any measurement kind; `POSITION_VECTOR` for
-  pseudo-observations) and `batch_options`: `parameter_kinds` (the caller's
+  state), legacy observations or extended observations (1–6 lanes, e.g.
+  `POSITION_VELOCITY` for a catalog element set's state at its epoch), and
+  `batch_options`: `parameter_kinds` (the caller's
   vocabulary, e.g. PRW `DYNAMIC_PARAMETERS` ordinals, echoed), initial
   `parameter_values`, optional `apriori_covariance` ((6+p)², empty = none),
-  optional `observation_covariances` (a 3×3 per `POSITION_VECTOR`
-  observation, whitened by its Cholesky factor), `maximum_iterations`,
+  optional `observation_covariances` (value_count² per observation, whitened
+  by its Cholesky factor; `covariance_axes` 1 states them in the radial,
+  transverse and normal axes of each observed `POSITION_VELOCITY` state),
+  `maximum_iterations`,
   `correction_tolerance` (√(dxᵀN dx/n)) and `sigma_edit_threshold` (edit an
   observation whose whitened RMS exceeds k × max(1, previous weighted RMS)).
 - **Inverted port:** each iteration returns `NEEDS_PROPAGATION` with one
@@ -134,10 +137,13 @@ Authority ([batch_fit.test.mjs](tests/batch_fit.test.mjs)): Orekit 13.1
 `BatchLSEstimator` on the same noisy positions
 ([OrekitBatchReference.java](tests/fixtures/OrekitBatchReference.java)),
 with propagator/hpop's WASM answering the queries: LEO 400 km with drag
-(state + B) and GPS (state + AGOM). The estimate agrees within 1.1e-3 of a
-formal sigma (0.8 mm), the covariance within 2.2e-6 of √(PᵢᵢPⱼⱼ) and χ²
-within 1.2e-6. Off-diagonal measurement covariances have no Orekit
-reference (its batch estimator weights components by their sigmas alone).
+(state + B, positions), GPS (state + AGOM, positions with per-axis
+variances as full 3×3 matrices) and GPS with full-state measurements (with
+sigmas, and with RTN covariances rotated by Orekit's QSW frame). The
+estimate agrees within 1.1e-3 of a formal sigma (0.8 mm), the covariance
+within 2.2e-6 of √(PᵢᵢPⱼⱼ) and χ² within 1.2e-6. Orekit's batch estimator
+weights components by their sigmas alone, so a covariance correlated in the
+request axes has no Orekit reference.
 
 ## Append-only invoke contract v1
 

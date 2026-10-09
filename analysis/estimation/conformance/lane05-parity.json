@@ -2,24 +2,24 @@
   "ok": true,
   "fixture": "TMPL lane05 estimation",
   "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--modules-estimation-batch-fit-20261009/analysis/estimation/dist/isomorphic/module.wasm",
-  "artifactSha256": "9d0f1d5e494edae1fe2ad5d2dd24d2b326bd41f63966ab7887f7966f2907bbb4",
-  "moduleSha256": "9d0f1d5e494edae1fe2ad5d2dd24d2b326bd41f63966ab7887f7966f2907bbb4",
+  "artifactSha256": "f2e322784fd4876c7728376d0ba3b4b0d641bb2858a41083e73b8631c6cdebb0",
+  "moduleSha256": "f2e322784fd4876c7728376d0ba3b4b0d641bb2858a41083e73b8631c6cdebb0",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
-      "runs": 84,
-      "durationMs": 1135
+      "runs": 92,
+      "durationMs": 1366
     },
     {
       "lane": "wasmedge",
-      "runs": 84,
-      "durationMs": 2704
+      "runs": 92,
+      "durationMs": 3503
     },
     {
       "lane": "docker-wasmedge",
-      "runs": 84,
-      "durationMs": 18535
+      "runs": 92,
+      "durationMs": 23461
     }
   ],
   "cases": [
@@ -43,9 +43,11 @@
     "fit-batch-LEO400-drag-query",
     "fit-batch-LEO400-drag-complete",
     "fit-batch-GPS-srp-query",
-    "fit-batch-GPS-srp-complete"
+    "fit-batch-GPS-srp-complete",
+    "fit-batch-GPS-pv-query",
+    "fit-batch-GPS-pv-complete"
   ],
-  "comparisons": 483,
+  "comparisons": 529,
   "failures": [],
   "runs": [
     {
@@ -889,6 +891,86 @@
       "stdoutLength": 3960
     },
     {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
       "lane": "wasmedge",
       "caseId": "correlated-vector",
       "threadCount": 1,
@@ -1729,6 +1811,86 @@
       "stdoutLength": 3960
     },
     {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
       "lane": "docker-wasmedge",
       "caseId": "correlated-vector",
       "threadCount": 1,
@@ -2567,6 +2729,86 @@
       "spawnCount": null,
       "stdoutSha256": "25da215b72bd3da94613bd4f7118ec405bc0cc79d72e155bd6670d574e661005",
       "stdoutLength": 3960
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-pv-query",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "885d3468ff40c954e0cf720d368ec068ff31100c495cf89555134237fc113e40",
+      "stdoutLength": 3728
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-batch-GPS-pv-complete",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fc8ce7cf973b587b0e84cf2ee99ebc1686a0f3b07a1411d4fec90e763b6c38c4",
+      "stdoutLength": 2040
     }
   ]
 }

@@ -5,9 +5,10 @@
 //   1. propagates a truth orbit with a named force set (the force sets and
 //      constants of propagator/hpop's tests/fixtures/orekit/OrekitReference.java,
 //      so that HPOP reproduces these trajectories to about a centimetre a day),
-//   2. samples positions and adds Gaussian noise drawn with java.util.Random
-//      (the algorithm is fixed by the Java specification) through the
-//      Cholesky factor of the stated 3x3 measurement covariance,
+//   2. samples positions (or positions and velocities) and adds Gaussian
+//      noise drawn with java.util.Random (the algorithm is fixed by the Java
+//      specification) through the Cholesky factor of the stated measurement
+//      covariance,
 //   3. runs BatchLSEstimator (Gauss-Newton) from a perturbed state and
 //      parameter, estimating the GCRF Cartesian state at the epoch and the
 //      drag coefficient (LEO) or the reflection coefficient (GPS),
@@ -41,7 +42,10 @@ import org.orekit.data.DataContext;
 import org.orekit.data.DirectoryCrawler;
 import org.orekit.estimation.leastsquares.BatchLSEstimator;
 import org.orekit.estimation.measurements.ObservableSatellite;
+import org.orekit.estimation.measurements.ObservedMeasurement;
+import org.orekit.estimation.measurements.PV;
 import org.orekit.estimation.measurements.Position;
+import org.orekit.frames.LOFType;
 import org.orekit.forces.ForceModel;
 import org.orekit.forces.drag.DragForce;
 import org.orekit.forces.drag.DragSensitive;
@@ -117,6 +121,8 @@ public class OrekitBatchReference {
         String name; double aKm, e, iDeg, raanDeg, argpDeg, mDeg; boolean drag;
         double spanSeconds, stepSeconds; double[][] covariance; long seed;
         double[] dr, dv; double aprioriCoefficient; String parameter;
+        // pv: position-velocity measurements (6x6 covariance) instead of positions.
+        boolean pv;
     }
 
     static List<ForceModel> forces(Case c, Frame itrf, TimeScale utc, double cd, double cr) {
@@ -180,7 +186,20 @@ public class OrekitBatchReference {
             epoch.toString(utc), GM, MASS, AREA, CR, CD, F107, F107A, AP));
         out.append(" \"cases\": [\n");
         boolean firstCase = true;
-        for (Case c : List.of(leo, gps)) {
+        // GPS-pv: each measurement a full state, as a catalog element set's
+        // state at its epoch is, every 3 h; sigmas 20, 50, 10 m and 0.005,
+        // 0.002, 0.004 m/s. The fixture also states each measurement's
+        // covariance in the radial, transverse, normal (QSW) axes of the
+        // measured state, rotated by Orekit's LOFType.QSW.
+        Case gpsPv = new Case();
+        gpsPv.name = "GPS-pv"; gpsPv.aKm = 26559.7; gpsPv.e = 0.005; gpsPv.iDeg = 55; gpsPv.raanDeg = 200; gpsPv.argpDeg = 30; gpsPv.mDeg = 45; gpsPv.drag = false;
+        gpsPv.spanSeconds = 86400; gpsPv.stepSeconds = 10800; gpsPv.seed = 20261011L; gpsPv.pv = true;
+        gpsPv.covariance = new double[6][6];
+        double[] pvSigma = {20, 50, 10, 0.005, 0.002, 0.004};
+        for (int i = 0; i < 6; ++i) gpsPv.covariance[i][i] = pvSigma[i] * pvSigma[i];
+        gpsPv.dr = new double[] {300, 200, -100}; gpsPv.dv = new double[] {0.03, -0.02, 0.01}; gpsPv.aprioriCoefficient = 1.0; gpsPv.parameter = "SRP_AREA_OVER_MASS";
+
+        for (Case c : List.of(leo, gps, gpsPv)) {
             KeplerianOrbit kep = new KeplerianOrbit(c.aKm * 1000, c.e, Math.toRadians(c.iDeg), Math.toRadians(c.argpDeg),
                 Math.toRadians(c.raanDeg), Math.toRadians(c.mDeg), PositionAngleType.MEAN, gcrf, epoch, GM);
             CartesianOrbit truthOrbit = new CartesianOrbit(kep.getPVCoordinates(), gcrf, epoch, GM);
@@ -192,17 +211,35 @@ public class OrekitBatchReference {
             // Noisy positions: truth + L z, z standard normal from java.util.Random(seed).
             RealMatrix l = new CholeskyDecomposition(MatrixUtils.createRealMatrix(c.covariance), 1e-15, 1e-15).getL();
             Random random = new Random(c.seed);
-            List<Position> measurements = new ArrayList<>();
-            StringBuilder obs = new StringBuilder();
+            List<ObservedMeasurement<?>> measurements = new ArrayList<>();
+            StringBuilder obs = new StringBuilder(), rtn = new StringBuilder();
+            final int m = c.pv ? 6 : 3;
             ObservableSatellite sat = new ObservableSatellite(0);
             for (double t = c.stepSeconds; t <= c.spanSeconds + 1e-9; t += c.stepSeconds) {
                 AbsoluteDate date = epoch.shiftedBy(t);
-                Vector3D r = truth.propagate(date).getPVCoordinates(gcrf).getPosition();
-                double[] z = {random.nextGaussian(), random.nextGaussian(), random.nextGaussian()};
+                PVCoordinates truePv = truth.propagate(date).getPVCoordinates(gcrf);
+                double[] z = new double[m];
+                for (int k = 0; k < m; ++k) z[k] = random.nextGaussian();
                 double[] n = l.operate(z);
-                Vector3D y = r.add(new Vector3D(n[0], n[1], n[2]));
-                measurements.add(new Position(date, y, c.covariance, 1.0, sat));
-                obs.append(obs.length() == 0 ? "\n    " : ",\n    ").append(String.format("[%.1f, \"%s\", %.6f, %.6f, %.6f]", t, date.toString(utc), y.getX(), y.getY(), y.getZ()));
+                Vector3D y = truePv.getPosition().add(new Vector3D(n[0], n[1], n[2]));
+                StringBuilder row = new StringBuilder(String.format("[%.1f, \"%s\", %.6f, %.6f, %.6f", t, date.toString(utc), y.getX(), y.getY(), y.getZ()));
+                if (c.pv) {
+                    Vector3D yv = truePv.getVelocity().add(new Vector3D(n[3], n[4], n[5]));
+                    measurements.add(new PV(date, y, yv, c.covariance, 1.0, sat));
+                    row.append(String.format(", %.9f, %.9f, %.9f", yv.getX(), yv.getY(), yv.getZ()));
+                    // M C M' blockwise, M the inertial -> QSW rotation at the measured state.
+                    RealMatrix q = MatrixUtils.createRealMatrix(LOFType.QSW.rotationFromInertial(new PVCoordinates(y, yv)).getMatrix());
+                    RealMatrix big = MatrixUtils.createRealMatrix(6, 6);
+                    big.setSubMatrix(q.getData(), 0, 0);
+                    big.setSubMatrix(q.getData(), 3, 3);
+                    RealMatrix inRtn = big.multiply(MatrixUtils.createRealMatrix(c.covariance)).multiply(big.transpose());
+                    double[] flat = new double[36];
+                    for (int a = 0; a < 6; ++a) for (int b = 0; b < 6; ++b) flat[a * 6 + b] = inRtn.getEntry(a, b);
+                    rtn.append(rtn.length() == 0 ? "\n    " : ",\n    ").append(vec(flat));
+                } else {
+                    measurements.add(new Position(date, y, c.covariance, 1.0, sat));
+                }
+                obs.append(obs.length() == 0 ? "\n    " : ",\n    ").append(row).append("]");
             }
 
             // The a priori: the truth perturbed, and the coefficient perturbed.
@@ -220,7 +257,7 @@ public class OrekitBatchReference {
             estimator.setParametersConvergenceThreshold(1e-6);
             estimator.setMaxIterations(30);
             estimator.setMaxEvaluations(40);
-            for (Position m : measurements) estimator.addMeasurement(m);
+            for (ObservedMeasurement<?> measurement : measurements) estimator.addMeasurement(measurement);
             Propagator[] estimated = estimator.estimate();
             PVCoordinates est = estimated[0].getInitialState().getPVCoordinates(gcrf);
             double coefficient = 0;
@@ -235,14 +272,16 @@ public class OrekitBatchReference {
             for (var e : estimator.getLastEstimations().entrySet()) {
                 double[] o = e.getKey().getObservedValue(), x = e.getValue().getEstimatedValue();
                 RealMatrix inv = MatrixUtils.inverse(MatrixUtils.createRealMatrix(c.covariance));
-                double[] d = {o[0] - x[0], o[1] - x[1], o[2] - x[2]};
+                double[] d = new double[m];
+                for (int k = 0; k < m; ++k) d[k] = o[k] - x[k];
                 double[] w = inv.operate(d);
-                chi2 += d[0] * w[0] + d[1] * w[1] + d[2] * w[2]; count += 3;
+                for (int k = 0; k < m; ++k) chi2 += d[k] * w[k];
+                count += m;
             }
             if (!firstCase) out.append(",\n");
             firstCase = false;
-            double[] flatCov = new double[9];
-            for (int i = 0; i < 3; ++i) for (int j = 0; j < 3; ++j) flatCov[i * 3 + j] = c.covariance[i][j];
+            double[] flatCov = new double[m * m];
+            for (int i = 0; i < m; ++i) for (int j = 0; j < m; ++j) flatCov[i * m + j] = c.covariance[i][j];
             out.append(String.format("  {\"name\": \"%s\", \"orbit\": {\"aKm\": %.3f, \"e\": %.4f, \"iDeg\": %.1f, \"raanDeg\": %.1f, \"argpDeg\": %.1f, \"mDeg\": %.1f},\n", c.name, c.aKm, c.e, c.iDeg, c.raanDeg, c.argpDeg, c.mDeg));
             out.append(String.format("   \"forces\": {\"degree\": 20, \"order\": 20, \"thirdBodies\": true, \"srp\": true, \"drag\": %b},\n", c.drag));
             out.append(String.format("   \"parameter\": \"%s\", \"truthParameter\": %.17g, \"aprioriParameter\": %.17g,\n", c.parameter,
@@ -253,6 +292,8 @@ public class OrekitBatchReference {
             out.append(String.format("   \"orekit\": {\"iterations\": %d, \"evaluations\": %d, \"chiSquare\": %.17g, \"scalarCount\": %d,\n", estimator.getIterationsCount(), estimator.getEvaluationsCount(), chi2, count));
             out.append("    \"estimate\": " + vec(new double[] {est.getPosition().getX(), est.getPosition().getY(), est.getPosition().getZ(), est.getVelocity().getX(), est.getVelocity().getY(), est.getVelocity().getZ(), coefficient * AREA / MASS}) + ",\n");
             out.append("    \"covariance\": " + vec(cov) + "},\n");
+            if (c.pv) out.append("   \"rtnCovariances\": [" + rtn + "],\n");
+            out.append(String.format("   \"measurement\": \"%s\",\n", c.pv ? "POSITION_VELOCITY" : "POSITION_VECTOR"));
             out.append("   \"observations\": [" + obs + "]}");
             System.err.println(c.name + ": " + estimator.getIterationsCount() + " iterations, coefficient " + coefficient);
         }
