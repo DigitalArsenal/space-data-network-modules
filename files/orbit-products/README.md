@@ -136,3 +136,35 @@ covariance, drag coefficient or SRP coefficient is fabricated.
 
 See [catalog epoch fitting](../../analysis/catalog-composer/docs/epoch-fitting.md)
 for position-arc validation, fitting and reproducible real-provider evidence.
+
+## SES and Intelsat eleven-parameter ephemerides (0.1.3)
+
+`normalize_ses_i11` reads an Intelsat eleven-parameter (IESS-412) ephemeris
+file as SES publishes it (provider format `ses-i11`), hash-checked against its
+NCD, and evaluates the model from the element epoch to the file's stated end
+of validity (170 hours when it states none) every 300 s. It emits one $OEM
+block, Earth-fixed (`FIXED_EARTH`, the format names no realization) on UTC,
+kilometres and kilometres per second, and the input NCD unchanged.
+
+The evaluation is the one Orekit 13.1 implements
+(`IntelsatElevenElementsPropagator.propagateInEcef`): east longitude and
+geocentric latitude as functions of the days since the epoch, the cross term
+of the latitude amplitudes in the longitude, and the radius from the longitude
+drift on the 42164.57 km synchronous radius. Velocities are the analytic
+derivatives. The satellite is named as the file names it; no catalog number is
+supplied.
+
+The files print the satellite's predicted longitude and latitude at a stated
+hour after the epoch. The method evaluates that prediction first and refuses a
+file whose elements do not reproduce it to the printed precision (6e-5 deg:
+half the printed 1e-4 deg plus the rounding of the inputs). Every one of the
+38 SES files captured on 2026-09-09 reproduces its prediction within 5e-5 deg.
+
+Evidence (`tests/ses_i11.test.mjs`):
+
+| Claim | Reference | Tolerance |
+| --- | --- | --- |
+| Earth-fixed position and velocity at 0–170 h, three element sets (Orekit's own Intelsat 4521 set, an inclined drifting orbit, a station-kept one) | Orekit 13.1, `tests/fixtures/ses-i11/GenerateReference.java` and its output | 1 mm, 1 µm/s (double-precision evaluation of the same expressions) |
+| Longitude and latitude at 170 h for Intelsat 4521 | Intelsat's calculator, as Orekit 13.1's test asserts it (301.9191 E, 0.0257 N) | 1e-4 deg |
+| Longitude, latitude, radius and radial rate at the epoch for Intelsat 4521 | STK, as Orekit 13.1's test asserts it (302.0355 E, 0.0378 N, 42172456.005 m, 0.797 m/s) | 1e-4 deg, 1 mm, 1 mm/s |
+| A printed prediction the elements do not reproduce, a wrong format name, a wrong hash and a missing parameter line | refused, no output | — |
