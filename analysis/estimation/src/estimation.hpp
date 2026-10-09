@@ -276,6 +276,54 @@ simulate_measurements(const std::vector<Observation> &templates,
                       const std::vector<PropagatorSample> &truth_samples,
                       const std::vector<ErrorModel> &error_models);
 
+// Batch least squares of the state at the configuration epoch plus dynamic
+// parameters (B, BDOT, AGOM, ...), through an external propagator. The
+// propagator returns, for one seed [state, parameters] and the observation
+// epochs, each sample's state, its 6x6 STM and its 6 x p parameter
+// sensitivity (row-major), all relative to the seed epoch. Returning false
+// means the samples are not available yet (inverted port).
+struct ParameterSample {
+  CartesianState state{};
+  Matrix6 stm{};
+  std::vector<double> sensitivity;
+};
+using ParameterPropagatorPort = std::function<bool(
+    const Vector6 &seed, const std::vector<double> &parameters,
+    std::vector<ParameterSample> *samples)>;
+
+struct BatchFitConfig {
+  Vector6 initial_state{};
+  std::vector<double> initial_parameters;
+  // (6 + p)^2 row-major, or empty for no a priori information.
+  std::vector<double> apriori_covariance;
+  // 9 per observation (POSITION_VECTOR), or empty: per-component sigmas.
+  std::vector<double> observation_covariances;
+  int maximum_iterations{20};
+  double correction_tolerance{1.0e-3};
+  double sigma_edit_threshold{0.0};
+  ParameterPropagatorPort propagator;
+};
+
+struct BatchFitResult {
+  bool valid{false};
+  bool pending{false};  // the propagator has not answered yet
+  std::string error;
+  std::vector<double> estimate;    // 6 + p
+  std::vector<double> covariance;  // (6 + p)^2, formal
+  double chi_square{0.0};
+  double weighted_rms{0.0};
+  double reduced_chi_square{0.0};
+  std::size_t measurement_count{0};
+  std::size_t degrees_of_freedom{0};
+  int iterations{0};
+  bool converged{false};
+  std::vector<double> whitened_residuals;
+  std::vector<std::size_t> rejected_indices;
+};
+
+BatchFitResult batch_fit(const BatchFitConfig &config,
+                         const std::vector<Observation> &observations);
+
 IodResult gauss_iod(const std::array<AnglesObservation, 3> &observations,
                     double gravitational_parameter_m3_s2);
 IodResult laplace_iod(const std::array<AnglesObservation, 3> &observations,

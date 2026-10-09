@@ -848,6 +848,146 @@ extern "C" int run_estimation(void) {
   return converged ? 0 : 5;
 }
 
+// fit_batch: the state at the configuration epoch plus dynamic parameters,
+// by batch least squares through the inverted propagator port. Each
+// iteration asks for one sample per observation from one seed
+// [state, parameters]; the caller replays the unchanged request with every
+// answer so far. Status OK or NOT_CONVERGED is in the result record.
+extern "C" int fit_batch(void) {
+  plugin_reset_output_state();
+  const wire::EstimationRequest* request = nullptr;
+  const wire::EstimationEnvelope* envelope = nullptr;
+  if (!decode_request(input("request"), &request, &envelope))
+    return fail("bad-estimation-request", "request must be a valid $EST envelope with configuration and a named propagator port");
+  const auto* options = request->batch_options();
+  if (options == nullptr) return fail("bad-estimation-request", "fit_batch requires batch_options");
+  if (request->config()->estimator() != wire::EstimatorKind::BATCH_WEIGHTED_LEAST_SQUARES || request->options() || (request->extended_observations() && request->extended_observations()->size()))
+    return fail("bad-estimation-request", "fit_batch takes a BATCH_WEIGHTED_LEAST_SQUARES configuration and legacy observations only");
+  if (request->observations() == nullptr || request->observations()->size() == 0)
+    return fail("bad-estimation-request", "fit_batch requires observations");
+  const auto kinds_size = options->parameter_kinds() ? options->parameter_kinds()->size() : 0;
+  const auto values_size = options->parameter_values() ? options->parameter_values()->size() : 0;
+  if (kinds_size != values_size) return fail("bad-estimation-request", "parameter_kinds and parameter_values differ in length");
+
+  const wire::EstimationEpoch& reference = request->config()->initial_epoch();
+  std::vector<core::Observation> observations;
+  std::vector<wire::EstimationEpoch> epochs;
+  for (const wire::EstimationObservation* source : *request->observations()) {
+    if (source == nullptr || source->value_count() < 1 || source->value_count() > 4)
+      return fail("bad-estimation-request", "observations need 1..4 values");
+    observations.push_back(observation_from_wire(*source, reference, true));
+    epochs.push_back(source->epoch());
+  }
+
+  core::BatchFitConfig config;
+  for (int i = 0; i < 6; ++i) config.initial_state[i] = request->config()->initial_state()->Get(i);
+  if (options->parameter_values()) config.initial_parameters.assign(options->parameter_values()->begin(), options->parameter_values()->end());
+  if (options->apriori_covariance()) config.apriori_covariance.assign(options->apriori_covariance()->begin(), options->apriori_covariance()->end());
+  if (options->observation_covariances()) config.observation_covariances.assign(options->observation_covariances()->begin(), options->observation_covariances()->end());
+  config.maximum_iterations = static_cast<int>(options->maximum_iterations());
+  config.correction_tolerance = options->correction_tolerance();
+  config.sigma_edit_threshold = options->sigma_edit_threshold();
+
+  const std::size_t count = observations.size();
+  const std::size_t p = config.initial_parameters.size();
+  const auto* answers = envelope->propagation_answers();
+  std::size_t call = 0;
+  bool protocol_error = false;
+  std::vector<std::unique_ptr<wire::PropagationQueryT>> pending;
+  config.propagator = [&](const core::Vector6& seed, const std::vector<double>& parameters, std::vector<core::ParameterSample>* samples) {
+    const std::size_t first = call++ * count;
+    core::Matrix6 empty{};
+    const wire::EstimationState seed_wire(reference,
+      ::flatbuffers::span<const double, 6>(seed.data(), 6),
+      ::flatbuffers::span<const double, 36>(empty.data(), 36), 0, 0, 0, 0, 0,
+      request->config()->reference_frame(), 0, 0, request->config()->estimator());
+    const std::size_t have = answers ? answers->size() : 0;
+    if (have <= first) {
+      for (std::size_t j = 0; j < count; ++j) {
+        auto query = std::make_unique<wire::PropagationQueryT>();
+        query->sequence = static_cast<std::uint32_t>(first + j);
+        query->seed = std::make_unique<wire::EstimationState>(seed_wire);
+        query->target_epoch = std::make_unique<wire::EstimationEpoch>(epochs[j]);
+        query->parameter_values = parameters;
+        pending.push_back(std::move(query));
+      }
+      return false;
+    }
+    if (have < first + count) { protocol_error = true; return false; }
+    samples->resize(count);
+    for (std::size_t j = 0; j < count; ++j) {
+      const auto* answer = answers->Get(static_cast<::flatbuffers::uoffset_t>(first + j));
+      const auto* query = answer ? answer->query() : nullptr;
+      const auto* sample = answer ? answer->sample() : nullptr;
+      if (!query || !sample || !query->seed() || !query->target_epoch() || query->sequence() != first + j ||
+          query->seed()->epoch().jd_day() != reference.jd_day() || query->seed()->epoch().seconds() != reference.seconds() ||
+          query->seed()->reference_frame() != request->config()->reference_frame() ||
+          query->target_epoch()->jd_day() != epochs[j].jd_day() || query->target_epoch()->seconds() != epochs[j].seconds() ||
+          (query->parameter_values() ? query->parameter_values()->size() : 0) != p ||
+          (answer->sensitivity() ? answer->sensitivity()->size() : 0) != 6 * p) { protocol_error = true; return false; }
+      for (int i = 0; i < 6; ++i) if (query->seed()->state()->Get(i) != seed[i]) { protocol_error = true; return false; }
+      for (std::size_t q = 0; q < p; ++q) if (query->parameter_values()->Get(q) != parameters[q]) { protocol_error = true; return false; }
+      core::ParameterSample& out = (*samples)[j];
+      out.state.epoch_seconds = relative_seconds(sample->epoch(), reference);
+      for (int i = 0; i < 6; ++i) out.state.value[i] = sample->state()->Get(i);
+      for (int i = 0; i < 36; ++i) out.stm[i] = sample->stm()->Get(i);
+      if (p) out.sensitivity.assign(answer->sensitivity()->begin(), answer->sensitivity()->end());
+    }
+    return true;
+  };
+
+  const core::BatchFitResult fit = core::batch_fit(config, observations);
+  if (protocol_error || (fit.valid && answers && answers->size() > call * count))
+    return fail("propagator-protocol", "propagator answers do not match the exact seed, parameters, epochs, frame and sequence");
+  if (fit.pending) {
+    wire::EstimationEnvelopeT reply;
+    reply.result = std::make_unique<wire::EstimationResultT>();
+    reply.result->status = wire::EstimationStatus::NEEDS_PROPAGATION;
+    reply.result->propagation_requests = std::move(pending);
+    ::flatbuffers::FlatBufferBuilder b;
+    wire::FinishEstimationEnvelopeBuffer(b, wire::EstimationEnvelope::Pack(b, &reply));
+    std::vector<uint8_t> bytes(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+    return push("result", "Estimation.fbs", "$EST", bytes) < 0 ? fail("emit-failed", "cannot emit propagation queries") : 0;
+  }
+  if (!fit.valid) return fail("fit-failed", fit.error.c_str());
+
+  const std::size_t n = 6 + p;
+  wire::EstimationEnvelopeT reply;
+  reply.result = std::make_unique<wire::EstimationResultT>();
+  reply.result->status = fit.converged ? wire::EstimationStatus::OK : wire::EstimationStatus::NOT_CONVERGED;
+  core::Matrix6 marginal{};
+  for (int i = 0; i < 6; ++i) for (int j = 0; j < 6; ++j) marginal[i * 6 + j] = fit.covariance[i * n + j];
+  const std::size_t rejected = fit.rejected_indices.size();
+  reply.result->estimate = std::make_unique<wire::EstimationState>(reference,
+    ::flatbuffers::span<const double, 6>(fit.estimate.data(), 6),
+    ::flatbuffers::span<const double, 36>(marginal.data(), 36), fit.weighted_rms, std::sqrt(fit.reduced_chi_square),
+    static_cast<std::uint32_t>(fit.iterations), static_cast<std::uint32_t>(count - rejected), static_cast<std::uint32_t>(rejected),
+    request->config()->reference_frame(), fit.converged ? 1 : 0, 0, request->config()->estimator());
+  for (std::size_t index : fit.rejected_indices) reply.result->rejected_observation_indices.push_back(static_cast<std::uint32_t>(index));
+  if (request->trace_id()) reply.result->trace_id = request->trace_id()->str();
+  auto out = std::make_unique<wire::BatchFitResultT>();
+  out->state_dimension = static_cast<std::uint8_t>(n);
+  if (options->parameter_kinds()) out->parameter_kinds.assign(options->parameter_kinds()->begin(), options->parameter_kinds()->end());
+  out->estimate = fit.estimate;
+  out->covariance = fit.covariance;
+  out->scaled_covariance = fit.covariance;
+  for (double& v : out->scaled_covariance) v *= fit.reduced_chi_square;
+  out->chi_square = fit.chi_square;
+  out->reduced_chi_square = fit.reduced_chi_square;
+  out->weighted_rms = fit.weighted_rms;
+  out->measurement_count = static_cast<std::uint32_t>(fit.measurement_count);
+  out->degrees_of_freedom = static_cast<std::uint32_t>(fit.degrees_of_freedom);
+  out->iterations = static_cast<std::uint32_t>(fit.iterations);
+  out->converged = fit.converged;
+  out->whitened_residuals = fit.whitened_residuals;
+  out->rejected_observation_indices = reply.result->rejected_observation_indices;
+  reply.result->batch_fit = std::move(out);
+  ::flatbuffers::FlatBufferBuilder b(8192);
+  wire::FinishEstimationEnvelopeBuffer(b, wire::EstimationEnvelope::Pack(b, &reply));
+  std::vector<uint8_t> bytes(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+  return push("result", "Estimation.fbs", "$EST", bytes) < 0 ? fail("emit-failed", "cannot emit the batch fit result") : 0;
+}
+
 extern "C" int simulate_tracking(void) {
   plugin_reset_output_state();
   const wire::EstimationRequest* request = nullptr;

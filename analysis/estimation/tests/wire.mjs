@@ -43,8 +43,12 @@ try {
  compile(['--ts','--gen-object-api','--gen-all','/schema/Estimation.fbs']);
  function copy(dir,out) {fs.mkdirSync(out,{recursive:true});for(const name of flatc.FS.readdir(dir)){if(name==='.'||name==='..')continue;const source=`${dir}/${name}`;if(flatc.FS.isDir(flatc.FS.stat(source).mode))copy(source,path.join(out,name));else if(name.endsWith('.ts'))fs.writeFileSync(path.join(out,name),flatc.FS.readFile(source));}}
  copy('/out',temp);
- const result=await build({entryPoints:[path.join(temp,'orbpro/estimation/estimation-envelope.ts')],bundle:true,write:false,format:'esm',platform:'node',nodePaths:[fileURLToPath(new URL('../node_modules',import.meta.url))]});
+ // One entry re-exporting every generated table, struct and enum.
+ const dir=path.join(temp,'orbpro/estimation');
+ fs.writeFileSync(path.join(temp,'all.ts'),fs.readdirSync(dir).filter(n=>n.endsWith('.ts')).map(n=>`export * from './orbpro/estimation/${n.slice(0,-3)}';`).join('\n'));
+ const result=await build({entryPoints:[path.join(temp,'all.ts')],bundle:true,write:false,format:'esm',platform:'node',nodePaths:[fileURLToPath(new URL('../node_modules',import.meta.url))]});
  objectApi=await import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].contents).toString('base64')}`);
 } finally {fs.rmSync(temp,{recursive:true,force:true});}
+export const api=()=>objectApi;
 export function unpack(bytes) {return objectApi.EstimationEnvelope.getRootAsEstimationEnvelope(new ByteBuffer(bytes)).unpack();}
 export function pack(object) {const b=new Builder();b.finish(object.pack(b),'$EST');return b.asUint8Array();}

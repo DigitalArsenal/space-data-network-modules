@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.analysis.estimation",
   "name": "Measurement-based Orbit Estimation",
   "version": "0.2.0",
-  "description": "C++ six/eight-state EKF, nonlinear Wan-Merwe UKF and linear KF with RTS, optional innovation-matched Q scaling, sigma-gated R inflation, PV and receiver-clock pseudorange. Module-local Estimation.fbs extension v1 preserves all legacy structs and field IDs; adds optional SequentialOptions, ExtendedObservation, ExtendedFilterEpoch and inverted PropagationQuery/Answer tables. SDS ODR/OCM retain six-state orbit projections; linear KF uses their unspecified estimator category. Validated against Orekit 13.1, Hipparchus 4.0.3, analytic Gaussian cases and nonlinear multi-sensor Monte Carlo.",
+  "description": "C++ six/eight-state EKF, nonlinear Wan-Merwe UKF and linear KF with RTS, optional innovation-matched Q scaling, sigma-gated R inflation, PV and receiver-clock pseudorange. Module-local Estimation.fbs extension v1 preserves all legacy structs and field IDs; adds optional SequentialOptions, ExtendedObservation, ExtendedFilterEpoch and inverted PropagationQuery/Answer tables. SDS ODR/OCM retain six-state orbit projections; linear KF uses their unspecified estimator category. Extension v2 adds fit_batch: batch least squares of the state plus dynamic parameters (B, BDOT, AGOM) with full 3x3 position weights through the inverted port. Validated against Orekit 13.1 BatchLSEstimator, Orekit 13.1, Hipparchus 4.0.3, analytic Gaussian cases and nonlinear multi-sensor Monte Carlo.",
   "pluginFamily": "analysis",
   "threadModel": "wasi-sequential",
   "sequentialJustification": {
@@ -104,6 +104,24 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot",
       "description": "Runs six-state batch WLS, nominal-trajectory EKF or EKF/RTS from caller-supplied cumulative STMs. UKF selects a legacy measurement-only unscented update, not a nonlinear-dynamics UKF. No linear-KF selector, adaptive-noise controls or GNSS PVT/clock states exist in the pinned contract."
+    },
+    {
+      "methodId": "fit_batch",
+      "displayName": "Fit Batch (State and Dynamic Parameters)",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [{"setId": "batch-fit-request", "allowedTypes": [{"schemaName": "Estimation.fbs", "fileIdentifier": "$EST", "rootTypeName": "EstimationEnvelope"}], "description": "BATCH_WEIGHTED_LEAST_SQUARES configuration, observations, batch_options (dynamic parameters, a priori, per-observation 3x3 covariances) and every propagation answer so far."}],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Batch-fit request, replayed unchanged with the answers."
+        }
+      ],
+      "outputPorts": [{"portId": "result", "acceptedTypeSets": [{"setId": "batch-fit-result", "allowedTypes": [{"schemaName": "Estimation.fbs", "fileIdentifier": "$EST", "rootTypeName": "EstimationEnvelope"}], "description": "NEEDS_PROPAGATION queries, or the estimate with its formal and chi-square-scaled covariance over state and parameters."}], "minStreams": 0, "maxStreams": 1, "required": false, "description": "Batch-fit result wire."}],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Weighted batch least squares of the state at the configuration epoch plus dynamic parameters (for example B, BDOT, AGOM) through the inverted propagator port: each iteration asks for one sample per observation, with its STM and 6 x p parameter sensitivity, from one seed. Returns the estimate, the formal covariance (J^T W J + P0^-1)^-1 and its reduced-chi-square scaling, whitened residuals and edits; status OK or NOT_CONVERGED in the record."
     },
     {
       "methodId": "simulate_tracking",

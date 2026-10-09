@@ -56,6 +56,7 @@ const { families, headers: sdsHeaders, version: sdsVersion } = await generateSds
 const sdkHeaders = await generateSdkHeaders();
 const estimationHeader = await fs.readFile(path.join(packageRoot, "src", "estimation.hpp"), "utf8");
 const estimationSource = await fs.readFile(path.join(packageRoot, "src", "estimation.cpp"), "utf8");
+const batchFitSource = await fs.readFile(path.join(packageRoot, "src", "batch_fit.cpp"), "utf8");
 const moduleSource = await fs.readFile(path.join(packageRoot, "src", "module.cpp"), "utf8");
 
 const sourceCode = [
@@ -65,6 +66,7 @@ const sourceCode = [
   ...sdkHeaders.map((header, index) => index === 0 ? header : stripGeneratedIncludes(header)),
   estimationHeader,
   stripGeneratedIncludes(estimationSource),
+  stripGeneratedIncludes(batchFitSource),
   stripGeneratedIncludes(moduleSource),
 ].join("\n\n");
 
@@ -104,7 +106,7 @@ fsSync.writeFileSync(path.join(packageRoot, "dist", "build-provenance.json"), `$
   spacedatastandards: sdsVersion,
   moduleSdk: JSON.parse(await fs.readFile(path.join(sdkRoot, "package.json"), "utf8")).version,
   family: "estimation",
-  invokeContract: {path: "schemas/Estimation.fbs", extension: 1, sha256: crypto.createHash("sha256").update(await fs.readFile(path.join(packageRoot, "schemas", "Estimation.fbs"))).digest("hex")},
+  invokeContract: {path: "schemas/Estimation.fbs", extension: 2, sha256: crypto.createHash("sha256").update(await fs.readFile(path.join(packageRoot, "schemas", "Estimation.fbs"))).digest("hex")},
   propagatorContract: ["plugin_propagate", "plugin_compute_stm"],
   threadModel: manifest.threadModel,
 }, null, 2)}\n`);

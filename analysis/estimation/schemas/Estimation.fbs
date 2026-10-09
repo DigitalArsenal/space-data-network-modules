@@ -221,6 +221,7 @@ table EstimationRequest {
   trace_id:string;
   options:SequentialOptions;
   extended_observations:[ExtendedObservation];
+  batch_options:BatchFitOptions;
 }
 
 table EstimationResult {
@@ -238,6 +239,7 @@ table EstimationResult {
   trace_id:string;
   extended_history:[ExtendedFilterEpoch];
   propagation_requests:[PropagationQuery];
+  batch_fit:BatchFitResult;
 }
 
 table EstimationEnvelope {
@@ -307,8 +309,60 @@ table PropagationQuery {
   sequence:uint;
   seed:EstimationState (required);
   target_epoch:EstimationEpoch (required);
+  // Extension v2 (fit_batch): the seed's dynamic parameters, in the order of
+  // BatchFitOptions.parameter_kinds.
+  parameter_values:[double];
 }
 table PropagationAnswer {
   query:PropagationQuery (required);
   sample:EstimationPropagatorSample (required);
+  // Extension v2 (fit_batch): row-major 6 x p sensitivity of the sample state
+  // to the seed's parameters (the S block of [[Phi, S], [0, I]]), SI.
+  sensitivity:[double];
+}
+
+// Module-local append-only extension v2: batch least squares of the state at
+// the configuration epoch plus dynamic parameters (fit_batch).
+table BatchFitOptions {
+  // The caller's propagator vocabulary for the solve-for parameters (for
+  // propagator/hpop, PRW DYNAMIC_PARAMETERS ordinals); opaque to the module
+  // and echoed in the result.
+  parameter_kinds:[ubyte];
+  // Their initial nominal (and a priori) values, SI.
+  parameter_values:[double];
+  // Optional row-major (6 + p)^2 a priori covariance of
+  // [config.initial_state, parameter_values]; empty: no a priori information.
+  apriori_covariance:[double];
+  // Optional 3x3 row-major covariance per observation (POSITION_VECTOR only),
+  // 9 values per observation, replacing its sigmas.
+  observation_covariances:[double];
+  maximum_iterations:uint = 20;
+  // Converged when the correction's length under the normal matrix,
+  // sqrt(dx' N dx / (6 + p)), is below this (dimensionless).
+  correction_tolerance:double = 1e-3;
+  // Edit an observation whose whitened residual RMS exceeds this many times
+  // the previous iteration's weighted RMS (at least 1); 0 disables editing.
+  sigma_edit_threshold:double = 0;
+}
+
+table BatchFitResult {
+  state_dimension:ubyte;
+  parameter_kinds:[ubyte];
+  // [state at the configuration epoch, parameters], SI.
+  estimate:[double];
+  // Formal covariance (J' W J + P0^-1)^-1, row-major (6 + p)^2.
+  covariance:[double];
+  // The formal covariance times the reduced chi-square.
+  scaled_covariance:[double];
+  chi_square:double;
+  reduced_chi_square:double;
+  weighted_rms:double;
+  measurement_count:uint;
+  degrees_of_freedom:uint;
+  iterations:uint;
+  converged:bool;
+  // Whitened post-fit residuals, one per scalar measurement of each accepted
+  // and rejected observation, linearized at the final correction.
+  whitened_residuals:[double];
+  rejected_observation_indices:[uint];
 }
