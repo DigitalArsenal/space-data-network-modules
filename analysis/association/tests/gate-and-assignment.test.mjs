@@ -112,6 +112,38 @@ test('global assignment beats nearest neighbour, and ambiguity and posterior fol
   assert.equal(out.o1.UCT, false);
   assert.equal(out.o2.SAT_NO, 101);
   assert.equal(records.ucts.length, 0);
+  // The statistics on the records (SDS 1.241.0) are the report's.
+  close(out.o1.CORR_MAHALANOBIS_SQ, costs.o1.B, 'o1 CORR_MAHALANOBIS_SQ');
+  close(out.o1.CORR_P_VALUE, o1.p_value, 'o1 CORR_P_VALUE');
+  close(out.o1.CORR_QUALITY, pB, 'o1 CORR_QUALITY');
+  assert.deepEqual([out.o1.CORR_DOF, out.o1.CORR_GATE, out.o1.CORR_AMBIGUOUS], [1, gate, true]);
+  close(out.o2.CORR_MAHALANOBIS_SQ, costs.o2.A, 'o2 CORR_MAHALANOBIS_SQ');
+  assert.equal(out.o2.CORR_AMBIGUOUS, false);
+});
+
+test('a radar DOPPLER of carrier DOPPLER_FREQUENCY is the two-way range rate -c df / (2 f)', async () => {
+  // A GEO object seen from an Earth-fixed radar on the equator (range rate
+  // needs the sensor's velocity). A range rate of 0.01 +- 0.05 km/s and the
+  // X-band (10 GHz) two-way Doppler of the same rate, df = -2 f rdot / c
+  // with sigma 2 f sigma_rdot / c, must give the same d2 (1e-9 relative:
+  // they differ only by the conversion's rounding); a sign or factor error
+  // would not. A DOPPLER without its carrier is refused.
+  const C = 299792.458, f = 1e10, rate = 0.01, sigma = 0.05;
+  const geo = [{ epoch: T0, state: [42164, 0, 0, 0, 3.07, 0] }, { epoch: T1, state: [42164, 1842, 0, 0, 3.07, 0] }];
+  const prediction = predictions([block({ norad: 7, objectId: 'GEO', states: geo, covariances: covs(diagonal(1, 1e-6)) })]);
+  const eop = earthOrientation([eopRow({ date: '2026-08-02', mjd: 61254, xArcsec: 0.2, yArcsec: 0.3, dut1: 0.05 })]);
+  const base = { OB_TIME: T, ID_SENSOR: 'radar', SEN_REFERENCE_FRAME: 'ITRF', SENX: 6378.137, SENY: 0, SENZ: 0 };
+  const { report, error } = await associate([prediction, eop, options({ light_time: false }),
+    rdo({ ...base, ID: 'rate', RANGE_RATE: rate, RANGE_RATE_UNC: sigma }),
+    rdo({ ...base, ID: 'doppler', DOPPLER: -2 * f * rate / C, DOPPLER_UNC: 2 * f * sigma / C, DOPPLER_FREQUENCY: f })]);
+  assert.equal(error, undefined, error);
+  const [byRate, byDoppler] = ['rate', 'doppler'].map((id) => report.observations.find((o) => o.id === id));
+  const d2 = (o) => o.candidates[0].d2;
+  assert.equal(byDoppler.source.range_rate_km_s, 'DOPPLER');
+  assert.ok(d2(byRate) > 0, `d2 ${d2(byRate)}`);
+  assert.ok(Math.abs(d2(byDoppler) - d2(byRate)) <= 1e-9 * d2(byRate), `${d2(byDoppler)} vs ${d2(byRate)}`);
+  const refused = await associate([prediction, eop, rdo({ ...base, ID: 'bare', DOPPLER: 1, DOPPLER_UNC: 1 })]);
+  assert.match(refused.error, /DOPPLER_FREQUENCY/);
 });
 
 test('an Earth-fixed sensor is rotated to GCRF as in Vallado\'s IAU-2006/2000 worked example', async () => {

@@ -10,7 +10,7 @@ fits, whether that is ambiguous, and which observations fit nothing
 
 | Port | Direction | Type | Content |
 | --- | --- | --- | --- |
-| `radar_observations` | in | `$RDO` | RANGE, RANGE_RATE, AZIMUTH, ELEVATION |
+| `radar_observations` | in | `$RDO` | RANGE, RANGE_RATE or Doppler (DOPPLER, DOPPLER_FREQUENCY), AZIMUTH, ELEVATION |
 | `optical_observations` | in | `$EOO` | RA, DECLINATION, AZIMUTH, ELEVATION, RANGE, RANGE_RATE |
 | `rf_observations` | in | `$RFO` | RANGE, RANGE_RATE or Doppler (FREQUENCY, NOMINAL_FREQUENCY), AZIMUTH, ELEVATION |
 | `predictions` | in | `$OEM` | One block per catalog object span, with COVARIANCE_MATRIX_LINES |
@@ -36,10 +36,12 @@ A field is a measurement when its 1-sigma uncertainty (`*_UNC`) is positive.
   and elevation need an Earth-fixed sensor.
 - **RA and declination** (`$EOO`) are topocentric in `REFERENCE_FRAME`:
   J2000 when absent (the record's own default), or GCRF/ICRF.
-- **Doppler** (`$RFO`, SatNOGS style): with no `RANGE_RATE_UNC`, `FREQUENCY`
-  and `NOMINAL_FREQUENCY` (MHz) give the one-way, first-order range rate
-  `c (1 - f / f0)`. `$RFO` has no frequency uncertainty field, so
-  `options.frequency_sigma_hz` supplies it.
+- **Doppler.** `$RFO` (SatNOGS style), with no `RANGE_RATE_UNC`:
+  `FREQUENCY` and `NOMINAL_FREQUENCY` (MHz) give the one-way, first-order
+  range rate `c (1 - f / f0)`, with 1-sigma `FREQUENCY_UNC` (MHz, required).
+  `$RDO`, with no `RANGE_RATE_UNC`: `DOPPLER` (Hz, 1-sigma `DOPPLER_UNC`) is
+  a monostatic radar's two-way shift of its carrier `DOPPLER_FREQUENCY` (Hz,
+  required), range rate `-c DOPPLER / (2 DOPPLER_FREQUENCY)`.
 - Biases (`*_BIAS`, `TIMING_BIAS`) are not applied. Angles are geometric:
   no aberration, no refraction.
 
@@ -76,8 +78,11 @@ not a candidate for it.
    the summed d², where leaving an observation unassigned costs its gate.
 5. **Outcome.** An assigned observation is re-emitted with `UCT` false,
    `SAT_NO` (`$EOO`: `NORAD_CAT_ID`) and `ON_ORBIT` (`$EOO`: `ID_ON_ORBIT`)
-   set to the prediction's object, and the posterior in `$EOO` `CORR_QUALITY`
-   or `$RFO` `CONFIDENCE`. The others are UCTs, with the reason
+   set to the prediction's object, and the posterior in `$RDO` and `$EOO`
+   `CORR_QUALITY` or `$RFO` `CONFIDENCE`. Every record, associated or not,
+   carries `CORR_MAHALANOBIS_SQ` (d²), `CORR_DOF`, `CORR_GATE`,
+   `CORR_P_VALUE` and `CORR_AMBIGUOUS`; a UCT's d² and p-value are its
+   nearest candidate's (0 when no prediction covered it). The others are UCTs, with the reason
    `no-prediction`, `outside-gate` or `lost-assignment`. An observation is
    **ambiguous** when its assigned candidate's posterior is below
    `min_posterior`, or when the assignment gave it other than its best
@@ -91,7 +96,6 @@ not a candidate for it.
 | `light_time` | true | Light-time correction |
 | `min_posterior` | 0.99 | Posterior below which an association is ambiguous |
 | `clutter_density` | 0 | New-object density beta in the posterior |
-| `frequency_sigma_hz` | — | Doppler 1-sigma for `$RFO` frequencies |
 | `scan` | `sensor_time` | `sensor_time`, `track` (`TRACK_ID`) or `observation` (no joint constraint) |
 | `max_candidates` | 5 | Out-of-gate candidates listed per observation |
 | `geometry` | true | Predicted GCRF state and position covariance per listed candidate |
@@ -103,14 +107,13 @@ forbidden) or `{rows, columns, entries: [[i, j, c]]}`, optional
 `unassigned_cost` (one number or one per row). Returns the column per row
 (−1 = unassigned) and the total cost.
 
-## SDS gap
+## Records
 
-`$RDO`, `$EOO` and `$RFO` carry `UCT` and the catalog identity, `$EOO` a
-correlation score and `$RFO` a confidence, but no record carries an
-association's Mahalanobis distance, its degrees of freedom, the gate, the
-p-value or the ambiguity, and `$RDO` has no correlation score. Those are in
-the JSON report until an append-only SDS addition carries them. `$RFO` has
-no frequency uncertainty, and `$RDO` `DOPPLER` has no carrier frequency.
+The association statistics are SDS fields (spacedatastandards.org 1.241.0):
+`CORR_MAHALANOBIS_SQ`, `CORR_DOF`, `CORR_GATE`, `CORR_P_VALUE` and
+`CORR_AMBIGUOUS` on `$RDO`, `$EOO` and `$RFO`, `$RDO` `CORR_QUALITY`, and
+the Doppler inputs `$RFO` `FREQUENCY_UNC` and `$RDO` `DOPPLER_FREQUENCY`.
+The JSON report adds every candidate's residuals, posterior and geometry.
 
 ## Verification
 
@@ -126,7 +129,8 @@ PATH="$HOME/.wasmedge/bin:$PATH" node tests/parity.mjs
 | --- | --- | --- |
 | Gate thresholds, m = 1..6, P = 0.90..0.999 | NIST/SEMATECH e-Handbook 1.3.6.7.4 chi-square table | 5e-4 (half the printed digit) |
 | Assignment | OR-Library (Beasley 1990): assign100 = 305, assign200 = 475, sparse assignp800 = 2239 | exact (integer costs) |
-| Global vs nearest-neighbour assignment, posterior, RSW covariance | closed form and exhaustive enumeration | 1e-6 relative |
+| Global vs nearest-neighbour assignment, posterior, RSW covariance, the records' `CORR_*` | closed form and exhaustive enumeration | 1e-6 relative |
+| `$RDO` two-way Doppler | the same range rate as `RANGE_RATE`, closed-form conversion | 1e-9 relative in d² |
 | Earth-fixed sensor to GCRF | Vallado, *Fundamentals of Astrodynamics and Applications* 4th ed., §3.7 worked example (2004-04-06) | 2 cm (ERFA reproduces the printed vector to 1.1 cm) |
 | GNSS association | ESA final orbits as truth, IGS final orbits as the catalog (independent analyses), 2026-08-02; radar, optical and Doppler observations generated at three IGS sites | no unflagged wrong association; Galileo and two withheld GPS satellites are UCTs; p-values uniform (KS, alpha 0.01) |
 

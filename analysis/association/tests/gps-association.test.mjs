@@ -57,5 +57,14 @@ test('GNSS observations associate with an independent catalog; uncatalogued ones
     assert.ok((record.SAT_NO ?? record.NORAD_CAT_ID) > 0);
   }
   for (const { record } of records.ucts) assert.equal(record.UCT, true);
+  // Every record carries its association statistics (SDS 1.241.0): the
+  // report's d2, dof, gate, p-value and ambiguity (a UCT: its nearest
+  // candidate's d2 and p-value, 0 without one).
+  const byId = new Map(report.observations.map((o) => [o.id, o]));
+  for (const { record } of [...records.associated, ...records.ucts]) {
+    const o = byId.get(record.ID), c = o.status === 'uct' ? o.candidates[0] : o;
+    assert.deepEqual([record.CORR_MAHALANOBIS_SQ, record.CORR_DOF, record.CORR_GATE, record.CORR_P_VALUE, record.CORR_AMBIGUOUS],
+      [c?.d2 ?? 0, o.dof, o.gate, c?.p_value ?? 0, o.ambiguous], record.ID);
+  }
   assert.equal(records.associated.length + records.ucts.length, report.observations.length);
 });

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import zlib from 'node:zlib';
-import { block, celestial, earthOrientation, eoo, eopRow, options, predictions, rdo, rfo } from './lib.mjs';
+import { block, celestial, earthOrientation, eoo, eopRow, predictions, rdo, rfo } from './lib.mjs';
 
 // Association of real GNSS geometry, where the right answer is known by
 // construction from independent sources (fixture: scripts/build-gps-fixture.mjs).
@@ -152,13 +152,12 @@ export function gpsScenario() {
         } else {
           const rate = (downleg(sat, t0 + 0.5, position).range - downleg(sat, t0 - 0.5, position).range) / 1.0;
           inputs.push(rfo({ ID: id, OB_TIME: obTime, ID_SENSOR: name, SENLAT: site.lat, SENLON: site.lon, SENALT: site.h,
-            NOMINAL_FREQUENCY: L1_MHZ, FREQUENCY: L1_MHZ * (1 - rate / C) + SIGMA.frequencyHz * 1e-6 * gauss() }));
+            NOMINAL_FREQUENCY: L1_MHZ, FREQUENCY: L1_MHZ * (1 - rate / C) + SIGMA.frequencyHz * 1e-6 * gauss(), FREQUENCY_UNC: SIGMA.frequencyHz * 1e-6 }));
         }
       }
     }
   }
   inputs.push(predictions(catalog.map((c) => block({ norad: c.norad, objectId: c.objectId, name: c.name, frame: 'GCRF', degree: 7, states: c.states, covariances: c.covariances }))));
   inputs.push(earthOrientation(fx.eop.map(eopRow)));
-  inputs.push(options({ frequency_sigma_hz: SIGMA.frequencyHz }));
   return { inputs, truthOf, catalog };
 }

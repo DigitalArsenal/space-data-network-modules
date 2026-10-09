@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.240.0",
+  "spacedatastandards": "1.241.0",
   "sdsFamilies": [
     "RDO",
     "RFM",
@@ -19,5 +19,5 @@
   "eopSeries": "foundation/frames/src/eop_series.hpp",
   "moduleSdk": "0.8.26",
   "threadModel": "wasi-sequential",
-  "wasmSha256": "570606c05016f8e2d438bee810ca264627192f3a3a58d083e418a64a137bf810"
+  "wasmSha256": "690f9e631cac9959f196d2104c08b6d17e605800f096779e50f59ebf379d4e5b"
 }

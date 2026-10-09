@@ -20,7 +20,9 @@
 // Predicted measurements use the state at the light-time-corrected emission
 // time t - tau, tau = |r(t - tau) - s(t)| / c (one-way down leg); the range
 // rate is the derivative of that range, rho_dot = u.(v - v_s) / (1 + u.v / c).
-// RFO Doppler is one-way, first order: rho_dot = c (1 - f / f0). Angles are
+// RFO Doppler is one-way, first order: rho_dot = c (1 - f / f0), its sigma
+// from FREQUENCY_UNC. RDO Doppler is a monostatic radar's two-way shift of its
+// carrier DOPPLER_FREQUENCY: rho_dot = -c DOPPLER / (2 DOPPLER_FREQUENCY). Angles are
 // geometric (astrometric) directions: no aberration and no refraction.
 // Measurement biases (*_BIAS) and timing biases are not applied.
 
@@ -449,7 +451,6 @@ struct Options {
   bool lightTime = true;
   double minPosterior = 0.99;
   double clutterDensity = 0.0;
-  double frequencySigmaHz = 0.0;
   std::string scan = "sensor_time";
   int maxCandidates = 5;
   bool geometry = true;
@@ -464,7 +465,6 @@ bool readOptions(const Json& j, Options& o) {
     else if (k == "light_time") { NEED(v.is_boolean(), "light_time must be true or false."); o.lightTime = v.get<bool>(); }
     else if (k == "min_posterior") { NEED(v.is_number() && v.get<double>() > 0 && v.get<double>() <= 1, "min_posterior must be in (0, 1]."); o.minPosterior = v.get<double>(); }
     else if (k == "clutter_density") { NEED(v.is_number() && v.get<double>() >= 0, "clutter_density must be a non-negative number."); o.clutterDensity = v.get<double>(); }
-    else if (k == "frequency_sigma_hz") { NEED(v.is_number() && v.get<double>() > 0, "frequency_sigma_hz must be positive."); o.frequencySigmaHz = v.get<double>(); }
     else if (k == "scan") { NEED(v.is_string() && (v == "sensor_time" || v == "track" || v == "observation"), "scan must be sensor_time, track or observation."); o.scan = v.get<std::string>(); }
     else if (k == "max_candidates") { NEED(v.is_number_integer() && v.get<int>() >= 1 && v.get<int>() <= 50, "max_candidates must be an integer in [1, 50]."); o.maxCandidates = v.get<int>(); }
     else if (k == "geometry") { NEED(v.is_boolean(), "geometry must be true or false."); o.geometry = v.get<bool>(); }
@@ -496,7 +496,14 @@ bool loadRdo(const RDO* r, Observation& o) {
   o.sensor = {r->SENX(), r->SENY(), r->SENZ()};
   NEED(o.sensorFrame != Frame::ITRF || norm3(o.sensor) > 1.0, "An $RDO has no Earth-fixed sensor position (SENX, SENY, SENZ in km).");
   add(o.z, Kind::RANGE, r->RANGE(), r->RANGE_UNC(), "RANGE", false);
-  add(o.z, Kind::RANGE_RATE, r->RANGE_RATE(), r->RANGE_RATE_UNC(), "RANGE_RATE", false);
+  if (r->RANGE_RATE_UNC() > 0) {
+    add(o.z, Kind::RANGE_RATE, r->RANGE_RATE(), r->RANGE_RATE_UNC(), "RANGE_RATE", false);
+  } else if (r->DOPPLER_UNC() > 0) {
+    // Monostatic two-way Doppler of the carrier: df = -2 f rho_dot / c.
+    NEED(r->DOPPLER_FREQUENCY() > 0, "An $RDO DOPPLER needs its carrier DOPPLER_FREQUENCY (Hz).");
+    const double f = r->DOPPLER_FREQUENCY();
+    add(o.z, Kind::RANGE_RATE, -kC * r->DOPPLER() / (2.0 * f), kC * r->DOPPLER_UNC() / (2.0 * f), "DOPPLER", false);
+  }
   add(o.z, Kind::AZ, r->AZIMUTH(), r->AZIMUTH_UNC(), "AZIMUTH", true);
   add(o.z, Kind::EL, r->ELEVATION(), r->ELEVATION_UNC(), "ELEVATION", true);
   return true;
@@ -525,7 +532,7 @@ bool loadEoo(const EOO* r, Observation& o) {
   return true;
 }
 
-bool loadRfo(const RFO* r, Observation& o, const Options& opt) {
+bool loadRfo(const RFO* r, Observation& o) {
   o.id = r->ID() ? r->ID()->str() : "";
   o.sensorKey = r->ID_SENSOR() ? r->ID_SENSOR()->str() : r->ORIG_SENSOR_ID() ? r->ORIG_SENSOR_ID()->str() : "";
   o.trackId = r->TRACK_ID() ? r->TRACK_ID()->str() : "";
@@ -539,9 +546,9 @@ bool loadRfo(const RFO* r, Observation& o, const Options& opt) {
     add(o.z, Kind::RANGE_RATE, r->RANGE_RATE(), r->RANGE_RATE_UNC(), "RANGE_RATE", false);
   } else if (r->FREQUENCY() > 0 && r->NOMINAL_FREQUENCY() > 0) {
     // One-way Doppler: f = f0 (1 - rho_dot / c), so rho_dot = c (1 - f / f0).
-    NEED(opt.frequencySigmaHz > 0, "An $RFO carries a Doppler frequency without a range-rate uncertainty; set options.frequency_sigma_hz (RFO has no frequency uncertainty field).");
-    const double f0 = r->NOMINAL_FREQUENCY();  // MHz
-    add(o.z, Kind::RANGE_RATE, kC * (1.0 - r->FREQUENCY() / f0), kC * (opt.frequencySigmaHz * 1e-6) / f0, "DOPPLER", false);
+    NEED(r->FREQUENCY_UNC() > 0, "An $RFO carries a Doppler FREQUENCY without FREQUENCY_UNC or RANGE_RATE_UNC.");
+    const double f0 = r->NOMINAL_FREQUENCY();  // MHz, as FREQUENCY and FREQUENCY_UNC
+    add(o.z, Kind::RANGE_RATE, kC * (1.0 - r->FREQUENCY() / f0), kC * r->FREQUENCY_UNC() / f0, "DOPPLER", false);
   }
   return true;
 }
@@ -695,14 +702,29 @@ std::vector<uint8_t> finish(flatbuffers::FlatBufferBuilder& fbb, flatbuffers::Of
   return {fbb.GetBufferPointer(), fbb.GetBufferPointer() + fbb.GetSize()};
 }
 
-std::vector<uint8_t> annotated(const Observation& o, const Block* b, double posterior) {
+// The record re-emitted: identity (or UCT) and the association statistics.
+// `c` is the assigned candidate, or for a UCT the nearest one (null when no
+// prediction covered the observation); `b` its object when assigned.
+template <typename T>
+void statistics(T& t, const Observation& o, const Candidate* c) {
+  t.CORR_MAHALANOBIS_SQ = c ? c->d2 : 0.0;
+  t.CORR_DOF = static_cast<uint8_t>(o.z.size());
+  t.CORR_GATE = o.gate;
+  t.CORR_P_VALUE = c ? c->pValue : 0.0;
+  t.CORR_AMBIGUOUS = o.ambiguous;
+}
+
+std::vector<uint8_t> annotated(const Observation& o, const Block* b, const Candidate* c) {
   flatbuffers::FlatBufferBuilder fbb(o.length + 256);
   const std::string onOrbit = b ? (!b->objectId.empty() ? b->objectId : b->norad ? std::to_string(b->norad) : b->name) : "";
+  const double posterior = b ? c->posterior : 0.0;
   if (o.type == RecordType::RDO) {
     std::unique_ptr<RDOT> t(GetRDO(o.bytes)->UnPack());
     t->UCT = b == nullptr;
     t->SAT_NO = b ? b->norad : 0;
     t->ON_ORBIT = onOrbit;
+    t->CORR_QUALITY = posterior;
+    statistics(*t, o, c);
     return finish(fbb, RDO::Pack(fbb, t.get()), "$RDO");
   }
   if (o.type == RecordType::EOO) {
@@ -710,14 +732,16 @@ std::vector<uint8_t> annotated(const Observation& o, const Block* b, double post
     t->UCT = b == nullptr;
     t->NORAD_CAT_ID = b ? static_cast<int32_t>(b->norad) : 0;
     t->ID_ON_ORBIT = onOrbit;
-    t->CORR_QUALITY = b ? static_cast<float>(posterior) : 0.0f;
+    t->CORR_QUALITY = static_cast<float>(posterior);
+    statistics(*t, o, c);
     return finish(fbb, EOO::Pack(fbb, t.get()), "$EOO");
   }
   std::unique_ptr<RFOT> t(GetRFO(o.bytes)->UnPack());
   t->UCT = b == nullptr;
   t->SAT_NO = b ? b->norad : 0;
   t->ON_ORBIT = onOrbit;
-  t->CONFIDENCE = b ? posterior : 0.0;
+  t->CONFIDENCE = posterior;
+  statistics(*t, o, c);
   return finish(fbb, RFO::Pack(fbb, t.get()), "$RFO");
 }
 
@@ -768,7 +792,7 @@ bool run(Json& report, std::vector<std::pair<std::string, std::pair<RecordType, 
   std::vector<Observation> obs;
   std::vector<const plugin_input_frame_t*> observationFrames;
   const uint32_t count = plugin_get_input_count();
-  // Options first: they decide how an RFO Doppler measurement is read.
+  // Options first.
   for (uint32_t i = 0; i < count; ++i) {
     const auto* frame = plugin_get_input_frame(i);
     NEED(frame && frame->port_id, "An input frame has no port.");
@@ -828,7 +852,7 @@ bool run(Json& report, std::vector<std::pair<std::string, std::pair<RecordType, 
       flatbuffers::Verifier verifier(bytes, length, verifierOptions());
       NEED(VerifyRFOBuffer(verifier), "An rf_observations frame is not a valid $RFO FlatBuffer.");
       o.type = RecordType::RFO;
-      if (!loadRfo(GetRFO(bytes), o, opt)) return false;
+      if (!loadRfo(GetRFO(bytes), o)) return false;
     }
     NEED(!o.z.empty(), "Observation " + o.id + " has no measurement: a field is measured when its 1-sigma uncertainty is positive.");
     NEED(o.z.size() <= 6, "An observation has more than six measured components.");
@@ -961,7 +985,7 @@ bool run(Json& report, std::vector<std::pair<std::string, std::pair<RecordType, 
     Vec3 los;
     if (lineOfSight(o, los)) oj["line_of_sight_gcrf"] = vec(los);
     const Block* assigned = o.assigned >= 0 ? &blocks[o.candidates[static_cast<size_t>(o.assigned)].block] : nullptr;
-    const double posterior = assigned ? o.candidates[static_cast<size_t>(o.assigned)].posterior : 0.0;
+    const Candidate* judged = assigned ? &o.candidates[static_cast<size_t>(o.assigned)] : o.candidates.empty() ? nullptr : &o.candidates.front();
     if (assigned) {
       const auto& c = o.candidates[static_cast<size_t>(o.assigned)];
       oj["object"] = objectJson(*assigned);
@@ -977,14 +1001,14 @@ bool run(Json& report, std::vector<std::pair<std::string, std::pair<RecordType, 
     }
     observationsJson.push_back(oj);
     const char* family = o.type == RecordType::RDO ? "radar" : o.type == RecordType::EOO ? "optical" : "rf";
-    outputs.push_back({std::string(family) + (assigned ? "_associated" : "_ucts"), {o.type, annotated(o, assigned, posterior)}});
+    outputs.push_back({std::string(family) + (assigned ? "_associated" : "_ucts"), {o.type, annotated(o, assigned, judged)}});
   }
   Json gatesJson = Json::object();
   for (const auto& [m, g] : gates) gatesJson[std::to_string(m)] = g;
   report = {
     {"method", "chi-square gate on S = H P H^T + R, global nearest neighbour per scan (Hungarian), gate as the non-assignment cost"},
     {"options", {{"gate_probability", opt.gateProbability}, {"light_time", opt.lightTime}, {"min_posterior", opt.minPosterior},
-                 {"clutter_density", opt.clutterDensity}, {"frequency_sigma_hz", opt.frequencySigmaHz}, {"scan", opt.scan}}},
+                 {"clutter_density", opt.clutterDensity}, {"scan", opt.scan}}},
     {"gate_thresholds", gatesJson},
     {"earth_orientation_rows", eopRows.size()},
     {"counts", {{"observations", obs.size()}, {"predictions", blocks.size()}, {"scans", scans.size()},
