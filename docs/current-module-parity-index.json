@@ -1,21 +1,23 @@
 {
-  "generatedAt": "2026-10-09T02:23:54.048Z",
-  "moduleCount": 116,
-  "parityScopeModuleCount": 47,
-  "isomorphicWasmCount": 114,
+  "generatedAt": "2026-10-09T20:59:45.287Z",
+  "moduleCount": 118,
+  "parityScopeModuleCount": 49,
+  "isomorphicWasmCount": 116,
   "missingIsomorphicWasm": [
     "hostcap/flatsql-store",
     "maneuver/star-search"
   ],
-  "browserWasmEdgeTargetCount": 109,
+  "browserWasmEdgeTargetCount": 111,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
     "analysis/access",
+    "analysis/association",
     "analysis/catalog-composer",
     "analysis/catalog-synthesis",
     "analysis/conjunction-assessment",
     "analysis/covariance",
+    "analysis/density-calibration",
     "analysis/dop",
     "analysis/epoch-state",
     "analysis/estimation",
@@ -104,6 +106,50 @@
         "tests/orekit-fixture.mjs",
         "tests/orekit-night.test.mjs",
         "tests/orekit-wasm.test.mjs",
+        "tests/parity.mjs",
+        "tests/sdk_compat.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "analysis/association",
+      "pluginId": "com.digitalarsenal.analysis.association",
+      "name": "Observation association",
+      "pluginFamily": "analysis",
+      "version": "0.1.0",
+      "methodIds": [
+        "associate_observations",
+        "solve_assignment"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 13,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/association.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/gps-20260802.json.gz",
+        "tests/fixtures/nist-chi-square.json",
+        "tests/fixtures/or-library/SOURCE.md",
+        "tests/fixtures/or-library/assign100.txt",
+        "tests/fixtures/or-library/assign200.txt",
+        "tests/fixtures/or-library/assignopt.txt",
+        "tests/fixtures/or-library/assignp800.txt.gz",
+        "tests/gate-and-assignment.test.mjs",
+        "tests/gps-association.test.mjs",
+        "tests/gps-scenario.mjs",
+        "tests/lib.mjs",
         "tests/parity.mjs",
         "tests/sdk_compat.test.mjs"
       ]
@@ -463,6 +509,38 @@
       ]
     },
     {
+      "modulePath": "analysis/density-calibration",
+      "pluginId": "com.digitalarsenal.analysis.density-calibration",
+      "name": "Thermospheric density calibration (JB2008 temperature corrections)",
+      "pluginFamily": "analysis",
+      "version": "0.1.0",
+      "methodIds": [
+        "calibrate",
+        "evaluate"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/density_calibration.cpp"
+      ],
+      "testFiles": [
+        "tests/density_calibration.test.mjs"
+      ]
+    },
+    {
       "modulePath": "analysis/dop",
       "pluginId": "com.orbpro.dop",
       "name": "DOP Analysis",
@@ -532,6 +610,7 @@
       "pluginFamily": "analysis",
       "version": "0.2.0",
       "methodIds": [
+        "fit_batch",
         "initial_orbit",
         "run_estimation",
         "simulate_tracking"
@@ -546,12 +625,13 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 5,
+      "cxxSourceFileCount": 6,
       "cSourceFileCount": 0,
-      "testFileCount": 28,
+      "testFileCount": 32,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
+        "src/batch_fit.cpp",
         "src/estimation.cpp",
         "src/module.cpp",
         "tests/depth_validation.cpp",
@@ -559,6 +639,8 @@
         "tests/sequential_validation.cpp"
       ],
       "testFiles": [
+        "tests/batch-fit-fixtures.mjs",
+        "tests/batch_fit.test.mjs",
         "tests/build-provider.mjs",
         "tests/conformance.test.mjs",
         "tests/depth-fixtures.mjs",
@@ -567,6 +649,7 @@
         "tests/depth_validation.cpp",
         "tests/fixtures.mjs",
         "tests/fixtures/DEPTH.md",
+        "tests/fixtures/OrekitBatchReference.java",
         "tests/fixtures/OrekitReference.java",
         "tests/fixtures/README.md",
         "tests/fixtures/circular-fusion.json",
@@ -575,6 +658,7 @@
         "tests/fixtures/hipparchus-NOTICE.txt",
         "tests/fixtures/hipparchus-cv-inputs.json",
         "tests/fixtures/hipparchus-cv-smoother.txt",
+        "tests/fixtures/orekit-batch-reference.json",
         "tests/fixtures/orekit-pv-reference.txt",
         "tests/invoke.test.mjs",
         "tests/native.test.mjs",
@@ -901,14 +985,16 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 3,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/observation_simulator.cpp"
       ],
       "testFiles": [
-        "tests/observation_simulator.test.mjs"
+        "tests/lib.mjs",
+        "tests/observation_simulator.test.mjs",
+        "tests/parity.mjs"
       ]
     },
     {
@@ -4599,9 +4685,9 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 32,
+      "cxxSourceFileCount": 35,
       "cSourceFileCount": 0,
-      "testFileCount": 243,
+      "testFileCount": 279,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -4633,7 +4719,10 @@
         "tests/drag_frame_native.cpp",
         "tests/environment_conformance.cpp",
         "tests/finite_burn_native.cpp",
+        "tests/fixtures/tudat/tudat_wasm_driver.cpp",
         "tests/force_partials_native.cpp",
+        "tests/gnss_srp_native.cpp",
+        "tests/gps_srp_accuracy_native.cpp",
         "tests/variational_controls_native.cpp",
         "tests/variational_native.cpp",
         "tests/zonal_crossvalidation.cpp"
@@ -4652,6 +4741,8 @@
         "tests/drag_winds_abi.test.mjs",
         "tests/environment_conformance.cpp",
         "tests/environment_conformance.test.mjs",
+        "tests/evidence/gnss-srp/prw-gnss-parity.json",
+        "tests/evidence/gps-srp-accuracy/score-test-window.json",
         "tests/evidence/lane13/baseline.log",
         "tests/evidence/lane13/build-final.log",
         "tests/evidence/lane13/compliance-final.log",
@@ -4673,6 +4764,7 @@
         "tests/evidence/lane13/sdk-compat-final.log",
         "tests/evidence/lane13/variational-parity-final.log",
         "tests/evidence/lane13/variational-parity.json",
+        "tests/evidence/xval/summary.json",
         "tests/finite-burn-fixture.mjs",
         "tests/finite-burn-parity.mjs",
         "tests/finite_burn.test.mjs",
@@ -4680,7 +4772,17 @@
         "tests/finite_burn_native.cpp",
         "tests/fixtures/atmosphere/jacchia-roberts-gmat.json",
         "tests/fixtures/atmosphere/jb2008-orekit.json",
+        "tests/fixtures/atmosphere/make-jacchia-roberts-gmat.mjs",
+        "tests/fixtures/gmat/gmat-console.mjs",
+        "tests/fixtures/gmat/gmat-reference.json",
+        "tests/fixtures/gmat/make-gmat-reference.mjs",
         "tests/fixtures/hosted-runtime/hpop.single-plugin.flow.json",
+        "tests/fixtures/nyx/Cargo.lock",
+        "tests/fixtures/nyx/Cargo.toml",
+        "tests/fixtures/nyx/make-nyx-reference.mjs",
+        "tests/fixtures/nyx/nyx-reference.json",
+        "tests/fixtures/nyx/src/main.rs",
+        "tests/fixtures/orekit/OrekitGnssSrpReference.java",
         "tests/fixtures/orekit/OrekitReference.java",
         "tests/fixtures/orekit/eop-2026-06.json",
         "tests/fixtures/orekit/eop-2026-08.json",
@@ -4689,9 +4791,17 @@
         "tests/fixtures/orekit/make-gfc.mjs",
         "tests/fixtures/orekit/make-jb2008.mjs",
         "tests/fixtures/orekit/make-spw.mjs",
+        "tests/fixtures/orekit/orekit-gnss-srp-reference.json",
         "tests/fixtures/orekit/orekit-reference.json",
         "tests/fixtures/orekit/spw-2026-08.json",
         "tests/fixtures/request.propagate.json",
+        "tests/fixtures/tudat/tudat-wasm-reference.json",
+        "tests/fixtures/tudat/tudat-wasm-reference.mjs",
+        "tests/fixtures/tudat/tudat_reference.py",
+        "tests/fixtures/tudat/tudat_wasm_driver.cpp",
+        "tests/fixtures/tudat/tudatpy-reference.json",
+        "tests/fixtures/xval/egm2008-cof.mjs",
+        "tests/fixtures/xval/xval-cases.json",
         "tests/force_partials.test.mjs",
         "tests/force_partials_native.cpp",
         "tests/generated/sds/Band.js",
@@ -4748,6 +4858,7 @@
         "tests/generated/sds/PRWDescribeRequest.js",
         "tests/generated/sds/PRWDescribeResult.js",
         "tests/generated/sds/PRWEarthOrientation.js",
+        "tests/generated/sds/PRWEcom2.js",
         "tests/generated/sds/PRWEphemerisRequest.js",
         "tests/generated/sds/PRWEphemerisResult.js",
         "tests/generated/sds/PRWExecutionRequest.js",
@@ -4827,10 +4938,12 @@
         "tests/generated/sds/prwDensityTreatment.js",
         "tests/generated/sds/prwDerivativeTechnique.js",
         "tests/generated/sds/prwDynamicParameter.js",
+        "tests/generated/sds/prwGnssSpacecraftBlock.js",
         "tests/generated/sds/prwGravitySelection.js",
         "tests/generated/sds/prwProcessNoiseAxes.js",
         "tests/generated/sds/prwProcessNoiseModel.js",
         "tests/generated/sds/prwQualityEvidence.js",
+        "tests/generated/sds/prwRadiationPressureFamily.js",
         "tests/generated/sds/prwRelativityTerms.js",
         "tests/generated/sds/prwSolidTideModel.js",
         "tests/generated/sds/prwSolverAlgorithm.js",
@@ -4847,24 +4960,34 @@
         "tests/generated/sds/timConversionStatus.js",
         "tests/generated/sds/timEpochRepresentation.js",
         "tests/generated/sds/timingStandard.js",
+        "tests/gnss_srp.test.mjs",
+        "tests/gnss_srp_native.cpp",
+        "tests/gps-srp-accuracy-build.mjs",
+        "tests/gps-srp-accuracy-prepare.mjs",
+        "tests/gps-srp-accuracy-score.mjs",
+        "tests/gps_srp_accuracy_native.cpp",
         "tests/intermodule_sgp4_import.test.mjs",
         "tests/jb2008_abi.test.mjs",
         "tests/kernel-parity.mjs",
         "tests/kernel_invoke.test.mjs",
+        "tests/lib/gnssSrpCases.mjs",
         "tests/lib/orekitCases.mjs",
         "tests/lib/pivInvokeHelper.mjs",
         "tests/lib/prwCodec.mjs",
         "tests/lib/residentRuntime.mjs",
+        "tests/lib/xvalCases.mjs",
         "tests/no_duplicate_sources.test.mjs",
         "tests/orekit_reference.test.mjs",
         "tests/path_state_vectors.test.mjs",
         "tests/pivInvokeContract.test.mjs",
         "tests/prw-contract-fixture.mjs",
+        "tests/prw-gnss-parity.mjs",
         "tests/prw-parity.mjs",
         "tests/prw-resident-parity.mjs",
         "tests/prw_atmospheres.test.mjs",
         "tests/prw_contract.test.mjs",
         "tests/prw_covariance.test.mjs",
+        "tests/prw_gnss_srp.test.mjs",
         "tests/prw_parameters.test.mjs",
         "tests/prw_resident.test.mjs",
         "tests/prw_sequence.test.mjs",
@@ -4880,6 +5003,8 @@
         "tests/variational_invoke.test.mjs",
         "tests/variational_native.cpp",
         "tests/version_query.test.mjs",
+        "tests/xval-summary.mjs",
+        "tests/xval_reference.test.mjs",
         "tests/zonal_crossvalidation.cpp",
         "tests/zonal_crossvalidation.test.mjs"
       ]

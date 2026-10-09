@@ -1,6 +1,6 @@
 {
  "about": "Largest 3D position difference (m) over 24 h, hourly samples; HPOP (browser harness) against each tool, and tool against tool. tests/xval-summary.mjs.",
- "hpopWasmSha256": "473d527175de6606ccf305c45b37218288634fa9de2dcab0d72564a190bdabd1",
+ "hpopWasmSha256": "0d1f626464ff42e444c265bce1a13ae84b5d7bb809bdeb83fdb92a26b591397f",
  "tools": {
   "orekit": "Orekit 13.1 (CS GROUP, Apache-2.0), DormandPrince853 (steps <= 10 s), GCRF; NRLMSISE-00 on mean local solar time",
   "gmat": "GMAT R2022a (NASA GSFC, Apache-2.0; GmatConsole, Build Date: Jan 11 2023  15:45:41), PrinceDormand78 at 1e-13 (steps <= 60 s); state in ICRF axes at the epoch, samples from the MJ2000Eq integration axes by the epoch's fixed rotation; Earth orientation IAU 1976/1980 (FK5) with the pole and UT1-UTC of ../orekit/eop-2026-08.json; Sun and Moon from DE440 via SPICE; drag Jacchia-Roberts",
@@ -352,7 +352,7 @@
      "worstAt": 86400
     },
     "gmat": {
-     "worst": 30007.504718058703,
+     "worst": 1.3683585280685497,
      "worstAt": 86400,
      "atmosphere": "JACCHIA_ROBERTS"
     },
@@ -739,7 +739,7 @@
      "worstAt": 86400
     },
     "gmat": {
-     "worst": 450.54687852490804,
+     "worst": 0.17414552988129414,
      "worstAt": 86400,
      "atmosphere": "JACCHIA_ROBERTS"
     },

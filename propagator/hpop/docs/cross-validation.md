@@ -79,7 +79,15 @@ These differences are part of the measured spread:
     4.5 mm at MOLNIYA perigee.
   - **Drag:** the macOS build of R2022a has no NRLMSISE-00 plugin, so GMAT's
     drag cases use Jacchia-Roberts and HPOP is asked for Jacchia-Roberts on
-    them. These cases are not compared with the NRLMSISE-00 tools.
+    them. These cases are not compared with the NRLMSISE-00 tools. GMAT's
+    Earth is given WGS84's flattening on them, the ellipsoid Orekit and HPOP
+    take heights on (GMAT's default 0.0033527 moves LEO400 13 cm).
+  - **Jacchia-Roberts axes:** GMAT gives the model the spacecraft and the Sun
+    in its MJ2000Eq axes, so the Sun's hour angle and declination are on the
+    J2000 equator; HPOP uses Earth-fixed axes, the true equator of date. By
+    2026 the two poles are 0.15 deg apart. That leaves LEO400 1.37 m and
+    SSO700 0.17 m from GMAT after a day; HPOP built with GMAT's axes is 2.4 cm
+    and 1.0 cm from it (measured). GMAT's drag limit is therefore 1.5 m.
 - **Tudat**
   - **Clock:** Tudat's independent variable is TDB, while the other codes
     integrate geocentric motion on TT. In August 2026 the two rates differ by
@@ -133,7 +141,8 @@ These differences are part of the measured spread:
 ## Results
 
 Largest 3D position difference over 24 h, at hourly samples, measured on
-2026-10-09 with the shipped HPOP WASM (sha256 473d5271...bdabd1) through
+2026-10-09 with HPOP WASM 0d1f6264...91397f (the GMAT drag rows; the
+others are unchanged from 473d5271...bdabd1) through
 the SDK's browser harness (`node tests/xval-summary.mjs`, which also writes
 `tests/evidence/xval/summary.json`). (JR) marks GMAT's Jacchia-Roberts drag
 cases, where HPOP was also run with Jacchia-Roberts.
@@ -147,13 +156,13 @@ cases, where HPOP was also run with Jacchia-Roberts.
 | LEO400 F3-field20x20 | 9.10 mm | 16.1 mm | 10.8 mm | 10.8 mm | 26.4 mm |
 | LEO400 F4-field-sun-moon | 9.15 mm | 8.43 mm | 10.9 mm | 10.9 mm | 26.4 mm |
 | LEO400 F5-field-sun-moon-srp | 9.75 mm | 19.3 mm | 10.7 mm | 10.7 mm | 26.7 mm |
-| LEO400 F6-field-sun-moon-srp-drag | 12.6 mm | 30008 m (JR) | 26.8 mm | 26.8 mm | 12.09 m |
+| LEO400 F6-field-sun-moon-srp-drag | 12.6 mm | 1.37 m (JR) | 26.8 mm | 26.8 mm | 12.09 m |
 | SSO700 F0-point-mass | 0.22 mm | 0.86 mm | 0.04 mm | 0.03 mm | 0.09 mm |
 | SSO700 F1-J2 | 6.95 mm | 18.6 mm | 6.71 mm | 6.72 mm | 30.8 mm |
 | SSO700 F3-field20x20 | 6.80 mm | 12.7 mm | 6.07 mm | 6.09 mm | 31.4 mm |
 | SSO700 F4-field-sun-moon | 6.81 mm | 21.6 mm | 6.10 mm | 6.09 mm | 31.4 mm |
 | SSO700 F5-field-sun-moon-srp | 6.55 mm | 8.14 mm | 5.97 mm | 5.98 mm | 30.8 mm |
-| SSO700 F6-field-sun-moon-srp-drag | 6.78 mm | 451 m (JR) | 60.2 mm | 60.2 mm | 14.7 mm |
+| SSO700 F6-field-sun-moon-srp-drag | 6.78 mm | 174.1 mm (JR) | 60.2 mm | 60.2 mm | 14.7 mm |
 | GPS F0-point-mass | 0.16 mm | 0.63 mm | 0.00 mm | 0.00 mm | 0.00 mm |
 | GPS F1-J2 | 0.48 mm | 0.74 mm | 0.33 mm | 0.33 mm | 1.61 mm |
 | GPS F3-field20x20 | 0.47 mm | 0.28 mm | 0.28 mm | 0.28 mm | 1.61 mm |
@@ -226,19 +235,15 @@ cases, where HPOP was also run with Jacchia-Roberts.
 - **Tudat native against Tudat WebAssembly:** at most 0.02 mm in every case,
   drag included, after matching the NRLMSISE-00 storm-conditions default.
   The WebAssembly build reproduces native Tudat.
-- **Jacchia-Roberts defect in HPOP:**
-  - **The cause:** `lib/jacchia_roberts.h` gives GMAT's density functions
-    MJD + 29999.5, but GMAT's modified Julian date is JD - 2430000, which
-    is MJD - 29999.5.
-  - **The effect:** this moves the semiannual density term to the wrong
-    date. On 2026-08-02 it raises the 400 km density 1.67 times (measured on
-    the port itself). LEO400 is then 30 km from GMAT after a day (SSO700
-    451 m), against a drag effect of 44 km.
-  - **Why the earlier check passed:** the port's fixture
-    (`tests/fixtures/atmosphere/jacchia-roberts-gmat.json`) was generated
-    with the same mapping, so its bit-for-bit check passes.
-  - **In the test:** the GMAT drag cases are `todo` until HPOP is fixed.
-    HPOP's binary is not changed here.
+- **Jacchia-Roberts date, fixed:** HPOP gave GMAT's density functions
+  MJD + 29999.5 where GMAT's modified Julian date (JD - 2430000) is
+  MJD - 29999.5, moving the semiannual term (1.67 times the 400 km density
+  on 2026-08-02; LEO400 30 km and SSO700 451 m from GMAT after a day). The
+  port's fixture had been made with the same mapping. It is now GMAT's own
+  density from GmatConsole at 2000 epochs and points
+  (`tests/fixtures/atmosphere/make-jacchia-roberts-gmat.mjs`); the port agrees
+  to 1.8e-6 (it was up to 124 % off), and the GMAT drag cases are 1.37 m and
+  0.17 m from GMAT, the axes difference above.
 
 ## Not compared, and why
 
