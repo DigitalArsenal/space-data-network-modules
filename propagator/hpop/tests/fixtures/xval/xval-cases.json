@@ -1,0 +1,10 @@
+{
+ "about": "The Orekit reference cases (../orekit/orekit-reference.json) every cross-validation tool reproduces: each orbit with point mass, J2, the 20x20 field, + Sun and Moon, + radiation pressure, and (LEO400, SSO700) + NRLMSISE-00 drag. Initial states, epoch, constants and space weather are those of the Orekit file.",
+ "cases": [
+  "LEO400 F0-point-mass", "LEO400 F1-J2", "LEO400 F3-field20x20", "LEO400 F4-field-sun-moon", "LEO400 F5-field-sun-moon-srp", "LEO400 F6-field-sun-moon-srp-drag",
+  "SSO700 F0-point-mass", "SSO700 F1-J2", "SSO700 F3-field20x20", "SSO700 F4-field-sun-moon", "SSO700 F5-field-sun-moon-srp", "SSO700 F6-field-sun-moon-srp-drag",
+  "GPS F0-point-mass", "GPS F1-J2", "GPS F3-field20x20", "GPS F4-field-sun-moon", "GPS F5-field-sun-moon-srp",
+  "GEO F0-point-mass", "GEO F1-J2", "GEO F3-field20x20", "GEO F4-field-sun-moon", "GEO F5-field-sun-moon-srp",
+  "MOLNIYA F0-point-mass", "MOLNIYA F1-J2", "MOLNIYA F3-field20x20", "MOLNIYA F4-field-sun-moon", "MOLNIYA F5-field-sun-moon-srp"
+ ]
+}
