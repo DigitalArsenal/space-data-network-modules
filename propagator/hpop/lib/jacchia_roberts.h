@@ -318,7 +318,7 @@ inline double density(double height, double geodeticLatitude, const double point
     s.cbPolarSquared = polarRadiusKm * polarRadiusKm;
     s.xtemp = 379.0 + 3.24 * in.f107a + 1.3 * (in.f107 - in.f107a);
     s.tkp = in.kp;
-    const double a1_time = mjdUtc + 29999.5;  // GMAT MJD = JD - 2430000
+    const double a1_time = mjdUtc - 29999.5;  // GMAT MJD = JD - 2430000 = MJD - 29999.5
     const double sun_dec = std::atan2(sun[2], std::sqrt(sun[0] * sun[0] + sun[1] * sun[1]));
     const double geo_lat = geodeticLatitude;
     double rho, temperature, t_500;

@@ -25,7 +25,10 @@
 // Moon GM from the DE440 header (as Orekit reads lnxp1990.440), Sun radius
 // 695 700 km, shadow-body radius 6378.137 km, 1361 W/m^2 at 1 au
 // (149 597 870.7 km), mass 1000 kg, area 20 m^2, Cr 1.3, Cd 2.2, constant
-// F10.7 = F10.7a = 150 and Kp 3 (GMAT takes Kp; Kp 3 is ap 15). Nutation is
+// F10.7 = F10.7a = 150 and Kp 3 (GMAT takes Kp; Kp 3 is ap 15); on the drag
+// cases the Earth's flattening is WGS84's (1/298.257223563), the ellipsoid
+// Orekit and HPOP take geodetic heights on (GMAT's default, 0.0033527, moves
+// LEO400 13 cm in the day). Nutation is
 // evaluated at every call (Earth.NutationUpdateInterval = 0; GMAT's default
 // reuses it for 60 s). PrinceDormand78 at 1e-13, steps of at most 60 s:
 // RungeKutta89 at 1e-14 / 30 s and PrinceDormand78 at 1e-13 / 10 s move GEO
@@ -51,14 +54,14 @@
 // comparable with the NRLMSISE-00 drag of Orekit and Tudat.
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { writeEgm2008Cof } from '../xval/egm2008-cof.mjs';
+import { gmatRootOf, gmatVersion, runScript, writeStartupFile } from './gmat-console.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const [gmat, work, out, only] = process.argv.slice(2);
 if (!out) throw new Error('usage: make-gmat-reference.mjs <GmatConsole> <work dir> <out.json> [only]');
-const gmatRoot = path.resolve(path.dirname(gmat), '..');
+const gmatRoot = gmatRootOf(gmat);
 fs.mkdirSync(work, { recursive: true });
 
 const OREKIT = JSON.parse(fs.readFileSync(path.join(here, '../orekit/orekit-reference.json'), 'utf8'));
@@ -85,15 +88,7 @@ const originalEop = fs.readFileSync(path.join(gmatRoot, 'data/planetary_coeff/eo
 const firstData = originalEop.findIndex((l) => /^\s*\d{4}\s+\d+\s+\d+\s+\d{5}\s/.test(l));
 fs.writeFileSync(path.join(work, 'eop-2026-08.txt'), `${[...originalEop.slice(0, firstData), ...eopLines].join('\n')}\n`);
 
-// GMAT's startup file, every path absolute, the EOP file replaced.
-const startup = fs.readFileSync(path.join(gmatRoot, 'bin/gmat_startup_file.txt'), 'utf8').split('\n').map((line) => {
-  if (/^PLUGIN\s/.test(line)) return /libPythonInterface|libMatlabInterface|libOpenFrames/.test(line) ? `# ${line}` : line.replace('../', `${gmatRoot}/`);
-  if (/^ROOT_PATH\s/.test(line)) return `ROOT_PATH                = ${gmatRoot}/`;
-  if (/^OUTPUT_PATH\s/.test(line)) return `OUTPUT_PATH              = ${path.resolve(work)}/`;
-  if (/^EOP_FILE\s/.test(line)) return `EOP_FILE                 = ${path.resolve(work, 'eop-2026-08.txt')}`;
-  return line;
-}).join('\n');
-fs.writeFileSync(path.join(work, 'gmat_startup_file.txt'), startup);
+const startupFile = writeStartupFile(gmat, work, path.join(work, 'eop-2026-08.txt'));
 
 const utcGregorian = (iso) => {
   const d = new Date(`${iso}Z`), months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -113,7 +108,7 @@ GMAT SolarSystem.SPKFilename = '${KERNEL}';
 GMAT Earth.Mu = ${f(K.gm / 1e9)};
 GMAT Earth.EquatorialRadius = ${(K.shadowRadiusM / 1000).toFixed(3)};
 GMAT Earth.NutationUpdateInterval = 0;
-GMAT Sun.Mu = ${f(GM_SUN)};
+${c.drag ? `GMAT Earth.Flattening = ${f(1 / 298.257223563)};\n` : ''}GMAT Sun.Mu = ${f(GM_SUN)};
 GMAT Sun.EquatorialRadius = 695700;
 GMAT Luna.Mu = ${f(GM_MOON)};
 
@@ -183,7 +178,7 @@ EndFor;
 `;
 }
 
-const version = execFileSync(gmat, ['--version'], { cwd: path.dirname(gmat), encoding: 'utf8' }).match(/Build Date:[^\n]*/)?.[0] ?? 'unknown';
+const version = gmatVersion(gmat);
 const cases = [];
 for (const name of LIST) {
   if (only && !name.includes(only)) continue;
@@ -192,7 +187,7 @@ for (const name of LIST) {
   const report = path.join(work, `${slug}.txt`), file = path.join(work, `${slug}.script`);
   fs.rmSync(report, { force: true });
   fs.writeFileSync(file, script(c, report));
-  execFileSync(gmat, ['--startup_file', path.join(work, 'gmat_startup_file.txt'), '--logfile', path.join(work, `${slug}.log`), '--verbose', 'off', '--run', file], { cwd: path.dirname(gmat), stdio: 'ignore' });
+  runScript(gmat, startupFile, file);
   const rows = fs.readFileSync(report, 'utf8').trim().split('\n').map((l) => l.trim().split(/\s+/).map(Number));
   if (rows.length !== 25) throw new Error(`${name}: ${rows.length} report rows (see ${slug}.log)`);
   // The fixed rotation from GMAT's integration axes to GCRF at the epoch,

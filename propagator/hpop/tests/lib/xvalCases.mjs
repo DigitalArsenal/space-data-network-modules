@@ -34,7 +34,10 @@ export const forceClass = (c) => (c.drag ? 'drag' : c.srp ? 'srp' : c.degree > 0
 //                  Earth orientation and the 0.13 mas/day drift of its ICRF
 //                  tie: point mass <= 4.2 mm (4.5 mm); field, Sun, Moon and
 //                  radiation pressure <= 2.7 cm (2.2 cm); drag is
-//                  Jacchia-Roberts on both sides (todo, see the test)
+//                  Jacchia-Roberts on both sides, whose Sun hour angle
+//                  and declination GMAT takes in MJ2000Eq axes and HPOP
+//                  on the true equator of date: LEO400 <= 1.4 m (with
+//                  GMAT's axes 2.4 cm)
 //   Tudat ........ a TT clock given to a TDB-based code (ephemerides and
 //                  Earth rotation read 0.75 ms off), fixed steps, and with
 //                  drag an ellipsoidal Earth whose mean radius (6371.0 km)
@@ -52,7 +55,7 @@ export const forceClass = (c) => (c.drag ? 'drag' : c.srp ? 'srp' : c.degree > 0
 //                  drag effect; SSO700 2 cm), a difference not isolated here
 export const TOLERANCE_M = {
   orekit: { pointMass: 1e-3, gravity: 0.05, srp: 0.1, drag: 0.1 },
-  gmat: { pointMass: 0.01, gravity: 0.05, srp: 0.1, drag: 0.1 },
+  gmat: { pointMass: 0.01, gravity: 0.05, srp: 0.1, drag: 1.5 },
   tudatpy: { pointMass: 2e-3, gravity: 0.05, srp: 0.1, drag: 0.1 },
   'tudat-wasm': { pointMass: 2e-3, gravity: 0.05, srp: 0.1, drag: 0.1 },
   nyx: { pointMass: 2e-3, gravity: 0.2, srp: 0.2, drag: 20 },

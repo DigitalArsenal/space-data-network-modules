@@ -1,10 +1,20 @@
 // The ported thermosphere models against the code they were ported from, at
 // random arguments covering their altitude range and driver domain:
 //   lib/jb2008.h ........... Orekit 13.1 JB2008 (fixtures/atmosphere/jb2008-orekit.json)
-//   lib/jacchia_roberts.h .. NASA GMAT JacchiaRobertsAtmosphere (fixtures/atmosphere/jacchia-roberts-gmat.json)
-// Both agree to rounding (measured: JB2008 1.8e-14 over 400 points,
-// Jacchia-Roberts bit for bit over 2000). Propagation with them:
-// orekit_reference (JB2008 J1 cases) and prw_atmospheres.
+//   lib/jacchia_roberts.h .. NASA GMAT R2022a itself: GmatConsole's
+//                            Jacchia-Roberts density at 2000 epochs
+//                            (2000-2023) and points (100-2500 km), with the
+//                            arguments GMAT used (fixtures/atmosphere/
+//                            jacchia-roberts-gmat.json, make-jacchia-roberts-gmat.mjs)
+// JB2008 agrees to rounding (measured 1.8e-14 over 400 points). Jacchia-
+// Roberts agrees to 1.8e-6 relative (measured; the port with GMAT's
+// date mapping before the fix was off by up to 124 %, 0.63-1.70x at
+// 400 km). The 1.8e-6 is not rounding: the arguments are rebuilt from what
+// GMAT reports (its geodetic height matches GMAT's Altitude parameter to
+// 2e-12 km), and a Sun direction 1e-7 rad off moves the density that much;
+// the bound is 5e-6. Where GMAT's density is 0 (two points near 2500 km)
+// the port's must be 0. Propagation with them: orekit_reference (JB2008 J1
+// cases), prw_atmospheres and xval_reference (GMAT's Jacchia-Roberts drag).
 //
 // Jacchia-Roberts is also checked against its own physics, independently of
 // GMAT: the diffusion equations integrated numerically from 90 km
@@ -38,10 +48,10 @@ function native(input) {
 test('JB2008 and Jacchia-Roberts ports reproduce their sources', () => {
   const jb = fixture('jb2008-orekit.json').rows, jr = fixture('jacchia-roberts-gmat.json').rows;
   const out = native([...jb.map((r) => `jb2008 ${r.slice(0, 15).join(' ')}`), ...jr.map((r) => `jacchia-roberts ${r.slice(0, 13).join(' ')}`)].join('\n')).map(Number);
-  const worst = (rows, values) => Math.max(...rows.map((r, i) => Math.abs(values[i] - r.at(-1)) / r.at(-1)));
+  const worst = (rows, values) => Math.max(...rows.map((r, i) => (r.at(-1) > 0 ? Math.abs(values[i] - r.at(-1)) / r.at(-1) : Math.abs(values[i]))));
   const wJb = worst(jb, out.slice(0, jb.length)), wJr = worst(jr, out.slice(jb.length));
   assert.ok(wJb < 1e-12, `JB2008 differs from Orekit by ${wJb} (relative)`);
-  assert.ok(wJr < 1e-12, `Jacchia-Roberts differs from GMAT by ${wJr} (relative)`);
+  assert.ok(wJr < 5e-6, `Jacchia-Roberts differs from GMAT by ${wJr} (relative)`);
 });
 
 test('Jacchia-Roberts agrees with the diffusion equations integrated numerically', (t) => {

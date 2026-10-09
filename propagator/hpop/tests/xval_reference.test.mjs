@@ -22,11 +22,12 @@
 // "reference spread" checks the tools against each other, so a regenerated
 // reference that drifted is caught on its own.
 //
-// Known defect, reported and not hidden: HPOP's Jacchia-Roberts gives GMAT's
-// density functions the modified Julian date + 29999.5 where GMAT's MJD is
-// MJD - 29999.5 (lib/jacchia_roberts.h, density()), which moves the
-// semiannual term and raises LEO400 density 1.67 times on this date; the
-// GMAT drag cases are therefore `todo` (they run and report the gap).
+// GMAT's Jacchia-Roberts takes the Sun's hour angle and declination in its
+// MJ2000Eq axes; HPOP takes them in Earth-fixed axes, on the true equator of
+// the date (0.15 deg of precession from J2000 by 2026). That alone leaves
+// LEO400 1.4 m from GMAT after a day of 44 km of drag (SSO700 0.17 m);
+// HPOP given GMAT's axes is 2.4 cm (1.0 cm) from it (measured), so the GMAT
+// drag limit is that axes difference plus HPOP's Orekit drag tolerance.
 //
 // Lanes: the browser harness by default; HPOP_XVAL_RUNTIMES=browser,wasmedge
 // adds the SDK's native WasmEdge runner (about 15 min for the 29 runs).
@@ -36,7 +37,6 @@ import { residentHarness } from './lib/residentRuntime.mjs';
 import { CASES, TOLERANCE_M, TOOLS, difference, forceClass, hpopInputs, hpopSamples } from './lib/xvalCases.mjs';
 
 const LANES = (process.env.HPOP_XVAL_RUNTIMES ?? 'browser').split(',').filter(Boolean);
-const JR_DEFECT = 'HPOP Jacchia-Roberts passes MJD + 29999.5 for GMAT MJD (MJD - 29999.5): lib/jacchia_roberts.h density()';
 
 for (const lane of LANES) {
   for (const name of CASES) {
@@ -52,8 +52,7 @@ for (const lane of LANES) {
     }
     for (const [atmosphere, { c, tools }] of groups) {
       const label = `${name}${atmosphere === 'NRLMSISE00' ? '' : ` (${atmosphere})`}`;
-      const todo = atmosphere === 'JACCHIA_ROBERTS' ? JR_DEFECT : undefined;
-      test(`HPOP (${lane}) against ${tools.map((t) => t.label).join(', ')}: ${label}`, { todo }, async (t) => {
+      test(`HPOP (${lane}) against ${tools.map((t) => t.label).join(', ')}: ${label}`, async (t) => {
         const harness = await residentHarness(lane);
         t.after(() => harness.destroy());
         const response = await harness.invoke({ methodId: 'invoke', inputs: hpopInputs(c) });
