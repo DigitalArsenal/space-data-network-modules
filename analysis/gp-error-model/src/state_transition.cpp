@@ -1,4 +1,5 @@
 #include <complex>
+#include <type_traits>
 
 // map_covariance: an RTN covariance of an element set's state mapped from one
 // epoch to others through a state transition matrix. Built in one
@@ -79,6 +80,20 @@ bool invert(const Mat6& a, Mat6* out) {
   for (int i = 0; i < 6; ++i)
     for (int j = 0; j < 6; ++j) (*out)[6 * i + j] = m[i][j + 6];
   return true;
+}
+
+// Inverse of a two-body (symplectic) STM [[A, B], [C, D]]: [[D', -B'], [-C', A']].
+// Exact, unlike elimination on a matrix whose condition grows with every revolution.
+Mat6 symplectic_inverse(const Mat6& p) {
+  Mat6 q{};
+  for (int i = 0; i < 3; ++i)
+    for (int j = 0; j < 3; ++j) {
+      q[6 * i + j] = p[6 * (j + 3) + i + 3];          // D'
+      q[6 * i + j + 3] = -p[6 * j + i + 3];           // -B'
+      q[6 * (i + 3) + j] = -p[6 * (j + 3) + i];       // -C'
+      q[6 * (i + 3) + j + 3] = p[6 * j + i];          // A'
+    }
+  return q;
 }
 
 // Block-diagonal rotation into the RTN axes of (r, v): rows R, T, N.
@@ -163,35 +178,65 @@ void stumpff(cplx z, cplx* c, cplx* s) {
     *s = (std::sinh(q) - q) / (q * q * q);
   }
 }
+// Kepler's universal equation F(x) = sigma x^2 C + (1 - alpha r0) x^3 S + r0 x
+// - sqrt(mu) dt and its derivative, the radius at x (T: double or complex).
+template <typename T>
+void universal(const T& x, const T& r0n, const T& sigma, const T& alpha, double smdt, T* f, T* df) {
+  const T z = alpha * x * x;
+  cplx c, s;
+  stumpff(cplx(z), &c, &s);
+  T cc, ss;
+  if constexpr (std::is_same_v<T, double>) { cc = c.real(); ss = s.real(); } else { cc = c; ss = s; }
+  *f = sigma * x * x * cc + (1.0 - alpha * r0n) * x * x * x * ss + r0n * x - smdt;
+  *df = sigma * x * (1.0 - z * ss) + (1.0 - alpha * r0n) * x * x * cc + r0n;
+}
 // State after dt seconds (dt may be negative); false without convergence.
+// The real universal anomaly comes first, by Newton safeguarded with a
+// bracket (F increases with x: its derivative is the radius), because plain
+// Newton can wander on eccentric arcs of many revolutions; three complex
+// Newton steps from that root then carry the complex-step perturbation.
 bool kepler(const cplx r0[3], const cplx v0[3], double dt, cplx r[3], cplx v[3]) {
   const double sm = std::sqrt(kMu);
   const cplx r0n = std::sqrt(dot(r0, r0));
   const cplx sigma = dot(r0, v0) / sm;
   const cplx alpha = 2.0 / r0n - dot(v0, v0) / kMu;
-  cplx x = alpha.real() > 1e-12 ? sm * dt * alpha : sm * dt / r0n;
+  const double rr = r0n.real(), sr = sigma.real(), ar = alpha.real(), smdt = sm * dt;
+  auto F = [&](double y, double* f, double* df) { universal<double>(y, rr, sr, ar, smdt, f, df); };
+  double x = ar > 1e-12 ? smdt * ar : smdt / rr, fx, dfx;
+  F(x, &fx, &dfx);
+  if (!std::isfinite(fx)) return false;
+  // Bracket [lo, hi] with F(lo) <= 0 <= F(hi), stepping by a revolution's span of x.
+  double span = ar > 1e-12 ? 2 * kPi / std::sqrt(ar) : std::max(1.0, std::fabs(x));
+  double lo = x, hi = x, flo = fx, fhi = fx;
+  for (int k = 0; k < 200 && flo > 0; ++k, span *= 2) { hi = lo; fhi = flo; lo -= span; F(lo, &flo, &dfx); if (!std::isfinite(flo)) return false; }
+  span = ar > 1e-12 ? 2 * kPi / std::sqrt(ar) : std::max(1.0, std::fabs(x));
+  for (int k = 0; k < 200 && fhi < 0; ++k, span *= 2) { lo = hi; flo = fhi; hi += span; F(hi, &fhi, &dfx); if (!std::isfinite(fhi)) return false; }
+  if (!(flo <= 0 && fhi >= 0)) return false;
   bool converged = false;
-  for (int it = 0, extra = 0; it < 200; ++it) {
-    const cplx z = alpha * x * x;
-    cplx c, s;
-    stumpff(z, &c, &s);
-    const cplx f = sigma * x * x * c + (1.0 - alpha * r0n) * x * x * x * s + r0n * x - sm * dt;
-    const cplx df = sigma * x * (1.0 - z * s) + (1.0 - alpha * r0n) * x * x * c + r0n;  // the radius at x
-    const cplx dx = f / df;
-    x -= dx;
-    if (converged && ++extra >= 2) break;  // two more steps settle the imaginary part
-    if (std::fabs(dx.real()) <= 1e-14 * std::max(1.0, std::fabs(x.real()))) converged = true;
+  for (int it = 0; it < 300 && !converged; ++it) {
+    F(x, &fx, &dfx);
+    if (fx > 0) hi = x; else lo = x;
+    double next = dfx > 0 ? x - fx / dfx : 0.5 * (lo + hi);
+    if (!(next > lo && next < hi)) next = 0.5 * (lo + hi);
+    converged = std::fabs(next - x) <= 1e-14 * std::max(1.0, std::fabs(x)) || hi - lo <= 1e-14 * std::max(1.0, std::fabs(x));
+    x = next;
   }
   if (!converged) return false;
-  const cplx z = alpha * x * x;
+  cplx xc(x, 0.0);
+  for (int it = 0; it < 3; ++it) {
+    cplx f, df;
+    universal<cplx>(xc, r0n, sigma, alpha, smdt, &f, &df);
+    xc -= f / df;
+  }
+  const cplx z = alpha * xc * xc;
   cplx c, s;
   stumpff(z, &c, &s);
-  const cplx f = 1.0 - x * x * c / r0n, g = dt - x * x * x * s / sm;
+  const cplx f = 1.0 - xc * xc * c / r0n, g = dt - xc * xc * xc * s / sm;
   for (int a = 0; a < 3; ++a) r[a] = f * r0[a] + g * v0[a];
   const cplx rn = std::sqrt(dot(r, r));
-  const cplx fd = sm / (rn * r0n) * x * (z * s - 1.0), gd = 1.0 - x * x * c / rn;
+  const cplx fd = sm / (rn * r0n) * xc * (z * s - 1.0), gd = 1.0 - xc * xc * c / rn;
   for (int a = 0; a < 3; ++a) v[a] = fd * r0[a] + gd * v0[a];
-  return std::isfinite(r[0].real()) && std::isfinite(v[0].real());
+  return std::isfinite(r[0].real()) && std::isfinite(v[0].real()) && std::isfinite(r[0].imag()) && std::isfinite(v[0].imag());
 }
 // Phi of two-body motion from (r0, v0) over dt, by complex step (h = 1e-20).
 bool two_body_stm(const double r0[3], const double v0[3], double dt, Mat6* phi) {
@@ -217,8 +262,17 @@ struct Arc {
   int revolutions = 0;
   std::string branch;
   double v1[3] = {};
-  double energy = 0, sgp4_energy = 0;
+  double energy = 0, sgp4_energy = 0, perigee = 0;
 };
+// Perigee radius a (1 - e) of the two-body orbit through (r, v).
+double perigee_radius(const double r[3], const double v[3]) {
+  const double rn = std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
+  const double energy = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) / 2 - kMu / rn;
+  const double h[3] = {r[1] * v[2] - r[2] * v[1], r[2] * v[0] - r[0] * v[2], r[0] * v[1] - r[1] * v[0]};
+  const double hh = h[0] * h[0] + h[1] * h[1] + h[2] * h[2], sma = -kMu / (2 * energy);
+  return sma * (1 - std::sqrt(std::max(0.0, 1 - hh / (kMu * sma))));
+}
+
 Arc lambert_arc(const double r1[3], const double v1s[3], const double r2[3], double dt) {
   Arc arc;
   const double r1n = std::sqrt(r1[0] * r1[0] + r1[1] * r1[1] + r1[2] * r1[2]);
@@ -240,6 +294,7 @@ Arc lambert_arc(const double r1[3], const double v1s[3], const double r2[3], dou
       std::copy(v1s, v1s + 3, arc.v1);
       arc.branch = "short-arc";
       arc.energy = arc.sgp4_energy;
+      arc.perigee = perigee_radius(r1, arc.v1);
       return arc;
     }
     arc.error = "transfer angle within 1 degree of 0 or 180 degrees";
@@ -278,6 +333,7 @@ Arc lambert_arc(const double r1[3], const double v1s[3], const double r2[3], dou
   arc.revolutions = std::max(n, 0);
   const double ve = arc.v1[0] * arc.v1[0] + arc.v1[1] * arc.v1[1] + arc.v1[2] * arc.v1[2];
   arc.energy = ve / 2 - kMu / r1n;
+  arc.perigee = perigee_radius(r1, arc.v1);
   return arc;
 }
 
@@ -402,11 +458,10 @@ extern "C" int map_covariance() {
           } else {
             Mat6 fwd{};
             if (!two_body_stm(ra, arc.v1, std::fabs(dt), &fwd)) err = "Kepler solution did not converge";
-            else if (forward) phi = fwd;
-            else if (!invert(fwd, &phi)) err = "singular Lambert STM";
+            else phi = forward ? fwd : symplectic_inverse(fwd);
             o["lambert"] = {{"revolutions", arc.revolutions}, {"branch", arc.branch},
                             {"v1", {arc.v1[0], arc.v1[1], arc.v1[2]}}, {"energy", arc.energy},
-                            {"sgp4Energy", arc.sgp4_energy}};
+                            {"sgp4Energy", arc.sgp4_energy}, {"perigeeRadiusKm", arc.perigee}};
           }
         }
       }

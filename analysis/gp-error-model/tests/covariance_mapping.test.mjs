@@ -133,7 +133,8 @@ test('map_covariance two-body: complex-step Kepler STM against finite difference
           const want = i < 3 && j === i + 3 ? 1 : i >= 3 && j === i - 3 ? -1 : 0;
           worst = Math.max(worst, Math.abs(s - want));
         }
-      assert.ok(worst < 1e-6, `symplectic ${c.set} ${e.minutes} min: ${worst}`);
+      const scale = Math.max(...p.map(Math.abs)) ** 2;  // products of entries cancel to 0 or 1
+      assert.ok(worst < 1e-14 * scale, `symplectic ${c.set} ${e.minutes} min: ${worst} (entries to ${Math.sqrt(scale)})`);
     });
   }
 });
@@ -198,6 +199,44 @@ test('map_covariance axesSet: the input covariance is read in another set\'s RTN
   for (let a = 0; a < 6; ++a) for (let c = 0; c <= a; ++c) lower.push(want[6 * a + c]);
   assert.ok(relative(rotated, lower) < 1e-9, `rotated: ${relative(rotated, lower)}`);
   assert.ok(relative(rotated, c0) > 1e-4, 'the two sets\' axes differ');
+});
+
+test('map_covariance lambert over 88 revolutions (LAGEOS-like, synthetic elements): the arc STM is symplectic and the map back inverts', async (t) => {
+  // A two-week map back along many revolutions: Thompson et al.'s energy rule
+  // can pick a nearly radial branch; whatever the arc, its two-body STM must be
+  // symplectic and mapping back then forward must restore the covariance.
+  const s = { norad: 99002, EPOCH: '2026-04-11T08:43:36.786144', MEAN_MOTION: 6.38665, ECCENTRICITY: 0.0045, INCLINATION: 109.8,
+    RA_OF_ASC_NODE: 156.5, ARG_OF_PERICENTER: 316.6, MEAN_ANOMALY: 35.8, BSTAR: 0 };
+  const b = new flatbuffers.Builder(512);
+  const o = new OMM.OMMT();
+  Object.assign(o, { EPOCH: s.EPOCH, NORAD_CAT_ID: s.norad, MEAN_ELEMENT_THEORY: OMM.meanElementSource.SGP4, MEAN_MOTION: s.MEAN_MOTION,
+    ECCENTRICITY: s.ECCENTRICITY, INCLINATION: s.INCLINATION, RA_OF_ASC_NODE: s.RA_OF_ASC_NODE, ARG_OF_PERICENTER: s.ARG_OF_PERICENTER,
+    MEAN_ANOMALY: s.MEAN_ANOMALY, BSTAR: s.BSTAR });
+  OMM.OMM.finishSizePrefixedOMMBuffer(b, o.pack(b));
+  const el = { portId: 'elements', payload: Buffer.from(b.asUint8Array()), typeRef: { schemaName: 'OMM.fbs', fileIdentifier: '$OMM', rootTypeName: 'OMM', wireFormat: 'flatbuffer' } };
+  const later = '2026-04-25T07:16:07.682880';
+  const c0 = ref.sgp4[0].covariance;
+  const back = await call(t, 'map_covariance', [el, json('options', { requests: [{ norad: 99002, set: s.EPOCH, from: later, covariance: c0, to: [s.EPOCH], method: 'lambert', stm: true }] })]);
+  const row = back.results[0].targets[0];
+  assert.equal(row.error, undefined, row.error);
+  assert.ok(row.lambert.revolutions >= 80, `revolutions ${row.lambert.revolutions}`);
+  const p = row.stm;
+  let worst = 0;
+  for (let i = 0; i < 6; ++i) for (let j = 0; j < 6; ++j) {
+    let v = 0;
+    for (let a = 0; a < 3; ++a) v += p[6 * a + i] * p[6 * (a + 3) + j] - p[6 * (a + 3) + i] * p[6 * a + j];
+    const want = i < 3 && j === i + 3 ? 1 : i >= 3 && j === i - 3 ? -1 : 0;
+    worst = Math.max(worst, Math.abs(v - want));
+  }
+  const scale = Math.max(...p.map(Math.abs)) ** 2;
+  assert.ok(worst < 1e-14 * scale, `symplectic: ${worst} (entries to ${Math.sqrt(scale)})`);
+  // Mapping back and forward again restores the covariance to the precision
+  // the map's conditioning allows: entries near 1e6 s give a condition number
+  // near 1e12-1e13, so double precision keeps about 1e-3 of a round trip.
+  const round = await call(t, 'map_covariance', [el, json('options', { requests: [{ norad: 99002, set: s.EPOCH, covariance: row.covariance, to: [later], method: 'lambert' }] })]);
+  const error = relative(round.results[0].targets[0].covariance, c0);
+  assert.ok(error < 1e-2, `round trip ${error}`);
+  console.log(`88-revolution round trip: relative change ${error.toExponential(2)}, STM entries to ${Math.sqrt(scale).toExponential(2)}`);
 });
 
 test('screening_cases: Foster Pc in closed form for zero miss, and a polar-grid integral for an offset anisotropic pair', async (t) => {

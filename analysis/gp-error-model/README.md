@@ -161,12 +161,14 @@ SGP4 state (TEME). Φ by `method`:
   nonsingular mean elements (n, e cos ω, e sin ω, i, Ω, M + ω) by central
   differences, B* held (the linearized SGP4 STM);
 - `two-body`: Keplerian motion from the anchor's SGP4 state at t₀,
-  complex-step differentiation of the universal-variable Kepler solution;
+  complex-step differentiation of the universal-variable Kepler solution
+  (the real anomaly by bracketed Newton, then complex Newton steps);
 - `lambert`: Thompson, Gossner, Sais and Cunningham (2019): the two-body arc
   through SGP4's positions at the two epochs (Izzo's solver from
   `analysis/lambert-izzo`), N = floor(Δt / P) revolutions from SGP4's state
   at the earlier epoch, the branch whose energy is nearest SGP4's; Φ is the
-  two-body STM on that arc. Within a degree of the start inside the first
+  two-body STM on that arc (its inverse, for a target before t₀, taken
+  symplectically) and each arc reports its perigee radius. Within a degree of the start inside the first
   revolution the arc is SGP4's osculating one; within a degree of 0 or 180
   degrees otherwise the target is refused.
 

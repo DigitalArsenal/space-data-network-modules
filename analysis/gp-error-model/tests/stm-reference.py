@@ -202,6 +202,10 @@ def main():
         'gps': dict(norad=99001, epoch='2025-11-10T03:17:42.123456', n=rev(2.00563012), e=0.0071, i=55.2 * DEG,
                     node=121.4 * DEG, w=43.0 * DEG, m=210.5 * DEG, bstar=0.0),
     }
+    m = next(x for x in vallado if x['satnum'] == 9880)  # 12-hour, e = 0.7 (deep space, resonant)
+    sets['molniya'] = dict(norad=9880, epoch=iso(datetime.strptime(m['epochIso'], '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=timezone.utc)),
+                           n=rev(m['MEAN_MOTION']), e=m['ECCENTRICITY'], i=m['INCLINATION'] * DEG, node=m['RA_OF_ASC_NODE'] * DEG,
+                           w=m['ARG_OF_PERICENTER'] * DEG, m=m['MEAN_ANOMALY'] * DEG, bstar=m['BSTAR'])
     out = {'source': __doc__.strip().splitlines()[0], 'versions': {'python-sgp4': sgp4.__version__, 'pyerfa': erfa.__version__,
            'numpy': np.__version__}, 'sets': {}}
     for name, s in sets.items():
@@ -277,7 +281,8 @@ def main():
 
     # ── map_covariance, two-body: Phi of Keplerian motion from SGP4's state ──
     tb = []
-    for name, targets in [('leo', [1440.0, 4320.0, 10080.0, -600.0]), ('gps', [1440.0, 4320.0, 10080.0])]:
+    for name, targets in [('leo', [1440.0, 4320.0, 10080.0, -600.0]), ('gps', [1440.0, 4320.0, 10080.0]),
+                          ('molniya', [1440.0, 4320.0, 10080.0])]:
         s = sets[name]
         x0 = teme(satrec(s), 0.0)
         tb.append(dict(set=name, targets=[dict(minutes=t, epoch=iso(parse(s['epoch']) + timedelta(minutes=t)),
