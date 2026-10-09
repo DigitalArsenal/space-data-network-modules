@@ -170,7 +170,9 @@ SGP4 state (TEME). Φ by `method`:
   revolution the arc is SGP4's osculating one; within a degree of 0 or 180
   degrees otherwise the target is refused.
 
-With `stm: true` each target also carries Φ (TEME, row-major).
+With `stm: true` each target also carries Φ (TEME, row-major). With
+`axesSet` the input covariance is in the RTN axes of that set's SGP4 state at
+`from` (Thompson et al. rotate the final set's scatter with its own state).
 
 ## Model and validation
 

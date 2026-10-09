@@ -6,7 +6,8 @@
 // and analysis/lambert-izzo's solver header.
 //
 // The covariance is the lower triangle of the 6x6 position/velocity matrix
-// (km, km/s) in the RTN axes of the anchor set's SGP4 state (TEME): rows R,
+// (km, km/s) in the RTN axes of the anchor set's SGP4 state (TEME; at t0 the
+// state of `axesSet` when given, e.g. the set whose scatter it is): rows R,
 // T, N of position, then velocity differences projected on the same axes (as
 // accumulate's errors are). With B(t) the block-diagonal rotation into those
 // axes at t,  C(t) = B(t) Phi(t, t0) B(t0)' C(t0) B(t0) Phi(t, t0)' B(t)'.
@@ -346,7 +347,25 @@ extern "C" int map_covariance() {
       results.push_back(row);
       continue;
     }
-    const Mat6 b0 = rtn_block(r0, v0);
+    // The covariance's axes: the anchor's state at t0, or with axesSet another
+    // set's state there (Thompson et al. rotate the final set's scatter with
+    // the final set's own state before mapping it back along the first set).
+    Mat6 b0 = rtn_block(r0, v0);
+    if (req.contains("axesSet")) {
+      Instant at;
+      if (!req["axesSet"].is_string() || !parse_instant(req["axesSet"].get<std::string>(), &at))
+        return fail("invalid-options", "axesSet is not ISO 8601 UTC.");
+      ElementSet* a = common::find_set(sets, norad, at);
+      double ra[3], va[3];
+      if (!a || !propagate(*a, seconds_between(a->epoch, t0) / 60.0, ra, va)) {
+        row["error"] = "axes set not found or not propagated";
+        ++refused;
+        results.push_back(row);
+        continue;
+      }
+      b0 = rtn_block(ra, va);
+      row["axesSet"] = a->epoch_text;
+    }
     const Mat6 cart0 = multiply(multiply(transpose(b0), c0), b0);  // RTN -> TEME
     std::vector<double> minutes{m0};
     for (const Instant& t : targets) minutes.push_back(seconds_between(s->epoch, t) / 60.0);

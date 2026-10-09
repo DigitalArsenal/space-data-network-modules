@@ -2,8 +2,8 @@
   "ok": true,
   "fixture": "gp-error-model e2b methods",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "ec83cacc3a10a44d20860fe756dd6cd624f4cb5eaf1ad5294ed22b968f5e9586",
-  "moduleSha256": "ec83cacc3a10a44d20860fe756dd6cd624f4cb5eaf1ad5294ed22b968f5e9586",
+  "artifactSha256": "13ffdd03e2d011df0b78eab9cc6e54d21fc37a3237f695a571b983adca409c2e",
+  "moduleSha256": "13ffdd03e2d011df0b78eab9cc6e54d21fc37a3237f695a571b983adca409c2e",
   "pin": "0.16.4",
   "lanes": [
     {
@@ -14,12 +14,12 @@
     {
       "lane": "wasmedge",
       "runs": 7,
-      "durationMs": 345
+      "durationMs": 502
     },
     {
       "lane": "docker-wasmedge",
       "runs": 7,
-      "durationMs": 2998
+      "durationMs": 2695
     }
   ],
   "cases": [

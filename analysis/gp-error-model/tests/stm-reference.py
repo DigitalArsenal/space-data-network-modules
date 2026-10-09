@@ -304,6 +304,13 @@ def main():
                              v1=list(v1), stm=list(kepler_stm(arc, dt).flatten())))
         lam.append(dict(set=name, targets=rows))
     out['lambert'] = lam
+
+    # ── axes: leo-b's RTN rows to leo's at leo's epoch (TEME, both SGP4 states there) ──
+    xa = teme(satrec(sets['leo']), 0.0)
+    minutes_b = (parse(sets['leo']['epoch']) - parse(sets['leo-b']['epoch'])).total_seconds() / 60.0
+    xb = teme(satrec(sets['leo-b']), minutes_b)
+    rot = rtn_rows(xa[:3], xa[3:]) @ rtn_rows(xb[:3], xb[3:]).T
+    out['axes'] = {'leoBToLeoAtLeoEpoch': list(rot.flatten())}
     with open(os.path.join(HERE, 'stm-reference.json'), 'w') as f:
         json.dump(out, f, indent=1)
         f.write('\n')

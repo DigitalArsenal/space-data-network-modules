@@ -175,6 +175,31 @@ test('map_covariance: at t0 the covariance is returned unchanged; a target befor
   }
 });
 
+test('map_covariance axesSet: the input covariance is read in another set\'s RTN axes at t0', async (t) => {
+  // An RTN covariance in leo-b's axes at leo's epoch, mapped along leo's arc to
+  // leo's own axes at t0 (zero time): the rotation between the two RTN frames,
+  // from the reference states of tests/stm-reference.json (TEME, python-sgp4).
+  const s = ref.sets.leo, b = ref.sets['leo-b'];
+  const c0 = ref.sgp4[0].covariance;
+  const out = await call(t, 'map_covariance', [elements('leo', 'leo-b'), json('options', { requests: [
+    { norad: 6251, set: s.EPOCH, axesSet: b.EPOCH, covariance: c0, to: [s.EPOCH], method: 'sgp4' },
+    { norad: 6251, set: s.EPOCH, covariance: c0, to: [s.EPOCH], method: 'sgp4' }] })]);
+  const [rotated, same] = out.results.map((r) => r.targets[0].covariance);
+  assert.equal(out.results[0].axesSet, b.EPOCH);
+  assert.ok(relative(same, c0) < 1e-12);
+  const rot = ref.axes.leoBToLeoAtLeoEpoch;  // 3x3, leo-b RTN -> leo RTN
+  const B = Array.from({ length: 36 }, (_, k) => { const i = Math.floor(k / 6), j = k % 6; return (i < 3) === (j < 3) ? rot[(i % 3) * 3 + (j % 3)] : 0; });
+  const full = Array(36).fill(0);
+  for (let a = 0, q = 0; a < 6; ++a) for (let c = 0; c <= a; ++c, ++q) full[6 * a + c] = full[6 * c + a] = c0[q];
+  const mul = (x, y) => Array.from({ length: 36 }, (_, k) => { const i = Math.floor(k / 6), j = k % 6; let v = 0; for (let m = 0; m < 6; ++m) v += x[6 * i + m] * y[6 * m + j]; return v; });
+  const tr = (x) => Array.from({ length: 36 }, (_, k) => x[6 * (k % 6) + Math.floor(k / 6)]);
+  const want = mul(mul(B, full), tr(B));
+  const lower = [];
+  for (let a = 0; a < 6; ++a) for (let c = 0; c <= a; ++c) lower.push(want[6 * a + c]);
+  assert.ok(relative(rotated, lower) < 1e-9, `rotated: ${relative(rotated, lower)}`);
+  assert.ok(relative(rotated, c0) > 1e-4, 'the two sets\' axes differ');
+});
+
 test('screening_cases: Foster Pc in closed form for zero miss, and a polar-grid integral for an offset anisotropic pair', async (t) => {
   const s = 0.01, R = 0.02;  // km: 10 m per axis, 20 m hard body
   const iso = [s * s, 0, s * s, 0, 0, s * s];
