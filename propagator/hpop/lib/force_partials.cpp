@@ -234,12 +234,12 @@ double density(const Vec3& r,double jd,const ForceModelSet& f,const EarthAxes& a
             switch(f.drag.model){
                 case DragModelType::Exponential:return exponentialAtmosphereDensity(alt);
                 case DragModelType::USSA1976:return computeUSSA1976(alt).density;
-                case DragModelType::JB2008:return computeJB2008(fixed,atmosphereJD,weather).density;
+                case DragModelType::JB2008:return JB2008DensityAt(r,jd,atmosphereJD,axes,weather);
                 case DragModelType::DTM2020:return computeDTM2020(fixed,atmosphereJD,weather).density;
                 default:{AtmosphereConfig c;c.minAltitude=f.drag.minAltitude;c.maxAltitude=f.drag.maxAltitude;c.coRotatingAtmosphere=f.drag.coRotatingAtmosphere;c.includeWinds=f.drag.includeWinds;return computeNRLMSISE00(fixed,atmosphereJD,weather,c).density;}
             }
         case DragModelType::JB2008:return JB2008DensityAt(r,jd,atmosphereJD,axes,weather);
-        case DragModelType::Jacchia70:return Jacchia70DensityAt(r,jd,atmosphereJD,axes,weather);
+        case DragModelType::JacchiaRoberts:return JacchiaRobertsDensityAt(r,jd,atmosphereJD,axes,weather);
         case DragModelType::DTM2020:return computeDTM2020(fixed,atmosphereJD,weather).density;
     }
     return 0;

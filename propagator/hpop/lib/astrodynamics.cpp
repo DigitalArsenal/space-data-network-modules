@@ -11,6 +11,8 @@
 #include "ephemeris.h"
 #include "atmosphere.h"
 #include "shadow.h"
+#include "jb2008.h"
+#include "time_convert.h"
 #include <cmath>
 #include <stdexcept>
 #include <cstring>
@@ -4927,96 +4929,35 @@ AtmosphericDensity computeNRLMSISE00(
     return result;
 }
 
+// Jacchia-Bowman 2008 (lib/jb2008.h, the port of Orekit's JB2008, Bowman
+// et al., AIAA 2008-6438) at an Earth-fixed point. The Sun is put in the
+// axes EarthFixedForDensity uses for callers that pass no axes (GMST about
+// the GCRF z axis), so the hour angle is consistent for those callers; the
+// force path evaluates ForceModel::JB2008DensityAt with the field's Earth
+// orientation instead. Drivers: F107/F107a (F10, F10B), S107/S107a,
+// M107/M107a, Y107/Y107a and dTc (DSTDTC) of `weather`. Until 2026-10-08
+// this function was a single-species stand-in, not the published model.
 AtmosphericDensity computeJB2008(
     const Vec3& position,
     double jd,
     const SpaceWeatherData& weather)
 {
     AtmosphericDensity result;
-
-    // SIMPLIFIED APPROXIMATION of Jacchia-Bowman 2008 — NOT the full
-    // JB2008 coefficient model (Bowman et al., AIAA 2008-6438). This
-    // implementation only mimics the exospheric-temperature response to
-    // the S10.7/M10.7/Y10.7 indices and uses a single-species barometric
-    // profile from 120 km. Do not use where validated JB2008 densities
-    // are required; prefer NRLMSISE00 (full model, vendored).
-
-    double lat, lon, alt;
+    double lat = 0, lon = 0, alt = 0;
     ecefToGeodetic(position, lat, lon, alt);
-
+    result.altitude = alt;
     result.latitude = lat;
     result.longitude = lon;
-    result.altitude = alt;
-    result.localSolarTime = computeLocalSolarTime(lon, jd);
-
-    if (alt > 2500 || alt < 90) {
-        result.density = (alt < 90) ? computeUSSA1976(alt).density : 0;
-        return result;
-    }
-
-    // Base exospheric temperature from JB2008
-    double Tc = weather.dTc;  // Temperature correction from space weather
-    double S10 = weather.S107;
-    double M10 = weather.M107;
-    double Y10 = weather.Y107;
-    double F10 = weather.F107;
-    double F10B = weather.F107a;
-
-    // Solar activity temperature (JB2008 Eq. 14)
-    double dTc_solar = 0.0;
-    if (S10 > 0 && M10 > 0 && Y10 > 0) {
-        double Fbar = 0.5 * (F10 + F10B);
-        double S10bar = 0.5 * (S10 + weather.S107);  // Would need 81-day avg
-        dTc_solar = 28.0 * (S10 - 75.0) / 100.0
-                  + 14.0 * (M10 - 75.0) / 100.0
-                  + 14.0 * (Y10 - 75.0) / 100.0;
-    } else {
-        dTc_solar = 28.0 * (F10 - 75.0) / 100.0;
-    }
-
-    // Geomagnetic temperature contribution
-    double Dst = weather.Dst;
-    double dTc_geomag = 0.0;
-    if (weather.isStorm) {
-        dTc_geomag = -3.0 * Dst / 100.0;  // Storm time heating
-    }
-
-    // Total exospheric temperature
-    double Tinf = 900.0 + dTc_solar + dTc_geomag + Tc;
-
-    // Diurnal variation
-    double lst = result.localSolarTime;
-    double tau = (lst - 14.0) * PI / 12.0;  // Peak at 14:00 local time
-    double n_lat = std::cos(lat);
-    double Td = Tinf * (1.0 + 0.28 * n_lat * std::cos(tau));
-
-    result.temperature = Td;
-
-    // Density from Jacchia diffusion model
-    double T0 = 188.0;
-    double z0 = 120.0;
-    double sigma = 0.02;
-    double Tz = Tinf - (Tinf - T0) * std::exp(-sigma * (alt - z0));
-
-    // Base density at 120 km (kg/m^3)
-    double rho120 = 2.0e-8;
-
-    // Barometric formula with variable temperature
-    double g0 = 9.80665;           // m/s^2
-    double M = 28.0e-3;            // Mean molecular mass (kg/mol)
-    double R = 8.31446;            // J/(mol·K)
-
-    // Scale height H = R*T/(M*g): result is in meters, divide by 1000 for km
-    // (alt is in km). For Tz ~ 1000 K this gives H ~ 30 km.
-    double H = R * Tz / (M * g0) / 1000.0;  // Scale height in km
-    result.density = rho120 * std::exp(-(alt - 120.0) / H);
-
-    // Apply solar/geomagnetic factors
-    double F10_factor = 1.0 + 0.3 * (F10 - 150.0) / 100.0;
-    result.density *= F10_factor;
-
-    result.scaleHeight = H;
-
+    const EphemerisState sun = getSunPosition(jd);
+    if (!sun.valid) return result;
+    const double theta = timesys::ut1ToGmst(jd), c = std::cos(theta), s = std::sin(theta);
+    const Vec3 sunFixed(c * sun.position.x + s * sun.position.y, -s * sun.position.x + c * sun.position.y, sun.position.z);
+    double sunLat = 0, sunLon = 0, sunAlt = 0;
+    ecefToGeodetic(sunFixed, sunLat, sunLon, sunAlt);
+    const jb2008::Inputs in{weather.F107, weather.F107a, weather.S107, weather.S107a,
+                            weather.M107, weather.M107a, weather.Y107, weather.Y107a, weather.dTc};
+    result.density = jb2008::density(jd - 2400000.5, sunLon, sunLat, lon, lat, alt * 1000.0, in);
+    result.localSolarTime = std::fmod((lon - sunLon) * 12.0 / PI + 12.0 + 48.0, 24.0);
     return result;
 }
 

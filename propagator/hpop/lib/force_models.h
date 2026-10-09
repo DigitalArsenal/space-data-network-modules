@@ -241,7 +241,7 @@ enum class DragModelType {
     NRLMSISE00,     ///< NRLMSISE-00 empirical model
     JB2008,         ///< Jacchia-Bowman 2008
     DTM2020,        ///< Drag Temperature Model 2020
-    Jacchia70       ///< Jacchia 1970 (Roberts' evaluation, lib/jacchia_roberts.h)
+    JacchiaRoberts  ///< Jacchia-Roberts (Roberts 1971, J71 constants; lib/jacchia_roberts.h)
 };
 
 /// Atmospheric drag configuration
@@ -382,13 +382,13 @@ Vec3 JB2008(const Vec3& position, const Vec3& velocity, double jd,
 double JB2008DensityAt(const Vec3& position, double jdTdb, double jdUtc,
                        const EarthAxes& axes, const SpaceWeatherData& weather);
 
-/// Jacchia 1970 (Jacchia-Roberts; lib/jacchia_roberts.h, ported from NASA
+/// Jacchia-Roberts (lib/jacchia_roberts.h, ported from NASA
 /// GMAT) mass density (kg/m^3) at a GCRF position (km): WGS84 geodetic
 /// height and latitude, the point and the true Sun in the given Earth-fixed
 /// axes, UTC from jdUtc; drivers from `weather`: F10.7 of the previous day
 /// (F107), the 81-day centred average of the previous day (f107aPreviousDay,
 /// else F107a) and Kp 6.7 h earlier (kpLag67h, else Kp).
-double Jacchia70DensityAt(const Vec3& position, double jdTdb, double jdUtc,
+double JacchiaRobertsDensityAt(const Vec3& position, double jdTdb, double jdUtc,
                           const EarthAxes& axes, const SpaceWeatherData& weather);
 
 /// Get JB2008 density

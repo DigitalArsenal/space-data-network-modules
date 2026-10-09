@@ -129,7 +129,7 @@ public:
         out.F107=yesterday->second.f107Obs;out.F107a=today->second.f107ObsCentred81;out.Ap=today->second.apDaily;
         const int slot=std::min(7,std::max(0,int((mjd-double(day))*8)));
         out.Kp=out.kp3h=today->second.kp[slot];out.epoch=jdUtc;
-        // Jacchia 1970: Kp 6.7 h earlier, and the previous day's centred F10.7.
+        // Jacchia-Roberts: Kp 6.7 h earlier, and the previous day's centred F10.7.
         out.f107aPreviousDay=yesterday->second.f107ObsCentred81;
         const double lagged=mjd-6.7/24.0;const long lagDay=long(std::floor(lagged));
         const auto kpDay=days.find(lagDay);
@@ -363,11 +363,11 @@ bool parseForces(const PRWForceConfiguration* in,double epoch,bool hasEarthOrien
             if(out.useDrag&&!hasEarthOrientation)return prwError(error,"eop-data-required: JB2008 is evaluated in Earth-fixed axes; supply earth_orientation.");
             if(in->WEATHER())return prwError(error,"invalid-weather: JB2008 reads the jb2008_indices input; omit WEATHER.");
             out.dragModel=ForceModel::DragModelType::JB2008;break;
-        // Jacchia 1970 (lib/jacchia_roberts.h), also Earth-fixed; drivers from
+        // Jacchia-Roberts (lib/jacchia_roberts.h), also Earth-fixed; drivers from
         // WEATHER or the space_weather input like NRLMSISE-00.
-        case prwAtmosphereFamily::JACCHIA_70:
-            if(out.useDrag&&!hasEarthOrientation)return prwError(error,"eop-data-required: Jacchia 1970 is evaluated in Earth-fixed axes; supply earth_orientation.");
-            out.dragModel=ForceModel::DragModelType::Jacchia70;break;
+        case prwAtmosphereFamily::JACCHIA_ROBERTS:
+            if(out.useDrag&&!hasEarthOrientation)return prwError(error,"eop-data-required: Jacchia-Roberts is evaluated in Earth-fixed axes; supply earth_orientation.");
+            out.dragModel=ForceModel::DragModelType::JacchiaRoberts;break;
         default:return prwError(error,"unsupported-atmosphere: Unknown atmosphere selection.");
     }
     out.drag.model=out.dragModel;out.explicitEpochContract=true;out.integrationEpochTDB=epoch;out.weather.epoch=timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(epoch)));

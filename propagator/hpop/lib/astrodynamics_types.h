@@ -874,7 +874,7 @@ struct SpaceWeatherData {
     /// real input (PRW KP_INDEX, an explicit JSON Kp, or ap_a[1] of
     /// plugin_set_solar_activity); negative when not supplied.
     double kp3h{-1.0};
-    /// Jacchia 1970's drivers from a daily table: the three-hour Kp 6.7 h
+    /// Jacchia-Roberts' drivers from a daily table: the three-hour Kp 6.7 h
     /// before the epoch and the 81-day centred F10.7 of the previous day;
     /// negative when not supplied (then Kp and F107a).
     double kpLag67h{-1.0};

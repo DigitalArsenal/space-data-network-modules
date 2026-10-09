@@ -11,8 +11,8 @@ Implements a high-fidelity numerical orbit propagator accounting for full geopot
 | `NRLMSISE00` | **Full model.** The real NRLMSISE-00 (Picone/Hedin/Drob, JGR 2002) via the public-domain Brodowski C port vendored in `third_party/nrlmsise00/`. Drag uses the gtd7d "effective mass density" (includes anomalous oxygen). Verified against the canonical 17-case output table shipped with the reference package. |
 | `USSA1976` | **Full lower-atmosphere model (0-86 km geometric).** US Standard Atmosphere 1976 with the proper geopotential-altitude layer formulation. Above 86 km it hands off to the Vallado exponential table (documented in code). |
 | `Exponential` | Piecewise-exponential model, Vallado *Fundamentals of Astrodynamics and Applications* 4th ed., Table 8-4. |
-| `JB2008` | **Full model on the PRW execution path** (`ATMOSPHERE_MODEL` `JB2008`): Bowman et al. (AIAA 2008-6438), `lib/jb2008.h`, a port of Orekit 13.1's JB2008 equal to it to 2e-14 (`tests/atmosphere_ports.test.mjs`), driven by the `jb2008_indices` input. The `ForceModel::JB2008()` function kept for direct C++ callers and the resident/legacy paths is still the **simplified stand-in** (single-species barometric profile), not the published model. |
-| `Jacchia70` | **Full model on the PRW execution path** (`ATMOSPHERE_MODEL` `JACCHIA_70`): Jacchia 1970 (SAO SR 313) as Roberts (1971) evaluates it, the GTDS/GMAT "Jacchia-Roberts"; `lib/jacchia_roberts.h`, a port of NASA GMAT's density functions, bit for bit (`tests/atmosphere_ports.test.mjs`). At equal exospheric temperature its density at 400-700 km is 2-3 times JB2008's. That is characteristic of Jacchia-Roberts: SatelliteToolbox.jl's independent `jr1971` example (2018-06-19 18:35 UT, 22 S 45 W, 700 km, F10.7 79/73.5, Kp 1.34) gives 9.68e-15 kg/m^3 against its JB2008's 5.19e-15; this port gives 1.31e-14 there (exospheric temperature 810 K against SatelliteToolbox's 832 K, with GMAT's semiannual and latitudinal factor 1.19). The 35 % between the two Jacchia-Roberts implementations is open (SR 313's tables). |
+| `JB2008` | **Full model on the PRW execution path** (`ATMOSPHERE_MODEL` `JB2008`): Bowman et al. (AIAA 2008-6438), `lib/jb2008.h`, a port of Orekit 13.1's JB2008 equal to it to 2e-14 (`tests/atmosphere_ports.test.mjs`), driven by the `jb2008_indices` input. The resident ABI runs the same model (label 4, published since 2026-10-08) on drivers held for the arc, set by `plugin_set_jb2008_indices([F10, F10B, S10, S10B, M10, M10B, Y10, Y10B, DSTDTC], 9)`; selecting it before they are set returns `HPOP_ERR_NOT_LOADED` (`tests/jb2008_abi.test.mjs`). `ForceModel::JB2008()` and `computeJB2008()` for direct C++ callers evaluate the same model (the single-species stand-in they used to be is gone). |
+| `JacchiaRoberts` | **Full model on the PRW execution path** (`ATMOSPHERE_MODEL` `JACCHIA_ROBERTS`, a VCM's JACCHIA_70): Jacchia's static diffusion model as Roberts (1971) integrates it in closed form, the GTDS/GMAT "Jacchia-Roberts", with Jacchia 1971's constants (SR 332; SR 313's inflection temperature and 100 km composition differ); `lib/jacchia_roberts.h`, a port of NASA GMAT's density functions, bit for bit. Independently of GMAT, the diffusion equations integrated numerically from 90 km reproduce its closed forms to 1.6e-4, and with Jacchia's own arctangent temperature profile in place of Roberts' exponential fit agree within 4.3 % at 200 km and 2 % from 300 km (`tests/atmosphere_ports.test.mjs`). At equal exospheric temperature its density at 400-700 km is 2-3 times JB2008's. SatelliteToolbox.jl's `jr1971` example (2018-06-19 18:35 UT, 22 S 45 W, 700 km, F10.7 79/73.5, Kp 1.34) gives 9.68e-15 kg/m^3, 26 % below this port's 1.31e-14 although its exospheric temperature is 22 K higher; since the port reproduces the model's own equations, the difference is on SatelliteToolbox's side and is not pursued further. |
 | `DTM2020` | **Simplified approximation only** — mimics the DTM2020 F30/Hp temperature response. NOT the published DTM2020 spherical-harmonic model. |
 | `HarrisPriester` | Harris-Priester diurnal-bulge table (100-1000 km), with the apex taken from the Sun direction; outside the table the model declines and drag is zero. Selectable as `forces.dragModel` `HARRIS_PRIESTER` and the PRW `HARRIS_PRIESTER` family. |
 | `GOST2004` | Enum placeholder only; not implemented and not selectable. |
@@ -87,7 +87,7 @@ axes and the built-in field was completed past degree 4; see
 
 ### Drag frame and inputs
 
-NRLMSISE-00 (and the JB2008/DTM2020 stand-ins) take an Earth-fixed position.
+NRLMSISE-00, JB2008 and the DTM2020 stand-in take an Earth-fixed position.
 Drag uses the field's Earth-fixed axes (above): ITRF from the
 `earth_orientation` rows when supplied. The geodetic conversion is WGS84,
 exact to a nanometre against ERFA `eraGc2gd`. Local solar time is the mean
@@ -213,7 +213,7 @@ field and an implementation checked against Orekit 13.1 or GMAT
   rotated by the IAU 2000 frame bias (`eraBp00`) on the way in and out,
   with covariances, STMs, impulses and inertial burn directions.
 - **Geopotential** EGM96 or EGM2008 with "mmZ,nnT" truncation (above).
-- **Drag** NRLMSISE-00, JB2008 (`jb2008_indices`) or Jacchia 1970 (WEATHER
+- **Drag** NRLMSISE-00, JB2008 (`jb2008_indices`) or Jacchia-Roberts (WEATHER
   or `space_weather`; F10.7 of the previous day and its 81-day centred
   average, Kp 6.7 h earlier); `DRAG_AREA_OVER_MASS_RATE_M2_KG_S` is BDOT,
   Cd*A/m growing linearly from the initial epoch.
@@ -404,7 +404,8 @@ That covers:
   requests for each epoch alone; the plain path through LEO penumbrae at
   300 s steps; backward requests on forward-only integrators refused, in
   `tests/prw_sequence.test.mjs`.
-- The JB2008 and Jacchia 1970 ports against Orekit and GMAT in
+- The JB2008 and Jacchia-Roberts ports against Orekit and GMAT, and
+  Jacchia-Roberts against the diffusion equations integrated numerically, in
   `tests/atmosphere_ports.test.mjs`; their PRW inputs in
   `tests/prw_atmospheres.test.mjs`; dynamic parameters and EME2000 in
   `tests/prw_parameters.test.mjs`.

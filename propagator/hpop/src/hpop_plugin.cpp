@@ -53,6 +53,7 @@ static IntegrationMethod g_integratorType = IntegrationMethod::RK78;
 static bool g_analyticSTM = true;
 static ForceModel::DensityGradient g_densityGradient = ForceModel::DensityGradient::Neglected;
 static SpaceWeatherData g_weather;
+static bool g_jb2008Indices = false;  // plugin_set_jb2008_indices was called
 
 // ABI wind mode (plugin_set_drag_options): 0 off, 1 HWM14 total, 2 quiet
 // time. Mode 1 adds the DWM07 disturbance winds only while a 3-hour ap is
@@ -1018,6 +1019,7 @@ int plugin_init() {
 
     g_integratorType = IntegrationMethod::RK78;
     g_weather = SpaceWeatherData();
+    g_jb2008Indices = false;
     g_state = StateVector();
 
     // Free any existing ephemeris/burn/arc memory and clear entities
@@ -1746,6 +1748,11 @@ int plugin_set_atmosphere_model(int modelEnum) {
     if (atmosphereImplementationOf(label) != AtmosphereImplementation::Published) {
         return HPOP_ERR_NOT_IMPLEMENTED;
     }
+    // JB2008 has drivers of its own; refuse it until they are supplied rather
+    // than run it on placeholders.
+    if (label == AtmosphereModelType::JB2008 && !g_jb2008Indices) {
+        return HPOP_ERR_NOT_LOADED;
+    }
     const ForceModel::DragModelType drag = dragModelForLabel(label);
     g_forceSet.dragModel = drag;
     g_forceSet.drag.model = drag;
@@ -1780,6 +1787,28 @@ const char* plugin_get_atmosphere_model_name(int modelEnum) {
 const char* plugin_get_atmosphere_model_provenance(int modelEnum) {
     if (modelEnum < 0 || modelEnum >= kAtmosphereLabelCount) return "";
     return atmosphereModelProvenance(kAtmosphereLabels[modelEnum]);
+}
+
+/// JB2008's drivers, held for the whole arc like plugin_set_solar_activity:
+/// [F10, F10B, S10, S10B, M10, M10B, Y10, Y10B, DSTDTC] (the SET SOLFSMY
+/// values at the lags JB2008 prescribes, and DTCFILE's temperature change
+/// in kelvin). F10 and F10B are the F10.7 and its 81-day centred average
+/// that plugin_set_solar_activity also writes. Required before
+/// plugin_set_atmosphere_model(4).
+/// @return HPOP_OK, or HPOP_ERR_BAD_ARGUMENT
+int plugin_set_jb2008_indices(const double* values, int count) {
+    if (!values || count != 9) return HPOP_ERR_BAD_ARGUMENT;
+    for (int i = 0; i < 9; ++i)
+        if (!std::isfinite(values[i]) || (i < 8 && !(values[i] > 0.0))) return HPOP_ERR_BAD_ARGUMENT;
+    g_weather.F107 = values[0];  g_weather.F107a = values[1];
+    g_weather.S107 = values[2];  g_weather.S107a = values[3];
+    g_weather.M107 = values[4];  g_weather.M107a = values[5];
+    g_weather.Y107 = values[6];  g_weather.Y107a = values[7];
+    g_weather.dTc = values[8];
+    g_forceSet.weather = g_weather;
+    g_jb2008Indices = true;
+    g_configVersion++;
+    return HPOP_OK;
 }
 
 /// Set solar activity indices for atmosphere models.
@@ -2210,27 +2239,12 @@ int plugin_get_acceleration_breakdown(double jd, double* outPtr) {
     if (g_forceSet.useThirdBody)
         thirdBody = ForceModel::ThirdBody(g_state.position, jd, g_forceSet.thirdBody);
 
-    if (g_forceSet.useDrag) {
-        switch (g_forceSet.dragModel) {
-            case ForceModel::DragModelType::NRLMSISE00:
-                drag = ForceModel::NRLMSISE00(g_state.position, g_state.velocity, jd,
-                    g_forceSet.weather, g_forceSet.drag, g_forceSet.nrlmsise00);
-                break;
-            case ForceModel::DragModelType::JB2008:
-                drag = ForceModel::JB2008(g_state.position, g_state.velocity, jd,
-                    g_forceSet.weather, g_forceSet.drag, g_forceSet.jb2008);
-                break;
-            case ForceModel::DragModelType::DTM2020:
-                drag = ForceModel::DTM2020(g_state.position, g_state.velocity, jd,
-                    g_forceSet.weather, g_forceSet.drag, g_forceSet.dtm2020);
-                break;
-            case ForceModel::DragModelType::Exponential:
-            default:
-                drag = ForceModel::AtmosphericDragExponential(g_state.position, g_state.velocity,
-                    g_forceSet.drag.mass, g_forceSet.drag.area, g_forceSet.drag.Cd);
-                break;
-        }
-    }
+    // The integrator's own drag dispatch, so every model (Harris-Priester and
+    // USSA1976 used to fall through to the exponential here) and the BDOT
+    // rate are reported as integrated.
+    if (g_forceSet.useDrag)
+        drag = ForceModel::DragAccelerationWith(g_state.position, g_state.velocity, jd,
+            g_forceSet, ForceModel::DragAt(jd, g_forceSet));
 
     if (g_forceSet.useSRP)
         srp = ForceModel::SolarRadiation(g_state.position, sunPos, g_forceSet.srp);
@@ -3032,6 +3046,7 @@ void plugin_destroy() {
     g_forceSet = ForceModel::ForceModelSet();
     g_integratorConfig = IntegratorConfig();
     g_weather = SpaceWeatherData();
+    g_jb2008Indices = false;
     g_segmentSets.clear();
     g_nextSegmentSetHandle = 1u;
     g_retentionBehindDays = 1e30;

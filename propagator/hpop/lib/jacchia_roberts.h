@@ -1,15 +1,25 @@
-// jacchia_roberts.h - Jacchia 1970 thermospheric density, Roberts' evaluation
+// jacchia_roberts.h - Jacchia-Roberts thermospheric density
 // =============================================================================
-// Jacchia, "New Static Models of the Thermosphere and Exosphere with
-// Empirical Temperature Profiles", SAO Special Report 313 (1970): the
-// exospheric temperature from F10.7 (Tc = 379 + 3.24 F10.7bar + 1.3 (F10.7 -
-// F10.7bar)), its diurnal variation and the geomagnetic term in Kp, and the
-// diffusion profile above 90 km; with the semiannual and seasonal-latitudinal
-// corrections. Roberts, "An Analytic Model for Upper Atmosphere Densities
-// Based upon Jacchia's 1970 Models", Celestial Mechanics 4 (1971) 368-377,
-// integrates J70's profile in closed form (90-125 km) and with Jacchia's
-// constituent polynomials above. This is the J70 evaluation NASA GTDS and
-// GMAT use ("Jacchia-Roberts").
+// Jacchia's static diffusion model (SAO Special Reports 313, 1970, and 332,
+// 1971): the exospheric temperature from F10.7 (Tc = 379 + 3.24 F10.7bar +
+// 1.3 (F10.7 - F10.7bar)), its diurnal variation and the geomagnetic term in
+// Kp, and the diffusion profile above 90 km; with the semiannual and
+// seasonal-latitudinal corrections. Roberts, "An Analytic Model for Upper
+// Atmosphere Densities Based upon Jacchia's 1970 Models", Celestial Mechanics
+// 4 (1971) 368-377, integrates the profile in closed form, replacing
+// Jacchia's arctangent temperature profile above 125 km by an exponential
+// one fitted to it. This is the evaluation NASA GTDS and GMAT use
+// ("Jacchia-Roberts"), and its constants are Jacchia 1971's: the inflection
+// temperature Tx = 371.6678 + 0.0518806 Tinf - 294.3505 exp(-0.00216222 Tinf)
+// and 27.64 for the mean molecular mass at 100 km (SR 313 has Tx = 444.3807
+// + 0.02385 Tinf - 392.8292 exp(-0.0021357 Tinf) and 28.15).
+//
+// Checked independently (tests/atmosphere_ports_native.cpp, "integrate"):
+// the diffusion equations integrated numerically from 90 km with the same
+// constants reproduce this file to 0.02 % with Roberts' temperature profile,
+// and to 4.3 % (2 % from 300 km) with Jacchia's arctangent profile
+// (Tinf 700-1500 K, 200-500 km), so the closed forms and the fit are what
+// the model claims.
 //
 // A C++ port of the density functions of NASA GMAT's
 // src/base/solarsys/JacchiaRobertsAtmosphere.cpp (Copyright (c) 2002-2026

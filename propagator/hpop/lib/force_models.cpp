@@ -555,7 +555,7 @@ AtmosphereModelType AtmosphereModelForDrag(DragModelType model) {
         case DragModelType::NRLMSISE00:     return AtmosphereModelType::NRLMSISE00;
         case DragModelType::JB2008:         return AtmosphereModelType::JB2008;
         case DragModelType::DTM2020:        return AtmosphereModelType::DTM2020;
-        case DragModelType::Jacchia70:      break;  // force-set path only (DragAccelerationWith)
+        case DragModelType::JacchiaRoberts:      break;  // force-set path only (DragAccelerationWith)
     }
     return AtmosphereModelType::NRLMSISE00;
 }
@@ -602,6 +602,9 @@ Vec3 AtmosphericDrag(const Vec3& position, const Vec3& velocity, double jd,
     if (alt < config.minAltitude || alt > config.maxAltitude) {
         return Vec3();
     }
+
+    // JB2008 needs the Sun in the same Earth-fixed axes as the point.
+    if (config.model == DragModelType::JB2008) return JB2008(position, velocity, jd, weather, config, JB2008Config(), axes);
 
     DragConfig dragCfg;
     dragCfg.mass = config.mass;
@@ -699,43 +702,33 @@ double JB2008DensityAt(const Vec3& position, double jdTdb, double jdUtc,
     return jb2008::density(jdUtc - 2400000.5, sunLon, sunLat, lon, lat, alt * 1000.0, in);
 }
 
+// Drag from a density at the point: the air's velocity (co-rotation and
+// winds as configured, in the same axes) and 1/2 rho v^2 Cd A/m along -v_rel.
+static Vec3 DragFromDensity(double rho, const Vec3& position, const Vec3& velocity, double jdUt,
+                     const EarthAxes& axes, const DragForceConfig& drag,
+                     const SpaceWeatherData& weather) {
+    const Vec3 vRel = relativeAtmosphereVelocity(position, velocity, jdUt, axes,
+        drag.coRotatingAtmosphere, drag.includeWinds, &weather, drag.windDisturbance);
+    const double vRelMag = vRel.magnitude();
+    if (rho < 1e-20 || vRelMag < 1e-6) return Vec3();
+    const double vRelMs = vRelMag * 1000.0;
+    return vRel.normalized() * (-0.5 * rho * vRelMs * vRelMs * drag.Cd * drag.area / drag.mass * 1e-3);
+}
+
+// The published model (JB2008DensityAt), on the given axes or GMST axes.
+// The Sun is taken at jd as given (UTC here; 69 s from TDB moves it 0.0008
+// degrees).
 Vec3 JB2008(const Vec3& position, const Vec3& velocity, double jd,
             const SpaceWeatherData& weather, const DragForceConfig& dragConfig,
-            const JB2008Config& jb2008Config, const EarthAxes* axes) {
+            const JB2008Config&, const EarthAxes* axes) {
     EarthAxes fallback;
     const EarthAxes& e = axesOr(axes, fallback, jd);
-    AtmosphericDensity density = computeJB2008(e.fixed(position), jd, weather);
-
-    if (density.density < 1e-20) {
-        return Vec3();
-    }
-
-    Vec3 vRel = relativeAtmosphereVelocity(
-        position,
-        velocity,
-        jd,
-        e,
-        dragConfig.coRotatingAtmosphere,
-        dragConfig.includeWinds,
-        &weather,
-        dragConfig.windDisturbance
-    );
-    double vRelMag = vRel.magnitude();
-
-    if (vRelMag < 1e-6) {
-        return Vec3();
-    }
-
-    double vRel_ms = vRelMag * 1000.0;
-    double B = dragConfig.Cd * dragConfig.area / dragConfig.mass;
-    double aMag = 0.5 * density.density * vRel_ms * vRel_ms * B * 1e-3;
-
-    return vRel.normalized() * (-aMag);
+    return DragFromDensity(JB2008DensityAt(position, jd, jd, e, weather), position, velocity, jd, e, dragConfig, weather);
 }
 
 AtmosphericDensity JB2008Density(const Vec3& position, double jd,
                                  const SpaceWeatherData& weather,
-                                 const JB2008Config& config) {
+                                 const JB2008Config&) {
     return computeJB2008(EarthFixedForDensity(position, jd), jd, weather);
 }
 
@@ -1743,19 +1736,12 @@ Vec3 DragAccelerationWith(const Vec3& position, const Vec3& velocity, double jd,
                                         weather, drag, &axes);
             break;
         case DragModelType::JB2008:
-        case DragModelType::Jacchia70: {
-            // The real JB2008 (lib/jb2008.h; the JB2008() function above is
-            // the legacy stand-in kept for its direct callers) and Jacchia
-            // 1970 (lib/jacchia_roberts.h).
+        case DragModelType::JacchiaRoberts: {
+            // JB2008 (lib/jb2008.h) and Jacchia-Roberts (lib/jacchia_roberts.h).
             const double rho = forceSet.dragModel == DragModelType::JB2008
                 ? JB2008DensityAt(position, jd, atmosphereJD, axes, weather)
-                : Jacchia70DensityAt(position, jd, atmosphereJD, axes, weather);
-            const Vec3 vRel = relativeAtmosphereVelocity(position, velocity, atmosphereJD, axes,
-                drag.coRotatingAtmosphere, drag.includeWinds, &weather, drag.windDisturbance);
-            const double vRelMag = vRel.magnitude();
-            if (rho < 1e-20 || vRelMag < 1e-6) break;
-            const double vRelMs = vRelMag * 1000.0;
-            totalAcc += vRel.normalized() * (-0.5 * rho * vRelMs * vRelMs * drag.Cd * drag.area / drag.mass * 1e-3);
+                : JacchiaRobertsDensityAt(position, jd, atmosphereJD, axes, weather);
+            totalAcc += DragFromDensity(rho, position, velocity, atmosphereJD, axes, drag, weather);
             break;
         }
         case DragModelType::DTM2020:
@@ -1770,7 +1756,7 @@ Vec3 DragAccelerationWith(const Vec3& position, const Vec3& velocity, double jd,
     return totalAcc;
 }
 
-double Jacchia70DensityAt(const Vec3& position, double jdTdb, double jdUtc,
+double JacchiaRobertsDensityAt(const Vec3& position, double jdTdb, double jdUtc,
                           const EarthAxes& axes, const SpaceWeatherData& weather) {
     double lat = 0, lon = 0, alt = 0;
     const Vec3 fixed = axes.fixed(position);

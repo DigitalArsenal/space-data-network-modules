@@ -1379,8 +1379,8 @@ AtmosphereImplementation atmosphereImplementationOf(AtmosphereModelType model) {
         case AtmosphereModelType::USSA1976:
         case AtmosphereModelType::NRLMSISE00:
         case AtmosphereModelType::HarrisPriester:
-            return AtmosphereImplementation::Published;
         case AtmosphereModelType::JB2008:
+            return AtmosphereImplementation::Published;
         case AtmosphereModelType::DTM2020:
         case AtmosphereModelType::GOST2004:
         default:
@@ -1413,8 +1413,9 @@ const char* atmosphereModelProvenance(AtmosphereModelType model) {
             return "Harris-Priester modified-exponential table, 100-1000 km, "
                    "mean solar activity";
         case AtmosphereModelType::JB2008:
-            return "not implemented: only a simplified exospheric-temperature "
-                   "stand-in exists, which is not the published coefficient model";
+            return "Jacchia-Bowman 2008 (Bowman et al., AIAA 2008-6438), port of "
+                   "Orekit 13.1's JB2008 (lib/jb2008.h); drivers from "
+                   "plugin_set_jb2008_indices";
         case AtmosphereModelType::DTM2020:
             return "not implemented: only a simplified stand-in exists, which is "
                    "not the published spherical-harmonic coefficient model";
