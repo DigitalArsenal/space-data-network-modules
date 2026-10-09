@@ -250,10 +250,11 @@ field and an implementation checked against Orekit 13.1 or GMAT
   whose burn state runs along the arc, still integrate each epoch from the
   initial state.
 
-A VCM's equinoctial covariance must be transformed to Cartesian (with its
-B/AGOM rows) by the caller; its single EOP point becomes daily
-`EARTH_ORIENTATION` rows; integrator settings, EDR and the weighted RMS are
-not propagation inputs.
+`analysis/vcm-adapter` reads a VCM into this request: its equinoctial
+covariance transformed exactly to Cartesian with the B, BDOT, AGOM and T rows
+as `DYNAMIC_PARAMETERS`, and its single EOP point as daily
+`EARTH_ORIENTATION` rows; it also writes a result back as a VCM. Integrator
+settings, EDR and the weighted RMS are not propagation inputs.
 
 ### Resident states and handles
 
