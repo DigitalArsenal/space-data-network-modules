@@ -45,6 +45,10 @@ struct PRWBatchResponse;
 struct PRWBatchResponseBuilder;
 struct PRWBatchResponseT;
 
+struct PRWEcom2;
+struct PRWEcom2Builder;
+struct PRWEcom2T;
+
 struct PRWInstance;
 struct PRWInstanceBuilder;
 struct PRWInstanceT;
@@ -886,37 +890,147 @@ enum class prwDynamicParameter : uint8_t {
   DRAG_AREA_OVER_MASS_RATE = 2,
   SRP_AREA_OVER_MASS = 3,
   IN_TRACK_ACCELERATION = 4,
+  /// ECOM2 coefficients (PRWEcom2), in their order there.
+  ECOM2_D0 = 5,
+  ECOM2_Y0 = 6,
+  ECOM2_B0 = 7,
+  ECOM2_D2_COS = 8,
+  ECOM2_D2_SIN = 9,
+  ECOM2_D4_COS = 10,
+  ECOM2_D4_SIN = 11,
+  ECOM2_B1_COS = 12,
+  ECOM2_B1_SIN = 13,
+  ECOM2_B3_COS = 14,
+  ECOM2_B3_SIN = 15,
   MIN = UNSPECIFIED,
-  MAX = IN_TRACK_ACCELERATION
+  MAX = ECOM2_B3_SIN
 };
 
-inline const prwDynamicParameter (&EnumValuesprwDynamicParameter())[5] {
+inline const prwDynamicParameter (&EnumValuesprwDynamicParameter())[16] {
   static const prwDynamicParameter values[] = {
     prwDynamicParameter::UNSPECIFIED,
     prwDynamicParameter::DRAG_AREA_OVER_MASS,
     prwDynamicParameter::DRAG_AREA_OVER_MASS_RATE,
     prwDynamicParameter::SRP_AREA_OVER_MASS,
-    prwDynamicParameter::IN_TRACK_ACCELERATION
+    prwDynamicParameter::IN_TRACK_ACCELERATION,
+    prwDynamicParameter::ECOM2_D0,
+    prwDynamicParameter::ECOM2_Y0,
+    prwDynamicParameter::ECOM2_B0,
+    prwDynamicParameter::ECOM2_D2_COS,
+    prwDynamicParameter::ECOM2_D2_SIN,
+    prwDynamicParameter::ECOM2_D4_COS,
+    prwDynamicParameter::ECOM2_D4_SIN,
+    prwDynamicParameter::ECOM2_B1_COS,
+    prwDynamicParameter::ECOM2_B1_SIN,
+    prwDynamicParameter::ECOM2_B3_COS,
+    prwDynamicParameter::ECOM2_B3_SIN
   };
   return values;
 }
 
 inline const char * const *EnumNamesprwDynamicParameter() {
-  static const char * const names[6] = {
+  static const char * const names[17] = {
     "UNSPECIFIED",
     "DRAG_AREA_OVER_MASS",
     "DRAG_AREA_OVER_MASS_RATE",
     "SRP_AREA_OVER_MASS",
     "IN_TRACK_ACCELERATION",
+    "ECOM2_D0",
+    "ECOM2_Y0",
+    "ECOM2_B0",
+    "ECOM2_D2_COS",
+    "ECOM2_D2_SIN",
+    "ECOM2_D4_COS",
+    "ECOM2_D4_SIN",
+    "ECOM2_B1_COS",
+    "ECOM2_B1_SIN",
+    "ECOM2_B3_COS",
+    "ECOM2_B3_SIN",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameprwDynamicParameter(prwDynamicParameter e) {
-  if (::flatbuffers::IsOutRange(e, prwDynamicParameter::UNSPECIFIED, prwDynamicParameter::IN_TRACK_ACCELERATION)) return "";
+  if (::flatbuffers::IsOutRange(e, prwDynamicParameter::UNSPECIFIED, prwDynamicParameter::ECOM2_B3_SIN)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesprwDynamicParameter()[index];
+}
+
+/// Solar radiation pressure model family. CANNONBALL uses the
+/// radiation-pressure coefficient and area-to-mass ratio of the force
+/// configuration; GNSS_BOX_WING is the a priori box-wing model of the
+/// spacecraft block in GNSS_BLOCK (Rodriguez-Solano, Hugentobler and
+/// Steigenberger 2012, Adv. Space Res. 49, doi:10.1016/j.asr.2012.01.016)
+/// under nominal yaw steering, with the mass INITIAL_MASS_KG.
+enum class prwRadiationPressureFamily : uint8_t {
+  CANNONBALL = 0,
+  GNSS_BOX_WING = 1,
+  NONE = 2,
+  MIN = CANNONBALL,
+  MAX = NONE
+};
+
+inline const prwRadiationPressureFamily (&EnumValuesprwRadiationPressureFamily())[3] {
+  static const prwRadiationPressureFamily values[] = {
+    prwRadiationPressureFamily::CANNONBALL,
+    prwRadiationPressureFamily::GNSS_BOX_WING,
+    prwRadiationPressureFamily::NONE
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwRadiationPressureFamily() {
+  static const char * const names[4] = {
+    "CANNONBALL",
+    "GNSS_BOX_WING",
+    "NONE",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwRadiationPressureFamily(prwRadiationPressureFamily e) {
+  if (::flatbuffers::IsOutRange(e, prwRadiationPressureFamily::CANNONBALL, prwRadiationPressureFamily::NONE)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwRadiationPressureFamily()[index];
+}
+
+/// GNSS spacecraft block, selecting the box-wing surfaces.
+enum class prwGnssSpacecraftBlock : uint8_t {
+  UNSPECIFIED = 0,
+  GPS_IIR = 1,
+  GPS_IIR_M = 2,
+  GPS_IIF = 3,
+  MIN = UNSPECIFIED,
+  MAX = GPS_IIF
+};
+
+inline const prwGnssSpacecraftBlock (&EnumValuesprwGnssSpacecraftBlock())[4] {
+  static const prwGnssSpacecraftBlock values[] = {
+    prwGnssSpacecraftBlock::UNSPECIFIED,
+    prwGnssSpacecraftBlock::GPS_IIR,
+    prwGnssSpacecraftBlock::GPS_IIR_M,
+    prwGnssSpacecraftBlock::GPS_IIF
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwGnssSpacecraftBlock() {
+  static const char * const names[5] = {
+    "UNSPECIFIED",
+    "GPS_IIR",
+    "GPS_IIR_M",
+    "GPS_IIF",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwGnssSpacecraftBlock(prwGnssSpacecraftBlock e) {
+  if (::flatbuffers::IsOutRange(e, prwGnssSpacecraftBlock::UNSPECIFIED, prwGnssSpacecraftBlock::GPS_IIF)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwGnssSpacecraftBlock()[index];
 }
 
 struct PRWInitT : public ::flatbuffers::NativeTable {
@@ -1705,6 +1819,178 @@ inline ::flatbuffers::Offset<PRWBatchResponse> CreatePRWBatchResponseDirect(
 
 ::flatbuffers::Offset<PRWBatchResponse> CreatePRWBatchResponse(::flatbuffers::FlatBufferBuilder &_fbb, const PRWBatchResponseT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct PRWEcom2T : public ::flatbuffers::NativeTable {
+  typedef PRWEcom2 TableType;
+  double D0_M_S2 = 0.0;
+  double Y0_M_S2 = 0.0;
+  double B0_M_S2 = 0.0;
+  double D2_COS_M_S2 = 0.0;
+  double D2_SIN_M_S2 = 0.0;
+  double D4_COS_M_S2 = 0.0;
+  double D4_SIN_M_S2 = 0.0;
+  double B1_COS_M_S2 = 0.0;
+  double B1_SIN_M_S2 = 0.0;
+  double B3_COS_M_S2 = 0.0;
+  double B3_SIN_M_S2 = 0.0;
+};
+
+/// ECOM2 empirical solar radiation pressure (Arnold et al. 2015, J. Geod. 89,
+/// doi:10.1007/s00190-015-0814-4, eq. 5), in m/s^2 in the D-Y-B frame,
+/// added to the a priori model and scaled by the visible Sun fraction.
+struct PRWEcom2 FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef PRWEcom2T NativeTableType;
+  typedef PRWEcom2Builder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_D0_M_S2 = 4,
+    VT_Y0_M_S2 = 6,
+    VT_B0_M_S2 = 8,
+    VT_D2_COS_M_S2 = 10,
+    VT_D2_SIN_M_S2 = 12,
+    VT_D4_COS_M_S2 = 14,
+    VT_D4_SIN_M_S2 = 16,
+    VT_B1_COS_M_S2 = 18,
+    VT_B1_SIN_M_S2 = 20,
+    VT_B3_COS_M_S2 = 22,
+    VT_B3_SIN_M_S2 = 24
+  };
+  double D0_M_S2() const {
+    return GetField<double>(VT_D0_M_S2, 0.0);
+  }
+  double Y0_M_S2() const {
+    return GetField<double>(VT_Y0_M_S2, 0.0);
+  }
+  double B0_M_S2() const {
+    return GetField<double>(VT_B0_M_S2, 0.0);
+  }
+  double D2_COS_M_S2() const {
+    return GetField<double>(VT_D2_COS_M_S2, 0.0);
+  }
+  double D2_SIN_M_S2() const {
+    return GetField<double>(VT_D2_SIN_M_S2, 0.0);
+  }
+  double D4_COS_M_S2() const {
+    return GetField<double>(VT_D4_COS_M_S2, 0.0);
+  }
+  double D4_SIN_M_S2() const {
+    return GetField<double>(VT_D4_SIN_M_S2, 0.0);
+  }
+  double B1_COS_M_S2() const {
+    return GetField<double>(VT_B1_COS_M_S2, 0.0);
+  }
+  double B1_SIN_M_S2() const {
+    return GetField<double>(VT_B1_SIN_M_S2, 0.0);
+  }
+  double B3_COS_M_S2() const {
+    return GetField<double>(VT_B3_COS_M_S2, 0.0);
+  }
+  double B3_SIN_M_S2() const {
+    return GetField<double>(VT_B3_SIN_M_S2, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<double>(verifier, VT_D0_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_Y0_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_B0_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_D2_COS_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_D2_SIN_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_D4_COS_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_D4_SIN_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_B1_COS_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_B1_SIN_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_B3_COS_M_S2, 8) &&
+           VerifyField<double>(verifier, VT_B3_SIN_M_S2, 8) &&
+           verifier.EndTable();
+  }
+  PRWEcom2T *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(PRWEcom2T *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<PRWEcom2> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEcom2T* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct PRWEcom2Builder {
+  typedef PRWEcom2 Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_D0_M_S2(double D0_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_D0_M_S2, D0_M_S2, 0.0);
+  }
+  void add_Y0_M_S2(double Y0_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_Y0_M_S2, Y0_M_S2, 0.0);
+  }
+  void add_B0_M_S2(double B0_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_B0_M_S2, B0_M_S2, 0.0);
+  }
+  void add_D2_COS_M_S2(double D2_COS_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_D2_COS_M_S2, D2_COS_M_S2, 0.0);
+  }
+  void add_D2_SIN_M_S2(double D2_SIN_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_D2_SIN_M_S2, D2_SIN_M_S2, 0.0);
+  }
+  void add_D4_COS_M_S2(double D4_COS_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_D4_COS_M_S2, D4_COS_M_S2, 0.0);
+  }
+  void add_D4_SIN_M_S2(double D4_SIN_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_D4_SIN_M_S2, D4_SIN_M_S2, 0.0);
+  }
+  void add_B1_COS_M_S2(double B1_COS_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_B1_COS_M_S2, B1_COS_M_S2, 0.0);
+  }
+  void add_B1_SIN_M_S2(double B1_SIN_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_B1_SIN_M_S2, B1_SIN_M_S2, 0.0);
+  }
+  void add_B3_COS_M_S2(double B3_COS_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_B3_COS_M_S2, B3_COS_M_S2, 0.0);
+  }
+  void add_B3_SIN_M_S2(double B3_SIN_M_S2) {
+    fbb_.AddElement<double>(PRWEcom2::VT_B3_SIN_M_S2, B3_SIN_M_S2, 0.0);
+  }
+  explicit PRWEcom2Builder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<PRWEcom2> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<PRWEcom2>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<PRWEcom2> CreatePRWEcom2(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    double D0_M_S2 = 0.0,
+    double Y0_M_S2 = 0.0,
+    double B0_M_S2 = 0.0,
+    double D2_COS_M_S2 = 0.0,
+    double D2_SIN_M_S2 = 0.0,
+    double D4_COS_M_S2 = 0.0,
+    double D4_SIN_M_S2 = 0.0,
+    double B1_COS_M_S2 = 0.0,
+    double B1_SIN_M_S2 = 0.0,
+    double B3_COS_M_S2 = 0.0,
+    double B3_SIN_M_S2 = 0.0) {
+  PRWEcom2Builder builder_(_fbb);
+  builder_.add_B3_SIN_M_S2(B3_SIN_M_S2);
+  builder_.add_B3_COS_M_S2(B3_COS_M_S2);
+  builder_.add_B1_SIN_M_S2(B1_SIN_M_S2);
+  builder_.add_B1_COS_M_S2(B1_COS_M_S2);
+  builder_.add_D4_SIN_M_S2(D4_SIN_M_S2);
+  builder_.add_D4_COS_M_S2(D4_COS_M_S2);
+  builder_.add_D2_SIN_M_S2(D2_SIN_M_S2);
+  builder_.add_D2_COS_M_S2(D2_COS_M_S2);
+  builder_.add_B0_M_S2(B0_M_S2);
+  builder_.add_Y0_M_S2(Y0_M_S2);
+  builder_.add_D0_M_S2(D0_M_S2);
+  return builder_.Finish();
+}
+
+struct PRWEcom2::Traits {
+  using type = PRWEcom2;
+  static auto constexpr Create = CreatePRWEcom2;
+};
+
+::flatbuffers::Offset<PRWEcom2> CreatePRWEcom2(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEcom2T *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct PRWInstanceT : public ::flatbuffers::NativeTable {
   typedef PRWInstance TableType;
   std::string MODULE_ID{};
@@ -2099,6 +2385,9 @@ struct PRWForceConfigurationT : public ::flatbuffers::NativeTable {
   bool HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false;
   uint16_t MAXIMUM_TESSERAL_DEGREE = 0;
   bool HAS_MAXIMUM_TESSERAL_DEGREE = false;
+  prwRadiationPressureFamily RADIATION_PRESSURE_MODEL = prwRadiationPressureFamily::CANNONBALL;
+  prwGnssSpacecraftBlock GNSS_BLOCK = prwGnssSpacecraftBlock::UNSPECIFIED;
+  std::unique_ptr<PRWEcom2T> ECOM2{};
   PRWForceConfigurationT() = default;
   PRWForceConfigurationT(const PRWForceConfigurationT &o);
   PRWForceConfigurationT(PRWForceConfigurationT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -2141,7 +2430,10 @@ struct PRWForceConfiguration FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Ta
     VT_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 56,
     VT_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 58,
     VT_MAXIMUM_TESSERAL_DEGREE = 60,
-    VT_HAS_MAXIMUM_TESSERAL_DEGREE = 62
+    VT_HAS_MAXIMUM_TESSERAL_DEGREE = 62,
+    VT_RADIATION_PRESSURE_MODEL = 64,
+    VT_GNSS_BLOCK = 66,
+    VT_ECOM2 = 68
   };
   prwGravitySelection GRAVITY_CHOICE() const {
     return static_cast<prwGravitySelection>(GetField<uint8_t>(VT_GRAVITY_CHOICE, 0));
@@ -2251,6 +2543,18 @@ struct PRWForceConfiguration FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Ta
   bool HAS_MAXIMUM_TESSERAL_DEGREE() const {
     return GetField<uint8_t>(VT_HAS_MAXIMUM_TESSERAL_DEGREE, 0) != 0;
   }
+  /// Solar radiation pressure model family (default: the cannonball).
+  prwRadiationPressureFamily RADIATION_PRESSURE_MODEL() const {
+    return static_cast<prwRadiationPressureFamily>(GetField<uint8_t>(VT_RADIATION_PRESSURE_MODEL, 0));
+  }
+  /// Spacecraft block; required when RADIATION_PRESSURE_MODEL is GNSS_BOX_WING.
+  prwGnssSpacecraftBlock GNSS_BLOCK() const {
+    return static_cast<prwGnssSpacecraftBlock>(GetField<uint8_t>(VT_GNSS_BLOCK, 0));
+  }
+  /// ECOM2 coefficients; absent means no ECOM2 term.
+  const PRWEcom2 *ECOM2() const {
+    return GetPointer<const PRWEcom2 *>(VT_ECOM2);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -2287,6 +2591,10 @@ struct PRWForceConfiguration FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Ta
            VerifyField<uint8_t>(verifier, VT_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, 1) &&
            VerifyField<uint16_t>(verifier, VT_MAXIMUM_TESSERAL_DEGREE, 2) &&
            VerifyField<uint8_t>(verifier, VT_HAS_MAXIMUM_TESSERAL_DEGREE, 1) &&
+           VerifyField<uint8_t>(verifier, VT_RADIATION_PRESSURE_MODEL, 1) &&
+           VerifyField<uint8_t>(verifier, VT_GNSS_BLOCK, 1) &&
+           VerifyOffset(verifier, VT_ECOM2) &&
+           verifier.VerifyTable(ECOM2()) &&
            verifier.EndTable();
   }
   PRWForceConfigurationT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2388,6 +2696,15 @@ struct PRWForceConfigurationBuilder {
   void add_HAS_MAXIMUM_TESSERAL_DEGREE(bool HAS_MAXIMUM_TESSERAL_DEGREE) {
     fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_HAS_MAXIMUM_TESSERAL_DEGREE, static_cast<uint8_t>(HAS_MAXIMUM_TESSERAL_DEGREE), 0);
   }
+  void add_RADIATION_PRESSURE_MODEL(prwRadiationPressureFamily RADIATION_PRESSURE_MODEL) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_RADIATION_PRESSURE_MODEL, static_cast<uint8_t>(RADIATION_PRESSURE_MODEL), 0);
+  }
+  void add_GNSS_BLOCK(prwGnssSpacecraftBlock GNSS_BLOCK) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_GNSS_BLOCK, static_cast<uint8_t>(GNSS_BLOCK), 0);
+  }
+  void add_ECOM2(::flatbuffers::Offset<PRWEcom2> ECOM2) {
+    fbb_.AddOffset(PRWForceConfiguration::VT_ECOM2, ECOM2);
+  }
   explicit PRWForceConfigurationBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2431,7 +2748,10 @@ inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfiguration(
     double DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 0.0,
     bool HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false,
     uint16_t MAXIMUM_TESSERAL_DEGREE = 0,
-    bool HAS_MAXIMUM_TESSERAL_DEGREE = false) {
+    bool HAS_MAXIMUM_TESSERAL_DEGREE = false,
+    prwRadiationPressureFamily RADIATION_PRESSURE_MODEL = prwRadiationPressureFamily::CANNONBALL,
+    prwGnssSpacecraftBlock GNSS_BLOCK = prwGnssSpacecraftBlock::UNSPECIFIED,
+    ::flatbuffers::Offset<PRWEcom2> ECOM2 = 0) {
   PRWForceConfigurationBuilder builder_(_fbb);
   builder_.add_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
   builder_.add_IN_TRACK_ACCELERATION_M_S2(IN_TRACK_ACCELERATION_M_S2);
@@ -2440,12 +2760,15 @@ inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfiguration(
   builder_.add_AREA_M2(AREA_M2);
   builder_.add_INITIAL_MASS_KG(INITIAL_MASS_KG);
   builder_.add_GRAVITATIONAL_PARAMETER(GRAVITATIONAL_PARAMETER);
+  builder_.add_ECOM2(ECOM2);
   builder_.add_EPHEMERIS_SOURCE(EPHEMERIS_SOURCE);
   builder_.add_WEATHER(WEATHER);
   builder_.add_THIRD_BODY_IDS(THIRD_BODY_IDS);
   builder_.add_MAXIMUM_TESSERAL_DEGREE(MAXIMUM_TESSERAL_DEGREE);
   builder_.add_MAXIMUM_ORDER(MAXIMUM_ORDER);
   builder_.add_MAXIMUM_DEGREE(MAXIMUM_DEGREE);
+  builder_.add_GNSS_BLOCK(GNSS_BLOCK);
+  builder_.add_RADIATION_PRESSURE_MODEL(RADIATION_PRESSURE_MODEL);
   builder_.add_HAS_MAXIMUM_TESSERAL_DEGREE(HAS_MAXIMUM_TESSERAL_DEGREE);
   builder_.add_HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
   builder_.add_HAS_IN_TRACK_ACCELERATION_M_S2(HAS_IN_TRACK_ACCELERATION_M_S2);
@@ -2502,7 +2825,10 @@ inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfigurationD
     double DRAG_AREA_OVER_MASS_RATE_M2_KG_S = 0.0,
     bool HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = false,
     uint16_t MAXIMUM_TESSERAL_DEGREE = 0,
-    bool HAS_MAXIMUM_TESSERAL_DEGREE = false) {
+    bool HAS_MAXIMUM_TESSERAL_DEGREE = false,
+    prwRadiationPressureFamily RADIATION_PRESSURE_MODEL = prwRadiationPressureFamily::CANNONBALL,
+    prwGnssSpacecraftBlock GNSS_BLOCK = prwGnssSpacecraftBlock::UNSPECIFIED,
+    ::flatbuffers::Offset<PRWEcom2> ECOM2 = 0) {
   auto THIRD_BODY_IDS__ = THIRD_BODY_IDS ? _fbb.CreateVector<int32_t>(*THIRD_BODY_IDS) : 0;
   auto EPHEMERIS_SOURCE__ = EPHEMERIS_SOURCE ? _fbb.CreateString(EPHEMERIS_SOURCE) : 0;
   return CreatePRWForceConfiguration(
@@ -2536,7 +2862,10 @@ inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfigurationD
       DRAG_AREA_OVER_MASS_RATE_M2_KG_S,
       HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S,
       MAXIMUM_TESSERAL_DEGREE,
-      HAS_MAXIMUM_TESSERAL_DEGREE);
+      HAS_MAXIMUM_TESSERAL_DEGREE,
+      RADIATION_PRESSURE_MODEL,
+      GNSS_BLOCK,
+      ECOM2);
 }
 
 ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfiguration(::flatbuffers::FlatBufferBuilder &_fbb, const PRWForceConfigurationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -7107,6 +7436,62 @@ inline ::flatbuffers::Offset<PRWBatchResponse> PRWBatchResponse::Pack(::flatbuff
       _ERROR_MESSAGE);
 }
 
+inline PRWEcom2T *PRWEcom2::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<PRWEcom2T>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void PRWEcom2::UnPackTo(PRWEcom2T *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = D0_M_S2(); _o->D0_M_S2 = _e; }
+  { auto _e = Y0_M_S2(); _o->Y0_M_S2 = _e; }
+  { auto _e = B0_M_S2(); _o->B0_M_S2 = _e; }
+  { auto _e = D2_COS_M_S2(); _o->D2_COS_M_S2 = _e; }
+  { auto _e = D2_SIN_M_S2(); _o->D2_SIN_M_S2 = _e; }
+  { auto _e = D4_COS_M_S2(); _o->D4_COS_M_S2 = _e; }
+  { auto _e = D4_SIN_M_S2(); _o->D4_SIN_M_S2 = _e; }
+  { auto _e = B1_COS_M_S2(); _o->B1_COS_M_S2 = _e; }
+  { auto _e = B1_SIN_M_S2(); _o->B1_SIN_M_S2 = _e; }
+  { auto _e = B3_COS_M_S2(); _o->B3_COS_M_S2 = _e; }
+  { auto _e = B3_SIN_M_S2(); _o->B3_SIN_M_S2 = _e; }
+}
+
+inline ::flatbuffers::Offset<PRWEcom2> CreatePRWEcom2(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEcom2T *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return PRWEcom2::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<PRWEcom2> PRWEcom2::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const PRWEcom2T* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const PRWEcom2T* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _D0_M_S2 = _o->D0_M_S2;
+  auto _Y0_M_S2 = _o->Y0_M_S2;
+  auto _B0_M_S2 = _o->B0_M_S2;
+  auto _D2_COS_M_S2 = _o->D2_COS_M_S2;
+  auto _D2_SIN_M_S2 = _o->D2_SIN_M_S2;
+  auto _D4_COS_M_S2 = _o->D4_COS_M_S2;
+  auto _D4_SIN_M_S2 = _o->D4_SIN_M_S2;
+  auto _B1_COS_M_S2 = _o->B1_COS_M_S2;
+  auto _B1_SIN_M_S2 = _o->B1_SIN_M_S2;
+  auto _B3_COS_M_S2 = _o->B3_COS_M_S2;
+  auto _B3_SIN_M_S2 = _o->B3_SIN_M_S2;
+  return CreatePRWEcom2(
+      _fbb,
+      _D0_M_S2,
+      _Y0_M_S2,
+      _B0_M_S2,
+      _D2_COS_M_S2,
+      _D2_SIN_M_S2,
+      _D4_COS_M_S2,
+      _D4_SIN_M_S2,
+      _B1_COS_M_S2,
+      _B1_SIN_M_S2,
+      _B3_COS_M_S2,
+      _B3_SIN_M_S2);
+}
+
 inline PRWInstanceT *PRWInstance::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<PRWInstanceT>();
   UnPackTo(_o.get(), _resolver);
@@ -7268,7 +7653,10 @@ inline PRWForceConfigurationT::PRWForceConfigurationT(const PRWForceConfiguratio
         DRAG_AREA_OVER_MASS_RATE_M2_KG_S(o.DRAG_AREA_OVER_MASS_RATE_M2_KG_S),
         HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(o.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S),
         MAXIMUM_TESSERAL_DEGREE(o.MAXIMUM_TESSERAL_DEGREE),
-        HAS_MAXIMUM_TESSERAL_DEGREE(o.HAS_MAXIMUM_TESSERAL_DEGREE) {
+        HAS_MAXIMUM_TESSERAL_DEGREE(o.HAS_MAXIMUM_TESSERAL_DEGREE),
+        RADIATION_PRESSURE_MODEL(o.RADIATION_PRESSURE_MODEL),
+        GNSS_BLOCK(o.GNSS_BLOCK),
+        ECOM2((o.ECOM2) ? new PRWEcom2T(*o.ECOM2) : nullptr) {
 }
 
 inline PRWForceConfigurationT &PRWForceConfigurationT::operator=(PRWForceConfigurationT o) FLATBUFFERS_NOEXCEPT {
@@ -7302,6 +7690,9 @@ inline PRWForceConfigurationT &PRWForceConfigurationT::operator=(PRWForceConfigu
   std::swap(HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S, o.HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
   std::swap(MAXIMUM_TESSERAL_DEGREE, o.MAXIMUM_TESSERAL_DEGREE);
   std::swap(HAS_MAXIMUM_TESSERAL_DEGREE, o.HAS_MAXIMUM_TESSERAL_DEGREE);
+  std::swap(RADIATION_PRESSURE_MODEL, o.RADIATION_PRESSURE_MODEL);
+  std::swap(GNSS_BLOCK, o.GNSS_BLOCK);
+  std::swap(ECOM2, o.ECOM2);
   return *this;
 }
 
@@ -7344,6 +7735,9 @@ inline void PRWForceConfiguration::UnPackTo(PRWForceConfigurationT *_o, const ::
   { auto _e = HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(); _o->HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = _e; }
   { auto _e = MAXIMUM_TESSERAL_DEGREE(); _o->MAXIMUM_TESSERAL_DEGREE = _e; }
   { auto _e = HAS_MAXIMUM_TESSERAL_DEGREE(); _o->HAS_MAXIMUM_TESSERAL_DEGREE = _e; }
+  { auto _e = RADIATION_PRESSURE_MODEL(); _o->RADIATION_PRESSURE_MODEL = _e; }
+  { auto _e = GNSS_BLOCK(); _o->GNSS_BLOCK = _e; }
+  { auto _e = ECOM2(); if (_e) { if(_o->ECOM2) { _e->UnPackTo(_o->ECOM2.get(), _resolver); } else { _o->ECOM2 = std::unique_ptr<PRWEcom2T>(_e->UnPack(_resolver)); } } else if (_o->ECOM2) { _o->ECOM2.reset(); } }
 }
 
 inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfiguration(::flatbuffers::FlatBufferBuilder &_fbb, const PRWForceConfigurationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -7384,6 +7778,9 @@ inline ::flatbuffers::Offset<PRWForceConfiguration> PRWForceConfiguration::Pack(
   auto _HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S = _o->HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S;
   auto _MAXIMUM_TESSERAL_DEGREE = _o->MAXIMUM_TESSERAL_DEGREE;
   auto _HAS_MAXIMUM_TESSERAL_DEGREE = _o->HAS_MAXIMUM_TESSERAL_DEGREE;
+  auto _RADIATION_PRESSURE_MODEL = _o->RADIATION_PRESSURE_MODEL;
+  auto _GNSS_BLOCK = _o->GNSS_BLOCK;
+  auto _ECOM2 = _o->ECOM2 ? CreatePRWEcom2(_fbb, _o->ECOM2.get(), _rehasher) : 0;
   return CreatePRWForceConfiguration(
       _fbb,
       _GRAVITY_CHOICE,
@@ -7415,7 +7812,10 @@ inline ::flatbuffers::Offset<PRWForceConfiguration> PRWForceConfiguration::Pack(
       _DRAG_AREA_OVER_MASS_RATE_M2_KG_S,
       _HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S,
       _MAXIMUM_TESSERAL_DEGREE,
-      _HAS_MAXIMUM_TESSERAL_DEGREE);
+      _HAS_MAXIMUM_TESSERAL_DEGREE,
+      _RADIATION_PRESSURE_MODEL,
+      _GNSS_BLOCK,
+      _ECOM2);
 }
 
 inline PRWStateMatrixT *PRWStateMatrix::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {

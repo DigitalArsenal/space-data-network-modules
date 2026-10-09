@@ -267,6 +267,47 @@ bool parseIntegrator(const PRWIntegratorSettings* in, bool mass, IntegratorConfi
     }
     return true;
 }
+// Radiation pressure family (PRW SDS 1.241.0, lib/gnss_srp.h): the cannonball
+// (REFLECTIVITY_COEFFICIENT, AREA_M2), the GNSS box-wing a priori of a GPS
+// block at INITIAL_MASS_KG, or none; and ECOM2 added to whichever. NONE is the
+// cannonball at Cr 0, which contributes exactly nothing, so ECOM2 alone needs
+// no other path. Cr and AREA_M2 belong to the cannonball; the other families
+// do not read them.
+bool parseRadiationPressure(const PRWForceConfiguration* in,ForceModel::SRPForceConfig& srp,std::string& error) {
+    const bool srpOn=in->ENABLE_SRP();
+    const auto family=in->RADIATION_PRESSURE_MODEL();
+    if(!srpOn&&(family!=prwRadiationPressureFamily::CANNONBALL||in->GNSS_BLOCK()!=prwGnssSpacecraftBlock::UNSPECIFIED||in->ECOM2()))
+        return prwError(error,"invalid-forces: RADIATION_PRESSURE_MODEL, GNSS_BLOCK and ECOM2 are radiation pressure; set ENABLE_SRP.");
+    if(family!=prwRadiationPressureFamily::GNSS_BOX_WING&&in->GNSS_BLOCK()!=prwGnssSpacecraftBlock::UNSPECIFIED)
+        return prwError(error,"invalid-forces: GNSS_BLOCK applies to RADIATION_PRESSURE_MODEL GNSS_BOX_WING.");
+    switch(family) {
+        case prwRadiationPressureFamily::CANNONBALL:srp.model=ForceModel::SRPModelType::Cannonball;break;
+        case prwRadiationPressureFamily::NONE:srp.model=ForceModel::SRPModelType::Cannonball;srp.Cr=0;break;
+        case prwRadiationPressureFamily::GNSS_BOX_WING:
+            srp.model=ForceModel::SRPModelType::GnssBoxWing;
+            switch(in->GNSS_BLOCK()) {
+                case prwGnssSpacecraftBlock::GPS_IIR:srp.gnssBoxWing=gnss_srp::GpsBoxWing(gnss_srp::GpsBlock::IIR);break;
+                case prwGnssSpacecraftBlock::GPS_IIR_M:srp.gnssBoxWing=gnss_srp::GpsBoxWing(gnss_srp::GpsBlock::IIR_M);break;
+                case prwGnssSpacecraftBlock::GPS_IIF:srp.gnssBoxWing=gnss_srp::GpsBoxWing(gnss_srp::GpsBlock::IIF);break;
+                case prwGnssSpacecraftBlock::UNSPECIFIED:return prwError(error,"invalid-forces: GNSS_BOX_WING needs GNSS_BLOCK.");
+                default:return prwError(error,"unsupported-radiation-pressure: Unknown GNSS spacecraft block.");
+            }
+            break;
+        default:return prwError(error,"unsupported-radiation-pressure: Unknown radiation pressure model.");
+    }
+    srp.ecom2=gnss_srp::Ecom2();
+    if(const auto* e=in->ECOM2()) {
+        const double c[11]={e->D0_M_S2(),e->Y0_M_S2(),e->B0_M_S2(),e->D2_COS_M_S2(),e->D2_SIN_M_S2(),e->D4_COS_M_S2(),e->D4_SIN_M_S2(),
+                            e->B1_COS_M_S2(),e->B1_SIN_M_S2(),e->B3_COS_M_S2(),e->B3_SIN_M_S2()};
+        srp.ecom2.enabled=true;
+        // PRWEcom2's order is gnss_srp::Ecom2Term's; both are m/s^2.
+        for(int k=0;k<=int(gnss_srp::Ecom2Term::B3s);++k) {
+            if(!std::isfinite(c[k]))return prwError(error,"invalid-forces: ECOM2 coefficients must be finite.");
+            gnss_srp::Ecom2Coefficient(srp.ecom2,gnss_srp::Ecom2Term(k))=c[k];
+        }
+    }
+    return true;
+}
 bool parseForces(const PRWForceConfiguration* in,double epoch,bool hasEarthOrientation,ForceModel::ForceModelSet& out,std::string& error) {
     if(!in)return prwError(error,"invalid-forces: Missing force configuration.");
     out.usePointMass=in->ENABLE_POINT_MASS();out.mu=in->GRAVITATIONAL_PARAMETER()*1e-9;
@@ -352,6 +393,7 @@ bool parseForces(const PRWForceConfiguration* in,double epoch,bool hasEarthOrien
     out.srp.mass=out.drag.mass=in->INITIAL_MASS_KG();out.srp.area=out.drag.area=in->AREA_M2();out.srp.Cr=in->REFLECTIVITY_COEFFICIENT();out.drag.Cd=in->DRAG_COEFFICIENT();
     if(!positive(out.drag.mass)||!nonnegative(out.drag.area)||!nonnegative(out.srp.Cr)||!nonnegative(out.drag.Cd))
         return prwError(error,"invalid-forces: Spacecraft mass, area, Cd and Cr are invalid.");
+    if(!parseRadiationPressure(in,out.srp,error))return false;
     switch(in->ATMOSPHERE_MODEL()) {
         case prwAtmosphereFamily::NRLMSISE00:out.dragModel=ForceModel::DragModelType::NRLMSISE00;break;
         case prwAtmosphereFamily::EXPONENTIAL:out.dragModel=ForceModel::DragModelType::Exponential;break;
@@ -543,8 +585,16 @@ bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execu
             case prwDynamicParameter::DRAG_AREA_OVER_MASS_RATE:q=ForceModel::DynamicParameter::DragAreaOverMassRate;break;
             case prwDynamicParameter::SRP_AREA_OVER_MASS:q=ForceModel::DynamicParameter::SrpAreaOverMass;break;
             case prwDynamicParameter::IN_TRACK_ACCELERATION:q=ForceModel::DynamicParameter::InTrackAcceleration;break;
+            // ECOM2_D0 .. ECOM2_B3_SIN: one ordinal each, in PRWEcom2's order.
+            case prwDynamicParameter::ECOM2_D0:case prwDynamicParameter::ECOM2_Y0:case prwDynamicParameter::ECOM2_B0:
+            case prwDynamicParameter::ECOM2_D2_COS:case prwDynamicParameter::ECOM2_D2_SIN:case prwDynamicParameter::ECOM2_D4_COS:
+            case prwDynamicParameter::ECOM2_D4_SIN:case prwDynamicParameter::ECOM2_B1_COS:case prwDynamicParameter::ECOM2_B1_SIN:
+            case prwDynamicParameter::ECOM2_B3_COS:case prwDynamicParameter::ECOM2_B3_SIN:
+                q=ForceModel::DynamicParameter(int(ForceModel::DynamicParameter::Ecom2D0)+int(p)-int(prwDynamicParameter::ECOM2_D0));break;
             default:return prwError(error,"unsupported-parameter: Unknown dynamic parameter.");
         }
+        if(q==ForceModel::DynamicParameter::SrpAreaOverMass&&in->FORCES()->RADIATION_PRESSURE_MODEL()!=prwRadiationPressureFamily::CANNONBALL)
+            return prwError(error,"invalid-parameters: SRP_AREA_OVER_MASS is the cannonball's Cr*A/m; RADIATION_PRESSURE_MODEL must be CANNONBALL.");
         if(std::find(out.parameters.begin(),out.parameters.end(),q)!=out.parameters.end())return prwError(error,"invalid-parameters: DYNAMIC_PARAMETERS must not repeat.");
         if(const char* reason=ForceModel::ValidateParameter(q,out.forces)){error=std::string("invalid-parameters: ")+reason;return false;}
         out.parameters.push_back(q);

@@ -209,10 +209,17 @@ Variant A reproduces E3's published HPOP-URA errors to 3 mm. The fitted
 ECOM2 does the work; with it, the box-wing a priori changes nothing
 measurable over a one-day fit arc (D/E 0.96-1.01, intervals across 1).
 
-PRW (SDS 1.240.0) cannot select these models or name the ECOM2 parameters:
-until SDS carries them, they are reachable from C++ only, and every PRW
-request runs exactly as before (all Orekit cases return byte-identical
-responses).
+On the PRW request (SDS 1.241.0), `FORCES.RADIATION_PRESSURE_MODEL` selects
+`CANNONBALL` (the default; `REFLECTIVITY_COEFFICIENT` and `AREA_M2`),
+`GNSS_BOX_WING` (with `GNSS_BLOCK` `GPS_IIR`, `GPS_IIR_M` or `GPS_IIF`, at the
+dynamical mass) or `NONE`; `FORCES.ECOM2` (`PRWEcom2`, m/s^2) adds ECOM2 to
+any of them, and `DYNAMIC_PARAMETERS` `ECOM2_D0` .. `ECOM2_B3_SIN` carry its
+coefficients in the STM and covariance. All of these need `ENABLE_SRP`;
+`GNSS_BLOCK` applies to the box-wing only and `SRP_AREA_OVER_MASS` to the
+cannonball only. `tests/prw_gnss_srp.test.mjs` runs the four Orekit cases
+above through the request: trajectories within 0.3 mm, the STM to 3.5e-12
+and the ECOM2 columns to 1.6e-9 (measured); `tests/prw-gnss-parity.mjs` is
+their tri-runtime receipt.
 
 ## Installation
 
