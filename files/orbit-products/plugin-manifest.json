@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.files.orbit-products",
   "name": "Orbit Products Reader",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Reads the four ephemeris CONTAINERS this stack round-trips \u2014 SPK (NAIF DAF, segment types 8, 9 and 13), SP3-c/d, Code-500 and scenario-epoch STK ephemeris \u2014 plus CCSDS-OEM keyword-value notation, and projects them onto SDS $OEM with the container's own facts carried out separately as $NCD. A container is a wire format, not a standard: the state history becomes $OEM and the file-level header, comment area, segment address ranges and accuracy block become the native-container descriptor, so a read-then-write cycle reproduces the source instead of inventing header values. Each container is evaluated by the interpolation rule it declares, never by a rule this module picked, and no time-scale conversion happens here: epochs stay on the scale the container named and that name is carried out with them. A malformed container is a named status, never a trap and never a NaN. Converts public-format Vimpel osculating element tables to analytic J2000 epoch OPM states with source provenance; no differenced velocity or covariance is invented. Converts SP Vector/Covariance Messages, legacy V2.0 text or superseded $VCM records, to $OCM without deriving uncertainty or splitting the ballistic coefficient.",
   "tagline": "SPK, SP3, Code-500, STK and CCSDS-OEM containers in; $OEM states and an $NCD descriptor out.",
   "pluginFamily": "parser",
@@ -256,6 +256,100 @@
           "maxStreams": 1,
           "required": true,
           "description": "SDS $NCD envelope carrying the half of the container that $OEM cannot hold: the resolved FORMAT, the internal file name, the comment area, the segment descriptors with their address ranges, the SP3 header accuracy block, the scenario-epoch parameters or the Code-500 header, and the SHA-256 of the bytes this run actually read. A writer that is handed the $OEM and this descriptor can reproduce the source container; a writer handed only the $OEM has to invent its header.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-descriptor",
+              "description": "SDS $NCD envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "methodId": "normalize_ses_i11",
+      "displayName": "Evaluate an eleven-parameter ephemeris",
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "inputPorts": [
+        {
+          "portId": "container",
+          "displayName": "container",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "An Intelsat eleven-parameter (IESS-412) ephemeris file as SES and Intelsat publish it, as a size-prefixed SDS $NCD descriptor with FORMAT PROVIDER_DEFINED and PROVIDER_DEFINED_FORMAT_NAME \"ses-i11\", SOURCE_SHA256 and SOURCE_BYTE_LENGTH declared, followed immediately by the file's exact bytes in the same frame.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ncd-container",
+              "description": "SDS $NCD envelope, with the described container's bytes appended to the frame.",
+              "allowedTypes": [
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD"
+                },
+                {
+                  "schemaName": "NCD.fbs",
+                  "fileIdentifier": "$NCD",
+                  "rootTypeName": "NCD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "ephemeris",
+          "displayName": "ephemeris",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "SDS $OEM envelope with one Earth-fixed (FIXED_EARTH) block on UTC: the eleven-parameter model evaluated from the element epoch to the file's stated end of validity (170 hours when it states none) every 300 s, positions in kilometres and velocities in kilometres per second (analytic derivatives). OBJECT_NAME is the satellite name the file states; no catalog number is supplied. The block COMMENT records the elements and how closely the file's own printed prediction is reproduced; a file whose printed prediction is not reproduced to its printed precision is refused.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-ephemeris",
+              "description": "SDS $OEM envelope.",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "descriptor",
+          "displayName": "descriptor",
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The input $NCD descriptor, unchanged: its SOURCE_CID and SOURCE_SHA256 lead back to the file.",
           "acceptedTypeSets": [
             {
               "setId": "sds-ncd-descriptor",
