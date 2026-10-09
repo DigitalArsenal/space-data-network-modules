@@ -1,0 +1,467 @@
+{
+  "pluginId": "com.digitalarsenal.analysis.association",
+  "name": "Observation association",
+  "version": "0.1.0",
+  "description": "Associates radar ($RDO), electro-optical ($EOO) and RF ($RFO) observations with catalog predictions ($OEM with covariance): joint chi-square gating on the innovation covariance S = H P H^T + R for range, range rate, Doppler, RA/Dec and azimuth/elevation; global nearest-neighbour assignment per sensor scan (Hungarian, with a per-observation non-assignment cost equal to the gate); ambiguity and posterior association probability; observations that fit no prediction are re-emitted as UCT records. Earth orientation through ERFA (IAU 2006/2000A, CIO based) with caller-supplied $EOP. Also solves general rectangular assignment problems.",
+  "pluginFamily": "analysis",
+  "threadModel": "wasi-sequential",
+  "sequentialJustification": {
+    "kind": "inherently-sequential-algorithm",
+    "detail": "Each scan is one shortest-augmenting-path assignment whose augmentations depend on the previous dual variables; scans are small (tens of observations) and the gate evaluation is a few hundred microseconds per observation, so parallel reductions would change floating-point association order with no useful speedup. No host calls, threads, propagation or network access."
+  },
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "RDO.fbs",
+      "fileIdentifier": "$RDO",
+      "rootTypeName": "RDO"
+    },
+    {
+      "schemaName": "EOO.fbs",
+      "fileIdentifier": "$EOO",
+      "rootTypeName": "EOO"
+    },
+    {
+      "schemaName": "RFO.fbs",
+      "fileIdentifier": "$RFO",
+      "rootTypeName": "RFO"
+    },
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    },
+    {
+      "schemaName": "EOP.fbs",
+      "fileIdentifier": "$EOP",
+      "rootTypeName": "EOP"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "associate_observations",
+      "displayName": "Associate observations",
+      "inputPorts": [
+        {
+          "portId": "radar_observations",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-observations-rdo",
+              "allowedTypes": [
+                {
+                  "schemaName": "RDO.fbs",
+                  "fileIdentifier": "$RDO",
+                  "rootTypeName": "RDO",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "RDO.fbs",
+                  "fileIdentifier": "$RDO",
+                  "rootTypeName": "RDO",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Radar observation ($RDO)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Radar observation records ($RDO, plain or size-prefixed). Measured: RANGE, RANGE_RATE, AZIMUTH, ELEVATION; a field is measured when its 1-sigma uncertainty is positive. OB_TIME is UTC. At least one observation on any observations port."
+        },
+        {
+          "portId": "optical_observations",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-observations-eoo",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOO.fbs",
+                  "fileIdentifier": "$EOO",
+                  "rootTypeName": "EOO",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "EOO.fbs",
+                  "fileIdentifier": "$EOO",
+                  "rootTypeName": "EOO",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Electro-optical observation ($EOO)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Electro-optical observation records ($EOO, plain or size-prefixed). Measured: RA, DECLINATION (J2000 or GCRF topocentric), AZIMUTH, ELEVATION, RANGE, RANGE_RATE; a field is measured when its 1-sigma uncertainty is positive. OB_TIME is UTC. At least one observation on any observations port."
+        },
+        {
+          "portId": "rf_observations",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-observations-rfo",
+              "allowedTypes": [
+                {
+                  "schemaName": "RFO.fbs",
+                  "fileIdentifier": "$RFO",
+                  "rootTypeName": "RFO",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "RFO.fbs",
+                  "fileIdentifier": "$RFO",
+                  "rootTypeName": "RFO",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "RF observation ($RFO)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "RF observation records ($RFO, plain or size-prefixed). Measured: RANGE, RANGE_RATE or one-way Doppler from FREQUENCY and NOMINAL_FREQUENCY (MHz), AZIMUTH, ELEVATION; a field is measured when its 1-sigma uncertainty is positive. OB_TIME is UTC. At least one observation on any observations port."
+        },
+        {
+          "portId": "predictions",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Catalog predictions with covariance."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "One or more $OEM frames. One data block per catalog object span (OBJECT names it), TIME_SYSTEM UTC, Earth-centred, with COVARIANCE_MATRIX_LINES spanning the observations. Frames GCRF, ICRF, J2000, EME2000, TEME or an ITRF realization; covariance in the state frame or RSW_INERTIAL."
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "IERS Earth orientation."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 366,
+          "required": false,
+          "description": "$EOP rows bracketing the observations (one row, several frames, or a size-prefixed stream). Required whenever an Earth-fixed sensor or prediction meets an inertial one."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "association-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Gate probability, light time, minimum unambiguous posterior, clutter density, Doppler frequency sigma and scan grouping as a JSON object; every field optional."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "JSON options; every field optional."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "radar_associated",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-associated-rdo",
+              "allowedTypes": [
+                {
+                  "schemaName": "RDO.fbs",
+                  "fileIdentifier": "$RDO",
+                  "rootTypeName": "RDO",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "RDO.fbs",
+                  "fileIdentifier": "$RDO",
+                  "rootTypeName": "RDO",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Radar observation ($RDO)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Each associated $RDO: the same record with UCT false and the catalog identity (SAT_NO, ON_ORBIT)."
+        },
+        {
+          "portId": "optical_associated",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-associated-eoo",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOO.fbs",
+                  "fileIdentifier": "$EOO",
+                  "rootTypeName": "EOO",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "EOO.fbs",
+                  "fileIdentifier": "$EOO",
+                  "rootTypeName": "EOO",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Electro-optical observation ($EOO)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Each associated $EOO: the same record with UCT false and the catalog identity (NORAD_CAT_ID, ID_ON_ORBIT; CORR_QUALITY = posterior association probability)."
+        },
+        {
+          "portId": "rf_associated",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-associated-rfo",
+              "allowedTypes": [
+                {
+                  "schemaName": "RFO.fbs",
+                  "fileIdentifier": "$RFO",
+                  "rootTypeName": "RFO",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "RFO.fbs",
+                  "fileIdentifier": "$RFO",
+                  "rootTypeName": "RFO",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "RF observation ($RFO)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Each associated $RFO: the same record with UCT false and the catalog identity (SAT_NO, ON_ORBIT; CONFIDENCE = posterior association probability)."
+        },
+        {
+          "portId": "radar_ucts",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ucts-rdo",
+              "allowedTypes": [
+                {
+                  "schemaName": "RDO.fbs",
+                  "fileIdentifier": "$RDO",
+                  "rootTypeName": "RDO",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "RDO.fbs",
+                  "fileIdentifier": "$RDO",
+                  "rootTypeName": "RDO",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Radar observation ($RDO)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Each uncorrelated $RDO: the same record with UCT true and the association fields cleared."
+        },
+        {
+          "portId": "optical_ucts",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ucts-eoo",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOO.fbs",
+                  "fileIdentifier": "$EOO",
+                  "rootTypeName": "EOO",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "EOO.fbs",
+                  "fileIdentifier": "$EOO",
+                  "rootTypeName": "EOO",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Electro-optical observation ($EOO)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Each uncorrelated $EOO: the same record with UCT true and the association fields cleared."
+        },
+        {
+          "portId": "rf_ucts",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ucts-rfo",
+              "allowedTypes": [
+                {
+                  "schemaName": "RFO.fbs",
+                  "fileIdentifier": "$RFO",
+                  "rootTypeName": "RFO",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "RFO.fbs",
+                  "fileIdentifier": "$RFO",
+                  "rootTypeName": "RFO",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "RF observation ($RFO)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Each uncorrelated $RFO: the same record with UCT true and the association fields cleared."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "association-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per observation: measured values, sigmas, gate, every candidate with its Mahalanobis distance d2, chi-square p-value, posterior probability, residuals and predicted geometry; the assignment, ambiguity and the UCT list. The scientific result is the re-emitted SDS records."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The association evidence as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "solve_assignment",
+      "displayName": "Solve assignment",
+      "inputPorts": [
+        {
+          "portId": "problem",
+          "acceptedTypeSets": [
+            {
+              "setId": "assignment-problem-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "A dense cost matrix (null = forbidden) or sparse [row, column, cost] entries, with an optional non-assignment cost per row."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "{cost: [[...]]} or {rows, columns, entries: [[i, j, c], ...]}, optional unassigned_cost (number or one per row)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "solution",
+          "acceptedTypeSets": [
+            {
+              "setId": "assignment-solution-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The minimum-cost assignment: column per row (-1 = unassigned) and the total cost."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "{assignment, total_cost, rows, columns}."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}
