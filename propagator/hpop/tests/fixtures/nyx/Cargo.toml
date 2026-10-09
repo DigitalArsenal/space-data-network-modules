@@ -1,0 +1,12 @@
+[package]
+name = "hpop-xval-nyx"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Nyx Space reference trajectories for propagator/hpop (make-nyx-reference.mjs)"
+
+[dependencies]
+nyx-space = "=2.6.0"
+anise = "=0.10.6"
+hifitime = "4"
+serde_json = "1"
