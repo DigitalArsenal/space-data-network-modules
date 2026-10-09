@@ -51,8 +51,9 @@ JSON control frames in and out.
   defined, then WGS84; the Sun's CIRS direction from ERFA every TT hour,
   interpolated (within 1e-6 rad of the per-point direction). Over whole
   revolutions this is the drag change in mean semi-major axis that the next
-  set observes. Sets more than `maxGapDays` (3) apart start a new chain with
-  its own offset.
+  set observes. Points above 2500 km (JB2008's ceiling here) add no drag.
+  Sets more than `maxGapDays` (3) apart start a new chain with its own
+  offset.
 
 ## Methods
 
@@ -61,7 +62,7 @@ JSON control frames in and out.
 | `evaluate` | `points {mjd, latDeg, lonDeg, altKm}` (UTC MJD) or `raw [{mjd, sunRaRad, sunDecRad, lonRad, latRad, altKm, inputs[9]}]` (the arguments of SET's subroutine); `jb2008 {rows}`; optional `correction` (`{degree, segments [{fromMjd, toMjd, coefficients}]}` or `{nodesMjd, altitudeKm, values}`); `derivative`; `diagnostics` | `result`: `density` (kg/m³), `deltaT` (K), `lstHours`, `dLnRhoDT` (1/K, with `derivative`), `sunLonDeg`/`sunLatDeg` (with `diagnostics`), `refused` |
 | `calibrate` | the same points plus `rho` (and optional `weight`); `degree`, `binHours`, `fromMjd`, `toMjd`, `logSigma`, `priorSigmaK` (per degree), `minPoints`, `iterations`, `editSigma` | `calibration`: per bin `coefficients` (K), `sigmas`, `n`, `used`, `prefitRms`, `postfitRms` (log density), `iterations`, `converged` |
 | `decay` | `jb2008 {rows}`; `objects [{id, sets [{mjd (UTC), MEAN_MOTION, ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER, MEAN_ANOMALY, BSTAR}], B? (m²/kg, default 1), spanDays? (a single set integrated alone)}]`; optional `correction` (time nodes), `stepSeconds`, `maxGapDays`, `samples` | `result`: per object the sets' mean semi-major axes (`aKm`), perigee heights, the drag decay of each segment (`decayM`) and its cumulative sum at each set, the mean geodetic altitude; with `samples` every trajectory point (TEME state, geodetic point, density) |
-| `calibrate_decay` | `jb2008 {rows}`; `objects [{id, sets, lnBPrior? {mean, sigma}}]`; `nodes {fromMjd, toMjd, stepHours, altitudeKm?}`; `priors {randomWalkKPerSqrtDay, meanLevelK, altitudeDifferenceK?}`; `stepSeconds`, `maxGapDays`, `sigmaFloorM`, `editSigma`, `iterations`, `minSets`, `residuals` | `calibration`: `correction {nodesMjd, altitudeKm, values, sigmas}` (K), per object `lnB`, `lnBSigma`, `B`, `sigmaM` (its robust residual scale), `rmsM`, `prefitRmsM`, `meanAltitudeKm`, decays; `fit` with the level of each altitude node and its sigma, and the correlation of the level with the mean ln B |
+| `calibrate_decay` | `jb2008 {rows}`; `objects [{id, sets, lnBPrior? {mean, sigma}}]`; `nodes {fromMjd, toMjd, stepHours, altitudeKm?}`; `priors {randomWalkKPerSqrtDay, meanLevelK, altitudeDifferenceK?}`; `stepSeconds`, `maxGapDays`, `sigmaFloorM`, `editSigma`, `iterations`, `tolerance {K, lnB, a0M}` (convergence: every step below; 0.5 K, 1e-3, 0.1 m), `minSets`, `residuals` | `calibration`: `correction {nodesMjd, altitudeKm, values, sigmas}` (K), per object `lnB`, `lnBSigma`, `B`, `sigmaM` (its robust residual scale), `rmsM`, `prefitRmsM`, `meanAltitudeKm`, decays; `fit` with the level of each altitude node and its sigma, and the correlation of the level with the mean ln B |
 
 `calibrate_decay` solves, by Gauss–Newton, for the correction at its nodes,
 each object's ln B and each chain's offset a0: a_k = a0 + B Σ_{segments before
@@ -75,7 +76,8 @@ enter only as their product: a common scale on every B is the same as a
 shift of the correction's level, so the level is set by the objects with
 known area to mass (strong ln B priors) and the level prior; the time
 variation is set by every object. `fit.level` and `fit.levelLnBCorrelation`
-report how well the level is determined. The start is the correction at zero
+report how well the level is determined; `fit.history` the largest steps
+and the chi-square of each iteration. The start is the correction at zero
 and each object's B by linear least squares (an unresolved decay starts at
 its prior, at 12.741621 B*, or at 0.01 m²/kg, with a weak prior). σ's are the
 formal posterior standard deviations under the residual scales.

@@ -492,10 +492,13 @@ class SunTable {
 
 // A point of a set's trajectory: the JB2008 point and the decay weight q =
 // (a^2 / mu) |v_r| (v . v_r) in m^2/s, so that da/dt = -B rho q. rv, when
-// given, receives the TEME state (km, km/s).
-bool trajectory_point(ElementSet& set, double mjd, const Jb2008Table& table, const SunTable& sun, Point& p, double& q, double* rv) {
+// given, receives the TEME state (km, km/s). Returns kPointFailed (SGP4
+// refused, below 90 km, or outside the drivers), kPointOk, or kPointAbove:
+// above 2500 km, JB2008's ceiling here, where the point adds no drag.
+constexpr int kPointFailed = 0, kPointOk = 1, kPointAbove = 2;
+int trajectory_point(ElementSet& set, double mjd, const Jb2008Table& table, const SunTable& sun, Point& p, double& q, double* rv) {
   double r[3], v[3];
-  if (!SGP4Funcs::sgp4(set.rec, (mjd - set.mjd) * 1440.0, r, v) || set.rec.error != 0) return false;
+  if (!SGP4Funcs::sgp4(set.rec, (mjd - set.mjd) * 1440.0, r, v) || set.rec.error != 0) return kPointFailed;
   const double rm[3] = {r[0] * 1e3, r[1] * 1e3, r[2] * 1e3}, vm[3] = {v[0] * 1e3, v[1] * 1e3, v[2] * 1e3};
   const double rr = std::sqrt(rm[0] * rm[0] + rm[1] * rm[1] + rm[2] * rm[2]), vv = vm[0] * vm[0] + vm[1] * vm[1] + vm[2] * vm[2];
   const double a = 1.0 / (2.0 / rr - vv / kMu);
@@ -506,17 +509,18 @@ bool trajectory_point(ElementSet& set, double mjd, const Jb2008Table& table, con
   const double cg = std::cos(g), sg = std::sin(g);
   double ef[3] = {cg * rm[0] + sg * rm[1], -sg * rm[0] + cg * rm[1], rm[2]};
   double elong = 0, phi = 0, height = 0;
-  if (eraGc2gd(1, ef, &elong, &phi, &height) != 0) return false;
+  if (eraGc2gd(1, ef, &elong, &phi, &height) != 0) return kPointFailed;
   p = Point{};
   p.mjd = mjd;
   p.lon = std::remainder(elong, 2 * kPi);
   p.lat = phi;
   p.altM = height;
-  if (!(p.altM >= 90e3 && p.altM <= 2500e3) || !table.at(mjd, p.in) || !sun.at(mjd, p.sunLon, p.sunLat)) return false;
-  p.ok = true;
   if (rv)
     for (int i = 0; i < 3; ++i) { rv[i] = r[i]; rv[3 + i] = v[i]; }
-  return true;
+  if (p.altM > 2500e3) return kPointAbove;
+  if (!(p.altM >= 90e3) || !table.at(mjd, p.in) || !sun.at(mjd, p.sunLon, p.sunLat)) return kPointFailed;
+  p.ok = true;
+  return kPointOk;
 }
 
 // One stretch of a set's trajectory, from its epoch (or a later instant) to
@@ -551,7 +555,9 @@ bool integrate(ElementSet& set, Segment& sg, double stepS, const Jb2008Table& ta
   for (int k = 0; k <= n; ++k) {
     const double mjd = sg.from + k * h / 86400.0;
     double q = 0, rv[6];
-    if (!trajectory_point(set, mjd, table, sun, p, q, samples ? rv : nullptr)) return false;
+    const int status = trajectory_point(set, mjd, table, sun, p, q, samples ? rv : nullptr);
+    if (status == kPointFailed) return false;
+    if (status == kPointAbove) continue;
     int idx[4];
     double wgt[4];
     const double dT = corr.at(mjd, p.altM / 1000.0, idx, wgt);
@@ -977,6 +983,10 @@ extern "C" int calibrate_decay() {
   const double stepS = request.value("stepSeconds", 60.0), maxGap = request.value("maxGapDays", 3.0), floorM = request.value("sigmaFloorM", 1.0);
   const double edit = request.value("editSigma", 4.0);
   const int maxIt = request.value("iterations", 10), minSets = request.value("minSets", 5);
+  const json& tol = request.value("tolerance", json::object());
+  const double tolK = tol.value("K", 0.5), tolLnB = tol.value("lnB", 1e-3), tolA0 = tol.value("a0M", 0.1);
+  if (!positive(tolK) || !positive(tolLnB) || !positive(tolA0)) return fail("invalid-request", "tolerance {K, lnB, a0M} must be positive.");
+  json history = json::array();
   const bool wantResiduals = request.value("residuals", false);
   if (!(stepS >= 1 && stepS <= 600) || !positive(floorM)) return fail("invalid-request", "stepSeconds must be 1-600 and sigmaFloorM positive.");
 
@@ -1183,7 +1193,8 @@ extern "C" int calibrate_decay() {
         bigA = std::max(bigA, std::abs(rhs[chainBase[i] + c]));
       }
     }
-    if (big < 0.05 && bigB < 1e-4 && bigA < 0.01) { converged = true; ++iterations; break; }
+    history.push_back({{"iteration", iterations + 1}, {"chiSquare", chi2}, {"observations", observations}, {"maxStepK", big}, {"maxStepLnB", bigB}, {"maxStepA0M", bigA}});
+    if (big < tolK && bigB < tolLnB && bigA < tolA0) { converged = true; ++iterations; break; }
   }
   // The solution: residuals, scales and the formal covariance there.
   for (Object& ob : objects)
@@ -1254,7 +1265,8 @@ extern "C" int calibrate_decay() {
     objs.push_back(o);
   }
   json fit = {{"iterations", iterations}, {"converged", converged}, {"observations", observations}, {"parameters", n}, {"objects", N},
-              {"chiSquare", chi2}, {"level", level},
+              {"chiSquare", chi2}, {"level", level}, {"history", history},
+              {"tolerance", {{"K", tolK}, {"lnB", tolLnB}, {"a0M", tolA0}}},
               {"levelLnBCorrelation", haveCov && varT > 0 && varB > 0 ? json(covTB / std::sqrt(varT * varB)) : json(nullptr)},
               {"meanLevelSigmaK", haveCov ? json(std::sqrt(varT)) : json(nullptr)}};
   json correction = {{"nodesMjd", corr.t}, {"altitudeKm", corr.alt}, {"values", values}, {"sigmas", sigmas}};
