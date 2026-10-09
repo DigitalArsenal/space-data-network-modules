@@ -46,9 +46,13 @@ One SP3 file per call, read first by `files/orbit-products` `read_container`.
 ## Products
 
 `scripts/fetch-reference-products.mjs --from YYYY-MM-DD --to YYYY-MM-DD
-[--products gps,slr,slr-daily,sentinel1,swarm] [--out DIR]` downloads and converts these
-products. Output goes outside the repository, by default
-`~/.cache/sdn-reference-states`.
+[--products gps,slr,slr-daily,sentinel1,swarm,doris,gfz-rso,cosmic2]
+[--local-archive DIR] [--out DIR]` downloads and converts these products.
+`doris`, `gfz-rso` and `cosmic2` read copies already downloaded under
+`--local-archive` (default `/opt/data/sdn-archive/hac`). Each copy is checked
+against the SHA-256 in its `.provenance.json`, whose URL is recorded as the
+source, and every arc that meets the days `--from` to `--to` is converted.
+Output goes outside the repository, by default `~/.cache/sdn-reference-states`.
 
 | Product | Objects | Spacing | Uncertainty |
 | --- | --- | --- | --- |
@@ -57,12 +61,21 @@ products. Output goes outside the repository, by default
 | ILRS analysis-centre 4-day fitted arcs (NSGF), one every 4 days, non-overlapping | Ajisai, Starlette, Stella, LARETS, WESTPAC, LARES, LARES-2 | 2–3 min | per-axis RMS of the arc's 3-day overlap with the next day's arc |
 | Sentinel-1 `AUX_POEORB`, transcribed to SP3-c | Sentinel-1C/1D (1A when published) | 10 s | the mission's 5 cm 3D RMS precise-orbit requirement, as 2.9 cm per axis |
 | Swarm reduced-dynamic precise orbits (ESA Swarm dissemination server) | Swarm A, B, C | 10 s | per-axis RMS of the kinematic minus the reduced-dynamic orbit over the day (kinematic outliers beyond 1 m excluded) |
+| IDS DORIS precise orbits from CNES SSALTO (`ssa`), 7- to 9-day arcs, each overlapping the next by 2.5–3 h; local copies | CryoSat-2, SARAL, Sentinel-3A/3B, SWOT | 60 s | per-axis RMS of the arc's overlap with the adjacent arc it overlaps longest |
+| GFZ rapid science orbits (ISDC `RSO`, codes L64/L65), 14-hour arcs every 12 hours; local copies | GRACE-FO 1 and 2 | 30 s | per-axis RMS of the arc's 2-hour overlap with the adjacent arc |
+| UCAR CDAAC COSMIC-2 near-real-time orbits (`leoOrb`), overlapping arcs of about 2 hours in daily tarballs; local copies | COSMIC-2 FM1–FM6, as present | 60 s | per-axis RMS of the arc's overlap (at least 1 h) with the adjacent arc it overlaps longest |
+
+The last three files state no accuracy, and no published figure for them is in
+the local archive. Their overlap RMS is the precision of consecutive fits,
+not an accuracy.
 
 Earth orientation comes from IERS EOP 20 C04, parsed by
-`data-source/eop-parser`. Two changes are made to products, and only these:
+`data-source/eop-parser`. Three changes are made to products, and only these:
 - ILRS comment lines (`%/*`) are read as SP3 `/*`;
 - the NSGF arcs' coordinate system "ECF" is read as ITRF, as their own
-  comment states.
+  comment states;
+- the GFZ rapid science orbits' coordinate system "CTS", the conventional
+  terrestrial system, is read as ITRF.
 
 C04 runs about 30 days behind. `--eop finals` uses the observed rows of IERS
 finals2000A instead (`parse_finals2000a`), so reference states can be made for

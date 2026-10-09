@@ -5,7 +5,8 @@
 // --eop finals the observed rows of finals2000A, for the Earth rotation.
 //
 //   node scripts/fetch-reference-products.mjs --from 2026-09-01 --to 2026-09-07 \
-//     [--products gps,slr,sentinel1,swarm] [--out DIR]
+//     [--products gps,slr,slr-daily,sentinel1,swarm,doris,gfz-rso,cosmic2] \
+//     [--local-archive DIR] [--out DIR]
 //
 // Products (all public):
 //   gps        IGS final orbits (IGS0OPSFIN, 15 min, IGS20; ESA0OPSFIN, 5 min,
@@ -28,9 +29,28 @@
 //              10 s, IGc20) from the ESA Swarm dissemination server; the
 //              stated sigma is the per-axis RMS of the kinematic minus the
 //              reduced-dynamic orbit over the day.
+//   doris      CNES SSALTO precise orbits distributed by the IDS (DORIS, with
+//              GNSS where the type code is DG_; 60 s, TAI, ITRF) of CryoSat-2,
+//              SARAL, Sentinel-3A/B and SWOT: 7- to 9-day arcs, each
+//              overlapping the next by 2.5 to 3 hours.
+//   gfz-rso    GFZ rapid science orbits (ISDC) of GRACE-FO 1 and 2 (codes L64,
+//              L65): 14-hour arcs every 12 hours, 30 s, GPS time. Their
+//              coordinate system is written "CTS", the conventional
+//              terrestrial system, and is read as ITRF.
+//   cosmic2    UCAR CDAAC near-real-time orbits of the COSMIC-2 spacecraft:
+//              daily tarballs of overlapping SP3-c arcs about 2 hours long
+//              (60 s, IGS08), named leoOrb_<yyyy>.<ddd>.<FM>.<nn>.
+//   These three read copies already downloaded under --local-archive
+//   (default /opt/data/sdn-archive/hac), each checked against the SHA-256 in
+//   its .provenance.json, whose URL is the source; every arc that meets the
+//   days --from to --to is converted. Their files state no accuracy and no
+//   published figure is in the archive, so the stated sigma is the per-axis
+//   RMS of the arc's overlap with the adjacent arc it overlaps longest: the
+//   precision of consecutive fits.
 // Output (outside the repository): DIR/products/ holds the downloads,
 // DIR/reference/<product>/<norad>.oem the size-prefixed $OEM per object, and
 // DIR/reference/<product>/index.json what each came from.
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -48,6 +68,8 @@ const { values } = parseArgs({ options: {
   // c04: IERS EOP 20 C04 (final, about 30 days behind). finals: IERS finals2000A,
   // observed rows only, for truth newer than C04 reaches.
   eop: { type: 'string', default: 'c04' },
+  // Already-downloaded copies, read by doris, gfz-rso and cosmic2.
+  'local-archive': { type: 'string', default: '/opt/data/sdn-archive/hac' },
 } });
 if (!['c04', 'finals'].includes(values.eop)) throw new Error('--eop is c04 or finals.');
 if (!values.from || !values.to) throw new Error('--from and --to (YYYY-MM-DD) are required.');
@@ -242,6 +264,15 @@ function sp3Positions(text) {  // epoch -> km position of the file's one satelli
   }
   return rows;
 }
+// Per-axis RMS (m) of b about a over the epochs both hold (sp3Positions maps).
+function overlapRms(a, b) {
+  let sum = 0, count = 0;
+  for (const [epoch, r] of b) {
+    const c = a.get(epoch);
+    if (c) { sum += r.reduce((s, x, i) => s + (x - c[i]) ** 2, 0); count += 3; }
+  }
+  return { sigma: count ? Math.sqrt(sum / count) * 1000 : 0, epochs: count / 3 };
+}
 async function slr(arc) {
   const yymmdd = new Date(arc).toISOString().slice(2, 10).replaceAll('-', '');
   for (const [sat, identity] of Object.entries(SLR)) {
@@ -353,19 +384,13 @@ async function slrDaily(arcStart) {
     if (!gz || !next) { console.warn(`slr-daily: ${sat} arc from ${yymmdd(arcStart)} or its successor not published`); continue; }
     const text = gunzipSync(gz).toString();
     if (!text.startsWith(`#cV${new Date(arcStart).toISOString().slice(0, 4)}`)) { console.warn(`slr-daily: ${sat} ${yymmdd(arcStart)} is not SP3-c`); continue; }
-    const truth = sp3Positions(text);
-    let sum = 0, count = 0;
-    for (const [epoch, r] of sp3Positions(gunzipSync(next).toString())) {
-      const c = truth.get(epoch);
-      if (c) { sum += r.reduce((a, x, i) => a + (x - c[i]) ** 2, 0); count += 3; }
-    }
-    if (count < 300) { console.warn(`slr-daily: ${sat} ${yymmdd(arcStart)} overlap too short to state a sigma`); continue; }
-    const sigma = Math.sqrt(sum / count) * 1000;
+    const { sigma, epochs } = overlapRms(sp3Positions(text), sp3Positions(gunzipSync(next).toString()));
+    if (epochs < 100) { console.warn(`slr-daily: ${sat} ${yymmdd(arcStart)} overlap too short to state a sigma`); continue; }
     const id = text.match(/^\+\s+1\s+(\S{3})/m)?.[1];
     const name = path.basename(new URL(file(arcStart + 4 * DAY)).pathname);
     // Header columns 47-51 carry the frame; "  ECF" is ITRF by the file's own comment.
     const sp3 = Buffer.from(text.replace(/^(#cV.{43})  ECF/, '$1ITRF '));
-    const basis = `the per-axis RMS (${sigma.toFixed(4)} m) of this arc's overlap with the next day's arc (${count / 3} epochs)`;
+    const basis = `the per-axis RMS (${sigma.toFixed(4)} m) of this arc's overlap with the next day's arc (${epochs} epochs)`;
     const product = `${name} (SHA-256 ${sha256(gunzipSync(gz))}, coordinate system "ECF" read as ITRF per the file's comment)`;
     await referenceStates(name.replace('.sp3.gz', ''), sp3, { product, source: file(arcStart + 4 * DAY), statedSigmaM: sigma, statedSigmaBasis: basis, satellites: { [id]: identity } },
       { product: name, url: file(arcStart + 4 * DAY), sha256: sha256(gz), statedSigmaM: sigma, statedSigmaBasis: basis });
@@ -419,6 +444,137 @@ async function swarm(day) {
   }
 }
 
+// ── local copies (--local-archive): each file with a .provenance.json (url, sha256) ──
+function localCopy(file) {
+  const bytes = fs.readFileSync(file);
+  const { url, sha256: recorded } = JSON.parse(fs.readFileSync(`${file}.provenance.json`));
+  if (sha256(bytes) !== recorded) { console.warn(`${path.basename(file)}: SHA-256 differs from its provenance record`); return null; }
+  return { bytes, url, sha256: recorded };
+}
+function untar(tar) {  // ustar: [name, bytes] of each regular file
+  const files = [];
+  for (let at = 0; at + 512 <= tar.length && tar[at];) {
+    const size = parseInt(tar.toString('latin1', at + 124, at + 136).replace(/\0.*$/s, '').trim() || '0', 8);
+    if (tar[at + 156] === 0x30 || tar[at + 156] === 0) files.push([tar.toString('latin1', at, at + 100).replace(/\0.*$/s, ''), tar.subarray(at + 512, at + 512 + size)]);
+    at += 512 + Math.ceil(size / 512) * 512;
+  }
+  return files;
+}
+// arcs: one satellite's arcs in time order, { name, file, start, stop, read() ->
+// { sp3, sp3Sha256, url, sha256 } }. Each arc meeting [lo, hi) becomes a product
+// whose stated sigma is the per-axis RMS of its overlap with the adjacent arc
+// (previous or next) it overlaps longest, over at least minEpochs epochs. An
+// identical neighbour is not an independent fit and is passed over.
+async function localArcs(arcs, lo, hi, minEpochs, identity, note = '') {
+  const cache = new Map();
+  const load = (i) => {
+    if (!cache.has(i)) { const copy = arcs[i].read(); cache.set(i, copy && { ...copy, rows: sp3Positions(copy.sp3.toString()) }); }
+    return cache.get(i);
+  };
+  for (let i = 0; i < arcs.length; ++i) {
+    if (arcs[i].stop <= lo || arcs[i].start >= hi) continue;
+    for (const k of cache.keys()) if (k < i - 1) cache.delete(k);
+    const own = load(i);
+    if (!own) continue;
+    let best = null;
+    for (const j of [i - 1, i + 1]) {
+      const o = arcs[j] && load(j) && overlapRms(own.rows, load(j).rows);
+      if (o && o.sigma > 0 && o.epochs >= minEpochs && o.epochs > (best?.epochs ?? 0)) best = { ...o, arc: arcs[j].name };
+    }
+    if (!best) { console.warn(`${arcs[i].name}: no adjacent arc overlaps it by ${minEpochs} epochs; no sigma can be stated`); continue; }
+    const id = own.sp3.toString().match(/^\+\s+1\s+(\S{3})/m)?.[1];
+    const basis = `the per-axis RMS (${best.sigma.toFixed(4)} m) of this arc's overlap with the adjacent arc ${best.arc} (${best.epochs} epochs), ` +
+      'the precision of consecutive fits: the file states no accuracy and no published figure for the product is in the local archive';
+    const product = `${arcs[i].file} (SP3 SHA-256 ${own.sp3Sha256}${note})`;
+    await referenceStates(arcs[i].name, own.sp3, { product, source: own.url, statedSigmaM: best.sigma, statedSigmaBasis: basis, satellites: { [id]: identity } },
+      { product: arcs[i].file, ...arcs[i].provenance, url: own.url, sha256: own.sha256, statedSigmaM: best.sigma, statedSigmaBasis: basis });
+  }
+}
+
+// ── DORIS: CNES SSALTO precise orbits (IDS), ssa<sat><version>.b<yyddd>.e<yyddd>.<type>.sp3.<nnn>.Z ──
+const DORIS = { cs2: { norad: 36508, objectId: '2010-013A', name: 'CRYOSAT 2' }, srl: { norad: 39086, objectId: '2013-009A', name: 'SARAL' },
+  s3a: { norad: 41335, objectId: '2016-011A', name: 'SENTINEL 3A' }, s3b: { norad: 43437, objectId: '2018-039A', name: 'SENTINEL 3B' },
+  swo: { norad: 54754, objectId: '2022-173A', name: 'SWOT' } };
+const yyddd = (s) => Date.UTC(2000 + Number(s.slice(0, 2)), 0, Number(s.slice(2)));
+async function doris(lo, hi) {
+  const dir = path.join(values['local-archive'], 'ids-doris', 'ssa');
+  const names = fs.readdirSync(dir).filter((n) => /^ssa\w{5}\.b\d{5}\.e\d{5}\.\w{3}\.sp3\.\d{3}\.Z$/.test(n)).sort();
+  for (const [sat, identity] of Object.entries(DORIS)) {
+    // One arc per first day, the latest version; .Z (LZW) is read by gzip.
+    const byStart = new Map(names.filter((n) => n.slice(3, 6) === sat).map((n) => [n.slice(10, 15), n]));
+    const arcs = [...byStart].sort().map(([b, file]) => ({ name: file.replace(/\.sp3\.\d{3}\.Z$/, ''), file, start: yyddd(b), stop: yyddd(file.slice(17, 22)) + DAY,
+      read: () => {
+        const copy = localCopy(path.join(dir, file));
+        const sp3 = copy && execFileSync('gzip', ['-dc'], { input: copy.bytes, maxBuffer: 1 << 28 });
+        return copy && { ...copy, sp3, sp3Sha256: sha256(sp3) };
+      } }));
+    await localArcs(arcs, lo, hi, 100, identity);
+  }
+}
+
+// ── GRACE-FO: GFZ rapid science orbits (ISDC), GFZOP_RSO_<code>_G_<start>_<stop>_v<nn>.sp3.gz ──
+// L64's positions are those of ESA's GRACE-FO 1 density product (DNS1ACC);
+// L65 is the other satellite.
+const GFZ_RSO = { L64: { norad: 43476, objectId: '2018-047A', name: 'GRACE-FO 1' }, L65: { norad: 43477, objectId: '2018-047B', name: 'GRACE-FO 2' } };
+const stamp = (s) => Date.parse(`${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T${s.slice(9, 11)}:${s.slice(11, 13)}:${s.slice(13, 15)}Z`);
+async function gfzRso(lo, hi) {
+  for (const [code, identity] of Object.entries(GFZ_RSO)) {
+    const dir = path.join(values['local-archive'], 'gfz-isdc-rso', 'RSO', code);
+    const names = fs.readdirSync(dir).filter((n) => /^GFZOP_RSO_L\d\d_G_\d{8}_\d{6}_\d{8}_\d{6}_v\d\d\.sp3\.gz$/.test(n)).sort();
+    const byStart = new Map(names.map((n) => [n.slice(16, 31), n]));  // the latest version
+    const arcs = [...byStart].sort().map(([start, file]) => ({ name: file.replace('.sp3.gz', ''), file, start: stamp(start), stop: stamp(file.slice(32, 47)),
+      read: () => {
+        const copy = localCopy(path.join(dir, file));
+        const text = copy && gunzipSync(copy.bytes);
+        // Header columns 47-51 carry the frame; "CTS  " is the conventional terrestrial system.
+        return copy && { ...copy, sp3: Buffer.from(text.toString().replace(/^(#[cd][PV].{43})CTS  /, '$1ITRF ')), sp3Sha256: sha256(text) };
+      } }));
+    await localArcs(arcs, lo, hi, 100, identity, ', coordinate system "CTS" read as ITRF');
+  }
+}
+
+// ── COSMIC-2: UCAR CDAAC near-real-time LEO orbits, leoOrb_nrt_<yyyy>_<ddd>.tar.gz ──
+// Members leoOrb_<yyyy>.<ddd>.<FM>.<nn>_<...>_sp3, FM the spacecraft number.
+const COSMIC2 = { '001': { norad: 44349, objectId: '2019-036L', name: 'FORMOSAT7-1/COSMIC2-1' }, '002': { norad: 44351, objectId: '2019-036N', name: 'FORMOSAT7-2/COSMIC2-2' },
+  '003': { norad: 44343, objectId: '2019-036E', name: 'FORMOSAT7-3/COSMIC2-3' }, '004': { norad: 44350, objectId: '2019-036M', name: 'FORMOSAT7-4/COSMIC2-4' },
+  '005': { norad: 44358, objectId: '2019-036V', name: 'FORMOSAT7-5/COSMIC2-5' }, '006': { norad: 44353, objectId: '2019-036Q', name: 'FORMOSAT7-6/COSMIC2-6' } };
+async function cosmic2(lo, hi) {
+  const dir = path.join(values['local-archive'], 'ucar-cosmic2', 'nrt-leoOrb');
+  const opened = new Map();  // the last few tarballs read
+  const tarball = (name) => {
+    if (!opened.has(name)) {
+      const copy = localCopy(path.join(dir, name));
+      opened.set(name, copy && { ...copy, files: new Map(untar(gunzipSync(copy.bytes))) });
+      if (opened.size > 3) opened.delete(opened.keys().next().value);
+    }
+    return opened.get(name);
+  };
+  const byFm = new Map();
+  // A day's tarball holds the arcs that begin from about 22:00 the day before.
+  for (let day = lo - DAY; day <= hi; day += DAY) {
+    const d = new Date(day), doy = Math.round((day - Date.UTC(d.getUTCFullYear(), 0, 1)) / DAY) + 1;
+    const name = `leoOrb_nrt_${d.getUTCFullYear()}_${String(doy).padStart(3, '0')}.tar.gz`;
+    const t = fs.existsSync(path.join(dir, name)) ? tarball(name) : null;
+    if (!t) { console.warn(`cosmic2: ${name} is not in the local archive`); continue; }
+    for (const [member, bytes] of t.files) {
+      const file = path.basename(member);
+      if (!file.endsWith('_sp3')) continue;
+      const [line1, line2] = bytes.toString('latin1', 0, 160).split('\n');
+      const f = line1.slice(3, 31).trim().split(/\s+/).map(Number);
+      const start = Date.UTC(f[0], f[1] - 1, f[2], f[3], f[4], f[5]);
+      const fm = file.split('.')[2];
+      if (!byFm.has(fm)) byFm.set(fm, []);
+      byFm.get(fm).push({ name: file.replace(/_sp3$/, ''), file, start, stop: start + (Number(line1.slice(32, 39)) - 1) * Number(line2.slice(24, 38)) * 1000,
+        provenance: { tarball: name },
+        read: () => { const copy = tarball(name), sp3 = copy?.files.get(member); return sp3 && { url: copy.url, sha256: copy.sha256, sp3, sp3Sha256: sha256(sp3) }; } });
+    }
+  }
+  for (const [fm, arcs] of [...byFm].sort()) {
+    if (!COSMIC2[fm]) { console.warn(`cosmic2: spacecraft ${fm} has no catalogued identity here`); continue; }
+    await localArcs(arcs.sort((a, b) => a.start - b.start || a.name.localeCompare(b.name)), lo, hi, 60, COSMIC2[fm]);
+  }
+}
+
 let arcs = null;
 for (let day = from; day <= to; day += DAY) {
   if (products.has('swarm')) await swarm(day);
@@ -433,5 +589,9 @@ for (let day = from; day <= to; day += DAY) {
     if (arcs.some((x) => x.endsWith(yymmdd))) await slr(day);
   }
 }
+// Local arcs that meet the days --from to --to.
+if (products.has('doris')) await doris(from, to + DAY);
+if (products.has('gfz-rso')) await gfzRso(from, to + DAY);
+if (products.has('cosmic2')) await cosmic2(from, to + DAY);
 await reader?.destroy();
 await reference?.destroy();
