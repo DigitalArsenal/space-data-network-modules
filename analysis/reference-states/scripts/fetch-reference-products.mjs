@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Fetches independent precise orbits and turns them into reference states:
 // product -> files/orbit-products read_container -> reference_states, with
-// IERS EOP 20 C04 rows (data-source/eop-parser) for the Earth rotation.
+// IERS Earth orientation rows (data-source/eop-parser): EOP 20 C04, or with
+// --eop finals the observed rows of finals2000A, for the Earth rotation.
 //
 //   node scripts/fetch-reference-products.mjs --from 2026-09-01 --to 2026-09-07 \
 //     [--products gps,slr,sentinel1,swarm] [--out DIR]
@@ -44,7 +45,11 @@ const { values } = parseArgs({ options: {
   from: { type: 'string' }, to: { type: 'string' },
   products: { type: 'string', default: 'gps,slr,slr-daily,sentinel1,swarm' },
   out: { type: 'string', default: process.env.SDN_REFERENCE_CACHE ?? path.join(os.homedir(), '.cache', 'sdn-reference-states') },
+  // c04: IERS EOP 20 C04 (final, about 30 days behind). finals: IERS finals2000A,
+  // observed rows only, for truth newer than C04 reaches.
+  eop: { type: 'string', default: 'c04' },
 } });
+if (!['c04', 'finals'].includes(values.eop)) throw new Error('--eop is c04 or finals.');
 if (!values.from || !values.to) throw new Error('--from and --to (YYYY-MM-DD) are required.');
 const DAY = 86400000;
 const from = Date.parse(`${values.from}T00:00:00Z`), to = Date.parse(`${values.to}T00:00:00Z`);
@@ -73,6 +78,9 @@ async function fetchCached(url, dir = 'products', name = path.basename(new URL(u
     const response = await fetch(url).catch((error) => ({ ok: false, status: error.message }));
     if (response.ok) {
       const bytes = Buffer.from(await response.arrayBuffer());
+      // A server's "not found" page sent with status 200 is not the product.
+      if (/\.gz$/i.test(name) && !(bytes[0] === 0x1f && bytes[1] === 0x8b)) return null;
+      if (/\.zip$/i.test(name) && bytes.readUInt32LE(0) !== 0x04034b50) return null;
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, bytes);
       return bytes;
@@ -106,17 +114,27 @@ function unzipFirst(zip) {  // one stored or deflated entry
   return zip.readUInt16LE(8) === 8 ? inflateRawSync(data) : Buffer.from(data);
 }
 
-// ── Earth orientation: IERS EOP 20 C04, rows bracketing each file ──
-const C04_URL = 'https://hpiers.obspm.fr/iers/eop/eopc04/eopc04.1962-now';
+// ── Earth orientation: IERS rows (C04 or observed finals2000A) bracketing each file ──
+const EOP_URL = values.eop === 'c04' ? 'https://hpiers.obspm.fr/iers/eop/eopc04/eopc04.1962-now' : 'https://datacenter.iers.org/data/9/finals2000A.all';
 let eopRows = null;
+// finals2000A up to the last row whose polar motion (column 17) and UT1-UTC
+// (column 58) are both flagged I (IERS observed); predictions are dropped.
+function observedFinals(body) {
+  const lines = body.toString('latin1').split('\n');
+  let last = -1;
+  lines.forEach((l, i) => { if (l[16] === 'I' && l[57] === 'I') last = i; });
+  return Buffer.from(`${lines.slice(0, last + 1).join('\n')}\n`);
+}
 async function earthOrientation(startMs, stopMs) {
   if (!eopRows) {
-    const body = await fetchCached(C04_URL);
-    if (!body) throw new Error(`EOP source unavailable: ${C04_URL}`);
+    const fetched = await fetchCached(EOP_URL);
+    if (!fetched) throw new Error(`EOP source unavailable: ${EOP_URL}`);
+    const body = values.eop === 'c04' ? fetched : observedFinals(fetched);
+    const method = values.eop === 'c04' ? 'parse_c04' : 'parse_finals2000a';
     const h = await harness('data-source/eop-parser');
-    const r = await h.invoke({ methodId: 'parse_c04', inputs: [{ portId: 'body', payload: body, typeRef: { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: body.length } }] });
+    const r = await h.invoke({ methodId: method, inputs: [{ portId: 'body', payload: body, typeRef: { wireFormat: 'aligned-binary', requiredAlignment: 1, byteLength: body.length } }] });
     await h.destroy();
-    if (r.statusCode !== 0) throw new Error(`parse_c04: ${r.errorMessage}`);
+    if (r.statusCode !== 0) throw new Error(`${method}: ${r.errorMessage}`);
     const stream = Buffer.from(r.outputs.find((o) => o.portId === 'records').payload);
     eopRows = [];
     for (let at = 0; at < stream.length;) {
@@ -128,7 +146,7 @@ async function earthOrientation(startMs, stopMs) {
   }
   const lo = Math.floor(startMs / DAY) + 40587 - 1, hi = Math.ceil(stopMs / DAY) + 40587 + 1;
   const rows = eopRows.filter((row) => row.mjd >= lo && row.mjd <= hi);
-  if (!rows.length || rows[0].mjd > lo + 1 || rows.at(-1).mjd < hi - 1) return null;  // C04 not yet published that far
+  if (!rows.length || rows[0].mjd > lo + 1 || rows.at(-1).mjd < hi - 1) return null;  // not yet published (or observed) that far
   return { portId: 'earth_orientation', payload: Buffer.concat(rows.map((row) => row.bytes)), typeRef: typeRef('EOP') };
 }
 
@@ -167,7 +185,7 @@ async function referenceStates(key, sp3, identities, provenance) {
     index.push({ norad, objectId: block.OBJECT().OBJECT_ID(), start: block.START_TIME(), stop: block.STOP_TIME(),
       epochs: block.ephemerisDataLinesLength(), file: `${norad}.oem`, comment: block.COMMENT() });
   }
-  fs.writeFileSync(path.join(dir, 'index.json'), `${JSON.stringify({ ...provenance, eop: C04_URL, objects: index }, null, 1)}\n`);
+  fs.writeFileSync(path.join(dir, 'index.json'), `${JSON.stringify({ ...provenance, eop: EOP_URL, objects: index }, null, 1)}\n`);
   console.log(`${key}: ${index.length} objects`);
 }
 
@@ -227,20 +245,30 @@ function sp3Positions(text) {  // epoch -> km position of the file's one satelli
 async function slr(arc) {
   const yymmdd = new Date(arc).toISOString().slice(2, 10).replaceAll('-', '');
   for (const [sat, identity] of Object.entries(SLR)) {
-    const base = `https://edc.dgfi.tum.de/pub/slr/products/orbits/${sat}/${yymmdd}/`;
+    const base = `https://edc.dgfi.tum.de/pub/slr/products/orbits/TRF/${sat}/20${yymmdd.slice(0, 2)}/${yymmdd}/`;  // EDC layout since October 2026
     const names = await listing(base, new RegExp(`[a-z]+\\.orb\\.${sat}\\.${yymmdd}\\.v\\d+\\.sp3\\.gz`, 'g'));
-    const combined = names.find((n) => n.startsWith('ilrsa.'));
-    if (!combined) { console.warn(`slr: no ilrsa arc for ${sat} ${yymmdd}`); continue; }
-    const gz = await fetchCached(base + combined);
-    // ILRS writes its comment lines as "%/*"; SP3-c comments are "/*", and the
-    // reader refuses unknown records. Only that prefix is rewritten.
-    const sp3 = Buffer.from(gunzipSync(gz).toString().replace(/^%\/\*/gm, '/* '));
+    // The combination with positions: EDC also lists versions published empty
+    // (header only), so each is tried in version order.
+    let combined = null, gz = null, sp3 = null, truth = null;
+    for (const name of names.filter((n) => n.startsWith('ilrsa.')).sort()) {
+      const bytes = await fetchCached(base + name);
+      if (!bytes) continue;
+      // ILRS writes its comment lines as "%/*"; SP3-c comments are "/*", and the
+      // reader refuses unknown records. Only that prefix is rewritten.
+      const text = gunzipSync(bytes).toString().replace(/^%\/\*/gm, '/* ');
+      const positions = sp3Positions(text);
+      if (!positions.size) continue;
+      combined = name; gz = bytes; sp3 = Buffer.from(text); truth = positions;
+      break;
+    }
+    if (!combined) { console.warn(`slr: no ilrsa arc with positions for ${sat} ${yymmdd}`); continue; }
     // Stated sigma: per-axis RMS of the analysis centres about the
     // combination (precision; shared data make it a lower bound on error).
-    const truth = sp3Positions(sp3.toString());
     let sum = 0, count = 0;
     const centres = [];
-    for (const n of names.filter((x) => x !== combined)) {
+    // The analysis centres' orbits of the combination's own version (EDC also holds other versions).
+    const version = combined.split('.').at(-3);
+    for (const n of names.filter((x) => x !== combined && x.split('.').at(-3) === version && !x.startsWith('ilrsb.'))) {
       const ac = await fetchCached(base + n);
       if (!ac) continue;
       centres.push(n.split('.')[0]);
@@ -318,7 +346,8 @@ const yymmdd = (ms) => new Date(ms).toISOString().slice(2, 10).replaceAll('-', '
 async function slrDaily(arcStart) {
   // The arc in file F spans F-4 00:00 to F-1; the next file's arc overlaps it by 3 days.
   for (const [sat, identity] of Object.entries(SLR_DAILY)) {
-    const file = (ms) => `https://edc.dgfi.tum.de/pub/slr/products/orbits/${sat}/${yymmdd(ms)}/nsgf.orb.${sat}.${yymmdd(ms)}.v00.sp3.gz`;
+    // EDC layout since October 2026: rapid/<sat>/<yyyy>/<yymmdd>/, daily files, version v000.
+    const file = (ms) => `https://edc.dgfi.tum.de/pub/slr/products/orbits/rapid/${sat}/${new Date(ms).getUTCFullYear()}/${yymmdd(ms)}/nsgf.orb.${sat}.${yymmdd(ms)}.v000.sp3.gz`;
     const gz = await fetchCached(file(arcStart + 4 * DAY));
     const next = await fetchCached(file(arcStart + 5 * DAY));
     if (!gz || !next) { console.warn(`slr-daily: ${sat} arc from ${yymmdd(arcStart)} or its successor not published`); continue; }
@@ -399,7 +428,8 @@ for (let day = from; day <= to; day += DAY) {
   // ILRS arcs are named by their last day, one each week.
   if (products.has('slr')) {
     const yymmdd = new Date(day).toISOString().slice(2, 10).replaceAll('-', '');
-    arcs ??= await listing('https://edc.dgfi.tum.de/pub/slr/products/orbits/lageos1/', /lageos1\/(\d{6})/g);
+    const years = [...new Set([new Date(from).getUTCFullYear(), new Date(to).getUTCFullYear()])];
+    arcs ??= (await Promise.all(years.map((y) => listing(`https://edc.dgfi.tum.de/pub/slr/products/orbits/TRF/lageos1/${y}/`, /lageos1\/\d{4}\/(\d{6})/g)))).flat();
     if (arcs.some((x) => x.endsWith(yymmdd))) await slr(day);
   }
 }

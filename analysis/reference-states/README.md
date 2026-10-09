@@ -64,6 +64,10 @@ Earth orientation comes from IERS EOP 20 C04, parsed by
 - the NSGF arcs' coordinate system "ECF" is read as ITRF, as their own
   comment states.
 
+C04 runs about 30 days behind. `--eop finals` uses the observed rows of IERS
+finals2000A instead (`parse_finals2000a`), so reference states can be made for
+recent days; delete the cached `finals2000A.all` under `--out` to refresh it.
+
 Each product gets `DIR/reference/<product>/<norad>.oem` (a size-prefixed
 `$OEM`) and an `index.json` recording the URL, SHA-256, stated sigma and basis.
 Products are public. Catalog element sets are not used here.
