@@ -1,0 +1,394 @@
+{
+  "ok": true,
+  "fixture": "analysis/association",
+  "wasmPath": "dist/isomorphic/module.wasm",
+  "artifactSha256": "570606c05016f8e2d438bee810ca264627192f3a3a58d083e418a64a137bf810",
+  "moduleSha256": "570606c05016f8e2d438bee810ca264627192f3a3a58d083e418a64a137bf810",
+  "pin": "0.16.4",
+  "lanes": [
+    {
+      "lane": "browser",
+      "runs": 12,
+      "durationMs": 1230
+    },
+    {
+      "lane": "wasmedge",
+      "runs": 12,
+      "durationMs": 25085
+    },
+    {
+      "lane": "docker-wasmedge",
+      "runs": 12,
+      "durationMs": 28064
+    }
+  ],
+  "cases": [
+    "gps-20260802",
+    "two-objects",
+    "or-library-assign100"
+  ],
+  "comparisons": 69,
+  "failures": [],
+  "runs": [
+    {
+      "lane": "browser",
+      "caseId": "gps-20260802",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ad006d8b203805115cb06a8c1195309cb06430c1ee13d7d12e34747c7785e088",
+      "stdoutLength": 2367584
+    },
+    {
+      "lane": "browser",
+      "caseId": "gps-20260802",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ad006d8b203805115cb06a8c1195309cb06430c1ee13d7d12e34747c7785e088",
+      "stdoutLength": 2367584
+    },
+    {
+      "lane": "browser",
+      "caseId": "gps-20260802",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ad006d8b203805115cb06a8c1195309cb06430c1ee13d7d12e34747c7785e088",
+      "stdoutLength": 2367584
+    },
+    {
+      "lane": "browser",
+      "caseId": "gps-20260802",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ad006d8b203805115cb06a8c1195309cb06430c1ee13d7d12e34747c7785e088",
+      "stdoutLength": 2367584
+    },
+    {
+      "lane": "browser",
+      "caseId": "two-objects",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "989c25587ef9f4a2c2309a94945e58429d123ba64be65020294a95695f2e1055",
+      "stdoutLength": 4296
+    },
+    {
+      "lane": "browser",
+      "caseId": "two-objects",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "989c25587ef9f4a2c2309a94945e58429d123ba64be65020294a95695f2e1055",
+      "stdoutLength": 4296
+    },
+    {
+      "lane": "browser",
+      "caseId": "two-objects",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "989c25587ef9f4a2c2309a94945e58429d123ba64be65020294a95695f2e1055",
+      "stdoutLength": 4296
+    },
+    {
+      "lane": "browser",
+      "caseId": "two-objects",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "989c25587ef9f4a2c2309a94945e58429d123ba64be65020294a95695f2e1055",
+      "stdoutLength": 4296
+    },
+    {
+      "lane": "browser",
+      "caseId": "or-library-assign100",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "30603d208bbddffc5b4d06028fb5b684ecc730a7881c117faab3ae2a79513e1b",
+      "stdoutLength": 600
+    },
+    {
+      "lane": "browser",
+      "caseId": "or-library-assign100",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "30603d208bbddffc5b4d06028fb5b684ecc730a7881c117faab3ae2a79513e1b",
+      "stdoutLength": 600
+    },
+    {
+      "lane": "browser",
+      "caseId": "or-library-assign100",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "30603d208bbddffc5b4d06028fb5b684ecc730a7881c117faab3ae2a79513e1b",
+      "stdoutLength": 600
+    },
+    {
+      "lane": "browser",
+      "caseId": "or-library-assign100",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "30603d208bbddffc5b4d06028fb5b684ecc730a7881c117faab3ae2a79513e1b",
+      "stdoutLength": 600
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "gps-20260802",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ad006d8b203805115cb06a8c1195309cb06430c1ee13d7d12e34747c7785e088",
+      "stdoutLength": 2367584
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "gps-20260802",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ad006d8b203805115cb06a8c1195309cb06430c1ee13d7d12e34747c7785e088",
+      "stdoutLength": 2367584
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "gps-20260802",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ad006d8b203805115cb06a8c1195309cb06430c1ee13d7d12e34747c7785e088",
+      "stdoutLength": 2367584
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "gps-20260802",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ad006d8b203805115cb06a8c1195309cb06430c1ee13d7d12e34747c7785e088",
+      "stdoutLength": 2367584
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "two-objects",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "989c25587ef9f4a2c2309a94945e58429d123ba64be65020294a95695f2e1055",
+      "stdoutLength": 4296
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "two-objects",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "989c25587ef9f4a2c2309a94945e58429d123ba64be65020294a95695f2e1055",
+      "stdoutLength": 4296
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "two-objects",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "989c25587ef9f4a2c2309a94945e58429d123ba64be65020294a95695f2e1055",
+      "stdoutLength": 4296
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "two-objects",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "989c25587ef9f4a2c2309a94945e58429d123ba64be65020294a95695f2e1055",
+      "stdoutLength": 4296
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "or-library-assign100",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "30603d208bbddffc5b4d06028fb5b684ecc730a7881c117faab3ae2a79513e1b",
+      "stdoutLength": 600
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "or-library-assign100",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "30603d208bbddffc5b4d06028fb5b684ecc730a7881c117faab3ae2a79513e1b",
+      "stdoutLength": 600
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "or-library-assign100",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "30603d208bbddffc5b4d06028fb5b684ecc730a7881c117faab3ae2a79513e1b",
+      "stdoutLength": 600
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "or-library-assign100",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "30603d208bbddffc5b4d06028fb5b684ecc730a7881c117faab3ae2a79513e1b",
+      "stdoutLength": 600
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "gps-20260802",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ad006d8b203805115cb06a8c1195309cb06430c1ee13d7d12e34747c7785e088",
+      "stdoutLength": 2367584
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "gps-20260802",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ad006d8b203805115cb06a8c1195309cb06430c1ee13d7d12e34747c7785e088",
+      "stdoutLength": 2367584
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "gps-20260802",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ad006d8b203805115cb06a8c1195309cb06430c1ee13d7d12e34747c7785e088",
+      "stdoutLength": 2367584
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "gps-20260802",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ad006d8b203805115cb06a8c1195309cb06430c1ee13d7d12e34747c7785e088",
+      "stdoutLength": 2367584
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "two-objects",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "989c25587ef9f4a2c2309a94945e58429d123ba64be65020294a95695f2e1055",
+      "stdoutLength": 4296
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "two-objects",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "989c25587ef9f4a2c2309a94945e58429d123ba64be65020294a95695f2e1055",
+      "stdoutLength": 4296
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "two-objects",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "989c25587ef9f4a2c2309a94945e58429d123ba64be65020294a95695f2e1055",
+      "stdoutLength": 4296
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "two-objects",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "989c25587ef9f4a2c2309a94945e58429d123ba64be65020294a95695f2e1055",
+      "stdoutLength": 4296
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "or-library-assign100",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "30603d208bbddffc5b4d06028fb5b684ecc730a7881c117faab3ae2a79513e1b",
+      "stdoutLength": 600
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "or-library-assign100",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "30603d208bbddffc5b4d06028fb5b684ecc730a7881c117faab3ae2a79513e1b",
+      "stdoutLength": 600
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "or-library-assign100",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "30603d208bbddffc5b4d06028fb5b684ecc730a7881c117faab3ae2a79513e1b",
+      "stdoutLength": 600
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "or-library-assign100",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "30603d208bbddffc5b4d06028fb5b684ecc730a7881c117faab3ae2a79513e1b",
+      "stdoutLength": 600
+    }
+  ]
+}
