@@ -1,7 +1,7 @@
 {
   "pluginId": "maneuver-planner",
   "name": "Maneuver Planning Plugin",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Classical orbital maneuver and ROE targeting operations exposed through a canonical SDK command bridge.",
   "pluginFamily": "maneuver",
   "capabilities": [],

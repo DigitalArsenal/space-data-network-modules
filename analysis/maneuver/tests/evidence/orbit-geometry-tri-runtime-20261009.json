@@ -1,25 +1,25 @@
 {
   "ok": true,
   "fixture": "maneuver-native-orbit-geometry",
-  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--saw-beta-sgp4-epoch-cache/analysis/maneuver/dist/isomorphic/module.wasm",
-  "artifactSha256": "25e56a6a958b94ca56c1ad14f5e69eda420ac7996c79477a370dee76cd1b3183",
-  "moduleSha256": "25e56a6a958b94ca56c1ad14f5e69eda420ac7996c79477a370dee76cd1b3183",
+  "wasmPath": "analysis/maneuver/dist/isomorphic/module.wasm",
+  "artifactSha256": "e07fd05f93975d15b43e92786ad897bdd066574d66d85d99fb8640be4c0c2a7b",
+  "moduleSha256": "e07fd05f93975d15b43e92786ad897bdd066574d66d85d99fb8640be4c0c2a7b",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 5,
-      "durationMs": 1190
+      "durationMs": 1290
     },
     {
       "lane": "wasmedge",
       "runs": 5,
-      "durationMs": 161
+      "durationMs": 237
     },
     {
       "lane": "docker-wasmedge",
       "runs": 5,
-      "durationMs": 898
+      "durationMs": 2061
     }
   ],
   "cases": [
@@ -38,6 +38,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "spawnCount": null,
       "stdoutSha256": "1856185eb47294202a7c0f791b09c64c7d7f79c63ce17fc8e2909357fc4811e2",
       "stdoutLength": 784
     },
@@ -47,6 +48,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "spawnCount": null,
       "stdoutSha256": "ee5e354e9b25dbf43d668cc71c1d3f099baaf0d574c60ac89884ba487e7e51c7",
       "stdoutLength": 400
     },
@@ -56,6 +58,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "spawnCount": null,
       "stdoutSha256": "cfba5734e2d71c0a2fd8ba78614dec94a1da0f75219fab6eeacdbe05ace58a3c",
       "stdoutLength": 248
     },
@@ -65,6 +68,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "spawnCount": null,
       "stdoutSha256": "e4eb2ec1199ec228d926a22a889bc214b7f1d37394df06b7c913009dc3deec6e",
       "stdoutLength": 152
     },
@@ -74,6 +78,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "spawnCount": null,
       "stdoutSha256": "f8537d7935215718fe33e3ce363a34c1a3c2468cf4b30a26fe4c7f19ec487784",
       "stdoutLength": 15392
     },
@@ -83,6 +88,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "spawnCount": null,
       "stdoutSha256": "1856185eb47294202a7c0f791b09c64c7d7f79c63ce17fc8e2909357fc4811e2",
       "stdoutLength": 784
     },
@@ -92,6 +98,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "spawnCount": null,
       "stdoutSha256": "ee5e354e9b25dbf43d668cc71c1d3f099baaf0d574c60ac89884ba487e7e51c7",
       "stdoutLength": 400
     },
@@ -101,6 +108,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "spawnCount": null,
       "stdoutSha256": "cfba5734e2d71c0a2fd8ba78614dec94a1da0f75219fab6eeacdbe05ace58a3c",
       "stdoutLength": 248
     },
@@ -110,6 +118,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "spawnCount": null,
       "stdoutSha256": "e4eb2ec1199ec228d926a22a889bc214b7f1d37394df06b7c913009dc3deec6e",
       "stdoutLength": 152
     },
@@ -119,6 +128,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "spawnCount": null,
       "stdoutSha256": "f8537d7935215718fe33e3ce363a34c1a3c2468cf4b30a26fe4c7f19ec487784",
       "stdoutLength": 15392
     },
@@ -128,6 +138,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "spawnCount": null,
       "stdoutSha256": "1856185eb47294202a7c0f791b09c64c7d7f79c63ce17fc8e2909357fc4811e2",
       "stdoutLength": 784
     },
@@ -137,6 +148,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "spawnCount": null,
       "stdoutSha256": "ee5e354e9b25dbf43d668cc71c1d3f099baaf0d574c60ac89884ba487e7e51c7",
       "stdoutLength": 400
     },
@@ -146,6 +158,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "spawnCount": null,
       "stdoutSha256": "cfba5734e2d71c0a2fd8ba78614dec94a1da0f75219fab6eeacdbe05ace58a3c",
       "stdoutLength": 248
     },
@@ -155,6 +168,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "spawnCount": null,
       "stdoutSha256": "e4eb2ec1199ec228d926a22a889bc214b7f1d37394df06b7c913009dc3deec6e",
       "stdoutLength": 152
     },
@@ -164,6 +178,7 @@
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
+      "spawnCount": null,
       "stdoutSha256": "f8537d7935215718fe33e3ce363a34c1a3c2468cf4b30a26fe4c7f19ec487784",
       "stdoutLength": 15392
     }
