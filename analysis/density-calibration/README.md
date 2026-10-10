@@ -70,7 +70,8 @@ k} D(correction), every set weighted by its object's robust residual scale
 (1.4826 MAD, at least `sigmaFloorM`; sets beyond `editSigma` of it left out
 from the second iteration; scales and edits re-estimated in the first
 `reweightIterations` (4) iterations and then held, so that the iterations
-converge on a fixed problem), with a random walk between consecutive nodes
+converge on a fixed problem; each object's ln B step limited to 1 and
+scaled by a factor halved whenever that step reverses sign), with a random walk between consecutive nodes
 (σ = `randomWalkKPerSqrtDay` √Δt), a Gaussian prior on each altitude node's
 mean level (`meanLevelK`), a prior tying neighbouring altitude nodes
 (`altitudeDifferenceK`), and each object's prior on ln B. Density and B
@@ -78,7 +79,8 @@ enter only as their product: a common scale on every B is the same as a
 shift of the correction's level, so the level is set by the objects with
 known area to mass (strong ln B priors) and the level prior; the time
 variation is set by every object. `fit.level` and `fit.levelLnBCorrelation`
-report how well the level is determined; `fit.history` the largest steps
+(with the precision-weighted mean ln B) report how well the level is
+determined; `fit.history` the largest steps
 and the chi-square of each iteration. The start is the correction at zero
 and each object's B by linear least squares (an unresolved decay starts at
 its prior, at 12.741621 B*, or at 0.01 m²/kg, with a weak prior). σ's are the
@@ -103,5 +105,5 @@ out. `sigmas` are the formal posterior standard deviations.
 | Node corrections | dT linear in time and altitude at six points against the closed form; a constant node correction against raising every DTC value | 1e-9 K; 1e-12 |
 | SGP4 trajectory and mean a | Vallado's verification set (SGP4-VER.TLE, tcppver.out t = 0 rows, near-Earth cases); Hoots and Roehrich (1980) Spacetrack Report No. 3 Brouwer semi-major axis with WGS-72 | 2e-8 km, 2e-9 km/s; 1e-6 km |
 | Drag decay | `propagator/hpop` integrating the equations of motion (RK78, zonal gravity to degree 4, JB2008 drag with Cd·A/m = B, DE440 Sun, zero EOP) from the set's GCRF epoch state (`analysis/epoch-state`): the change of the osculating semi-major axis averaged over whole nodal periods, one day, constant drivers; with DTC raised by 60 K and the same node correction | circular 400 km: rate within 0.4 %; e = 0.05, perigee 320 km: 1.6 % (SGP4's analytical trajectory, anomaly terms); the response to +60 K within 0.03 % |
-| Estimation | synthetic histories of six objects (360–730 km, a set every 8 h, 1 m noise) made by `decay` under a known correction (30 K, a one-day 90 K excursion, 10 K) and known B; one object anchored | steady-state error under 8 K and within the formal sigmas; every B within 1 %; without the anchor the level's sigma grows more than fourfold and its correlation with the mean ln B is below −0.9 (the degeneracy) |
+| Estimation | synthetic histories of six objects (360–730 km, a set every 8 h, 1 m noise) made by `decay` under a known correction (30 K, a one-day 90 K excursion, 10 K) and known B, and a seventh at 880 km whose sets rise 0.4 m a day (as radiation pressure can make them); one object anchored | converges; steady-state error under 8 K and within the formal sigmas; the six B within 1 %; without the anchor the level's sigma grows more than fourfold and its correlation with the precision-weighted mean ln B is below −0.9 (the degeneracy) |
 | SDK compliance | `space-data-module-sdk` `validateArtifactWithStandards` | pass |

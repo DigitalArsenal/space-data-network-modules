@@ -1171,6 +1171,11 @@ extern "C" int calibrate_decay() {
         rhs[i2] -= d * h;
       }
   };
+  // Each object's ln B step is limited to 1 and scaled by lnBScale[i] (1 at
+  // first), halved whenever the step reverses sign: an object whose sets do
+  // not decay as drag would (radiation pressure above ~800 km) otherwise
+  // alternates between two values, while the correction has converged.
+  std::vector<double> lnBScale(N, 1.0), lnBLast(N, 0.0);
   for (; iterations < maxIt; ++iterations) {
     bool ok = true;
     for (Object& ob : objects) ok = integrate_object(ob, stepS, table, sun, corr, true) && ok;
@@ -1188,7 +1193,9 @@ extern "C" int calibrate_decay() {
       big = std::max(big, std::abs(step));
     }
     for (int i = 0; i < N; ++i) {
-      const double step = std::max(-1.0, std::min(1.0, rhs[nTheta + i]));
+      if (rhs[nTheta + i] * lnBLast[i] < 0) lnBScale[i] *= 0.5;
+      const double step = std::max(-1.0, std::min(1.0, lnBScale[i] * rhs[nTheta + i]));
+      lnBLast[i] = step;
       objects[i].lnB += step;
       bigB = std::max(bigB, std::abs(step));
       for (size_t c = 0; c < objects[i].chains.size(); ++c) {
@@ -1231,13 +1238,20 @@ extern "C" int calibrate_decay() {
         for (int k = 0; k < M; ++k) var += cov[size_t(j * P + a) * n + (k * P + a)] / (double(M) * M);
     level.push_back({{"altitudeKm", P == 1 ? json(nullptr) : json(corr.alt[a])}, {"meanK", m}, {"sigmaK", haveCov ? json(std::sqrt(var)) : json(nullptr)}});
   }
+  // The mean ln B is weighted by each object's precision (1 / its ln B
+  // variance), so that an object whose B the data cannot resolve does not
+  // dominate it.
   if (haveCov) {
+    std::vector<double> wB(N, 0.0);
+    double sumW = 0;
+    for (int i = 0; i < N; ++i) { wB[i] = 1.0 / std::max(1e-300, cov[size_t(nTheta + i) * n + (nTheta + i)]); sumW += wB[i]; }
+    for (double& w : wB) w /= sumW;
     for (int u = 0; u < nTheta; ++u)
       for (int v = 0; v < nTheta; ++v) varT += cov[size_t(u) * n + v] / (double(nTheta) * nTheta);
     for (int i = 0; i < N; ++i)
-      for (int k = 0; k < N; ++k) varB += cov[size_t(nTheta + i) * n + (nTheta + k)] / (double(N) * N);
+      for (int k = 0; k < N; ++k) varB += wB[i] * wB[k] * cov[size_t(nTheta + i) * n + (nTheta + k)];
     for (int u = 0; u < nTheta; ++u)
-      for (int i = 0; i < N; ++i) covTB += cov[size_t(u) * n + (nTheta + i)] / (double(nTheta) * N);
+      for (int i = 0; i < N; ++i) covTB += cov[size_t(u) * n + (nTheta + i)] * wB[i] / double(nTheta);
   }
   json objs = json::array();
   for (int i = 0; i < N; ++i) {

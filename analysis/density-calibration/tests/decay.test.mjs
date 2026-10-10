@@ -253,7 +253,8 @@ async function synthetic({ t0, days, objects, correction, noiseM, seed }) {
   const rnd = random(seed);
   const gauss = () => Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd());
   const histories = objects.map((o) => ({ ...o, sets: Array.from({ length: Math.floor(days * 3) + 1 }, (_, k) => set(t0 + k / 3, o.aKm, o.e, o.inc, { MEAN_ANOMALY: (k * 97) % 360 })) }));
-  const noise = histories.map((h) => h.sets.map(() => noiseM * gauss()));
+  // trendMPerDay: a rise drag cannot make (radiation pressure on a high, light object).
+  const noise = histories.map((h) => h.sets.map((_, k) => noiseM * gauss() + (h.trendMPerDay ?? 0) * k / 3));
   // Two passes: the sets' mean motions follow the modelled decay of the trajectories they define.
   for (let pass = 0; pass < 2; ++pass) {
     const out = await call('decay', { jb2008: { rows: rows(t0 - 8, t0 + days + 2) }, stepSeconds: 120, correction,
@@ -266,7 +267,7 @@ async function synthetic({ t0, days, objects, correction, noiseM, seed }) {
   return histories;
 }
 
-test('calibrate_decay recovers a known correction and ballistic coefficients from synthetic histories; the level needs an anchor', async () => {
+test('calibrate_decay recovers a known correction and ballistic coefficients from synthetic histories, converges with an object whose sets rise; the level needs an anchor', async () => {
   const t0 = 61046.0, days = 8;
   // The true correction: 30 K, a one-day 90 K excursion from day 3, then 10 K.
   const nodesMjd = [], values = [];
@@ -280,6 +281,8 @@ test('calibrate_decay recovers a known correction and ballistic coefficients fro
     { id: 'A', aKm: 6378.137 + 360, e: 0.0008, inc: 65, B: 0.012 }, { id: 'B', aKm: 6378.137 + 420, e: 0.001, inc: 82, B: 0.03 },
     { id: 'C', aKm: 6378.137 + 480, e: 0.0015, inc: 98, B: 0.02 }, { id: 'D', aKm: 6378.137 + 540, e: 0.002, inc: 51.6, B: 0.05 },
     { id: 'E', aKm: 7100, e: 0.06, inc: 74, B: 0.012 }, { id: 'F', aKm: 6378.137 + 380, e: 0.001, inc: 28, B: 0.008 },
+    // Its sets rise 0.4 m a day: its B runs towards zero, and it must not keep the fit from converging.
+    { id: 'G', aKm: 6378.137 + 880, e: 0.001, inc: 99, B: 0.005, trendMPerDay: 0.4 },
   ];
   const histories = await synthetic({ t0, days, objects, correction: truth, noiseM: 1, seed: 20261009 });
   const request = (anchor) => ({ jb2008: { rows: rows(t0 - 8, t0 + days + 2) }, stepSeconds: 120, iterations: 12,
@@ -300,7 +303,7 @@ test('calibrate_decay recovers a known correction and ballistic coefficients fro
   const trueLevel = anchored.correction.nodesMjd.reduce((a, t) => a + trueAt(t), 0) / nodes.length;
   const [level] = anchored.fit.level;
   assert.ok(Math.abs(level.meanK - trueLevel) < 3 * level.sigmaK + 1, `level ${level.meanK} +- ${level.sigmaK} vs ${trueLevel}`);
-  anchored.objects.forEach((o) => {
+  anchored.objects.filter((o) => o.id !== 'G').forEach((o) => {
     const B = objects.find((x) => x.id === o.id).B;
     assert.ok(Math.abs(o.B / B - 1) < 0.01, `${o.id}: B ${o.B} vs ${B}`);
   });
