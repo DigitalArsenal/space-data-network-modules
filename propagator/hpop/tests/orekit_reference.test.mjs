@@ -37,13 +37,14 @@
 //   T1 IERS 2010 solid tides ............... LEO 9.1 mm, GPS 0.43 mm (15 m, 0.6 m)
 //   I1 in-track 5e-8 m/s^2 ................. LEO 9.1 mm              (560 m)
 //   B1 Cd*A/m rate 5e-8 m^2/kg/s ........... LEO 1.2 cm              (1.4 km)
-//   W1 daily CSSI space weather ............ LEO 1.5 cm, SSO 1.3 cm  (4.4 km, 50 m)
+//   W1 daily CSSI space weather (synthetic series, make-synthetic-weather.mjs)
+//      ..................................... LEO 1.2 cm, SSO 0.7 cm
 //   E1 EME2000 state in and out ............ LEO 9.1 mm, GPS 0.43 mm (17 cm, 4 mm)
 //   G1 EGM96 36x36 / 70x70 ................. LEO 9.1 mm, GPS 0.43 mm
 //   G2 EGM2008 36Z,24T ..................... LEO 9.2 mm
-//   J1 JB2008 on SET's SOLFSMY/DTCFILE rows
-//      from 2026-06-10 ..................... LEO 1.6 cm, SSO 1.2 cm (a one-day
-//      error in the Y10 lag alone moves LEO by 59 m)
+//   J1 JB2008 on synthetic SOLFSMY/DTCFILE rows (make-synthetic-weather.mjs)
+//      from 2026-06-10 ..................... LEO 1.4 cm, SSO 0.2 cm (the drivers'
+//      12 UT stamps matter: half a day of shift moved LEO by 342 m)
 //   C1 with the STM and parameter Jacobians (B, BDOT, AGOM, T; analytic,
 //      density gradient included): largest relative column difference, over
 //      the samples, of the STM .............. LEO 1.2e-5, GPS 4.0e-11 (limit 1e-4)
@@ -55,7 +56,7 @@
 // under one error control), visiting the epochs in order, one integration
 // per span. A request for the final epoch alone runs the plain RK78 path
 // instead; it is checked too ("final epoch only"), at 24 h, with the same
-// tolerances and 300 s steps: measured <= 2.8 cm (LEO400 W1), GPS <= 0.44 mm.
+// tolerances and 300 s steps: measured <= 2.6 cm (LEO400 W1), GPS <= 0.44 mm.
 // Before the steps ended on the shadow boundaries that path needed steps of
 // at most 10 s with radiation pressure (LEO400 F6 was 21 cm off at 60 s).
 // Orekit 13.1's DeSitterRelativity is replaced in the oracle by the same

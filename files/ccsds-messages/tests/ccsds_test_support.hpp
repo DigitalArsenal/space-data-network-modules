@@ -367,7 +367,7 @@ Epoch parse_epoch(const std::string& s) {
         e.day = days_from_civil(std::atoll(date[0].c_str()), std::atoll(date[1].c_str()),
                                 std::atoll(date[2].c_str()));
     } else if (date.size() == 2) {
-        // Day-of-year form, as Figure G-5 writes it: 2006-090T05:00:00.071.
+        // Day-of-year form, as Figure G-5 writes it: 2031-090T05:00:00.071.
         e.day = days_from_civil(std::atoll(date[0].c_str()), 1, 1) +
                 std::atoll(date[1].c_str()) - 1;
     } else {

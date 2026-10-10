@@ -46,9 +46,11 @@ import {
   runScreenCatalog,
   primaryArtifactExists,
 } from "./lib/screenCatalogParityHarness.mjs";
+import { privateFixtureSkip, privateFixturePath } from "./lib/privateFixtures.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURE_DIR = path.join(__dirname, "fixtures", "socrates");
+const SOCRATES_SKIP = privateFixtureSkip("socrates/reference.top3.json");
+const FIXTURE_DIR = privateFixturePath("socrates") ?? path.join(__dirname, "fixtures", "socrates");
 const T = CA_PARITY_TOLERANCES;
 
 const ARTIFACT = primaryArtifactExists();
@@ -82,7 +84,7 @@ function loadReferenceWindow() {
 }
 
 let ctx = null;
-if (ARTIFACT) {
+if (ARTIFACT && !SOCRATES_SKIP) {
   const exports = await loadRawConjunctionModule();
   const flatc = await initFlatc();
   const { reference, catalog, referenceEvents } = loadReferenceWindow();
@@ -144,7 +146,7 @@ function requireCtx(t) {
   return ctx;
 }
 
-test("SOCRATES: parity summary (measured deltas for the coordinator)", (t) => {
+test("SOCRATES: parity summary (measured deltas for the coordinator)", { skip: SOCRATES_SKIP }, (t) => {
   const c = requireCtx(t);
   if (!c) return;
   t.diagnostic(
@@ -167,7 +169,7 @@ test("SOCRATES: parity summary (measured deltas for the coordinator)", (t) => {
   assert.ok(true);
 });
 
-test("SOCRATES: event set — full reference recall, no spurious events [independent-parity + regression-guard]", (t) => {
+test("SOCRATES: event set — full reference recall, no spurious events [independent-parity + regression-guard]", { skip: SOCRATES_SKIP }, (t) => {
   const c = requireCtx(t);
   if (!c) return;
   // All 6 objects parsed.
@@ -188,7 +190,7 @@ test("SOCRATES: event set — full reference recall, no spurious events [indepen
   );
 });
 
-test("SOCRATES: other conjunctions of the reported pairs are distinct close approaches [regression-guard: same SGP4, separate TCA solver]", (t) => {
+test("SOCRATES: other conjunctions of the reported pairs are distinct close approaches [regression-guard: same SGP4, separate TCA solver]", { skip: SOCRATES_SKIP }, (t) => {
   const c = requireCtx(t);
   if (!c) return;
   const thresholdM = T.screening.socrates.thresholdKm * 1000;
@@ -218,7 +220,7 @@ test("SOCRATES: other conjunctions of the reported pairs are distinct close appr
   }
 });
 
-test("SOCRATES: TCA within rel-vel-stratified tolerance [independent-parity]", (t) => {
+test("SOCRATES: TCA within rel-vel-stratified tolerance [independent-parity]", { skip: SOCRATES_SKIP }, (t) => {
   const c = requireCtx(t);
   if (!c) return;
   for (const m of c.cmp.matched) {
@@ -234,7 +236,7 @@ test("SOCRATES: TCA within rel-vel-stratified tolerance [independent-parity]", (
   }
 });
 
-test("SOCRATES: miss distance within SOCRATES bound [regression-guard: CSV range quantized]", (t) => {
+test("SOCRATES: miss distance within SOCRATES bound [regression-guard: CSV range quantized]", { skip: SOCRATES_SKIP }, (t) => {
   const c = requireCtx(t);
   if (!c) return;
   for (const m of c.cmp.matched) {
@@ -245,7 +247,7 @@ test("SOCRATES: miss distance within SOCRATES bound [regression-guard: CSV range
   }
 });
 
-test("SOCRATES: relative speed within bound", (t) => {
+test("SOCRATES: relative speed within bound", { skip: SOCRATES_SKIP }, (t) => {
   const c = requireCtx(t);
   if (!c) return;
   for (const m of c.cmp.matched) {
@@ -257,7 +259,7 @@ test("SOCRATES: relative speed within bound", (t) => {
   }
 });
 
-test("SOCRATES: Pc advisory — same-family, recorded not gated [same-family-advisory]", (t) => {
+test("SOCRATES: Pc advisory — same-family, recorded not gated [same-family-advisory]", { skip: SOCRATES_SKIP }, (t) => {
   const c = requireCtx(t);
   if (!c) return;
   // Pc is NEVER a pass/fail axis (User's Guide + AMOS 2025). We record the

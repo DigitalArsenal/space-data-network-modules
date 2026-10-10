@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Writes the JB2008 drivers Orekit read (Space Environment Technologies'
-// SOLFSMY.TXT and DTCFILE.TXT, the files in Orekit's data directory) for a
-// range of days as PRWJB2008Indices rows, so HPOP's jb2008_indices input
-// carries exactly the same values.
+// Writes the JB2008 drivers Orekit read (SOLFSMY.TXT and DTCFILE.TXT in the
+// layout of Space Environment Technologies' files, here the synthetic ones of
+// make-synthetic-weather.mjs) for a range of days as PRWJB2008Indices rows, so
+// HPOP's jb2008_indices input carries exactly the same values. SET's own files
+// state no licence and are not used.
 //
 // SOLFSMY.TXT: YYYY DDD JulianDay F10 F81c S10 S81c M10 M81c Y10 Y81c Ssrc
 // (SFU, reported at 12 UT). DTCFILE.TXT: "DTC" YYYY DDD and 24 hourly DTC (K).
@@ -36,7 +37,7 @@ for (let day = new Date(`${from}T00:00:00Z`); day <= new Date(`${to}T00:00:00Z`)
   rows.push({ DATE: date, ...sol.get(date), DTC_HOURLY_K: dtc.get(date) });
 }
 fs.writeFileSync(out, `${JSON.stringify({
-  source: "Space Environment Technologies SOLFSMY.TXT and DTCFILE.TXT, the files in the Orekit data directory used for orekit-reference.json",
+  source: "Synthetic SOLFSMY.TXT and DTCFILE.TXT (make-synthetic-weather.mjs): invented values in the layout of Space Environment Technologies' files, read by Orekit for the J1 cases of orekit-reference.json",
   sha256: { solfsmy: crypto.createHash('sha256').update(solText).digest('hex'), dtcfile: crypto.createHash('sha256').update(dtcText).digest('hex') },
   rows,
 }, null, 1)}\n`);

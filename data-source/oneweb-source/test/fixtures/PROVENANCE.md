@@ -5,16 +5,14 @@ These fixtures drive the offline, mock-host integration test
 
 ## `ltef.sample.csv`
 
-The first **5 rows** of OneWeb's public LTEF (Long-Term Ephemeris File).
-
-- **Upstream source:** `https://ephemeris.oneweb.net/ltef/ltef.csv`
-  (open directory index at `ephemeris.oneweb.net`, authentication none; the site
-  root also serves `timestamp.txt` = last-update epoch and `ltef_checksum/`).
-- **Retrieved:** 2026-07-13. Full file: **578 rows** (one per fleet satellite),
-  17 integer columns, 45315 bytes; `timestamp.txt` = `2026-07-13T12:00:00.000`.
-  Live smoke: `HTTP/1.1 200`.
-- **Trim:** first 5 rows, bytes verbatim (so the test can SHA-256 this fixture
-  and match the adapter's `SOURCE_SHA256` provenance).
+**Synthetic.** Five rows in the layout of OneWeb's public LTEF (Long-Term
+Ephemeris File), 17 integer columns, written by
+`analysis/od/scripts/synthetic-fixtures.mjs`. The slot ids and the two epoch
+columns (c0, c1, c2) are the ones the adapter's test reads; every other column is
+an invented integer, the constant fields (c6 = 4096, c12..c15 = 0, c16 = 16)
+keeping the row's shape. The real file (`https://ephemeris.oneweb.net/ltef/ltef.csv`,
+578 rows) carries no licence, so no copy of it is kept in this tree. The column
+notes below are what was observed in it.
 
 ### LTEF column structure (observed — NO public spec exists)
 

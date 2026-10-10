@@ -5,15 +5,18 @@ import { ByteBuffer } from 'flatbuffers';
 import { CAT } from 'spacedatastandards.org/lib/js/CAT/CAT.js';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
 
-// Source: https://mmccants.org/tles/classfd.zip, retrieved 2026-09-07.
+// The element sets are synthetic: the layout of Mike McCants' classified-satellite
+// editions (https://mmccants.org/tles/classfd.zip), which state no licence, with
+// invented names and numbers. 79701 is an ordinary catalog number; 90011 is in the
+// 9xxxx range McCants uses for analyst numbers.
 // These checks concern catalog identity, not orbital-state accuracy. No frame,
 // epoch or propagation tolerance is asserted for the resulting CAT metadata.
-const canyon = ['Canyon 2',
-  '1 03889U 69036A   22058.58164633 0.00000000  00000-0  00000-0 0    08',
-  '2 03889  10.3920  54.5705 0924613 151.8146 208.1854  1.00414653    04'];
-const prowler = ['Prowler',
-  '1 90007U 90097E   21305.13119867 0.00000000  00000-0  00000-0 0    01',
-  '2 90007  14.4403 350.3137 0040735 245.2740 114.3135  1.00206833    00'];
+const canyon = ['Synthetic Alpha',
+  '1 79701U 26797A   22058.58164633 0.00000000  00000-0  00000-0 0    01',
+  '2 79701   9.1234  61.2345 0012345 151.8146 208.1854  1.00271234    05'];
+const prowler = ['Synthetic Beta',
+  '1 90011U 91097E   21305.13119867 0.00000000  00000-0  00000-0 0    07',
+  '2 90011  14.7421 350.9137 0040735 245.2740 114.3135  1.00206833    04'];
 const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json',import.meta.url)));
 async function harness(t) {
   const host = await createBrowserModuleHarness({wasmSource:fs.readFileSync(new URL('../dist/isomorphic/module.wasm',import.meta.url)),manifest,surface:'direct'});
@@ -43,21 +46,21 @@ function withNumber(lines,number) {
 }
 test('extracts McCants names and canonical identifiers without inventing orbital data',async t=> {
   const host=await harness(t),{rows,report}=decode(await host.invoke(request(canyon.join('\r\n')+'\r\n')));
-  assert.equal(rows[0].OBJECT_NAME,'Canyon 2'); assert.equal(rows[0].NORAD_CAT_ID,3889);
-  assert.equal(rows[0].OBJECT_ID,'1969-036A'); assert.equal(rows[0].PERIOD,0);
+  assert.equal(rows[0].OBJECT_NAME,'Synthetic Alpha'); assert.equal(rows[0].NORAD_CAT_ID,79701);
+  assert.equal(rows[0].OBJECT_ID,'2026-797A'); assert.equal(rows[0].PERIOD,0);
   assert.equal(rows[0].INCLINATION,0); assert.equal(rows[0].LAUNCH_DATE,null);
-  assert.deepEqual(report.nativeKeys,['03889']); assert.equal(report.unnumberedObjects,0);
+  assert.deepEqual(report.nativeKeys,['79701']); assert.equal(report.unnumberedObjects,0);
 });
 test('keeps analyst numbers and designators out of globally joinable identity fields',async t=> {
   const host=await harness(t),{rows,report}=decode(await host.invoke(request(prowler.join('\n'))));
-  assert.equal(rows[0].OBJECT_NAME,'Prowler'); assert.equal(rows[0].NORAD_CAT_ID,0);
-  assert.equal(rows[0].OBJECT_ID,null); assert.deepEqual(report.nativeKeys,['90007']);
+  assert.equal(rows[0].OBJECT_NAME,'Synthetic Beta'); assert.equal(rows[0].NORAD_CAT_ID,0);
+  assert.equal(rows[0].OBJECT_ID,null); assert.deepEqual(report.nativeKeys,['90011']);
   assert.equal(report.unnumberedObjects,1); assert.equal(report.unrepresentedDesignators,1);
 });
 test('accepts two-line records and explicit three-line names',async t=> {
   const host=await harness(t);
   assert.equal(decode(await host.invoke(request(canyon.slice(1).join('\n')))).rows[0].OBJECT_NAME,null);
-  assert.equal(decode(await host.invoke(request(['0 Canyon 2',...canyon.slice(1)].join('\n')))).rows[0].OBJECT_NAME,'Canyon 2');
+  assert.equal(decode(await host.invoke(request(['0 Synthetic Alpha',...canyon.slice(1)].join('\n')))).rows[0].OBJECT_NAME,'Synthetic Alpha');
 });
 test('uses Space-Track Alpha-5 numbering, excluding I and O',async t=> {
   // https://www.space-track.org/documentation#/tle-alpha5: A=10, J=18, Z=33.

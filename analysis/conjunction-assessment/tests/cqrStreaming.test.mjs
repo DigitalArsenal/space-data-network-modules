@@ -4,6 +4,7 @@ import test from 'node:test';
 import * as flatbuffers from 'flatbuffers';
 import { createConjunctionCommandHarness } from './lib/conjunctionCommandHarness.mjs';
 import { initCqrFlatc, encodeCqr, decodeCqr, earthFrame, screeningControls, gpRecord, publishedSchema } from './lib/cqr.mjs';
+import { privateFixtureSkip, readPrivateFixtureJson, privateFixturePath } from './lib/privateFixtures.mjs';
 
 // Independent rectilinear family in Earth-centered GCRF, UTC 2026-03-09:
 // object i has x=7000+0.1*i km, y=-i+(7.5+0.1*i)*t km.
@@ -51,15 +52,15 @@ test('CQR rejects time controls below the binary64 Julian-date resolution', asyn
   }
 });
 
-test('CQR direct OMM sources use distinct catalog identities when international designators are absent', async (t) => {
+test('CQR direct OMM sources use distinct catalog identities when international designators are absent', { skip: privateFixtureSkip('socrates/gp_47935,49179.json', 'socrates/reference.top3.json') }, async (t) => {
   const flatc = await initCqrFlatc();
   const harness = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
   t.after(() => harness.destroy());
   // CelesTrak SOCRATES Plus snapshot, captured 2026-03-10, same authoritative
   // 47935–49179 pair and TEME/UTC gates as proposal §8: .010 s / 5 m / 5 m/s.
   // https://celestrak.org/SOCRATES/ and the checked-in reference.top3.json.
-  const records = JSON.parse(fs.readFileSync(new URL('./fixtures/socrates/gp_47935,49179.json', import.meta.url), 'utf8'));
-  const reference = JSON.parse(fs.readFileSync(new URL('./fixtures/socrates/reference.top3.json', import.meta.url), 'utf8')).conjunctions.find(row => row.obj1_norad === 47935);
+  const records = readPrivateFixtureJson('socrates/gp_47935,49179.json');
+  const reference = readPrivateFixtureJson('socrates/reference.top3.json', { conjunctions: [] }).conjunctions.find(row => row.obj1_norad === 47935);
   const referenceJd = Date.parse(reference.tca) / 86400000 + 2440587.5;
   const request = encodeCqr(flatc, { CATALOG_REQUEST: {
     CONTROLS: { ...screeningControls({ startJd: referenceJd - 60 / 86400, durationSeconds: 120, coarseStepSec: 1 }), ALGORITHM: 'LAAS_2015' },

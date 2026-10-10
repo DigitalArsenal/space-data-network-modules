@@ -94,14 +94,14 @@ test("built WASM embeds + returns the real manifest", async () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixture-driven end-to-end pull (A2.2c-2). Instantiates the real built WASM with
-// a mock `space_data_module_host` bridge serving the REAL trimmed IAC GLONASS
+// a mock `space_data_module_host` bridge serving the synthetic GLONASS-style
 // SP3-d fixture over http.request, captures storage.write + pubsub.publish, and
 // returns a signature for keyslot.sign. No live network is touched.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const FIXTURES_DIR = path.join(__dirname, "fixtures");
 const SOURCE_URL = "ftp://ftp.glonass-iac.ru/MCC/PRODUCTS/LATEST/Final.sp3";
-const FIXTURE_FILE = "iac_glonass.sp3.glo";
+const FIXTURE_FILE = "synthetic_glonass.sp3.glo";
 
 function u32le(bytes, off) {
   return (bytes[off] | (bytes[off + 1] << 8) | (bytes[off + 2] << 16) | (bytes[off + 3] << 24)) >>> 0;

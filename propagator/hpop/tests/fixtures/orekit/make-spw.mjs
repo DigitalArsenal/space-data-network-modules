@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-// Writes the daily space weather Orekit read (CelesTrak/CSSI
-// SpaceWeather-All-v1.2.txt, the file in Orekit's data directory) as SDS $SPW
-// rows, so HPOP's space_weather input carries exactly the same values.
+// Writes the daily space weather Orekit read (SpaceWeather-All-v1.2.txt in the
+// layout of CelesTrak/CSSI's file, here the synthetic one of
+// make-synthetic-weather.mjs) as SDS $SPW rows, so HPOP's space_weather input
+// carries exactly the same values. CelesTrak's own file states no licence and is
+// not used.
 //
 // The file is whitespace-separated (CelesTrak, "Space Weather Data" format
 // v1.2): year month day BSRN ND Kp1..Kp8 (x10) Sum Ap1..Ap8 Avg Cp C9 ISN
@@ -38,7 +40,7 @@ for (const line of raw.toString('latin1').split('\n')) {
   });
 }
 fs.writeFileSync(out, `${JSON.stringify({
-  source: 'CelesTrak/CSSI SpaceWeather-All-v1.2.txt, the file in the Orekit data directory used for orekit-reference.json',
+  source: 'Synthetic SpaceWeather-All-v1.2.txt (make-synthetic-weather.mjs): invented values in the layout of the CelesTrak/CSSI file, read by Orekit for the W1 cases of orekit-reference.json',
   sha256: crypto.createHash('sha256').update(raw).digest('hex'),
   rows,
 }, null, 1)}\n`);

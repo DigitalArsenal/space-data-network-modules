@@ -13,7 +13,7 @@
 // the first 241 position records (4 h, 60 s, ITRF, metres, UTC) of the DGF
 // prediction lageos1_cpf_260713_19402. Reference: CelesTrak's CPF SupGP row
 // LAGEOS1 [DGF] for the same prediction (element set 194, epoch
-// 2026-07-13T00:00:00) in analysis/od/tests/data/supgp-reference/cpf. Both are
+// 2026-07-13T00:00:00) in analysis/od/tests/data/supgp-reference/cpf (private: $SDN_MODULES_PRIVATE_FIXTURES). Both are
 // fits to one ILRS prediction, so this checks the node's handling of CPF, not
 // the prediction itself.
 //
@@ -38,6 +38,8 @@ import { FSO } from "spacedatastandards.org/lib/js/FSO/FSO.js";
 import { OMM } from "spacedatastandards.org/lib/js/OMM/OMM.js";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 
+import { privatePath, privateSkip } from "../../../tests/lib/privateFixtures.mjs";
+
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const nodeRoot = path.join(packageRoot, "nodes/od");
 const modulesRoot = path.resolve(packageRoot, "../..");
@@ -45,10 +47,10 @@ const cpfFixture = path.join(
   modulesRoot,
   "data-source/cpf-source/test/fixtures/lageos1_cpf_260713_19402.4h.dgf",
 );
-const supGpCsv = path.join(
-  modulesRoot,
-  "analysis/od/tests/data/supgp-reference/cpf/celestrak_supgp_cpf_2026-07-13.csv",
-);
+// CelesTrak publishes no licence for SupGP, so this row is not in the tree: it is
+// read from $SDN_MODULES_PRIVATE_FIXTURES, and the SupGP comparison skips without it.
+const supGpRelative = "analysis/od/tests/data/supgp-reference/cpf/celestrak_supgp_cpf_2026-07-13.csv";
+const supGpCsv = privatePath(supGpRelative);
 const tolerance = Object.freeze({
   meanMotion: 0.0002,
   eccentricity: 0.00005,
@@ -197,7 +199,8 @@ async function odNode(t) {
   return node;
 }
 
-test("OD node fits LAGEOS-1 from a 4-hour CPF arc to CelesTrak's SupGP for the same prediction", async (t) => {
+test("OD node fits LAGEOS-1 from a 4-hour CPF arc to CelesTrak's SupGP for the same prediction",
+  { skip: privateSkip(supGpRelative) }, async (t) => {
   const node = await odNode(t);
   const reference = supGpRow("LAGEOS1 [DGF]");
   const { outputs } = await fitCpf(node, new Uint8Array(fs.readFileSync(cpfFixture)), 95_100n);

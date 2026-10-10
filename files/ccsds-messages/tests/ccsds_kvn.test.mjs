@@ -50,13 +50,13 @@ function fixtureFiles() {
   return readdirSync(fixturePath).filter((name) => name.endsWith(".txt"));
 }
 
-test("CCSDS KVN round-trips the published Blue Book examples", { concurrency: false }, (t) => {
+test("CCSDS KVN round-trips the example messages (synthetic, in the Blue Books' layouts)", { concurrency: false }, (t) => {
   const compiler = findCompiler();
   if (!compiler) {
     t.skip("no host c++ compiler; the native CCSDS harness cannot be built");
     return;
   }
-  assert.equal(fixtureFiles().length, 5, "expected the five published fixture messages");
+  assert.equal(fixtureFiles().length, 5, "expected the five fixture messages");
 
   const workDir = mkdtempSync(path.join(tmpdir(), "sdn-ccsds-kvn-"));
   const binaryPath = path.join(workDir, "ccsds_native");

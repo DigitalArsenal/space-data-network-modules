@@ -554,20 +554,20 @@ int main(int argc, char** argv) {
         ::TDMT ramped(TDM_BACK[1]);
         if (!ramped.SEGMENTS.empty() && ramped.SEGMENTS[0]) {
             std::unique_ptr< ::TDMTransmitRampT> a(new ::TDMTransmitRampT());
-            a->START_TIME = "2011-05-11T10:26:00.0000";
-            a->END_TIME = "2011-05-11T10:26:33.5000";
-            a->REFERENCE_TIME = "2011-05-11T10:26:00.0000";
+            a->START_TIME = "2031-05-11T10:26:00.0000";
+            a->END_TIME = "2031-05-11T10:26:33.5000";
+            a->REFERENCE_TIME = "2031-05-11T10:26:00.0000";
             a->FREQUENCY_HZ = 7176219176.5;
             a->FREQUENCY_RATE_HZ_PER_S = -32.125;
-            a->TRANSMITTING_STATION_ID = "CAMRA";
+            a->TRANSMITTING_STATION_ID = "STATION-X";
             a->TRANSMIT_BAND = "S";
             std::unique_ptr< ::TDMTransmitRampT> b(new ::TDMTransmitRampT());
-            b->START_TIME = "2011-05-11T10:26:33.5000";
-            b->END_TIME = "2011-05-11T10:27:00.0000";
-            b->REFERENCE_TIME = "2011-05-11T10:26:33.5000";
+            b->START_TIME = "2031-05-11T10:26:33.5000";
+            b->END_TIME = "2031-05-11T10:27:00.0000";
+            b->REFERENCE_TIME = "2031-05-11T10:26:33.5000";
             b->FREQUENCY_HZ = 7176218100.25;
             b->FREQUENCY_RATE_HZ_PER_S = 0.0;
-            b->TRANSMITTING_STATION_ID = "CAMRA";
+            b->TRANSMITTING_STATION_ID = "STATION-X";
             b->TRANSMIT_BAND = "S";
             ramped.SEGMENTS[0]->TRANSMIT_RAMPS.push_back(std::move(a));
             ramped.SEGMENTS[0]->TRANSMIT_RAMPS.push_back(std::move(b));
@@ -662,7 +662,7 @@ int main(int argc, char** argv) {
         {
             std::unique_ptr< ::AEMSegmentT> seg(new ::AEMSegmentT());
             seg->ATTITUDE_TYPE = "QUATERNION";
-            seg->START_TIME = "2006-090T05:00:00.071";
+            seg->START_TIME = "2031-090T05:00:00.071";
             seg->STEP_SIZE = 0.125;
             seg->ATTITUDE_COMPONENTS = 4;
             seg->ATTITUDE_DATA.push_back(1.0);
@@ -683,7 +683,7 @@ int main(int argc, char** argv) {
 
         /* The IDL forbids populating both forms. */
         std::unique_ptr< ::attitudeDataLineT> line(new ::attitudeDataLineT());
-        line->EPOCH = "2006-090T05:00:00.071";
+        line->EPOCH = "2031-090T05:00:00.071";
         line->Q1 = 1.0;
         compact.SEGMENTS[0]->ATTITUDE_DATA_LINES.push_back(std::move(line));
         const ccsds::aem::ProjectionStatus both = ccsds::aem::from_record(compact, &m);
@@ -697,7 +697,7 @@ int main(int argc, char** argv) {
          * epochs exist nowhere in the record. */
         ::TDMT gridded;
         gridded.CCSDS_TDM_VERS = "2.0";
-        gridded.OBSERVATION_START_TIME = "2011-05-11T10:26:33.2613";
+        gridded.OBSERVATION_START_TIME = "2031-05-11T10:26:33.2613";
         gridded.OBSERVATION_STEP_SIZE = 0.5;
         gridded.CLOCK_BIAS.push_back(1.0);
         gridded.CLOCK_BIAS.push_back(2.0);
@@ -744,11 +744,11 @@ int main(int argc, char** argv) {
          * stricter than the standard it implements. */
         ::TDMT rootform;
         rootform.CCSDS_TDM_VERS = "2.0";
-        rootform.CREATION_DATE = "2011-05-12T00:00:00.000";
-        rootform.ORIGINATOR = "ESA";
+        rootform.CREATION_DATE = "2031-05-12T00:00:00.000";
+        rootform.ORIGINATOR = "EXAMPLE-AGENCY";
         rootform.TIME_SYSTEM = "UTC";
-        rootform.PARTICIPANT_1 = "CAMRA";
-        rootform.PARTICIPANT_2 = "CRYOSAT";
+        rootform.PARTICIPANT_1 = "STATION-X";
+        rootform.PARTICIPANT_2 = "SYNTH-SAT-9";
         rootform.MODE = "SEQUENTIAL";
         rootform.PATH = "1,2,1";
         rootform.RANGE_UNITS = "km";
@@ -772,8 +772,8 @@ int main(int argc, char** argv) {
         const size_t n = m.segments.empty() ? 0 : m.segments[0].observation_count();
         result("record-root-observations-form-observations", sfmt("%zu", n), "15", n == 15);
         const char* p1 = m.segments.empty() ? nullptr : m.segments[0].participant(1);
-        result("record-root-observations-form-participant-1", p1 ? p1 : "(absent)", "CAMRA",
-               p1 && std::strcmp(p1, "CAMRA") == 0);
+        result("record-root-observations-form-participant-1", p1 ? p1 : "(absent)", "STATION-X",
+               p1 && std::strcmp(p1, "STATION-X") == 0);
     }
 
     /* ------------------------------------------------------------------ */
@@ -799,7 +799,7 @@ int main(int argc, char** argv) {
         ::TDMT ramped(TDM_BACK[1]);
         if (!ramped.SEGMENTS.empty() && ramped.SEGMENTS[0]) {
             std::unique_ptr< ::TDMTransmitRampT> a(new ::TDMTransmitRampT());
-            a->START_TIME = "2011-05-11T10:26:00.0000";
+            a->START_TIME = "2031-05-11T10:26:00.0000";
             a->FREQUENCY_HZ = 7176219176.5;
             a->TRANSMIT_BAND = "S";
             ramped.SEGMENTS[0]->TRANSMIT_RAMPS.push_back(std::move(a));

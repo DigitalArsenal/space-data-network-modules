@@ -7,12 +7,12 @@ import zlib from 'node:zlib';
 import { normalizeParityFixture, runParityHarness, formatParityReport } from 'space-data-module-sdk/testing';
 import { block, diagonal, options, predictions, rdo, wasmPath } from './lib.mjs';
 import { gpsScenario } from './gps-scenario.mjs';
+import { denseProblem } from './assignment-problems.mjs';
 
 const hex = (inputs) => inputs.map(({ payload, ...rest }) => ({ ...rest, payloadHex: Buffer.from(payload).toString('hex') }));
 const still = (x) => [{ epoch: '2026-08-02T00:00:00Z', state: [x, 0, 0, 0, 0, 0] }, { epoch: '2026-08-02T00:10:00Z', state: [x, 0, 0, 0, 0, 0] }];
 const covs = [{ epoch: '2026-08-02T00:00:00Z', lower: diagonal(1e-8) }, { epoch: '2026-08-02T00:10:00Z', lower: diagonal(1e-8) }];
-const numbers = fs.readFileSync(new URL('./fixtures/or-library/assign100.txt', import.meta.url), 'utf8').trim().split(/\s+/).map(Number);
-const cost = Array.from({ length: 100 }, (_, i) => numbers.slice(1 + i * 100, 1 + (i + 1) * 100));
+const cost = denseProblem(100, 100);
 const cases = [
   { id: 'gps-20260802', request: { methodId: 'associate_observations', inputs: hex(gpsScenario().inputs) } },
   { id: 'two-objects', request: { methodId: 'associate_observations', inputs: hex([
@@ -21,7 +21,7 @@ const cases = [
     rdo({ ID: 'o2', OB_TIME: '2026-08-02T00:05:00Z', ID_SENSOR: 'g', SEN_REFERENCE_FRAME: 'GCRF', RANGE: 6999.9995, RANGE_UNC: 0.001 }),
     options({ light_time: false }),
   ]) } },
-  { id: 'or-library-assign100', request: { methodId: 'solve_assignment', inputs: [{ portId: 'problem', typeRef: { schemaName: 'application/json' }, payloadHex: Buffer.from(JSON.stringify({ cost })).toString('hex') }] } },
+  { id: 'assignment-dense100', request: { methodId: 'solve_assignment', inputs: [{ portId: 'problem', typeRef: { schemaName: 'application/json' }, payloadHex: Buffer.from(JSON.stringify({ cost })).toString('hex') }] } },
 ];
 const plan = await normalizeParityFixture({ name: 'analysis/association', threadEnvVar: 'SDM_WORKER_COUNT', threadCounts: [1, 2, 4, 8], cases });
 const report = await runParityHarness({ wasmPath, plan, timeoutMs: 120000, log: console.log });

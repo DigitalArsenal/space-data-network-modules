@@ -1,5 +1,5 @@
 // ccsds_native.cpp — measured acceptance for the CCSDS KVN layer, run against
-// the five PUBLISHED Blue Book example messages in ../fixtures.
+// the five synthetic example messages in ../fixtures.
 //
 // WHAT IS BEING PROVEN, AND WHY IT IS PROVEN THIS WAY
 //
@@ -276,12 +276,12 @@ int main(int argc, char** argv) {
         // declared type still says QUATERNION, so the file now contradicts
         // itself and there is no safe reading of it.
         std::string mutated = LOADED[0].text;
-        const std::string from = "0.45689  0.68427";
+        const std::string from = "0.47000  0.70306";
         const size_t at = mutated.find(from);
         if (at == std::string::npos) {
             result("aem-mutation-applied", "not-found", "found", false);
         } else {
-            mutated.replace(at, from.size(), "0.45689");
+            mutated.replace(at, from.size(), "0.40000");
             kvn::Document doc;
             const kvn::Status ks = kvn::parse(mutated.data(), mutated.size(), &doc);
             ccsds::aem::Message m;
@@ -347,9 +347,9 @@ int main(int argc, char** argv) {
         const char* st1 = e18.segments[1].start_time();
         result("tdm-e18-segment-start-times",
                sfmt("%s|%s", st0 ? st0 : "(absent)", st1 ? st1 : "(absent)"),
-               "2005-184T11:12:23|2005-184T13:59:27.27",
-               st0 && st1 && std::strcmp(st0, "2005-184T11:12:23") == 0 &&
-                   std::strcmp(st1, "2005-184T13:59:27.27") == 0);
+               "2035-184T11:12:23|2035-184T13:59:27.27",
+               st0 && st1 && std::strcmp(st0, "2035-184T11:12:23") == 0 &&
+                   std::strcmp(st1, "2035-184T13:59:27.27") == 0);
         result("tdm-e18-observations-per-segment",
                sfmt("%zu/%zu", e18.segments[0].observation_count(),
                     e18.segments[1].observation_count()),
@@ -393,18 +393,18 @@ int main(int argc, char** argv) {
             }
         }
         if (last_rcs && prev_line) {
-            result("tdm-e17-last-rcs-epoch", last_rcs->epoch, "2011-05-11T10:26:33.7008",
-                   last_rcs->epoch == "2011-05-11T10:26:33.7008");
+            result("tdm-e17-last-rcs-epoch", last_rcs->epoch, "2031-05-11T10:26:33.7008",
+                   last_rcs->epoch == "2031-05-11T10:26:33.7008");
             result("tdm-e17-preceding-keyword", prev_line->keyword, "CARRIER_POWER",
                    prev_line->keyword == "CARRIER_POWER");
-            result("tdm-e17-preceding-epoch", prev_line->epoch, "2011-05-11T10:26:33.9686",
-                   prev_line->epoch == "2011-05-11T10:26:33.9686");
+            result("tdm-e17-preceding-epoch", prev_line->epoch, "2031-05-11T10:26:33.9686",
+                   prev_line->epoch == "2031-05-11T10:26:33.9686");
             const Epoch a = parse_epoch(prev_line->epoch);
             const Epoch b = parse_epoch(last_rcs->epoch);
             const double delta = epoch_diff(b, a);
             result("tdm-e17-rcs-minus-preceding-seconds", sfmt("%.4f", delta), "<0", delta < 0.0);
         } else {
-            result("tdm-e17-last-rcs-epoch", "(not found)", "2011-05-11T10:26:33.7008", false);
+            result("tdm-e17-last-rcs-epoch", "(not found)", "2031-05-11T10:26:33.7008", false);
         }
 
         // RANGE through the serialized form.

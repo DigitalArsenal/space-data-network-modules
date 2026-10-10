@@ -9,6 +9,7 @@ import {
   assertSuccessfulResponse,
   createStandaloneHarnessOrSkip,
 } from "../../../tests/lib/isomorphicHarness.mjs";
+import { privatePath } from "../../../tests/lib/privateFixtures.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
@@ -66,13 +67,19 @@ function listRegressionFiles() {
 // provider.json describing source token, input format (meme|oem), input files,
 // gate type and tolerances. Adding a provider (A2.4) is a data change, not code.
 
+// The checked-in suite is synthetic (starlink-synthetic, written by
+// analysis/od/scripts/synthetic-fixtures.mjs). The reference pairs built from
+// CelesTrak SupGP rows and from Intelsat, OneWeb and IAC data cannot be
+// redistributed (the SpaceX MEME files beside them are public): the suites are read
+// too when SDN_MODULES_PRIVATE_FIXTURES names them.
+function referenceSuiteRoots() {
+  return [REFERENCE_SUITE_DIR, privatePath("analysis/od/tests/data/supgp-reference")].filter(Boolean);
+}
+
 function listProviders() {
-  if (!fs.existsSync(REFERENCE_SUITE_DIR)) {
-    return [];
-  }
-  return fs.readdirSync(REFERENCE_SUITE_DIR, { withFileTypes: true })
+  return referenceSuiteRoots().flatMap((suiteRoot) => fs.readdirSync(suiteRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join(REFERENCE_SUITE_DIR, entry.name))
+    .map((entry) => path.join(suiteRoot, entry.name)))
     .filter((dir) => fs.existsSync(path.join(dir, "provider.json")))
     .map((dir) => ({
       dir,
@@ -774,9 +781,9 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       await harness.destroy();
     });
 
-    // Real IAC GLONASS SP3 R03 arc (ECEF/IGS20, GPS time, position-only, km) —
-    // the same 3 epochs the native test uses, provenance:
-    // analysis/od/tests/data/glonass/iac_glonass.sp3.glo (R03). A position-only
+    // Synthetic GLONASS-style R03 arc (ECEF/IGS20 label, GPS time, position-only,
+    // km): SGP4 truth, the same 3 epochs the native test uses, provenance:
+    // analysis/od/tests/data/glonass/synthetic_glonass.sp3.glo (R03). A position-only
     // KVN OEM (4-token state lines) exercises the OD module's ECEF->TEME (GMST) +
     // GPS->UTC + position-only-seed path through the real WASM ABI.
     const glonassKvn = [
@@ -792,9 +799,9 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
       "START_TIME = 2026-07-11T00:00:00.000",
       "STOP_TIME = 2026-07-11T00:30:00.000",
       "META_STOP",
-      "2026-07-11T00:00:00.000 -12150.969681 -3659.828919 22181.510368",
-      "2026-07-11T00:15:00.000 -9957.122270 -5356.366623 22914.410060",
-      "2026-07-11T00:30:00.000 -7849.784068 -7255.011907 23204.602173",
+      "2026-07-11T00:00:00.000 -3432.678048 25061.083693 -3280.055925",
+      "2026-07-11T00:15:00.000 -3312.370314 25291.725345 -72.141884",
+      "2026-07-11T00:30:00.000 -3138.018921 25119.802681 3137.174334",
       "",
     ].join("\n");
 

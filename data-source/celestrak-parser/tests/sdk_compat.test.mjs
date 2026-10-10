@@ -785,10 +785,10 @@ test("parse_socrates builds $CSM records with nested CAT identities and an exact
   const object2 = subTable(first, 2);
   assert.notEqual(object1, 0, "OBJECT_1 present");
   assert.notEqual(object2, 0, "OBJECT_2 present");
-  assert.equal(readScalar(first, 2, "u32", object1), 49107, "OBJECT_1.NORAD_CAT_ID");
-  assert.equal(readScalar(first, 2, "u32", object2), 47079, "OBJECT_2.NORAD_CAT_ID");
-  assert.equal(readString(first, 0, object1), "ONEWEB-0329", "status suffix split off the name");
-  assert.equal(readString(first, 0, object2), "SL-14 DEB");
+  assert.equal(readScalar(first, 2, "u32", object1), 91001, "OBJECT_1.NORAD_CAT_ID");
+  assert.equal(readScalar(first, 2, "u32", object2), 91002, "OBJECT_2.NORAD_CAT_ID");
+  assert.equal(readString(first, 0, object1), "SYN-SAT-A", "status suffix split off the name");
+  assert.equal(readString(first, 0, object2), "SYN-DEB-B");
   assert.notEqual(tableField(first, 4, object1), 0, "OPS_STATUS_CODE written explicitly for [+]");
   assert.equal(readScalar(first, 4, "i8", object1), OPS_OPERATIONAL, "[+] -> OPERATIONAL");
   assert.equal(readScalar(first, 4, "i8", object2), OPS_NONOPERATIONAL, "[-] -> NONOPERATIONAL");
@@ -796,13 +796,13 @@ test("parse_socrates builds $CSM records with nested CAT identities and an exact
   assert.equal(readScalar(first, 3, "f64"), 7.833, "DSE_2");
   assert.equal(readScalar(first, 4, "f64"), socratesTca("2026-05-12 04:07:04.871"), "TCA unix seconds, exact");
   assert.ok(Math.abs(readScalar(first, 4, "f64") - Date.parse("2026-05-12T04:07:04.871Z") / 1000) < 1e-6);
-  assert.equal(readScalar(first, 5, "f64"), 0.018, "TCA_RANGE km");
-  assert.equal(readScalar(first, 6, "f64"), 13.179, "TCA_RELATIVE_SPEED km/s");
-  assert.equal(readScalar(first, 7, "f64"), Number("2.170E-02"), "MAX_PROB");
-  assert.equal(readScalar(first, 8, "f64"), 0.008, "DILUTION");
+  assert.equal(readScalar(first, 5, "f64"), 0.021, "TCA_RANGE km");
+  assert.equal(readScalar(first, 6, "f64"), 12.87, "TCA_RELATIVE_SPEED km/s");
+  assert.equal(readScalar(first, 7, "f64"), Number("3.140E-02"), "MAX_PROB");
+  assert.equal(readScalar(first, 8, "f64"), 0.009, "DILUTION");
 
-  assert.equal(readScalar(second, 2, "u32", subTable(second, 0)), 56963);
-  assert.equal(readScalar(second, 2, "u32", subTable(second, 2)), 65204);
+  assert.equal(readScalar(second, 2, "u32", subTable(second, 0)), 91003);
+  assert.equal(readScalar(second, 2, "u32", subTable(second, 2)), 91004);
   assert.equal(readScalar(second, 4, "f64"), socratesTca("2026-05-11 12:09:59.834"));
 
   assert.deepEqual(Buffer.from(outputs.get("raw").payload), Buffer.from(SOCRATES_CSV));

@@ -1,5 +1,19 @@
 # Fixture provenance
 
+**Licence status of the fixtures (audit 2026-10-10).** `overpass-berlin.sample.json`:
+(c) OpenStreetMap contributors, ODbL 1.0. `fcc-uls-3650-houston.sample.json`: FCC
+Wireless Telecommunications Bureau, ULS 3650 MHz locations (U.S. Government, public
+domain). `bakom-mobile-sites.*`: Federal Office of Communications OFCOM (BAKOM),
+mobile phone base stations, opendata.swiss (open use). `acma-rrl.slice.zip`: Based on
+Australian Communications and Media Authority information (ACMA RRL licence).
+`anfr-cartoradio.slice.zip`: Agence nationale des frequences (ANFR), data.gouv.fr,
+Licence Ouverte 2.0. **`ised-sms-tafl.slice.zip` and `comreg-siteviewer.sample.pb`
+are synthetic** (`make-synthetic-slices.py`): ISED's terms allow non-commercial
+reproduction only and ComReg's licence could not be verified, so no row of either is
+kept here; the originals are in the private fixtures (`$SDN_MODULES_PRIVATE_FIXTURES`).
+They keep the formats and the counts (200 records, 250 masts). The sections below
+describe the original captures.
+
 `opencellid.sample.csv` is a HAND-WRITTEN fixture in the OpenCelliD CSV column
 contract (`radio,mcc,net,area,cell,unit,lon,lat,range,samples,changeable,created,updated,averageSignal`),
 not a cut of live provider data. It is written that way deliberately:

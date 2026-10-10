@@ -133,14 +133,16 @@ PATH="$HOME/.wasmedge/bin:$PATH" node tests/parity.mjs
 | Test | Reference | Tolerance |
 | --- | --- | --- |
 | Gate thresholds, m = 1..6, P = 0.90..0.999 | NIST/SEMATECH e-Handbook 1.3.6.7.4 chi-square table | 5e-4 (half the printed digit) |
-| Assignment | OR-Library (Beasley 1990): assign100 = 305, assign200 = 475, sparse assignp800 = 2239 | exact (integer costs) |
+| Assignment | Seeded problems of the OR-Library sizes (dense 100 and 200, sparse 800), optimum by an independent Hungarian method (`tests/assignment-problems.mjs`) | exact (integer costs) |
 | Global vs nearest-neighbour assignment, posterior, RSW covariance, the records' `CORR_*` | closed form and exhaustive enumeration | 1e-6 relative |
 | `$RDO` two-way Doppler | the same range rate as `RANGE_RATE`, closed-form conversion | 1e-9 relative in d² |
 | Earth-fixed sensor to GCRF | Vallado, *Fundamentals of Astrodynamics and Applications* 4th ed., §3.7 worked example (2004-04-06) | 2 cm (ERFA reproduces the printed vector to 1.1 cm) |
-| GNSS association | ESA final orbits as truth, IGS final orbits as the catalog (independent analyses), 2026-08-02; radar, optical and Doppler observations generated at three IGS sites | no unflagged wrong association; Galileo and two withheld GPS satellites are UCTs; p-values uniform (KS, alpha 0.01) |
+| GNSS association | Synthetic GNSS day (2026-08-02, SGP4 truth): truth orbits with a few-millimetre offset from the catalog's; radar, optical and Doppler observations generated at three IGS sites | no unflagged wrong association; Galileo and two withheld GPS satellites are UCTs; p-values uniform (KS, alpha 0.01) |
 
 The GNSS fixture (`tests/fixtures/gps-20260802.json.gz`) is built by
-`scripts/build-gps-fixture.mjs` from the public products; it records each
-input's SHA-256. [`conformance/parity.json`](conformance/parity.json) is the
+`scripts/build-gps-fixture.mjs` from SGP4 truth: 32 GPS-like and 24 Galileo-like
+satellites, the GPS-like ones through `files/orbit-products` and
+`analysis/reference-states` to GCRF states with covariance. The ESA/ESOC and IGS
+final orbits it once held are not redistributable and are not used. [`conformance/parity.json`](conformance/parity.json) is the
 tri-runtime receipt: Chrome, native WasmEdge and Docker WasmEdge, worker
 widths 1/2/4/8, byte-identical.

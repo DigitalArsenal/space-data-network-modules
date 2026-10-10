@@ -9,7 +9,7 @@
     "OD time system GPS -> UTC. A2.2a is UTC-only (fail-closed otherwise); IAC SP3 declares TIME_SYSTEM=GPS, so a GPS->UTC (leap-second) step is required before the OD fit.",
     "Position-only OD fit. IAC SP3 has no velocity records (STATE_VECTOR_SIZE=3); confirm the OD SGP4 fit accepts a position-only state series."
   ],
-  "inputFiles": ["../iac_glonass.sp3.glo"],
+  "inputFiles": ["../synthetic_glonass.sp3.glo"],
   "objectName": "GLONASS Rnn",
   "objectId": "",
   "noradCatId": 0,

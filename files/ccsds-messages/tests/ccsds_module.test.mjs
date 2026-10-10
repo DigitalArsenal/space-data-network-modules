@@ -175,7 +175,7 @@ test("files/ccsds-messages artifact is standalone WASI and exports every method"
   }
 });
 
-test("read_aem projects published Figure G-4 and describes the file it read", { skip: !built && "run `npm run build` first" }, async (t) => {
+test("read_aem projects synthetic Figure G-4 layout and describes the file it read", { skip: !built && "run `npm run build` first" }, async (t) => {
   const bytes = fs.readFileSync(path.join(FIXTURES, AEM_FIXTURE));
   const frame = buildMessageFrame(bytes, { format: ncdContainerFormat.CCSDS_AEM_KVN });
   const response = await (await harness(t)).invoke({
@@ -192,18 +192,18 @@ test("read_aem projects published Figure G-4 and describes the file it read", { 
   const descriptor = readDescriptorFrame(outputByPort(response, "descriptor").payload);
   assert.equal(descriptor.FORMAT(), ncdContainerFormat.CCSDS_AEM_KVN);
   assert.equal(descriptor.FORMAT_VERSION(), "2.0");
-  assert.equal(descriptor.ORIGINATOR(), "NASA/JPL");
-  assert.equal(descriptor.CREATION_DATE(), "2002-11-04T17:22:31");
+  assert.equal(descriptor.ORIGINATOR(), "EXAMPLE-AGENCY");
+  assert.equal(descriptor.CREATION_DATE(), "2031-03-04T17:22:31");
   assert.equal(descriptor.NATIVE_TIME_SYSTEM(), "UTC");
-  assert.equal(descriptor.START_TIME(), "1996-11-28T21:29:07.2555");
-  assert.equal(descriptor.STOP_TIME(), "1996-12-28T21:28:00.5555");
+  assert.equal(descriptor.START_TIME(), "2031-03-01T10:12:07.2555");
+  assert.equal(descriptor.STOP_TIME(), "2031-03-31T14:58:00.5555");
   // The guest hashed the bytes it actually read; node:crypto hashed the bytes
   // we actually sent. Two implementations, one answer.
   assert.equal(descriptor.SOURCE_SHA256(), sha256Hex(bytes));
   assert.equal(descriptor.SOURCE_BYTE_LENGTH(), BigInt(bytes.byteLength));
 });
 
-test("read_tdm projects published Figure E-17", { skip: !built && "run `npm run build` first" }, async (t) => {
+test("read_tdm projects synthetic Figure E-17 layout", { skip: !built && "run `npm run build` first" }, async (t) => {
   const bytes = fs.readFileSync(path.join(FIXTURES, TDM_FIXTURE));
   const frame = buildMessageFrame(bytes, { format: ncdContainerFormat.CCSDS_TDM_KVN });
   const response = await (await harness(t)).invoke({
@@ -216,7 +216,7 @@ test("read_tdm projects published Figure E-17", { skip: !built && "run `npm run 
 
   const descriptor = readDescriptorFrame(outputByPort(response, "descriptor").payload);
   assert.equal(descriptor.FORMAT(), ncdContainerFormat.CCSDS_TDM_KVN);
-  assert.equal(descriptor.ORIGINATOR(), "ESA");
+  assert.equal(descriptor.ORIGINATOR(), "EXAMPLE-AGENCY");
   assert.equal(descriptor.NATIVE_TIME_SYSTEM(), "UTC");
   // E-17 declares no START_TIME/STOP_TIME. Absent stays absent — the module
   // does not synthesise a span from the observations.
@@ -227,7 +227,7 @@ test("read_tdm projects published Figure E-17", { skip: !built && "run `npm run 
   assert.equal(descriptor.NATIVE_FRAME_NAME(), null);
 });
 
-// The round trip through the ABI: read a published message, write the record
+// The round trip through the ABI: read an example message, write the record
 // back out, then read THAT frame. The two $AEM payloads must be identical
 // bytes — which also proves the emitted frame is one a read method accepts,
 // rather than a shape only this test knows how to build.

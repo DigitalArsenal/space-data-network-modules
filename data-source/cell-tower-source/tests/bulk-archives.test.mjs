@@ -248,14 +248,14 @@ test("ised-sms-tafl: decodes the headerless positional CSV — exact count", asy
 test("ised-sms-tafl: the positional column map lands on the right fields", async (t) => {
   // There are no column names in this file, so the ordinals ARE the contract.
   // A map shifted by one still produces 200 rows; only the values catch it.
-  // These are the first record's verbatim fields from the live archive.
+  // These are the first record's fields in the synthetic slice (fixtures/make-synthetic-slices.py), at the live archive's ordinals.
   const { reports } = await decodeProvider(t, "ised-sms-tafl", ISED);
   const first = reports[0];
-  assert.equal(first.native_id, "0001403864", "column 2 (frequency record id) moved");
-  assert.equal(first.site_name, "CASTLEGAR BC (ILS LOCALIZER)", "column 31 (location) moved");
-  assert.equal(first.operator, "NAV CANADA - BRITISH COLUMBIA", "column 54 (licensee) moved");
-  assert.equal(first.latitude, 49.2525, "column 40 (latitude) moved");
-  assert.equal(first.longitude, -117.6625, "column 41 (longitude) moved");
+  assert.equal(first.native_id, "0009000001", "column 2 (frequency record id) moved");
+  assert.equal(first.site_name, "SYNTHETIC SITE 001 XX", "column 31 (location) moved");
+  assert.equal(first.operator, "SYNTHETIC LICENSEE 1", "column 54 (licensee) moved");
+  assert.equal(first.latitude, 50.9451, "column 40 (latitude) moved");
+  assert.equal(first.longitude, -117.891, "column 41 (longitude) moved");
   assert.equal(first.country_code, "CA");
 });
 
@@ -345,9 +345,9 @@ test("comreg-siteviewer: negative longitudes survive the varint decode", async (
     assert.ok(r.longitude > -11 && r.longitude < -5.3, `longitude ${r.longitude} is not Irish`);
   }
   const first = reports[0];
-  assert.equal(first.native_id, "1-EIR_CE_1135-3GQQVUXZ");
-  assert.ok(Math.abs(first.latitude - 52.696114) < 1e-6);
-  assert.ok(Math.abs(first.longitude - -8.815159) < 1e-6);
+  assert.equal(first.native_id, "1-SYN_CE_1000-3GQQVUXZ");
+  assert.ok(Math.abs(first.latitude - 52.250421) < 1e-6);
+  assert.ok(Math.abs(first.longitude - -6.087997) < 1e-6);
 });
 
 test("comreg-siteviewer: the operator token is carried verbatim, never expanded", async (t) => {

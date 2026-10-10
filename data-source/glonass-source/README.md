@@ -108,7 +108,7 @@ node --test test/*.test.mjs
 ```
 
 `test/module.test.mjs` instantiates the rebuilt WASM with a mock
-`space_data_module_host` bridge serving the **real** trimmed IAC GLONASS SP3-d
+`space_data_module_host` bridge serving a **synthetic** GLONASS-style SP3-d (SGP4 truth; no IAC data)
 fixture, and asserts: SP3 parse → 25 GLONASS OEM records with schema-exact keys,
 `REFERENCE_FRAME = IGS20` (NOT PZ-90.11) + `TIME_SYSTEM = GPS` preserved as
 declared, verbose position-only (`STATE_VECTOR_SIZE = 3`, `X`/`Y`/`Z`, no

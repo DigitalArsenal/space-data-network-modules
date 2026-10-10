@@ -16,8 +16,10 @@ import test from 'node:test';
 import { createConjunctionCommandHarness } from './lib/conjunctionCommandHarness.mjs';
 import { decodeCqr, earthFrame, encodeCqr, initCqrFlatc, screeningControls, gpSource, gpRecord, publishedSchema } from './lib/cqr.mjs';
 import { uncertaintyModelFrame } from '../scripts/uncertainty-model.mjs';
+import { privateFixtureSkip, readPrivateFixtureJson, privateFixturePath } from './lib/privateFixtures.mjs';
 
-const [GRUS, STARLINK] = JSON.parse(fs.readFileSync(new URL('./fixtures/socrates/gp_47935,49179.json', import.meta.url)));
+const PAIR_SKIP = privateFixtureSkip('socrates/gp_47935,49179.json');
+const [GRUS, STARLINK] = readPrivateFixtureJson('socrates/gp_47935,49179.json');
 const TCA = Date.parse('2026-03-12T04:44:40.733Z') / 86400000 + 2440587.5;
 const SIGMA_KM = [0.1, 1.0, 0.1];
 const covariance = [SIGMA_KM[0] ** 2, 0, SIGMA_KM[1] ** 2, 0, 0, SIGMA_KM[2] ** 2, 0, 0, 0, 1e-6, 0, 0, 0, 0, 1e-6, 0, 0, 0, 0, 0, 1e-6];
@@ -64,7 +66,7 @@ async function assess(h, algorithm, frame) {
   return decodeCqr(flatc, r.outputs[0].payload).EVENT_RESULT;
 }
 
-test('an element-set pair takes the model covariance at its prediction age, with the gate\'s label', async () => {
+test('an element-set pair takes the model covariance at its prediction age, with the gate\'s label', { skip: PAIR_SKIP }, async () => {
   const h = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
   try {
     const e = await assess(h, 'FOSTER', uncertaintyModelFrame(model(), calibrated, 'test'));
@@ -90,7 +92,7 @@ test('an element-set pair takes the model covariance at its prediction age, with
   }
 });
 
-test('outside the model\'s ages, or with ALFANO_MAXIMUM, the event keeps the Alfano maximum', async () => {
+test('outside the model\'s ages, or with ALFANO_MAXIMUM, the event keeps the Alfano maximum', { skip: PAIR_SKIP }, async () => {
   const h = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
   try {
     for (const e of [await assess(h, 'FOSTER', uncertaintyModelFrame(model([[0, 1]]), calibrated)),
@@ -103,7 +105,7 @@ test('outside the model\'s ages, or with ALFANO_MAXIMUM, the event keeps the Alf
   }
 });
 
-test('catalog and refinement screens label their events the same way', async () => {
+test('catalog and refinement screens label their events the same way', { skip: PAIR_SKIP }, async () => {
   const h = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
   try {
     const frame = uncertaintyModelFrame(model(), calibrated, 'test');

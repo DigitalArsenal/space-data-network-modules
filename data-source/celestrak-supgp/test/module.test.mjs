@@ -32,8 +32,8 @@ const REQUIRED_HOST_IMPORTS = ["call", "response_len", "read_response"];
 
 // CelesTrak SupGP endpoint each registry token resolves to (built-in table).
 const BASE = "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php";
-// Registry token -> {sourceName, fixture, expectRecords} (fixtures are trimmed
-// real captures, 2026-07-13; see fixtures/PROVENANCE.md).
+// Registry token -> {sourceName, fixture, expectRecords} (fixtures are synthetic,
+// SupGP-shaped; see fixtures/PROVENANCE.md).
 const REGISTRY = {
   "SES-E": { sourceName: "ses", fixture: "SES-E.trimmed.json", records: 4 },
   Planet: { sourceName: "planet", fixture: "Planet.trimmed.json", records: 4 },
@@ -315,7 +315,7 @@ test("pull (single token SES-E JSON): schema-exact OMM + non-independent provena
   assert.equal(summary.records, 4);
   assert.equal(storage.length, 4);
 
-  // First object: NSS-11 (NORAD 26554), values copied faithfully from the feed.
+  // First object: NSS-11 (NORAD 26554), values copied faithfully from the feed (here the synthetic fixture).
   const rec = JSON.parse(storage[0].data.toString("utf8"));
   assert.equal(rec.CCSDS_OMM_VERS, 2.0);
   assert.equal(rec.OBJECT_NAME, "NSS-11");
@@ -324,16 +324,16 @@ test("pull (single token SES-E JSON): schema-exact OMM + non-independent provena
   assert.equal(rec.CENTER_NAME, "EARTH");
   assert.equal(rec.CLASSIFICATION_TYPE, "C");
   assert.equal(rec.EPHEMERIS_TYPE, 0);
-  assert.ok(Math.abs(rec.MEAN_MOTION - 1.00268926) < 1e-9, "MEAN_MOTION faithful");
-  assert.ok(Math.abs(rec.ECCENTRICITY - 0.0002684) < 1e-12);
-  assert.ok(Math.abs(rec.INCLINATION - 2.1911) < 1e-9);
-  assert.ok(Math.abs(rec.MEAN_MOTION_DOT - 1.1466e-6) < 1e-12, "scientific-notation field faithful");
+  assert.ok(Math.abs(rec.MEAN_MOTION - 1.00069336) < 1e-9, "MEAN_MOTION faithful");
+  assert.ok(Math.abs(rec.ECCENTRICITY - 0.0001761) < 1e-12);
+  assert.ok(Math.abs(rec.INCLINATION - 0.3095) < 1e-9);
+  assert.ok(Math.abs(rec.MEAN_MOTION_DOT - 2.7007e-7) < 1e-12, "scientific-notation field faithful");
   // Honesty markers.
   assert.equal(rec.USER_DEFINED_SDN_SOURCE_NAME, "ses");
   assert.equal(rec.USER_DEFINED_SDN_DATA_SOURCE, "CelesTrak SupGP");
   assert.equal(rec.USER_DEFINED_SDN_INDEPENDENT, "false");
   assert.equal(rec.USER_DEFINED_SDN_CELESTRAK_DATA_SOURCE, "SES-E");
-  assert.equal(rec.USER_DEFINED_SDN_CELESTRAK_RMS, "0.649", "CelesTrak fit residual preserved");
+  assert.equal(rec.USER_DEFINED_SDN_CELESTRAK_RMS, "0.747", "CelesTrak fit residual preserved");
   assert.ok(Array.isArray(rec.COMMENT) && rec.COMMENT.some((c) => /NON-INDEPENDENT/.test(c)));
 
   // Tags + PNM.
@@ -397,10 +397,10 @@ test("pull (SES-E CSV fallback): CSV parses to the same schema-exact OMM records
   // Same faithful values as the JSON path (CelesTrak CSV leading-dot / E-notation).
   assert.equal(rec.OBJECT_NAME, "NSS-11");
   assert.equal(rec.NORAD_CAT_ID, 26554);
-  assert.ok(Math.abs(rec.MEAN_MOTION - 1.00268926) < 1e-9);
-  assert.ok(Math.abs(rec.ECCENTRICITY - 0.0002684) < 1e-12, "leading-dot decimal parsed");
-  assert.ok(Math.abs(rec.MEAN_MOTION_DOT - 1.1466e-6) < 1e-12, "E-notation parsed");
-  assert.equal(rec.USER_DEFINED_SDN_CELESTRAK_RMS, "0.649");
+  assert.ok(Math.abs(rec.MEAN_MOTION - 1.00069336) < 1e-9);
+  assert.ok(Math.abs(rec.ECCENTRICITY - 0.0001761) < 1e-12, "leading-dot decimal parsed");
+  assert.ok(Math.abs(rec.MEAN_MOTION_DOT - 2.7007e-7) < 1e-12, "E-notation parsed");
+  assert.equal(rec.USER_DEFINED_SDN_CELESTRAK_RMS, "0.747");
   assert.equal(rec.USER_DEFINED_SDN_INDEPENDENT, "false");
 });
 

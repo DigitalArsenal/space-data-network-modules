@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import zlib from 'node:zlib';
 import test from 'node:test';
 import { associate, block, celestial, diagonal, earthOrientation, eopRow, options, predictions, rdo, solveAssignment, OEM } from './lib.mjs';
 
 const fixture = (name) => new URL(`./fixtures/${name}`, import.meta.url);
+import { denseProblem, hungarianOptimum, sparseOptimum, sparseProblem } from './assignment-problems.mjs';
 
 // A geocentric observer (sensor at the origin of GCRF) ranging objects that
 // sit still on the +x axis: range is x, H = [1 0 0 0 0 0], so
@@ -30,27 +30,21 @@ test('chi-square gates match the NIST critical values for 1 to 6 degrees of free
   }
 });
 
-test('OR-Library assignment problems solve to their published optimal values', async () => {
-  // Beasley, OR-Library (fixtures/or-library/SOURCE.md): assign100 = 305,
-  // assign200 = 475 (dense), assignp800 = 2239 (sparse; absent pairs are
-  // forbidden). Integer costs: the optimum is exact.
-  const optimal = Object.fromEntries(fs.readFileSync(fixture('or-library/assignopt.txt'), 'utf8').split('\n')
-    .map((l) => l.trim().split(/\s+/)).filter((f) => f.length === 2 && /^assign/.test(f[0])).map(([k, v]) => [k, Number(v)]));
-  for (const name of ['assign100', 'assign200']) {
-    const numbers = fs.readFileSync(fixture(`or-library/${name}.txt`), 'utf8').trim().split(/\s+/).map(Number);
-    const n = numbers[0];
-    const cost = Array.from({ length: n }, (_, i) => numbers.slice(1 + i * n, 1 + (i + 1) * n));
+test('seeded assignment problems of the OR-Library sizes solve to the optimum an independent Hungarian method finds', async () => {
+  // Dense 100 x 100 and 200 x 200, and sparse 800 x 800 (absent pairs are
+  // forbidden): tests/assignment-problems.mjs. Integer costs: the optimum is exact.
+  for (const [name, n, seed] of [['dense100', 100, 100], ['dense200', 200, 200]]) {
+    const cost = denseProblem(n, seed);
+    const optimal = hungarianOptimum(cost);
     const solution = await solveAssignment({ cost });
-    assert.equal(solution.total_cost, optimal[name], name);
+    assert.equal(solution.total_cost, optimal, name);
     assert.equal(new Set(solution.assignment).size, n, `${name}: a permutation`);
-    assert.equal(solution.assignment.reduce((s, j, i) => s + cost[i][j], 0), optimal[name], `${name}: the assignment costs what it reports`);
+    assert.equal(solution.assignment.reduce((s, j, i) => s + cost[i][j], 0), optimal, `${name}: the assignment costs what it reports`);
   }
-  const sparse = zlib.gunzipSync(fs.readFileSync(fixture('or-library/assignp800.txt.gz'))).toString().trim().split('\n');
-  const n = Number(sparse[0]);
-  const entries = sparse.slice(1).map((l) => l.trim().split(/\s+/).map(Number)).map(([i, j, c]) => [i - 1, j - 1, c]);
-  const solution = await solveAssignment({ rows: n, columns: n, entries });
-  assert.equal(solution.total_cost, optimal.assignp800);
-  const permitted = new Map(entries.map(([i, j, c]) => [`${i},${j}`, c]));
+  const problem = sparseProblem(800, 800);
+  const solution = await solveAssignment(problem);
+  assert.equal(solution.total_cost, sparseOptimum(problem));
+  const permitted = new Map(problem.entries.map(([i, j, c]) => [`${i},${j}`, c]));
   assert.ok(solution.assignment.every((j, i) => permitted.has(`${i},${j}`)), 'only permitted pairs');
 });
 
