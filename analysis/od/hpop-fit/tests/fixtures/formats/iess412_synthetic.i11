@@ -1,0 +1,36 @@
+-----------------------
+WEEKLY I11 DATA SET VALID UNTIL 15-Oct-2026 12:00
+-----------------------
+
+
+
+
+SUBJECT: ELEVEN PARAMETER EPHEMERIS FOR SYNTHSAT-1 / 12.50 DEG. E
+
+YEAR  MONTH  DAY  HOUR  MINUTE  SECOND
+2026  10     08   12    00      00
+
+THE EPHEMERIS VALUES ARE:
+
+LM0             LM1              LM2
+DEG. E          DEG/DAY          DEG/DAY/DAY
+12.3456        0.0123           -0.000045
+
+
+LONC            LONC1            LONS             LONS1
+DEG. E          DEG/DAY          DEG. E           DEG/DAY
+0.0311        0.0002           -0.0187         -0.0001
+
+
+LATC            LATC1            LATS             LATS1
+DEG. N          DEG/DAY          DEG. N           DEG/DAY
+0.4120        0.0004           -0.3105         -0.0003
+
+THE NOMINAL ORBITAL LOCATION FOR THIS SATELLITE IS 12.50 DEG. E
+
+THE PREDICTED SATELLITE LONGITUDE AND LATITUDE AT 170 HOURS AFTER
+EPOCH ARE   12.4453 DEG. E AND   0.1426  DEG. N 
+
+
+SYNTHETIC TEST OPERATOR
+NOT A REAL EPHEMERIS

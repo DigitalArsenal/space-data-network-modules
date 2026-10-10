@@ -49,7 +49,10 @@ Json closure(const odhpop::ClosureResult& c) {
           {"secondHalf", stats(c.second_half)},
           {"maxRKm", c.max_r_km},
           {"maxTKm", c.max_t_km},
-          {"maxNKm", c.max_n_km}};
+          {"maxNKm", c.max_n_km},
+          {"iterations", c.iterations},
+          {"stageIterations", c.stage_iterations},
+          {"converged", c.converged}};
 }
 
 bool read_options(const plugin_input_frame_t* f, odhpop::OperatorFitOptions* o, std::string* creation, std::string* error) {
@@ -70,6 +73,7 @@ bool read_options(const plugin_input_frame_t* f, odhpop::OperatorFitOptions* o, 
   dbl("ommStartSeconds", &o->omm_start_s);
   dbl("ommSpanSeconds", &o->omm_span_s);
   dbl("hpopSpanSeconds", &o->hpop_span_s);
+  dbl("hpopSpanOrbits", &o->hpop_span_orbits);
   dbl("referenceRmsMaxKm", &o->reference_rms_max_km);
   dbl("hpopRmsMaxKm", &o->hpop_rms_max_km);
   if (j.contains("maximumFitPoints") && j["maximumFitPoints"].is_number_integer())
@@ -77,6 +81,9 @@ bool read_options(const plugin_input_frame_t* f, odhpop::OperatorFitOptions* o, 
   if (j.contains("closure") && j["closure"].is_boolean()) o->closure = j["closure"].get<bool>();
   if (j.contains("hpop") && j["hpop"].is_boolean()) o->hpop = j["hpop"].get<bool>();
   str("creationDate", creation);
+  if (j.contains("initialParameters") && j["initialParameters"].is_object())
+    for (auto it = j["initialParameters"].begin(); it != j["initialParameters"].end(); ++it)
+      if (it.value().is_number()) o->initial_parameters.emplace_back(it.key(), it.value().get<double>());
   if (j.contains("forces") && j["forces"].is_object()) {
     const Json& fj = j["forces"];
     auto& fm = o->forces;
@@ -155,6 +162,7 @@ extern "C" int fit(void) {
       g["referenceGate"] = r.sgp4.reference_gate_pass ? "PASS" : "FAIL";
     }
     result["sgp4"] = g;
+    result["timingSeconds"] = {{"read", r.t_read_s}, {"sgp4", r.t_sgp4_s}, {"hpopFit", r.t_hpop_fit_s}, {"hpopExact", r.t_hpop_exact_s}, {"closure", r.t_closure_s}};
     if (r.hpop.ok) {
       Json params = Json::object();
       for (const auto& p : r.hpop.fit.solution.params) params[odhpop::param_name(p.id)] = p.value;
@@ -162,7 +170,7 @@ extern "C" int fit(void) {
       result["hpop"] = {{"epoch", odhpop::format_iso_utc(r.hpop.fit.solution.epoch, 6)},
                         {"iterations", r.hpop.fit.iterations},
                         {"converged", r.hpop.fit.converged},
-                        {"criterion", "sqrt(dx' N dx / n) < 1e-4"},
+                        {"criterion", "sqrt(dx' N dx / n) < 1e-3"},
                         {"fitPoints", r.hpop.fit.fit_points},
                         {"propagations", r.hpop.fit.propagations},
                         {"weightedRms", r.hpop.fit.weighted_rms},

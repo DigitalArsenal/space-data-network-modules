@@ -1,0 +1,71 @@
+{
+  "sdk": "0.8.25",
+  "threadModel": "wasi-sequential",
+  "target": "wasm32-wasip1-threads",
+  "sha256": "e085284c18d2d48d9af0da1192e9bca26e8274e31abe2e494710fc20b6bf464d",
+  "bytes": 2666790,
+  "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)",
+  "exceptionRuntimeArchives": [
+    {
+      "name": "libc++abi-ww-wasmexcept.a",
+      "sha256": "4e27aa6d5bb01619802a27c00c611100ca10d5eb844f4a7261affcf5560bd51a"
+    },
+    {
+      "name": "libunwind-ww-wasmexcept.a",
+      "sha256": "d8bcc70af787c3993c20e100d48f6ea403e2176b838bca496f93e6f8520c5b8d"
+    }
+  ],
+  "units": [
+    "propagator/hpop/lib/astrodynamics.cpp",
+    "propagator/hpop/lib/integrators.cpp",
+    "propagator/hpop/lib/variational.cpp",
+    "propagator/hpop/lib/finite_burn.cpp",
+    "propagator/hpop/lib/force_partials.cpp",
+    "propagator/hpop/lib/coords.cpp",
+    "propagator/hpop/lib/atmosphere_plugin.cpp",
+    "propagator/hpop/lib/environment_models.cpp",
+    "propagator/hpop/lib/ephemeris.cpp",
+    "propagator/hpop/lib/force_models.cpp",
+    "propagator/hpop/lib/atmosphere_winds.cpp",
+    "propagator/hpop/lib/nrlmsise00.cpp",
+    "propagator/hpop/lib/time_convert.cpp",
+    "propagator/hpop/lib/us76.cpp",
+    "third_party/hwm14/hwm14.cpp",
+    "third_party/hwm14/hwm14_data.cpp",
+    "third_party/nrlmsise00/nrlmsise-00.c",
+    "third_party/nrlmsise00/nrlmsise-00_data.c",
+    "propagator/hpop/src/cpp/src/prw_execution.cpp",
+    "erfa-amalgamation (foundation/frames/erfa-amalgamation.mjs)",
+    "analysis/estimation/src/batch_fit.cpp",
+    "analysis/estimation/src/estimation.cpp",
+    "analysis/od/hpop-fit/src/hpop_fit.cpp",
+    "analysis/od/hpop-fit/src/time_frames.cpp",
+    "analysis/od/hpop-fit/src/residual_stats.cpp",
+    "analysis/od/src/cpp/src/meme_parser.cpp",
+    "analysis/od/src/cpp/src/oem_parser.cpp",
+    "analysis/od/src/cpp/src/oem_fb_reader.cpp",
+    "analysis/od/src/cpp/src/frame_transform.cpp",
+    "analysis/od/src/cpp/src/sgp4_fitter.cpp",
+    "analysis/od/src/cpp/src/omm_fb_builder.cpp",
+    "analysis/od/src/cpp/src/obd_fb_builder.cpp",
+    "analysis/od/src/cpp/deps/vallado-sgp4/SGP4.cpp",
+    "analysis/od/hpop-fit/src/support/errno_weak.c",
+    "analysis/od/hpop-fit/src/formats/cpf.cpp",
+    "analysis/od/hpop-fit/src/formats/css_oem_zip.cpp",
+    "analysis/od/hpop-fit/src/formats/formats.cpp",
+    "analysis/od/hpop-fit/src/formats/iess412_i11.cpp",
+    "analysis/od/hpop-fit/src/formats/moditc.cpp",
+    "analysis/od/hpop-fit/src/formats/oneweb_ltef.cpp",
+    "analysis/od/hpop-fit/src/formats/planet_states.cpp",
+    "analysis/od/hpop-fit/src/formats/sp3.cpp",
+    "analysis/od/hpop-fit/src/formats/support.cpp",
+    "analysis/od/hpop-fit/src/formats/zip.cpp",
+    "analysis/od/hpop-fit/src/ephemeris_input.cpp",
+    "analysis/od/hpop-fit/src/operator_fit.cpp",
+    "analysis/od/hpop-fit/src/products.cpp"
+  ],
+  "linked": {
+    "propagator/hpop": "1.2.0",
+    "analysis/estimation": "0.3.0"
+  }
+}

@@ -40,6 +40,7 @@ const units=[
   ...['meme_parser','oem_parser','oem_fb_reader','frame_transform','sgp4_fitter','omm_fb_builder','obd_fb_builder'].map(n=>O(path.join(od,`src/${n}.cpp`))),
   O(path.join(od,'deps/vallado-sgp4/SGP4.cpp')),
   {path:path.join(root,'src/support/errno_weak.c'),includes:[],defines:{}},
+  ...fsSync.readdirSync(path.join(root,'src/formats')).filter(f=>f.endsWith('.cpp')).sort().map(f=>O(path.join(root,'src/formats',f))),
   O(path.join(root,'src/ephemeris_input.cpp')),O(path.join(root,'src/operator_fit.cpp')),O(path.join(root,'src/products.cpp')),
 ];
 const glueIncludes=[...odIncludes,path.join(hpop,'src/cpp/include')];

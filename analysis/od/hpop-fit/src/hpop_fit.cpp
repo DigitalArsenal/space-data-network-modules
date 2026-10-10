@@ -267,45 +267,17 @@ bool run(const std::vector<uint8_t>& request, const Environment& env, std::vecto
   return true;
 }
 
-// The space-weather drivers step at UTC boundaries (NRLMSISE-00's daily
-// F10.7 and Ap, the 3-hourly Kp): a step that straddles one integrates a
-// different density. With drag on, every 3-hour UTC boundary inside the arc
-// becomes an extra sample epoch, so the integration restarts exactly there
-// (E4-A5 2026-10-10: 2 mm jump after midnight, then 0.6 mm/h, without it).
-std::vector<UtcEpoch> breakpoints(const UtcEpoch& seed, const std::vector<UtcEpoch>& epochs) {
-  std::vector<UtcEpoch> out;
-  double lo = 0, hi = 0;
-  for (const auto& e : epochs) {
-    const double dt = seconds_between(seed, e);
-    lo = std::min(lo, dt);
-    hi = std::max(hi, dt);
-  }
-  // 3-hour boundaries from the seed's 00:00 UTC (jd2 is the day fraction).
-  const double since = seed.jd2 * 86400.0;
-  const double first = std::ceil((since + lo) / 10800.0) * 10800.0 - since;
-  for (double dt = first; dt < hi; dt += 10800.0)
-    if (dt > lo && std::abs(dt) > 1e-6) out.push_back(add_seconds(seed, dt));
-  return out;
-}
-
-// HPOP samples of one seed at `epochs` (plus the drag breakpoints, dropped
-// from the answer), at most 10000 per request.
+// HPOP samples of one seed at `epochs`, at most 10000 per request. (HPOP
+// itself restarts at the space-weather table's 3-hour boundaries and reads
+// the table inside each span: propagator/hpop d1d8ca88.)
 bool sample(const Solution& s, const std::array<double, 6>& state, const std::vector<double>& values,
             const Integration& integration, const std::vector<UtcEpoch>& epochs, bool with_sensitivity,
             const Environment& env, std::vector<Sample>* out, std::string* error) {
-  std::vector<UtcEpoch> all = epochs;
-  if (s.forces.drag) {
-    for (const auto& b : breakpoints(s.epoch, epochs)) {
-      bool present = false;
-      for (const auto& e : epochs)
-        if (std::abs(seconds_between(b, e)) < 1e-6) present = true;
-      if (!present) all.push_back(b);
-    }
-  }
+  const std::vector<UtcEpoch>& all = epochs;
   out->clear();
   out->reserve(epochs.size());
   std::vector<Sample> got;
-  // In time order; chunks restart from the seed with their own breakpoints.
+  // In time order; each chunk of 10000 restarts from the seed.
   std::vector<std::size_t> order(all.size());
   for (std::size_t i = 0; i < order.size(); ++i) order[i] = i;
   std::vector<double> offset(all.size());
@@ -344,8 +316,10 @@ bool predict(const Solution& solution, const Environment& env, const Integration
   return true;
 }
 
-FitResult fit(const std::vector<Point>& points, const Solution& initial, const Environment& env,
-              const Integration& integration, const FitOptions& options) {
+namespace {
+
+FitResult fit_once(const std::vector<Point>& points, const Solution& initial, const Environment& env,
+                   const Integration& integration, const FitOptions& options) {
   FitResult out;
   out.solution = initial;
   if (points.size() < 4) {
@@ -440,6 +414,49 @@ FitResult fit(const std::vector<Point>& points, const Solution& initial, const E
   out.chi_square = r.chi_square;
   out.reduced_chi_square = r.reduced_chi_square;
   out.ok = true;
+  return out;
+}
+
+}  // namespace
+
+ForceModel reduced_forces(const ForceModel& f, int degree) {
+  ForceModel r = f;
+  r.degree = std::min(f.degree, degree);
+  r.order = std::min(f.order, degree);
+  r.venus = r.mars = r.jupiter = false;
+  r.ocean_tide_degree = 0;
+  r.earth_radiation = false;
+  r.relativity = false;
+  return r;
+}
+
+FitResult fit(const std::vector<Point>& points, const Solution& initial, const Environment& env,
+              const Integration& integration, const FitOptions& options) {
+  if (!options.staged) return fit_once(points, initial, env, integration, options);
+  // Stage 1: the bulk of the iterations on a reduced model (gravity to
+  // stage_degree, Sun, Moon, drag and radiation pressure); stage 2: Gauss-
+  // Newton on the full force model from there, to the full tolerance. The
+  // solution, its covariance and every statistic are the full-force ones.
+  Solution reduced = initial;
+  reduced.forces = reduced_forces(initial.forces, options.stage_degree);
+  FitOptions coarse = options;
+  coarse.correction_tolerance = options.stage_tolerance;
+  coarse.maximum_iterations = std::min(options.maximum_iterations, options.stage_maximum_iterations);
+  // Fewer samples let the reduced model take its longer steps.
+  coarse.maximum_fit_points = std::min(options.maximum_fit_points, options.stage_fit_points);
+  FitResult first = fit_once(points, reduced, env, integration, coarse);
+  Solution start = initial;
+  if (first.ok) {
+    start.state = first.solution.state;
+    for (std::size_t j = 0; j < start.params.size(); ++j) start.params[j].value = first.solution.params[j].value;
+  }
+  // From the first stage's solution the full-force problem is nearly linear:
+  // plain Gauss-Newton, no damping.
+  FitOptions fine = options;
+  if (first.ok) fine.levenberg_marquardt = false;
+  FitResult out = fit_once(points, start, env, integration, fine);
+  out.stage_iterations = first.ok ? first.iterations : 0;
+  out.propagations += first.propagations;
   return out;
 }
 

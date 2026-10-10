@@ -35,6 +35,8 @@ struct Ephemeris {
   int segment_count = 1;
   bool position_only = false;
   std::vector<Sample> samples;
+  // Operator-declared events (maneuvers), as epochs.
+  std::vector<std::pair<UtcEpoch, std::string>> events;
 };
 
 struct ReadResult {
@@ -44,10 +46,19 @@ struct ReadResult {
   Ephemeris ephemeris;
 };
 
-// `format` "meme", "oem", "oem-fb" or empty (detect). ITRF sources need the
-// Earth orientation; TEME and EME2000 do not.
+// Which object of a multi-object file (Planet, SP3, ...) to read: by NORAD
+// number, else by name or COSPAR id. Empty: the file must hold one object.
+struct ObjectSelector {
+  int norad_cat_id = 0;
+  std::string object_name;
+  std::string object_id;
+};
+
+// `format` "meme", "oem", "oem-fb", a provider token of formats::formats(), or
+// empty (detect MEME / OEM / $OEM). ITRF sources need the Earth orientation;
+// TEME and EME2000 do not.
 ReadResult read_ephemeris(const uint8_t* bytes, std::size_t size, const std::string& format,
-                          const EarthOrientation* eop);
+                          const EarthOrientation* eop, const ObjectSelector& select = {});
 
 // sha256 of the raw bytes, lowercase hex (the provenance kept for every input;
 // the bytes themselves are never kept).

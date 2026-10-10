@@ -30,6 +30,9 @@ struct OperatorFitOptions {
   // HPOP span from the first point of the first maneuver-free segment;
   // 0: the whole segment.
   double hpop_span_s = 86400.0;
+  // When > 0, the HPOP span is this many orbital periods instead (from the
+  // first point's osculating semi-major axis).
+  double hpop_span_orbits = 0.0;
   std::size_t maximum_fit_points = 720;
   bool closure = true;
   bool hpop = true;
@@ -40,7 +43,12 @@ struct OperatorFitOptions {
   double gap_factor = 3.0;
   double jump_k = 10.0;
   double jump_floor_m_s2 = 1e-6;
+  double jump_min_residual_m = 0.5;
   ForceModel forces;  // full force by default
+  // Warm start: parameter values from the previous solution for this object
+  // (e.g. its last OCM), by name (B, AGOM, IN_TRACK, ECOM2_*). Missing ones
+  // take the defaults.
+  std::vector<std::pair<std::string, double>> initial_parameters;
 };
 
 struct Segment {
@@ -54,6 +62,8 @@ struct ClosureResult {
   ResidualStats first_half;  // the half fit's own exact stats
   ResidualStats second_half;  // the closure
   double max_r_km = 0, max_t_km = 0, max_n_km = 0;
+  int iterations = 0, stage_iterations = 0;
+  bool converged = false;
   std::string error;
 };
 
@@ -93,6 +103,8 @@ struct OperatorFitResult {
   std::vector<Segment> segments;
   SgpResult sgp4;
   HpopResult hpop;
+  // Wall time per phase, seconds (read, sgp4, hpop fit, hpop exact, closure).
+  double t_read_s = 0, t_sgp4_s = 0, t_hpop_fit_s = 0, t_hpop_exact_s = 0, t_closure_s = 0;
 };
 
 struct Reference {

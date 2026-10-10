@@ -28,7 +28,7 @@ for (const c of cases) {
     t.diagnostic(JSON.stringify({ iterations: h.iterations, converged: h.converged, parameters: h.parameters, fitMaxKm: h.stats.max3dKm,
       closureMaxKm: h.closure.secondHalf?.max3dKm, closureRmsKm: h.closure.secondHalf?.rms3dKm, n: h.closure.secondHalf?.n }));
     assert.equal(h.closure.done, true, h.closure.error);
-    assert.equal(h.closure.secondHalf.n, epochs.filter((iso) => Date.parse(`${iso}Z`) > Date.parse(`${h.closure.splitEpoch}Z`)).length, 'every second-half point is scored');
+    assert.equal(h.closure.firstHalf.n + h.closure.secondHalf.n, epochs.length, 'every point is scored in one half');
     assert.ok(h.closure.secondHalf.max3dKm <= GATE_KM, `closure max ${(h.closure.secondHalf.max3dKm * 1e5).toFixed(3)} cm`);
     // The stored product is the full-span fit, scored on every point.
     assert.equal(h.stats.n, epochs.length);

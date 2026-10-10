@@ -1,6 +1,7 @@
 // Native development probe for the whole operator fit (not a test): an HPOP
 // truth written as a CCSDS OEM KVN (EME2000, UTC), read back and fitted.
 //   operator_probe <env-dir> <span-hours> <step-s> [frame-error]
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -63,25 +64,31 @@ int main(int argc, char** argv) {
   o.hpop_span_s = 0;
   o.omm_span_s = 6 * 3600;
   o.data_source = "SYNTH";
+  if (std::getenv("NO_HPOP")) o.hpop = false;
+  if (std::getenv("NO_CLOSURE")) o.closure = false;
   Reference ref;
   if (frame_error) {
     // The "reference": an SGP4 fit to the correct TEME states.
     std::string correct = kvn;  // not used
     (void)correct;
   }
+  auto t0 = std::chrono::steady_clock::now();
   OperatorFitResult r = fit_operator_ephemeris(reinterpret_cast<const uint8_t*>(kvn.data()), kvn.size(), ref, env, o);
+  std::printf("wall %.2f s\n", std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
+  std::printf("phases: read %.2f sgp4 %.2f hpopFit %.2f hpopExact %.2f closure %.2f s\n", r.t_read_s, r.t_sgp4_s, r.t_hpop_fit_s, r.t_hpop_exact_s, r.t_closure_s);
   std::printf("ok %d %s %s sha %s samples %zu segments %zu\n", r.ok, r.failure_code.c_str(), r.failure_message.c_str(),
               r.raw_sha256.substr(0, 16).c_str(), r.samples, r.segments.size());
   std::printf(" SGP4 fit points %zu B* %.6e\n", r.sgp4.fit_points, r.sgp4.elements.bstar);
   print("sgp4", r.sgp4.stats);
   print("sgp4 half", r.sgp4.closure.first_half);
   print("sgp4 closure", r.sgp4.closure.second_half);
-  std::printf(" HPOP iterations %d converged %d props %zu\n", r.hpop.fit.iterations, r.hpop.fit.converged,
-              r.hpop.fit.propagations);
+  std::printf(" HPOP iterations %d (+%d reduced) converged %d props %zu\n", r.hpop.fit.iterations, r.hpop.fit.stage_iterations,
+              r.hpop.fit.converged, r.hpop.fit.propagations);
   for (const auto& p : r.hpop.fit.solution.params) std::printf("  %s = %.9e\n", param_name(p.id), p.value);
   print("hpop", r.hpop.stats);
   print("hpop half", r.hpop.closure.first_half);
   print("hpop closure", r.hpop.closure.second_half);
+  std::printf("  half fit iterations %d (+%d reduced) converged %d\n", r.hpop.closure.iterations, r.hpop.closure.stage_iterations, r.hpop.closure.converged);
   for (const auto& ev : r.hpop.segment.evidence) std::printf("  evidence: %s\n", ev.c_str());
   return 0;
 }

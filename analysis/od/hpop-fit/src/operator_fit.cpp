@@ -1,6 +1,8 @@
 #include "operator_fit.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <cstdio>
 #include <cmath>
 #include <limits>
 
@@ -10,6 +12,10 @@
 namespace odhpop {
 
 namespace {
+
+double now_s() {
+  return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
 
 constexpr std::size_t kNone = std::numeric_limits<std::size_t>::max();
 
@@ -22,22 +28,36 @@ std::vector<Segment> split_segments(const Ephemeris& e, double gap_factor) {
   std::nth_element(sorted.begin(), sorted.begin() + sorted.size() / 2, sorted.end());
   const double median = sorted.empty() ? 0.0 : sorted[sorted.size() / 2];
   Segment cur;
-  cur.begin = 0;
-  for (std::size_t i = 1; i <= s.size(); ++i) {
+  std::size_t i = 1;
+  while (i <= s.size()) {
     std::string why;
+    bool event = false;
     if (i < s.size()) {
       if (s[i].segment != s[i - 1].segment) why = "operator-segment-boundary";
       else if (median > 0 && steps[i - 1] > gap_factor * median) why = "gap";
+      else
+        for (const auto& [te, text] : e.events)
+          if (seconds_between(te, s[i].t) > 0 && seconds_between(te, s[i - 1].t) <= 0) why = "operator-event: " + text, event = true;
     }
-    if (i == s.size() || !why.empty()) {
-      cur.end = i;
-      if (i < s.size()) cur.evidence.push_back("ends: " + why);
-      out.push_back(cur);
-      cur = Segment();
-      cur.begin = i;
-      if (!why.empty()) cur.evidence.push_back("starts: " + why);
+    if (i < s.size() && why.empty()) {
+      ++i;
+      continue;
     }
+    cur.end = i;
+    if (i < s.size()) cur.evidence.push_back("ends: " + why);
+    if (cur.end > cur.begin) out.push_back(cur);
+    if (i >= s.size()) break;
+    cur = Segment();
+    cur.begin = i;
+    if (event) {
+      // The next segment starts after a 1800 s guard (E4-A5's rule).
+      const UtcEpoch guard = add_seconds(s[i - 1].t, 1800.0);
+      while (cur.begin < s.size() && seconds_between(guard, s[cur.begin].t) < 0) ++cur.begin;
+    }
+    cur.evidence.push_back("starts: " + why);
+    i = cur.begin + 1;
   }
+  if (out.empty()) out.push_back(Segment{0, s.size(), {}});
   return out;
 }
 
@@ -210,10 +230,11 @@ struct HpopRun {
   std::vector<UtcEpoch> t;
   std::vector<std::array<double, 3>> rtn;  // m
   double max_rtn_km[3] = {0, 0, 0};
+  double t_fit_s = 0, t_exact_s = 0;
 };
 
 HpopRun hpop_fit_range(const std::vector<Sample>& s, std::size_t begin, std::size_t end, const Environment& env,
-                       const OperatorFitOptions& o) {
+                       const OperatorFitOptions& o, const std::vector<ParamValue>* warm = nullptr) {
   HpopRun out;
   if (end - begin < 4) {
     out.error = "fit-failed: fewer than four points";
@@ -235,10 +256,23 @@ HpopRun hpop_fit_range(const std::vector<Sample>& s, std::size_t begin, std::siz
   if (!s[begin].has_velocity) v = velocity_from_positions(s, begin, begin, end);
   for (int k = 0; k < 3; ++k) guess.state[3 + k] = v[k];
   guess.params = default_parameters(guess.state, seconds_between(s[begin].t, s[end - 1].t), &guess.forces);
+  for (auto& q : guess.params)
+    for (const auto& [name, value] : o.initial_parameters)
+      if (name == param_name(q.id) && std::isfinite(value)) {
+        q.value = value;
+        if (std::isfinite(q.lower) && q.value < q.lower) q.value = q.lower;
+      }
+  // A starting point only: the half fit converges on its own data.
+  if (warm)
+    for (auto& q : guess.params)
+      for (const auto& w : *warm)
+        if (w.id == q.id) q.value = std::isfinite(q.lower) ? std::max(q.lower, w.value) : w.value;
   Integration integ;
   FitOptions fo;
   fo.maximum_fit_points = o.maximum_fit_points;
+  const double t0 = now_s();
   out.fit = fit(pts, guess, env, integ, fo);
+  out.t_fit_s = now_s() - t0;
   if (!out.fit.ok) {
     out.error = out.fit.error;
     return out;
@@ -257,6 +291,7 @@ HpopRun hpop_fit_range(const std::vector<Sample>& s, std::size_t begin, std::siz
     return out;
   }
   out.stats = residual_stats(out.t, truth, model, hv, true);
+  out.t_exact_s = now_s() - t0 - out.t_fit_s;
   for (std::size_t i = 0; i < out.t.size(); ++i) {
     double c[3];
     rtn_components(truth[i], model[i], hv[i], c);
@@ -287,12 +322,17 @@ OperatorFitResult fit_operator_ephemeris(const uint8_t* bytes, std::size_t size,
     res.failure_message = message;
     return res;
   };
+  double mark = now_s();
   EarthOrientation eop;
   if (env.earth_orientation_size) {
     const std::string why = eop.load(env.earth_orientation, env.earth_orientation_size);
     if (!why.empty()) return failed("invalid-earth-orientation", why);
   }
-  ReadResult rr = read_ephemeris(bytes, size, o.input_format, &eop);
+  ObjectSelector select;
+  select.norad_cat_id = o.norad_cat_id;
+  select.object_name = o.object_name;
+  select.object_id = o.object_id;
+  ReadResult rr = read_ephemeris(bytes, size, o.input_format, &eop, select);
   if (!rr.ok) return failed(rr.error_code, rr.error_message);
   Ephemeris& e = rr.ephemeris;
   res.format = e.format;
@@ -305,6 +345,8 @@ OperatorFitResult fit_operator_ephemeris(const uint8_t* bytes, std::size_t size,
   res.first = e.samples.front().t;
   res.last = e.samples.back().t;
   res.segments = split_segments(e, o.gap_factor);
+  res.t_read_s = now_s() - mark;
+  mark = now_s();
   const auto& s = e.samples;
 
   // ---- SGP4 OMM over its window -------------------------------------------
@@ -353,6 +395,7 @@ OperatorFitResult fit_operator_ephemeris(const uint8_t* bytes, std::size_t size,
       }
     }
     g.ok = true;
+    res.t_sgp4_s = now_s() - mark;
   }
 
   // ---- HPOP over the first maneuver-free segment ----------------------------
@@ -360,15 +403,32 @@ OperatorFitResult fit_operator_ephemeris(const uint8_t* bytes, std::size_t size,
     HpopResult& hp = res.hpop;
     const Segment& seg0 = res.segments.front();
     std::size_t begin = seg0.begin;
-    std::size_t end = span_end(s, begin, seg0.end, o.hpop_span_s);
+    double span_s = o.hpop_span_s;
+    if (o.hpop_span_orbits > 0) {
+      const auto& x = s[begin].gcrf_m;
+      const double r = std::sqrt(x[0] * x[0] + x[1] * x[1] + x[2] * x[2]);
+      const double a = 1.0 / (2.0 / r - (x[3] * x[3] + x[4] * x[4] + x[5] * x[5]) / 3.986004415e14);
+      span_s = a > 0 ? o.hpop_span_orbits * 2.0 * M_PI * std::sqrt(a * a * a / 3.986004415e14) : o.hpop_span_s;
+    }
+    std::size_t end = span_end(s, begin, seg0.end, span_s);
     hp.segment.begin = begin;
     hp.segment.evidence = seg0.evidence;
-    if (o.hpop_span_s > 0 && end < seg0.end) hp.segment.evidence.push_back("ends: hpop span limit");
+    if (span_s > 0 && end < seg0.end) hp.segment.evidence.push_back("ends: hpop span limit");
     HpopRun run;
     for (int attempt = 0; attempt < 4; ++attempt) {
       run = hpop_fit_range(s, begin, end, env, o);
       if (!run.ok) return failed("hpop-fit-failed", run.error);
       std::string detail;
+      // A solution that matches every point to within jump_min_residual_m
+      // leaves no room for an unmodelled maneuver; below it the second
+      // differences are integration noise (mm at 10 s sampling is 1e-5 m/s^2).
+      if (run.stats.max_3d_km * 1e3 < o.jump_min_residual_m) {
+        char buf[120];
+        std::snprintf(buf, sizeof buf, "maneuver-free: every residual below %.3g m (max %.3g m)", o.jump_min_residual_m,
+                      run.stats.max_3d_km * 1e3);
+        hp.segment.evidence.push_back(buf);
+        break;
+      }
       const std::size_t j = residual_jump(run.t, run.rtn, o.jump_k, o.jump_floor_m_s2, &detail);
       if (j == kNone) {
         hp.segment.evidence.push_back("maneuver-free: no residual jump (k=" + std::to_string(o.jump_k) + ")");
@@ -379,6 +439,9 @@ OperatorFitResult fit_operator_ephemeris(const uint8_t* bytes, std::size_t size,
       end = begin + j - 1;
     }
     hp.segment.end = end;
+    res.t_hpop_fit_s = run.t_fit_s;
+    res.t_hpop_exact_s = run.t_exact_s;
+    mark = now_s();
     hp.fit = run.fit;
     hp.stats = run.stats;
     // Convergence is recorded (iterations, criterion, flag), not gated: the
@@ -389,15 +452,23 @@ OperatorFitResult fit_operator_ephemeris(const uint8_t* bytes, std::size_t size,
       c.split = add_seconds(s[begin].t, 0.5 * seconds_between(s[begin].t, s[end - 1].t));
       std::size_t mid = begin;
       while (mid < end && seconds_between(c.split, s[mid].t) <= 0) ++mid;
-      HpopRun half = hpop_fit_range(s, begin, mid, env, o);
+      HpopRun half = hpop_fit_range(s, begin, mid, env, o, &run.fit.solution.params);
       if (half.ok && mid < end) {
         c.first_half = half.stats;
-        std::vector<UtcEpoch> t2;
-        std::vector<std::array<double, 6>> truth, model;
+        c.iterations = half.fit.iterations;
+        c.stage_iterations = half.fit.stage_iterations;
+        c.converged = half.fit.converged;
+        std::vector<UtcEpoch> t2, through;
+        std::vector<std::array<double, 6>> truth, model, all;
         std::vector<bool> hv;
         for (std::size_t i = mid; i < end; ++i) t2.push_back(s[i].t), truth.push_back(s[i].gcrf_m), hv.push_back(s[i].has_velocity);
+        // The prediction passes through every ephemeris epoch from the
+        // start, as the fit's own propagation did (HPOP restarts at each),
+        // and is scored on the second half.
+        for (std::size_t i = begin; i < end; ++i) through.push_back(s[i].t);
         std::string error;
-        if (predict(half.fit.solution, env, Integration(), t2, &model, &error)) {
+        if (predict(half.fit.solution, env, Integration(), through, &all, &error)) {
+          model.assign(all.begin() + (mid - begin), all.end());
           c.second_half = residual_stats(t2, truth, model, hv, true);
           for (std::size_t i = 0; i < t2.size(); ++i) {
             double d[3];
@@ -414,6 +485,7 @@ OperatorFitResult fit_operator_ephemeris(const uint8_t* bytes, std::size_t size,
         c.error = half.ok ? "no second half" : half.error;
       }
     }
+    res.t_closure_s = now_s() - mark;
     hp.ok = true;
   }
 

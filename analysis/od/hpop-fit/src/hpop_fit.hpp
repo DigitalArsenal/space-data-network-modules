@@ -106,10 +106,17 @@ struct Solution {
 struct FitOptions {
   int maximum_iterations = 25;
   // sqrt(dx' N dx / n) on whitened residuals (estimation's criterion).
-  double correction_tolerance = 1e-4;  // 0.1 mm on 1 m sigmas
+  double correction_tolerance = 1e-3;  // agreed with E4-A5
   bool levenberg_marquardt = true;
   std::size_t maximum_fit_points = 720;
   double sigma_m = 1.0;
+  // Staged iterations: first on reduced_forces(stage_degree) to
+  // stage_tolerance, then on the full force model to correction_tolerance.
+  bool staged = true;
+  int stage_degree = 20;
+  double stage_tolerance = 1e-2;
+  std::size_t stage_fit_points = 48;
+  int stage_maximum_iterations = 6;  // a starting point only
 };
 
 struct FitResult {
@@ -127,7 +134,13 @@ struct FitResult {
   double reduced_chi_square = 0.0;
   std::size_t fit_points = 0;
   std::size_t propagations = 0;
+  int stage_iterations = 0;  // reduced-model iterations before `iterations`
 };
+
+// The reduced model of the first stage: gravity to `degree`, no planets,
+// ocean tides, Earth radiation or relativity (Sun, Moon, drag, solar
+// radiation pressure and solid tides stay).
+ForceModel reduced_forces(const ForceModel& f, int degree);
 
 // Fits `initial` (its epoch, seed state and parameters) to the positions.
 FitResult fit(const std::vector<Point>& points, const Solution& initial, const Environment& env,

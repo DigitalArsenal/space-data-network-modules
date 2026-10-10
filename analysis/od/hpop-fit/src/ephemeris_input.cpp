@@ -4,6 +4,7 @@
 #include <cctype>
 #include <string>
 
+#include "formats/formats.hpp"
 #include "od/meme_parser.h"
 #include "od/oem_fb_reader.h"
 #include "od/oem_parser.h"
@@ -126,8 +127,68 @@ ReadResult from_source(const od::OEMSourceResult& src, const std::string& format
 
 }  // namespace
 
+namespace {
+
+ReadResult from_provider(const std::string& format, const uint8_t* bytes, std::size_t size,
+                         const EarthOrientation* eop, const ObjectSelector& select) {
+  formats::ParseResult p = formats::parse(format, bytes, size);
+  if (!p.ok) return fail(p.error_code, p.error_message);
+  const formats::RawSeries* chosen = nullptr;
+  for (const auto& o : p.objects) {
+    const bool match = (select.norad_cat_id > 0 && o.norad_cat_id == select.norad_cat_id) ||
+                       (!select.object_name.empty() && o.object_name == select.object_name) ||
+                       (!select.object_id.empty() && o.object_id == select.object_id);
+    if (match) {
+      chosen = &o;
+      break;
+    }
+  }
+  if (!chosen) {
+    if (p.objects.size() != 1) {
+      std::string names;
+      for (std::size_t i = 0; i < p.objects.size() && i < 20; ++i)
+        names += (i ? ", " : "") + (p.objects[i].norad_cat_id ? std::to_string(p.objects[i].norad_cat_id) : p.objects[i].object_name);
+      return fail("object-selector-required", std::to_string(p.objects.size()) + " objects (" + names + "); select one by noradCatId, objectName or objectId");
+    }
+    chosen = &p.objects.front();
+  }
+  ReadResult out;
+  Ephemeris& e = out.ephemeris;
+  e.format = format;
+  e.source_frame = chosen->frame;
+  e.time_system = chosen->scale;
+  e.object_name = chosen->object_name;
+  e.object_id = chosen->object_id;
+  e.norad_cat_id = chosen->norad_cat_id;
+  const Axes axes = axes_of(e.source_frame);
+  if (axes == Axes::UNSUPPORTED) return fail("unsupported-frame", "frame " + e.source_frame);
+  bool any_velocity = false;
+  int segments = 0;
+  for (const auto& s : chosen->samples) {
+    UtcEpoch t;
+    if (!parse_epoch(s.epoch, e.time_system, s.offset_s, &t)) return fail("parse-failed", "epoch " + s.epoch + " on " + e.time_system);
+    Sample x;
+    std::string error;
+    if (!place(axes, t, s.r_km, s.v_km, s.has_velocity, eop, &x, &error)) return fail(error, error);
+    x.segment = s.segment;
+    segments = std::max(segments, s.segment + 1);
+    any_velocity = any_velocity || s.has_velocity;
+    e.samples.push_back(x);
+  }
+  e.segment_count = segments;
+  e.position_only = !any_velocity;
+  for (const auto& ev : chosen->events) {
+    UtcEpoch t;
+    if (parse_epoch(ev.epoch, e.time_system, 0.0, &t)) e.events.push_back({t, ev.text});
+  }
+  out.ok = true;
+  return out;
+}
+
+}  // namespace
+
 ReadResult read_ephemeris(const uint8_t* bytes, std::size_t size, const std::string& format_in,
-                          const EarthOrientation* eop) {
+                          const EarthOrientation* eop, const ObjectSelector& select) {
   std::string format = format_in;
   if (format.empty()) {
     if (od::is_oem_flatbuffer(bytes, size)) format = "oem-fb";
@@ -159,7 +220,10 @@ ReadResult read_ephemeris(const uint8_t* bytes, std::size_t size, const std::str
     }
     out.ok = true;
   } else {
-    return fail("unsupported-input-format", "inputFormat " + format);
+    const auto known = formats::formats();
+    if (std::find(known.begin(), known.end(), format) == known.end())
+      return fail("unsupported-input-format", "inputFormat " + format);
+    out = from_provider(format, bytes, size, eop, select);
   }
   if (!out.ok) return out;
   auto& samples = out.ephemeris.samples;

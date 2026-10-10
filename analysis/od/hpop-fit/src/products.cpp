@@ -183,7 +183,7 @@ Products build_products(const OperatorFitResult& r, const OperatorFitOptions& o,
   od.OD_OBSERVATIONS_TYPE.push_back("POSITION");
   od.OD_OBSERVATIONS_USED = static_cast<int32_t>(h.fit.fit_points);
   od.OD_DATA_WEIGHTING = "EQUAL, 1 m per axis";
-  od.OD_CONVERGENCE_CRITERIA = "sqrt(dx' N dx / n) < 1e-4; iterations " + std::to_string(h.fit.iterations) +
+  od.OD_CONVERGENCE_CRITERIA = "sqrt(dx' N dx / n) < 1e-3; iterations " + std::to_string(h.fit.iterations) +
                                (h.fit.converged ? "; converged" : "; not converged");
   od.OD_COV_REDUCTION = "FORMAL (J'WJ)^-1 SCALED BY REDUCED CHI-SQUARE";
   for (const auto& q : s.params) od.OD_EST_PARAMETERS.push_back(param_name(q.id));
@@ -244,7 +244,7 @@ Products build_products(const OperatorFitResult& r, const OperatorFitOptions& o,
     }
     b.BALLISTIC_COEFF_MODEL = f.drag ? pt.ATMOSPHERIC_DRAG : "NONE";
     b.AGOM_MODEL = pt.SOLAR_RAD_PRESSURE;
-    b.RMS_CONVERGENCE_CRITERIA = 1e-4;
+    b.RMS_CONVERGENCE_CRITERIA = 1e-3;
     b.NUM_ITERATIONS = static_cast<uint16_t>(std::max(0, h.fit.iterations));
     b.NUM_ACCEPTED_OBS = static_cast<uint32_t>(h.fit.fit_points);
     b.ACCEPTED_OB_TYPS.push_back("POSITION");
