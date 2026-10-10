@@ -212,6 +212,17 @@ struct Execution {
     // units when they are given with one.
     std::vector<ForceModel::DynamicParameter> parameters;
     std::vector<double> pParameters;
+    // The space_weather table's change epochs (TT, ascending) for drag models
+    // that read it as published, piecewise constant: NRLMSISE-00 and
+    // Jacchia-Roberts take daily F10.7, F10.7a and Ap and 3-hourly Kp
+    // (Jacchia-Roberts 6.7 h earlier). The integration restarts at each, as
+    // at a sample epoch, and while a span is integrated the table is read
+    // inside that span (driverSpan, UTC Julian dates), so no step mixes two
+    // days' or two slots' indices. Without this, integrations whose steps
+    // fall differently across a change differ by about a centimetre a day in
+    // LEO. Finite burns are integrated without these restarts.
+    std::vector<TTEpoch> breaks;
+    std::shared_ptr<std::array<double,2>> driverSpan;
 };
 // GCRF <-> request axes.
 Vec3 toRequestAxes(const Execution& e,const Vec3& v) {
@@ -713,6 +724,43 @@ std::unique_ptr<PRWResidentStateT> sampleState(const Execution& execution,const 
 std::unique_ptr<PRWStateMatrixT> sampleMatrix(const Execution& execution,const double* values,unsigned n,bool covariance) {
     std::vector<double> m(values,values+n*n);rotateMatrix(execution,m.data(),n,true);return matrix(m.data(),n,covariance);
 }
+double utcJd(const TTEpoch& tt) {return timesys::taiToUtc(timesys::ttToTai(tt.jdTt()));}
+// The table's change epochs strictly inside the arc (initial, target and
+// samples), ascending.
+std::vector<TTEpoch> driverBreaks(const Execution& e) {
+    std::vector<TTEpoch> out;
+    const bool msis=e.forces.dragModel==ForceModel::DragModelType::NRLMSISE00,jr=e.forces.dragModel==ForceModel::DragModelType::JacchiaRoberts;
+    if(!e.forces.useDrag||!(msis||jr))return out;
+    TTEpoch lo=e.initialTT,hi=e.initialTT;
+    for(const TTEpoch* t:{&e.targetTT}){if(elapsedSeconds(lo,*t)<0)lo=*t;if(elapsedSeconds(hi,*t)>0)hi=*t;}
+    for(const auto& t:e.samplesTT){if(elapsedSeconds(lo,t)<0)lo=t;if(elapsedSeconds(hi,t)>0)hi=t;}
+    // UTC seconds since 2000-01-01T12:00 UTC, as parseIsoSeconds counts them.
+    const auto utcSeconds=[](const TTEpoch& t){return t.whole+t.fraction-(double(timesys::getLeapSeconds(utcJd(t)))+32.184);};
+    const double period=3*3600.0,from=utcSeconds(lo)-period,to=utcSeconds(hi)+period;
+    std::vector<double> phases{0.0};
+    if(jr)phases.push_back(6.7*3600.0);
+    for(const double phase:phases)
+        for(double s=std::floor((from+43200.0-phase)/period)*period+phase-43200.0;s<=to;s+=period) {
+            TTEpoch tt;std::string ignored;const double whole=std::floor(s);
+            if(!toTT(whole,s-whole,2451545.0+s/86400.0,timingStandard::UTC,tt,ignored))continue;
+            if(elapsedSeconds(lo,tt)>0&&elapsedSeconds(tt,hi)>0)out.push_back(tt);
+        }
+    std::sort(out.begin(),out.end(),[](const TTEpoch& a,const TTEpoch& b){return elapsedSeconds(a,b)>0;});
+    return out;
+}
+// The breaks strictly between from and to, in the direction of travel.
+std::vector<TTEpoch> breaksBetween(const Execution& e,const TTEpoch& from,const TTEpoch& to) {
+    std::vector<TTEpoch> out;const double span=elapsedSeconds(from,to);
+    for(const auto& b:e.breaks){const double s=elapsedSeconds(from,b);if((span>0&&s>0&&s<span)||(span<0&&s<0&&s>span))out.push_back(b);}
+    if(span<0)std::reverse(out.begin(),out.end());
+    return out;
+}
+// The span the table is read in while [from, to] is integrated.
+void setDriverSpan(Execution& e,const TTEpoch& from,const TTEpoch& to) {
+    if(!e.driverSpan)return;
+    const double a=utcJd(from),b=utcJd(to);
+    *e.driverSpan={std::min(a,b),std::max(a,b)};
+}
 bool finish(const Execution& execution,const PRWExecutionRequest* request,const TTEpoch& epochTT,PRWPropagationSampleT& out,std::string& error);
 // One epoch integrated from the initial state: finite burns (whose burn state
 // runs along the arc) and the plain path without STM or samples.
@@ -746,13 +794,26 @@ bool evaluate(Execution& execution,const PRWExecutionRequest* request,const TTEp
         if(config.method==IntegrationMethod::RK4 && seconds>0 &&
            std::ceil(seconds/config.initialStep)>config.maxSteps)
             return prwError(error,"invoke-failed: RK4 request exceeds MAXIMUM_STEPS.");
-        const auto value=Integrator::PropagateWithResult(execution.initial,seconds,config,execution.forces);
-        if(!value.success){error="invoke-failed: "+value.errorMessage;return false;}
-        // RK4, RKDP87 and BS step forward only; a backward request must not
-        // come back as the initial state.
-        if(!std::isfinite(value.totalTime)||std::abs(value.totalTime-seconds)>32*std::numeric_limits<double>::epsilon()*std::max(1.0,std::abs(seconds)))
-            return prwError(error,"invoke-failed: The integrator did not reach the target epoch (RK4, RKDP87 and BS integrate forward only).");
-        auto state=value.finalState;state.epoch=epoch;out.STATE=stateOut(state);out.ACCEPTED_STEPS=value.steps;out.REJECTED_STEPS=value.rejections;
+        // Span by span through the space-weather breaks (one span without
+        // them); the force clock restarts with each span, as the variational
+        // path's segments do.
+        StateVector state=execution.initial;TTEpoch at=execution.initialTT;uint32_t steps=0,rejections=0;
+        auto stops=breaksBetween(execution,at,epochTT);stops.push_back(epochTT);
+        const double clock=execution.forces.integrationEpochTDB;
+        struct Restore{double& v;double saved;~Restore(){v=saved;}} restore{execution.forces.integrationEpochTDB,clock};
+        for(const auto& stop:stops) {
+            const double span=elapsedSeconds(at,stop);
+            setDriverSpan(execution,at,stop);
+            if(execution.forces.explicitEpochContract)execution.forces.integrationEpochTDB=state.epoch;
+            const auto value=Integrator::PropagateWithResult(state,span,config,execution.forces);
+            if(!value.success){error="invoke-failed: "+value.errorMessage;return false;}
+            // RK4, RKDP87 and BS step forward only; a backward request must not
+            // come back as the initial state.
+            if(!std::isfinite(value.totalTime)||std::abs(value.totalTime-span)>32*std::numeric_limits<double>::epsilon()*std::max(1.0,std::abs(span)))
+                return prwError(error,"invoke-failed: The integrator did not reach the target epoch (RK4, RKDP87 and BS integrate forward only).");
+            state=value.finalState;state.epoch=timesys::ttToTdb(stop.jdTt());at=stop;steps+=value.steps;rejections+=value.rejections;
+        }
+        state.epoch=epoch;out.STATE=stateOut(state);out.ACCEPTED_STEPS=steps;out.REJECTED_STEPS=rejections;
     }
     return finish(execution,request,epochTT,out,error);
 }
@@ -784,9 +845,10 @@ struct Cursor {
     std::vector<double> phi, p;  // n x n, n = 6 + parameters
     uint32_t steps = 0, rejections = 0;
 };
-bool advance(Execution& execution,Cursor& c,const TTEpoch& to,std::string& error) {
+bool advanceSpan(Execution& execution,Cursor& c,const TTEpoch& to,std::string& error) {
     const double seconds=elapsedSeconds(c.tt,to);
     if(seconds==0)return true;
+    setDriverSpan(execution,c.tt,to);
     const unsigned n=6+unsigned(execution.parameters.size());
     std::vector<double> span(n*n,0.0),p;
     StateVector state;uint32_t steps=0,rejections=0;
@@ -808,6 +870,10 @@ bool advance(Execution& execution,Cursor& c,const TTEpoch& to,std::string& error
     c.state=state;c.state.epoch=timesys::ttToTdb(to.jdTt());c.tt=to;
     c.steps+=steps;c.rejections+=rejections;
     return true;
+}
+bool advance(Execution& execution,Cursor& c,const TTEpoch& to,std::string& error) {
+    for(const auto& b:breaksBetween(execution,c.tt,to))if(!advanceSpan(execution,c,b,error))return false;
+    return advanceSpan(execution,c,to,error);
 }
 bool evaluateInOrder(Execution& execution,const PRWExecutionRequest* request,PRWExecutionResultT& result,std::string& error) {
     // Index 0 is the target epoch, k > 0 the k-th sample.
@@ -864,7 +930,15 @@ bool execute(const PRWExecutionRequest* request,const std::shared_ptr<EarthRotat
         const auto utc=[](double jdTdb){return timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(jdTdb)));};
         for(double t=utc(first);t<utc(last)+1.0;t+=1.0)
             if(!weather->covers(std::min(t,utc(last))))return prwError(error,"space-weather-out-of-range: The SPW rows must cover every day of the arc and the day before it.");
-        execution.forces.weatherAt=[weather](double jdUtc,SpaceWeatherData& w){weather->at(jdUtc,w);};
+        // Read inside the span being integrated (setDriverSpan), 1e-8 d from its ends.
+        const auto span=std::make_shared<std::array<double,2>>(std::array<double,2>{0,0});
+        execution.driverSpan=span;
+        execution.forces.weatherAt=[weather,span](double jdUtc,SpaceWeatherData& w){
+            const double lo=(*span)[0]+1e-8,hi=(*span)[1]-1e-8;
+            const double read=(*span)[1]<=(*span)[0]?jdUtc:lo>hi?0.5*((*span)[0]+(*span)[1]):std::min(hi,std::max(lo,jdUtc));
+            weather->at(read,w);w.epoch=jdUtc;
+        };
+        if(!execution.massDynamics)execution.breaks=driverBreaks(execution);
     }
     if(earth) {
         // The EOP must bracket the whole arc; nothing is extrapolated.

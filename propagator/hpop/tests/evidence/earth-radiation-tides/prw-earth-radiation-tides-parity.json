@@ -2,24 +2,24 @@
   "ok": true,
   "fixture": "propagator/hpop PRW Earth radiation and ocean tides",
   "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--hpop-full-force-20261009/propagator/hpop/dist/isomorphic/module.wasm",
-  "artifactSha256": "c432dd6593061f524477dd8ad6941bdf039bd059f1c9262e9c2d2911e8ad3e13",
-  "moduleSha256": "c432dd6593061f524477dd8ad6941bdf039bd059f1c9262e9c2d2911e8ad3e13",
+  "artifactSha256": "1b1df5e38c7060f2a06aec59e470c9db3144efc837e64ced8a2405dbd17a94d1",
+  "moduleSha256": "1b1df5e38c7060f2a06aec59e470c9db3144efc837e64ced8a2405dbd17a94d1",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 24,
-      "durationMs": 1432
+      "durationMs": 1243
     },
     {
       "lane": "wasmedge",
       "runs": 24,
-      "durationMs": 41684
+      "durationMs": 41904
     },
     {
       "lane": "docker-wasmedge",
       "runs": 24,
-      "durationMs": 52867
+      "durationMs": 48917
     }
   ],
   "cases": [
