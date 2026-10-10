@@ -221,6 +221,53 @@ above through the request: trajectories within 0.3 mm, the STM to 3.5e-12
 and the ECOM2 columns to 1.6e-9 (measured); `tests/prw-gnss-parity.mjs` is
 their tri-runtime receipt.
 
+#### Earth radiation pressure: albedo and infrared (`lib/earth_radiation.h`)
+
+The sunlight the Earth reflects and the infrared it emits push on the
+spacecraft as on an isotropic (cannonball) body: Knocke, Ries and Tapley
+(1988), "Earth radiation pressure effects on satellites", AIAA paper 88-4292,
+ported from Orekit 13.1's `KnockeRediffusedForceModel` with its constants
+(albedo 0.34 + 0.10 cos(annual) P1 + 0.29 P2, emissivity 0.68 - 0.07
+cos(annual) P1 - 0.18 P2 of sin(latitude), annual phase from 1981-12-22,
+4.5606e-6 N/m^2 at 1 au), the same surface elements (a central cap and
+crowns of angular size `resolution`, default 15 degrees, out to the horizon,
+on the 6378.137 km sphere) and the flux per element. The acceleration is
+Cr*A/m times the summed pressure. One template serves the integrator and the
+analytic STM.
+
+On the PRW request (SDS 1.243.0), `FORCES.EARTH_RADIATION` `KNOCKE` selects
+it, `EARTH_RADIATION_RESOLUTION_DEG` the element size (1 to 45 degrees), and
+`EARTH_RADIATION_AREA_OVER_MASS_M2_KG` (with its `HAS_` flag) its own Cr*A/m.
+Without one it uses the cannonball's `REFLECTIVITY_COEFFICIENT` *
+`AREA_M2` / `INITIAL_MASS_KG`, and a fitted `SRP_AREA_OVER_MASS` then scales
+both (its STM column includes the Earth radiation); a GNSS box-wing request
+must state the coefficient.
+
+### Ocean tides (`OceanTideField`, `lib/fes2004_data.h`)
+
+IERS Conventions (2010) section 6.3 with the FES2004 model: the variations
+of the normalized Stokes coefficients of its 18 waves (the IERS file
+`fes2004_Cnm-Snm.dat`, SHA-256 620dc48f..., embedded to degree and order 50
+by `scripts/generate-fes2004.mjs`, coefficients stored as float, under 6e-8 of
+each), at their Doodson arguments (GMST + pi from UT1 and the IERS 2010
+Delaunay arguments, as the solid tides), summed from degree 2 as Orekit 13.1's
+`OceanTidesField` does, without the ocean pole tide, and evaluated in the
+force set's Earth-fixed axes like the solid tides. The field's position
+partials go into the analytic STM.
+
+On the PRW request (SDS 1.243.0), `FORCES.OCEAN_TIDES` `FES2004` selects it,
+with `OCEAN_TIDE_MAXIMUM_DEGREE` and `OCEAN_TIDE_MAXIMUM_ORDER` (default 30,
+at most 50); like the solid tides it needs `earth_orientation`.
+
+Against Orekit 13.1 (`tests/orekit_reference.test.mjs`, cases A1, O1, O2 and
+C2): after a day, Earth radiation on top of F5 agrees to 9.8 mm in LEO and
+0.43 mm at GPS, the effect being 104 m and 0.22 m; FES2004 30x30 on top of F4
+to 9.1 mm and 0.43 mm, on effects of 1.9 m and 0.18 m. Those totals are the
+common integration difference; taken as (HPOP with - without) - (Orekit with
+- without), the forces agree to 0.07 mm in LEO and 0.004 mm at GPS. With both
+forces, the solid tides and the STM, the STM agrees to 1.8e-5 (LEO) and
+4.8e-11 (GPS), and the SRP_AREA_OVER_MASS column to 2.6e-5 and 1.4e-8.
+
 ## Installation
 
 ```bash
@@ -647,9 +694,11 @@ selected branch derivative; a discontinuous threshold has no classical
 Jacobian at the boundary. Inline tesseral gravity refuses its exact polar
 coordinate singularity.
 
-The six-state analytic STM explicitly refuses albedo, thermal reradiation,
-tides, empirical accelerations, the legacy fixed-mass finite-thrust force,
-SRP other than the cannonball, the GNSS box-wing and ECOM2, and atmosphere winds. Select the finite-difference path for
+The six-state analytic STM explicitly refuses thermal reradiation, the pole
+tide, empirical accelerations, the legacy fixed-mass finite-thrust force,
+attitude-dependent SRP other than the cannonball and the GNSS box-wing, and
+atmosphere winds (the solid and ocean tides, Earth radiation, the GNSS
+box-wing and ECOM2 have analytic partials). Select the finite-difference path for
 those legacy forces. Mass-aware finite burns use the seven-state path below.
 Cd/Cr are configurable force inputs;
 there is no existing parameter-sensitivity matrix plumbing, and this lane does

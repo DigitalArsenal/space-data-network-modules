@@ -52,6 +52,21 @@
 //      AGOM 1.4e-4 (native and wasm alike; 3.9e-3 in wasm before the
 //      boundaries were located), T 5.1e-6; GPS AGOM 5.3e-10, T 1.6e-11
 //      (limit 1e-3)
+// The PRW SDS 1.243.0 cases, against Orekit's KnockeRediffusedForceModel (15
+// degree elements, the radiation-pressure spacecraft's own Cr) and OceanTides
+// (FES2004, no ocean pole tide, no interpolation cache), with the effect each
+// has over the day and the differential agreement, (HPOP with - without) -
+// (Orekit with - without), measured 2026-10-09:
+//   A1 + Earth radiation, on F5 ........... LEO 9.8 mm, SSO 6.6 mm, GPS 0.43 mm
+//                                           (effect 104 m, 32 m, 0.22 m;
+//                                           differential 0.069 mm LEO, 0.004 mm GPS)
+//   O1 + FES2004 ocean tides 30x30, on F4 .. LEO 9.1 mm, SSO 6.8 mm, GPS 0.43 mm
+//                                           (effect 1.9 m, 0.86 m, 0.18 m;
+//                                           differential 0.074 mm LEO, 0.001 mm GPS)
+//   O2 FES2004 50x50 ....................... LEO 9.1 mm (29 mm more than 30x30)
+//   C2 with both, the solid tides and the STM: STM LEO 1.8e-5, GPS 4.8e-11;
+//      SRP_AREA_OVER_MASS, which scales the Earth radiation too, LEO 2.6e-5,
+//      GPS 1.4e-8; LEO B 7.5e-6, BDOT 5.5e-6
 // Every case with samples runs HPOP's variational integrator (state and STM
 // under one error control), visiting the epochs in order, one integration
 // per span. A request for the final epoch alone runs the plain RK78 path
