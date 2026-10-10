@@ -68,6 +68,11 @@ struct SGP4Elements {
     // byte-for-byte unchanged.
     bool has_reference_rms = false;
     double reference_rms_km = 0.0;
+
+    // fit_sgp4_exact: the epoch's EphemerisPoint::t_offset_s. When set, SGP4
+    // time since epoch is (t_offset_s - epoch_offset_s) / 60 minutes.
+    bool has_epoch_offset = false;
+    double epoch_offset_s = 0.0;
 };
 
 /// Fitting configuration
@@ -115,6 +120,9 @@ struct FitterConfig {
     // every existing result stays byte-for-byte identical. DEFAULT false => zero
     // change to the sacred fit path and all its gates.
     bool compute_covariance = false;
+
+    // fit_sgp4_exact sets this: time since epoch from EphemerisPoint::t_offset_s.
+    bool precise_time = false;
 };
 
 /// Fit result
@@ -148,6 +156,19 @@ FitResult fit_sgp4(
 FitResult fit_sgp4_series(
     const StateSeries& series,
     const FitterConfig& config = {});
+
+/// Least-squares SGP4 fit over exactly `points` (no window selection, no
+/// thinning, no multi-start): the epoch is the first point; the same LM
+/// phases as fit_sgp4, then a polish to a relative cost change of
+/// `polish_tolerance` (default 1e-10). Times come from t_offset_s, exact.
+FitResult fit_sgp4_exact(
+    const std::vector<EphemerisPoint>& points,
+    const FitterConfig& config = {},
+    double polish_tolerance = 1e-10);
+
+/// SGP4 (WGS-72, opsmode 'i') of `el` at `tsince_min` minutes after its
+/// epoch: TEME km, km/s. false when SGP4 reports an error.
+bool propagate_sgp4(const SGP4Elements& el, double tsince_min, double r[3], double v[3]);
 
 /// Fit SGP4 elements from a MEME file. `data_source` is the provider/source
 /// token supplied by the caller/manifest (empty = unlabeled); it is NOT

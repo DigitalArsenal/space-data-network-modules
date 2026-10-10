@@ -42,6 +42,9 @@ namespace od {
 /// frame/time-system/center, or an empty ephemeris — mirroring parse_oem.
 OEMParseResult read_oem_flatbuffer(const uint8_t* buf, std::size_t len);
 
+/// The same validation, returning source-frame samples without rotation.
+OEMSourceResult read_oem_flatbuffer_source(const uint8_t* buf, std::size_t len);
+
 /// True when `buf`/`len` carries the "$OEM" file identifier (cheap 8-byte check;
 /// used by the plugin entry to select the FlatBuffer path over the text path).
 bool is_oem_flatbuffer(const uint8_t* buf, std::size_t len);

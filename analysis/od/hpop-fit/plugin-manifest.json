@@ -1,0 +1,258 @@
+{
+  "pluginId": "com.digitalarsenal.analysis.od-hpop",
+  "name": "Orbit Determination: operator ephemeris to SGP4 OMM and full-force HPOP OCM",
+  "version": "0.1.0",
+  "description": "Fits one operator ephemeris held in memory (SpaceX MEME, CCSDS OEM KVN or SDS $OEM) twice: an SGP4 least-squares OMM over its window and a full-force HPOP batch least-squares solution (estimation fit_batch v2 with propagator/hpop: EGM2008, Sun, Moon, Venus, Mars, Jupiter from DE440, NRLMSISE-00 or JB2008 drag, cannonball or GNSS box-wing SRP with ECOM2, Knocke albedo and infrared, IERS 2010 solid tides, FES2004 ocean tides, relativity). Both carry exact residual statistics over every ephemeris point of their span (3D, RTN, max, N, span and the per-coordinate RMS CelesTrak publishes, TEME km) and a half-split closure; a reference OMM is scored on the same points as the frame-error gate. The ephemeris is never stored: the outputs are the OMM, the OCM, the OBDs and a JSON result, or a failure row with the raw bytes' sha256.",
+  "pluginFamily": "orbit_determination",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "threadModel": "wasi-sequential",
+  "sequentialJustification": {
+    "kind": "inherently-sequential-algorithm",
+    "detail": "One batch least-squares fit per invocation: each Gauss-Newton round depends on the previous one. Independent ephemerides run as independent instances."
+  },
+  "methods": [
+    {
+      "methodId": "fit",
+      "displayName": "Fit an operator ephemeris: SGP4 OMM and full-force HPOP OCM with exact RMS and closure",
+      "inputPorts": [
+        {
+          "portId": "ephemeris",
+          "description": "One operator ephemeris: the provider's text (SpaceX MEME, CCSDS OEM KVN) as received, or an SDS $OEM FlatBuffer. Held for this invocation only.",
+          "acceptedTypeSets": [
+            {
+              "setId": "operator-ephemeris",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "text/plain",
+                "detail": "The operator's own ephemeris text (MEME, OEM KVN) exactly as fetched, or an SDS $OEM FlatBuffer (detected by its identifier); parsed in memory and never stored."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "fit-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "dataSource, objectName, objectId, noradCatId, inputFormat, ommAnchor (first|reference), ommStartSeconds, ommSpanSeconds, hpopSpanSeconds (0 = whole segment), maximumFitPoints, closure, hpop, referenceRmsMaxKm, hpopRmsMaxKm, creationDate, forces {degree, oceanTideDegree, atmosphere, gnssBlock, massKg}."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "reference",
+          "description": "Optional reference element set (CelesTrak SupGP for the same file, or the Space-Track OMM of the time), scored on the same ephemeris points: the frame-error gate.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "earth_orientation",
+          "description": "PRW.EARTH_ORIENTATION: IERS $EOP rows covering the span (propagator/hpop's input; also rotates Earth-fixed ephemerides).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "space_weather",
+          "description": "PRW.SPACE_WEATHER: daily $SPW rows covering the span and the day before (NRLMSISE-00 drag).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "jb2008_indices",
+          "description": "PRW.JB2008_INDICES: the JB2008 drivers, when forces.atmosphere is JB2008.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "kernel",
+          "description": "PRW.NATIVE_INPUT: the DE440 SPK excerpt covering the span (Sun, Moon, Venus, Mars, Jupiter).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-prw",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "omm",
+          "description": "The SGP4 fit; COMMENT carries its exact statistics and the reference's.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "ocm",
+          "description": "The full-force HPOP solution: GCRF epoch state, covariance, estimated parameters, PERTURBATIONS, ORBIT_DETERMINATION and every exact, reference and closure statistic.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false
+        },
+        {
+          "portId": "obd",
+          "description": "One per fit: SGP4, then HPOP.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-obd",
+              "allowedTypes": [
+                {
+                  "schemaName": "OBD.fbs",
+                  "fileIdentifier": "$OBD",
+                  "rootTypeName": "OBD",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 2,
+          "required": false
+        },
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "fit-result-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Exact, reference and closure statistics of both fits, segment evidence, convergence; or the failure row (failureCode, failureMessage, sourceSha256)."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

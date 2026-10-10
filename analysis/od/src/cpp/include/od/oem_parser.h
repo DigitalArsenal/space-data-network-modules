@@ -20,9 +20,45 @@
 
 #include <string>
 
+#include "od/frame_transform.h"
 #include "od/state_series.h"
 
 namespace od {
+
+/// One OEM state line as written: the source frame's km and km/s, the epoch
+/// token, its UTC Julian date (declared time system mapped to UTC) and the
+/// META segment it belongs to (0-based).
+struct SourceSample {
+    std::string epoch;
+    double jd_utc = 0.0;
+    double r[3] = {0.0, 0.0, 0.0};
+    double v[3] = {0.0, 0.0, 0.0};
+    bool has_velocity = true;
+    int segment = 0;
+    // $OEM compact blocks: `epoch` is START_TIME and the sample lies
+    // `offset_s` (i * STEP_SIZE) after it.
+    bool compact = false;
+    double offset_s = 0.0;
+};
+
+/// The OEM's samples in the source frame, before any rotation. `meta` is as
+/// parse_oem reports it except `ref_frame`, which stays the source token.
+struct SourceSeries {
+    StateSeriesMeta meta;
+    FrameKind frame = FrameKind::Unsupported;
+    std::vector<SourceSample> samples;
+};
+
+struct OEMSourceResult {
+    bool ok = false;
+    std::string error_code;
+    std::string error_message;
+    SourceSeries series;
+};
+
+/// Parse a CCSDS OEM KVN document into source-frame samples (the same
+/// validation as parse_oem, no rotation).
+OEMSourceResult parse_oem_source(const std::string& content);
 
 /// Outcome of an OEM parse. On failure `error_code` is a stable, precise token
 /// ("unsupported-frame", "unsupported-time-system", "unsupported-center",

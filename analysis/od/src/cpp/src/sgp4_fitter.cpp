@@ -584,6 +584,7 @@ static bool propagate_elements(
     if (!init_satrec(el, satrec)) return false;
 
     double dt_min = (target_jd - el.epoch_jd) * MIN_PER_DAY;
+    if (el.has_epoch_offset) dt_min = 0.0;  // only ever called at the epoch itself
     double r[3], v[3];
     bool ok = SGP4Funcs::sgp4(satrec, dt_min, r, v);
     if (!ok || satrec.error != 0) return false;
@@ -604,7 +605,9 @@ static bool propagate_batch(
 
     out.resize(points.size());
     for (size_t i = 0; i < points.size(); i++) {
-        double dt_min = (points[i].epoch_jd - el.epoch_jd) * MIN_PER_DAY;
+        double dt_min = el.has_epoch_offset
+                            ? (points[i].t_offset_s - el.epoch_offset_s) / 60.0
+                            : (points[i].epoch_jd - el.epoch_jd) * MIN_PER_DAY;
         double r[3], v[3];
         bool ok = SGP4Funcs::sgp4(satrec, dt_min, r, v);
         if (!ok || satrec.error != 0) return false;
@@ -1153,6 +1156,12 @@ static bool compute_state_covariance_impl(
     return true;
 }
 
+static FitResult fit_window_points(
+    const std::vector<EphemerisPoint>& all_points,
+    size_t epoch_idx,
+    const std::vector<EphemerisPoint>& fit_points,
+    const FitterConfig& config);
+
 static FitResult fit_single_epoch(
     const std::vector<EphemerisPoint>& all_points,
     size_t epoch_idx,
@@ -1180,6 +1189,16 @@ static FitResult fit_single_epoch(
         fit_points.push_back(all_points[i]);
     }
 
+    return fit_window_points(all_points, epoch_idx, fit_points, config);
+}
+
+static FitResult fit_window_points(
+    const std::vector<EphemerisPoint>& all_points,
+    size_t epoch_idx,
+    const std::vector<EphemerisPoint>& fit_points,
+    const FitterConfig& config) {
+
+    const double epoch_jd = all_points[epoch_idx].epoch_jd;
     if (fit_points.size() < 3) {
         return {{}, {}, 1e6, 0, false};
     }
@@ -1195,6 +1214,10 @@ static FitResult fit_single_epoch(
     }
     auto kepler = cartesian_to_keplerian(ep.x, ep.y, ep.z, gvx, gvy, gvz);
     SGP4Elements el = keplerian_to_mean(kepler, epoch_jd);
+    if (config.precise_time) {
+        el.has_epoch_offset = true;
+        el.epoch_offset_s = ep.t_offset_s;
+    }
 
     // Assign temporary catalog identifiers (overwritten when real NORAD ID is known)
     el.norad_cat_id = 99999;
@@ -1468,6 +1491,40 @@ std::string elements_to_tle(const SGP4Elements& el) {
     std::string l1, l2;
     make_tle_lines(el, l1, l2);
     return l1 + "\n" + l2;
+}
+
+FitResult fit_sgp4_exact(
+    const std::vector<EphemerisPoint>& points,
+    const FitterConfig& config,
+    double polish_tolerance) {
+    if (points.size() < 3) return {{}, {}, 1e6, 0, false};
+    FitterConfig cfg = config;
+    cfg.precise_time = true;
+    FitResult result = fit_window_points(points, 0, points, cfg);
+    // Polish: Levenberg-Marquardt from the converged elements to a relative
+    // cost change of polish_tolerance (E11's criterion), kept only when it
+    // lowers the RMS.
+    FitterConfig polish = cfg;
+    polish.max_iterations = 200;
+    polish.convergence_tol = polish_tolerance;
+    FitResult polished = lm_fit_equinoctial(result.elements, points, polish);
+    if (polished.rms_km < result.rms_km) {
+        result.elements = polished.elements;
+        result.rms_km = polished.rms_km;
+        result.iterations += polished.iterations;
+        result.converged = polished.converged || result.converged;
+    }
+    result.rms_km = compute_rms_position(result.elements, points);
+    result.elements.rms_km = result.rms_km;
+    result.elements.converged = result.converged;
+    result.elements.iterations = result.iterations;
+    return result;
+}
+
+bool propagate_sgp4(const SGP4Elements& el, double tsince_min, double r[3], double v[3]) {
+    elsetrec satrec;
+    if (!init_satrec(el, satrec)) return false;
+    return SGP4Funcs::sgp4(satrec, tsince_min, r, v) && satrec.error == 0;
 }
 
 }  // namespace od

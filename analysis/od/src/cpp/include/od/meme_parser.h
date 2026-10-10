@@ -38,6 +38,10 @@ struct EphemerisPoint {
     double vx, vy, vz;        // Velocity (km/s)
     double covariance[21];     // Lower triangular 6×6 (pos+vel)
     bool has_covariance = false;
+    // Seconds (SI) from a series reference epoch, exact. Read only by
+    // fit_sgp4_exact, where a single-double Julian date (40 us, 0.3 m along a
+    // LEO track) is too coarse.
+    double t_offset_s = 0.0;
 };
 
 /// MEME file metadata

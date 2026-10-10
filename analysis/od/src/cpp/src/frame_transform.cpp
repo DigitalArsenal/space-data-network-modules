@@ -25,7 +25,7 @@ FrameKind classify_frame(const std::string& token) {
         u.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
     }
     if (u.empty()) return FrameKind::Unsupported;
-    if (u == "TEME" || u == "TRUEEQUATORMEANEQUINOX") return FrameKind::Teme;
+    if (u == "TEME" || u == "TEMEOFDATE" || u == "TRUEEQUATORMEANEQUINOX") return FrameKind::Teme;
     if (u == "EME2000" || u == "J2000" || u == "GCRF" || u == "ICRF")
         return FrameKind::EciJ2000;
     // Earth-fixed: generic tokens + any ITRF/IGS realization (ITRF2020, IGS20, …).

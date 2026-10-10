@@ -43,8 +43,8 @@ struct SegmentMeta {
     std::string time_system;    // upper-cased token
 };
 
-OEMParseResult fail(const char* code, std::string message) {
-    OEMParseResult r;
+OEMSourceResult fail(const char* code, std::string message) {
+    OEMSourceResult r;
     r.ok = false;
     r.error_code = code;
     r.error_message = std::move(message);
@@ -61,9 +61,9 @@ bool looks_like_oem(const std::string& content) {
            head.find("META_START") != std::string::npos;
 }
 
-OEMParseResult parse_oem(const std::string& content) {
-    OEMParseResult result;
-    StateSeries& series = result.series;
+OEMSourceResult parse_oem_source(const std::string& content) {
+    OEMSourceResult result;
+    SourceSeries& series = result.series;
 
     std::istringstream stream(content);
     std::string line;
@@ -134,10 +134,11 @@ OEMParseResult parse_oem(const std::string& content) {
                 series.meta.object_name = seg.object_name;
                 series.meta.object_id = seg.object_id;
                 series.meta.center_name = center;
-                series.meta.ref_frame = "TEME";
+                series.meta.ref_frame = frame;
                 series.meta.source_frame = frame;
                 series.meta.time_system = time_sys;
                 frame_kind = fk;
+                series.frame = fk;
                 time_upper = time_sys;
                 have_identity = true;
             } else if (!seg.object_id.empty() && !series.meta.object_id.empty() &&
@@ -192,40 +193,13 @@ OEMParseResult parse_oem(const std::string& content) {
 
             if (has_vel) full_state_lines++; else pos_only_lines++;
 
-            EphemerisPoint pt{};
-            pt.epoch_jd = jd;
-            pt.timestamp_str = epoch_tok;
-            pt.has_covariance = false;
-
-            const double r_in[3] = {x, y, z};
-            const double v_in[3] = {vx, vy, vz};
-            double r_out[3], v_out[3];
-            switch (frame_kind) {
-                case FrameKind::Teme:
-                    pt.x = x; pt.y = y; pt.z = z;
-                    pt.vx = vx; pt.vy = vy; pt.vz = vz;
-                    break;
-                case FrameKind::EciJ2000:
-                    eci_j2000_to_teme(jd, r_in, v_in, r_out, v_out);
-                    pt.x = r_out[0]; pt.y = r_out[1]; pt.z = r_out[2];
-                    pt.vx = v_out[0]; pt.vy = v_out[1]; pt.vz = v_out[2];
-                    break;
-                case FrameKind::Ecef:
-                    if (has_vel) {
-                        ecef_to_teme(jd, r_in, v_in, r_out, v_out);
-                        pt.x = r_out[0]; pt.y = r_out[1]; pt.z = r_out[2];
-                        pt.vx = v_out[0]; pt.vy = v_out[1]; pt.vz = v_out[2];
-                    } else {
-                        // Position-only: rotate position; leave velocity 0 (the
-                        // fitter seeds it from positions when position_only).
-                        ecef_to_teme_pos(jd, r_in, r_out);
-                        pt.x = r_out[0]; pt.y = r_out[1]; pt.z = r_out[2];
-                        pt.vx = 0.0; pt.vy = 0.0; pt.vz = 0.0;
-                    }
-                    break;
-                case FrameKind::Unsupported:
-                    continue;  // unreachable (validated at META_STOP)
-            }
+            SourceSample pt{};
+            pt.epoch = epoch_tok;
+            pt.jd_utc = jd;
+            pt.r[0] = x; pt.r[1] = y; pt.r[2] = z;
+            pt.v[0] = vx; pt.v[1] = vy; pt.v[2] = vz;
+            pt.has_velocity = has_vel;
+            pt.segment = segment_count - 1;
             series.samples.push_back(pt);
             continue;
         }
@@ -248,6 +222,57 @@ OEMParseResult parse_oem(const std::string& content) {
     // full-state); position_only is set only when every sample was position-only.
     series.meta.position_only = (full_state_lines == 0 && pos_only_lines > 0);
     series.meta.segment_count = segment_count;
+    result.ok = true;
+    return result;
+}
+
+OEMParseResult parse_oem(const std::string& content) {
+    OEMSourceResult source = parse_oem_source(content);
+    OEMParseResult result;
+    if (!source.ok) {
+        result.error_code = std::move(source.error_code);
+        result.error_message = std::move(source.error_message);
+        return result;
+    }
+    StateSeries& series = result.series;
+    series.meta = source.series.meta;
+    series.meta.ref_frame = "TEME";
+    series.samples.reserve(source.series.samples.size());
+    for (const SourceSample& s : source.series.samples) {
+        const double jd = s.jd_utc;
+        EphemerisPoint pt{};
+        pt.epoch_jd = jd;
+        pt.timestamp_str = s.epoch;
+        pt.has_covariance = false;
+        double r_out[3], v_out[3];
+        switch (source.series.frame) {
+            case FrameKind::Teme:
+                pt.x = s.r[0]; pt.y = s.r[1]; pt.z = s.r[2];
+                pt.vx = s.v[0]; pt.vy = s.v[1]; pt.vz = s.v[2];
+                break;
+            case FrameKind::EciJ2000:
+                eci_j2000_to_teme(jd, s.r, s.v, r_out, v_out);
+                pt.x = r_out[0]; pt.y = r_out[1]; pt.z = r_out[2];
+                pt.vx = v_out[0]; pt.vy = v_out[1]; pt.vz = v_out[2];
+                break;
+            case FrameKind::Ecef:
+                if (s.has_velocity) {
+                    ecef_to_teme(jd, s.r, s.v, r_out, v_out);
+                    pt.x = r_out[0]; pt.y = r_out[1]; pt.z = r_out[2];
+                    pt.vx = v_out[0]; pt.vy = v_out[1]; pt.vz = v_out[2];
+                } else {
+                    // Position-only: rotate position; leave velocity 0 (the
+                    // fitter seeds it from positions when position_only).
+                    ecef_to_teme_pos(jd, s.r, r_out);
+                    pt.x = r_out[0]; pt.y = r_out[1]; pt.z = r_out[2];
+                    pt.vx = 0.0; pt.vy = 0.0; pt.vz = 0.0;
+                }
+                break;
+            case FrameKind::Unsupported:
+                continue;  // unreachable (validated at META_STOP)
+        }
+        series.samples.push_back(pt);
+    }
     result.ok = true;
     return result;
 }

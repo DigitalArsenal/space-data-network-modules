@@ -60,8 +60,8 @@ std::string to_upper(std::string s) {
     return s;
 }
 
-OEMParseResult fail(const char* code, std::string message) {
-    OEMParseResult r;
+OEMSourceResult fail(const char* code, std::string message) {
+    OEMSourceResult r;
     r.ok = false;
     r.error_code = code;
     r.error_message = std::move(message);
@@ -149,9 +149,9 @@ bool is_oem_flatbuffer(const uint8_t* buf, std::size_t len) {
     return OEMBufferHasIdentifier(buf);
 }
 
-OEMParseResult read_oem_flatbuffer(const uint8_t* buf, std::size_t len) {
-    OEMParseResult result;
-    StateSeries& series = result.series;
+OEMSourceResult read_oem_flatbuffer_source(const uint8_t* buf, std::size_t len) {
+    OEMSourceResult result;
+    SourceSeries& series = result.series;
 
     if (buf == nullptr || len < 8) {
         return fail("parse-failed", "$OEM FlatBuffer payload is empty.");
@@ -225,10 +225,11 @@ OEMParseResult read_oem_flatbuffer(const uint8_t* buf, std::size_t len) {
             series.meta.object_id = seg_object_id;
             series.meta.norad_cat_id = seg_norad;
             series.meta.center_name = center;
-            series.meta.ref_frame = "TEME";
+            series.meta.ref_frame = frame;
             series.meta.source_frame = frame;  // honest source frame (e.g. EME2000)
             series.meta.time_system = time_sys;
             frame_kind = fk;
+            series.frame = fk;
             time_upper = time_sys;
             have_identity = true;
         } else if (!seg_object_id.empty() && !series.meta.object_id.empty() &&
@@ -250,21 +251,23 @@ OEMParseResult read_oem_flatbuffer(const uint8_t* buf, std::size_t len) {
 
         auto push_sample = [&](const std::string& epoch_tok, double x, double y,
                                double z, bool has_vel, double vx, double vy,
-                               double vz) -> OEMParseResult* {
+                               double vz) -> OEMSourceResult* {
             const double jd_decl = iso_to_jd(epoch_tok);
             if (jd_decl == 0.0) return nullptr;  // unparseable epoch: skip
             TimeConv tc = time_system_to_utc(time_upper, jd_decl);
             if (!tc.ok) {
-                static OEMParseResult err;
+                static OEMSourceResult err;
                 err = fail(tc.error_code.c_str(), tc.error_message);
                 return &err;
             }
             if (has_vel) full_state_lines++; else pos_only_lines++;
-            EphemerisPoint pt{};
-            pt.epoch_jd = tc.jd_utc;
-            pt.timestamp_str = epoch_tok;
-            pt.has_covariance = false;
-            to_teme(frame_kind, tc.jd_utc, has_vel, x, y, z, vx, vy, vz, &pt);
+            SourceSample pt{};
+            pt.epoch = epoch_tok;
+            pt.jd_utc = tc.jd_utc;
+            pt.r[0] = x; pt.r[1] = y; pt.r[2] = z;
+            pt.v[0] = vx; pt.v[1] = vy; pt.v[2] = vz;
+            pt.has_velocity = has_vel;
+            pt.segment = segment_count - 1;
             series.samples.push_back(pt);
             return nullptr;
         };
@@ -276,7 +279,7 @@ OEMParseResult read_oem_flatbuffer(const uint8_t* buf, std::size_t len) {
                 // A full state carries velocity; the ISS/EME2000 fixture always
                 // does. (Position-only verbose sources are handled via the
                 // compact STATE_VECTOR_SIZE==3 path.)
-                if (OEMParseResult* e = push_sample(
+                if (OEMSourceResult* e = push_sample(
                         ln->EPOCH()->str(), ln->X(), ln->Y(), ln->Z(),
                         /*has_vel=*/true, ln->X_DOT(), ln->Y_DOT(), ln->Z_DOT()))
                     return *e;
@@ -307,15 +310,19 @@ OEMParseResult read_oem_flatbuffer(const uint8_t* buf, std::size_t len) {
                 TimeConv tc = time_system_to_utc(time_upper, jd_decl);
                 if (!tc.ok) return fail(tc.error_code.c_str(), tc.error_message);
                 if (has_vel) full_state_lines++; else pos_only_lines++;
-                EphemerisPoint pt{};
-                pt.epoch_jd = tc.jd_utc;
-                pt.timestamp_str = jd_to_iso_supgp(tc.jd_utc);
-                pt.has_covariance = false;
-                to_teme(frame_kind, tc.jd_utc, has_vel, compact->Get(o + 0),
-                        compact->Get(o + 1), compact->Get(o + 2),
-                        has_vel ? compact->Get(o + 3) : 0.0,
-                        has_vel ? compact->Get(o + 4) : 0.0,
-                        has_vel ? compact->Get(o + 5) : 0.0, &pt);
+                SourceSample pt{};
+                pt.epoch = blk->START_TIME()->str();
+                pt.compact = true;
+                pt.offset_s = static_cast<double>(i) * blk->STEP_SIZE();
+                pt.jd_utc = tc.jd_utc;
+                pt.r[0] = compact->Get(o + 0);
+                pt.r[1] = compact->Get(o + 1);
+                pt.r[2] = compact->Get(o + 2);
+                pt.v[0] = has_vel ? compact->Get(o + 3) : 0.0;
+                pt.v[1] = has_vel ? compact->Get(o + 4) : 0.0;
+                pt.v[2] = has_vel ? compact->Get(o + 5) : 0.0;
+                pt.has_velocity = has_vel;
+                pt.segment = segment_count - 1;
                 series.samples.push_back(pt);
             }
         } else {
@@ -334,6 +341,31 @@ OEMParseResult read_oem_flatbuffer(const uint8_t* buf, std::size_t len) {
 
     series.meta.position_only = (full_state_lines == 0 && pos_only_lines > 0);
     series.meta.segment_count = segment_count;
+    result.ok = true;
+    return result;
+}
+
+OEMParseResult read_oem_flatbuffer(const uint8_t* buf, std::size_t len) {
+    OEMSourceResult source = read_oem_flatbuffer_source(buf, len);
+    OEMParseResult result;
+    if (!source.ok) {
+        result.error_code = std::move(source.error_code);
+        result.error_message = std::move(source.error_message);
+        return result;
+    }
+    StateSeries& series = result.series;
+    series.meta = source.series.meta;
+    series.meta.ref_frame = "TEME";
+    series.samples.reserve(source.series.samples.size());
+    for (const SourceSample& s : source.series.samples) {
+        EphemerisPoint pt{};
+        pt.epoch_jd = s.jd_utc;
+        pt.timestamp_str = s.compact ? jd_to_iso_supgp(s.jd_utc) : s.epoch;
+        pt.has_covariance = false;
+        to_teme(source.series.frame, s.jd_utc, s.has_velocity, s.r[0], s.r[1], s.r[2],
+                s.v[0], s.v[1], s.v[2], &pt);
+        series.samples.push_back(pt);
+    }
     result.ok = true;
     return result;
 }
