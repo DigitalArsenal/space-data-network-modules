@@ -3,7 +3,7 @@
 //
 // usage: node scripts/run-all-vs-all-cpu.mjs --catalog <omm.uint32be.bin>
 //          [--runtime wasmedge|docker-wasmedge|node] [--propagator sgp4|hpop]
-//          [--start <jd>] [--days 3] [--window-hours 6|2] [--threshold-km 5]
+//          [--start <jd>] [--days 3] [--window-hours 6|1] [--threshold-km 5]
 //          [--step-s 60] [--workers N] [--farm-workers N] [--aot] [--wasmedge-runner <path>]
 //          [--hpop-environment <dir>] [--hpop-profile full-force|gravity-only]
 //          [--algorithm FOSTER --uncertainty-model <model.cau1>] [--out summary.json]
@@ -42,7 +42,9 @@ if (!['sgp4', 'hpop'].includes(o.propagator)) throw new Error('--propagator is s
 const t0 = performance.now();
 const catalog = splitCatalog(new Uint8Array(fs.readFileSync(o.catalog)));
 const workers = Number(o.workers ?? Math.max(1, os.availableParallelism() - 1));
-const windowHours = Number(o['window-hours'] ?? (o.propagator === 'hpop' ? 2 : 6));
+// HPOP's 300 s segments: a 1-hour window of the full catalog is about 390 MB of
+// trajectories, which the module indexes in about 1.1 of its 2 GiB.
+const windowHours = Number(o['window-hours'] ?? (o.propagator === 'hpop' ? 1 : 6));
 const windows = screenWindows(Number(o.start), Number(o.days), windowHours);
 const MARGIN_DAYS = 2 / 1440;   // HPOP returns whole intervals; this covers TDB - UTC
 

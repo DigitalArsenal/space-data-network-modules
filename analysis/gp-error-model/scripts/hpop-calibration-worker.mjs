@@ -75,8 +75,11 @@ async function runFullForce(harness, { catalogPath, environment, arcs, variants,
     const cdAm = catalog.dragAreaOverMass(harness.instance.exports, arc.bstar);
     const last = arc.targets.reduce((a, b) => (Date.parse(b) > Date.parse(a) ? b : a));
     const samples = arc.targets.map(() => ({}));
-    for (let k = 0; k < variants.length; ++k) {
-      const v = variants[k];
+    // An arc whose regime has no P0 yet (hpop_arcs gives it no covariance) is
+    // propagated for its state alone.
+    const arcVariants = arc.covariance || variants.every((v) => v === 'state') ? variants : ['state'];
+    for (let k = 0; k < arcVariants.length; ++k) {
+      const v = arcVariants[k];
       const request = catalog.fullForceRequest({ epoch: s.epoch, state, target: last, targetScale: 'UTC', cdAm, crAm: catalog.DEFAULT_SRP_AREA_OVER_MASS });
       request.SAMPLE_EPOCHS = arc.targets.map((t) => catalog.instant(t, 'UTC'));
       if (v === 'a') request.INITIAL_COVARIANCE = table('PRWStateMatrix', { DIMENSION: 6, VALUES: arc.covariance });

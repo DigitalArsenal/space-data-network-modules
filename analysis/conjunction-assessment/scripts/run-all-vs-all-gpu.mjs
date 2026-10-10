@@ -42,7 +42,9 @@ if (!['sgp4', 'hpop'].includes(o.propagator)) throw new Error('--propagator is s
 const t0 = performance.now();
 const catalogBytes = fs.readFileSync(o.catalog);
 // HPOP windows hold every object's trajectory (~12 KB per object per 2 h).
-const windowHours = Number(o['window-hours'] ?? (o.propagator === 'hpop' ? 2 : 6));
+// HPOP's 300 s segments: a 1-hour window of the full catalog is about 390 MB of
+// trajectories, which the module indexes in about 1.1 of its 2 GiB.
+const windowHours = Number(o['window-hours'] ?? (o.propagator === 'hpop' ? 1 : 6));
 const windows = Array.from({ length: Math.ceil((Number(o.days) * 24) / windowHours - 1e-9) }, (_, k) => ({
   startJd: Number(o.start) + (k * windowHours) / 24, durationDays: Math.min(windowHours, Number(o.days) * 24 - k * windowHours) / 24 }));
 
