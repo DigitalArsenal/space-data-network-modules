@@ -359,6 +359,12 @@ struct ElementSet {
   int regime = -1;
   elsetrec rec;
   double r[3], v[3];  // TEME at epoch, km and km/s
+  // SGP4's inputs, kept so perturbed copies can be initialized (state
+  // transition matrices): Kozai mean motion (rad/min), e, i, node, argument
+  // of perigee, mean anomaly (rad), B* (1/earth radii); and the epoch in
+  // days from 1949-12-31 00:00 UTC.
+  double el[7] = {};
+  double sgp4_epoch = 0;
 };
 
 struct Counts {
@@ -401,6 +407,11 @@ bool load_elements(const Options& o, std::vector<ElementSet>& sets, Counts& coun
       s.epoch_text = omm->EPOCH()->str();
       std::memset(&s.rec, 0, sizeof(s.rec));
       const double epoch = static_cast<double>(s.epoch.day) + kSgp4EpochFromUnixDays + s.epoch.sec / 86400.0;
+      const double inputs[7] = {omm->MEAN_MOTION() * 2.0 * kPi / 1440.0, omm->ECCENTRICITY(), omm->INCLINATION() * kDeg,
+                                omm->RA_OF_ASC_NODE() * kDeg, omm->ARG_OF_PERICENTER() * kDeg, omm->MEAN_ANOMALY() * kDeg,
+                                omm->BSTAR()};
+      std::copy(inputs, inputs + 7, s.el);
+      s.sgp4_epoch = epoch;
       char satn[9] = "00000";
       if (!SGP4Funcs::sgp4init(wgs72, 'i', satn, epoch, omm->BSTAR(), 0.0, 0.0, omm->ECCENTRICITY(),
                                omm->ARG_OF_PERICENTER() * kDeg, omm->INCLINATION() * kDeg, omm->MEAN_ANOMALY() * kDeg,
@@ -1057,6 +1068,132 @@ struct Tally {
   double pc_sum = 0, possibility_sum = 0, brier = 0;
 };
 
+// The screening rules' settings, shared by screening_evaluation and
+// screening_cases.
+struct Settings {
+  double radius = 0.02, pc_threshold = 1e-4, necessity_level = 0.9973, bound_coverage = 0.9973, bound_k = 0;
+  int directions = 4;
+  std::vector<double> misses = {0, 10, 50, 100, 500, 1000, 2000, 5000};
+};
+
+std::string read_settings(const nlohmann::json& opt, Settings* s) {
+  auto number = [&](const char* key, double fallback) {
+    return opt.is_object() && opt.contains(key) && opt[key].is_number() ? opt[key].get<double>() : fallback;
+  };
+  s->radius = number("hardBodyRadiusM", 20) * 1e-3;
+  s->pc_threshold = number("pcThreshold", 1e-4);
+  s->necessity_level = number("necessityLevel", 0.9973);
+  s->bound_coverage = number("boundCoverage", 0.9973);
+  s->directions = static_cast<int>(number("directions", 4));
+  if (opt.is_object() && opt.contains("missDistancesM") && opt["missDistancesM"].is_array()) {
+    s->misses.clear();
+    for (const auto& m : opt["missDistancesM"])
+      if (m.is_number()) s->misses.push_back(m.get<double>());
+  }
+  if (!(s->radius > 0) || s->directions < 1 || s->misses.empty() || !(s->bound_coverage > 0 && s->bound_coverage < 1))
+    return "hardBodyRadiusM, directions, missDistancesM and boundCoverage must be valid.";
+  s->bound_k = std::sqrt(-2.0 * std::log(1.0 - s->bound_coverage));  // chi-square 2 quantile
+  return {};
+}
+
+// Constant-initialized: these modules run no static constructors.
+constexpr double h45 = 0.7071067811865475;  // 1.0 / std::sqrt(2.0) in double, as the stratum code computed it
+// geometry -> (primary axes, secondary axes) in each object's own RTN
+const double kGeometries[2][2][2][3] = {
+    {{{1, 0, 0}, {0, 0, 1}}, {{1, 0, 0}, {0, 0, -1}}},              // head-on
+    {{{1, 0, 0}, {0, h45, h45}}, {{1, 0, 0}, {0, h45, -h45}}},      // crossing at 90 degrees
+};
+const char* kGeometryNames[2] = {"head-on", "crossing-90"};
+
+// A row-major 3x3 RTN position covariance projected on two plane axes: (xx, xy, yy).
+void project(const std::array<double, 9>& m, const double a[2][3], double out[3]) {
+  double t[2][3] = {};
+  for (int i = 0; i < 2; ++i)
+    for (int j = 0; j < 3; ++j)
+      for (int k = 0; k < 3; ++k) t[i][j] += a[i][k] * m[3 * k + j];
+  double r[2][2] = {};
+  for (int i = 0; i < 2; ++i)
+    for (int j = 0; j < 2; ++j)
+      for (int k = 0; k < 3; ++k) r[i][j] += t[i][k] * a[j][k];
+  out[0] = r[0][0]; out[1] = r[0][1]; out[2] = r[1][1];
+}
+
+// One pair of RTN position errors (km) with their position covariances (km^2),
+// object a as the primary and b as the secondary, scored in both geometries
+// at every synthetic miss and direction: tallies[geometry][miss].
+void score_pair(const Settings& st, const double ea[3], const std::array<double, 9>& ca, const double eb[3],
+                const std::array<double, 9>& cb, std::vector<Tally> tallies[2]) {
+  for (int g = 0; g < 2; ++g) {
+    double c1[3], c2[3];
+    project(ca, kGeometries[g][0], c1);
+    project(cb, kGeometries[g][1], c2);
+    const double crel[3] = {c1[0] + c2[0], c1[1] + c2[1], c1[2] + c2[2]};
+    double e1[2], e2[2];
+    for (int i = 0; i < 2; ++i) {
+      e1[i] = kGeometries[g][0][i][0] * ea[0] + kGeometries[g][0][i][1] * ea[1] + kGeometries[g][0][i][2] * ea[2];
+      e2[i] = kGeometries[g][1][i][0] * eb[0] + kGeometries[g][1][i][1] * eb[1] + kGeometries[g][1][i][2] * eb[2];
+    }
+    for (size_t mi = 0; mi < st.misses.size(); ++mi) {
+      const double m = st.misses[mi] * 1e-3;
+      const bool collision = m <= st.radius;
+      for (int d = 0; d < st.directions; ++d) {
+        const double phi = (d + 0.5) * 2 * kPi / st.directions;
+        Case2 cs{{m * std::cos(phi) + e2[0] - e1[0], m * std::sin(phi) + e2[1] - e1[1]},
+                 {c1[0], c1[1], c1[2]}, {c2[0], c2[1], c2[2]}};
+        Tally& t = tallies[g][mi];
+        const double pc = foster(cs.p, crel, st.radius);
+        const double pi = possibility(cs, st.radius);
+        ++t.cases;
+        t.pc_sum += pc;
+        t.brier += (pc - (collision ? 1.0 : 0.0)) * (pc - (collision ? 1.0 : 0.0));
+        t.pc_alerts += pc >= st.pc_threshold;
+        t.bound_alerts += ellipse_distance(cs.p, crel, st.bound_k) <= st.radius;
+        t.possibility_sum += pi;
+        t.possibility_alerts += 1.0 - pi < st.necessity_level;
+      }
+    }
+  }
+}
+
+void add_tallies(std::vector<Tally>& into, const std::vector<Tally>& from) {
+  if (into.empty()) into.resize(from.size());
+  for (size_t mi = 0; mi < from.size(); ++mi) {
+    const Tally& t = from[mi];
+    Tally& o = into[mi];
+    o.cases += t.cases; o.pc_alerts += t.pc_alerts; o.bound_alerts += t.bound_alerts;
+    o.possibility_alerts += t.possibility_alerts; o.pc_sum += t.pc_sum; o.possibility_sum += t.possibility_sum;
+    o.brier += t.brier;
+  }
+}
+
+nlohmann::json tally_rows(const Settings& st, const std::vector<Tally>& tallies) {
+  nlohmann::json rows = nlohmann::json::array();
+  for (size_t mi = 0; mi < st.misses.size(); ++mi) {
+    const Tally& t = tallies[mi];
+    const double n = t.cases ? double(t.cases) : 1.0;
+    rows.push_back({{"missM", st.misses[mi]}, {"collision", st.misses[mi] * 1e-3 <= st.radius}, {"cases", t.cases},
+                    {"pcAlertRate", t.pc_alerts / n}, {"meanPc", t.pc_sum / n}, {"brier", t.brier / n},
+                    {"boundedSetAlertRate", t.bound_alerts / n}, {"possibilityAlertRate", t.possibility_alerts / n},
+                    {"meanPossibilityOfCollision", t.possibility_sum / n}});
+  }
+  return rows;
+}
+
+nlohmann::json definitions_json(const char* cases) {
+  return {{"cases", cases},
+          {"collision", "true miss <= hard-body radius"},
+          {"probabilistic", "alert when Foster Pc >= pcThreshold, relative covariance C1 + C2"},
+          {"boundedSet", "alert when the relative ellipse at boundCoverage (chi-square 2) comes within the radius"},
+          {"possibility", "pi = 1 - F_chi2_3(d^2) per object, joint min; alert unless N(no collision) >= necessityLevel"},
+          {"missedCollision", "a collision case without an alert"},
+          {"falseAlert", "a non-collision case with an alert"}};
+}
+
+nlohmann::json settings_json(const Settings& st) {
+  return {{"hardBodyRadiusM", st.radius * 1e3}, {"pcThreshold", st.pc_threshold}, {"necessityLevel", st.necessity_level},
+          {"boundCoverage", st.bound_coverage}, {"directions", st.directions}, {"missDistancesM", st.misses}};
+}
+
 }  // namespace screening
 
 extern "C" int screening_evaluation() {
@@ -1073,20 +1210,11 @@ extern "C" int screening_evaluation() {
   auto number = [&](const char* key, double fallback) {
     return opt.is_object() && opt.contains(key) && opt[key].is_number() ? opt[key].get<double>() : fallback;
   };
-  const double radius = number("hardBodyRadiusM", 20) * 1e-3, pc_threshold = number("pcThreshold", 1e-4);
-  const double necessity_level = number("necessityLevel", 0.9973), bound_coverage = number("boundCoverage", 0.9973);
+  Settings st;
+  e = read_settings(opt, &st);
+  if (!e.empty()) return fail("invalid-options", e);
   const size_t pairs_per_stratum = static_cast<size_t>(number("pairsPerStratum", 500));
-  const int directions = static_cast<int>(number("directions", 4));
   uint64_t seed = static_cast<uint64_t>(number("seed", 1));
-  std::vector<double> misses = {0, 10, 50, 100, 500, 1000, 2000, 5000};
-  if (opt.is_object() && opt.contains("missDistancesM") && opt["missDistancesM"].is_array()) {
-    misses.clear();
-    for (const auto& m : opt["missDistancesM"])
-      if (m.is_number()) misses.push_back(m.get<double>());
-  }
-  if (!(radius > 0) || directions < 1 || misses.empty() || !(bound_coverage > 0 && bound_coverage < 1))
-    return fail("invalid-options", "hardBodyRadiusM, directions, missDistancesM and boundCoverage must be valid.");
-  const double bound_k = std::sqrt(-2.0 * std::log(1.0 - bound_coverage));  // chi-square 2 quantile
 
   acc.strata.assign(acc.options.regimes.size() * acc.options.ages.size(), Stratum());
   acc.mode = "reference";
@@ -1098,34 +1226,17 @@ extern "C" int screening_evaluation() {
 
   // Stratum covariances (position block, clipped when present).
   std::map<std::pair<int, int>, std::array<double, 9>> cov;
-  for (const auto& st : model["strata"]) {
-    const nlohmann::json& c = st.contains("clipped") && st["clipped"].contains("covariance") ? st["clipped"]["covariance"]
-                              : st.contains("covariance") ? st["covariance"] : nlohmann::json();
+  for (const auto& stratum : model["strata"]) {
+    const nlohmann::json& c = stratum.contains("clipped") && stratum["clipped"].contains("covariance")
+                                  ? stratum["clipped"]["covariance"]
+                              : stratum.contains("covariance") ? stratum["covariance"] : nlohmann::json();
     if (!c.is_array() || c.size() != 21) continue;
     const int idx[3][3] = {{0, 1, 3}, {1, 2, 4}, {3, 4, 5}};
     std::array<double, 9> m;
     for (int a = 0; a < 3; ++a)
       for (int b = 0; b < 3; ++b) m[3 * a + b] = c[idx[a][b]].get<double>();
-    cov[{st["regimeIndex"].get<int>(), st["ageIndex"].get<int>()}] = m;
+    cov[{stratum["regimeIndex"].get<int>(), stratum["ageIndex"].get<int>()}] = m;
   }
-  auto project = [](const std::array<double, 9>& m, const double a[2][3], double out[3]) {
-    double t[2][3] = {};
-    for (int i = 0; i < 2; ++i)
-      for (int j = 0; j < 3; ++j)
-        for (int k = 0; k < 3; ++k) t[i][j] += a[i][k] * m[3 * k + j];
-    double r[2][2] = {};
-    for (int i = 0; i < 2; ++i)
-      for (int j = 0; j < 2; ++j)
-        for (int k = 0; k < 3; ++k) r[i][j] += t[i][k] * a[j][k];
-    out[0] = r[0][0]; out[1] = r[0][1]; out[2] = r[1][1];
-  };
-  const double h = 1.0 / std::sqrt(2.0);
-  // geometry -> (primary axes, secondary axes) in each object's own RTN
-  const double geometries[2][2][2][3] = {
-      {{{1, 0, 0}, {0, 0, 1}}, {{1, 0, 0}, {0, 0, -1}}},  // head-on
-      {{{1, 0, 0}, {0, h, h}}, {{1, 0, 0}, {0, h, -h}}},  // crossing at 90 degrees
-  };
-  const char* geometry_names[2] = {"head-on", "crossing-90"};
 
   std::map<std::pair<int, int>, std::vector<const Accumulator::Kept*>> by_stratum;
   for (const auto& k : acc.kept) by_stratum[{k.regime, k.age}].push_back(&k);
@@ -1152,55 +1263,12 @@ extern "C" int screening_evaluation() {
       const auto* b = samples[next() % samples.size()];
       if (a->norad != b->norad) pairs.push_back({a, b});
     }
+    std::vector<Tally> tallies[2] = {std::vector<Tally>(st.misses.size()), std::vector<Tally>(st.misses.size())};
+    for (const auto& [a, b] : pairs) score_pair(st, a->e, c->second, b->e, c->second, tallies);
     nlohmann::json geometry_rows = nlohmann::json::array();
     for (int g = 0; g < 2; ++g) {
-      double c1[3], c2[3];
-      project(c->second, geometries[g][0], c1);
-      project(c->second, geometries[g][1], c2);
-      const double crel[3] = {c1[0] + c2[0], c1[1] + c2[1], c1[2] + c2[2]};
-      std::vector<Tally> tallies(misses.size());
-      for (const auto& [a, b] : pairs) {
-        double e1[2], e2[2];
-        for (int i = 0; i < 2; ++i) {
-          e1[i] = geometries[g][0][i][0] * a->e[0] + geometries[g][0][i][1] * a->e[1] + geometries[g][0][i][2] * a->e[2];
-          e2[i] = geometries[g][1][i][0] * b->e[0] + geometries[g][1][i][1] * b->e[1] + geometries[g][1][i][2] * b->e[2];
-        }
-        for (size_t mi = 0; mi < misses.size(); ++mi) {
-          const double m = misses[mi] * 1e-3;
-          const bool collision = m <= radius;
-          for (int d = 0; d < directions; ++d) {
-            const double phi = (d + 0.5) * 2 * kPi / directions;
-            Case2 cs{{m * std::cos(phi) + e2[0] - e1[0], m * std::sin(phi) + e2[1] - e1[1]},
-                     {c1[0], c1[1], c1[2]}, {c2[0], c2[1], c2[2]}};
-            Tally& t = tallies[mi];
-            const double pc = foster(cs.p, crel, radius);
-            const double pi = possibility(cs, radius);
-            ++t.cases;
-            t.pc_sum += pc;
-            t.brier += (pc - (collision ? 1.0 : 0.0)) * (pc - (collision ? 1.0 : 0.0));
-            t.pc_alerts += pc >= pc_threshold;
-            t.bound_alerts += ellipse_distance(cs.p, crel, bound_k) <= radius;
-            t.possibility_sum += pi;
-            t.possibility_alerts += 1.0 - pi < necessity_level;
-          }
-        }
-      }
-      auto& all = overall[geometry_names[g]];
-      if (all.empty()) all.resize(misses.size());
-      nlohmann::json rows = nlohmann::json::array();
-      for (size_t mi = 0; mi < misses.size(); ++mi) {
-        const Tally& t = tallies[mi];
-        Tally& o = all[mi];
-        o.cases += t.cases; o.pc_alerts += t.pc_alerts; o.bound_alerts += t.bound_alerts;
-        o.possibility_alerts += t.possibility_alerts; o.pc_sum += t.pc_sum; o.possibility_sum += t.possibility_sum;
-        o.brier += t.brier;
-        const double n = t.cases ? double(t.cases) : 1.0;
-        rows.push_back({{"missM", misses[mi]}, {"collision", misses[mi] * 1e-3 <= radius}, {"cases", t.cases},
-                        {"pcAlertRate", t.pc_alerts / n}, {"meanPc", t.pc_sum / n}, {"brier", t.brier / n},
-                        {"boundedSetAlertRate", t.bound_alerts / n}, {"possibilityAlertRate", t.possibility_alerts / n},
-                        {"meanPossibilityOfCollision", t.possibility_sum / n}});
-      }
-      geometry_rows.push_back({{"geometry", geometry_names[g]}, {"rows", rows}});
+      add_tallies(overall[kGeometryNames[g]], tallies[g]);
+      geometry_rows.push_back({{"geometry", kGeometryNames[g]}, {"rows", tally_rows(st, tallies[g])}});
     }
     out_strata.push_back({{"regime", acc.options.regimes[key.first].id}, {"regimeIndex", key.first}, {"ageIndex", key.second},
                           {"ageDays", {acc.options.ages[key.second].first, acc.options.ages[key.second].second}},
@@ -1209,34 +1277,74 @@ extern "C" int screening_evaluation() {
                           {"geometries", geometry_rows}});
   }
   nlohmann::json summary = nlohmann::json::object();
-  for (const auto& [name, tallies] : overall) {
-    nlohmann::json rows = nlohmann::json::array();
-    for (size_t mi = 0; mi < misses.size(); ++mi) {
-      const Tally& t = tallies[mi];
-      const double n = t.cases ? double(t.cases) : 1.0;
-      rows.push_back({{"missM", misses[mi]}, {"collision", misses[mi] * 1e-3 <= radius}, {"cases", t.cases},
-                      {"pcAlertRate", t.pc_alerts / n}, {"meanPc", t.pc_sum / n}, {"brier", t.brier / n},
-                      {"boundedSetAlertRate", t.bound_alerts / n}, {"possibilityAlertRate", t.possibility_alerts / n},
-                      {"meanPossibilityOfCollision", t.possibility_sum / n}});
-    }
-    summary[name] = rows;
-  }
+  for (const auto& [name, tallies] : overall) summary[name] = tally_rows(st, tallies);
+  nlohmann::json settings = settings_json(st);
+  settings["pairsPerStratum"] = pairs_per_stratum;
   nlohmann::json report{
       {"kind", "screening-evaluation"}, {"version", 1}, {"counts", counts_json(acc.counts)},
       {"definitions",
-       {{"cases", "two reference-state errors of different objects in one stratum; true miss synthetic, predicted = true + relative error"},
-        {"collision", "true miss <= hard-body radius"},
-        {"probabilistic", "alert when Foster Pc >= pcThreshold, relative covariance C1 + C2"},
-        {"boundedSet", "alert when the relative ellipse at boundCoverage (chi-square 2) comes within the radius"},
-        {"possibility", "pi = 1 - F_chi2_3(d^2) per object, joint min; alert unless N(no collision) >= necessityLevel"},
-        {"missedCollision", "a collision case without an alert"},
-        {"falseAlert", "a non-collision case with an alert"}}},
-      {"settings",
-       {{"hardBodyRadiusM", radius * 1e3}, {"pcThreshold", pc_threshold}, {"necessityLevel", necessity_level},
-        {"boundCoverage", bound_coverage}, {"pairsPerStratum", pairs_per_stratum}, {"directions", directions},
-        {"missDistancesM", misses}}},
+       definitions_json("two reference-state errors of different objects in one stratum; true miss synthetic, predicted = true + relative error")},
+      {"settings", settings},
       {"summary", summary}, {"strata", out_strata}};
   return emit("report", report);
+}
+
+// screening_cases: the same screening rules on caller-supplied pairs, each
+// object with its own RTN position error (km) and position covariance
+// (lower triangle RR, TR, TT, NR, NT, NN; km^2), so covariance products that
+// differ per sample can be scored the way screening_evaluation scores a
+// stratum's. The caller draws the pairs.
+extern "C" int screening_cases() {
+  using namespace screening;
+  const nlohmann::json cases = json_input("cases");
+  if (!cases.is_object() || !cases.contains("pairs") || !cases["pairs"].is_array())
+    return fail("invalid-cases", "cases must be JSON with a pairs array.");
+  const nlohmann::json opt = input("options") ? json_input("options") : nlohmann::json::object();
+  Settings st;
+  const std::string e = read_settings(opt, &st);
+  if (!e.empty()) return fail("invalid-options", e);
+  auto vec3 = [](const nlohmann::json& j, double out[3]) {
+    if (!j.is_array() || j.size() != 3) return false;
+    for (int k = 0; k < 3; ++k) {
+      if (!j[k].is_number()) return false;
+      out[k] = j[k].get<double>();
+    }
+    return std::isfinite(out[0]) && std::isfinite(out[1]) && std::isfinite(out[2]);
+  };
+  // Lower triangle -> row-major 3x3, refused unless positive definite (Cholesky).
+  auto cov3 = [](const nlohmann::json& j, std::array<double, 9>* m) {
+    if (!j.is_array() || j.size() != 6) return false;
+    double l[6];
+    for (int k = 0; k < 6; ++k) {
+      if (!j[k].is_number()) return false;
+      l[k] = j[k].get<double>();
+    }
+    *m = {l[0], l[1], l[3], l[1], l[2], l[4], l[3], l[4], l[5]};
+    const double a = l[0];
+    if (!(a > 0)) return false;
+    const double b = l[1] / std::sqrt(a), c = l[3] / std::sqrt(a);
+    const double d2 = l[2] - b * b;
+    if (!(d2 > 0)) return false;
+    const double f = (l[4] - c * b) / std::sqrt(d2);
+    return l[5] - c * c - f * f > 0;
+  };
+  std::vector<Tally> tallies[2] = {std::vector<Tally>(st.misses.size()), std::vector<Tally>(st.misses.size())};
+  size_t n = 0;
+  for (const auto& p : cases["pairs"]) {
+    double ea[3], eb[3];
+    std::array<double, 9> ca, cb;
+    if (!p.is_object() || !p.contains("e1") || !p.contains("c1") || !p.contains("e2") || !p.contains("c2") ||
+        !vec3(p["e1"], ea) || !vec3(p["e2"], eb) || !cov3(p["c1"], &ca) || !cov3(p["c2"], &cb))
+      return fail("invalid-cases", "pair " + std::to_string(n) +
+                                       ": e1, e2 need 3 finite numbers and c1, c2 a positive definite lower triangle (6).");
+    score_pair(st, ea, ca, eb, cb, tallies);
+    ++n;
+  }
+  nlohmann::json summary = nlohmann::json::object();
+  for (int g = 0; g < 2; ++g) summary[kGeometryNames[g]] = tally_rows(st, tallies[g]);
+  return emit("report", {{"kind", "screening-cases"}, {"version", 1}, {"pairs", n},
+                         {"definitions", definitions_json("caller-supplied pairs of RTN errors with per-object covariances; true miss synthetic, predicted = true + relative error")},
+                         {"settings", settings_json(st)}, {"summary", summary}});
 }
 
 // ── HPOP covariance calibration ──

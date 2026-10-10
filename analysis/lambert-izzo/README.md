@@ -8,9 +8,11 @@ This package is the SDN module home for Izzo's revisited Lambert solver.
 - Pinned version: `v2.0.0`
 - Pinned commit: `65b561b745a0f1afe6a2d73f46f70a3a382e67aa`
 - Implementation strategy: the reviewed Izzo equations are shipped as the
-  header-only `include/lambert_izzo/solver.hpp`. Both this module and
-  `analysis/maneuver` compile that one kernel; no nested upstream submodule is
-  added.
+  header-only `include/lambert_izzo/solver.hpp`. This module,
+  `analysis/maneuver` and `analysis/gp-error-model` compile that one kernel;
+  no nested upstream submodule is added. `solve` keeps the 32-revolution cap;
+  `solve_revolutions(request, N)` gives both branches for exactly N
+  revolutions without it (gp-error-model's multi-day Lambert arcs).
 - License: `MIT OR Apache-2.0`; preserve the upstream notice and license text
   when publishing an SDN artifact.
 

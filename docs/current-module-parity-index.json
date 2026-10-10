@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-10T00:36:24.789Z",
+  "generatedAt": "2026-10-10T01:04:37.406Z",
   "moduleCount": 118,
   "parityScopeModuleCount": 49,
   "isomorphicWasmCount": 116,
@@ -681,10 +681,13 @@
       "version": "0.1.0",
       "methodIds": [
         "accumulate",
+        "common_epoch",
         "finalize",
         "hpop_arcs",
         "hpop_coverage",
+        "map_covariance",
         "scale_model",
+        "screening_cases",
         "screening_evaluation"
       ],
       "runtimeTargets": [
@@ -697,16 +700,22 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 1,
+      "cxxSourceFileCount": 3,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 5,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
-        "src/gp_error_model.cpp"
+        "src/common_epoch.cpp",
+        "src/gp_error_model.cpp",
+        "src/state_transition.cpp"
       ],
       "testFiles": [
-        "tests/gp_error_model.test.mjs"
+        "tests/covariance_mapping.test.mjs",
+        "tests/gp_error_model.test.mjs",
+        "tests/parity.mjs",
+        "tests/stm-reference.json",
+        "tests/stm-reference.py"
       ]
     },
     {
@@ -898,7 +907,7 @@
       "pluginId": "maneuver-planner",
       "name": "Maneuver Planning Plugin",
       "pluginFamily": "maneuver",
-      "version": "0.6.1",
+      "version": "0.6.2",
       "methodIds": [
         "invoke"
       ],
@@ -951,7 +960,7 @@
         "src/cpp/tests/test_targeting.cpp",
         "tests/behavior.test.mjs",
         "tests/error_path.test.mjs",
-        "tests/evidence/orbit-geometry-tri-runtime-20260906.json",
+        "tests/evidence/orbit-geometry-tri-runtime-20261009.json",
         "tests/fixtures/hosted-runtime/maneuver.single-plugin.flow.json",
         "tests/fixtures/orbit_geometry.parity.json",
         "tests/fixtures/request.hohmann.json",

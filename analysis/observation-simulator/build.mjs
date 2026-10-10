@@ -12,8 +12,8 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 const framesSrc = path.resolve(root, '../../foundation/frames/src');
 const estimationSrc = path.resolve(root, '../estimation/src');
 const { header, version, families } = await generateSdsHeaders(['ACW', 'RDO', 'EOO', 'RFO'], import.meta.url);
-if (!header.includes('SIMULATE_OBSERVATIONS')) {
-  throw new Error(`spacedatastandards.org@${version} has no ACW SIMULATE_OBSERVATIONS; the simulator needs 1.229.0 or later.`);
+if (!header.includes('TRANSMIT_FREQUENCY_HZ')) {
+  throw new Error(`spacedatastandards.org@${version} has no ACW TRANSMIT_FREQUENCY_HZ (two-way RDO DOPPLER); the simulator needs 1.242.0 or later.`);
 }
 const erfa = await composeErfaTranslationUnit();
 const bodyModels = await fs.readFile(path.join(framesSrc, 'iau_body_models.hpp'), 'utf8');

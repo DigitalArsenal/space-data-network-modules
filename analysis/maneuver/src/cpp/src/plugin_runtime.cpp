@@ -58,7 +58,7 @@ namespace {
 /// three releases went by without it moving because nothing compared it to
 /// anything. `tests/behavior.test.mjs` now asserts this string against the
 /// manifest, so the next release cannot forget it.
-constexpr const char* kModuleVersion = "0.6.1";
+constexpr const char* kModuleVersion = "0.6.2";
 
 std::string version() { return kModuleVersion; }
 
