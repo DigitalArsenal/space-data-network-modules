@@ -15,5 +15,6 @@
   "erfaSourceFiles": 248,
   "axisEngine": "foundation/frames/src/axis_engine.hpp",
   "sgp4": "propagator/sgp4/src/cpp/src/SGP4.cpp",
+  "lambert": "analysis/lambert-izzo/include/lambert_izzo/solver.hpp",
   "threadModel": "single-thread"
 }

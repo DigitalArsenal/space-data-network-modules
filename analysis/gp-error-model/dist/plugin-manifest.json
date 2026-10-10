@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.analysis.gp-error-model",
   "name": "GP prediction-error model",
   "version": "0.1.0",
-  "description": "Empirical SGP4 prediction error by orbit regime and prediction age, in RTN. Element sets are propagated to later element sets of the same object (consecutive-set differences, which are not truth) or to independent reference states (GCRF, from analysis/reference-states). Batches accumulate counts, moments and histograms; finalize gives mean, covariance, quantiles, robust sigma and clipped covariance per stratum. With a model on accumulate (reference mode), each error is also tested against its stratum's model covariance (Mahalanobis d^2 against chi-square with 3 degrees of freedom, every sample counted) and finalize gates each stratum CALIBRATED, FAILED or INSUFFICIENT; scale_model fits per-stratum scale factors to reference-state errors. screening_evaluation scores a probabilistic (Foster Pc), a bounded-set and a possibility (admissible-set) screening rule on independent cases built from reference-state errors with synthetic true misses. hpop_arcs and hpop_coverage calibrate HPOP covariance (P0 at the element-set epoch, white-acceleration process noise) against reference states.",
+  "description": "Empirical SGP4 prediction error by orbit regime and prediction age, in RTN. Element sets are propagated to later element sets of the same object (consecutive-set differences, which are not truth) or to independent reference states (GCRF, from analysis/reference-states). Batches accumulate counts, moments and histograms; finalize gives mean, covariance, quantiles, robust sigma and clipped covariance per stratum. With a model on accumulate (reference mode), each error is also tested against its stratum's model covariance (Mahalanobis d^2 against chi-square with 3 degrees of freedom, every sample counted) and finalize gates each stratum CALIBRATED, FAILED or INSUFFICIENT; scale_model fits per-stratum scale factors to reference-state errors. screening_evaluation scores a probabilistic (Foster Pc), a bounded-set and a possibility (admissible-set) screening rule on independent cases built from reference-state errors with synthetic true misses. screening_cases scores the same rules on caller-supplied pairs, each object with its own covariance. common_epoch propagates element sets of one object to common epochs and returns each one's RTN difference from an origin there (a reference state, their mean, or one set). map_covariance maps an RTN covariance through a state transition matrix: SGP4's (central differences in nonsingular mean elements), two-body (complex-step Kepler) or the Lambert arc of Thompson et al. (2019). hpop_arcs and hpop_coverage calibrate HPOP covariance (P0 at the element-set epoch, white-acceleration process noise) against reference states.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -712,6 +712,250 @@
           "maxStreams": 1,
           "required": false,
           "description": "The coverage report (test mode)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "common_epoch",
+      "displayName": "Element sets at a common epoch",
+      "inputPorts": [
+        {
+          "portId": "elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "Size-prefixed $OMM records, concatenated, SGP4 mean elements; every element set a target names. Epochs within one second are one element set republished: the later record is kept."
+        },
+        {
+          "portId": "reference",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "Reference states ($OEM, GCRF, UTC, OBJECT.NORAD_CAT_ID): the origin of targets whose origin is reference, and the instant of any target with afterSeconds (the first reference epoch at or after its epoch). The first copy of an epoch, in input order, is used."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "common-epoch-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "targets[]: norad, epoch (ISO 8601 UTC), afterSeconds, sets (element-set epochs), origin (reference | mean | set), originSet."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Targets as JSON: per target the object, the epoch, the element sets to propagate there and the origin their differences are taken from."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "differences",
+          "acceptedTypeSets": [
+            {
+              "setId": "common-epoch-differences-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per target: its epoch, the origin state (GCRF, km, km/s) and per element set its epoch, age in days and prediction minus origin in the origin's RTN axes."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The differences as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "map_covariance",
+      "displayName": "Map an RTN covariance through a state transition matrix",
+      "inputPorts": [
+        {
+          "portId": "elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "Size-prefixed $OMM records, concatenated, SGP4 mean elements: the anchor element sets the requests name."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "map-covariance-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "requests[]: norad, set (anchor epoch), from (covariance epoch, default the set epoch), covariance (21, lower triangle, RTN, km, km/s), to (ISO 8601 UTC epochs), method (sgp4 | two-body | lambert), stm."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Requests as JSON: per request the anchor element set, the covariance and its epoch, the target epochs and the STM method."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "covariance",
+          "acceptedTypeSets": [
+            {
+              "setId": "covariance-map-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per request and target: the mapped covariance (21, lower triangle, RTN axes of the anchor set's SGP4 state at the target), optionally the STM (36, row-major, TEME), and for lambert the arc (revolutions, branch, v1, energies)."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The mapped covariances as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "screening_cases",
+      "displayName": "Screening rules on supplied pairs",
+      "inputPorts": [
+        {
+          "portId": "cases",
+          "acceptedTypeSets": [
+            {
+              "setId": "screening-cases-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "pairs[]: e1, e2 (RTN position errors, km) and c1, c2 (position covariances, lower triangle RR, TR, TT, NR, NT, NN, km^2, positive definite)."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Pairs of objects, each with its own error and covariance, as JSON."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "screening-cases-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "hardBodyRadiusM, pcThreshold, necessityLevel, boundCoverage, directions, missDistancesM."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Screening settings as JSON; every field optional (the defaults of screening_evaluation)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "screening-cases-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Alert rates of the probabilistic, bounded-set and possibility methods by geometry and synthetic miss, over the supplied pairs."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The screening report as JSON."
         }
       ],
       "maxBatch": 1,
