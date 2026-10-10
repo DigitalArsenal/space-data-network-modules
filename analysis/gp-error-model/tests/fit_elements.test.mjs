@@ -183,8 +183,15 @@ test('fit_elements on the NASA ISS OEM: the same fit as scipy; element_residuals
   assert.ok(r.rms.rms3dKm <= c.scipyStats.rms3dKm + 1e-9, 'not worse than scipy');
   const d = compare(r.equinoctial, equinoctial(c.scipy));
   [1e-10, 1e-8, 1e-8, 1e-8, 1e-8, 1e-7, 1e-6].forEach((tol, k) => assert.ok(d[k] <= tol, `parameter ${k}: ${d[k]}`));
+  // CelesTrak's set comes from the analysis/od fixture CSV (no reuse licence: not copied here).
   const s = c.supgp;
-  const res = await call(t, 'element_residuals', [elements(ommSet(25544, s.epoch, s.elements)), eph, json('options', { requests: [{ norad: 25544, set: s.epoch,
+  const csv = new URL(`../../../${s.csv}`, import.meta.url);
+  if (!fs.existsSync(csv)) { t.diagnostic(`skipped: ${s.csv} is absent`); return; }
+  const [head, ...rows] = fs.readFileSync(csv, 'utf8').trim().split(/\r?\n/).map((l) => l.split(','));
+  const row = Object.fromEntries(head.map((k, i) => [k, rows[s.row][i]]));
+  const el = ['MEAN_MOTION', 'ECCENTRICITY', 'INCLINATION', 'RA_OF_ASC_NODE', 'ARG_OF_PERICENTER', 'MEAN_ANOMALY', 'BSTAR'].map((k) => Number(row[k]));
+  assert.equal(row.EPOCH, s.epoch);
+  const res = await call(t, 'element_residuals', [elements(ommSet(25544, s.epoch, el)), eph, json('options', { requests: [{ norad: 25544, set: s.epoch,
     windows: [{ from: iso(c.states[0][0]), to: iso(c.states.at(-1)[0]), label: 'all' }, { from: iso(s.window6h.from), to: iso(s.window6h.to), label: 'segment' }] }] })]);
   const [all, seg] = report(res, 'residuals').results[0].windows;
   assert.equal(all.n, s.recomputed.n);
@@ -192,5 +199,5 @@ test('fit_elements on the NASA ISS OEM: the same fit as scipy; element_residuals
   assert.equal(seg.n, s.window6h.n);
   assert.ok(Math.abs(seg.rmsPerCoordinateKm - s.window6h.rmsPerCoordinateKm) < 1e-9, `${seg.rmsPerCoordinateKm} vs ${s.window6h.rmsPerCoordinateKm}`);
   // CelesTrak's rms file value is this per-coordinate RMS over the segment (3D / sqrt 3), to its three decimals.
-  assert.ok(Math.abs(seg.rmsPerCoordinateKm - s.publishedRmsKm) < 0.002, `${seg.rmsPerCoordinateKm} vs published ${s.publishedRmsKm}`);
+  assert.ok(Math.abs(seg.rmsPerCoordinateKm - Number(row.RMS)) < 0.002, `${seg.rmsPerCoordinateKm} vs published ${row.RMS}`);
 });

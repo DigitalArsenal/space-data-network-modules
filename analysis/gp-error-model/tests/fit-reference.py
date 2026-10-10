@@ -23,8 +23,15 @@ Cases:
              coordinate, fitted here by scipy. The module must find the same
              least-squares optimum, RMS and covariance.
   iss        The NASA ISS OEM fixture in analysis/od/tests/data/supgp-reference
-             (EME2000/UTC, public US Government data), fitted here by scipy, and
-             CelesTrak's Segment-01 SupGP set from the same fixture scored on it.
+             (EME2000/UTC; ISS trajectory: NASA JSC Flight Operations Directorate
+             (TOPO), a U.S. Government work in the public domain), fitted here by
+             scipy, and CelesTrak's Segment-01 SupGP set from that fixture's CSV
+             scored on it. CelesTrak's sets have no reuse licence, so only our
+             statistics are written here; the test reads the set from the CSV.
+
+Vallado's verification files: Vallado, D. A., Crawford, P., Hujsak, R.,
+Kelso, T. S. (2006), Revisiting Spacetrack Report #3, AIAA 2006-6753
+(SGP4-VER.TLE and tcppver.out; free use with citation).
 
 Run: python3 tests/fit-reference.py (python-sgp4 2.27, pyerfa 2.0.1.5,
 scipy 1.18.1, numpy 2.5.3).
@@ -283,8 +290,8 @@ def iss():
     el, r, _ = fit(tem, epoch, sup, fit_bstar=True, start=perturbed(sup))
     return {'file': 'analysis/od/tests/data/supgp-reference/iss/ISS.OEM_J2K_EPH.trimmed.txt', 'frame': 'EME2000',
             'states': [[iso(t)] + list(r) + list(v) for t, r, v in states], 'epoch': iso(epoch), 'scipy': el, 'scipyStats': stats(r),
-            'supgp': {'epoch': seg1['EPOCH'], 'elements': sup, 'publishedRmsKm': float(seg1['RMS']), 'recomputed': stats(r_sup),
-                      'window6h': {'from': iso(sup_epoch), 'to': iso(six), **stats(r_six)}}}
+            'supgp': {'csv': 'analysis/od/tests/data/supgp-reference/iss/celestrak_supgp_iss-e_2026-07-13.csv', 'row': 0, 'epoch': seg1['EPOCH'],
+                      'recomputed': stats(r_sup), 'window6h': {'from': iso(sup_epoch), 'to': iso(six), **stats(r_six)}}}
 
 
 def main():
@@ -305,7 +312,7 @@ def main():
         d = max(abs(a - b) for a, b in zip(v['scipy'][:6], v['truth'][:6]))
         print(f"  vallado {v['satnum']:5d} {v['regime']:10s} n={len(v['states'])} rms={v['scipyStats']['rms3dKm']:.2e} max|el-truth|={d:.2e}")
     print('  noisy scipy rms', ref['noisy']['scipyStats'])
-    print('  iss scipy', ref['iss']['scipyStats'], 'supgp 6h', ref['iss']['supgp']['window6h'], 'published', ref['iss']['supgp']['publishedRmsKm'])
+    print('  iss scipy', ref['iss']['scipyStats'], 'supgp 6h', ref['iss']['supgp']['window6h'])
 
 
 if __name__ == '__main__':

@@ -331,6 +331,8 @@ Each test has an expected value that does not come from this module:
   - ten seeded random element sets across LEO, MEO, GEO, Molniya and GTO, spans, samplings and frames give back their elements, and half the data predicts the other half within 1 cm;
   - on 50 m noise, the module reaches scipy's optimum, RMS and covariance;
   - on the NASA ISS OEM fixture of `analysis/od`, scipy's fit, and CelesTrak's Segment-01 set scored as python-sgp4 scores it.
+    The set is read from that fixture's CSV at test time; CelesTrak's sets have no reuse licence, so it is not copied.
+  - Sources: Vallado, Crawford, Hujsak and Kelso (2006), Revisiting Spacetrack Report #3, AIAA 2006-6753 (SGP4-VER.TLE, tcppver.out); ISS trajectory, NASA JSC Flight Operations Directorate (TOPO), a U.S. Government work; CelesTrak (T. S. Kelso), https://celestrak.org.
 
 Tri-runtime parity of these methods: `PATH=$HOME/.wasmedge/bin:$PATH node
 tests/parity.mjs` (browser, WasmEdge, Docker WasmEdge; report in

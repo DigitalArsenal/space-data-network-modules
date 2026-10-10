@@ -67,10 +67,14 @@ function ephemeris(norad, frame, opts) {
 const compact = (norad, c) => ephemeris(norad, c.frame, { start: c.start, step: c.stepSeconds, size: c.stateVectorSize, data: c.data });
 const geo = fitRef.synthetic.find((c) => c.name === 'geo');
 const issEph = ephemeris(25544, fitRef.iss.frame, { lines: fitRef.iss.states });
+// CelesTrak's Segment-01 set, read from the analysis/od fixture CSV (no reuse licence: not copied).
 function supgpSet() {
   const s = fitRef.iss.supgp, t = new OMM.OMMT();
-  Object.assign(t, { EPOCH: s.epoch, NORAD_CAT_ID: 25544, MEAN_ELEMENT_THEORY: OMM.meanElementSource.SGP4, MEAN_MOTION: s.elements[0], ECCENTRICITY: s.elements[1],
-    INCLINATION: s.elements[2], RA_OF_ASC_NODE: s.elements[3], ARG_OF_PERICENTER: s.elements[4], MEAN_ANOMALY: s.elements[5], BSTAR: s.elements[6] });
+  const [head, ...rows] = fs.readFileSync(new URL(`../../../${s.csv}`, import.meta.url), 'utf8').trim().split(/\r?\n/).map((l) => l.split(','));
+  const row = Object.fromEntries(head.map((k, i) => [k, rows[s.row][i]]));
+  const el = ['MEAN_MOTION', 'ECCENTRICITY', 'INCLINATION', 'RA_OF_ASC_NODE', 'ARG_OF_PERICENTER', 'MEAN_ANOMALY', 'BSTAR'].map((k) => Number(row[k]));
+  Object.assign(t, { EPOCH: s.epoch, NORAD_CAT_ID: 25544, MEAN_ELEMENT_THEORY: OMM.meanElementSource.SGP4, MEAN_MOTION: el[0], ECCENTRICITY: el[1],
+    INCLINATION: el[2], RA_OF_ASC_NODE: el[3], ARG_OF_PERICENTER: el[4], MEAN_ANOMALY: el[5], BSTAR: el[6] });
   const b = new flatbuffers.Builder(512);
   OMM.OMM.finishSizePrefixedOMMBuffer(b, t.pack(b));
   return { portId: 'elements', payload: Buffer.from(b.asUint8Array()), typeRef: { schemaName: 'OMM.fbs', fileIdentifier: '$OMM', rootTypeName: 'OMM', wireFormat: 'flatbuffer' } };
