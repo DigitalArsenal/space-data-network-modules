@@ -1,25 +1,25 @@
 {
   "ok": true,
-  "fixture": "gp-error-model e2b methods",
+  "fixture": "gp-error-model e2b and e14 methods",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "0f823d02e6236917814b681d5e46a3241b3234fe9386b9eb0a7af8f3d5d07e19",
-  "moduleSha256": "0f823d02e6236917814b681d5e46a3241b3234fe9386b9eb0a7af8f3d5d07e19",
+  "artifactSha256": "f27a2391561afce3da609b775e75546589873e19122cf349b52104cc1dc27b33",
+  "moduleSha256": "f27a2391561afce3da609b775e75546589873e19122cf349b52104cc1dc27b33",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
-      "runs": 7,
-      "durationMs": 1084
+      "runs": 11,
+      "durationMs": 797
     },
     {
       "lane": "wasmedge",
-      "runs": 7,
-      "durationMs": 393
+      "runs": 11,
+      "durationMs": 531
     },
     {
       "lane": "docker-wasmedge",
-      "runs": 7,
-      "durationMs": 2928
+      "runs": 11,
+      "durationMs": 4949
     }
   ],
   "cases": [
@@ -29,9 +29,13 @@
     "map-two-body",
     "map-lambert",
     "screening-cases",
-    "accumulate-reference"
+    "accumulate-reference",
+    "pair-statistics",
+    "fit-calibration",
+    "calibrate-covariance-sets",
+    "dcp-covariance"
   ],
-  "comparisons": 35,
+  "comparisons": 55,
   "failures": [],
   "runs": [
     {
@@ -105,6 +109,46 @@
       "stdoutLength": 2696
     },
     {
+      "lane": "browser",
+      "caseId": "pair-statistics",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d87ef73b8cdf40f19784bdf57089ada4ab87e3a627d798243e28abf3824b3070",
+      "stdoutLength": 864
+    },
+    {
+      "lane": "browser",
+      "caseId": "fit-calibration",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "844c5a208ffa3d487151687ec0db167a96c15d2614d50ed8802c77b3610a0e5a",
+      "stdoutLength": 552
+    },
+    {
+      "lane": "browser",
+      "caseId": "calibrate-covariance-sets",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "cdee5810d84e0ff64edd4f5acc13785ac1ba42831ca93dafa0ffe6b624aeb065",
+      "stdoutLength": 1080
+    },
+    {
+      "lane": "browser",
+      "caseId": "dcp-covariance",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6af57cada73f8a2e07e34d8f6bdf9f650995406e969a97836083b4581214f8cf",
+      "stdoutLength": 2328
+    },
+    {
       "lane": "wasmedge",
       "caseId": "common-epoch",
       "threadCount": 1,
@@ -175,6 +219,46 @@
       "stdoutLength": 2696
     },
     {
+      "lane": "wasmedge",
+      "caseId": "pair-statistics",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d87ef73b8cdf40f19784bdf57089ada4ab87e3a627d798243e28abf3824b3070",
+      "stdoutLength": 864
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "fit-calibration",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "844c5a208ffa3d487151687ec0db167a96c15d2614d50ed8802c77b3610a0e5a",
+      "stdoutLength": 552
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "calibrate-covariance-sets",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "cdee5810d84e0ff64edd4f5acc13785ac1ba42831ca93dafa0ffe6b624aeb065",
+      "stdoutLength": 1080
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "dcp-covariance",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6af57cada73f8a2e07e34d8f6bdf9f650995406e969a97836083b4581214f8cf",
+      "stdoutLength": 2328
+    },
+    {
       "lane": "docker-wasmedge",
       "caseId": "common-epoch",
       "threadCount": 1,
@@ -243,6 +327,46 @@
       "spawnCount": null,
       "stdoutSha256": "7c82970e87d66c175a1ec08417d0e11e528ab93578b91d5d93d615fa69d4513d",
       "stdoutLength": 2696
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "pair-statistics",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d87ef73b8cdf40f19784bdf57089ada4ab87e3a627d798243e28abf3824b3070",
+      "stdoutLength": 864
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "fit-calibration",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "844c5a208ffa3d487151687ec0db167a96c15d2614d50ed8802c77b3610a0e5a",
+      "stdoutLength": 552
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "calibrate-covariance-sets",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "cdee5810d84e0ff64edd4f5acc13785ac1ba42831ca93dafa0ffe6b624aeb065",
+      "stdoutLength": 1080
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "dcp-covariance",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "6af57cada73f8a2e07e34d8f6bdf9f650995406e969a97836083b4581214f8cf",
+      "stdoutLength": 2328
     }
   ]
 }

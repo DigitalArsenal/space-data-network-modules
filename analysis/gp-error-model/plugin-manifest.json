@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.analysis.gp-error-model",
   "name": "GP prediction-error model",
-  "version": "0.1.0",
-  "description": "Empirical SGP4 prediction error by orbit regime and prediction age, in RTN. Element sets are propagated to later element sets of the same object (consecutive-set differences, which are not truth) or to independent reference states (GCRF, from analysis/reference-states). Batches accumulate counts, moments and histograms; finalize gives mean, covariance, quantiles, robust sigma and clipped covariance per stratum. With a model on accumulate (reference mode), each error is also tested against its stratum's model covariance (Mahalanobis d^2 against chi-square with 3 degrees of freedom, every sample counted) and finalize gates each stratum CALIBRATED, FAILED or INSUFFICIENT; scale_model fits per-stratum scale factors to reference-state errors. screening_evaluation scores a probabilistic (Foster Pc), a bounded-set and a possibility (admissible-set) screening rule on independent cases built from reference-state errors with synthetic true misses. screening_cases scores the same rules on caller-supplied pairs, each object with its own covariance. common_epoch propagates element sets of one object to common epochs and returns each one's RTN difference from an origin there (a reference state, their mean, or one set). map_covariance maps an RTN covariance through a state transition matrix: SGP4's (central differences in nonsingular mean elements), two-body (complex-step Kepler) or the Lambert arc of Thompson et al. (2019). hpop_arcs and hpop_coverage calibrate HPOP covariance (P0 at the element-set epoch, white-acceleration process noise) against reference states.",
+  "version": "0.3.0",
+  "description": "Empirical SGP4 prediction error by orbit regime and prediction age, in RTN. Element sets are propagated to later element sets of the same object (consecutive-set differences, which are not truth) or to independent reference states (GCRF, from analysis/reference-states). Batches accumulate counts, moments and histograms; finalize gives mean, covariance, quantiles, robust sigma and clipped covariance per stratum. With a model on accumulate (reference mode), each error is also tested against its stratum's model covariance (Mahalanobis d^2 against chi-square with 3 degrees of freedom, every sample counted) and finalize gates each stratum CALIBRATED, FAILED or INSUFFICIENT; scale_model fits per-stratum scale factors to reference-state errors. screening_evaluation scores a probabilistic (Foster Pc), a bounded-set and a possibility (admissible-set) screening rule on independent cases built from reference-state errors with synthetic true misses. screening_cases scores the same rules on caller-supplied pairs, each object with its own covariance. common_epoch propagates element sets of one object to common epochs and returns each one's RTN difference from an origin there (a reference state, their mean, or one set). map_covariance maps an RTN covariance through a state transition matrix: SGP4's (central differences in nonsingular mean elements), two-body (complex-step Kepler) or the Lambert arc of Thompson et al. (2019). hpop_arcs and hpop_coverage calibrate HPOP covariance (P0 at the element-set epoch, white-acceleration process noise) against reference states. pair_statistics, fit_calibration, calibrate_covariance and dcp_covariance (orbit-accuracy-experiments E14) give the error and Mahalanobis statistics of predicted against truth states, fit covariance calibration factors per stratum, apply a frozen covariance model (operator-file factors by regime and horizon, or an element-set model by regime and age) to objects in RTN and inertial axes, and form the density-forecast consider covariance (an open Dynamic Consider Parameter).",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -956,6 +956,286 @@
           "maxStreams": 1,
           "required": true,
           "description": "The screening report as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "pair_statistics",
+      "displayName": "Error and Mahalanobis statistics of predicted against truth states",
+      "inputPorts": [
+        {
+          "portId": "pairs",
+          "acceptedTypeSets": [
+            {
+              "setId": "pair-statistics-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "pairs[]: id, predicted {position[3] m, velocity[3] m/s, covariance (lower 6 or 21, or full 9 or 36; SI), covarianceAxes RTN | UVW | INERTIAL}, truth {position, velocity, covariance?, covarianceAxes?}; axesFrom predicted | truth."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Pairs of a predicted and a truth state, each with a covariance, as JSON."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "statistics",
+          "acceptedTypeSets": [
+            {
+              "setId": "pair-statistics-result-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per pair: errorRtn, velocityErrorRtn (predicted minus truth, RTN of the chosen state), predictedRtn and truthRtn (lower 3x3), d2Combined, d2Predicted, zCombined, zPredicted."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Pair statistics as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "fit_calibration",
+      "displayName": "Covariance calibration factors per stratum",
+      "inputPorts": [
+        {
+          "portId": "samples",
+          "acceptedTypeSets": [
+            {
+              "setId": "fit-calibration-samples-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "samples[]: stratum (string), object, error [3] and covariance (lower 6 or full 9), one consistent unit."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Errors with their predicted position covariances, as JSON."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "fit-calibration-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "method scalar-mle | axes-mle | coverage; coverage (default 0.95); minimumSamples; minimumObjects."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Fit options as JSON."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "calibration",
+          "acceptedTypeSets": [
+            {
+              "setId": "fit-calibration-result-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per stratum: n, objects, factor (variance) or axesFactors [3], and mean d^2/3 and 95 % coverage before and after."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Calibration factors as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "calibrate_covariance",
+      "displayName": "Apply a frozen covariance model to objects",
+      "inputPorts": [
+        {
+          "portId": "model",
+          "acceptedTypeSets": [
+            {
+              "setId": "calibrate-covariance-model-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "kind e14-factors (strata [{regime, horizonDays [lo, hi], factor | axesFactors, status}], regimes) or e14-element-set-model (regimes, ageBinsDays, strata [{regimeIndex, ageIndex, n, covariance[21] RTN km, km/s}], factors, status, minimumBinSamples); version."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The frozen model as JSON."
+        },
+        {
+          "portId": "objects",
+          "acceptedTypeSets": [
+            {
+              "setId": "calibrate-covariance-objects-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "objects[]: id, regime | set {norad, epoch} | state {position, velocity} (inertial SI), horizonDays or ageDays, covariance and covarianceAxes (factor models), objectFactor."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The objects as JSON."
+        },
+        {
+          "portId": "elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "Size-prefixed $OMM records, concatenated (SGP4 mean elements): the element sets objects name, for their regime by gp-error-model's rule."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "covariance",
+          "acceptedTypeSets": [
+            {
+              "setId": "calibrate-covariance-result-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per object: regime, cell, status, factor(s), covarianceRtn (21, SI) and covarianceInertial (36, SI, given a state); the calibration version."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Calibrated covariances as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "dcp_covariance",
+      "displayName": "Density-forecast consider covariance (open DCP)",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "dcp-covariance-request-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "leadCovariance (K x K, ln density error by lead day), start (ISO UTC), segments [{from, to, lead}], ballisticCoefficient, startSample {stm[36], s[6]}?, epochs [{epoch, sensitivity[6] | stm[36] and s[6], base?}]."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The consider request as JSON."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "dcp",
+          "acceptedTypeSets": [
+            {
+              "setId": "dcp-covariance-result-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per epoch: sigmaEff, weights by lead, sensitivity g, covariance (36, SI), total (base + covariance) when a base is given."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The consider covariance as JSON."
         }
       ],
       "maxBatch": 1,

@@ -176,6 +176,57 @@ With `stm: true` each target also carries Φ (TEME, row-major). With
 `axesSet` the input covariance is in the RTN axes of that set's SGP4 state at
 `from` (Thompson et al. rotate the final set's scatter with its own state).
 
+### Covariance realism by data source (orbit-accuracy-experiments E14)
+
+Units are SI (m, m/s; m², m²/s, m²/s²). Lower triangles are row-major RR,
+TR, TT, NR, NT, NN (and dR R, … for 6 × 6).
+
+- **`pair_statistics`** (`pairs` → `statistics`). Each pair is a predicted
+  and a truth state (inertial, one frame), each with a covariance in RTN
+  (also `UVW`, the same axes) or inertial axes. Output: the error, predicted
+  minus truth, in the RTN axes of the predicted state (or the truth's,
+  `axesFrom`), both position covariances in those axes, d² against the
+  combined covariance and against the predicted one alone, and per-axis
+  z = e/σ.
+- **`fit_calibration`** (`samples`, `options` → `calibration`). Samples
+  (stratum, RTN error, RTN position covariance, object). Per stratum a
+  variance factor: `scalar-mle`, k² = mean d²/3 (the maximum-likelihood
+  common scale); `coverage`, k² = the d² quantile at `coverage` (type 7)
+  over its χ²₃ value; `axes-mle`, s_k² = mean(e_k²/P_kk) per axis (the
+  marginal maximum likelihood), applied as P' = S P S. Mean d²/3 and the 95 %
+  coverage before and after.
+- **`calibrate_covariance`** (`model`, `objects`, optional `elements` →
+  `covariance`). A frozen model applied to objects:
+  - `e14-factors`: strata by regime (or `*`) and horizon `[lo, hi)` days,
+    each a common factor or per-axis factors with a status, applied to the
+    object's native covariance as S P S, S = diag(s_R, s_T, s_N, s_R, s_T,
+    s_N) (velocity rows scale with their position axes);
+  - `e14-element-set-model`: per regime and age bin a 6 × 6 RTN second
+    moment (km, km/s) and a factor, linear in age between the centres of
+    bins with at least `minimumBinSamples`, held beyond them.
+
+  An object's regime is given, or that of the element set it names
+  (`elements`, this module's rule), or from its state's osculating elements
+  (WGS-84). An `objectFactor` multiplies the covariance. Output: the
+  covariance in RTN and, given a state, in inertial axes, the cell, the
+  cell's status and the model's calibration version.
+- **`dcp_covariance`** (`request` → `dcp`). The density-forecast consider
+  term (an open Dynamic Consider Parameter, Hejduk 2019). Daily ln-density
+  forecast errors by lead day have covariance C (K × K); `segments` map times
+  to lead days; from the forecast start s₀ to t a constant error acts on the
+  along-track position with weight 2(t − s)/(t − s₀)², so lead l weighs
+  w_l = Σ ((t − a)² − (t − b)²)/(t − s₀)² over its segments [a, b] clipped to
+  [s₀, t] (5/9, 3/9, 1/9 at three whole days); σ_eff² = wᵀCw and
+  P = σ_eff² g gᵀ, g the sensitivity to ln B from s₀: given, or
+  B (S(t) − Φ(t) Φ(s₀)⁻¹ S(s₀)) from HPOP's STM and B columns (`startSample`).
+  With a `base` covariance the total is returned too.
+
+Tests (`tests/covariance_realism.test.mjs`) use designed inputs with
+closed-form answers: d² of diagonal cases and its invariance under a rotation
+of the whole case; factors of designed samples; diagonal scalings, the RTN to
+inertial rotation and the midpoint of two bins; Hejduk's weights and
+σ_eff = √(wᵀCw); the start-relative sensitivity for designed matrices.
+
 ## Model and validation
 
 `scripts/build-model.mjs` builds the model and its validation from the GP
@@ -281,6 +332,6 @@ Each test has an expected value that does not come from this module:
 - `screening_cases`: Foster Pc in closed form at zero miss, and a fine polar
   grid for an offset anisotropic pair.
 
-Tri-runtime parity of these methods: `PATH=$HOME/.wasmedge/bin:$PATH node
+Tri-runtime parity of these methods (and E14's four): `PATH=$HOME/.wasmedge/bin:$PATH node
 tests/parity.mjs` (browser, WasmEdge, Docker WasmEdge; report in
 `conformance/parity.json`).
