@@ -70,6 +70,14 @@ enum class EstimatorKind : std::uint8_t {
   UNSCENTED_KALMAN_FILTER = 2,
   EXTENDED_KALMAN_FILTER_WITH_RTS = 3,
   LINEAR_KALMAN_FILTER = 4,
+  // Epistemic Support-Point Filter as the 2025 operational paper describes
+  // it (Jah and Haslett, arXiv 2508.20806) and as the 2026 TEAG papers state
+  // it (Jah 2026: TEAG, ESPF-HJ, arXiv 2603.10065); docs/espf-spec.md.
+  ESPF_2025 = 5,
+  ESPF_2026 = 6,
+  // Ellipsoidal set-membership filter (Schweppe 1968; Bertsekas and Rhodes
+  // 1971), linearized about the propagated centre.
+  ELLIPSOIDAL_SET_MEMBERSHIP = 7,
 };
 
 enum class ProcessNoiseKind : std::uint8_t {
@@ -187,6 +195,77 @@ using Matrix8 = std::array<double, 64>;
 using PropagatorPort =
     std::function<bool(const CartesianState &, double, PropagatorSample *)>;
 
+// ESPF parameters. Every default is the value a paper states or the choice
+// docs/espf-spec.md records for a value it leaves open.
+struct EspfOptions {
+  int smolyak_level{0};                // 0: the variant's default (2025: 2, 2026: 3)
+  double initial_bound_scale{3};       // r0: {(x - x0)' P0^-1 (x - x0) <= r0^2}
+  double process_bound_scale{1};       // k_w: process-noise set shape k_w^2 Q
+  double measurement_bound_scale{1};   // k_y: sensor set shape Pi_y = k_y^2 R
+  // 2026 (TEAG, ESPF-HJ, 2603.10065).
+  double sigma_initial{1}, sigma_min{0.1}, sigma_max{1};
+  double rate_expand{1.15}, rate_contract{0.97};
+  int minimum_survivors{0};            // 0: N_min = 2n + 1
+  int pcrb_rank{0};                    // 0: state dimension n; 1: measurement rank m
+  int medoid_metric{0};                // 0: MVEE of the survivors; 1: innovation metric
+  double vfi_floor_ratio{1e-12};
+  double mvee_tolerance{1e-7};
+  int mvee_max_iterations{20000};
+  bool entropy_diagnostics{false};
+  bool record_support{false};          // emit each epoch's survivors
+  // 2025 (2508.20806).
+  double plausibility_radius{3};       // r = sqrt(-2 log(1 - eta))
+  double compatibility_floor{1e-6};    // epsilon in S = -log(Comp + epsilon)
+  double surprisal_threshold{1};
+  double regularization{1e-6};
+  bool regularization_relative{true};
+  double spread_sigma0{1}, spread_sigma_min{0}, spread_sigma_max{1e300};
+  double dispersion_gain{0}, surprisal_gain{0}, surprisal_reference{0}, surprisal_scale{1};
+  double radius_gain_expand{0}, radius_gain_contract{0};
+  double decay_rate{0.05};
+  int mode_weighting{0};               // 0 residual possibility, 1 singleton necessity, 2 compatibility
+  bool gaussian_limit{false};          // appendix: UT points, product fusion (the UKF)
+  double pcrb_trigger{1};              // 2026: expand at this fraction of the PCRB floor (G18)
+};
+
+struct SetMembershipOptions {
+  double initial_bound_scale{3};
+  double process_bound_scale{3};
+  double measurement_bound_scale{3};
+  int criterion{0};                    // 0: minimum trace; 1: minimum log det
+};
+
+// The state an ESPF or set-membership run carries from one observation to
+// the next; restartable (an arc can be split at any epoch).
+struct SupportState {
+  double epoch_seconds{0};
+  EstimatorKind estimator{EstimatorKind::ESPF_2026};
+  int count{0};
+  std::vector<double> points;          // count x 6, SI, request frame
+  std::vector<double> possibility;     // count
+  Vector6 estimate{};
+  Matrix6 shape{};
+  double sigma{1}, radius{3}, dispersion{0};
+  int steps{0};
+  bool valid{false};
+};
+
+struct SupportEpoch {
+  double epoch_seconds{0};
+  Vector6 estimate{};
+  Matrix6 shape{};                     // posterior set (2026: MVEE of the survivors; 2025: spread; SMF: bound)
+  Matrix6 carried_shape{};             // what is carried forward (2026: sigma^2 MVEE; 2025: sigma^2 spread; SMF: bound)
+  Matrix6 predicted_shape{};
+  int support_count{0}, survivor_count{0}, medoid_index{-1};
+  double choquet_surprisal{0}, information{0}, normalization_shift{0};
+  double minimum_whitened_innovation{0}, basin_radius{0}, basin_threshold{0};
+  double pcrb_floor{0}, log_volume_change{0}, sigma{0}, radius{0}, dispersion{0};
+  double mean_surprisal{0}, regime_log_det{0}, entropy{0}, entropy_alpha{0};
+  bool inconsistent{false}, accepted{true};
+  std::vector<double> survivors;       // survivor_count x 6 when recorded
+  std::vector<double> survivor_possibility;
+};
+
 struct FilterConfig {
   CartesianState initial{};
   Matrix6 initial_covariance{};
@@ -205,6 +284,9 @@ struct FilterConfig {
   double initial_clock_bias_m{0}, initial_clock_drift_mps{0};
   Matrix8 initial_covariance8{};
   double clock_bias_psd{0}, clock_drift_psd{0};
+  EspfOptions espf{};
+  SetMembershipOptions set_membership{};
+  SupportState initial_support{};      // used when valid
 };
 
 struct FilterEpoch {
@@ -226,6 +308,9 @@ struct FilterResult {
   std::vector<FilterEpoch> epochs;
   std::vector<std::size_t> rejected_indices;
   bool valid{false};
+  std::vector<SupportEpoch> support;   // ESPF and set-membership runs
+  SupportState final_support{};
+  std::string error;
 };
 
 struct AnglesObservation {
@@ -270,6 +355,16 @@ FilterResult sequential_filter(const FilterConfig &config,
                                const std::vector<Observation> &observations,
                                const std::vector<PropagatorSample> &samples,
                                bool smooth);
+
+// The process-noise covariance of the sequential filters over an interval,
+// and the residual convention they share (angles wrapped to [-pi, pi]).
+Matrix6 process_noise_covariance(const FilterConfig &config, double elapsed_seconds);
+double measurement_residual(MeasurementKind kind, int component, double observed, double predicted);
+
+// ESPF (2025 and 2026 variants) and the ellipsoidal set-membership filter.
+// Nonlinear propagation through config.propagator only (espf.cpp).
+FilterResult support_filter(const FilterConfig &config, const std::vector<Observation> &observations);
+FilterResult set_membership_filter(const FilterConfig &config, const std::vector<Observation> &observations);
 
 std::vector<Observation>
 simulate_measurements(const std::vector<Observation> &templates,

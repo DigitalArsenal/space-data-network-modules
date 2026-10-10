@@ -76,41 +76,74 @@ struct BatchFitResult;
 struct BatchFitResultBuilder;
 struct BatchFitResultT;
 
+struct EspfOptions;
+struct EspfOptionsBuilder;
+struct EspfOptionsT;
+
+struct SetMembershipOptions;
+struct SetMembershipOptionsBuilder;
+struct SetMembershipOptionsT;
+
+struct SupportState;
+struct SupportStateBuilder;
+struct SupportStateT;
+
+struct SupportEpoch;
+struct SupportEpochBuilder;
+struct SupportEpochT;
+
+struct TeagRequest;
+struct TeagRequestBuilder;
+struct TeagRequestT;
+
+struct TeagResult;
+struct TeagResultBuilder;
+struct TeagResultT;
+
 enum class EstimatorKind : uint8_t {
   BATCH_WEIGHTED_LEAST_SQUARES = 0,
   EXTENDED_KALMAN_FILTER = 1,
   UNSCENTED_KALMAN_FILTER = 2,
   EXTENDED_KALMAN_FILTER_WITH_RTS = 3,
   LINEAR_KALMAN_FILTER = 4,
+  ESPF_2025 = 5,
+  ESPF_2026 = 6,
+  ELLIPSOIDAL_SET_MEMBERSHIP = 7,
   MIN = BATCH_WEIGHTED_LEAST_SQUARES,
-  MAX = LINEAR_KALMAN_FILTER
+  MAX = ELLIPSOIDAL_SET_MEMBERSHIP
 };
 
-inline const EstimatorKind (&EnumValuesEstimatorKind())[5] {
+inline const EstimatorKind (&EnumValuesEstimatorKind())[8] {
   static const EstimatorKind values[] = {
     EstimatorKind::BATCH_WEIGHTED_LEAST_SQUARES,
     EstimatorKind::EXTENDED_KALMAN_FILTER,
     EstimatorKind::UNSCENTED_KALMAN_FILTER,
     EstimatorKind::EXTENDED_KALMAN_FILTER_WITH_RTS,
-    EstimatorKind::LINEAR_KALMAN_FILTER
+    EstimatorKind::LINEAR_KALMAN_FILTER,
+    EstimatorKind::ESPF_2025,
+    EstimatorKind::ESPF_2026,
+    EstimatorKind::ELLIPSOIDAL_SET_MEMBERSHIP
   };
   return values;
 }
 
 inline const char * const *EnumNamesEstimatorKind() {
-  static const char * const names[6] = {
+  static const char * const names[9] = {
     "BATCH_WEIGHTED_LEAST_SQUARES",
     "EXTENDED_KALMAN_FILTER",
     "UNSCENTED_KALMAN_FILTER",
     "EXTENDED_KALMAN_FILTER_WITH_RTS",
     "LINEAR_KALMAN_FILTER",
+    "ESPF_2025",
+    "ESPF_2026",
+    "ELLIPSOIDAL_SET_MEMBERSHIP",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameEstimatorKind(EstimatorKind e) {
-  if (::flatbuffers::IsOutRange(e, EstimatorKind::BATCH_WEIGHTED_LEAST_SQUARES, EstimatorKind::LINEAR_KALMAN_FILTER)) return "";
+  if (::flatbuffers::IsOutRange(e, EstimatorKind::BATCH_WEIGHTED_LEAST_SQUARES, EstimatorKind::ELLIPSOIDAL_SET_MEMBERSHIP)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesEstimatorKind()[index];
 }
@@ -1506,6 +1539,8 @@ struct EstimationResultT : public ::flatbuffers::NativeTable {
   std::vector<std::unique_ptr<orbpro::estimation::ExtendedFilterEpochT>> extended_history{};
   std::vector<std::unique_ptr<orbpro::estimation::PropagationQueryT>> propagation_requests{};
   std::unique_ptr<orbpro::estimation::BatchFitResultT> batch_fit{};
+  std::vector<std::unique_ptr<orbpro::estimation::SupportEpochT>> support_history{};
+  std::unique_ptr<orbpro::estimation::SupportStateT> final_support{};
   EstimationResultT() = default;
   EstimationResultT(const EstimationResultT &o);
   EstimationResultT(EstimationResultT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1529,7 +1564,9 @@ struct EstimationResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_TRACE_ID = 22,
     VT_EXTENDED_HISTORY = 24,
     VT_PROPAGATION_REQUESTS = 26,
-    VT_BATCH_FIT = 28
+    VT_BATCH_FIT = 28,
+    VT_SUPPORT_HISTORY = 30,
+    VT_FINAL_SUPPORT = 32
   };
   orbpro::estimation::EstimationStatus status() const {
     return static_cast<orbpro::estimation::EstimationStatus>(GetField<int32_t>(VT_STATUS, 0));
@@ -1572,6 +1609,12 @@ struct EstimationResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const orbpro::estimation::BatchFitResult *batch_fit() const {
     return GetPointer<const orbpro::estimation::BatchFitResult *>(VT_BATCH_FIT);
   }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::SupportEpoch>> *support_history() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::SupportEpoch>> *>(VT_SUPPORT_HISTORY);
+  }
+  const orbpro::estimation::SupportState *final_support() const {
+    return GetPointer<const orbpro::estimation::SupportState *>(VT_FINAL_SUPPORT);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1601,6 +1644,11 @@ struct EstimationResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyVectorOfTables(propagation_requests()) &&
            VerifyOffset(verifier, VT_BATCH_FIT) &&
            verifier.VerifyTable(batch_fit()) &&
+           VerifyOffset(verifier, VT_SUPPORT_HISTORY) &&
+           verifier.VerifyVector(support_history()) &&
+           verifier.VerifyVectorOfTables(support_history()) &&
+           VerifyOffset(verifier, VT_FINAL_SUPPORT) &&
+           verifier.VerifyTable(final_support()) &&
            verifier.EndTable();
   }
   EstimationResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1651,6 +1699,12 @@ struct EstimationResultBuilder {
   void add_batch_fit(::flatbuffers::Offset<orbpro::estimation::BatchFitResult> batch_fit) {
     fbb_.AddOffset(EstimationResult::VT_BATCH_FIT, batch_fit);
   }
+  void add_support_history(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::SupportEpoch>>> support_history) {
+    fbb_.AddOffset(EstimationResult::VT_SUPPORT_HISTORY, support_history);
+  }
+  void add_final_support(::flatbuffers::Offset<orbpro::estimation::SupportState> final_support) {
+    fbb_.AddOffset(EstimationResult::VT_FINAL_SUPPORT, final_support);
+  }
   explicit EstimationResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1676,8 +1730,12 @@ inline ::flatbuffers::Offset<EstimationResult> CreateEstimationResult(
     ::flatbuffers::Offset<::flatbuffers::String> trace_id = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::ExtendedFilterEpoch>>> extended_history = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::PropagationQuery>>> propagation_requests = 0,
-    ::flatbuffers::Offset<orbpro::estimation::BatchFitResult> batch_fit = 0) {
+    ::flatbuffers::Offset<orbpro::estimation::BatchFitResult> batch_fit = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::SupportEpoch>>> support_history = 0,
+    ::flatbuffers::Offset<orbpro::estimation::SupportState> final_support = 0) {
   EstimationResultBuilder builder_(_fbb);
+  builder_.add_final_support(final_support);
+  builder_.add_support_history(support_history);
   builder_.add_batch_fit(batch_fit);
   builder_.add_propagation_requests(propagation_requests);
   builder_.add_extended_history(extended_history);
@@ -1713,7 +1771,9 @@ inline ::flatbuffers::Offset<EstimationResult> CreateEstimationResultDirect(
     const char *trace_id = nullptr,
     const std::vector<::flatbuffers::Offset<orbpro::estimation::ExtendedFilterEpoch>> *extended_history = nullptr,
     const std::vector<::flatbuffers::Offset<orbpro::estimation::PropagationQuery>> *propagation_requests = nullptr,
-    ::flatbuffers::Offset<orbpro::estimation::BatchFitResult> batch_fit = 0) {
+    ::flatbuffers::Offset<orbpro::estimation::BatchFitResult> batch_fit = 0,
+    const std::vector<::flatbuffers::Offset<orbpro::estimation::SupportEpoch>> *support_history = nullptr,
+    ::flatbuffers::Offset<orbpro::estimation::SupportState> final_support = 0) {
   auto filter_history__ = filter_history ? _fbb.CreateVectorOfStructs<orbpro::estimation::FilterEpoch>(*filter_history) : 0;
   auto residuals__ = residuals ? _fbb.CreateVector<double>(*residuals) : 0;
   auto iteration_covariances__ = iteration_covariances ? _fbb.CreateVector<double>(*iteration_covariances) : 0;
@@ -1724,6 +1784,7 @@ inline ::flatbuffers::Offset<EstimationResult> CreateEstimationResultDirect(
   auto trace_id__ = trace_id ? _fbb.CreateString(trace_id) : 0;
   auto extended_history__ = extended_history ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::ExtendedFilterEpoch>>(*extended_history) : 0;
   auto propagation_requests__ = propagation_requests ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::PropagationQuery>>(*propagation_requests) : 0;
+  auto support_history__ = support_history ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::SupportEpoch>>(*support_history) : 0;
   return orbpro::estimation::CreateEstimationResult(
       _fbb,
       status,
@@ -1738,7 +1799,9 @@ inline ::flatbuffers::Offset<EstimationResult> CreateEstimationResultDirect(
       trace_id__,
       extended_history__,
       propagation_requests__,
-      batch_fit);
+      batch_fit,
+      support_history__,
+      final_support);
 }
 
 ::flatbuffers::Offset<EstimationResult> CreateEstimationResult(::flatbuffers::FlatBufferBuilder &_fbb, const EstimationResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1752,6 +1815,8 @@ struct EstimationEnvelopeT : public ::flatbuffers::NativeTable {
   std::unique_ptr<orbpro::estimation::InitialOrbitRequest> initial_orbit_request{};
   std::unique_ptr<orbpro::estimation::InitialOrbitResult> initial_orbit_result{};
   std::vector<std::unique_ptr<orbpro::estimation::PropagationAnswerT>> propagation_answers{};
+  std::unique_ptr<orbpro::estimation::TeagRequestT> teag_request{};
+  std::unique_ptr<orbpro::estimation::TeagResultT> teag_result{};
   EstimationEnvelopeT() = default;
   EstimationEnvelopeT(const EstimationEnvelopeT &o);
   EstimationEnvelopeT(EstimationEnvelopeT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1769,7 +1834,9 @@ struct EstimationEnvelope FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
     VT_SIMULATED_OBSERVATIONS = 10,
     VT_INITIAL_ORBIT_REQUEST = 12,
     VT_INITIAL_ORBIT_RESULT = 14,
-    VT_PROPAGATION_ANSWERS = 16
+    VT_PROPAGATION_ANSWERS = 16,
+    VT_TEAG_REQUEST = 18,
+    VT_TEAG_RESULT = 20
   };
   const orbpro::estimation::EstimationRequest *request() const {
     return GetPointer<const orbpro::estimation::EstimationRequest *>(VT_REQUEST);
@@ -1792,6 +1859,12 @@ struct EstimationEnvelope FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
   const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::PropagationAnswer>> *propagation_answers() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::PropagationAnswer>> *>(VT_PROPAGATION_ANSWERS);
   }
+  const orbpro::estimation::TeagRequest *teag_request() const {
+    return GetPointer<const orbpro::estimation::TeagRequest *>(VT_TEAG_REQUEST);
+  }
+  const orbpro::estimation::TeagResult *teag_result() const {
+    return GetPointer<const orbpro::estimation::TeagResult *>(VT_TEAG_RESULT);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1808,6 +1881,10 @@ struct EstimationEnvelope FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
            VerifyOffset(verifier, VT_PROPAGATION_ANSWERS) &&
            verifier.VerifyVector(propagation_answers()) &&
            verifier.VerifyVectorOfTables(propagation_answers()) &&
+           VerifyOffset(verifier, VT_TEAG_REQUEST) &&
+           verifier.VerifyTable(teag_request()) &&
+           VerifyOffset(verifier, VT_TEAG_RESULT) &&
+           verifier.VerifyTable(teag_result()) &&
            verifier.EndTable();
   }
   EstimationEnvelopeT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1840,6 +1917,12 @@ struct EstimationEnvelopeBuilder {
   void add_propagation_answers(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::PropagationAnswer>>> propagation_answers) {
     fbb_.AddOffset(EstimationEnvelope::VT_PROPAGATION_ANSWERS, propagation_answers);
   }
+  void add_teag_request(::flatbuffers::Offset<orbpro::estimation::TeagRequest> teag_request) {
+    fbb_.AddOffset(EstimationEnvelope::VT_TEAG_REQUEST, teag_request);
+  }
+  void add_teag_result(::flatbuffers::Offset<orbpro::estimation::TeagResult> teag_result) {
+    fbb_.AddOffset(EstimationEnvelope::VT_TEAG_RESULT, teag_result);
+  }
   explicit EstimationEnvelopeBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1859,8 +1942,12 @@ inline ::flatbuffers::Offset<EstimationEnvelope> CreateEstimationEnvelope(
     ::flatbuffers::Offset<::flatbuffers::Vector<const orbpro::estimation::EstimationObservation *>> simulated_observations = 0,
     const orbpro::estimation::InitialOrbitRequest *initial_orbit_request = nullptr,
     const orbpro::estimation::InitialOrbitResult *initial_orbit_result = nullptr,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::PropagationAnswer>>> propagation_answers = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<orbpro::estimation::PropagationAnswer>>> propagation_answers = 0,
+    ::flatbuffers::Offset<orbpro::estimation::TeagRequest> teag_request = 0,
+    ::flatbuffers::Offset<orbpro::estimation::TeagResult> teag_result = 0) {
   EstimationEnvelopeBuilder builder_(_fbb);
+  builder_.add_teag_result(teag_result);
+  builder_.add_teag_request(teag_request);
   builder_.add_propagation_answers(propagation_answers);
   builder_.add_initial_orbit_result(initial_orbit_result);
   builder_.add_initial_orbit_request(initial_orbit_request);
@@ -1884,7 +1971,9 @@ inline ::flatbuffers::Offset<EstimationEnvelope> CreateEstimationEnvelopeDirect(
     const std::vector<orbpro::estimation::EstimationObservation> *simulated_observations = nullptr,
     const orbpro::estimation::InitialOrbitRequest *initial_orbit_request = nullptr,
     const orbpro::estimation::InitialOrbitResult *initial_orbit_result = nullptr,
-    const std::vector<::flatbuffers::Offset<orbpro::estimation::PropagationAnswer>> *propagation_answers = nullptr) {
+    const std::vector<::flatbuffers::Offset<orbpro::estimation::PropagationAnswer>> *propagation_answers = nullptr,
+    ::flatbuffers::Offset<orbpro::estimation::TeagRequest> teag_request = 0,
+    ::flatbuffers::Offset<orbpro::estimation::TeagResult> teag_result = 0) {
   auto propagator_samples__ = propagator_samples ? _fbb.CreateVectorOfStructs<orbpro::estimation::EstimationPropagatorSample>(*propagator_samples) : 0;
   auto simulated_observations__ = simulated_observations ? _fbb.CreateVectorOfStructs<orbpro::estimation::EstimationObservation>(*simulated_observations) : 0;
   auto propagation_answers__ = propagation_answers ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::PropagationAnswer>>(*propagation_answers) : 0;
@@ -1896,7 +1985,9 @@ inline ::flatbuffers::Offset<EstimationEnvelope> CreateEstimationEnvelopeDirect(
       simulated_observations__,
       initial_orbit_request,
       initial_orbit_result,
-      propagation_answers__);
+      propagation_answers__,
+      teag_request,
+      teag_result);
 }
 
 ::flatbuffers::Offset<EstimationEnvelope> CreateEstimationEnvelope(::flatbuffers::FlatBufferBuilder &_fbb, const EstimationEnvelopeT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1920,6 +2011,13 @@ struct SequentialOptionsT : public ::flatbuffers::NativeTable {
   std::vector<double> initial_covariance8{};
   double clock_bias_psd = 0.0;
   double clock_drift_psd = 0.0;
+  std::unique_ptr<orbpro::estimation::EspfOptionsT> espf{};
+  std::unique_ptr<orbpro::estimation::SetMembershipOptionsT> set_membership{};
+  std::unique_ptr<orbpro::estimation::SupportStateT> initial_support{};
+  SequentialOptionsT() = default;
+  SequentialOptionsT(const SequentialOptionsT &o);
+  SequentialOptionsT(SequentialOptionsT&&) FLATBUFFERS_NOEXCEPT = default;
+  SequentialOptionsT &operator=(SequentialOptionsT o) FLATBUFFERS_NOEXCEPT;
 };
 
 struct SequentialOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -1943,7 +2041,10 @@ struct SequentialOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
     VT_INITIAL_CLOCK_DRIFT_MPS = 30,
     VT_INITIAL_COVARIANCE8 = 32,
     VT_CLOCK_BIAS_PSD = 34,
-    VT_CLOCK_DRIFT_PSD = 36
+    VT_CLOCK_DRIFT_PSD = 36,
+    VT_ESPF = 38,
+    VT_SET_MEMBERSHIP = 40,
+    VT_INITIAL_SUPPORT = 42
   };
   double ukf_alpha() const {
     return GetField<double>(VT_UKF_ALPHA, 1.0);
@@ -1996,6 +2097,15 @@ struct SequentialOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
   double clock_drift_psd() const {
     return GetField<double>(VT_CLOCK_DRIFT_PSD, 0.0);
   }
+  const orbpro::estimation::EspfOptions *espf() const {
+    return GetPointer<const orbpro::estimation::EspfOptions *>(VT_ESPF);
+  }
+  const orbpro::estimation::SetMembershipOptions *set_membership() const {
+    return GetPointer<const orbpro::estimation::SetMembershipOptions *>(VT_SET_MEMBERSHIP);
+  }
+  const orbpro::estimation::SupportState *initial_support() const {
+    return GetPointer<const orbpro::estimation::SupportState *>(VT_INITIAL_SUPPORT);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -2017,6 +2127,12 @@ struct SequentialOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table 
            verifier.VerifyVector(initial_covariance8()) &&
            VerifyField<double>(verifier, VT_CLOCK_BIAS_PSD, 8) &&
            VerifyField<double>(verifier, VT_CLOCK_DRIFT_PSD, 8) &&
+           VerifyOffset(verifier, VT_ESPF) &&
+           verifier.VerifyTable(espf()) &&
+           VerifyOffset(verifier, VT_SET_MEMBERSHIP) &&
+           verifier.VerifyTable(set_membership()) &&
+           VerifyOffset(verifier, VT_INITIAL_SUPPORT) &&
+           verifier.VerifyTable(initial_support()) &&
            verifier.EndTable();
   }
   SequentialOptionsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2079,6 +2195,15 @@ struct SequentialOptionsBuilder {
   void add_clock_drift_psd(double clock_drift_psd) {
     fbb_.AddElement<double>(SequentialOptions::VT_CLOCK_DRIFT_PSD, clock_drift_psd, 0.0);
   }
+  void add_espf(::flatbuffers::Offset<orbpro::estimation::EspfOptions> espf) {
+    fbb_.AddOffset(SequentialOptions::VT_ESPF, espf);
+  }
+  void add_set_membership(::flatbuffers::Offset<orbpro::estimation::SetMembershipOptions> set_membership) {
+    fbb_.AddOffset(SequentialOptions::VT_SET_MEMBERSHIP, set_membership);
+  }
+  void add_initial_support(::flatbuffers::Offset<orbpro::estimation::SupportState> initial_support) {
+    fbb_.AddOffset(SequentialOptions::VT_INITIAL_SUPPORT, initial_support);
+  }
   explicit SequentialOptionsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2108,7 +2233,10 @@ inline ::flatbuffers::Offset<SequentialOptions> CreateSequentialOptions(
     double initial_clock_drift_mps = 0.0,
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> initial_covariance8 = 0,
     double clock_bias_psd = 0.0,
-    double clock_drift_psd = 0.0) {
+    double clock_drift_psd = 0.0,
+    ::flatbuffers::Offset<orbpro::estimation::EspfOptions> espf = 0,
+    ::flatbuffers::Offset<orbpro::estimation::SetMembershipOptions> set_membership = 0,
+    ::flatbuffers::Offset<orbpro::estimation::SupportState> initial_support = 0) {
   SequentialOptionsBuilder builder_(_fbb);
   builder_.add_clock_drift_psd(clock_drift_psd);
   builder_.add_clock_bias_psd(clock_bias_psd);
@@ -2121,6 +2249,9 @@ inline ::flatbuffers::Offset<SequentialOptions> CreateSequentialOptions(
   builder_.add_ukf_kappa(ukf_kappa);
   builder_.add_ukf_beta(ukf_beta);
   builder_.add_ukf_alpha(ukf_alpha);
+  builder_.add_initial_support(initial_support);
+  builder_.add_set_membership(set_membership);
+  builder_.add_espf(espf);
   builder_.add_initial_covariance8(initial_covariance8);
   builder_.add_estimate_clock(estimate_clock);
   builder_.add_inflate_measurement_noise(inflate_measurement_noise);
@@ -2153,7 +2284,10 @@ inline ::flatbuffers::Offset<SequentialOptions> CreateSequentialOptionsDirect(
     double initial_clock_drift_mps = 0.0,
     const std::vector<double> *initial_covariance8 = nullptr,
     double clock_bias_psd = 0.0,
-    double clock_drift_psd = 0.0) {
+    double clock_drift_psd = 0.0,
+    ::flatbuffers::Offset<orbpro::estimation::EspfOptions> espf = 0,
+    ::flatbuffers::Offset<orbpro::estimation::SetMembershipOptions> set_membership = 0,
+    ::flatbuffers::Offset<orbpro::estimation::SupportState> initial_support = 0) {
   auto initial_covariance8__ = initial_covariance8 ? _fbb.CreateVector<double>(*initial_covariance8) : 0;
   return orbpro::estimation::CreateSequentialOptions(
       _fbb,
@@ -2173,7 +2307,10 @@ inline ::flatbuffers::Offset<SequentialOptions> CreateSequentialOptionsDirect(
       initial_clock_drift_mps,
       initial_covariance8__,
       clock_bias_psd,
-      clock_drift_psd);
+      clock_drift_psd,
+      espf,
+      set_membership,
+      initial_support);
 }
 
 ::flatbuffers::Offset<SequentialOptions> CreateSequentialOptions(::flatbuffers::FlatBufferBuilder &_fbb, const SequentialOptionsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -3151,6 +3288,1935 @@ inline ::flatbuffers::Offset<BatchFitResult> CreateBatchFitResultDirect(
 
 ::flatbuffers::Offset<BatchFitResult> CreateBatchFitResult(::flatbuffers::FlatBufferBuilder &_fbb, const BatchFitResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct EspfOptionsT : public ::flatbuffers::NativeTable {
+  typedef EspfOptions TableType;
+  uint8_t smolyak_level = 0;
+  double initial_bound_scale = 3.0;
+  double process_bound_scale = 1.0;
+  double measurement_bound_scale = 1.0;
+  double sigma_initial = 1.0;
+  double sigma_min = 0.1;
+  double sigma_max = 1.0;
+  double rate_expand = 1.15;
+  double rate_contract = 0.97;
+  uint32_t minimum_survivors = 0;
+  uint8_t pcrb_rank = 0;
+  uint8_t medoid_metric = 0;
+  double vfi_floor_ratio = 1e-12;
+  double mvee_tolerance = 1e-7;
+  uint32_t mvee_max_iterations = 20000;
+  bool entropy_diagnostics = false;
+  bool record_support = false;
+  double plausibility_radius = 3.0;
+  double compatibility_floor = 1e-6;
+  double surprisal_threshold = 1.0;
+  double regularization = 1e-6;
+  bool regularization_relative = true;
+  double spread_sigma0 = 1.0;
+  double spread_sigma_min = 0.0;
+  double spread_sigma_max = 1e300;
+  double dispersion_gain = 0.0;
+  double surprisal_gain = 0.0;
+  double surprisal_reference = 0.0;
+  double surprisal_scale = 1.0;
+  double radius_gain_expand = 0.0;
+  double radius_gain_contract = 0.0;
+  double decay_rate = 0.05;
+  uint8_t mode_weighting = 0;
+  bool gaussian_limit = false;
+  double pcrb_trigger = 1.0;
+};
+
+struct EspfOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef EspfOptionsT NativeTableType;
+  typedef EspfOptionsBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SMOLYAK_LEVEL = 4,
+    VT_INITIAL_BOUND_SCALE = 6,
+    VT_PROCESS_BOUND_SCALE = 8,
+    VT_MEASUREMENT_BOUND_SCALE = 10,
+    VT_SIGMA_INITIAL = 12,
+    VT_SIGMA_MIN = 14,
+    VT_SIGMA_MAX = 16,
+    VT_RATE_EXPAND = 18,
+    VT_RATE_CONTRACT = 20,
+    VT_MINIMUM_SURVIVORS = 22,
+    VT_PCRB_RANK = 24,
+    VT_MEDOID_METRIC = 26,
+    VT_VFI_FLOOR_RATIO = 28,
+    VT_MVEE_TOLERANCE = 30,
+    VT_MVEE_MAX_ITERATIONS = 32,
+    VT_ENTROPY_DIAGNOSTICS = 34,
+    VT_RECORD_SUPPORT = 36,
+    VT_PLAUSIBILITY_RADIUS = 38,
+    VT_COMPATIBILITY_FLOOR = 40,
+    VT_SURPRISAL_THRESHOLD = 42,
+    VT_REGULARIZATION = 44,
+    VT_REGULARIZATION_RELATIVE = 46,
+    VT_SPREAD_SIGMA0 = 48,
+    VT_SPREAD_SIGMA_MIN = 50,
+    VT_SPREAD_SIGMA_MAX = 52,
+    VT_DISPERSION_GAIN = 54,
+    VT_SURPRISAL_GAIN = 56,
+    VT_SURPRISAL_REFERENCE = 58,
+    VT_SURPRISAL_SCALE = 60,
+    VT_RADIUS_GAIN_EXPAND = 62,
+    VT_RADIUS_GAIN_CONTRACT = 64,
+    VT_DECAY_RATE = 66,
+    VT_MODE_WEIGHTING = 68,
+    VT_GAUSSIAN_LIMIT = 70,
+    VT_PCRB_TRIGGER = 72
+  };
+  uint8_t smolyak_level() const {
+    return GetField<uint8_t>(VT_SMOLYAK_LEVEL, 0);
+  }
+  double initial_bound_scale() const {
+    return GetField<double>(VT_INITIAL_BOUND_SCALE, 3.0);
+  }
+  double process_bound_scale() const {
+    return GetField<double>(VT_PROCESS_BOUND_SCALE, 1.0);
+  }
+  double measurement_bound_scale() const {
+    return GetField<double>(VT_MEASUREMENT_BOUND_SCALE, 1.0);
+  }
+  double sigma_initial() const {
+    return GetField<double>(VT_SIGMA_INITIAL, 1.0);
+  }
+  double sigma_min() const {
+    return GetField<double>(VT_SIGMA_MIN, 0.1);
+  }
+  double sigma_max() const {
+    return GetField<double>(VT_SIGMA_MAX, 1.0);
+  }
+  double rate_expand() const {
+    return GetField<double>(VT_RATE_EXPAND, 1.15);
+  }
+  double rate_contract() const {
+    return GetField<double>(VT_RATE_CONTRACT, 0.97);
+  }
+  uint32_t minimum_survivors() const {
+    return GetField<uint32_t>(VT_MINIMUM_SURVIVORS, 0);
+  }
+  uint8_t pcrb_rank() const {
+    return GetField<uint8_t>(VT_PCRB_RANK, 0);
+  }
+  uint8_t medoid_metric() const {
+    return GetField<uint8_t>(VT_MEDOID_METRIC, 0);
+  }
+  double vfi_floor_ratio() const {
+    return GetField<double>(VT_VFI_FLOOR_RATIO, 1e-12);
+  }
+  double mvee_tolerance() const {
+    return GetField<double>(VT_MVEE_TOLERANCE, 1e-7);
+  }
+  uint32_t mvee_max_iterations() const {
+    return GetField<uint32_t>(VT_MVEE_MAX_ITERATIONS, 20000);
+  }
+  bool entropy_diagnostics() const {
+    return GetField<uint8_t>(VT_ENTROPY_DIAGNOSTICS, 0) != 0;
+  }
+  bool record_support() const {
+    return GetField<uint8_t>(VT_RECORD_SUPPORT, 0) != 0;
+  }
+  double plausibility_radius() const {
+    return GetField<double>(VT_PLAUSIBILITY_RADIUS, 3.0);
+  }
+  double compatibility_floor() const {
+    return GetField<double>(VT_COMPATIBILITY_FLOOR, 1e-6);
+  }
+  double surprisal_threshold() const {
+    return GetField<double>(VT_SURPRISAL_THRESHOLD, 1.0);
+  }
+  double regularization() const {
+    return GetField<double>(VT_REGULARIZATION, 1e-6);
+  }
+  bool regularization_relative() const {
+    return GetField<uint8_t>(VT_REGULARIZATION_RELATIVE, 1) != 0;
+  }
+  double spread_sigma0() const {
+    return GetField<double>(VT_SPREAD_SIGMA0, 1.0);
+  }
+  double spread_sigma_min() const {
+    return GetField<double>(VT_SPREAD_SIGMA_MIN, 0.0);
+  }
+  double spread_sigma_max() const {
+    return GetField<double>(VT_SPREAD_SIGMA_MAX, 1e300);
+  }
+  double dispersion_gain() const {
+    return GetField<double>(VT_DISPERSION_GAIN, 0.0);
+  }
+  double surprisal_gain() const {
+    return GetField<double>(VT_SURPRISAL_GAIN, 0.0);
+  }
+  double surprisal_reference() const {
+    return GetField<double>(VT_SURPRISAL_REFERENCE, 0.0);
+  }
+  double surprisal_scale() const {
+    return GetField<double>(VT_SURPRISAL_SCALE, 1.0);
+  }
+  double radius_gain_expand() const {
+    return GetField<double>(VT_RADIUS_GAIN_EXPAND, 0.0);
+  }
+  double radius_gain_contract() const {
+    return GetField<double>(VT_RADIUS_GAIN_CONTRACT, 0.0);
+  }
+  double decay_rate() const {
+    return GetField<double>(VT_DECAY_RATE, 0.05);
+  }
+  uint8_t mode_weighting() const {
+    return GetField<uint8_t>(VT_MODE_WEIGHTING, 0);
+  }
+  bool gaussian_limit() const {
+    return GetField<uint8_t>(VT_GAUSSIAN_LIMIT, 0) != 0;
+  }
+  double pcrb_trigger() const {
+    return GetField<double>(VT_PCRB_TRIGGER, 1.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_SMOLYAK_LEVEL, 1) &&
+           VerifyField<double>(verifier, VT_INITIAL_BOUND_SCALE, 8) &&
+           VerifyField<double>(verifier, VT_PROCESS_BOUND_SCALE, 8) &&
+           VerifyField<double>(verifier, VT_MEASUREMENT_BOUND_SCALE, 8) &&
+           VerifyField<double>(verifier, VT_SIGMA_INITIAL, 8) &&
+           VerifyField<double>(verifier, VT_SIGMA_MIN, 8) &&
+           VerifyField<double>(verifier, VT_SIGMA_MAX, 8) &&
+           VerifyField<double>(verifier, VT_RATE_EXPAND, 8) &&
+           VerifyField<double>(verifier, VT_RATE_CONTRACT, 8) &&
+           VerifyField<uint32_t>(verifier, VT_MINIMUM_SURVIVORS, 4) &&
+           VerifyField<uint8_t>(verifier, VT_PCRB_RANK, 1) &&
+           VerifyField<uint8_t>(verifier, VT_MEDOID_METRIC, 1) &&
+           VerifyField<double>(verifier, VT_VFI_FLOOR_RATIO, 8) &&
+           VerifyField<double>(verifier, VT_MVEE_TOLERANCE, 8) &&
+           VerifyField<uint32_t>(verifier, VT_MVEE_MAX_ITERATIONS, 4) &&
+           VerifyField<uint8_t>(verifier, VT_ENTROPY_DIAGNOSTICS, 1) &&
+           VerifyField<uint8_t>(verifier, VT_RECORD_SUPPORT, 1) &&
+           VerifyField<double>(verifier, VT_PLAUSIBILITY_RADIUS, 8) &&
+           VerifyField<double>(verifier, VT_COMPATIBILITY_FLOOR, 8) &&
+           VerifyField<double>(verifier, VT_SURPRISAL_THRESHOLD, 8) &&
+           VerifyField<double>(verifier, VT_REGULARIZATION, 8) &&
+           VerifyField<uint8_t>(verifier, VT_REGULARIZATION_RELATIVE, 1) &&
+           VerifyField<double>(verifier, VT_SPREAD_SIGMA0, 8) &&
+           VerifyField<double>(verifier, VT_SPREAD_SIGMA_MIN, 8) &&
+           VerifyField<double>(verifier, VT_SPREAD_SIGMA_MAX, 8) &&
+           VerifyField<double>(verifier, VT_DISPERSION_GAIN, 8) &&
+           VerifyField<double>(verifier, VT_SURPRISAL_GAIN, 8) &&
+           VerifyField<double>(verifier, VT_SURPRISAL_REFERENCE, 8) &&
+           VerifyField<double>(verifier, VT_SURPRISAL_SCALE, 8) &&
+           VerifyField<double>(verifier, VT_RADIUS_GAIN_EXPAND, 8) &&
+           VerifyField<double>(verifier, VT_RADIUS_GAIN_CONTRACT, 8) &&
+           VerifyField<double>(verifier, VT_DECAY_RATE, 8) &&
+           VerifyField<uint8_t>(verifier, VT_MODE_WEIGHTING, 1) &&
+           VerifyField<uint8_t>(verifier, VT_GAUSSIAN_LIMIT, 1) &&
+           VerifyField<double>(verifier, VT_PCRB_TRIGGER, 8) &&
+           verifier.EndTable();
+  }
+  EspfOptionsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(EspfOptionsT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<EspfOptions> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const EspfOptionsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct EspfOptionsBuilder {
+  typedef EspfOptions Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_smolyak_level(uint8_t smolyak_level) {
+    fbb_.AddElement<uint8_t>(EspfOptions::VT_SMOLYAK_LEVEL, smolyak_level, 0);
+  }
+  void add_initial_bound_scale(double initial_bound_scale) {
+    fbb_.AddElement<double>(EspfOptions::VT_INITIAL_BOUND_SCALE, initial_bound_scale, 3.0);
+  }
+  void add_process_bound_scale(double process_bound_scale) {
+    fbb_.AddElement<double>(EspfOptions::VT_PROCESS_BOUND_SCALE, process_bound_scale, 1.0);
+  }
+  void add_measurement_bound_scale(double measurement_bound_scale) {
+    fbb_.AddElement<double>(EspfOptions::VT_MEASUREMENT_BOUND_SCALE, measurement_bound_scale, 1.0);
+  }
+  void add_sigma_initial(double sigma_initial) {
+    fbb_.AddElement<double>(EspfOptions::VT_SIGMA_INITIAL, sigma_initial, 1.0);
+  }
+  void add_sigma_min(double sigma_min) {
+    fbb_.AddElement<double>(EspfOptions::VT_SIGMA_MIN, sigma_min, 0.1);
+  }
+  void add_sigma_max(double sigma_max) {
+    fbb_.AddElement<double>(EspfOptions::VT_SIGMA_MAX, sigma_max, 1.0);
+  }
+  void add_rate_expand(double rate_expand) {
+    fbb_.AddElement<double>(EspfOptions::VT_RATE_EXPAND, rate_expand, 1.15);
+  }
+  void add_rate_contract(double rate_contract) {
+    fbb_.AddElement<double>(EspfOptions::VT_RATE_CONTRACT, rate_contract, 0.97);
+  }
+  void add_minimum_survivors(uint32_t minimum_survivors) {
+    fbb_.AddElement<uint32_t>(EspfOptions::VT_MINIMUM_SURVIVORS, minimum_survivors, 0);
+  }
+  void add_pcrb_rank(uint8_t pcrb_rank) {
+    fbb_.AddElement<uint8_t>(EspfOptions::VT_PCRB_RANK, pcrb_rank, 0);
+  }
+  void add_medoid_metric(uint8_t medoid_metric) {
+    fbb_.AddElement<uint8_t>(EspfOptions::VT_MEDOID_METRIC, medoid_metric, 0);
+  }
+  void add_vfi_floor_ratio(double vfi_floor_ratio) {
+    fbb_.AddElement<double>(EspfOptions::VT_VFI_FLOOR_RATIO, vfi_floor_ratio, 1e-12);
+  }
+  void add_mvee_tolerance(double mvee_tolerance) {
+    fbb_.AddElement<double>(EspfOptions::VT_MVEE_TOLERANCE, mvee_tolerance, 1e-7);
+  }
+  void add_mvee_max_iterations(uint32_t mvee_max_iterations) {
+    fbb_.AddElement<uint32_t>(EspfOptions::VT_MVEE_MAX_ITERATIONS, mvee_max_iterations, 20000);
+  }
+  void add_entropy_diagnostics(bool entropy_diagnostics) {
+    fbb_.AddElement<uint8_t>(EspfOptions::VT_ENTROPY_DIAGNOSTICS, static_cast<uint8_t>(entropy_diagnostics), 0);
+  }
+  void add_record_support(bool record_support) {
+    fbb_.AddElement<uint8_t>(EspfOptions::VT_RECORD_SUPPORT, static_cast<uint8_t>(record_support), 0);
+  }
+  void add_plausibility_radius(double plausibility_radius) {
+    fbb_.AddElement<double>(EspfOptions::VT_PLAUSIBILITY_RADIUS, plausibility_radius, 3.0);
+  }
+  void add_compatibility_floor(double compatibility_floor) {
+    fbb_.AddElement<double>(EspfOptions::VT_COMPATIBILITY_FLOOR, compatibility_floor, 1e-6);
+  }
+  void add_surprisal_threshold(double surprisal_threshold) {
+    fbb_.AddElement<double>(EspfOptions::VT_SURPRISAL_THRESHOLD, surprisal_threshold, 1.0);
+  }
+  void add_regularization(double regularization) {
+    fbb_.AddElement<double>(EspfOptions::VT_REGULARIZATION, regularization, 1e-6);
+  }
+  void add_regularization_relative(bool regularization_relative) {
+    fbb_.AddElement<uint8_t>(EspfOptions::VT_REGULARIZATION_RELATIVE, static_cast<uint8_t>(regularization_relative), 1);
+  }
+  void add_spread_sigma0(double spread_sigma0) {
+    fbb_.AddElement<double>(EspfOptions::VT_SPREAD_SIGMA0, spread_sigma0, 1.0);
+  }
+  void add_spread_sigma_min(double spread_sigma_min) {
+    fbb_.AddElement<double>(EspfOptions::VT_SPREAD_SIGMA_MIN, spread_sigma_min, 0.0);
+  }
+  void add_spread_sigma_max(double spread_sigma_max) {
+    fbb_.AddElement<double>(EspfOptions::VT_SPREAD_SIGMA_MAX, spread_sigma_max, 1e300);
+  }
+  void add_dispersion_gain(double dispersion_gain) {
+    fbb_.AddElement<double>(EspfOptions::VT_DISPERSION_GAIN, dispersion_gain, 0.0);
+  }
+  void add_surprisal_gain(double surprisal_gain) {
+    fbb_.AddElement<double>(EspfOptions::VT_SURPRISAL_GAIN, surprisal_gain, 0.0);
+  }
+  void add_surprisal_reference(double surprisal_reference) {
+    fbb_.AddElement<double>(EspfOptions::VT_SURPRISAL_REFERENCE, surprisal_reference, 0.0);
+  }
+  void add_surprisal_scale(double surprisal_scale) {
+    fbb_.AddElement<double>(EspfOptions::VT_SURPRISAL_SCALE, surprisal_scale, 1.0);
+  }
+  void add_radius_gain_expand(double radius_gain_expand) {
+    fbb_.AddElement<double>(EspfOptions::VT_RADIUS_GAIN_EXPAND, radius_gain_expand, 0.0);
+  }
+  void add_radius_gain_contract(double radius_gain_contract) {
+    fbb_.AddElement<double>(EspfOptions::VT_RADIUS_GAIN_CONTRACT, radius_gain_contract, 0.0);
+  }
+  void add_decay_rate(double decay_rate) {
+    fbb_.AddElement<double>(EspfOptions::VT_DECAY_RATE, decay_rate, 0.05);
+  }
+  void add_mode_weighting(uint8_t mode_weighting) {
+    fbb_.AddElement<uint8_t>(EspfOptions::VT_MODE_WEIGHTING, mode_weighting, 0);
+  }
+  void add_gaussian_limit(bool gaussian_limit) {
+    fbb_.AddElement<uint8_t>(EspfOptions::VT_GAUSSIAN_LIMIT, static_cast<uint8_t>(gaussian_limit), 0);
+  }
+  void add_pcrb_trigger(double pcrb_trigger) {
+    fbb_.AddElement<double>(EspfOptions::VT_PCRB_TRIGGER, pcrb_trigger, 1.0);
+  }
+  explicit EspfOptionsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<EspfOptions> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<EspfOptions>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<EspfOptions> CreateEspfOptions(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint8_t smolyak_level = 0,
+    double initial_bound_scale = 3.0,
+    double process_bound_scale = 1.0,
+    double measurement_bound_scale = 1.0,
+    double sigma_initial = 1.0,
+    double sigma_min = 0.1,
+    double sigma_max = 1.0,
+    double rate_expand = 1.15,
+    double rate_contract = 0.97,
+    uint32_t minimum_survivors = 0,
+    uint8_t pcrb_rank = 0,
+    uint8_t medoid_metric = 0,
+    double vfi_floor_ratio = 1e-12,
+    double mvee_tolerance = 1e-7,
+    uint32_t mvee_max_iterations = 20000,
+    bool entropy_diagnostics = false,
+    bool record_support = false,
+    double plausibility_radius = 3.0,
+    double compatibility_floor = 1e-6,
+    double surprisal_threshold = 1.0,
+    double regularization = 1e-6,
+    bool regularization_relative = true,
+    double spread_sigma0 = 1.0,
+    double spread_sigma_min = 0.0,
+    double spread_sigma_max = 1e300,
+    double dispersion_gain = 0.0,
+    double surprisal_gain = 0.0,
+    double surprisal_reference = 0.0,
+    double surprisal_scale = 1.0,
+    double radius_gain_expand = 0.0,
+    double radius_gain_contract = 0.0,
+    double decay_rate = 0.05,
+    uint8_t mode_weighting = 0,
+    bool gaussian_limit = false,
+    double pcrb_trigger = 1.0) {
+  EspfOptionsBuilder builder_(_fbb);
+  builder_.add_pcrb_trigger(pcrb_trigger);
+  builder_.add_decay_rate(decay_rate);
+  builder_.add_radius_gain_contract(radius_gain_contract);
+  builder_.add_radius_gain_expand(radius_gain_expand);
+  builder_.add_surprisal_scale(surprisal_scale);
+  builder_.add_surprisal_reference(surprisal_reference);
+  builder_.add_surprisal_gain(surprisal_gain);
+  builder_.add_dispersion_gain(dispersion_gain);
+  builder_.add_spread_sigma_max(spread_sigma_max);
+  builder_.add_spread_sigma_min(spread_sigma_min);
+  builder_.add_spread_sigma0(spread_sigma0);
+  builder_.add_regularization(regularization);
+  builder_.add_surprisal_threshold(surprisal_threshold);
+  builder_.add_compatibility_floor(compatibility_floor);
+  builder_.add_plausibility_radius(plausibility_radius);
+  builder_.add_mvee_tolerance(mvee_tolerance);
+  builder_.add_vfi_floor_ratio(vfi_floor_ratio);
+  builder_.add_rate_contract(rate_contract);
+  builder_.add_rate_expand(rate_expand);
+  builder_.add_sigma_max(sigma_max);
+  builder_.add_sigma_min(sigma_min);
+  builder_.add_sigma_initial(sigma_initial);
+  builder_.add_measurement_bound_scale(measurement_bound_scale);
+  builder_.add_process_bound_scale(process_bound_scale);
+  builder_.add_initial_bound_scale(initial_bound_scale);
+  builder_.add_mvee_max_iterations(mvee_max_iterations);
+  builder_.add_minimum_survivors(minimum_survivors);
+  builder_.add_gaussian_limit(gaussian_limit);
+  builder_.add_mode_weighting(mode_weighting);
+  builder_.add_regularization_relative(regularization_relative);
+  builder_.add_record_support(record_support);
+  builder_.add_entropy_diagnostics(entropy_diagnostics);
+  builder_.add_medoid_metric(medoid_metric);
+  builder_.add_pcrb_rank(pcrb_rank);
+  builder_.add_smolyak_level(smolyak_level);
+  return builder_.Finish();
+}
+
+struct EspfOptions::Traits {
+  using type = EspfOptions;
+  static auto constexpr Create = CreateEspfOptions;
+};
+
+::flatbuffers::Offset<EspfOptions> CreateEspfOptions(::flatbuffers::FlatBufferBuilder &_fbb, const EspfOptionsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct SetMembershipOptionsT : public ::flatbuffers::NativeTable {
+  typedef SetMembershipOptions TableType;
+  double initial_bound_scale = 3.0;
+  double process_bound_scale = 3.0;
+  double measurement_bound_scale = 3.0;
+  uint8_t criterion = 0;
+};
+
+struct SetMembershipOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SetMembershipOptionsT NativeTableType;
+  typedef SetMembershipOptionsBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_INITIAL_BOUND_SCALE = 4,
+    VT_PROCESS_BOUND_SCALE = 6,
+    VT_MEASUREMENT_BOUND_SCALE = 8,
+    VT_CRITERION = 10
+  };
+  double initial_bound_scale() const {
+    return GetField<double>(VT_INITIAL_BOUND_SCALE, 3.0);
+  }
+  double process_bound_scale() const {
+    return GetField<double>(VT_PROCESS_BOUND_SCALE, 3.0);
+  }
+  double measurement_bound_scale() const {
+    return GetField<double>(VT_MEASUREMENT_BOUND_SCALE, 3.0);
+  }
+  uint8_t criterion() const {
+    return GetField<uint8_t>(VT_CRITERION, 0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<double>(verifier, VT_INITIAL_BOUND_SCALE, 8) &&
+           VerifyField<double>(verifier, VT_PROCESS_BOUND_SCALE, 8) &&
+           VerifyField<double>(verifier, VT_MEASUREMENT_BOUND_SCALE, 8) &&
+           VerifyField<uint8_t>(verifier, VT_CRITERION, 1) &&
+           verifier.EndTable();
+  }
+  SetMembershipOptionsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SetMembershipOptionsT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SetMembershipOptions> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SetMembershipOptionsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct SetMembershipOptionsBuilder {
+  typedef SetMembershipOptions Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_initial_bound_scale(double initial_bound_scale) {
+    fbb_.AddElement<double>(SetMembershipOptions::VT_INITIAL_BOUND_SCALE, initial_bound_scale, 3.0);
+  }
+  void add_process_bound_scale(double process_bound_scale) {
+    fbb_.AddElement<double>(SetMembershipOptions::VT_PROCESS_BOUND_SCALE, process_bound_scale, 3.0);
+  }
+  void add_measurement_bound_scale(double measurement_bound_scale) {
+    fbb_.AddElement<double>(SetMembershipOptions::VT_MEASUREMENT_BOUND_SCALE, measurement_bound_scale, 3.0);
+  }
+  void add_criterion(uint8_t criterion) {
+    fbb_.AddElement<uint8_t>(SetMembershipOptions::VT_CRITERION, criterion, 0);
+  }
+  explicit SetMembershipOptionsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SetMembershipOptions> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SetMembershipOptions>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SetMembershipOptions> CreateSetMembershipOptions(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    double initial_bound_scale = 3.0,
+    double process_bound_scale = 3.0,
+    double measurement_bound_scale = 3.0,
+    uint8_t criterion = 0) {
+  SetMembershipOptionsBuilder builder_(_fbb);
+  builder_.add_measurement_bound_scale(measurement_bound_scale);
+  builder_.add_process_bound_scale(process_bound_scale);
+  builder_.add_initial_bound_scale(initial_bound_scale);
+  builder_.add_criterion(criterion);
+  return builder_.Finish();
+}
+
+struct SetMembershipOptions::Traits {
+  using type = SetMembershipOptions;
+  static auto constexpr Create = CreateSetMembershipOptions;
+};
+
+::flatbuffers::Offset<SetMembershipOptions> CreateSetMembershipOptions(::flatbuffers::FlatBufferBuilder &_fbb, const SetMembershipOptionsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct SupportStateT : public ::flatbuffers::NativeTable {
+  typedef SupportState TableType;
+  std::unique_ptr<orbpro::estimation::EstimationEpoch> epoch{};
+  orbpro::estimation::EstimatorKind estimator = orbpro::estimation::EstimatorKind::BATCH_WEIGHTED_LEAST_SQUARES;
+  uint8_t dimension = 6;
+  std::vector<double> points{};
+  std::vector<double> possibility{};
+  std::vector<double> estimate{};
+  std::vector<double> shape{};
+  double sigma = 1.0;
+  double radius = 3.0;
+  double dispersion = 0.0;
+  uint32_t steps = 0;
+  SupportStateT() = default;
+  SupportStateT(const SupportStateT &o);
+  SupportStateT(SupportStateT&&) FLATBUFFERS_NOEXCEPT = default;
+  SupportStateT &operator=(SupportStateT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct SupportState FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SupportStateT NativeTableType;
+  typedef SupportStateBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_EPOCH = 4,
+    VT_ESTIMATOR = 6,
+    VT_DIMENSION = 8,
+    VT_POINTS = 10,
+    VT_POSSIBILITY = 12,
+    VT_ESTIMATE = 14,
+    VT_SHAPE = 16,
+    VT_SIGMA = 18,
+    VT_RADIUS = 20,
+    VT_DISPERSION = 22,
+    VT_STEPS = 24
+  };
+  const orbpro::estimation::EstimationEpoch *epoch() const {
+    return GetStruct<const orbpro::estimation::EstimationEpoch *>(VT_EPOCH);
+  }
+  orbpro::estimation::EstimatorKind estimator() const {
+    return static_cast<orbpro::estimation::EstimatorKind>(GetField<uint8_t>(VT_ESTIMATOR, 0));
+  }
+  uint8_t dimension() const {
+    return GetField<uint8_t>(VT_DIMENSION, 6);
+  }
+  const ::flatbuffers::Vector<double> *points() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_POINTS);
+  }
+  const ::flatbuffers::Vector<double> *possibility() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_POSSIBILITY);
+  }
+  const ::flatbuffers::Vector<double> *estimate() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_ESTIMATE);
+  }
+  const ::flatbuffers::Vector<double> *shape() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SHAPE);
+  }
+  double sigma() const {
+    return GetField<double>(VT_SIGMA, 1.0);
+  }
+  double radius() const {
+    return GetField<double>(VT_RADIUS, 3.0);
+  }
+  double dispersion() const {
+    return GetField<double>(VT_DISPERSION, 0.0);
+  }
+  uint32_t steps() const {
+    return GetField<uint32_t>(VT_STEPS, 0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<orbpro::estimation::EstimationEpoch>(verifier, VT_EPOCH, 8) &&
+           VerifyField<uint8_t>(verifier, VT_ESTIMATOR, 1) &&
+           VerifyField<uint8_t>(verifier, VT_DIMENSION, 1) &&
+           VerifyOffset(verifier, VT_POINTS) &&
+           verifier.VerifyVector(points()) &&
+           VerifyOffset(verifier, VT_POSSIBILITY) &&
+           verifier.VerifyVector(possibility()) &&
+           VerifyOffset(verifier, VT_ESTIMATE) &&
+           verifier.VerifyVector(estimate()) &&
+           VerifyOffset(verifier, VT_SHAPE) &&
+           verifier.VerifyVector(shape()) &&
+           VerifyField<double>(verifier, VT_SIGMA, 8) &&
+           VerifyField<double>(verifier, VT_RADIUS, 8) &&
+           VerifyField<double>(verifier, VT_DISPERSION, 8) &&
+           VerifyField<uint32_t>(verifier, VT_STEPS, 4) &&
+           verifier.EndTable();
+  }
+  SupportStateT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SupportStateT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SupportState> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SupportStateT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct SupportStateBuilder {
+  typedef SupportState Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_epoch(const orbpro::estimation::EstimationEpoch *epoch) {
+    fbb_.AddStruct(SupportState::VT_EPOCH, epoch);
+  }
+  void add_estimator(orbpro::estimation::EstimatorKind estimator) {
+    fbb_.AddElement<uint8_t>(SupportState::VT_ESTIMATOR, static_cast<uint8_t>(estimator), 0);
+  }
+  void add_dimension(uint8_t dimension) {
+    fbb_.AddElement<uint8_t>(SupportState::VT_DIMENSION, dimension, 6);
+  }
+  void add_points(::flatbuffers::Offset<::flatbuffers::Vector<double>> points) {
+    fbb_.AddOffset(SupportState::VT_POINTS, points);
+  }
+  void add_possibility(::flatbuffers::Offset<::flatbuffers::Vector<double>> possibility) {
+    fbb_.AddOffset(SupportState::VT_POSSIBILITY, possibility);
+  }
+  void add_estimate(::flatbuffers::Offset<::flatbuffers::Vector<double>> estimate) {
+    fbb_.AddOffset(SupportState::VT_ESTIMATE, estimate);
+  }
+  void add_shape(::flatbuffers::Offset<::flatbuffers::Vector<double>> shape) {
+    fbb_.AddOffset(SupportState::VT_SHAPE, shape);
+  }
+  void add_sigma(double sigma) {
+    fbb_.AddElement<double>(SupportState::VT_SIGMA, sigma, 1.0);
+  }
+  void add_radius(double radius) {
+    fbb_.AddElement<double>(SupportState::VT_RADIUS, radius, 3.0);
+  }
+  void add_dispersion(double dispersion) {
+    fbb_.AddElement<double>(SupportState::VT_DISPERSION, dispersion, 0.0);
+  }
+  void add_steps(uint32_t steps) {
+    fbb_.AddElement<uint32_t>(SupportState::VT_STEPS, steps, 0);
+  }
+  explicit SupportStateBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SupportState> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SupportState>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SupportState> CreateSupportState(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const orbpro::estimation::EstimationEpoch *epoch = nullptr,
+    orbpro::estimation::EstimatorKind estimator = orbpro::estimation::EstimatorKind::BATCH_WEIGHTED_LEAST_SQUARES,
+    uint8_t dimension = 6,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> points = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> possibility = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> estimate = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> shape = 0,
+    double sigma = 1.0,
+    double radius = 3.0,
+    double dispersion = 0.0,
+    uint32_t steps = 0) {
+  SupportStateBuilder builder_(_fbb);
+  builder_.add_dispersion(dispersion);
+  builder_.add_radius(radius);
+  builder_.add_sigma(sigma);
+  builder_.add_steps(steps);
+  builder_.add_shape(shape);
+  builder_.add_estimate(estimate);
+  builder_.add_possibility(possibility);
+  builder_.add_points(points);
+  builder_.add_epoch(epoch);
+  builder_.add_dimension(dimension);
+  builder_.add_estimator(estimator);
+  return builder_.Finish();
+}
+
+struct SupportState::Traits {
+  using type = SupportState;
+  static auto constexpr Create = CreateSupportState;
+};
+
+inline ::flatbuffers::Offset<SupportState> CreateSupportStateDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const orbpro::estimation::EstimationEpoch *epoch = nullptr,
+    orbpro::estimation::EstimatorKind estimator = orbpro::estimation::EstimatorKind::BATCH_WEIGHTED_LEAST_SQUARES,
+    uint8_t dimension = 6,
+    const std::vector<double> *points = nullptr,
+    const std::vector<double> *possibility = nullptr,
+    const std::vector<double> *estimate = nullptr,
+    const std::vector<double> *shape = nullptr,
+    double sigma = 1.0,
+    double radius = 3.0,
+    double dispersion = 0.0,
+    uint32_t steps = 0) {
+  auto points__ = points ? _fbb.CreateVector<double>(*points) : 0;
+  auto possibility__ = possibility ? _fbb.CreateVector<double>(*possibility) : 0;
+  auto estimate__ = estimate ? _fbb.CreateVector<double>(*estimate) : 0;
+  auto shape__ = shape ? _fbb.CreateVector<double>(*shape) : 0;
+  return orbpro::estimation::CreateSupportState(
+      _fbb,
+      epoch,
+      estimator,
+      dimension,
+      points__,
+      possibility__,
+      estimate__,
+      shape__,
+      sigma,
+      radius,
+      dispersion,
+      steps);
+}
+
+::flatbuffers::Offset<SupportState> CreateSupportState(::flatbuffers::FlatBufferBuilder &_fbb, const SupportStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct SupportEpochT : public ::flatbuffers::NativeTable {
+  typedef SupportEpoch TableType;
+  std::unique_ptr<orbpro::estimation::EstimationEpoch> epoch{};
+  std::vector<double> estimate{};
+  std::vector<double> shape{};
+  std::vector<double> carried_shape{};
+  std::vector<double> predicted_shape{};
+  uint32_t support_count = 0;
+  uint32_t survivor_count = 0;
+  int32_t medoid_index = -1;
+  double choquet_surprisal = 0.0;
+  double information = 0.0;
+  double normalization_shift = 0.0;
+  double minimum_whitened_innovation = 0.0;
+  double basin_radius = 0.0;
+  double basin_threshold = 0.0;
+  double pcrb_floor = 0.0;
+  double log_volume_change = 0.0;
+  double sigma = 0.0;
+  double radius = 0.0;
+  double dispersion = 0.0;
+  double mean_surprisal = 0.0;
+  double regime_log_det = 0.0;
+  double entropy = 0.0;
+  double entropy_alpha = 0.0;
+  bool inconsistent = false;
+  bool accepted = true;
+  std::vector<double> survivors{};
+  std::vector<double> survivor_possibility{};
+  SupportEpochT() = default;
+  SupportEpochT(const SupportEpochT &o);
+  SupportEpochT(SupportEpochT&&) FLATBUFFERS_NOEXCEPT = default;
+  SupportEpochT &operator=(SupportEpochT o) FLATBUFFERS_NOEXCEPT;
+};
+
+struct SupportEpoch FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SupportEpochT NativeTableType;
+  typedef SupportEpochBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_EPOCH = 4,
+    VT_ESTIMATE = 6,
+    VT_SHAPE = 8,
+    VT_CARRIED_SHAPE = 10,
+    VT_PREDICTED_SHAPE = 12,
+    VT_SUPPORT_COUNT = 14,
+    VT_SURVIVOR_COUNT = 16,
+    VT_MEDOID_INDEX = 18,
+    VT_CHOQUET_SURPRISAL = 20,
+    VT_INFORMATION = 22,
+    VT_NORMALIZATION_SHIFT = 24,
+    VT_MINIMUM_WHITENED_INNOVATION = 26,
+    VT_BASIN_RADIUS = 28,
+    VT_BASIN_THRESHOLD = 30,
+    VT_PCRB_FLOOR = 32,
+    VT_LOG_VOLUME_CHANGE = 34,
+    VT_SIGMA = 36,
+    VT_RADIUS = 38,
+    VT_DISPERSION = 40,
+    VT_MEAN_SURPRISAL = 42,
+    VT_REGIME_LOG_DET = 44,
+    VT_ENTROPY = 46,
+    VT_ENTROPY_ALPHA = 48,
+    VT_INCONSISTENT = 50,
+    VT_ACCEPTED = 52,
+    VT_SURVIVORS = 54,
+    VT_SURVIVOR_POSSIBILITY = 56
+  };
+  const orbpro::estimation::EstimationEpoch *epoch() const {
+    return GetStruct<const orbpro::estimation::EstimationEpoch *>(VT_EPOCH);
+  }
+  const ::flatbuffers::Vector<double> *estimate() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_ESTIMATE);
+  }
+  const ::flatbuffers::Vector<double> *shape() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SHAPE);
+  }
+  const ::flatbuffers::Vector<double> *carried_shape() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_CARRIED_SHAPE);
+  }
+  const ::flatbuffers::Vector<double> *predicted_shape() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_PREDICTED_SHAPE);
+  }
+  uint32_t support_count() const {
+    return GetField<uint32_t>(VT_SUPPORT_COUNT, 0);
+  }
+  uint32_t survivor_count() const {
+    return GetField<uint32_t>(VT_SURVIVOR_COUNT, 0);
+  }
+  int32_t medoid_index() const {
+    return GetField<int32_t>(VT_MEDOID_INDEX, -1);
+  }
+  double choquet_surprisal() const {
+    return GetField<double>(VT_CHOQUET_SURPRISAL, 0.0);
+  }
+  double information() const {
+    return GetField<double>(VT_INFORMATION, 0.0);
+  }
+  double normalization_shift() const {
+    return GetField<double>(VT_NORMALIZATION_SHIFT, 0.0);
+  }
+  double minimum_whitened_innovation() const {
+    return GetField<double>(VT_MINIMUM_WHITENED_INNOVATION, 0.0);
+  }
+  double basin_radius() const {
+    return GetField<double>(VT_BASIN_RADIUS, 0.0);
+  }
+  double basin_threshold() const {
+    return GetField<double>(VT_BASIN_THRESHOLD, 0.0);
+  }
+  double pcrb_floor() const {
+    return GetField<double>(VT_PCRB_FLOOR, 0.0);
+  }
+  double log_volume_change() const {
+    return GetField<double>(VT_LOG_VOLUME_CHANGE, 0.0);
+  }
+  double sigma() const {
+    return GetField<double>(VT_SIGMA, 0.0);
+  }
+  double radius() const {
+    return GetField<double>(VT_RADIUS, 0.0);
+  }
+  double dispersion() const {
+    return GetField<double>(VT_DISPERSION, 0.0);
+  }
+  double mean_surprisal() const {
+    return GetField<double>(VT_MEAN_SURPRISAL, 0.0);
+  }
+  double regime_log_det() const {
+    return GetField<double>(VT_REGIME_LOG_DET, 0.0);
+  }
+  double entropy() const {
+    return GetField<double>(VT_ENTROPY, 0.0);
+  }
+  double entropy_alpha() const {
+    return GetField<double>(VT_ENTROPY_ALPHA, 0.0);
+  }
+  bool inconsistent() const {
+    return GetField<uint8_t>(VT_INCONSISTENT, 0) != 0;
+  }
+  bool accepted() const {
+    return GetField<uint8_t>(VT_ACCEPTED, 1) != 0;
+  }
+  const ::flatbuffers::Vector<double> *survivors() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SURVIVORS);
+  }
+  const ::flatbuffers::Vector<double> *survivor_possibility() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SURVIVOR_POSSIBILITY);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<orbpro::estimation::EstimationEpoch>(verifier, VT_EPOCH, 8) &&
+           VerifyOffset(verifier, VT_ESTIMATE) &&
+           verifier.VerifyVector(estimate()) &&
+           VerifyOffset(verifier, VT_SHAPE) &&
+           verifier.VerifyVector(shape()) &&
+           VerifyOffset(verifier, VT_CARRIED_SHAPE) &&
+           verifier.VerifyVector(carried_shape()) &&
+           VerifyOffset(verifier, VT_PREDICTED_SHAPE) &&
+           verifier.VerifyVector(predicted_shape()) &&
+           VerifyField<uint32_t>(verifier, VT_SUPPORT_COUNT, 4) &&
+           VerifyField<uint32_t>(verifier, VT_SURVIVOR_COUNT, 4) &&
+           VerifyField<int32_t>(verifier, VT_MEDOID_INDEX, 4) &&
+           VerifyField<double>(verifier, VT_CHOQUET_SURPRISAL, 8) &&
+           VerifyField<double>(verifier, VT_INFORMATION, 8) &&
+           VerifyField<double>(verifier, VT_NORMALIZATION_SHIFT, 8) &&
+           VerifyField<double>(verifier, VT_MINIMUM_WHITENED_INNOVATION, 8) &&
+           VerifyField<double>(verifier, VT_BASIN_RADIUS, 8) &&
+           VerifyField<double>(verifier, VT_BASIN_THRESHOLD, 8) &&
+           VerifyField<double>(verifier, VT_PCRB_FLOOR, 8) &&
+           VerifyField<double>(verifier, VT_LOG_VOLUME_CHANGE, 8) &&
+           VerifyField<double>(verifier, VT_SIGMA, 8) &&
+           VerifyField<double>(verifier, VT_RADIUS, 8) &&
+           VerifyField<double>(verifier, VT_DISPERSION, 8) &&
+           VerifyField<double>(verifier, VT_MEAN_SURPRISAL, 8) &&
+           VerifyField<double>(verifier, VT_REGIME_LOG_DET, 8) &&
+           VerifyField<double>(verifier, VT_ENTROPY, 8) &&
+           VerifyField<double>(verifier, VT_ENTROPY_ALPHA, 8) &&
+           VerifyField<uint8_t>(verifier, VT_INCONSISTENT, 1) &&
+           VerifyField<uint8_t>(verifier, VT_ACCEPTED, 1) &&
+           VerifyOffset(verifier, VT_SURVIVORS) &&
+           verifier.VerifyVector(survivors()) &&
+           VerifyOffset(verifier, VT_SURVIVOR_POSSIBILITY) &&
+           verifier.VerifyVector(survivor_possibility()) &&
+           verifier.EndTable();
+  }
+  SupportEpochT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SupportEpochT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SupportEpoch> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SupportEpochT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct SupportEpochBuilder {
+  typedef SupportEpoch Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_epoch(const orbpro::estimation::EstimationEpoch *epoch) {
+    fbb_.AddStruct(SupportEpoch::VT_EPOCH, epoch);
+  }
+  void add_estimate(::flatbuffers::Offset<::flatbuffers::Vector<double>> estimate) {
+    fbb_.AddOffset(SupportEpoch::VT_ESTIMATE, estimate);
+  }
+  void add_shape(::flatbuffers::Offset<::flatbuffers::Vector<double>> shape) {
+    fbb_.AddOffset(SupportEpoch::VT_SHAPE, shape);
+  }
+  void add_carried_shape(::flatbuffers::Offset<::flatbuffers::Vector<double>> carried_shape) {
+    fbb_.AddOffset(SupportEpoch::VT_CARRIED_SHAPE, carried_shape);
+  }
+  void add_predicted_shape(::flatbuffers::Offset<::flatbuffers::Vector<double>> predicted_shape) {
+    fbb_.AddOffset(SupportEpoch::VT_PREDICTED_SHAPE, predicted_shape);
+  }
+  void add_support_count(uint32_t support_count) {
+    fbb_.AddElement<uint32_t>(SupportEpoch::VT_SUPPORT_COUNT, support_count, 0);
+  }
+  void add_survivor_count(uint32_t survivor_count) {
+    fbb_.AddElement<uint32_t>(SupportEpoch::VT_SURVIVOR_COUNT, survivor_count, 0);
+  }
+  void add_medoid_index(int32_t medoid_index) {
+    fbb_.AddElement<int32_t>(SupportEpoch::VT_MEDOID_INDEX, medoid_index, -1);
+  }
+  void add_choquet_surprisal(double choquet_surprisal) {
+    fbb_.AddElement<double>(SupportEpoch::VT_CHOQUET_SURPRISAL, choquet_surprisal, 0.0);
+  }
+  void add_information(double information) {
+    fbb_.AddElement<double>(SupportEpoch::VT_INFORMATION, information, 0.0);
+  }
+  void add_normalization_shift(double normalization_shift) {
+    fbb_.AddElement<double>(SupportEpoch::VT_NORMALIZATION_SHIFT, normalization_shift, 0.0);
+  }
+  void add_minimum_whitened_innovation(double minimum_whitened_innovation) {
+    fbb_.AddElement<double>(SupportEpoch::VT_MINIMUM_WHITENED_INNOVATION, minimum_whitened_innovation, 0.0);
+  }
+  void add_basin_radius(double basin_radius) {
+    fbb_.AddElement<double>(SupportEpoch::VT_BASIN_RADIUS, basin_radius, 0.0);
+  }
+  void add_basin_threshold(double basin_threshold) {
+    fbb_.AddElement<double>(SupportEpoch::VT_BASIN_THRESHOLD, basin_threshold, 0.0);
+  }
+  void add_pcrb_floor(double pcrb_floor) {
+    fbb_.AddElement<double>(SupportEpoch::VT_PCRB_FLOOR, pcrb_floor, 0.0);
+  }
+  void add_log_volume_change(double log_volume_change) {
+    fbb_.AddElement<double>(SupportEpoch::VT_LOG_VOLUME_CHANGE, log_volume_change, 0.0);
+  }
+  void add_sigma(double sigma) {
+    fbb_.AddElement<double>(SupportEpoch::VT_SIGMA, sigma, 0.0);
+  }
+  void add_radius(double radius) {
+    fbb_.AddElement<double>(SupportEpoch::VT_RADIUS, radius, 0.0);
+  }
+  void add_dispersion(double dispersion) {
+    fbb_.AddElement<double>(SupportEpoch::VT_DISPERSION, dispersion, 0.0);
+  }
+  void add_mean_surprisal(double mean_surprisal) {
+    fbb_.AddElement<double>(SupportEpoch::VT_MEAN_SURPRISAL, mean_surprisal, 0.0);
+  }
+  void add_regime_log_det(double regime_log_det) {
+    fbb_.AddElement<double>(SupportEpoch::VT_REGIME_LOG_DET, regime_log_det, 0.0);
+  }
+  void add_entropy(double entropy) {
+    fbb_.AddElement<double>(SupportEpoch::VT_ENTROPY, entropy, 0.0);
+  }
+  void add_entropy_alpha(double entropy_alpha) {
+    fbb_.AddElement<double>(SupportEpoch::VT_ENTROPY_ALPHA, entropy_alpha, 0.0);
+  }
+  void add_inconsistent(bool inconsistent) {
+    fbb_.AddElement<uint8_t>(SupportEpoch::VT_INCONSISTENT, static_cast<uint8_t>(inconsistent), 0);
+  }
+  void add_accepted(bool accepted) {
+    fbb_.AddElement<uint8_t>(SupportEpoch::VT_ACCEPTED, static_cast<uint8_t>(accepted), 1);
+  }
+  void add_survivors(::flatbuffers::Offset<::flatbuffers::Vector<double>> survivors) {
+    fbb_.AddOffset(SupportEpoch::VT_SURVIVORS, survivors);
+  }
+  void add_survivor_possibility(::flatbuffers::Offset<::flatbuffers::Vector<double>> survivor_possibility) {
+    fbb_.AddOffset(SupportEpoch::VT_SURVIVOR_POSSIBILITY, survivor_possibility);
+  }
+  explicit SupportEpochBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SupportEpoch> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SupportEpoch>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SupportEpoch> CreateSupportEpoch(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const orbpro::estimation::EstimationEpoch *epoch = nullptr,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> estimate = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> shape = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> carried_shape = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> predicted_shape = 0,
+    uint32_t support_count = 0,
+    uint32_t survivor_count = 0,
+    int32_t medoid_index = -1,
+    double choquet_surprisal = 0.0,
+    double information = 0.0,
+    double normalization_shift = 0.0,
+    double minimum_whitened_innovation = 0.0,
+    double basin_radius = 0.0,
+    double basin_threshold = 0.0,
+    double pcrb_floor = 0.0,
+    double log_volume_change = 0.0,
+    double sigma = 0.0,
+    double radius = 0.0,
+    double dispersion = 0.0,
+    double mean_surprisal = 0.0,
+    double regime_log_det = 0.0,
+    double entropy = 0.0,
+    double entropy_alpha = 0.0,
+    bool inconsistent = false,
+    bool accepted = true,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> survivors = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> survivor_possibility = 0) {
+  SupportEpochBuilder builder_(_fbb);
+  builder_.add_entropy_alpha(entropy_alpha);
+  builder_.add_entropy(entropy);
+  builder_.add_regime_log_det(regime_log_det);
+  builder_.add_mean_surprisal(mean_surprisal);
+  builder_.add_dispersion(dispersion);
+  builder_.add_radius(radius);
+  builder_.add_sigma(sigma);
+  builder_.add_log_volume_change(log_volume_change);
+  builder_.add_pcrb_floor(pcrb_floor);
+  builder_.add_basin_threshold(basin_threshold);
+  builder_.add_basin_radius(basin_radius);
+  builder_.add_minimum_whitened_innovation(minimum_whitened_innovation);
+  builder_.add_normalization_shift(normalization_shift);
+  builder_.add_information(information);
+  builder_.add_choquet_surprisal(choquet_surprisal);
+  builder_.add_survivor_possibility(survivor_possibility);
+  builder_.add_survivors(survivors);
+  builder_.add_medoid_index(medoid_index);
+  builder_.add_survivor_count(survivor_count);
+  builder_.add_support_count(support_count);
+  builder_.add_predicted_shape(predicted_shape);
+  builder_.add_carried_shape(carried_shape);
+  builder_.add_shape(shape);
+  builder_.add_estimate(estimate);
+  builder_.add_epoch(epoch);
+  builder_.add_accepted(accepted);
+  builder_.add_inconsistent(inconsistent);
+  return builder_.Finish();
+}
+
+struct SupportEpoch::Traits {
+  using type = SupportEpoch;
+  static auto constexpr Create = CreateSupportEpoch;
+};
+
+inline ::flatbuffers::Offset<SupportEpoch> CreateSupportEpochDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const orbpro::estimation::EstimationEpoch *epoch = nullptr,
+    const std::vector<double> *estimate = nullptr,
+    const std::vector<double> *shape = nullptr,
+    const std::vector<double> *carried_shape = nullptr,
+    const std::vector<double> *predicted_shape = nullptr,
+    uint32_t support_count = 0,
+    uint32_t survivor_count = 0,
+    int32_t medoid_index = -1,
+    double choquet_surprisal = 0.0,
+    double information = 0.0,
+    double normalization_shift = 0.0,
+    double minimum_whitened_innovation = 0.0,
+    double basin_radius = 0.0,
+    double basin_threshold = 0.0,
+    double pcrb_floor = 0.0,
+    double log_volume_change = 0.0,
+    double sigma = 0.0,
+    double radius = 0.0,
+    double dispersion = 0.0,
+    double mean_surprisal = 0.0,
+    double regime_log_det = 0.0,
+    double entropy = 0.0,
+    double entropy_alpha = 0.0,
+    bool inconsistent = false,
+    bool accepted = true,
+    const std::vector<double> *survivors = nullptr,
+    const std::vector<double> *survivor_possibility = nullptr) {
+  auto estimate__ = estimate ? _fbb.CreateVector<double>(*estimate) : 0;
+  auto shape__ = shape ? _fbb.CreateVector<double>(*shape) : 0;
+  auto carried_shape__ = carried_shape ? _fbb.CreateVector<double>(*carried_shape) : 0;
+  auto predicted_shape__ = predicted_shape ? _fbb.CreateVector<double>(*predicted_shape) : 0;
+  auto survivors__ = survivors ? _fbb.CreateVector<double>(*survivors) : 0;
+  auto survivor_possibility__ = survivor_possibility ? _fbb.CreateVector<double>(*survivor_possibility) : 0;
+  return orbpro::estimation::CreateSupportEpoch(
+      _fbb,
+      epoch,
+      estimate__,
+      shape__,
+      carried_shape__,
+      predicted_shape__,
+      support_count,
+      survivor_count,
+      medoid_index,
+      choquet_surprisal,
+      information,
+      normalization_shift,
+      minimum_whitened_innovation,
+      basin_radius,
+      basin_threshold,
+      pcrb_floor,
+      log_volume_change,
+      sigma,
+      radius,
+      dispersion,
+      mean_surprisal,
+      regime_log_det,
+      entropy,
+      entropy_alpha,
+      inconsistent,
+      accepted,
+      survivors__,
+      survivor_possibility__);
+}
+
+::flatbuffers::Offset<SupportEpoch> CreateSupportEpoch(::flatbuffers::FlatBufferBuilder &_fbb, const SupportEpochT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct TeagRequestT : public ::flatbuffers::NativeTable {
+  typedef TeagRequest TableType;
+  uint8_t dimension = 0;
+  std::vector<double> points{};
+  std::vector<double> prior_impossibility{};
+  std::vector<double> surprisal{};
+  std::vector<double> whitened_squared_innovation{};
+  std::vector<uint8_t> events{};
+  uint32_t event_count = 0;
+  std::vector<double> alpha_levels{};
+  double front_tolerance = 0.0;
+  std::vector<uint32_t> subset{};
+  std::vector<double> metric_shape{};
+  uint32_t effective_dimension = 0;
+  double prior_radius = 1.0;
+  uint8_t smolyak_dimension = 0;
+  uint8_t smolyak_level = 0;
+  std::vector<double> shape_a{};
+  std::vector<double> shape_b{};
+  double mvee_tolerance = 1e-9;
+  uint32_t mvee_max_iterations = 100000;
+  bool entropy = false;
+  uint32_t minimum_count = 0;
+  bool mvee = false;
+};
+
+struct TeagRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef TeagRequestT NativeTableType;
+  typedef TeagRequestBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_DIMENSION = 4,
+    VT_POINTS = 6,
+    VT_PRIOR_IMPOSSIBILITY = 8,
+    VT_SURPRISAL = 10,
+    VT_WHITENED_SQUARED_INNOVATION = 12,
+    VT_EVENTS = 14,
+    VT_EVENT_COUNT = 16,
+    VT_ALPHA_LEVELS = 18,
+    VT_FRONT_TOLERANCE = 20,
+    VT_SUBSET = 22,
+    VT_METRIC_SHAPE = 24,
+    VT_EFFECTIVE_DIMENSION = 26,
+    VT_PRIOR_RADIUS = 28,
+    VT_SMOLYAK_DIMENSION = 30,
+    VT_SMOLYAK_LEVEL = 32,
+    VT_SHAPE_A = 34,
+    VT_SHAPE_B = 36,
+    VT_MVEE_TOLERANCE = 38,
+    VT_MVEE_MAX_ITERATIONS = 40,
+    VT_ENTROPY = 42,
+    VT_MINIMUM_COUNT = 44,
+    VT_MVEE = 46
+  };
+  uint8_t dimension() const {
+    return GetField<uint8_t>(VT_DIMENSION, 0);
+  }
+  const ::flatbuffers::Vector<double> *points() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_POINTS);
+  }
+  const ::flatbuffers::Vector<double> *prior_impossibility() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_PRIOR_IMPOSSIBILITY);
+  }
+  const ::flatbuffers::Vector<double> *surprisal() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SURPRISAL);
+  }
+  const ::flatbuffers::Vector<double> *whitened_squared_innovation() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_WHITENED_SQUARED_INNOVATION);
+  }
+  const ::flatbuffers::Vector<uint8_t> *events() const {
+    return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_EVENTS);
+  }
+  uint32_t event_count() const {
+    return GetField<uint32_t>(VT_EVENT_COUNT, 0);
+  }
+  const ::flatbuffers::Vector<double> *alpha_levels() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_ALPHA_LEVELS);
+  }
+  double front_tolerance() const {
+    return GetField<double>(VT_FRONT_TOLERANCE, 0.0);
+  }
+  const ::flatbuffers::Vector<uint32_t> *subset() const {
+    return GetPointer<const ::flatbuffers::Vector<uint32_t> *>(VT_SUBSET);
+  }
+  const ::flatbuffers::Vector<double> *metric_shape() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_METRIC_SHAPE);
+  }
+  uint32_t effective_dimension() const {
+    return GetField<uint32_t>(VT_EFFECTIVE_DIMENSION, 0);
+  }
+  double prior_radius() const {
+    return GetField<double>(VT_PRIOR_RADIUS, 1.0);
+  }
+  uint8_t smolyak_dimension() const {
+    return GetField<uint8_t>(VT_SMOLYAK_DIMENSION, 0);
+  }
+  uint8_t smolyak_level() const {
+    return GetField<uint8_t>(VT_SMOLYAK_LEVEL, 0);
+  }
+  const ::flatbuffers::Vector<double> *shape_a() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SHAPE_A);
+  }
+  const ::flatbuffers::Vector<double> *shape_b() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SHAPE_B);
+  }
+  double mvee_tolerance() const {
+    return GetField<double>(VT_MVEE_TOLERANCE, 1e-9);
+  }
+  uint32_t mvee_max_iterations() const {
+    return GetField<uint32_t>(VT_MVEE_MAX_ITERATIONS, 100000);
+  }
+  bool entropy() const {
+    return GetField<uint8_t>(VT_ENTROPY, 0) != 0;
+  }
+  uint32_t minimum_count() const {
+    return GetField<uint32_t>(VT_MINIMUM_COUNT, 0);
+  }
+  bool mvee() const {
+    return GetField<uint8_t>(VT_MVEE, 0) != 0;
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_DIMENSION, 1) &&
+           VerifyOffset(verifier, VT_POINTS) &&
+           verifier.VerifyVector(points()) &&
+           VerifyOffset(verifier, VT_PRIOR_IMPOSSIBILITY) &&
+           verifier.VerifyVector(prior_impossibility()) &&
+           VerifyOffset(verifier, VT_SURPRISAL) &&
+           verifier.VerifyVector(surprisal()) &&
+           VerifyOffset(verifier, VT_WHITENED_SQUARED_INNOVATION) &&
+           verifier.VerifyVector(whitened_squared_innovation()) &&
+           VerifyOffset(verifier, VT_EVENTS) &&
+           verifier.VerifyVector(events()) &&
+           VerifyField<uint32_t>(verifier, VT_EVENT_COUNT, 4) &&
+           VerifyOffset(verifier, VT_ALPHA_LEVELS) &&
+           verifier.VerifyVector(alpha_levels()) &&
+           VerifyField<double>(verifier, VT_FRONT_TOLERANCE, 8) &&
+           VerifyOffset(verifier, VT_SUBSET) &&
+           verifier.VerifyVector(subset()) &&
+           VerifyOffset(verifier, VT_METRIC_SHAPE) &&
+           verifier.VerifyVector(metric_shape()) &&
+           VerifyField<uint32_t>(verifier, VT_EFFECTIVE_DIMENSION, 4) &&
+           VerifyField<double>(verifier, VT_PRIOR_RADIUS, 8) &&
+           VerifyField<uint8_t>(verifier, VT_SMOLYAK_DIMENSION, 1) &&
+           VerifyField<uint8_t>(verifier, VT_SMOLYAK_LEVEL, 1) &&
+           VerifyOffset(verifier, VT_SHAPE_A) &&
+           verifier.VerifyVector(shape_a()) &&
+           VerifyOffset(verifier, VT_SHAPE_B) &&
+           verifier.VerifyVector(shape_b()) &&
+           VerifyField<double>(verifier, VT_MVEE_TOLERANCE, 8) &&
+           VerifyField<uint32_t>(verifier, VT_MVEE_MAX_ITERATIONS, 4) &&
+           VerifyField<uint8_t>(verifier, VT_ENTROPY, 1) &&
+           VerifyField<uint32_t>(verifier, VT_MINIMUM_COUNT, 4) &&
+           VerifyField<uint8_t>(verifier, VT_MVEE, 1) &&
+           verifier.EndTable();
+  }
+  TeagRequestT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(TeagRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<TeagRequest> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const TeagRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct TeagRequestBuilder {
+  typedef TeagRequest Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_dimension(uint8_t dimension) {
+    fbb_.AddElement<uint8_t>(TeagRequest::VT_DIMENSION, dimension, 0);
+  }
+  void add_points(::flatbuffers::Offset<::flatbuffers::Vector<double>> points) {
+    fbb_.AddOffset(TeagRequest::VT_POINTS, points);
+  }
+  void add_prior_impossibility(::flatbuffers::Offset<::flatbuffers::Vector<double>> prior_impossibility) {
+    fbb_.AddOffset(TeagRequest::VT_PRIOR_IMPOSSIBILITY, prior_impossibility);
+  }
+  void add_surprisal(::flatbuffers::Offset<::flatbuffers::Vector<double>> surprisal) {
+    fbb_.AddOffset(TeagRequest::VT_SURPRISAL, surprisal);
+  }
+  void add_whitened_squared_innovation(::flatbuffers::Offset<::flatbuffers::Vector<double>> whitened_squared_innovation) {
+    fbb_.AddOffset(TeagRequest::VT_WHITENED_SQUARED_INNOVATION, whitened_squared_innovation);
+  }
+  void add_events(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> events) {
+    fbb_.AddOffset(TeagRequest::VT_EVENTS, events);
+  }
+  void add_event_count(uint32_t event_count) {
+    fbb_.AddElement<uint32_t>(TeagRequest::VT_EVENT_COUNT, event_count, 0);
+  }
+  void add_alpha_levels(::flatbuffers::Offset<::flatbuffers::Vector<double>> alpha_levels) {
+    fbb_.AddOffset(TeagRequest::VT_ALPHA_LEVELS, alpha_levels);
+  }
+  void add_front_tolerance(double front_tolerance) {
+    fbb_.AddElement<double>(TeagRequest::VT_FRONT_TOLERANCE, front_tolerance, 0.0);
+  }
+  void add_subset(::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> subset) {
+    fbb_.AddOffset(TeagRequest::VT_SUBSET, subset);
+  }
+  void add_metric_shape(::flatbuffers::Offset<::flatbuffers::Vector<double>> metric_shape) {
+    fbb_.AddOffset(TeagRequest::VT_METRIC_SHAPE, metric_shape);
+  }
+  void add_effective_dimension(uint32_t effective_dimension) {
+    fbb_.AddElement<uint32_t>(TeagRequest::VT_EFFECTIVE_DIMENSION, effective_dimension, 0);
+  }
+  void add_prior_radius(double prior_radius) {
+    fbb_.AddElement<double>(TeagRequest::VT_PRIOR_RADIUS, prior_radius, 1.0);
+  }
+  void add_smolyak_dimension(uint8_t smolyak_dimension) {
+    fbb_.AddElement<uint8_t>(TeagRequest::VT_SMOLYAK_DIMENSION, smolyak_dimension, 0);
+  }
+  void add_smolyak_level(uint8_t smolyak_level) {
+    fbb_.AddElement<uint8_t>(TeagRequest::VT_SMOLYAK_LEVEL, smolyak_level, 0);
+  }
+  void add_shape_a(::flatbuffers::Offset<::flatbuffers::Vector<double>> shape_a) {
+    fbb_.AddOffset(TeagRequest::VT_SHAPE_A, shape_a);
+  }
+  void add_shape_b(::flatbuffers::Offset<::flatbuffers::Vector<double>> shape_b) {
+    fbb_.AddOffset(TeagRequest::VT_SHAPE_B, shape_b);
+  }
+  void add_mvee_tolerance(double mvee_tolerance) {
+    fbb_.AddElement<double>(TeagRequest::VT_MVEE_TOLERANCE, mvee_tolerance, 1e-9);
+  }
+  void add_mvee_max_iterations(uint32_t mvee_max_iterations) {
+    fbb_.AddElement<uint32_t>(TeagRequest::VT_MVEE_MAX_ITERATIONS, mvee_max_iterations, 100000);
+  }
+  void add_entropy(bool entropy) {
+    fbb_.AddElement<uint8_t>(TeagRequest::VT_ENTROPY, static_cast<uint8_t>(entropy), 0);
+  }
+  void add_minimum_count(uint32_t minimum_count) {
+    fbb_.AddElement<uint32_t>(TeagRequest::VT_MINIMUM_COUNT, minimum_count, 0);
+  }
+  void add_mvee(bool mvee) {
+    fbb_.AddElement<uint8_t>(TeagRequest::VT_MVEE, static_cast<uint8_t>(mvee), 0);
+  }
+  explicit TeagRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<TeagRequest> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<TeagRequest>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<TeagRequest> CreateTeagRequest(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint8_t dimension = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> points = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> prior_impossibility = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> surprisal = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> whitened_squared_innovation = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> events = 0,
+    uint32_t event_count = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> alpha_levels = 0,
+    double front_tolerance = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> subset = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> metric_shape = 0,
+    uint32_t effective_dimension = 0,
+    double prior_radius = 1.0,
+    uint8_t smolyak_dimension = 0,
+    uint8_t smolyak_level = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> shape_a = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> shape_b = 0,
+    double mvee_tolerance = 1e-9,
+    uint32_t mvee_max_iterations = 100000,
+    bool entropy = false,
+    uint32_t minimum_count = 0,
+    bool mvee = false) {
+  TeagRequestBuilder builder_(_fbb);
+  builder_.add_mvee_tolerance(mvee_tolerance);
+  builder_.add_prior_radius(prior_radius);
+  builder_.add_front_tolerance(front_tolerance);
+  builder_.add_minimum_count(minimum_count);
+  builder_.add_mvee_max_iterations(mvee_max_iterations);
+  builder_.add_shape_b(shape_b);
+  builder_.add_shape_a(shape_a);
+  builder_.add_effective_dimension(effective_dimension);
+  builder_.add_metric_shape(metric_shape);
+  builder_.add_subset(subset);
+  builder_.add_alpha_levels(alpha_levels);
+  builder_.add_event_count(event_count);
+  builder_.add_events(events);
+  builder_.add_whitened_squared_innovation(whitened_squared_innovation);
+  builder_.add_surprisal(surprisal);
+  builder_.add_prior_impossibility(prior_impossibility);
+  builder_.add_points(points);
+  builder_.add_mvee(mvee);
+  builder_.add_entropy(entropy);
+  builder_.add_smolyak_level(smolyak_level);
+  builder_.add_smolyak_dimension(smolyak_dimension);
+  builder_.add_dimension(dimension);
+  return builder_.Finish();
+}
+
+struct TeagRequest::Traits {
+  using type = TeagRequest;
+  static auto constexpr Create = CreateTeagRequest;
+};
+
+inline ::flatbuffers::Offset<TeagRequest> CreateTeagRequestDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint8_t dimension = 0,
+    const std::vector<double> *points = nullptr,
+    const std::vector<double> *prior_impossibility = nullptr,
+    const std::vector<double> *surprisal = nullptr,
+    const std::vector<double> *whitened_squared_innovation = nullptr,
+    const std::vector<uint8_t> *events = nullptr,
+    uint32_t event_count = 0,
+    const std::vector<double> *alpha_levels = nullptr,
+    double front_tolerance = 0.0,
+    const std::vector<uint32_t> *subset = nullptr,
+    const std::vector<double> *metric_shape = nullptr,
+    uint32_t effective_dimension = 0,
+    double prior_radius = 1.0,
+    uint8_t smolyak_dimension = 0,
+    uint8_t smolyak_level = 0,
+    const std::vector<double> *shape_a = nullptr,
+    const std::vector<double> *shape_b = nullptr,
+    double mvee_tolerance = 1e-9,
+    uint32_t mvee_max_iterations = 100000,
+    bool entropy = false,
+    uint32_t minimum_count = 0,
+    bool mvee = false) {
+  auto points__ = points ? _fbb.CreateVector<double>(*points) : 0;
+  auto prior_impossibility__ = prior_impossibility ? _fbb.CreateVector<double>(*prior_impossibility) : 0;
+  auto surprisal__ = surprisal ? _fbb.CreateVector<double>(*surprisal) : 0;
+  auto whitened_squared_innovation__ = whitened_squared_innovation ? _fbb.CreateVector<double>(*whitened_squared_innovation) : 0;
+  auto events__ = events ? _fbb.CreateVector<uint8_t>(*events) : 0;
+  auto alpha_levels__ = alpha_levels ? _fbb.CreateVector<double>(*alpha_levels) : 0;
+  auto subset__ = subset ? _fbb.CreateVector<uint32_t>(*subset) : 0;
+  auto metric_shape__ = metric_shape ? _fbb.CreateVector<double>(*metric_shape) : 0;
+  auto shape_a__ = shape_a ? _fbb.CreateVector<double>(*shape_a) : 0;
+  auto shape_b__ = shape_b ? _fbb.CreateVector<double>(*shape_b) : 0;
+  return orbpro::estimation::CreateTeagRequest(
+      _fbb,
+      dimension,
+      points__,
+      prior_impossibility__,
+      surprisal__,
+      whitened_squared_innovation__,
+      events__,
+      event_count,
+      alpha_levels__,
+      front_tolerance,
+      subset__,
+      metric_shape__,
+      effective_dimension,
+      prior_radius,
+      smolyak_dimension,
+      smolyak_level,
+      shape_a__,
+      shape_b__,
+      mvee_tolerance,
+      mvee_max_iterations,
+      entropy,
+      minimum_count,
+      mvee);
+}
+
+::flatbuffers::Offset<TeagRequest> CreateTeagRequest(::flatbuffers::FlatBufferBuilder &_fbb, const TeagRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct TeagResultT : public ::flatbuffers::NativeTable {
+  typedef TeagResult TableType;
+  std::vector<double> posterior_impossibility{};
+  std::vector<double> rescaled_impossibility{};
+  double normalization_shift = 0.0;
+  std::vector<int8_t> zones{};
+  std::vector<uint32_t> alpha_cuts{};
+  std::vector<uint32_t> alpha_cut_offsets{};
+  std::vector<double> event_possibility{};
+  std::vector<double> event_necessity{};
+  double choquet_surprisal = 0.0;
+  double information = 0.0;
+  double basin_radius = 0.0;
+  double basin_threshold = 0.0;
+  uint32_t basin_unit_survivors = 0;
+  double pcrb_floor = 0.0;
+  std::vector<double> mvee_center{};
+  std::vector<double> mvee_shape{};
+  uint32_t mvee_iterations = 0;
+  double mvee_gap = 0.0;
+  double mvee_log_volume = 0.0;
+  int32_t medoid = -1;
+  double medoid_radius = 0.0;
+  std::vector<double> smolyak_points{};
+  std::vector<double> minkowski_shape{};
+  double entropy = 0.0;
+  double support_entropy = 0.0;
+  double entropy_alpha = 0.0;
+};
+
+struct TeagResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef TeagResultT NativeTableType;
+  typedef TeagResultBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_POSTERIOR_IMPOSSIBILITY = 4,
+    VT_RESCALED_IMPOSSIBILITY = 6,
+    VT_NORMALIZATION_SHIFT = 8,
+    VT_ZONES = 10,
+    VT_ALPHA_CUTS = 12,
+    VT_ALPHA_CUT_OFFSETS = 14,
+    VT_EVENT_POSSIBILITY = 16,
+    VT_EVENT_NECESSITY = 18,
+    VT_CHOQUET_SURPRISAL = 20,
+    VT_INFORMATION = 22,
+    VT_BASIN_RADIUS = 24,
+    VT_BASIN_THRESHOLD = 26,
+    VT_BASIN_UNIT_SURVIVORS = 28,
+    VT_PCRB_FLOOR = 30,
+    VT_MVEE_CENTER = 32,
+    VT_MVEE_SHAPE = 34,
+    VT_MVEE_ITERATIONS = 36,
+    VT_MVEE_GAP = 38,
+    VT_MVEE_LOG_VOLUME = 40,
+    VT_MEDOID = 42,
+    VT_MEDOID_RADIUS = 44,
+    VT_SMOLYAK_POINTS = 46,
+    VT_MINKOWSKI_SHAPE = 48,
+    VT_ENTROPY = 50,
+    VT_SUPPORT_ENTROPY = 52,
+    VT_ENTROPY_ALPHA = 54
+  };
+  const ::flatbuffers::Vector<double> *posterior_impossibility() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_POSTERIOR_IMPOSSIBILITY);
+  }
+  const ::flatbuffers::Vector<double> *rescaled_impossibility() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_RESCALED_IMPOSSIBILITY);
+  }
+  double normalization_shift() const {
+    return GetField<double>(VT_NORMALIZATION_SHIFT, 0.0);
+  }
+  const ::flatbuffers::Vector<int8_t> *zones() const {
+    return GetPointer<const ::flatbuffers::Vector<int8_t> *>(VT_ZONES);
+  }
+  const ::flatbuffers::Vector<uint32_t> *alpha_cuts() const {
+    return GetPointer<const ::flatbuffers::Vector<uint32_t> *>(VT_ALPHA_CUTS);
+  }
+  const ::flatbuffers::Vector<uint32_t> *alpha_cut_offsets() const {
+    return GetPointer<const ::flatbuffers::Vector<uint32_t> *>(VT_ALPHA_CUT_OFFSETS);
+  }
+  const ::flatbuffers::Vector<double> *event_possibility() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_EVENT_POSSIBILITY);
+  }
+  const ::flatbuffers::Vector<double> *event_necessity() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_EVENT_NECESSITY);
+  }
+  double choquet_surprisal() const {
+    return GetField<double>(VT_CHOQUET_SURPRISAL, 0.0);
+  }
+  double information() const {
+    return GetField<double>(VT_INFORMATION, 0.0);
+  }
+  double basin_radius() const {
+    return GetField<double>(VT_BASIN_RADIUS, 0.0);
+  }
+  double basin_threshold() const {
+    return GetField<double>(VT_BASIN_THRESHOLD, 0.0);
+  }
+  uint32_t basin_unit_survivors() const {
+    return GetField<uint32_t>(VT_BASIN_UNIT_SURVIVORS, 0);
+  }
+  double pcrb_floor() const {
+    return GetField<double>(VT_PCRB_FLOOR, 0.0);
+  }
+  const ::flatbuffers::Vector<double> *mvee_center() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_MVEE_CENTER);
+  }
+  const ::flatbuffers::Vector<double> *mvee_shape() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_MVEE_SHAPE);
+  }
+  uint32_t mvee_iterations() const {
+    return GetField<uint32_t>(VT_MVEE_ITERATIONS, 0);
+  }
+  double mvee_gap() const {
+    return GetField<double>(VT_MVEE_GAP, 0.0);
+  }
+  double mvee_log_volume() const {
+    return GetField<double>(VT_MVEE_LOG_VOLUME, 0.0);
+  }
+  int32_t medoid() const {
+    return GetField<int32_t>(VT_MEDOID, -1);
+  }
+  double medoid_radius() const {
+    return GetField<double>(VT_MEDOID_RADIUS, 0.0);
+  }
+  const ::flatbuffers::Vector<double> *smolyak_points() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SMOLYAK_POINTS);
+  }
+  const ::flatbuffers::Vector<double> *minkowski_shape() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_MINKOWSKI_SHAPE);
+  }
+  double entropy() const {
+    return GetField<double>(VT_ENTROPY, 0.0);
+  }
+  double support_entropy() const {
+    return GetField<double>(VT_SUPPORT_ENTROPY, 0.0);
+  }
+  double entropy_alpha() const {
+    return GetField<double>(VT_ENTROPY_ALPHA, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_POSTERIOR_IMPOSSIBILITY) &&
+           verifier.VerifyVector(posterior_impossibility()) &&
+           VerifyOffset(verifier, VT_RESCALED_IMPOSSIBILITY) &&
+           verifier.VerifyVector(rescaled_impossibility()) &&
+           VerifyField<double>(verifier, VT_NORMALIZATION_SHIFT, 8) &&
+           VerifyOffset(verifier, VT_ZONES) &&
+           verifier.VerifyVector(zones()) &&
+           VerifyOffset(verifier, VT_ALPHA_CUTS) &&
+           verifier.VerifyVector(alpha_cuts()) &&
+           VerifyOffset(verifier, VT_ALPHA_CUT_OFFSETS) &&
+           verifier.VerifyVector(alpha_cut_offsets()) &&
+           VerifyOffset(verifier, VT_EVENT_POSSIBILITY) &&
+           verifier.VerifyVector(event_possibility()) &&
+           VerifyOffset(verifier, VT_EVENT_NECESSITY) &&
+           verifier.VerifyVector(event_necessity()) &&
+           VerifyField<double>(verifier, VT_CHOQUET_SURPRISAL, 8) &&
+           VerifyField<double>(verifier, VT_INFORMATION, 8) &&
+           VerifyField<double>(verifier, VT_BASIN_RADIUS, 8) &&
+           VerifyField<double>(verifier, VT_BASIN_THRESHOLD, 8) &&
+           VerifyField<uint32_t>(verifier, VT_BASIN_UNIT_SURVIVORS, 4) &&
+           VerifyField<double>(verifier, VT_PCRB_FLOOR, 8) &&
+           VerifyOffset(verifier, VT_MVEE_CENTER) &&
+           verifier.VerifyVector(mvee_center()) &&
+           VerifyOffset(verifier, VT_MVEE_SHAPE) &&
+           verifier.VerifyVector(mvee_shape()) &&
+           VerifyField<uint32_t>(verifier, VT_MVEE_ITERATIONS, 4) &&
+           VerifyField<double>(verifier, VT_MVEE_GAP, 8) &&
+           VerifyField<double>(verifier, VT_MVEE_LOG_VOLUME, 8) &&
+           VerifyField<int32_t>(verifier, VT_MEDOID, 4) &&
+           VerifyField<double>(verifier, VT_MEDOID_RADIUS, 8) &&
+           VerifyOffset(verifier, VT_SMOLYAK_POINTS) &&
+           verifier.VerifyVector(smolyak_points()) &&
+           VerifyOffset(verifier, VT_MINKOWSKI_SHAPE) &&
+           verifier.VerifyVector(minkowski_shape()) &&
+           VerifyField<double>(verifier, VT_ENTROPY, 8) &&
+           VerifyField<double>(verifier, VT_SUPPORT_ENTROPY, 8) &&
+           VerifyField<double>(verifier, VT_ENTROPY_ALPHA, 8) &&
+           verifier.EndTable();
+  }
+  TeagResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(TeagResultT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<TeagResult> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const TeagResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct TeagResultBuilder {
+  typedef TeagResult Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_posterior_impossibility(::flatbuffers::Offset<::flatbuffers::Vector<double>> posterior_impossibility) {
+    fbb_.AddOffset(TeagResult::VT_POSTERIOR_IMPOSSIBILITY, posterior_impossibility);
+  }
+  void add_rescaled_impossibility(::flatbuffers::Offset<::flatbuffers::Vector<double>> rescaled_impossibility) {
+    fbb_.AddOffset(TeagResult::VT_RESCALED_IMPOSSIBILITY, rescaled_impossibility);
+  }
+  void add_normalization_shift(double normalization_shift) {
+    fbb_.AddElement<double>(TeagResult::VT_NORMALIZATION_SHIFT, normalization_shift, 0.0);
+  }
+  void add_zones(::flatbuffers::Offset<::flatbuffers::Vector<int8_t>> zones) {
+    fbb_.AddOffset(TeagResult::VT_ZONES, zones);
+  }
+  void add_alpha_cuts(::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> alpha_cuts) {
+    fbb_.AddOffset(TeagResult::VT_ALPHA_CUTS, alpha_cuts);
+  }
+  void add_alpha_cut_offsets(::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> alpha_cut_offsets) {
+    fbb_.AddOffset(TeagResult::VT_ALPHA_CUT_OFFSETS, alpha_cut_offsets);
+  }
+  void add_event_possibility(::flatbuffers::Offset<::flatbuffers::Vector<double>> event_possibility) {
+    fbb_.AddOffset(TeagResult::VT_EVENT_POSSIBILITY, event_possibility);
+  }
+  void add_event_necessity(::flatbuffers::Offset<::flatbuffers::Vector<double>> event_necessity) {
+    fbb_.AddOffset(TeagResult::VT_EVENT_NECESSITY, event_necessity);
+  }
+  void add_choquet_surprisal(double choquet_surprisal) {
+    fbb_.AddElement<double>(TeagResult::VT_CHOQUET_SURPRISAL, choquet_surprisal, 0.0);
+  }
+  void add_information(double information) {
+    fbb_.AddElement<double>(TeagResult::VT_INFORMATION, information, 0.0);
+  }
+  void add_basin_radius(double basin_radius) {
+    fbb_.AddElement<double>(TeagResult::VT_BASIN_RADIUS, basin_radius, 0.0);
+  }
+  void add_basin_threshold(double basin_threshold) {
+    fbb_.AddElement<double>(TeagResult::VT_BASIN_THRESHOLD, basin_threshold, 0.0);
+  }
+  void add_basin_unit_survivors(uint32_t basin_unit_survivors) {
+    fbb_.AddElement<uint32_t>(TeagResult::VT_BASIN_UNIT_SURVIVORS, basin_unit_survivors, 0);
+  }
+  void add_pcrb_floor(double pcrb_floor) {
+    fbb_.AddElement<double>(TeagResult::VT_PCRB_FLOOR, pcrb_floor, 0.0);
+  }
+  void add_mvee_center(::flatbuffers::Offset<::flatbuffers::Vector<double>> mvee_center) {
+    fbb_.AddOffset(TeagResult::VT_MVEE_CENTER, mvee_center);
+  }
+  void add_mvee_shape(::flatbuffers::Offset<::flatbuffers::Vector<double>> mvee_shape) {
+    fbb_.AddOffset(TeagResult::VT_MVEE_SHAPE, mvee_shape);
+  }
+  void add_mvee_iterations(uint32_t mvee_iterations) {
+    fbb_.AddElement<uint32_t>(TeagResult::VT_MVEE_ITERATIONS, mvee_iterations, 0);
+  }
+  void add_mvee_gap(double mvee_gap) {
+    fbb_.AddElement<double>(TeagResult::VT_MVEE_GAP, mvee_gap, 0.0);
+  }
+  void add_mvee_log_volume(double mvee_log_volume) {
+    fbb_.AddElement<double>(TeagResult::VT_MVEE_LOG_VOLUME, mvee_log_volume, 0.0);
+  }
+  void add_medoid(int32_t medoid) {
+    fbb_.AddElement<int32_t>(TeagResult::VT_MEDOID, medoid, -1);
+  }
+  void add_medoid_radius(double medoid_radius) {
+    fbb_.AddElement<double>(TeagResult::VT_MEDOID_RADIUS, medoid_radius, 0.0);
+  }
+  void add_smolyak_points(::flatbuffers::Offset<::flatbuffers::Vector<double>> smolyak_points) {
+    fbb_.AddOffset(TeagResult::VT_SMOLYAK_POINTS, smolyak_points);
+  }
+  void add_minkowski_shape(::flatbuffers::Offset<::flatbuffers::Vector<double>> minkowski_shape) {
+    fbb_.AddOffset(TeagResult::VT_MINKOWSKI_SHAPE, minkowski_shape);
+  }
+  void add_entropy(double entropy) {
+    fbb_.AddElement<double>(TeagResult::VT_ENTROPY, entropy, 0.0);
+  }
+  void add_support_entropy(double support_entropy) {
+    fbb_.AddElement<double>(TeagResult::VT_SUPPORT_ENTROPY, support_entropy, 0.0);
+  }
+  void add_entropy_alpha(double entropy_alpha) {
+    fbb_.AddElement<double>(TeagResult::VT_ENTROPY_ALPHA, entropy_alpha, 0.0);
+  }
+  explicit TeagResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<TeagResult> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<TeagResult>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<TeagResult> CreateTeagResult(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> posterior_impossibility = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> rescaled_impossibility = 0,
+    double normalization_shift = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<int8_t>> zones = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> alpha_cuts = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> alpha_cut_offsets = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> event_possibility = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> event_necessity = 0,
+    double choquet_surprisal = 0.0,
+    double information = 0.0,
+    double basin_radius = 0.0,
+    double basin_threshold = 0.0,
+    uint32_t basin_unit_survivors = 0,
+    double pcrb_floor = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> mvee_center = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> mvee_shape = 0,
+    uint32_t mvee_iterations = 0,
+    double mvee_gap = 0.0,
+    double mvee_log_volume = 0.0,
+    int32_t medoid = -1,
+    double medoid_radius = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> smolyak_points = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> minkowski_shape = 0,
+    double entropy = 0.0,
+    double support_entropy = 0.0,
+    double entropy_alpha = 0.0) {
+  TeagResultBuilder builder_(_fbb);
+  builder_.add_entropy_alpha(entropy_alpha);
+  builder_.add_support_entropy(support_entropy);
+  builder_.add_entropy(entropy);
+  builder_.add_medoid_radius(medoid_radius);
+  builder_.add_mvee_log_volume(mvee_log_volume);
+  builder_.add_mvee_gap(mvee_gap);
+  builder_.add_pcrb_floor(pcrb_floor);
+  builder_.add_basin_threshold(basin_threshold);
+  builder_.add_basin_radius(basin_radius);
+  builder_.add_information(information);
+  builder_.add_choquet_surprisal(choquet_surprisal);
+  builder_.add_normalization_shift(normalization_shift);
+  builder_.add_minkowski_shape(minkowski_shape);
+  builder_.add_smolyak_points(smolyak_points);
+  builder_.add_medoid(medoid);
+  builder_.add_mvee_iterations(mvee_iterations);
+  builder_.add_mvee_shape(mvee_shape);
+  builder_.add_mvee_center(mvee_center);
+  builder_.add_basin_unit_survivors(basin_unit_survivors);
+  builder_.add_event_necessity(event_necessity);
+  builder_.add_event_possibility(event_possibility);
+  builder_.add_alpha_cut_offsets(alpha_cut_offsets);
+  builder_.add_alpha_cuts(alpha_cuts);
+  builder_.add_zones(zones);
+  builder_.add_rescaled_impossibility(rescaled_impossibility);
+  builder_.add_posterior_impossibility(posterior_impossibility);
+  return builder_.Finish();
+}
+
+struct TeagResult::Traits {
+  using type = TeagResult;
+  static auto constexpr Create = CreateTeagResult;
+};
+
+inline ::flatbuffers::Offset<TeagResult> CreateTeagResultDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const std::vector<double> *posterior_impossibility = nullptr,
+    const std::vector<double> *rescaled_impossibility = nullptr,
+    double normalization_shift = 0.0,
+    const std::vector<int8_t> *zones = nullptr,
+    const std::vector<uint32_t> *alpha_cuts = nullptr,
+    const std::vector<uint32_t> *alpha_cut_offsets = nullptr,
+    const std::vector<double> *event_possibility = nullptr,
+    const std::vector<double> *event_necessity = nullptr,
+    double choquet_surprisal = 0.0,
+    double information = 0.0,
+    double basin_radius = 0.0,
+    double basin_threshold = 0.0,
+    uint32_t basin_unit_survivors = 0,
+    double pcrb_floor = 0.0,
+    const std::vector<double> *mvee_center = nullptr,
+    const std::vector<double> *mvee_shape = nullptr,
+    uint32_t mvee_iterations = 0,
+    double mvee_gap = 0.0,
+    double mvee_log_volume = 0.0,
+    int32_t medoid = -1,
+    double medoid_radius = 0.0,
+    const std::vector<double> *smolyak_points = nullptr,
+    const std::vector<double> *minkowski_shape = nullptr,
+    double entropy = 0.0,
+    double support_entropy = 0.0,
+    double entropy_alpha = 0.0) {
+  auto posterior_impossibility__ = posterior_impossibility ? _fbb.CreateVector<double>(*posterior_impossibility) : 0;
+  auto rescaled_impossibility__ = rescaled_impossibility ? _fbb.CreateVector<double>(*rescaled_impossibility) : 0;
+  auto zones__ = zones ? _fbb.CreateVector<int8_t>(*zones) : 0;
+  auto alpha_cuts__ = alpha_cuts ? _fbb.CreateVector<uint32_t>(*alpha_cuts) : 0;
+  auto alpha_cut_offsets__ = alpha_cut_offsets ? _fbb.CreateVector<uint32_t>(*alpha_cut_offsets) : 0;
+  auto event_possibility__ = event_possibility ? _fbb.CreateVector<double>(*event_possibility) : 0;
+  auto event_necessity__ = event_necessity ? _fbb.CreateVector<double>(*event_necessity) : 0;
+  auto mvee_center__ = mvee_center ? _fbb.CreateVector<double>(*mvee_center) : 0;
+  auto mvee_shape__ = mvee_shape ? _fbb.CreateVector<double>(*mvee_shape) : 0;
+  auto smolyak_points__ = smolyak_points ? _fbb.CreateVector<double>(*smolyak_points) : 0;
+  auto minkowski_shape__ = minkowski_shape ? _fbb.CreateVector<double>(*minkowski_shape) : 0;
+  return orbpro::estimation::CreateTeagResult(
+      _fbb,
+      posterior_impossibility__,
+      rescaled_impossibility__,
+      normalization_shift,
+      zones__,
+      alpha_cuts__,
+      alpha_cut_offsets__,
+      event_possibility__,
+      event_necessity__,
+      choquet_surprisal,
+      information,
+      basin_radius,
+      basin_threshold,
+      basin_unit_survivors,
+      pcrb_floor,
+      mvee_center__,
+      mvee_shape__,
+      mvee_iterations,
+      mvee_gap,
+      mvee_log_volume,
+      medoid,
+      medoid_radius,
+      smolyak_points__,
+      minkowski_shape__,
+      entropy,
+      support_entropy,
+      entropy_alpha);
+}
+
+::flatbuffers::Offset<TeagResult> CreateTeagResult(::flatbuffers::FlatBufferBuilder &_fbb, const TeagResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 inline EstimationRequestT::EstimationRequestT(const EstimationRequestT &o)
       : config((o.config) ? new orbpro::estimation::EstimationConfig(*o.config) : nullptr),
         observations(o.observations),
@@ -3243,11 +5309,14 @@ inline EstimationResultT::EstimationResultT(const EstimationResultT &o)
         ocm_record(o.ocm_record),
         error_message(o.error_message),
         trace_id(o.trace_id),
-        batch_fit((o.batch_fit) ? new orbpro::estimation::BatchFitResultT(*o.batch_fit) : nullptr) {
+        batch_fit((o.batch_fit) ? new orbpro::estimation::BatchFitResultT(*o.batch_fit) : nullptr),
+        final_support((o.final_support) ? new orbpro::estimation::SupportStateT(*o.final_support) : nullptr) {
   extended_history.reserve(o.extended_history.size());
   for (const auto &extended_history_ : o.extended_history) { extended_history.emplace_back((extended_history_) ? new orbpro::estimation::ExtendedFilterEpochT(*extended_history_) : nullptr); }
   propagation_requests.reserve(o.propagation_requests.size());
   for (const auto &propagation_requests_ : o.propagation_requests) { propagation_requests.emplace_back((propagation_requests_) ? new orbpro::estimation::PropagationQueryT(*propagation_requests_) : nullptr); }
+  support_history.reserve(o.support_history.size());
+  for (const auto &support_history_ : o.support_history) { support_history.emplace_back((support_history_) ? new orbpro::estimation::SupportEpochT(*support_history_) : nullptr); }
 }
 
 inline EstimationResultT &EstimationResultT::operator=(EstimationResultT o) FLATBUFFERS_NOEXCEPT {
@@ -3264,6 +5333,8 @@ inline EstimationResultT &EstimationResultT::operator=(EstimationResultT o) FLAT
   std::swap(extended_history, o.extended_history);
   std::swap(propagation_requests, o.propagation_requests);
   std::swap(batch_fit, o.batch_fit);
+  std::swap(support_history, o.support_history);
+  std::swap(final_support, o.final_support);
   return *this;
 }
 
@@ -3289,6 +5360,8 @@ inline void EstimationResult::UnPackTo(EstimationResultT *_o, const ::flatbuffer
   { auto _e = extended_history(); if (_e) { _o->extended_history.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->extended_history[_i]) { _e->Get(_i)->UnPackTo(_o->extended_history[_i].get(), _resolver); } else { _o->extended_history[_i] = std::unique_ptr<orbpro::estimation::ExtendedFilterEpochT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->extended_history.resize(0); } }
   { auto _e = propagation_requests(); if (_e) { _o->propagation_requests.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->propagation_requests[_i]) { _e->Get(_i)->UnPackTo(_o->propagation_requests[_i].get(), _resolver); } else { _o->propagation_requests[_i] = std::unique_ptr<orbpro::estimation::PropagationQueryT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->propagation_requests.resize(0); } }
   { auto _e = batch_fit(); if (_e) { if(_o->batch_fit) { _e->UnPackTo(_o->batch_fit.get(), _resolver); } else { _o->batch_fit = std::unique_ptr<orbpro::estimation::BatchFitResultT>(_e->UnPack(_resolver)); } } else if (_o->batch_fit) { _o->batch_fit.reset(); } }
+  { auto _e = support_history(); if (_e) { _o->support_history.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->support_history[_i]) { _e->Get(_i)->UnPackTo(_o->support_history[_i].get(), _resolver); } else { _o->support_history[_i] = std::unique_ptr<orbpro::estimation::SupportEpochT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->support_history.resize(0); } }
+  { auto _e = final_support(); if (_e) { if(_o->final_support) { _e->UnPackTo(_o->final_support.get(), _resolver); } else { _o->final_support = std::unique_ptr<orbpro::estimation::SupportStateT>(_e->UnPack(_resolver)); } } else if (_o->final_support) { _o->final_support.reset(); } }
 }
 
 inline ::flatbuffers::Offset<EstimationResult> CreateEstimationResult(::flatbuffers::FlatBufferBuilder &_fbb, const EstimationResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -3312,6 +5385,8 @@ inline ::flatbuffers::Offset<EstimationResult> EstimationResult::Pack(::flatbuff
   auto _extended_history = _o->extended_history.size() ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::ExtendedFilterEpoch>> (_o->extended_history.size(), [](size_t i, _VectorArgs *__va) { return CreateExtendedFilterEpoch(*__va->__fbb, __va->__o->extended_history[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _propagation_requests = _o->propagation_requests.size() ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::PropagationQuery>> (_o->propagation_requests.size(), [](size_t i, _VectorArgs *__va) { return CreatePropagationQuery(*__va->__fbb, __va->__o->propagation_requests[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _batch_fit = _o->batch_fit ? CreateBatchFitResult(_fbb, _o->batch_fit.get(), _rehasher) : 0;
+  auto _support_history = _o->support_history.size() ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::SupportEpoch>> (_o->support_history.size(), [](size_t i, _VectorArgs *__va) { return CreateSupportEpoch(*__va->__fbb, __va->__o->support_history[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _final_support = _o->final_support ? CreateSupportState(_fbb, _o->final_support.get(), _rehasher) : 0;
   return orbpro::estimation::CreateEstimationResult(
       _fbb,
       _status,
@@ -3326,7 +5401,9 @@ inline ::flatbuffers::Offset<EstimationResult> EstimationResult::Pack(::flatbuff
       _trace_id,
       _extended_history,
       _propagation_requests,
-      _batch_fit);
+      _batch_fit,
+      _support_history,
+      _final_support);
 }
 
 inline EstimationEnvelopeT::EstimationEnvelopeT(const EstimationEnvelopeT &o)
@@ -3335,7 +5412,9 @@ inline EstimationEnvelopeT::EstimationEnvelopeT(const EstimationEnvelopeT &o)
         propagator_samples(o.propagator_samples),
         simulated_observations(o.simulated_observations),
         initial_orbit_request((o.initial_orbit_request) ? new orbpro::estimation::InitialOrbitRequest(*o.initial_orbit_request) : nullptr),
-        initial_orbit_result((o.initial_orbit_result) ? new orbpro::estimation::InitialOrbitResult(*o.initial_orbit_result) : nullptr) {
+        initial_orbit_result((o.initial_orbit_result) ? new orbpro::estimation::InitialOrbitResult(*o.initial_orbit_result) : nullptr),
+        teag_request((o.teag_request) ? new orbpro::estimation::TeagRequestT(*o.teag_request) : nullptr),
+        teag_result((o.teag_result) ? new orbpro::estimation::TeagResultT(*o.teag_result) : nullptr) {
   propagation_answers.reserve(o.propagation_answers.size());
   for (const auto &propagation_answers_ : o.propagation_answers) { propagation_answers.emplace_back((propagation_answers_) ? new orbpro::estimation::PropagationAnswerT(*propagation_answers_) : nullptr); }
 }
@@ -3348,6 +5427,8 @@ inline EstimationEnvelopeT &EstimationEnvelopeT::operator=(EstimationEnvelopeT o
   std::swap(initial_orbit_request, o.initial_orbit_request);
   std::swap(initial_orbit_result, o.initial_orbit_result);
   std::swap(propagation_answers, o.propagation_answers);
+  std::swap(teag_request, o.teag_request);
+  std::swap(teag_result, o.teag_result);
   return *this;
 }
 
@@ -3367,6 +5448,8 @@ inline void EstimationEnvelope::UnPackTo(EstimationEnvelopeT *_o, const ::flatbu
   { auto _e = initial_orbit_request(); if (_e) _o->initial_orbit_request = std::unique_ptr<orbpro::estimation::InitialOrbitRequest>(new orbpro::estimation::InitialOrbitRequest(*_e)); }
   { auto _e = initial_orbit_result(); if (_e) _o->initial_orbit_result = std::unique_ptr<orbpro::estimation::InitialOrbitResult>(new orbpro::estimation::InitialOrbitResult(*_e)); }
   { auto _e = propagation_answers(); if (_e) { _o->propagation_answers.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->propagation_answers[_i]) { _e->Get(_i)->UnPackTo(_o->propagation_answers[_i].get(), _resolver); } else { _o->propagation_answers[_i] = std::unique_ptr<orbpro::estimation::PropagationAnswerT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->propagation_answers.resize(0); } }
+  { auto _e = teag_request(); if (_e) { if(_o->teag_request) { _e->UnPackTo(_o->teag_request.get(), _resolver); } else { _o->teag_request = std::unique_ptr<orbpro::estimation::TeagRequestT>(_e->UnPack(_resolver)); } } else if (_o->teag_request) { _o->teag_request.reset(); } }
+  { auto _e = teag_result(); if (_e) { if(_o->teag_result) { _e->UnPackTo(_o->teag_result.get(), _resolver); } else { _o->teag_result = std::unique_ptr<orbpro::estimation::TeagResultT>(_e->UnPack(_resolver)); } } else if (_o->teag_result) { _o->teag_result.reset(); } }
 }
 
 inline ::flatbuffers::Offset<EstimationEnvelope> CreateEstimationEnvelope(::flatbuffers::FlatBufferBuilder &_fbb, const EstimationEnvelopeT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -3384,6 +5467,8 @@ inline ::flatbuffers::Offset<EstimationEnvelope> EstimationEnvelope::Pack(::flat
   auto _initial_orbit_request = _o->initial_orbit_request ? _o->initial_orbit_request.get() : nullptr;
   auto _initial_orbit_result = _o->initial_orbit_result ? _o->initial_orbit_result.get() : nullptr;
   auto _propagation_answers = _o->propagation_answers.size() ? _fbb.CreateVector<::flatbuffers::Offset<orbpro::estimation::PropagationAnswer>> (_o->propagation_answers.size(), [](size_t i, _VectorArgs *__va) { return CreatePropagationAnswer(*__va->__fbb, __va->__o->propagation_answers[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _teag_request = _o->teag_request ? CreateTeagRequest(_fbb, _o->teag_request.get(), _rehasher) : 0;
+  auto _teag_result = _o->teag_result ? CreateTeagResult(_fbb, _o->teag_result.get(), _rehasher) : 0;
   return orbpro::estimation::CreateEstimationEnvelope(
       _fbb,
       _request,
@@ -3392,7 +5477,56 @@ inline ::flatbuffers::Offset<EstimationEnvelope> EstimationEnvelope::Pack(::flat
       _simulated_observations,
       _initial_orbit_request,
       _initial_orbit_result,
-      _propagation_answers);
+      _propagation_answers,
+      _teag_request,
+      _teag_result);
+}
+
+inline SequentialOptionsT::SequentialOptionsT(const SequentialOptionsT &o)
+      : ukf_alpha(o.ukf_alpha),
+        ukf_beta(o.ukf_beta),
+        ukf_kappa(o.ukf_kappa),
+        nonlinear_propagation(o.nonlinear_propagation),
+        smooth(o.smooth),
+        adaptive_process_noise(o.adaptive_process_noise),
+        inflate_measurement_noise(o.inflate_measurement_noise),
+        adaptation_rate(o.adaptation_rate),
+        minimum_process_scale(o.minimum_process_scale),
+        maximum_process_scale(o.maximum_process_scale),
+        maximum_measurement_scale(o.maximum_measurement_scale),
+        estimate_clock(o.estimate_clock),
+        initial_clock_bias_m(o.initial_clock_bias_m),
+        initial_clock_drift_mps(o.initial_clock_drift_mps),
+        initial_covariance8(o.initial_covariance8),
+        clock_bias_psd(o.clock_bias_psd),
+        clock_drift_psd(o.clock_drift_psd),
+        espf((o.espf) ? new orbpro::estimation::EspfOptionsT(*o.espf) : nullptr),
+        set_membership((o.set_membership) ? new orbpro::estimation::SetMembershipOptionsT(*o.set_membership) : nullptr),
+        initial_support((o.initial_support) ? new orbpro::estimation::SupportStateT(*o.initial_support) : nullptr) {
+}
+
+inline SequentialOptionsT &SequentialOptionsT::operator=(SequentialOptionsT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(ukf_alpha, o.ukf_alpha);
+  std::swap(ukf_beta, o.ukf_beta);
+  std::swap(ukf_kappa, o.ukf_kappa);
+  std::swap(nonlinear_propagation, o.nonlinear_propagation);
+  std::swap(smooth, o.smooth);
+  std::swap(adaptive_process_noise, o.adaptive_process_noise);
+  std::swap(inflate_measurement_noise, o.inflate_measurement_noise);
+  std::swap(adaptation_rate, o.adaptation_rate);
+  std::swap(minimum_process_scale, o.minimum_process_scale);
+  std::swap(maximum_process_scale, o.maximum_process_scale);
+  std::swap(maximum_measurement_scale, o.maximum_measurement_scale);
+  std::swap(estimate_clock, o.estimate_clock);
+  std::swap(initial_clock_bias_m, o.initial_clock_bias_m);
+  std::swap(initial_clock_drift_mps, o.initial_clock_drift_mps);
+  std::swap(initial_covariance8, o.initial_covariance8);
+  std::swap(clock_bias_psd, o.clock_bias_psd);
+  std::swap(clock_drift_psd, o.clock_drift_psd);
+  std::swap(espf, o.espf);
+  std::swap(set_membership, o.set_membership);
+  std::swap(initial_support, o.initial_support);
+  return *this;
 }
 
 inline SequentialOptionsT *SequentialOptions::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -3421,6 +5555,9 @@ inline void SequentialOptions::UnPackTo(SequentialOptionsT *_o, const ::flatbuff
   { auto _e = initial_covariance8(); if (_e) { _o->initial_covariance8.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->initial_covariance8[_i] = _e->Get(_i); } } else { _o->initial_covariance8.resize(0); } }
   { auto _e = clock_bias_psd(); _o->clock_bias_psd = _e; }
   { auto _e = clock_drift_psd(); _o->clock_drift_psd = _e; }
+  { auto _e = espf(); if (_e) { if(_o->espf) { _e->UnPackTo(_o->espf.get(), _resolver); } else { _o->espf = std::unique_ptr<orbpro::estimation::EspfOptionsT>(_e->UnPack(_resolver)); } } else if (_o->espf) { _o->espf.reset(); } }
+  { auto _e = set_membership(); if (_e) { if(_o->set_membership) { _e->UnPackTo(_o->set_membership.get(), _resolver); } else { _o->set_membership = std::unique_ptr<orbpro::estimation::SetMembershipOptionsT>(_e->UnPack(_resolver)); } } else if (_o->set_membership) { _o->set_membership.reset(); } }
+  { auto _e = initial_support(); if (_e) { if(_o->initial_support) { _e->UnPackTo(_o->initial_support.get(), _resolver); } else { _o->initial_support = std::unique_ptr<orbpro::estimation::SupportStateT>(_e->UnPack(_resolver)); } } else if (_o->initial_support) { _o->initial_support.reset(); } }
 }
 
 inline ::flatbuffers::Offset<SequentialOptions> CreateSequentialOptions(::flatbuffers::FlatBufferBuilder &_fbb, const SequentialOptionsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -3448,6 +5585,9 @@ inline ::flatbuffers::Offset<SequentialOptions> SequentialOptions::Pack(::flatbu
   auto _initial_covariance8 = _o->initial_covariance8.size() ? _fbb.CreateVector(_o->initial_covariance8) : 0;
   auto _clock_bias_psd = _o->clock_bias_psd;
   auto _clock_drift_psd = _o->clock_drift_psd;
+  auto _espf = _o->espf ? CreateEspfOptions(_fbb, _o->espf.get(), _rehasher) : 0;
+  auto _set_membership = _o->set_membership ? CreateSetMembershipOptions(_fbb, _o->set_membership.get(), _rehasher) : 0;
+  auto _initial_support = _o->initial_support ? CreateSupportState(_fbb, _o->initial_support.get(), _rehasher) : 0;
   return orbpro::estimation::CreateSequentialOptions(
       _fbb,
       _ukf_alpha,
@@ -3466,7 +5606,10 @@ inline ::flatbuffers::Offset<SequentialOptions> SequentialOptions::Pack(::flatbu
       _initial_clock_drift_mps,
       _initial_covariance8,
       _clock_bias_psd,
-      _clock_drift_psd);
+      _clock_drift_psd,
+      _espf,
+      _set_membership,
+      _initial_support);
 }
 
 inline ExtendedObservationT::ExtendedObservationT(const ExtendedObservationT &o)
@@ -3814,6 +5957,609 @@ inline ::flatbuffers::Offset<BatchFitResult> BatchFitResult::Pack(::flatbuffers:
       _converged,
       _whitened_residuals,
       _rejected_observation_indices);
+}
+
+inline EspfOptionsT *EspfOptions::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<EspfOptionsT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void EspfOptions::UnPackTo(EspfOptionsT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = smolyak_level(); _o->smolyak_level = _e; }
+  { auto _e = initial_bound_scale(); _o->initial_bound_scale = _e; }
+  { auto _e = process_bound_scale(); _o->process_bound_scale = _e; }
+  { auto _e = measurement_bound_scale(); _o->measurement_bound_scale = _e; }
+  { auto _e = sigma_initial(); _o->sigma_initial = _e; }
+  { auto _e = sigma_min(); _o->sigma_min = _e; }
+  { auto _e = sigma_max(); _o->sigma_max = _e; }
+  { auto _e = rate_expand(); _o->rate_expand = _e; }
+  { auto _e = rate_contract(); _o->rate_contract = _e; }
+  { auto _e = minimum_survivors(); _o->minimum_survivors = _e; }
+  { auto _e = pcrb_rank(); _o->pcrb_rank = _e; }
+  { auto _e = medoid_metric(); _o->medoid_metric = _e; }
+  { auto _e = vfi_floor_ratio(); _o->vfi_floor_ratio = _e; }
+  { auto _e = mvee_tolerance(); _o->mvee_tolerance = _e; }
+  { auto _e = mvee_max_iterations(); _o->mvee_max_iterations = _e; }
+  { auto _e = entropy_diagnostics(); _o->entropy_diagnostics = _e; }
+  { auto _e = record_support(); _o->record_support = _e; }
+  { auto _e = plausibility_radius(); _o->plausibility_radius = _e; }
+  { auto _e = compatibility_floor(); _o->compatibility_floor = _e; }
+  { auto _e = surprisal_threshold(); _o->surprisal_threshold = _e; }
+  { auto _e = regularization(); _o->regularization = _e; }
+  { auto _e = regularization_relative(); _o->regularization_relative = _e; }
+  { auto _e = spread_sigma0(); _o->spread_sigma0 = _e; }
+  { auto _e = spread_sigma_min(); _o->spread_sigma_min = _e; }
+  { auto _e = spread_sigma_max(); _o->spread_sigma_max = _e; }
+  { auto _e = dispersion_gain(); _o->dispersion_gain = _e; }
+  { auto _e = surprisal_gain(); _o->surprisal_gain = _e; }
+  { auto _e = surprisal_reference(); _o->surprisal_reference = _e; }
+  { auto _e = surprisal_scale(); _o->surprisal_scale = _e; }
+  { auto _e = radius_gain_expand(); _o->radius_gain_expand = _e; }
+  { auto _e = radius_gain_contract(); _o->radius_gain_contract = _e; }
+  { auto _e = decay_rate(); _o->decay_rate = _e; }
+  { auto _e = mode_weighting(); _o->mode_weighting = _e; }
+  { auto _e = gaussian_limit(); _o->gaussian_limit = _e; }
+  { auto _e = pcrb_trigger(); _o->pcrb_trigger = _e; }
+}
+
+inline ::flatbuffers::Offset<EspfOptions> CreateEspfOptions(::flatbuffers::FlatBufferBuilder &_fbb, const EspfOptionsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return EspfOptions::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<EspfOptions> EspfOptions::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const EspfOptionsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const EspfOptionsT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _smolyak_level = _o->smolyak_level;
+  auto _initial_bound_scale = _o->initial_bound_scale;
+  auto _process_bound_scale = _o->process_bound_scale;
+  auto _measurement_bound_scale = _o->measurement_bound_scale;
+  auto _sigma_initial = _o->sigma_initial;
+  auto _sigma_min = _o->sigma_min;
+  auto _sigma_max = _o->sigma_max;
+  auto _rate_expand = _o->rate_expand;
+  auto _rate_contract = _o->rate_contract;
+  auto _minimum_survivors = _o->minimum_survivors;
+  auto _pcrb_rank = _o->pcrb_rank;
+  auto _medoid_metric = _o->medoid_metric;
+  auto _vfi_floor_ratio = _o->vfi_floor_ratio;
+  auto _mvee_tolerance = _o->mvee_tolerance;
+  auto _mvee_max_iterations = _o->mvee_max_iterations;
+  auto _entropy_diagnostics = _o->entropy_diagnostics;
+  auto _record_support = _o->record_support;
+  auto _plausibility_radius = _o->plausibility_radius;
+  auto _compatibility_floor = _o->compatibility_floor;
+  auto _surprisal_threshold = _o->surprisal_threshold;
+  auto _regularization = _o->regularization;
+  auto _regularization_relative = _o->regularization_relative;
+  auto _spread_sigma0 = _o->spread_sigma0;
+  auto _spread_sigma_min = _o->spread_sigma_min;
+  auto _spread_sigma_max = _o->spread_sigma_max;
+  auto _dispersion_gain = _o->dispersion_gain;
+  auto _surprisal_gain = _o->surprisal_gain;
+  auto _surprisal_reference = _o->surprisal_reference;
+  auto _surprisal_scale = _o->surprisal_scale;
+  auto _radius_gain_expand = _o->radius_gain_expand;
+  auto _radius_gain_contract = _o->radius_gain_contract;
+  auto _decay_rate = _o->decay_rate;
+  auto _mode_weighting = _o->mode_weighting;
+  auto _gaussian_limit = _o->gaussian_limit;
+  auto _pcrb_trigger = _o->pcrb_trigger;
+  return orbpro::estimation::CreateEspfOptions(
+      _fbb,
+      _smolyak_level,
+      _initial_bound_scale,
+      _process_bound_scale,
+      _measurement_bound_scale,
+      _sigma_initial,
+      _sigma_min,
+      _sigma_max,
+      _rate_expand,
+      _rate_contract,
+      _minimum_survivors,
+      _pcrb_rank,
+      _medoid_metric,
+      _vfi_floor_ratio,
+      _mvee_tolerance,
+      _mvee_max_iterations,
+      _entropy_diagnostics,
+      _record_support,
+      _plausibility_radius,
+      _compatibility_floor,
+      _surprisal_threshold,
+      _regularization,
+      _regularization_relative,
+      _spread_sigma0,
+      _spread_sigma_min,
+      _spread_sigma_max,
+      _dispersion_gain,
+      _surprisal_gain,
+      _surprisal_reference,
+      _surprisal_scale,
+      _radius_gain_expand,
+      _radius_gain_contract,
+      _decay_rate,
+      _mode_weighting,
+      _gaussian_limit,
+      _pcrb_trigger);
+}
+
+inline SetMembershipOptionsT *SetMembershipOptions::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SetMembershipOptionsT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SetMembershipOptions::UnPackTo(SetMembershipOptionsT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = initial_bound_scale(); _o->initial_bound_scale = _e; }
+  { auto _e = process_bound_scale(); _o->process_bound_scale = _e; }
+  { auto _e = measurement_bound_scale(); _o->measurement_bound_scale = _e; }
+  { auto _e = criterion(); _o->criterion = _e; }
+}
+
+inline ::flatbuffers::Offset<SetMembershipOptions> CreateSetMembershipOptions(::flatbuffers::FlatBufferBuilder &_fbb, const SetMembershipOptionsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return SetMembershipOptions::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SetMembershipOptions> SetMembershipOptions::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SetMembershipOptionsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SetMembershipOptionsT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _initial_bound_scale = _o->initial_bound_scale;
+  auto _process_bound_scale = _o->process_bound_scale;
+  auto _measurement_bound_scale = _o->measurement_bound_scale;
+  auto _criterion = _o->criterion;
+  return orbpro::estimation::CreateSetMembershipOptions(
+      _fbb,
+      _initial_bound_scale,
+      _process_bound_scale,
+      _measurement_bound_scale,
+      _criterion);
+}
+
+inline SupportStateT::SupportStateT(const SupportStateT &o)
+      : epoch((o.epoch) ? new orbpro::estimation::EstimationEpoch(*o.epoch) : nullptr),
+        estimator(o.estimator),
+        dimension(o.dimension),
+        points(o.points),
+        possibility(o.possibility),
+        estimate(o.estimate),
+        shape(o.shape),
+        sigma(o.sigma),
+        radius(o.radius),
+        dispersion(o.dispersion),
+        steps(o.steps) {
+}
+
+inline SupportStateT &SupportStateT::operator=(SupportStateT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(epoch, o.epoch);
+  std::swap(estimator, o.estimator);
+  std::swap(dimension, o.dimension);
+  std::swap(points, o.points);
+  std::swap(possibility, o.possibility);
+  std::swap(estimate, o.estimate);
+  std::swap(shape, o.shape);
+  std::swap(sigma, o.sigma);
+  std::swap(radius, o.radius);
+  std::swap(dispersion, o.dispersion);
+  std::swap(steps, o.steps);
+  return *this;
+}
+
+inline SupportStateT *SupportState::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SupportStateT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SupportState::UnPackTo(SupportStateT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = epoch(); if (_e) _o->epoch = std::unique_ptr<orbpro::estimation::EstimationEpoch>(new orbpro::estimation::EstimationEpoch(*_e)); }
+  { auto _e = estimator(); _o->estimator = _e; }
+  { auto _e = dimension(); _o->dimension = _e; }
+  { auto _e = points(); if (_e) { _o->points.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->points[_i] = _e->Get(_i); } } else { _o->points.resize(0); } }
+  { auto _e = possibility(); if (_e) { _o->possibility.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->possibility[_i] = _e->Get(_i); } } else { _o->possibility.resize(0); } }
+  { auto _e = estimate(); if (_e) { _o->estimate.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->estimate[_i] = _e->Get(_i); } } else { _o->estimate.resize(0); } }
+  { auto _e = shape(); if (_e) { _o->shape.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->shape[_i] = _e->Get(_i); } } else { _o->shape.resize(0); } }
+  { auto _e = sigma(); _o->sigma = _e; }
+  { auto _e = radius(); _o->radius = _e; }
+  { auto _e = dispersion(); _o->dispersion = _e; }
+  { auto _e = steps(); _o->steps = _e; }
+}
+
+inline ::flatbuffers::Offset<SupportState> CreateSupportState(::flatbuffers::FlatBufferBuilder &_fbb, const SupportStateT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return SupportState::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SupportState> SupportState::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SupportStateT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SupportStateT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _epoch = _o->epoch ? _o->epoch.get() : nullptr;
+  auto _estimator = _o->estimator;
+  auto _dimension = _o->dimension;
+  auto _points = _o->points.size() ? _fbb.CreateVector(_o->points) : 0;
+  auto _possibility = _o->possibility.size() ? _fbb.CreateVector(_o->possibility) : 0;
+  auto _estimate = _o->estimate.size() ? _fbb.CreateVector(_o->estimate) : 0;
+  auto _shape = _o->shape.size() ? _fbb.CreateVector(_o->shape) : 0;
+  auto _sigma = _o->sigma;
+  auto _radius = _o->radius;
+  auto _dispersion = _o->dispersion;
+  auto _steps = _o->steps;
+  return orbpro::estimation::CreateSupportState(
+      _fbb,
+      _epoch,
+      _estimator,
+      _dimension,
+      _points,
+      _possibility,
+      _estimate,
+      _shape,
+      _sigma,
+      _radius,
+      _dispersion,
+      _steps);
+}
+
+inline SupportEpochT::SupportEpochT(const SupportEpochT &o)
+      : epoch((o.epoch) ? new orbpro::estimation::EstimationEpoch(*o.epoch) : nullptr),
+        estimate(o.estimate),
+        shape(o.shape),
+        carried_shape(o.carried_shape),
+        predicted_shape(o.predicted_shape),
+        support_count(o.support_count),
+        survivor_count(o.survivor_count),
+        medoid_index(o.medoid_index),
+        choquet_surprisal(o.choquet_surprisal),
+        information(o.information),
+        normalization_shift(o.normalization_shift),
+        minimum_whitened_innovation(o.minimum_whitened_innovation),
+        basin_radius(o.basin_radius),
+        basin_threshold(o.basin_threshold),
+        pcrb_floor(o.pcrb_floor),
+        log_volume_change(o.log_volume_change),
+        sigma(o.sigma),
+        radius(o.radius),
+        dispersion(o.dispersion),
+        mean_surprisal(o.mean_surprisal),
+        regime_log_det(o.regime_log_det),
+        entropy(o.entropy),
+        entropy_alpha(o.entropy_alpha),
+        inconsistent(o.inconsistent),
+        accepted(o.accepted),
+        survivors(o.survivors),
+        survivor_possibility(o.survivor_possibility) {
+}
+
+inline SupportEpochT &SupportEpochT::operator=(SupportEpochT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(epoch, o.epoch);
+  std::swap(estimate, o.estimate);
+  std::swap(shape, o.shape);
+  std::swap(carried_shape, o.carried_shape);
+  std::swap(predicted_shape, o.predicted_shape);
+  std::swap(support_count, o.support_count);
+  std::swap(survivor_count, o.survivor_count);
+  std::swap(medoid_index, o.medoid_index);
+  std::swap(choquet_surprisal, o.choquet_surprisal);
+  std::swap(information, o.information);
+  std::swap(normalization_shift, o.normalization_shift);
+  std::swap(minimum_whitened_innovation, o.minimum_whitened_innovation);
+  std::swap(basin_radius, o.basin_radius);
+  std::swap(basin_threshold, o.basin_threshold);
+  std::swap(pcrb_floor, o.pcrb_floor);
+  std::swap(log_volume_change, o.log_volume_change);
+  std::swap(sigma, o.sigma);
+  std::swap(radius, o.radius);
+  std::swap(dispersion, o.dispersion);
+  std::swap(mean_surprisal, o.mean_surprisal);
+  std::swap(regime_log_det, o.regime_log_det);
+  std::swap(entropy, o.entropy);
+  std::swap(entropy_alpha, o.entropy_alpha);
+  std::swap(inconsistent, o.inconsistent);
+  std::swap(accepted, o.accepted);
+  std::swap(survivors, o.survivors);
+  std::swap(survivor_possibility, o.survivor_possibility);
+  return *this;
+}
+
+inline SupportEpochT *SupportEpoch::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SupportEpochT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SupportEpoch::UnPackTo(SupportEpochT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = epoch(); if (_e) _o->epoch = std::unique_ptr<orbpro::estimation::EstimationEpoch>(new orbpro::estimation::EstimationEpoch(*_e)); }
+  { auto _e = estimate(); if (_e) { _o->estimate.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->estimate[_i] = _e->Get(_i); } } else { _o->estimate.resize(0); } }
+  { auto _e = shape(); if (_e) { _o->shape.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->shape[_i] = _e->Get(_i); } } else { _o->shape.resize(0); } }
+  { auto _e = carried_shape(); if (_e) { _o->carried_shape.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->carried_shape[_i] = _e->Get(_i); } } else { _o->carried_shape.resize(0); } }
+  { auto _e = predicted_shape(); if (_e) { _o->predicted_shape.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->predicted_shape[_i] = _e->Get(_i); } } else { _o->predicted_shape.resize(0); } }
+  { auto _e = support_count(); _o->support_count = _e; }
+  { auto _e = survivor_count(); _o->survivor_count = _e; }
+  { auto _e = medoid_index(); _o->medoid_index = _e; }
+  { auto _e = choquet_surprisal(); _o->choquet_surprisal = _e; }
+  { auto _e = information(); _o->information = _e; }
+  { auto _e = normalization_shift(); _o->normalization_shift = _e; }
+  { auto _e = minimum_whitened_innovation(); _o->minimum_whitened_innovation = _e; }
+  { auto _e = basin_radius(); _o->basin_radius = _e; }
+  { auto _e = basin_threshold(); _o->basin_threshold = _e; }
+  { auto _e = pcrb_floor(); _o->pcrb_floor = _e; }
+  { auto _e = log_volume_change(); _o->log_volume_change = _e; }
+  { auto _e = sigma(); _o->sigma = _e; }
+  { auto _e = radius(); _o->radius = _e; }
+  { auto _e = dispersion(); _o->dispersion = _e; }
+  { auto _e = mean_surprisal(); _o->mean_surprisal = _e; }
+  { auto _e = regime_log_det(); _o->regime_log_det = _e; }
+  { auto _e = entropy(); _o->entropy = _e; }
+  { auto _e = entropy_alpha(); _o->entropy_alpha = _e; }
+  { auto _e = inconsistent(); _o->inconsistent = _e; }
+  { auto _e = accepted(); _o->accepted = _e; }
+  { auto _e = survivors(); if (_e) { _o->survivors.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->survivors[_i] = _e->Get(_i); } } else { _o->survivors.resize(0); } }
+  { auto _e = survivor_possibility(); if (_e) { _o->survivor_possibility.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->survivor_possibility[_i] = _e->Get(_i); } } else { _o->survivor_possibility.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<SupportEpoch> CreateSupportEpoch(::flatbuffers::FlatBufferBuilder &_fbb, const SupportEpochT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return SupportEpoch::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SupportEpoch> SupportEpoch::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SupportEpochT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SupportEpochT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _epoch = _o->epoch ? _o->epoch.get() : nullptr;
+  auto _estimate = _o->estimate.size() ? _fbb.CreateVector(_o->estimate) : 0;
+  auto _shape = _o->shape.size() ? _fbb.CreateVector(_o->shape) : 0;
+  auto _carried_shape = _o->carried_shape.size() ? _fbb.CreateVector(_o->carried_shape) : 0;
+  auto _predicted_shape = _o->predicted_shape.size() ? _fbb.CreateVector(_o->predicted_shape) : 0;
+  auto _support_count = _o->support_count;
+  auto _survivor_count = _o->survivor_count;
+  auto _medoid_index = _o->medoid_index;
+  auto _choquet_surprisal = _o->choquet_surprisal;
+  auto _information = _o->information;
+  auto _normalization_shift = _o->normalization_shift;
+  auto _minimum_whitened_innovation = _o->minimum_whitened_innovation;
+  auto _basin_radius = _o->basin_radius;
+  auto _basin_threshold = _o->basin_threshold;
+  auto _pcrb_floor = _o->pcrb_floor;
+  auto _log_volume_change = _o->log_volume_change;
+  auto _sigma = _o->sigma;
+  auto _radius = _o->radius;
+  auto _dispersion = _o->dispersion;
+  auto _mean_surprisal = _o->mean_surprisal;
+  auto _regime_log_det = _o->regime_log_det;
+  auto _entropy = _o->entropy;
+  auto _entropy_alpha = _o->entropy_alpha;
+  auto _inconsistent = _o->inconsistent;
+  auto _accepted = _o->accepted;
+  auto _survivors = _o->survivors.size() ? _fbb.CreateVector(_o->survivors) : 0;
+  auto _survivor_possibility = _o->survivor_possibility.size() ? _fbb.CreateVector(_o->survivor_possibility) : 0;
+  return orbpro::estimation::CreateSupportEpoch(
+      _fbb,
+      _epoch,
+      _estimate,
+      _shape,
+      _carried_shape,
+      _predicted_shape,
+      _support_count,
+      _survivor_count,
+      _medoid_index,
+      _choquet_surprisal,
+      _information,
+      _normalization_shift,
+      _minimum_whitened_innovation,
+      _basin_radius,
+      _basin_threshold,
+      _pcrb_floor,
+      _log_volume_change,
+      _sigma,
+      _radius,
+      _dispersion,
+      _mean_surprisal,
+      _regime_log_det,
+      _entropy,
+      _entropy_alpha,
+      _inconsistent,
+      _accepted,
+      _survivors,
+      _survivor_possibility);
+}
+
+inline TeagRequestT *TeagRequest::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<TeagRequestT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void TeagRequest::UnPackTo(TeagRequestT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = dimension(); _o->dimension = _e; }
+  { auto _e = points(); if (_e) { _o->points.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->points[_i] = _e->Get(_i); } } else { _o->points.resize(0); } }
+  { auto _e = prior_impossibility(); if (_e) { _o->prior_impossibility.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->prior_impossibility[_i] = _e->Get(_i); } } else { _o->prior_impossibility.resize(0); } }
+  { auto _e = surprisal(); if (_e) { _o->surprisal.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->surprisal[_i] = _e->Get(_i); } } else { _o->surprisal.resize(0); } }
+  { auto _e = whitened_squared_innovation(); if (_e) { _o->whitened_squared_innovation.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->whitened_squared_innovation[_i] = _e->Get(_i); } } else { _o->whitened_squared_innovation.resize(0); } }
+  { auto _e = events(); if (_e) { _o->events.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->events.begin()); } }
+  { auto _e = event_count(); _o->event_count = _e; }
+  { auto _e = alpha_levels(); if (_e) { _o->alpha_levels.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->alpha_levels[_i] = _e->Get(_i); } } else { _o->alpha_levels.resize(0); } }
+  { auto _e = front_tolerance(); _o->front_tolerance = _e; }
+  { auto _e = subset(); if (_e) { _o->subset.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->subset[_i] = _e->Get(_i); } } else { _o->subset.resize(0); } }
+  { auto _e = metric_shape(); if (_e) { _o->metric_shape.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->metric_shape[_i] = _e->Get(_i); } } else { _o->metric_shape.resize(0); } }
+  { auto _e = effective_dimension(); _o->effective_dimension = _e; }
+  { auto _e = prior_radius(); _o->prior_radius = _e; }
+  { auto _e = smolyak_dimension(); _o->smolyak_dimension = _e; }
+  { auto _e = smolyak_level(); _o->smolyak_level = _e; }
+  { auto _e = shape_a(); if (_e) { _o->shape_a.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->shape_a[_i] = _e->Get(_i); } } else { _o->shape_a.resize(0); } }
+  { auto _e = shape_b(); if (_e) { _o->shape_b.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->shape_b[_i] = _e->Get(_i); } } else { _o->shape_b.resize(0); } }
+  { auto _e = mvee_tolerance(); _o->mvee_tolerance = _e; }
+  { auto _e = mvee_max_iterations(); _o->mvee_max_iterations = _e; }
+  { auto _e = entropy(); _o->entropy = _e; }
+  { auto _e = minimum_count(); _o->minimum_count = _e; }
+  { auto _e = mvee(); _o->mvee = _e; }
+}
+
+inline ::flatbuffers::Offset<TeagRequest> CreateTeagRequest(::flatbuffers::FlatBufferBuilder &_fbb, const TeagRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return TeagRequest::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<TeagRequest> TeagRequest::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const TeagRequestT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const TeagRequestT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _dimension = _o->dimension;
+  auto _points = _o->points.size() ? _fbb.CreateVector(_o->points) : 0;
+  auto _prior_impossibility = _o->prior_impossibility.size() ? _fbb.CreateVector(_o->prior_impossibility) : 0;
+  auto _surprisal = _o->surprisal.size() ? _fbb.CreateVector(_o->surprisal) : 0;
+  auto _whitened_squared_innovation = _o->whitened_squared_innovation.size() ? _fbb.CreateVector(_o->whitened_squared_innovation) : 0;
+  auto _events = _o->events.size() ? _fbb.CreateVector(_o->events) : 0;
+  auto _event_count = _o->event_count;
+  auto _alpha_levels = _o->alpha_levels.size() ? _fbb.CreateVector(_o->alpha_levels) : 0;
+  auto _front_tolerance = _o->front_tolerance;
+  auto _subset = _o->subset.size() ? _fbb.CreateVector(_o->subset) : 0;
+  auto _metric_shape = _o->metric_shape.size() ? _fbb.CreateVector(_o->metric_shape) : 0;
+  auto _effective_dimension = _o->effective_dimension;
+  auto _prior_radius = _o->prior_radius;
+  auto _smolyak_dimension = _o->smolyak_dimension;
+  auto _smolyak_level = _o->smolyak_level;
+  auto _shape_a = _o->shape_a.size() ? _fbb.CreateVector(_o->shape_a) : 0;
+  auto _shape_b = _o->shape_b.size() ? _fbb.CreateVector(_o->shape_b) : 0;
+  auto _mvee_tolerance = _o->mvee_tolerance;
+  auto _mvee_max_iterations = _o->mvee_max_iterations;
+  auto _entropy = _o->entropy;
+  auto _minimum_count = _o->minimum_count;
+  auto _mvee = _o->mvee;
+  return orbpro::estimation::CreateTeagRequest(
+      _fbb,
+      _dimension,
+      _points,
+      _prior_impossibility,
+      _surprisal,
+      _whitened_squared_innovation,
+      _events,
+      _event_count,
+      _alpha_levels,
+      _front_tolerance,
+      _subset,
+      _metric_shape,
+      _effective_dimension,
+      _prior_radius,
+      _smolyak_dimension,
+      _smolyak_level,
+      _shape_a,
+      _shape_b,
+      _mvee_tolerance,
+      _mvee_max_iterations,
+      _entropy,
+      _minimum_count,
+      _mvee);
+}
+
+inline TeagResultT *TeagResult::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<TeagResultT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void TeagResult::UnPackTo(TeagResultT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = posterior_impossibility(); if (_e) { _o->posterior_impossibility.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->posterior_impossibility[_i] = _e->Get(_i); } } else { _o->posterior_impossibility.resize(0); } }
+  { auto _e = rescaled_impossibility(); if (_e) { _o->rescaled_impossibility.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->rescaled_impossibility[_i] = _e->Get(_i); } } else { _o->rescaled_impossibility.resize(0); } }
+  { auto _e = normalization_shift(); _o->normalization_shift = _e; }
+  { auto _e = zones(); if (_e) { _o->zones.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->zones.begin()); } }
+  { auto _e = alpha_cuts(); if (_e) { _o->alpha_cuts.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->alpha_cuts[_i] = _e->Get(_i); } } else { _o->alpha_cuts.resize(0); } }
+  { auto _e = alpha_cut_offsets(); if (_e) { _o->alpha_cut_offsets.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->alpha_cut_offsets[_i] = _e->Get(_i); } } else { _o->alpha_cut_offsets.resize(0); } }
+  { auto _e = event_possibility(); if (_e) { _o->event_possibility.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->event_possibility[_i] = _e->Get(_i); } } else { _o->event_possibility.resize(0); } }
+  { auto _e = event_necessity(); if (_e) { _o->event_necessity.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->event_necessity[_i] = _e->Get(_i); } } else { _o->event_necessity.resize(0); } }
+  { auto _e = choquet_surprisal(); _o->choquet_surprisal = _e; }
+  { auto _e = information(); _o->information = _e; }
+  { auto _e = basin_radius(); _o->basin_radius = _e; }
+  { auto _e = basin_threshold(); _o->basin_threshold = _e; }
+  { auto _e = basin_unit_survivors(); _o->basin_unit_survivors = _e; }
+  { auto _e = pcrb_floor(); _o->pcrb_floor = _e; }
+  { auto _e = mvee_center(); if (_e) { _o->mvee_center.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->mvee_center[_i] = _e->Get(_i); } } else { _o->mvee_center.resize(0); } }
+  { auto _e = mvee_shape(); if (_e) { _o->mvee_shape.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->mvee_shape[_i] = _e->Get(_i); } } else { _o->mvee_shape.resize(0); } }
+  { auto _e = mvee_iterations(); _o->mvee_iterations = _e; }
+  { auto _e = mvee_gap(); _o->mvee_gap = _e; }
+  { auto _e = mvee_log_volume(); _o->mvee_log_volume = _e; }
+  { auto _e = medoid(); _o->medoid = _e; }
+  { auto _e = medoid_radius(); _o->medoid_radius = _e; }
+  { auto _e = smolyak_points(); if (_e) { _o->smolyak_points.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->smolyak_points[_i] = _e->Get(_i); } } else { _o->smolyak_points.resize(0); } }
+  { auto _e = minkowski_shape(); if (_e) { _o->minkowski_shape.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->minkowski_shape[_i] = _e->Get(_i); } } else { _o->minkowski_shape.resize(0); } }
+  { auto _e = entropy(); _o->entropy = _e; }
+  { auto _e = support_entropy(); _o->support_entropy = _e; }
+  { auto _e = entropy_alpha(); _o->entropy_alpha = _e; }
+}
+
+inline ::flatbuffers::Offset<TeagResult> CreateTeagResult(::flatbuffers::FlatBufferBuilder &_fbb, const TeagResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return TeagResult::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<TeagResult> TeagResult::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const TeagResultT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const TeagResultT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _posterior_impossibility = _o->posterior_impossibility.size() ? _fbb.CreateVector(_o->posterior_impossibility) : 0;
+  auto _rescaled_impossibility = _o->rescaled_impossibility.size() ? _fbb.CreateVector(_o->rescaled_impossibility) : 0;
+  auto _normalization_shift = _o->normalization_shift;
+  auto _zones = _o->zones.size() ? _fbb.CreateVector(_o->zones) : 0;
+  auto _alpha_cuts = _o->alpha_cuts.size() ? _fbb.CreateVector(_o->alpha_cuts) : 0;
+  auto _alpha_cut_offsets = _o->alpha_cut_offsets.size() ? _fbb.CreateVector(_o->alpha_cut_offsets) : 0;
+  auto _event_possibility = _o->event_possibility.size() ? _fbb.CreateVector(_o->event_possibility) : 0;
+  auto _event_necessity = _o->event_necessity.size() ? _fbb.CreateVector(_o->event_necessity) : 0;
+  auto _choquet_surprisal = _o->choquet_surprisal;
+  auto _information = _o->information;
+  auto _basin_radius = _o->basin_radius;
+  auto _basin_threshold = _o->basin_threshold;
+  auto _basin_unit_survivors = _o->basin_unit_survivors;
+  auto _pcrb_floor = _o->pcrb_floor;
+  auto _mvee_center = _o->mvee_center.size() ? _fbb.CreateVector(_o->mvee_center) : 0;
+  auto _mvee_shape = _o->mvee_shape.size() ? _fbb.CreateVector(_o->mvee_shape) : 0;
+  auto _mvee_iterations = _o->mvee_iterations;
+  auto _mvee_gap = _o->mvee_gap;
+  auto _mvee_log_volume = _o->mvee_log_volume;
+  auto _medoid = _o->medoid;
+  auto _medoid_radius = _o->medoid_radius;
+  auto _smolyak_points = _o->smolyak_points.size() ? _fbb.CreateVector(_o->smolyak_points) : 0;
+  auto _minkowski_shape = _o->minkowski_shape.size() ? _fbb.CreateVector(_o->minkowski_shape) : 0;
+  auto _entropy = _o->entropy;
+  auto _support_entropy = _o->support_entropy;
+  auto _entropy_alpha = _o->entropy_alpha;
+  return orbpro::estimation::CreateTeagResult(
+      _fbb,
+      _posterior_impossibility,
+      _rescaled_impossibility,
+      _normalization_shift,
+      _zones,
+      _alpha_cuts,
+      _alpha_cut_offsets,
+      _event_possibility,
+      _event_necessity,
+      _choquet_surprisal,
+      _information,
+      _basin_radius,
+      _basin_threshold,
+      _basin_unit_survivors,
+      _pcrb_floor,
+      _mvee_center,
+      _mvee_shape,
+      _mvee_iterations,
+      _mvee_gap,
+      _mvee_log_volume,
+      _medoid,
+      _medoid_radius,
+      _smolyak_points,
+      _minkowski_shape,
+      _entropy,
+      _support_entropy,
+      _entropy_alpha);
 }
 
 inline const orbpro::estimation::EstimationEnvelope *GetEstimationEnvelope(const void *buf) {

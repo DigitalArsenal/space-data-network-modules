@@ -12,6 +12,6 @@ test('estimation manifest passes SDK standards validation',async()=>{
 test('built estimation artifact passes SDK validation and exports canonical ABI',async()=>{
  const r=await validateArtifactWithStandards({manifest,wasmPath});assert.equal(r.ok,true,JSON.stringify(r.issues));
  const inspection=await inspectModule(fs.readFileSync(wasmPath));
- for(const name of ['_start','plugin_invoke_stream','plugin_alloc','plugin_free','plugin_get_manifest_flatbuffer','plugin_get_manifest_flatbuffer_size','run_estimation','fit_batch'])assert.ok(inspection.exports.includes(name),name);
+ for(const name of ['_start','plugin_invoke_stream','plugin_alloc','plugin_free','plugin_get_manifest_flatbuffer','plugin_get_manifest_flatbuffer_size','run_estimation','fit_batch','evaluate_teag'])assert.ok(inspection.exports.includes(name),name);
  assert.equal(inspection.profile,'standalone');
 });

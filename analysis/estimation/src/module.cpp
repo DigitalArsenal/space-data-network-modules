@@ -1,5 +1,6 @@
 #include "space_data_module_invoke.h"
 #include "estimation.hpp"
+#include "teag.hpp"
 #include "Estimation_generated.h"
 #include "ODR_generated.h"
 #include "OCM_generated.h"
@@ -32,6 +33,13 @@ const plugin_input_frame_t* input(const char* port) {
 int fail(const char* code, const char* message) {
   plugin_set_error(code, message);
   return 3;
+}
+
+// ESPF_2025, ESPF_2026 and ELLIPSOIDAL_SET_MEMBERSHIP report sets, not
+// covariances (extension v3).
+bool set_based(wire::EstimatorKind kind) {
+  return kind == wire::EstimatorKind::ESPF_2025 || kind == wire::EstimatorKind::ESPF_2026 ||
+         kind == wire::EstimatorKind::ELLIPSOIDAL_SET_MEMBERSHIP;
 }
 
 double relative_seconds(const wire::EstimationEpoch& epoch,
@@ -486,6 +494,10 @@ std::vector<std::uint8_t> make_ocm(const core::CartesianState& estimate,
       estimator == wire::EstimatorKind::UNSCENTED_KALMAN_FILTER ? estimatorCategory::UnscentedKalman :
       sequential ? estimatorCategory::ExtendedKalman : estimatorCategory::BatchLeastSquares;
   if (estimator == wire::EstimatorKind::LINEAR_KALMAN_FILTER) record.ORBIT_DETERMINATION->OD_ALGORITHM = "LINEAR_KALMAN_FILTER";
+  if (set_based(estimator)) {
+    record.ORBIT_DETERMINATION->OD_ESTIMATOR = estimatorCategory::Unknown;
+    record.ORBIT_DETERMINATION->OD_ALGORITHM = wire::EnumNameEstimatorKind(estimator);
+  }
 
   record.COV_CALIBRATION = covarianceCalibration::Uncalibrated;
   auto& od = *record.ORBIT_DETERMINATION;
@@ -535,6 +547,10 @@ std::vector<std::uint8_t> make_ocm(const core::CartesianState& estimate,
       "not calibrated against independent evidence (COV_CALIBRATION Uncalibrated).",
       "Estimated parameters: Cartesian position and velocity. Consider parameters: none. Measurement biases: "
       "neither estimated nor considered; error-model biases are not applied by the fit."};
+  if (set_based(estimator))
+    record.HEADER->COMMENT.insert(record.HEADER->COMMENT.begin(),
+        std::string("COVARIANCE_DATA holds the shape S of the admissible set {(x - c)' S^-1 (x - c) <= 1} reported by ") +
+        wire::EnumNameEstimatorKind(estimator) + ", not a probabilistic covariance (docs/espf-spec.md).");
   ::flatbuffers::FlatBufferBuilder builder(2048);
   const auto root = CreateOCM(builder, &record);
   FinishOCMBuffer(builder, root);
@@ -554,7 +570,8 @@ std::vector<std::uint8_t> make_odr(const wire::EstimationRequest* request,
   report.STATE_COVARIANCE.assign(covariance.begin(), covariance.end());
   report.ESTIMATED_EPOCH_STATE = frm_state(estimate, request->config()->initial_epoch());
   report.CONFIGURATION = std::make_unique<ODRSolverConfigurationT>();
-  report.CONFIGURATION->ESTIMATOR = request->config()->estimator() == wire::EstimatorKind::LINEAR_KALMAN_FILTER
+  report.CONFIGURATION->ESTIMATOR = request->config()->estimator() == wire::EstimatorKind::LINEAR_KALMAN_FILTER ||
+                                         set_based(request->config()->estimator())
       ? odrEstimatorKind::UNSPECIFIED
       : static_cast<odrEstimatorKind>(static_cast<int>(request->config()->estimator()) + 1);
   report.CONFIGURATION->MAXIMUM_ITERATIONS = request->config()->maximum_iterations();
@@ -624,6 +641,11 @@ int push(const char* port, const char* schema, const char* identifier,
          const std::vector<std::uint8_t>& bytes) {
   return plugin_push_output(port, schema, identifier, bytes.data(),
                             static_cast<std::uint32_t>(bytes.size()));
+}
+
+bool smooth_requested(const wire::EstimationRequest* request) {
+  return request->config()->estimator() == wire::EstimatorKind::EXTENDED_KALMAN_FILTER_WITH_RTS ||
+         (request->options() && request->options()->smooth());
 }
 
 }  // namespace
@@ -740,7 +762,61 @@ extern "C" int run_estimation(void) {
           return fail("bad-estimation-request", "clock estimation requires a row-major 8x8 initial covariance");
         std::copy(options->initial_covariance8()->begin(), options->initial_covariance8()->end(), config.initial_covariance8.begin());
       }
+      if (const auto* e = options->espf()) {
+        auto& o = config.espf;
+        o.smolyak_level = e->smolyak_level(); o.initial_bound_scale = e->initial_bound_scale();
+        o.process_bound_scale = e->process_bound_scale(); o.measurement_bound_scale = e->measurement_bound_scale();
+        o.sigma_initial = e->sigma_initial(); o.sigma_min = e->sigma_min(); o.sigma_max = e->sigma_max();
+        o.rate_expand = e->rate_expand(); o.rate_contract = e->rate_contract();
+        o.minimum_survivors = static_cast<int>(e->minimum_survivors()); o.pcrb_rank = e->pcrb_rank();
+        o.medoid_metric = e->medoid_metric(); o.vfi_floor_ratio = e->vfi_floor_ratio();
+        o.mvee_tolerance = e->mvee_tolerance(); o.mvee_max_iterations = static_cast<int>(e->mvee_max_iterations());
+        o.entropy_diagnostics = e->entropy_diagnostics(); o.record_support = e->record_support();
+        o.plausibility_radius = e->plausibility_radius(); o.compatibility_floor = e->compatibility_floor();
+        o.surprisal_threshold = e->surprisal_threshold(); o.regularization = e->regularization();
+        o.regularization_relative = e->regularization_relative();
+        o.spread_sigma0 = e->spread_sigma0(); o.spread_sigma_min = e->spread_sigma_min(); o.spread_sigma_max = e->spread_sigma_max();
+        o.dispersion_gain = e->dispersion_gain(); o.surprisal_gain = e->surprisal_gain();
+        o.surprisal_reference = e->surprisal_reference(); o.surprisal_scale = e->surprisal_scale();
+        o.radius_gain_expand = e->radius_gain_expand(); o.radius_gain_contract = e->radius_gain_contract();
+        o.decay_rate = e->decay_rate(); o.mode_weighting = e->mode_weighting(); o.gaussian_limit = e->gaussian_limit();
+        o.pcrb_trigger = e->pcrb_trigger();
+        if (!(o.pcrb_trigger > 0) || o.pcrb_trigger > 1) return fail("bad-estimation-request", "ESPF pcrb_trigger must be in (0, 1]");
+        const double positives[] = {o.initial_bound_scale, o.process_bound_scale, o.measurement_bound_scale, o.sigma_initial,
+                                    o.sigma_min, o.sigma_max, o.rate_expand, o.rate_contract, o.plausibility_radius,
+                                    o.mvee_tolerance, o.vfi_floor_ratio};
+        for (double v : positives)
+          if (!(v > 0) || !std::isfinite(v)) return fail("bad-estimation-request", "ESPF scales, rates, radii and tolerances must be positive and finite");
+        if (o.smolyak_level > 5 || o.mode_weighting > 2 || o.pcrb_rank > 1 || o.medoid_metric > 1 || o.mvee_max_iterations < 1)
+          return fail("bad-estimation-request", "ESPF option out of range");
+      }
+      if (const auto* m = options->set_membership()) {
+        auto& o = config.set_membership;
+        o.initial_bound_scale = m->initial_bound_scale(); o.process_bound_scale = m->process_bound_scale();
+        o.measurement_bound_scale = m->measurement_bound_scale(); o.criterion = m->criterion();
+        if (!(o.initial_bound_scale > 0) || !(o.process_bound_scale > 0) || !(o.measurement_bound_scale > 0) || o.criterion > 1)
+          return fail("bad-estimation-request", "set-membership bound scales must be positive; criterion 0 or 1");
+      }
+      if (const auto* s0 = options->initial_support()) {
+        auto& t = config.initial_support;
+        t.epoch_seconds = s0->epoch() ? relative_seconds(*s0->epoch(), request->config()->initial_epoch()) : 0.0;
+        t.estimator = static_cast<core::EstimatorKind>(s0->estimator());
+        if (s0->points()) t.points.assign(s0->points()->begin(), s0->points()->end());
+        if (s0->possibility()) t.possibility.assign(s0->possibility()->begin(), s0->possibility()->end());
+        t.count = static_cast<int>(t.possibility.size());
+        if (!s0->estimate() || s0->estimate()->size() != 6 || !s0->shape() || s0->shape()->size() != 36 ||
+            t.points.size() != t.possibility.size() * 6 || s0->estimator() != request->config()->estimator() ||
+            t.epoch_seconds != 0.0)
+          return fail("bad-estimation-request", "initial_support must match the estimator and the configuration epoch, with 6-state points, an estimate and a 6x6 shape");
+        for (int i = 0; i < 6; ++i) t.estimate[i] = s0->estimate()->Get(i);
+        for (int i = 0; i < 36; ++i) t.shape[i] = s0->shape()->Get(i);
+        t.sigma = s0->sigma(); t.radius = s0->radius(); t.dispersion = s0->dispersion();
+        t.steps = static_cast<int>(s0->steps());
+        t.valid = true;
+      }
     }
+    if (set_based(request->config()->estimator()) && (!nonlinear || smooth_requested(request)))
+      return fail("bad-estimation-request", "ESPF and set-membership estimators need nonlinear_propagation and do not smooth");
     const bool smooth = request->config()->estimator() == wire::EstimatorKind::EXTENDED_KALMAN_FILTER_WITH_RTS || (request->options() && request->options()->smooth());
     std::vector<std::unique_ptr<wire::PropagationQueryT>> pending;
     const auto* answers=envelope->propagation_answers();
@@ -772,7 +848,9 @@ extern "C" int run_estimation(void) {
       query->target_epoch=std::make_unique<wire::EstimationEpoch>(target_epoch);
       pending.push_back(std::move(query));return false;
     };
-    filter = core::sequential_filter(config, observations, samples, smooth);
+    if (config.estimator == core::EstimatorKind::ELLIPSOIDAL_SET_MEMBERSHIP) filter = core::set_membership_filter(config, observations);
+    else if (config.estimator == core::EstimatorKind::ESPF_2025 || config.estimator == core::EstimatorKind::ESPF_2026) filter = core::support_filter(config, observations);
+    else filter = core::sequential_filter(config, observations, samples, smooth);
     if(protocol_error || (answers && answers->size()>sequence)) return fail("propagator-protocol", "propagator answers do not match the exact seed, epoch, frame and sequence");
     if(!pending.empty()) {
       wire::EstimationEnvelopeT reply;reply.result=std::make_unique<wire::EstimationResultT>();
@@ -781,7 +859,8 @@ extern "C" int run_estimation(void) {
       std::vector<uint8_t> bytes(b.GetBufferPointer(),b.GetBufferPointer()+b.GetSize());
       return push("result","Estimation.fbs","$EST",bytes)<0?fail("emit-failed","cannot emit propagation query"):0;
     }
-    if (!filter.valid || filter.epochs.empty()) return fail("filter-failed", "sequential filter did not produce a valid covariance history");
+    if (!filter.valid || filter.epochs.empty())
+      return fail("filter-failed", filter.error.empty() ? "sequential filter did not produce a valid covariance history" : filter.error.c_str());
     const core::FilterEpoch& final = filter.epochs.back();
     estimate = smooth ? final.smoothed : final.filtered;
     covariance = smooth ? final.smoothed_covariance : final.filtered_covariance;
@@ -833,10 +912,45 @@ extern "C" int run_estimation(void) {
       extended_history.push_back(wire::ExtendedFilterEpoch::Pack(builder,&row));
     }
   }
+  std::vector<::flatbuffers::Offset<wire::SupportEpoch>> support_history;
+  ::flatbuffers::Offset<wire::SupportState> final_support = 0;
+  if (!batch_mode && set_based(request->config()->estimator())) {
+    for (const core::SupportEpoch& e : filter.support) {
+      wire::SupportEpochT row;
+      row.epoch = std::make_unique<wire::EstimationEpoch>(absolute_epoch(e.epoch_seconds, request->config()->initial_epoch()));
+      row.estimate.assign(e.estimate.begin(), e.estimate.end());
+      row.shape.assign(e.shape.begin(), e.shape.end());
+      row.carried_shape.assign(e.carried_shape.begin(), e.carried_shape.end());
+      row.predicted_shape.assign(e.predicted_shape.begin(), e.predicted_shape.end());
+      row.support_count = static_cast<std::uint32_t>(e.support_count);
+      row.survivor_count = static_cast<std::uint32_t>(e.survivor_count);
+      row.medoid_index = e.medoid_index;
+      row.choquet_surprisal = e.choquet_surprisal; row.information = e.information;
+      row.normalization_shift = e.normalization_shift; row.minimum_whitened_innovation = e.minimum_whitened_innovation;
+      row.basin_radius = e.basin_radius; row.basin_threshold = e.basin_threshold; row.pcrb_floor = e.pcrb_floor;
+      row.log_volume_change = e.log_volume_change; row.sigma = e.sigma; row.radius = e.radius;
+      row.dispersion = e.dispersion; row.mean_surprisal = e.mean_surprisal; row.regime_log_det = e.regime_log_det;
+      row.entropy = e.entropy; row.entropy_alpha = e.entropy_alpha;
+      row.inconsistent = e.inconsistent; row.accepted = e.accepted;
+      row.survivors = e.survivors; row.survivor_possibility = e.survivor_possibility;
+      support_history.push_back(wire::SupportEpoch::Pack(builder, &row));
+    }
+    const core::SupportState& f = filter.final_support;
+    wire::SupportStateT state_row;
+    state_row.epoch = std::make_unique<wire::EstimationEpoch>(absolute_epoch(f.epoch_seconds, request->config()->initial_epoch()));
+    state_row.estimator = request->config()->estimator();
+    state_row.points = f.points; state_row.possibility = f.possibility;
+    state_row.estimate.assign(f.estimate.begin(), f.estimate.end());
+    state_row.shape.assign(f.shape.begin(), f.shape.end());
+    state_row.sigma = f.sigma; state_row.radius = f.radius; state_row.dispersion = f.dispersion;
+    state_row.steps = static_cast<std::uint32_t>(f.steps);
+    final_support = wire::SupportState::Pack(builder, &state_row);
+  }
   const auto result = wire::CreateEstimationResultDirect(builder,
       converged ? wire::EstimationStatus::OK : wire::EstimationStatus::NOT_CONVERGED,
       &state, &wire_history, &residuals, &iteration_covariances, &rejected,
-      &odr, &ocm, nullptr, trace, &extended_history);
+      &odr, &ocm, nullptr, trace, &extended_history, nullptr, 0,
+      support_history.empty() ? nullptr : &support_history, final_support);
   const auto root = wire::CreateEstimationEnvelope(builder, 0, result);
   wire::FinishEstimationEnvelopeBuffer(builder, root);
   const std::vector<std::uint8_t> response(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
@@ -1110,4 +1224,132 @@ extern "C" int initial_orbit(void) {
   if (plugin_push_output("result", "Estimation.fbs", "$EST", builder.GetBufferPointer(),
                          static_cast<std::uint32_t>(builder.GetSize())) < 0) return fail("emit-failed", "failed to emit initial-orbit result");
   return result.valid ? 0 : 4;
+}
+
+// The TEAG primitives on a finite support (extension v3): impossibility
+// field and conjunctive update, rescaling, zones, alpha-cuts, possibility and
+// necessity of events, Choquet surprisal and information content, the
+// PCRB-admissible basin, the MVEE, the minimax medoid, Smolyak grids, the
+// Minkowski outer bound and the truncated possibilistic entropy. Every output
+// whose inputs are present is computed (docs/espf-spec.md).
+extern "C" int evaluate_teag(void) {
+  plugin_reset_output_state();
+  const plugin_input_frame_t* frame = input("request");
+  if (frame == nullptr || frame->payload == nullptr || frame->payload_length == 0 ||
+      !wire::EstimationEnvelopeBufferHasIdentifier(frame->payload))
+    return fail("bad-teag-request", "request must be a $EST envelope with teag_request");
+  ::flatbuffers::Verifier verifier(frame->payload, frame->payload_length);
+  if (!wire::VerifyEstimationEnvelopeBuffer(verifier)) return fail("bad-teag-request", "request does not verify");
+  const auto* envelope = wire::GetEstimationEnvelope(frame->payload);
+  const wire::TeagRequest* req = envelope ? envelope->teag_request() : nullptr;
+  if (req == nullptr) return fail("bad-teag-request", "request must carry teag_request");
+  namespace T = ::sdn::teag;
+  auto vec = [](const ::flatbuffers::Vector<double>* v) { return v ? T::Vec(v->begin(), v->end()) : T::Vec(); };
+  const int n = req->dimension();
+  const T::Vec points = vec(req->points());
+  const T::Vec prior_in = vec(req->prior_impossibility()), psi_in = vec(req->surprisal()), q = vec(req->whitened_squared_innovation());
+  std::size_t field_count = std::max({prior_in.size(), psi_in.size(), q.size()});
+  const int point_count = n > 0 ? static_cast<int>(points.size() / n) : 0;
+  if (n > 0 && points.size() % n != 0) return fail("bad-teag-request", "points must be count x dimension");
+  for (const T::Vec* v : {&prior_in, &psi_in, &q})
+    if (!v->empty() && v->size() != field_count) return fail("bad-teag-request", "field vectors must have one value per point");
+  if (field_count > 0 && n > 0 && !points.empty() && static_cast<int>(field_count) != point_count)
+    return fail("bad-teag-request", "fields and points must have the same count");
+  wire::TeagResultT out;
+  T::Vec field_for_events;
+  if (field_count > 0) {
+    const T::Vec prior = prior_in.empty() ? T::Vec(field_count, 0.0) : prior_in;
+    T::Vec psi = psi_in;
+    if (psi.empty() && !q.empty()) { psi.resize(field_count); for (std::size_t i = 0; i < field_count; ++i) psi[i] = 0.5 * q[i]; }
+    if (!psi.empty()) {
+      out.posterior_impossibility = T::conjoin(prior, psi);
+      T::Vec rescaled = out.posterior_impossibility;
+      out.normalization_shift = T::rescale(&rescaled);
+      out.rescaled_impossibility = rescaled;
+      for (int z : T::zones(prior, psi, req->front_tolerance())) out.zones.push_back(static_cast<std::int8_t>(z));
+      field_for_events = rescaled;
+    } else {
+      field_for_events = prior;
+    }
+    if (req->alpha_levels())
+      for (double alpha : *req->alpha_levels()) {
+        out.alpha_cut_offsets.push_back(static_cast<std::uint32_t>(out.alpha_cuts.size()));
+        for (int i : T::alpha_cut(field_for_events, alpha)) out.alpha_cuts.push_back(static_cast<std::uint32_t>(i));
+      }
+    if (req->events()) {
+      if (req->events()->size() != req->event_count() * field_count) return fail("bad-teag-request", "events must be event_count x count");
+      for (std::uint32_t e = 0; e < req->event_count(); ++e) {
+        std::vector<std::uint8_t> mask(req->events()->begin() + e * field_count, req->events()->begin() + (e + 1) * field_count);
+        out.event_possibility.push_back(T::possibility_of(field_for_events, mask));
+        out.event_necessity.push_back(T::necessity_of(field_for_events, mask));
+      }
+    }
+    if (!q.empty()) {
+      T::Vec prior_pi(field_count);
+      for (std::size_t i = 0; i < field_count; ++i) prior_pi[i] = T::possibility(prior[i]);
+      out.choquet_surprisal = T::choquet_surprisal(q, prior_pi);
+      out.information = T::information_content(out.choquet_surprisal);
+      const int eff = req->effective_dimension() > 0 ? static_cast<int>(req->effective_dimension()) : std::max(1, n);
+      const T::PcrbBasin b = T::pcrb_basin(field_for_events, out.information, eff, req->prior_radius());
+      out.basin_radius = b.radius;
+      out.basin_threshold = b.threshold;
+      out.basin_unit_survivors = static_cast<std::uint32_t>(b.unit_survivors);
+      out.pcrb_floor = T::pcrb_floor(eff, out.information);
+    }
+  }
+  std::vector<int> subset;
+  if (req->subset()) for (std::uint32_t i : *req->subset()) {
+    if (static_cast<int>(i) >= point_count) return fail("bad-teag-request", "subset index out of range");
+    subset.push_back(static_cast<int>(i));
+  }
+  if (subset.empty()) for (int i = 0; i < point_count; ++i) subset.push_back(i);
+  T::Ellipsoid ellipsoid;
+  bool have_mvee = false;
+  if (req->mvee() && n > 0) {
+    T::Vec sub;
+    for (int k : subset) for (int i = 0; i < n; ++i) sub.push_back(points[k * n + i]);
+    T::MveeReport report;
+    if (!T::mvee(sub, static_cast<int>(subset.size()), n, req->mvee_tolerance(), static_cast<int>(req->mvee_max_iterations()), &ellipsoid, &report))
+      return fail("teag-mvee-failed", "the MVEE needs at least n + 1 affinely independent points");
+    have_mvee = true;
+    out.mvee_center = ellipsoid.center;
+    out.mvee_shape = ellipsoid.shape;
+    out.mvee_iterations = static_cast<std::uint32_t>(report.iterations);
+    out.mvee_gap = report.gap;
+    T::ellipsoid_log_volume(ellipsoid.shape, n, &out.mvee_log_volume);
+  }
+  const T::Vec metric = vec(req->metric_shape());
+  if (n > 0 && point_count > 0 && (!metric.empty() || have_mvee)) {
+    if (!metric.empty() && metric.size() != static_cast<std::size_t>(n) * n) return fail("bad-teag-request", "metric_shape must be n x n");
+    double radius = 0;
+    out.medoid = T::minimax_medoid(points, n, subset, metric.empty() ? ellipsoid.shape : metric, &radius);
+    out.medoid_radius = radius;
+    if (out.medoid < 0) return fail("teag-medoid-failed", "metric shape is not positive definite");
+  }
+  if (req->smolyak_dimension() > 0 && req->smolyak_level() > 0) {
+    if (req->smolyak_level() > 6 || req->smolyak_dimension() > 12) return fail("bad-teag-request", "Smolyak level at most 6, dimension at most 12");
+    out.smolyak_points = T::smolyak_clenshaw_curtis(req->smolyak_dimension(), req->smolyak_level());
+  }
+  const T::Vec sa = vec(req->shape_a()), sb = vec(req->shape_b());
+  if (!sa.empty() || !sb.empty()) {
+    const int m = static_cast<int>(std::lround(std::sqrt(static_cast<double>(sa.size()))));
+    if (sa.size() != sb.size() || static_cast<std::size_t>(m) * m != sa.size()) return fail("bad-teag-request", "shape_a and shape_b must be equal-size square matrices");
+    out.minkowski_shape = T::minkowski_outer(sa, sb, m);
+  }
+  if (req->entropy() && n > 0 && point_count > 0) {
+    T::Vec possibility(point_count, 1.0);
+    if (!field_for_events.empty()) for (int i = 0; i < point_count; ++i) possibility[i] = T::possibility(field_for_events[i]);
+    T::EntropyReport rep;
+    const int minimum = req->minimum_count() > 0 ? static_cast<int>(req->minimum_count()) : 2 * n + 1;
+    if (!T::possibilistic_entropy(points, possibility, n, minimum, &rep)) return fail("teag-entropy-failed", "no alpha-cut has the minimum count");
+    out.entropy = rep.entropy;
+    out.support_entropy = rep.support_entropy;
+    out.entropy_alpha = rep.truncation_alpha;
+  }
+  wire::EstimationEnvelopeT reply;
+  reply.teag_result = std::make_unique<wire::TeagResultT>(std::move(out));
+  ::flatbuffers::FlatBufferBuilder b;
+  wire::FinishEstimationEnvelopeBuffer(b, wire::EstimationEnvelope::Pack(b, &reply));
+  const std::vector<std::uint8_t> bytes(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+  return push("result", "Estimation.fbs", "$EST", bytes) < 0 ? fail("emit-failed", "cannot emit the TEAG result") : 0;
 }
