@@ -19,6 +19,18 @@ struct RFB;
 struct RFBBuilder;
 struct RFBT;
 
+/// Band designation carried by an emitter record.
+///
+/// Two naming systems coexist here on purpose. `UHF`, `SHF`, `EHF` and the
+/// members below `OTHER` are ITU-R V.431 decade bands; `L` through `Q` are the
+/// IEEE 521 letter bands. They OVERLAP by construction (an 8.4 GHz downlink is
+/// both `X` and `SHF`). A publisher encodes the designation ITS SOURCE STATES —
+/// never a re-derivation from CENTER_FREQ, and never both.
+///
+/// ORDINALS ARE WIRE VALUES. New members are APPENDED ONLY. Members added after
+/// `OTHER` are therefore out of frequency order in the declaration; that is
+/// deliberate and permanent. Reordering this enum silently re-labels every
+/// $RFB record ever published.
 enum class rfBandDesignation : int8_t {
   UHF = 0,
   L = 1,
@@ -32,12 +44,27 @@ enum class rfBandDesignation : int8_t {
   W = 9,
   Q = 10,
   EHF = 11,
+  /// The source states a designation this enum cannot express. The verbatim
+  /// designation MUST be preserved in NAME.
   OTHER = 12,
+  /// ITU-R V.431 very high frequency, 30–300 MHz. Appended 1.177.0.
+  VHF = 13,
+  /// ITU-R V.431 high frequency, 3–30 MHz. Appended 1.177.0.
+  HF = 14,
+  /// ITU-R V.431 medium frequency, 300 kHz–3 MHz. Appended 1.177.0.
+  MF = 15,
+  /// ITU-R V.431 low frequency, 30–300 kHz. Appended 1.177.0.
+  LF = 16,
+  /// ITU-R V.431 very low frequency, 3–30 kHz. Appended 1.177.0.
+  VLF = 17,
+  /// ITU-R V.431 super high frequency, 3–30 GHz. Appended 1.177.0 to close the
+  /// decade ladder between the pre-existing UHF and EHF members.
+  SHF = 18,
   MIN = UHF,
-  MAX = OTHER
+  MAX = SHF
 };
 
-inline const rfBandDesignation (&EnumValuesrfBandDesignation())[13] {
+inline const rfBandDesignation (&EnumValuesrfBandDesignation())[19] {
   static const rfBandDesignation values[] = {
     rfBandDesignation::UHF,
     rfBandDesignation::L,
@@ -51,13 +78,19 @@ inline const rfBandDesignation (&EnumValuesrfBandDesignation())[13] {
     rfBandDesignation::W,
     rfBandDesignation::Q,
     rfBandDesignation::EHF,
-    rfBandDesignation::OTHER
+    rfBandDesignation::OTHER,
+    rfBandDesignation::VHF,
+    rfBandDesignation::HF,
+    rfBandDesignation::MF,
+    rfBandDesignation::LF,
+    rfBandDesignation::VLF,
+    rfBandDesignation::SHF
   };
   return values;
 }
 
 inline const char * const *EnumNamesrfBandDesignation() {
-  static const char * const names[14] = {
+  static const char * const names[20] = {
     "UHF",
     "L",
     "S",
@@ -71,13 +104,19 @@ inline const char * const *EnumNamesrfBandDesignation() {
     "Q",
     "EHF",
     "OTHER",
+    "VHF",
+    "HF",
+    "MF",
+    "LF",
+    "VLF",
+    "SHF",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamerfBandDesignation(rfBandDesignation e) {
-  if (::flatbuffers::IsOutRange(e, rfBandDesignation::UHF, rfBandDesignation::OTHER)) return "";
+  if (::flatbuffers::IsOutRange(e, rfBandDesignation::UHF, rfBandDesignation::SHF)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesrfBandDesignation()[index];
 }
@@ -196,7 +235,8 @@ struct RFBT : public ::flatbuffers::NativeTable {
 /// RF Band Specification
 ///
 /// UNITS ARE NORMATIVE. Every frequency field in this table is MHz. Sources
-/// that publish Hz (SatNOGS DB) MUST divide by 1e6 before encoding; sources
+/// that publish Hz (as open transmitter databases commonly do) MUST divide by
+/// 1e6 before encoding; sources
 /// that publish kHz MUST divide by 1e3. BAUD is baud (symbols per second),
 /// never kilobaud. Encoding a Hz value into a MHz field is a defect, not a
 /// convention.
@@ -306,7 +346,8 @@ struct RFB FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     return GetField<uint32_t>(VT_NORAD_CAT_ID, 0);
   }
   /// Identifier of the physical transmitter, transceiver or transponder this
-  /// record describes (e.g. a SatNOGS transmitter UUID). Uplink and downlink
+  /// record describes (e.g. an upstream transmitter database's UUID). Uplink
+  /// and downlink
   /// records of the same device share this value.
   const ::flatbuffers::String *ID_TRANSMITTER() const {
     return GetPointer<const ::flatbuffers::String *>(VT_ID_TRANSMITTER);

@@ -31,7 +31,9 @@
 //   plugin_entity_get_mode(entity_index)             → get mode
 //   plugin_get_omm_record_by_pointer(ptr,out)        → OMM payload by sqlite id
 //
-// All positions are output in ECEF frame, in meters.
+// The direct-call exports output ECEF positions in meters. The PIV method
+// propagate_state also answers in TEME or GCRF (output_frame), and
+// propagate_ephemeris writes `$OEM` trajectories in TEME or GCRF.
 // =============================================================================
 
 #include "orbpro_plugin.h"
@@ -43,6 +45,9 @@
 #include "generated/PropagatorState_generated.h"
 #include "generated/StateVector_generated.h"
 #include "generated/sds/PIV_generated.h"
+#include "generated/sds/OEM_generated.h"
+// TEME and GCRF output: foundation/frames' axis engine over the vendored ERFA.
+#include "axis_engine.hpp"
 #include <flatbuffers/flatbuffers.h>
 #include <sqlite3.h>
 #include <cstdlib>
@@ -156,6 +161,7 @@ static bool g_pendingEntityNamesFromFlatbuffer = false;
 extern "C" int32_t plugin_init_omm(const OrbProOMMRecord* records, uint32_t count);
 extern "C" double plugin_entity_add_omm(uint32_t entity_index, const OrbProOMMRecord* record);
 extern "C" int32_t plugin_propagate(double julian_date, uint32_t entity_index, OrbProStateVector* out);
+extern "C" int32_t plugin_get_entity_catalog_row(uint32_t entity_index, OrbProCatalogRow* out_row);
 
 // =============================================================================
 // Internal Helpers
@@ -1964,6 +1970,103 @@ int32_t findEntityIndexByNorad(uint32_t noradCatId) {
     return -1;
 }
 
+// -----------------------------------------------------------------------------
+// TEME and GCRF output (1.2.0)
+// -----------------------------------------------------------------------------
+
+// Half-width of the central difference giving the TEME axes' rotation rate,
+// as analysis/epoch-state takes it: the shortest IAU 2000A nutation periods
+// are days, so its truncation error is far below double rounding.
+constexpr double TEME_RATE_HALF_STEP_SECONDS = 600.0;
+
+// A UTC Julian date as ERFA's two parts: the day's start and its fraction.
+void splitUtcJulianDate(double jdUtc, double& day, double& fraction) {
+    day = std::floor(jdUtc - 0.5) + 0.5;
+    fraction = jdUtc - day;
+}
+
+// TEME -> GCRF at a UTC Julian date (km, km/s), as analysis/epoch-state does
+// it: R = foundation/frames gcrfToTeme (ERFA eraPnm06a and eraEe06a) at TT
+// from UTC by ERFA's leap-second table, Rdot by a +/-600 s central
+// difference, r_g = R' r_t and v_g = R' (v_t - Rdot r_g). ERFA's "dubious
+// year" (+1: before 1960 or past its table) is used, as in epoch-state: a
+// second moves R by about 1e-11 rad.
+bool temeToGcrf(double jdUtc, const double rTeme[3], const double vTeme[3],
+                double rGcrf[3], double vGcrf[3]) {
+    namespace fr = sdn::frames;
+    double day = 0.0, fraction = 0.0, tai1 = 0.0, tai2 = 0.0;
+    splitUtcJulianDate(jdUtc, day, fraction);
+    if (eraUtctai(day, fraction, &tai1, &tai2) < 0) return false;
+    fr::Epoch epoch;
+    if (eraTaitt(tai1, tai2, &epoch.tt1, &epoch.tt2) != 0) return false;
+    fr::Epoch before = epoch, after = epoch;
+    before.tt2 -= TEME_RATE_HALF_STEP_SECONDS / 86400.0;
+    after.tt2 += TEME_RATE_HALF_STEP_SECONDS / 86400.0;
+    const fr::Mat3 R = fr::gcrfToTeme(epoch);
+    const fr::Mat3 Rb = fr::gcrfToTeme(before);
+    const fr::Mat3 Ra = fr::gcrfToTeme(after);
+    fr::Mat3 Rdot;
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            Rdot.m[i][j] = (Ra.m[i][j] - Rb.m[i][j]) * (1.0 / (2.0 * TEME_RATE_HALF_STEP_SECONDS));
+        }
+    }
+    const fr::Mat3 Rt = fr::transpose(R);
+    const fr::Vec3 r = fr::apply(Rt, fr::Vec3{rTeme[0], rTeme[1], rTeme[2]});
+    const fr::Vec3 v = fr::apply(Rt, fr::sub(fr::Vec3{vTeme[0], vTeme[1], vTeme[2]}, fr::apply(Rdot, r)));
+    rGcrf[0] = r.x; rGcrf[1] = r.y; rGcrf[2] = r.z;
+    vGcrf[0] = v.x; vGcrf[1] = v.y; vGcrf[2] = v.z;
+    return std::isfinite(r.x) && std::isfinite(r.y) && std::isfinite(r.z) &&
+           std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+}
+
+// ISO 8601 UTC, to the microsecond, of a UTC Julian date (ERFA eraD2dtf,
+// which knows the leap seconds). Empty when ERFA refuses the date.
+std::string isoFromUtcJulianDate(double jdUtc) {
+    double day = 0.0, fraction = 0.0;
+    splitUtcJulianDate(jdUtc, day, fraction);
+    int year = 0, month = 0, dayOfMonth = 0, hmsf[4] = {0, 0, 0, 0};
+    if (eraD2dtf("UTC", 6, day, fraction, &year, &month, &dayOfMonth, hmsf) < 0) return std::string();
+    char text[40];
+    std::snprintf(text, sizeof text, "%04d-%02d-%02dT%02d:%02d:%02d.%06dZ",
+                  year, month, dayOfMonth, hmsf[0], hmsf[1], hmsf[2], hmsf[3]);
+    return text;
+}
+
+// The TEME or GCRF state (m, m/s) of an entity: plugin_propagate's
+// propagation and validity, without its Earth-fixed rotation.
+int32_t propagateInertial(double julianDate, uint32_t entityIndex, OrbProReferenceFrame frame,
+                          OrbProStateVector* out) {
+    if (!g_initialized || entityIndex >= g_satellites.size()) {
+        return -1;
+    }
+    SatelliteEntity& entity = g_satellites[entityIndex];
+    if (!entity.valid) {
+        orbpro_state_init(out);
+        return -1;
+    }
+    if (!propagateEntityTEME(entity, julianDate, entity.r, entity.v)) {
+        orbpro_state_init(out);
+        out->flags = ORBPRO_STATE_DECAYED;
+        return -1;
+    }
+    entity.lastEpochJD = julianDate;
+    double r[3] = {entity.r[0], entity.r[1], entity.r[2]};
+    double v[3] = {entity.v[0], entity.v[1], entity.v[2]};
+    if (frame == ORBPRO_FRAME_ICRF && !temeToGcrf(julianDate, entity.r, entity.v, r, v)) {
+        orbpro_state_init(out);
+        return -1;
+    }
+    out->epoch = julianDate;
+    for (int i = 0; i < 3; ++i) {
+        out->position[i] = r[i] * 1000.0;
+        out->velocity[i] = v[i] * 1000.0;
+    }
+    orbpro_state_set_frame(out, frame);
+    out->flags = entity.valid ? ORBPRO_STATE_VALID : 0;
+    return 0;
+}
+
 bool addNewEntityFromOmmRecord(
     const OrbProOMMRecord& omm,
     const PendingCatalogMetadata* metadata = nullptr
@@ -2437,7 +2540,8 @@ uint8_t* encodePropagatorStatePayload(
     uint32_t entityIndex,
     uint32_t catalogNumber,
     bool valid,
-    uint32_t* payloadSizeOut
+    uint32_t* payloadSizeOut,
+    orbpro::plugins::ReferenceFrame frame = orbpro::plugins::ReferenceFrame_ECEF
 ) {
     flatbuffers::FlatBufferBuilder builder(256);
     const std::vector<double> position = {
@@ -2458,7 +2562,7 @@ uint8_t* encodePropagatorStatePayload(
         positionOffset,
         velocityOffset,
         julianDateToJ2000Milliseconds(state.epoch),
-        orbpro::plugins::ReferenceFrame_ECEF,
+        frame,
         0,
         0.0,
         0.0,
@@ -2468,6 +2572,307 @@ uint8_t* encodePropagatorStatePayload(
     );
     orbpro::plugins::FinishPropagatorStateBuffer(builder, stateOffset);
     return copyFlatBufferToHeap(builder, payloadSizeOut);
+}
+
+// -----------------------------------------------------------------------------
+// OMM ingestion from PIV frames
+// -----------------------------------------------------------------------------
+
+struct IngestFailure {
+    int32_t status = 0;
+    const char* code = "";
+    std::string message;
+};
+
+// The ports whose frames the propagate methods ingest before propagating.
+bool isIngestionPort(const TAB* input) {
+    const auto* port = input != nullptr ? input->PORT_ID() : nullptr;
+    return port != nullptr && (port->str() == "omm" || port->str() == "records");
+}
+
+// Ingests the OMM frames of an invocation as ingest_omm always has: direct
+// $OMM, size-prefixed $OMM streams or $REC payloads. With ingestionPortsOnly,
+// only frames on the omm and records ports count, and none is no ingestion
+// at all: the one-shot form of propagate_state and propagate_ephemeris
+// (1.2.0), which a command runtime needs, every invocation starting empty.
+bool ingestOmmFrames(const PIVRequest* request, const char* method, bool ingestionPortsOnly, IngestFailure& failure) {
+    std::vector<OrbProOMMRecord> records;
+    std::map<uint32_t, PendingCatalogMetadata> metadataByNorad;
+    bool found = false;
+    const auto* inputs = request->INPUTS();
+    if (inputs != nullptr) {
+        for (flatbuffers::uoffset_t inputIndex = 0; inputIndex < inputs->size(); inputIndex++) {
+            const auto* input = inputs->Get(inputIndex);
+            if (ingestionPortsOnly && !isIngestionPort(input)) {
+                continue;
+            }
+            const uint8_t* payload = nullptr;
+            uint32_t payloadSize = 0;
+            if (!resolvePivInputPayload(request, input, payload, payloadSize)) {
+                continue;
+            }
+            found = true;
+
+            std::vector<OrbProOMMRecord> inputRecords;
+            if (!parseOmmFlatBufferStream(payload, payloadSize, inputRecords)) {
+                g_pendingEntityMetadataByNorad.clear();
+                g_pendingEntityNamesFromFlatbuffer = false;
+                failure = {400, "invalid-input",
+                           std::string(method) + " expects direct $OMM, size-prefixed OMM stream, or $REC payloads."};
+                return false;
+            }
+
+            records.insert(records.end(), inputRecords.begin(), inputRecords.end());
+            for (const auto& entry : g_pendingEntityMetadataByNorad) {
+                metadataByNorad[entry.first] = entry.second;
+            }
+            g_pendingEntityMetadataByNorad.clear();
+            g_pendingEntityNamesFromFlatbuffer = false;
+        }
+    }
+    if (ingestionPortsOnly && !found) {
+        return true;
+    }
+
+    if (!ingestOmmRecords(records, metadataByNorad)) {
+        failure = {500, "ingest-failed", std::string(method) + " failed to apply any OMM records."};
+        return false;
+    }
+    return true;
+}
+
+// The entities a propagate request names, in order. catalog_numbers (1.2.0)
+// resolves each object by its NORAD number, and with entity_handles as well
+// every handle must hold that object; otherwise entity_handles, else every
+// entity up to max_count, as in 1.1.0. False, with a PIV error code and
+// message, when the request names an object the module does not hold.
+bool selectEntities(
+    const orbpro::propagator::PropagatorBatchRequest* batchRequest,
+    std::vector<uint32_t>& handles,
+    std::string& errorCode,
+    std::string& errorMessage
+) {
+    handles.clear();
+    const auto* catalog = batchRequest->catalog_numbers();
+    const auto* requested = batchRequest->entity_handles();
+    const bool haveHandles = requested != nullptr && requested->size() > 0;
+    if (catalog != nullptr && catalog->size() > 0) {
+        if (haveHandles && requested->size() != catalog->size()) {
+            errorCode = "handle-mismatch";
+            errorMessage = "entity_handles and catalog_numbers name different numbers of objects.";
+            return false;
+        }
+        handles.reserve(catalog->size());
+        for (flatbuffers::uoffset_t k = 0; k < catalog->size(); ++k) {
+            const uint32_t norad = catalog->Get(k);
+            if (haveHandles) {
+                const uint32_t handle = requested->Get(k);
+                const uint32_t held = handle < g_satellites.size() ? g_satellites[handle].noradId : 0;
+                if (held != norad) {
+                    errorCode = "handle-mismatch";
+                    errorMessage = "handle " + std::to_string(handle) + " is NORAD " + std::to_string(held) +
+                                   ", not " + std::to_string(norad) + ".";
+                    return false;
+                }
+                handles.push_back(handle);
+                continue;
+            }
+            const int32_t index = findEntityIndexByNorad(norad);
+            if (index < 0) {
+                errorCode = "unknown-object";
+                errorMessage = "NORAD " + std::to_string(norad) + " is not loaded.";
+                return false;
+            }
+            handles.push_back(static_cast<uint32_t>(index));
+        }
+        return true;
+    }
+    if (haveHandles) {
+        handles.reserve(requested->size());
+        for (uint32_t handle : *requested) {
+            handles.push_back(handle);
+        }
+        return true;
+    }
+    const uint32_t entityCount = static_cast<uint32_t>(g_satellites.size());
+    const uint32_t maxCount =
+        batchRequest->max_count() > 0
+            ? std::min(batchRequest->max_count(), entityCount)
+            : entityCount;
+    handles.reserve(maxCount);
+    for (uint32_t handle = 0; handle < maxCount; handle++) {
+        handles.push_back(handle);
+    }
+    return true;
+}
+
+// -----------------------------------------------------------------------------
+// $OEM trajectories (propagate_ephemeris, 1.2.0)
+// -----------------------------------------------------------------------------
+
+// Most states one request may write, over all its blocks.
+constexpr size_t MAX_EPHEMERIS_LINES = 2000000;
+
+struct EphemerisLine {
+    double jd;      // UTC Julian date
+    double r[3];    // km
+    double v[3];    // km/s
+};
+
+struct EphemerisBlock {
+    std::string comment;
+    std::vector<EphemerisLine> lines;
+};
+
+// The states of one block from startJd to stopJd (UTC Julian dates): every
+// step from the start, then the stop itself. From one element set alone when
+// `set` is given, else through the entity's own set selection (nearest or
+// interpolated). TEME, or GCRF when `gcrf`.
+bool sampleSpan(SatelliteEntity& entity, const elsetrec* set, double startJd, double stopJd,
+                double stepSeconds, bool gcrf, size_t& budget, EphemerisBlock& block,
+                std::string& error) {
+    const double stepDays = stepSeconds / 86400.0;
+    std::vector<double> instants;
+    for (uint64_t k = 0;; ++k) {
+        const double jd = startJd + static_cast<double>(k) * stepDays;
+        // Within a microsecond of the stop: the stop itself follows.
+        if (jd >= stopJd - 1.0e-6 / 86400.0) break;
+        instants.push_back(jd);
+    }
+    instants.push_back(stopJd);
+    if (instants.size() > budget) {
+        error = "The request asks for more than 2,000,000 states.";
+        return false;
+    }
+    budget -= instants.size();
+    elsetrec copy{};
+    if (set != nullptr) copy = *set;
+    for (double jd : instants) {
+        double r[3], v[3];
+        bool ok;
+        if (set != nullptr) {
+            const double epoch = copy.jdsatepoch + copy.jdsatepochF;
+            ok = SGP4Funcs::sgp4(copy, (jd - epoch) * 1440.0, r, v) && copy.error == 0;
+        } else {
+            ok = propagateEntityTEME(entity, jd, r, v);
+        }
+        if (!ok) {
+            error = "SGP4 fails for NORAD " + std::to_string(entity.noradId) + " at " + isoFromUtcJulianDate(jd) + ".";
+            return false;
+        }
+        EphemerisLine line{jd, {r[0], r[1], r[2]}, {v[0], v[1], v[2]}};
+        if (gcrf && !temeToGcrf(jd, r, v, line.r, line.v)) {
+            error = "No GCRF axes at " + isoFromUtcJulianDate(jd) + " (outside ERFA's dates).";
+            return false;
+        }
+        block.lines.push_back(line);
+    }
+    return true;
+}
+
+// One SDS $OEM: every block of one object, km and km/s, UTC, centred on the
+// Earth, in TEME (TEMEOFDATE) or GCRF axes.
+std::vector<uint8_t> encodeEphemeris(uint32_t entityIndex, const std::vector<EphemerisBlock>& blocks, bool gcrf) {
+    flatbuffers::FlatBufferBuilder fbb(1 << 16);
+    OrbProCatalogRow row{};
+    const bool haveRow = plugin_get_entity_catalog_row(entityIndex, &row) == 0;
+    const std::string name = !haveRow ? std::string() : row.object_name[0] ? row.object_name : row.cat_object_name;
+    const std::string id = !haveRow ? std::string() : row.object_id[0] ? row.object_id : row.cat_object_id;
+    const auto objectName = fbb.CreateString(name);
+    const auto objectId = fbb.CreateString(id);
+    CATBuilder cat(fbb);
+    cat.add_OBJECT_NAME(objectName);
+    cat.add_OBJECT_ID(objectId);
+    cat.add_NORAD_CAT_ID(g_satellites[entityIndex].noradId);
+    const auto object = cat.Finish();
+    const auto axes = CreateCelestialFrameWrapper(fbb, gcrf ? CelestialFrame::GCRF : CelestialFrame::TEMEOFDATE);
+    RFMBuilder rfm(fbb);
+    rfm.add_REFERENCE_FRAME_type(RFMUnion::CelestialFrameWrapper);
+    rfm.add_REFERENCE_FRAME(axes.Union());
+    const auto frame = rfm.Finish();
+    const auto center = fbb.CreateString("EARTH");
+
+    std::vector<flatbuffers::Offset<ephemerisDataBlock>> offsets;
+    offsets.reserve(blocks.size());
+    for (const EphemerisBlock& block : blocks) {
+        std::vector<flatbuffers::Offset<ephemerisDataLine>> lines;
+        lines.reserve(block.lines.size());
+        for (const EphemerisLine& line : block.lines) {
+            const auto epoch = fbb.CreateString(isoFromUtcJulianDate(line.jd));
+            lines.push_back(CreateephemerisDataLine(fbb, epoch, line.r[0], line.r[1], line.r[2],
+                                                    line.v[0], line.v[1], line.v[2]));
+        }
+        const auto data = fbb.CreateVector(lines);
+        const auto comment = fbb.CreateString(block.comment);
+        const auto start = fbb.CreateString(isoFromUtcJulianDate(block.lines.front().jd));
+        const auto stop = fbb.CreateString(isoFromUtcJulianDate(block.lines.back().jd));
+        ephemerisDataBlockBuilder b(fbb);
+        b.add_COMMENT(comment);
+        b.add_OBJECT(object);
+        b.add_CENTER_NAME(center);
+        b.add_REFERENCE_FRAME(frame);
+        b.add_TIME_SYSTEM(timingStandard::UTC);
+        b.add_START_TIME(start);
+        b.add_STOP_TIME(stop);
+        b.add_EPHEMERIS_DATA_LINES(data);
+        offsets.push_back(b.Finish());
+    }
+    const auto data = fbb.CreateVector(offsets);
+    const auto originator = fbb.CreateString("propagator/sgp4");
+    OEMBuilder oem(fbb);
+    oem.add_CCSDS_OEM_VERS(2.0);
+    oem.add_ORIGINATOR(originator);
+    oem.add_EPHEMERIS_DATA_BLOCK(data);
+    FinishOEMBuffer(fbb, oem.Finish());
+    return std::vector<uint8_t>(fbb.GetBufferPointer(), fbb.GetBufferPointer() + fbb.GetSize());
+}
+
+// The blocks of one object's trajectory. With element_set_blocks, one per
+// element set of its history, propagated from that set alone from the epoch
+// of the set neighbour_sets earlier to that of the set neighbour_sets later
+// (clamped at the ends of the history) and clipped to [epoch, stop_epoch]
+// when stop_epoch is after epoch; else one block from epoch to stop_epoch
+// through the entity's own propagation.
+bool ephemerisBlocks(const orbpro::propagator::PropagatorBatchRequest* batchRequest, uint32_t entityIndex,
+                     bool gcrf, size_t& budget, std::vector<EphemerisBlock>& blocks, std::string& error) {
+    SatelliteEntity& entity = g_satellites[entityIndex];
+    const double step = batchRequest->step_seconds();
+    const double from = batchRequest->epoch();
+    const double to = batchRequest->stop_epoch();
+    if (!batchRequest->element_set_blocks()) {
+        EphemerisBlock block;
+        block.comment = "SGP4, NORAD " + std::to_string(entity.noradId) + " (propagator/sgp4)";
+        if (!sampleSpan(entity, nullptr, from, to, step, gcrf, budget, block, error)) return false;
+        blocks.push_back(std::move(block));
+        return true;
+    }
+    // The history in epoch order (a single set lives in entity.satrec).
+    std::vector<std::pair<double, const elsetrec*>> sets;
+    if (entity.satrecs.empty()) {
+        sets.emplace_back(entity.satrec.jdsatepoch + entity.satrec.jdsatepochF, &entity.satrec);
+    } else {
+        for (const auto& [epoch, satrec] : entity.satrecs) sets.emplace_back(epoch, &satrec);
+    }
+    const bool clip = to > from;
+    const size_t neighbours = batchRequest->neighbour_sets();
+    for (size_t i = 0; i < sets.size(); ++i) {
+        double start = sets[i >= neighbours ? i - neighbours : 0].first;
+        double stop = sets[std::min(sets.size() - 1, i + neighbours)].first;
+        if (clip) {
+            start = std::max(start, from);
+            stop = std::min(stop, to);
+            if (stop < start) continue;
+        }
+        EphemerisBlock block;
+        block.comment = "Element set " + isoFromUtcJulianDate(sets[i].first) + " (SGP4 from this set alone, propagator/sgp4)";
+        if (!sampleSpan(entity, sets[i].second, start, stop, step, gcrf, budget, block, error)) return false;
+        blocks.push_back(std::move(block));
+    }
+    if (blocks.empty()) {
+        error = "NORAD " + std::to_string(entity.noradId) + " has no element set in the requested span.";
+        return false;
+    }
+    return true;
 }
 
 }  // anonymous namespace
@@ -2742,49 +3147,10 @@ uint8_t* sgp4_dispatch_piv(
     const auto* inputs = request->INPUTS();
 
     if (methodId == "ingest_omm") {
-        std::vector<OrbProOMMRecord> records;
-        std::map<uint32_t, PendingCatalogMetadata> metadataByNorad;
-        if (inputs != nullptr) {
-            for (flatbuffers::uoffset_t inputIndex = 0; inputIndex < inputs->size(); inputIndex++) {
-                const auto* input = inputs->Get(inputIndex);
-                const uint8_t* payload = nullptr;
-                uint32_t payloadSize = 0;
-                if (!resolvePivInputPayload(request, input, payload, payloadSize)) {
-                    continue;
-                }
-
-                std::vector<OrbProOMMRecord> inputRecords;
-                if (!parseOmmFlatBufferStream(payload, payloadSize, inputRecords)) {
-                    g_pendingEntityMetadataByNorad.clear();
-                    g_pendingEntityNamesFromFlatbuffer = false;
-                    return buildErrorPivInvokeResponse(
-                        400,
-                        pivStatus::FAILED,
-                        "invalid-input",
-                        "ingest_omm expects direct $OMM, size-prefixed OMM stream, or $REC payloads.",
-                        traceId,
-                        response_size_out
-                    );
-                }
-
-                records.insert(records.end(), inputRecords.begin(), inputRecords.end());
-                for (const auto& entry : g_pendingEntityMetadataByNorad) {
-                    metadataByNorad[entry.first] = entry.second;
-                }
-                g_pendingEntityMetadataByNorad.clear();
-                g_pendingEntityNamesFromFlatbuffer = false;
-            }
-        }
-
-        if (!ingestOmmRecords(records, metadataByNorad)) {
-            return buildErrorPivInvokeResponse(
-                500,
-                pivStatus::FAILED,
-                "ingest-failed",
-                "ingest_omm failed to apply any OMM records.",
-                traceId,
-                response_size_out
-            );
+        IngestFailure failure;
+        if (!ingestOmmFrames(request, "ingest_omm", false, failure)) {
+            return buildErrorPivInvokeResponse(failure.status, pivStatus::FAILED, failure.code,
+                                               failure.message.c_str(), traceId, response_size_out);
         }
         return buildEmptyPivInvokeResponse(traceId, response_size_out);
     }
@@ -2865,10 +3231,18 @@ uint8_t* sgp4_dispatch_piv(
     if (methodId == "propagate_state") {
         std::vector<PivOutputFrame> outputFrames;
         const uint32_t outputCap = request->OUTPUT_STREAM_CAP();
+        IngestFailure failure;
+        if (!ingestOmmFrames(request, "propagate_state", true, failure)) {
+            return buildErrorPivInvokeResponse(failure.status, pivStatus::FAILED, failure.code,
+                                               failure.message.c_str(), traceId, response_size_out);
+        }
 
         if (inputs != nullptr) {
             for (flatbuffers::uoffset_t inputIndex = 0; inputIndex < inputs->size(); inputIndex++) {
                 const auto* input = inputs->Get(inputIndex);
+                if (isIngestionPort(input)) {
+                    continue;
+                }
                 const uint8_t* payload = nullptr;
                 uint32_t payloadSize = 0;
                 if (!resolvePivInputPayload(request, input, payload, payloadSize)) {
@@ -2889,21 +3263,32 @@ uint8_t* sgp4_dispatch_piv(
                 }
 
                 std::vector<uint32_t> handles;
-                if (batchRequest->entity_handles() != nullptr && batchRequest->entity_handles()->size() > 0) {
-                    handles.reserve(batchRequest->entity_handles()->size());
-                    for (uint32_t handle : *batchRequest->entity_handles()) {
-                        handles.push_back(handle);
-                    }
-                } else {
-                    const uint32_t entityCount = static_cast<uint32_t>(g_satellites.size());
-                    const uint32_t maxCount =
-                        batchRequest->max_count() > 0
-                            ? std::min(batchRequest->max_count(), entityCount)
-                            : entityCount;
-                    handles.reserve(maxCount);
-                    for (uint32_t handle = 0; handle < maxCount; handle++) {
-                        handles.push_back(handle);
-                    }
+                std::string selectionCode, selectionMessage;
+                if (!selectEntities(batchRequest, handles, selectionCode, selectionMessage)) {
+                    releasePivOutputFrames(outputFrames);
+                    return buildErrorPivInvokeResponse(
+                        400,
+                        pivStatus::FAILED,
+                        selectionCode.c_str(),
+                        selectionMessage.c_str(),
+                        traceId,
+                        response_size_out
+                    );
+                }
+                // ECEF (1.1.0, the default), TEME or ICRF (GCRF) axes.
+                const auto outputFrame = batchRequest->output_frame();
+                if (outputFrame != orbpro::propagator::ReferenceFrame_ECEF &&
+                    outputFrame != orbpro::propagator::ReferenceFrame_TEME &&
+                    outputFrame != orbpro::propagator::ReferenceFrame_ICRF) {
+                    releasePivOutputFrames(outputFrames);
+                    return buildErrorPivInvokeResponse(
+                        400,
+                        pivStatus::FAILED,
+                        "unsupported-frame",
+                        "propagate_state answers in ECEF, TEME or ICRF (GCRF) axes.",
+                        traceId,
+                        response_size_out
+                    );
                 }
 
                 if (outputCap > 0 &&
@@ -2926,7 +3311,16 @@ uint8_t* sgp4_dispatch_piv(
                     state.epoch = batchRequest->epoch();
                     orbpro_state_set_frame(&state, ORBPRO_FRAME_ECEF);
 
-                    const int32_t propagateResult = plugin_propagate(batchRequest->epoch(), entityIndex, &state);
+                    int32_t propagateResult = 0;
+                    orbpro::plugins::ReferenceFrame stateFrame = orbpro::plugins::ReferenceFrame_ECEF;
+                    if (outputFrame == orbpro::propagator::ReferenceFrame_ECEF) {
+                        propagateResult = plugin_propagate(batchRequest->epoch(), entityIndex, &state);
+                    } else {
+                        const bool gcrf = outputFrame == orbpro::propagator::ReferenceFrame_ICRF;
+                        stateFrame = gcrf ? orbpro::plugins::ReferenceFrame_ICRF : orbpro::plugins::ReferenceFrame_TEME;
+                        propagateResult = propagateInertial(batchRequest->epoch(), entityIndex,
+                                                            gcrf ? ORBPRO_FRAME_ICRF : ORBPRO_FRAME_TEME, &state);
+                    }
                     const bool valid = propagateResult == 0 &&
                         entityIndex < static_cast<uint32_t>(g_satellites.size()) &&
                         (state.flags & ORBPRO_STATE_VALID) != 0;
@@ -2941,7 +3335,8 @@ uint8_t* sgp4_dispatch_piv(
                         entityIndex,
                         catalogNumber,
                         valid,
-                        &payloadSize
+                        &payloadSize,
+                        stateFrame
                     );
                     if (statePayload == nullptr) {
                         releasePivOutputFrames(outputFrames);
@@ -2965,6 +3360,100 @@ uint8_t* sgp4_dispatch_piv(
                         input->FRAME_ID() + static_cast<uint64_t>(handleIndex),
                         statePayload,
                         payloadSize
+                    });
+                }
+            }
+        }
+
+        uint8_t* responseBytes = buildPivInvokeResponse(
+            0,
+            pivStatus::OK,
+            nullptr,
+            nullptr,
+            traceId,
+            &outputFrames,
+            response_size_out
+        );
+        releasePivOutputFrames(outputFrames);
+        return responseBytes;
+    }
+
+    if (methodId == "propagate_ephemeris") {
+        // One $OEM per requested object, on the ephemeris port.
+        std::vector<PivOutputFrame> outputFrames;
+        const uint32_t outputCap = request->OUTPUT_STREAM_CAP();
+        size_t budget = MAX_EPHEMERIS_LINES;
+        auto refuse = [&](const char* code, const std::string& message) {
+            releasePivOutputFrames(outputFrames);
+            return buildErrorPivInvokeResponse(400, pivStatus::FAILED, code, message.c_str(), traceId, response_size_out);
+        };
+        IngestFailure failure;
+        if (!ingestOmmFrames(request, "propagate_ephemeris", true, failure)) {
+            return buildErrorPivInvokeResponse(failure.status, pivStatus::FAILED, failure.code,
+                                               failure.message.c_str(), traceId, response_size_out);
+        }
+        if (inputs != nullptr) {
+            for (flatbuffers::uoffset_t inputIndex = 0; inputIndex < inputs->size(); inputIndex++) {
+                const auto* input = inputs->Get(inputIndex);
+                if (isIngestionPort(input)) {
+                    continue;
+                }
+                const uint8_t* payload = nullptr;
+                uint32_t payloadSize = 0;
+                if (!resolvePivInputPayload(request, input, payload, payloadSize)) {
+                    continue;
+                }
+                const orbpro::propagator::PropagatorBatchRequest* batchRequest = nullptr;
+                if (!decodePropagatorBatchRequest(payload, payloadSize, batchRequest) || batchRequest == nullptr) {
+                    return refuse("invalid-input", "propagate_ephemeris expects PropagatorBatchRequest input frames.");
+                }
+                const auto outputFrame = batchRequest->output_frame();
+                if (outputFrame != orbpro::propagator::ReferenceFrame_TEME &&
+                    outputFrame != orbpro::propagator::ReferenceFrame_ICRF) {
+                    return refuse("unsupported-frame",
+                                  "propagate_ephemeris writes TEME or ICRF (GCRF) axes; Earth-fixed axes are not an inertial $OEM frame.");
+                }
+                if (!(batchRequest->step_seconds() > 0.0) || !std::isfinite(batchRequest->step_seconds())) {
+                    return refuse("invalid-input", "propagate_ephemeris needs step_seconds > 0.");
+                }
+                if (!batchRequest->element_set_blocks() && !(batchRequest->stop_epoch() > batchRequest->epoch())) {
+                    return refuse("invalid-input", "propagate_ephemeris needs stop_epoch after epoch.");
+                }
+                std::vector<uint32_t> handles;
+                std::string selectionCode, selectionMessage;
+                if (!selectEntities(batchRequest, handles, selectionCode, selectionMessage)) {
+                    return refuse(selectionCode.c_str(), selectionMessage);
+                }
+                if (outputCap > 0 && outputFrames.size() + handles.size() > static_cast<size_t>(outputCap)) {
+                    return refuse("output-cap-exceeded", "propagate_ephemeris output_stream_cap is smaller than the requested object count.");
+                }
+                for (size_t handleIndex = 0; handleIndex < handles.size(); handleIndex++) {
+                    const uint32_t entityIndex = handles[handleIndex];
+                    if (!g_initialized || entityIndex >= g_satellites.size() || !g_satellites[entityIndex].valid) {
+                        return refuse("unknown-object", "handle " + std::to_string(entityIndex) + " holds no object.");
+                    }
+                    std::vector<EphemerisBlock> blocks;
+                    std::string error;
+                    const bool gcrf = outputFrame == orbpro::propagator::ReferenceFrame_ICRF;
+                    if (!ephemerisBlocks(batchRequest, entityIndex, gcrf, budget, blocks, error)) {
+                        return refuse("propagation-failed", error);
+                    }
+                    const std::vector<uint8_t> oem = encodeEphemeris(entityIndex, blocks, gcrf);
+                    uint8_t* bytes = static_cast<uint8_t*>(orbpro_malloc(oem.size()));
+                    if (bytes == nullptr) {
+                        return refuse("encode-failed", "Failed to allocate the $OEM output.");
+                    }
+                    std::memcpy(bytes, oem.data(), oem.size());
+                    outputFrames.push_back({
+                        "ephemeris",
+                        "OEM.fbs",
+                        "$OEM",
+                        "OEM",
+                        payloadWireFormat::FLATBUFFER,
+                        8,
+                        input->FRAME_ID() + static_cast<uint64_t>(handleIndex),
+                        bytes,
+                        static_cast<uint32_t>(oem.size())
                     });
                 }
             }

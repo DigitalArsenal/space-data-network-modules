@@ -167,18 +167,25 @@ inline const char *EnumNameStateFlags(StateFlags e) {
 /// Binary layout (64 bytes total):
 ///   Offset  Size  Field
 ///   0       8     epoch (Julian date as float64)
-///   8       24    position [x, y, z] in km
-///   32      24    velocity [vx, vy, vz] in km/s
+///   8       24    position [x, y, z] in METERS
+///   32      24    velocity [vx, vy, vz] in METERS/SECOND
 ///   56      1     reference_frame (ReferenceFrame enum)
-///   57      3     _reserved (padding)
+///   57      3     _reserved (padding, MUST be zero)
 ///   60      4     flags (StateFlags bitfield)
 ///
-/// Units:
-///   - Position: kilometers (km)
-///   - Velocity: kilometers per second (km/s)
+/// NORMATIVE UNITS:
+///   - Position: METERS (m)
+///   - Velocity: METERS PER SECOND (m/s)
 ///   - Epoch: Julian date (days since J2000)
 ///
-/// The host converts km → meters for Cesium.
+/// There is NO unit conversion on this seam. The host does not scale; it
+/// hands these numbers straight to Cesium Cartesian3, whose unit is metres,
+/// and both shipped propagators (propagator.sgp4, propagator.hpop) document
+/// and emit "ECEF positions in meters". This block previously said kilometres
+/// and claimed "the host converts km → meters for Cesium" — a 1000x error
+/// that renders satellites inside the Earth.
+///
+/// Ruling: graph/findings/official-harness-shapes.md §4.1 / §8.1
 FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(8) StateVector FLATBUFFERS_FINAL_CLASS {
  private:
   double epoch_;
@@ -220,14 +227,14 @@ FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(8) StateVector FLATBUFFERS_FINAL_CLASS {
   void mutate_epoch(double _epoch) {
     ::flatbuffers::WriteScalar(&epoch_, _epoch);
   }
-  /// Position [x, y, z] in km (reference frame specified below)
+  /// Position [x, y, z] in METERS (reference frame specified below)
   const orbpro::Vec3 &position() const {
     return position_;
   }
   orbpro::Vec3 &mutable_position() {
     return position_;
   }
-  /// Velocity [vx, vy, vz] in km/s
+  /// Velocity [vx, vy, vz] in METERS/SECOND
   const orbpro::Vec3 &velocity() const {
     return velocity_;
   }
@@ -616,7 +623,13 @@ struct PropagatorBatchRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::T
     VT_EPOCH = 4,
     VT_ENTITY_HANDLES = 6,
     VT_OUTPUT_OFFSET = 8,
-    VT_MAX_COUNT = 10
+    VT_MAX_COUNT = 10,
+    VT_CATALOG_NUMBERS = 12,
+    VT_OUTPUT_FRAME = 14,
+    VT_STOP_EPOCH = 16,
+    VT_STEP_SECONDS = 18,
+    VT_ELEMENT_SET_BLOCKS = 20,
+    VT_NEIGHBOUR_SETS = 22
   };
   /// Target epoch as Julian date
   double epoch() const {
@@ -646,6 +659,52 @@ struct PropagatorBatchRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::T
   bool mutate_max_count(uint32_t _max_count = 0) {
     return SetField<uint32_t>(VT_MAX_COUNT, _max_count, 0);
   }
+  /// Objects by NORAD catalog number. Each is resolved by its number, so the
+  /// answer is never another object's; an unknown number refuses the request.
+  /// With entity_handles as well, both must name the same objects in order.
+  const ::flatbuffers::Vector<uint32_t> *catalog_numbers() const {
+    return GetPointer<const ::flatbuffers::Vector<uint32_t> *>(VT_CATALOG_NUMBERS);
+  }
+  ::flatbuffers::Vector<uint32_t> *mutable_catalog_numbers() {
+    return GetPointer<::flatbuffers::Vector<uint32_t> *>(VT_CATALOG_NUMBERS);
+  }
+  /// Axes of the output: ECEF (default, Earth-fixed as before), TEME (SGP4's
+  /// own axes) or ICRF (Earth-centred ICRF axes, that is GCRF).
+  orbpro::propagator::ReferenceFrame output_frame() const {
+    return static_cast<orbpro::propagator::ReferenceFrame>(GetField<uint8_t>(VT_OUTPUT_FRAME, 3));
+  }
+  bool mutate_output_frame(orbpro::propagator::ReferenceFrame _output_frame = static_cast<orbpro::propagator::ReferenceFrame>(3)) {
+    return SetField<uint8_t>(VT_OUTPUT_FRAME, static_cast<uint8_t>(_output_frame), 3);
+  }
+  /// propagate_ephemeris: the span's end as a Julian date (UTC; epoch is its
+  /// start) and the sample step in seconds.
+  double stop_epoch() const {
+    return GetField<double>(VT_STOP_EPOCH, 0.0);
+  }
+  bool mutate_stop_epoch(double _stop_epoch = 0.0) {
+    return SetField<double>(VT_STOP_EPOCH, _stop_epoch, 0.0);
+  }
+  double step_seconds() const {
+    return GetField<double>(VT_STEP_SECONDS, 0.0);
+  }
+  bool mutate_step_seconds(double _step_seconds = 0.0) {
+    return SetField<double>(VT_STEP_SECONDS, _step_seconds, 0.0);
+  }
+  /// propagate_ephemeris: one data block per element set of each object's
+  /// history, each propagated from its own set alone from the epoch of the
+  /// set neighbour_sets earlier to the epoch of the set neighbour_sets later.
+  bool element_set_blocks() const {
+    return GetField<uint8_t>(VT_ELEMENT_SET_BLOCKS, 0) != 0;
+  }
+  bool mutate_element_set_blocks(bool _element_set_blocks = 0) {
+    return SetField<uint8_t>(VT_ELEMENT_SET_BLOCKS, static_cast<uint8_t>(_element_set_blocks), 0);
+  }
+  uint32_t neighbour_sets() const {
+    return GetField<uint32_t>(VT_NEIGHBOUR_SETS, 2);
+  }
+  bool mutate_neighbour_sets(uint32_t _neighbour_sets = 2) {
+    return SetField<uint32_t>(VT_NEIGHBOUR_SETS, _neighbour_sets, 2);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -654,6 +713,13 @@ struct PropagatorBatchRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::T
            verifier.VerifyVector(entity_handles()) &&
            VerifyField<uint32_t>(verifier, VT_OUTPUT_OFFSET, 4) &&
            VerifyField<uint32_t>(verifier, VT_MAX_COUNT, 4) &&
+           VerifyOffset(verifier, VT_CATALOG_NUMBERS) &&
+           verifier.VerifyVector(catalog_numbers()) &&
+           VerifyField<uint8_t>(verifier, VT_OUTPUT_FRAME, 1) &&
+           VerifyField<double>(verifier, VT_STOP_EPOCH, 8) &&
+           VerifyField<double>(verifier, VT_STEP_SECONDS, 8) &&
+           VerifyField<uint8_t>(verifier, VT_ELEMENT_SET_BLOCKS, 1) &&
+           VerifyField<uint32_t>(verifier, VT_NEIGHBOUR_SETS, 4) &&
            verifier.EndTable();
   }
 };
@@ -674,6 +740,24 @@ struct PropagatorBatchRequestBuilder {
   void add_max_count(uint32_t max_count) {
     fbb_.AddElement<uint32_t>(PropagatorBatchRequest::VT_MAX_COUNT, max_count, 0);
   }
+  void add_catalog_numbers(::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> catalog_numbers) {
+    fbb_.AddOffset(PropagatorBatchRequest::VT_CATALOG_NUMBERS, catalog_numbers);
+  }
+  void add_output_frame(orbpro::propagator::ReferenceFrame output_frame) {
+    fbb_.AddElement<uint8_t>(PropagatorBatchRequest::VT_OUTPUT_FRAME, static_cast<uint8_t>(output_frame), 3);
+  }
+  void add_stop_epoch(double stop_epoch) {
+    fbb_.AddElement<double>(PropagatorBatchRequest::VT_STOP_EPOCH, stop_epoch, 0.0);
+  }
+  void add_step_seconds(double step_seconds) {
+    fbb_.AddElement<double>(PropagatorBatchRequest::VT_STEP_SECONDS, step_seconds, 0.0);
+  }
+  void add_element_set_blocks(bool element_set_blocks) {
+    fbb_.AddElement<uint8_t>(PropagatorBatchRequest::VT_ELEMENT_SET_BLOCKS, static_cast<uint8_t>(element_set_blocks), 0);
+  }
+  void add_neighbour_sets(uint32_t neighbour_sets) {
+    fbb_.AddElement<uint32_t>(PropagatorBatchRequest::VT_NEIGHBOUR_SETS, neighbour_sets, 2);
+  }
   explicit PropagatorBatchRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -690,12 +774,24 @@ inline ::flatbuffers::Offset<PropagatorBatchRequest> CreatePropagatorBatchReques
     double epoch = 0.0,
     ::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> entity_handles = 0,
     uint32_t output_offset = 0,
-    uint32_t max_count = 0) {
+    uint32_t max_count = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint32_t>> catalog_numbers = 0,
+    orbpro::propagator::ReferenceFrame output_frame = orbpro::propagator::ReferenceFrame_ECEF,
+    double stop_epoch = 0.0,
+    double step_seconds = 0.0,
+    bool element_set_blocks = false,
+    uint32_t neighbour_sets = 2) {
   PropagatorBatchRequestBuilder builder_(_fbb);
+  builder_.add_step_seconds(step_seconds);
+  builder_.add_stop_epoch(stop_epoch);
   builder_.add_epoch(epoch);
+  builder_.add_neighbour_sets(neighbour_sets);
+  builder_.add_catalog_numbers(catalog_numbers);
   builder_.add_max_count(max_count);
   builder_.add_output_offset(output_offset);
   builder_.add_entity_handles(entity_handles);
+  builder_.add_element_set_blocks(element_set_blocks);
+  builder_.add_output_frame(output_frame);
   return builder_.Finish();
 }
 
@@ -704,14 +800,27 @@ inline ::flatbuffers::Offset<PropagatorBatchRequest> CreatePropagatorBatchReques
     double epoch = 0.0,
     const std::vector<uint32_t> *entity_handles = nullptr,
     uint32_t output_offset = 0,
-    uint32_t max_count = 0) {
+    uint32_t max_count = 0,
+    const std::vector<uint32_t> *catalog_numbers = nullptr,
+    orbpro::propagator::ReferenceFrame output_frame = orbpro::propagator::ReferenceFrame_ECEF,
+    double stop_epoch = 0.0,
+    double step_seconds = 0.0,
+    bool element_set_blocks = false,
+    uint32_t neighbour_sets = 2) {
   auto entity_handles__ = entity_handles ? _fbb.CreateVector<uint32_t>(*entity_handles) : 0;
+  auto catalog_numbers__ = catalog_numbers ? _fbb.CreateVector<uint32_t>(*catalog_numbers) : 0;
   return orbpro::propagator::CreatePropagatorBatchRequest(
       _fbb,
       epoch,
       entity_handles__,
       output_offset,
-      max_count);
+      max_count,
+      catalog_numbers__,
+      output_frame,
+      stop_epoch,
+      step_seconds,
+      element_set_blocks,
+      neighbour_sets);
 }
 
 /// Response header for batch propagation

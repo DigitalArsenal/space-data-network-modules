@@ -13,6 +13,8 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
               FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
+#include "RFM_generated.h"
+
 struct FRMVector3;
 struct FRMVector3Builder;
 struct FRMVector3T;
@@ -20,6 +22,10 @@ struct FRMVector3T;
 struct FRMMatrix3;
 struct FRMMatrix3Builder;
 struct FRMMatrix3T;
+
+struct FRMStateVector;
+struct FRMStateVectorBuilder;
+struct FRMStateVectorT;
 
 struct FRMFrameTransformRequest;
 struct FRMFrameTransformRequestBuilder;
@@ -33,76 +39,200 @@ struct FRM;
 struct FRMBuilder;
 struct FRMT;
 
+/// Operations this record can request. Values 1-4 are the original
+/// position-only planet-centred-inertial / planet-centred-fixed / geodetic
+/// conversions and are FROZEN. Append new values only; never reorder.
 enum class frmOperationCode : int8_t {
   UNKNOWN = 0,
   PCI_TO_PCPF = 1,
   PCPF_TO_PCI = 2,
   LLA_TO_PCPF = 3,
   PCPF_TO_LLA = 4,
+  /// Transform a full state (position AND velocity) from SOURCE_COORDINATE_SYSTEM
+  /// to TARGET_COORDINATE_SYSTEM at EPOCH, expressed in TARGET_REPRESENTATION.
+  STATE_TRANSFORM = 5,
+  /// Return only the rotation from SOURCE_COORDINATE_SYSTEM to
+  /// TARGET_COORDINATE_SYSTEM at EPOCH, with its time derivative and the
+  /// angular velocity of the target axes. No state is required.
+  FRAME_ROTATION = 6,
+  /// Convert a state between element sets within ONE coordinate system.
+  STATE_REPRESENTATION_CONVERT = 7,
   MIN = UNKNOWN,
-  MAX = PCPF_TO_LLA
+  MAX = STATE_REPRESENTATION_CONVERT
 };
 
-inline const frmOperationCode (&EnumValuesfrmOperationCode())[5] {
+inline const frmOperationCode (&EnumValuesfrmOperationCode())[8] {
   static const frmOperationCode values[] = {
     frmOperationCode::UNKNOWN,
     frmOperationCode::PCI_TO_PCPF,
     frmOperationCode::PCPF_TO_PCI,
     frmOperationCode::LLA_TO_PCPF,
-    frmOperationCode::PCPF_TO_LLA
+    frmOperationCode::PCPF_TO_LLA,
+    frmOperationCode::STATE_TRANSFORM,
+    frmOperationCode::FRAME_ROTATION,
+    frmOperationCode::STATE_REPRESENTATION_CONVERT
   };
   return values;
 }
 
 inline const char * const *EnumNamesfrmOperationCode() {
-  static const char * const names[6] = {
+  static const char * const names[9] = {
     "UNKNOWN",
     "PCI_TO_PCPF",
     "PCPF_TO_PCI",
     "LLA_TO_PCPF",
     "PCPF_TO_LLA",
+    "STATE_TRANSFORM",
+    "FRAME_ROTATION",
+    "STATE_REPRESENTATION_CONVERT",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamefrmOperationCode(frmOperationCode e) {
-  if (::flatbuffers::IsOutRange(e, frmOperationCode::UNKNOWN, frmOperationCode::PCPF_TO_LLA)) return "";
+  if (::flatbuffers::IsOutRange(e, frmOperationCode::UNKNOWN, frmOperationCode::STATE_REPRESENTATION_CONVERT)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesfrmOperationCode()[index];
 }
 
+/// Append new values only; never reorder or reuse existing values.
 enum class frmResultStatus : int8_t {
   OK = 0,
   INVALID_INPUT = 1,
   UNSUPPORTED_OPERATION = 2,
+  /// The provider does not implement the requested axis set.
+  UNSUPPORTED_AXIS_TYPE = 3,
+  /// The provider does not implement the requested element set.
+  UNSUPPORTED_STATE_REPRESENTATION = 4,
+  /// The axis chain needs Earth-orientation data that was not supplied or
+  /// does not span EPOCH. The provider MUST fail here rather than silently
+  /// extrapolate.
+  MISSING_EOP_DATA = 5,
+  /// The state is at a singularity of the requested element set (for example
+  /// e -> 0 for Keplerian). The provider MUST report this rather than
+  /// substitute a different element set.
+  SINGULAR_ELEMENT_SET = 6,
   MIN = OK,
-  MAX = UNSUPPORTED_OPERATION
+  MAX = SINGULAR_ELEMENT_SET
 };
 
-inline const frmResultStatus (&EnumValuesfrmResultStatus())[3] {
+inline const frmResultStatus (&EnumValuesfrmResultStatus())[7] {
   static const frmResultStatus values[] = {
     frmResultStatus::OK,
     frmResultStatus::INVALID_INPUT,
-    frmResultStatus::UNSUPPORTED_OPERATION
+    frmResultStatus::UNSUPPORTED_OPERATION,
+    frmResultStatus::UNSUPPORTED_AXIS_TYPE,
+    frmResultStatus::UNSUPPORTED_STATE_REPRESENTATION,
+    frmResultStatus::MISSING_EOP_DATA,
+    frmResultStatus::SINGULAR_ELEMENT_SET
   };
   return values;
 }
 
 inline const char * const *EnumNamesfrmResultStatus() {
-  static const char * const names[4] = {
+  static const char * const names[8] = {
     "OK",
     "INVALID_INPUT",
     "UNSUPPORTED_OPERATION",
+    "UNSUPPORTED_AXIS_TYPE",
+    "UNSUPPORTED_STATE_REPRESENTATION",
+    "MISSING_EOP_DATA",
+    "SINGULAR_ELEMENT_SET",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamefrmResultStatus(frmResultStatus e) {
-  if (::flatbuffers::IsOutRange(e, frmResultStatus::OK, frmResultStatus::UNSUPPORTED_OPERATION)) return "";
+  if (::flatbuffers::IsOutRange(e, frmResultStatus::OK, frmResultStatus::SINGULAR_ELEMENT_SET)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesfrmResultStatus()[index];
+}
+
+/// Orbit state element sets. Append new values only; never reorder or reuse
+/// existing values.
+enum class frmStateRepresentation : uint8_t {
+  UNSPECIFIED = 0,
+  /// Position and velocity components, 6 elements.
+  CARTESIAN = 1,
+  /// SMA, ECC, INC, RAAN, AOP, TA.
+  KEPLERIAN = 2,
+  /// RadPer, RadApo, INC, RAAN, AOP, TA.
+  MODIFIED_KEPLERIAN = 3,
+  /// RMAG, RA, DEC, VMAG, azimuth, flight-path angle.
+  SPHERICAL_AZFPA = 4,
+  /// RMAG, RA, DEC, VMAG, right ascension of velocity, declination of velocity.
+  SPHERICAL_RADEC = 5,
+  /// SMA, h, k, p, q, mean longitude.
+  EQUINOCTIAL = 6,
+  /// p, f, g, h, k, true longitude.
+  MODIFIED_EQUINOCTIAL = 7,
+  /// Equinoctial variant using mean motion in place of the semi-major axis.
+  ALTERNATE_EQUINOCTIAL = 8,
+  /// Delaunay canonical variables l, g, h, L, G, H.
+  DELAUNAY = 9,
+  /// Geodetic latitude/longitude/height with the horizon velocity triple.
+  PLANETODETIC = 10,
+  /// Incoming asymptote (B-plane) element set.
+  INCOMING_ASYMPTOTE = 11,
+  /// Outgoing asymptote (B-plane) element set.
+  OUTGOING_ASYMPTOTE = 12,
+  /// Brouwer-Lyddane mean elements, short-period terms only.
+  BROUWER_MEAN_SHORT = 13,
+  /// Brouwer-Lyddane mean elements, short and long period terms.
+  BROUWER_MEAN_LONG = 14,
+  MIN = UNSPECIFIED,
+  MAX = BROUWER_MEAN_LONG
+};
+
+inline const frmStateRepresentation (&EnumValuesfrmStateRepresentation())[15] {
+  static const frmStateRepresentation values[] = {
+    frmStateRepresentation::UNSPECIFIED,
+    frmStateRepresentation::CARTESIAN,
+    frmStateRepresentation::KEPLERIAN,
+    frmStateRepresentation::MODIFIED_KEPLERIAN,
+    frmStateRepresentation::SPHERICAL_AZFPA,
+    frmStateRepresentation::SPHERICAL_RADEC,
+    frmStateRepresentation::EQUINOCTIAL,
+    frmStateRepresentation::MODIFIED_EQUINOCTIAL,
+    frmStateRepresentation::ALTERNATE_EQUINOCTIAL,
+    frmStateRepresentation::DELAUNAY,
+    frmStateRepresentation::PLANETODETIC,
+    frmStateRepresentation::INCOMING_ASYMPTOTE,
+    frmStateRepresentation::OUTGOING_ASYMPTOTE,
+    frmStateRepresentation::BROUWER_MEAN_SHORT,
+    frmStateRepresentation::BROUWER_MEAN_LONG
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesfrmStateRepresentation() {
+  static const char * const names[16] = {
+    "UNSPECIFIED",
+    "CARTESIAN",
+    "KEPLERIAN",
+    "MODIFIED_KEPLERIAN",
+    "SPHERICAL_AZFPA",
+    "SPHERICAL_RADEC",
+    "EQUINOCTIAL",
+    "MODIFIED_EQUINOCTIAL",
+    "ALTERNATE_EQUINOCTIAL",
+    "DELAUNAY",
+    "PLANETODETIC",
+    "INCOMING_ASYMPTOTE",
+    "OUTGOING_ASYMPTOTE",
+    "BROUWER_MEAN_SHORT",
+    "BROUWER_MEAN_LONG",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamefrmStateRepresentation(frmStateRepresentation e) {
+  if (::flatbuffers::IsOutRange(e, frmStateRepresentation::UNSPECIFIED, frmStateRepresentation::BROUWER_MEAN_LONG)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesfrmStateRepresentation()[index];
 }
 
 struct FRMVector3T : public ::flatbuffers::NativeTable {
@@ -333,6 +463,192 @@ struct FRMMatrix3::Traits {
 
 ::flatbuffers::Offset<FRMMatrix3> CreateFRMMatrix3(::flatbuffers::FlatBufferBuilder &_fbb, const FRMMatrix3T *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct FRMStateVectorT : public ::flatbuffers::NativeTable {
+  typedef FRMStateVector TableType;
+  frmStateRepresentation REPRESENTATION = frmStateRepresentation::UNSPECIFIED;
+  std::vector<double> ELEMENTS{};
+  std::unique_ptr<FRMVector3T> POSITION{};
+  std::unique_ptr<FRMVector3T> VELOCITY{};
+  std::string COORDINATE_SYSTEM_NAME{};
+  std::string EPOCH{};
+  std::string EPOCH_TIME_SYSTEM{};
+  double GRAVITATIONAL_PARAMETER = 0.0;
+  FRMStateVectorT() = default;
+  FRMStateVectorT(const FRMStateVectorT &o);
+  FRMStateVectorT(FRMStateVectorT&&) FLATBUFFERS_NOEXCEPT = default;
+  FRMStateVectorT &operator=(FRMStateVectorT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// A state in a named element set at a named epoch. ELEMENTS is the element
+/// set's own 6 values in the order documented on frmStateRepresentation.
+/// POSITION and VELOCITY are the Cartesian projection of the same state and
+/// are populated when REPRESENTATION is CARTESIAN or when the provider can
+/// supply them; a consumer MUST NOT infer velocity from POSITION alone.
+struct FRMStateVector FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef FRMStateVectorT NativeTableType;
+  typedef FRMStateVectorBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_REPRESENTATION = 4,
+    VT_ELEMENTS = 6,
+    VT_POSITION = 8,
+    VT_VELOCITY = 10,
+    VT_COORDINATE_SYSTEM_NAME = 12,
+    VT_EPOCH = 14,
+    VT_EPOCH_TIME_SYSTEM = 16,
+    VT_GRAVITATIONAL_PARAMETER = 18
+  };
+  frmStateRepresentation REPRESENTATION() const {
+    return static_cast<frmStateRepresentation>(GetField<uint8_t>(VT_REPRESENTATION, 0));
+  }
+  /// The 6 element values of REPRESENTATION, SI units and radians.
+  const ::flatbuffers::Vector<double> *ELEMENTS() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_ELEMENTS);
+  }
+  /// Cartesian position, metres.
+  const FRMVector3 *POSITION() const {
+    return GetPointer<const FRMVector3 *>(VT_POSITION);
+  }
+  /// Cartesian velocity, metres per second.
+  const FRMVector3 *VELOCITY() const {
+    return GetPointer<const FRMVector3 *>(VT_VELOCITY);
+  }
+  /// Name of the coordinate system these elements are expressed in; resolves
+  /// against RFMCoordinateSystem.NAME.
+  const ::flatbuffers::String *COORDINATE_SYSTEM_NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_COORDINATE_SYSTEM_NAME);
+  }
+  /// Epoch of this state, ISO 8601.
+  const ::flatbuffers::String *EPOCH() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_EPOCH);
+  }
+  /// Time system of EPOCH, named by the $TIM timingStandard member name.
+  const ::flatbuffers::String *EPOCH_TIME_SYSTEM() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_EPOCH_TIME_SYSTEM);
+  }
+  /// Gravitational parameter, m^3/s^2, of the origin body when the element
+  /// set requires one. Absent means the provider's default for the origin.
+  double GRAVITATIONAL_PARAMETER() const {
+    return GetField<double>(VT_GRAVITATIONAL_PARAMETER, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_REPRESENTATION, 1) &&
+           VerifyOffset(verifier, VT_ELEMENTS) &&
+           verifier.VerifyVector(ELEMENTS()) &&
+           VerifyOffset(verifier, VT_POSITION) &&
+           verifier.VerifyTable(POSITION()) &&
+           VerifyOffset(verifier, VT_VELOCITY) &&
+           verifier.VerifyTable(VELOCITY()) &&
+           VerifyOffset(verifier, VT_COORDINATE_SYSTEM_NAME) &&
+           verifier.VerifyString(COORDINATE_SYSTEM_NAME()) &&
+           VerifyOffset(verifier, VT_EPOCH) &&
+           verifier.VerifyString(EPOCH()) &&
+           VerifyOffset(verifier, VT_EPOCH_TIME_SYSTEM) &&
+           verifier.VerifyString(EPOCH_TIME_SYSTEM()) &&
+           VerifyField<double>(verifier, VT_GRAVITATIONAL_PARAMETER, 8) &&
+           verifier.EndTable();
+  }
+  FRMStateVectorT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(FRMStateVectorT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<FRMStateVector> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const FRMStateVectorT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct FRMStateVectorBuilder {
+  typedef FRMStateVector Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_REPRESENTATION(frmStateRepresentation REPRESENTATION) {
+    fbb_.AddElement<uint8_t>(FRMStateVector::VT_REPRESENTATION, static_cast<uint8_t>(REPRESENTATION), 0);
+  }
+  void add_ELEMENTS(::flatbuffers::Offset<::flatbuffers::Vector<double>> ELEMENTS) {
+    fbb_.AddOffset(FRMStateVector::VT_ELEMENTS, ELEMENTS);
+  }
+  void add_POSITION(::flatbuffers::Offset<FRMVector3> POSITION) {
+    fbb_.AddOffset(FRMStateVector::VT_POSITION, POSITION);
+  }
+  void add_VELOCITY(::flatbuffers::Offset<FRMVector3> VELOCITY) {
+    fbb_.AddOffset(FRMStateVector::VT_VELOCITY, VELOCITY);
+  }
+  void add_COORDINATE_SYSTEM_NAME(::flatbuffers::Offset<::flatbuffers::String> COORDINATE_SYSTEM_NAME) {
+    fbb_.AddOffset(FRMStateVector::VT_COORDINATE_SYSTEM_NAME, COORDINATE_SYSTEM_NAME);
+  }
+  void add_EPOCH(::flatbuffers::Offset<::flatbuffers::String> EPOCH) {
+    fbb_.AddOffset(FRMStateVector::VT_EPOCH, EPOCH);
+  }
+  void add_EPOCH_TIME_SYSTEM(::flatbuffers::Offset<::flatbuffers::String> EPOCH_TIME_SYSTEM) {
+    fbb_.AddOffset(FRMStateVector::VT_EPOCH_TIME_SYSTEM, EPOCH_TIME_SYSTEM);
+  }
+  void add_GRAVITATIONAL_PARAMETER(double GRAVITATIONAL_PARAMETER) {
+    fbb_.AddElement<double>(FRMStateVector::VT_GRAVITATIONAL_PARAMETER, GRAVITATIONAL_PARAMETER, 0.0);
+  }
+  explicit FRMStateVectorBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<FRMStateVector> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<FRMStateVector>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<FRMStateVector> CreateFRMStateVector(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    frmStateRepresentation REPRESENTATION = frmStateRepresentation::UNSPECIFIED,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> ELEMENTS = 0,
+    ::flatbuffers::Offset<FRMVector3> POSITION = 0,
+    ::flatbuffers::Offset<FRMVector3> VELOCITY = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> COORDINATE_SYSTEM_NAME = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> EPOCH = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> EPOCH_TIME_SYSTEM = 0,
+    double GRAVITATIONAL_PARAMETER = 0.0) {
+  FRMStateVectorBuilder builder_(_fbb);
+  builder_.add_GRAVITATIONAL_PARAMETER(GRAVITATIONAL_PARAMETER);
+  builder_.add_EPOCH_TIME_SYSTEM(EPOCH_TIME_SYSTEM);
+  builder_.add_EPOCH(EPOCH);
+  builder_.add_COORDINATE_SYSTEM_NAME(COORDINATE_SYSTEM_NAME);
+  builder_.add_VELOCITY(VELOCITY);
+  builder_.add_POSITION(POSITION);
+  builder_.add_ELEMENTS(ELEMENTS);
+  builder_.add_REPRESENTATION(REPRESENTATION);
+  return builder_.Finish();
+}
+
+struct FRMStateVector::Traits {
+  using type = FRMStateVector;
+  static auto constexpr Create = CreateFRMStateVector;
+};
+
+inline ::flatbuffers::Offset<FRMStateVector> CreateFRMStateVectorDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    frmStateRepresentation REPRESENTATION = frmStateRepresentation::UNSPECIFIED,
+    const std::vector<double> *ELEMENTS = nullptr,
+    ::flatbuffers::Offset<FRMVector3> POSITION = 0,
+    ::flatbuffers::Offset<FRMVector3> VELOCITY = 0,
+    const char *COORDINATE_SYSTEM_NAME = nullptr,
+    const char *EPOCH = nullptr,
+    const char *EPOCH_TIME_SYSTEM = nullptr,
+    double GRAVITATIONAL_PARAMETER = 0.0) {
+  auto ELEMENTS__ = ELEMENTS ? _fbb.CreateVector<double>(*ELEMENTS) : 0;
+  auto COORDINATE_SYSTEM_NAME__ = COORDINATE_SYSTEM_NAME ? _fbb.CreateString(COORDINATE_SYSTEM_NAME) : 0;
+  auto EPOCH__ = EPOCH ? _fbb.CreateString(EPOCH) : 0;
+  auto EPOCH_TIME_SYSTEM__ = EPOCH_TIME_SYSTEM ? _fbb.CreateString(EPOCH_TIME_SYSTEM) : 0;
+  return CreateFRMStateVector(
+      _fbb,
+      REPRESENTATION,
+      ELEMENTS__,
+      POSITION,
+      VELOCITY,
+      COORDINATE_SYSTEM_NAME__,
+      EPOCH__,
+      EPOCH_TIME_SYSTEM__,
+      GRAVITATIONAL_PARAMETER);
+}
+
+::flatbuffers::Offset<FRMStateVector> CreateFRMStateVector(::flatbuffers::FlatBufferBuilder &_fbb, const FRMStateVectorT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct FRMFrameTransformRequestT : public ::flatbuffers::NativeTable {
   typedef FRMFrameTransformRequest TableType;
   frmOperationCode OPERATION = frmOperationCode::UNKNOWN;
@@ -341,6 +657,13 @@ struct FRMFrameTransformRequestT : public ::flatbuffers::NativeTable {
   double EQUATORIAL_RADIUS_M = 0.0;
   double POLAR_RADIUS_M = 0.0;
   std::string TRACE_ID{};
+  std::unique_ptr<RFMCoordinateSystemT> SOURCE_COORDINATE_SYSTEM{};
+  std::unique_ptr<RFMCoordinateSystemT> TARGET_COORDINATE_SYSTEM{};
+  std::unique_ptr<FRMStateVectorT> SOURCE_STATE{};
+  frmStateRepresentation TARGET_REPRESENTATION = frmStateRepresentation::UNSPECIFIED;
+  std::string EPOCH{};
+  std::string EPOCH_TIME_SYSTEM{};
+  std::string EOP_DATA_SET_CID{};
   FRMFrameTransformRequestT() = default;
   FRMFrameTransformRequestT(const FRMFrameTransformRequestT &o);
   FRMFrameTransformRequestT(FRMFrameTransformRequestT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -357,7 +680,14 @@ struct FRMFrameTransformRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers:
     VT_TRANSFORM_DCM = 8,
     VT_EQUATORIAL_RADIUS_M = 10,
     VT_POLAR_RADIUS_M = 12,
-    VT_TRACE_ID = 14
+    VT_TRACE_ID = 14,
+    VT_SOURCE_COORDINATE_SYSTEM = 16,
+    VT_TARGET_COORDINATE_SYSTEM = 18,
+    VT_SOURCE_STATE = 20,
+    VT_TARGET_REPRESENTATION = 22,
+    VT_EPOCH = 24,
+    VT_EPOCH_TIME_SYSTEM = 26,
+    VT_EOP_DATA_SET_CID = 28
   };
   frmOperationCode OPERATION() const {
     return static_cast<frmOperationCode>(GetField<int8_t>(VT_OPERATION, 0));
@@ -377,6 +707,38 @@ struct FRMFrameTransformRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers:
   const ::flatbuffers::String *TRACE_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_TRACE_ID);
   }
+  /// Coordinate system the request's state is expressed in.
+  const RFMCoordinateSystem *SOURCE_COORDINATE_SYSTEM() const {
+    return GetPointer<const RFMCoordinateSystem *>(VT_SOURCE_COORDINATE_SYSTEM);
+  }
+  /// Coordinate system the result is required in.
+  const RFMCoordinateSystem *TARGET_COORDINATE_SYSTEM() const {
+    return GetPointer<const RFMCoordinateSystem *>(VT_TARGET_COORDINATE_SYSTEM);
+  }
+  /// The full input state, carrying velocity as well as position. POSITION
+  /// above is position-only and remains the input for operations 1-4.
+  const FRMStateVector *SOURCE_STATE() const {
+    return GetPointer<const FRMStateVector *>(VT_SOURCE_STATE);
+  }
+  /// Element set the result must be expressed in.
+  frmStateRepresentation TARGET_REPRESENTATION() const {
+    return static_cast<frmStateRepresentation>(GetField<uint8_t>(VT_TARGET_REPRESENTATION, 0));
+  }
+  /// Epoch the transform is evaluated at, ISO 8601. Required for every
+  /// time-dependent axis chain.
+  const ::flatbuffers::String *EPOCH() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_EPOCH);
+  }
+  /// Time system of EPOCH, named by the $TIM timingStandard member name.
+  const ::flatbuffers::String *EPOCH_TIME_SYSTEM() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_EPOCH_TIME_SYSTEM);
+  }
+  /// Content identifier of the Earth-orientation data set the caller requires
+  /// the provider to use. A provider that cannot honour it returns
+  /// MISSING_EOP_DATA rather than substituting another table.
+  const ::flatbuffers::String *EOP_DATA_SET_CID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_EOP_DATA_SET_CID);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -389,6 +751,19 @@ struct FRMFrameTransformRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers:
            VerifyField<double>(verifier, VT_POLAR_RADIUS_M, 8) &&
            VerifyOffset(verifier, VT_TRACE_ID) &&
            verifier.VerifyString(TRACE_ID()) &&
+           VerifyOffset(verifier, VT_SOURCE_COORDINATE_SYSTEM) &&
+           verifier.VerifyTable(SOURCE_COORDINATE_SYSTEM()) &&
+           VerifyOffset(verifier, VT_TARGET_COORDINATE_SYSTEM) &&
+           verifier.VerifyTable(TARGET_COORDINATE_SYSTEM()) &&
+           VerifyOffset(verifier, VT_SOURCE_STATE) &&
+           verifier.VerifyTable(SOURCE_STATE()) &&
+           VerifyField<uint8_t>(verifier, VT_TARGET_REPRESENTATION, 1) &&
+           VerifyOffset(verifier, VT_EPOCH) &&
+           verifier.VerifyString(EPOCH()) &&
+           VerifyOffset(verifier, VT_EPOCH_TIME_SYSTEM) &&
+           verifier.VerifyString(EPOCH_TIME_SYSTEM()) &&
+           VerifyOffset(verifier, VT_EOP_DATA_SET_CID) &&
+           verifier.VerifyString(EOP_DATA_SET_CID()) &&
            verifier.EndTable();
   }
   FRMFrameTransformRequestT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -418,6 +793,27 @@ struct FRMFrameTransformRequestBuilder {
   void add_TRACE_ID(::flatbuffers::Offset<::flatbuffers::String> TRACE_ID) {
     fbb_.AddOffset(FRMFrameTransformRequest::VT_TRACE_ID, TRACE_ID);
   }
+  void add_SOURCE_COORDINATE_SYSTEM(::flatbuffers::Offset<RFMCoordinateSystem> SOURCE_COORDINATE_SYSTEM) {
+    fbb_.AddOffset(FRMFrameTransformRequest::VT_SOURCE_COORDINATE_SYSTEM, SOURCE_COORDINATE_SYSTEM);
+  }
+  void add_TARGET_COORDINATE_SYSTEM(::flatbuffers::Offset<RFMCoordinateSystem> TARGET_COORDINATE_SYSTEM) {
+    fbb_.AddOffset(FRMFrameTransformRequest::VT_TARGET_COORDINATE_SYSTEM, TARGET_COORDINATE_SYSTEM);
+  }
+  void add_SOURCE_STATE(::flatbuffers::Offset<FRMStateVector> SOURCE_STATE) {
+    fbb_.AddOffset(FRMFrameTransformRequest::VT_SOURCE_STATE, SOURCE_STATE);
+  }
+  void add_TARGET_REPRESENTATION(frmStateRepresentation TARGET_REPRESENTATION) {
+    fbb_.AddElement<uint8_t>(FRMFrameTransformRequest::VT_TARGET_REPRESENTATION, static_cast<uint8_t>(TARGET_REPRESENTATION), 0);
+  }
+  void add_EPOCH(::flatbuffers::Offset<::flatbuffers::String> EPOCH) {
+    fbb_.AddOffset(FRMFrameTransformRequest::VT_EPOCH, EPOCH);
+  }
+  void add_EPOCH_TIME_SYSTEM(::flatbuffers::Offset<::flatbuffers::String> EPOCH_TIME_SYSTEM) {
+    fbb_.AddOffset(FRMFrameTransformRequest::VT_EPOCH_TIME_SYSTEM, EPOCH_TIME_SYSTEM);
+  }
+  void add_EOP_DATA_SET_CID(::flatbuffers::Offset<::flatbuffers::String> EOP_DATA_SET_CID) {
+    fbb_.AddOffset(FRMFrameTransformRequest::VT_EOP_DATA_SET_CID, EOP_DATA_SET_CID);
+  }
   explicit FRMFrameTransformRequestBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -436,13 +832,27 @@ inline ::flatbuffers::Offset<FRMFrameTransformRequest> CreateFRMFrameTransformRe
     ::flatbuffers::Offset<FRMMatrix3> TRANSFORM_DCM = 0,
     double EQUATORIAL_RADIUS_M = 0.0,
     double POLAR_RADIUS_M = 0.0,
-    ::flatbuffers::Offset<::flatbuffers::String> TRACE_ID = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> TRACE_ID = 0,
+    ::flatbuffers::Offset<RFMCoordinateSystem> SOURCE_COORDINATE_SYSTEM = 0,
+    ::flatbuffers::Offset<RFMCoordinateSystem> TARGET_COORDINATE_SYSTEM = 0,
+    ::flatbuffers::Offset<FRMStateVector> SOURCE_STATE = 0,
+    frmStateRepresentation TARGET_REPRESENTATION = frmStateRepresentation::UNSPECIFIED,
+    ::flatbuffers::Offset<::flatbuffers::String> EPOCH = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> EPOCH_TIME_SYSTEM = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> EOP_DATA_SET_CID = 0) {
   FRMFrameTransformRequestBuilder builder_(_fbb);
   builder_.add_POLAR_RADIUS_M(POLAR_RADIUS_M);
   builder_.add_EQUATORIAL_RADIUS_M(EQUATORIAL_RADIUS_M);
+  builder_.add_EOP_DATA_SET_CID(EOP_DATA_SET_CID);
+  builder_.add_EPOCH_TIME_SYSTEM(EPOCH_TIME_SYSTEM);
+  builder_.add_EPOCH(EPOCH);
+  builder_.add_SOURCE_STATE(SOURCE_STATE);
+  builder_.add_TARGET_COORDINATE_SYSTEM(TARGET_COORDINATE_SYSTEM);
+  builder_.add_SOURCE_COORDINATE_SYSTEM(SOURCE_COORDINATE_SYSTEM);
   builder_.add_TRACE_ID(TRACE_ID);
   builder_.add_TRANSFORM_DCM(TRANSFORM_DCM);
   builder_.add_POSITION(POSITION);
+  builder_.add_TARGET_REPRESENTATION(TARGET_REPRESENTATION);
   builder_.add_OPERATION(OPERATION);
   return builder_.Finish();
 }
@@ -459,8 +869,18 @@ inline ::flatbuffers::Offset<FRMFrameTransformRequest> CreateFRMFrameTransformRe
     ::flatbuffers::Offset<FRMMatrix3> TRANSFORM_DCM = 0,
     double EQUATORIAL_RADIUS_M = 0.0,
     double POLAR_RADIUS_M = 0.0,
-    const char *TRACE_ID = nullptr) {
+    const char *TRACE_ID = nullptr,
+    ::flatbuffers::Offset<RFMCoordinateSystem> SOURCE_COORDINATE_SYSTEM = 0,
+    ::flatbuffers::Offset<RFMCoordinateSystem> TARGET_COORDINATE_SYSTEM = 0,
+    ::flatbuffers::Offset<FRMStateVector> SOURCE_STATE = 0,
+    frmStateRepresentation TARGET_REPRESENTATION = frmStateRepresentation::UNSPECIFIED,
+    const char *EPOCH = nullptr,
+    const char *EPOCH_TIME_SYSTEM = nullptr,
+    const char *EOP_DATA_SET_CID = nullptr) {
   auto TRACE_ID__ = TRACE_ID ? _fbb.CreateString(TRACE_ID) : 0;
+  auto EPOCH__ = EPOCH ? _fbb.CreateString(EPOCH) : 0;
+  auto EPOCH_TIME_SYSTEM__ = EPOCH_TIME_SYSTEM ? _fbb.CreateString(EPOCH_TIME_SYSTEM) : 0;
+  auto EOP_DATA_SET_CID__ = EOP_DATA_SET_CID ? _fbb.CreateString(EOP_DATA_SET_CID) : 0;
   return CreateFRMFrameTransformRequest(
       _fbb,
       OPERATION,
@@ -468,7 +888,14 @@ inline ::flatbuffers::Offset<FRMFrameTransformRequest> CreateFRMFrameTransformRe
       TRANSFORM_DCM,
       EQUATORIAL_RADIUS_M,
       POLAR_RADIUS_M,
-      TRACE_ID__);
+      TRACE_ID__,
+      SOURCE_COORDINATE_SYSTEM,
+      TARGET_COORDINATE_SYSTEM,
+      SOURCE_STATE,
+      TARGET_REPRESENTATION,
+      EPOCH__,
+      EPOCH_TIME_SYSTEM__,
+      EOP_DATA_SET_CID__);
 }
 
 ::flatbuffers::Offset<FRMFrameTransformRequest> CreateFRMFrameTransformRequest(::flatbuffers::FlatBufferBuilder &_fbb, const FRMFrameTransformRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -479,6 +906,12 @@ struct FRMFrameTransformResultT : public ::flatbuffers::NativeTable {
   std::string ERROR_MESSAGE{};
   std::unique_ptr<FRMVector3T> POSITION{};
   std::string TRACE_ID{};
+  std::unique_ptr<FRMStateVectorT> TARGET_STATE{};
+  std::unique_ptr<FRMMatrix3T> ROTATION_DCM{};
+  std::unique_ptr<FRMMatrix3T> ROTATION_DCM_RATE{};
+  std::unique_ptr<FRMVector3T> ANGULAR_VELOCITY_RAD_S{};
+  std::string EOP_DATA_SET_EPOCH{};
+  std::string EOP_DATA_SET_CID{};
   FRMFrameTransformResultT() = default;
   FRMFrameTransformResultT(const FRMFrameTransformResultT &o);
   FRMFrameTransformResultT(FRMFrameTransformResultT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -493,7 +926,13 @@ struct FRMFrameTransformResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::
     VT_STATUS = 4,
     VT_ERROR_MESSAGE = 6,
     VT_POSITION = 8,
-    VT_TRACE_ID = 10
+    VT_TRACE_ID = 10,
+    VT_TARGET_STATE = 12,
+    VT_ROTATION_DCM = 14,
+    VT_ROTATION_DCM_RATE = 16,
+    VT_ANGULAR_VELOCITY_RAD_S = 18,
+    VT_EOP_DATA_SET_EPOCH = 20,
+    VT_EOP_DATA_SET_CID = 22
   };
   frmResultStatus STATUS() const {
     return static_cast<frmResultStatus>(GetField<int8_t>(VT_STATUS, 0));
@@ -507,6 +946,33 @@ struct FRMFrameTransformResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::
   const ::flatbuffers::String *TRACE_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_TRACE_ID);
   }
+  /// The transformed state, with velocity, in TARGET_COORDINATE_SYSTEM and
+  /// TARGET_REPRESENTATION.
+  const FRMStateVector *TARGET_STATE() const {
+    return GetPointer<const FRMStateVector *>(VT_TARGET_STATE);
+  }
+  /// Rotation from the source axes to the target axes at EPOCH.
+  const FRMMatrix3 *ROTATION_DCM() const {
+    return GetPointer<const FRMMatrix3 *>(VT_ROTATION_DCM);
+  }
+  /// Time derivative of ROTATION_DCM, per second. Required for a velocity
+  /// transform between relatively rotating axis sets.
+  const FRMMatrix3 *ROTATION_DCM_RATE() const {
+    return GetPointer<const FRMMatrix3 *>(VT_ROTATION_DCM_RATE);
+  }
+  /// Angular velocity of the target axes with respect to the source axes,
+  /// radians per second, expressed in the source axes.
+  const FRMVector3 *ANGULAR_VELOCITY_RAD_S() const {
+    return GetPointer<const FRMVector3 *>(VT_ANGULAR_VELOCITY_RAD_S);
+  }
+  /// Epoch of the Earth-orientation data set actually used, ISO 8601.
+  const ::flatbuffers::String *EOP_DATA_SET_EPOCH() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_EOP_DATA_SET_EPOCH);
+  }
+  /// Content identifier of the Earth-orientation data set actually used.
+  const ::flatbuffers::String *EOP_DATA_SET_CID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_EOP_DATA_SET_CID);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -517,6 +983,18 @@ struct FRMFrameTransformResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::
            verifier.VerifyTable(POSITION()) &&
            VerifyOffset(verifier, VT_TRACE_ID) &&
            verifier.VerifyString(TRACE_ID()) &&
+           VerifyOffset(verifier, VT_TARGET_STATE) &&
+           verifier.VerifyTable(TARGET_STATE()) &&
+           VerifyOffset(verifier, VT_ROTATION_DCM) &&
+           verifier.VerifyTable(ROTATION_DCM()) &&
+           VerifyOffset(verifier, VT_ROTATION_DCM_RATE) &&
+           verifier.VerifyTable(ROTATION_DCM_RATE()) &&
+           VerifyOffset(verifier, VT_ANGULAR_VELOCITY_RAD_S) &&
+           verifier.VerifyTable(ANGULAR_VELOCITY_RAD_S()) &&
+           VerifyOffset(verifier, VT_EOP_DATA_SET_EPOCH) &&
+           verifier.VerifyString(EOP_DATA_SET_EPOCH()) &&
+           VerifyOffset(verifier, VT_EOP_DATA_SET_CID) &&
+           verifier.VerifyString(EOP_DATA_SET_CID()) &&
            verifier.EndTable();
   }
   FRMFrameTransformResultT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -540,6 +1018,24 @@ struct FRMFrameTransformResultBuilder {
   void add_TRACE_ID(::flatbuffers::Offset<::flatbuffers::String> TRACE_ID) {
     fbb_.AddOffset(FRMFrameTransformResult::VT_TRACE_ID, TRACE_ID);
   }
+  void add_TARGET_STATE(::flatbuffers::Offset<FRMStateVector> TARGET_STATE) {
+    fbb_.AddOffset(FRMFrameTransformResult::VT_TARGET_STATE, TARGET_STATE);
+  }
+  void add_ROTATION_DCM(::flatbuffers::Offset<FRMMatrix3> ROTATION_DCM) {
+    fbb_.AddOffset(FRMFrameTransformResult::VT_ROTATION_DCM, ROTATION_DCM);
+  }
+  void add_ROTATION_DCM_RATE(::flatbuffers::Offset<FRMMatrix3> ROTATION_DCM_RATE) {
+    fbb_.AddOffset(FRMFrameTransformResult::VT_ROTATION_DCM_RATE, ROTATION_DCM_RATE);
+  }
+  void add_ANGULAR_VELOCITY_RAD_S(::flatbuffers::Offset<FRMVector3> ANGULAR_VELOCITY_RAD_S) {
+    fbb_.AddOffset(FRMFrameTransformResult::VT_ANGULAR_VELOCITY_RAD_S, ANGULAR_VELOCITY_RAD_S);
+  }
+  void add_EOP_DATA_SET_EPOCH(::flatbuffers::Offset<::flatbuffers::String> EOP_DATA_SET_EPOCH) {
+    fbb_.AddOffset(FRMFrameTransformResult::VT_EOP_DATA_SET_EPOCH, EOP_DATA_SET_EPOCH);
+  }
+  void add_EOP_DATA_SET_CID(::flatbuffers::Offset<::flatbuffers::String> EOP_DATA_SET_CID) {
+    fbb_.AddOffset(FRMFrameTransformResult::VT_EOP_DATA_SET_CID, EOP_DATA_SET_CID);
+  }
   explicit FRMFrameTransformResultBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -556,8 +1052,20 @@ inline ::flatbuffers::Offset<FRMFrameTransformResult> CreateFRMFrameTransformRes
     frmResultStatus STATUS = frmResultStatus::OK,
     ::flatbuffers::Offset<::flatbuffers::String> ERROR_MESSAGE = 0,
     ::flatbuffers::Offset<FRMVector3> POSITION = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> TRACE_ID = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> TRACE_ID = 0,
+    ::flatbuffers::Offset<FRMStateVector> TARGET_STATE = 0,
+    ::flatbuffers::Offset<FRMMatrix3> ROTATION_DCM = 0,
+    ::flatbuffers::Offset<FRMMatrix3> ROTATION_DCM_RATE = 0,
+    ::flatbuffers::Offset<FRMVector3> ANGULAR_VELOCITY_RAD_S = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> EOP_DATA_SET_EPOCH = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> EOP_DATA_SET_CID = 0) {
   FRMFrameTransformResultBuilder builder_(_fbb);
+  builder_.add_EOP_DATA_SET_CID(EOP_DATA_SET_CID);
+  builder_.add_EOP_DATA_SET_EPOCH(EOP_DATA_SET_EPOCH);
+  builder_.add_ANGULAR_VELOCITY_RAD_S(ANGULAR_VELOCITY_RAD_S);
+  builder_.add_ROTATION_DCM_RATE(ROTATION_DCM_RATE);
+  builder_.add_ROTATION_DCM(ROTATION_DCM);
+  builder_.add_TARGET_STATE(TARGET_STATE);
   builder_.add_TRACE_ID(TRACE_ID);
   builder_.add_POSITION(POSITION);
   builder_.add_ERROR_MESSAGE(ERROR_MESSAGE);
@@ -575,15 +1083,29 @@ inline ::flatbuffers::Offset<FRMFrameTransformResult> CreateFRMFrameTransformRes
     frmResultStatus STATUS = frmResultStatus::OK,
     const char *ERROR_MESSAGE = nullptr,
     ::flatbuffers::Offset<FRMVector3> POSITION = 0,
-    const char *TRACE_ID = nullptr) {
+    const char *TRACE_ID = nullptr,
+    ::flatbuffers::Offset<FRMStateVector> TARGET_STATE = 0,
+    ::flatbuffers::Offset<FRMMatrix3> ROTATION_DCM = 0,
+    ::flatbuffers::Offset<FRMMatrix3> ROTATION_DCM_RATE = 0,
+    ::flatbuffers::Offset<FRMVector3> ANGULAR_VELOCITY_RAD_S = 0,
+    const char *EOP_DATA_SET_EPOCH = nullptr,
+    const char *EOP_DATA_SET_CID = nullptr) {
   auto ERROR_MESSAGE__ = ERROR_MESSAGE ? _fbb.CreateString(ERROR_MESSAGE) : 0;
   auto TRACE_ID__ = TRACE_ID ? _fbb.CreateString(TRACE_ID) : 0;
+  auto EOP_DATA_SET_EPOCH__ = EOP_DATA_SET_EPOCH ? _fbb.CreateString(EOP_DATA_SET_EPOCH) : 0;
+  auto EOP_DATA_SET_CID__ = EOP_DATA_SET_CID ? _fbb.CreateString(EOP_DATA_SET_CID) : 0;
   return CreateFRMFrameTransformResult(
       _fbb,
       STATUS,
       ERROR_MESSAGE__,
       POSITION,
-      TRACE_ID__);
+      TRACE_ID__,
+      TARGET_STATE,
+      ROTATION_DCM,
+      ROTATION_DCM_RATE,
+      ANGULAR_VELOCITY_RAD_S,
+      EOP_DATA_SET_EPOCH__,
+      EOP_DATA_SET_CID__);
 }
 
 ::flatbuffers::Offset<FRMFrameTransformResult> CreateFRMFrameTransformResult(::flatbuffers::FlatBufferBuilder &_fbb, const FRMFrameTransformResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -746,13 +1268,90 @@ inline ::flatbuffers::Offset<FRMMatrix3> FRMMatrix3::Pack(::flatbuffers::FlatBuf
       _M33);
 }
 
+inline FRMStateVectorT::FRMStateVectorT(const FRMStateVectorT &o)
+      : REPRESENTATION(o.REPRESENTATION),
+        ELEMENTS(o.ELEMENTS),
+        POSITION((o.POSITION) ? new FRMVector3T(*o.POSITION) : nullptr),
+        VELOCITY((o.VELOCITY) ? new FRMVector3T(*o.VELOCITY) : nullptr),
+        COORDINATE_SYSTEM_NAME(o.COORDINATE_SYSTEM_NAME),
+        EPOCH(o.EPOCH),
+        EPOCH_TIME_SYSTEM(o.EPOCH_TIME_SYSTEM),
+        GRAVITATIONAL_PARAMETER(o.GRAVITATIONAL_PARAMETER) {
+}
+
+inline FRMStateVectorT &FRMStateVectorT::operator=(FRMStateVectorT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(REPRESENTATION, o.REPRESENTATION);
+  std::swap(ELEMENTS, o.ELEMENTS);
+  std::swap(POSITION, o.POSITION);
+  std::swap(VELOCITY, o.VELOCITY);
+  std::swap(COORDINATE_SYSTEM_NAME, o.COORDINATE_SYSTEM_NAME);
+  std::swap(EPOCH, o.EPOCH);
+  std::swap(EPOCH_TIME_SYSTEM, o.EPOCH_TIME_SYSTEM);
+  std::swap(GRAVITATIONAL_PARAMETER, o.GRAVITATIONAL_PARAMETER);
+  return *this;
+}
+
+inline FRMStateVectorT *FRMStateVector::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<FRMStateVectorT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void FRMStateVector::UnPackTo(FRMStateVectorT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = REPRESENTATION(); _o->REPRESENTATION = _e; }
+  { auto _e = ELEMENTS(); if (_e) { _o->ELEMENTS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->ELEMENTS[_i] = _e->Get(_i); } } else { _o->ELEMENTS.resize(0); } }
+  { auto _e = POSITION(); if (_e) { if(_o->POSITION) { _e->UnPackTo(_o->POSITION.get(), _resolver); } else { _o->POSITION = std::unique_ptr<FRMVector3T>(_e->UnPack(_resolver)); } } else if (_o->POSITION) { _o->POSITION.reset(); } }
+  { auto _e = VELOCITY(); if (_e) { if(_o->VELOCITY) { _e->UnPackTo(_o->VELOCITY.get(), _resolver); } else { _o->VELOCITY = std::unique_ptr<FRMVector3T>(_e->UnPack(_resolver)); } } else if (_o->VELOCITY) { _o->VELOCITY.reset(); } }
+  { auto _e = COORDINATE_SYSTEM_NAME(); if (_e) _o->COORDINATE_SYSTEM_NAME = _e->str(); }
+  { auto _e = EPOCH(); if (_e) _o->EPOCH = _e->str(); }
+  { auto _e = EPOCH_TIME_SYSTEM(); if (_e) _o->EPOCH_TIME_SYSTEM = _e->str(); }
+  { auto _e = GRAVITATIONAL_PARAMETER(); _o->GRAVITATIONAL_PARAMETER = _e; }
+}
+
+inline ::flatbuffers::Offset<FRMStateVector> CreateFRMStateVector(::flatbuffers::FlatBufferBuilder &_fbb, const FRMStateVectorT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return FRMStateVector::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<FRMStateVector> FRMStateVector::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const FRMStateVectorT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const FRMStateVectorT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _REPRESENTATION = _o->REPRESENTATION;
+  auto _ELEMENTS = _o->ELEMENTS.size() ? _fbb.CreateVector(_o->ELEMENTS) : 0;
+  auto _POSITION = _o->POSITION ? CreateFRMVector3(_fbb, _o->POSITION.get(), _rehasher) : 0;
+  auto _VELOCITY = _o->VELOCITY ? CreateFRMVector3(_fbb, _o->VELOCITY.get(), _rehasher) : 0;
+  auto _COORDINATE_SYSTEM_NAME = _o->COORDINATE_SYSTEM_NAME.empty() ? 0 : _fbb.CreateString(_o->COORDINATE_SYSTEM_NAME);
+  auto _EPOCH = _o->EPOCH.empty() ? 0 : _fbb.CreateString(_o->EPOCH);
+  auto _EPOCH_TIME_SYSTEM = _o->EPOCH_TIME_SYSTEM.empty() ? 0 : _fbb.CreateString(_o->EPOCH_TIME_SYSTEM);
+  auto _GRAVITATIONAL_PARAMETER = _o->GRAVITATIONAL_PARAMETER;
+  return CreateFRMStateVector(
+      _fbb,
+      _REPRESENTATION,
+      _ELEMENTS,
+      _POSITION,
+      _VELOCITY,
+      _COORDINATE_SYSTEM_NAME,
+      _EPOCH,
+      _EPOCH_TIME_SYSTEM,
+      _GRAVITATIONAL_PARAMETER);
+}
+
 inline FRMFrameTransformRequestT::FRMFrameTransformRequestT(const FRMFrameTransformRequestT &o)
       : OPERATION(o.OPERATION),
         POSITION((o.POSITION) ? new FRMVector3T(*o.POSITION) : nullptr),
         TRANSFORM_DCM((o.TRANSFORM_DCM) ? new FRMMatrix3T(*o.TRANSFORM_DCM) : nullptr),
         EQUATORIAL_RADIUS_M(o.EQUATORIAL_RADIUS_M),
         POLAR_RADIUS_M(o.POLAR_RADIUS_M),
-        TRACE_ID(o.TRACE_ID) {
+        TRACE_ID(o.TRACE_ID),
+        SOURCE_COORDINATE_SYSTEM((o.SOURCE_COORDINATE_SYSTEM) ? new RFMCoordinateSystemT(*o.SOURCE_COORDINATE_SYSTEM) : nullptr),
+        TARGET_COORDINATE_SYSTEM((o.TARGET_COORDINATE_SYSTEM) ? new RFMCoordinateSystemT(*o.TARGET_COORDINATE_SYSTEM) : nullptr),
+        SOURCE_STATE((o.SOURCE_STATE) ? new FRMStateVectorT(*o.SOURCE_STATE) : nullptr),
+        TARGET_REPRESENTATION(o.TARGET_REPRESENTATION),
+        EPOCH(o.EPOCH),
+        EPOCH_TIME_SYSTEM(o.EPOCH_TIME_SYSTEM),
+        EOP_DATA_SET_CID(o.EOP_DATA_SET_CID) {
 }
 
 inline FRMFrameTransformRequestT &FRMFrameTransformRequestT::operator=(FRMFrameTransformRequestT o) FLATBUFFERS_NOEXCEPT {
@@ -762,6 +1361,13 @@ inline FRMFrameTransformRequestT &FRMFrameTransformRequestT::operator=(FRMFrameT
   std::swap(EQUATORIAL_RADIUS_M, o.EQUATORIAL_RADIUS_M);
   std::swap(POLAR_RADIUS_M, o.POLAR_RADIUS_M);
   std::swap(TRACE_ID, o.TRACE_ID);
+  std::swap(SOURCE_COORDINATE_SYSTEM, o.SOURCE_COORDINATE_SYSTEM);
+  std::swap(TARGET_COORDINATE_SYSTEM, o.TARGET_COORDINATE_SYSTEM);
+  std::swap(SOURCE_STATE, o.SOURCE_STATE);
+  std::swap(TARGET_REPRESENTATION, o.TARGET_REPRESENTATION);
+  std::swap(EPOCH, o.EPOCH);
+  std::swap(EPOCH_TIME_SYSTEM, o.EPOCH_TIME_SYSTEM);
+  std::swap(EOP_DATA_SET_CID, o.EOP_DATA_SET_CID);
   return *this;
 }
 
@@ -780,6 +1386,13 @@ inline void FRMFrameTransformRequest::UnPackTo(FRMFrameTransformRequestT *_o, co
   { auto _e = EQUATORIAL_RADIUS_M(); _o->EQUATORIAL_RADIUS_M = _e; }
   { auto _e = POLAR_RADIUS_M(); _o->POLAR_RADIUS_M = _e; }
   { auto _e = TRACE_ID(); if (_e) _o->TRACE_ID = _e->str(); }
+  { auto _e = SOURCE_COORDINATE_SYSTEM(); if (_e) { if(_o->SOURCE_COORDINATE_SYSTEM) { _e->UnPackTo(_o->SOURCE_COORDINATE_SYSTEM.get(), _resolver); } else { _o->SOURCE_COORDINATE_SYSTEM = std::unique_ptr<RFMCoordinateSystemT>(_e->UnPack(_resolver)); } } else if (_o->SOURCE_COORDINATE_SYSTEM) { _o->SOURCE_COORDINATE_SYSTEM.reset(); } }
+  { auto _e = TARGET_COORDINATE_SYSTEM(); if (_e) { if(_o->TARGET_COORDINATE_SYSTEM) { _e->UnPackTo(_o->TARGET_COORDINATE_SYSTEM.get(), _resolver); } else { _o->TARGET_COORDINATE_SYSTEM = std::unique_ptr<RFMCoordinateSystemT>(_e->UnPack(_resolver)); } } else if (_o->TARGET_COORDINATE_SYSTEM) { _o->TARGET_COORDINATE_SYSTEM.reset(); } }
+  { auto _e = SOURCE_STATE(); if (_e) { if(_o->SOURCE_STATE) { _e->UnPackTo(_o->SOURCE_STATE.get(), _resolver); } else { _o->SOURCE_STATE = std::unique_ptr<FRMStateVectorT>(_e->UnPack(_resolver)); } } else if (_o->SOURCE_STATE) { _o->SOURCE_STATE.reset(); } }
+  { auto _e = TARGET_REPRESENTATION(); _o->TARGET_REPRESENTATION = _e; }
+  { auto _e = EPOCH(); if (_e) _o->EPOCH = _e->str(); }
+  { auto _e = EPOCH_TIME_SYSTEM(); if (_e) _o->EPOCH_TIME_SYSTEM = _e->str(); }
+  { auto _e = EOP_DATA_SET_CID(); if (_e) _o->EOP_DATA_SET_CID = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<FRMFrameTransformRequest> CreateFRMFrameTransformRequest(::flatbuffers::FlatBufferBuilder &_fbb, const FRMFrameTransformRequestT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -796,6 +1409,13 @@ inline ::flatbuffers::Offset<FRMFrameTransformRequest> FRMFrameTransformRequest:
   auto _EQUATORIAL_RADIUS_M = _o->EQUATORIAL_RADIUS_M;
   auto _POLAR_RADIUS_M = _o->POLAR_RADIUS_M;
   auto _TRACE_ID = _o->TRACE_ID.empty() ? 0 : _fbb.CreateString(_o->TRACE_ID);
+  auto _SOURCE_COORDINATE_SYSTEM = _o->SOURCE_COORDINATE_SYSTEM ? CreateRFMCoordinateSystem(_fbb, _o->SOURCE_COORDINATE_SYSTEM.get(), _rehasher) : 0;
+  auto _TARGET_COORDINATE_SYSTEM = _o->TARGET_COORDINATE_SYSTEM ? CreateRFMCoordinateSystem(_fbb, _o->TARGET_COORDINATE_SYSTEM.get(), _rehasher) : 0;
+  auto _SOURCE_STATE = _o->SOURCE_STATE ? CreateFRMStateVector(_fbb, _o->SOURCE_STATE.get(), _rehasher) : 0;
+  auto _TARGET_REPRESENTATION = _o->TARGET_REPRESENTATION;
+  auto _EPOCH = _o->EPOCH.empty() ? 0 : _fbb.CreateString(_o->EPOCH);
+  auto _EPOCH_TIME_SYSTEM = _o->EPOCH_TIME_SYSTEM.empty() ? 0 : _fbb.CreateString(_o->EPOCH_TIME_SYSTEM);
+  auto _EOP_DATA_SET_CID = _o->EOP_DATA_SET_CID.empty() ? 0 : _fbb.CreateString(_o->EOP_DATA_SET_CID);
   return CreateFRMFrameTransformRequest(
       _fbb,
       _OPERATION,
@@ -803,14 +1423,27 @@ inline ::flatbuffers::Offset<FRMFrameTransformRequest> FRMFrameTransformRequest:
       _TRANSFORM_DCM,
       _EQUATORIAL_RADIUS_M,
       _POLAR_RADIUS_M,
-      _TRACE_ID);
+      _TRACE_ID,
+      _SOURCE_COORDINATE_SYSTEM,
+      _TARGET_COORDINATE_SYSTEM,
+      _SOURCE_STATE,
+      _TARGET_REPRESENTATION,
+      _EPOCH,
+      _EPOCH_TIME_SYSTEM,
+      _EOP_DATA_SET_CID);
 }
 
 inline FRMFrameTransformResultT::FRMFrameTransformResultT(const FRMFrameTransformResultT &o)
       : STATUS(o.STATUS),
         ERROR_MESSAGE(o.ERROR_MESSAGE),
         POSITION((o.POSITION) ? new FRMVector3T(*o.POSITION) : nullptr),
-        TRACE_ID(o.TRACE_ID) {
+        TRACE_ID(o.TRACE_ID),
+        TARGET_STATE((o.TARGET_STATE) ? new FRMStateVectorT(*o.TARGET_STATE) : nullptr),
+        ROTATION_DCM((o.ROTATION_DCM) ? new FRMMatrix3T(*o.ROTATION_DCM) : nullptr),
+        ROTATION_DCM_RATE((o.ROTATION_DCM_RATE) ? new FRMMatrix3T(*o.ROTATION_DCM_RATE) : nullptr),
+        ANGULAR_VELOCITY_RAD_S((o.ANGULAR_VELOCITY_RAD_S) ? new FRMVector3T(*o.ANGULAR_VELOCITY_RAD_S) : nullptr),
+        EOP_DATA_SET_EPOCH(o.EOP_DATA_SET_EPOCH),
+        EOP_DATA_SET_CID(o.EOP_DATA_SET_CID) {
 }
 
 inline FRMFrameTransformResultT &FRMFrameTransformResultT::operator=(FRMFrameTransformResultT o) FLATBUFFERS_NOEXCEPT {
@@ -818,6 +1451,12 @@ inline FRMFrameTransformResultT &FRMFrameTransformResultT::operator=(FRMFrameTra
   std::swap(ERROR_MESSAGE, o.ERROR_MESSAGE);
   std::swap(POSITION, o.POSITION);
   std::swap(TRACE_ID, o.TRACE_ID);
+  std::swap(TARGET_STATE, o.TARGET_STATE);
+  std::swap(ROTATION_DCM, o.ROTATION_DCM);
+  std::swap(ROTATION_DCM_RATE, o.ROTATION_DCM_RATE);
+  std::swap(ANGULAR_VELOCITY_RAD_S, o.ANGULAR_VELOCITY_RAD_S);
+  std::swap(EOP_DATA_SET_EPOCH, o.EOP_DATA_SET_EPOCH);
+  std::swap(EOP_DATA_SET_CID, o.EOP_DATA_SET_CID);
   return *this;
 }
 
@@ -834,6 +1473,12 @@ inline void FRMFrameTransformResult::UnPackTo(FRMFrameTransformResultT *_o, cons
   { auto _e = ERROR_MESSAGE(); if (_e) _o->ERROR_MESSAGE = _e->str(); }
   { auto _e = POSITION(); if (_e) { if(_o->POSITION) { _e->UnPackTo(_o->POSITION.get(), _resolver); } else { _o->POSITION = std::unique_ptr<FRMVector3T>(_e->UnPack(_resolver)); } } else if (_o->POSITION) { _o->POSITION.reset(); } }
   { auto _e = TRACE_ID(); if (_e) _o->TRACE_ID = _e->str(); }
+  { auto _e = TARGET_STATE(); if (_e) { if(_o->TARGET_STATE) { _e->UnPackTo(_o->TARGET_STATE.get(), _resolver); } else { _o->TARGET_STATE = std::unique_ptr<FRMStateVectorT>(_e->UnPack(_resolver)); } } else if (_o->TARGET_STATE) { _o->TARGET_STATE.reset(); } }
+  { auto _e = ROTATION_DCM(); if (_e) { if(_o->ROTATION_DCM) { _e->UnPackTo(_o->ROTATION_DCM.get(), _resolver); } else { _o->ROTATION_DCM = std::unique_ptr<FRMMatrix3T>(_e->UnPack(_resolver)); } } else if (_o->ROTATION_DCM) { _o->ROTATION_DCM.reset(); } }
+  { auto _e = ROTATION_DCM_RATE(); if (_e) { if(_o->ROTATION_DCM_RATE) { _e->UnPackTo(_o->ROTATION_DCM_RATE.get(), _resolver); } else { _o->ROTATION_DCM_RATE = std::unique_ptr<FRMMatrix3T>(_e->UnPack(_resolver)); } } else if (_o->ROTATION_DCM_RATE) { _o->ROTATION_DCM_RATE.reset(); } }
+  { auto _e = ANGULAR_VELOCITY_RAD_S(); if (_e) { if(_o->ANGULAR_VELOCITY_RAD_S) { _e->UnPackTo(_o->ANGULAR_VELOCITY_RAD_S.get(), _resolver); } else { _o->ANGULAR_VELOCITY_RAD_S = std::unique_ptr<FRMVector3T>(_e->UnPack(_resolver)); } } else if (_o->ANGULAR_VELOCITY_RAD_S) { _o->ANGULAR_VELOCITY_RAD_S.reset(); } }
+  { auto _e = EOP_DATA_SET_EPOCH(); if (_e) _o->EOP_DATA_SET_EPOCH = _e->str(); }
+  { auto _e = EOP_DATA_SET_CID(); if (_e) _o->EOP_DATA_SET_CID = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<FRMFrameTransformResult> CreateFRMFrameTransformResult(::flatbuffers::FlatBufferBuilder &_fbb, const FRMFrameTransformResultT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -848,12 +1493,24 @@ inline ::flatbuffers::Offset<FRMFrameTransformResult> FRMFrameTransformResult::P
   auto _ERROR_MESSAGE = _o->ERROR_MESSAGE.empty() ? 0 : _fbb.CreateString(_o->ERROR_MESSAGE);
   auto _POSITION = _o->POSITION ? CreateFRMVector3(_fbb, _o->POSITION.get(), _rehasher) : 0;
   auto _TRACE_ID = _o->TRACE_ID.empty() ? 0 : _fbb.CreateString(_o->TRACE_ID);
+  auto _TARGET_STATE = _o->TARGET_STATE ? CreateFRMStateVector(_fbb, _o->TARGET_STATE.get(), _rehasher) : 0;
+  auto _ROTATION_DCM = _o->ROTATION_DCM ? CreateFRMMatrix3(_fbb, _o->ROTATION_DCM.get(), _rehasher) : 0;
+  auto _ROTATION_DCM_RATE = _o->ROTATION_DCM_RATE ? CreateFRMMatrix3(_fbb, _o->ROTATION_DCM_RATE.get(), _rehasher) : 0;
+  auto _ANGULAR_VELOCITY_RAD_S = _o->ANGULAR_VELOCITY_RAD_S ? CreateFRMVector3(_fbb, _o->ANGULAR_VELOCITY_RAD_S.get(), _rehasher) : 0;
+  auto _EOP_DATA_SET_EPOCH = _o->EOP_DATA_SET_EPOCH.empty() ? 0 : _fbb.CreateString(_o->EOP_DATA_SET_EPOCH);
+  auto _EOP_DATA_SET_CID = _o->EOP_DATA_SET_CID.empty() ? 0 : _fbb.CreateString(_o->EOP_DATA_SET_CID);
   return CreateFRMFrameTransformResult(
       _fbb,
       _STATUS,
       _ERROR_MESSAGE,
       _POSITION,
-      _TRACE_ID);
+      _TRACE_ID,
+      _TARGET_STATE,
+      _ROTATION_DCM,
+      _ROTATION_DCM_RATE,
+      _ANGULAR_VELOCITY_RAD_S,
+      _EOP_DATA_SET_EPOCH,
+      _EOP_DATA_SET_CID);
 }
 
 inline FRMT::FRMT(const FRMT &o)
