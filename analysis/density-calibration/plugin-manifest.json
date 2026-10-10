@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.analysis.density-calibration",
   "name": "Thermospheric density calibration (JB2008 temperature corrections)",
-  "version": "0.1.0",
-  "description": "JB2008 thermospheric mass density at points (propagator/hpop's JB2008, driven by SET SOLFSMY/DTCFILE rows as hpop reads them) with an exospheric-temperature correction field dT(latitude, local solar time) in Schmidt semi-normalized spherical harmonics added to JB2008's DSTDTC; and the estimation of that field, per time bin, from observed densities (Gauss-Newton on log-density residuals with a Gaussian prior and robust editing): a public, simplified analogue of the Dynamic Calibration of the Atmosphere in HASDM.",
+  "version": "0.2.1",
+  "description": "JB2008 thermospheric mass density at points (propagator/hpop's JB2008, driven by SET SOLFSMY/DTCFILE rows as hpop reads them) with an exospheric-temperature correction added to JB2008's DSTDTC: spherical harmonics in latitude and local solar time per time bin, or values at time nodes, optionally linear in altitude. Estimates the correction from observed densities (Gauss-Newton on log-density residuals per bin) or from the orbital decay of catalogued objects (element-set histories propagated by Vallado SGP4; Gauss-Newton on the sets' mean semi-major axes with each object's ballistic coefficient): public, simplified analogues of the Dynamic Calibration of the Atmosphere in HASDM.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -16,7 +16,7 @@
   ],
   "sequentialJustification": {
     "kind": "pure-transform",
-    "detail": "Deterministic density evaluation and least squares over caller-supplied points, drivers and observations. No host calls, threads or network access."
+    "detail": "Deterministic density evaluation, SGP4 propagation and least squares over caller-supplied points, element sets, drivers and observations. No host calls, threads or network access."
   },
   "schemasUsed": [],
   "methods": [
@@ -123,6 +123,114 @@
           "maxStreams": 1,
           "required": true,
           "description": "Coefficients per time bin."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "decay",
+      "displayName": "Orbital decay of element sets under JB2008",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "density-decay-request-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "{jb2008: {rows}, objects: [{id, sets: [{mjd (UTC), MEAN_MOTION, ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER, MEAN_ANOMALY, BSTAR}], B? (m^2/kg), spanDays?}], correction? {nodesMjd, altitudeKm, values}, stepSeconds?, maxGapDays?, samples?}"
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Element-set histories, drivers and the optional correction."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "density-decay-result-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "{objects: [{id, sets: [{mjd, aKm, perigeeKm, eccentricity, cumulativeDecayM}], segments: [{fromMjd, toMjd, decayM, meanAltitudeKm}], meanAltitudeKm, samples?}]}"
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Mean semi-major axes and the modelled drag decay."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "calibrate_decay",
+      "displayName": "Estimate temperature corrections and ballistic coefficients from element-set histories",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "density-calibrate-decay-request-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "{jb2008: {rows}, objects: [{id, sets, lnBPrior? {mean, sigma}}], nodes: {fromMjd, toMjd, stepHours, altitudeKm?}, priors: {randomWalkKPerSqrtDay, meanLevelK, altitudeDifferenceK?}, stepSeconds?, maxGapDays?, sigmaFloorM?, editSigma?, iterations?, minSets?, residuals?}"
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Element-set histories, drivers, node layout and priors."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "calibration",
+          "acceptedTypeSets": [
+            {
+              "setId": "density-decay-calibration-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "{correction: {nodesMjd, altitudeKm, values [K], sigmas [K]}, objects: [{id, lnB, lnBSigma, B, sigmaM, rmsM, ...}], skipped, fit: {iterations, converged, level, levelLnBCorrelation, ...}}"
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The correction at its nodes and each object's ballistic coefficient."
         }
       ],
       "maxBatch": 1,

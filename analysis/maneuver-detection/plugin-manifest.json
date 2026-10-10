@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
   "name": "Maneuver detection",
-  "version": "0.1.0",
-  "description": "Detects maneuvers in an element-set history. Takes each element set's trajectory from any propagator, finds where consecutive trajectories cross, measures the energy and orbit-plane change there, and flags steps beyond the object's own noise. Emits $MNV DETECTED events with time, in-track and cross-track delta-V, pre and post states and characterization.",
+  "version": "0.2.0",
+  "description": "Detects maneuvers in an element-set history. Takes each element set's trajectory from any propagator, finds where consecutive trajectories cross, measures the energy and orbit-plane change there, and flags steps beyond the object's own noise. Emits $MNV DETECTED events with time, in-track and cross-track delta-V, pre and post states and characterization. Element sets may be given instead of ephemerides; the module then propagates them with Vallado SGP4.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -50,10 +50,32 @@
               ]
             }
           ],
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "One or more $OEM frames. One data block per element set, in an Earth-centred inertial frame, spanning at least the neighbouring element sets' epochs (two on each side recommended). Blocks are grouped by OBJECT and ordered by the midpoint of their span."
+          "required": false,
+          "description": "One or more $OEM frames (or element sets on elements). One data block per element set, in an Earth-centred inertial frame, spanning at least the neighbouring element sets' epochs (two on each side recommended). Blocks are grouped by OBJECT and ordered by the midpoint of their span."
+        },
+        {
+          "portId": "elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "detection-elements-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "{objects: [{id?, norad?, name?, sets: [{mjd (UTC), MEAN_MOTION, ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER, MEAN_ANOMALY, BSTAR, comment?}]}]}: SGP4 element sets the module propagates itself (Vallado SGP4, WGS-72) into one TEME block per set over its neighbours' epochs (two on each side) on the grid_step_s grid."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Element-set histories as JSON, propagated by the module with SGP4 instead of caller-supplied ephemerides."
         },
         {
           "portId": "options",

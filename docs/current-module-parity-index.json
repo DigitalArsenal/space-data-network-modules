@@ -516,9 +516,11 @@
       "pluginId": "com.digitalarsenal.analysis.density-calibration",
       "name": "Thermospheric density calibration (JB2008 temperature corrections)",
       "pluginFamily": "analysis",
-      "version": "0.1.0",
+      "version": "0.2.1",
       "methodIds": [
         "calibrate",
+        "calibrate_decay",
+        "decay",
         "evaluate"
       ],
       "runtimeTargets": [
@@ -533,13 +535,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 2,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/density_calibration.cpp"
       ],
       "testFiles": [
+        "tests/decay.test.mjs",
         "tests/density_calibration.test.mjs"
       ]
     },
@@ -897,7 +900,7 @@
       "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
       "name": "Maneuver detection",
       "pluginFamily": "analysis",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "detect_maneuvers"
       ],

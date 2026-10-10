@@ -1,6 +1,7 @@
 {
   "erfaSourceFiles": 248,
   "jb2008": "propagator/hpop/lib/jb2008.h",
+  "sgp4": "propagator/sgp4/src/cpp/src/SGP4.cpp",
   "json": "propagator/sgp4/src/cpp/include/nlohmann/json.hpp",
   "threadModel": "single-thread"
 }

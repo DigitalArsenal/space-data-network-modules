@@ -375,11 +375,10 @@ maneuverCharacterization characterize(double inTrack, double crossTrack, const E
 
 struct Event { size_t pair; bool inTrack, crossTrack; double stepInTrack, stepCrossTrack, thInTrack, thCrossTrack; };
 
-bool detect(const std::vector<const uint8_t*>& frames, const std::vector<size_t>& lengths, const Options& o,
-            std::vector<std::vector<uint8_t>>& outputs, std::string& reportJson) {
-  std::map<std::string, std::vector<Block>> objects;
-  std::string creation;
-  size_t blockCount = 0;
+using Objects = std::map<std::string, std::vector<Block>>;
+
+// $OEM frames: one block per element set, grouped by object.
+bool loadOem(const std::vector<const uint8_t*>& frames, Objects& objects, std::string& creation, size_t& blockCount) {
   for (size_t f = 0; f < frames.size(); ++f) {
     const OEM* oem = GetOEM(frames[f]);
     NEED(oem->EPHEMERIS_DATA_BLOCK() && oem->EPHEMERIS_DATA_BLOCK()->size() > 0, "An $OEM frame has no data blocks.");
@@ -394,6 +393,78 @@ bool detect(const std::vector<const uint8_t*>& frames, const std::vector<size_t>
       objects[b.key].push_back(std::move(b));
     }
   }
+  return true;
+}
+
+// Element sets (JSON): each set propagated by Vallado's SGP4 (propagator/
+// sgp4's sources; WGS-72, opsmode 'i') on the grid_step_s grid from the epoch
+// of the set two before it to the epoch of the set two after it, in TEME, as
+// the input contract asks of a caller (and as the ISS study's trajectories
+// were made). A set SGP4 refuses, or that refuses a sample, has no block.
+// {objects: [{id?, norad?, name?, sets: [{mjd (UTC), MEAN_MOTION, ECCENTRICITY,
+// INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER, MEAN_ANOMALY, BSTAR, comment?}]}]}
+bool loadElements(const Json& j, const Options& o, Objects& objects, size_t& blockCount, Json& refused) {
+  NEED(j.is_object() && j.contains("objects") && j["objects"].is_array(), "The elements frame must be {objects: [...]}.");
+  for (const Json& ob : j["objects"]) {
+    NEED(ob.is_object() && ob.contains("sets") && ob["sets"].is_array(), "Every elements object needs sets.");
+    Block proto;
+    proto.norad = ob.contains("norad") && ob["norad"].is_number_unsigned() ? ob["norad"].get<uint32_t>() : 0;
+    proto.objectId = ob.contains("id") && ob["id"].is_string() ? ob["id"].get<std::string>() : "";
+    proto.objectName = ob.contains("name") && ob["name"].is_string() ? ob["name"].get<std::string>() : "";
+    NEED(proto.norad > 0 || !proto.objectId.empty(), "Every elements object must name itself (id or norad).");
+    proto.key = proto.objectId.empty() ? "NORAD:" + std::to_string(proto.norad) : proto.objectId;
+    proto.frame = "TEME";
+    struct Set { double mjd; elsetrec rec; std::string comment; };
+    std::vector<Set> sets;
+    for (const Json& e : ob["sets"]) {
+      const char* keys[] = {"mjd", "MEAN_MOTION", "ECCENTRICITY", "INCLINATION", "RA_OF_ASC_NODE", "ARG_OF_PERICENTER", "MEAN_ANOMALY", "BSTAR"};
+      double v[8];
+      for (int k = 0; k < 8; ++k) {
+        NEED(e.contains(keys[k]) && e[keys[k]].is_number(), "Every element set needs mjd, MEAN_MOTION, ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER, MEAN_ANOMALY and BSTAR.");
+        v[k] = e[keys[k]].get<double>();
+        NEED(std::isfinite(v[k]), "Element-set values must be finite.");
+      }
+      Set s;
+      s.mjd = v[0];
+      s.comment = e.contains("comment") && e["comment"].is_string() ? e["comment"].get<std::string>() : "EPOCH " + isoMs((v[0] - 40587.0) * 86400.0);
+      std::memset(&s.rec, 0, sizeof(s.rec));
+      const char satn[9] = "00000";
+      const double r = kPi / 180.0;
+      if (!(v[1] > 0) || !(v[2] >= 0 && v[2] < 1) ||
+          !SGP4Funcs::sgp4init(wgs72, 'i', satn, v[0] - 33281.0, v[7], 0.0, 0.0, v[2], v[5] * r, v[3] * r, v[6] * r, v[1] * 2 * kPi / 1440.0, v[4] * r, s.rec) ||
+          s.rec.error != 0) {
+        refused.push_back({{"object", proto.key}, {"epoch", isoMs((v[0] - 40587.0) * 86400.0)}, {"reason", "sgp4-init"}});
+        continue;
+      }
+      sets.push_back(s);
+    }
+    std::stable_sort(sets.begin(), sets.end(), [](const Set& a, const Set& b) { return a.mjd < b.mjd; });
+    const double step = o.gridStep;
+    for (size_t i = 0; i < sets.size(); ++i) {
+      const double a = (sets[i >= 2 ? i - 2 : 0].mjd - 40587.0) * 86400.0, b = (sets[std::min(sets.size() - 1, i + 2)].mjd - 40587.0) * 86400.0;
+      Block blk = proto;
+      blk.comment = sets[i].comment;
+      bool ok = true;
+      for (double t = std::ceil(a / step) * step; t <= b + 1e-6 && ok; t += step) {
+        double rr[3], vv[3];
+        if (!SGP4Funcs::sgp4(sets[i].rec, (t / 86400.0 + 40587.0 - sets[i].mjd) * 1440.0, rr, vv) || sets[i].rec.error != 0) { ok = false; break; }
+        blk.t.push_back(t);
+        blk.s.push_back({rr[0], rr[1], rr[2], vv[0], vv[1], vv[2]});
+      }
+      if (!ok || blk.t.size() < 2) {
+        refused.push_back({{"object", proto.key}, {"epoch", isoMs((sets[i].mjd - 40587.0) * 86400.0)}, {"reason", ok ? "span" : "sgp4"}});
+        continue;
+      }
+      NEED(blk.t.size() <= kMaxStatesPerBlock, "An element set's trajectory has too many states; raise grid_step_s.");
+      NEED(++blockCount <= kMaxBlocks, "Too many ephemeris blocks in one request.");
+      objects[blk.key].push_back(std::move(blk));
+    }
+  }
+  return true;
+}
+
+bool detect(Objects& objects, const std::string& creation, const Json& refused, const Options& o,
+            std::vector<std::vector<uint8_t>>& outputs, std::string& reportJson) {
   const std::string reportTime = o.reportTime.empty() ? creation : o.reportTime;
   Json report = Json::object();
   report["options"] = {{"k", o.k}, {"floor_in_track_mps", o.floorInTrack}, {"floor_cross_track_mps", o.floorCrossTrack},
@@ -554,6 +625,7 @@ bool detect(const std::vector<const uint8_t*>& frames, const std::vector<size_t>
     report["objects"].push_back(objectReport);
   }
   report["objects_screened"] = objects.size();
+  if (!refused.empty()) report["refused_sets"] = refused;
   report["detections"] = detections;
   reportJson = report.dump();
   return true;
@@ -570,16 +642,17 @@ const uint8_t* rootOf(const plugin_input_frame_t* frame, size_t& length, const c
 extern "C" int detect_maneuvers() {
   Options options;
   std::vector<const uint8_t*> frames;
-  std::vector<size_t> lengths;
+  std::vector<Json> elements;
   const uint32_t count = plugin_get_input_count();
   for (uint32_t i = 0; i < count; ++i) {
     const auto* frame = plugin_get_input_frame(i);
     if (!frame || !frame->port_id) return fail("An input frame has no port.");
-    if (std::strcmp(frame->port_id, "options") == 0) {
+    if (std::strcmp(frame->port_id, "options") == 0 || std::strcmp(frame->port_id, "elements") == 0) {
       if (!frame->payload || frame->payload_length == 0) continue;
       const std::string text(reinterpret_cast<const char*>(frame->payload), frame->payload_length);
       const Json j = Json::parse(text, nullptr, false);
-      if (j.is_discarded()) return fail("The options frame is not valid JSON.");
+      if (j.is_discarded()) return fail(std::strcmp(frame->port_id, "options") == 0 ? "The options frame is not valid JSON." : "The elements frame is not valid JSON.");
+      if (std::strcmp(frame->port_id, "elements") == 0) { elements.push_back(j); continue; }
       if (!readOptions(j, options)) return fail(error);
       continue;
     }
@@ -593,12 +666,18 @@ extern "C" int detect_maneuvers() {
     flatbuffers::Verifier verifier(bytes, length, verifierOptions);
     if (!VerifyOEMBuffer(verifier)) return fail("An ephemerides frame is not a valid $OEM FlatBuffer.");
     frames.push_back(bytes);
-    lengths.push_back(length);
   }
-  if (frames.empty()) return fail("At least one $OEM frame is required on the ephemerides port.");
+  if (frames.empty() && elements.empty()) return fail("At least one $OEM frame on ephemerides, or element sets on elements, is required.");
+  Objects objects;
+  std::string creation;
+  size_t blockCount = 0;
+  Json refused = Json::array();
+  if (!loadOem(frames, objects, creation, blockCount)) return fail(error);
+  for (const Json& j : elements)
+    if (!loadElements(j, options, objects, blockCount, refused)) return fail(error);
   std::vector<std::vector<uint8_t>> outputs;
   std::string report;
-  if (!detect(frames, lengths, options, outputs, report)) return fail(error);
+  if (!detect(objects, creation, refused, options, outputs, report)) return fail(error);
   if (plugin_push_output_ex("report", nullptr, nullptr, PLUGIN_PAYLOAD_WIRE_FORMAT_ALIGNED_BINARY, nullptr, 0, 1,
         reinterpret_cast<const uint8_t*>(report.data()), report.size()) < 0) return 1;
   for (const auto& mnv : outputs) {

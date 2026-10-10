@@ -1,15 +1,17 @@
 # Maneuver detection
 
 Detects maneuvers in an element-set history and emits `$MNV` records with
-`STATUS: DETECTED`. The module does no propagation: the caller propagates each
-element set with the provider of its choice (SGP4 for GP data, HPOP, an
-operator ephemeris) and passes the trajectories as `$OEM`.
+`STATUS: DETECTED`. The caller propagates each element set with the provider
+of its choice (SGP4 for GP data, HPOP, an operator ephemeris) and passes the
+trajectories as `$OEM`, or passes SGP4 element sets on `elements` and the
+module propagates them itself with Vallado's SGP4.
 
 Method `detect_maneuvers`:
 
 | Port | Direction | Type | Content |
 | --- | --- | --- | --- |
 | `ephemerides` | in | `$OEM` (one or more frames) | One data block per element set, Earth-centred inertial frame, UTC |
+| `elements` | in, optional | JSON | `{objects: [{id?, norad?, name?, sets: [{mjd (UTC), MEAN_MOTION, ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER, MEAN_ANOMALY, BSTAR, comment?}]}]}`: GP element sets, instead of (or beside) `ephemerides` |
 | `options` | in, optional | JSON | Thresholds (below) |
 | `maneuvers` | out | `$MNV` | One frame per detected maneuver |
 | `report` | out | JSON | Per-pair crossing times, jumps, steps and thresholds; each event's evidence |
@@ -28,6 +30,12 @@ Method `detect_maneuvers`:
   (Earth-centred). One frame per object. Earth-fixed frames are refused.
 - A block's `COMMENT` (for example the element set's GP_ID and epoch) is copied
   into `SOURCED_DATA` of every event it bounds.
+- **Element sets** (`elements`): each set is propagated by Vallado's SGP4
+  (`propagator/sgp4`'s sources; WGS-72, opsmode `i`), in TEME, on the
+  `grid_step_s` grid (aligned to whole multiples of it in UTC seconds) from
+  the epoch of the set two before it to the epoch of the set two after it:
+  the contract above, as the ISS study's trajectories were made. A set SGP4
+  refuses has no block and is listed under `refused_sets` in the report.
 
 ## Method
 
@@ -112,6 +120,13 @@ universal variables in the test, independent of the module):
 - one outlying element set (0.5 km higher, alone): no event;
 - GEO 0.05 m/s trim with a 0.02 m/s floor: `STATION_KEEPING`, da = 2 a dv / v;
 - an Earth-fixed ephemeris: refused.
+- element sets propagated by the module (a set every 8 h of one 400-km
+  object, its mean anomaly, argument of perigee and node advancing at SGP4's
+  first-order J2 secular rates, Hoots and Roehrich 1980): no event without a
+  burn; with a 1 m/s in-track burn (every later set's mean motion lowered by
+  3/2 n da/a, da = 2 a² v dv/μ) one `ORBIT_RAISING` event within 8 h of the
+  burn and an in-track delta-V within 0.1 m/s (measured 1.0002 m/s, 57 min
+  before the burn with sets 8 h apart).
 
 ISS reboosts, 2021-03 to 2026-09 (study below). The truth is 72 burns from
 NASA's public ISS trajectory archive, with execution confirmed by NASA's own
