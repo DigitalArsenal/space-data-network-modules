@@ -59,8 +59,13 @@ not a candidate for it.
 
 1. **Geometry, in GCRF.** Earth-fixed sensors and predictions are rotated by
    the `foundation/frames` chain (ERFA, IAU 2006/2000A, CIO based) with the
-   supplied `$EOP`; the sensor's velocity is omega × r with omega scaled by
-   LOD. The predicted state is taken at the emission time t − tau,
+   supplied `$EOP`. An Earth-fixed point moves with the rate of that
+   rotation (a ±1 s central difference of the same chain, UT1 advancing
+   at 1 − LOD/86400): r_g = Mᵀ r, v_g = Mᵀ v + Ṁᵀ r, so polar motion and
+   precession-nutation enter as well as the Earth rotation angle. The
+   report gives each observation's `sensor_gcrf_km` and
+   `sensor_velocity_gcrf_km_s` (null for an inertial sensor, which carries
+   no velocity). The predicted state is taken at the emission time t − tau,
    tau = |r(t − tau) − s(t)| / c. Range rate is the derivative of that range,
    u·(v − v_s) / (1 + u·v / c).
 2. **Gate.** For every observation and every prediction covering its time:
