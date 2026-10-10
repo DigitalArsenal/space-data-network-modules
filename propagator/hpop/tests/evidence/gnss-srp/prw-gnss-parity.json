@@ -1,25 +1,25 @@
 {
   "ok": true,
   "fixture": "propagator/hpop PRW GNSS radiation pressure",
-  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--integration-20261009/propagator/hpop/dist/isomorphic/module.wasm",
-  "artifactSha256": "0d1f626464ff42e444c265bce1a13ae84b5d7bb809bdeb83fdb92a26b591397f",
-  "moduleSha256": "0d1f626464ff42e444c265bce1a13ae84b5d7bb809bdeb83fdb92a26b591397f",
+  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--hpop-full-force-20261009/propagator/hpop/dist/isomorphic/module.wasm",
+  "artifactSha256": "c432dd6593061f524477dd8ad6941bdf039bd059f1c9262e9c2d2911e8ad3e13",
+  "moduleSha256": "c432dd6593061f524477dd8ad6941bdf039bd059f1c9262e9c2d2911e8ad3e13",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 20,
-      "durationMs": 1369
+      "durationMs": 1331
     },
     {
       "lane": "wasmedge",
       "runs": 20,
-      "durationMs": 43118
+      "durationMs": 75113
     },
     {
       "lane": "docker-wasmedge",
       "runs": 20,
-      "durationMs": 47827
+      "durationMs": 58132
     }
   ],
   "cases": [
