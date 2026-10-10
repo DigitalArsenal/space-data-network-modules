@@ -1,8 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 
+// Build products, never sources: a checkout that has built a module (the
+// SDK compiler's .sdk-build holds HPOP's generated ERFA amalgamation) must
+// index the same files as one that has not.
 const IGNORED_DIRS = new Set([
   ".build",
+  ".sdk-build",
   ".emcache",
   ".git",
   "CMakeFiles",
