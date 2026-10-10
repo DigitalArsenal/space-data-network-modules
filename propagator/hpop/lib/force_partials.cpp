@@ -134,8 +134,10 @@ V extendedGravity(const V& r,const ExtendedGravityField& f,bool central=true) {
     V a=central?pointMass(r,f.mu):V();if(f.maxDegree<2)return a;
     const D r2=rr*rr,x=r.x*f.referenceRadius/r2,y=r.y*f.referenceRadius/r2,z=r.z*f.referenceRadius/r2,s=(f.referenceRadius/rr)*(f.referenceRadius/rr);
     const int nmax=f.maxDegree;
-    std::vector<std::vector<D>> v(nmax+4),w(nmax+4);
-    for(int n=0;n<nmax+4;++n){v[n].resize(n+2);w[n].resize(n+2);}
+    // Kept between calls and refilled with zeros, so the evaluation does not allocate.
+    static thread_local std::vector<std::vector<D>> v,w;
+    if(v.size()<size_t(nmax+4)){v.resize(nmax+4);w.resize(nmax+4);}
+    for(int n=0;n<nmax+4;++n){v[n].assign(n+2,D());w[n].assign(n+2,D());}
     v[0][0]=f.referenceRadius/rr;
     v[1][0]=std::sqrt(3.0)*z*v[0][0];v[1][1]=std::sqrt(3.0)*x*v[0][0];w[1][1]=std::sqrt(3.0)*y*v[0][0];
     for(int n=2;n<=nmax+1;++n){
@@ -321,7 +323,7 @@ V solidTides(const V& r,double jd,const ForceModelSet& f) {
 // on time only.
 V oceanTides(const V& r,double jd,const ForceModelSet& f) {
     if(r.norm().value<RE_EARTH)return V();
-    const EarthAxes axes=EarthAxesAt(jd,f);const ExtendedGravityField field=OceanTideField(jd,f);
+    const EarthAxes axes=EarthAxesAt(jd,f);ExtendedGravityField scratch;const ExtendedGravityField& field=OceanTideFieldAt(jd,f,scratch);
     const auto& m=axes.m;
     const V fixed(r.x*m[0][0]+r.y*m[0][1]+r.z*m[0][2],r.x*m[1][0]+r.y*m[1][1]+r.z*m[1][2],r.x*m[2][0]+r.y*m[2][1]+r.z*m[2][2]);
     const V a=extendedGravity(fixed,field,false);

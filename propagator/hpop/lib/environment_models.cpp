@@ -266,8 +266,10 @@ GravityAcceleration computeExtendedGravity(
         return result;
     }
 
-    // Compute fully normalized V̄/W̄ with embedded (R/r)^{n+1}
-    std::vector<std::vector<double>> V, W;
+    // Compute fully normalized V̄/W̄ with embedded (R/r)^{n+1}. The arrays
+    // are kept between calls (computePinesLegendre refills them), so the
+    // force evaluation does not allocate.
+    static thread_local std::vector<std::vector<double>> V, W;
     computePinesLegendre(position, R, field.maxDegree, field.maxOrder, V, W);
 
     Vec3 harmonicAcc;

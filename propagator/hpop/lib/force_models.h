@@ -572,6 +572,21 @@ struct OceanTideConfig {
 /// the force set's Earth-fixed axes without its central term.
 ExtendedGravityField OceanTideField(double jd, const ForceModelSet& forceSet);
 
+/// OceanTideField on a fixed TT grid for one force set (MakeOceanTideCache),
+/// read by OceanTideFieldAt.
+struct OceanTideCache;
+std::shared_ptr<OceanTideCache> MakeOceanTideCache();
+
+/// The ocean tide field at a TDB Julian date as the force evaluation reads
+/// it. With the set's oceanTideCache: interpolated by 4-point Lagrange from
+/// OceanTideField at multiples of OCEAN_TIDE_GRID_SECONDS of TT from J2000.0
+/// (the grid is absolute, so every integration reads the same field). The
+/// shortest FES2004 constituents are quarter-diurnal (~6.2 h), so the field
+/// differs from the direct sum by about 1e-9 of itself. Without a cache:
+/// OceanTideField, in `scratch`. The reference holds until the next call.
+constexpr double OCEAN_TIDE_GRID_SECONDS = 120.0;
+const ExtendedGravityField& OceanTideFieldAt(double jd, const ForceModelSet& forceSet, ExtendedGravityField& scratch);
+
 /// Ocean tide acceleration (km/s^2) at a GCRF position (km), TDB Julian date,
 /// in the force set's Earth orientation.
 Vec3 OceanTideAcceleration(const Vec3& satPosition, double jd, const ForceModelSet& forceSet);
@@ -873,6 +888,7 @@ struct ForceModelSet {
 
     bool useOceanTides{false};
     OceanTideConfig oceanTides;
+    std::shared_ptr<OceanTideCache> oceanTideCache;  ///< OceanTideFieldAt's grid (none: the direct sum)
 
     bool usePoleTide{false};
     PoleTideConfig poleTide;

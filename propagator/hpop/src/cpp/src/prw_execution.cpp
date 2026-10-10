@@ -55,17 +55,24 @@ public:
         double tai1,tai2;
         return eraTttai(2451545.0,jdTt-2451545.0,&tai1,&tai2)==0&&eraTaiutc(tai1,tai2,&u1,&u2)==0;
     }
+    // The table's series checks run once (they parse every row's DATE);
+    // every later read only brackets and interpolates.
+    const std::string& validation() {
+        if(!validated){validated=true;invalid=sdn::frames::eop::validate(rows,midnight);}
+        return invalid;
+    }
     bool covers(double jdTdb) {
         double u1,u2;sdn::frames::EarthOrientation e;
         if(!utcAt(timesys::tdbToTt(jdTdb),u1,u2)){error="eop-out-of-range: Epoch outside the leap-second table.";return false;}
-        const std::string reason=sdn::frames::eop::at(rows,u1,u2,&e,midnight);
+        std::string reason=validation();
+        if(reason.empty())reason=sdn::frames::eop::atValidated(rows,u1,u2,&e);
         if(!reason.empty()){error="invalid-earth-orientation: "+reason;return false;}
         return true;
     }
     void matrix(double jdTdb,double m[3][3]) {
         const double jdTt=timesys::tdbToTt(jdTdb),tt1=2451545.0,tt2=jdTt-2451545.0;
         double u1,u2,ut11,ut12;sdn::frames::EarthOrientation e;
-        if(!utcAt(jdTt,u1,u2)||!sdn::frames::eop::at(rows,u1,u2,&e,midnight).empty()||eraUtcut1(u1,u2,e.dut1,&ut11,&ut12)<0) {
+        if(!validation().empty()||!utcAt(jdTt,u1,u2)||!sdn::frames::eop::atValidated(rows,u1,u2,&e).empty()||eraUtcut1(u1,u2,e.dut1,&ut11,&ut12)<0) {
             for(int i=0;i<3;++i)for(int j=0;j<3;++j)m[i][j]=std::numeric_limits<double>::quiet_NaN();
             return;
         }
@@ -81,12 +88,13 @@ public:
     double ut1(double jdTdb) {
         const double jdTt=timesys::tdbToTt(jdTdb);
         double u1,u2,a,b;sdn::frames::EarthOrientation e;
-        if(!utcAt(jdTt,u1,u2)||!sdn::frames::eop::at(rows,u1,u2,&e,midnight).empty()||eraUtcut1(u1,u2,e.dut1,&a,&b)<0)
+        if(!validation().empty()||!utcAt(jdTt,u1,u2)||!sdn::frames::eop::atValidated(rows,u1,u2,&e).empty()||eraUtcut1(u1,u2,e.dut1,&a,&b)<0)
             return std::numeric_limits<double>::quiet_NaN();
         return a+b;
     }
 private:
     double cachedTt=-1e300,rc2i[3][3]{},rpom[3][3]{};
+    bool validated=false;std::string invalid;
 };
 bool positive(double x) {return std::isfinite(x)&&x>0;}
 bool nonnegative(double x) {return std::isfinite(x)&&x>=0;}
@@ -193,6 +201,9 @@ struct Execution {
     Integrator::STMMethod technique = Integrator::STMMethod::Analytic;
     ForceModel::DensityGradient density = ForceModel::DensityGradient::Neglected;
     bool massDynamics = false, variational = false, covariance = false, massCovariance = false;
+    // Sampled, without STM, covariance, parameters, impulses or burns: the
+    // 6-state equations only (evaluateStatesInOrder).
+    bool stateOnly = false;
     Mat6 p{};
     Integrator::Matrix7 p7{};
     std::vector<double> samples;
@@ -483,7 +494,8 @@ bool parseForces(const PRWForceConfiguration* in,double epoch,bool hasEarthOrien
             const int degree=in->OCEAN_TIDE_MAXIMUM_DEGREE(),order=in->OCEAN_TIDE_MAXIMUM_ORDER();
             if(degree<2||degree>50||order>degree)
                 return prwError(error,"invalid-forces: OCEAN_TIDE_MAXIMUM_DEGREE must lie in [2, 50] and OCEAN_TIDE_MAXIMUM_ORDER not exceed it.");
-            out.useOceanTides=true;out.oceanTides.maxDegree=static_cast<uint16_t>(degree);out.oceanTides.maxOrder=static_cast<uint16_t>(order);break;
+            out.useOceanTides=true;out.oceanTides.maxDegree=static_cast<uint16_t>(degree);out.oceanTides.maxOrder=static_cast<uint16_t>(order);
+            out.oceanTideCache=ForceModel::MakeOceanTideCache();break;
         }
         default:return prwError(error,"unsupported-ocean-tides: Unknown ocean tide model.");
     }
@@ -699,6 +711,7 @@ bool parseExecution(const PRWExecutionRequest* in,bool hasEarthOrientation,Execu
         }
     }
     out.variational=in->INCLUDE_STM()||out.covariance||out.massCovariance||out.massDynamics||!out.samples.empty()||!out.impulses.empty();
+    out.stateOnly=!in->INCLUDE_STM()&&!out.covariance&&!out.massCovariance&&!out.massDynamics&&out.impulses.empty()&&out.burns.empty()&&out.parameters.empty();
     return true;
 }
 std::unique_ptr<PRWStateMatrixT> matrix(const double* values,unsigned n,bool covariance) {
@@ -761,6 +774,32 @@ void setDriverSpan(Execution& e,const TTEpoch& from,const TTEpoch& to) {
     const double a=utcJd(from),b=utcJd(to);
     *e.driverSpan={std::min(a,b),std::max(a,b)};
 }
+// The 6-state equations from (state, at) to `to`, span by span through the
+// space-weather breaks (one span without them), the force clock restarting
+// with each span as the variational path's segments do. state and at
+// advance; steps and rejections accumulate.
+bool propagateState(Execution& execution,StateVector& state,TTEpoch& at,const TTEpoch& to,uint32_t& steps,uint32_t& rejections,std::string& error) {
+    auto config=execution.integrator;
+    if(config.method==IntegrationMethod::Cowell)config.method=IntegrationMethod::RKF45;
+    const double total=elapsedSeconds(at,to);
+    if(config.method==IntegrationMethod::RK4 && total>0 && std::ceil(total/config.initialStep)>config.maxSteps)
+        return prwError(error,"invoke-failed: RK4 request exceeds MAXIMUM_STEPS.");
+    auto stops=breaksBetween(execution,at,to);stops.push_back(to);
+    struct Restore{double& v;double saved;~Restore(){v=saved;}} restore{execution.forces.integrationEpochTDB,execution.forces.integrationEpochTDB};
+    for(const auto& stop:stops) {
+        const double span=elapsedSeconds(at,stop);
+        setDriverSpan(execution,at,stop);
+        if(execution.forces.explicitEpochContract)execution.forces.integrationEpochTDB=state.epoch;
+        const auto value=Integrator::PropagateWithResult(state,span,config,execution.forces);
+        if(!value.success){error="invoke-failed: "+value.errorMessage;return false;}
+        // RK4, RKDP87 and BS step forward only; a backward request must not
+        // come back as the initial state.
+        if(!std::isfinite(value.totalTime)||std::abs(value.totalTime-span)>32*std::numeric_limits<double>::epsilon()*std::max(1.0,std::abs(span)))
+            return prwError(error,"invoke-failed: The integrator did not reach the target epoch (RK4, RKDP87 and BS integrate forward only).");
+        state=value.finalState;state.epoch=timesys::ttToTdb(stop.jdTt());at=stop;steps+=value.steps;rejections+=value.rejections;
+    }
+    return true;
+}
 bool finish(const Execution& execution,const PRWExecutionRequest* request,const TTEpoch& epochTT,PRWPropagationSampleT& out,std::string& error);
 // One epoch integrated from the initial state: finite burns (whose burn state
 // runs along the arc) and the plain path without STM or samples.
@@ -789,30 +828,8 @@ bool evaluate(Execution& execution,const PRWExecutionRequest* request,const TTEp
             report->DELTA_V_M_S=burn.deltaVKmS*1000;report->PROPELLANT_KG=burn.propellantKg;out.BURNS.push_back(std::move(report));
         }
     } else {
-        auto config=execution.integrator;
-        if(config.method==IntegrationMethod::Cowell)config.method=IntegrationMethod::RKF45;
-        if(config.method==IntegrationMethod::RK4 && seconds>0 &&
-           std::ceil(seconds/config.initialStep)>config.maxSteps)
-            return prwError(error,"invoke-failed: RK4 request exceeds MAXIMUM_STEPS.");
-        // Span by span through the space-weather breaks (one span without
-        // them); the force clock restarts with each span, as the variational
-        // path's segments do.
         StateVector state=execution.initial;TTEpoch at=execution.initialTT;uint32_t steps=0,rejections=0;
-        auto stops=breaksBetween(execution,at,epochTT);stops.push_back(epochTT);
-        const double clock=execution.forces.integrationEpochTDB;
-        struct Restore{double& v;double saved;~Restore(){v=saved;}} restore{execution.forces.integrationEpochTDB,clock};
-        for(const auto& stop:stops) {
-            const double span=elapsedSeconds(at,stop);
-            setDriverSpan(execution,at,stop);
-            if(execution.forces.explicitEpochContract)execution.forces.integrationEpochTDB=state.epoch;
-            const auto value=Integrator::PropagateWithResult(state,span,config,execution.forces);
-            if(!value.success){error="invoke-failed: "+value.errorMessage;return false;}
-            // RK4, RKDP87 and BS step forward only; a backward request must not
-            // come back as the initial state.
-            if(!std::isfinite(value.totalTime)||std::abs(value.totalTime-span)>32*std::numeric_limits<double>::epsilon()*std::max(1.0,std::abs(span)))
-                return prwError(error,"invoke-failed: The integrator did not reach the target epoch (RK4, RKDP87 and BS integrate forward only).");
-            state=value.finalState;state.epoch=timesys::ttToTdb(stop.jdTt());at=stop;steps+=value.steps;rejections+=value.rejections;
-        }
+        if(!propagateState(execution,state,at,epochTT,steps,rejections,error))return false;
         state.epoch=epoch;out.STATE=stateOut(state);out.ACCEPTED_STEPS=steps;out.REJECTED_STEPS=rejections;
     }
     return finish(execution,request,epochTT,out,error);
@@ -907,6 +924,39 @@ bool evaluateInOrder(Execution& execution,const PRWExecutionRequest* request,PRW
     for(size_t k=1;k<samples.size();++k)result.SAMPLES.push_back(std::move(samples[k]));
     return true;
 }
+// Sampled requests without STM, covariance, parameters, impulses or burns:
+// the 6-state equations only, epoch by epoch in time order (forward and
+// backward of the initial epoch separately), each span integrated once through
+// the space-weather breaks. The samples carry no STM. The states agree with
+// the variational path's to the integration tolerance (the STM no longer
+// enters the step control), at a fraction of its cost.
+bool evaluateStatesInOrder(Execution& execution,const PRWExecutionRequest* request,PRWExecutionResultT& result,std::string& error) {
+    std::vector<TTEpoch> epochs{execution.targetTT};
+    epochs.insert(epochs.end(),execution.samplesTT.begin(),execution.samplesTT.end());
+    std::vector<std::pair<double,size_t>> forward,backward;
+    for(size_t k=0;k<epochs.size();++k) {
+        const double seconds=elapsedSeconds(execution.initialTT,epochs[k]);
+        (seconds<0?backward:forward).push_back({std::abs(seconds),k});
+    }
+    std::stable_sort(forward.begin(),forward.end());std::stable_sort(backward.begin(),backward.end());
+    std::vector<std::unique_ptr<PRWPropagationSampleT>> samples(epochs.size());
+    for(const auto* group:{&forward,&backward}) {
+        StateVector state=execution.initial;TTEpoch at=execution.initialTT;uint32_t steps=0,rejections=0;
+        for(const auto& entry:*group) {
+            const TTEpoch& epochTT=epochs[entry.second];
+            if(!preflightKernel(execution,timesys::ttToTdb(epochTT.jdTt()),error))return false;
+            if(!propagateState(execution,state,at,epochTT,steps,rejections,error))return false;
+            auto out=std::make_unique<PRWPropagationSampleT>();
+            out->STATE=sampleState(execution,request,state);
+            out->ACCEPTED_STEPS=steps;out->REJECTED_STEPS=rejections;
+            if(!finish(execution,request,epochTT,*out,error))return false;
+            samples[entry.second]=std::move(out);
+        }
+    }
+    result.FINAL_SAMPLE=std::move(samples[0]);
+    for(size_t k=1;k<samples.size();++k)result.SAMPLES.push_back(std::move(samples[k]));
+    return true;
+}
 bool execute(const PRWExecutionRequest* request,const std::shared_ptr<EarthRotation>& earth,const std::shared_ptr<SpaceWeatherTable>& weather,
              const std::shared_ptr<JB2008IndicesTable>& jb2008,PRWT& response,std::string& error) {
     Execution execution;if(!parseExecution(request,earth!=nullptr,execution,error))return false;
@@ -949,7 +999,9 @@ bool execute(const PRWExecutionRequest* request,const std::shared_ptr<EarthRotat
         execution.forces.jdUt1At=[earth](double jdTdb){return earth->ut1(jdTdb);};
     }
     auto result=std::make_unique<PRWExecutionResultT>();
-    if(execution.variational&&!execution.massDynamics) {
+    if(execution.variational&&!execution.massDynamics&&execution.stateOnly) {
+        if(!evaluateStatesInOrder(execution,request,*result,error))return false;
+    } else if(execution.variational&&!execution.massDynamics) {
         if(!evaluateInOrder(execution,request,*result,error))return false;
     } else {
         // Finite burns carry burn state along the arc; each epoch is integrated

@@ -199,6 +199,79 @@ inline std::string at(const std::vector<Row>& rows, double utc1, double utc2,
   return "";
 }
 
+// The series checks of `at` alone, for a caller that reads one table many
+// times (propagator/hpop evaluates the Earth's orientation at every force
+// evaluation): validate once, then read with `atValidated`. Empty string =
+// valid. `at` above is unchanged.
+inline std::string validate(const std::vector<Row>& rows,
+                            const std::function<bool(const char*, double)>& dateMatchesMjd) {
+  if (rows.empty()) return "No EOP rows.";
+  auto first = rows.front().row;
+  if (first->IAU_CONVENTION() != iauPrecessionNutationModel::UNSPECIFIED &&
+      first->IAU_CONVENTION() != iauPrecessionNutationModel::IAU_2000A &&
+      first->IAU_CONVENTION() != iauPrecessionNutationModel::IAU_2006)
+    return "Unsupported EOP IAU convention; use IAU_2000A or IAU_2006.";
+  if (rows.size() == 1) return "";
+  for (size_t i = 0; i < rows.size(); ++i) {
+    auto row = rows[i].row;
+    if (!sameSeries(first, row))
+      return "EOP table mixes series, IAU conventions, or data-set "
+             "provenance.";
+    if (i && row->MJD() <= rows[i - 1].row->MJD())
+      return "EOP table must have strictly increasing MJDs.";
+    if (row->DATE() && !dateMatchesMjd(row->DATE()->c_str(), row->MJD()))
+      return "EOP table DATE must match MJD at 00:00 UTC.";
+  }
+  return "";
+}
+
+// `at` for a table `validate` accepted: the same bracket and the same
+// interpolation, without the series checks. The bracketing row is found by
+// bisection.
+inline std::string atValidated(const std::vector<Row>& rows, double utc1, double utc2,
+                               EarthOrientation* out) {
+  if (rows.empty()) return "No EOP rows.";
+  auto first = rows.front().row;
+  const double mjd = (utc1 - 2400000.5) + utc2;
+  *out = rows.front().value;
+  if (rows.size() == 1) return "";
+  if (mjd < first->MJD() || mjd > rows.back().row->MJD())
+    return "EOP table does not bracket EPOCH; extrapolation is disabled.";
+  // The first row with MJD >= mjd.
+  size_t lo = 0, hi = rows.size();
+  while (lo < hi) {
+    const size_t mid = (lo + hi) / 2;
+    if (rows[mid].row->MJD() < mjd) lo = mid + 1; else hi = mid;
+  }
+  const size_t upper = lo;
+  if (mjd == rows[upper].row->MJD()) {
+    *out = rows[upper].value;
+    return "";
+  }
+  const auto& a = rows[upper - 1];
+  const auto& b = rows[upper];
+  double da, db, dq;
+  if (!dat(a.row->MJD(), &da) || !dat(b.row->MJD(), &db) || !dat(mjd, &dq))
+    return "EOP interpolation is outside the ERFA leap-second table.";
+  double ta1, ta2, tb1, tb2, tq1, tq2;
+  if (eraUtctai(2400000.5, a.row->MJD(), &ta1, &ta2) ||
+      eraUtctai(2400000.5, b.row->MJD(), &tb1, &tb2) ||
+      eraUtctai(utc1, utc2, &tq1, &tq2))
+    return "Cannot convert EOP epochs to TAI.";
+  const double t = ((tq1 - ta1) + (tq2 - ta2)) / ((tb1 - ta1) + (tb2 - ta2));
+  auto lerp = [t](double x, double y) { return x + t * (y - x); };
+  out->xPole = lerp(a.value.xPole, b.value.xPole);
+  out->yPole = lerp(a.value.yPole, b.value.yPole);
+  // UT1-TAI is continuous through leap seconds; UT1-UTC is not.
+  out->dut1 = lerp(a.value.dut1 - da, b.value.dut1 - db) + dq;
+  out->dX = lerp(a.value.dX, b.value.dX);
+  out->dY = lerp(a.value.dY, b.value.dY);
+  out->lengthOfDay = lerp(a.value.lengthOfDay, b.value.lengthOfDay);
+  out->dPsi = lerp(a.value.dPsi, b.value.dPsi);
+  out->dEpsilon = lerp(a.value.dEpsilon, b.value.dEpsilon);
+  return "";
+}
+
 }  // namespace eop
 }  // namespace frames
 }  // namespace sdn

@@ -20,6 +20,10 @@
 #include <cmath>
 #include <algorithm>
 #include <stdexcept>
+#include <map>
+#include <limits>
+#include <cstdlib>
+#include <iterator>
 #include <cstring>
 
 namespace astro {
@@ -1147,10 +1151,53 @@ ExtendedGravityField OceanTideField(double jd, const ForceModelSet& forceSet) {
     return field;
 }
 
+struct OceanTideCache {
+    std::map<long long, ExtendedGravityField> nodes;  // by grid index
+    ExtendedGravityField field;                       // the last interpolated field
+    double jd = std::numeric_limits<double>::quiet_NaN();
+};
+std::shared_ptr<OceanTideCache> MakeOceanTideCache() { return std::make_shared<OceanTideCache>(); }
+
+const ExtendedGravityField& OceanTideFieldAt(double jd, const ForceModelSet& forceSet, ExtendedGravityField& scratch) {
+    if (!forceSet.oceanTideCache) { scratch = OceanTideField(jd, forceSet); return scratch; }
+    OceanTideCache& cache = *forceSet.oceanTideCache;
+    if (jd == cache.jd) return cache.field;
+    const double g = (timesys::tdbToTt(jd) - 2451545.0) * 86400.0 / OCEAN_TIDE_GRID_SECONDS;
+    const long long k = static_cast<long long>(std::floor(g));
+    const double u = g - static_cast<double>(k);
+    const ExtendedGravityField* node[4];
+    for (int i = 0; i < 4; ++i) {
+        const long long index = k - 1 + i;
+        auto it = cache.nodes.find(index);
+        if (it == cache.nodes.end()) {
+            if (cache.nodes.size() >= 64) {
+                // Drop the node farthest from this one.
+                auto far = cache.nodes.begin();
+                if (std::llabs(cache.nodes.rbegin()->first - index) > std::llabs(far->first - index)) far = std::prev(cache.nodes.end());
+                cache.nodes.erase(far);
+            }
+            const double jdTt = 2451545.0 + static_cast<double>(index) * OCEAN_TIDE_GRID_SECONDS / 86400.0;
+            it = cache.nodes.emplace(index, OceanTideField(timesys::ttToTdb(jdTt), forceSet)).first;
+        }
+        node[i] = &it->second;
+    }
+    const double w[4] = {-u * (u - 1) * (u - 2) / 6, (u + 1) * (u - 1) * (u - 2) / 2, -(u + 1) * u * (u - 2) / 2, (u + 1) * u * (u - 1) / 6};
+    ExtendedGravityField& f = cache.field;
+    if (f.Cnm.empty() || f.maxDegree != node[0]->maxDegree || f.maxOrder != node[0]->maxOrder) f = *node[0];
+    for (size_t n = 0; n < f.Cnm.size(); ++n)
+        for (size_t m = 0; m < f.Cnm[n].size(); ++m) {
+            f.Cnm[n][m] = w[0] * node[0]->Cnm[n][m] + w[1] * node[1]->Cnm[n][m] + w[2] * node[2]->Cnm[n][m] + w[3] * node[3]->Cnm[n][m];
+            f.Snm[n][m] = w[0] * node[0]->Snm[n][m] + w[1] * node[1]->Snm[n][m] + w[2] * node[2]->Snm[n][m] + w[3] * node[3]->Snm[n][m];
+        }
+    cache.jd = jd;
+    return f;
+}
+
 Vec3 OceanTideAcceleration(const Vec3& satPosition, double jd, const ForceModelSet& forceSet) {
     if (satPosition.magnitude() < RE_EARTH) return Vec3();
     const EarthAxes axes = EarthAxesAt(jd, forceSet);
-    const ExtendedGravityField field = OceanTideField(jd, forceSet);
+    ExtendedGravityField scratch;
+    const ExtendedGravityField& field = OceanTideFieldAt(jd, forceSet, scratch);
     return axes.inertial(computeExtendedGravity(axes.fixed(satPosition), field).zonalHarmonics);
 }
 
