@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.analysis.gp-error-model",
   "name": "GP prediction-error model",
-  "version": "0.1.0",
-  "description": "Empirical SGP4 prediction error by orbit regime and prediction age, in RTN. Element sets are propagated to later element sets of the same object (consecutive-set differences, which are not truth) or to independent reference states (GCRF, from analysis/reference-states). Batches accumulate counts, moments and histograms; finalize gives mean, covariance, quantiles, robust sigma and clipped covariance per stratum. With a model on accumulate (reference mode), each error is also tested against its stratum's model covariance (Mahalanobis d^2 against chi-square with 3 degrees of freedom, every sample counted) and finalize gates each stratum CALIBRATED, FAILED or INSUFFICIENT; scale_model fits per-stratum scale factors to reference-state errors. screening_evaluation scores a probabilistic (Foster Pc), a bounded-set and a possibility (admissible-set) screening rule on independent cases built from reference-state errors with synthetic true misses. screening_cases scores the same rules on caller-supplied pairs, each object with its own covariance. common_epoch propagates element sets of one object to common epochs and returns each one's RTN difference from an origin there (a reference state, their mean, or one set). map_covariance maps an RTN covariance through a state transition matrix: SGP4's (central differences in nonsingular mean elements), two-body (complex-step Kepler) or the Lambert arc of Thompson et al. (2019). hpop_arcs and hpop_coverage calibrate HPOP covariance (P0 at the element-set epoch, white-acceleration process noise) against reference states.",
+  "version": "0.2.0",
+  "description": "Empirical SGP4 prediction error by orbit regime and prediction age, in RTN. Element sets are propagated to later element sets of the same object (consecutive-set differences, which are not truth) or to independent reference states (GCRF, from analysis/reference-states). Batches accumulate counts, moments and histograms; finalize gives mean, covariance, quantiles, robust sigma and clipped covariance per stratum. With a model on accumulate (reference mode), each error is also tested against its stratum's model covariance (Mahalanobis d^2 against chi-square with 3 degrees of freedom, every sample counted) and finalize gates each stratum CALIBRATED, FAILED or INSUFFICIENT; scale_model fits per-stratum scale factors to reference-state errors. screening_evaluation scores a probabilistic (Foster Pc), a bounded-set and a possibility (admissible-set) screening rule on independent cases built from reference-state errors with synthetic true misses. screening_cases scores the same rules on caller-supplied pairs, each object with its own covariance. common_epoch propagates element sets of one object to common epochs and returns each one's RTN difference from an origin there (a reference state, their mean, or one set). map_covariance maps an RTN covariance through a state transition matrix: SGP4's (central differences in nonsingular mean elements), two-body (complex-step Kepler) or the Lambert arc of Thompson et al. (2019). hpop_arcs and hpop_coverage calibrate HPOP covariance (P0 at the element-set epoch, white-acceleration process noise) against reference states. fit_elements fits SGP4 mean elements (an OMM, optionally B*) to an ephemeris by weighted Levenberg-Marquardt differential correction in equinoctial elements, with exact residual statistics on every state, a half-split closure test and the fit covariance; element_residuals scores element sets against an ephemeris over time windows.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -956,6 +956,221 @@
           "maxStreams": 1,
           "required": true,
           "description": "The screening report as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "fit_elements",
+      "displayName": "Fit SGP4 mean elements to an ephemeris",
+      "inputPorts": [
+        {
+          "portId": "ephemeris",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "The ephemeris: $OEM (size-prefixed or not), each block with OBJECT.NORAD_CAT_ID, REFERENCE_FRAME TEME, GCRF, ICRF, EME2000 or J2000, TIME_SYSTEM UTC, TAI, TT or GPS, states as lines or the compact form, optional covariance lines."
+        },
+        {
+          "portId": "elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "Optional a priori $OMM sets (size-prefixed, concatenated): the source of B* when it is not fitted, or the starting elements with initial = apriori."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "element-fit-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "from, to, epoch (first | last | middle | ISO), stepSeconds, fitBstar, bstar (number | apriori), weighting (uniform | rtn | covariance), sigmaRtnKm, velocity, sigmaVelocityKmS, halfLifeHours, towards, maxIterations, tolerance, initial, rejectSigma, scaleCovariance, closure, residuals, ephemerisStream, OMM metadata (originator, creationDate, classification, elementSetNo, comment, objectName, objectId); fits[] with norad and per-fit overrides."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Fit settings as JSON; without fits, every object of the ephemeris is fitted with the global settings."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-aligned-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Size-prefixed $OMM records, one per converged fit: full-precision SGP4 mean elements in TEME, B*, and the epoch Cartesian covariance in RSW axes."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The fitted element sets. Absent when no fit converged."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "element-fit-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per fit: states, stages, iterations, convergence and criterion, epoch, elements, residual statistics on every state of the span (3D, per-coordinate, RTN, max, N, span), the half-split closure, the weighted RMS, the condition number, and the covariance in equinoctial, classical and RSW Cartesian form."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The fit report as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "element_residuals",
+      "displayName": "Element sets against an ephemeris",
+      "inputPorts": [
+        {
+          "portId": "elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 64,
+          "required": true,
+          "description": "Size-prefixed $OMM records, concatenated, SGP4 mean elements: the sets the requests name."
+        },
+        {
+          "portId": "ephemeris",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "The ephemeris: $OEM (size-prefixed or not), each block with OBJECT.NORAD_CAT_ID, REFERENCE_FRAME TEME, GCRF, ICRF, EME2000 or J2000, TIME_SYSTEM UTC, TAI, TT or GPS, states as lines or the compact form, optional covariance lines."
+        },
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "element-residuals-options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "requests[]: norad, set (epoch, ISO 8601 UTC), windows[] {from, to, label}, stepSeconds, ephemerisStream, label; samples (per-state RTN residuals)."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The requests as JSON."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "residuals",
+          "acceptedTypeSets": [
+            {
+              "setId": "element-residuals-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per request and window: N, span, 3D, per-coordinate and RTN RMS, RTN means, maxima, the velocity RMS where the ephemeris has velocities, and propagation failures; optionally per-state residuals."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The residual statistics as JSON."
         }
       ],
       "maxBatch": 1,

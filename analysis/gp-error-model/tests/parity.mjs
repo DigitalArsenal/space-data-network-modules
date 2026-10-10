@@ -1,6 +1,8 @@
 // Tri-runtime parity (browser, WasmEdge, Docker WasmEdge) of the methods E2b
-// added, on the inputs of tests/covariance_mapping.test.mjs, plus accumulate:
-// identical request bytes must give byte-identical outputs in every lane.
+// added, on the inputs of tests/covariance_mapping.test.mjs, plus accumulate,
+// and of fit_elements and element_residuals on inputs of
+// tests/fit_elements.test.mjs: identical request bytes must give
+// byte-identical outputs in every lane.
 //   PATH=$HOME/.wasmedge/bin:$PATH node tests/parity.mjs
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -15,6 +17,7 @@ const flatbuffers = require('flatbuffers');
 const load = async (code) => import(pathToFileURL(path.join(root, `lib/js/${code}/main.js`)));
 const [OMM, OEM] = await Promise.all(['OMM', 'OEM'].map(load));
 const ref = JSON.parse(fs.readFileSync(new URL('./stm-reference.json', import.meta.url)));
+const fitRef = JSON.parse(fs.readFileSync(new URL('./fit-reference.json', import.meta.url)));
 function omm(s) {
   const t = new OMM.OMMT();
   Object.assign(t, { EPOCH: s.EPOCH, NORAD_CAT_ID: s.norad, MEAN_ELEMENT_THEORY: OMM.meanElementSource.SGP4, MEAN_MOTION: s.MEAN_MOTION,
@@ -41,6 +44,37 @@ function reference(norad, lines) {
   return { portId: 'reference', payload: Buffer.from(b.asUint8Array()), typeRef: { schemaName: 'OEM.fbs', fileIdentifier: '$OEM', rootTypeName: 'OEM', wireFormat: 'flatbuffer' } };
 }
 const json = (portId, value) => ({ portId, payload: Buffer.from(JSON.stringify(value)), typeRef: { schemaName: 'application/json' } });
+// Ephemeris frames for fit_elements / element_residuals (compact form or lines).
+function ephemeris(norad, frame, opts) {
+  const b = new OEM.ephemerisDataBlockT();
+  Object.assign(b, { CENTER_NAME: 'EARTH', TIME_SYSTEM: OEM.timingStandard.UTC });
+  b.OBJECT = Object.assign(new OEM.CATT(), { NORAD_CAT_ID: norad });
+  b.REFERENCE_FRAME = Object.assign(new OEM.RFMT(), { NAME: frame });
+  if (opts.lines) {
+    b.EPHEMERIS_DATA_LINES = opts.lines.map(([epoch, ...x]) => {
+      const l = new OEM.ephemerisDataLineT();
+      l.EPOCH = `${epoch}Z`;
+      [l.X, l.Y, l.Z, l.X_DOT, l.Y_DOT, l.Z_DOT] = x;
+      return l;
+    });
+  } else {
+    Object.assign(b, { START_TIME: `${opts.start}Z`, STEP_SIZE: opts.step, STATE_VECTOR_SIZE: opts.size, EPHEMERIS_DATA: opts.data });
+  }
+  const fb = new flatbuffers.Builder(1 << 20);
+  OEM.OEM.finishSizePrefixedOEMBuffer(fb, Object.assign(new OEM.OEMT(), { EPHEMERIS_DATA_BLOCK: [b] }).pack(fb));
+  return { portId: 'ephemeris', payload: Buffer.from(fb.asUint8Array()), typeRef: { schemaName: 'OEM.fbs', fileIdentifier: '$OEM', rootTypeName: 'OEM', wireFormat: 'flatbuffer' } };
+}
+const compact = (norad, c) => ephemeris(norad, c.frame, { start: c.start, step: c.stepSeconds, size: c.stateVectorSize, data: c.data });
+const geo = fitRef.synthetic.find((c) => c.name === 'geo');
+const issEph = ephemeris(25544, fitRef.iss.frame, { lines: fitRef.iss.states });
+function supgpSet() {
+  const s = fitRef.iss.supgp, t = new OMM.OMMT();
+  Object.assign(t, { EPOCH: s.epoch, NORAD_CAT_ID: 25544, MEAN_ELEMENT_THEORY: OMM.meanElementSource.SGP4, MEAN_MOTION: s.elements[0], ECCENTRICITY: s.elements[1],
+    INCLINATION: s.elements[2], RA_OF_ASC_NODE: s.elements[3], ARG_OF_PERICENTER: s.elements[4], MEAN_ANOMALY: s.elements[5], BSTAR: s.elements[6] });
+  const b = new flatbuffers.Builder(512);
+  OMM.OMM.finishSizePrefixedOMMBuffer(b, t.pack(b));
+  return { portId: 'elements', payload: Buffer.from(b.asUint8Array()), typeRef: { schemaName: 'OMM.fbs', fileIdentifier: '$OMM', rootTypeName: 'OMM', wireFormat: 'flatbuffer' } };
+}
 const ce = ref.commonEpoch, sets = ce.sets.map((n) => ref.sets[n].EPOCH);
 const truth = reference(6251, [[ce.target, ce.reference], [ce.later, ce.referenceLater]]);
 const P0 = ref.sgp4[0].covariance;
@@ -59,8 +93,14 @@ const cases = [
     json('options', { hardBodyRadiusM: 20, missDistancesM: [0, 30, 500], directions: 4 })] } },
   { id: 'accumulate-reference', request: { methodId: 'accumulate', inputs: [elements('leo', 'leo-b', 'leo-c'), truth,
     json('options', { referenceStepSeconds: 0 })] } },
+  { id: 'fit-elements-leo-noise', request: { methodId: 'fit_elements', inputs: [compact(40001, fitRef.noisy),
+    json('options', { epoch: `${fitRef.noisy.epoch}Z`, fitBstar: true, creationDate: '2026-10-10T00:00:00Z', originator: 'parity' })] } },
+  { id: 'fit-elements-geo-multistart', request: { methodId: 'fit_elements', inputs: [compact(40002, geo), json('options', { epoch: `${geo.epoch}Z`, fitBstar: false })] } },
+  { id: 'fit-elements-iss', request: { methodId: 'fit_elements', inputs: [issEph, json('options', { epoch: `${fitRef.iss.epoch}Z`, fitBstar: true })] } },
+  { id: 'element-residuals-iss', request: { methodId: 'element_residuals', inputs: [supgpSet(), issEph, json('options', { requests: [{ norad: 25544,
+    set: fitRef.iss.supgp.epoch, windows: [{ from: `${fitRef.iss.supgp.window6h.from}Z`, to: `${fitRef.iss.supgp.window6h.to}Z`, label: 'segment' }] }], samples: true })] } },
 ];
-const plan = await normalizeParityFixture({ name: 'gp-error-model e2b methods', cases: cases.map((c) => ({ ...c, request: { ...c.request,
+const plan = await normalizeParityFixture({ name: 'gp-error-model e2b and element-fit methods', cases: cases.map((c) => ({ ...c, request: { ...c.request,
   inputs: c.request.inputs.map(({ payload, ...p }) => ({ ...p, payloadHex: Buffer.from(payload).toString('hex') })) } })) });
 const report = await runParityHarness({ wasmPath: fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url)), plan, timeoutMs: 120000, log: console.log });
 console.log(formatParityReport(report));

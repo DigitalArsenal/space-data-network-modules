@@ -176,6 +176,50 @@ With `stm: true` each target also carries Φ (TEME, row-major). With
 `axesSet` the input covariance is in the RTN axes of that set's SGP4 state at
 `from` (Thompson et al. rotate the final set's scatter with its own state).
 
+### `fit_elements`
+
+Inputs:
+
+- `ephemeris`: `$OEM` (size-prefixed or not, any number of streams).
+  - Each block needs `OBJECT.NORAD_CAT_ID`, `REFERENCE_FRAME` TEME, GCRF, ICRF, EME2000 or J2000, and `TIME_SYSTEM` UTC, TAI, TT or GPS (converted to UTC through ERFA's leap-second table).
+  - States come as lines or in the compact form (`STEP_SIZE`, `STATE_VECTOR_SIZE` 3, 6 or 9). A line whose velocity is all zeros has no velocity.
+  - Covariance lines at a state's epoch are its covariance, in `COV_REFERENCE_FRAME` (absent: the state frame; RSW, RTN, RIC or UVW: the state's own axes).
+  - Every state goes to TEME: EME2000 through the IAU 2006 frame bias, then GCRF through `gcrfToTeme` (IAU 2006/2000A and the equation of the equinoxes).
+- `elements` (optional): a priori `$OMM` sets, the B* source or the starting elements.
+- `options` (JSON):
+  - span: `from`, `to`;
+  - `epoch`: `first`, `last`, `middle` or an ISO instant;
+  - `stepSeconds`: thins the fitted states;
+  - B*: `fitBstar`, `bstar` (a number or `apriori`);
+  - weights: `weighting` (`uniform`, `rtn` with `sigmaRtnKm`, or `covariance`), `velocity` with `sigmaVelocityKmS`, `halfLifeHours` with `towards`;
+  - solver: `maxIterations` (100), `tolerance` (1e-10), `floorKm` (1e-6), `initial` (`ephemeris` or `apriori`), `rejectSigma`, `scaleCovariance`;
+  - output: `closure` (true), `residuals`, `ephemerisStream`;
+  - OMM metadata;
+  - `fits[]` with per-object overrides.
+
+Outputs: `elements`, one size-prefixed `$OMM` per converged fit; `report` (JSON).
+
+Method:
+
+- **Least squares.** Weighted least squares on model minus ephemeris (positions, and velocities when asked) in TEME. The model is SGP4 (Vallado 2020, WGS-72, opsmode `i`).
+- **Parameters.** Equinoctial mean elements: n (Kozai, rad/min), af = e cos(ω+Ω), ag = e sin(ω+Ω), χ = tan(i/2) sin Ω, ψ = tan(i/2) cos Ω, λ = M+ω+Ω. B* is optional.
+- **Solver.** Levenberg-Marquardt on the Jacobi-scaled normal equations, with a central-difference Jacobian.
+- **Convergence.** Either an undamped step lowers the weighted cost by a relative `tolerance` or less, or no step lowers it at a stationary point. Stationary means the Gauss-Newton predicted decrease is at most 1e-6 of the cost, or the position RMS is at most `floorKm`.
+- **Start.** The osculating elements of the state nearest the epoch, refined to mean elements by matching SGP4's own osculating elements there (osculating-to-mean inversion).
+  - Below 3° osculating inclination, SDP4's cost has several basins in (χ, ψ). There the fit also starts from the osculating vector and from copies scaled by 1/4, 1/2 and 1 and turned by 0, 90, 180 and 270°, and keeps the lowest cost.
+  - Spans grow four-fold from one period around the seed. B* joins in the last stage.
+- **Statistics.** Taken on every state of the span (no thinning, no rejection): N, span, 3D RMS, per-coordinate RMS, R/T/N RMS and means, maxima, and the velocity RMS.
+  - The per-coordinate RMS (3D / √3) is the convention of CelesTrak's SupGP rms files. On the NASA ISS OEM, CelesTrak's sets scored over their 6-hour segments match the published values to 0.002 km.
+- **Closure.** The same fit on the first ⌊N/2⌋ states by time, scored on every remaining state: split epoch, N, RMS and maxima.
+- **Covariance.** s² (JᵀWJ)⁻¹, reported in equinoctial and classical elements and as the RSW Cartesian covariance at the epoch. The RSW covariance also goes into the OMM's `COVARIANCE`.
+
+### `element_residuals`
+
+Inputs: `elements` (`$OMM`), `ephemeris` (`$OEM`, as above), `options`.
+
+- Options: `requests[]` with `norad`, `set` (epoch) and `windows[]` (`from`, `to`, `label`), plus `stepSeconds`, `ephemerisStream` and `samples`.
+- Output: `residuals`. Each set is propagated by the same SGP4 to every ephemeris state in each window, with the same statistics (prediction minus ephemeris).
+
 ## Model and validation
 
 `scripts/build-model.mjs` builds the model and its validation from the GP
@@ -280,6 +324,13 @@ Each test has an expected value that does not come from this module:
   Lambert STMs to 1e-7 and 1e-6, common-epoch differences to 2 mm.
 - `screening_cases`: Foster Pc in closed form at zero miss, and a fine polar
   grid for an offset anisotropic pair.
+- `fit_elements` and `element_residuals` (`tests/fit_elements.test.mjs`):
+  `tests/fit-reference.json`, written by `tests/fit-reference.py` from
+  python-sgp4, pyerfa and scipy's Levenberg-Marquardt in classical elements:
+  - Vallado's published SGP4 verification states (11 cases) give back their elements;
+  - ten seeded random element sets across LEO, MEO, GEO, Molniya and GTO, spans, samplings and frames give back their elements, and half the data predicts the other half within 1 cm;
+  - on 50 m noise, the module reaches scipy's optimum, RMS and covariance;
+  - on the NASA ISS OEM fixture of `analysis/od`, scipy's fit, and CelesTrak's Segment-01 set scored as python-sgp4 scores it.
 
 Tri-runtime parity of these methods: `PATH=$HOME/.wasmedge/bin:$PATH node
 tests/parity.mjs` (browser, WasmEdge, Docker WasmEdge; report in
