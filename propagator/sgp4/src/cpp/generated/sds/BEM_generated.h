@@ -13,6 +13,18 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
               FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
+struct BEMProvenance;
+struct BEMProvenanceBuilder;
+struct BEMProvenanceT;
+
+struct BEMHopSlot;
+struct BEMHopSlotBuilder;
+struct BEMHopSlotT;
+
+struct BEMHopSchedule;
+struct BEMHopScheduleBuilder;
+struct BEMHopScheduleT;
+
 struct beamContourPoint;
 struct beamContourPointBuilder;
 struct beamContourPointT;
@@ -111,6 +123,588 @@ inline const char *EnumNamebeamPolarization(beamPolarization e) {
   const size_t index = static_cast<size_t>(e);
   return EnumNamesbeamPolarization()[index];
 }
+
+/// Operational state of one beam-hop slot.
+enum class bemHopSlotState : int8_t {
+  UNSPECIFIED = 0,
+  ACTIVE = 1,
+  GUARD = 2,
+  IDLE = 3,
+  MIN = UNSPECIFIED,
+  MAX = IDLE
+};
+
+inline const bemHopSlotState (&EnumValuesbemHopSlotState())[4] {
+  static const bemHopSlotState values[] = {
+    bemHopSlotState::UNSPECIFIED,
+    bemHopSlotState::ACTIVE,
+    bemHopSlotState::GUARD,
+    bemHopSlotState::IDLE
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesbemHopSlotState() {
+  static const char * const names[5] = {
+    "UNSPECIFIED",
+    "ACTIVE",
+    "GUARD",
+    "IDLE",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamebemHopSlotState(bemHopSlotState e) {
+  if (::flatbuffers::IsOutRange(e, bemHopSlotState::UNSPECIFIED, bemHopSlotState::IDLE)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesbemHopSlotState()[index];
+}
+
+struct BEMProvenanceT : public ::flatbuffers::NativeTable {
+  typedef BEMProvenance TableType;
+  std::string SOURCE{};
+  std::string SOURCE_QUERY{};
+  std::string MODEL_NAME{};
+  std::string MODEL_VERSION{};
+  std::string CITATION{};
+  std::string MODULE_ID{};
+  std::string MODULE_VERSION{};
+  std::string MODULE_CONTENT_HASH{};
+  uint64_t COMPUTED_AT = 0;
+};
+
+/// Provenance of a deployed-beam descriptor or hop schedule.
+struct BEMProvenance FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef BEMProvenanceT NativeTableType;
+  typedef BEMProvenanceBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SOURCE = 4,
+    VT_SOURCE_QUERY = 6,
+    VT_MODEL_NAME = 8,
+    VT_MODEL_VERSION = 10,
+    VT_CITATION = 12,
+    VT_MODULE_ID = 14,
+    VT_MODULE_VERSION = 16,
+    VT_MODULE_CONTENT_HASH = 18,
+    VT_COMPUTED_AT = 20
+  };
+  const ::flatbuffers::String *SOURCE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SOURCE);
+  }
+  const ::flatbuffers::String *SOURCE_QUERY() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SOURCE_QUERY);
+  }
+  const ::flatbuffers::String *MODEL_NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MODEL_NAME);
+  }
+  const ::flatbuffers::String *MODEL_VERSION() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MODEL_VERSION);
+  }
+  const ::flatbuffers::String *CITATION() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_CITATION);
+  }
+  const ::flatbuffers::String *MODULE_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MODULE_ID);
+  }
+  const ::flatbuffers::String *MODULE_VERSION() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MODULE_VERSION);
+  }
+  const ::flatbuffers::String *MODULE_CONTENT_HASH() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MODULE_CONTENT_HASH);
+  }
+  uint64_t COMPUTED_AT() const {
+    return GetField<uint64_t>(VT_COMPUTED_AT, 0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_SOURCE) &&
+           verifier.VerifyString(SOURCE()) &&
+           VerifyOffset(verifier, VT_SOURCE_QUERY) &&
+           verifier.VerifyString(SOURCE_QUERY()) &&
+           VerifyOffset(verifier, VT_MODEL_NAME) &&
+           verifier.VerifyString(MODEL_NAME()) &&
+           VerifyOffset(verifier, VT_MODEL_VERSION) &&
+           verifier.VerifyString(MODEL_VERSION()) &&
+           VerifyOffset(verifier, VT_CITATION) &&
+           verifier.VerifyString(CITATION()) &&
+           VerifyOffset(verifier, VT_MODULE_ID) &&
+           verifier.VerifyString(MODULE_ID()) &&
+           VerifyOffset(verifier, VT_MODULE_VERSION) &&
+           verifier.VerifyString(MODULE_VERSION()) &&
+           VerifyOffset(verifier, VT_MODULE_CONTENT_HASH) &&
+           verifier.VerifyString(MODULE_CONTENT_HASH()) &&
+           VerifyField<uint64_t>(verifier, VT_COMPUTED_AT, 8) &&
+           verifier.EndTable();
+  }
+  BEMProvenanceT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(BEMProvenanceT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<BEMProvenance> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const BEMProvenanceT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct BEMProvenanceBuilder {
+  typedef BEMProvenance Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_SOURCE(::flatbuffers::Offset<::flatbuffers::String> SOURCE) {
+    fbb_.AddOffset(BEMProvenance::VT_SOURCE, SOURCE);
+  }
+  void add_SOURCE_QUERY(::flatbuffers::Offset<::flatbuffers::String> SOURCE_QUERY) {
+    fbb_.AddOffset(BEMProvenance::VT_SOURCE_QUERY, SOURCE_QUERY);
+  }
+  void add_MODEL_NAME(::flatbuffers::Offset<::flatbuffers::String> MODEL_NAME) {
+    fbb_.AddOffset(BEMProvenance::VT_MODEL_NAME, MODEL_NAME);
+  }
+  void add_MODEL_VERSION(::flatbuffers::Offset<::flatbuffers::String> MODEL_VERSION) {
+    fbb_.AddOffset(BEMProvenance::VT_MODEL_VERSION, MODEL_VERSION);
+  }
+  void add_CITATION(::flatbuffers::Offset<::flatbuffers::String> CITATION) {
+    fbb_.AddOffset(BEMProvenance::VT_CITATION, CITATION);
+  }
+  void add_MODULE_ID(::flatbuffers::Offset<::flatbuffers::String> MODULE_ID) {
+    fbb_.AddOffset(BEMProvenance::VT_MODULE_ID, MODULE_ID);
+  }
+  void add_MODULE_VERSION(::flatbuffers::Offset<::flatbuffers::String> MODULE_VERSION) {
+    fbb_.AddOffset(BEMProvenance::VT_MODULE_VERSION, MODULE_VERSION);
+  }
+  void add_MODULE_CONTENT_HASH(::flatbuffers::Offset<::flatbuffers::String> MODULE_CONTENT_HASH) {
+    fbb_.AddOffset(BEMProvenance::VT_MODULE_CONTENT_HASH, MODULE_CONTENT_HASH);
+  }
+  void add_COMPUTED_AT(uint64_t COMPUTED_AT) {
+    fbb_.AddElement<uint64_t>(BEMProvenance::VT_COMPUTED_AT, COMPUTED_AT, 0);
+  }
+  explicit BEMProvenanceBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<BEMProvenance> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<BEMProvenance>(end);
+    fbb_.Required(o, BEMProvenance::VT_SOURCE);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<BEMProvenance> CreateBEMProvenance(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> SOURCE = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> SOURCE_QUERY = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MODEL_NAME = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MODEL_VERSION = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> CITATION = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MODULE_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MODULE_VERSION = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MODULE_CONTENT_HASH = 0,
+    uint64_t COMPUTED_AT = 0) {
+  BEMProvenanceBuilder builder_(_fbb);
+  builder_.add_COMPUTED_AT(COMPUTED_AT);
+  builder_.add_MODULE_CONTENT_HASH(MODULE_CONTENT_HASH);
+  builder_.add_MODULE_VERSION(MODULE_VERSION);
+  builder_.add_MODULE_ID(MODULE_ID);
+  builder_.add_CITATION(CITATION);
+  builder_.add_MODEL_VERSION(MODEL_VERSION);
+  builder_.add_MODEL_NAME(MODEL_NAME);
+  builder_.add_SOURCE_QUERY(SOURCE_QUERY);
+  builder_.add_SOURCE(SOURCE);
+  return builder_.Finish();
+}
+
+struct BEMProvenance::Traits {
+  using type = BEMProvenance;
+  static auto constexpr Create = CreateBEMProvenance;
+};
+
+inline ::flatbuffers::Offset<BEMProvenance> CreateBEMProvenanceDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *SOURCE = nullptr,
+    const char *SOURCE_QUERY = nullptr,
+    const char *MODEL_NAME = nullptr,
+    const char *MODEL_VERSION = nullptr,
+    const char *CITATION = nullptr,
+    const char *MODULE_ID = nullptr,
+    const char *MODULE_VERSION = nullptr,
+    const char *MODULE_CONTENT_HASH = nullptr,
+    uint64_t COMPUTED_AT = 0) {
+  auto SOURCE__ = SOURCE ? _fbb.CreateString(SOURCE) : 0;
+  auto SOURCE_QUERY__ = SOURCE_QUERY ? _fbb.CreateString(SOURCE_QUERY) : 0;
+  auto MODEL_NAME__ = MODEL_NAME ? _fbb.CreateString(MODEL_NAME) : 0;
+  auto MODEL_VERSION__ = MODEL_VERSION ? _fbb.CreateString(MODEL_VERSION) : 0;
+  auto CITATION__ = CITATION ? _fbb.CreateString(CITATION) : 0;
+  auto MODULE_ID__ = MODULE_ID ? _fbb.CreateString(MODULE_ID) : 0;
+  auto MODULE_VERSION__ = MODULE_VERSION ? _fbb.CreateString(MODULE_VERSION) : 0;
+  auto MODULE_CONTENT_HASH__ = MODULE_CONTENT_HASH ? _fbb.CreateString(MODULE_CONTENT_HASH) : 0;
+  return CreateBEMProvenance(
+      _fbb,
+      SOURCE__,
+      SOURCE_QUERY__,
+      MODEL_NAME__,
+      MODEL_VERSION__,
+      CITATION__,
+      MODULE_ID__,
+      MODULE_VERSION__,
+      MODULE_CONTENT_HASH__,
+      COMPUTED_AT);
+}
+
+::flatbuffers::Offset<BEMProvenance> CreateBEMProvenance(::flatbuffers::FlatBufferBuilder &_fbb, const BEMProvenanceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct BEMHopSlotT : public ::flatbuffers::NativeTable {
+  typedef BEMHopSlot TableType;
+  std::string SLOT_ID{};
+  double START_OFFSET_S = 0.0;
+  double DURATION_S = 0.0;
+  bemHopSlotState STATE = bemHopSlotState::UNSPECIFIED;
+  std::string BEAM_ID{};
+  std::string TARGET_CELL_ID{};
+  double TARGET_CENTER_LATITUDE_DEG = 0.0;
+  double TARGET_CENTER_LONGITUDE_DEG = 0.0;
+  double CENTER_FREQUENCY_HZ = 0.0;
+  double EIRP_DBW = 0.0;
+  uint32_t PRIORITY = 0;
+};
+
+/// One time slice of a periodic beam-hopping plan.
+struct BEMHopSlot FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef BEMHopSlotT NativeTableType;
+  typedef BEMHopSlotBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SLOT_ID = 4,
+    VT_START_OFFSET_S = 6,
+    VT_DURATION_S = 8,
+    VT_STATE = 10,
+    VT_BEAM_ID = 12,
+    VT_TARGET_CELL_ID = 14,
+    VT_TARGET_CENTER_LATITUDE_DEG = 16,
+    VT_TARGET_CENTER_LONGITUDE_DEG = 18,
+    VT_CENTER_FREQUENCY_HZ = 20,
+    VT_EIRP_DBW = 22,
+    VT_PRIORITY = 24
+  };
+  const ::flatbuffers::String *SLOT_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SLOT_ID);
+  }
+  /// Offset from BEMHopSchedule.EPOCH in seconds.
+  double START_OFFSET_S() const {
+    return GetField<double>(VT_START_OFFSET_S, 0.0);
+  }
+  double DURATION_S() const {
+    return GetField<double>(VT_DURATION_S, 0.0);
+  }
+  bemHopSlotState STATE() const {
+    return static_cast<bemHopSlotState>(GetField<int8_t>(VT_STATE, 0));
+  }
+  /// Beam activated in this slot. May name this BEM.ID or another beam in a
+  /// coordinated schedule.
+  const ::flatbuffers::String *BEAM_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_BEAM_ID);
+  }
+  const ::flatbuffers::String *TARGET_CELL_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TARGET_CELL_ID);
+  }
+  double TARGET_CENTER_LATITUDE_DEG() const {
+    return GetField<double>(VT_TARGET_CENTER_LATITUDE_DEG, 0.0);
+  }
+  double TARGET_CENTER_LONGITUDE_DEG() const {
+    return GetField<double>(VT_TARGET_CENTER_LONGITUDE_DEG, 0.0);
+  }
+  double CENTER_FREQUENCY_HZ() const {
+    return GetField<double>(VT_CENTER_FREQUENCY_HZ, 0.0);
+  }
+  double EIRP_DBW() const {
+    return GetField<double>(VT_EIRP_DBW, 0.0);
+  }
+  uint32_t PRIORITY() const {
+    return GetField<uint32_t>(VT_PRIORITY, 0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_SLOT_ID) &&
+           verifier.VerifyString(SLOT_ID()) &&
+           VerifyField<double>(verifier, VT_START_OFFSET_S, 8) &&
+           VerifyField<double>(verifier, VT_DURATION_S, 8) &&
+           VerifyField<int8_t>(verifier, VT_STATE, 1) &&
+           VerifyOffsetRequired(verifier, VT_BEAM_ID) &&
+           verifier.VerifyString(BEAM_ID()) &&
+           VerifyOffset(verifier, VT_TARGET_CELL_ID) &&
+           verifier.VerifyString(TARGET_CELL_ID()) &&
+           VerifyField<double>(verifier, VT_TARGET_CENTER_LATITUDE_DEG, 8) &&
+           VerifyField<double>(verifier, VT_TARGET_CENTER_LONGITUDE_DEG, 8) &&
+           VerifyField<double>(verifier, VT_CENTER_FREQUENCY_HZ, 8) &&
+           VerifyField<double>(verifier, VT_EIRP_DBW, 8) &&
+           VerifyField<uint32_t>(verifier, VT_PRIORITY, 4) &&
+           verifier.EndTable();
+  }
+  BEMHopSlotT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(BEMHopSlotT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<BEMHopSlot> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const BEMHopSlotT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct BEMHopSlotBuilder {
+  typedef BEMHopSlot Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_SLOT_ID(::flatbuffers::Offset<::flatbuffers::String> SLOT_ID) {
+    fbb_.AddOffset(BEMHopSlot::VT_SLOT_ID, SLOT_ID);
+  }
+  void add_START_OFFSET_S(double START_OFFSET_S) {
+    fbb_.AddElement<double>(BEMHopSlot::VT_START_OFFSET_S, START_OFFSET_S, 0.0);
+  }
+  void add_DURATION_S(double DURATION_S) {
+    fbb_.AddElement<double>(BEMHopSlot::VT_DURATION_S, DURATION_S, 0.0);
+  }
+  void add_STATE(bemHopSlotState STATE) {
+    fbb_.AddElement<int8_t>(BEMHopSlot::VT_STATE, static_cast<int8_t>(STATE), 0);
+  }
+  void add_BEAM_ID(::flatbuffers::Offset<::flatbuffers::String> BEAM_ID) {
+    fbb_.AddOffset(BEMHopSlot::VT_BEAM_ID, BEAM_ID);
+  }
+  void add_TARGET_CELL_ID(::flatbuffers::Offset<::flatbuffers::String> TARGET_CELL_ID) {
+    fbb_.AddOffset(BEMHopSlot::VT_TARGET_CELL_ID, TARGET_CELL_ID);
+  }
+  void add_TARGET_CENTER_LATITUDE_DEG(double TARGET_CENTER_LATITUDE_DEG) {
+    fbb_.AddElement<double>(BEMHopSlot::VT_TARGET_CENTER_LATITUDE_DEG, TARGET_CENTER_LATITUDE_DEG, 0.0);
+  }
+  void add_TARGET_CENTER_LONGITUDE_DEG(double TARGET_CENTER_LONGITUDE_DEG) {
+    fbb_.AddElement<double>(BEMHopSlot::VT_TARGET_CENTER_LONGITUDE_DEG, TARGET_CENTER_LONGITUDE_DEG, 0.0);
+  }
+  void add_CENTER_FREQUENCY_HZ(double CENTER_FREQUENCY_HZ) {
+    fbb_.AddElement<double>(BEMHopSlot::VT_CENTER_FREQUENCY_HZ, CENTER_FREQUENCY_HZ, 0.0);
+  }
+  void add_EIRP_DBW(double EIRP_DBW) {
+    fbb_.AddElement<double>(BEMHopSlot::VT_EIRP_DBW, EIRP_DBW, 0.0);
+  }
+  void add_PRIORITY(uint32_t PRIORITY) {
+    fbb_.AddElement<uint32_t>(BEMHopSlot::VT_PRIORITY, PRIORITY, 0);
+  }
+  explicit BEMHopSlotBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<BEMHopSlot> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<BEMHopSlot>(end);
+    fbb_.Required(o, BEMHopSlot::VT_SLOT_ID);
+    fbb_.Required(o, BEMHopSlot::VT_BEAM_ID);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<BEMHopSlot> CreateBEMHopSlot(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> SLOT_ID = 0,
+    double START_OFFSET_S = 0.0,
+    double DURATION_S = 0.0,
+    bemHopSlotState STATE = bemHopSlotState::UNSPECIFIED,
+    ::flatbuffers::Offset<::flatbuffers::String> BEAM_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> TARGET_CELL_ID = 0,
+    double TARGET_CENTER_LATITUDE_DEG = 0.0,
+    double TARGET_CENTER_LONGITUDE_DEG = 0.0,
+    double CENTER_FREQUENCY_HZ = 0.0,
+    double EIRP_DBW = 0.0,
+    uint32_t PRIORITY = 0) {
+  BEMHopSlotBuilder builder_(_fbb);
+  builder_.add_EIRP_DBW(EIRP_DBW);
+  builder_.add_CENTER_FREQUENCY_HZ(CENTER_FREQUENCY_HZ);
+  builder_.add_TARGET_CENTER_LONGITUDE_DEG(TARGET_CENTER_LONGITUDE_DEG);
+  builder_.add_TARGET_CENTER_LATITUDE_DEG(TARGET_CENTER_LATITUDE_DEG);
+  builder_.add_DURATION_S(DURATION_S);
+  builder_.add_START_OFFSET_S(START_OFFSET_S);
+  builder_.add_PRIORITY(PRIORITY);
+  builder_.add_TARGET_CELL_ID(TARGET_CELL_ID);
+  builder_.add_BEAM_ID(BEAM_ID);
+  builder_.add_SLOT_ID(SLOT_ID);
+  builder_.add_STATE(STATE);
+  return builder_.Finish();
+}
+
+struct BEMHopSlot::Traits {
+  using type = BEMHopSlot;
+  static auto constexpr Create = CreateBEMHopSlot;
+};
+
+inline ::flatbuffers::Offset<BEMHopSlot> CreateBEMHopSlotDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *SLOT_ID = nullptr,
+    double START_OFFSET_S = 0.0,
+    double DURATION_S = 0.0,
+    bemHopSlotState STATE = bemHopSlotState::UNSPECIFIED,
+    const char *BEAM_ID = nullptr,
+    const char *TARGET_CELL_ID = nullptr,
+    double TARGET_CENTER_LATITUDE_DEG = 0.0,
+    double TARGET_CENTER_LONGITUDE_DEG = 0.0,
+    double CENTER_FREQUENCY_HZ = 0.0,
+    double EIRP_DBW = 0.0,
+    uint32_t PRIORITY = 0) {
+  auto SLOT_ID__ = SLOT_ID ? _fbb.CreateString(SLOT_ID) : 0;
+  auto BEAM_ID__ = BEAM_ID ? _fbb.CreateString(BEAM_ID) : 0;
+  auto TARGET_CELL_ID__ = TARGET_CELL_ID ? _fbb.CreateString(TARGET_CELL_ID) : 0;
+  return CreateBEMHopSlot(
+      _fbb,
+      SLOT_ID__,
+      START_OFFSET_S,
+      DURATION_S,
+      STATE,
+      BEAM_ID__,
+      TARGET_CELL_ID__,
+      TARGET_CENTER_LATITUDE_DEG,
+      TARGET_CENTER_LONGITUDE_DEG,
+      CENTER_FREQUENCY_HZ,
+      EIRP_DBW,
+      PRIORITY);
+}
+
+::flatbuffers::Offset<BEMHopSlot> CreateBEMHopSlot(::flatbuffers::FlatBufferBuilder &_fbb, const BEMHopSlotT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct BEMHopScheduleT : public ::flatbuffers::NativeTable {
+  typedef BEMHopSchedule TableType;
+  std::string SCHEDULE_ID{};
+  double EPOCH = 0.0;
+  double PERIOD_S = 0.0;
+  bool REPEATS = false;
+  std::vector<std::unique_ptr<BEMHopSlotT>> SLOTS{};
+  std::unique_ptr<BEMProvenanceT> PROVENANCE{};
+  BEMHopScheduleT() = default;
+  BEMHopScheduleT(const BEMHopScheduleT &o);
+  BEMHopScheduleT(BEMHopScheduleT&&) FLATBUFFERS_NOEXCEPT = default;
+  BEMHopScheduleT &operator=(BEMHopScheduleT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Periodic beam-hopping schedule carried by a deployed beam descriptor.
+struct BEMHopSchedule FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef BEMHopScheduleT NativeTableType;
+  typedef BEMHopScheduleBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SCHEDULE_ID = 4,
+    VT_EPOCH = 6,
+    VT_PERIOD_S = 8,
+    VT_REPEATS = 10,
+    VT_SLOTS = 12,
+    VT_PROVENANCE = 14
+  };
+  const ::flatbuffers::String *SCHEDULE_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SCHEDULE_ID);
+  }
+  /// Seconds since 1970-01-01T00:00:00 UTC at which slot offsets begin.
+  double EPOCH() const {
+    return GetField<double>(VT_EPOCH, 0.0);
+  }
+  double PERIOD_S() const {
+    return GetField<double>(VT_PERIOD_S, 0.0);
+  }
+  bool REPEATS() const {
+    return GetField<uint8_t>(VT_REPEATS, 0) != 0;
+  }
+  const ::flatbuffers::Vector<::flatbuffers::Offset<BEMHopSlot>> *SLOTS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<BEMHopSlot>> *>(VT_SLOTS);
+  }
+  const BEMProvenance *PROVENANCE() const {
+    return GetPointer<const BEMProvenance *>(VT_PROVENANCE);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_SCHEDULE_ID) &&
+           verifier.VerifyString(SCHEDULE_ID()) &&
+           VerifyField<double>(verifier, VT_EPOCH, 8) &&
+           VerifyField<double>(verifier, VT_PERIOD_S, 8) &&
+           VerifyField<uint8_t>(verifier, VT_REPEATS, 1) &&
+           VerifyOffsetRequired(verifier, VT_SLOTS) &&
+           verifier.VerifyVector(SLOTS()) &&
+           verifier.VerifyVectorOfTables(SLOTS()) &&
+           VerifyOffsetRequired(verifier, VT_PROVENANCE) &&
+           verifier.VerifyTable(PROVENANCE()) &&
+           verifier.EndTable();
+  }
+  BEMHopScheduleT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(BEMHopScheduleT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<BEMHopSchedule> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const BEMHopScheduleT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct BEMHopScheduleBuilder {
+  typedef BEMHopSchedule Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_SCHEDULE_ID(::flatbuffers::Offset<::flatbuffers::String> SCHEDULE_ID) {
+    fbb_.AddOffset(BEMHopSchedule::VT_SCHEDULE_ID, SCHEDULE_ID);
+  }
+  void add_EPOCH(double EPOCH) {
+    fbb_.AddElement<double>(BEMHopSchedule::VT_EPOCH, EPOCH, 0.0);
+  }
+  void add_PERIOD_S(double PERIOD_S) {
+    fbb_.AddElement<double>(BEMHopSchedule::VT_PERIOD_S, PERIOD_S, 0.0);
+  }
+  void add_REPEATS(bool REPEATS) {
+    fbb_.AddElement<uint8_t>(BEMHopSchedule::VT_REPEATS, static_cast<uint8_t>(REPEATS), 0);
+  }
+  void add_SLOTS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<BEMHopSlot>>> SLOTS) {
+    fbb_.AddOffset(BEMHopSchedule::VT_SLOTS, SLOTS);
+  }
+  void add_PROVENANCE(::flatbuffers::Offset<BEMProvenance> PROVENANCE) {
+    fbb_.AddOffset(BEMHopSchedule::VT_PROVENANCE, PROVENANCE);
+  }
+  explicit BEMHopScheduleBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<BEMHopSchedule> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<BEMHopSchedule>(end);
+    fbb_.Required(o, BEMHopSchedule::VT_SCHEDULE_ID);
+    fbb_.Required(o, BEMHopSchedule::VT_SLOTS);
+    fbb_.Required(o, BEMHopSchedule::VT_PROVENANCE);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<BEMHopSchedule> CreateBEMHopSchedule(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> SCHEDULE_ID = 0,
+    double EPOCH = 0.0,
+    double PERIOD_S = 0.0,
+    bool REPEATS = false,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<BEMHopSlot>>> SLOTS = 0,
+    ::flatbuffers::Offset<BEMProvenance> PROVENANCE = 0) {
+  BEMHopScheduleBuilder builder_(_fbb);
+  builder_.add_PERIOD_S(PERIOD_S);
+  builder_.add_EPOCH(EPOCH);
+  builder_.add_PROVENANCE(PROVENANCE);
+  builder_.add_SLOTS(SLOTS);
+  builder_.add_SCHEDULE_ID(SCHEDULE_ID);
+  builder_.add_REPEATS(REPEATS);
+  return builder_.Finish();
+}
+
+struct BEMHopSchedule::Traits {
+  using type = BEMHopSchedule;
+  static auto constexpr Create = CreateBEMHopSchedule;
+};
+
+inline ::flatbuffers::Offset<BEMHopSchedule> CreateBEMHopScheduleDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *SCHEDULE_ID = nullptr,
+    double EPOCH = 0.0,
+    double PERIOD_S = 0.0,
+    bool REPEATS = false,
+    const std::vector<::flatbuffers::Offset<BEMHopSlot>> *SLOTS = nullptr,
+    ::flatbuffers::Offset<BEMProvenance> PROVENANCE = 0) {
+  auto SCHEDULE_ID__ = SCHEDULE_ID ? _fbb.CreateString(SCHEDULE_ID) : 0;
+  auto SLOTS__ = SLOTS ? _fbb.CreateVector<::flatbuffers::Offset<BEMHopSlot>>(*SLOTS) : 0;
+  return CreateBEMHopSchedule(
+      _fbb,
+      SCHEDULE_ID__,
+      EPOCH,
+      PERIOD_S,
+      REPEATS,
+      SLOTS__,
+      PROVENANCE);
+}
+
+::flatbuffers::Offset<BEMHopSchedule> CreateBEMHopSchedule(::flatbuffers::FlatBufferBuilder &_fbb, const BEMHopScheduleT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 struct beamContourPointT : public ::flatbuffers::NativeTable {
   typedef beamContourPoint TableType;
@@ -322,6 +916,12 @@ struct BEMT : public ::flatbuffers::NativeTable {
   double FOOTPRINT_AREA = 0.0;
   std::vector<std::unique_ptr<beamContourT>> BEAM_CONTOURS{};
   std::string NOTES{};
+  std::unique_ptr<BEMHopScheduleT> HOP_SCHEDULE{};
+  std::unique_ptr<BEMProvenanceT> PROVENANCE{};
+  uint64_t COMPUTED_AT = 0;
+  std::string PRODUCER_ID{};
+  std::vector<uint8_t> SIGNATURE{};
+  std::vector<uint8_t> CANONICAL_JSON_SIGNATURE{};
   BEMT() = default;
   BEMT(const BEMT &o);
   BEMT(BEMT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -350,7 +950,13 @@ struct BEM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_G_OVER_T = 30,
     VT_FOOTPRINT_AREA = 32,
     VT_BEAM_CONTOURS = 34,
-    VT_NOTES = 36
+    VT_NOTES = 36,
+    VT_HOP_SCHEDULE = 38,
+    VT_PROVENANCE = 40,
+    VT_COMPUTED_AT = 42,
+    VT_PRODUCER_ID = 44,
+    VT_SIGNATURE = 46,
+    VT_CANONICAL_JSON_SIGNATURE = 48
   };
   /// Unique beam identifier
   const ::flatbuffers::String *ID() const {
@@ -420,6 +1026,32 @@ struct BEM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *NOTES() const {
     return GetPointer<const ::flatbuffers::String *>(VT_NOTES);
   }
+  /// Time-sliced activation plan for this deployed beam.
+  const BEMHopSchedule *HOP_SCHEDULE() const {
+    return GetPointer<const BEMHopSchedule *>(VT_HOP_SCHEDULE);
+  }
+  const BEMProvenance *PROVENANCE() const {
+    return GetPointer<const BEMProvenance *>(VT_PROVENANCE);
+  }
+  /// Unix ms this record was serialized.
+  uint64_t COMPUTED_AT() const {
+    return GetField<uint64_t>(VT_COMPUTED_AT, 0);
+  }
+  /// `$EPM` identifier of the producing node.
+  const ::flatbuffers::String *PRODUCER_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PRODUCER_ID);
+  }
+  /// Ed25519 signature over the size-prefixed FlatBuffer with both 64-byte
+  /// signature payloads zeroed while preserving their vectors and offsets.
+  const ::flatbuffers::Vector<uint8_t> *SIGNATURE() const {
+    return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_SIGNATURE);
+  }
+  /// Ed25519 signature over canonical JSON with IDL field order and
+  /// capitalization, no insignificant whitespace, and both signature fields
+  /// omitted.
+  const ::flatbuffers::Vector<uint8_t> *CANONICAL_JSON_SIGNATURE() const {
+    return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_CANONICAL_JSON_SIGNATURE);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -447,6 +1079,17 @@ struct BEM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyVectorOfTables(BEAM_CONTOURS()) &&
            VerifyOffset(verifier, VT_NOTES) &&
            verifier.VerifyString(NOTES()) &&
+           VerifyOffset(verifier, VT_HOP_SCHEDULE) &&
+           verifier.VerifyTable(HOP_SCHEDULE()) &&
+           VerifyOffset(verifier, VT_PROVENANCE) &&
+           verifier.VerifyTable(PROVENANCE()) &&
+           VerifyField<uint64_t>(verifier, VT_COMPUTED_AT, 8) &&
+           VerifyOffset(verifier, VT_PRODUCER_ID) &&
+           verifier.VerifyString(PRODUCER_ID()) &&
+           VerifyOffset(verifier, VT_SIGNATURE) &&
+           verifier.VerifyVector(SIGNATURE()) &&
+           VerifyOffset(verifier, VT_CANONICAL_JSON_SIGNATURE) &&
+           verifier.VerifyVector(CANONICAL_JSON_SIGNATURE()) &&
            verifier.EndTable();
   }
   BEMT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -509,6 +1152,24 @@ struct BEMBuilder {
   void add_NOTES(::flatbuffers::Offset<::flatbuffers::String> NOTES) {
     fbb_.AddOffset(BEM::VT_NOTES, NOTES);
   }
+  void add_HOP_SCHEDULE(::flatbuffers::Offset<BEMHopSchedule> HOP_SCHEDULE) {
+    fbb_.AddOffset(BEM::VT_HOP_SCHEDULE, HOP_SCHEDULE);
+  }
+  void add_PROVENANCE(::flatbuffers::Offset<BEMProvenance> PROVENANCE) {
+    fbb_.AddOffset(BEM::VT_PROVENANCE, PROVENANCE);
+  }
+  void add_COMPUTED_AT(uint64_t COMPUTED_AT) {
+    fbb_.AddElement<uint64_t>(BEM::VT_COMPUTED_AT, COMPUTED_AT, 0);
+  }
+  void add_PRODUCER_ID(::flatbuffers::Offset<::flatbuffers::String> PRODUCER_ID) {
+    fbb_.AddOffset(BEM::VT_PRODUCER_ID, PRODUCER_ID);
+  }
+  void add_SIGNATURE(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> SIGNATURE) {
+    fbb_.AddOffset(BEM::VT_SIGNATURE, SIGNATURE);
+  }
+  void add_CANONICAL_JSON_SIGNATURE(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> CANONICAL_JSON_SIGNATURE) {
+    fbb_.AddOffset(BEM::VT_CANONICAL_JSON_SIGNATURE, CANONICAL_JSON_SIGNATURE);
+  }
   explicit BEMBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -538,8 +1199,15 @@ inline ::flatbuffers::Offset<BEM> CreateBEM(
     double G_OVER_T = 0.0,
     double FOOTPRINT_AREA = 0.0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<beamContour>>> BEAM_CONTOURS = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> NOTES = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> NOTES = 0,
+    ::flatbuffers::Offset<BEMHopSchedule> HOP_SCHEDULE = 0,
+    ::flatbuffers::Offset<BEMProvenance> PROVENANCE = 0,
+    uint64_t COMPUTED_AT = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> PRODUCER_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> SIGNATURE = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> CANONICAL_JSON_SIGNATURE = 0) {
   BEMBuilder builder_(_fbb);
+  builder_.add_COMPUTED_AT(COMPUTED_AT);
   builder_.add_FOOTPRINT_AREA(FOOTPRINT_AREA);
   builder_.add_G_OVER_T(G_OVER_T);
   builder_.add_EIRP(EIRP);
@@ -549,6 +1217,11 @@ inline ::flatbuffers::Offset<BEM> CreateBEM(
   builder_.add_CENTER_LATITUDE(CENTER_LATITUDE);
   builder_.add_EOC_GAIN(EOC_GAIN);
   builder_.add_PEAK_GAIN(PEAK_GAIN);
+  builder_.add_CANONICAL_JSON_SIGNATURE(CANONICAL_JSON_SIGNATURE);
+  builder_.add_SIGNATURE(SIGNATURE);
+  builder_.add_PRODUCER_ID(PRODUCER_ID);
+  builder_.add_PROVENANCE(PROVENANCE);
+  builder_.add_HOP_SCHEDULE(HOP_SCHEDULE);
   builder_.add_NOTES(NOTES);
   builder_.add_BEAM_CONTOURS(BEAM_CONTOURS);
   builder_.add_ID_ANTENNA(ID_ANTENNA);
@@ -583,13 +1256,22 @@ inline ::flatbuffers::Offset<BEM> CreateBEMDirect(
     double G_OVER_T = 0.0,
     double FOOTPRINT_AREA = 0.0,
     const std::vector<::flatbuffers::Offset<beamContour>> *BEAM_CONTOURS = nullptr,
-    const char *NOTES = nullptr) {
+    const char *NOTES = nullptr,
+    ::flatbuffers::Offset<BEMHopSchedule> HOP_SCHEDULE = 0,
+    ::flatbuffers::Offset<BEMProvenance> PROVENANCE = 0,
+    uint64_t COMPUTED_AT = 0,
+    const char *PRODUCER_ID = nullptr,
+    const std::vector<uint8_t> *SIGNATURE = nullptr,
+    const std::vector<uint8_t> *CANONICAL_JSON_SIGNATURE = nullptr) {
   auto ID__ = ID ? _fbb.CreateString(ID) : 0;
   auto BEAM_NAME__ = BEAM_NAME ? _fbb.CreateString(BEAM_NAME) : 0;
   auto ID_ENTITY__ = ID_ENTITY ? _fbb.CreateString(ID_ENTITY) : 0;
   auto ID_ANTENNA__ = ID_ANTENNA ? _fbb.CreateString(ID_ANTENNA) : 0;
   auto BEAM_CONTOURS__ = BEAM_CONTOURS ? _fbb.CreateVector<::flatbuffers::Offset<beamContour>>(*BEAM_CONTOURS) : 0;
   auto NOTES__ = NOTES ? _fbb.CreateString(NOTES) : 0;
+  auto PRODUCER_ID__ = PRODUCER_ID ? _fbb.CreateString(PRODUCER_ID) : 0;
+  auto SIGNATURE__ = SIGNATURE ? _fbb.CreateVector<uint8_t>(*SIGNATURE) : 0;
+  auto CANONICAL_JSON_SIGNATURE__ = CANONICAL_JSON_SIGNATURE ? _fbb.CreateVector<uint8_t>(*CANONICAL_JSON_SIGNATURE) : 0;
   return CreateBEM(
       _fbb,
       ID__,
@@ -608,10 +1290,183 @@ inline ::flatbuffers::Offset<BEM> CreateBEMDirect(
       G_OVER_T,
       FOOTPRINT_AREA,
       BEAM_CONTOURS__,
-      NOTES__);
+      NOTES__,
+      HOP_SCHEDULE,
+      PROVENANCE,
+      COMPUTED_AT,
+      PRODUCER_ID__,
+      SIGNATURE__,
+      CANONICAL_JSON_SIGNATURE__);
 }
 
 ::flatbuffers::Offset<BEM> CreateBEM(::flatbuffers::FlatBufferBuilder &_fbb, const BEMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+inline BEMProvenanceT *BEMProvenance::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<BEMProvenanceT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void BEMProvenance::UnPackTo(BEMProvenanceT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = SOURCE(); if (_e) _o->SOURCE = _e->str(); }
+  { auto _e = SOURCE_QUERY(); if (_e) _o->SOURCE_QUERY = _e->str(); }
+  { auto _e = MODEL_NAME(); if (_e) _o->MODEL_NAME = _e->str(); }
+  { auto _e = MODEL_VERSION(); if (_e) _o->MODEL_VERSION = _e->str(); }
+  { auto _e = CITATION(); if (_e) _o->CITATION = _e->str(); }
+  { auto _e = MODULE_ID(); if (_e) _o->MODULE_ID = _e->str(); }
+  { auto _e = MODULE_VERSION(); if (_e) _o->MODULE_VERSION = _e->str(); }
+  { auto _e = MODULE_CONTENT_HASH(); if (_e) _o->MODULE_CONTENT_HASH = _e->str(); }
+  { auto _e = COMPUTED_AT(); _o->COMPUTED_AT = _e; }
+}
+
+inline ::flatbuffers::Offset<BEMProvenance> CreateBEMProvenance(::flatbuffers::FlatBufferBuilder &_fbb, const BEMProvenanceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return BEMProvenance::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<BEMProvenance> BEMProvenance::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const BEMProvenanceT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const BEMProvenanceT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _SOURCE = _fbb.CreateString(_o->SOURCE);
+  auto _SOURCE_QUERY = _o->SOURCE_QUERY.empty() ? 0 : _fbb.CreateString(_o->SOURCE_QUERY);
+  auto _MODEL_NAME = _o->MODEL_NAME.empty() ? 0 : _fbb.CreateString(_o->MODEL_NAME);
+  auto _MODEL_VERSION = _o->MODEL_VERSION.empty() ? 0 : _fbb.CreateString(_o->MODEL_VERSION);
+  auto _CITATION = _o->CITATION.empty() ? 0 : _fbb.CreateString(_o->CITATION);
+  auto _MODULE_ID = _o->MODULE_ID.empty() ? 0 : _fbb.CreateString(_o->MODULE_ID);
+  auto _MODULE_VERSION = _o->MODULE_VERSION.empty() ? 0 : _fbb.CreateString(_o->MODULE_VERSION);
+  auto _MODULE_CONTENT_HASH = _o->MODULE_CONTENT_HASH.empty() ? 0 : _fbb.CreateString(_o->MODULE_CONTENT_HASH);
+  auto _COMPUTED_AT = _o->COMPUTED_AT;
+  return CreateBEMProvenance(
+      _fbb,
+      _SOURCE,
+      _SOURCE_QUERY,
+      _MODEL_NAME,
+      _MODEL_VERSION,
+      _CITATION,
+      _MODULE_ID,
+      _MODULE_VERSION,
+      _MODULE_CONTENT_HASH,
+      _COMPUTED_AT);
+}
+
+inline BEMHopSlotT *BEMHopSlot::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<BEMHopSlotT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void BEMHopSlot::UnPackTo(BEMHopSlotT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = SLOT_ID(); if (_e) _o->SLOT_ID = _e->str(); }
+  { auto _e = START_OFFSET_S(); _o->START_OFFSET_S = _e; }
+  { auto _e = DURATION_S(); _o->DURATION_S = _e; }
+  { auto _e = STATE(); _o->STATE = _e; }
+  { auto _e = BEAM_ID(); if (_e) _o->BEAM_ID = _e->str(); }
+  { auto _e = TARGET_CELL_ID(); if (_e) _o->TARGET_CELL_ID = _e->str(); }
+  { auto _e = TARGET_CENTER_LATITUDE_DEG(); _o->TARGET_CENTER_LATITUDE_DEG = _e; }
+  { auto _e = TARGET_CENTER_LONGITUDE_DEG(); _o->TARGET_CENTER_LONGITUDE_DEG = _e; }
+  { auto _e = CENTER_FREQUENCY_HZ(); _o->CENTER_FREQUENCY_HZ = _e; }
+  { auto _e = EIRP_DBW(); _o->EIRP_DBW = _e; }
+  { auto _e = PRIORITY(); _o->PRIORITY = _e; }
+}
+
+inline ::flatbuffers::Offset<BEMHopSlot> CreateBEMHopSlot(::flatbuffers::FlatBufferBuilder &_fbb, const BEMHopSlotT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return BEMHopSlot::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<BEMHopSlot> BEMHopSlot::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const BEMHopSlotT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const BEMHopSlotT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _SLOT_ID = _fbb.CreateString(_o->SLOT_ID);
+  auto _START_OFFSET_S = _o->START_OFFSET_S;
+  auto _DURATION_S = _o->DURATION_S;
+  auto _STATE = _o->STATE;
+  auto _BEAM_ID = _fbb.CreateString(_o->BEAM_ID);
+  auto _TARGET_CELL_ID = _o->TARGET_CELL_ID.empty() ? 0 : _fbb.CreateString(_o->TARGET_CELL_ID);
+  auto _TARGET_CENTER_LATITUDE_DEG = _o->TARGET_CENTER_LATITUDE_DEG;
+  auto _TARGET_CENTER_LONGITUDE_DEG = _o->TARGET_CENTER_LONGITUDE_DEG;
+  auto _CENTER_FREQUENCY_HZ = _o->CENTER_FREQUENCY_HZ;
+  auto _EIRP_DBW = _o->EIRP_DBW;
+  auto _PRIORITY = _o->PRIORITY;
+  return CreateBEMHopSlot(
+      _fbb,
+      _SLOT_ID,
+      _START_OFFSET_S,
+      _DURATION_S,
+      _STATE,
+      _BEAM_ID,
+      _TARGET_CELL_ID,
+      _TARGET_CENTER_LATITUDE_DEG,
+      _TARGET_CENTER_LONGITUDE_DEG,
+      _CENTER_FREQUENCY_HZ,
+      _EIRP_DBW,
+      _PRIORITY);
+}
+
+inline BEMHopScheduleT::BEMHopScheduleT(const BEMHopScheduleT &o)
+      : SCHEDULE_ID(o.SCHEDULE_ID),
+        EPOCH(o.EPOCH),
+        PERIOD_S(o.PERIOD_S),
+        REPEATS(o.REPEATS),
+        PROVENANCE((o.PROVENANCE) ? new BEMProvenanceT(*o.PROVENANCE) : nullptr) {
+  SLOTS.reserve(o.SLOTS.size());
+  for (const auto &SLOTS_ : o.SLOTS) { SLOTS.emplace_back((SLOTS_) ? new BEMHopSlotT(*SLOTS_) : nullptr); }
+}
+
+inline BEMHopScheduleT &BEMHopScheduleT::operator=(BEMHopScheduleT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(SCHEDULE_ID, o.SCHEDULE_ID);
+  std::swap(EPOCH, o.EPOCH);
+  std::swap(PERIOD_S, o.PERIOD_S);
+  std::swap(REPEATS, o.REPEATS);
+  std::swap(SLOTS, o.SLOTS);
+  std::swap(PROVENANCE, o.PROVENANCE);
+  return *this;
+}
+
+inline BEMHopScheduleT *BEMHopSchedule::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<BEMHopScheduleT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void BEMHopSchedule::UnPackTo(BEMHopScheduleT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = SCHEDULE_ID(); if (_e) _o->SCHEDULE_ID = _e->str(); }
+  { auto _e = EPOCH(); _o->EPOCH = _e; }
+  { auto _e = PERIOD_S(); _o->PERIOD_S = _e; }
+  { auto _e = REPEATS(); _o->REPEATS = _e; }
+  { auto _e = SLOTS(); if (_e) { _o->SLOTS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->SLOTS[_i]) { _e->Get(_i)->UnPackTo(_o->SLOTS[_i].get(), _resolver); } else { _o->SLOTS[_i] = std::unique_ptr<BEMHopSlotT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->SLOTS.resize(0); } }
+  { auto _e = PROVENANCE(); if (_e) { if(_o->PROVENANCE) { _e->UnPackTo(_o->PROVENANCE.get(), _resolver); } else { _o->PROVENANCE = std::unique_ptr<BEMProvenanceT>(_e->UnPack(_resolver)); } } else if (_o->PROVENANCE) { _o->PROVENANCE.reset(); } }
+}
+
+inline ::flatbuffers::Offset<BEMHopSchedule> CreateBEMHopSchedule(::flatbuffers::FlatBufferBuilder &_fbb, const BEMHopScheduleT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return BEMHopSchedule::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<BEMHopSchedule> BEMHopSchedule::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const BEMHopScheduleT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const BEMHopScheduleT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _SCHEDULE_ID = _fbb.CreateString(_o->SCHEDULE_ID);
+  auto _EPOCH = _o->EPOCH;
+  auto _PERIOD_S = _o->PERIOD_S;
+  auto _REPEATS = _o->REPEATS;
+  auto _SLOTS = _fbb.CreateVector<::flatbuffers::Offset<BEMHopSlot>> (_o->SLOTS.size(), [](size_t i, _VectorArgs *__va) { return CreateBEMHopSlot(*__va->__fbb, __va->__o->SLOTS[i].get(), __va->__rehasher); }, &_va );
+  auto _PROVENANCE = _o->PROVENANCE ? CreateBEMProvenance(_fbb, _o->PROVENANCE.get(), _rehasher) : 0;
+  return CreateBEMHopSchedule(
+      _fbb,
+      _SCHEDULE_ID,
+      _EPOCH,
+      _PERIOD_S,
+      _REPEATS,
+      _SLOTS,
+      _PROVENANCE);
+}
 
 inline beamContourPointT *beamContourPoint::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<beamContourPointT>();
@@ -707,7 +1562,13 @@ inline BEMT::BEMT(const BEMT &o)
         EIRP(o.EIRP),
         G_OVER_T(o.G_OVER_T),
         FOOTPRINT_AREA(o.FOOTPRINT_AREA),
-        NOTES(o.NOTES) {
+        NOTES(o.NOTES),
+        HOP_SCHEDULE((o.HOP_SCHEDULE) ? new BEMHopScheduleT(*o.HOP_SCHEDULE) : nullptr),
+        PROVENANCE((o.PROVENANCE) ? new BEMProvenanceT(*o.PROVENANCE) : nullptr),
+        COMPUTED_AT(o.COMPUTED_AT),
+        PRODUCER_ID(o.PRODUCER_ID),
+        SIGNATURE(o.SIGNATURE),
+        CANONICAL_JSON_SIGNATURE(o.CANONICAL_JSON_SIGNATURE) {
   BEAM_CONTOURS.reserve(o.BEAM_CONTOURS.size());
   for (const auto &BEAM_CONTOURS_ : o.BEAM_CONTOURS) { BEAM_CONTOURS.emplace_back((BEAM_CONTOURS_) ? new beamContourT(*BEAM_CONTOURS_) : nullptr); }
 }
@@ -730,6 +1591,12 @@ inline BEMT &BEMT::operator=(BEMT o) FLATBUFFERS_NOEXCEPT {
   std::swap(FOOTPRINT_AREA, o.FOOTPRINT_AREA);
   std::swap(BEAM_CONTOURS, o.BEAM_CONTOURS);
   std::swap(NOTES, o.NOTES);
+  std::swap(HOP_SCHEDULE, o.HOP_SCHEDULE);
+  std::swap(PROVENANCE, o.PROVENANCE);
+  std::swap(COMPUTED_AT, o.COMPUTED_AT);
+  std::swap(PRODUCER_ID, o.PRODUCER_ID);
+  std::swap(SIGNATURE, o.SIGNATURE);
+  std::swap(CANONICAL_JSON_SIGNATURE, o.CANONICAL_JSON_SIGNATURE);
   return *this;
 }
 
@@ -759,6 +1626,12 @@ inline void BEM::UnPackTo(BEMT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = FOOTPRINT_AREA(); _o->FOOTPRINT_AREA = _e; }
   { auto _e = BEAM_CONTOURS(); if (_e) { _o->BEAM_CONTOURS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->BEAM_CONTOURS[_i]) { _e->Get(_i)->UnPackTo(_o->BEAM_CONTOURS[_i].get(), _resolver); } else { _o->BEAM_CONTOURS[_i] = std::unique_ptr<beamContourT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->BEAM_CONTOURS.resize(0); } }
   { auto _e = NOTES(); if (_e) _o->NOTES = _e->str(); }
+  { auto _e = HOP_SCHEDULE(); if (_e) { if(_o->HOP_SCHEDULE) { _e->UnPackTo(_o->HOP_SCHEDULE.get(), _resolver); } else { _o->HOP_SCHEDULE = std::unique_ptr<BEMHopScheduleT>(_e->UnPack(_resolver)); } } else if (_o->HOP_SCHEDULE) { _o->HOP_SCHEDULE.reset(); } }
+  { auto _e = PROVENANCE(); if (_e) { if(_o->PROVENANCE) { _e->UnPackTo(_o->PROVENANCE.get(), _resolver); } else { _o->PROVENANCE = std::unique_ptr<BEMProvenanceT>(_e->UnPack(_resolver)); } } else if (_o->PROVENANCE) { _o->PROVENANCE.reset(); } }
+  { auto _e = COMPUTED_AT(); _o->COMPUTED_AT = _e; }
+  { auto _e = PRODUCER_ID(); if (_e) _o->PRODUCER_ID = _e->str(); }
+  { auto _e = SIGNATURE(); if (_e) { _o->SIGNATURE.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->SIGNATURE.begin()); } }
+  { auto _e = CANONICAL_JSON_SIGNATURE(); if (_e) { _o->CANONICAL_JSON_SIGNATURE.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->CANONICAL_JSON_SIGNATURE.begin()); } }
 }
 
 inline ::flatbuffers::Offset<BEM> CreateBEM(::flatbuffers::FlatBufferBuilder &_fbb, const BEMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -786,6 +1659,12 @@ inline ::flatbuffers::Offset<BEM> BEM::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _FOOTPRINT_AREA = _o->FOOTPRINT_AREA;
   auto _BEAM_CONTOURS = _o->BEAM_CONTOURS.size() ? _fbb.CreateVector<::flatbuffers::Offset<beamContour>> (_o->BEAM_CONTOURS.size(), [](size_t i, _VectorArgs *__va) { return CreatebeamContour(*__va->__fbb, __va->__o->BEAM_CONTOURS[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _NOTES = _o->NOTES.empty() ? 0 : _fbb.CreateString(_o->NOTES);
+  auto _HOP_SCHEDULE = _o->HOP_SCHEDULE ? CreateBEMHopSchedule(_fbb, _o->HOP_SCHEDULE.get(), _rehasher) : 0;
+  auto _PROVENANCE = _o->PROVENANCE ? CreateBEMProvenance(_fbb, _o->PROVENANCE.get(), _rehasher) : 0;
+  auto _COMPUTED_AT = _o->COMPUTED_AT;
+  auto _PRODUCER_ID = _o->PRODUCER_ID.empty() ? 0 : _fbb.CreateString(_o->PRODUCER_ID);
+  auto _SIGNATURE = _o->SIGNATURE.size() ? _fbb.CreateVector(_o->SIGNATURE) : 0;
+  auto _CANONICAL_JSON_SIGNATURE = _o->CANONICAL_JSON_SIGNATURE.size() ? _fbb.CreateVector(_o->CANONICAL_JSON_SIGNATURE) : 0;
   return CreateBEM(
       _fbb,
       _ID,
@@ -804,7 +1683,13 @@ inline ::flatbuffers::Offset<BEM> BEM::Pack(::flatbuffers::FlatBufferBuilder &_f
       _G_OVER_T,
       _FOOTPRINT_AREA,
       _BEAM_CONTOURS,
-      _NOTES);
+      _NOTES,
+      _HOP_SCHEDULE,
+      _PROVENANCE,
+      _COMPUTED_AT,
+      _PRODUCER_ID,
+      _SIGNATURE,
+      _CANONICAL_JSON_SIGNATURE);
 }
 
 inline const BEM *GetBEM(const void *buf) {

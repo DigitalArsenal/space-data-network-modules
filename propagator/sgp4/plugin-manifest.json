@@ -1,8 +1,8 @@
 {
   "pluginId": "com.orbpro.sgp4",
   "name": "SGP4/SDP4 Propagator",
-  "version": "1.1.0",
-  "description": "SGP4/SDP4 analytical orbit propagator for TLE-based satellite tracking, ported from OrbPro main with a canonical SDS PIV/TAB invoke surface.",
+  "version": "1.2.0",
+  "description": "SGP4/SDP4 analytical orbit propagator for OMM element sets, ported from OrbPro main with a canonical SDS PIV/TAB invoke surface.",
   "pluginFamily": "propagator",
   "capabilities": [],
   "externalInterfaces": [],
@@ -110,7 +110,7 @@
     {
       "methodId": "propagate_state",
       "displayName": "Propagate State",
-      "description": "Propagates requested objects to requested epochs and emits FlatBuffer PropagatorState frames.",
+      "description": "Propagates requested objects to requested epochs and emits FlatBuffer PropagatorState frames, in Earth-fixed (default), TEME or ICRF (GCRF) axes. Objects are named by entity handle or, identity-checked, by NORAD catalog number. OMM frames on the omm or records ports are ingested first, as ingest_omm does, so one invocation can carry its element sets.",
       "inputPorts": [
         {
           "portId": "request",
@@ -129,6 +129,42 @@
           "minStreams": 1,
           "maxStreams": 65535,
           "required": true
+        },
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.sds.omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.sds.omm",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false
+        },
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.sds.rec",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.sds.rec",
+                  "fileIdentifier": "$REC",
+                  "rootTypeName": "REC"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false
         }
       ],
       "outputPorts": [
@@ -142,6 +178,89 @@
                   "schemaName": "orbpro.plugins.PropagatorState",
                   "fileIdentifier": "PRST",
                   "rootTypeName": "PropagatorState"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "drain-until-yield"
+    },
+    {
+      "methodId": "propagate_ephemeris",
+      "displayName": "Propagate Ephemeris",
+      "description": "Writes one SDS $OEM per requested object (km, km/s, UTC, Earth-centred TEME or GCRF): one block over a span, or one block per element set of the object's history, each propagated from its own set alone across its neighbouring sets' epochs (the analysis/maneuver-detection input). OMM frames on the omm or records ports are ingested first, as ingest_omm does.",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.propagator.PropagatorBatchRequest",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.propagator.PropagatorBatchRequest",
+                  "fileIdentifier": "PROP",
+                  "rootTypeName": "PropagatorBatchRequest"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true
+        },
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.sds.omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.sds.omm",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false
+        },
+        {
+          "portId": "records",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.sds.rec",
+              "allowedTypes": [
+                {
+                  "schemaName": "orbpro.sds.rec",
+                  "fileIdentifier": "$REC",
+                  "rootTypeName": "REC"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "ephemeris",
+          "acceptedTypeSets": [
+            {
+              "setId": "orbpro.sds.oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
                 }
               ]
             }

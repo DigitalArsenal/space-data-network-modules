@@ -53,7 +53,7 @@ export function fitRequest(c, variant = 'sigmas') {
 }
 
 // Routes one round of queries (one seed, every observation epoch) to HPOP.
-async function answer(hpop, c, queries) {
+export async function answer(hpop, c, queries) {
   const A = api();
   const seed = queries[0].seed.state, parameter = queries[0].parameterValues[0];
   const iso = new Map(c.observations.map(([t, text]) => [t, text]));

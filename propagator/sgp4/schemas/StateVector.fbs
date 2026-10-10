@@ -163,6 +163,25 @@ table PropagatorBatchRequest {
   output_offset: uint32;
   /// Maximum entities to process
   max_count: uint32;
+
+  // Appended (propagator.sgp4 1.2.0). Absent fields keep the 1.1.0 behaviour.
+
+  /// Objects by NORAD catalog number. Each is resolved by its number, so the
+  /// answer is never another object's; an unknown number refuses the request.
+  /// With entity_handles as well, both must name the same objects in order.
+  catalog_numbers: [uint32];
+  /// Axes of the output: ECEF (default, Earth-fixed as before), TEME (SGP4's
+  /// own axes) or ICRF (Earth-centred ICRF axes, that is GCRF).
+  output_frame: ReferenceFrame = ECEF;
+  /// propagate_ephemeris: the span's end as a Julian date (UTC; epoch is its
+  /// start) and the sample step in seconds.
+  stop_epoch: double;
+  step_seconds: double;
+  /// propagate_ephemeris: one data block per element set of each object's
+  /// history, each propagated from its own set alone from the epoch of the
+  /// set neighbour_sets earlier to the epoch of the set neighbour_sets later.
+  element_set_blocks: bool;
+  neighbour_sets: uint32 = 2;
 }
 
 /// Response header for batch propagation

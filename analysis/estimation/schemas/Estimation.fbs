@@ -337,6 +337,61 @@ table PropagationAnswer {
   sensitivity:[double];
 }
 
+// Extension v4 (fit_batch version 2): the types BatchFitOptions and
+// BatchFitResult use.
+enum ParameterTransform : ubyte {
+  IDENTITY = 0,
+  LOGARITHM = 1
+}
+
+enum MeasurementParameterKind : ubyte {
+  // Added to one component of each listed observation, in its units.
+  BIAS = 0,
+  // drift * (t - reference_epoch) added to that component (units/s).
+  DRIFT = 1,
+  // The observations were taken at their time tag plus this (s).
+  TIME_BIAS = 2
+}
+
+table MeasurementParameter {
+  kind:MeasurementParameterKind;
+  // BIAS and DRIFT: the component (lane) of each listed observation.
+  component:ubyte;
+  // The observations it applies to (for example one pass), ascending.
+  observations:[uint] (required);
+  // Initial value, and the a priori mean when sigma > 0.
+  value:double;
+  // A priori 1-sigma; 0: none. A consider parameter needs one.
+  sigma:double;
+  // Held at value; sigma enters consider_covariance.
+  consider:bool = false;
+  // DRIFT: the epoch of zero drift (absent: the earliest listed observation).
+  reference_epoch:EstimationEpoch;
+}
+
+table CovarianceBlock {
+  // The observations it covers, ascending; each in at most one block.
+  observations:[uint] (required);
+  // Row-major covariance of their stacked values ((sum of value counts)^2),
+  // in the axes of covariance_axes.
+  covariance:[double] (required);
+}
+
+table CovarianceRegularization {
+  // Index in covariance_blocks, or -1 for a per-observation covariance.
+  block:int = -1;
+  // The first observation it covers.
+  observation:uint;
+  dimension:uint;
+  // Eigenvalues of the correlation matrix raised to the floor.
+  raised:uint;
+  // Smallest eigenvalue of the correlation matrix as given.
+  minimum_eigenvalue:double;
+  // ||R' - R||_F / ||R||_F, and max |R'ij - Rij| (sigmas are unchanged).
+  frobenius_change:double;
+  maximum_correlation_change:double;
+}
+
 // Module-local append-only extension v2: batch least squares of the state at
 // the configuration epoch plus dynamic parameters (fit_batch).
 table BatchFitOptions {
@@ -359,9 +414,45 @@ table BatchFitOptions {
   // Edit an observation whose whitened residual RMS exceeds this many times
   // the previous iteration's weighted RMS (at least 1); 0 disables editing.
   sigma_edit_threshold:double = 0;
-  // Axes of observation_covariances: 0 the request axes, 1 the radial,
-  // transverse and normal axes of each observed state (POSITION_VELOCITY).
+  // Axes of observation_covariances and covariance_blocks: 0 the request
+  // axes, 1 the radial, transverse and normal axes of each observed state
+  // (POSITION_VELOCITY: the observed state; POSITION_VECTOR: the observed
+  // position and the predicted velocity). Other kinds keep their own
+  // components, so one request can mix them.
   covariance_axes:ubyte = 0;
+
+  // Extension v4 (fit_batch version 2). Every field defaults to version 1:
+  // a version-1 request gives the same bytes.
+  //
+  // Per dynamic parameter, in the order of parameter_kinds (empty: none).
+  // LOGARITHM estimates ln(value), so the parameter stays positive; its
+  // covariance is reported in the parameter itself through the Jacobian.
+  parameter_transforms:[ParameterTransform];
+  // Physical bounds (NaN: none). A step that leaves them is projected onto
+  // the bound, so the propagator never receives a value outside.
+  parameter_lower_bounds:[double];
+  parameter_upper_bounds:[double];
+  // true: a consider parameter, held at its value; its a priori variance
+  // (apriori_covariance, required, uncorrelated with the estimated
+  // parameters) enters consider_covariance.
+  parameter_consider:[bool];
+  // Levenberg-Marquardt damping: a step that does not lower the cost is
+  // refused and retried with ten times the damping.
+  levenberg_marquardt:bool = false;
+  initial_damping:double = 1e-3;
+  // Bias, drift and time-bias states of observation groups.
+  measurement_parameters:[MeasurementParameter];
+  // Covariance blocks across observations (generalized least squares),
+  // replacing their sigmas; exclusive with observation_covariances.
+  covariance_blocks:[CovarianceBlock];
+  // 0 refuse a covariance that is not positive definite (version 1); 1 raise
+  // the eigenvalues of its correlation matrix below correlation_floor to it
+  // and rescale to unit diagonal (the sigmas are unchanged), reported in
+  // BatchFitResult.regularizations.
+  covariance_regularization:ubyte = 0;
+  correlation_floor:double = 1e-3;
+  // Also report the covariances in the RTN axes of the estimated state.
+  rtn_covariance:bool = false;
 }
 
 table BatchFitResult {
@@ -384,6 +475,25 @@ table BatchFitResult {
   // and rejected observation, linearized at the final correction.
   whitened_residuals:[double];
   rejected_observation_indices:[uint];
+
+  // Extension v4. The measurement parameters follow the state and dynamic
+  // parameters in estimate and the covariances: dimension
+  // state_dimension + measurement_parameter_count. A consider parameter's
+  // estimate is its value; in covariance and scaled_covariance its row and
+  // column hold only its a priori variance.
+  measurement_parameter_count:uint;
+  // With consider parameters: the covariance with their effect, P + S Pc S'
+  // and S Pc with S = -P Hx' W Hc (Tapley, Schutz and Born 2004, 6.3).
+  consider_covariance:[double];
+  // Per dynamic parameter, when any has bounds or a transform: 0 inside,
+  // 1 at its lower bound, 2 at its upper bound.
+  bound_status:[ubyte];
+  // rtn_covariance: covariance and consider_covariance with the position
+  // and velocity rows and columns in the RTN axes of the estimated state.
+  covariance_rtn:[double];
+  consider_covariance_rtn:[double];
+  // covariance_regularization: each covariance it changed.
+  regularizations:[CovarianceRegularization];
 }
 
 // Module-local append-only extension v3: the Epistemic Support-Point Filter
