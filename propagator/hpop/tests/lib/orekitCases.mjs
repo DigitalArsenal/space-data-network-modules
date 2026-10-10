@@ -91,6 +91,10 @@ export function requestInputs(c, { tolerance = integratorTolerance(c), maxStep =
   if (c.spaceWeather === 'cssi') exec.FORCES.WEATHER = null;
   if (c.atmosphere === 'JB2008') Object.assign(exec.FORCES, { ATMOSPHERE_MODEL: sds.prwAtmosphereFamily.JB2008, WEATHER: null });
   if (c.tesseralDegree !== undefined) Object.assign(exec.FORCES, { MAXIMUM_TESSERAL_DEGREE: c.tesseralDegree, HAS_MAXIMUM_TESSERAL_DEGREE: true });
+  // Forces added with PRW SDS 1.243.0: Knocke Earth radiation on the
+  // cannonball's Cr*A/m, FES2004 ocean tides.
+  if (c.earthRadiation) Object.assign(exec.FORCES, { EARTH_RADIATION: sds.prwEarthRadiationModel.KNOCKE, EARTH_RADIATION_RESOLUTION_DEG: c.earthRadiationResolutionDeg });
+  if (c.oceanTidesDegree) Object.assign(exec.FORCES, { OCEAN_TIDES: sds.prwOceanTideModel.FES2004, OCEAN_TIDE_MAXIMUM_DEGREE: c.oceanTidesDegree, OCEAN_TIDE_MAXIMUM_ORDER: c.oceanTidesDegree });
   // Jacobian cases: the STM with the VCM parameters appended, analytic, with
   // the density gradient (Orekit differentiates the density too).
   if (c.parameters) Object.assign(exec, {

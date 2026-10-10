@@ -1,4 +1,4 @@
-// Known answer: com.orbpro.hpop 1.1.0, the identity authored in
+// Known answer: com.orbpro.hpop 1.2.0, the identity authored in
 // plugin-manifest.json (sdk_compat.test.mjs proves the artifact embeds exactly
 // that manifest as its $PLG). A PRW VERSION_QUERY sent to the BUILT
 // dist/isomorphic/module.wasm must answer with that identity on every runtime:
@@ -13,14 +13,14 @@ import { decodePluginInvokeResponse } from 'space-data-module-sdk/invoke';
 import { defaultParityLaneRunners, normalizeParityFixture, runParityHarness } from 'space-data-module-sdk/testing';
 import { TYPE, encodePrw, decodePrw } from './lib/prwCodec.mjs';
 
-const EXPECTED = { MODULE_ID: 'com.orbpro.hpop', VERSION: '1.1.0' };
+const EXPECTED = { MODULE_ID: 'com.orbpro.hpop', VERSION: '1.2.0' };
 const wasmPath = fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url));
 
 function dockerUp() {
   try { execFileSync('docker', ['info'], { stdio: 'ignore' }); return true; } catch { return false; }
 }
 
-test('PRW VERSION_QUERY answers com.orbpro.hpop 1.1.0 on every runtime', async () => {
+test('PRW VERSION_QUERY answers com.orbpro.hpop 1.2.0 on every runtime', async () => {
   const authored = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json', import.meta.url), 'utf8'));
   assert.deepEqual({ MODULE_ID: authored.pluginId, VERSION: authored.version }, EXPECTED);
   const lanes = ['browser', 'wasmedge', ...(dockerUp() ? ['docker-wasmedge'] : [])];

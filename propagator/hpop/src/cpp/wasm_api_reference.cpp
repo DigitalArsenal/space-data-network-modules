@@ -1355,7 +1355,9 @@ void plugin_set_tides(int solidEnabled, int oceanEnabled, int poleTideEnabled, i
 
     g_forceSet.useOceanTides = oceanEnabled != 0;
     if (g_forceSet.useOceanTides) {
-        g_forceSet.oceanTides.maxDegree = static_cast<uint16_t>(std::max(2, std::min(oceanMaxDegree, 20)));
+        // FES2004 (IERS 2010 section 6.3), degree and order to 50.
+        g_forceSet.oceanTides.maxDegree = static_cast<uint16_t>(std::max(2, std::min(oceanMaxDegree, 50)));
+        g_forceSet.oceanTides.maxOrder = g_forceSet.oceanTides.maxDegree;
     }
 
     g_forceSet.usePoleTide = poleTideEnabled != 0;
@@ -1373,9 +1375,12 @@ void plugin_set_relativity(int schwarzschild, int lenseThirring, int deSitter) {
 
 /// Set Earth radiation pressure configuration.
 void plugin_set_earth_radiation(int albedoEnabled, int gridRes) {
-    g_forceSet.useEarthAlbedo = albedoEnabled != 0;
-    if (g_forceSet.useEarthAlbedo) {
-        g_forceSet.earthAlbedo.gridResolution = static_cast<uint16_t>(std::max(4, std::min(gridRes, 72)));
+    // Knocke albedo and infrared on the cannonball SRP's Cr*A/m; gridRes
+    // latitude bands are elements of 180/gridRes degrees.
+    g_forceSet.useEarthRadiation = albedoEnabled != 0;
+    if (g_forceSet.useEarthRadiation) {
+        g_forceSet.earthRadiation.resolutionDeg = 180.0 / std::max(4, std::min(gridRes, 72));
+        g_forceSet.earthRadiation.sharesSrpCoefficient = true;
     }
     g_configVersion++;
 }
@@ -1539,7 +1544,7 @@ int plugin_get_acceleration_breakdown(double jd, double* outPtr) {
     g_forceSet.weather = g_weather;
 
     Vec3 sunPos;
-    if (g_forceSet.useSRP || g_forceSet.useEarthAlbedo) {
+    if (g_forceSet.useSRP || g_forceSet.useEarthRadiation) {
         EphemerisState sun = getSunPosition(jd);
         sunPos = sun.position;
     }
@@ -1589,10 +1594,13 @@ int plugin_get_acceleration_breakdown(double jd, double* outPtr) {
     if (g_forceSet.useSolidTides)
         tides += ForceModel::SolidTides(g_state.position, jd, g_forceSet.solidTides);
     if (g_forceSet.useOceanTides)
-        tides += ForceModel::OceanTides(g_state.position, jd, g_forceSet.oceanTides);
+        tides += ForceModel::OceanTideAcceleration(g_state.position, jd, g_forceSet);
 
-    if (g_forceSet.useEarthAlbedo)
-        albedo = ForceModel::EarthAlbedo(g_state.position, sunPos, g_forceSet.earthAlbedo);
+    if (g_forceSet.useEarthRadiation) {
+        ForceModel::EarthRadiationConfig config = g_forceSet.earthRadiation;
+        config.crAreaOverMass = ForceModel::EarthRadiationCoefficient(g_forceSet);
+        albedo = ForceModel::EarthRadiation(g_state.position, sunPos, jd, config);
+    }
 
     if (g_forceSet.useEmpiricalAccel)
         empirical = ForceModel::EmpiricalAcceleration(g_state.position, g_state.velocity,

@@ -1,0 +1,757 @@
+{
+  "ok": true,
+  "fixture": "propagator/hpop PRW Earth radiation and ocean tides",
+  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--hpop-full-force-20261009/propagator/hpop/dist/isomorphic/module.wasm",
+  "artifactSha256": "5b7b6ead6a44678e9cbc3fbcfb57bfaf393c3d9d37ba635ef9677a71147cfc8c",
+  "moduleSha256": "5b7b6ead6a44678e9cbc3fbcfb57bfaf393c3d9d37ba635ef9677a71147cfc8c",
+  "pin": "0.16.4",
+  "lanes": [
+    {
+      "lane": "browser",
+      "runs": 24,
+      "durationMs": 1756
+    },
+    {
+      "lane": "wasmedge",
+      "runs": 24,
+      "durationMs": 19491
+    },
+    {
+      "lane": "docker-wasmedge",
+      "runs": 24,
+      "durationMs": 25928
+    }
+  ],
+  "cases": [
+    "LEO400-A1-field-sun-moon-srp-knocke",
+    "GPS-A1-field-sun-moon-srp-knocke",
+    "LEO400-O1-field-sun-moon-ocean-tides30",
+    "GPS-O1-field-sun-moon-ocean-tides30",
+    "LEO400-C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+    "GPS-C2-field-sun-moon-srp-knocke-ocean-jacobians"
+  ],
+  "comparisons": 138,
+  "failures": [],
+  "runs": [
+    {
+      "lane": "browser",
+      "caseId": "LEO400-A1-field-sun-moon-srp-knocke",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ccecb087aece20d6a31361eb7844a089c20226354d7c7495738faa113e90b137",
+      "stdoutLength": 1192
+    },
+    {
+      "lane": "browser",
+      "caseId": "LEO400-A1-field-sun-moon-srp-knocke",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ccecb087aece20d6a31361eb7844a089c20226354d7c7495738faa113e90b137",
+      "stdoutLength": 1192
+    },
+    {
+      "lane": "browser",
+      "caseId": "LEO400-A1-field-sun-moon-srp-knocke",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ccecb087aece20d6a31361eb7844a089c20226354d7c7495738faa113e90b137",
+      "stdoutLength": 1192
+    },
+    {
+      "lane": "browser",
+      "caseId": "LEO400-A1-field-sun-moon-srp-knocke",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ccecb087aece20d6a31361eb7844a089c20226354d7c7495738faa113e90b137",
+      "stdoutLength": 1192
+    },
+    {
+      "lane": "browser",
+      "caseId": "GPS-A1-field-sun-moon-srp-knocke",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9e50db0ecfa8380903be9370d03b712324a5f56e253601fee8e95d66acfd20fa",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "browser",
+      "caseId": "GPS-A1-field-sun-moon-srp-knocke",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9e50db0ecfa8380903be9370d03b712324a5f56e253601fee8e95d66acfd20fa",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "browser",
+      "caseId": "GPS-A1-field-sun-moon-srp-knocke",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9e50db0ecfa8380903be9370d03b712324a5f56e253601fee8e95d66acfd20fa",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "browser",
+      "caseId": "GPS-A1-field-sun-moon-srp-knocke",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9e50db0ecfa8380903be9370d03b712324a5f56e253601fee8e95d66acfd20fa",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "browser",
+      "caseId": "LEO400-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "84b1a9a9414a460a07dd33daf37eb5f92b462dfd18546957076c8d32ceeaf476",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "browser",
+      "caseId": "LEO400-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "84b1a9a9414a460a07dd33daf37eb5f92b462dfd18546957076c8d32ceeaf476",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "browser",
+      "caseId": "LEO400-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "84b1a9a9414a460a07dd33daf37eb5f92b462dfd18546957076c8d32ceeaf476",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "browser",
+      "caseId": "LEO400-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "84b1a9a9414a460a07dd33daf37eb5f92b462dfd18546957076c8d32ceeaf476",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "browser",
+      "caseId": "GPS-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7b885000feba45acd1b03d51b10fbdb1339bff0498d62b1df09bd34494cd204c",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "browser",
+      "caseId": "GPS-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7b885000feba45acd1b03d51b10fbdb1339bff0498d62b1df09bd34494cd204c",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "browser",
+      "caseId": "GPS-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7b885000feba45acd1b03d51b10fbdb1339bff0498d62b1df09bd34494cd204c",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "browser",
+      "caseId": "GPS-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7b885000feba45acd1b03d51b10fbdb1339bff0498d62b1df09bd34494cd204c",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "browser",
+      "caseId": "LEO400-C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "77f8d4a73c7633d24b4670add02d2e87e2ec5f1335b9890ef113600351b1dbd1",
+      "stdoutLength": 3152
+    },
+    {
+      "lane": "browser",
+      "caseId": "LEO400-C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "77f8d4a73c7633d24b4670add02d2e87e2ec5f1335b9890ef113600351b1dbd1",
+      "stdoutLength": 3152
+    },
+    {
+      "lane": "browser",
+      "caseId": "LEO400-C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "77f8d4a73c7633d24b4670add02d2e87e2ec5f1335b9890ef113600351b1dbd1",
+      "stdoutLength": 3152
+    },
+    {
+      "lane": "browser",
+      "caseId": "LEO400-C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "77f8d4a73c7633d24b4670add02d2e87e2ec5f1335b9890ef113600351b1dbd1",
+      "stdoutLength": 3152
+    },
+    {
+      "lane": "browser",
+      "caseId": "GPS-C2-field-sun-moon-srp-knocke-ocean-jacobians",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fdf5b780ff8c12ecfb96a6a86e80ded481e920a88a9ebd6ea43e8237405f81eb",
+      "stdoutLength": 2384
+    },
+    {
+      "lane": "browser",
+      "caseId": "GPS-C2-field-sun-moon-srp-knocke-ocean-jacobians",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fdf5b780ff8c12ecfb96a6a86e80ded481e920a88a9ebd6ea43e8237405f81eb",
+      "stdoutLength": 2384
+    },
+    {
+      "lane": "browser",
+      "caseId": "GPS-C2-field-sun-moon-srp-knocke-ocean-jacobians",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fdf5b780ff8c12ecfb96a6a86e80ded481e920a88a9ebd6ea43e8237405f81eb",
+      "stdoutLength": 2384
+    },
+    {
+      "lane": "browser",
+      "caseId": "GPS-C2-field-sun-moon-srp-knocke-ocean-jacobians",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fdf5b780ff8c12ecfb96a6a86e80ded481e920a88a9ebd6ea43e8237405f81eb",
+      "stdoutLength": 2384
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "LEO400-A1-field-sun-moon-srp-knocke",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ccecb087aece20d6a31361eb7844a089c20226354d7c7495738faa113e90b137",
+      "stdoutLength": 1192
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "LEO400-A1-field-sun-moon-srp-knocke",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ccecb087aece20d6a31361eb7844a089c20226354d7c7495738faa113e90b137",
+      "stdoutLength": 1192
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "LEO400-A1-field-sun-moon-srp-knocke",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ccecb087aece20d6a31361eb7844a089c20226354d7c7495738faa113e90b137",
+      "stdoutLength": 1192
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "LEO400-A1-field-sun-moon-srp-knocke",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ccecb087aece20d6a31361eb7844a089c20226354d7c7495738faa113e90b137",
+      "stdoutLength": 1192
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "GPS-A1-field-sun-moon-srp-knocke",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9e50db0ecfa8380903be9370d03b712324a5f56e253601fee8e95d66acfd20fa",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "GPS-A1-field-sun-moon-srp-knocke",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9e50db0ecfa8380903be9370d03b712324a5f56e253601fee8e95d66acfd20fa",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "GPS-A1-field-sun-moon-srp-knocke",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9e50db0ecfa8380903be9370d03b712324a5f56e253601fee8e95d66acfd20fa",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "GPS-A1-field-sun-moon-srp-knocke",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9e50db0ecfa8380903be9370d03b712324a5f56e253601fee8e95d66acfd20fa",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "LEO400-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "84b1a9a9414a460a07dd33daf37eb5f92b462dfd18546957076c8d32ceeaf476",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "LEO400-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "84b1a9a9414a460a07dd33daf37eb5f92b462dfd18546957076c8d32ceeaf476",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "LEO400-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "84b1a9a9414a460a07dd33daf37eb5f92b462dfd18546957076c8d32ceeaf476",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "LEO400-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "84b1a9a9414a460a07dd33daf37eb5f92b462dfd18546957076c8d32ceeaf476",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "GPS-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7b885000feba45acd1b03d51b10fbdb1339bff0498d62b1df09bd34494cd204c",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "GPS-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7b885000feba45acd1b03d51b10fbdb1339bff0498d62b1df09bd34494cd204c",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "GPS-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7b885000feba45acd1b03d51b10fbdb1339bff0498d62b1df09bd34494cd204c",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "GPS-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7b885000feba45acd1b03d51b10fbdb1339bff0498d62b1df09bd34494cd204c",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "LEO400-C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "77f8d4a73c7633d24b4670add02d2e87e2ec5f1335b9890ef113600351b1dbd1",
+      "stdoutLength": 3152
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "LEO400-C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "77f8d4a73c7633d24b4670add02d2e87e2ec5f1335b9890ef113600351b1dbd1",
+      "stdoutLength": 3152
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "LEO400-C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "77f8d4a73c7633d24b4670add02d2e87e2ec5f1335b9890ef113600351b1dbd1",
+      "stdoutLength": 3152
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "LEO400-C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "77f8d4a73c7633d24b4670add02d2e87e2ec5f1335b9890ef113600351b1dbd1",
+      "stdoutLength": 3152
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "GPS-C2-field-sun-moon-srp-knocke-ocean-jacobians",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fdf5b780ff8c12ecfb96a6a86e80ded481e920a88a9ebd6ea43e8237405f81eb",
+      "stdoutLength": 2384
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "GPS-C2-field-sun-moon-srp-knocke-ocean-jacobians",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fdf5b780ff8c12ecfb96a6a86e80ded481e920a88a9ebd6ea43e8237405f81eb",
+      "stdoutLength": 2384
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "GPS-C2-field-sun-moon-srp-knocke-ocean-jacobians",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fdf5b780ff8c12ecfb96a6a86e80ded481e920a88a9ebd6ea43e8237405f81eb",
+      "stdoutLength": 2384
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "GPS-C2-field-sun-moon-srp-knocke-ocean-jacobians",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fdf5b780ff8c12ecfb96a6a86e80ded481e920a88a9ebd6ea43e8237405f81eb",
+      "stdoutLength": 2384
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "LEO400-A1-field-sun-moon-srp-knocke",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ccecb087aece20d6a31361eb7844a089c20226354d7c7495738faa113e90b137",
+      "stdoutLength": 1192
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "LEO400-A1-field-sun-moon-srp-knocke",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ccecb087aece20d6a31361eb7844a089c20226354d7c7495738faa113e90b137",
+      "stdoutLength": 1192
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "LEO400-A1-field-sun-moon-srp-knocke",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ccecb087aece20d6a31361eb7844a089c20226354d7c7495738faa113e90b137",
+      "stdoutLength": 1192
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "LEO400-A1-field-sun-moon-srp-knocke",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ccecb087aece20d6a31361eb7844a089c20226354d7c7495738faa113e90b137",
+      "stdoutLength": 1192
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "GPS-A1-field-sun-moon-srp-knocke",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9e50db0ecfa8380903be9370d03b712324a5f56e253601fee8e95d66acfd20fa",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "GPS-A1-field-sun-moon-srp-knocke",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9e50db0ecfa8380903be9370d03b712324a5f56e253601fee8e95d66acfd20fa",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "GPS-A1-field-sun-moon-srp-knocke",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9e50db0ecfa8380903be9370d03b712324a5f56e253601fee8e95d66acfd20fa",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "GPS-A1-field-sun-moon-srp-knocke",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9e50db0ecfa8380903be9370d03b712324a5f56e253601fee8e95d66acfd20fa",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "LEO400-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "84b1a9a9414a460a07dd33daf37eb5f92b462dfd18546957076c8d32ceeaf476",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "LEO400-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "84b1a9a9414a460a07dd33daf37eb5f92b462dfd18546957076c8d32ceeaf476",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "LEO400-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "84b1a9a9414a460a07dd33daf37eb5f92b462dfd18546957076c8d32ceeaf476",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "LEO400-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "84b1a9a9414a460a07dd33daf37eb5f92b462dfd18546957076c8d32ceeaf476",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "GPS-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7b885000feba45acd1b03d51b10fbdb1339bff0498d62b1df09bd34494cd204c",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "GPS-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7b885000feba45acd1b03d51b10fbdb1339bff0498d62b1df09bd34494cd204c",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "GPS-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7b885000feba45acd1b03d51b10fbdb1339bff0498d62b1df09bd34494cd204c",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "GPS-O1-field-sun-moon-ocean-tides30",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7b885000feba45acd1b03d51b10fbdb1339bff0498d62b1df09bd34494cd204c",
+      "stdoutLength": 1136
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "LEO400-C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "77f8d4a73c7633d24b4670add02d2e87e2ec5f1335b9890ef113600351b1dbd1",
+      "stdoutLength": 3152
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "LEO400-C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "77f8d4a73c7633d24b4670add02d2e87e2ec5f1335b9890ef113600351b1dbd1",
+      "stdoutLength": 3152
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "LEO400-C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "77f8d4a73c7633d24b4670add02d2e87e2ec5f1335b9890ef113600351b1dbd1",
+      "stdoutLength": 3152
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "LEO400-C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "77f8d4a73c7633d24b4670add02d2e87e2ec5f1335b9890ef113600351b1dbd1",
+      "stdoutLength": 3152
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "GPS-C2-field-sun-moon-srp-knocke-ocean-jacobians",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fdf5b780ff8c12ecfb96a6a86e80ded481e920a88a9ebd6ea43e8237405f81eb",
+      "stdoutLength": 2384
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "GPS-C2-field-sun-moon-srp-knocke-ocean-jacobians",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fdf5b780ff8c12ecfb96a6a86e80ded481e920a88a9ebd6ea43e8237405f81eb",
+      "stdoutLength": 2384
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "GPS-C2-field-sun-moon-srp-knocke-ocean-jacobians",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fdf5b780ff8c12ecfb96a6a86e80ded481e920a88a9ebd6ea43e8237405f81eb",
+      "stdoutLength": 2384
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "GPS-C2-field-sun-moon-srp-knocke-ocean-jacobians",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fdf5b780ff8c12ecfb96a6a86e80ded481e920a88a9ebd6ea43e8237405f81eb",
+      "stdoutLength": 2384
+    }
+  ]
+}
