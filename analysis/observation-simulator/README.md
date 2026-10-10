@@ -10,7 +10,7 @@ Method `simulate_observations`:
 
 | Port | Direction | Type | Content |
 | --- | --- | --- | --- |
-| `request` | in | `$ACW` | `REQUEST` with `OPERATION` `SIMULATE_OBSERVATIONS` (SDS 1.229.0+) |
+| `request` | in | `$ACW` | `REQUEST` with `OPERATION` `SIMULATE_OBSERVATIONS` (SDS 1.242.0+) |
 | `radar` | out | `$RDO` | One record per radar observation |
 | `optical` | out | `$EOO` | One record per optical or laser-ranging observation |
 | `rf` | out | `$RFO` | One record per passive RF observation |
@@ -46,6 +46,11 @@ The module needs no propagator and computes no visibility:
   - troposphere when `TROPOSPHERE_MODEL` is set, at the true elevation
     under a standard atmosphere.
   Azimuth is measured from north through east. RA/Dec are topocentric GCRF.
+  Radar `DOPPLER` is two-way, as `$RDO` defines it: the echo's shift of the
+  sensor's `TRANSMIT_FREQUENCY_HZ`, twice the one-way shift, -2 f rdot / c
+  to first order. Each `$RDO` carries it with `DOPPLER_FREQUENCY` = f and
+  `DOPPLER_UNC`, so rdot = -c `DOPPLER` / (2 `DOPPLER_FREQUENCY`). A radar
+  `DOPPLER` model without `TRANSMIT_FREQUENCY_HZ` is refused.
 - **Errors, per model and component.** The error is one bias for the run
   (`BIAS + BIAS_SIGMA * N(0, 1)`, per sensor and model) plus noise with
   standard deviation `NOISE_SIGMA`. The noise is a first-order Gauss-Markov
@@ -69,9 +74,10 @@ The module needs no propagator and computes no visibility:
     (pi R^2) (1 au / d_sun)^2], in the Gaia G band of `EOO.MAG`, and must
     not exceed `LIMITING_MAGNITUDE` (0 = no limit).
   - Passive RF: SNR = EIRP - 20 log10(4 pi R f / c) + G/T - 10 log10(k)
-    - 10 log10(B). The reported frequency is f (1 - rdot / c); with a
-    `DOPPLER` error model it is f plus the Doppler as measured, bias and
-    noise included.
+    - 10 log10(B). The reported frequency is f (1 - rdot / c), one-way, as
+    `$RFO` defines it; with a `DOPPLER` error model it is f plus the Doppler
+    as measured, bias and noise included, and `FREQUENCY_UNC` is the model's
+    sigma.
   - Laser ranging: always detected.
 - **False alarms.** A Poisson number per track at
   `FALSE_ALARM_RATE_PER_HOUR`. Each lands at a uniform time within 5 deg of
@@ -96,9 +102,13 @@ The module needs no propagator and computes no visibility:
 - Radar SNR (R^-4, RCS) and the threshold.
 - Optical: the diffuse-sphere magnitude at 90 deg phase (to float32),
   umbra and daylight losses.
+- Radar two-way Doppler: a target receding at 1 km/s, observed 2,000 times
+  at 10 GHz with 20 Hz noise; association's -c `DOPPLER` /
+  (2 `DOPPLER_FREQUENCY`) recovers the range rate, its mean and spread each
+  within 4 standard errors.
 - Passive RF: link-budget SNR and the Doppler-shifted frequency; a
   `DOPPLER` model's bias and noise in `FREQUENCY` over 2,000 observations,
-  each within 4 standard errors.
+  each within 4 standard errors, and its sigma as `FREQUENCY_UNC`.
 - Noise statistics over 2,000 observations: bias, sigma and the
   Gauss-Markov lag-1 autocorrelation, each within 4 standard errors.
 - The exact earliest-deadline-first schedule of two targets with one slot
@@ -110,7 +120,9 @@ The module needs no propagator and computes no visibility:
 - One-way light time with a reception time tag, as the estimator models.
   Monostatic radar and laser ranging report two-way ranges tagged at
   transmit. The difference is metre-level for LEO (station motion over the
-  flight time); simulate with `APPLY_LIGHT_TIME` false to remove it.
+  flight time); simulate with `APPLY_LIGHT_TIME` false to remove it. The
+  two-way Doppler is likewise twice the down-leg shift, not the sum of the
+  up- and down-leg shifts.
 - Troposphere uses a standard atmosphere, not station weather. There is no
   ionosphere, as `ACW` carries no TEC.
 - Radar detection is a deterministic SNR threshold: no Swerling fluctuation,
