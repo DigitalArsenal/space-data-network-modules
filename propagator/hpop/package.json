@@ -1,6 +1,6 @@
 {
   "name": "@orbpro/plugin-hpop",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "OrbPro High-Precision Orbital Propagator Plugin",
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
@@ -35,7 +35,7 @@
     "flatbuffers": "^25.9.23",
     "flatc-wasm": "^26.1.32",
     "space-data-module-sdk": "0.8.25",
-    "spacedatastandards.org": "1.241.0"
+    "spacedatastandards.org": "1.243.0"
   },
   "keywords": [
     "orbpro",

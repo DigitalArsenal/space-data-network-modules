@@ -437,6 +437,45 @@ bool parseForces(const PRWForceConfiguration* in,double epoch,bool hasEarthOrien
             out.useRelativisticCorrection=true;out.relativistic.schwarzschild=out.relativistic.lenseThirring=out.relativistic.deSitter=true;break;
         default:return prwError(error,"unsupported-relativity: Unknown relativity terms.");
     }
+    // Earth radiation pressure (PRW EARTH_RADIATION, SDS 1.243.0): Knocke
+    // albedo and infrared (lib/earth_radiation.h) on an isotropic Cr*A/m, the
+    // request's own or the cannonball's.
+    switch(in->EARTH_RADIATION()) {
+        case prwEarthRadiationModel::NONE:
+            if(in->HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG())
+                return prwError(error,"invalid-forces: EARTH_RADIATION_AREA_OVER_MASS_M2_KG applies to EARTH_RADIATION KNOCKE.");
+            break;
+        case prwEarthRadiationModel::KNOCKE: {
+            const double resolution=in->EARTH_RADIATION_RESOLUTION_DEG();
+            if(!(std::isfinite(resolution)&&resolution>=1&&resolution<=45))
+                return prwError(error,"invalid-forces: EARTH_RADIATION_RESOLUTION_DEG must lie in [1, 45] degrees.");
+            out.useEarthRadiation=true;out.earthRadiation=ForceModel::EarthRadiationConfig();out.earthRadiation.resolutionDeg=resolution;
+            if(in->HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG()) {
+                const double coefficient=in->EARTH_RADIATION_AREA_OVER_MASS_M2_KG();
+                if(!nonnegative(coefficient))return prwError(error,"invalid-forces: EARTH_RADIATION_AREA_OVER_MASS_M2_KG must be finite and non-negative.");
+                out.earthRadiation.crAreaOverMass=coefficient;
+            } else {
+                if(out.srp.model!=ForceModel::SRPModelType::Cannonball)
+                    return prwError(error,"invalid-forces: Earth radiation with a GNSS box-wing needs EARTH_RADIATION_AREA_OVER_MASS_M2_KG.");
+                out.earthRadiation.sharesSrpCoefficient=true;
+            }
+            break;
+        }
+        default:return prwError(error,"unsupported-earth-radiation: Unknown Earth radiation model.");
+    }
+    // Ocean tides (PRW OCEAN_TIDES, SDS 1.243.0): FES2004, IERS Conventions
+    // (2010) section 6.3, to degree and order 50.
+    switch(in->OCEAN_TIDES()) {
+        case prwOceanTideModel::NONE:break;
+        case prwOceanTideModel::FES2004: {
+            if(!hasEarthOrientation)return prwError(error,"eop-data-required: Ocean tides are Earth-fixed; supply earth_orientation.");
+            const int degree=in->OCEAN_TIDE_MAXIMUM_DEGREE(),order=in->OCEAN_TIDE_MAXIMUM_ORDER();
+            if(degree<2||degree>50||order>degree)
+                return prwError(error,"invalid-forces: OCEAN_TIDE_MAXIMUM_DEGREE must lie in [2, 50] and OCEAN_TIDE_MAXIMUM_ORDER not exceed it.");
+            out.useOceanTides=true;out.oceanTides.maxDegree=static_cast<uint16_t>(degree);out.oceanTides.maxOrder=static_cast<uint16_t>(order);break;
+        }
+        default:return prwError(error,"unsupported-ocean-tides: Unknown ocean tide model.");
+    }
     // Constant in-track acceleration (the VCM's in-track thrust): T of RTN.
     if(!in->HAS_IN_TRACK_ACCELERATION_M_S2()&&in->IN_TRACK_ACCELERATION_M_S2()!=0)
         return prwError(error,"invalid-presence: IN_TRACK_ACCELERATION_M_S2 requires HAS_IN_TRACK_ACCELERATION_M_S2.");

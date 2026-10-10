@@ -129,7 +129,7 @@ void densityModes(){
     result("drag_closed_velocity_jacobian",std::sqrt(error/norm),2e-14);
 }
 void rejectionChecks(){
-    ForceModelSet f;f.useEarthAlbedo=true;
+    ForceModelSet f;f.usePoleTide=true;  // no analytic partials (ocean tides and Earth radiation have them)
     bool rejected=false;try{ComputeAccelerationPartials(defaultR,defaultV,jd,f);}catch(const std::invalid_argument&){rejected=true;}
     result("unsupported_force_rejected",rejected?0:1,0);
     f=ForceModelSet();f.useSRP=true;f.srp.model=SRPModelType::BoxWing;

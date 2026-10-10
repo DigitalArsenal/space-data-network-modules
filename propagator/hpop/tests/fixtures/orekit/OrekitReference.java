@@ -49,6 +49,8 @@ import org.orekit.forces.gravity.DeSitterRelativity;
 import org.orekit.forces.gravity.LenseThirringRelativity;
 import org.orekit.forces.gravity.Relativity;
 import org.orekit.forces.gravity.SolidTides;
+import org.orekit.forces.gravity.OceanTides;
+import org.orekit.forces.radiation.KnockeRediffusedForceModel;
 import org.orekit.forces.gravity.potential.TideSystem;
 import org.orekit.forces.drag.DragSensitive;
 import org.orekit.forces.radiation.RadiationSensitive;
@@ -125,6 +127,12 @@ public class OrekitReference {
         // Write the STM and the Jacobian for each active VCM parameter (B,
         // BDOT, AGOM, T) at every sample.
         boolean jacobians = false;
+        // PRW SDS 1.243.0: Earth radiation pressure (Knocke albedo and
+        // infrared, 15 degree elements, on the radiation-pressure spacecraft
+        // itself, so its Cr is one driver for both) and FES2004 ocean tides to
+        // degree and order oceanDegree (IERS 2010 section 6.3, no ocean pole
+        // tide, coefficients evaluated at every call: no interpolation cache).
+        boolean knocke = false; int oceanDegree = 0;
         Forces(String name, int degree, int order, boolean thirdBodies, boolean srp, boolean drag) {
             this.name = name; this.degree = degree; this.order = order; this.thirdBodies = thirdBodies; this.srp = srp; this.drag = drag;
         }
@@ -138,6 +146,8 @@ public class OrekitReference {
         Forces tesseral(int degree) { tesseralDegree = degree; return this; }
         Forces jacobians() { jacobians = true; return this; }
         Forces jb2008(String start) { jb2008 = true; epochUtc = start; return this; }
+        Forces knocke() { knocke = true; return this; }
+        Forces ocean(int degree) { oceanDegree = degree; return this; }
     }
 
     // The field with its tesseral and sectorial terms (order >= 1) above
@@ -298,8 +308,14 @@ public class OrekitReference {
                 new Forces("G1-egm96-36x36-sun-moon", 36, 36, true, false, false).egm96(),
                 new Forces("G2-egm2008-36z24t-sun-moon", 36, 24, true, false, false).tesseral(24),
                 new Forces("C1-field-sun-moon-srp-drag-intrack-bdot-jacobians", 20, 20, true, true, true).inTrack(5e-8).bdot(5e-8).jacobians(),
-                new Forces("J1-field-sun-moon-srp-drag-jb2008", 20, 20, true, true, true).jb2008("2026-06-10T00:00:00")),
+                new Forces("J1-field-sun-moon-srp-drag-jb2008", 20, 20, true, true, true).jb2008("2026-06-10T00:00:00"),
+                new Forces("A1-field-sun-moon-srp-knocke", 20, 20, true, true, false).knocke(),
+                new Forces("O1-field-sun-moon-ocean-tides30", 20, 20, true, false, false).ocean(30),
+                new Forces("O2-field-sun-moon-ocean-tides50", 20, 20, true, false, false).ocean(50),
+                new Forces("C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians", 20, 20, true, true, true).tides().knocke().ocean(30).jacobians()),
             "SSO700", List.of(
+                new Forces("A1-field-sun-moon-srp-knocke", 20, 20, true, true, false).knocke(),
+                new Forces("O1-field-sun-moon-ocean-tides30", 20, 20, true, false, false).ocean(30),
                 new Forces("W1-field-sun-moon-srp-drag-cssi", 20, 20, true, true, true).cssi(),
                 new Forces("J1-field-sun-moon-srp-drag-jb2008", 20, 20, true, true, true).jb2008("2026-06-10T00:00:00")),
             "GPS", List.of(
@@ -308,7 +324,10 @@ public class OrekitReference {
                 new Forces("T1-field-sun-moon-solid-tides", 20, 20, true, false, false).tides(),
                 new Forces("E1-field-sun-moon-eme2000", 20, 20, true, false, false).eme2000(),
                 new Forces("G1-egm96-70x70-sun-moon", 70, 70, true, false, false).egm96(),
-                new Forces("C1-field-sun-moon-srp-intrack-jacobians", 20, 20, true, true, false).inTrack(5e-8).jacobians()));
+                new Forces("C1-field-sun-moon-srp-intrack-jacobians", 20, 20, true, true, false).inTrack(5e-8).jacobians(),
+                new Forces("A1-field-sun-moon-srp-knocke", 20, 20, true, true, false).knocke(),
+                new Forces("O1-field-sun-moon-ocean-tides30", 20, 20, true, false, false).ocean(30),
+                new Forces("C2-field-sun-moon-srp-knocke-ocean-jacobians", 20, 20, true, true, false).knocke().ocean(30).jacobians()));
 
         StringBuilder out = new StringBuilder();
         out.append("{\n \"source\": \"Orekit 13.1 (CS GROUP, Apache-2.0), DormandPrince853 (steps <= 10 s), GCRF; NRLMSISE-00 on mean local solar time\",\n");
@@ -355,9 +374,16 @@ public class OrekitReference {
                     p.addForceModel(new ThirdBodyAttraction(sun));
                     p.addForceModel(new ThirdBodyAttraction(moon));
                 }
+                final IsotropicRadiationSingleCoefficient spacecraft = new IsotropicRadiationSingleCoefficient(AREA, CR);
                 if (f.srp) {
-                    p.addForceModel(new SolarRadiationPressure(AU, SOLAR_PRESSURE, sun, new OneAxisEllipsoid(RE, 0.0, itrf),
-                        new IsotropicRadiationSingleCoefficient(AREA, CR)));
+                    p.addForceModel(new SolarRadiationPressure(AU, SOLAR_PRESSURE, sun, new OneAxisEllipsoid(RE, 0.0, itrf), spacecraft));
+                }
+                if (f.knocke) {
+                    p.addForceModel(new KnockeRediffusedForceModel(sun, spacecraft, Constants.WGS84_EARTH_EQUATORIAL_RADIUS, Math.toRadians(15.0)));
+                }
+                if (f.oceanDegree > 0) {
+                    p.addForceModel(new OceanTides(itrf, FIELD_RADIUS, GM, false, 0.0, 1, f.oceanDegree, f.oceanDegree,
+                        IERSConventions.IERS_2010, TimeScalesFactory.getUT1(IERSConventions.IERS_2010, false)));
                 }
                 if (f.relativity >= 1) p.addForceModel(new Relativity(GM));
                 if (f.relativity >= 2) {
@@ -422,6 +448,8 @@ public class OrekitReference {
                 if (f.relativity != 0 || f.tides || f.inTrack != 0 || f.bdot != 0 || f.cssi)
                     out.append(String.format("   \"relativity\": %d, \"solidTides\": %b, \"inTrackAccelerationMS2\": %.6e, \"dragAreaOverMassRateM2KgS\": %.6e, \"spaceWeather\": \"%s\",\n",
                         f.relativity, f.tides, f.inTrack, f.bdot, f.cssi ? "cssi" : "constant"));
+                if (f.knocke || f.oceanDegree > 0)
+                    out.append(String.format("   \"earthRadiation\": %b, \"earthRadiationResolutionDeg\": %.1f, \"oceanTidesDegree\": %d,\n", f.knocke, 15.0, f.oceanDegree));
                 if (f.jacobians) out.append("   \"parameters\": [\"" + String.join("\", \"", parameterNames) + "\"],\n");
                 StringBuilder stms = new StringBuilder(), jacobians = new StringBuilder();
                 out.append("   \"samples\": [");

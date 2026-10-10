@@ -466,33 +466,27 @@ Vec3 SchwarzschildCorrection(const Vec3& position, const Vec3& velocity, double 
 // 12. Earth Albedo - Earth Radiation Pressure
 // -----------------------------------------------------------------------------
 
-/// Earth albedo configuration (Knocke model)
-/// Reference: Knocke, Ries, Tapley (1988), "Earth radiation pressure
-///   effects on satellites", AIAA/AAS Astrodynamics Conference
-struct EarthAlbedoConfig {
-    double solarFlux{1361.0};       ///< Solar constant at 1 AU (W/m^2)
-    uint16_t gridResolution{18};    ///< Lat/lon grid cells per hemisphere (4-72)
-
-    double mass{1000.0};            ///< Spacecraft mass (kg)
-    double area{10.0};              ///< Cross-sectional area (m^2)
-    double Cr{1.5};                 ///< Reflectivity coefficient
-
-    // Knocke latitude-dependent model coefficients
-    // α(ϕ) = a0 + a1·sin²(ϕ)   (albedo: poles brighter)
-    // ε(ϕ) = e0 + e1·sin²(ϕ)   (emissivity: equator hotter)
-    double a0{0.34};               ///< Mean albedo
-    double a1{0.10};               ///< Albedo latitude variation
-    double e0{0.68};               ///< Mean IR emissivity
-    double e1{-0.07};              ///< Emissivity latitude variation
+/// Earth radiation pressure (albedo and infrared): Knocke, Ries and Tapley
+/// (1988), as Orekit 13.1's KnockeRediffusedForceModel evaluates it
+/// (lib/earth_radiation.h), on an isotropic spacecraft.
+struct EarthRadiationConfig {
+    double resolutionDeg{15.0};          ///< Angular size of the surface elements (degrees)
+    double radiusKm{6378.137};           ///< Earth's equatorial radius for the elements (WGS84)
+    /// Cr*A/m (m^2/kg). `sharesSrpCoefficient`: the cannonball SRP's
+    /// Cr*A/m, which SRP_AREA_OVER_MASS then scales for both.
+    double crAreaOverMass{0.0};
+    bool sharesSrpCoefficient{false};
 };
 
-/// Earth albedo (reflected sunlight) and thermal radiation pressure
-/// @param satPosition Satellite position in geocentric frame (km)
-/// @param sunPosition Sun position (km)
-/// @param config Earth albedo configuration
-/// @return Albedo acceleration (km/s^2)
-Vec3 EarthAlbedo(const Vec3& satPosition, const Vec3& sunPosition,
-                 const EarthAlbedoConfig& config);
+/// The Earth radiation pressure acceleration (km/s^2) at a GCRF position (km),
+/// TDB Julian date, with the Sun at `sunPosition` (km, GCRF).
+Vec3 EarthRadiation(const Vec3& satPosition, const Vec3& sunPosition, double jd,
+                    const EarthRadiationConfig& config);
+
+struct ForceModelSet;
+
+/// The Cr*A/m the force set's Earth radiation acts on (m^2/kg).
+double EarthRadiationCoefficient(const ForceModelSet& forceSet);
 
 // -----------------------------------------------------------------------------
 // 13. Thermal Reradiation - Yarkovsky-like Effect
@@ -563,25 +557,24 @@ Vec3 SolidTides(const Vec3& satPosition, double jd, const SolidTideConfig& confi
 // 15. Ocean Tides - Ocean Loading
 // -----------------------------------------------------------------------------
 
-/// Ocean tide configuration (FES2004 model)
+/// Ocean tides, IERS Conventions (2010) section 6.3: the FES2004 waves'
+/// variations of the normalized Stokes coefficients (lib/fes2004_data.h, eq.
+/// 6.15) at their Doodson arguments, as Orekit 13.1's OceanTides sums them
+/// (without its ocean pole tide), evaluated in the force set's Earth-fixed
+/// axes with GMST from its UT1.
 struct OceanTideConfig {
-    uint16_t maxDegree{20};         ///< Maximum spherical harmonic degree (FES2004: up to 100)
-    bool includeM2{true};           ///< Principal lunar semidiurnal (Doodson 255.555)
-    bool includeS2{true};           ///< Principal solar semidiurnal (Doodson 273.555)
-    bool includeN2{true};           ///< Larger lunar elliptic (Doodson 245.655)
-    bool includeK2{true};           ///< Lunisolar semidiurnal (Doodson 275.555)
-    bool includeK1{true};           ///< Lunar-solar diurnal (Doodson 165.555)
-    bool includeO1{true};           ///< Principal lunar diurnal (Doodson 145.555)
-    bool includeP1{true};           ///< Principal solar diurnal (Doodson 163.555)
-    bool includeQ1{true};           ///< Larger lunar elliptic diurnal (Doodson 135.655)
+    uint16_t maxDegree{30};         ///< Truncation degree (2 to 50)
+    uint16_t maxOrder{30};          ///< Truncation order (<= maxDegree)
 };
 
-/// Ocean tides acceleration perturbation
-/// @param satPosition Satellite position (km)
-/// @param jd Julian date
-/// @param config Ocean tide configuration
-/// @return Ocean tide acceleration (km/s^2)
-Vec3 OceanTides(const Vec3& satPosition, double jd, const OceanTideConfig& config = OceanTideConfig());
+/// The ocean tide field at a TDB Julian date: dC/dS to the configured degree
+/// and order with the set's GM and EGM2008's reference radius. Evaluate it in
+/// the force set's Earth-fixed axes without its central term.
+ExtendedGravityField OceanTideField(double jd, const ForceModelSet& forceSet);
+
+/// Ocean tide acceleration (km/s^2) at a GCRF position (km), TDB Julian date,
+/// in the force set's Earth orientation.
+Vec3 OceanTideAcceleration(const Vec3& satPosition, double jd, const ForceModelSet& forceSet);
 
 // -----------------------------------------------------------------------------
 // 16. Pole Tide - Polar Motion Correction
@@ -866,9 +859,9 @@ struct ForceModelSet {
     bool useRelativisticCorrection{false};
     RelativisticConfig relativistic;
 
-    // Earth radiation
-    bool useEarthAlbedo{false};
-    EarthAlbedoConfig earthAlbedo;
+    // Earth radiation (albedo and infrared)
+    bool useEarthRadiation{false};
+    EarthRadiationConfig earthRadiation;
 
     // Thermal
     bool useThermalReradiation{false};

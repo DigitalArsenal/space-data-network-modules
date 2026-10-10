@@ -15,6 +15,8 @@
 #include "iers2010_tides.h"
 #include "jb2008.h"
 #include "jacchia_roberts.h"
+#include "earth_radiation.h"
+#include "fes2004_data.h"
 #include <cmath>
 #include <algorithm>
 #include <stdexcept>
@@ -897,107 +899,26 @@ Vec3 RelativisticCorrection(const Vec3& position, const Vec3& velocity, double j
 }
 
 // =============================================================================
-// 12. Earth Albedo - Earth Radiation Pressure
+// 12. Earth Radiation Pressure - albedo and infrared (Knocke 1988)
 // =============================================================================
 
-Vec3 EarthAlbedo(const Vec3& satPosition, const Vec3& sunPosition,
-                 const EarthAlbedoConfig& config) {
-    // Knocke, Ries, Tapley (1988) Earth radiation pressure model
-    // Discretizes visible Earth surface into lat/lon grid cells,
-    // computing reflected sunlight (albedo) and thermal IR per cell.
+// Orekit 13.1 KnockeRediffusedForceModel (lib/earth_radiation.h), in metres:
+// the pressure vector times Cr*A/m. The annual term reads the time since
+// 1981-12-22T00:00:00 UTC on TT (TDB differs by under 2 ms).
+Vec3 EarthRadiation(const Vec3& satPosition, const Vec3& sunPosition, double jd,
+                    const EarthRadiationConfig& config) {
+    if (!(config.crAreaOverMass > 0) || satPosition.magnitude() <= config.radiusKm) return Vec3();
+    const double deltaT = (timesys::tdbToTt(jd) - knocke::REFERENCE_EPOCH_JD_TT) * 86400.0;
+    const Vec3 pressure = knocke::pressure<Vec3, double>(satPosition * 1000.0, sunPosition * 1000.0, deltaT,
+                                                         config.resolutionDeg * DEG_TO_RAD, config.radiusKm * 1000.0);
+    return pressure * (config.crAreaOverMass * 1e-3);
+}
 
-    double r = satPosition.magnitude();
-    double alt = r - RE_EARTH;
-    if (alt < 100.0 || alt > 100000.0) return Vec3();
-
-    Vec3 satDir = satPosition.normalized();
-    Vec3 sunDir = sunPosition.normalized();
-
-    // Satellite nadir angle limit (max angle from sub-satellite point that is visible)
-    double sinRho = RE_EARTH / r;
-    double cosRho = std::sqrt(1.0 - sinRho * sinRho);
-
-    // Grid parameters
-    int nLat = std::max(4, std::min(static_cast<int>(config.gridResolution), 72));
-    int nLon = 2 * nLat;
-    double dLat = M_PI / nLat;
-    double dLon = 2.0 * M_PI / nLon;
-
-    // Area-to-mass ratio in km^2/kg
-    double AmRatio = config.area / config.mass * 1e-6;
-    double c_inv = 1.0 / (SPEED_OF_LIGHT * 1000.0); // 1/(m/s -> km/s)
-
-    // Stefan-Boltzmann for IR: Earth equilibrium temperature ~255K
-    // Total IR power = σT⁴ = ~240 W/m². We use emissivity model directly.
-    // IR flux from a cell = ε(ϕ) · σT⁴_earth, where σT⁴ ≈ 240 W/m²
-    static constexpr double EARTH_IR_TOTAL = 240.0; // W/m² average
-
-    Vec3 totalAcc;
-
-    for (int iLat = 0; iLat < nLat; iLat++) {
-        double lat = -M_PI / 2.0 + (iLat + 0.5) * dLat;
-        double cosLat = std::cos(lat);
-        double sinLat = std::sin(lat);
-        double sin2Lat = sinLat * sinLat;
-
-        // Knocke latitude-dependent albedo and emissivity
-        double albedo = config.a0 + config.a1 * sin2Lat;
-        double emissivity = config.e0 + config.e1 * sin2Lat;
-
-        // Cell area on unit sphere = cos(lat) * dLat * dLon
-        double cellArea = cosLat * dLat * dLon; // steradians
-        // Actual area on Earth surface (km^2)
-        double cellAreaKm2 = RE_EARTH * RE_EARTH * cellArea;
-
-        for (int iLon = 0; iLon < nLon; iLon++) {
-            double lon = (iLon + 0.5) * dLon;
-
-            // Cell center position on Earth surface (unit sphere)
-            Vec3 cellNormal;
-            cellNormal.x = cosLat * std::cos(lon);
-            cellNormal.y = cosLat * std::sin(lon);
-            cellNormal.z = sinLat;
-
-            // Check visibility from satellite: cell normal · satellite direction > cos(rho)
-            double cosAngle = cellNormal.dot(satDir);
-            if (cosAngle < cosRho) continue; // cell not visible from satellite
-
-            // Vector from cell to satellite
-            Vec3 cellPos = cellNormal * RE_EARTH;
-            Vec3 cellToSat = satPosition - cellPos;
-            double dist = cellToSat.magnitude();
-            Vec3 cellToSatDir = cellToSat * (1.0 / dist);
-
-            // Cosine of emission angle (cell normal vs direction to satellite)
-            double cosEmit = cellNormal.dot(cellToSatDir);
-            if (cosEmit <= 0.0) continue;
-
-            // --- Albedo (reflected sunlight) ---
-            // Cell is illuminated if Sun is above local horizon
-            double cosSunCell = cellNormal.dot(sunDir);
-            double albedoFlux = 0.0;
-            if (cosSunCell > 0.0) {
-                // Reflected flux = (solar flux) × albedo × cos(sun zenith) × Lambertian
-                // Lambertian: reflected intensity ∝ cos(emission angle) / π
-                albedoFlux = config.solarFlux * albedo * cosSunCell * cosEmit / M_PI;
-            }
-
-            // --- Thermal IR ---
-            // All cells emit IR regardless of illumination (Lambertian)
-            double irFlux = EARTH_IR_TOTAL * emissivity * cosEmit / M_PI;
-
-            // Total flux from this cell at satellite distance
-            // dF = flux × (cell area) / distance² [W/m²]
-            double dFlux = (albedoFlux + irFlux) * cellAreaKm2 / (dist * dist);
-
-            // Radiation pressure acceleration from this cell
-            // Direction: cell-to-satellite (away from cell)
-            double dAccMag = dFlux * c_inv * config.Cr * AmRatio;
-            totalAcc += cellToSatDir * dAccMag;
-        }
-    }
-
-    return totalAcc;
+double EarthRadiationCoefficient(const ForceModelSet& forceSet) {
+    const EarthRadiationConfig& c = forceSet.earthRadiation;
+    if (!c.sharesSrpCoefficient) return c.crAreaOverMass;
+    const SRPForceConfig& s = forceSet.srp;
+    return s.mass > 0 ? s.Cr * s.area / s.mass : 0.0;
 }
 
 // =============================================================================
@@ -1185,178 +1106,52 @@ Vec3 SolidTides(const Vec3& satPosition, double jd, const SolidTideConfig& confi
 }
 
 // =============================================================================
-// 15. Ocean Tides - Ocean Loading
+// 15. Ocean Tides - IERS Conventions (2010) section 6.3, FES2004
 // =============================================================================
 
-/// Ocean tide constituent data: Doodson multipliers and FES2004 prograde/retrograde coefficients
-/// Each constituent produces ΔCnm± and ΔSnm± that vary with Doodson arguments
-struct OceanTideConstituent {
-    const char* name;
-    // Doodson multipliers [τ, s, h, p, N', p_s] (encoded as integers)
-    int doodson[6];
-    // Degree-2 amplitude coefficients (prograde C+, S+ and retrograde C-, S-) in 1e-12
-    // For (n=2,m=0): only C20+, S20+
-    // For (n=2,m=1): C21+, S21+, C21-, S21-
-    // For (n=2,m=2): C22+, S22+, C22-, S22-
-    double C20p, S20p;       // (2,0) prograde
-    double C21p, S21p, C21m, S21m;  // (2,1) prograde/retrograde
-    double C22p, S22p, C22m, S22m;  // (2,2) prograde/retrograde
-};
-
-/// Compute Doodson fundamental arguments from Julian date
-/// Returns [τ, s, h, p, N', ps] in radians
-static void computeDoodsonArguments(double jd, double args[6]) {
-    double T = (jd - 2451545.0) / 36525.0;
-
-    // Mean lunar longitude (s) - IERS 2010
-    double s = 218.3164477 + 481267.88123421 * T
-               - 0.0015786 * T * T + T * T * T / 538841.0;
-
-    // Mean solar longitude (h)
-    double h = 280.46646 + 36000.76983 * T + 0.0003032 * T * T;
-
-    // Mean lunar perigee (p)
-    double p = 83.3532465 + 4069.0137287 * T
-               - 0.0103200 * T * T - T * T * T / 80053.0;
-
-    // Mean lunar node (N')
-    double N = 125.04452 - 1934.13626 * T + 0.00207 * T * T;
-
-    // Mean solar perigee (ps)
-    double ps = 282.93735 + 1.71946 * T + 0.00046 * T * T;
-
-    // GMST (τ = GMST + π - s)
-    double gmst_deg = 280.46061837 + 360.98564736629 * (jd - 2451545.0)
-                      + 0.000387933 * T * T;
-
-    double tau = gmst_deg + 180.0 - s;
-
-    // Convert to radians and normalize
-    args[0] = std::fmod(tau * DEG_TO_RAD, TWO_PI);
-    args[1] = std::fmod(s * DEG_TO_RAD, TWO_PI);
-    args[2] = std::fmod(h * DEG_TO_RAD, TWO_PI);
-    args[3] = std::fmod(p * DEG_TO_RAD, TWO_PI);
-    args[4] = std::fmod(N * DEG_TO_RAD, TWO_PI);
-    args[5] = std::fmod(ps * DEG_TO_RAD, TWO_PI);
+// Orekit 13.1 OceanTidesField / OceanTidesWave.addContribution: each wave's
+// Doodson number gives the multipliers of gamma = GMST + pi and the Delaunay
+// arguments (IERS 2010 eq. 5.43, the solid tides' delaunayArguments), and
+//   dCnm += (C+ + C-) cos(theta) + (S+ + S-) sin(theta)
+//   dSnm += (S+ - S-) cos(theta) - (C+ - C-) sin(theta)
+// summed from degree 2. No ocean pole tide.
+ExtendedGravityField OceanTideField(double jd, const ForceModelSet& forceSet) {
+    const OceanTideConfig& config = forceSet.oceanTides;
+    const int maxDegree = std::max(2, std::min<int>(config.maxDegree, fes2004::MAX_DEGREE));
+    const int maxOrder = std::max(0, std::min<int>(config.maxOrder, maxDegree));
+    ExtendedGravityField field;
+    field.mu = forceSet.mu;
+    field.referenceRadius = EGM2008_RADIUS_KM;
+    field.allocate(maxDegree, maxOrder);
+    const double jdTt = timesys::tdbToTt(jd);
+    const double gamma = gmst2006(ut1At(jd, forceSet), jdTt) + PI;
+    double fundamental[5];  // l, l', F, D, Omega
+    delaunayArguments(jdTt, fundamental);
+    for (int k = 0; k < fes2004::WAVE_COUNT; ++k) {
+        const fes2004::Wave& wave = fes2004::WAVES[k];
+        const int d = wave.doodson;
+        const int cPs = (d % 10) - 5, cNPrime = ((d / 10) % 10) - 5, cP = ((d / 100) % 10) - 5;
+        const int cH = ((d / 1000) % 10) - 5, cS = ((d / 10000) % 10) - 5, cTau = (d / 100000) % 10;
+        const double theta = cTau * gamma - cP * fundamental[0] - cPs * fundamental[1] +
+                             (-cTau + cS + cH + cP + cPs) * fundamental[2] + (-cH - cPs) * fundamental[3] +
+                             (-cTau + cS + cH + cP - cNPrime + cPs) * fundamental[4];
+        const double c = std::cos(theta), s = std::sin(theta);
+        for (int i = 0; i < wave.count; ++i) {
+            const fes2004::Row& row = wave.rows[i];
+            if (row.n > maxDegree || row.m > maxOrder) continue;
+            const double cp = row.cPlus, sp = row.sPlus, cm = row.cMinus, sm = row.sMinus;
+            field.Cnm[row.n][row.m] += ((cp + cm) * c + (sp + sm) * s) * fes2004::UNIT;
+            field.Snm[row.n][row.m] += ((sp - sm) * c - (cp - cm) * s) * fes2004::UNIT;
+        }
+    }
+    return field;
 }
 
-Vec3 OceanTides(const Vec3& satPosition, double jd, const OceanTideConfig& config) {
-    // FES2004-based ocean tide model
-    // Computes time-varying ΔCnm/ΔSnm from tidal constituents using Doodson arguments
-    // Then converts to gravity acceleration perturbation
-
-    Vec3 totalAcc;
-    double r = satPosition.magnitude();
-    if (r < RE_EARTH) return Vec3();
-
-    // Compute Doodson fundamental arguments
-    double doodArgs[6];
-    computeDoodsonArguments(jd, doodArgs);
-
-    // FES2004 ocean tide coefficients for degree 2 (in units of 1e-12)
-    // Format: name, Doodson[6], C20p/S20p, C21p/S21p/C21m/S21m, C22p/S22p/C22m/S22m
-    // These are representative amplitudes from FES2004 model
-    // Doodson encoding: [τ, s, h, p, N', ps] multiplicative integers
-
-    struct TideEntry {
-        int doodson[6];     // Doodson multipliers
-        double dC20, dC21, dS21, dC22, dS22;  // Amplitude (normalized, ×1e-12)
-        bool enabled;
-    };
-
-    // Major tide constituents with their Doodson arguments and FES2004 C20 amplitudes
-    TideEntry tides[] = {
-        // M2: Principal lunar semidiurnal  τ=2 s=0 h=0 p=0 N'=0 ps=0
-        {{2, 0, 0, 0, 0, 0}, -30.16, 0.0, 0.0, -2.76, -0.24, config.includeM2},
-        // S2: Principal solar semidiurnal  τ=2 s=2 h=-2 p=0 N'=0 ps=0
-        {{2, 2, -2, 0, 0, 0}, -12.94, 0.0, 0.0, -1.25, -0.57, config.includeS2},
-        // N2: Larger lunar elliptic  τ=2 s=-1 h=0 p=1 N'=0 ps=0
-        {{2, -1, 0, 1, 0, 0}, -6.33, 0.0, 0.0, -0.53, -0.08, config.includeN2},
-        // K2: Lunisolar semidiurnal  τ=2 s=2 h=0 p=0 N'=0 ps=0
-        {{2, 2, 0, 0, 0, 0}, -3.51, 0.0, 0.0, -0.37, -0.15, config.includeK2},
-        // K1: Lunar-solar diurnal  τ=1 s=0 h=1 p=0 N'=0 ps=0
-        {{1, 0, 1, 0, 0, 0}, -0.45, -4.72, 0.91, 0.0, 0.0, config.includeK1},
-        // O1: Principal lunar diurnal  τ=1 s=-1 h=0 p=0 N'=0 ps=0
-        {{1, -1, 0, 0, 0, 0}, 0.94, -3.42, 0.75, 0.0, 0.0, config.includeO1},
-        // P1: Principal solar diurnal  τ=1 s=1 h=-2 p=0 N'=0 ps=0
-        {{1, 1, -2, 0, 0, 0}, -0.22, -1.54, 0.31, 0.0, 0.0, config.includeP1},
-        // Q1: Larger lunar elliptic diurnal  τ=1 s=-2 h=0 p=1 N'=0 ps=0
-        {{1, -2, 0, 1, 0, 0}, 0.19, -0.64, 0.15, 0.0, 0.0, config.includeQ1},
-    };
-
-    // Satellite position in spherical coordinates
-    double sinLat = satPosition.z / r;
-    double xyDist = std::sqrt(satPosition.x * satPosition.x + satPosition.y * satPosition.y);
-    double cosLat = xyDist / r;
-    double lon = std::atan2(satPosition.y, satPosition.x);
-
-    double Re = RE_EARTH;
-    double Re_r = Re / r;
-    double Re_r2 = Re_r * Re_r;
-    double mu_r2 = MU_EARTH / (r * r);
-
-    // Associated Legendre functions at satellite
-    double P20 = 0.5 * (3.0 * sinLat * sinLat - 1.0);
-    double P21 = 3.0 * sinLat * cosLat;
-    double P22 = 3.0 * cosLat * cosLat;
-
-    double dP20 = -3.0 * sinLat * cosLat;
-    double dP21 = 3.0 * (cosLat * cosLat - sinLat * sinLat);
-    double dP22 = -6.0 * sinLat * cosLat;
-
-    double cosLon = std::cos(lon);
-    double sinLon = std::sin(lon);
-    double cos2Lon = std::cos(2.0 * lon);
-    double sin2Lon = std::sin(2.0 * lon);
-    double safe_cosLat = std::max(cosLat, 1e-10);
-
-    for (const auto& tide : tides) {
-        if (!tide.enabled) continue;
-
-        // Compute tidal argument θ = Σ(doodson[i] * doodArgs[i])
-        double theta = 0.0;
-        for (int i = 0; i < 6; i++) {
-            theta += tide.doodson[i] * doodArgs[i];
-        }
-        double cosTheta = std::cos(theta);
-        double sinTheta = std::sin(theta);
-
-        // Time-varying Stokes coefficient changes (×1e-12)
-        double dC20 = tide.dC20 * 1e-12 * cosTheta;
-        double dC21 = tide.dC21 * 1e-12 * cosTheta - tide.dS21 * 1e-12 * sinTheta;
-        double dS21 = tide.dC21 * 1e-12 * sinTheta + tide.dS21 * 1e-12 * cosTheta;
-        double dC22 = tide.dC22 * 1e-12 * cosTheta - tide.dS22 * 1e-12 * sinTheta;
-        double dS22 = tide.dC22 * 1e-12 * sinTheta + tide.dS22 * 1e-12 * cosTheta;
-
-        // Radial acceleration: -μ/r² (n+1)(Re/r)^n Σ [ΔCnm cos(mλ) + ΔSnm sin(mλ)] Pnm
-        double ar = -mu_r2 * Re_r2 * 3.0 * (
-            dC20 * P20 +
-            (dC21 * cosLon + dS21 * sinLon) * P21 +
-            (dC22 * cos2Lon + dS22 * sin2Lon) * P22
-        );
-
-        // Latitude acceleration
-        double aphi = mu_r2 * Re_r2 * (
-            dC20 * dP20 +
-            (dC21 * cosLon + dS21 * sinLon) * dP21 +
-            (dC22 * cos2Lon + dS22 * sin2Lon) * dP22
-        );
-
-        // Longitude acceleration
-        double alon = mu_r2 / safe_cosLat * Re_r2 * (
-            1.0 * (-dC21 * sinLon + dS21 * cosLon) * P21 +
-            2.0 * (-dC22 * sin2Lon + dS22 * cos2Lon) * P22
-        );
-
-        // Spherical to Cartesian
-        Vec3 rHat(cosLat * cosLon, cosLat * sinLon, sinLat);
-        Vec3 phiHat(-sinLat * cosLon, -sinLat * sinLon, cosLat);
-        Vec3 lonHat(-sinLon, cosLon, 0.0);
-
-        totalAcc += rHat * ar + phiHat * aphi + lonHat * alon;
-    }
-
-    return totalAcc;
+Vec3 OceanTideAcceleration(const Vec3& satPosition, double jd, const ForceModelSet& forceSet) {
+    if (satPosition.magnitude() < RE_EARTH) return Vec3();
+    const EarthAxes axes = EarthAxesAt(jd, forceSet);
+    const ExtendedGravityField field = OceanTideField(jd, forceSet);
+    return axes.inertial(computeExtendedGravity(axes.fixed(satPosition), field).zonalHarmonics);
 }
 
 // =============================================================================
@@ -1814,7 +1609,7 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double
 
     // Get Sun position if needed and not provided
     Vec3 sunPos;
-    if (forceSet.useSRP || forceSet.useEarthAlbedo || forceSet.useThermalReradiation) {
+    if (forceSet.useSRP || forceSet.useEarthRadiation || forceSet.useThermalReradiation) {
         if (forceSet.sunPositionProvided) {
             sunPos = forceSet.sunPosition;
         } else {
@@ -1865,9 +1660,11 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double
                                            forceSet.relativistic, &axes);
     }
 
-    // 12. Earth Albedo
-    if (forceSet.useEarthAlbedo) {
-        totalAcc += EarthAlbedo(position, sunPos, forceSet.earthAlbedo);
+    // 12. Earth radiation pressure (albedo and infrared)
+    if (forceSet.useEarthRadiation) {
+        EarthRadiationConfig config = forceSet.earthRadiation;
+        config.crAreaOverMass = EarthRadiationCoefficient(forceSet);
+        totalAcc += EarthRadiation(position, sunPos, jd, config);
     }
 
     // 13. Thermal Reradiation
@@ -1882,7 +1679,7 @@ Vec3 ComputeTotalAcceleration(const Vec3& position, const Vec3& velocity, double
 
     // 15. Ocean Tides
     if (forceSet.useOceanTides) {
-        totalAcc += OceanTides(position, jd, forceSet.oceanTides);
+        totalAcc += OceanTideAcceleration(position, jd, forceSet);
     }
 
     // 16. Pole Tide
@@ -2055,9 +1852,8 @@ ForceModelSet CreateHighFidelityForceModel(double mass, double area) {
     fs.relativistic.lenseThirring = true;
     fs.relativistic.deSitter = true;
 
-    fs.useEarthAlbedo = true;
-    fs.earthAlbedo.mass = mass;
-    fs.earthAlbedo.area = area;
+    fs.useEarthRadiation = true;
+    fs.earthRadiation.sharesSrpCoefficient = true;
 
     fs.useSolidTides = true;
     fs.solidTides.includeSunTide = true;
