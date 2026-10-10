@@ -344,16 +344,20 @@ void segmentRange(const Object& o, const TTEpoch& start, const TTEpoch& end, lon
     last = std::max(first, static_cast<long long>(std::ceil(b)) - 1);
 }
 
-std::unique_ptr<PRWFitQualityT> sampledResidual(double positionM, double velocityMS) {
+// A segment's record carries its residuals only; the method is stated once
+// per source (the PPE comment) and per prepared set (its quality), so the
+// export does not repeat it every 300 s.
+std::unique_ptr<PRWFitQualityT> sampledResidual(double positionM, double velocityMS, bool withMethod) {
     auto q = std::make_unique<PRWFitQualityT>();
     q->EVIDENCE_KIND = prwQualityEvidence::SAMPLED_RESIDUAL;
     q->HAS_MAXIMUM_POSITION_ERROR_M = true;
     q->MAXIMUM_POSITION_ERROR_M = positionM;
     q->HAS_MAXIMUM_VELOCITY_ERROR_M_S = true;
     q->MAXIMUM_VELOCITY_ERROR_M_S = velocityMS;
-    q->METHOD = "Degree-12 Chebyshev series at the Gauss-Lobatto nodes of 300 s TT segments, from the integrator's dense output "
-                "(Hermite interpolation of position, velocity and acceleration at four accepted steps); the largest difference "
-                "from the integrator's accepted states inside the segments.";
+    if (withMethod)
+        q->METHOD = "Degree-12 Chebyshev series at the Gauss-Lobatto nodes of 300 s TT segments, from the integrator's dense output "
+                    "(Hermite interpolation of position, velocity and acceleration at four accepted steps); the largest difference "
+                    "from the integrator's accepted states inside the segments.";
     return q;
 }
 
@@ -550,7 +554,7 @@ bool ResidentDynamics::describe(size_t i, const TTEpoch& start, const TTEpoch& e
         record->VEL_COEFF_Y.assign(s.c[4], s.c[4] + CHEBY_NPTS);
         record->VEL_COEFF_Z.assign(s.c[5], s.c[5] + CHEBY_NPTS);
         ppe.POSITION_RECORDS.push_back(std::move(record));
-        quality.push_back(sampledResidual(s.positionM, s.velocityMS));
+        quality.push_back(sampledResidual(s.positionM, s.velocityMS, false));
     }
     ppe.TIME_SYSTEM = timingStandard::TT;
     ppe.START_TIME = formatIsoSeconds(o.segmentStart(first));
@@ -564,6 +568,6 @@ bool ResidentDynamics::describe(size_t i, const TTEpoch& start, const TTEpoch& e
     return true;
 }
 
-std::unique_ptr<PRWFitQualityT> ResidentDynamics::quality(double positionM, double velocityMS) { return sampledResidual(positionM, velocityMS); }
+std::unique_ptr<PRWFitQualityT> ResidentDynamics::quality(double positionM, double velocityMS) { return sampledResidual(positionM, velocityMS, true); }
 
 } // namespace hpop

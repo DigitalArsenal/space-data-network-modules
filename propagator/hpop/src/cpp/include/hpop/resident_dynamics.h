@@ -54,7 +54,7 @@ public:
     bool residuals(size_t object, const TTEpoch& start, const TTEpoch& end, double& positionM, double& velocityMS, std::string& error);
     // The PPE source name: the module identity.
     static std::string sourceName();
-    // The SAMPLED_RESIDUAL quality of fitted segments (m, m/s).
+    // The SAMPLED_RESIDUAL quality of a prepared set (m, m/s), with the method.
     static std::unique_ptr<PRWFitQualityT> quality(double positionM, double velocityMS);
 
     struct Object;

@@ -104,6 +104,7 @@ test('exported PPE interpolates the dense output and the execution path within 1
     INSTANCE: instance(), START_EPOCH: isoInstant(start, 'TT'), DURATION_SECONDS: seconds, PROFILE: 'conjunction-screening' }))] }), 'prepare')[0].PREPARE_RESULT;
   assert.equal(prepared.COVERAGE_COMPLETE, true);
   assert.equal(prepared.QUALITY.EVIDENCE_KIND, sds.prwQualityEvidence.SAMPLED_RESIDUAL);
+  assert.match(prepared.QUALITY.METHOD, /Chebyshev/);
   assert.ok(prepared.QUALITY.HAS_MAXIMUM_POSITION_ERROR_M && prepared.QUALITY.MAXIMUM_POSITION_ERROR_M <= 1e-3, `prepare quality ${prepared.QUALITY.MAXIMUM_POSITION_ERROR_M} m`);
   const describe = { methodId: 'describe_trajectory_segments', inputs: [frame('request', 'DESCRIBE_REQUEST', makeTable('PRWDescribeRequest', {
     INSTANCE: instance(), SEGMENT_SET_HANDLE: prepared.SEGMENT_SET_HANDLE }))] };
@@ -122,6 +123,7 @@ test('exported PPE interpolates the dense output and the execution path within 1
     let reported = 0, samples = 0;
     for (const q of source.SEGMENT_QUALITY) {
       assert.equal(q.EVIDENCE_KIND, sds.prwQualityEvidence.SAMPLED_RESIDUAL);
+      assert.equal(q.METHOD, null);   // stated once, in the PPE comment and the prepare result
       reported = Math.max(reported, q.MAXIMUM_POSITION_ERROR_M);
     }
     let worstDense = 0, worstExecution = 0;

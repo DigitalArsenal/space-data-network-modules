@@ -519,7 +519,10 @@ and km/s.
   above degree 35 to the fit's error, centimetres. Each segment's
   `PRWFitQuality` is `SAMPLED_RESIDUAL`: its largest difference from the
   integrator's accepted states inside it; the prepare result carries the
-  largest over the set. `EPHEMERIS_SOURCE` is `com.orbpro.hpop@1.3.0`.
+  largest over the set. The method is stated once per source (the PPE
+  comment) and in the prepare result's quality, not in each segment's
+  record: a segment is about 0.8 KB, a day about 236 KB per object.
+  `EPHEMERIS_SOURCE` is `com.orbpro.hpop@1.3.0`.
   Measured (`tests/prw_resident_configured.test.mjs`, four days, PPE
   evaluated every 61 s): within 0.31 mm of the dense output in LEO and 0.18 mm
   for Molniya (GPS and GEO under 0.1 µm); within 0.08 mm of the execution path;
