@@ -12,10 +12,12 @@ import { composeErfaTranslationUnit } from '../../foundation/frames/erfa-amalgam
 const root = fileURLToPath(new URL('.', import.meta.url));
 const jsonHeader = path.resolve(root, '../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp');
 const jb2008Header = path.resolve(root, '../../propagator/hpop/lib/jb2008.h');
+const egm2008Header = path.resolve(root, '../../propagator/hpop/lib/egm2008_data.h');
 const sgp4Src = path.resolve(root, '../../propagator/sgp4/src/cpp/src');
 const erfa = await composeErfaTranslationUnit();
 const json = await fs.readFile(jsonHeader, 'utf8');
 const jb2008 = await fs.readFile(jb2008Header, 'utf8');
+const egm2008 = await fs.readFile(egm2008Header, 'utf8');
 // SGP4.cpp carries Latin-1 bytes in comments and defines a `pi` macro that
 // must not leak past it.
 const sgp4Header = await fs.readFile(path.join(sgp4Src, 'SGP4.h'), 'latin1');
@@ -26,7 +28,7 @@ const outputPath = path.join(root, 'dist/isomorphic/module.wasm');
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 const result = await compileModuleFromSource({
   manifest,
-  sourceCode: ['#include "space_data_module_invoke.h"', '#define JSON_NOEXCEPTION 1', json, erfa.source, jb2008, sgp4Header, sgp4Source, '#undef pi', source].join('\n\n'),
+  sourceCode: ['#include "space_data_module_invoke.h"', '#define JSON_NOEXCEPTION 1', json, erfa.source, jb2008, egm2008, sgp4Header, sgp4Source, '#undef pi', source].join('\n\n'),
   language: 'c++',
   outputPath,
   threadModel: 'single-thread',
