@@ -3325,6 +3325,7 @@ struct EspfOptionsT : public ::flatbuffers::NativeTable {
   uint8_t mode_weighting = 0;
   bool gaussian_limit = false;
   double pcrb_trigger = 1.0;
+  double regeneration_scale = 1.0;
 };
 
 struct EspfOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -3366,7 +3367,8 @@ struct EspfOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_DECAY_RATE = 66,
     VT_MODE_WEIGHTING = 68,
     VT_GAUSSIAN_LIMIT = 70,
-    VT_PCRB_TRIGGER = 72
+    VT_PCRB_TRIGGER = 72,
+    VT_REGENERATION_SCALE = 74
   };
   uint8_t smolyak_level() const {
     return GetField<uint8_t>(VT_SMOLYAK_LEVEL, 0);
@@ -3473,6 +3475,9 @@ struct EspfOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   double pcrb_trigger() const {
     return GetField<double>(VT_PCRB_TRIGGER, 1.0);
   }
+  double regeneration_scale() const {
+    return GetField<double>(VT_REGENERATION_SCALE, 1.0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -3511,6 +3516,7 @@ struct EspfOptions FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint8_t>(verifier, VT_MODE_WEIGHTING, 1) &&
            VerifyField<uint8_t>(verifier, VT_GAUSSIAN_LIMIT, 1) &&
            VerifyField<double>(verifier, VT_PCRB_TRIGGER, 8) &&
+           VerifyField<double>(verifier, VT_REGENERATION_SCALE, 8) &&
            verifier.EndTable();
   }
   EspfOptionsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -3627,6 +3633,9 @@ struct EspfOptionsBuilder {
   void add_pcrb_trigger(double pcrb_trigger) {
     fbb_.AddElement<double>(EspfOptions::VT_PCRB_TRIGGER, pcrb_trigger, 1.0);
   }
+  void add_regeneration_scale(double regeneration_scale) {
+    fbb_.AddElement<double>(EspfOptions::VT_REGENERATION_SCALE, regeneration_scale, 1.0);
+  }
   explicit EspfOptionsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -3674,8 +3683,10 @@ inline ::flatbuffers::Offset<EspfOptions> CreateEspfOptions(
     double decay_rate = 0.05,
     uint8_t mode_weighting = 0,
     bool gaussian_limit = false,
-    double pcrb_trigger = 1.0) {
+    double pcrb_trigger = 1.0,
+    double regeneration_scale = 1.0) {
   EspfOptionsBuilder builder_(_fbb);
+  builder_.add_regeneration_scale(regeneration_scale);
   builder_.add_pcrb_trigger(pcrb_trigger);
   builder_.add_decay_rate(decay_rate);
   builder_.add_radius_gain_contract(radius_gain_contract);
@@ -6003,6 +6014,7 @@ inline void EspfOptions::UnPackTo(EspfOptionsT *_o, const ::flatbuffers::resolve
   { auto _e = mode_weighting(); _o->mode_weighting = _e; }
   { auto _e = gaussian_limit(); _o->gaussian_limit = _e; }
   { auto _e = pcrb_trigger(); _o->pcrb_trigger = _e; }
+  { auto _e = regeneration_scale(); _o->regeneration_scale = _e; }
 }
 
 inline ::flatbuffers::Offset<EspfOptions> CreateEspfOptions(::flatbuffers::FlatBufferBuilder &_fbb, const EspfOptionsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -6048,6 +6060,7 @@ inline ::flatbuffers::Offset<EspfOptions> EspfOptions::Pack(::flatbuffers::FlatB
   auto _mode_weighting = _o->mode_weighting;
   auto _gaussian_limit = _o->gaussian_limit;
   auto _pcrb_trigger = _o->pcrb_trigger;
+  auto _regeneration_scale = _o->regeneration_scale;
   return orbpro::estimation::CreateEspfOptions(
       _fbb,
       _smolyak_level,
@@ -6084,7 +6097,8 @@ inline ::flatbuffers::Offset<EspfOptions> EspfOptions::Pack(::flatbuffers::FlatB
       _decay_rate,
       _mode_weighting,
       _gaussian_limit,
-      _pcrb_trigger);
+      _pcrb_trigger,
+      _regeneration_scale);
 }
 
 inline SetMembershipOptionsT *SetMembershipOptions::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {

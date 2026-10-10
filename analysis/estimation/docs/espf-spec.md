@@ -136,9 +136,10 @@ The Algorithm of E25 §12 with the details of §§6–11.
     S_k = S₀(1 + λ_s(S̄_k − S_ref)); σ_raw = σ₀ exp(−λ_d D_k + λ_s(S_k − S_ref));
     σ_k = clamp(σ_raw, σ_min, σ_max) exp(−λ_t τ), τ the number of assimilated
     observations.
-12. **Kernel and regeneration** (§10.4–10.5): χ₀ = x̂, χ_{±i} = x̂ ± σ_k L_{:,i}
-    (ζᵢ = 1, G16), LLᵀ = Π_k; possibilities exp(−σ_k²/(2r_k²)) from the
-    kernel π(x) = exp(−(x − x̂)ᵀΠ_k⁻¹(x − x̂)/(2r_k²)).
+12. **Kernel and regeneration** (§10.4–10.5): χ₀ = x̂, χ_{±i} = x̂ ± ζσ_k L_{:,i}
+    (ζ = `regeneration_scale`, 1 by default, G16), LLᵀ = Π_k; possibilities
+    exp(−ζ²σ_k²/(2r_k²)) from the kernel π(x) = exp(−(x − x̂)ᵀΠ_k⁻¹(x −
+    x̂)/(2r_k²)); the carried shape (ζσ_k)²Π_k is the points' MVEE.
 
 **Gaussian limit** (`gaussian_limit`, `step_gaussian`; E25 Appendix B): the
 unscented transform's points and weights (α, β, κ as the UKF's options),
@@ -200,7 +201,7 @@ not collision probabilities; finite supports screen only what they sample.
 | G13 | E25 gives no values for λ_d, λ_s, S_ref, S₀, λ±, σ₀, σ_min, σ_max, η, ε_c or S_threshold, and gives λ_t = 0.05 with τ the measurement count (§10.3.4; Appendix A: γ_t = exp(−0.05τ)). With τ the count, σ_k → 0 within about 100 observations and the support collapses. | Stated values as stated; the unstated gains neutral (0, σ₀ = 1, no clamp); r = 3 (the ±3σ bands of §14.1, η = 1 − e^{−4.5}). With these the recursion contracts by σ_k² and by pruning at every step and has no stated re-expansion (observed in `tests/espf.test.mjs`: 2.1 km to 2 mm in 12 steps). E10 pre-registers a tuned variant. |
 | G14 | §9: wᵢ = πᵢNᵢ / Σ πⱼNⱼ with Nᵢ undefined; the singleton necessity 1 − max_{j≠i} πⱼ gives zero weights whenever two points have π = 1. | Nᵢ = exp(−½ eᵢᵀΠ_e⁻¹eᵢ), the graded residual possibility π_e of §8.3 ("centered on ... measurement alignment"); the singleton necessity (argmax) and the compatibility are options. |
 | G15 | §10.3.3: S̄_k "average surprisal across retained points"; retained points have Comp = 1, so S̄ ≈ 0 always. | The mean over all predicted points. |
-| G16 | §10.5: χ = x̂ ± σ_k L_{k,i} ∘ ζᵢ with ζᵢ undefined. | ζᵢ = 1: column i of the Cholesky factor. |
+| G16 | §10.5: χ = x̂ ± σ_k L_{k,i} ∘ ζᵢ with ζᵢ undefined. With ζᵢ = 1 the 1/(2n) spread (§10.1) of the regenerated points is σ_k²Π_k/n: every cycle shrinks the spread n-fold before any evidence, the main cause of the collapse in G13. | ζᵢ = 1 (column i of the Cholesky factor) by default; `regeneration_scale` ζ sets ζᵢ = ζ, and ζ = √n makes the regenerated spread σ_k²Π_k (the unscented scaling of the appendix's Gaussian limit with λ = 0). |
 | G17 | §11.3.1: Π + εI, ε = 10⁻⁶, is dimensionally inconsistent for position and velocity (in the paper's km and km/s it is 1 m² and 1 (m/s)², the latter not small). | Π + ε diag(Π), ε = 10⁻⁶; the absolute form is an option. |
 | G18 | HJ §6: the σ controller "triggers expansion" as contraction approaches the PCRB floor, with rates r₊ = 1.15, r₋ = 0.97; trigger and bounds are not given. Because S̄ ≤ 1 (the capacity π is at most 1), I saturates at 1 − e⁻¹ as soon as one fully possible hypothesis has q ≥ 2, and the floor is then fixed at −n/2. | Expand when ½Δ log det MVEE ≤ κ (n/2) log(1 − I), else contract; κ = `pcrb_trigger` (1: reaching the floor; "approaching" is a fraction κ < 1); σ ∈ [0.1, 1], σ₀ = 1. OPT's Table 1 shows exactly 0.97 per step in nominal tracking. |
 | G19 | Regenerated possibilities: HJ Thm. 1 (iii) resets Φ = 0; OPT §2 extends possibilities by a max–min kernel with an unspecified proximity kernel κ. | Reset (HJ, v3). |
@@ -239,6 +240,7 @@ not collision probabilities; finite supports screen only what they sample.
 | ε regularization (2025) | 10⁻⁶ relative | E25 §11.3.1 value, relative form (G17) |
 | λ_t (2025) | 0.05 | E25 §10.3.4 and Appendix A |
 | σ₀, σ_min, σ_max, λ_d, λ_s, S_ref, S₀, λ₊, λ₋ (2025) | 1, 0, ∞, 0, 0, 0, 1, 0, 0 | unstated; neutral (G13) |
+| ζ (`regeneration_scale`, 2025) | 1 | choice (G16) |
 | Mode weights (2025) | πᵢ exp(−½dᵢ²) | choice (G14) |
 | UKF α, β, κ (Gaussian limit) | 1, 2, 0 | the module's UKF defaults |
 
@@ -254,6 +256,7 @@ not collision probabilities; finite supports screen only what they sample.
 | T6 | Set-membership filter: the truth stays inside the bound when the noise bound holds; an impossible observation is flagged | Schweppe 1968 | `tests/espf.test.mjs` | pass |
 | T7 | Screening: Π, N and α-cut ranges by definition; the encounter-plane closed forms; brute force | definitions; closed forms | conjunction-assessment `tests/possibilityScreening.test.mjs` | exact / 1e-12 / 1e-8 |
 | T8 | Measurements: `LINEAR` records (y = H x + offset, H value_count × 6) take the core filters' measurement model; H = [I 0] reproduces `POSITION_VECTOR` | identity | `tests/espf.test.mjs` | byte-identical in ESPF 2026, ESPF 2025 and the set-membership filter |
+| T9 | 2025 regeneration with ζ = √n: the 1/(2n) spread of the regenerated support equals σ_k²Π_k | §10.1, §10.5 | `tests/espf.test.mjs` | 1e-12 relative |
 
 ## 10. What needs the authors' implementation or the v3 full texts
 

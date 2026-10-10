@@ -152,7 +152,7 @@ gap, choice and parameter is in [docs/espf-spec.md](docs/espf-spec.md).
 
 | Selector | Behavior |
 | --- | --- |
-| `ESPF_2025` | The Epistemic Support-Point Filter as Jah and Haslett (arXiv 2508.20806) describe it: 2n + 1 support points, Minkowski prediction, joint epistemic spread, uniform compatibility, surprisal pruning, sup-min fusion, weighted mode, spread, radius and sigma adaptation with the stated temporal decay. `espf.gaussian_limit` runs its appendix's Gaussian limit (the UKF). |
+| `ESPF_2025` | The Epistemic Support-Point Filter as Jah and Haslett (arXiv 2508.20806) describe it: 2n + 1 support points, Minkowski prediction, joint epistemic spread, uniform compatibility, surprisal pruning, sup-min fusion, weighted mode, spread, radius and sigma adaptation with the stated temporal decay. `espf.gaussian_limit` runs its appendix's Gaussian limit (the UKF); `espf.regeneration_scale` sets the undefined ζ of its regeneration (1; √n keeps the spread, spec G16). |
 | `ESPF_2026` | The canonical form of the 2026 TEAG papers: a level-3 Smolyak support (85 points), max-plus conjunctive update Phi+ = max(Phi-, q/2) in MVEE-whitened innovation space, Choquet information content, PCRB-admissible basin with N_min = 2n + 1, whitened minimax medoid, MVEE regeneration with the r+ = 1.15 / r- = 0.97 sigma controller. |
 | `ELLIPSOIDAL_SET_MEMBERSHIP` | Outer bounding ellipsoids (Schweppe 1968; Bertsekas and Rhodes 1971): predicted F S F' plus the process set, updated by the minimum-trace (or log-det) member of the outer family; empty intersections are flagged and leave the set unchanged. |
 

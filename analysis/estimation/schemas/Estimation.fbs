@@ -451,6 +451,10 @@ table EspfOptions {
   // reaches this fraction of the PCRB floor (1: the floor itself; ESPF-HJ
   // section 6 says "approaching"; docs/espf-spec.md G18).
   pcrb_trigger:double = 1;
+  // 2025 regeneration chi = x +/- zeta sigma L_i (section 10.5; zeta is not
+  // defined, docs/espf-spec.md G16): 1 = column i of the Cholesky factor;
+  // sqrt(n) makes the regenerated points' 1/(2n) spread equal sigma^2 Pi.
+  regeneration_scale:double = 1;
 }
 
 table SetMembershipOptions {

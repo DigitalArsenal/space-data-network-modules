@@ -517,10 +517,13 @@ bool step_2025(const FilterConfig &c, const Observation &o, double from, Support
   st->points.assign(static_cast<std::size_t>(st->count) * kN, 0.0);
   st->possibility.assign(st->count, 1.0);
   for (int i = 0; i < kN; ++i) st->points[i] = mode[i];
-  const double kernel = std::exp(-sigma * sigma / (2.0 * st->radius * st->radius));
+  // Points at the whitened reach zeta sigma (G16), their kernel possibility
+  // at that reach (10.4); the carried shape is the points' MVEE.
+  const double reach = opt.regeneration_scale * sigma;
+  const double kernel = std::exp(-reach * reach / (2.0 * st->radius * st->radius));
   for (int j = 0; j < kN; ++j) {
     for (int i = 0; i < kN; ++i) {
-      const double dv = (i >= j) ? sigma * lk[i * kN + j] : 0.0;
+      const double dv = (i >= j) ? reach * lk[i * kN + j] : 0.0;
       st->points[(1 + j) * kN + i] = mode[i] + dv;
       st->points[(1 + kN + j) * kN + i] = mode[i] - dv;
     }
@@ -528,7 +531,7 @@ bool step_2025(const FilterConfig &c, const Observation &o, double from, Support
   }
   st->estimate = mode;
   Vec carried = pk;
-  for (double &v : carried) v *= sigma * sigma;
+  for (double &v : carried) v *= reach * reach;
   st->shape = matrix_of(carried);
   st->epoch_seconds = o.epoch_seconds;
   out->epoch_seconds = o.epoch_seconds;

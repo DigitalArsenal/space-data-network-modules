@@ -226,6 +226,7 @@ struct EspfOptions {
   int mode_weighting{0};               // 0 residual possibility, 1 singleton necessity, 2 compatibility
   bool gaussian_limit{false};          // appendix: UT points, product fusion (the UKF)
   double pcrb_trigger{1};              // 2026: expand at this fraction of the PCRB floor (G18)
+  double regeneration_scale{1};        // 2025: zeta in chi = x +/- zeta sigma L_i (G16)
 };
 
 struct SetMembershipOptions {

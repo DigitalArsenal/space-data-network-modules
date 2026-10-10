@@ -11,7 +11,8 @@
 // the bound when the noise bound holds, and an observation outside every
 // admissible state is flagged and leaves the set unchanged. LINEAR records
 // (y = H x + offset) enter all three through the same measurement model as
-// the core filters: H = [I 0] reproduces POSITION_VECTOR byte for byte.
+// the core filters: H = [I 0] reproduces POSITION_VECTOR byte for byte. The
+// 2025 regeneration with zeta = sqrt(n) keeps the spread it was built from.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { module, runToCompletion } from './hpop-port.mjs';
@@ -138,4 +139,19 @@ test('LINEAR records with H = [I 0] reproduce POSITION_VECTOR byte for byte (ESP
       assert.deepEqual(e.filteredCovariance, vector.filterHistory[k].filteredCovariance);
     });
   }
+});
+
+test('ESPF 2025 regeneration with zeta = sqrt(n): the regenerated support keeps the spread sigma^2 Pi', async () => {
+  const run = await runToCompletion(estimator, hpop, envelopeFor('ESPF_2025', { espf: { regeneration_scale: Math.sqrt(6) } }, { observations: OBSERVATIONS.slice(0, 4) }));
+  assert.equal(run.status, 0, run.error);
+  const last = run.supportHistory.at(-1), points = run.finalSupport.points;
+  assert.equal(points.length, 13 * 6);
+  const spread = new Array(36).fill(0);
+  for (let k = 1; k < 13; ++k)
+    for (let a = 0; a < 6; ++a) for (let b = 0; b < 6; ++b) spread[a * 6 + b] += (points[k * 6 + a] - points[a]) * (points[k * 6 + b] - points[b]) / 12;
+  const expected = last.shape.map((v) => v * last.sigma * last.sigma);
+  const relative = Math.max(...spread.map((v, i) => Math.abs(v - expected[i]) / Math.max(...expected.map(Math.abs))));
+  assert.ok(relative < 1e-12, `spread differs from sigma^2 Pi by ${relative}`);
+  // The carried shape is the points' MVEE, (zeta sigma)^2 Pi.
+  assert.ok(maxRelative(last.carriedShape, last.shape.map((v) => v * 6 * last.sigma * last.sigma)) < 1e-12);
 });

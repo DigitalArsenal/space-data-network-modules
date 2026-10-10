@@ -782,6 +782,8 @@ extern "C" int run_estimation(void) {
         o.decay_rate = e->decay_rate(); o.mode_weighting = e->mode_weighting(); o.gaussian_limit = e->gaussian_limit();
         o.pcrb_trigger = e->pcrb_trigger();
         if (!(o.pcrb_trigger > 0) || o.pcrb_trigger > 1) return fail("bad-estimation-request", "ESPF pcrb_trigger must be in (0, 1]");
+        o.regeneration_scale = e->regeneration_scale();
+        if (!(o.regeneration_scale > 0) || !std::isfinite(o.regeneration_scale)) return fail("bad-estimation-request", "ESPF regeneration_scale must be positive and finite");
         const double positives[] = {o.initial_bound_scale, o.process_bound_scale, o.measurement_bound_scale, o.sigma_initial,
                                     o.sigma_min, o.sigma_max, o.rate_expand, o.rate_contract, o.plausibility_radius,
                                     o.mvee_tolerance, o.vfi_floor_ratio};
