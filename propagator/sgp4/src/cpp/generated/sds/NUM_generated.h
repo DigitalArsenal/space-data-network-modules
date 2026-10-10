@@ -1384,7 +1384,7 @@ struct NUMGaussMarkovRequestT : public ::flatbuffers::NativeTable {
   std::string TRACE_ID{};
 };
 
-/// Request for one Basilisk-compatible Gauss-Markov random sequence.
+/// Request for one first-order Gauss-Markov random sequence.
 struct NUMGaussMarkovRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef NUMGaussMarkovRequestT NativeTableType;
   typedef NUMGaussMarkovRequestBuilder Builder;
@@ -1417,7 +1417,7 @@ struct NUMGaussMarkovRequest FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Ta
   uint32_t WARMUP_COUNT() const {
     return GetField<uint32_t>(VT_WARMUP_COUNT, 0);
   }
-  /// Seed for the Basilisk-compatible standard normal generator.
+  /// Seed for the standard-normal generator.
   uint32_t RNG_SEED() const {
     return GetField<uint32_t>(VT_RNG_SEED, 0);
   }
@@ -1586,7 +1586,7 @@ struct NUMGaussMarkovResultT : public ::flatbuffers::NativeTable {
   std::string TRACE_ID{};
 };
 
-/// Result of one Basilisk-compatible Gauss-Markov random sequence.
+/// Result of one first-order Gauss-Markov random sequence.
 struct NUMGaussMarkovResult FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef NUMGaussMarkovResultT NativeTableType;
   typedef NUMGaussMarkovResultBuilder Builder;

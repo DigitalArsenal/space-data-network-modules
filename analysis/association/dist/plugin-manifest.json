@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.association",
   "name": "Observation association",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Associates radar ($RDO), electro-optical ($EOO) and RF ($RFO) observations with catalog predictions ($OEM with covariance): joint chi-square gating on the innovation covariance S = H P H^T + R for range, range rate, Doppler, RA/Dec and azimuth/elevation; global nearest-neighbour assignment per sensor scan (Hungarian, with a per-observation non-assignment cost equal to the gate); ambiguity and posterior association probability; observations that fit no prediction are re-emitted as UCT records. Earth orientation through ERFA (IAU 2006/2000A, CIO based) with caller-supplied $EOP. Also solves general rectangular assignment problems.",
   "pluginFamily": "analysis",
   "threadModel": "wasi-sequential",

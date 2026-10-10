@@ -20,28 +20,48 @@ import { stripPublicationRecordCollection } from "space-data-module-sdk/transpor
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const browserDistDir = path.resolve(__dirname, "..", "..", "dist", "browser");
 
-let cachedFactory = null;
+const cachedFactories = new Map();
 
-async function loadFactory() {
-  if (!cachedFactory) {
+async function loadFactory(distDir) {
+  if (!cachedFactories.has(distDir)) {
     const moduleUrl = new URL(
-      "file://" + path.join(browserDistDir, "module.js"),
+      "file://" + path.join(distDir, "module.js"),
     );
     const imported = await import(moduleUrl.href);
-    cachedFactory = imported.default;
+    cachedFactories.set(distDir, imported.default);
   }
-  return cachedFactory;
+  return cachedFactories.get(distDir);
 }
 
-export async function loadRawSgp4Module() {
-  const factory = await loadFactory();
+// The browser artifact (module.js and module.wasm) of this package, or of
+// another build in `distDir` (the 1.1.0 baseline, for the regression digests).
+export async function loadRawSgp4Module(distDir = browserDistDir) {
+  const factory = await loadFactory(distDir);
   // dist artifacts ship signed (appended publication record collection);
   // strip it the way runtime consumers (OrbPro resolveProtectedWasmBytes,
   // SDK loaders) do before handing bytes to the Emscripten factory.
   const wasmBinary = stripPublicationRecordCollection(
-    await readFile(path.join(browserDistDir, "module.wasm")),
+    await readFile(path.join(distDir, "module.wasm")),
   );
-  return factory({ wasmBinary });
+  // The module grows its memory from inside the wasm, which leaves the
+  // glue's HEAPU8 view on the old buffer; keep the memory to read it fresh.
+  let memory = null;
+  const module = await factory({
+    wasmBinary,
+    instantiateWasm(imports, receive) {
+      WebAssembly.instantiate(wasmBinary, imports).then(({ instance, module: compiled }) => {
+        memory = instance.exports.memory;
+        receive(instance, compiled);
+      });
+      return {};
+    },
+  });
+  module.currentHeap = () => (memory ? new Uint8Array(memory.buffer) : module.HEAPU8);
+  return module;
+}
+
+function heap(module) {
+  return module.currentHeap ? module.currentHeap() : module.HEAPU8;
 }
 
 function alignOffset(offset, alignment) {
@@ -128,13 +148,31 @@ export function decodePivEnvelope(bytes) {
 }
 
 function writeBytes(module, pointer, bytes) {
-  module.HEAPU8.set(bytes, Number(pointer) >>> 0);
+  heap(module).set(bytes, Number(pointer) >>> 0);
 }
 
 function cloneBytes(module, pointer, size) {
   const start = Number(pointer) >>> 0;
   const end = start + (Number(size) >>> 0);
-  return new Uint8Array(module.HEAPU8.slice(start, end));
+  return new Uint8Array(heap(module).slice(start, end));
+}
+
+// The raw PIV response bytes of one invocation.
+export function invokePivRaw(module, requestBytes) {
+  const requestPointer = module._plugin_alloc(requestBytes.length);
+  const responseSizePointer = module._plugin_alloc(4);
+  writeBytes(module, requestPointer, requestBytes);
+  new DataView(heap(module).buffer).setUint32(responseSizePointer, 0, true);
+  let responsePointer = 0;
+  try {
+    responsePointer = module._plugin_invoke_stream(requestPointer, requestBytes.length, responseSizePointer);
+    const responseSize = new DataView(heap(module).buffer).getUint32(responseSizePointer, true);
+    return cloneBytes(module, responsePointer, responseSize);
+  } finally {
+    if (responsePointer) module._plugin_free(responsePointer, 0);
+    module._plugin_free(requestPointer, requestBytes.length);
+    module._plugin_free(responseSizePointer, 4);
+  }
 }
 
 export function invokePiv(
@@ -150,7 +188,7 @@ export function invokePiv(
   const requestPointer = module._plugin_alloc(requestBytes.length);
   const responseSizePointer = module._plugin_alloc(4);
   writeBytes(module, requestPointer, requestBytes);
-  new DataView(module.HEAPU8.buffer).setUint32(responseSizePointer, 0, true);
+  new DataView(heap(module).buffer).setUint32(responseSizePointer, 0, true);
 
   let responsePointer = 0;
   try {
@@ -159,7 +197,7 @@ export function invokePiv(
       requestBytes.length,
       responseSizePointer,
     );
-    const responseSize = new DataView(module.HEAPU8.buffer).getUint32(
+    const responseSize = new DataView(heap(module).buffer).getUint32(
       responseSizePointer,
       true,
     );

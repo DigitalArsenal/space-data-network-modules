@@ -1,0 +1,138 @@
+{
+ "source": "analysis/estimation version 1 (space-data-network-modules 37a0801f), propagator/hpop answering",
+ "module": "786d0de99fc5a2692e066d9c3912ac60bb8c34462234f69f77b52913eb7c6310",
+ "cases": {
+  "LEO400-drag-sigmas": [
+   {
+    "request": "ce4569745225d96ea2d8fac261659954d4c9e65371651713e491a772a3f2987f",
+    "status": 0,
+    "result": "85e99c04f25d55992ed1ecfdf9cc2d39dedcccb41837b7c4df919f6420261620"
+   },
+   {
+    "request": "2c4f61be82a3a6cd97ba3a12f545bef368e01e11282722b26487378aea021d0f",
+    "status": 0,
+    "result": "c8a8afe541b76b690dc4b6e4128ceb20f385cc697594e03330edc85873317ea4"
+   },
+   {
+    "request": "61603d31239ec765b8978a7fd739c1f8dfbbb58e54eecf4f2a886c6ec73c7a1e",
+    "status": 0,
+    "result": "5ba70926a82858a752cff767acf38aab7084338741eae7f056e821cb16928b7e"
+   },
+   {
+    "request": "12ce06db25769ee9dd32955ef814143423544ed0aefd795b2e3c9a73e2e14f61",
+    "status": 0,
+    "result": "f966c95802e8ed1eeecf78c9eef358cf08771a354015494add981003b1480b64"
+   }
+  ],
+  "GPS-srp-sigmas": [
+   {
+    "request": "8f98039b3024f8ad181f23a7a2fc5bfe4974ad6dbc18007785c5f3861af625d6",
+    "status": 0,
+    "result": "96cdcd1ce85492bbd827a704a860bb7af3f8ad301258d54c268d9c51d061293a"
+   },
+   {
+    "request": "499b895c444739cc4aa5b56be3692b8142a64f9c0c2040e45dcf3a2e2e35a035",
+    "status": 0,
+    "result": "920ed315249d6826021346f954e567a79e6c2912d2437337343cb782effd4090"
+   },
+   {
+    "request": "f11fdfec7e3f347956610c91a78dab63d4695468f5e387646ba633ebcf86fd9e",
+    "status": 0,
+    "result": "e0c50c3b7e91bb488decede32f75d39551d679926675989d81f333ea39b6b5ad"
+   },
+   {
+    "request": "eeddd5f15077908a192f4bc4e95094943cf7a76eba445ca380ef80ed0cced792",
+    "status": 0,
+    "result": "311eb88de4d2c2f5d129a11c39de09ad0353c76765426a9b65ce75501acd8b03"
+   }
+  ],
+  "GPS-pv-sigmas": [
+   {
+    "request": "112f3bf904b912819bd5967edadb2bd806931fdb40e5c38bbeaa0f225381e8c1",
+    "status": 0,
+    "result": "edb9615d410dcfeca24b95dfdf9f6c27d485c4ca9903c4f4cb2a0f7782694500"
+   },
+   {
+    "request": "39849c75ce8a133dac96b7c7d2290f177291a05c1207efe87a65d9bf03d0981d",
+    "status": 0,
+    "result": "ed15e9ad36d88cc6876a614fd4a7761c030034f81f35263785b1503abd60942d"
+   },
+   {
+    "request": "853ddff5ee642b2d4fe8d172e162fafac336592c32a9dbac81a2a0dc35154f37",
+    "status": 0,
+    "result": "598ee6efafb6f0bb6aeaa3fbfbaad5faab0e4252e732236383fccbb57cd58e38"
+   },
+   {
+    "request": "183de0bd313cf93f1f204d4ed165d7aeaae27c92b5d7441ae12378bfd4542de6",
+    "status": 0,
+    "result": "17b1397bf02aed4a3d1814363f7fc1816104d5063e0b1f8787cf95c2a6cd6fc3"
+   }
+  ],
+  "GPS-pv-rtn": [
+   {
+    "request": "08e0f8cd0b14fad16be6e19a5064dd4e31a7133dcb59dfa574dd7655133bb4cf",
+    "status": 0,
+    "result": "edb9615d410dcfeca24b95dfdf9f6c27d485c4ca9903c4f4cb2a0f7782694500"
+   },
+   {
+    "request": "7fad49dbcac101c4afad3d7c1713edf20c2e770862e0a747beddc95a11edcb57",
+    "status": 0,
+    "result": "e9892baeab5f461a99777ccd417345d1e2e887eb868f4886892170eecb1e2b56"
+   },
+   {
+    "request": "9832bceb259dd37e141323f3d3e110b58a6102df94cb53926905479a206a2b05",
+    "status": 0,
+    "result": "db2ee66de3510fd0032ff62f03d53a7c773575443a435c0d9a6c06c35df63977"
+   },
+   {
+    "request": "ddddf936baa3849404e373adf0e9f4942cb5bc456a34f6a96cd776957938655d",
+    "status": 0,
+    "result": "6c97277c7567b09a3db588947810f0162cd29fdcea5950efbf762c10a3f7c2e6"
+   }
+  ],
+  "GPS-pv-rtn-apriori": [
+   {
+    "request": "98b7dc93580b761bee3c5ef682bb443f7f64db20ea1b0b578103a98f8bc3b918",
+    "status": 0,
+    "result": "edb9615d410dcfeca24b95dfdf9f6c27d485c4ca9903c4f4cb2a0f7782694500"
+   },
+   {
+    "request": "e03caa4cb26b5ccefd06537049b761e1dcad24a466c6baac2ece6255535299e7",
+    "status": 0,
+    "result": "e3e6e90c09c9644192815236376d00d53646ca11cf39abf09ed839871a9decd0"
+   },
+   {
+    "request": "c3845eded29051bc64bface1f07f81919aeb074263d3ce71553e13e68fa3271f",
+    "status": 0,
+    "result": "b072db4d058dcb2d09fc25832830fd94e6eeaf115ffef09276eecd75e9f44f58"
+   },
+   {
+    "request": "66f2237c21f154a7af0c0e333e0d5d49609eb092ca3a55b9f4da8dac087d1ea8",
+    "status": 0,
+    "result": "e4f6b869f7f0384d3cd68fe0b462fe0a3216e02f2432b8d446db4fd22eda6d1e"
+   }
+  ],
+  "LEO400-drag-apriori-edit": [
+   {
+    "request": "1010134dd81490a5f29295d39830329bfba83993fa7fa13372f7a888ff30940a",
+    "status": 0,
+    "result": "85e99c04f25d55992ed1ecfdf9cc2d39dedcccb41837b7c4df919f6420261620"
+   },
+   {
+    "request": "75afd52967d5d2028478559d64a434f97137ec904e772d10325a2013b1b9bb7c",
+    "status": 0,
+    "result": "2b5f6cfb3852959d34cb58208eb93335ac7c032b691ba91765c40cb6cdbc5b04"
+   },
+   {
+    "request": "0476fdf89466d5ccdc1b2df836b40b0dcd455fe1b5a24ab6a3505b44dca2466a",
+    "status": 0,
+    "result": "07979febb7e0f6057d10831f5fd51ccd9dd1c1f14c70ac0d25c1fa2de13f5b38"
+   },
+   {
+    "request": "0f46b158b3a1833dba1e021790ea2e3fb7748b31b89accfdbad4819e7d940f56",
+    "status": 0,
+    "result": "3b0bd064701df5cf9b987d6f07d6761f1b00e06ac8256224822b8027f0994fff"
+   }
+  ]
+ }
+}

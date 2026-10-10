@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-10T11:57:48.233Z",
+  "generatedAt": "2026-10-10T12:19:18.089Z",
   "moduleCount": 118,
   "parityScopeModuleCount": 49,
   "isomorphicWasmCount": 116,
@@ -115,7 +115,7 @@
       "pluginId": "com.digitalarsenal.analysis.association",
       "name": "Observation association",
       "pluginFamily": "analysis",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "associate_observations",
         "solve_assignment"
@@ -611,7 +611,7 @@
       "pluginId": "com.digitalarsenal.analysis.estimation",
       "name": "Measurement-based Orbit Estimation",
       "pluginFamily": "analysis",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "methodIds": [
         "evaluate_teag",
         "fit_batch",
@@ -631,7 +631,7 @@
       ],
       "cxxSourceFileCount": 7,
       "cSourceFileCount": 0,
-      "testFileCount": 40,
+      "testFileCount": 48,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -645,7 +645,10 @@
       ],
       "testFiles": [
         "tests/batch-fit-fixtures.mjs",
+        "tests/batch-fit-v2-fixtures.mjs",
+        "tests/batch-fit-v2-lib.mjs",
         "tests/batch_fit.test.mjs",
+        "tests/batch_fit_v2.test.mjs",
         "tests/build-provider.mjs",
         "tests/conformance.test.mjs",
         "tests/depth-fixtures.mjs",
@@ -654,13 +657,16 @@
         "tests/depth_validation.cpp",
         "tests/espf-fixtures.mjs",
         "tests/espf.test.mjs",
+        "tests/fit-batch-v1-cases.mjs",
         "tests/fixtures.mjs",
         "tests/fixtures/DEPTH.md",
         "tests/fixtures/OrekitBatchReference.java",
         "tests/fixtures/OrekitReference.java",
         "tests/fixtures/README.md",
         "tests/fixtures/circular-fusion.json",
+        "tests/fixtures/fit-batch-v1-digests.json",
         "tests/fixtures/generate-cv-inputs.py",
+        "tests/fixtures/generate-fit-batch-v1-digests.mjs",
         "tests/fixtures/hipparchus-LICENSE.txt",
         "tests/fixtures/hipparchus-NOTICE.txt",
         "tests/fixtures/hipparchus-cv-inputs.json",
@@ -671,6 +677,7 @@
         "tests/fixtures/orekit-pv-reference.txt",
         "tests/hpop-port.mjs",
         "tests/invoke.test.mjs",
+        "tests/measurement_parameters.test.mjs",
         "tests/mvee.test.mjs",
         "tests/native.test.mjs",
         "tests/native_conformance.cpp",
@@ -682,6 +689,7 @@
         "tests/sequential_validation.cpp",
         "tests/teag-fixtures.mjs",
         "tests/teag.test.mjs",
+        "tests/tracking-pipeline.mjs",
         "tests/two_body_provider.hpp",
         "tests/wire.mjs"
       ]
@@ -5112,10 +5120,11 @@
       "pluginId": "com.orbpro.sgp4",
       "name": "SGP4/SDP4 Propagator",
       "pluginFamily": "propagator",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "methodIds": [
         "catalog_query",
         "ingest_omm",
+        "propagate_ephemeris",
         "propagate_state",
         "upsert_cat"
       ],
@@ -5133,7 +5142,7 @@
       ],
       "cxxSourceFileCount": 3,
       "cSourceFileCount": 1,
-      "testFileCount": 67,
+      "testFileCount": 75,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -5144,8 +5153,15 @@
       ],
       "testFiles": [
         "tests/catFlatBufferContract.test.mjs",
+        "tests/catalogNumberSelection.test.mjs",
+        "tests/ephemerisOutput.test.mjs",
+        "tests/fixtures/generate-propagate-state-digests.mjs",
         "tests/fixtures/hosted-runtime/sgp4.single-plugin.flow.json",
+        "tests/fixtures/propagate-state-1.1.0-digests.json",
         "tests/fixtures/request.propagate.json",
+        "tests/gcrfOutput.test.mjs",
+        "tests/legacy-propagate-state-cases.mjs",
+        "tests/legacyPropagateState.test.mjs",
         "tests/lib/generated/StateVector.js",
         "tests/lib/generated/orbpro.js",
         "tests/lib/generated/orbpro/bool32.js",
@@ -5206,6 +5222,7 @@
         "tests/lib/payloadEncoders.mjs",
         "tests/lib/pivInvokeHelper.mjs",
         "tests/manifestContract.test.mjs",
+        "tests/parity.mjs",
         "tests/pivInvokeContract.test.mjs",
         "tests/sameEpochReplacement.test.mjs",
         "tests/sdk_compat.test.mjs",

@@ -77,6 +77,22 @@ target_compile_definitions(
 # diagnostics for our own code.
 target_compile_options(sgp4_sqlite3 PRIVATE -Wno-everything)
 
+# -------- ERFA and the foundation/frames axis engine --------------------------
+# TEME and GCRF output use the stack's one TEME definition: foundation/frames'
+# axis engine (gcrfToTeme: IAU 2006/2000A precession-nutation and equation of
+# the equinoxes) over the vendored ERFA (BSD-3, derived from IAU SOFA), as
+# analysis/epoch-state does. ERFA's own test drivers and its autotools version
+# file are left out.
+set(SDN_MODULES_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../..")
+set(ERFA_DIR "${SDN_MODULES_ROOT}/higherpop/third_party/erfa")
+set(FRAMES_SRC_DIR "${SDN_MODULES_ROOT}/foundation/frames/src")
+file(GLOB ERFA_SOURCES "${ERFA_DIR}/*.c")
+list(FILTER ERFA_SOURCES EXCLUDE REGEX "/(t_erfa_c|t_erfa_c_extra|erfaversion)\\.c$")
+list(SORT ERFA_SOURCES)
+add_library(sgp4_erfa STATIC ${ERFA_SOURCES})
+target_include_directories(sgp4_erfa PUBLIC "${ERFA_DIR}")
+target_compile_options(sgp4_erfa PRIVATE -Wno-everything)
+
 # -------- Core propagator library --------------------------------------------
 # SGP4 (Vallado) + OrbPro's SDS PIV wasm surface.
 add_library(
@@ -93,8 +109,9 @@ target_include_directories(
     "${CMAKE_CURRENT_SOURCE_DIR}/generated"
     "${CMAKE_CURRENT_SOURCE_DIR}/generated/sds"
     "${FLATBUFFERS_INCLUDE_DIR}"
+    "${FRAMES_SRC_DIR}"
 )
-target_link_libraries(sgp4_core PUBLIC sgp4_sqlite3)
+target_link_libraries(sgp4_core PUBLIC sgp4_sqlite3 sgp4_erfa)
 
 # -------- Wasm adapter executable --------------------------------------------
 # The bridge implements the SDS PIV invoke surface and dispatches into
