@@ -360,6 +360,13 @@ Parity runs identical estimator bytes in Chrome/V8, native WasmEdge and containe
 WasmEdge at host worker widths 1/2/4/8. This sequential artifact tests host width
 invariance, not concurrent filter updates.
 
+The dynamical tests are answered by `propagator/hpop`'s WASM. The measurement
+campaign ([tracking-pipeline.mjs](tests/tracking-pipeline.mjs), used by
+`measurement_parameters.test.mjs` and the parity plan) also runs the committed
+artifacts of `foundation/frames`, `analysis/access`,
+`analysis/observation-simulator` and `analysis/association`, and reads SDS
+records through `analysis/association`'s installed bindings (`npm ci` there).
+
 See [original fixture authorities](tests/fixtures/README.md),
 [depth authority and reproduction details](tests/fixtures/DEPTH.md), and
 [the tri-runtime receipt](conformance/lane05-parity.json).
