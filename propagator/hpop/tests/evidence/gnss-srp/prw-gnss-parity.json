@@ -9,17 +9,17 @@
     {
       "lane": "browser",
       "runs": 20,
-      "durationMs": 1331
+      "durationMs": 1170
     },
     {
       "lane": "wasmedge",
       "runs": 20,
-      "durationMs": 75113
+      "durationMs": 44031
     },
     {
       "lane": "docker-wasmedge",
       "runs": 20,
-      "durationMs": 58132
+      "durationMs": 51976
     }
   ],
   "cases": [

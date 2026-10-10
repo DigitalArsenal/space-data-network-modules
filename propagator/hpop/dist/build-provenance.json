@@ -1,6 +1,6 @@
 {
   "sdk": "0.8.25",
-  "spacedatastandards": "1.243.0+1791587374056",
+  "spacedatastandards": "1.243.0",
   "threadModel": "wasi-sequential",
   "target": "wasm32-wasip1-threads",
   "sharedMemory": true,
