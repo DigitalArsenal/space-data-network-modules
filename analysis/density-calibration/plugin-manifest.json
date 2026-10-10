@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.density-calibration",
   "name": "Thermospheric density calibration (JB2008 temperature corrections)",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "JB2008 thermospheric mass density at points (propagator/hpop's JB2008, driven by SET SOLFSMY/DTCFILE rows as hpop reads them) with an exospheric-temperature correction added to JB2008's DSTDTC: spherical harmonics in latitude and local solar time per time bin, or values at time nodes, optionally linear in altitude. Estimates the correction from observed densities (Gauss-Newton on log-density residuals per bin) or from the orbital decay of catalogued objects (element-set histories propagated by Vallado SGP4; Gauss-Newton on the sets' mean semi-major axes with each object's ballistic coefficient): public, simplified analogues of the Dynamic Calibration of the Atmosphere in HASDM.",
   "pluginFamily": "analysis",
   "capabilities": [],

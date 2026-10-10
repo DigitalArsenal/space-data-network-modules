@@ -71,7 +71,9 @@ k} D(correction), every set weighted by its object's robust residual scale
 from the second iteration; scales and edits re-estimated in the first
 `reweightIterations` (4) iterations and then held, so that the iterations
 converge on a fixed problem; each object's ln B step limited to 1 and
-scaled by a factor halved whenever that step reverses sign), with a random walk between consecutive nodes
+scaled by a factor halved whenever that step reverses sign once the scales
+and edits are held, so that only an object alternating on the fixed problem
+is slowed), with a random walk between consecutive nodes
 (σ = `randomWalkKPerSqrtDay` √Δt), a Gaussian prior on each altitude node's
 mean level (`meanLevelK`), a prior tying neighbouring altitude nodes
 (`altitudeDifferenceK`), and each object's prior on ln B. Density and B

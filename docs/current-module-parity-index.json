@@ -513,7 +513,7 @@
       "pluginId": "com.digitalarsenal.analysis.density-calibration",
       "name": "Thermospheric density calibration (JB2008 temperature corrections)",
       "pluginFamily": "analysis",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "methodIds": [
         "calibrate",
         "calibrate_decay",

@@ -1175,8 +1175,16 @@ extern "C" int calibrate_decay() {
   // first), halved whenever the step reverses sign: an object whose sets do
   // not decay as drag would (radiation pressure above ~800 km) otherwise
   // alternates between two values, while the correction has converged.
+  // While the scales and edits are re-estimated the objective changes from
+  // one iteration to the next and steps reverse for that reason alone, so
+  // the damping starts afresh once they are held: it then slows only an
+  // object that alternates under a fixed objective.
   std::vector<double> lnBScale(N, 1.0), lnBLast(N, 0.0);
   for (; iterations < maxIt; ++iterations) {
+    if (iterations == reweight) {
+      std::fill(lnBScale.begin(), lnBScale.end(), 1.0);
+      std::fill(lnBLast.begin(), lnBLast.end(), 0.0);
+    }
     bool ok = true;
     for (Object& ob : objects) ok = integrate_object(ob, stepS, table, sun, corr, true) && ok;
     if (!ok) return fail("integration-failed", "a trajectory left the drivers' span during the iterations.");
