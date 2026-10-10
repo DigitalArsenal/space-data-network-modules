@@ -262,8 +262,11 @@ not collision probabilities; finite supports screen only what they sample.
 
 - Every G-item marked as a choice above, especially G5 (how process noise
   enters a finite cloud), G7 (r⁻ and M_surv), G13 (the 2025 gains and the
-  temporal decay), G14 (Nᵢ), G18 (the σ controller's trigger) and G19 (reset
-  versus kernel extension).
+  temporal decay), G14 (Nᵢ), G16 (the 2025 regeneration's ζ), G18 (the σ
+  controller's trigger and bounds) and G19 (reset versus kernel extension).
+  G16 and G18 decide whether a support keeps its size: with ζ = 1 the 2025
+  spread shrinks n-fold per cycle, and with σ ≤ 1 nothing re-expands a 2026
+  support once the basin keeps only N_min points.
 - The rank-aware PCRB (Preprints 202607.2165): its basin radius and its
   "falsifiable prediction about previously reported over-pruning".
 - The exact Smolyak construction behind OPT's M = 106 and TEAG's 2n² + 1.
