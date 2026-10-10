@@ -48,6 +48,8 @@ public:
     void taken(double t1, const double* y1) {
         if (active_) values(t1, y1, g0_);
     }
+    // The step just accepted ended on a boundary (until next() is called).
+    bool crossedBoundary() const { return crossed_; }
     // The next step after a taken one: after a step that ended on a boundary,
     // the step proposed before it was shortened, if that is longer.
     double next(double h) {

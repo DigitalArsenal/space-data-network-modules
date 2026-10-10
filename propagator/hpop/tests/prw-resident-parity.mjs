@@ -14,6 +14,7 @@ import {encodePluginInvokeRequest,decodePluginInvokeResponse} from 'space-data-m
 import {loadWasmEdgePin,assertWasmEdgeVersionMatchesPin} from 'space-data-module-sdk/testing';
 import {residentHarness,packageDir,wasmPath,dockerRunner} from './lib/residentRuntime.mjs';
 import {TYPE,makeTable,residentState,instant,coordinateSystem,encodePrw,decodePrw} from './lib/prwCodec.mjs';
+import {GM,environmentInputs,fullForceRequest,isoInstant,residentRecord} from './lib/fullForce.mjs';
 const execFile=promisify(execFileCallback);
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const wasm=fs.readFileSync(wasmPath),wasmSha=sha(wasm),pin=loadWasmEdgePin();
@@ -22,13 +23,13 @@ const seed=(id,generation=1n,extra={})=>Object.assign(residentState({epochJD:245
   INSTANCE:inst(generation),ENTITY_HANDLE:id,CATALOG_NUMBER:25544,OBJECT_ID:`source-${id}`,...extra,
 });
 const frame=(port,arm,record)=>({portId:port,typeRef:TYPE,payload:encodePrw(arm,record)});
-const req=(method,arm,record)=>({methodId:method,outputStreamCap:1,inputs:[frame(method==='ingest_state'?'state':'request',arm,record)]});
+const req=(method,arm,record)=>({methodId:method,outputStreamCap:1,inputs:[frame(method==='ingest_state_gravity_only'?'state':'request',arm,record)]});
 const batch=(generation=1n,ids=[])=>makeTable('PRWResidentRequest',{INSTANCE:inst(generation),TARGET_EPOCH:instant(2451545),ENTITY_HANDLES:ids,TARGET_COORDINATE_SYSTEM:coordinateSystem()});
 const prep=()=>makeTable('PRWPrepareRequest',{INSTANCE:inst(),START_EPOCH:instant(2451545),DURATION_SECONDS:600});
 const desc=(generation=1n)=>makeTable('PRWDescribeRequest',{INSTANCE:inst(generation),SEGMENT_SET_HANDLE:1});
 const step=(label,request,error=null)=>({label,requestBytes:encodePluginInvokeRequest(request),error});
 const groups=[{id:'resident-continuation-and-generation',steps:[
-  step('ingest-two',{methodId:'ingest_state',inputs:[frame('state','RESIDENT_STATE',seed(31)),frame('state','RESIDENT_STATE',seed(47))]}),
+  step('ingest-two',{methodId:'ingest_state_gravity_only',inputs:[frame('state','RESIDENT_STATE',seed(31)),frame('state','RESIDENT_STATE',seed(47))]}),
   step('state-chunk-0',req('propagate_state','RESIDENT_REQUEST',batch())),
   step('state-chunk-1',req('propagate_state','RESIDENT_REQUEST',batch())),
   step('prepare',req('prepare_trajectory_segments','PREPARE_REQUEST',prep())),
@@ -37,19 +38,42 @@ const groups=[{id:'resident-continuation-and-generation',steps:[
   step('duplicate',req('propagate_state','RESIDENT_REQUEST',batch(1n,[31,31])),'invalid-request'),
   step('unknown',req('propagate_state','RESIDENT_REQUEST',batch(1n,[999])),'unknown-entity'),
   step('wrong-arm',req('propagate_state','VERSION_QUERY',true),'method-arm-mismatch'),
-  step('new-generation',req('ingest_state','RESIDENT_STATE',seed(31,2n))),
+  step('new-generation',req('ingest_state_gravity_only','RESIDENT_STATE',seed(31,2n))),
   step('stale-generation',req('propagate_state','RESIDENT_REQUEST',batch()),'stale-instance'),
   step('stale-segment',req('describe_trajectory_segments','DESCRIBE_REQUEST',desc(2n)),'stale-handle'),
   step('new-state',req('propagate_state','RESIDENT_REQUEST',batch(2n))),
 ]},{id:'resident-atomic-rejection',steps:[
-  step('ingest',req('ingest_state','RESIDENT_STATE',seed(31))),
-  step('unsupported-covariance',req('ingest_state','RESIDENT_STATE',seed(31,2n,{COVARIANCE:makeTable('PRWStateMatrix',{DIMENSION:6,VALUES:Array(36).fill(0)})})),'unsupported-configuration'),
+  step('ingest',req('ingest_state_gravity_only','RESIDENT_STATE',seed(31))),
+  step('unsupported-coefficients',req('ingest_state_gravity_only','RESIDENT_STATE',seed(31,2n,{DRAG_AREA_OVER_MASS_M2_KG:0.01,HAS_DRAG_AREA_OVER_MASS_M2_KG:true})),'unsupported-configuration'),
   step('old-generation-survives',req('propagate_state','RESIDENT_REQUEST',batch())),
-  step('unsupported-mass',req('ingest_state','RESIDENT_STATE',seed(31,2n,{HAS_MASS_KG:true,MASS_KG:1000})),'unsupported-configuration'),
-  step('repeated-generation',req('ingest_state','RESIDENT_STATE',seed(31)),'stale-instance'),
-  step('invalid-flag',req('ingest_state','RESIDENT_STATE',seed(31,2n,{VALID:false}))),
+  step('unsupported-mass',req('ingest_state_gravity_only','RESIDENT_STATE',seed(31,2n,{HAS_MASS_KG:true,MASS_KG:1000})),'unsupported-configuration'),
+  step('repeated-generation',req('ingest_state_gravity_only','RESIDENT_STATE',seed(31)),'stale-instance'),
+  step('invalid-flag',req('ingest_state_gravity_only','RESIDENT_STATE',seed(31,2n,{VALID:false}))),
   step('invalid-selection',req('propagate_state','RESIDENT_REQUEST',batch(2n)),'invalid-state'),
-]}];
+]},{id:'configured-full-force',steps:configuredSteps()}];
+// The configured profile: one LEO object and one GEO object under the full
+// force model, ingested with the kernel and environment, then queried.
+function configuredSteps() {
+  const epoch='2026-08-02T00:00:00.000',tt=(s)=>isoInstant(s,'TT');
+  const orbit=(a,e,inc)=>{const rp=a*(1-e),vp=Math.sqrt(GM*(1+e)/rp),i=inc*Math.PI/180;return [rp,0,0,0,vp*Math.cos(i),vp*Math.sin(i)];};
+  const objects=[{handle:1,state:orbit(6778137,0.0005,51.6)},{handle:2,state:orbit(42164000,0.0002,0.1)}];
+  const instance=makeTable('PRWInstance',{MODULE_ID:'com.orbpro.hpop',INSTANCE_ID:'configured-parity',GENERATION:1n});
+  const states=objects.map(o=>frame('state','RESIDENT_STATE',residentRecord({instance,handle:o.handle,epoch,state:o.state,cdAm:0.02,crAm:0.02})));
+  const configuration=frame('configuration','EXECUTION_REQUEST',fullForceRequest({epoch,state:objects[0].state}));
+  const request=(arm,record)=>({methodId:arm==='RESIDENT_REQUEST'?'propagate_state':arm==='PREPARE_REQUEST'?'prepare_trajectory_segments':'describe_trajectory_segments',
+    outputStreamCap:1,inputs:[frame('request',arm,record)]});
+  const at=(iso)=>makeTable('PRWResidentRequest',{INSTANCE:instance,TARGET_EPOCH:tt(iso),ENTITY_HANDLES:[],TARGET_COORDINATE_SYSTEM:coordinateSystem()});
+  return [
+    step('configured-ingest',{methodId:'ingest_state',inputs:[...states,configuration,...environmentInputs()]}),
+    step('configured-state-chunk-0',request('RESIDENT_REQUEST',at('2026-08-02T01:01:09.184000000'))),
+    step('configured-state-chunk-1',request('RESIDENT_REQUEST',at('2026-08-02T01:01:09.184000000'))),
+    step('configured-backward',request('RESIDENT_REQUEST',makeTable('PRWResidentRequest',{INSTANCE:instance,TARGET_EPOCH:tt('2026-08-01T23:01:09.184000000'),ENTITY_HANDLES:[1],TARGET_COORDINATE_SYSTEM:coordinateSystem()}))),
+    step('configured-prepare',request('PREPARE_REQUEST',makeTable('PRWPrepareRequest',{INSTANCE:instance,START_EPOCH:tt('2026-08-02T00:01:09.184000000'),DURATION_SECONDS:3600,PROFILE:'conjunction-screening'}))),
+    step('configured-ppe-chunk-0',request('DESCRIBE_REQUEST',makeTable('PRWDescribeRequest',{INSTANCE:instance,SEGMENT_SET_HANDLE:1}))),
+    step('configured-ppe-chunk-1',request('DESCRIBE_REQUEST',makeTable('PRWDescribeRequest',{INSTANCE:instance,SEGMENT_SET_HANDLE:1}))),
+    step('configured-no-configuration',{methodId:'ingest_state',inputs:[...states]},'missing-required-input'),
+  ];
+}
 async function runProcess(runtime) {
   const results=[];
   for(const group of groups) {

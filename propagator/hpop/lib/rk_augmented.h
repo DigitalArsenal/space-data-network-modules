@@ -19,10 +19,13 @@ namespace rkf78 {
                              9.0/280.0, 9.0/280.0, 0, 41.0/840.0, 41.0/840.0};
 }
 
+// One step from (t, y) whose first stage, the derivative f(t, y), the caller
+// has evaluated already (k0). An adaptive loop evaluates it once per state and
+// reuses it for every attempt from that state and for its dense output.
 template<int N>
-void rkf78Step(double t, double h, const double* y,
-               double* yout, double* yerr,
-               DerivativeFunc deriv, void* params) {
+void rkf78StepFrom(double t, double h, const double* y, const double* k0,
+                   double* yout, double* yerr,
+                   DerivativeFunc deriv, void* params) {
     constexpr int S = 13;  // Number of stages
     double k[S][N];
     double ytmp[N];
@@ -31,7 +34,7 @@ void rkf78Step(double t, double h, const double* y,
     // Full 13-stage RKF78 with all a_ij coefficients
 
     // Stage 1
-    deriv(t, y, k[0], params);
+    for (int i = 0; i < N; i++) k[0][i] = k0[i];
 
     // Stage 2
     for (int i = 0; i < N; i++)
@@ -122,6 +125,15 @@ void rkf78Step(double t, double h, const double* y,
                                 rkf78::b7[12]*k[12][i]);
         yerr[i] = yout[i] - y7;
     }
+}
+
+template<int N>
+void rkf78Step(double t, double h, const double* y,
+               double* yout, double* yerr,
+               DerivativeFunc deriv, void* params) {
+    double k0[N];
+    deriv(t, y, k0, params);
+    rkf78StepFrom<N>(t, h, y, k0, yout, yerr, deriv, params);
 }
 
 // Cash-Karp coefficients

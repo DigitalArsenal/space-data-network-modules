@@ -107,7 +107,7 @@ test("HPOP ingests an aligned-binary PropagatorState emitted by SGP4", async (t)
   assert.equal(sgp4State.catalogNumber, 25544);
 
   const hpopIngest = await hpop.invoke({
-    methodId: "ingest_state",
+    methodId: "ingest_state_gravity_only",
     inputs: [
       {
         portId: "state",

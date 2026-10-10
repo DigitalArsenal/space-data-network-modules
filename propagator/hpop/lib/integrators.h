@@ -11,6 +11,7 @@
 #include "force_models.h"
 #include <functional>
 #include <array>
+#include <memory>
 #include <vector>
 
 namespace astro {
@@ -417,6 +418,68 @@ PropagateResult RKF78Propagate(const StateVector& initialState, double targetTim
                                const IntegratorConfig& config,
                                DerivativeFunc deriv, void* params,
                                shadow::BoundaryEvents* events = nullptr);
+
+/// The step loop of RKF78Propagate, resumable. `attempt` runs one pass of
+/// that loop toward `target` (seconds from the run's start; a step that would
+/// pass it is shortened to end on it), so a caller that stops after any
+/// accepted step and continues later takes exactly the steps of one
+/// uninterrupted RKF78Propagate call. `derivative()` is f at the current
+/// state. With `reuseDerivative` it is evaluated once per state and serves
+/// every attempt from it, which gives the same steps whenever f is a function
+/// of (t, y) alone; without it every attempt evaluates f afresh, as
+/// RKF78Propagate always has (a force model that caches on its call history,
+/// as the built-in Earth rotation does, then sees the same history).
+class RKF78Run {
+public:
+    /// direction: +1 forward, -1 backward (RKF78Propagate: the target's sign).
+    RKF78Run(const std::array<double, 6>& y0, int direction, const IntegratorConfig& config,
+             DerivativeFunc deriv, void* params, shadow::BoundaryEvents* events = nullptr,
+             bool reuseDerivative = false);
+    /// RKF78Propagate's loop condition for `target`.
+    bool running(double target) const;
+    /// One pass of the loop; true when it accepted a step.
+    bool attempt(double target);
+    double time() const { return t_; }
+    const std::array<double, 6>& state() const { return y_; }
+    /// f(time(), state()), evaluated on first use.
+    const std::array<double, 6>& derivative();
+    /// The last accepted step ended on a shadow boundary (a kink of the
+    /// radiation pressure lies within the events' tolerance before it).
+    bool endedOnBoundary() const { return boundary_; }
+    uint32_t steps() const { return steps_; }
+    uint32_t rejections() const { return rejections_; }
+    double maxError() const { return maxError_; }
+private:
+    IntegratorConfig config_;
+    DerivativeFunc deriv_;
+    void* params_;
+    shadow::BoundaryEvents* events_;
+    std::array<double, 6> y_, k0_{};
+    bool haveK0_ = false, backward_, boundary_ = false, reuse_;
+    double t_ = 0, h_;
+    uint32_t steps_ = 0, rejections_ = 0, attempts_ = 0, maxAttempts_;
+    double maxError_ = 0;
+};
+
+/// A force set's equations of motion integrated by RKF78 from a state, as
+/// PropagateWithResult integrates RK78 and RKF78: the same clock (the force
+/// set's epoch at t = 0), the same shadow-boundary events and therefore the
+/// same steps, but resumable (RKF78Run) and with the derivative at every
+/// accepted state available to the caller.
+class ForceRun {
+public:
+    ForceRun(const StateVector& initial, int direction, const IntegratorConfig& config,
+             ForceModel::ForceModelSet& forces, bool reuseDerivative);
+    ~ForceRun();
+    ForceRun(const ForceRun&) = delete;
+    ForceRun& operator=(const ForceRun&) = delete;
+    RKF78Run& run() { return *run_; }
+private:
+    struct Equations;
+    std::unique_ptr<Equations> equations_;
+    std::unique_ptr<shadow::BoundaryEvents> events_;
+    std::unique_ptr<RKF78Run> run_;
+};
 
 /// RKF78 propagation with ForceModel
 /// @param initialState Initial Cartesian state

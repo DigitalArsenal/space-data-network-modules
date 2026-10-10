@@ -22,7 +22,7 @@ const libDir=path.join(emsdk,'upstream/emscripten/cache/sysroot/lib/wasm32-emscr
 const exceptionLibraries=['libc++abi-ww-wasmexcept.a','libunwind-ww-wasmexcept.a'].map(n=>path.join(libDir,n));
 for(const file of exceptionLibraries)if(!fsSync.existsSync(file))throw new Error(`Missing LLVM standard Wasm EH runtime archive ${file}`);
 const units=['astrodynamics','integrators','variational','finite_burn','force_partials','coords','atmosphere_plugin','environment_models','ephemeris','force_models','atmosphere_winds','nrlmsise00','time_convert','us76'].map(n=>path.join(packageRoot,`lib/${n}.cpp`));
-units.push(path.join(packageRoot,'../../third_party/hwm14/hwm14.cpp'),path.join(packageRoot,'../../third_party/hwm14/hwm14_data.cpp'),path.join(packageRoot,'../../third_party/nrlmsise00/nrlmsise-00.c'),path.join(packageRoot,'../../third_party/nrlmsise00/nrlmsise-00_data.c'),path.join(packageRoot,'src/hpop_plugin.cpp'),path.join(packageRoot,'src/cpp/src/prw_execution.cpp'));
+units.push(path.join(packageRoot,'../../third_party/hwm14/hwm14.cpp'),path.join(packageRoot,'../../third_party/hwm14/hwm14_data.cpp'),path.join(packageRoot,'../../third_party/nrlmsise00/nrlmsise-00.c'),path.join(packageRoot,'../../third_party/nrlmsise00/nrlmsise-00_data.c'),path.join(packageRoot,'src/hpop_plugin.cpp'),path.join(packageRoot,'src/cpp/src/prw_execution.cpp'),path.join(packageRoot,'src/cpp/src/prw_dynamics.cpp'),path.join(packageRoot,'src/cpp/src/resident_dynamics.cpp'),path.join(packageRoot,'src/cpp/src/kernel_store.cpp'));
 // Earth orientation for the earth_orientation input (prw_execution.cpp): the
 // vendored ERFA amalgamated exactly as foundation/frames compiles it, so both
 // modules evaluate one IAU 2006/2000A chain.

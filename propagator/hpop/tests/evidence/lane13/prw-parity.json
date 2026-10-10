@@ -1,25 +1,25 @@
 {
   "ok": true,
   "fixture": "TMPL lane13 PRW malformed classifications",
-  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--hpop-full-force-20261009/propagator/hpop/dist/isomorphic/module.wasm",
-  "artifactSha256": "5b7b6ead6a44678e9cbc3fbcfb57bfaf393c3d9d37ba635ef9677a71147cfc8c",
-  "moduleSha256": "5b7b6ead6a44678e9cbc3fbcfb57bfaf393c3d9d37ba635ef9677a71147cfc8c",
+  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--hpop-resident-full-force-20261010/propagator/hpop/dist/isomorphic/module.wasm",
+  "artifactSha256": "aa2f03a7420a65d0f10a67eef25bb20d0d1ba6fc3be1dbe75d84f697fefeed4b",
+  "moduleSha256": "aa2f03a7420a65d0f10a67eef25bb20d0d1ba6fc3be1dbe75d84f697fefeed4b",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 72,
-      "durationMs": 2231
+      "durationMs": 929
     },
     {
       "lane": "wasmedge",
       "runs": 72,
-      "durationMs": 6549
+      "durationMs": 3606
     },
     {
       "lane": "docker-wasmedge",
       "runs": 72,
-      "durationMs": 31683
+      "durationMs": 12671
     }
   ],
   "cases": [
@@ -732,7 +732,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "ec29af961d17093aae834545e3aa2e177b3300e8b5301bafccd9b935daa70d16",
+      "stdoutSha256": "34ecab7cfcd196bc58c5151e49abe2c25a06b4547656f971a76157b6686e59e4",
       "stdoutLength": 312
     },
     {
@@ -742,7 +742,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "ec29af961d17093aae834545e3aa2e177b3300e8b5301bafccd9b935daa70d16",
+      "stdoutSha256": "34ecab7cfcd196bc58c5151e49abe2c25a06b4547656f971a76157b6686e59e4",
       "stdoutLength": 312
     },
     {
@@ -752,7 +752,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "ec29af961d17093aae834545e3aa2e177b3300e8b5301bafccd9b935daa70d16",
+      "stdoutSha256": "34ecab7cfcd196bc58c5151e49abe2c25a06b4547656f971a76157b6686e59e4",
       "stdoutLength": 312
     },
     {
@@ -762,7 +762,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "ec29af961d17093aae834545e3aa2e177b3300e8b5301bafccd9b935daa70d16",
+      "stdoutSha256": "34ecab7cfcd196bc58c5151e49abe2c25a06b4547656f971a76157b6686e59e4",
       "stdoutLength": 312
     },
     {
@@ -1452,7 +1452,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "ec29af961d17093aae834545e3aa2e177b3300e8b5301bafccd9b935daa70d16",
+      "stdoutSha256": "34ecab7cfcd196bc58c5151e49abe2c25a06b4547656f971a76157b6686e59e4",
       "stdoutLength": 312
     },
     {
@@ -1462,7 +1462,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "ec29af961d17093aae834545e3aa2e177b3300e8b5301bafccd9b935daa70d16",
+      "stdoutSha256": "34ecab7cfcd196bc58c5151e49abe2c25a06b4547656f971a76157b6686e59e4",
       "stdoutLength": 312
     },
     {
@@ -1472,7 +1472,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "ec29af961d17093aae834545e3aa2e177b3300e8b5301bafccd9b935daa70d16",
+      "stdoutSha256": "34ecab7cfcd196bc58c5151e49abe2c25a06b4547656f971a76157b6686e59e4",
       "stdoutLength": 312
     },
     {
@@ -1482,7 +1482,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "ec29af961d17093aae834545e3aa2e177b3300e8b5301bafccd9b935daa70d16",
+      "stdoutSha256": "34ecab7cfcd196bc58c5151e49abe2c25a06b4547656f971a76157b6686e59e4",
       "stdoutLength": 312
     },
     {
@@ -2172,7 +2172,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "ec29af961d17093aae834545e3aa2e177b3300e8b5301bafccd9b935daa70d16",
+      "stdoutSha256": "34ecab7cfcd196bc58c5151e49abe2c25a06b4547656f971a76157b6686e59e4",
       "stdoutLength": 312
     },
     {
@@ -2182,7 +2182,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "ec29af961d17093aae834545e3aa2e177b3300e8b5301bafccd9b935daa70d16",
+      "stdoutSha256": "34ecab7cfcd196bc58c5151e49abe2c25a06b4547656f971a76157b6686e59e4",
       "stdoutLength": 312
     },
     {
@@ -2192,7 +2192,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "ec29af961d17093aae834545e3aa2e177b3300e8b5301bafccd9b935daa70d16",
+      "stdoutSha256": "34ecab7cfcd196bc58c5151e49abe2c25a06b4547656f971a76157b6686e59e4",
       "stdoutLength": 312
     },
     {
@@ -2202,7 +2202,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "ec29af961d17093aae834545e3aa2e177b3300e8b5301bafccd9b935daa70d16",
+      "stdoutSha256": "34ecab7cfcd196bc58c5151e49abe2c25a06b4547656f971a76157b6686e59e4",
       "stdoutLength": 312
     }
   ]

@@ -821,6 +821,94 @@ StepResult RKF78WithDense(const std::array<double, 6>& state, double t, double h
     return result;
 }
 
+RKF78Run::RKF78Run(const std::array<double, 6>& y0, int direction, const IntegratorConfig& config,
+                   DerivativeFunc deriv, void* params, shadow::BoundaryEvents* events, bool reuseDerivative)
+    : config_(config), deriv_(deriv), params_(params), events_(events), y_(y0),
+      backward_(direction < 0), reuse_(reuseDerivative),
+      h_(direction < 0 ? -std::abs(config.initialStep) : std::abs(config.initialStep)),
+      maxAttempts_(config.maxSteps * 10) {}  // Allow rejections but prevent infinite loop
+
+bool RKF78Run::running(double target) const {
+    return std::abs(t_) < std::abs(target) && steps_ < config_.maxSteps && attempts_ < maxAttempts_;
+}
+
+const std::array<double, 6>& RKF78Run::derivative() {
+    if (!haveK0_) { deriv_(t_, y_.data(), k0_.data(), params_); haveK0_ = true; }
+    return k0_;
+}
+
+bool RKF78Run::attempt(double target) {
+    attempts_++;
+    if (!reuse_) haveK0_ = false;
+    double h = h_;
+
+    // Adjust step to not overshoot target
+    if (backward_) {
+        if (t_ + h < target) {
+            h = target - t_;
+        }
+    } else {
+        if (t_ + h > target) {
+            h = target - t_;
+        }
+    }
+
+    StepResult stepRes;
+    {
+        double yout[6], yerr[6];
+        astro::rk_detail::rkf78StepFrom<6>(t_, h, y_.data(), derivative().data(), yout, yerr, deriv_, params_);
+        for (int i = 0; i < 6; i++) {
+            stepRes.state[i] = yout[i];
+            stepRes.error[i] = std::abs(yerr[i]);
+        }
+        stepRes.time = t_ + h;
+    }
+
+    // Compute error norm
+    double errNorm = ComputeErrorNorm(stepRes.error, stepRes.state,
+                                      config_.absTolerance, config_.relTolerance);
+
+    // A step across a shadow boundary is shortened to end on it.
+    if (errNorm <= 1.0 && events_) {
+        if (const double shorter = events_->cut(t_, h, stepRes.state.data())) {
+            h_ = shorter;
+            return false;
+        }
+    }
+    const auto accept = [&]() {
+        y_ = stepRes.state;
+        t_ = stepRes.time;
+        haveK0_ = false;
+        boundary_ = events_ && events_->crossedBoundary();
+        if (events_) events_->taken(t_, y_.data());
+        steps_++;
+        maxError_ = std::max(maxError_, errNorm);
+    };
+    if (errNorm <= 1.0) {
+        // Accept step
+        accept();
+
+        // Compute optimal step size (order 8)
+        double optStep = ComputeOptimalStep(std::abs(h), errNorm, 8);
+        optStep = std::min(config_.maxStep, std::max(config_.minStep, optStep));
+        h_ = backward_ ? -optStep : optStep;
+        if (events_) h_ = events_->next(h_);
+        return true;
+    }
+    // Reject step
+    rejections_++;
+    double optStep = ComputeOptimalStep(std::abs(h), errNorm, 8, 0.9, 0.1, 1.0);
+    optStep = std::max(config_.minStep, optStep);
+    h_ = backward_ ? -optStep : optStep;
+
+    // If at minimum step and still rejecting, force acceptance to make progress
+    if (optStep <= config_.minStep * 1.01 && rejections_ > 10) {
+        accept();
+        return true;
+    }
+    return false;
+}
+
 PropagateResult RKF78Propagate(const StateVector& initialState, double targetTime,
                                const IntegratorConfig& config,
                                DerivativeFunc deriv, void* params,
@@ -828,83 +916,20 @@ PropagateResult RKF78Propagate(const StateVector& initialState, double targetTim
     PropagateResult result;
     result.finalState = initialState;
 
-    std::array<double, 6> y = {
-        initialState.position.x, initialState.position.y, initialState.position.z,
-        initialState.velocity.x, initialState.velocity.y, initialState.velocity.z
-    };
+    RKF78Run run({initialState.position.x, initialState.position.y, initialState.position.z,
+                  initialState.velocity.x, initialState.velocity.y, initialState.velocity.z},
+                 targetTime < 0.0 ? -1 : 1, config, deriv, params, events);
+    while (run.running(targetTime)) run.attempt(targetTime);
 
-    double t = 0.0;
-    // Handle backward propagation: use negative step for negative target time
-    bool backward = (targetTime < 0.0);
-    double h = backward ? -std::abs(config.initialStep) : std::abs(config.initialStep);
-    double absTargetTime = std::abs(targetTime);
-
-    uint32_t maxAttempts = config.maxSteps * 10;  // Allow rejections but prevent infinite loop
-    uint32_t attempts = 0;
-
-    while (std::abs(t) < absTargetTime && result.steps < config.maxSteps && attempts < maxAttempts) {
-        attempts++;
-
-        // Adjust step to not overshoot target
-        if (backward) {
-            if (t + h < targetTime) {
-                h = targetTime - t;
-            }
-        } else {
-            if (t + h > targetTime) {
-                h = targetTime - t;
-            }
-        }
-
-        StepResult stepRes = RKF78(y, t, h, deriv, params);
-
-        // Compute error norm
-        double errNorm = ComputeErrorNorm(stepRes.error, stepRes.state,
-                                          config.absTolerance, config.relTolerance);
-
-        // A step across a shadow boundary is shortened to end on it.
-        if (errNorm <= 1.0 && events) {
-            if (const double shorter = events->cut(t, h, stepRes.state.data())) {
-                h = shorter;
-                continue;
-            }
-        }
-        if (errNorm <= 1.0) {
-            // Accept step
-            y = stepRes.state;
-            t = stepRes.time;
-            if (events) events->taken(t, y.data());
-            result.steps++;
-            result.maxError = std::max(result.maxError, errNorm);
-
-            // Compute optimal step size (order 8)
-            double optStep = ComputeOptimalStep(std::abs(h), errNorm, 8);
-            optStep = std::min(config.maxStep, std::max(config.minStep, optStep));
-            h = backward ? -optStep : optStep;
-            if (events) h = events->next(h);
-        } else {
-            // Reject step
-            result.rejections++;
-            double optStep = ComputeOptimalStep(std::abs(h), errNorm, 8, 0.9, 0.1, 1.0);
-            optStep = std::max(config.minStep, optStep);
-            h = backward ? -optStep : optStep;
-
-            // If at minimum step and still rejecting, force acceptance to make progress
-            if (optStep <= config.minStep * 1.01 && result.rejections > 10) {
-                y = stepRes.state;
-                t = stepRes.time;
-                if (events) events->taken(t, y.data());
-                result.steps++;
-                result.maxError = std::max(result.maxError, errNorm);
-            }
-        }
-    }
-
+    const auto& y = run.state();
     result.finalState.position = Vec3(y[0], y[1], y[2]);
     result.finalState.velocity = Vec3(y[3], y[4], y[5]);
-    result.finalState.epoch = initialState.epoch + t / 86400.0;
-    result.totalTime = t;
-    result.success = (result.steps < config.maxSteps);
+    result.finalState.epoch = initialState.epoch + run.time() / 86400.0;
+    result.totalTime = run.time();
+    result.steps = run.steps();
+    result.rejections = run.rejections();
+    result.maxError = run.maxError();
+    result.success = (run.steps() < config.maxSteps);
 
     return result;
 }
@@ -1836,6 +1861,21 @@ PropagateResult GenerateEphemerisDense(const StateVector& initialState, double d
 
     return result;
 }
+
+struct ForceRun::Equations : ForceModelWrapper {};
+
+ForceRun::ForceRun(const StateVector& initial, int direction, const IntegratorConfig& config,
+                   ForceModel::ForceModelSet& forces, bool reuseDerivative)
+    : equations_(new Equations) {
+    equations_->forceSet = &forces;
+    equations_->epoch = clockEpoch(forces, initial);
+    const std::array<double, 6> y0 = {initial.position.x, initial.position.y, initial.position.z,
+                                      initial.velocity.x, initial.velocity.y, initial.velocity.z};
+    events_.reset(new shadow::BoundaryEvents(forces, equations_->epoch, 0.0, y0.data()));
+    run_.reset(new RKF78Run(y0, direction, config, forceModelDerivative, equations_.get(),
+                            events_->active() ? events_.get() : nullptr, reuseDerivative));
+}
+ForceRun::~ForceRun() = default;
 
 PropagateResult PropagateWithResult(const StateVector& initialState, double dt,
                                     const IntegratorConfig& config,

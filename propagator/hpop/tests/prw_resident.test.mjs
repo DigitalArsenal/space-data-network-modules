@@ -25,7 +25,7 @@ function seed(handle=31, generation=1n, extra={}) {
 }
 const frame = (portId, arm, record) => ({portId, typeRef:TYPE, payload:encodePrw(arm,record)});
 const input = (methodId, arm, record, outputStreamCap=1) => ({methodId, outputStreamCap,
-  inputs:[frame(methodId==='ingest_state'?'state':'request',arm,record)]});
+  inputs:[frame(methodId==='ingest_state_gravity_only'?'state':'request',arm,record)]});
 async function harness(t) {
   const h = await residentHarness(residentRuntime);
   t.after(()=>h.destroy());
@@ -61,7 +61,7 @@ function assertUnmeasured(quality) {
 
 test('PRW resident retains SI state and host handles at the initial TDB epoch',async t=>{
   const h=await harness(t);
-  success(await h.invoke(input('ingest_state','RESIDENT_STATE',seed())));
+  success(await h.invoke(input('ingest_state_gravity_only','RESIDENT_STATE',seed())));
   const [result]=success(await h.invoke(input('propagate_state','RESIDENT_REQUEST',batch())));
   const out=result.RESIDENT_STATE;
   assert.equal(out.ENTITY_HANDLE,31);
@@ -80,7 +80,7 @@ test('PRW resident retains SI state and host handles at the initial TDB epoch',a
 test('PRW resident UTC clock is converted inside WASM before TDB integration',async t=>{
   const h=await harness(t);
   const state=seed(); state.STATE.EPOCH_TIME_SYSTEM='UTC';
-  success(await h.invoke(input('ingest_state','RESIDENT_STATE',state)));
+  success(await h.invoke(input('ingest_state_gravity_only','RESIDENT_STATE',state)));
   const request=batch(); request.TARGET_EPOCH=instant(epoch,'UTC');
   const [result]=success(await h.invoke(input('propagate_state','RESIDENT_REQUEST',request)));
   const out=result.RESIDENT_STATE;
@@ -101,18 +101,18 @@ test('PRW resident UTC clock is converted inside WASM before TDB integration',as
 
 test('PRW replacement is atomic and rejects stale generations and unsupported controls',async t=>{
   const h=await harness(t);
-  success(await h.invoke(input('ingest_state','RESIDENT_STATE',seed())));
+  success(await h.invoke(input('ingest_state_gravity_only','RESIDENT_STATE',seed())));
   for (const extra of [
     {HAS_MASS_KG:true,MASS_KG:1000},
     {HAS_DRAG_AREA_OVER_MASS_M2_KG:true,DRAG_AREA_OVER_MASS_M2_KG:0.01},
     {HAS_SRP_AREA_OVER_MASS_M2_KG:true,SRP_AREA_OVER_MASS_M2_KG:0.01},
-  ]) rejected(await h.invoke(input('ingest_state','RESIDENT_STATE',seed(31,2n,extra))),'unsupported-configuration');
+  ]) rejected(await h.invoke(input('ingest_state_gravity_only','RESIDENT_STATE',seed(31,2n,extra))),'unsupported-configuration');
   // Failed replacement leaves the previous catalog generation intact.
   success(await h.invoke(input('propagate_state','RESIDENT_REQUEST',batch())));
-  rejected(await h.invoke(input('ingest_state','RESIDENT_STATE',seed())),'stale-instance');
+  rejected(await h.invoke(input('ingest_state_gravity_only','RESIDENT_STATE',seed())),'stale-instance');
   const [prepared]=success(await h.invoke(input('prepare_trajectory_segments','PREPARE_REQUEST',prepare())));
   const handle=prepared.PREPARE_RESULT.SEGMENT_SET_HANDLE;
-  success(await h.invoke(input('ingest_state','RESIDENT_STATE',seed(31,2n))));
+  success(await h.invoke(input('ingest_state_gravity_only','RESIDENT_STATE',seed(31,2n))));
   rejected(await h.invoke(input('propagate_state','RESIDENT_REQUEST',batch())),'stale-instance');
   rejected(await h.invoke(input('describe_trajectory_segments','DESCRIBE_REQUEST',describe(handle,2n))),'stale-handle');
   success(await h.invoke(input('propagate_state','RESIDENT_REQUEST',batch(2n))));
@@ -122,16 +122,16 @@ test('PRW resident rejects unsupported axes, wrong arms and invalid selected sta
   const h=await harness(t);
   for (const axes of ['ECEF','TEME']) {
     const state=seed(); state.COORDINATE_SYSTEM=coordinateSystem(axes); state.STATE.COORDINATE_SYSTEM_NAME=axes;
-    rejected(await h.invoke(input('ingest_state','RESIDENT_STATE',state)),'eop-data-required');
+    rejected(await h.invoke(input('ingest_state_gravity_only','RESIDENT_STATE',state)),'eop-data-required');
   }
-  success(await h.invoke(input('ingest_state','RESIDENT_STATE',seed(31,1n,{VALID:false}))));
+  success(await h.invoke(input('ingest_state_gravity_only','RESIDENT_STATE',seed(31,1n,{VALID:false}))));
   rejected(await h.invoke(input('propagate_state','RESIDENT_REQUEST',batch())),'invalid-state');
   rejected(await h.invoke(input('propagate_state','VERSION_QUERY',true)),'method-arm-mismatch');
 });
 
 test('PRW resident preserves requested ordering and validates duplicates',async t=>{
   const h=await harness(t);
-  success(await h.invoke({methodId:'ingest_state',inputs:[
+  success(await h.invoke({methodId:'ingest_state_gravity_only',inputs:[
     frame('state','RESIDENT_STATE',seed(31)),frame('state','RESIDENT_STATE',seed(47)),
   ]}));
   const request=batch(1n,[47,31]); request.MAXIMUM_COUNT=1;
@@ -140,7 +140,7 @@ test('PRW resident preserves requested ordering and validates duplicates',async 
   assert.equal(response.yielded,false); assert.equal(BigInt(response.backlogRemaining),0n);
   rejected(await h.invoke(input('propagate_state','RESIDENT_REQUEST',batch(1n,[31,31]))),'invalid-request');
   rejected(await h.invoke(input('propagate_state','RESIDENT_REQUEST',batch(1n,[999]))),'unknown-entity');
-  const replacement={methodId:'ingest_state',inputs:[
+  const replacement={methodId:'ingest_state_gravity_only',inputs:[
     frame('state','RESIDENT_STATE',seed(31,2n)),frame('state','RESIDENT_STATE',seed(31,2n)),
   ]};
   rejected(await h.invoke(replacement),'invalid-request');
@@ -150,17 +150,17 @@ test('PRW resident preserves requested ordering and validates duplicates',async 
 test('PRW resident invalidates diagnostic configuration and burn mutations',
   {skip:residentRuntime!=='browser'?'SDK process harness intentionally exposes only public PIV methods, not diagnostic C exports':false},async t=>{
   const h=await harness(t);
-  success(await h.invoke(input('ingest_state','RESIDENT_STATE',seed())));
+  success(await h.invoke(input('ingest_state_gravity_only','RESIDENT_STATE',seed())));
   h.instance.exports.plugin_set_integrator(2);
   rejected(await h.invoke(input('propagate_state','RESIDENT_REQUEST',batch(1n,[31]))),'stale-instance');
-  success(await h.invoke(input('ingest_state','RESIDENT_STATE',seed(31,2n))));
+  success(await h.invoke(input('ingest_state_gravity_only','RESIDENT_STATE',seed(31,2n))));
   h.instance.exports.plugin_clear_burns(0);
   rejected(await h.invoke(input('propagate_state','RESIDENT_REQUEST',batch(2n,[31]))),'stale-instance');
 });
 
 test('PRW trajectory exports nested PPE, honest quality, and bounded source chunks',async t=>{
   const h=await harness(t);
-  success(await h.invoke({methodId:'ingest_state',inputs:[
+  success(await h.invoke({methodId:'ingest_state_gravity_only',inputs:[
     frame('state','RESIDENT_STATE',seed(31)),frame('state','RESIDENT_STATE',seed(47)),
   ]}));
   const firstBatch=await h.invoke(input('propagate_state','RESIDENT_REQUEST',batch()));
@@ -203,7 +203,7 @@ test('PRW trajectory exports nested PPE, honest quality, and bounded source chun
 
 test('PRW trajectory windows on segment boundaries export one after another',async t=>{
   const h=await harness(t);
-  success(await h.invoke({methodId:'ingest_state',inputs:[frame('state','RESIDENT_STATE',seed(31)),frame('state','RESIDENT_STATE',seed(47))]}));
+  success(await h.invoke({methodId:'ingest_state_gravity_only',inputs:[frame('state','RESIDENT_STATE',seed(31)),frame('state','RESIDENT_STATE',seed(47))]}));
   // 2 h windows start on 10-minute segment boundaries, where the grid index
   // used to land one segment off; each window is exported after the last.
   let previousEnd=null;

@@ -183,9 +183,9 @@ inline bool decodeEpochTT(const TIMInstant* instant, TTEpoch& out, std::string& 
     if (instant->SUBSECOND_NANOS()) fraction += instant->SUBSECOND_NANOS() * 1e-9;
     return toTT(whole, fraction, jd, instant->TIME_SYSTEM(), out, error);
 }
-// TT epoch -> ISO8601 text on TDB with nine decimals (the PRW output scale).
-inline std::string formatTdb(const TTEpoch& tt) {
-    TTEpoch tdb = normalizeTT(tt.whole, tt.fraction + tdbMinusTtSeconds(tt.jdTt()));
+// Seconds since J2000.0 of a time scale (two parts, as TTEpoch holds TT) ->
+// ISO8601 text with nine decimals on the same scale.
+inline std::string formatIsoSeconds(const TTEpoch& tdb) {
     double seconds = tdb.whole + 43200.0;                 // since 2000-01-01T00:00
     const double days = std::floor(seconds / 86400.0);
     double sod = seconds - days * 86400.0;
@@ -198,6 +198,18 @@ inline std::string formatTdb(const TTEpoch& tt) {
     char out[48];
     std::snprintf(out, sizeof(out), "%04d-%02d-%02dT%02d:%02d:%02d.%09lld", y, m, d, isod / 3600, (isod / 60) % 60, isod % 60, ns);
     return out;
+}
+// TT epoch <-> TDB seconds since J2000.0 TDB; the periodic TDB - TT is
+// evaluated at the TT date (it differs from the TDB argument by milliseconds).
+inline TTEpoch tdbSecondsOf(const TTEpoch& tt) {
+    return normalizeTT(tt.whole, tt.fraction + tdbMinusTtSeconds(tt.jdTt()));
+}
+inline TTEpoch ttOfTdbSeconds(const TTEpoch& tdb) {
+    return normalizeTT(tdb.whole, tdb.fraction - tdbMinusTtSeconds(2451545.0 + (tdb.whole + tdb.fraction) / 86400.0));
+}
+// TT epoch -> ISO8601 text on TDB with nine decimals (the PRW output scale).
+inline std::string formatTdb(const TTEpoch& tt) {
+    return formatIsoSeconds(tdbSecondsOf(tt));
 }
 inline bool decodeEpoch(const TIMInstant* instant, double& tdb, double& utc, std::string& error) {
     if(!instant) return prwError(error,"invalid-epoch: Missing TIMInstant.");
