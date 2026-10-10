@@ -19,16 +19,16 @@
    "sha256": "2cc5c36d3032027c48387af78d97ffd42a4e6cfc9359cf8c186527632f263cd3"
   },
   {
-   "label": "ingest NOAA 20",
+   "label": "ingest the synthetic sun-synchronous object",
    "sha256": "0324d854f1a904503d7a66908d890ed74197c637c7896943b36a79341d1a8c6e"
   },
   {
    "label": "all objects",
-   "sha256": "9077f6272af36787542f3fbb5ce48ac81b0c06999d42404b1f4c94e12a7f7b4c"
+   "sha256": "61f6821c557f1e6ec4fafe57fcf351183964457ce820a7ed4dc306fae292afe0"
   },
   {
    "label": "handles [1, 0]",
-   "sha256": "c21172529b6ec7c5bfdff652bd70d5be73f7c5207f3b0d90a6d18988edf0a82f"
+   "sha256": "17f4f572a3fa4fc98eecea1e166995e93fce33d254ef3b43fd938a932b127265"
   },
   {
    "label": "max_count 1",

@@ -125,11 +125,6 @@ the PIV contract, the Tudat-derived SGP4 cases (below), and:
 - `ephemerisOutput`: every `$OEM` state equals its element set propagated
   alone (to the microsecond epochs: < 1 m), block spans and metadata, and
   `detect_maneuvers` reads the result.
-- `issReboostEphemeris`: the ISS history around the 2024-05-24 reboost (from
-  the local SDN GP archive; skipped without it) through `propagate_ephemeris`
-  and `detect_maneuvers`: one event, at 14:56:08 UTC with 1.050 m/s in-track,
-  where docs/studies/maneuver-detection.md reports 14:56 and 1.06 m/s (NASA
-  TIG 14:16).
 - `legacyPropagateState`: 1.1.0 requests return the 1.1.0 artifact's
   responses byte for byte (`tests/fixtures/propagate-state-1.1.0-digests.json`).
 

@@ -16,17 +16,13 @@ import {
   encodeOmmPayload,
   encodePropagatorBatchRequest,
   encodeSizePrefixedStream,
+  SYNTHETIC_SSO,
 } from "./lib/payloadEncoders.mjs";
 
 const wasmPath = fileURLToPath(new URL("../dist/isomorphic/module.wasm", import.meta.url));
 const OMM_TYPE = { schemaName: "orbpro.sds.omm", fileIdentifier: "$OMM", rootTypeName: "OMM" };
 const PROP_TYPE = { schemaName: "orbpro.propagator.PropagatorBatchRequest", fileIdentifier: "PROP", rootTypeName: "PropagatorBatchRequest" };
 const VALLADO = JSON.parse(fs.readFileSync(new URL("../../../analysis/epoch-state/tests/vallado-verification.json", import.meta.url), "utf8")).cases;
-const NOAA20 = {
-  noradId: 43013, objectName: "NOAA 20", objectId: "2017-073A", epoch: "2024-01-01T00:00:00",
-  meanMotion: 14.19545214, eccentricity: 0.0001397, inclination: 98.7302, raan: 51.2511,
-  argPericenter: 92.7364, meanAnomaly: 267.3994, bstar: 0.000036, meanMotionDot: 0.00000044,
-};
 const HISTORY = [0, 1, 2, 3, 4].map((k) => ({
   epoch: new Date(Date.UTC(2024, 0, 1, 6 * k)).toISOString().replace(/\.000Z$/, ""),
   meanAnomaly: (173.4281 + 47 * k) % 360,
@@ -46,7 +42,7 @@ const invoke = (methodId, inputs, outputStreamCap = 0) => ({ methodId, inputs, o
 const cases = [
   { id: "ingest-omm", request: invoke("ingest_omm", [omm(vallado)]) },
   { id: "propagate-state-earth-fixed-1.1.0-request", request: invoke("propagate_state",
-    [request(encodeLegacyPropagatorBatchRequest({ epoch: 2460310.75, entityHandles: [0, 1] })), omm([encodeOmmPayload(), encodeOmmPayload(NOAA20)])], 2) },
+    [request(encodeLegacyPropagatorBatchRequest({ epoch: 2460310.75, entityHandles: [0, 1] })), omm([encodeOmmPayload(), encodeOmmPayload(SYNTHETIC_SSO)])], 2) },
   { id: "propagate-state-teme-by-catalog-number", request: invoke("propagate_state",
     [request(encodePropagatorBatchRequest({ epoch: 2453912.0, catalogNumbers: [11801, 5, 14128], outputFrame: ReferenceFrame.TEME })), omm(vallado)], 3) },
   { id: "propagate-state-gcrf-by-catalog-number", request: invoke("propagate_state",
@@ -55,10 +51,10 @@ const cases = [
     [request(encodePropagatorBatchRequest({ epoch: 0, catalogNumbers: [25544], outputFrame: ReferenceFrame.ICRF, stepSeconds: 600, elementSetBlocks: true })),
       omm(HISTORY.map((s) => encodeOmmPayload(s)))], 1) },
   { id: "propagate-ephemeris-span-teme", request: invoke("propagate_ephemeris",
-    [request(encodePropagatorBatchRequest({ epoch: 2460310.6, stopEpoch: 2460310.7, catalogNumbers: [43013], outputFrame: ReferenceFrame.TEME, stepSeconds: 60 })),
-      omm([encodeOmmPayload(), encodeOmmPayload(NOAA20)])], 1) },
+    [request(encodePropagatorBatchRequest({ epoch: 2460310.6, stopEpoch: 2460310.7, catalogNumbers: [99002], outputFrame: ReferenceFrame.TEME, stepSeconds: 60 })),
+      omm([encodeOmmPayload(), encodeOmmPayload(SYNTHETIC_SSO)])], 1) },
   { id: "refuse-handle-mismatch", request: invoke("propagate_state",
-    [request(encodePropagatorBatchRequest({ epoch: 2460310.75, entityHandles: [0], catalogNumbers: [43013] })), omm([encodeOmmPayload(), encodeOmmPayload(NOAA20)])], 1) },
+    [request(encodePropagatorBatchRequest({ epoch: 2460310.75, entityHandles: [0], catalogNumbers: [99002] })), omm([encodeOmmPayload(), encodeOmmPayload(SYNTHETIC_SSO)])], 1) },
   { id: "refuse-unknown-object", request: invoke("propagate_ephemeris",
     [request(encodePropagatorBatchRequest({ epoch: 0, catalogNumbers: [99999], outputFrame: ReferenceFrame.TEME, stepSeconds: 60, elementSetBlocks: true })), omm([encodeOmmPayload()])], 1) },
 ];

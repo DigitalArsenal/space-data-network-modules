@@ -18,19 +18,16 @@ import {
   encodeOmmPayload,
   encodePropagatorBatchRequest,
   encodeSizePrefixedStream,
+  SYNTHETIC_SSO,
 } from "./lib/payloadEncoders.mjs";
 
 const OMM_TYPE = { schemaName: "orbpro.sds.omm", fileIdentifier: "$OMM", rootTypeName: "OMM" };
 const PROP_TYPE = { schemaName: "orbpro.propagator.PropagatorBatchRequest", fileIdentifier: "PROP", rootTypeName: "PropagatorBatchRequest" };
 const EPOCH = 2460310.75;  // 2024-01-01T06:00:00 UTC, six hours after both sets
 
-// A: the ISS fixture. B: a sun-synchronous LEO with different elements.
+// A: the ISS fixture. B: a synthetic sun-synchronous LEO.
 const A = { noradId: 25544 };
-const B = {
-  noradId: 43013, objectName: "NOAA 20", objectId: "2017-073A", epoch: "2024-01-01T00:00:00",
-  meanMotion: 14.19545214, eccentricity: 0.0001397, inclination: 98.7302, raan: 51.2511,
-  argPericenter: 92.7364, meanAnomaly: 267.3994, bstar: 0.000036, meanMotionDot: 0.00000044,
-};
+const B = SYNTHETIC_SSO;
 
 function ingest(module, payload) {
   const result = invokePiv(module, { methodId: "ingest_omm", inputs: [{ portId: "omm", payload, typeRef: OMM_TYPE }] });
@@ -89,7 +86,7 @@ test("catalog_numbers answers the named object after A then B are ingested separ
     const mismatch = propagate(module, { entityHandles: [0], catalogNumbers: [B.noradId] });
     assert.equal(mismatch.response.STATUS_CODE, 400);
     assert.equal(mismatch.response.ERROR_CODE, "handle-mismatch");
-    assert.match(mismatch.response.ERROR_MESSAGE, /handle 0 is NORAD 25544, not 43013/);
+    assert.match(mismatch.response.ERROR_MESSAGE, /handle 0 is NORAD 25544, not 99002/);
     assert.equal(mismatch.outputPayloads.length, 0);
 
     const matched = propagate(module, { entityHandles: [1], catalogNumbers: [B.noradId] });

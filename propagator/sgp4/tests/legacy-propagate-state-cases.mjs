@@ -7,15 +7,10 @@
 import crypto from "node:crypto";
 
 import { encodePivInvokeRequest, invokePivRaw } from "./lib/pivInvokeHelper.mjs";
-import { encodeLegacyPropagatorBatchRequest, encodeOmmPayload } from "./lib/payloadEncoders.mjs";
+import { encodeLegacyPropagatorBatchRequest, encodeOmmPayload, SYNTHETIC_SSO } from "./lib/payloadEncoders.mjs";
 
 const OMM_TYPE = { schemaName: "orbpro.sds.omm", fileIdentifier: "$OMM", rootTypeName: "OMM" };
 const PROP_TYPE = { schemaName: "orbpro.propagator.PropagatorBatchRequest", fileIdentifier: "PROP", rootTypeName: "PropagatorBatchRequest" };
-const NOAA20 = {
-  noradId: 43013, objectName: "NOAA 20", objectId: "2017-073A", epoch: "2024-01-01T00:00:00",
-  meanMotion: 14.19545214, eccentricity: 0.0001397, inclination: 98.7302, raan: 51.2511,
-  argPericenter: 92.7364, meanAnomaly: 267.3994, bstar: 0.000036, meanMotionDot: 0.00000044,
-};
 
 const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
 
@@ -30,7 +25,7 @@ export function legacyRounds(module) {
 
   ingest("ingest ISS", encodeOmmPayload());
   for (const epoch of [2460310.5, 2460310.75, 2460311.0]) propagate(`ISS at JD ${epoch}`, { epoch, entityHandles: [0], maxCount: 1 }, 1);
-  ingest("ingest NOAA 20", encodeOmmPayload(NOAA20));
+  ingest("ingest the synthetic sun-synchronous object", encodeOmmPayload(SYNTHETIC_SSO));
   propagate("all objects", { epoch: 2460310.6 }, 2);
   propagate("handles [1, 0]", { epoch: 2460310.6, entityHandles: [1, 0] }, 2);
   propagate("max_count 1", { epoch: 2460310.6, maxCount: 1 }, 1);

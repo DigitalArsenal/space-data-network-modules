@@ -38,6 +38,14 @@ export { CatalogQueryKind };
 
 // -------- OMM / CAT / REC encoders (SDS wire contract) ----------------------
 
+// A second object for multi-object cases: a synthetic sun-synchronous LEO with
+// round elements, not any real object's element set.
+export const SYNTHETIC_SSO = Object.freeze({
+  noradId: 99002, objectName: "SYNTHETIC SSO", objectId: "2026-998A", epoch: "2024-01-01T00:00:00",
+  meanMotion: 14.2, eccentricity: 0.0001, inclination: 98.7, raan: 51.0,
+  argPericenter: 90.0, meanAnomaly: 270.0, bstar: 0.00004, meanMotionDot: 0,
+});
+
 export function encodeOmmPayload({
   noradId = 25544,
   objectName = "ISS (ZARYA)",
