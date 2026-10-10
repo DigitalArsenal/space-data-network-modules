@@ -1,0 +1,1 @@
+SpaceX public ephemerides, open (owner determination 2026-10-10). Source: SpaceX, https://api.starlink.com/public-files/ephemerides/ ; captured 2026-07-14 (launch group 2026-034). The CelesTrak SupGP rows that were paired with these files are not in the tree (CelesTrak publishes no licence for SupGP); the live reference gate runs from $SDN_MODULES_PRIVATE_FIXTURES.
