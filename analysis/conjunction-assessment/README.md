@@ -5,7 +5,7 @@ using the canonical SDK invoke contract and published SDS **1.231.0** records.
 
 ## Public methods and records
 
-`plugin-manifest.json` advertises all 23 methods. Requests and results use
+`plugin-manifest.json` advertises all 24 methods. Requests and results use
 ordinary, verified FlatBuffers with explicit UTC times, Earth reference frames,
 source provenance, probability algorithms and units.
 
@@ -26,6 +26,7 @@ source provenance, probability algorithms and units.
 | `refine_candidates` | CQR window request on a resident index, optional candidate pairs and exclusions | Chunked CQR catalog results, plus one OMM per excluded object |
 | `destroy_screening_index` | CQR destroy request | Empty successful response |
 | `version` | CQR version query | CQR version result |
+| `possibility_of_collision` | `CPQ1` frame: two admissible sets (finite supports with possibilities, or ellipsoidal kernels) and the combined radius | `CPR1` frame: possibility and necessity of collision, miss-distance and closest-approach-time ranges |
 
 Use the exact method names, port names and CQR arms in the manifest. The former
 JSON `invoke` operation envelope and Emscripten JSON exports are retired.
@@ -115,6 +116,28 @@ See the Evidence-Supported ASO Catalog whitepaper, sections 5, 9 and 16.2.
 
 `signCdmOutput(...)` remains a Node.js host utility for signing emitted CDM bytes and
 provenance. It does not perform conjunction calculations.
+
+### Screening admissible trajectories (possibility and necessity)
+
+`possibility_of_collision` screens two admissible sets by possibility and
+necessity (whitepaper section 12; TEAG, Jah 2026, Remark 3.7). With finite
+supports (for example the ESPF support points of `analysis/estimation`, with
+their possibilities), a pair collides when its rectilinear closest approach
+within a window around the common epoch is within the combined hard-body
+radius; a pair's joint possibility is the smaller of the two (non-interactive
+objects); the possibility of collision is the largest joint possibility of a
+colliding pair, and its necessity is one minus the possibility of the
+complement. With ellipsoidal sets carrying Gaussian-shaped possibility kernels,
+the relative kernel is bounded from outside by the minimum-trace ellipsoid of
+the Minkowski sum (conservative) and evaluated in the encounter plane at the
+nominal closest approach, the short-term assumptions of Foster's probability.
+Possibility and necessity are not collision probabilities, and finite
+supports screen only the encounters they sample. The request and result are
+module-local aligned frames (`CPQ1`, `CPR1`), as `coarse_grid`'s; the layout
+is in `src/cpp/src/possibility_screening.cpp`, which uses the TEAG primitives
+of `analysis/estimation/src/teag.hpp`. Authority:
+`tests/possibilityScreening.test.mjs` (definitions on a constructed support,
+the encounter-plane closed forms, a brute-force disk search, monotonicity).
 
 ## Build and runtime contract
 

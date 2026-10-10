@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.analysis.estimation",
   "name": "Measurement-based Orbit Estimation",
   "version": "0.2.0",
-  "description": "C++ six/eight-state EKF, nonlinear Wan-Merwe UKF and linear KF with RTS, optional innovation-matched Q scaling, sigma-gated R inflation, PV and receiver-clock pseudorange. Module-local Estimation.fbs extension v1 preserves all legacy structs and field IDs; adds optional SequentialOptions, ExtendedObservation, ExtendedFilterEpoch and inverted PropagationQuery/Answer tables. SDS ODR/OCM retain six-state orbit projections; linear KF uses their unspecified estimator category. Extension v2 adds fit_batch: batch least squares of the state plus dynamic parameters (B, BDOT, AGOM) with full 3x3 position weights through the inverted port. Validated against Orekit 13.1 BatchLSEstimator, Orekit 13.1, Hipparchus 4.0.3, analytic Gaussian cases and nonlinear multi-sensor Monte Carlo.",
+  "description": "C++ six/eight-state EKF, nonlinear Wan-Merwe UKF and linear KF with RTS, optional innovation-matched Q scaling, sigma-gated R inflation, PV and receiver-clock pseudorange. Module-local Estimation.fbs extension v1 preserves all legacy structs and field IDs; adds optional SequentialOptions, ExtendedObservation, ExtendedFilterEpoch and inverted PropagationQuery/Answer tables. SDS ODR/OCM retain six-state orbit projections; linear KF uses their unspecified estimator category. Extension v2 adds fit_batch: batch least squares of the state plus dynamic parameters (B, BDOT, AGOM) with full 3x3 position weights through the inverted port. Validated against Orekit 13.1 BatchLSEstimator, Orekit 13.1, Hipparchus 4.0.3, analytic Gaussian cases and nonlinear multi-sensor Monte Carlo. Extension v3 adds the Epistemic Support-Point Filter (ESPF_2025 and ESPF_2026), an ellipsoidal set-membership filter (ELLIPSOIDAL_SET_MEMBERSHIP) and evaluate_teag (the TEAG primitives); docs/espf-spec.md.",
   "pluginFamily": "analysis",
   "threadModel": "wasi-sequential",
   "sequentialJustification": {
@@ -103,7 +103,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Runs six-state batch WLS, nominal-trajectory EKF or EKF/RTS from caller-supplied cumulative STMs. UKF selects a legacy measurement-only unscented update, not a nonlinear-dynamics UKF. No linear-KF selector, adaptive-noise controls or GNSS PVT/clock states exist in the pinned contract."
+      "description": "Runs six-state batch WLS, nominal-trajectory EKF or EKF/RTS from caller-supplied cumulative STMs. UKF selects a legacy measurement-only unscented update, not a nonlinear-dynamics UKF. No linear-KF selector, adaptive-noise controls or GNSS PVT/clock states exist in the pinned contract. Extension v3: ESPF_2025 and ESPF_2026 (support points through the same inverted port, max-plus conjunctive update, PCRB-admissible basin, whitened minimax medoid, MVEE regeneration) and ELLIPSOIDAL_SET_MEMBERSHIP (outer bounding ellipsoids), configured by SequentialOptions.espf, set_membership and initial_support; results add support_history and final_support."
     },
     {
       "methodId": "fit_batch",
@@ -143,6 +143,41 @@
       "maxBatch": 1,
       "drainPolicy": "single-shot",
       "description": "Makes the four compiled initial-orbit methods reachable through the family ABI."
+    },
+    {
+      "methodId": "evaluate_teag",
+      "displayName": "Evaluate TEAG Primitives",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [{
+            "setId": "teag-request",
+            "allowedTypes": [{"schemaName": "Estimation.fbs", "fileIdentifier": "$EST", "rootTypeName": "EstimationEnvelope"}],
+            "description": "teag_request: a finite support (points), its prior impossibility, the surprisal or whitened squared innovations, events, alpha levels, a medoid subset and metric, Smolyak and Minkowski inputs."
+          }],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "TEAG primitive request."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [{
+            "setId": "teag-result",
+            "allowedTypes": [{"schemaName": "Estimation.fbs", "fileIdentifier": "$EST", "rootTypeName": "EstimationEnvelope"}],
+            "description": "teag_result: the conjunctive (max-plus) posterior impossibility, its rescaling and zones, alpha-cuts, possibility and necessity of each event, Choquet surprisal and information content, the PCRB-admissible basin, the MVEE, the minimax medoid, Smolyak points, the Minkowski outer bound and the truncated possibilistic entropy."
+          }],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "TEAG primitive result."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "The Theory of Epistemic Abductive Geometry primitives on a finite support (Jah 2026): impossibility field Phi = -log pi and the conjunctive update Phi+ = max(Phi-, psi), max-rescaling, the active-front zones, alpha-cuts, possibility Pi(A) and necessity N(A) = 1 - Pi(A^c) of events, Choquet surprisal and information content, the PCRB-admissible basin, the minimum-volume enclosing ellipsoid (Khachiyan with Todd-Yildirim away steps), the minimax medoid, Smolyak Clenshaw-Curtis grids, the minimum-trace outer bound of a Minkowski sum and the truncated possibilistic entropy. docs/espf-spec.md maps each to its paper."
     }
   ],
   "schemasUsed": [

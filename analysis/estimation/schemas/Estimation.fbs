@@ -12,7 +12,11 @@ enum EstimatorKind : ubyte (abi, abi_c_name: "OrbProEstimatorKind", abi_c_prefix
   EXTENDED_KALMAN_FILTER = 1,
   UNSCENTED_KALMAN_FILTER = 2,
   EXTENDED_KALMAN_FILTER_WITH_RTS = 3,
-  LINEAR_KALMAN_FILTER = 4
+  LINEAR_KALMAN_FILTER = 4,
+  // Extension v3 (TEAG/ESPF; docs/espf-spec.md).
+  ESPF_2025 = 5,
+  ESPF_2026 = 6,
+  ELLIPSOIDAL_SET_MEMBERSHIP = 7
 }
 
 enum MeasurementKind : ushort (abi, abi_c_name: "OrbProMeasurementKind", abi_c_prefix: "ORBPRO_MEASUREMENT_") {
@@ -240,6 +244,10 @@ table EstimationResult {
   extended_history:[ExtendedFilterEpoch];
   propagation_requests:[PropagationQuery];
   batch_fit:BatchFitResult;
+  // Extension v3: per-observation support diagnostics and the final support
+  // state (ESPF_2025, ESPF_2026, ELLIPSOIDAL_SET_MEMBERSHIP).
+  support_history:[SupportEpoch];
+  final_support:SupportState;
 }
 
 table EstimationEnvelope {
@@ -250,6 +258,9 @@ table EstimationEnvelope {
   initial_orbit_request:InitialOrbitRequest;
   initial_orbit_result:InitialOrbitResult;
   propagation_answers:[PropagationAnswer];
+  // Extension v3: the TEAG primitives (method evaluate_teag).
+  teag_request:TeagRequest;
+  teag_result:TeagResult;
 }
 
 root_type EstimationEnvelope;
@@ -275,6 +286,11 @@ table SequentialOptions {
   initial_covariance8:[double];
   clock_bias_psd:double = 0;
   clock_drift_psd:double = 0;
+  // Extension v3: ESPF and set-membership options, and a support state to
+  // start from (an arc split at an epoch continues exactly).
+  espf:EspfOptions;
+  set_membership:SetMembershipOptions;
+  initial_support:SupportState;
 }
 
 table ExtendedObservation {
@@ -368,4 +384,199 @@ table BatchFitResult {
   // and rejected observation, linearized at the final correction.
   whitened_residuals:[double];
   rejected_observation_indices:[uint];
+}
+
+// Module-local append-only extension v3: the Epistemic Support-Point Filter
+// (ESPF 2025: Jah and Haslett, arXiv 2508.20806; ESPF 2026: Jah 2026, TEAG
+// and ESPF-HJ, preprints 202603.2010 and 202603.2110, and arXiv 2603.10065),
+// the ellipsoidal set-membership filter, and the TEAG primitives. Each
+// default is a value a paper states or a recorded choice (docs/espf-spec.md).
+table EspfOptions {
+  // Smolyak Clenshaw-Curtis level; 0 = the variant's default (2025: 2, 2026: 3).
+  smolyak_level:ubyte = 0;
+  // r0: the initial admissible set {(x - x0)' P0^-1 (x - x0) <= r0^2} with P0
+  // the configuration's initial covariance (2025: its bounding box).
+  initial_bound_scale:double = 3;
+  // k_w: the process-noise set has shape k_w^2 Q (Q of process_noise).
+  process_bound_scale:double = 1;
+  // k_y: the sensor set Pi_y has shape k_y^2 R (R from the sigmas).
+  measurement_bound_scale:double = 1;
+  // 2026 sigma controller (ESPF-HJ section 6: r+ = 1.15, r- = 0.97).
+  sigma_initial:double = 1;
+  sigma_min:double = 0.1;
+  sigma_max:double = 1;
+  rate_expand:double = 1.15;
+  rate_contract:double = 0.97;
+  // N_min; 0 = 2n + 1 (2603.10065 Definition 2.1).
+  minimum_survivors:uint = 0;
+  // PCRB dimension: 0 the state dimension n (TEAG Theorem 4.5), 1 the
+  // measurement rank m (rank-aware PCRB, preprints 202607.2165).
+  pcrb_rank:ubyte = 0;
+  // Medoid metric: 0 the MVEE of the survivors (TEAG section 5.1, eq. 3),
+  // 1 the whitened innovation metric (ESPF-HJ eq. 48).
+  medoid_metric:ubyte = 0;
+  // Volumetric faithfulness: eigenvalues of the regeneration shape at least
+  // this fraction of the largest.
+  vfi_floor_ratio:double = 1e-12;
+  mvee_tolerance:double = 1e-7;
+  mvee_max_iterations:uint = 20000;
+  // Truncated possibilistic entropy per epoch (costly; diagnostics only).
+  entropy_diagnostics:bool = false;
+  // Emit each epoch's survivors and possibilities in SupportEpoch.
+  record_support:bool = false;
+  // 2025: plausibility radius r = sqrt(-2 log(1 - eta)); 3 is eta = 1 - e^-4.5.
+  plausibility_radius:double = 3;
+  compatibility_floor:double = 1e-6;
+  surprisal_threshold:double = 1;
+  // Spread regularization Pi + eps diag(Pi) (relative) or Pi + eps I (SI).
+  regularization:double = 1e-6;
+  regularization_relative:bool = true;
+  spread_sigma0:double = 1;
+  spread_sigma_min:double = 0;
+  spread_sigma_max:double = 1e300;
+  dispersion_gain:double = 0;
+  surprisal_gain:double = 0;
+  surprisal_reference:double = 0;
+  surprisal_scale:double = 1;
+  radius_gain_expand:double = 0;
+  radius_gain_contract:double = 0;
+  // Temporal decay exp(-decay_rate tau), tau the assimilated observation count.
+  decay_rate:double = 0.05;
+  // Mode weights w ~ pi N: 0 N = the residual possibility exp(-d^2/2),
+  // 1 N = the singleton necessity, 2 N = the compatibility.
+  mode_weighting:ubyte = 0;
+  // The 2025 appendix's Gaussian limit: unscented points, product fusion.
+  gaussian_limit:bool = false;
+  // 2026 sigma controller: expand when the realised support contraction
+  // reaches this fraction of the PCRB floor (1: the floor itself; ESPF-HJ
+  // section 6 says "approaching"; docs/espf-spec.md G18).
+  pcrb_trigger:double = 1;
+  // 2025 regeneration chi = x +/- zeta sigma L_i (section 10.5; zeta is not
+  // defined, docs/espf-spec.md G16): 1 = column i of the Cholesky factor;
+  // sqrt(n) makes the regenerated points' 1/(2n) spread equal sigma^2 Pi.
+  regeneration_scale:double = 1;
+}
+
+table SetMembershipOptions {
+  initial_bound_scale:double = 3;
+  process_bound_scale:double = 3;
+  measurement_bound_scale:double = 3;
+  // 0 minimum trace, 1 minimum log det of the outer bounding ellipsoid.
+  criterion:ubyte = 0;
+}
+
+table SupportState {
+  epoch:EstimationEpoch;
+  estimator:EstimatorKind;
+  dimension:ubyte = 6;
+  // count x 6, SI, request frame, at epoch.
+  points:[double];
+  possibility:[double];
+  estimate:[double];
+  // Row-major 6 x 6: the set carried forward.
+  shape:[double];
+  sigma:double = 1;
+  radius:double = 3;
+  dispersion:double;
+  steps:uint;
+}
+
+table SupportEpoch {
+  epoch:EstimationEpoch;
+  estimate:[double];
+  // Posterior set: 2026 the MVEE of the survivors; 2025 the spread matrix;
+  // set-membership the bounding ellipsoid. Shapes, not covariances.
+  shape:[double];
+  carried_shape:[double];
+  predicted_shape:[double];
+  support_count:uint;
+  survivor_count:uint;
+  medoid_index:int = -1;
+  choquet_surprisal:double;
+  information:double;
+  normalization_shift:double;
+  minimum_whitened_innovation:double;
+  basin_radius:double;
+  basin_threshold:double;
+  pcrb_floor:double;
+  log_volume_change:double;
+  sigma:double;
+  radius:double;
+  dispersion:double;
+  mean_surprisal:double;
+  regime_log_det:double;
+  entropy:double;
+  entropy_alpha:double;
+  inconsistent:bool;
+  accepted:bool = true;
+  survivors:[double];
+  survivor_possibility:[double];
+}
+
+// The TEAG primitives on a finite support (method evaluate_teag). Every
+// output whose inputs are present is computed; the rest are left empty.
+table TeagRequest {
+  dimension:ubyte;
+  // count x dimension.
+  points:[double];
+  // Phi- per point (default 0, full prior possibility).
+  prior_impossibility:[double];
+  // psi per point; absent: half the whitened squared innovation below.
+  surprisal:[double];
+  whitened_squared_innovation:[double];
+  // Membership masks, event_count x count row-major (1 = in the event).
+  events:[ubyte];
+  event_count:uint;
+  alpha_levels:[double];
+  front_tolerance:double = 0;
+  // Medoid subset (default every point) and metric shape (n x n; default the
+  // MVEE of the subset).
+  subset:[uint];
+  metric_shape:[double];
+  // PCRB: 0 = dimension; prior whitened radius r-.
+  effective_dimension:uint;
+  prior_radius:double = 1;
+  smolyak_dimension:ubyte;
+  smolyak_level:ubyte;
+  shape_a:[double];
+  shape_b:[double];
+  mvee_tolerance:double = 1e-9;
+  mvee_max_iterations:uint = 100000;
+  entropy:bool = false;
+  minimum_count:uint;
+  // Compute the MVEE of every point (also for the medoid default metric).
+  mvee:bool = false;
+}
+
+table TeagResult {
+  posterior_impossibility:[double];
+  rescaled_impossibility:[double];
+  normalization_shift:double;
+  // -1 history-governed, 0 the active front, +1 evidence-governed.
+  zones:[byte];
+  // Concatenated alpha-cut index lists and their start offsets.
+  alpha_cuts:[uint];
+  alpha_cut_offsets:[uint];
+  // Possibility and necessity of each event on the rescaled posterior field
+  // (on the prior field when no surprisal is given).
+  event_possibility:[double];
+  event_necessity:[double];
+  choquet_surprisal:double;
+  information:double;
+  basin_radius:double;
+  basin_threshold:double;
+  basin_unit_survivors:uint;
+  pcrb_floor:double;
+  mvee_center:[double];
+  mvee_shape:[double];
+  mvee_iterations:uint;
+  mvee_gap:double;
+  mvee_log_volume:double;
+  medoid:int = -1;
+  medoid_radius:double;
+  smolyak_points:[double];
+  minkowski_shape:[double];
+  entropy:double;
+  support_entropy:double;
+  entropy_alpha:double;
 }

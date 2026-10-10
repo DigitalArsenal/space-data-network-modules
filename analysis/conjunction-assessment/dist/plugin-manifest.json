@@ -1774,6 +1774,61 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "possibility_of_collision",
+      "displayName": "Possibility and Necessity of Collision",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "possibility-request-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.ca-possibility-request",
+                "detail": "CPQ1 tag, f64 combined_radius_m, f64 half_window_s, u32 mode (0 finite supports, 1 ellipsoidal kernels), u32 count_a, u32 count_b, u32 alpha_count, f64 alpha[]; mode 0: rows of f64 x y z vx vy vz possibility (SI, one inertial frame) for A then B; mode 1: per object f64 centre[6] and shape[36]."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Two admissible sets at a common epoch near the encounter and the combined hard-body radius."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "possibility-result-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/vnd.sdn.ca-possibility-result",
+                "detail": "CPR1 tag, f64 possibility_collision, f64 necessity_collision, f64 necessity_no_collision, f64 min_miss_m, f64 max_miss_m, f64 tca_min_s, f64 tca_max_s, u64 pairs, u64 colliding_pairs, then per alpha level f64 min_miss_m, max_miss_m, tca_min_s, tca_max_s."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Possibility and necessity of collision and the miss-distance and closest-approach-time ranges."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot",
+      "description": "Screening admissible trajectories by possibility and necessity (ASO catalog whitepaper section 12; TEAG N(A) = 1 - Pi(A^c)): finite supports with possibilities (pairs' rectilinear closest approach within the window; joint possibility min(pi_a, pi_b)) or ellipsoidal sets with Gaussian-shaped possibility kernels (minimum-trace outer bound of the Minkowski sum, evaluated in the encounter plane at the nominal closest approach). Possibility and necessity are not collision probabilities; finite supports screen only the encounters they sample."
     }
   ],
   "threadModel": "emscripten-pthreads"
