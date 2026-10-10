@@ -1,6 +1,6 @@
 {
-  "wasmSha256": "aa2f03a7420a65d0f10a67eef25bb20d0d1ba6fc3be1dbe75d84f697fefeed4b",
-  "wasmBytes": 2033656,
+  "wasmSha256": "ef24b5b7659781d8e74b51838f157f974077fb4001a97be7b4b45cf6c6811edc",
+  "wasmBytes": 2033785,
   "wasmedgeVersion": "0.16.4",
   "dockerImage": "space-data-module-sdk/parity-wasmedge:0.16.4",
   "runtimeInstances": "One persistent direct instance per group",

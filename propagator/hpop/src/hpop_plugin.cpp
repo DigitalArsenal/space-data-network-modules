@@ -2995,6 +2995,16 @@ uint8_t* plugin_stream_invoke(
 // Cleanup
 // -----------------------------------------------------------------------------
 
+/// Cd*A/m (m^2/kg) of an SGP4 element set's drag term B* (1/earth radii):
+/// B = 2 B* / rho0, with rho0 = 2.461e-5 XKMPER kg/m^2/ER, the reference
+/// density of Hoots and Roehrich, Spacetrack Report No. 3 (1980), sections 8
+/// and 9 (its Fortran RHO = 0.15696615). A B* of zero or below (or not
+/// finite) carries no drag information; the caller's `nonPositive` is returned.
+double plugin_drag_area_over_mass_from_bstar(double bstar, double nonPositive) {
+    constexpr double rho0 = 0.15696615;  // kg/m^2/ER
+    return std::isfinite(bstar) && bstar > 0.0 ? 2.0 * bstar / rho0 : nonPositive;
+}
+
 void plugin_destroy() {
     ++g_catalogRevision;
     // Free ephemeris/burn/arc memory and clear entities

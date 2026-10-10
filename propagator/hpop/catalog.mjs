@@ -11,12 +11,11 @@
 // 2010 relativity. Coefficients ride on unit area and mass:
 // DRAG_COEFFICIENT carries Cd*A/m and REFLECTIVITY_COEFFICIENT Cr*A/m (m^2/kg).
 //
-// Element sets: Cd*A/m from SGP4's drag term, B = 2 B* / rho0 (Hoots and
-// Roehrich, Spacetrack Report No. 3, 1980, sections 8 and 9: B = Cd A/m and
-// rho0 = 2.461e-5 XKMPER kg/m^2/ER, the report's RHO = 0.15696615). A B* of
-// zero or below carries no drag information: such an object takes 0.01
-// m^2/kg. Cr*A/m is 0.02 m^2/kg for every object. Both defaults are the
-// fits' a priori values.
+// Element sets: Cd*A/m from SGP4's drag term B*, computed by the module
+// (plugin_drag_area_over_mass_from_bstar: B = 2 B* / rho0, Spacetrack Report
+// No. 3). Two stated assumptions, the fits' a priori values: a B* of zero or
+// below carries no drag information, and such an object takes 0.01 m^2/kg;
+// Cr*A/m is 0.02 m^2/kg for every object.
 import { createHash } from 'node:crypto';
 import * as flatbuffers from 'flatbuffers';
 import * as P from 'spacedatastandards.org/lib/js/PRW/main.js';
@@ -26,7 +25,6 @@ if (!('EARTH_RADIATION' in new P.PRWForceConfigurationT()) || !('OCEAN_TIDES' in
 
 export const TYPE = Object.freeze({ schemaName: 'PRW.fbs', fileIdentifier: '$PRW', rootTypeName: 'PRW', wireFormat: 'flatbuffer' });
 export const GM = 3.986004415e14;                 // m^3/s^2, EGM2008, TT-compatible
-export const SGP4_REFERENCE_DENSITY = 0.15696615; // kg/m^2/ER (Spacetrack Report No. 3)
 export const DEFAULT_DRAG_AREA_OVER_MASS = 0.01;  // m^2/kg
 export const DEFAULT_SRP_AREA_OVER_MASS = 0.02;   // m^2/kg
 // RK78 at 1e-12 relative (1e-9 m absolute), first step 30 s, steps of at most
@@ -52,9 +50,10 @@ export function encode(arm, value) {
   return b.asUint8Array().slice();
 }
 
-// Cd*A/m (m^2/kg) of an element set's B* (1/earth radii).
-export function dragAreaOverMass(bstar) {
-  return Number.isFinite(bstar) && bstar > 0 ? 2 * bstar / SGP4_REFERENCE_DENSITY : DEFAULT_DRAG_AREA_OVER_MASS;
+// Cd*A/m (m^2/kg) of an element set's B* (1/earth radii), by the module:
+// `exports` are an HPOP instance's exports (an SDK harness's instance.exports).
+export function dragAreaOverMass(exports, bstar) {
+  return exports.plugin_drag_area_over_mass_from_bstar(Number(bstar), DEFAULT_DRAG_AREA_OVER_MASS);
 }
 
 // The full force execution request: GCRF state (m, m/s) at a UTC ISO epoch,

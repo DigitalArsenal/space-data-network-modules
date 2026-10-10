@@ -2,24 +2,24 @@
   "ok": true,
   "fixture": "TMPL lane13 canonical PRW DE440 artifact",
   "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--hpop-resident-full-force-20261010/propagator/hpop/dist/isomorphic/module.wasm",
-  "artifactSha256": "aa2f03a7420a65d0f10a67eef25bb20d0d1ba6fc3be1dbe75d84f697fefeed4b",
-  "moduleSha256": "aa2f03a7420a65d0f10a67eef25bb20d0d1ba6fc3be1dbe75d84f697fefeed4b",
+  "artifactSha256": "ef24b5b7659781d8e74b51838f157f974077fb4001a97be7b4b45cf6c6811edc",
+  "moduleSha256": "ef24b5b7659781d8e74b51838f157f974077fb4001a97be7b4b45cf6c6811edc",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 24,
-      "durationMs": 826
+      "durationMs": 832
     },
     {
       "lane": "wasmedge",
       "runs": 24,
-      "durationMs": 2209
+      "durationMs": 2263
     },
     {
       "lane": "docker-wasmedge",
       "runs": 24,
-      "durationMs": 5470
+      "durationMs": 5902
     }
   ],
   "cases": [

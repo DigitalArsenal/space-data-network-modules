@@ -418,6 +418,13 @@ the epoch. Each object may carry `MASS_KG` (the dynamical mass, as
 (Cr*A/m, which needs cannonball radiation pressure); they replace the
 configuration's spacecraft for that object. `catalog.mjs` writes the full force
 configuration (the orbit-determination fits' force set) and these records.
+Element sets: the module converts B* (1/earth radii) to Cd*A/m with
+`plugin_drag_area_over_mass_from_bstar(bstar, nonPositive)`, B = 2 B* / rho0
+with rho0 = 2.461e-5 XKMPER kg/m^2/ER (Hoots and Roehrich, Spacetrack Report
+No. 3, 1980, sections 8 and 9; the report's RHO = 0.15696615), and returns
+`nonPositive` for a B* of zero or below (`tests/ballistic_coefficient.test.mjs`).
+`catalog.mjs` states the two assumptions it passes: 0.01 m^2/kg for those
+objects and Cr*A/m 0.02 m^2/kg for every object, the fits' a priori values.
 
 Each object is integrated from its epoch, forward and backward as queries need,
 with exactly the steps an execution request for that object takes: the same
