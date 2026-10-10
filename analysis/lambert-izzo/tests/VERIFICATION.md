@@ -20,10 +20,25 @@ existing LMS invocation behavior is preserved. MANEUVER host usage is documented
 in the README. Builds now generate C++ headers from released SDS schemas, rather
 than assuming a sibling checkout includes generated headers.
 
+## 2026-10-09: shared-kernel refactor, rebuilt artifact
+
+`include/lambert_izzo/solver.hpp` split `solve()` into `prepare` and
+`revolution_branches` and gained `solve_revolutions(request, N)`, both branches
+for exactly N revolutions without `solve()`'s 32-revolution cap (used by
+`analysis/gp-error-model`). `solve()` keeps its checks, statuses and cap.
+Rebuilt, the artifact behaves as before: 1,008 `solve_lambert` requests
+(18 transfer angles, a quarter to 34 periods, `MAX_REVS` 0 to 40, short and
+long way) return byte-identical outputs and statuses from the previous and the
+rebuilt artifact, and the six grid parity cases return byte-identical outputs
+in all three runtimes (receipt below, compared run by run with the previous
+receipt). `npm test`: 45 pass.
+
 ## Artifact and dependencies
 
-- WASM SHA-256: `2f8e9c05b08e2dab11398aab01e054965772b24cc3a4b1cd9d92336720115f0c`.
-- Artifact: `dist/isomorphic/module.wasm`, 154,461 bytes.
+- WASM SHA-256: `6ab466391b30858b4f5719546fb89681ac3a47a3eb6758ffbb1163e72e576b25`
+  (rebuilt 2026-10-09 with SDK 0.8.25 from the refactored shared kernel; the
+  previous artifact was `2f8e9c05…cd5d07e19`, 154,461 bytes).
+- Artifact: `dist/isomorphic/module.wasm`, 154,635 bytes.
 - SDK: 0.8.15; authoritative local revision
   `1362cccb044fcc945b7e8356b5392359e6f543e3` (clean checkout).
 - Published SDK 0.8.15 compiler, invoke glue, parity harness and lane runner

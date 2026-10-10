@@ -16,7 +16,9 @@
 //
 // Geometry is in GCRF. Earth-fixed sensors and predictions are rotated with
 // the foundation/frames chain (ERFA, IAU 2006/2000A, CIO based) and the
-// caller's $EOP rows; sensor velocity is omega x r with omega scaled by LOD.
+// caller's $EOP rows; an Earth-fixed point's velocity is the rate of that
+// rotation (polar motion, precession-nutation and the Earth rotation angle,
+// with UT1 advancing at 1 - LOD/86400).
 // Predicted measurements use the state at the light-time-corrected emission
 // time t - tau, tau = |r(t - tau) - s(t)| / c (one-way down leg); the range
 // rate is the derivative of that range, rho_dot = u.(v - v_s) / (1 + u.v / c).
@@ -46,7 +48,6 @@ namespace ax = ::sdn::frames;
 constexpr double kC = 299792.458;                // km/s
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kDeg = kPi / 180.0;
-constexpr double kOmegaEarth = 7.292115146706979e-5;  // rad/s, IERS nominal mean angular velocity
 constexpr size_t kMaxObservations = 200000;
 constexpr size_t kMaxStatesPerBlock = 500000;
 
@@ -107,8 +108,8 @@ bool dateMatchesMjd(const char* date, double mjd) {
 
 // GCRF -> ITRF at a UTC instant, and the Earth's angular velocity there.
 struct Earth {
-  Mat3 r{};
-  double omega = kOmegaEarth;
+  Mat3 r{};     // GCRF -> ITRF
+  Mat3 rate{};  // its time derivative (1/s)
 };
 
 bool earthAt(const Utc& u, Earth& out) {
@@ -121,7 +122,18 @@ bool earthAt(const Utc& u, Earth& out) {
   NEED(eraUtctai(u.jd1, u.jd2, &tai1, &tai2) == 0 && eraTaitt(tai1, tai2, &epoch.tt1, &epoch.tt2) == 0 &&
        eraUtcut1(u.jd1, u.jd2, eo.dut1, &epoch.ut11, &epoch.ut12) == 0, "An epoch is outside ERFA's leap-second table.");
   out.r = fromAx(ax::gcrfToItrf(epoch, eo));
-  out.omega = kOmegaEarth * (1.0 - eo.lengthOfDay / 86400.0);
+  // The rate by a central difference of the same chain over +/-1 s (the
+  // foundation/frames step), TT advancing 1 s and UT1 (1 - LOD/86400) s:
+  // truncation omega^3 r h^2 / 6, 3e-10 km/s at the Earth's surface.
+  const double h = 1.0, ut1 = h * (1.0 - eo.lengthOfDay / 86400.0);
+  ax::Epoch ahead = epoch, behind = epoch;
+  ahead.tt2 += h / 86400.0;
+  ahead.ut12 += ut1 / 86400.0;
+  behind.tt2 -= h / 86400.0;
+  behind.ut12 -= ut1 / 86400.0;
+  const Mat3 a = fromAx(ax::gcrfToItrf(ahead, eo)), b = fromAx(ax::gcrfToItrf(behind, eo));
+  for (int i = 0; i < 3; ++i)
+    for (int j = 0; j < 3; ++j) out.rate[i][j] = (a[i][j] - b[i][j]) / (2.0 * h);
   return true;
 }
 
@@ -377,12 +389,11 @@ bool predictGcrf(const Block& b, const Utc& u, std::array<double, 6>& x, Mat6* p
   } else {
     Earth e;
     if (!earthAt(u, e)) return false;
+    // r_g = M' r, v_g = M' v + Mdot' r.
     rot = transpose3(e.r);
-    const Vec3 w{0, 0, e.omega};
+    lower = transpose3(e.rate);
     rg = apply3(rot, r);
-    vg = apply3(rot, add3(v, cross3(w, r)));
-    const Mat3 wx{{{0, -e.omega, 0}, {e.omega, 0, 0}, {0, 0, 0}}};
-    lower = mul3(rot, wx);
+    vg = add3(apply3(rot, v), apply3(lower, r));
   }
   x = {rg[0], rg[1], rg[2], vg[0], vg[1], vg[2]};
   if (p) *p = transformCovariance(pn, blockDiagonal(rot, lower, rot));
@@ -631,7 +642,7 @@ bool sensorGeometry(Observation& o) {
   o.haveEarth = true;
   const Mat3 back = transpose3(e.r);
   o.sensorGcrf = apply3(back, o.sensor);
-  o.sensorVelocityGcrf = apply3(back, cross3({0, 0, e.omega}, o.sensor));
+  o.sensorVelocityGcrf = apply3(transpose3(e.rate), o.sensor);
   double xyz[3] = {o.sensor[0] * 1000, o.sensor[1] * 1000, o.sensor[2] * 1000}, lon, lat, height;
   NEED(eraGc2gd(1, xyz, &lon, &lat, &height) == 0, "A sensor position has no geodetic equivalent.");
   o.enu = {{{-std::sin(lon), std::cos(lon), 0},
@@ -982,6 +993,9 @@ bool run(Json& report, std::vector<std::pair<std::string, std::pair<RecordType, 
                {"status", o.status}, {"ambiguous", o.ambiguous}, {"assignment_conflict", o.conflict}, {"candidates", candidates}};
     if (!o.reason.empty()) oj["reason"] = o.reason;
     oj["sensor_gcrf_km"] = vec(o.sensorGcrf);
+    // omega x r rotated to GCRF for an Earth-fixed sensor; an inertial
+    // sensor position carries no velocity.
+    oj["sensor_velocity_gcrf_km_s"] = o.haveEarth ? vec(o.sensorVelocityGcrf) : Json();
     Vec3 los;
     if (lineOfSight(o, los)) oj["line_of_sight_gcrf"] = vec(los);
     const Block* assigned = o.assigned >= 0 ? &blocks[o.candidates[static_cast<size_t>(o.assigned)].block] : nullptr;

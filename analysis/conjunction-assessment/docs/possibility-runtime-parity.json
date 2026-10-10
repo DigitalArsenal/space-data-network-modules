@@ -1,0 +1,805 @@
+{
+  "ok": true,
+  "fixture": "possibility_of_collision",
+  "wasmPath": "/Users/tj/software/worktrees/space-data-network-modules--teag-espf-20261009/analysis/conjunction-assessment/dist/isomorphic/module.wasm",
+  "artifactSha256": "8a6d1c820fb914e6faf13962e62ea7e8dc4174c88d61d0722593b1422ce9dca1",
+  "moduleSha256": "5e85f95947b96b56d82388a30a3d64771ea9039a6c3fd95f2c29a783c75ef512",
+  "pin": "0.16.4",
+  "lanes": [
+    {
+      "lane": "browser",
+      "runs": 16,
+      "durationMs": 3020
+    },
+    {
+      "lane": "wasmedge",
+      "runs": 16,
+      "durationMs": 738
+    },
+    {
+      "lane": "docker-wasmedge",
+      "runs": 16,
+      "durationMs": 12656
+    }
+  ],
+  "cases": [
+    "support-four-pairs",
+    "kernel-isotropic-outside",
+    "kernel-isotropic-inside",
+    "invalid-radius"
+  ],
+  "comparisons": 92,
+  "failures": [],
+  "runs": [
+    {
+      "lane": "browser",
+      "caseId": "support-four-pairs",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6",
+      "stdoutLength": 304
+    },
+    {
+      "lane": "browser",
+      "caseId": "support-four-pairs",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6",
+      "stdoutLength": 304
+    },
+    {
+      "lane": "browser",
+      "caseId": "support-four-pairs",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6",
+      "stdoutLength": 304
+    },
+    {
+      "lane": "browser",
+      "caseId": "support-four-pairs",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6",
+      "stdoutLength": 304
+    },
+    {
+      "lane": "browser",
+      "caseId": "kernel-isotropic-outside",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42",
+      "stdoutLength": 272
+    },
+    {
+      "lane": "browser",
+      "caseId": "kernel-isotropic-outside",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42",
+      "stdoutLength": 272
+    },
+    {
+      "lane": "browser",
+      "caseId": "kernel-isotropic-outside",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42",
+      "stdoutLength": 272
+    },
+    {
+      "lane": "browser",
+      "caseId": "kernel-isotropic-outside",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42",
+      "stdoutLength": 272
+    },
+    {
+      "lane": "browser",
+      "caseId": "kernel-isotropic-inside",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c",
+      "stdoutLength": 240
+    },
+    {
+      "lane": "browser",
+      "caseId": "kernel-isotropic-inside",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c",
+      "stdoutLength": 240
+    },
+    {
+      "lane": "browser",
+      "caseId": "kernel-isotropic-inside",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c",
+      "stdoutLength": 240
+    },
+    {
+      "lane": "browser",
+      "caseId": "kernel-isotropic-inside",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c",
+      "stdoutLength": 240
+    },
+    {
+      "lane": "browser",
+      "caseId": "invalid-radius",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "f153fea68f6ca55b767fdbbf153eb42ee561bfed4284fa9a50119375cfe236d0",
+      "stdoutLength": 192
+    },
+    {
+      "lane": "browser",
+      "caseId": "invalid-radius",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "f153fea68f6ca55b767fdbbf153eb42ee561bfed4284fa9a50119375cfe236d0",
+      "stdoutLength": 192
+    },
+    {
+      "lane": "browser",
+      "caseId": "invalid-radius",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "f153fea68f6ca55b767fdbbf153eb42ee561bfed4284fa9a50119375cfe236d0",
+      "stdoutLength": 192
+    },
+    {
+      "lane": "browser",
+      "caseId": "invalid-radius",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "f153fea68f6ca55b767fdbbf153eb42ee561bfed4284fa9a50119375cfe236d0",
+      "stdoutLength": 192
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "support-four-pairs",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6",
+      "stdoutLength": 304
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "support-four-pairs",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6",
+      "stdoutLength": 304
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "support-four-pairs",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6",
+      "stdoutLength": 304
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "support-four-pairs",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6",
+      "stdoutLength": 304
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "kernel-isotropic-outside",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42",
+      "stdoutLength": 272
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "kernel-isotropic-outside",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42",
+      "stdoutLength": 272
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "kernel-isotropic-outside",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42",
+      "stdoutLength": 272
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "kernel-isotropic-outside",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42",
+      "stdoutLength": 272
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "kernel-isotropic-inside",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c",
+      "stdoutLength": 240
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "kernel-isotropic-inside",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c",
+      "stdoutLength": 240
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "kernel-isotropic-inside",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c",
+      "stdoutLength": 240
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "kernel-isotropic-inside",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c",
+      "stdoutLength": 240
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "invalid-radius",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "f153fea68f6ca55b767fdbbf153eb42ee561bfed4284fa9a50119375cfe236d0",
+      "stdoutLength": 192
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "invalid-radius",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "f153fea68f6ca55b767fdbbf153eb42ee561bfed4284fa9a50119375cfe236d0",
+      "stdoutLength": 192
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "invalid-radius",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "f153fea68f6ca55b767fdbbf153eb42ee561bfed4284fa9a50119375cfe236d0",
+      "stdoutLength": 192
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "invalid-radius",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "f153fea68f6ca55b767fdbbf153eb42ee561bfed4284fa9a50119375cfe236d0",
+      "stdoutLength": 192
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "support-four-pairs",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6",
+      "stdoutLength": 304
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "support-four-pairs",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6",
+      "stdoutLength": 304
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "support-four-pairs",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6",
+      "stdoutLength": 304
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "support-four-pairs",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6",
+      "stdoutLength": 304
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "kernel-isotropic-outside",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42",
+      "stdoutLength": 272
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "kernel-isotropic-outside",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42",
+      "stdoutLength": 272
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "kernel-isotropic-outside",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42",
+      "stdoutLength": 272
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "kernel-isotropic-outside",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42",
+      "stdoutLength": 272
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "kernel-isotropic-inside",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c",
+      "stdoutLength": 240
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "kernel-isotropic-inside",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c",
+      "stdoutLength": 240
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "kernel-isotropic-inside",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c",
+      "stdoutLength": 240
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "kernel-isotropic-inside",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c",
+      "stdoutLength": 240
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "invalid-radius",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "f153fea68f6ca55b767fdbbf153eb42ee561bfed4284fa9a50119375cfe236d0",
+      "stdoutLength": 192
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "invalid-radius",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "f153fea68f6ca55b767fdbbf153eb42ee561bfed4284fa9a50119375cfe236d0",
+      "stdoutLength": 192
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "invalid-radius",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "f153fea68f6ca55b767fdbbf153eb42ee561bfed4284fa9a50119375cfe236d0",
+      "stdoutLength": 192
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "invalid-radius",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": 0,
+      "stdoutSha256": "f153fea68f6ca55b767fdbbf153eb42ee561bfed4284fa9a50119375cfe236d0",
+      "stdoutLength": 192
+    }
+  ],
+  "values": [
+    {
+      "lane": "browser",
+      "workers": 1,
+      "caseId": "support-four-pairs",
+      "possibility": 0.4,
+      "necessity": 0,
+      "sha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6"
+    },
+    {
+      "lane": "browser",
+      "workers": 2,
+      "caseId": "support-four-pairs",
+      "possibility": 0.4,
+      "necessity": 0,
+      "sha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6"
+    },
+    {
+      "lane": "browser",
+      "workers": 4,
+      "caseId": "support-four-pairs",
+      "possibility": 0.4,
+      "necessity": 0,
+      "sha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6"
+    },
+    {
+      "lane": "browser",
+      "workers": 8,
+      "caseId": "support-four-pairs",
+      "possibility": 0.4,
+      "necessity": 0,
+      "sha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6"
+    },
+    {
+      "lane": "browser",
+      "workers": 1,
+      "caseId": "kernel-isotropic-outside",
+      "possibility": 0.00033546262790251185,
+      "necessity": 0,
+      "sha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42"
+    },
+    {
+      "lane": "browser",
+      "workers": 2,
+      "caseId": "kernel-isotropic-outside",
+      "possibility": 0.00033546262790251185,
+      "necessity": 0,
+      "sha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42"
+    },
+    {
+      "lane": "browser",
+      "workers": 4,
+      "caseId": "kernel-isotropic-outside",
+      "possibility": 0.00033546262790251185,
+      "necessity": 0,
+      "sha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42"
+    },
+    {
+      "lane": "browser",
+      "workers": 8,
+      "caseId": "kernel-isotropic-outside",
+      "possibility": 0.00033546262790251185,
+      "necessity": 0,
+      "sha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42"
+    },
+    {
+      "lane": "browser",
+      "workers": 1,
+      "caseId": "kernel-isotropic-inside",
+      "possibility": 1,
+      "necessity": 0.24516039801099265,
+      "sha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c"
+    },
+    {
+      "lane": "browser",
+      "workers": 2,
+      "caseId": "kernel-isotropic-inside",
+      "possibility": 1,
+      "necessity": 0.24516039801099265,
+      "sha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c"
+    },
+    {
+      "lane": "browser",
+      "workers": 4,
+      "caseId": "kernel-isotropic-inside",
+      "possibility": 1,
+      "necessity": 0.24516039801099265,
+      "sha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c"
+    },
+    {
+      "lane": "browser",
+      "workers": 8,
+      "caseId": "kernel-isotropic-inside",
+      "possibility": 1,
+      "necessity": 0.24516039801099265,
+      "sha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c"
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 1,
+      "caseId": "support-four-pairs",
+      "possibility": 0.4,
+      "necessity": 0,
+      "sha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6"
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 2,
+      "caseId": "support-four-pairs",
+      "possibility": 0.4,
+      "necessity": 0,
+      "sha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6"
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 4,
+      "caseId": "support-four-pairs",
+      "possibility": 0.4,
+      "necessity": 0,
+      "sha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6"
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 8,
+      "caseId": "support-four-pairs",
+      "possibility": 0.4,
+      "necessity": 0,
+      "sha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6"
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 1,
+      "caseId": "kernel-isotropic-outside",
+      "possibility": 0.00033546262790251185,
+      "necessity": 0,
+      "sha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42"
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 2,
+      "caseId": "kernel-isotropic-outside",
+      "possibility": 0.00033546262790251185,
+      "necessity": 0,
+      "sha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42"
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 4,
+      "caseId": "kernel-isotropic-outside",
+      "possibility": 0.00033546262790251185,
+      "necessity": 0,
+      "sha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42"
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 8,
+      "caseId": "kernel-isotropic-outside",
+      "possibility": 0.00033546262790251185,
+      "necessity": 0,
+      "sha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42"
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 1,
+      "caseId": "kernel-isotropic-inside",
+      "possibility": 1,
+      "necessity": 0.24516039801099265,
+      "sha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c"
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 2,
+      "caseId": "kernel-isotropic-inside",
+      "possibility": 1,
+      "necessity": 0.24516039801099265,
+      "sha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c"
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 4,
+      "caseId": "kernel-isotropic-inside",
+      "possibility": 1,
+      "necessity": 0.24516039801099265,
+      "sha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c"
+    },
+    {
+      "lane": "wasmedge",
+      "workers": 8,
+      "caseId": "kernel-isotropic-inside",
+      "possibility": 1,
+      "necessity": 0.24516039801099265,
+      "sha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 1,
+      "caseId": "support-four-pairs",
+      "possibility": 0.4,
+      "necessity": 0,
+      "sha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 2,
+      "caseId": "support-four-pairs",
+      "possibility": 0.4,
+      "necessity": 0,
+      "sha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 4,
+      "caseId": "support-four-pairs",
+      "possibility": 0.4,
+      "necessity": 0,
+      "sha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 8,
+      "caseId": "support-four-pairs",
+      "possibility": 0.4,
+      "necessity": 0,
+      "sha256": "9329ee3797888b70ec51f8fd63eb3bacc0ddc41c648ae99022c8dfa65ed7bcc6"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 1,
+      "caseId": "kernel-isotropic-outside",
+      "possibility": 0.00033546262790251185,
+      "necessity": 0,
+      "sha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 2,
+      "caseId": "kernel-isotropic-outside",
+      "possibility": 0.00033546262790251185,
+      "necessity": 0,
+      "sha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 4,
+      "caseId": "kernel-isotropic-outside",
+      "possibility": 0.00033546262790251185,
+      "necessity": 0,
+      "sha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 8,
+      "caseId": "kernel-isotropic-outside",
+      "possibility": 0.00033546262790251185,
+      "necessity": 0,
+      "sha256": "829ba02668d34b4dd0301b261902b4bd9ea8554985c4929aedf83a7b72c62f42"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 1,
+      "caseId": "kernel-isotropic-inside",
+      "possibility": 1,
+      "necessity": 0.24516039801099265,
+      "sha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 2,
+      "caseId": "kernel-isotropic-inside",
+      "possibility": 1,
+      "necessity": 0.24516039801099265,
+      "sha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 4,
+      "caseId": "kernel-isotropic-inside",
+      "possibility": 1,
+      "necessity": 0.24516039801099265,
+      "sha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c"
+    },
+    {
+      "lane": "docker-wasmedge",
+      "workers": 8,
+      "caseId": "kernel-isotropic-inside",
+      "possibility": 1,
+      "necessity": 0.24516039801099265,
+      "sha256": "466fbce5c3b6e665ef2085fa386a6b6c2a4bddab7f3e3be60c2ae1000306477c"
+    }
+  ]
+}

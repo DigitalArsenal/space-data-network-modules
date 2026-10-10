@@ -61,7 +61,8 @@ async function sourceWithIncludes(file) {
 const caSources = ['conjunction_assessment.cpp','gp_json.cpp','kdtree.cpp',
   'resident_screening_index.cpp','screening_internal.cpp','screening.cpp','screening_tight.cpp',
   'cdm_output.cpp','csm_output.cpp','pc_method.cpp','ephemeris_source.cpp',
-  'conjunction_engine.cpp','time_scales.cpp','earth_orientation.cpp','ephemeris_upload.cpp','plugin_invoke_bridge.cpp'];
+  'conjunction_engine.cpp','time_scales.cpp','earth_orientation.cpp','ephemeris_upload.cpp','plugin_invoke_bridge.cpp',
+  'possibility_screening.cpp'];
 // sgp4_propagator.cpp is the unused alternate implementation: the historical
 // static archive selected conjunction_assessment.cpp for those same symbols.
 const sgp4Root = path.join(cppRoot,'deps/sgp4/libsgp4');

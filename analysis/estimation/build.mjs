@@ -50,13 +50,16 @@ async function generateSdkHeaders() {
 
 const stripGeneratedIncludes = (source) => source
   .replace(/^#include "[A-Za-z0-9_]+_generated\.h"\n/gm, "")
-  .replace(/^#include "estimation\.hpp"\n/gm, "");
+  .replace(/^#include "estimation\.hpp"\n/gm, "")
+  .replace(/^#include "teag\.hpp"\n/gm, "");
 
 const { families, headers: sdsHeaders, version: sdsVersion } = await generateSdsHeaders();
 const sdkHeaders = await generateSdkHeaders();
 const estimationHeader = await fs.readFile(path.join(packageRoot, "src", "estimation.hpp"), "utf8");
 const estimationSource = await fs.readFile(path.join(packageRoot, "src", "estimation.cpp"), "utf8");
 const batchFitSource = await fs.readFile(path.join(packageRoot, "src", "batch_fit.cpp"), "utf8");
+const teagHeader = await fs.readFile(path.join(packageRoot, "src", "teag.hpp"), "utf8");
+const espfSource = await fs.readFile(path.join(packageRoot, "src", "espf.cpp"), "utf8");
 const moduleSource = await fs.readFile(path.join(packageRoot, "src", "module.cpp"), "utf8");
 
 const sourceCode = [
@@ -65,8 +68,10 @@ const sourceCode = [
     : stripGeneratedIncludes(sdsHeaders[family])),
   ...sdkHeaders.map((header, index) => index === 0 ? header : stripGeneratedIncludes(header)),
   estimationHeader,
+  teagHeader,
   stripGeneratedIncludes(estimationSource),
   stripGeneratedIncludes(batchFitSource),
+  stripGeneratedIncludes(espfSource),
   stripGeneratedIncludes(moduleSource),
 ].join("\n\n");
 

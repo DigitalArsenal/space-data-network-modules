@@ -123,6 +123,7 @@ ensure_emscripten
 ensure_sqlite_amalgamation
 
 node "$SCRIPT_DIR/generate-sds-headers.mjs"
+node "$SCRIPT_DIR/generate-local-headers.mjs"
 node "$SCRIPT_DIR/generate-manifest-header.mjs"
 node "$SCRIPT_DIR/generate-test-bindings.mjs"
 

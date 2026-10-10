@@ -174,7 +174,35 @@ test('passive RF: link-budget SNR and the Doppler-shifted frequency', async (t) 
   assert.equal(o.DETECTION_STATUS, RFO.rfDetectionStatus.DETECTED);
 });
 
-test('passive RF: a DOPPLER error model puts its bias and noise in FREQUENCY', async (t) => {
+test('radar DOPPLER is two-way: -c DOPPLER / (2 DOPPLER_FREQUENCY) recovers the true range rate', async (t) => {
+  // A target receding from the site along the line of sight at 1 km/s (true
+  // range rate +1000 m/s in any frame), observed 2000 times by a 10 GHz
+  // radar with a DOPPLER model of 20 Hz white noise. The echo's two-way shift
+  // is -2 f rdot / c, so association's conversion rdot = -c DOPPLER /
+  // (2 DOPPLER_FREQUENCY) gives 1000 m/s with noise c 20 / (2 f) = 0.30 m/s:
+  // the mean within 4 standard errors (0.30 / sqrt(2000) = 0.0067 m/s) and
+  // the spread within 4 standard errors (0.30 / sqrt(2 (N - 1)) = 0.0047
+  // m/s). A one-way shift would read 500 m/s.
+  const f = 10e9, sigma = 20;
+  const los = mul(OFFSET, 1 / norm(OFFSET)), v = mul(los, 1000);
+  const out = await simulate(t, request({
+    GROUND_STATIONS: [station('site', 30, 0, 100)],
+    TARGETS: [target('receding', straight(T0, FIXED, v, 21000, 600))],
+    SENSORS: [sensor('radar', 'site', 'RADAR', [model('DOPPLER', sigma)], { TRANSMIT_FREQUENCY_HZ: f })],
+    ACCESS: [access('radar', 'receding', [[T0, T0 + 19990 / 86400]])],
+  }));
+  assert.equal(out.error, undefined, out.error);
+  assert.equal(out.radar.length, 2000);
+  assert.ok(out.radar.every((d) => d.DOPPLER_FREQUENCY === f && d.DOPPLER_UNC === sigma), 'every record carries its carrier and sigma');
+  const rate = out.radar.map((d) => -C * d.DOPPLER / (2 * d.DOPPLER_FREQUENCY));
+  const mean = rate.reduce((s, x) => s + x, 0) / rate.length;
+  const spread = Math.sqrt(rate.reduce((s, x) => s + (x - mean) ** 2, 0) / (rate.length - 1));
+  const noise = C * sigma / (2 * f);
+  assert.ok(Math.abs(mean - 1000) < 4 * noise / Math.sqrt(rate.length), `mean ${mean} m/s`);
+  assert.ok(Math.abs(spread - noise) < 4 * noise / Math.sqrt(2 * (rate.length - 1)), `spread ${spread} m/s vs ${noise}`);
+});
+
+test('passive RF: a DOPPLER error model puts its bias and noise in FREQUENCY and its sigma in FREQUENCY_UNC', async (t) => {
   // The same receding emitter (true received f0 (1 - 1000 / c)) observed
   // 2000 times with a DOPPLER model of 20 Hz bias and 50 Hz white noise:
   // the mean error is the bias within 4 standard errors (50 / sqrt(2000) =
@@ -196,6 +224,8 @@ test('passive RF: a DOPPLER error model puts its bias and noise in FREQUENCY', a
   assert.ok(Math.abs(mean - 20) < 4 * 50 / Math.sqrt(e.length), `mean ${mean} Hz`);
   assert.ok(Math.abs(sigma - 50) < 4 * 50 / Math.sqrt(2 * (e.length - 1)), `sigma ${sigma} Hz`);
   assert.equal(out.rf[0].NOMINAL_FREQUENCY, f0 / 1e6);
+  // Every record reports the model's 50 Hz sigma as FREQUENCY_UNC, in MHz as FREQUENCY.
+  assert.ok(out.rf.every((o) => o.FREQUENCY_UNC === 50 / 1e6), `FREQUENCY_UNC ${out.rf[0].FREQUENCY_UNC} MHz`);
 });
 
 test('noise: bias plus Gauss-Markov noise with the stated sigma and correlation time', async (t) => {
@@ -269,11 +299,18 @@ test('false alarms: a Poisson count at the stated rate, flagged UCT without iden
   assert.equal(out.radar.length - ghosts.length, 61);
 });
 
-test('a request without access, or with an unknown host, is refused', async (t) => {
+test('a sensor on an unknown host, or a radar DOPPLER without its carrier, is refused', async (t) => {
   const none = await simulate(t, request({
     GROUND_STATIONS: [station('site', 30, 0, 100)],
     TARGETS: [target('fixed', straight(T0, FIXED, [0, 0, 0], 600))],
     SENSORS: [sensor('radar', 'nowhere', 'RADAR', [model('RANGE')])],
   }));
   assert.match(none.error, /HOST_ID/);
+  const noCarrier = await simulate(t, request({
+    GROUND_STATIONS: [station('site', 30, 0, 100)],
+    TARGETS: [target('fixed', straight(T0, FIXED, [0, 0, 0], 600))],
+    SENSORS: [sensor('radar', 'site', 'RADAR', [model('DOPPLER', 1)])],
+    ACCESS: [access('radar', 'fixed', [[T0, T0]])],
+  }));
+  assert.match(noCarrier.error, /TRANSMIT_FREQUENCY_HZ/);
 });

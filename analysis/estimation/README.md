@@ -2,7 +2,7 @@
 
 C++ WASM estimation through the SDK's `dist/isomorphic/module.wasm`. The caller
 selects the propagator; the estimator contains no force model. JavaScript only
-routes FlatBuffer messages. The build pins SDK **0.8.17** and SDS **1.203.0**.
+routes FlatBuffer messages. The build pins SDK **0.8.25** and SDS **1.232.0**.
 
 ## Sequential estimators
 
@@ -115,10 +115,15 @@ Born 2004, §4.3–4.6). The module holds no force model.
   `parameter_values`, optional `apriori_covariance` ((6+p)², empty = none),
   optional `observation_covariances` (value_count² per observation, whitened
   by its Cholesky factor; `covariance_axes` 1 states them in the radial,
-  transverse and normal axes of each observed `POSITION_VELOCITY` state),
+  transverse and normal axes of each observed `POSITION_VELOCITY` state, and
+  of a `POSITION_VECTOR`'s observed position with the predicted velocity;
+  other kinds keep their own components, so one request may mix them),
   `maximum_iterations`,
   `correction_tolerance` (√(dxᵀN dx/n)) and `sigma_edit_threshold` (edit an
   observation whose whitened RMS exceeds k × max(1, previous weighted RMS)).
+  The request's `error_models` apply as in `run_estimation`: troposphere and
+  ionosphere selection, sigmas and the light-time and Sagnac flags by
+  measurement kind.
 - **Inverted port:** each iteration returns `NEEDS_PROPAGATION` with one
   `PropagationQuery` per observation from one seed (state and
   `parameter_values`). The caller propagates once with the parameters as
@@ -145,6 +150,137 @@ within 2.2e-6 of √(PᵢᵢPⱼⱼ) and χ² within 1.2e-6. Orekit's batch esti
 weights components by their sigmas alone, so a covariance correlated in the
 request axes has no Orekit reference.
 
+### Version 2 (extension v4)
+
+Every option below defaults to version 1, and a version-1 request gives the
+same bytes: [fit-batch-v1-digests.json](tests/fixtures/fit-batch-v1-digests.json)
+holds the version-1 artifact's request and result digests for every round of
+six cases, and the module reproduces them.
+
+- **Bounded parameters.** `parameter_lower_bounds` / `parameter_upper_bounds`
+  (physical units, NaN = none): a step that leaves a bound is projected onto
+  it, so the propagator never receives a value outside; a parameter held at
+  a bound is released when its multiplier points back inside, and
+  `bound_status` reports 1 or 2 for a parameter that ends there (the data ask
+  for less than the bound; its covariance is the formal one at the bound).
+  propagator/hpop refuses a negative Cd·A/m or Cr·A/m: give B and AGOM a
+  lower bound of 0.
+- **Logarithmic parameters.** `parameter_transforms` `LOGARITHM` estimates
+  ln p (p must start positive). Each step changes p by at most a factor of ten
+  (a box trust region in ln p) and convergence is judged on the undamped
+  Gauss–Newton step, so p cannot creep to zero unnoticed. The a priori stays
+  Gaussian in p; the covariance is reported in p, J P Jᵀ with J = diag(p).
+  A parameter whose optimum may be zero needs a bound, not a logarithm.
+- **Levenberg–Marquardt.** `levenberg_marquardt` damps the step by
+  (N + λ diag N); a trial that does not lower the cost (χ² plus the a priori
+  term) is refused and retried with 10 λ, an accepted one divides λ by 10.
+  Each trial is one propagation round. Convergence is judged on the
+  undamped step.
+- **More dynamic parameters.** Up to 512 state, dynamic and measurement
+  parameters in all; with propagator/hpop, B, BDOT, the in-track
+  acceleration and the eleven ECOM2 terms at once.
+- **Measurement parameters** (`measurement_parameters`), each over a list of
+  observations (for example one pass): `BIAS` (added to one component, in its
+  units: metres, m/s, Hz, rad), `DRIFT` (drift × (t − `reference_epoch`),
+  default the earliest listed observation) and `TIME_BIAS` (the observations
+  were taken at their time tag plus τ). A time bias is evaluated, not
+  linearized: the queries for its observations are at t + τ, the sensor and
+  any remote moved by their velocity × τ, plus two more at t + τ ± 1 s for
+  the partial ∂h/∂τ by central difference of the measurement model. Such
+  requests therefore carry more queries than observations, in sequence.
+  `value` starts the parameter; `sigma` > 0 adds an a priori.
+- **Consider parameters.** `parameter_consider` (dynamic parameters; their
+  variance from `apriori_covariance`, uncorrelated with the estimated ones)
+  and `consider` on a measurement parameter (its `sigma`) hold the parameter
+  at its value. `consider_covariance` is P + S P_c Sᵀ with S = −P Hₓᵀ W H_c
+  over the accepted data and cross terms S P_c (Tapley, Schutz & Born 2004,
+  §6.3); in `covariance` a consider parameter has only its a priori variance.
+- **Covariance blocks** (`covariance_blocks`): one covariance across several
+  observations' stacked values (generalized least squares, e.g. consecutive
+  element sets), in the axes of `covariance_axes` (each 3-vector rotated by
+  its own observation's RTN axes). A block is edited as a whole. Exclusive
+  with `observation_covariances`.
+- **Regularization** (`covariance_regularization` 1): a stated covariance's
+  correlation matrix R has its eigenvalues below `correlation_floor`
+  (default 1e-3) raised to it — the nearest matrix with that spectral floor in
+  the Frobenius norm — and is rescaled to unit diagonal, so the sigmas are
+  unchanged. `regularizations` reports, per changed covariance, the number of
+  eigenvalues raised, the smallest eigenvalue as given and the relative
+  Frobenius and largest correlation changes.
+- **RTN output** (`rtn_covariance`): `covariance_rtn` and
+  `consider_covariance_rtn`, the position and velocity rows and columns
+  rotated into the RTN axes of the estimated state.
+
+The result's `estimate` and covariances are [state, dynamic parameters,
+measurement parameters]: `state_dimension` (6 + p) plus
+`measurement_parameter_count`.
+
+Authority ([batch_fit_v2.test.mjs](tests/batch_fit_v2.test.mjs),
+[measurement_parameters.test.mjs](tests/measurement_parameters.test.mjs)):
+
+| Case | Reference | Result |
+| --- | --- | --- |
+| Version-1 requests | the version-1 artifact's digests | 24 rounds byte-identical |
+| Equicorrelated non-PD block (ρ = −0.6) | closed form: eigenvalue 1 + 2ρ raised, ρ'' and the mean's variance σ²(1 + 2ρ'')/3 | diagnostics 1e-12, estimate and variance 1e-8 |
+| Correlated two-epoch block in RTN axes | x = (Aᵀ C⁻¹ A)⁻¹ Aᵀ C⁻¹ z | 1e-10 relative |
+| Mixed PV, position and range in RTN axes | stationarity of the GLS cost and (Jᵀ C⁻¹ J)⁻¹; RTN rotation of the covariance | 1e-6 σ, 1e-9 |
+| Consider parameters | closed-form P + S P_c Sᵀ | 1e-12 |
+| Error models | Orekit's Saastamoinen (24.26096 m) and Marini–Murray (13.2611 m), ITU-R P.531 Table 3 | target recovered to 9e-7 m; 61 m off without them |
+| Bounds, logarithm, damping, LEO drag | Orekit 13.1 `BatchLSEstimator` | 1.1e-3 σ, covariance 2.2e-6, χ² 1.2e-6 |
+| Starts where version 1 proposes B = −0.18, −0.13 and −1.6 | Orekit's solution | no negative query; same tolerances |
+| Thrust the data read as negative drag | the simulating truth | B held at 0 (status 1); with a signed in-track term both recovered, d² 17 (8) |
+| B, eleven ECOM2 terms and in-track at once | the simulating truth (HPOP, full force) | d² 15.9 (19), every term within 0.7 σ |
+| Range biases, frequency offsets per pass, a drift, a 0.82 s RF lag and a 50 ms radar time bias | the injected values (HPOP truth, observation simulator, association geometry) | every estimate within 2.2 σ, d² 19.9 (20) |
+
+## Admissible sets: ESPF, set-membership filter and TEAG primitives (extension v3)
+
+Implemented from the papers, independently of their authors' code; every step,
+gap, choice and parameter is in [docs/espf-spec.md](docs/espf-spec.md).
+
+| Selector | Behavior |
+| --- | --- |
+| `ESPF_2025` | The Epistemic Support-Point Filter as Jah and Haslett (arXiv 2508.20806) describe it: 2n + 1 support points, Minkowski prediction, joint epistemic spread, uniform compatibility, surprisal pruning, sup-min fusion, weighted mode, spread, radius and sigma adaptation with the stated temporal decay. `espf.gaussian_limit` runs its appendix's Gaussian limit (the UKF); `espf.regeneration_scale` sets the undefined ζ of its regeneration (1; √n keeps the spread, spec G16). |
+| `ESPF_2026` | The canonical form of the 2026 TEAG papers: a level-3 Smolyak support (85 points), max-plus conjunctive update Phi+ = max(Phi-, q/2) in MVEE-whitened innovation space, Choquet information content, PCRB-admissible basin with N_min = 2n + 1, whitened minimax medoid, MVEE regeneration with the r+ = 1.15 / r- = 0.97 sigma controller. |
+| `ELLIPSOIDAL_SET_MEMBERSHIP` | Outer bounding ellipsoids (Schweppe 1968; Bertsekas and Rhodes 1971): predicted F S F' plus the process set, updated by the minimum-trace (or log-det) member of the outer family; empty intersections are flagged and leave the set unchanged. |
+
+They take every measurement kind the EKF/UKF take except `PSEUDORANGE`
+(six-state only), `LINEAR` records included (H is value_count x 6).
+All three use nonlinear propagation through the same inverted port as the UKF
+(`options.nonlinear_propagation`): every support point is a query, answered by
+the caller's propagator (propagator/hpop at full force). Options are
+`SequentialOptions.espf` and `set_membership`. Results add `support_history`
+(per observation: the posterior set, carried and predicted shapes, support and
+survivor counts, medoid, Choquet surprisal, information content, rescaling
+shift, PCRB basin and floor, sigma, inconsistency) and `final_support`. A
+request may start from a previous `final_support` (`options.initial_support`)
+at its configuration epoch, so an arc can be split at any observation and
+continues exactly. The `filter_history` covariance of these estimators holds the
+set's shape, not a covariance; the OCM says so.
+
+`evaluate_teag` exposes the TEAG primitives (src/teag.hpp) on a finite support:
+the conjunctive update, rescaling, active-front zones, alpha-cuts, possibility
+and necessity of events, Choquet surprisal and information content, the PCRB
+basin, the minimum-volume enclosing ellipsoid, the minimax medoid, Smolyak
+Clenshaw-Curtis grids, the Minkowski outer bound and the truncated
+possibilistic entropy.
+
+Authority:
+
+- [teag.test.mjs](tests/teag.test.mjs): the scalar closed forms of Jah 2026
+  ("The ESPF as a Tropical Hamilton-Jacobi System", section 4, eqs. 8-14),
+  exactly on dyadic cases; idempotence, Popperian monotonicity, the alpha-cut
+  intersection, N(A) = 1 - Pi(A^c) and maxitivity; the MVEE of analytic sets;
+  Smolyak counts; the Minkowski bound's containment.
+- [mvee.test.mjs](tests/mvee.test.mjs): the MVEE against an independent numpy
+  implementation (fixture generated by
+  [mvee_numpy_reference.py](tests/fixtures/mvee_numpy_reference.py)), about
+  1e-12.
+- [espf.test.mjs](tests/espf.test.mjs), with propagator/hpop answering at full
+  force: the 2025 Gaussian limit reproduces the UKF (state 1.6e-14, covariance
+  1.9e-11 relative over 12 epochs); ESPF 2026 invariants and exact restart;
+  the 2025 decay; the set-membership filter keeps the truth inside its bound
+  and flags an impossible observation.
+
 ## Append-only invoke contract v1
 
 [`schemas/Estimation.fbs`](schemas/Estimation.fbs) is the module-local invoke
@@ -162,6 +298,22 @@ Additions:
   `PropagationQuery`, `PropagationAnswer`.
 - Optional suffix fields: request `options`/`extended_observations`; result
   `extended_history`/`propagation_requests`; envelope `propagation_answers`.
+- Extension v3: estimator `ESPF_2025=5`, `ESPF_2026=6`,
+  `ELLIPSOIDAL_SET_MEMBERSHIP=7`; tables `EspfOptions`, `SetMembershipOptions`,
+  `SupportState`, `SupportEpoch`, `TeagRequest`, `TeagResult`; optional suffix
+  fields `SequentialOptions.espf`/`set_membership`/`initial_support`,
+  `EstimationResult.support_history`/`final_support` and envelope
+  `teag_request`/`teag_result`.
+- Extension v4 (`fit_batch` version 2): enums `ParameterTransform`,
+  `MeasurementParameterKind`; tables `MeasurementParameter`,
+  `CovarianceBlock`, `CovarianceRegularization`; `BatchFitOptions` suffix
+  fields `parameter_transforms`, `parameter_lower_bounds`,
+  `parameter_upper_bounds`, `parameter_consider`, `levenberg_marquardt`,
+  `initial_damping`, `measurement_parameters`, `covariance_blocks`,
+  `covariance_regularization`, `correlation_floor`, `rtn_covariance`;
+  `BatchFitResult` suffix fields `measurement_parameter_count`,
+  `consider_covariance`, `bound_status`, `covariance_rtn`,
+  `consider_covariance_rtn`, `regularizations`.
 
 The OCM publishes the fit's formal covariance with its assumptions and
 `COV_CALIBRATION Uncalibrated` (SDS 1.232.0). The covariance is conditional on
@@ -194,6 +346,8 @@ npm ci
 node build.mjs
 node tests/build-provider.mjs
 node --test tests/depth.test.mjs tests/sequential.test.mjs tests/depth-invoke.test.mjs
+node --test tests/teag.test.mjs tests/mvee.test.mjs tests/espf.test.mjs
+node --test tests/batch_fit.test.mjs tests/batch_fit_v2.test.mjs tests/measurement_parameters.test.mjs
 node --test tests/sdk_compat.test.mjs
 PATH="$HOME/.wasmedge/bin:$PATH" node tests/parity.mjs
 node tests/refresh-evidence.mjs
@@ -205,6 +359,13 @@ Its physics is C++ WASM. Production artifacts never include that provider.
 Parity runs identical estimator bytes in Chrome/V8, native WasmEdge and container
 WasmEdge at host worker widths 1/2/4/8. This sequential artifact tests host width
 invariance, not concurrent filter updates.
+
+The dynamical tests are answered by `propagator/hpop`'s WASM. The measurement
+campaign ([tracking-pipeline.mjs](tests/tracking-pipeline.mjs), used by
+`measurement_parameters.test.mjs` and the parity plan) also runs the committed
+artifacts of `foundation/frames`, `analysis/access`,
+`analysis/observation-simulator` and `analysis/association`, and reads SDS
+records through `analysis/association`'s installed bindings (`npm ci` there).
 
 See [original fixture authorities](tests/fixtures/README.md),
 [depth authority and reproduction details](tests/fixtures/DEPTH.md), and

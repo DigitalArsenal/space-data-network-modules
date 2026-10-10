@@ -18,6 +18,8 @@ import {
   PropagatorBatchRequest,
   PropagatorBatchRequestT,
 } from "./generated/orbpro/propagator/propagator-batch-request.js";
+import { ReferenceFrame } from "./generated/orbpro/propagator/reference-frame.js";
+import { OEM as OEMClass } from "spacedatastandards.org/lib/js/OEM/OEM.js";
 import {
   PropagatorState,
 } from "./generated/orbpro/plugins/propagator-state.js";
@@ -35,6 +37,14 @@ import {
 export { CatalogQueryKind };
 
 // -------- OMM / CAT / REC encoders (SDS wire contract) ----------------------
+
+// A second object for multi-object cases: a synthetic sun-synchronous LEO with
+// round elements, not any real object's element set.
+export const SYNTHETIC_SSO = Object.freeze({
+  noradId: 99002, objectName: "SYNTHETIC SSO", objectId: "2026-998A", epoch: "2024-01-01T00:00:00",
+  meanMotion: 14.2, eccentricity: 0.0001, inclination: 98.7, raan: 51.0,
+  argPericenter: 90.0, meanAnomaly: 270.0, bstar: 0.00004, meanMotionDot: 0,
+});
 
 export function encodeOmmPayload({
   noradId = 25544,
@@ -134,11 +144,19 @@ export function encodeSizePrefixedStream(payloads) {
 // Real FlatBuffer encoder matching orbpro.propagator.PropagatorBatchRequest,
 // which the C++ side decodes via flatbuffers::Verifier + GetRoot<>.
 
+export { ReferenceFrame };
+
 export function encodePropagatorBatchRequest({
   epoch,
   entityHandles = [],
   outputOffset = 0,
   maxCount = 0,
+  catalogNumbers = [],
+  outputFrame = ReferenceFrame.ECEF,
+  stopEpoch = 0,
+  stepSeconds = 0,
+  elementSetBlocks = false,
+  neighbourSets = 2,
 }) {
   const builder = new flatbuffers.Builder(256);
   const request = new PropagatorBatchRequestT(
@@ -146,9 +164,39 @@ export function encodePropagatorBatchRequest({
     entityHandles,
     outputOffset,
     maxCount,
+    catalogNumbers,
+    outputFrame,
+    stopEpoch,
+    stepSeconds,
+    elementSetBlocks,
+    neighbourSets,
   );
   builder.finish(request.pack(builder));
   return builder.asUint8Array();
+}
+
+// The 1.1.0 request layout (four fields), byte for byte as a 1.1.0 host
+// builds it: the regression baseline of propagate_state.
+export function encodeLegacyPropagatorBatchRequest({ epoch, entityHandles = [], outputOffset = 0, maxCount = 0 }) {
+  const builder = new flatbuffers.Builder(256);
+  const handles = PropagatorBatchRequest.createEntityHandlesVector(builder, entityHandles);
+  builder.startObject(4);
+  builder.addFieldFloat64(0, epoch, 0);
+  builder.addFieldOffset(1, handles, 0);
+  builder.addFieldInt32(2, outputOffset, 0);
+  builder.addFieldInt32(3, maxCount, 0);
+  builder.finish(builder.endObject());
+  return builder.asUint8Array();
+}
+
+// -------- $OEM decoder (SDS) ------------------------------------------------
+
+export function decodeOem(bytes) {
+  const buffer = new flatbuffers.ByteBuffer(bytes);
+  if (!OEMClass.bufferHasIdentifier(buffer)) {
+    throw new Error("OEM payload missing $OEM file identifier");
+  }
+  return OEMClass.getRootAsOEM(buffer).unpack();
 }
 
 // -------- CatalogQueryRequest -----------------------------------------------

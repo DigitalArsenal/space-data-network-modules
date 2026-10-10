@@ -290,15 +290,22 @@ inline bool reconstruct(const Request& request, double x, uint32_t iterations,
   return finite(solution->v1) && finite(solution->v2);
 }
 
-inline Result solve(const Request& request) {
-  Result result;
+// Normalized geometry of a request: lambda (negative on the long way), the
+// nondimensional time of flight, and t00 (the zero-revolution time of flight
+// at x = 0). Fails like solve() on invalid or degenerate input; the
+// revolution cap is the caller's.
+struct Geometry {
+  double lambda = 0.0;
+  double target_tof = 0.0;
+  double t00 = 0.0;
+};
+
+inline Status prepare(const Request& request, Geometry* geometry) {
   if (!finite(request.r1) || !finite(request.r2) ||
       !std::isfinite(request.tof) || !std::isfinite(request.mu) ||
       !(norm(request.r1) > 0.0) || !(norm(request.r2) > 0.0) ||
-      !(request.tof > 0.0) || !(request.mu > 0.0) ||
-      request.max_revolutions > 32) {
-    result.status = Status::InvalidInput;
-    return result;
+      !(request.tof > 0.0) || !(request.mu > 0.0)) {
+    return Status::InvalidInput;
   }
   const bool antipodal_plane = finite(request.antipodal_normal) &&
       norm(request.antipodal_normal) > 0.0 &&
@@ -309,56 +316,89 @@ inline Result solve(const Request& request) {
           request.r1.z * request.antipodal_normal.z) <=
           1e-12 * norm(request.r1) * norm(request.antipodal_normal);
   if (!(norm(cross(request.r1, request.r2)) > 0.0) && !antipodal_plane) {
-    result.status = Status::DegenerateGeometry;
-    return result;
+    return Status::DegenerateGeometry;
   }
-
   const double chord_norm = norm(subtract(request.r2, request.r1));
   const double semiperimeter =
       0.5 * (norm(request.r1) + norm(request.r2) + chord_norm);
   double lambda =
       std::sqrt(std::max(0.0, 1.0 - chord_norm / semiperimeter));
   if (request.long_way) lambda = -lambda;
-  const double target_tof =
+  geometry->lambda = lambda;
+  geometry->target_tof =
       std::sqrt(2.0 * request.mu / std::pow(semiperimeter, 3)) * request.tof;
+  geometry->t00 =
+      std::acos(lambda) + lambda * std::sqrt(1.0 - lambda * lambda);
+  return Status::Ok;
+}
 
-  double x = initial_guess_zero_revolution(lambda, target_tof);
+enum class Branches {
+  Ok,
+  TooShort,  // the time of flight is below this revolution count's minimum
+  NoConvergence,
+};
+
+// Both branches (long and short period) for exactly `revolutions` >= 1.
+inline Branches revolution_branches(const Request& request,
+                                    const Geometry& geometry,
+                                    uint32_t revolutions,
+                                    RevolutionSolutions* pair) {
+  const double m_pi = revolutions * kPi;
+  if (geometry.target_tof < m_pi) return Branches::TooShort;
+  if (geometry.target_tof < geometry.t00 + m_pi &&
+      minimum_multi_revolution_tof(geometry.lambda, revolutions) >
+          geometry.target_tof) {
+    return Branches::TooShort;
+  }
+  auto guesses =
+      initial_guess_multi_revolution(geometry.target_tof, revolutions);
+  uint32_t left_iterations = 0;
+  uint32_t right_iterations = 0;
+  double left_residual = 0.0;
+  double right_residual = 0.0;
+  if (!householder(geometry.target_tof, geometry.lambda, revolutions,
+                   &guesses.first, &left_iterations, &left_residual) ||
+      !householder(geometry.target_tof, geometry.lambda, revolutions,
+                   &guesses.second, &right_iterations, &right_residual)) {
+    return Branches::NoConvergence;
+  }
+  pair->revolutions = static_cast<uint16_t>(revolutions);
+  if (!reconstruct(request, guesses.first, left_iterations, left_residual,
+                   &pair->long_period) ||
+      !reconstruct(request, guesses.second, right_iterations, right_residual,
+                   &pair->short_period)) {
+    return Branches::NoConvergence;
+  }
+  return Branches::Ok;
+}
+
+inline Result solve(const Request& request) {
+  Result result;
+  if (request.max_revolutions > 32) {
+    result.status = Status::InvalidInput;
+    return result;
+  }
+  Geometry geometry;
+  result.status = prepare(request, &geometry);
+  if (result.status != Status::Ok) return result;
+
+  double x = initial_guess_zero_revolution(geometry.lambda, geometry.target_tof);
   uint32_t iterations = 0;
   double residual = 0.0;
-  if (!householder(target_tof, lambda, 0, &x, &iterations, &residual) ||
+  if (!householder(geometry.target_tof, geometry.lambda, 0, &x, &iterations,
+                   &residual) ||
       !reconstruct(request, x, iterations, residual, &result.single)) {
     result.status = Status::NoConvergence;
     return result;
   }
 
-  const double t00 =
-      std::acos(lambda) + lambda * std::sqrt(1.0 - lambda * lambda);
   for (uint16_t revolutions = 1; revolutions <= request.max_revolutions;
        ++revolutions) {
-    const double m_pi = revolutions * kPi;
-    if (target_tof < m_pi) break;
-    if (target_tof < t00 + m_pi &&
-        minimum_multi_revolution_tof(lambda, revolutions) > target_tof) {
-      break;
-    }
-    auto guesses = initial_guess_multi_revolution(target_tof, revolutions);
-    uint32_t left_iterations = 0;
-    uint32_t right_iterations = 0;
-    double left_residual = 0.0;
-    double right_residual = 0.0;
-    if (!householder(target_tof, lambda, revolutions, &guesses.first,
-                     &left_iterations, &left_residual) ||
-        !householder(target_tof, lambda, revolutions, &guesses.second,
-                     &right_iterations, &right_residual)) {
-      result.status = Status::NoConvergence;
-      return result;
-    }
     RevolutionSolutions pair;
-    pair.revolutions = revolutions;
-    if (!reconstruct(request, guesses.first, left_iterations, left_residual,
-                     &pair.long_period) ||
-        !reconstruct(request, guesses.second, right_iterations, right_residual,
-                     &pair.short_period)) {
+    const Branches branches =
+        revolution_branches(request, geometry, revolutions, &pair);
+    if (branches == Branches::TooShort) break;
+    if (branches == Branches::NoConvergence) {
       result.status = Status::NoConvergence;
       return result;
     }
@@ -366,6 +406,27 @@ inline Result solve(const Request& request) {
   }
 
   result.status = Status::Ok;
+  return result;
+}
+
+// Both branches for exactly `revolutions` >= 1 full revolutions, without
+// solve()'s 32-revolution cap (multi-day arcs in low orbit need about 15 a
+// day). `request.max_revolutions` is ignored. Status::Ok with one entry in
+// `multi`; InvalidInput when the time of flight is below the minimum for
+// that count.
+inline Result solve_revolutions(const Request& request, uint32_t revolutions) {
+  Result result;
+  Geometry geometry;
+  result.status = revolutions == 0 ? Status::InvalidInput
+                                   : prepare(request, &geometry);
+  if (result.status != Status::Ok) return result;
+  RevolutionSolutions pair;
+  const Branches branches =
+      revolution_branches(request, geometry, revolutions, &pair);
+  if (branches == Branches::Ok) result.multi.push_back(pair);
+  result.status = branches == Branches::Ok ? Status::Ok
+                  : branches == Branches::TooShort ? Status::InvalidInput
+                                                   : Status::NoConvergence;
   return result;
 }
 

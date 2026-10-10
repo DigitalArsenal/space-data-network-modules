@@ -327,6 +327,15 @@ double residual_component(MeasurementKind kind, int component, double observed,
 
 }  // namespace
 
+Matrix6 process_noise_covariance(const FilterConfig& config, double elapsed_seconds) {
+  return process_noise(config, elapsed_seconds);
+}
+
+double measurement_residual(MeasurementKind kind, int component, double observed,
+                            double predicted) {
+  return residual_component(kind, component, observed, predicted);
+}
+
 Vec3 add(Vec3 a, Vec3 b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
 Vec3 subtract(Vec3 a, Vec3 b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
 Vec3 scale(Vec3 a, double s) { return {a.x * s, a.y * s, a.z * s}; }

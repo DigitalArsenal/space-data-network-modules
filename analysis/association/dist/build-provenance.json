@@ -19,5 +19,5 @@
   "eopSeries": "foundation/frames/src/eop_series.hpp",
   "moduleSdk": "0.8.26",
   "threadModel": "wasi-sequential",
-  "wasmSha256": "690f9e631cac9959f196d2104c08b6d17e605800f096779e50f59ebf379d4e5b"
+  "wasmSha256": "ceb3d0002998a31fc1b4e1233a9dacbf4203b156ce59ea36baefd3143ab40dd5"
 }

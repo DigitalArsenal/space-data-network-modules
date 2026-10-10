@@ -447,10 +447,32 @@ frame, epoch and tolerance.
 The SDK tri-runtime fixture `tests/fixtures/orbit_geometry.parity.json` also
 compares five command cases byte-for-byte in real headless Chrome, native
 WasmEdge 0.16.4 and Docker WasmEdge 0.16.4. Its receipt is
-`tests/evidence/orbit-geometry-tri-runtime-20260906.json`: 15 runs, 25 comparisons,
-no failures, artifact SHA-256
-`25e56a6a958b94ca56c1ad14f5e69eda420ac7996c79477a370dee76cd1b3183`.
+`tests/evidence/orbit-geometry-tri-runtime-20261009.json` (0.6.2): 15 runs, 25
+comparisons, no failures, artifact SHA-256
+`e07fd05f93975d15b43e92786ad897bdd066574d66d85d99fb8640be4c0c2a7b`.
 The fixture's process outcome for a refused request is `ok`: the command exits
 zero while carrying a nonzero PIV status and structured error. The native
 geometry test separately asserts that PIV refusal and persistent-instance
 recovery; a command-only receipt does not prove persistence.
+
+# 0.6.2: rebuilt on the refactored shared Lambert kernel
+
+No behaviour changes except `version`, which answers `0.6.2`. The shared
+kernel `analysis/lambert-izzo/include/lambert_izzo/solver.hpp` split `solve()`
+into `prepare` and `revolution_branches` and gained `solve_revolutions(N)`
+(exactly N revolutions, used by `analysis/gp-error-model`). `solve()`, which
+this module calls, keeps its checks, its statuses and its 32-revolution cap.
+The artifact was rebuilt from that source:
+
+- 1,008 `solveLambert` requests (18 transfer angles, times of flight from a
+  quarter to 34 periods, `nRevs` 0 to 40) return byte-identical responses
+  from 0.6.1 and 0.6.2: 354 solutions, 432 refusals of `nRevs` above 20 and
+  222 "no solution".
+- `parity/maneuver-command.json` gives byte-identical outputs from both
+  artifacts in every case but `version`; 0.6.2 passes it in all three lanes at
+  1, 2, 4 and 8 threads (656 comparisons). `tests/fixtures/orbit_geometry.parity.json`
+  is byte-identical to the 0.6.1 receipt.
+- `npm test`: 181 pass and 1 skip. The skip is the WasmEdge lane of
+  `tests/lambert_izzo_crosscheck.test.mjs`: the WasmEdge command harness cannot
+  invoke `analysis/lambert-izzo`, with the 0.6.1 artifacts as well.
+

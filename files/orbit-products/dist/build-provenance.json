@@ -21,6 +21,7 @@
     "SCENARIO_EPOCH_EPHEMERIS_TEXT",
     "CCSDS_OEM_KVN",
     "vimpel-orbits-text",
+    "ses-i11",
     "vcm-v2-text"
   ]
 }

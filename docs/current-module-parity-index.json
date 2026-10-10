@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-09T20:59:45.287Z",
+  "generatedAt": "2026-10-10T11:53:54.153Z",
   "moduleCount": 118,
   "parityScopeModuleCount": 49,
   "isomorphicWasmCount": 116,
@@ -115,7 +115,7 @@
       "pluginId": "com.digitalarsenal.analysis.association",
       "name": "Observation association",
       "pluginFamily": "analysis",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "associate_observations",
         "solve_assignment"
@@ -258,6 +258,7 @@
         "parse_cdm_kvn",
         "parse_cdm_xml",
         "parse_ephemeris",
+        "possibility_of_collision",
         "prepare_sample_screening_index",
         "prepare_screening_index",
         "prepare_segment_screening_index",
@@ -281,9 +282,9 @@
         "c",
         "c++"
       ],
-      "cxxSourceFileCount": 30,
+      "cxxSourceFileCount": 31,
       "cSourceFileCount": 1,
-      "testFileCount": 154,
+      "testFileCount": 155,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -301,6 +302,7 @@
         "src/cpp/src/kdtree.cpp",
         "src/cpp/src/pc_method.cpp",
         "src/cpp/src/plugin_invoke_bridge.cpp",
+        "src/cpp/src/possibility_screening.cpp",
         "src/cpp/src/resident_screening_index.cpp",
         "src/cpp/src/screening.cpp",
         "src/cpp/src/screening_internal.cpp",
@@ -462,6 +464,7 @@
         "tests/ocmOemTrackAdapter.test.mjs",
         "tests/pairCallsOneInstance.test.mjs",
         "tests/pivInvokeContract.test.mjs",
+        "tests/possibilityScreening.test.mjs",
         "tests/realCatalogExclusion.test.mjs",
         "tests/screeningWindowUnion.test.mjs",
         "tests/sdk_compat.test.mjs",
@@ -611,8 +614,9 @@
       "pluginId": "com.digitalarsenal.analysis.estimation",
       "name": "Measurement-based Orbit Estimation",
       "pluginFamily": "analysis",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "methodIds": [
+        "evaluate_teag",
         "fit_batch",
         "initial_orbit",
         "run_estimation",
@@ -628,13 +632,14 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 6,
+      "cxxSourceFileCount": 7,
       "cSourceFileCount": 0,
-      "testFileCount": 32,
+      "testFileCount": 48,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/batch_fit.cpp",
+        "src/espf.cpp",
         "src/estimation.cpp",
         "src/module.cpp",
         "tests/depth_validation.cpp",
@@ -643,27 +648,40 @@
       ],
       "testFiles": [
         "tests/batch-fit-fixtures.mjs",
+        "tests/batch-fit-v2-fixtures.mjs",
+        "tests/batch-fit-v2-lib.mjs",
         "tests/batch_fit.test.mjs",
+        "tests/batch_fit_v2.test.mjs",
         "tests/build-provider.mjs",
         "tests/conformance.test.mjs",
         "tests/depth-fixtures.mjs",
         "tests/depth-invoke.test.mjs",
         "tests/depth.test.mjs",
         "tests/depth_validation.cpp",
+        "tests/espf-fixtures.mjs",
+        "tests/espf.test.mjs",
+        "tests/fit-batch-v1-cases.mjs",
         "tests/fixtures.mjs",
         "tests/fixtures/DEPTH.md",
         "tests/fixtures/OrekitBatchReference.java",
         "tests/fixtures/OrekitReference.java",
         "tests/fixtures/README.md",
         "tests/fixtures/circular-fusion.json",
+        "tests/fixtures/fit-batch-v1-digests.json",
         "tests/fixtures/generate-cv-inputs.py",
+        "tests/fixtures/generate-fit-batch-v1-digests.mjs",
         "tests/fixtures/hipparchus-LICENSE.txt",
         "tests/fixtures/hipparchus-NOTICE.txt",
         "tests/fixtures/hipparchus-cv-inputs.json",
         "tests/fixtures/hipparchus-cv-smoother.txt",
+        "tests/fixtures/mvee-numpy-reference.json",
+        "tests/fixtures/mvee_numpy_reference.py",
         "tests/fixtures/orekit-batch-reference.json",
         "tests/fixtures/orekit-pv-reference.txt",
+        "tests/hpop-port.mjs",
         "tests/invoke.test.mjs",
+        "tests/measurement_parameters.test.mjs",
+        "tests/mvee.test.mjs",
         "tests/native.test.mjs",
         "tests/native_conformance.cpp",
         "tests/parity.mjs",
@@ -672,6 +690,9 @@
         "tests/sdk_compat.test.mjs",
         "tests/sequential.test.mjs",
         "tests/sequential_validation.cpp",
+        "tests/teag-fixtures.mjs",
+        "tests/teag.test.mjs",
+        "tests/tracking-pipeline.mjs",
         "tests/two_body_provider.hpp",
         "tests/wire.mjs"
       ]
@@ -684,10 +705,13 @@
       "version": "0.1.0",
       "methodIds": [
         "accumulate",
+        "common_epoch",
         "finalize",
         "hpop_arcs",
         "hpop_coverage",
+        "map_covariance",
         "scale_model",
+        "screening_cases",
         "screening_evaluation"
       ],
       "runtimeTargets": [
@@ -700,16 +724,22 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 1,
+      "cxxSourceFileCount": 3,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 5,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
-        "src/gp_error_model.cpp"
+        "src/common_epoch.cpp",
+        "src/gp_error_model.cpp",
+        "src/state_transition.cpp"
       ],
       "testFiles": [
-        "tests/gp_error_model.test.mjs"
+        "tests/covariance_mapping.test.mjs",
+        "tests/gp_error_model.test.mjs",
+        "tests/parity.mjs",
+        "tests/stm-reference.json",
+        "tests/stm-reference.py"
       ]
     },
     {
@@ -901,7 +931,7 @@
       "pluginId": "maneuver-planner",
       "name": "Maneuver Planning Plugin",
       "pluginFamily": "maneuver",
-      "version": "0.6.1",
+      "version": "0.6.2",
       "methodIds": [
         "invoke"
       ],
@@ -954,7 +984,7 @@
         "src/cpp/tests/test_targeting.cpp",
         "tests/behavior.test.mjs",
         "tests/error_path.test.mjs",
-        "tests/evidence/orbit-geometry-tri-runtime-20260906.json",
+        "tests/evidence/orbit-geometry-tri-runtime-20261009.json",
         "tests/fixtures/hosted-runtime/maneuver.single-plugin.flow.json",
         "tests/fixtures/orbit_geometry.parity.json",
         "tests/fixtures/request.hohmann.json",
@@ -3171,9 +3201,10 @@
       "pluginId": "com.digitalarsenal.files.orbit-products",
       "name": "Orbit Products Reader",
       "pluginFamily": "parser",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "methodIds": [
         "describe_container",
+        "normalize_ses_i11",
         "normalize_vcm",
         "normalize_vimpel",
         "read_container",
@@ -3189,13 +3220,14 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 11,
+      "cxxSourceFileCount": 12,
       "cSourceFileCount": 0,
-      "testFileCount": 34,
+      "testFileCount": 37,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/orbit_products_module.cpp",
+        "src/ses_i11_module.cpp",
         "src/vcm_module.cpp",
         "src/vimpel_module.cpp",
         "tests/code500_stk_native.cpp",
@@ -3225,10 +3257,13 @@
         "tests/fixtures/de440/generate_references.py",
         "tests/fixtures/de440/horizons-responses.json",
         "tests/fixtures/de440/horizons.csv",
+        "tests/fixtures/ses-i11/GenerateReference.java",
+        "tests/fixtures/ses-i11/orekit-13.1-reference.json",
         "tests/oem_epoch.test.mjs",
         "tests/oem_epoch_native.cpp",
         "tests/orbit_products_module.test.mjs",
         "tests/sdk_compat.test.mjs",
+        "tests/ses_i11.test.mjs",
         "tests/sp3.test.mjs",
         "tests/sp3_native.cpp",
         "tests/spk.test.mjs",
@@ -4688,13 +4723,12 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 35,
+      "cxxSourceFileCount": 34,
       "cSourceFileCount": 0,
       "testFileCount": 279,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
-        ".sdk-build/erfa-amalgamation.cpp",
         "lib/astrodynamics.cpp",
         "lib/atmosphere_plugin.cpp",
         "lib/atmosphere_winds.cpp",
@@ -5085,10 +5119,11 @@
       "pluginId": "com.orbpro.sgp4",
       "name": "SGP4/SDP4 Propagator",
       "pluginFamily": "propagator",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "methodIds": [
         "catalog_query",
         "ingest_omm",
+        "propagate_ephemeris",
         "propagate_state",
         "upsert_cat"
       ],
@@ -5106,7 +5141,7 @@
       ],
       "cxxSourceFileCount": 3,
       "cSourceFileCount": 1,
-      "testFileCount": 67,
+      "testFileCount": 75,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -5117,8 +5152,15 @@
       ],
       "testFiles": [
         "tests/catFlatBufferContract.test.mjs",
+        "tests/catalogNumberSelection.test.mjs",
+        "tests/ephemerisOutput.test.mjs",
+        "tests/fixtures/generate-propagate-state-digests.mjs",
         "tests/fixtures/hosted-runtime/sgp4.single-plugin.flow.json",
+        "tests/fixtures/propagate-state-1.1.0-digests.json",
         "tests/fixtures/request.propagate.json",
+        "tests/gcrfOutput.test.mjs",
+        "tests/legacy-propagate-state-cases.mjs",
+        "tests/legacyPropagateState.test.mjs",
         "tests/lib/generated/StateVector.js",
         "tests/lib/generated/orbpro.js",
         "tests/lib/generated/orbpro/bool32.js",
@@ -5179,6 +5221,7 @@
         "tests/lib/payloadEncoders.mjs",
         "tests/lib/pivInvokeHelper.mjs",
         "tests/manifestContract.test.mjs",
+        "tests/parity.mjs",
         "tests/pivInvokeContract.test.mjs",
         "tests/sameEpochReplacement.test.mjs",
         "tests/sdk_compat.test.mjs",

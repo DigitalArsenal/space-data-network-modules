@@ -169,3 +169,49 @@ test('an Earth-fixed sensor is rotated to GCRF as in Vallado\'s IAU-2006/2000 wo
   const expected = [5102.508958, 6123.011401, 6378.136928];
   for (let k = 0; k < 3; k++) assert.ok(Math.abs(s[k] - expected[k]) <= 2e-5, `component ${k}: ${s[k]} vs ${expected[k]}`);
 });
+
+test('the report gives an Earth-fixed sensor\'s GCRF velocity, the rate of its GCRF position', async () => {
+  // The Vallado section 3.7 sensor and EOP above, observed at t - 1 s, t and
+  // t + 1 s (UTC). Two references independent of the reported velocity:
+  // 1. the central difference of the reported GCRF positions (the chain the
+  //    test above checks against Vallado): agreement within 3e-8 km/s. The
+  //    one $EOP row holds UT1 - UTC constant, so these positions turn at the
+  //    nominal rate while the module advances UT1 at 1 - LOD/86400
+  //    (1.8e-8 of 0.58 km/s, 1.1e-8 km/s); the difference's truncation
+  //    error, omega^3 r h^2 / 6, is 4e-10 km/s. Turning the sensor about the
+  //    ITRF z axis instead, which the polar motion tilts by 0.36" here,
+  //    misses by 2.8e-7 km/s.
+  // 2. the closed form |v| = omega (1 - LOD / 86400 s) sqrt(x^2 + y^2),
+  //    omega = 7.292115146706979e-5 rad/s (IERS Conventions 2010), the
+  //    distance from the ITRF z axis: within 1e-5 relative, the polar motion
+  //    (0.36", 1.7e-6 rad) tilting the rotation axis; and v is orthogonal to
+  //    r and to the axis to the same order.
+  const sensor = [-1033.4793830, 7901.2952754, 6380.3565958];
+  const times = ['2004-04-06T07:51:27.386009Z', '2004-04-06T07:51:28.386009Z', '2004-04-06T07:51:29.386009Z'];
+  const state = [{ epoch: '2004-04-06T07:50:00Z', state: [42164, 0, 0, 0, 3.07, 0] }, { epoch: '2004-04-06T07:53:00Z', state: [42164, 552.6, 0, 0, 3.07, 0] }];
+  const { report, error } = await associate([
+    predictions([block({ norad: 1, objectId: 'GEO', states: state, covariances: [{ epoch: state[0].epoch, lower: diagonal(1) }, { epoch: state[1].epoch, lower: diagonal(1) }] })]),
+    ...times.map((t, i) => rdo({ ID: `v${i}`, OB_TIME: t, ID_SENSOR: 'vallado-3-14', SEN_REFERENCE_FRAME: 'ITRF', SENX: sensor[0], SENY: sensor[1], SENZ: sensor[2], RANGE: 40000, RANGE_UNC: 1 })),
+    earthOrientation([eopRow({ date: '2004-04-06', mjd: 53101, xArcsec: -0.140682, yArcsec: 0.333309, dut1: -0.4399619, lod: 0.0015563, dXArcsec: -0.000205, dYArcsec: -0.000136 })]),
+  ]);
+  assert.equal(error, undefined, error);
+  const at = (i) => report.observations.find((o) => o.id === `v${i}`);
+  const v = at(1).sensor_velocity_gcrf_km_s;
+  const difference = [0, 1, 2].map((k) => (at(2).sensor_gcrf_km[k] - at(0).sensor_gcrf_km[k]) / 2);
+  for (let k = 0; k < 3; k++) assert.ok(Math.abs(v[k] - difference[k]) <= 3e-8, `component ${k}: ${v[k]} vs ${difference[k]} km/s`);
+  const speed = Math.hypot(...v);
+  const closed = 7.292115146706979e-5 * (1 - 0.0015563 / 86400) * Math.hypot(sensor[0], sensor[1]);
+  assert.ok(Math.abs(speed - closed) <= 1e-5 * closed, `|v| ${speed} vs ${closed} km/s`);
+  const r = at(1).sensor_gcrf_km;
+  assert.ok(Math.abs(v[0] * r[0] + v[1] * r[1] + v[2] * r[2]) <= 1e-5 * speed * Math.hypot(...r), 'v is orthogonal to r');
+});
+
+test('an inertial sensor reports no GCRF velocity', async () => {
+  const state = [{ epoch: '2004-04-06T07:50:00Z', state: [42164, 0, 0, 0, 3.07, 0] }, { epoch: '2004-04-06T07:53:00Z', state: [42164, 552.6, 0, 0, 3.07, 0] }];
+  const { report, error } = await associate([
+    predictions([block({ norad: 1, objectId: 'GEO', states: state, covariances: [{ epoch: state[0].epoch, lower: diagonal(1) }, { epoch: state[1].epoch, lower: diagonal(1) }] })]),
+    rdo({ ID: 'space', OB_TIME: '2004-04-06T07:51:28.386009Z', ID_SENSOR: 'space', SEN_REFERENCE_FRAME: 'GCRF', SENX: 7000, SENY: 0, SENZ: 0, RANGE: 35000, RANGE_UNC: 1 }),
+  ]);
+  assert.equal(error, undefined, error);
+  assert.equal(report.observations[0].sensor_velocity_gcrf_km_s, null);
+});

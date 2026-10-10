@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "family": "estimation",
   "artifact": {
-    "sha256": "f2e322784fd4876c7728376d0ba3b4b0d641bb2858a41083e73b8631c6cdebb0",
+    "sha256": "9882faafb755973757c1cacbda1f803c74b45bde053cdb504172864ad7ce2764",
     "moduleSdk": "0.8.17",
     "spacedatastandards": "1.203.0"
   },

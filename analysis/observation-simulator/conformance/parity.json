@@ -2,31 +2,32 @@
   "ok": true,
   "fixture": "analysis/observation-simulator",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "3dd5db10cd6dc6b6fd8fe35f1f983c4d45908fea54c996be1f9216bc76da8e7c",
-  "moduleSha256": "3dd5db10cd6dc6b6fd8fe35f1f983c4d45908fea54c996be1f9216bc76da8e7c",
+  "artifactSha256": "20edccda3a5c33fba5972495bf8b17b034df9ad5b89d3f77560b012bc8bc5d3f",
+  "moduleSha256": "20edccda3a5c33fba5972495bf8b17b034df9ad5b89d3f77560b012bc8bc5d3f",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
-      "runs": 8,
-      "durationMs": 1096
+      "runs": 12,
+      "durationMs": 1473
     },
     {
       "lane": "wasmedge",
-      "runs": 8,
-      "durationMs": 20407
+      "runs": 12,
+      "durationMs": 26666
     },
     {
       "lane": "docker-wasmedge",
-      "runs": 8,
-      "durationMs": 20920
+      "runs": 12,
+      "durationMs": 31862
     }
   ],
   "cases": [
     "radar-range-noise",
+    "radar-doppler-two-way",
     "passive-rf-doppler-noise"
   ],
-  "comparisons": 46,
+  "comparisons": 69,
   "failures": [],
   "runs": [
     {
@@ -71,13 +72,53 @@
     },
     {
       "lane": "browser",
+      "caseId": "radar-doppler-two-way",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "cf6a6c8630730f67dcf803c58220b626bfd25c00fef37e1b403e2bf32ca4f0dd",
+      "stdoutLength": 84728
+    },
+    {
+      "lane": "browser",
+      "caseId": "radar-doppler-two-way",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "cf6a6c8630730f67dcf803c58220b626bfd25c00fef37e1b403e2bf32ca4f0dd",
+      "stdoutLength": 84728
+    },
+    {
+      "lane": "browser",
+      "caseId": "radar-doppler-two-way",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "cf6a6c8630730f67dcf803c58220b626bfd25c00fef37e1b403e2bf32ca4f0dd",
+      "stdoutLength": 84728
+    },
+    {
+      "lane": "browser",
+      "caseId": "radar-doppler-two-way",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "cf6a6c8630730f67dcf803c58220b626bfd25c00fef37e1b403e2bf32ca4f0dd",
+      "stdoutLength": 84728
+    },
+    {
+      "lane": "browser",
       "caseId": "passive-rf-doppler-noise",
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "fa8160e2528b53c36e310b154d303af46224695a50edb8c974f5962f97d46229",
-      "stdoutLength": 85520
+      "stdoutSha256": "23850ce4f0aad16262fdc649b9ba2d17e1d9e922c5f09d097b947900015432ff",
+      "stdoutLength": 88432
     },
     {
       "lane": "browser",
@@ -86,8 +127,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "fa8160e2528b53c36e310b154d303af46224695a50edb8c974f5962f97d46229",
-      "stdoutLength": 85520
+      "stdoutSha256": "23850ce4f0aad16262fdc649b9ba2d17e1d9e922c5f09d097b947900015432ff",
+      "stdoutLength": 88432
     },
     {
       "lane": "browser",
@@ -96,8 +137,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "fa8160e2528b53c36e310b154d303af46224695a50edb8c974f5962f97d46229",
-      "stdoutLength": 85520
+      "stdoutSha256": "23850ce4f0aad16262fdc649b9ba2d17e1d9e922c5f09d097b947900015432ff",
+      "stdoutLength": 88432
     },
     {
       "lane": "browser",
@@ -106,8 +147,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "fa8160e2528b53c36e310b154d303af46224695a50edb8c974f5962f97d46229",
-      "stdoutLength": 85520
+      "stdoutSha256": "23850ce4f0aad16262fdc649b9ba2d17e1d9e922c5f09d097b947900015432ff",
+      "stdoutLength": 88432
     },
     {
       "lane": "wasmedge",
@@ -151,13 +192,53 @@
     },
     {
       "lane": "wasmedge",
+      "caseId": "radar-doppler-two-way",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "cf6a6c8630730f67dcf803c58220b626bfd25c00fef37e1b403e2bf32ca4f0dd",
+      "stdoutLength": 84728
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "radar-doppler-two-way",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "cf6a6c8630730f67dcf803c58220b626bfd25c00fef37e1b403e2bf32ca4f0dd",
+      "stdoutLength": 84728
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "radar-doppler-two-way",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "cf6a6c8630730f67dcf803c58220b626bfd25c00fef37e1b403e2bf32ca4f0dd",
+      "stdoutLength": 84728
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "radar-doppler-two-way",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "cf6a6c8630730f67dcf803c58220b626bfd25c00fef37e1b403e2bf32ca4f0dd",
+      "stdoutLength": 84728
+    },
+    {
+      "lane": "wasmedge",
       "caseId": "passive-rf-doppler-noise",
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "fa8160e2528b53c36e310b154d303af46224695a50edb8c974f5962f97d46229",
-      "stdoutLength": 85520
+      "stdoutSha256": "23850ce4f0aad16262fdc649b9ba2d17e1d9e922c5f09d097b947900015432ff",
+      "stdoutLength": 88432
     },
     {
       "lane": "wasmedge",
@@ -166,8 +247,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "fa8160e2528b53c36e310b154d303af46224695a50edb8c974f5962f97d46229",
-      "stdoutLength": 85520
+      "stdoutSha256": "23850ce4f0aad16262fdc649b9ba2d17e1d9e922c5f09d097b947900015432ff",
+      "stdoutLength": 88432
     },
     {
       "lane": "wasmedge",
@@ -176,8 +257,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "fa8160e2528b53c36e310b154d303af46224695a50edb8c974f5962f97d46229",
-      "stdoutLength": 85520
+      "stdoutSha256": "23850ce4f0aad16262fdc649b9ba2d17e1d9e922c5f09d097b947900015432ff",
+      "stdoutLength": 88432
     },
     {
       "lane": "wasmedge",
@@ -186,8 +267,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "fa8160e2528b53c36e310b154d303af46224695a50edb8c974f5962f97d46229",
-      "stdoutLength": 85520
+      "stdoutSha256": "23850ce4f0aad16262fdc649b9ba2d17e1d9e922c5f09d097b947900015432ff",
+      "stdoutLength": 88432
     },
     {
       "lane": "docker-wasmedge",
@@ -231,13 +312,53 @@
     },
     {
       "lane": "docker-wasmedge",
+      "caseId": "radar-doppler-two-way",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "cf6a6c8630730f67dcf803c58220b626bfd25c00fef37e1b403e2bf32ca4f0dd",
+      "stdoutLength": 84728
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "radar-doppler-two-way",
+      "threadCount": 2,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "cf6a6c8630730f67dcf803c58220b626bfd25c00fef37e1b403e2bf32ca4f0dd",
+      "stdoutLength": 84728
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "radar-doppler-two-way",
+      "threadCount": 4,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "cf6a6c8630730f67dcf803c58220b626bfd25c00fef37e1b403e2bf32ca4f0dd",
+      "stdoutLength": 84728
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "radar-doppler-two-way",
+      "threadCount": 8,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "cf6a6c8630730f67dcf803c58220b626bfd25c00fef37e1b403e2bf32ca4f0dd",
+      "stdoutLength": 84728
+    },
+    {
+      "lane": "docker-wasmedge",
       "caseId": "passive-rf-doppler-noise",
       "threadCount": 1,
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "fa8160e2528b53c36e310b154d303af46224695a50edb8c974f5962f97d46229",
-      "stdoutLength": 85520
+      "stdoutSha256": "23850ce4f0aad16262fdc649b9ba2d17e1d9e922c5f09d097b947900015432ff",
+      "stdoutLength": 88432
     },
     {
       "lane": "docker-wasmedge",
@@ -246,8 +367,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "fa8160e2528b53c36e310b154d303af46224695a50edb8c974f5962f97d46229",
-      "stdoutLength": 85520
+      "stdoutSha256": "23850ce4f0aad16262fdc649b9ba2d17e1d9e922c5f09d097b947900015432ff",
+      "stdoutLength": 88432
     },
     {
       "lane": "docker-wasmedge",
@@ -256,8 +377,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "fa8160e2528b53c36e310b154d303af46224695a50edb8c974f5962f97d46229",
-      "stdoutLength": 85520
+      "stdoutSha256": "23850ce4f0aad16262fdc649b9ba2d17e1d9e922c5f09d097b947900015432ff",
+      "stdoutLength": 88432
     },
     {
       "lane": "docker-wasmedge",
@@ -266,8 +387,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "fa8160e2528b53c36e310b154d303af46224695a50edb8c974f5962f97d46229",
-      "stdoutLength": 85520
+      "stdoutSha256": "23850ce4f0aad16262fdc649b9ba2d17e1d9e922c5f09d097b947900015432ff",
+      "stdoutLength": 88432
     }
   ]
 }
