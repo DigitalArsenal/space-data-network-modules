@@ -982,6 +982,9 @@ extern "C" int calibrate_decay() {
   if (!positive(rw) || !positive(meanK) || !positive(diffK)) return fail("invalid-request", "priors must be positive.");
   const double stepS = request.value("stepSeconds", 60.0), maxGap = request.value("maxGapDays", 3.0), floorM = request.value("sigmaFloorM", 1.0);
   const double edit = request.value("editSigma", 4.0);
+  // Residual scales and edits are re-estimated in the first reweight
+  // iterations and then held, so that Gauss-Newton converges on a fixed problem.
+  const int reweight = request.value("reweightIterations", 4);
   const int maxIt = request.value("iterations", 10), minSets = request.value("minSets", 5);
   const json& tol = request.value("tolerance", json::object());
   const double tolK = tol.value("K", 0.5), tolLnB = tol.value("lnB", 1e-3), tolA0 = tol.value("a0M", 0.1);
@@ -1174,7 +1177,7 @@ extern "C" int calibrate_decay() {
     if (!ok) return fail("integration-failed", "a trajectory left the drivers' span during the iterations.");
     for (Object& ob : objects) {
       residuals(ob);
-      robust_sigma(ob, floorM, iterations >= 1 ? edit : 0);
+      if (iterations < reweight) robust_sigma(ob, floorM, iterations >= 1 ? edit : 0);
     }
     build();
     if (!cholesky_solve(NM, rhs, n, nullptr)) break;
@@ -1194,15 +1197,13 @@ extern "C" int calibrate_decay() {
       }
     }
     history.push_back({{"iteration", iterations + 1}, {"chiSquare", chi2}, {"observations", observations}, {"maxStepK", big}, {"maxStepLnB", bigB}, {"maxStepA0M", bigA}});
-    if (big < tolK && bigB < tolLnB && bigA < tolA0) { converged = true; ++iterations; break; }
+    if (iterations + 1 >= reweight && big < tolK && bigB < tolLnB && bigA < tolA0) { converged = true; ++iterations; break; }
   }
-  // The solution: residuals, scales and the formal covariance there.
+  // The solution: residuals and the formal covariance there, under the scales
+  // and edits the solution was found with.
   for (Object& ob : objects)
     if (!integrate_object(ob, stepS, table, sun, corr, true)) return fail("integration-failed", "a trajectory left the drivers' span at the solution.");
-  for (Object& ob : objects) {
-    residuals(ob);
-    robust_sigma(ob, floorM, edit);
-  }
+  for (Object& ob : objects) residuals(ob);
   build();
   std::vector<double> cov;
   std::vector<double> scratch(rhs);
@@ -1272,6 +1273,6 @@ extern "C" int calibrate_decay() {
   json correction = {{"nodesMjd", corr.t}, {"altitudeKm", corr.alt}, {"values", values}, {"sigmas", sigmas}};
   return emit("calibration", {{"kind", "jb2008-decay-calibration"}, {"version", 1}, {"correction", correction}, {"objects", objs},
                               {"skipped", skipped}, {"fit", fit},
-                              {"settings", {{"stepSeconds", stepS}, {"maxGapDays", maxGap}, {"sigmaFloorM", floorM}, {"editSigma", edit},
+                              {"settings", {{"stepSeconds", stepS}, {"maxGapDays", maxGap}, {"sigmaFloorM", floorM}, {"editSigma", edit}, {"reweightIterations", reweight},
                                             {"priors", {{"randomWalkKPerSqrtDay", rw}, {"meanLevelK", meanK}, {"altitudeDifferenceK", diffK}}}}}});
 }
