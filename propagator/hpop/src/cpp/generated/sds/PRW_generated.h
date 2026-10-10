@@ -996,6 +996,77 @@ inline const char *EnumNameprwRadiationPressureFamily(prwRadiationPressureFamily
   return EnumNamesprwRadiationPressureFamily()[index];
 }
 
+/// Earth radiation pressure: the sunlight the Earth reflects (albedo) and the
+/// infrared it emits, pushing on an isotropic (cannonball) spacecraft. KNOCKE
+/// is Knocke, Ries and Tapley (1988, AIAA paper 88-4292): albedo and
+/// emissivity zonal to the second Legendre degree with the annual term of
+/// the first, from the elements of the Earth's surface the spacecraft sees
+/// (as Orekit's KnockeRediffusedForceModel evaluates it).
+enum class prwEarthRadiationModel : uint8_t {
+  NONE = 0,
+  KNOCKE = 1,
+  MIN = NONE,
+  MAX = KNOCKE
+};
+
+inline const prwEarthRadiationModel (&EnumValuesprwEarthRadiationModel())[2] {
+  static const prwEarthRadiationModel values[] = {
+    prwEarthRadiationModel::NONE,
+    prwEarthRadiationModel::KNOCKE
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwEarthRadiationModel() {
+  static const char * const names[3] = {
+    "NONE",
+    "KNOCKE",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwEarthRadiationModel(prwEarthRadiationModel e) {
+  if (::flatbuffers::IsOutRange(e, prwEarthRadiationModel::NONE, prwEarthRadiationModel::KNOCKE)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwEarthRadiationModel()[index];
+}
+
+/// Ocean tide model for the central body's field. FES2004 is IERS
+/// Conventions (2010) section 6.3: the variations of the normalized Stokes
+/// coefficients of the FES2004 waves (the IERS file fes2004_Cnm-Snm.dat,
+/// eq. 6.15) at their Doodson arguments, in the field's Earth-fixed axes.
+/// The ocean pole tide is not included.
+enum class prwOceanTideModel : uint8_t {
+  NONE = 0,
+  FES2004 = 1,
+  MIN = NONE,
+  MAX = FES2004
+};
+
+inline const prwOceanTideModel (&EnumValuesprwOceanTideModel())[2] {
+  static const prwOceanTideModel values[] = {
+    prwOceanTideModel::NONE,
+    prwOceanTideModel::FES2004
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesprwOceanTideModel() {
+  static const char * const names[3] = {
+    "NONE",
+    "FES2004",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameprwOceanTideModel(prwOceanTideModel e) {
+  if (::flatbuffers::IsOutRange(e, prwOceanTideModel::NONE, prwOceanTideModel::FES2004)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesprwOceanTideModel()[index];
+}
+
 /// GNSS spacecraft block, selecting the box-wing surfaces.
 enum class prwGnssSpacecraftBlock : uint8_t {
   UNSPECIFIED = 0,
@@ -2388,6 +2459,13 @@ struct PRWForceConfigurationT : public ::flatbuffers::NativeTable {
   prwRadiationPressureFamily RADIATION_PRESSURE_MODEL = prwRadiationPressureFamily::CANNONBALL;
   prwGnssSpacecraftBlock GNSS_BLOCK = prwGnssSpacecraftBlock::UNSPECIFIED;
   std::unique_ptr<PRWEcom2T> ECOM2{};
+  prwEarthRadiationModel EARTH_RADIATION = prwEarthRadiationModel::NONE;
+  double EARTH_RADIATION_RESOLUTION_DEG = 15.0;
+  double EARTH_RADIATION_AREA_OVER_MASS_M2_KG = 0.0;
+  bool HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = false;
+  prwOceanTideModel OCEAN_TIDES = prwOceanTideModel::NONE;
+  uint16_t OCEAN_TIDE_MAXIMUM_DEGREE = 30;
+  uint16_t OCEAN_TIDE_MAXIMUM_ORDER = 30;
   PRWForceConfigurationT() = default;
   PRWForceConfigurationT(const PRWForceConfigurationT &o);
   PRWForceConfigurationT(PRWForceConfigurationT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -2433,7 +2511,14 @@ struct PRWForceConfiguration FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Ta
     VT_HAS_MAXIMUM_TESSERAL_DEGREE = 62,
     VT_RADIATION_PRESSURE_MODEL = 64,
     VT_GNSS_BLOCK = 66,
-    VT_ECOM2 = 68
+    VT_ECOM2 = 68,
+    VT_EARTH_RADIATION = 70,
+    VT_EARTH_RADIATION_RESOLUTION_DEG = 72,
+    VT_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = 74,
+    VT_HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = 76,
+    VT_OCEAN_TIDES = 78,
+    VT_OCEAN_TIDE_MAXIMUM_DEGREE = 80,
+    VT_OCEAN_TIDE_MAXIMUM_ORDER = 82
   };
   prwGravitySelection GRAVITY_CHOICE() const {
     return static_cast<prwGravitySelection>(GetField<uint8_t>(VT_GRAVITY_CHOICE, 0));
@@ -2555,6 +2640,37 @@ struct PRWForceConfiguration FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Ta
   const PRWEcom2 *ECOM2() const {
     return GetPointer<const PRWEcom2 *>(VT_ECOM2);
   }
+  /// Earth radiation pressure (albedo and infrared). It reads the Sun's
+  /// position from the request's ephemeris source.
+  prwEarthRadiationModel EARTH_RADIATION() const {
+    return static_cast<prwEarthRadiationModel>(GetField<uint8_t>(VT_EARTH_RADIATION, 0));
+  }
+  /// Angular size of the Earth surface elements it sums, degrees.
+  double EARTH_RADIATION_RESOLUTION_DEG() const {
+    return GetField<double>(VT_EARTH_RADIATION_RESOLUTION_DEG, 15.0);
+  }
+  /// Isotropic Cr*A/m, m2/kg, the Earth's radiation acts on. Absent, it is the
+  /// cannonball's REFLECTIVITY_COEFFICIENT * AREA_M2 / INITIAL_MASS_KG, and
+  /// fitting SRP_AREA_OVER_MASS scales both.
+  double EARTH_RADIATION_AREA_OVER_MASS_M2_KG() const {
+    return GetField<double>(VT_EARTH_RADIATION_AREA_OVER_MASS_M2_KG, 0.0);
+  }
+  /// True when EARTH_RADIATION_AREA_OVER_MASS_M2_KG carries a value; false means absent.
+  bool HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG() const {
+    return GetField<uint8_t>(VT_HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG, 0) != 0;
+  }
+  /// Ocean tides. Their field is Earth-fixed, so a provider needs Earth
+  /// orientation (PRW.EARTH_ORIENTATION) to apply them.
+  prwOceanTideModel OCEAN_TIDES() const {
+    return static_cast<prwOceanTideModel>(GetField<uint8_t>(VT_OCEAN_TIDES, 0));
+  }
+  /// Truncation of the ocean tide field.
+  uint16_t OCEAN_TIDE_MAXIMUM_DEGREE() const {
+    return GetField<uint16_t>(VT_OCEAN_TIDE_MAXIMUM_DEGREE, 30);
+  }
+  uint16_t OCEAN_TIDE_MAXIMUM_ORDER() const {
+    return GetField<uint16_t>(VT_OCEAN_TIDE_MAXIMUM_ORDER, 30);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -2595,6 +2711,13 @@ struct PRWForceConfiguration FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Ta
            VerifyField<uint8_t>(verifier, VT_GNSS_BLOCK, 1) &&
            VerifyOffset(verifier, VT_ECOM2) &&
            verifier.VerifyTable(ECOM2()) &&
+           VerifyField<uint8_t>(verifier, VT_EARTH_RADIATION, 1) &&
+           VerifyField<double>(verifier, VT_EARTH_RADIATION_RESOLUTION_DEG, 8) &&
+           VerifyField<double>(verifier, VT_EARTH_RADIATION_AREA_OVER_MASS_M2_KG, 8) &&
+           VerifyField<uint8_t>(verifier, VT_HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG, 1) &&
+           VerifyField<uint8_t>(verifier, VT_OCEAN_TIDES, 1) &&
+           VerifyField<uint16_t>(verifier, VT_OCEAN_TIDE_MAXIMUM_DEGREE, 2) &&
+           VerifyField<uint16_t>(verifier, VT_OCEAN_TIDE_MAXIMUM_ORDER, 2) &&
            verifier.EndTable();
   }
   PRWForceConfigurationT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2705,6 +2828,27 @@ struct PRWForceConfigurationBuilder {
   void add_ECOM2(::flatbuffers::Offset<PRWEcom2> ECOM2) {
     fbb_.AddOffset(PRWForceConfiguration::VT_ECOM2, ECOM2);
   }
+  void add_EARTH_RADIATION(prwEarthRadiationModel EARTH_RADIATION) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_EARTH_RADIATION, static_cast<uint8_t>(EARTH_RADIATION), 0);
+  }
+  void add_EARTH_RADIATION_RESOLUTION_DEG(double EARTH_RADIATION_RESOLUTION_DEG) {
+    fbb_.AddElement<double>(PRWForceConfiguration::VT_EARTH_RADIATION_RESOLUTION_DEG, EARTH_RADIATION_RESOLUTION_DEG, 15.0);
+  }
+  void add_EARTH_RADIATION_AREA_OVER_MASS_M2_KG(double EARTH_RADIATION_AREA_OVER_MASS_M2_KG) {
+    fbb_.AddElement<double>(PRWForceConfiguration::VT_EARTH_RADIATION_AREA_OVER_MASS_M2_KG, EARTH_RADIATION_AREA_OVER_MASS_M2_KG, 0.0);
+  }
+  void add_HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG(bool HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG, static_cast<uint8_t>(HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG), 0);
+  }
+  void add_OCEAN_TIDES(prwOceanTideModel OCEAN_TIDES) {
+    fbb_.AddElement<uint8_t>(PRWForceConfiguration::VT_OCEAN_TIDES, static_cast<uint8_t>(OCEAN_TIDES), 0);
+  }
+  void add_OCEAN_TIDE_MAXIMUM_DEGREE(uint16_t OCEAN_TIDE_MAXIMUM_DEGREE) {
+    fbb_.AddElement<uint16_t>(PRWForceConfiguration::VT_OCEAN_TIDE_MAXIMUM_DEGREE, OCEAN_TIDE_MAXIMUM_DEGREE, 30);
+  }
+  void add_OCEAN_TIDE_MAXIMUM_ORDER(uint16_t OCEAN_TIDE_MAXIMUM_ORDER) {
+    fbb_.AddElement<uint16_t>(PRWForceConfiguration::VT_OCEAN_TIDE_MAXIMUM_ORDER, OCEAN_TIDE_MAXIMUM_ORDER, 30);
+  }
   explicit PRWForceConfigurationBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2751,8 +2895,17 @@ inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfiguration(
     bool HAS_MAXIMUM_TESSERAL_DEGREE = false,
     prwRadiationPressureFamily RADIATION_PRESSURE_MODEL = prwRadiationPressureFamily::CANNONBALL,
     prwGnssSpacecraftBlock GNSS_BLOCK = prwGnssSpacecraftBlock::UNSPECIFIED,
-    ::flatbuffers::Offset<PRWEcom2> ECOM2 = 0) {
+    ::flatbuffers::Offset<PRWEcom2> ECOM2 = 0,
+    prwEarthRadiationModel EARTH_RADIATION = prwEarthRadiationModel::NONE,
+    double EARTH_RADIATION_RESOLUTION_DEG = 15.0,
+    double EARTH_RADIATION_AREA_OVER_MASS_M2_KG = 0.0,
+    bool HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = false,
+    prwOceanTideModel OCEAN_TIDES = prwOceanTideModel::NONE,
+    uint16_t OCEAN_TIDE_MAXIMUM_DEGREE = 30,
+    uint16_t OCEAN_TIDE_MAXIMUM_ORDER = 30) {
   PRWForceConfigurationBuilder builder_(_fbb);
+  builder_.add_EARTH_RADIATION_AREA_OVER_MASS_M2_KG(EARTH_RADIATION_AREA_OVER_MASS_M2_KG);
+  builder_.add_EARTH_RADIATION_RESOLUTION_DEG(EARTH_RADIATION_RESOLUTION_DEG);
   builder_.add_DRAG_AREA_OVER_MASS_RATE_M2_KG_S(DRAG_AREA_OVER_MASS_RATE_M2_KG_S);
   builder_.add_IN_TRACK_ACCELERATION_M_S2(IN_TRACK_ACCELERATION_M_S2);
   builder_.add_DRAG_COEFFICIENT(DRAG_COEFFICIENT);
@@ -2764,9 +2917,14 @@ inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfiguration(
   builder_.add_EPHEMERIS_SOURCE(EPHEMERIS_SOURCE);
   builder_.add_WEATHER(WEATHER);
   builder_.add_THIRD_BODY_IDS(THIRD_BODY_IDS);
+  builder_.add_OCEAN_TIDE_MAXIMUM_ORDER(OCEAN_TIDE_MAXIMUM_ORDER);
+  builder_.add_OCEAN_TIDE_MAXIMUM_DEGREE(OCEAN_TIDE_MAXIMUM_DEGREE);
   builder_.add_MAXIMUM_TESSERAL_DEGREE(MAXIMUM_TESSERAL_DEGREE);
   builder_.add_MAXIMUM_ORDER(MAXIMUM_ORDER);
   builder_.add_MAXIMUM_DEGREE(MAXIMUM_DEGREE);
+  builder_.add_OCEAN_TIDES(OCEAN_TIDES);
+  builder_.add_HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG(HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG);
+  builder_.add_EARTH_RADIATION(EARTH_RADIATION);
   builder_.add_GNSS_BLOCK(GNSS_BLOCK);
   builder_.add_RADIATION_PRESSURE_MODEL(RADIATION_PRESSURE_MODEL);
   builder_.add_HAS_MAXIMUM_TESSERAL_DEGREE(HAS_MAXIMUM_TESSERAL_DEGREE);
@@ -2828,7 +2986,14 @@ inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfigurationD
     bool HAS_MAXIMUM_TESSERAL_DEGREE = false,
     prwRadiationPressureFamily RADIATION_PRESSURE_MODEL = prwRadiationPressureFamily::CANNONBALL,
     prwGnssSpacecraftBlock GNSS_BLOCK = prwGnssSpacecraftBlock::UNSPECIFIED,
-    ::flatbuffers::Offset<PRWEcom2> ECOM2 = 0) {
+    ::flatbuffers::Offset<PRWEcom2> ECOM2 = 0,
+    prwEarthRadiationModel EARTH_RADIATION = prwEarthRadiationModel::NONE,
+    double EARTH_RADIATION_RESOLUTION_DEG = 15.0,
+    double EARTH_RADIATION_AREA_OVER_MASS_M2_KG = 0.0,
+    bool HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = false,
+    prwOceanTideModel OCEAN_TIDES = prwOceanTideModel::NONE,
+    uint16_t OCEAN_TIDE_MAXIMUM_DEGREE = 30,
+    uint16_t OCEAN_TIDE_MAXIMUM_ORDER = 30) {
   auto THIRD_BODY_IDS__ = THIRD_BODY_IDS ? _fbb.CreateVector<int32_t>(*THIRD_BODY_IDS) : 0;
   auto EPHEMERIS_SOURCE__ = EPHEMERIS_SOURCE ? _fbb.CreateString(EPHEMERIS_SOURCE) : 0;
   return CreatePRWForceConfiguration(
@@ -2865,7 +3030,14 @@ inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfigurationD
       HAS_MAXIMUM_TESSERAL_DEGREE,
       RADIATION_PRESSURE_MODEL,
       GNSS_BLOCK,
-      ECOM2);
+      ECOM2,
+      EARTH_RADIATION,
+      EARTH_RADIATION_RESOLUTION_DEG,
+      EARTH_RADIATION_AREA_OVER_MASS_M2_KG,
+      HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG,
+      OCEAN_TIDES,
+      OCEAN_TIDE_MAXIMUM_DEGREE,
+      OCEAN_TIDE_MAXIMUM_ORDER);
 }
 
 ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfiguration(::flatbuffers::FlatBufferBuilder &_fbb, const PRWForceConfigurationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -7656,7 +7828,14 @@ inline PRWForceConfigurationT::PRWForceConfigurationT(const PRWForceConfiguratio
         HAS_MAXIMUM_TESSERAL_DEGREE(o.HAS_MAXIMUM_TESSERAL_DEGREE),
         RADIATION_PRESSURE_MODEL(o.RADIATION_PRESSURE_MODEL),
         GNSS_BLOCK(o.GNSS_BLOCK),
-        ECOM2((o.ECOM2) ? new PRWEcom2T(*o.ECOM2) : nullptr) {
+        ECOM2((o.ECOM2) ? new PRWEcom2T(*o.ECOM2) : nullptr),
+        EARTH_RADIATION(o.EARTH_RADIATION),
+        EARTH_RADIATION_RESOLUTION_DEG(o.EARTH_RADIATION_RESOLUTION_DEG),
+        EARTH_RADIATION_AREA_OVER_MASS_M2_KG(o.EARTH_RADIATION_AREA_OVER_MASS_M2_KG),
+        HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG(o.HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG),
+        OCEAN_TIDES(o.OCEAN_TIDES),
+        OCEAN_TIDE_MAXIMUM_DEGREE(o.OCEAN_TIDE_MAXIMUM_DEGREE),
+        OCEAN_TIDE_MAXIMUM_ORDER(o.OCEAN_TIDE_MAXIMUM_ORDER) {
 }
 
 inline PRWForceConfigurationT &PRWForceConfigurationT::operator=(PRWForceConfigurationT o) FLATBUFFERS_NOEXCEPT {
@@ -7693,6 +7872,13 @@ inline PRWForceConfigurationT &PRWForceConfigurationT::operator=(PRWForceConfigu
   std::swap(RADIATION_PRESSURE_MODEL, o.RADIATION_PRESSURE_MODEL);
   std::swap(GNSS_BLOCK, o.GNSS_BLOCK);
   std::swap(ECOM2, o.ECOM2);
+  std::swap(EARTH_RADIATION, o.EARTH_RADIATION);
+  std::swap(EARTH_RADIATION_RESOLUTION_DEG, o.EARTH_RADIATION_RESOLUTION_DEG);
+  std::swap(EARTH_RADIATION_AREA_OVER_MASS_M2_KG, o.EARTH_RADIATION_AREA_OVER_MASS_M2_KG);
+  std::swap(HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG, o.HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG);
+  std::swap(OCEAN_TIDES, o.OCEAN_TIDES);
+  std::swap(OCEAN_TIDE_MAXIMUM_DEGREE, o.OCEAN_TIDE_MAXIMUM_DEGREE);
+  std::swap(OCEAN_TIDE_MAXIMUM_ORDER, o.OCEAN_TIDE_MAXIMUM_ORDER);
   return *this;
 }
 
@@ -7738,6 +7924,13 @@ inline void PRWForceConfiguration::UnPackTo(PRWForceConfigurationT *_o, const ::
   { auto _e = RADIATION_PRESSURE_MODEL(); _o->RADIATION_PRESSURE_MODEL = _e; }
   { auto _e = GNSS_BLOCK(); _o->GNSS_BLOCK = _e; }
   { auto _e = ECOM2(); if (_e) { if(_o->ECOM2) { _e->UnPackTo(_o->ECOM2.get(), _resolver); } else { _o->ECOM2 = std::unique_ptr<PRWEcom2T>(_e->UnPack(_resolver)); } } else if (_o->ECOM2) { _o->ECOM2.reset(); } }
+  { auto _e = EARTH_RADIATION(); _o->EARTH_RADIATION = _e; }
+  { auto _e = EARTH_RADIATION_RESOLUTION_DEG(); _o->EARTH_RADIATION_RESOLUTION_DEG = _e; }
+  { auto _e = EARTH_RADIATION_AREA_OVER_MASS_M2_KG(); _o->EARTH_RADIATION_AREA_OVER_MASS_M2_KG = _e; }
+  { auto _e = HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG(); _o->HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = _e; }
+  { auto _e = OCEAN_TIDES(); _o->OCEAN_TIDES = _e; }
+  { auto _e = OCEAN_TIDE_MAXIMUM_DEGREE(); _o->OCEAN_TIDE_MAXIMUM_DEGREE = _e; }
+  { auto _e = OCEAN_TIDE_MAXIMUM_ORDER(); _o->OCEAN_TIDE_MAXIMUM_ORDER = _e; }
 }
 
 inline ::flatbuffers::Offset<PRWForceConfiguration> CreatePRWForceConfiguration(::flatbuffers::FlatBufferBuilder &_fbb, const PRWForceConfigurationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -7781,6 +7974,13 @@ inline ::flatbuffers::Offset<PRWForceConfiguration> PRWForceConfiguration::Pack(
   auto _RADIATION_PRESSURE_MODEL = _o->RADIATION_PRESSURE_MODEL;
   auto _GNSS_BLOCK = _o->GNSS_BLOCK;
   auto _ECOM2 = _o->ECOM2 ? CreatePRWEcom2(_fbb, _o->ECOM2.get(), _rehasher) : 0;
+  auto _EARTH_RADIATION = _o->EARTH_RADIATION;
+  auto _EARTH_RADIATION_RESOLUTION_DEG = _o->EARTH_RADIATION_RESOLUTION_DEG;
+  auto _EARTH_RADIATION_AREA_OVER_MASS_M2_KG = _o->EARTH_RADIATION_AREA_OVER_MASS_M2_KG;
+  auto _HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG = _o->HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG;
+  auto _OCEAN_TIDES = _o->OCEAN_TIDES;
+  auto _OCEAN_TIDE_MAXIMUM_DEGREE = _o->OCEAN_TIDE_MAXIMUM_DEGREE;
+  auto _OCEAN_TIDE_MAXIMUM_ORDER = _o->OCEAN_TIDE_MAXIMUM_ORDER;
   return CreatePRWForceConfiguration(
       _fbb,
       _GRAVITY_CHOICE,
@@ -7815,7 +8015,14 @@ inline ::flatbuffers::Offset<PRWForceConfiguration> PRWForceConfiguration::Pack(
       _HAS_MAXIMUM_TESSERAL_DEGREE,
       _RADIATION_PRESSURE_MODEL,
       _GNSS_BLOCK,
-      _ECOM2);
+      _ECOM2,
+      _EARTH_RADIATION,
+      _EARTH_RADIATION_RESOLUTION_DEG,
+      _EARTH_RADIATION_AREA_OVER_MASS_M2_KG,
+      _HAS_EARTH_RADIATION_AREA_OVER_MASS_M2_KG,
+      _OCEAN_TIDES,
+      _OCEAN_TIDE_MAXIMUM_DEGREE,
+      _OCEAN_TIDE_MAXIMUM_ORDER);
 }
 
 inline PRWStateMatrixT *PRWStateMatrix::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {

@@ -4,6 +4,7 @@
 #include "time_convert.h"
 #include "shadow.h"
 #include "gnss_srp.h"
+#include "earth_radiation.h"
 
 #include <algorithm>
 #include <cmath>
@@ -51,6 +52,10 @@ V operator-(const V&a,const V&b){return V(a.x-b.x,a.y-b.y,a.z-b.z);}
 V operator*(const V&a,const D&b){return V(a.x*b,a.y*b,a.z*b);}
 V operator/(const V&a,const D&b){return V(a.x/b,a.y/b,a.z/b);}
 V unit(const V&a){const D n=a.norm();return n.value>0 ? a/n : V();}
+// The vector operations lib/earth_radiation.h's template calls.
+D dot(const V& a,const V& b){return a.dot(b);}
+V cross(const V& a,const V& b){return a.cross(b);}
+D norm(const V& a){return a.norm();}
 V positionSeed(const Vec3&r){return V(D::seed(r.x,0),D::seed(r.y,1),D::seed(r.z,2));}
 V velocitySeed(const Vec3&v){return V(D::seed(v.x,3),D::seed(v.y,4),D::seed(v.z,5));}
 
@@ -311,9 +316,33 @@ V solidTides(const V& r,double jd,const ForceModelSet& f) {
     return V(a.x*m[0][0]+a.y*m[1][0]+a.z*m[2][0],a.x*m[0][1]+a.y*m[1][1]+a.z*m[2][1],a.x*m[0][2]+a.y*m[1][2]+a.z*m[2][2]);
 }
 
+// The FES2004 ocean tide field (force_models.cpp OceanTideField) in the
+// force set's Earth-fixed axes; like the solid tides, its coefficients depend
+// on time only.
+V oceanTides(const V& r,double jd,const ForceModelSet& f) {
+    if(r.norm().value<RE_EARTH)return V();
+    const EarthAxes axes=EarthAxesAt(jd,f);const ExtendedGravityField field=OceanTideField(jd,f);
+    const auto& m=axes.m;
+    const V fixed(r.x*m[0][0]+r.y*m[0][1]+r.z*m[0][2],r.x*m[1][0]+r.y*m[1][1]+r.z*m[1][2],r.x*m[2][0]+r.y*m[2][1]+r.z*m[2][2]);
+    const V a=extendedGravity(fixed,field,false);
+    return V(a.x*m[0][0]+a.y*m[1][0]+a.z*m[2][0],a.x*m[0][1]+a.y*m[1][1]+a.z*m[2][1],a.x*m[0][2]+a.y*m[1][2]+a.z*m[2][2]);
+}
+
+// Earth radiation pressure (force_models.cpp EarthRadiation), the same
+// template through the dual numbers.
+V earthRadiation(const V& r,double jd,const ForceModelSet& f) {
+    const double coefficient=EarthRadiationCoefficient(f);
+    const EarthRadiationConfig& c=f.earthRadiation;
+    if(!(coefficient>0)||r.norm().value<=c.radiusKm)return V();
+    const Vec3 sun=f.sunPositionProvided?f.sunPosition:getSunPosition(jd).position;
+    const double deltaT=(timesys::tdbToTt(jd)-knocke::REFERENCE_EPOCH_JD_TT)*86400.0;
+    const V pressure=knocke::pressure<V,D>(r*D(1000.0),V(sun*1000.0),deltaT,c.resolutionDeg*DEG_TO_RAD,c.radiusKm*1000.0);
+    return pressure*D(coefficient*1e-3);
+}
+
 const char* configError(const ForceModelSet& f) {
-    if(f.useEarthAlbedo || f.useThermalReradiation || f.useOceanTides || f.usePoleTide || f.useEmpiricalAccel || f.hasFiniteManeuver)
-        return "ANALYTIC STM: albedo, thermal, ocean and pole tide, empirical and finite-thrust partials are unavailable; select FINITE_DIFFERENCE";
+    if(f.useThermalReradiation || f.usePoleTide || f.useEmpiricalAccel || f.hasFiniteManeuver)
+        return "ANALYTIC STM: thermal, pole tide, empirical and finite-thrust partials are unavailable; select FINITE_DIFFERENCE";
     if(f.useSRP && f.srp.model!=SRPModelType::Cannonball && f.srp.model!=SRPModelType::GnssBoxWing)
         return "ANALYTIC STM requires cannonball or GNSS box-wing SRP; select FINITE_DIFFERENCE for other attitude-dependent SRP";
     if(f.useDrag && f.drag.includeWinds && f.dragModel!=DragModelType::Exponential)
@@ -363,7 +392,13 @@ Vec3 AccelerationParameterPartial(DynamicParameter p,const Vec3& r,const Vec3& v
         }
         case DynamicParameter::SrpAreaOverMass: {
             SRPForceConfig unit=f.srp;unit.Cr=unit.mass/unit.area;    // Cr*A/m = 1 m^2/kg
-            return SrpAcceleration(r,v,jd,f,unit);
+            Vec3 a=SrpAcceleration(r,v,jd,f,unit);
+            // Earth radiation on the same Cr*A/m moves with it.
+            if(f.useEarthRadiation&&f.earthRadiation.sharesSrpCoefficient) {
+                EarthRadiationConfig c=f.earthRadiation;c.crAreaOverMass=1.0;
+                a+=EarthRadiation(r,f.sunPositionProvided?f.sunPosition:getSunPosition(jd).position,jd,c);
+            }
+            return a;
         }
         case DynamicParameter::InTrackAcceleration: {
             const Vec3 h=r.cross(v);if(h.magnitude()<=0)return Vec3();
@@ -442,6 +477,8 @@ AccelerationPartials ComputeAccelerationPartials(const Vec3& position,const Vec3
     if(f.useDrag)a=a+drag(r,v,position,jd,f,gradient);
     if(f.useRelativisticCorrection)a=a+relativity(r,v,jd,f);
     if(f.useSolidTides)a=a+solidTides(r,jd,f);
+    if(f.useOceanTides)a=a+oceanTides(r,jd,f);
+    if(f.useEarthRadiation)a=a+earthRadiation(r,jd,f);
     if(f.useContributions)for(int i=0;i<std::min(f.contributions.count,ContributionSet::MAX_SLOTS);++i){
         const auto& c=f.contributions.slots[i];if(!c.enabled)continue;
         switch(c.kind){

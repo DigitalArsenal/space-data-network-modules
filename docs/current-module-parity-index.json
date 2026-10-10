@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-09T20:59:45.287Z",
+  "generatedAt": "2026-10-09T23:59:30.727Z",
   "moduleCount": 118,
   "parityScopeModuleCount": 49,
   "isomorphicWasmCount": 116,
@@ -4672,7 +4672,7 @@
       "pluginId": "com.orbpro.hpop",
       "name": "HPOP High-Precision Orbit Propagator",
       "pluginFamily": "propagator",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "methodIds": [
         "describe_trajectory_segments",
         "ingest_state",
@@ -4690,13 +4690,12 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 35,
+      "cxxSourceFileCount": 34,
       "cSourceFileCount": 0,
-      "testFileCount": 279,
+      "testFileCount": 282,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
-        ".sdk-build/erfa-amalgamation.cpp",
         "lib/astrodynamics.cpp",
         "lib/atmosphere_plugin.cpp",
         "lib/atmosphere_winds.cpp",
@@ -4943,8 +4942,10 @@
         "tests/generated/sds/prwDensityTreatment.js",
         "tests/generated/sds/prwDerivativeTechnique.js",
         "tests/generated/sds/prwDynamicParameter.js",
+        "tests/generated/sds/prwEarthRadiationModel.js",
         "tests/generated/sds/prwGnssSpacecraftBlock.js",
         "tests/generated/sds/prwGravitySelection.js",
+        "tests/generated/sds/prwOceanTideModel.js",
         "tests/generated/sds/prwProcessNoiseAxes.js",
         "tests/generated/sds/prwProcessNoiseModel.js",
         "tests/generated/sds/prwQualityEvidence.js",
@@ -4986,6 +4987,7 @@
         "tests/path_state_vectors.test.mjs",
         "tests/pivInvokeContract.test.mjs",
         "tests/prw-contract-fixture.mjs",
+        "tests/prw-earth-radiation-tides-parity.mjs",
         "tests/prw-gnss-parity.mjs",
         "tests/prw-parity.mjs",
         "tests/prw-resident-parity.mjs",
