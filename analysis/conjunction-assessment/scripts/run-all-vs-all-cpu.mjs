@@ -5,11 +5,14 @@
 //          [--runtime wasmedge|docker-wasmedge|node] [--propagator sgp4|hpop]
 //          [--start <jd>] [--days 3] [--window-hours 6|2] [--threshold-km 5]
 //          [--step-s 60] [--workers N] [--farm-workers N] [--aot] [--wasmedge-runner <path>]
+//          [--hpop-environment <dir>] [--hpop-profile full-force|gravity-only]
 //          [--algorithm FOSTER --uncertainty-model <model.cau1>] [--out summary.json]
 // wasmedge runs the module as an SDN node does (WasmEdge, wasi-threads), and
 // --aot compiles it ahead of time first as SDN nodes do (wasmedgec; set
 // WASMEDGEC or put it on PATH / ~/.wasmedge/bin); node runs it in V8. One
-// propagator per run; hpop uses the propagation farm. --wasmedge-runner runs a
+// propagator per run; hpop uses the propagation farm: the full force model
+// with --hpop-environment (kernel.prw, earth_orientation.prw and
+// space_weather.prw, PRW records), or --hpop-profile gravity-only. --wasmedge-runner runs a
 // given WasmEdge host build (for example the test runner linked against SDN's
 // patched static WasmEdge) instead of the one the tests build. --algorithm with
 // --uncertainty-model (scripts/uncertainty-model.mjs) gives element-set events
@@ -30,7 +33,7 @@ const { values: o } = parseArgs({ options: {
   catalog: { type: 'string' }, runtime: { type: 'string', default: 'wasmedge' }, propagator: { type: 'string', default: 'sgp4' },
   start: { type: 'string', default: '2461314.5' }, days: { type: 'string', default: '3' }, 'window-hours': { type: 'string' },
   'threshold-km': { type: 'string', default: '5' }, 'step-s': { type: 'string', default: '60' },
-  workers: { type: 'string' }, 'farm-workers': { type: 'string' }, aot: { type: 'boolean', default: false }, 'wasmedge-runner': { type: 'string' }, out: { type: 'string' },
+  workers: { type: 'string' }, 'farm-workers': { type: 'string' }, 'hpop-environment': { type: 'string' }, 'hpop-profile': { type: 'string', default: 'full-force' }, aot: { type: 'boolean', default: false }, 'wasmedge-runner': { type: 'string' }, out: { type: 'string' },
   algorithm: { type: 'string', default: 'ALFANO_MAXIMUM' }, 'uncertainty-model': { type: 'string' },
 } });
 if (!o.catalog) throw new Error('--catalog <omm.uint32be.bin> is required.');
@@ -71,7 +74,8 @@ let farm = null;
 try {
   if (o.propagator === 'hpop') {
     farm = await createHpopFarm({ catalog, modulesRoot: path.resolve(root, '../..'),
-      workers: o['farm-workers'] ? Number(o['farm-workers']) : undefined });
+      workers: o['farm-workers'] ? Number(o['farm-workers']) : undefined,
+      profile: o['hpop-profile'], environment: o['hpop-environment'] });
   }
   // The next window exports while this one screens.
   const exports = [];

@@ -4,6 +4,12 @@
 // those states on worker threads, at most 1,024 objects per resident
 // instance, and exports conjunction-screening trajectories one time window at
 // a time. All physics is in those modules; this file moves records.
+//
+// Profiles: 'full-force' (the default) configures every instance with the
+// full force model of propagator/hpop/catalog.mjs and the environment frames
+// in `environment` (kernel.prw, earth_orientation.prw and space_weather.prw,
+// PRW records), each object carrying its Cd*A/m (from its B*) and Cr*A/m;
+// 'gravity-only' names the point mass and degree/order 20 field.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -93,8 +99,17 @@ async function epochStates(epochStateDir, omms) {
  * @returns {Promise<{objects: object[], excluded: object[], window: Function, close: Function}>}
  */
 export async function createHpopFarm(o) {
+  const profile = o.profile ?? 'full-force';
+  if (!['full-force', 'gravity-only'].includes(profile)) throw new Error(`Unknown HPOP profile ${profile}: full-force or gravity-only.`);
+  let environment = null;
+  if (profile === 'full-force') {
+    if (!o.environment) throw new Error('The full-force HPOP farm needs its environment frames (kernel.prw, earth_orientation.prw, space_weather.prw).');
+    environment = Object.fromEntries(['kernel', 'earth_orientation', 'space_weather'].map((port) =>
+      [port, new Uint8Array(fs.readFileSync(path.join(o.environment, `${port}.prw`)))]));
+  }
   const omms = o.catalog.map((bytes) => OMM.getRootAsOMM(new flatbuffers.ByteBuffer(bytes)).unpack());
-  const objects = omms.map((m, i) => ({ handle: i + 1, norad: m.NORAD_CAT_ID, objectId: m.OBJECT_ID || String(m.NORAD_CAT_ID), name: m.OBJECT_NAME }));
+  const objects = omms.map((m, i) => ({ handle: i + 1, norad: m.NORAD_CAT_ID, objectId: m.OBJECT_ID || String(m.NORAD_CAT_ID), name: m.OBJECT_NAME,
+    bstar: m.BSTAR }));
   const t0 = performance.now();
   const { states, report } = await epochStates(path.join(o.modulesRoot, 'analysis/epoch-state'), omms);
   const deriveMs = performance.now() - t0;
@@ -123,14 +138,15 @@ export async function createHpopFarm(o) {
   const adds = [];
   for (let b = 0; b < instanceCount; b++) {
     adds.push(send(workers[b % count], 'add', { wasmPath: path.join(hpop, 'dist/isomorphic/module.wasm'),
-      manifestPath: path.join(hpop, 'plugin-manifest.json'), id: `farm-${b}`, states: ready.filter((_, i) => i % instanceCount === b) }));
+      manifestPath: path.join(hpop, 'plugin-manifest.json'), catalogPath: path.join(hpop, 'catalog.mjs'), profile, environment,
+      id: `farm-${b}`, states: ready.filter((_, i) => i % instanceCount === b) }));
   }
   await Promise.all(adds);
   const ingestMs = performance.now() - t1;
   const byHandle = new Map(objects.map((x) => [x.handle, x]));
 
   return {
-    objects, excluded, deriveMs, ingestMs, workers: count, instances: instanceCount, epochStateReport: report,
+    objects, excluded, deriveMs, ingestMs, workers: count, instances: instanceCount, epochStateReport: report, profile,
     /** Trajectories of every object over [startJd, startJd + days], UTC. */
     async window(startJd, days) {
       const parts = await Promise.all(workers.map((w) => send(w, 'window', { startJd, seconds: days * 86400 })));

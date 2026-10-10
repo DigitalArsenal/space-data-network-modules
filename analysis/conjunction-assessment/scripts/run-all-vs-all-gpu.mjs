@@ -4,6 +4,7 @@
 // usage: node scripts/run-all-vs-all-gpu.mjs --catalog <omm.uint32be.bin>
 //          [--propagator sgp4|hpop] [--start <jd>] [--days 3] [--window-hours 6]
 //          [--threshold-km 5] [--step-s 60] [--farm-workers N] [--cpu]
+//          [--hpop-environment <dir>] [--hpop-profile full-force|gravity-only]
 //          [--out summary.json] [--serve] [--port 0] [--timeout-s 7200]
 // The catalog is $OMM records, each prefixed by its u32 big-endian length.
 // One propagator per run. With --propagator hpop the runner hosts the HPOP
@@ -32,6 +33,7 @@ const { values: o } = parseArgs({ options: {
   catalog: { type: 'string' }, propagator: { type: 'string', default: 'sgp4' }, start: { type: 'string', default: '2461314.5' },
   days: { type: 'string', default: '3' }, 'window-hours': { type: 'string' }, 'threshold-km': { type: 'string', default: '5' },
   'step-s': { type: 'string', default: '60' }, 'farm-workers': { type: 'string' }, cpu: { type: 'boolean', default: false },
+  'hpop-environment': { type: 'string' }, 'hpop-profile': { type: 'string', default: 'full-force' },
   out: { type: 'string' }, serve: { type: 'boolean', default: false }, port: { type: 'string', default: '0' },
   'timeout-s': { type: 'string', default: '7200' },
 } });
@@ -59,7 +61,8 @@ if (o.propagator === 'hpop') {
     at += 4 + n;
   }
   farm = await createHpopFarm({ catalog, modulesRoot: path.resolve(root, '../..'),
-    workers: o['farm-workers'] ? Number(o['farm-workers']) : undefined });
+    workers: o['farm-workers'] ? Number(o['farm-workers']) : undefined,
+    profile: o['hpop-profile'], environment: o['hpop-environment'] });
   farmInfo = { workers: farm.workers, instances: farm.instances, deriveMs: farm.deriveMs, ingestMs: farm.ingestMs,
     epochStateExcluded: farm.excluded.length, windowExportMs: [] };
   process.stderr.write(`farm: ${farm.objects.length} objects, ${farm.workers} workers, ${farm.instances} HPOP instances\n`);

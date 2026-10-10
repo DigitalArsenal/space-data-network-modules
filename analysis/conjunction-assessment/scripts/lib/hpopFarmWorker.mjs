@@ -3,6 +3,7 @@
 // conjunction-screening trajectories window by window. Every number comes
 // from propagator/hpop; this file builds and forwards PRW records.
 import fs from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { parentPort } from 'node:worker_threads';
 import * as flatbuffers from 'flatbuffers';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
@@ -30,10 +31,28 @@ async function call(harness, methodId, port, arm, records) {
   return harness.invoke({ methodId, inputs: records.map((r) => ({ portId: port, typeRef: TYPE, payload: encode(arm, r) })) });
 }
 
-// GCRF/UTC epoch states (epoch-state output) -> one resident HPOP catalog.
-async function addInstance({ wasm, manifest, id, states }) {
+// GCRF/UTC epoch states (epoch-state output) -> one resident HPOP catalog:
+// under the full force model (propagator/hpop/catalog.mjs; each object's
+// Cd*A/m from its B*, converted by the module), or under the profile named
+// gravity-only.
+async function addInstance({ wasm, manifest, catalogPath, profile, environment, id, states }) {
   const harness = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
   const identity = new PRWInstanceT('com.orbpro.hpop', id, 1n);
+  if (profile === 'full-force') {
+    const catalog = await import(pathToFileURL(catalogPath).href);
+    const meters = (s) => [...s.position, ...s.velocity].map((x) => x * 1000);
+    const inputs = states.map((s) => ({ portId: 'state', typeRef: TYPE, payload: catalog.encode('RESIDENT_STATE', catalog.residentState({
+      instanceId: id, handle: s.handle, catalogNumber: s.norad, objectId: s.objectId, epoch: s.epoch, state: meters(s),
+      cdAm: catalog.dragAreaOverMass(harness.instance.exports, s.bstar), crAm: catalog.DEFAULT_SRP_AREA_OVER_MASS })) }));
+    // The configuration's own state is a placeholder each object replaces.
+    inputs.push({ portId: 'configuration', typeRef: TYPE, payload: catalog.encode('EXECUTION_REQUEST',
+      catalog.fullForceRequest({ epoch: states[0].epoch, state: meters(states[0]) })) });
+    for (const [portId, payload] of Object.entries(environment)) inputs.push({ portId, typeRef: TYPE, payload });
+    const response = await harness.invoke({ methodId: 'ingest_state', inputs });
+    if (response.statusCode !== 0) throw new Error(`HPOP ingest: ${response.errorCode}: ${response.errorMessage}`);
+    instances.push({ harness, identity, handles: new Set(states.map((s) => s.handle)) });
+    return;
+  }
   const records = states.map((s) => {
     const state = new FRMStateVectorT(frmStateRepresentation.CARTESIAN, [],
       new FRMVector3T(s.position[0] * 1000, s.position[1] * 1000, s.position[2] * 1000),
@@ -42,7 +61,7 @@ async function addInstance({ wasm, manifest, id, states }) {
     resident.VALID = true;
     return resident;
   });
-  const response = await call(harness, 'ingest_state', 'state', 'RESIDENT_STATE', records);
+  const response = await call(harness, 'ingest_state_gravity_only', 'state', 'RESIDENT_STATE', records);
   if (response.statusCode !== 0) throw new Error(`HPOP ingest: ${response.errorCode}: ${response.errorMessage}`);
   instances.push({ harness, identity, handles: new Set(states.map((s) => s.handle)) });
 }

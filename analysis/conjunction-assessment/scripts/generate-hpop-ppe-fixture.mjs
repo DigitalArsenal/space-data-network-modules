@@ -5,11 +5,14 @@
 // Four objects leave one point of a 7000 km orbit at the same instant on
 // planes 0, 45, 90 and 120 degrees apart, 0 to 2 km apart in radius, so every
 // pair meets near that point and its antipode each half orbit. HPOP integrates
-// them (its default resident force model) and exports its
-// `conjunction-screening` profile: 13-coefficient Chebyshev intervals of 600 s,
-// Earth GCRF, TDB. The fixture keeps the PPE records as HPOP emitted them.
+// them under the full force model (propagator/hpop/catalog.mjs, the catalog
+// screen's configuration and environment) and exports its
+// `conjunction-screening` profile: 13-coefficient Chebyshev intervals of 300 s,
+// Earth GCRF, TT. The fixture keeps the PPE records as HPOP emitted them.
 //
-// usage: node scripts/generate-hpop-ppe-fixture.mjs   (propagator/hpop built and installed)
+// usage: node scripts/generate-hpop-ppe-fixture.mjs <environment dir>
+//   (kernel.prw, earth_orientation.prw and space_weather.prw covering
+//   2026-09-30 and 2026-10-01; propagator/hpop built and installed)
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -17,11 +20,16 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const hpop = path.resolve(root, '../../propagator/hpop');
-const { makeTable, encodePrw, decodePrw, instant, residentState, TYPE } = await import(path.join(hpop, 'tests/lib/prwCodec.mjs'));
+const { makeTable, encodePrw, decodePrw, instant, TYPE } = await import(path.join(hpop, 'tests/lib/prwCodec.mjs'));
 const { residentHarness, wasmPath } = await import(path.join(hpop, 'tests/lib/residentRuntime.mjs'));
+const catalog = await import(path.join(hpop, 'catalog.mjs'));
+const environmentDir = process.argv[2];
+if (!environmentDir) throw new Error('usage: generate-hpop-ppe-fixture.mjs <environment dir>');
+const environment = ['kernel', 'earth_orientation', 'space_weather'].map((portId) =>
+  ({ portId, typeRef: TYPE, payload: new Uint8Array(fs.readFileSync(path.join(environmentDir, `${portId}.prw`))) }));
 
-const EPOCH_TDB_JD = 2461314.5;          // 2026-10-01T00:00:00 TDB
-const LEAD_S = 1200;                       // segments start 20 min before the meeting
+const EPOCH_UTC = '2026-10-01T00:00:00.000';
+const LEAD_START_UTC = '2026-09-30T23:40:00.000';   // segments start 20 min before the meeting
 const DURATION_S = 3 * 3600;
 const OBJECTS = [                          // km, km/s; GCRF
   { handle: 1, norad: 90001, name: 'CROSSING-0', position: [7000, 0, 0], velocity: [0, 7.546, 0] },
@@ -42,11 +50,16 @@ const plain = (v) => JSON.parse(JSON.stringify(v, (_, x) =>
 
 const h = await residentHarness('browser');
 try {
-  await call(h, 'ingest_state', 'state', 'RESIDENT_STATE', OBJECTS.map((o) => Object.assign(
-    residentState({ epochJD: EPOCH_TDB_JD, position: o.position, velocity: o.velocity }),
-    { INSTANCE: instance, ENTITY_HANDLE: o.handle, CATALOG_NUMBER: o.norad, OBJECT_ID: o.name })));
+  const meters = (o) => [...o.position, ...o.velocity].map((x) => x * 1000);
+  const ingest = await h.invoke({ methodId: 'ingest_state', inputs: [
+    ...OBJECTS.map((o) => ({ portId: 'state', typeRef: TYPE, payload: catalog.encode('RESIDENT_STATE', catalog.residentState({
+      instanceId: 'ca-ppe-fixture', handle: o.handle, catalogNumber: o.norad, objectId: o.name, epoch: EPOCH_UTC, state: meters(o),
+      cdAm: catalog.DEFAULT_DRAG_AREA_OVER_MASS, crAm: catalog.DEFAULT_SRP_AREA_OVER_MASS })) })),
+    { portId: 'configuration', typeRef: TYPE, payload: catalog.encode('EXECUTION_REQUEST', catalog.fullForceRequest({ epoch: EPOCH_UTC, state: meters(OBJECTS[0]) })) },
+    ...environment] });
+  if (ingest.statusCode !== 0) throw new Error(`ingest_state: ${ingest.errorCode}: ${ingest.errorMessage}`);
   const prepared = decodePrw((await call(h, 'prepare_trajectory_segments', 'request', 'PREPARE_REQUEST', [
-    makeTable('PRWPrepareRequest', { INSTANCE: instance, START_EPOCH: instant(EPOCH_TDB_JD - LEAD_S / 86400), DURATION_SECONDS: DURATION_S, PROFILE: 'conjunction-screening' }),
+    makeTable('PRWPrepareRequest', { INSTANCE: instance, START_EPOCH: catalog.instant(LEAD_START_UTC, 'UTC'), DURATION_SECONDS: DURATION_S, PROFILE: 'conjunction-screening' }),
   ])).outputs[0].payload).PREPARE_RESULT;
   if (!prepared.COVERAGE_COMPLETE) throw new Error('HPOP did not cover the interval.');
   const describe = makeTable('PRWDescribeRequest', { INSTANCE: instance, SEGMENT_SET_HANDLE: prepared.SEGMENT_SET_HANDLE });
@@ -63,9 +76,10 @@ try {
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, JSON.stringify({
     source: {
-      propagator: 'propagator/hpop prepare_trajectory_segments + describe_trajectory_segments, profile conjunction-screening',
+      propagator: 'propagator/hpop ingest_state (full force, catalog.mjs) + prepare_trajectory_segments + describe_trajectory_segments, profile conjunction-screening',
       hpopModuleSha256: createHash('sha256').update(fs.readFileSync(wasmPath)).digest('hex'),
-      epochTdbJd: EPOCH_TDB_JD, durationSeconds: DURATION_S, frame: 'GCRF', initialStates: OBJECTS,
+      environmentSha256: Object.fromEntries(environment.map((f) => [f.portId, createHash('sha256').update(f.payload).digest('hex')])),
+      epochUtc: EPOCH_UTC, durationSeconds: DURATION_S, frame: 'GCRF', initialStates: OBJECTS,
     },
     sources,
   }) + '\n');

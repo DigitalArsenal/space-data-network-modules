@@ -65,9 +65,15 @@ export async function epochStates(list, batch = 20000) {
   return states;
 }
 
-// arcs: [{arc, norad, seed: {epoch, position, velocity}, covariance?, targets: [ISO UTC]}]
+// arcs: [{arc, norad, seed: {epoch, position, velocity}, covariance?, targets: [ISO UTC],
+//   bstar, day (the element set's UTC date)}]
 // -> [{arc, samples: [{state, a?, u?} | {error}]}] in input order of each worker.
-export async function propagateArcs(arcs, { variants, interval = 600, workers = Math.max(1, Math.min(12, os.availableParallelism() - 2)) }) {
+// profile 'full-force' needs `environment` (see hpop-calibration-worker.mjs);
+// 'gravity-only' names the resident point mass and degree/order 20 field.
+export async function propagateArcs(arcs, { variants, interval = 600, profile, environment,
+  workers = Math.max(1, Math.min(12, os.availableParallelism() - 2)) }) {
+  if (!['full-force', 'gravity-only'].includes(profile)) throw new Error('propagateArcs needs profile full-force or gravity-only.');
+  if (profile === 'full-force' && !environment) throw new Error('The full-force profile needs its environment directory.');
   const count = Math.min(workers, arcs.length);
   const hpop = path.join(modules, 'propagator/hpop');
   let finished = 0;
@@ -84,6 +90,7 @@ export async function propagateArcs(arcs, { variants, interval = 600, workers = 
     });
     worker.on('error', reject);
     worker.postMessage({ wasmPath: path.join(hpop, 'dist/isomorphic/module.wasm'), manifestPath: path.join(hpop, 'plugin-manifest.json'),
+      catalogPath: path.join(hpop, 'catalog.mjs'), profile, environment,
       id: `hpop-${w}`, arcs: arcs.filter((_, i) => i % count === w), variants, interval });
   })));
   process.stderr.write('\n');
