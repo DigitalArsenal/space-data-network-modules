@@ -94,7 +94,7 @@ test("built WASM embeds + returns the real manifest", async () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixture-driven end-to-end pull (A2.2c-2). Serves a real MyIntelsat listing
-// page + the trimmed real IS-21 ECF file over http.request; captures
+// page + the synthetic IS-21-style ECF file over http.request; captures
 // storage.write + pubsub.publish. No live network is touched.
 // ─────────────────────────────────────────────────────────────────────────────
 

@@ -9,6 +9,7 @@ import { inspectModule } from "space-data-module-sdk/host/isomorphic";
 import { decodePluginManifest } from "space-data-module-sdk";
 import { encodePlgManifest, legacyManifestToPlg } from "space-data-module-sdk/manifest";
 import createStarlinkSourcePluginManifest from "../manifest.js";
+import { privatePath, privateSkip } from "../../../tests/lib/privateFixtures.mjs";
 
 // Encode the canonical manifest exactly as the build embeds it: the SDK's $PLG
 // encoder (the format the Go node's PLG parser reads).
@@ -389,29 +390,35 @@ test("range: rangeBytes=0 opts out (full-file fetch, no Range header)", async ()
 });
 
 // ── Frame: MEME state vectors are EME2000 ────────────────────────────────────
-// Source: the checked-in OD reference suite analysis/od/tests/data/supgp-reference/
-// starlink — ten SpaceX MEME operator ephemerides (captured 2026-05-14, launch
-// 2026-034) and CelesTrak's SupGP elements for the same objects
+// Two suites run the same check. Public: the synthetic suite
+// analysis/od/tests/data/supgp-reference/starlink-synthetic
+// (analysis/od/scripts/synthetic-fixtures.mjs): ten MEME ephemerides in EME2000
+// from SGP4 truth, and for each a reference element set
+// (synthetic_reference_elements.csv) that stands in for a third-party fit of the
+// same ephemeris: the truth with the mean anomaly moved 0.02 deg, 2.3-3.2 km along
+// track. Private (SDN_MODULES_PRIVATE_FIXTURES): the ten SpaceX MEME operator
+// ephemerides of analysis/od/tests/data/supgp-reference/starlink (captured
+// 2026-05-14, launch 2026-034) and CelesTrak's SupGP elements for the same objects
 // (celestrak_supgp_2026-034.csv, DATA_SOURCE SpaceX-E), which CelesTrak fitted to
-// that same operator ephemeris. Units km; TEME of date; UTC epochs.
+// that same operator ephemeris; CelesTrak publishes no licence for SupGP, so that
+// file is not in the tree. Units km; TEME of date; UTC epochs.
 //
 // Method: pull the ten full-length MEME files through this module and fit each
 // emitted $OEM with analysis/od (typed `oem` port), which honours the frame the
 // $OEM declares. Then score two element sets with the same SGP4 on the
 // frame-correct TEME states, i.e. analysis/od's own MEME reader (EME2000 rotated
-// to TEME, IAU-76/FK5) over the same file: our fitted GP, and CelesTrak's SupGP
+// to TEME, IAU-76/FK5) over the same file: our fitted GP, and the reference set
 // (REFERENCE_RMS each). Both are RMS position errors against the same states, so
-// by Minkowski their sum bounds the RMS separation of our GP from SupGP. A fit's
-// own RMS cannot catch a frame error, because a fit is self-consistent in
+// by Minkowski their sum bounds the RMS separation of our GP from the reference.
+// A fit's own RMS cannot catch a frame error, because a fit is self-consistent in
 // whatever frame it is handed; an independent reference can.
 //
-// Tolerance 5 km on that bound: frame-correct, our GP sits <0.1 km from the
-// states and SupGP 2.2-3.0 km (CelesTrak's own fit residual plus propagation from
-// its element epoch). The pre-fix TEME label left the EME2000 states unrotated
-// and put our GP ~35 km from them, the precession since J2000.
-const SUPGP_SUITE_DIR = path.resolve(__dirname, "../../../analysis/od/tests/data/supgp-reference/starlink");
-const SUPGP_MEME_DIR = path.join(SUPGP_SUITE_DIR, "meme");
-const SUPGP_CSV = path.join(SUPGP_SUITE_DIR, "celestrak_supgp_2026-034.csv");
+// Tolerance 5 km on that bound: frame-correct, our GP sits within metres of the
+// states and the reference 2.3-3.2 km by construction. A TEME label would leave the
+// EME2000 states unrotated and put our GP ~35 km from them, the precession since
+// J2000.
+const SUPGP_SUITE_RELATIVE = "analysis/od/tests/data/supgp-reference/starlink";
+const SYNTHETIC_SUITE_DIR = path.resolve(__dirname, "../../../analysis/od/tests/data/supgp-reference/starlink-synthetic");
 const OD_WASM_PATH = path.resolve(__dirname, "../../../analysis/od/dist/isomorphic/module.wasm");
 const SUPGP_AGREEMENT_MAX_KM = 5.0;
 
@@ -469,7 +476,9 @@ function referenceOptions(elements) {
   };
 }
 
-test("pull: $OEM carries EME2000, and our fitted GP agrees with CelesTrak SupGP within 5 km", async (t) => {
+async function checkEme2000Suite(t, suiteDir, referenceCsv) {
+  const SUPGP_MEME_DIR = path.join(suiteDir, "meme");
+  const SUPGP_CSV = path.join(suiteDir, referenceCsv);
   const { ByteBuffer } = await import("flatbuffers");
   const { OEM } = await import("spacedatastandards.org/lib/js/OEM/OEM.js");
   const { RFMUnion } = await import("spacedatastandards.org/lib/js/OEM/RFMUnion.js");
@@ -479,7 +488,7 @@ test("pull: $OEM carries EME2000, and our fitted GP agrees with CelesTrak SupGP 
   const { createStandaloneHarness } = await import("space-data-module-sdk/testing/isomorphic");
 
   const files = fs.readdirSync(SUPGP_MEME_DIR).filter((name) => /^MEME_\d+_.*\.txt$/.test(name)).sort();
-  assert.equal(files.length, 10, "the Starlink SupGP suite holds ten MEME files");
+  assert.equal(files.length, 10, "the Starlink suite holds ten MEME files");
   const memeByNorad = new Map(files.map((name) => [Number.parseInt(name.split("_")[1], 10), name]));
   const serveSuite = (url) => {
     if (url.endsWith("MANIFEST.txt")) return { status: 200, body: `${files.join("\n")}\n` };
@@ -546,18 +555,25 @@ test("pull: $OEM carries EME2000, and our fitted GP agrees with CelesTrak SupGP 
 
     const ours = await fitOem(record);
     const rows = supGp.get(norad);
-    assert.ok(rows?.length, `no CelesTrak SupGP row for NORAD ${norad}`);
+    assert.ok(rows?.length, `no reference row for NORAD ${norad}`);
     const meme = new Uint8Array(fs.readFileSync(path.join(SUPGP_MEME_DIR, memeByNorad.get(norad))));
     const oursKm = await scoreOnMemeStates(meme, ours);
     const supGpKm = await scoreOnMemeStates(meme, closestRow(rows, ours.epoch));
     t.diagnostic(
-      `NORAD ${norad}: our GP ${oursKm.toFixed(3)} km, SupGP ${supGpKm.toFixed(3)} km from the TEME states; ` +
-        `our GP to SupGP ${Math.abs(oursKm - supGpKm).toFixed(3)}..${(oursKm + supGpKm).toFixed(3)} km`,
+      `NORAD ${norad}: our GP ${oursKm.toFixed(3)} km, reference ${supGpKm.toFixed(3)} km from the TEME states; ` +
+        `our GP to reference ${Math.abs(oursKm - supGpKm).toFixed(3)}..${(oursKm + supGpKm).toFixed(3)} km`,
     );
     assert.ok(
       oursKm + supGpKm <= SUPGP_AGREEMENT_MAX_KM,
-      `${norad}: our GP is ${oursKm} km and CelesTrak SupGP ${supGpKm} km from the frame-correct ` +
+      `${norad}: our GP is ${oursKm} km and the reference ${supGpKm} km from the frame-correct ` +
         `TEME states (sum limit ${SUPGP_AGREEMENT_MAX_KM} km); the $OEM states are in the wrong frame.`,
     );
   }
-});
+}
+
+test("pull: $OEM carries EME2000, and our fitted GP agrees with the synthetic reference element set within 5 km", (t) =>
+  checkEme2000Suite(t, SYNTHETIC_SUITE_DIR, "synthetic_reference_elements.csv"));
+
+test("pull: $OEM carries EME2000, and our fitted GP agrees with CelesTrak SupGP within 5 km on the SpaceX ephemerides (private)",
+  { skip: privateSkip(`${SUPGP_SUITE_RELATIVE}/celestrak_supgp_2026-034.csv`) },
+  (t) => checkEme2000Suite(t, privatePath(SUPGP_SUITE_RELATIVE), "celestrak_supgp_2026-034.csv"));

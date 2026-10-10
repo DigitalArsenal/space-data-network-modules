@@ -1,8 +1,8 @@
 # files/ccsds-messages
 
 CCSDS **AEM** (Attitude Ephemeris Message) and **TDM** (Tracking Data Message)
-readers, writers and SDS record projections, measured against the published
-Blue Book example messages.
+readers, writers and SDS record projections, measured against example messages in
+the layouts of the published Blue Book examples.
 
 ## The shape, and why it is this shape
 
@@ -21,6 +21,11 @@ So this package is three layers:
 | Record | `src/aem_projection.hpp`, `src/tdm_projection.hpp` | The `$AEM` / `$TDM` projection, both directions, against `spacedatastandards.org` **1.202.0** (`$AEM` 2.0.2, `$TDM` 2.0.4). What it cannot carry it **declares**. |
 
 ## Measured, against the published books
+
+The checked-in fixtures are synthetic messages with the structure and quirks of
+the books' annex examples (`fixtures/PROVENANCE.md`); the books state no terms
+for reproducing the examples themselves. The findings below were made on the
+books' own text.
 
 Fixtures and their extraction are documented in `fixtures/PROVENANCE.md`.
 **Premise correction:** the task body names CCSDS 504.0-B-1 and 503.0-B-1; both

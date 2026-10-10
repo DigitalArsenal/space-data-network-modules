@@ -3,7 +3,7 @@
 This directory seeds **A2.4** (OD parity gate vs CelesTrak) for GLONASS. It is a
 DRAFT: the CelesTrak SupGP capture is **missing** (CelesTrak unreachable), and —
 unlike GPS — the hard-RMS gate IS achievable here (the IAC SP3 is a real
-state-vector ephemeris) but has concrete **OD-side prerequisites** documented
+state-vector ephemeris product) but has concrete **OD-side prerequisites** documented
 below.
 
 ## Status: CelesTrak NOT captured (unreachable)
@@ -24,9 +24,10 @@ https://celestrak.org/NORAD/elements/supplemental/sup-gp.php?SOURCE=GLONASS-RE&F
 
 ## Operator ephemeris reference (in-repo)
 
-`../iac_glonass.sp3.glo` — a trimmed **real IAC GLONASS SP3-d** (full upstream:
-`ftp://ftp.glonass-iac.ru/MCC/PRODUCTS/26192/rapid/Sta24266.sp3.glo`, IGS20 /
-GPS time, position-only, 900 s). See `../PROVENANCE.md`.
+`../synthetic_glonass.sp3.glo` — a synthetic GLONASS-style SP3-d (SGP4 truth,
+IGS20 label / GPS time, position-only, 900 s). The real IAC product it stands in
+for (`ftp://ftp.glonass-iac.ru/MCC/PRODUCTS/26192/rapid/Sta24266.sp3.glo`) states
+no reuse terms and is not in this tree. See `../PROVENANCE.md`.
 
 ## ⚠️ Mission-assumption correction (IGS20/GPS, not PZ-90.11)
 

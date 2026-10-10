@@ -90,7 +90,7 @@ test("built WASM embeds + returns the real manifest", async () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Fixture-driven end-to-end pull (A2.2c). Serves the trimmed real LTEF over
+// Fixture-driven end-to-end pull (A2.2c). Serves the synthetic LTEF-style file over
 // http.request; captures storage.write + pubsub.publish. No live network.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -317,7 +317,7 @@ test("pull: LTEF parse → capped OEM shells + signed PNMs (honest, no fabricate
   assert.equal(prov.LTEF_EPOCH_UTC, "2026-07-13T12:33:21Z");
   assert.equal(prov.LTEF_REF_EPOCH_GPS, 1467979199);
   assert.equal(prov.LTEF_REF_EPOCH_UTC, "2026-07-13T11:59:59Z");
-  assert.equal(prov.LTEF_RAW, "7,1467981201,1467979199,-74,-2,1897,4096,103868,252012,-30,-75,2,0,0,0,0,16");
+  assert.equal(prov.LTEF_RAW, "7,1467981201,1467979199,591,14,1893,4096,83499,59290,66,-65,2,0,0,0,0,16");
   assert.equal(prov.DECODE_STATUS, "unresolved-ltef-encoding");
   assert.equal(prov.SOURCE_URL, LTEF_URL);
 });

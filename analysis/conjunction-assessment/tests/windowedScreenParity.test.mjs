@@ -29,9 +29,15 @@ import { decodeCqr, earthFrame, encodeCqr, gpSource, initCqrFlatc, publishedSche
 import { CA_PARITY_TOLERANCES as T } from './lib/caParityTolerances.mjs';
 import { parseGridFrame } from '../gpu/gpuScreen.mjs';
 import { screenAllVsAllOnGpu, screenWindowsOnGpu } from '../gpu/allVsAll.mjs';
+import { privateFixtureSkip, readPrivateFixtureJson, privateFixturePath } from './lib/privateFixtures.mjs';
 
 const fixture = (name) => JSON.parse(fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8'));
-const GP = fixture('decaying/gp_2026-07-06.json');
+const GP = readPrivateFixtureJson('decaying/gp_2026-07-06.json');
+const GP_SKIP = privateFixtureSkip('decaying/gp_2026-07-06.json');
+// An invented element set: the HPOP test only needs some SGP4 source to mix with PRW ones.
+const SYNTHETIC_GP = { OBJECT_NAME: 'SYNTHETIC-GP', OBJECT_ID: '2026-999A', EPOCH: '2026-07-06T00:00:00Z', MEAN_MOTION: 15.3, ECCENTRICITY: 0.0002,
+  INCLINATION: 53, RA_OF_ASC_NODE: 100, ARG_OF_PERICENTER: 90, MEAN_ANOMALY: 0, EPHEMERIS_TYPE: 0, CLASSIFICATION_TYPE: 'U', NORAD_CAT_ID: 99999,
+  ELEMENT_SET_NO: 999, REV_AT_EPOCH: 1, BSTAR: 0.0001, MEAN_MOTION_DOT: 0, MEAN_MOTION_DDOT: 0 };
 const HPOP = fixture('hpop-ppe/crossing-orbits.json');
 const STEP_S = 60, THRESHOLD_KM = 5;
 
@@ -81,7 +87,7 @@ function assertSameEvents(actual, expected, label) {
   }
 }
 
-test('SGP4: four 6 h windows report the one-day screen, exclusion included', async () => {
+test('SGP4: four 6 h windows report the one-day screen, exclusion included', { skip: GP_SKIP }, async () => {
   const harness = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
   try {
     const startJd = Date.parse('2026-07-06T00:00:00Z') / 86400000 + 2440587.5;
@@ -131,7 +137,7 @@ test('HPOP: four windows of forwarded PRW trajectories report the single-window 
     assertSameEvents(windowed.events, whole.events, 'windows');
     assert.equal(windowed.excluded.length, 0);
 
-    const mixed = await prepare(harness, INSTANCE(), [{ ...gpSource(GP[0]), SOURCE_HANDLE: 99 }, identity[0]], exportWindow({ startJd, durationDays: days }).slice(0, 1));
+    const mixed = await prepare(harness, INSTANCE(), [{ ...gpSource(SYNTHETIC_GP), SOURCE_HANDLE: 99 }, identity[0]], exportWindow({ startJd, durationDays: days }).slice(0, 1));
     assert.equal(mixed.errorCode, 'mixed-propagators', mixed.errorMessage);
   } finally {
     await harness.destroy?.();

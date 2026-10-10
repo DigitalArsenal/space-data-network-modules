@@ -34,3 +34,8 @@ state vectors** (4 header lines + 12 × [1 state row + 3 covariance rows]).
 
 The bytes are otherwise verbatim, so a test can independently SHA-256 a fixture
 and assert it equals the adapter's `SOURCE_SHA256` provenance.
+
+## Licence
+
+SpaceX public ephemerides, open (owner determination 2026-10-10). Attribution:
+SpaceX, https://api.starlink.com/public-files/ephemerides/ . See also `../../../../NOTICE.md`.

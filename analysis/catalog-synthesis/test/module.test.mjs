@@ -11,16 +11,16 @@
  *     writes them via storage.write today — the reader must fall back to
  *     USER_DEFINED_SDN_SOURCE_NAME.
  *   - Space-Track GP OMMs: real $OMM FlatBuffer records built with the SDS OMM
- *     binding from the trimmed live Space-Track gp JSON (NORAD 5/11/12) + the
- *     CelesTrak reference rows for the overlap objects. TAGGED
+ *     binding from the synthetic gp JSON (NORAD 5/11/12) + the synthetic
+ *     reference rows for the overlap objects. TAGGED
  *     SourceName="spacetrack-gp", exactly as the Go current-gp ingest lane writes
  *     them (sds.NewOMMBuilder → store.StoreWithSourceTags).
  *
  * It asserts the packet acceptance items: (a) union completeness, (b) determinism
  * across two runs, (c) per-NORAD precedence (hard-pass fresher fit wins; interim
  * fit never wins even when fresher; a staler hard-pass fit never wins),
- * (d) quarantine of unmapped fits, (e) element-space diff vs the CelesTrak GP
- * reference within A2.4 tolerances on the overlap set — plus the ABI/manifest
+ * (d) quarantine of unmapped fits, (e) element-space diff vs the reference
+ * rows within A2.4 tolerances on the overlap set — plus the ABI/manifest
  * contract and schema-exact provenance.
  */
 import { test } from "node:test";
@@ -44,8 +44,9 @@ const KEYPAIR_PATH =
   process.env.SDN_MODULE_SIGNING_KEYPAIR ||
   path.resolve(REPO_ROOT, "../../ancillary-packages/space-data-module-sdk/test/support/dev-module-signing-keypair.json");
 
-// CelesTrak SupGP reference CSVs the OD gate suite already ships (read-only reuse).
-const REF_DIR = path.join(REPO_ROOT, "analysis", "od", "tests", "data", "supgp-reference");
+// Synthetic reference element rows (fixtures/reference-elements.csv, written by
+// analysis/od/scripts/synthetic-fixtures.mjs), in the layout of a CelesTrak SupGP CSV.
+const REFERENCE_ELEMENTS = path.join(__dirname, "fixtures", "reference-elements.csv");
 const GP_SAMPLE_PATH = path.join(__dirname, "fixtures", "spacetrack-gp-current-sample.json");
 
 // SDS OMM FlatBuffer binding + flatbuffers runtime (from the sibling checkout,
@@ -58,7 +59,7 @@ const { OMM, OMMT } = await import(pathToFileURL(path.join(SDS_ROOT, "lib", "js"
 // ── A2.4 element-space tolerances (ISS-gate class) for the overlap diff ───────
 // Proving the synthesis PRESERVES elements within A2.4 bounds — the fit accuracy
 // itself is gated by the A2.4 suite; here every winner is compared epoch-aligned
-// against its CelesTrak reference row.
+// against its reference row.
 const A24_TOL = {
   MEAN_MOTION: 2e-4,
   ECCENTRICITY: 5e-5,
@@ -68,10 +69,10 @@ const A24_TOL = {
   MEAN_ANOMALY: 0.05,
 };
 
-// ── CelesTrak reference CSV reader ────────────────────────────────────────────
+// ── reference element CSV reader ──────────────────────────────────────────────
 
-function readCsvRows(provider, file) {
-  const text = fs.readFileSync(path.join(REF_DIR, provider, file), "utf8");
+function readCsvRows() {
+  const text = fs.readFileSync(REFERENCE_ELEMENTS, "utf8");
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
   const header = lines[0].split(",");
   return lines.slice(1).map((line) => {
@@ -81,10 +82,10 @@ function readCsvRows(provider, file) {
     return row;
   });
 }
-function csvRow(provider, file, norad, epochPrefix) {
-  const rows = readCsvRows(provider, file).filter((r) => Number.parseInt(r.NORAD_CAT_ID, 10) === norad);
+function csvRow(norad, epochPrefix) {
+  const rows = readCsvRows().filter((r) => Number.parseInt(r.NORAD_CAT_ID, 10) === norad);
   const row = epochPrefix ? rows.find((r) => r.EPOCH.startsWith(epochPrefix)) : rows[0];
-  assert.ok(row, `no CSV row for NORAD ${norad} in ${provider}/${file}`);
+  assert.ok(row, `no reference row for NORAD ${norad}`);
   return {
     OBJECT_NAME: row.OBJECT_NAME,
     OBJECT_ID: row.OBJECT_ID,
@@ -224,16 +225,15 @@ function record(cid, sourceName, dataBuf) {
 }
 
 // ── fixture constellation ─────────────────────────────────────────────────────
-// Reference rows (CelesTrak SupGP) drive both inputs so the overlap diff is
-// epoch-aligned. Winner epoch == CelesTrak reference epoch; loser epoch is set to
+// Reference rows (synthetic element sets) drive both inputs so the overlap diff is
+// epoch-aligned. Winner epoch == reference epoch; loser epoch is set to
 // drive each precedence case.
 
 function buildConstellation() {
-  const sxCsv = "celestrak_supgp_2026-034.csv";
-  const el67850 = csvRow("starlink", sxCsv, 67850);   // epoch 2026-05-14T05:07:42.000038
-  const el67851 = csvRow("starlink", sxCsv, 67851);   // epoch 2026-05-14T06:51:42.000019
-  const elIss = csvRow("iss", "celestrak_supgp_iss-e_2026-07-13.csv", 25544, "2026-07-13T12:00:00");
-  const elGlonass = csvRow("glonass", "celestrak_supgp_glonass-re_2026-07-13.csv", 32393); // 2026-07-11T23:59:42.000029
+  const el67850 = csvRow(67850);   // epoch 2026-05-14T01:42:42
+  const el67851 = csvRow(67851);   // epoch 2026-05-14T01:49:42
+  const elIss = csvRow(25544, "2026-07-13T12:00:00");
+  const elGlonass = csvRow(32393); // 2026-07-11T23:59:42
 
   const gp = JSON.parse(fs.readFileSync(GP_SAMPLE_PATH, "utf8")); // Vanguard 5,11,12
 
@@ -244,7 +244,7 @@ function buildConstellation() {
   records.push(fbRecord("cid-st-67850", "spacetrack-gp", spacetrackOmmFlatbuffer({ el: el67850, epoch: "2026-05-14T01:00:00.000000" })));
 
   // (c2) 67851 — hard-pass Starlink fit is STALER than ST -> ST wins.
-  records.push(jsonRecord("cid-fit-67851", "", fittedOmmJson({ el: el67851, epoch: "2026-05-14T02:00:00.000000", provider: "spacex-starlink", dataSource: "SpaceX-E" })));
+  records.push(jsonRecord("cid-fit-67851", "", fittedOmmJson({ el: el67851, epoch: "2026-05-14T00:50:00.000000", provider: "spacex-starlink", dataSource: "SpaceX-E" })));
   records.push(fbRecord("cid-st-67851", "spacetrack-gp", spacetrackOmmFlatbuffer({ el: el67851, epoch: el67851.EPOCH })));
 
   // (c3) 25544 — A2.4d: ISS is now hard-pass (same-ephemeris RMS beat), and its
@@ -531,7 +531,7 @@ test("(d) quarantine: an unmapped fit is quarantined, never keyed as NORAD 0", a
   }
 });
 
-test("(e) element-space diff vs CelesTrak reference within A2.4 tolerances on the overlap", async () => {
+test("(e) element-space diff vs the reference rows within A2.4 tolerances on the overlap", async () => {
   const { records, refs } = buildConstellation();
   const { ingests } = await runSynthesis(null, records);
   const catalog = catalogByNorad(ingests);
@@ -596,7 +596,7 @@ test("classification: tag-first with USER_DEFINED fallback (both discriminate ou
   // A TAGGED our-fit record (post fit-pipeline ingest_with_source migration) and
   // an UNTAGGED our-fit record (today) must both be attributed to our fit, and a
   // tagged ST record to Space-Track — proving the reader's dual discrimination.
-  const el = csvRow("starlink", "celestrak_supgp_2026-034.csv", 67850);
+  const el = csvRow(67850);
   const taggedFit = jsonRecord("cid-tagged-fit", "spacex-starlink",
     fittedOmmJson({ el, epoch: "2026-05-14T10:00:00.000000", provider: "spacex-starlink", dataSource: "SpaceX-E", norad: 90001 }));
   const untaggedFit = jsonRecord("cid-untagged-fit", "",

@@ -6,7 +6,7 @@
  *      generated from the VALIDATED EME2000->TEME (A2.2a) path.
  *   2. GPS/TAI -> UTC time-system conversion incl. fail-closed past the
  *      leap-second horizon and before the table.
- *   3. Position-only SGP4 fit on the real IAC GLONASS SP3 arc (IGS20 ECEF, GPS
+ *   3. Position-only SGP4 fit on the synthetic GLONASS-style SP3 arc (IGS20 ECEF label, GPS
  *      time, no velocities) -> credible GLONASS elements.
  */
 #include "od/frame_transform.h"
@@ -239,17 +239,17 @@ void test_time_systems() {
     CHECK(!bad.ok && bad.error_code == "unsupported-time-system", "unknown time system fails closed");
 }
 
-// ── 3. GLONASS position-only fit from the real SP3 arc ───────────────────────
+// ── 3. GLONASS position-only fit from the synthetic SP3 arc ───────────────────────
 
 // Minimal SP3 reader: collect the (epoch, x, y, z) of one satellite id ("PR03").
 static bool read_sp3_sat(const std::string& sat_id,
                          std::vector<std::array<double,4>>* out /* jd_gps, x,y,z */) {
     const char* paths[] = {
-        "tests/data/glonass/iac_glonass.sp3.glo",
-        "../tests/data/glonass/iac_glonass.sp3.glo",
-        "../../tests/data/glonass/iac_glonass.sp3.glo",
-        "../../../tests/data/glonass/iac_glonass.sp3.glo",       // src/cpp/build-native -> analysis/od
-        "analysis/od/tests/data/glonass/iac_glonass.sp3.glo",
+        "tests/data/glonass/synthetic_glonass.sp3.glo",
+        "../tests/data/glonass/synthetic_glonass.sp3.glo",
+        "../../tests/data/glonass/synthetic_glonass.sp3.glo",
+        "../../../tests/data/glonass/synthetic_glonass.sp3.glo",       // src/cpp/build-native -> analysis/od
+        "analysis/od/tests/data/glonass/synthetic_glonass.sp3.glo",
     };
     std::ifstream f;
     for (const char* p : paths) { f.open(p); if (f.is_open()) break; }
@@ -276,7 +276,7 @@ void test_glonass_position_only_fit() {
 
     std::vector<std::array<double,4>> raw;  // (jd_gps, x, y, z) km
     if (!read_sp3_sat("PR03", &raw)) {
-        std::cout << "  ⚠ GLONASS SP3 fixture not found (tests/data/glonass/iac_glonass.sp3.glo)" << std::endl;
+        std::cout << "  ⚠ GLONASS SP3 fixture not found (tests/data/glonass/synthetic_glonass.sp3.glo)" << std::endl;
         tests_failed++;  // this fixture is checked in; missing = a real failure
         return;
     }

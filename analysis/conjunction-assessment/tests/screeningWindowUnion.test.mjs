@@ -39,9 +39,11 @@ import { promisify } from 'node:util';
 import { CA_PARITY_TOLERANCES as T } from './lib/caParityTolerances.mjs';
 import { createConjunctionCommandHarness } from './lib/conjunctionCommandHarness.mjs';
 import { decodeCqr, earthFrame, encodeCqr, gpRecord, gpSource, initCqrFlatc, publishedSchema, screeningControls } from './lib/cqr.mjs';
+import { privateFixtureSkip, readPrivateFixtureJson, privateFixturePath } from './lib/privateFixtures.mjs';
 
 const REENTERING = [8301, 60875, 69729];
-const GP = JSON.parse(fs.readFileSync(new URL('./fixtures/decaying/gp_2026-07-06.json', import.meta.url), 'utf8'))
+const GP_SKIP = privateFixtureSkip('decaying/gp_2026-07-06.json');
+const GP = readPrivateFixtureJson('decaying/gp_2026-07-06.json')
   .filter((g) => !REENTERING.includes(g.NORAD_CAT_ID));
 const PRIMARY = 22;
 const START_JD = Date.parse('2026-07-06T00:00:00Z') / 86400000 + 2440587.5;
@@ -121,7 +123,7 @@ const bytes = (response) => Buffer.concat(response.outputs.map((f) => Buffer.fro
 const results = {};
 
 for (const [name, screen] of [['resident screen_window', residentWindow], ['screen_catalog', catalogWindow]]) {
-  test(`${name}: one seven-day window reports the conjunctions of its seven days`, async () => {
+  test(`${name}: one seven-day window reports the conjunctions of its seven days`, { skip: GP_SKIP }, async () => {
     const days = [];
     for (let d = 0; d < DAYS; d++) days.push(read(await screen(START_JD + d, 1)));
     const wholeResponse = await screen(START_JD, DAYS);
@@ -132,7 +134,7 @@ for (const [name, screen] of [['resident screen_window', residentWindow], ['scre
   });
 }
 
-test('the week holds exactly the conjunctions a separate TCA solver finds on short tiles', async () => {
+test('the week holds exactly the conjunctions a separate TCA solver finds on short tiles', { skip: GP_SKIP }, async () => {
   const solver = fileURLToPath(new URL('./lib/tiledPairSolver.mjs', import.meta.url));
   const primary = GP.find((g) => g.NORAD_CAT_ID === PRIMARY);
   const secondaries = GP.filter((g) => g.NORAD_CAT_ID !== PRIMARY);

@@ -26,6 +26,7 @@ import {
   canonicalSha256Hex,
   signPartitionedRunProvenance,
 } from "../scripts/run-sdn-omm-partitioned-screen-catalog.mjs";
+import { privateFixtureSkip, privateFixturePath } from "./lib/privateFixtures.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, "..");
@@ -1058,7 +1059,7 @@ test(
 // in its partition.
 test(
   "partitioned runner screens every pair of a real catalog once in both partition modes",
-  { timeout: 600000 },
+  { timeout: 600000, skip: privateFixtureSkip("decaying/gp_2026-07-06.json") },
   async (t) => {
     if (!conjunctionArtifactExists()) {
       t.skip("Build conjunction-assessment before running the partitioned runner test.");
@@ -1069,7 +1070,7 @@ test(
       await rm(tempDir, { recursive: true, force: true });
     });
     const gp = JSON.parse(
-      await readFile(path.join(__dirname, "fixtures/decaying/gp_2026-07-06.json"), "utf8"),
+      await readFile(privateFixturePath("decaying/gp_2026-07-06.json"), "utf8"),
     ).filter((record) => ![8301, 60875, 69729].includes(record.NORAD_CAT_ID));
     const ordered = [
       ...gp.filter((record) => record.NORAD_CAT_ID !== 22),

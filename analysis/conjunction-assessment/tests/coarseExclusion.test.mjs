@@ -28,8 +28,10 @@ import test from 'node:test';
 
 import { createConjunctionCommandHarness } from './lib/conjunctionCommandHarness.mjs';
 import { decodeCqr, earthFrame, encodeCqr, gpRecord, gpSource, initCqrFlatc, publishedSchema, screeningControls } from './lib/cqr.mjs';
+import { privateFixtureSkip, readPrivateFixtureJson, privateFixturePath } from './lib/privateFixtures.mjs';
 
-const GP = JSON.parse(fs.readFileSync(new URL('./fixtures/decaying/gp_2026-07-06.json', import.meta.url), 'utf8'));
+const GP_SKIP = privateFixtureSkip('decaying/gp_2026-07-06.json');
+const GP = readPrivateFixtureJson('decaying/gp_2026-07-06.json');
 const START_JD = Date.parse('2026-07-06T00:00:00Z') / 86400000 + 2440587.5;
 const STEP_S = 60;
 const PRIMARY = 22;
@@ -91,7 +93,7 @@ function checkExcludedRecords(run, expectedNorads) {
 
 const eventKey = (events) => JSON.stringify(events);
 
-test('screen_catalog completes on a catalog with reentering objects and lists them as excluded', async (t) => {
+test('screen_catalog completes on a catalog with reentering objects and lists them as excluded', { skip: GP_SKIP }, async (t) => {
   const harness = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
   t.after(() => harness.destroy());
   const week = 7 * 86400;
@@ -134,7 +136,7 @@ test('screen_catalog completes on a catalog with reentering objects and lists th
   assert.deepEqual(atFailure.get(8301), failures.get(8301));
 });
 
-test('resident screen_window excludes the same objects on the implicit and chunked coarse paths', async (t) => {
+test('resident screen_window excludes the same objects on the implicit and chunked coarse paths', { skip: GP_SKIP }, async (t) => {
   const harness = await createConjunctionCommandHarness({ runtimeKind: 'browser', surface: 'direct' });
   t.after(() => harness.destroy());
   let generation = 0;
@@ -159,7 +161,7 @@ test('resident screen_window excludes the same objects on the implicit and chunk
   }
 });
 
-test('an excluded catalog OMM without OBJECT_ID is reported without one', async (t) => {
+test('an excluded catalog OMM without OBJECT_ID is reported without one', { skip: GP_SKIP }, async (t) => {
   // OMM OBJECT_ID is optional; the screening then identifies the object by its
   // catalog number, which must not come back as an international designator.
   const harness = await createConjunctionCommandHarness({ runtimeKind: 'browser' });

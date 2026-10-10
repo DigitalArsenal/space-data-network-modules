@@ -35,9 +35,11 @@ import { decodeCqr, earthFrame, encodeCqr, gpRecord, gpSource, initCqrFlatc, pub
 import { CA_PARITY_TOLERANCES as T } from './lib/caParityTolerances.mjs';
 import { parseGridFrame } from '../gpu/gpuScreen.mjs';
 import { screenAllVsAllOnGpu } from '../gpu/allVsAll.mjs';
+import { privateFixtureSkip, readPrivateFixtureJson, privateFixturePath } from './lib/privateFixtures.mjs';
 
 const fixture = (name) => JSON.parse(fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8'));
-const GP = fixture('decaying/gp_2026-07-06.json');
+const GP = readPrivateFixtureJson('decaying/gp_2026-07-06.json');
+const GP_SKIP = privateFixtureSkip('decaying/gp_2026-07-06.json');
 const HPOP = fixture('hpop-ppe/crossing-orbits.json');
 const STEP_S = 60, THRESHOLD_KM = 5;
 
@@ -104,7 +106,7 @@ async function gpuPath(harness, windowRecord, screener = everyPair) {
   });
 }
 
-test('SGP4 element sets: the GPU path reports screen_catalog\'s conjunctions and exclusions', async () => {
+test('SGP4 element sets: the GPU path reports screen_catalog\'s conjunctions and exclusions', { skip: GP_SKIP }, async () => {
   const harness = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
   try {
     const startJd = Date.parse('2026-07-06T00:00:00Z') / 86400000 + 2440587.5;

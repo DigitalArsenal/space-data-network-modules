@@ -1,26 +1,37 @@
-// The OD node's Starlink GP agrees with CelesTrak SupGP: MEME state vectors are
-// EME2000, and the node must label them so the fit core rotates them to TEME.
+// The OD node's Starlink GP agrees with a reference element set fitted to the same
+// ephemeris: MEME state vectors are EME2000, and the node must label them so the
+// fit core rotates them to TEME.
 //
-// Source: the checked-in OD reference suite analysis/od/tests/data/supgp-reference/
-// starlink — ten SpaceX MEME operator ephemerides (captured 2026-05-14, launch
-// 2026-034) and CelesTrak's SupGP elements for the same objects
-// (celestrak_supgp_2026-034.csv, DATA_SOURCE SpaceX-E), which CelesTrak fitted to
-// that same operator ephemeris. Units km; TEME of date; UTC epochs.
+// Two suites run the same check.
+//  - Public: analysis/od/tests/data/supgp-reference/starlink-synthetic, written by
+//    analysis/od/scripts/synthetic-fixtures.mjs: ten MEME ephemerides in EME2000
+//    (GCRF to 23 mas, 0.8 m at LEO) from SGP4 truth, and for each a reference
+//    element set (synthetic_reference_elements.csv) that stands in for a third-party
+//    fit of the same ephemeris: the truth with the mean anomaly moved 0.02 deg,
+//    2.3 to 3.2 km along track.
+//  - Private (SDN_MODULES_PRIVATE_FIXTURES): the ten SpaceX MEME operator
+//    ephemerides in analysis/od/tests/data/supgp-reference/starlink (captured
+//    2026-05-14, launch 2026-034; SpaceX public ephemerides, open) and CelesTrak's
+//    SupGP elements for the same objects (celestrak_supgp_2026-034.csv,
+//    DATA_SOURCE SpaceX-E), which CelesTrak fitted to that same operator ephemeris.
+//    CelesTrak publishes no licence for SupGP, so that file is not in the tree.
+// Units km; TEME of date; UTC epochs.
 //
 // Method: feed each MEME file to the signed OD node as one complete canonical FSB
 // response on its `starlink` port and take the node's fitted $OMM. Then score two
 // element sets with the same SGP4 on the frame-correct TEME states, i.e.
 // analysis/od's own MEME reader (EME2000 rotated to TEME, IAU-76/FK5) over the
-// same file: the node's GP and CelesTrak's SupGP (REFERENCE_RMS each). Both are
+// same file: the node's GP and the reference set (REFERENCE_RMS each). Both are
 // RMS position errors against the same states, so by Minkowski their sum bounds
-// the RMS separation of the node's GP from SupGP. A fit's own RMS cannot catch a
-// frame error, because a fit is self-consistent in whatever frame it is handed;
-// an independent reference can.
+// the RMS separation of the node's GP from the reference. A fit's own RMS cannot
+// catch a frame error, because a fit is self-consistent in whatever frame it is
+// handed; an independent reference can.
 //
-// Tolerance 5 km on that bound: frame-correct, the node's GP sits <0.1 km from
-// the states and SupGP 2.2-3.0 km (CelesTrak's own fit residual plus propagation
-// from its element epoch). The pre-fix node labelled the states TEME, fitted them
-// unrotated and put its GP ~35 km from them, the precession since J2000.
+// Tolerance 5 km on that bound: frame-correct, the node's GP sits <0.1 km from the
+// states and the reference 2.2-3.2 km (CelesTrak's own fit residual plus
+// propagation from its element epoch; by construction in the synthetic suite).
+// The pre-fix node labelled the states TEME, fitted them unrotated and put its GP
+// ~35 km from them, the precession since J2000.
 //
 // SUPPLEMENTAL_OMM_OD_TEST_ARTIFACT_GIT_REF=<ref> scores the node artifact
 // committed at <ref> instead of the working tree's (as in od-node.test.mjs).
@@ -38,12 +49,13 @@ import { OMM } from "spacedatastandards.org/lib/js/OMM/OMM.js";
 import { createBrowserModuleHarness } from "space-data-module-sdk/testing";
 import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
 
+import { privatePath, privateSkip } from "../../../tests/lib/privateFixtures.mjs";
+
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const nodeRoot = path.join(packageRoot, "nodes/od");
 const modulesRoot = path.resolve(packageRoot, "../..");
-const suiteDir = path.join(modulesRoot, "analysis/od/tests/data/supgp-reference/starlink");
-const memeDir = path.join(suiteDir, "meme");
-const supGpCsv = path.join(suiteDir, "celestrak_supgp_2026-034.csv");
+const privateSuiteRelative = "analysis/od/tests/data/supgp-reference/starlink";
+const syntheticSuiteDir = path.join(modulesRoot, "analysis/od/tests/data/supgp-reference/starlink-synthetic");
 const odWasmPath = path.join(modulesRoot, "analysis/od/dist/isomorphic/module.wasm");
 const SUPGP_AGREEMENT_MAX_KM = 5.0;
 const fsbType = {
@@ -184,7 +196,9 @@ function referenceOptions(elements) {
   };
 }
 
-test("OD node's Starlink GP agrees with CelesTrak SupGP within 5 km (MEME states are EME2000)", async (t) => {
+async function checkStarlinkSuite(t, suiteDir, referenceCsv) {
+  const memeDir = path.join(suiteDir, "meme");
+  const supGpCsv = path.join(suiteDir, referenceCsv);
   const manifest = JSON.parse(fs.readFileSync(path.join(nodeRoot, "plugin-manifest.json"), "utf8"));
   const node = await createBrowserModuleHarness({
     wasmSource: readOdNodeArtifact(),
@@ -216,7 +230,7 @@ test("OD node's Starlink GP agrees with CelesTrak SupGP within 5 km (MEME states
 
   const supGp = parseSupGpRows(supGpCsv);
   const files = fs.readdirSync(memeDir).filter((name) => /^MEME_\d+_.*\.txt$/.test(name)).sort();
-  assert.equal(files.length, 10, "the Starlink SupGP suite holds ten MEME files");
+  assert.equal(files.length, 10, "the Starlink suite holds ten MEME files");
   let requestId = 94_100n;
   for (const file of files) {
     const [, noradText, objectName] = file.split("_");
@@ -245,17 +259,24 @@ test("OD node's Starlink GP agrees with CelesTrak SupGP within 5 km (MEME states
     const window = await fitMeme(meme, { inputFormat: "meme" });
     const nodeKm = await scoreOnMemeStates(meme, closest(fits, window.EPOCH));
     const rows = supGp.get(norad);
-    assert.ok(rows?.length, `no CelesTrak SupGP row for NORAD ${norad}`);
+    assert.ok(rows?.length, `no reference row for NORAD ${norad}`);
     const supGpKm = await scoreOnMemeStates(meme, closest(rows, window.EPOCH));
     t.diagnostic(
-      `NORAD ${norad}: node GP ${nodeKm.toFixed(3)} km, SupGP ${supGpKm.toFixed(3)} km from the TEME states; ` +
-        `node GP to SupGP ${Math.abs(nodeKm - supGpKm).toFixed(3)}..${(nodeKm + supGpKm).toFixed(3)} km`,
+      `NORAD ${norad}: node GP ${nodeKm.toFixed(3)} km, reference ${supGpKm.toFixed(3)} km from the TEME states; ` +
+        `node GP to reference ${Math.abs(nodeKm - supGpKm).toFixed(3)}..${(nodeKm + supGpKm).toFixed(3)} km`,
     );
     assert.ok(
       nodeKm + supGpKm <= SUPGP_AGREEMENT_MAX_KM,
-      `${norad}: the node's GP is ${nodeKm} km and CelesTrak SupGP ${supGpKm} km from the ` +
+      `${norad}: the node's GP is ${nodeKm} km and the reference ${supGpKm} km from the ` +
         `frame-correct TEME states (sum limit ${SUPGP_AGREEMENT_MAX_KM} km); the node fitted ` +
         "the MEME states in the wrong frame.",
     );
   }
-});
+}
+
+test("OD node's Starlink GP agrees with the synthetic reference element set within 5 km (MEME states are EME2000)", (t) =>
+  checkStarlinkSuite(t, syntheticSuiteDir, "synthetic_reference_elements.csv"));
+
+test("OD node's Starlink GP agrees with CelesTrak SupGP within 5 km on the SpaceX ephemerides (private)",
+  { skip: privateSkip(`${privateSuiteRelative}/celestrak_supgp_2026-034.csv`) },
+  (t) => checkStarlinkSuite(t, privatePath(privateSuiteRelative), "celestrak_supgp_2026-034.csv"));

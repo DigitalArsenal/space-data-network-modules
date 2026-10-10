@@ -7,8 +7,7 @@ import { decodePrw, decodeResult, encodePrw, execution, makeTable, nativeInput, 
 
 export const REFERENCE = JSON.parse(fs.readFileSync(new URL('../fixtures/orekit/orekit-reference.json', import.meta.url), 'utf8'));
 export const EOP = JSON.parse(fs.readFileSync(new URL('../fixtures/orekit/eop-2026-08.json', import.meta.url), 'utf8'));
-// The JB2008 cases start on 2026-06-10 (SET's indices in Orekit's data
-// directory end on 2026-06-17): their Earth orientation and drivers.
+// The JB2008 cases start on 2026-06-10 (the synthetic indices end on 2026-06-30): their Earth orientation and drivers.
 export const EOP_JUNE = JSON.parse(fs.readFileSync(new URL('../fixtures/orekit/eop-2026-06.json', import.meta.url), 'utf8'));
 export const JB2008 = JSON.parse(fs.readFileSync(new URL('../fixtures/orekit/jb2008-2026-06.json', import.meta.url), 'utf8'));
 export const SPW = JSON.parse(fs.readFileSync(new URL('../fixtures/orekit/spw-2026-08.json', import.meta.url), 'utf8'));
@@ -47,12 +46,12 @@ export function eopInput(c) {
   return { portId: 'earth_orientation', typeRef: TYPE, payload: encodePrw('EARTH_ORIENTATION', makeTable('PRWEarthOrientation', { ROWS: eopRows(fixture) })) };
 }
 
-// SET's JB2008 drivers Orekit read (make-jb2008.mjs), as PRW.JB2008_INDICES.
+// The synthetic JB2008 drivers Orekit read (make-jb2008.mjs), as PRW.JB2008_INDICES.
 export function jb2008Input() {
   return { portId: 'jb2008_indices', typeRef: TYPE, payload: encodePrw('JB2008_INDICES', makeTable('PRWJB2008IndicesTable', { ROWS: JB2008.rows.map((row) => makeTable('PRWJB2008Indices', row)) })) };
 }
 
-// Daily space weather Orekit read (make-spw.mjs), as PRW.SPACE_WEATHER.
+// The synthetic daily space weather Orekit read (make-spw.mjs), as PRW.SPACE_WEATHER.
 export function spaceWeatherInput() {
   return { portId: 'space_weather', typeRef: TYPE, payload: encodePrw('SPACE_WEATHER', makeTable('PRWSpaceWeatherTable', { ROWS: SPW.rows.map((row) => makeTable('SPW', row)) })) };
 }

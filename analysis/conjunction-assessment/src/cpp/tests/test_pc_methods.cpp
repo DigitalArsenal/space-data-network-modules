@@ -13,6 +13,7 @@
 #include "conjunction/pc_method.h"
 #include <cstdio>
 #include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <memory>
 #include <sstream>
@@ -484,8 +485,24 @@ void test_orekit_file_backed_cdm_probability() {
     printf("\n=== Test 11: Orekit file-backed real CDM probability vectors ===\n");
 
     // Source: Orekit 13.1 ccsds/cdm/ION_SCV8_vs_STARLINK_1233.txt and
-    // Patera2005Test/Laas2015Test testComputeProbabilityFromACdm.
-    const std::string cdm_text = read_fixture_text("orekit/cdm/ION_SCV8_vs_STARLINK_1233.txt");
+    // Patera2005Test/Laas2015Test testComputeProbabilityFromACdm. The CDM is a
+    // CSpOC message with no stated terms, so it is not in this tree: it is read
+    // from $SDN_MODULES_PRIVATE_FIXTURES/analysis/conjunction-assessment/src/cpp/
+    // tests/fixtures/orekit/cdm/, and the test is skipped without it.
+    const char* private_root = std::getenv("SDN_MODULES_PRIVATE_FIXTURES");
+    if (!private_root || !*private_root) {
+        printf("  SKIPPED: SDN_MODULES_PRIVATE_FIXTURES is not set (private CDM fixture)\n");
+        return;
+    }
+    std::ifstream cdm_file(std::string(private_root) +
+        "/analysis/conjunction-assessment/src/cpp/tests/fixtures/orekit/cdm/ION_SCV8_vs_STARLINK_1233.txt");
+    if (!cdm_file) {
+        printf("  SKIPPED: the private CDM fixture is not under SDN_MODULES_PRIVATE_FIXTURES\n");
+        return;
+    }
+    std::ostringstream cdm_buffer_text;
+    cdm_buffer_text << cdm_file.rdbuf();
+    const std::string cdm_text = cdm_buffer_text.str();
 
     uint8_t cdm_buffer[32768];
     const int32_t cdm_size = cdm_kvn_to_sds(

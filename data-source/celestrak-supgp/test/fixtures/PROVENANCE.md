@@ -1,21 +1,19 @@
-# CelesTrak SupGP fixtures — provenance + probe log (A2.9)
+# CelesTrak SupGP fixtures: provenance
 
-All fixtures are trimmed **byte-exact prefixes** of live CelesTrak Supplemental GP
-(SupGP) captures taken 2026-07-13 (UTC). celestrak.org is unreachable from the
-build host (erroneous upstream block), so captures were fetched **read-only** via
-the host proxy, exactly as A2.4 did:
+**Synthetic.** The files here are shaped like CelesTrak Supplemental GP (SupGP)
+responses (`sup-gp.php?SOURCE=<token>&FORMAT=<JSON|CSV>`: a schema-exact CCSDS OMM
+array with the `RMS` and `DATA_SOURCE` extras), but the orbital numbers are
+invented. CelesTrak publishes no licence for SupGP (its GP data come from
+Space-Track, its SupGP fits from the operators), so no capture is kept in this
+tree. What each record keeps is what identifies it: object name, designator,
+NORAD number, epoch, element-set number and `DATA_SOURCE`. Mean motion keeps its
+first two decimals (the orbit class); eccentricity, inclination, node, argument
+of perigee, mean anomaly, B*, mean-motion rate and RMS are drawn from a seeded
+generator. `make-synthetic.mjs` re-draws them in place.
 
-```
-ssh space-data-network-02 'curl -s --max-time 25 -H "User-Agent: sdn-supgp-reference-capture/1.0" "<url>"'
-```
-
-Serial, ≥4 s spacing; halt after 2 consecutive 404s; each host temp file
-`rm -f`'d inline; nothing else on the host touched. Endpoint (docs page is the
-token authority — `celestrak.org/NORAD/documentation/sup-gp-queries.php`):
-
-```
-https://celestrak.org/NORAD/elements/supplemental/sup-gp.php?SOURCE=<token>&FORMAT=<JSON|CSV>
-```
+The endpoints, the token list and the format notes below are the facts the
+adapter and its tests rely on; they were established by a read-only probe of 12
+requests on 2026-07-13.
 
 ## Probe log — 12 requests total (the hard budget), all accounted
 
@@ -46,10 +44,9 @@ likely populated only post-launch). Intelsat is already covered independently by
 
 ## Trimming
 
-Each `*.trimmed.json` is the raw capture truncated to its first N flat OMM objects
-(brace-depth-1 slice, real bytes verbatim, closing `]` re-appended). `AST.trimmed.json`
-is the FULL 10-object capture. `SES-E.csv.trimmed.csv` is the CSV header + first 4
-data rows. Object counts drive the test assertions:
+Each `*.trimmed.json` holds the first N flat OMM objects of its token's response
+shape. `AST.trimmed.json` has all 10 objects. `SES-E.csv.trimmed.csv` is the CSV header
++ the first 4 SES-E records, written from the JSON so the two formats agree. Object counts drive the test assertions:
 
 | Fixture | Objects | Note |
 |---------|---------|------|

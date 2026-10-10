@@ -9,18 +9,14 @@ import {
 } from "./lib/conjunctionCommandHarness.mjs";
 import { gpSource } from "./lib/cqr.mjs";
 import { buildThreadedWasmEdgeRunner } from "./lib/wasmedgePthreadRunner.mjs";
+import { privateFixtureSkip, readPrivateFixtureJson, privateFixturePath } from "./lib/privateFixtures.mjs";
 
-const SOCRATES_REFERENCE_PATH = new URL(
-  "./fixtures/socrates/reference.top3.json",
-  import.meta.url,
-);
-const GP_FIXTURE_DIR = new URL("./fixtures/socrates/", import.meta.url);
+const SOCRATES_SKIP = privateFixtureSkip("socrates/reference.top3.json");
+const SOCRATES_REFERENCE_PATH = privateFixturePath("socrates/reference.top3.json");
 
 function loadGpFixture(gpFile) {
   const jsonFile = gpFile.replace(/\.txt$/i, ".json");
-  return JSON.parse(
-    fs.readFileSync(new URL(jsonFile, GP_FIXTURE_DIR), "utf8"),
-  );
+  return readPrivateFixtureJson(`socrates/${jsonFile}`);
 }
 
 function probabilityRatio(actual, expected) {
@@ -35,7 +31,7 @@ function probabilityRatio(actual, expected) {
   return Math.max(a / e, e / a);
 }
 
-test("WasmEdge conjunction replay stays within the public SOCRATES tolerance envelope for the vendored close pairs", async (t) => {
+test("WasmEdge conjunction replay stays within the public SOCRATES tolerance envelope for the vendored close pairs", { skip: SOCRATES_SKIP }, async (t) => {
   if (!conjunctionArtifactExists()) {
     t.skip("Build conjunction-assessment before running the SOCRATES replay test.");
     return;

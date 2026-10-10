@@ -14,15 +14,11 @@ import {
 import { gpSource } from "./lib/cqr.mjs";
 import { buildThreadedWasmEdgeRunner } from "./lib/wasmedgePthreadRunner.mjs";
 import { signCdmOutput, verifySignedCdmOutput } from "../index.js";
+import { privateFixtureSkip, readPrivateFixtureJson, privateFixturePath } from "./lib/privateFixtures.mjs";
 
-const CLOSE_PAIR_FIXTURE_PATH = new URL(
-  "./fixtures/socrates/gp_61721,67298.json",
-  import.meta.url,
-);
-const SOCRATES_REFERENCE_PATH = new URL(
-  "./fixtures/socrates/reference.top3.json",
-  import.meta.url,
-);
+const SOCRATES_SKIP = privateFixtureSkip("socrates/gp_61721,67298.json", "socrates/reference.top3.json");
+const CLOSE_PAIR_FIXTURE_PATH = privateFixturePath("socrates/gp_61721,67298.json");
+const SOCRATES_REFERENCE_PATH = privateFixturePath("socrates/reference.top3.json");
 const OREKIT_CDM_EXAMPLE1_KVN = `CCSDS_CDM_VERS                = 1.0
 CREATION_DATE                 = 2010-03-12T22:31:12.000
 ORIGINATOR                    = JSPOC
@@ -164,7 +160,7 @@ function readText(path) {
   return fs.readFileSync(new URL(path, import.meta.url), "utf8");
 }
 
-test("conjunction WasmEdge harness accepts canonical OMM sources for the known close pair", async (t) => {
+test("conjunction WasmEdge harness accepts canonical OMM sources for the known close pair", { skip: SOCRATES_SKIP }, async (t) => {
   if (!conjunctionArtifactExists()) {
     t.skip("Build conjunction-assessment before running the WasmEdge harness test.");
     return;
@@ -208,7 +204,7 @@ test("conjunction WasmEdge harness accepts canonical OMM sources for the known c
   assert.equal(json?.obj2_norad, 67298);
 });
 
-test("emit_cdm accepts canonical OMM-backed conjunction requests", async (t) => {
+test("emit_cdm accepts canonical OMM-backed conjunction requests", { skip: SOCRATES_SKIP }, async (t) => {
   if (!conjunctionArtifactExists()) {
     t.skip("Build conjunction-assessment before running the WasmEdge harness test.");
     return;
@@ -272,7 +268,7 @@ test("emit_cdm accepts canonical OMM-backed conjunction requests", async (t) => 
 
 });
 
-test("emit_csm accepts canonical OMM-backed conjunction requests", async (t) => {
+test("emit_csm accepts canonical OMM-backed conjunction requests", { skip: SOCRATES_SKIP }, async (t) => {
   if (!conjunctionArtifactExists()) {
     t.skip("Build conjunction-assessment before running the WasmEdge harness test.");
     return;

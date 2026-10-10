@@ -1,8 +1,14 @@
 # Test fixture provenance
 
-`iqengine-meta.sample.json` is a verbatim cut of the **live** IQEngine bulk
-metadata index, fetched 2026-08-04 anonymously over HTTPS — no token, no
-account:
+`iqengine-meta.sample.json` is a **synthetic-text** cut of the live IQEngine bulk
+metadata index (fetched 2026-08-04 anonymously over HTTPS, no token, no account).
+IQEngine has no site-wide licence and its recordings carry their own licences or
+none, so the descriptive text of the recordings is not kept: `make-synthetic.mjs`
+replaces authors, descriptions, recorder, dataset and hardware names, annotation
+text and checksums with labelled synthetic ones. The 16 documents keep their
+structure, licence strings, file paths (the recordings' identifiers) and technical
+values. The original cut is in the private fixtures
+(`$SDN_MODULES_PRIVATE_FIXTURES`). What follows describes the live fetch:
 
     GET https://www.iqengine.org/api/datasources
     -> HTTP 200, ONE public datasource: {"type":"api","account":"local",

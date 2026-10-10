@@ -5,15 +5,20 @@ These fixtures drive the offline, mock-host integration test
 
 ## `i_aor_e_302.00_is-21_20260710_235300.sample.txt`
 
-A **trimmed** copy of a real Intelsat public **ECF** ephemeris for **IS-21**.
+**Synthetic.** An ECF ephemeris in the layout Intelsat's public ephemeris page
+serves, written by `analysis/od/scripts/synthetic-fixtures.mjs`; every number is
+invented. The real file this stands in for (MyIntelsat public ephemeris,
+`https://my.intelsat.com/Resource/Ephemeris/i_aor_e_302.00_is-21_20260710_235300.txt`)
+carries no licence and SES's terms reserve all rights, so no copy is kept in this
+tree.
 
-- **Upstream source:** `https://my.intelsat.com/Resource/Ephemeris/i_aor_e_302.00_is-21_20260710_235300.txt`
-  (MyIntelsat public ephemeris, **unauthenticated** — no login/cookie/token).
-  Retrieved 2026-07-13, `HTTP 200`, `Content-Type: text/plain`, full file 31,750
-  bytes / 437 lines (432 data rows, ~9-day span at 30-min steps).
-- **Trim:** the header (title + column/units lines) + the first **12 data rows**,
-  bytes **verbatim** (CRLF line endings preserved) so the test SHA-256s this
-  fixture and matches the adapter's `SOURCE_SHA256` provenance.
+- **Content:** the header (title with the invented name `SYN-GEO-1`, column and
+  units lines) and 12 data rows at 30 min from 2026/07/10 23:53:00. The
+  positions are SGP4 truth from an invented geostationary element set (n 1.002711
+  rev/day, i 0.062 deg), written Earth-fixed by `propagate_state` of
+  `propagator/sgp4`, with the mean anomaly set so the sub-satellite longitude is
+  302.00 E at the first epoch. Metres, 9 significant digits, as the real file.
+  LF line endings.
 - **Filename convention:** `<owner>_<region>_<category>_<longitude>_<sat>_<YYYYMMDD>_<HHMMSS>`
   — `owner` `i`=Intelsat-owned / `n`=non-Intelsat carrying Intelsat capacity;
   `region` aor/apr/iar/ior/por; **`category` `e`=ECF**, `c`=Center-of-Box,
@@ -21,10 +26,10 @@ A **trimmed** copy of a real Intelsat public **ECF** ephemeris for **IS-21**.
   `/Resource/Ephemeris/<name>.txt` (the listing `<option value>` is the bare name).
 - **Format (ECF — a true state-vector table, POSITION-ONLY):**
   ```
-  ECF Ephemeris for Intelsat IS-21 / 302.00 deg E /  58.00 deg W
+  ECF Ephemeris for Intelsat SYN-GEO-1 / 302.00 deg E /  58.00 deg W
                       UTC       ECF Pos.X       ECF Pos.Y       ECF Pos.Z
                                    meters          meters          meters
-  2026/07/10 23:53:00.000      22351147.8     -35753346.9     -8311.65859
+  2026/07/10 23:53:00.000      22348333.2     -35764811.6      32643.7821
   ```
   Columns: UTC `YYYY/MM/DD HH:MM:SS.sss`, X/Y/Z in **metres, ECF
   (Earth-Centered-Fixed)**. No velocity columns.
@@ -35,7 +40,7 @@ A **trimmed** copy of a real Intelsat public **ECF** ephemeris for **IS-21**.
   (`SOURCE_UNITS:"m"` / `RECORD_UNITS:"km"` in provenance).
 - **Position-only:** `STATE_VECTOR_SIZE: 3`, `EPHEMERIS_DATA_LINES` of
   `{EPOCH,X,Y,Z}` only. Velocity is **never fabricated**.
-- **Identity (honest — the ECF carries no NORAD/COSPAR):** `OBJECT_NAME: "IS-21"`
+- **Identity (honest — the ECF carries no NORAD/COSPAR):** `OBJECT_NAME: "SYN-GEO-1"`
   (parsed from the header), `NORAD_CAT_ID: 0`, `OBJECT_ID: ""` — neither is
   fabricated. A satellite-name → NORAD registry mapping is an A2.4 residual.
 

@@ -26,8 +26,10 @@ import test from 'node:test';
 
 import { createConjunctionCommandHarness } from './lib/conjunctionCommandHarness.mjs';
 import { decodeCqr, encodeCqr, gpSource, initCqrFlatc, pairRequest } from './lib/cqr.mjs';
+import { privateFixtureSkip, readPrivateFixtureJson, privateFixturePath } from './lib/privateFixtures.mjs';
 
-const GP = JSON.parse(fs.readFileSync(new URL('./fixtures/decaying/gp_2026-07-06.json', import.meta.url), 'utf8'));
+const GP_SKIP = privateFixtureSkip('decaying/gp_2026-07-06.json');
+const GP = readPrivateFixtureJson('decaying/gp_2026-07-06.json');
 const PRIMARY = GP.find((g) => g.NORAD_CAT_ID === 22);
 const SECONDARY = GP.find((g) => g.NORAD_CAT_ID === 53704);
 const START_JD = Date.parse('2026-07-06T00:00:00Z') / 86400000 + 2440587.5;
@@ -35,7 +37,7 @@ const WINDOWS = 24;
 const CALLS = 10000;
 const METHODS = [['find_tca', 'result'], ['assess_conjunction', 'result'], ['emit_cdm', 'cdm']];
 
-test('one instance answers 10,000 pair calls, each request encoded as it is sent', { timeout: 1800000 }, async (t) => {
+test('one instance answers 10,000 pair calls, each request encoded as it is sent', { timeout: 1800000, skip: GP_SKIP }, async (t) => {
   const flatc = await initCqrFlatc();
   const harness = await createConjunctionCommandHarness({ runtimeKind: 'browser', surface: 'direct' });
   t.after(() => harness.destroy());

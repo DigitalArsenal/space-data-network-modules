@@ -16,11 +16,13 @@ ingest lane (`internal/ingest/spacetrack_supplemental.go` → `ingestGPRows` →
 `sds.NewOMMBuilder` → `store.StoreWithSourceTags`) produces when it stores
 Space-Track GP, tagged `SourceName="spacetrack-gp"`, `ProviderID="space-track"`.
 
-## CelesTrak SupGP reference rows
+## `reference-elements.csv`
 
-The overlap-object fixtures (Starlink 67850/67851, ISS 25544, GLONASS 32393) draw
-their orbital elements from the checked-in **CelesTrak SupGP** reference CSVs at
-`analysis/od/tests/data/supgp-reference/<provider>/…csv` (read-only; captured
-2026-07-13 via the space-data-network-02 reader proxy, per the A2.4 progress
-notes). Winner epochs equal the reference epoch so the element-space diff is
+**Synthetic.** Four element rows in the layout of a CelesTrak SupGP CSV: the
+first two objects of the Starlink-style suite
+(`analysis/od/tests/data/supgp-reference/starlink`), an ISS-like row (NORAD
+25544) and a GLONASS-like row (NORAD 32393). Catalog numbers and designators are
+kept so the precedence cases have identities to order; every element value is
+invented. Written by `analysis/od/scripts/synthetic-fixtures.mjs`. The overlap
+objects' winner epochs equal the row epochs so the element-space diff is
 epoch-aligned.
