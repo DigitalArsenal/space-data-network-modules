@@ -12,6 +12,7 @@ import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
 
 import { ommParam, param, records, unpackMnv, unpackOcm, unpackOmm } from '../../../analysis/gp-error-model/tests/products-fixtures.mjs';
 import { gpHistory } from '../../../analysis/maneuver-detection/tests/fixtures.mjs';
+import { aoeRecord } from '../../../data-source/spacemapper-aoe-source/tests/fixtures/aoe-format.mjs';
 import { gpRecord, synthetic } from '../../../data-source/spacetrack-source/tests/fixtures/spacetrack-format.mjs';
 import { ephemerisFile, keplerArc } from '../../../data-source/vimpel-source/tests/fixtures/vimpel-format.mjs';
 import { recipeFor } from '../recipe.mjs';
@@ -61,6 +62,16 @@ test('space-track-gp through data-source/spacetrack-source: a gp_history as the 
   const parsed = await moduleAt('data-source/spacetrack-source')('parse_gp', [textPort('source', JSON.stringify(sets.map((s) => gpRecord(s))))]);
   assert.equal(JSON.parse(bytesOf(parsed, 'report')).rejected, 0);
   assertNamed(await throughFlow('space-track-gp', 'data-source/spacetrack-source', bytesOf(parsed, 'omm')), tb);
+});
+
+test('spacemapper-aoe through data-source/spacemapper-aoe-source: AOE records, as the archive stores them', async () => {
+  const { tb, sets } = designedHistory();
+  const lines = sets.map((s, k) => JSON.stringify(aoeRecord({ ...s, recordId: 7000 + k }))).join('\n');
+  const parsed = await moduleAt('data-source/spacemapper-aoe-source')('parse_aoe', [textPort('source', lines)]);
+  const report = JSON.parse(bytesOf(parsed, 'report'));
+  assert.equal(report.rejected, 0);
+  assert.equal(report.emitted, sets.length);
+  assertNamed(await throughFlow('spacemapper-aoe', 'data-source/spacemapper-aoe-source', bytesOf(parsed, 'omm')), tb);
 });
 
 // analysis/od, as an ephemeris source's own flow runs it: the ephemeris in, the SGP4 element set it is fitted to out.

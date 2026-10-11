@@ -496,6 +496,38 @@
         "Vimpel states no covariance (two 50 % scalars that give none): the pooled model answers (rule 4), uncalibrated for a lineage E14 did not measure.",
         "analysis/od gives an element set fitted to an OEM that names no NORAD number the placeholder NORAD 99999 and designator 99999A. The object is Vimpel's vimpel:<id> (OBJECT_NAME); a host must not read 99999 as a catalog number, and the integrator joins only through a link."
       ]
+    },
+    {
+      "id": "spacemapper-aoe",
+      "registry": [],
+      "kind": "element-set",
+      "originator": "SpaceMapper AOE",
+      "lineage": "spacemapper-aoe",
+      "licence": {
+        "class": "cite-only",
+        "id": "spacemapper-aoe"
+      },
+      "ownModel": false,
+      "via": [
+        {
+          "module": "data-source/spacemapper-aoe-source",
+          "method": "parse_aoe",
+          "port": "omm",
+          "type": "$OMM",
+          "into": [
+            {
+              "trigger": "element_sets",
+              "port": "omm"
+            }
+          ]
+        }
+      ],
+      "limits": [
+        "SpaceMapper states no licence for the AOE catalog, so its sets are computed on and cited, never republished. The data licence audit (orbit-accuracy-experiments data/licenses.json) has no entry yet: `spacemapper-aoe` names the one to add.",
+        "AOE is the second element-set lineage (SGP4 mean elements from its own sensors). E14 measured only the Space-Track lineage, so the pooled model answers (rule 4), uncalibrated; E15 measures AOE against independent orbits.",
+        "AOE rewrites an object's set every three hours and keeps the last until the next: a snapshot holds one newest set per object, and the record's ctime (CREATION_DATE) is the moment a set was available. A history across snapshots is what the maneuver detector screens.",
+        "parse_aoe also gives the id crosswalk (what AOE states about each object, as candidates) for the $CAT integrator; the flow does not take it."
+      ]
     }
   ],
   "refused": [
@@ -542,14 +574,6 @@
     }
   ],
   "missing": [
-    {
-      "name": "Space Mapper AOE element sets",
-      "registry": [],
-      "kind": "element-set",
-      "licence": [],
-      "module": "data-source/spacemapper-aoe-source",
-      "task": "modules-spacemapper-aoe-source-20261011"
-    },
     {
       "name": "IGS / BKG GPS precise, ESA GLONASS precise and ESA precise orbit determination (SP3)",
       "registry": [

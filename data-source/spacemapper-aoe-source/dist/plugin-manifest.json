@@ -1,0 +1,138 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.spacemapper-aoe-source",
+  "name": "SpaceMapper AOE Source",
+  "version": "0.1.0",
+  "description": "Read SpaceMapper's AOE catalog records (its SGP4 two-line sets, the NORAD number it gives or aoe:<id>, the channel) into canonical SDS OMM records and an id crosswalk of candidate identity links. Retrieval and page decoding belong to the SDN host flow.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "parse_aoe",
+      "displayName": "Read AOE element sets as OMM",
+      "inputPorts": [
+        {
+          "portId": "source",
+          "acceptedTypeSets": [
+            {
+              "setId": "source",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "AOE catalog records as the host extracted them from SpaceMapper's pages: JSON lines (one object per element set, as the archive's records.jsonl) or one JSON array of objects, bounded to 128 MiB.",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "application/json",
+                "detail": "AOE catalog records as the host extracted them from SpaceMapper's pages: JSON lines (one object per element set, as the archive's records.jsonl) or one JSON array of objects, bounded to 128 MiB."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "AOE catalog records as the host extracted them from SpaceMapper's pages: JSON lines (one object per element set, as the archive's records.jsonl) or one JSON array of objects, bounded to 128 MiB."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ],
+              "description": "Canonical size-prefixed OMM records in input order, one per element set that could be read, without padding between them."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Canonical size-prefixed OMM records in input order, one per element set that could be read, without padding between them."
+        },
+        {
+          "portId": "crosswalk",
+          "acceptedTypeSets": [
+            {
+              "setId": "crosswalk",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "What AOE states about each object, from its newest set, as candidates: its own id (aoe:<id>), the NORAD number and the international designator it gives, its name, class and channel; conflicts between sets listed. Identity evidence for the $CAT integrator, never an assertion.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "What AOE states about each object, from its newest set, as candidates: its own id (aoe:<id>), the NORAD number and the international designator it gives, its name, class and channel; conflicts between sets listed. Identity evidence for the $CAT integrator, never an assertion."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "What AOE states about each object, from its newest set, as candidates: its own id (aoe:<id>), the NORAD number and the international designator it gives, its name, class and channel; conflicts between sets listed. Identity evidence for the $CAT integrator, never an assertion."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Counts of the records read, emitted and dropped (and why, with the first examples), duplicates, Alpha-5 numbers, mismatched checksums and objects with no NORAD number; module control metadata the host keeps beside the input, not an observation.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Counts of the records read, emitted and dropped (and why, with the first examples), duplicates, Alpha-5 numbers, mismatched checksums and objects with no NORAD number; module control metadata the host keeps beside the input, not an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Counts of the records read, emitted and dropped (and why, with the first examples), duplicates, Alpha-5 numbers, mismatched checksums and objects with no NORAD number; module control metadata the host keeps beside the input, not an observation."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "spacemapper-aoe-source-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "One complete bounded set of provider records is read in input order into canonical records and two control frames; the host parallelizes independent snapshots and this parser creates no threads."
+  }
+}

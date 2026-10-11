@@ -1,0 +1,19 @@
+{
+  "spacedatastandards": "1.245.0",
+  "sdsFamilies": [
+    "RFM",
+    "TIM",
+    "MET",
+    "OMM"
+  ],
+  "commonHeaders": [
+    "alpha5.hpp",
+    "civil_time.hpp",
+    "flat_json_records.hpp"
+  ],
+  "sources": [
+    "src/spacemapper_aoe_source.cpp"
+  ],
+  "threadModel": "single-thread",
+  "wasmSha256": "5cd5a2d582763679d28820a62e0fb62e945e01aafec36b102188c72e4d8022b4"
+}
