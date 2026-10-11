@@ -97,16 +97,16 @@ needs larger parameters (n = 16384) and is not measured here.
 **Real conjunctions.** These reveal what any safe protocol must reveal. Each
 alert places the other object within R′ of a known object at a known time.
 
-From the 3-day full-catalog SGP4 screen (32,514 objects, 5 km, 292,516
+From the 3-day full-catalog SGP4 screen (32,514 objects, 5 km, 294,544
 conjunctions):
-- 27,187 objects had at least one conjunction (median 9 per object).
+- 27,756 objects had at least one conjunction (median 9 per object).
 
 | Constellation | Members in conjunctions | Outside objects with ≥ 1 conjunction | Per outside object (median, p90, max) | ≥ 3 | ≥ 10 | Within 1 km |
 | --- | ---: | ---: | --- | ---: | ---: | ---: |
-| Starlink | 10,978 | 2,532 | 3, 62, 207 | 1,304 | 668 | 613 |
-| Kuiper | 377 | 857 | 1, 4, 24 | 182 | 17 | 61 |
-| OneWeb | 589 | 452 | 1, 4, 18 | 86 | 9 | 42 |
-| Qianfan | 226 | 571 | 1, 2, 11 | 40 | 2 | 26 |
+| Starlink | 10,979 | 2,565 | 3, 61, 207 | 1,312 | 669 | 616 |
+| Kuiper | 379 | 875 | 1, 4, 24 | 184 | 17 | 62 |
+| OneWeb | 595 | 481 | 1, 4, 18 | 92 | 9 | 46 |
+| Qianfan | 228 | 591 | 1, 2, 11 | 41 | 2 | 27 |
 
 These counts are at 5 km. At R′ = 9.2 km there would be more.
 

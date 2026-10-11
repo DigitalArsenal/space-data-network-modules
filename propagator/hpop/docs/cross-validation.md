@@ -85,7 +85,7 @@ These differences are part of the measured spread:
   - **Jacchia-Roberts axes:** GMAT gives the model the spacecraft and the Sun
     in its MJ2000Eq axes, so the Sun's hour angle and declination are on the
     J2000 equator; HPOP uses Earth-fixed axes, the true equator of date. By
-    2026 the two poles are 0.15 deg apart. That leaves LEO400 1.37 m and
+    2026 the two poles are 0.15 deg apart. That leaves LEO400 1.38 m and
     SSO700 0.17 m from GMAT after a day; HPOP built with GMAT's axes is 2.4 cm
     and 1.0 cm from it (measured). GMAT's drag limit is therefore 1.5 m.
 - **Tudat**
@@ -141,43 +141,45 @@ These differences are part of the measured spread:
 ## Results
 
 Largest 3D position difference over 24 h, at hourly samples, measured on
-2026-10-09 with HPOP WASM 0d1f6264...91397f (the GMAT drag rows; the
-others are unchanged from 473d5271...bdabd1) through
+2026-10-11 with HPOP WASM 9c24bf0e...a8a99e3 (propagator/hpop 1.3.0) through
 the SDK's browser harness (`node tests/xval-summary.mjs`, which also writes
-`tests/evidence/xval/summary.json`). (JR) marks GMAT's Jacchia-Roberts drag
-cases, where HPOP was also run with Jacchia-Roberts.
+`tests/evidence/xval/summary.json`), at the Orekit suite's request: RK78 at
+1e-13 and steps of at most 300 s. HPOP's own integration error at those steps
+is most of its difference from Orekit and Tudat in LEO (README.md, Agreement
+with Orekit 13.1). (JR) marks GMAT's Jacchia-Roberts drag cases, where HPOP
+was also run with Jacchia-Roberts.
 
 ### HPOP against each tool
 
 | Case | HPOP - Orekit 13.1 | HPOP - GMAT R2022a | HPOP - Tudat (tudatpy 1.0.0) | HPOP - Tudat WASM | HPOP - Nyx 2.6.0 |
 |---|---:|---:|---:|---:|---:|
-| LEO400 F0-point-mass | 0.20 mm | 1.17 mm | 0.05 mm | 0.04 mm | 0.02 mm |
-| LEO400 F1-J2 | 9.11 mm | 8.39 mm | 9.03 mm | 9.03 mm | 26.2 mm |
-| LEO400 F3-field20x20 | 9.10 mm | 16.1 mm | 10.8 mm | 10.8 mm | 26.4 mm |
-| LEO400 F4-field-sun-moon | 9.15 mm | 8.43 mm | 10.9 mm | 10.9 mm | 26.4 mm |
-| LEO400 F5-field-sun-moon-srp | 9.75 mm | 19.3 mm | 10.7 mm | 10.7 mm | 26.7 mm |
-| LEO400 F6-field-sun-moon-srp-drag | 12.6 mm | 1.37 m (JR) | 26.8 mm | 26.8 mm | 12.09 m |
-| SSO700 F0-point-mass | 0.22 mm | 0.86 mm | 0.04 mm | 0.03 mm | 0.09 mm |
-| SSO700 F1-J2 | 6.95 mm | 18.6 mm | 6.71 mm | 6.72 mm | 30.8 mm |
-| SSO700 F3-field20x20 | 6.80 mm | 12.7 mm | 6.07 mm | 6.09 mm | 31.4 mm |
-| SSO700 F4-field-sun-moon | 6.81 mm | 21.6 mm | 6.10 mm | 6.09 mm | 31.4 mm |
-| SSO700 F5-field-sun-moon-srp | 6.55 mm | 8.14 mm | 5.97 mm | 5.98 mm | 30.8 mm |
-| SSO700 F6-field-sun-moon-srp-drag | 6.78 mm | 174.1 mm (JR) | 60.2 mm | 60.2 mm | 14.7 mm |
-| GPS F0-point-mass | 0.16 mm | 0.63 mm | 0.00 mm | 0.00 mm | 0.00 mm |
-| GPS F1-J2 | 0.48 mm | 0.74 mm | 0.33 mm | 0.33 mm | 1.61 mm |
-| GPS F3-field20x20 | 0.47 mm | 0.28 mm | 0.28 mm | 0.28 mm | 1.61 mm |
-| GPS F4-field-sun-moon | 0.43 mm | 3.18 mm | 0.17 mm | 0.17 mm | 1.61 mm |
-| GPS F5-field-sun-moon-srp | 0.43 mm | 0.64 mm | 0.17 mm | 0.17 mm | 1.61 mm |
+| LEO400 F0-point-mass | 0.48 mm | 1.17 mm | 0.32 mm | 0.32 mm | 0.30 mm |
+| LEO400 F1-J2 | 18.1 mm | 17.2 mm | 18.0 mm | 18.0 mm | 27.2 mm |
+| LEO400 F3-field20x20 | 18.1 mm | 19.9 mm | 19.8 mm | 19.8 mm | 27.5 mm |
+| LEO400 F4-field-sun-moon | 18.2 mm | 14.3 mm | 19.9 mm | 19.9 mm | 27.5 mm |
+| LEO400 F5-field-sun-moon-srp | 18.7 mm | 24.2 mm | 19.7 mm | 19.7 mm | 27.8 mm |
+| LEO400 F6-field-sun-moon-srp-drag | 21.7 mm | 1.38 m (JR) | 33.5 mm | 33.5 mm | 12.08 m |
+| SSO700 F0-point-mass | 0.48 mm | 0.85 mm | 0.30 mm | 0.30 mm | 0.36 mm |
+| SSO700 F1-J2 | 14.5 mm | 26.1 mm | 14.3 mm | 14.3 mm | 38.3 mm |
+| SSO700 F3-field20x20 | 14.5 mm | 19.5 mm | 13.8 mm | 13.8 mm | 39.0 mm |
+| SSO700 F4-field-sun-moon | 14.6 mm | 29.4 mm | 13.9 mm | 13.9 mm | 39.2 mm |
+| SSO700 F5-field-sun-moon-srp | 14.0 mm | 6.27 mm | 13.4 mm | 13.5 mm | 38.3 mm |
+| SSO700 F6-field-sun-moon-srp-drag | 14.2 mm | 166.6 mm (JR) | 65.3 mm | 65.3 mm | 13.5 mm |
+| GPS F0-point-mass | 0.14 mm | 0.63 mm | 0.02 mm | 0.02 mm | 0.01 mm |
+| GPS F1-J2 | 0.20 mm | 0.74 mm | 0.06 mm | 0.06 mm | 1.78 mm |
+| GPS F3-field20x20 | 0.19 mm | 0.01 mm | 0.08 mm | 0.08 mm | 1.76 mm |
+| GPS F4-field-sun-moon | 0.15 mm | 3.42 mm | 0.14 mm | 0.15 mm | 1.76 mm |
+| GPS F5-field-sun-moon-srp | 0.15 mm | 0.67 mm | 0.14 mm | 0.14 mm | 1.76 mm |
 | GEO F0-point-mass | 0.04 mm | 0.09 mm | 0.00 mm | 0.00 mm | 0.00 mm |
-| GEO F1-J2 | 0.04 mm | 0.03 mm | 0.03 mm | 0.03 mm | 0.12 mm |
+| GEO F1-J2 | 0.04 mm | 0.00 mm | 0.01 mm | 0.01 mm | 0.11 mm |
 | GEO F3-field20x20 | 0.04 mm | 0.82 mm | 0.05 mm | 0.05 mm | 0.11 mm |
-| GEO F4-field-sun-moon | 0.07 mm | 1.35 mm | 0.14 mm | 0.14 mm | 0.12 mm |
-| GEO F5-field-sun-moon-srp | 0.06 mm | 1.40 mm | 0.14 mm | 0.14 mm | 0.11 mm |
-| MOLNIYA F0-point-mass | 0.57 mm | 4.19 mm | 0.02 mm | 0.02 mm | 0.01 mm |
-| MOLNIYA F1-J2 | 5.25 mm | 26.8 mm | 5.51 mm | 5.49 mm | 109.3 mm |
-| MOLNIYA F3-field20x20 | 5.14 mm | 11.5 mm | 4.87 mm | 4.88 mm | 108.9 mm |
-| MOLNIYA F4-field-sun-moon | 5.22 mm | 19.5 mm | 5.10 mm | 5.10 mm | 108.9 mm |
-| MOLNIYA F5-field-sun-moon-srp | 5.81 mm | 24.0 mm | 5.25 mm | 5.23 mm | 109.1 mm |
+| GEO F4-field-sun-moon | 0.07 mm | 1.35 mm | 0.14 mm | 0.14 mm | 0.11 mm |
+| GEO F5-field-sun-moon-srp | 0.06 mm | 1.39 mm | 0.14 mm | 0.14 mm | 0.11 mm |
+| MOLNIYA F0-point-mass | 0.58 mm | 4.18 mm | 0.01 mm | 0.01 mm | 0.02 mm |
+| MOLNIYA F1-J2 | 11.0 mm | 10.6 mm | 10.8 mm | 10.8 mm | 93.0 mm |
+| MOLNIYA F3-field20x20 | 11.0 mm | 4.56 mm | 11.2 mm | 11.2 mm | 92.8 mm |
+| MOLNIYA F4-field-sun-moon | 11.0 mm | 3.23 mm | 11.2 mm | 11.2 mm | 92.6 mm |
+| MOLNIYA F5-field-sun-moon-srp | 10.5 mm | 7.68 mm | 11.1 mm | 11.1 mm | 92.8 mm |
 
 ### Tool against tool (the spread among established codes)
 
@@ -214,15 +216,18 @@ cases, where HPOP was also run with Jacchia-Roberts.
 ## Findings
 
 - **Agreement:** HPOP agrees with every tool to within that tool's own
-  distance from the others. Measured over 24 h, GMAT's Jacchia-Roberts drag
-  cases aside:
-  - Orekit: at most 1.3 cm.
-  - GMAT: at most 2.7 cm.
-  - Tudat, native and WebAssembly: at most 6.0 cm. Excluding drag, at most
-    1.1 cm.
-  - Nyx: at most 10.9 cm, consistent with the Earth-orientation difference above.
+  distance from the others, plus its own integration error. Measured over 24 h
+  at the suite's request, GMAT's Jacchia-Roberts drag cases aside:
+  - Orekit: at most 2.2 cm.
+  - GMAT: at most 2.9 cm.
+  - Tudat, native and WebAssembly: at most 6.5 cm. Excluding drag, at most
+    2.0 cm.
+  - Nyx: at most 9.3 cm, consistent with the Earth-orientation difference above.
     With drag on LEO400, 12.1 m, which is Nyx's own gap from all the others.
-  HPOP's own integration error at 1e-13 is about 9 mm per day in LEO.
+  HPOP's own integration error at 1e-13 and steps of at most 300 s is 1.8 cm
+  per day in LEO 400 km and 1.6 cm at 700 km; with steps of 30 s HPOP is
+  within 4.2 mm of Orekit outside Molniya, and a tolerance of 1e-15 with steps
+  of 10 s moves that by under 0.2 mm (README.md, Agreement with Orekit 13.1).
 - **Spread among the tools:**
   - **Orekit and Tudat** agree best: at most 1.7 mm with gravity, Sun and
     Moon; 1.0 mm with radiation pressure; 5.4 cm with NRLMSISE-00 drag.
@@ -242,7 +247,7 @@ cases, where HPOP was also run with Jacchia-Roberts.
   port's fixture had been made with the same mapping. It is now GMAT's own
   density from GmatConsole at 2000 epochs and points
   (`tests/fixtures/atmosphere/make-jacchia-roberts-gmat.mjs`); the port agrees
-  to 1.8e-6 (it was up to 124 % off), and the GMAT drag cases are 1.37 m and
+  to 1.8e-6 (it was up to 124 % off), and the GMAT drag cases are 1.38 m and
   0.17 m from GMAT, the axes difference above.
 
 ## Not compared, and why

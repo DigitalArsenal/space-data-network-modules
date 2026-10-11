@@ -10,10 +10,11 @@ and the events stay on the machine that ran it.
 - **Screen.** 2026-10-01T00:00Z plus 3 days, 5 km threshold, 60 s coarse
   steps, 72 windows of 1 hour, CPU search in Node.js
   (`scripts/run-all-vs-all-cpu.mjs --propagator hpop --window-hours 1
-  --farm-workers 16 --workers 8 --load-ceiling 45`).
-- **Modules.** The conjunction module of e1e9b6b8 (the module of the SGP4
-  rows in `gpu-all-vs-all.md`); propagator/hpop 1.3.0 (module 9c24bf0e) and
-  the farm of this commit.
+  --farm-workers 8 --workers 2 --load-ceiling 55`).
+- **Modules.** The conjunction module of 0.7.0 (SHA-256 ca5b9898, window
+  merges keyed by object id and catalog number; the module of the SGP4 rows in
+  `gpu-all-vs-all.md`); propagator/hpop 1.3.0 (module 9c24bf0e) and the farm of
+  this commit.
 - **HPOP.** `propagator/hpop/catalog.mjs`: EGM2008 70×70; the Sun, Moon,
   Venus, Mars and Jupiter from DE440s; NRLMSISE-00; cannonball radiation
   pressure with the conical shadow; Knocke Earth radiation; IERS 2010 solid
@@ -24,31 +25,31 @@ and the events stay on the machine that ran it.
   rows to the day before, the last one held; GFZ Kp, ap and F10.7, then NOAA
   SWPC's latest daily report and its 3-day forecast, the last day held.
 - **Host.** Mac Studio (28 cores) shared with other work: 1-minute load
-  average median 40, 90th percentile 47, maximum 62 over the run (one sample
+  average median 44, 90th percentile 58, maximum 82 over the run (one sample
   a minute). The farm held its next chunk of 64 objects while the load
-  exceeded 45.
+  exceeded 55.
 
 ## Results
 
 | | |
 | --- | ---: |
-| Conjunctions | 288,524 |
+| Conjunctions | 283,700 |
 | Candidates | 2,644,693 |
 | Objects excluded (reentered before the screen) | 21 |
-| Farm CPU time, propagation (16 worker threads, user and system) | 110,642 s |
-| of which the first window (catch-up from element epochs) | 40,118 s |
-| later windows, mean | 993 s |
-| Farm CPU time per object-day (153,120 object-days) | 0.72 s |
-| On 16 dedicated cores, plus search and refinement | 6,964 s |
-| Measured on the shared host: end to end | 9,294 s |
-| waiting on the farm | 9,231 s |
-| search (8 module threads) | 33.8 s |
-| refinement | 14.8 s |
-| Process CPU time (farm, module threads and host) | 111,651 s |
+| Farm CPU time, propagation (8 worker threads, user and system) | 99,929 s |
+| of which the first window (catch-up from element epochs) | 36,190 s |
+| later windows, mean | 898 s |
+| Farm CPU time per object-day (153,120 object-days) | 0.65 s |
+| On 16 dedicated cores, plus search and refinement | 6,383 s |
+| Measured on the shared host: end to end | 15,210 s |
+| waiting on the farm | 15,060 s |
+| search (2 module threads) | 97.7 s |
+| refinement | 40.1 s |
+| Process CPU time (farm, module threads and host) | 100,914 s |
 
 On one thread of the same host (load 12–15), `propagator/hpop` README,
 "Catalog cost", measured 0.645 s per object-day on stride samples: the farm's
-0.72 s is 12 % more.
+0.65 s is 1 % more.
 
 A day of HPOP's 300 s segments is about 240 KB per object; a 1-hour window of
 the catalog is about 390 MB of PPE, which `prepare_screening_index` holds in
@@ -74,14 +75,14 @@ the last full window before its reentry.
 
 `scripts/compare-screens.mjs`: the same pair with TCAs within 10 minutes,
 nearest first. The SGP4 screen is the same catalog, start, threshold and
-steps with the module's SGP4 (292,516 conjunctions).
+steps with the module's SGP4 (294,544 conjunctions).
 
 | TCA day | SGP4 | HPOP | Matched | Share of HPOP | TCA difference, median | Miss difference, median |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | 76,919 | 80,788 | 17,354 | 21 % | 0.75 s | 617 m |
-| 2 | 94,806 | 95,460 | 12,014 | 13 % | 1.43 s | 683 m |
-| 3 | 120,791 | 112,276 | 10,118 | 9 % | 2.25 s | 753 m |
-| All | 292,516 | 288,524 | 39,486 | 14 % | 1.19 s | 670 m |
+| 1 | 77,600 | 79,180 | 17,383 | 22 % | 0.77 s | 631 m |
+| 2 | 95,472 | 93,852 | 11,965 | 13 % | 1.47 s | 708 m |
+| 3 | 121,472 | 110,668 | 10,077 | 9 % | 2.33 s | 776 m |
+| All | 294,544 | 283,700 | 39,425 | 14 % | 1.23 s | 691 m |
 
 Both start from the same element sets; the numerical propagation of the
 epoch state and SGP4's mean-element theory diverge by kilometres within a day

@@ -274,7 +274,12 @@ public class OrekitReference {
         TimeScale utc = TimeScalesFactory.getUTC();
         AbsoluteDate epoch = new AbsoluteDate(2026, 8, 2, 0, 0, 0.0, utc);
         Frame gcrf = FramesFactory.getGCRF();
-        Frame itrf = FramesFactory.getITRF(IERSConventions.IERS_2010, false);
+        // The Earth-fixed frame carries IERS 2010's sub-daily corrections to polar motion and UT1
+        // (ocean tides and libration, up to about 0.3 mas) on top of the interpolated daily EOP rows.
+        // -Dorekit.simpleEOP=true leaves them out, as HPOP, which reads the rows only: the difference
+        // is what remains between the two codes with the integration error removed (SOURCES.md).
+        final boolean simpleEop = Boolean.getBoolean("orekit.simpleEOP");
+        Frame itrf = FramesFactory.getITRF(IERSConventions.IERS_2010, simpleEop);
         CelestialBody sun = CelestialBodyFactory.getSun();
         CelestialBody moon = CelestialBodyFactory.getMoon();
 
@@ -383,7 +388,7 @@ public class OrekitReference {
                 }
                 if (f.oceanDegree > 0) {
                     p.addForceModel(new OceanTides(itrf, FIELD_RADIUS, GM, false, 0.0, 1, f.oceanDegree, f.oceanDegree,
-                        IERSConventions.IERS_2010, TimeScalesFactory.getUT1(IERSConventions.IERS_2010, false)));
+                        IERSConventions.IERS_2010, TimeScalesFactory.getUT1(IERSConventions.IERS_2010, simpleEop)));
                 }
                 if (f.relativity >= 1) p.addForceModel(new Relativity(GM));
                 if (f.relativity >= 2) {
@@ -394,7 +399,7 @@ public class OrekitReference {
                     // IERS 2010 section 6.2 only (no pole tide), for the tide-free
                     // field; tidal coefficients sampled every 60 s.
                     p.addForceModel(new SolidTides(itrf, FIELD_RADIUS, GM, TideSystem.TIDE_FREE, false, 60.0, 12,
-                        IERSConventions.IERS_2010, TimeScalesFactory.getUT1(IERSConventions.IERS_2010, false), sun, moon));
+                        IERSConventions.IERS_2010, TimeScalesFactory.getUT1(IERSConventions.IERS_2010, simpleEop), sun, moon));
                 }
                 if (f.inTrack != 0) {
                     // QSW's S axis is the in-track axis, N x rhat.

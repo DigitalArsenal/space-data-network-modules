@@ -9,6 +9,7 @@
     "test:sdk-compat": "node --test tests/sdk_compat.test.mjs",
     "test:orekit": "node --test tests/orekit_reference.test.mjs",
     "test:xval": "node --test tests/xval_reference.test.mjs",
+    "orekit:summary": "node tests/orekit-summary.mjs",
     "xval:summary": "node tests/xval-summary.mjs",
     "test:stm": "node --test tests/force_partials.test.mjs tests/variational.test.mjs tests/variational_controls.test.mjs tests/variational_invoke.test.mjs",
     "test:stm-parity": "node tests/variational-parity.mjs",

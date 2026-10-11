@@ -98,8 +98,8 @@ Mac Studio, 28 cores, Space-Track GP catalog of 2026-09-30 (32,514 objects),
 
 | Run | End to end | Conjunctions |
 | --- | ---: | ---: |
-| SGP4, CPU, Node | 19.1 s | 292,516 (25 objects excluded) |
-| SGP4, GPU (Metal) | 21.3 s | 292,516 |
-| HPOP at full force, CPU, Node, 72 × 1 h | 110,642 CPU-s on 16 workers: 6,964 s on 16 dedicated cores (9,294 s measured, load median 40) | 288,524 (21 objects excluded) |
+| SGP4, CPU, Node | 19.1 s | 294,544 (25 objects excluded) |
+| SGP4, GPU (Metal) | 21.3 s | 294,544 |
+| HPOP at full force, CPU, Node, 72 × 1 h | 99,929 CPU-s on 8 workers: 6,383 s on 16 dedicated cores (15,210 s measured, load median 44) | 283,700 (21 objects excluded) |
 
 The numbers of conjunctions match only for the same catalog snapshot.

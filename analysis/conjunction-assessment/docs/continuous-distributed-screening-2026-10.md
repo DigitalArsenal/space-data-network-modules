@@ -138,7 +138,7 @@ about 01:05Z (E15); the archive held no finished snapshot to count.
 
 ## HPOP
 
-With a numerical propagator a screen's cost is propagation: 110,642 CPU-s of
+With a numerical propagator a screen's cost is propagation: 99,929 CPU-s of
 the 3-day full-force screen of the catalog
 ([hpop-full-force-screen-2026-10.md](hpop-full-force-screen-2026-10.md)).
 Propagation is per object and deterministic, so the incremental screen
@@ -164,7 +164,7 @@ subsets' objects: HPOP integrates from the element epoch, and a new set's
 epoch is recent. Computed from measured values: Space-Track changes 72,400
 element sets a day on average (Update cadence); propagating each over a 3-day
 horizon at 0.645 CPU-s per object-day (`propagator/hpop` README, "Catalog
-cost") is about 140,000 CPU-s a day, 1.6 cores, against 110,642 CPU-s for
+cost") is about 140,000 CPU-s a day, 1.6 cores, against 99,929 CPU-s for
 each full re-screen.
 
 ## Work units and verification

@@ -4,62 +4,62 @@
   "excluded": 25,
   "days": 3,
   "thresholdKm": 5,
-  "events": 292516
+  "events": 294544
  },
- "objectsWithConjunctions": 27187,
+ "objectsWithConjunctions": 27756,
  "conjunctionsPerObject": {
   "median": 9,
-  "p90": 59,
+  "p90": 58,
   "max": 209
  },
  "constellations": {
   "STARLINK": {
-   "membersInEvents": 10978,
-   "outsidersWithConjunctions": 2532,
+   "membersInEvents": 10979,
+   "outsidersWithConjunctions": 2565,
    "perOutsider": {
     "median": 3,
-    "p90": 62,
+    "p90": 61,
     "max": 207
    },
-   "outsidersWithAtLeast3": 1304,
-   "outsidersWithAtLeast10": 668,
-   "outsidersWithin1km": 613
+   "outsidersWithAtLeast3": 1312,
+   "outsidersWithAtLeast10": 669,
+   "outsidersWithin1km": 616
   },
   "ONEWEB": {
-   "membersInEvents": 589,
-   "outsidersWithConjunctions": 452,
+   "membersInEvents": 595,
+   "outsidersWithConjunctions": 481,
    "perOutsider": {
     "median": 1,
     "p90": 4,
     "max": 18
    },
-   "outsidersWithAtLeast3": 86,
+   "outsidersWithAtLeast3": 92,
    "outsidersWithAtLeast10": 9,
-   "outsidersWithin1km": 42
+   "outsidersWithin1km": 46
   },
   "KUIPER": {
-   "membersInEvents": 377,
-   "outsidersWithConjunctions": 857,
+   "membersInEvents": 379,
+   "outsidersWithConjunctions": 875,
    "perOutsider": {
     "median": 1,
     "p90": 4,
     "max": 24
    },
-   "outsidersWithAtLeast3": 182,
+   "outsidersWithAtLeast3": 184,
    "outsidersWithAtLeast10": 17,
-   "outsidersWithin1km": 61
+   "outsidersWithin1km": 62
   },
   "QIANFAN": {
-   "membersInEvents": 226,
-   "outsidersWithConjunctions": 571,
+   "membersInEvents": 228,
+   "outsidersWithConjunctions": 591,
    "perOutsider": {
     "median": 1,
     "p90": 2,
     "max": 11
    },
-   "outsidersWithAtLeast3": 40,
+   "outsidersWithAtLeast3": 41,
    "outsidersWithAtLeast10": 2,
-   "outsidersWithin1km": 26
+   "outsidersWithin1km": 27
   }
  }
 }

@@ -155,10 +155,12 @@ secant until it ends within 1 ms past it, and the next step resumes at the
 size proposed before (`lib/shadow_events.h`), as Orekit's eclipse detectors
 do. Radiation pressure therefore needs no special step limit or tolerance:
 against Orekit, LEO with radiation pressure and drag at RK78 1e-13 and 300 s
-steps is within 1.6 cm after a day with samples and 2.8 cm for the final
-epoch alone. Until 2026-10-08 the boundaries were crossed without being
-located, and the plain path needed steps of 10 s or less (21 cm a day at
-60 s). RK4 steps at its fixed size.
+steps is within 2.5 cm after a day with samples and 3.1 cm for the final
+epoch alone, which is HPOP's own integration error at those steps; with
+steps of 30 s it is within 4.2 mm (Agreement with Orekit 13.1, below). Until
+2026-10-08 the boundaries were crossed without being located, and the plain
+path needed steps of 10 s or less (21 cm a day at 60 s). RK4 steps at its
+fixed size.
 
 #### GNSS box-wing and ECOM2 (`lib/gnss_srp.h`)
 
@@ -266,13 +268,15 @@ with `OCEAN_TIDE_MAXIMUM_DEGREE` and `OCEAN_TIDE_MAXIMUM_ORDER` (default 30,
 at most 50); like the solid tides it needs `earth_orientation`.
 
 Against Orekit 13.1 (`tests/orekit_reference.test.mjs`, cases A1, O1, O2 and
-C2): after a day, Earth radiation on top of F5 agrees to 9.8 mm in LEO and
-0.43 mm at GPS, the effect being 104 m and 0.22 m; FES2004 30x30 on top of F4
-to 9.1 mm and 0.43 mm, on effects of 1.9 m and 0.18 m. Those totals are the
-common integration difference; taken as (HPOP with - without) - (Orekit with
-- without), the forces agree to 0.07 mm in LEO and 0.004 mm at GPS. With both
-forces, the solid tides and the STM, the STM agrees to 1.8e-5 (LEO) and
-4.8e-11 (GPS), and the SRP_AREA_OVER_MASS column to 2.6e-5 and 1.4e-8.
+C2): after a day, Earth radiation on top of F5 agrees to 18.9 mm in LEO and
+0.15 mm at GPS, the effect being 104 m and 0.22 m; FES2004 30x30 on top of F4
+to 18.1 mm and 0.15 mm, on effects of 1.9 m and 0.18 m. Those totals are the
+common integration difference (1.3 mm and 0.17 mm with steps of 30 s); taken
+as (HPOP with - without) - (Orekit with - without), the forces agree to
+0.22 mm (Earth radiation) and 0.08 mm (FES2004) in LEO and 0.003 mm and
+0.001 mm at GPS, and with steps of 30 s to 0.04 mm and 0.004 mm in LEO. With
+both forces, the solid tides and the STM, the STM agrees to 1.8e-5 (LEO) and
+1.6e-11 (GPS), and the SRP_AREA_OVER_MASS column to 2.7e-5 and 8.9e-9.
 
 ## Installation
 
@@ -645,15 +649,14 @@ That covers:
 - HPOP against Orekit 13.1 in `tests/orekit_reference.test.mjs`: five
   orbits (LEO 400 km, SSO 700 km, GPS, GEO, Molniya) by ten force sets
   (point mass; J2; zonal 20; 20x20; with Sun and Moon, radiation pressure and
-  NRLMSISE-00 drag), plus the SDS 1.240.0 cases (relativity, solid tides,
-  in-track thrust, BDOT, daily space weather, EME2000, EGM96, 36Z,24T, JB2008,
-  and the STM with parameter Jacobians): 63 cases, 24 h each, compared
-  hourly. Constants, Earth orientation (the same IERS rows on the
-  `earth_orientation` input), time scales and the atmosphere's conventions
-  are shared by construction; the agreement is 0.6 mm for the point mass,
-  9 mm with the field and third bodies, and 1.6 cm with radiation pressure
-  and drag (2.8 cm for a final epoch alone at 300 s steps). The tolerances
-  and their rationale are in the test's header.
+  NRLMSISE-00 drag), plus the SDS 1.240.0 and 1.243.0 cases (relativity,
+  solid tides, in-track thrust, BDOT, daily space weather, EME2000, EGM96,
+  36Z,24T, JB2008, Earth radiation, FES2004 ocean tides, and the STM with
+  parameter Jacobians): 72 cases, 24 h each, compared hourly. Constants,
+  daily Earth orientation (the same IERS rows on the `earth_orientation`
+  input), time scales and the atmosphere's conventions are shared by
+  construction. The tolerances and their rationale are in the test's header;
+  the measured agreement is under "Agreement with Orekit 13.1", below.
 - Samples in any order, repeated or before the initial epoch, against
   requests for each epoch alone; the plain path through LEO penumbrae at
   300 s steps; backward requests on forward-only integrators refused, in
@@ -676,6 +679,64 @@ test reads; nothing in the suite regenerates it (`OrekitReference.java ...
 The Tudat-derived regressions (`tests/tudat_wasm_derived.test.mjs`) were
 removed on 2026-10-08. Their high-fidelity case allowed 60 km, and their
 vectors came from a port in this organization rather than a public authority.
+
+### Agreement with Orekit 13.1
+
+`npm run orekit:summary` (`tests/orekit-summary.mjs`) scores the shipped
+module against the 72 cases at three integrator settings and writes
+`tests/evidence/orekit/summary.json`. HPOP integrates with RK78 at a relative
+tolerance of 1e-13 (the point-mass cases at 1e-15) and the steps the table
+names; Orekit with Dormand-Prince 8(5,3) at a relative tolerance of 1e-14 and
+steps of at most 10 s.
+For propagator/hpop 1.3.0, module SHA-256
+`9c24bf0ed74f59893282514f08891c414da6db071d4997357a8ebd6c2a8a99e3`, the largest
+3D difference over 24 h, hourly samples, all five orbits:
+
+| Force set | Steps of at most 300 s (the suite's request) | Steps of at most 30 s | Tolerance 1e-15, steps of at most 10 s |
+| --- | ---: | ---: | ---: |
+| Point mass | 0.58 mm | 0.59 mm | 0.57 mm |
+| Field, third bodies, radiation pressure, tides, relativity, thrust | 1.9 cm | 9.87 mm | 9.84 mm |
+| With drag | 2.5 cm | 4.18 mm | 4.05 mm |
+| All 72 cases | 2.5 cm | 9.87 mm | 9.84 mm |
+
+By orbit:
+
+| Orbit | Steps of at most 300 s | Steps of at most 30 s | 30 s, Orekit without its sub-daily corrections | HPOP's own integration error at 300 s |
+| --- | ---: | ---: | ---: | ---: |
+| LEO 400 km | 2.5 cm | 4.18 mm | 3.88 mm | 2.6 cm |
+| SSO 700 km | 1.7 cm | 1.67 mm | 0.78 mm | 1.6 cm |
+| GPS | 0.20 mm | 0.22 mm | 0.16 mm | 0.03 mm |
+| GEO | 0.07 mm | 0.07 mm | 0.06 mm | 0.00 mm |
+| Molniya | 1.1 cm | 9.87 mm | 0.59 mm | 1.31 mm |
+
+- **Integration.** At the suite's request HPOP's own integration error is
+  most of the difference in LEO. The sampled path controls its steps on the
+  six-state error, and at 1e-13 that leaves 1.8 cm over the day in LEO 400 km
+  (2.6 cm in the JB2008 drag case) and 1.6 cm at 700 km. The last column is
+  HPOP's trajectory at the suite's request against its own at tolerance 1e-15
+  with steps of at most 10 s. Steps of 30 s, a tolerance of 1e-15, or a
+  tolerance of 1e-13 with steps of 10 s each leave 1.1 mm for J2 alone in LEO
+  400 km, and the finest setting moves no row of the second column by more
+  than 0.2 mm.
+- **Earth orientation.** The reference frame is ITRF with IERS 2010's tidal
+  and libration corrections to polar motion and UT1
+  (`getITRF(IERS_2010, false)`); HPOP interpolates the daily IERS rows
+  (`EarthRotation`). With steps of 30 s that is most of what remains: 9.87 mm
+  in Molniya against 0.59 mm for Orekit generated without the corrections
+  (`-Dorekit.simpleEOP=true`, `tests/fixtures/orekit/SOURCES.md`), and 1.67 mm
+  at 700 km against 0.78 mm. Over all 72 cases that Orekit leaves 1.11 mm for
+  the field, third bodies, radiation pressure, tides, relativity and thrust,
+  and 3.88 mm with drag (`tests/evidence/orekit/summary-simple-eop.json`, from
+  `node tests/orekit-summary.mjs <out.json> --reference <that Orekit file>`).
+
+Earlier builds read these cases differently: 9.1 mm for J2 in LEO 400 km on
+the 1.1.0 builds and 24.3 mm on the 1.2.0 release, against 18.1 mm now. From
+1.2.0 the sampled path controls its steps on the six-state error and takes
+fewer, larger steps. Before 1.3.0 the celestial-to-intermediate and
+polar-motion matrices were held for up to an hour of TT, which left 7 mm in
+LEO 400 km with converged steps; 1.3.0 interpolates the CIP coordinates
+between whole hours and evaluates polar motion at every call, as a function of
+time alone, and leaves 1.1 mm.
 
 ## License
 

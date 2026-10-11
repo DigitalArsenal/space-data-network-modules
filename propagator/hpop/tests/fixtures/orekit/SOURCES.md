@@ -23,3 +23,16 @@ java -cp "<jars>/*" OrekitReference.java <dir>/orekit-syn <gfc> <out.json> W1-fi
 node make-jb2008.mjs <dir>/orekit-syn/Space-Environment-Data/SOLFSMY.TXT <dir>/orekit-syn/Space-Environment-Data/DTCFILE.TXT 2026-06-02 2026-06-13 jb2008-2026-06.json
 node make-spw.mjs <dir>/orekit-syn/CSSI-Space-Weather-Data/SpaceWeather-All-v1.2.txt 2026-08-01 2026-08-04 spw-2026-08.json
 ```
+
+All 72 cases regenerate the same way, with both gravity files in `<gfc>`
+(`make-gfc.mjs <gfc>/EGM96-hpop.gfc 70 3.986004415e14 6378136.3 egm96` beside
+the EGM2008 one) and no case name at the end of the command. The positions
+of `orekit-reference.json` reproduce exactly; the Jacobian columns differ in
+the last printed digit.
+
+`-Dorekit.simpleEOP=true` before `-cp` writes the same cases without the IERS
+2010 tidal and libration corrections to polar motion and UT1 that
+`getITRF(IERS_2010, false)` applies, as HPOP, which reads the daily rows,
+does not. The file is not kept. `node tests/orekit-summary.mjs <out.json>
+--reference <that file>` scores HPOP against it; the scores are
+`../../evidence/orekit/summary-simple-eop.json`.

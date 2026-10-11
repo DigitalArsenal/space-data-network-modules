@@ -282,32 +282,42 @@ so times are upper bounds.
 
 | Propagator | Pair search | End to end | Search (CPU) or grid + GPU | Refine | Conjunctions |
 | --- | --- | ---: | ---: | ---: | ---: |
-| SGP4, 12 × 6 h | module, Node | 19.1 s | 9.7 s | 6.6 s | 292,516 (25 objects excluded) |
-| SGP4 | module, WasmEdge 0.16.4 AOT, SDN patches | 22.9 s | 11.9 s | 8.7 s | 292,516 |
-| SGP4 | GPU | 21.3 s | 6.1 + 2.3 s | 7.2 s | 292,516 |
-| HPOP, 72 × 1 h | module, Node | 6,964 s on 16 cores (9,294 s measured) | 33.8 s | 14.8 s | 288,524 (21 objects excluded) |
+| SGP4, 12 × 6 h | module, Node | 19.1 s | 9.7 s | 6.6 s | 294,544 (25 objects excluded) |
+| SGP4 | module, WasmEdge 0.16.4 AOT, SDN patches | 22.9 s | 11.9 s | 8.7 s | 294,544 |
+| SGP4 | GPU | 21.3 s | 6.1 + 2.3 s | 7.2 s | 294,544 |
+| HPOP, 72 × 1 h | module, Node | 6,383 s on 16 cores (15,210 s measured) | 97.7 s | 40.1 s | 283,700 (21 objects excluded) |
 
 - Each propagator's runs report identical conjunctions (same TCA and miss
   distance) whichever host searched.
 - On the GPU path the module samples (6.1 s) and the GPU searches (2.3 s;
   8.5 s with the all-pairs kernel the grid replaced).
-- HPOP's time is propagation: 110,642 CPU-seconds on 16 farm workers
-  (user and system time of each worker thread), 0.72 s per object-day; the
+- The module's 294,544 conjunctions differ from the 292,516 of the module at
+  e1e9b6b8 by +2,839 conjunctions of the 597 objects whose international
+  designator is UNKNOWN (windows key objects by designator and catalog number
+  since 0.7.0) and -811 events of 71 pairs with identical or nearly identical
+  states (the ISS with its modules and visiting vehicles, the Chinese station,
+  attached vehicles; relative speed 0, 67 pairs in each window). Since
+  4e06269e a window reports a pair's interior minima of range and never a
+  window edge, and a constant range has none. The HPOP screen differs from its
+  earlier run by -4,871 and +47 events for the same reasons; both screens
+  have the candidates of the earlier runs.
+- HPOP's time is propagation: 99,929 CPU-seconds on 8 farm workers
+  (user and system time of each worker thread), 0.65 s per object-day; the
   first window, the catch-up from element epochs, took 36 % of it. Its
   end-to-end time is that CPU time on 16 dedicated cores plus search and
-  refinement. Measured on the shared host (1-minute load average median 40,
-  maximum 62; the farm held its next chunk while the load exceeded 45), the
-  screen took 9,294 s, 9,231 s of it waiting on the farm, with 8 module
+  refinement. Measured on the shared host (1-minute load average median 44,
+  maximum 82; the farm held its next chunk while the load exceeded 55), the
+  screen took 15,210 s, 15,060 s of it waiting on the farm, with 2 module
   threads.
 - The HPOP row is HPOP 1.3.0 at full force with the conjunction module of
-  e1e9b6b8, the one the SGP4 rows used, and the environment released at the
+  0.7.0, the one the SGP4 rows used, and the environment released at the
   screen's start. 21 objects reentered (100 km) before the screen and are
   excluded; 6 reentered during it and are screened through the last full
   window before their reentry
   ([hpop-full-force-screen-2026-10.md](hpop-full-force-screen-2026-10.md)).
-- Against the SGP4 screen (`scripts/compare-screens.mjs`), 39,486 of HPOP's
-  288,524 conjunctions are the same pair with TCAs within 10 minutes; on
-  those, TCAs differ by a median of 1.2 s and miss distances by 670 m.
+- Against the SGP4 screen (`scripts/compare-screens.mjs`), 39,425 of HPOP's
+  283,700 conjunctions are the same pair with TCAs within 10 minutes; on
+  those, TCAs differ by a median of 1.2 s and miss distances by 691 m.
 - AOT compilation (about 10 s, once per install) is not counted.
 
 ### Step size
@@ -317,10 +327,10 @@ candidates. SGP4, module search, Node:
 
 | Step | Candidates | Search | Refine | End to end | Conjunctions |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 5 s | 4,748,277 | 92.1 s | 6.9 s | 102.0 s | 292,516 |
-| 30 s | 1,414,694 | 17.8 s | 9.7 s | 29.9 s | 292,516 |
-| 60 s | 2,675,123 | 9.7 s | 6.6 s | 19.1 s | 292,516 |
-| 120 s | 17,116,089 | 10.0 s | 20.4 s | 39.4 s | 292,516 |
+| 5 s | 4,748,277 | 92.1 s | 6.9 s | 102.0 s | 294,544 |
+| 30 s | 1,414,694 | 17.8 s | 9.7 s | 29.9 s | 294,544 |
+| 60 s | 2,675,123 | 9.7 s | 6.6 s | 19.1 s | 294,544 |
+| 120 s | 17,116,089 | 10.0 s | 20.4 s | 39.4 s | 294,544 |
 
 The GPU at 5 s took 98.6 s (162.5 s with the all-pairs kernel). All runs report the same conjunctions with miss
 distances within 2 mm. TCAs differ by up to 173 ms only on flat minima, where
@@ -339,7 +349,7 @@ Three days, SGP4, module search, Node, on the same shared host:
 | Lock-free SGP4 state, GP elements converted once | 25.2 s | 12.7 s |
 | Chunked threads, events built in parallel, 1,024-event frames | 19.1 s | 6.6 s |
 
-Every row reports the same 292,516 conjunctions.
+Every row reports the same conjunctions.
 
 ### Against `screen_catalog`
 
