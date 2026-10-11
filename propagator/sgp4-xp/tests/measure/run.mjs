@@ -1,6 +1,6 @@
 // node tests/measure/run.mjs --source iss|starlink|gnss|slr|slr-leo [--fit-hours 24] [--stride-hours 24] [--leads 1,3,7] [--limit N] [--out results/<source>.json]
 // Fits SGP4-XP (propagator/sgp4-xp) and SGP4 (analysis/gp-error-model fit_elements) to the same ephemeris windows and
-// scores both on the days after the fit. SDN_GP_ERROR_MODEL names the gp-error-model 0.2.0 checkout.
+// scores both on the days after the fit. The SGP4 fitter is analysis/gp-error-model of this checkout (built); SDN_GP_ERROR_MODEL names another.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
