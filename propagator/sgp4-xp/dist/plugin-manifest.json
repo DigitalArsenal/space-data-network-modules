@@ -1,0 +1,317 @@
+{
+  "pluginId": "com.digitalarsenal.propagator.sgp4-xp",
+  "name": "SGP4-XP propagator and fitter (US Space Force Sgp4Prop)",
+  "version": "0.1.0",
+  "description": "The US Space Force SGP4 and SGP4-XP (Astro Standards v9.1 Sgp4Prop WebAssembly 9.1.1.0, XP build) as a space data module, and SDN's own SGP4-XP element sets fitted to ephemerides. propagate takes $OMM element sets (MEAN_ELEMENT_THEORY SGP4XP, BTERM in BSTAR and AGOM in MEAN_MOTION_DDOT; SGP4 sets too) to $OEM trajectories on the grid an optional $OEM template names, in TEME or GCRF. fit takes an $OEM ephemeris, TEME, GCRF (ICRF, J2000, EME2000) or Earth-fixed, UTC, GPS, TAI or TT, and returns the $OMM SGP4XP element set that fits its declared interval, its fit statistics, and an $OBD. The propagator ABI exports (plugin_init_omm, plugin_propagate, plugin_propagate_batch, plugin_destroy) are those of propagator/keplerian-reference, in Earth-fixed metres, so OrbPro's pluggable propagation and the maneuver detector's propagator query port route to it. The library is the Space Force's, unchanged, joined to the SDN code in the one module.wasm; it reads two-line element text, so every set has the digits of that text. Distributed under the US Space Force Open Source Agreement for SGP4 (third_party/ussf-sgp4/AGREEMENT.txt); the US Space Force does not endorse this module.",
+  "tagline": "SGP4 and SGP4-XP from the US Space Force's library, and SGP4-XP element sets fitted to any ephemeris.",
+  "pluginFamily": "propagator",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "threadModel": "wasi-sequential",
+  "sequentialJustification": {
+    "kind": "caller-level-parallelism",
+    "detail": "Propagation is embarrassingly parallel across element sets and strictly sequential within one, and a fit is a sequence of dependent propagations: each iteration needs the last. The propagator ABI puts sharding on the host (docs/propagator-abi.md, Threading), so this module spawns no threads of its own and shares nothing between rows; the Space Force library inside it is single-threaded."
+  },
+  "tags": [
+    "propagator",
+    "sgp4",
+    "sgp4-xp",
+    "xp",
+    "omm",
+    "oem",
+    "obd",
+    "orbit-fit",
+    "ussf",
+    "space-data"
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    },
+    {
+      "schemaName": "OBD.fbs",
+      "fileIdentifier": "$OBD",
+      "rootTypeName": "OBD"
+    },
+    {
+      "schemaName": "EOP.fbs",
+      "fileIdentifier": "$EOP",
+      "rootTypeName": "EOP"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "propagator-sgp4-xp-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1,
+  "methods": [
+    {
+      "methodId": "ingest_omm",
+      "displayName": "Ingest OMM",
+      "description": "Adopts SGP4XP element sets from SDS $OMM records and replaces the module's element table, which the propagator ABI exports (plugin_propagate, plugin_propagate_batch) propagate. Handles are the order the records arrive in. A set with MEAN_ELEMENT_THEORY other than SGP4XP is refused: the ABI is this module's SGP4-XP.",
+      "inputPorts": [
+        {
+          "portId": "omm",
+          "displayName": "omm",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "$OMM SGP4XP element sets (BTERM in BSTAR, AGOM in MEAN_MOTION_DDOT), each a plain buffer or size-prefixed buffers one after another.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-sgp4xp",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Ratified SDS $OMM mean elements. The module decodes the FlatBuffer itself; there is no wildcard."
+            }
+          ]
+        }
+      ],
+      "outputPorts": [],
+      "maxBatch": 1024,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "propagate",
+      "displayName": "Propagate OMM to OEM",
+      "description": "Each $OMM (MEAN_ELEMENT_THEORY SGP4XP, or SGP4) to one $OEM: a block per grid block on the optional grid port, TEME (TEMEOFDATE) or GCRF, km and km/s, UTC. A grid block names START_TIME, STOP_TIME and STEP_SIZE (default: the set's epoch, a day later, 60 s), or lists the epochs it wants as EPHEMERIS_DATA_LINES (EPOCH only); its REFERENCE_FRAME picks the axes (default TEME). The set's elements are rounded to the digits of the two-line text the Space Force library reads. Refused by name: invalid-omm, invalid-grid, element-set-refused, propagation-failed, too-many-states.",
+      "inputPorts": [
+        {
+          "portId": "omm",
+          "displayName": "omm",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "$OMM element sets to propagate, in the order their trajectories are returned.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-propagate",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "grid",
+          "displayName": "grid",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Optional $OEM template: the epochs and axes of the trajectories. Its states, if any, are ignored.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-grid",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "ephemeris",
+          "displayName": "ephemeris",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "One $OEM per element set, one block per grid block: EPHEMERIS_DATA_LINES in km and km/s, UTC, centred on the Earth.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-trajectory",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "fit",
+      "displayName": "Fit SGP4-XP elements to an OEM ephemeris",
+      "description": "Fits the six mean elements, BTERM and AGOM to each ephemeris block (Levenberg-Marquardt on TEME position residuals, then a search of the lattice of the two-line text's digits) and returns the set whose epoch is the first state of the declared fit interval. The fit interval is the block's USEABLE_START_TIME to USEABLE_STOP_TIME (the whole block when neither is stated); the states after USEABLE_STOP_TIME up to STOP_TIME are held out and scored, overall and by day after the fit interval. The $OMM carries ORIGINATOR (the source's: the $OEM's), the fit and held-out statistics in its COMMENT and USER_DEFINED_PARAMETERS, and the $OBD the diagnostics. Frames TEME, GCRF (ICRF, J2000, J2000A, EME2000) and Earth-fixed (ITRF, ECEF, WGS84), time systems UTC, GPS, TAI and TT; positions suffice (the first velocity is derived by Gibbs' method). Refused by name: invalid-oem, unsupported-frame, unsupported-center, bad-epoch, no-states, too-few-states, arc-too-short, leap-second-in-arc, fit-failed.",
+      "inputPorts": [
+        {
+          "portId": "ephemeris",
+          "displayName": "ephemeris",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "$OEM ephemerides, one fit per data block. Compact (EPHEMERIS_DATA with STEP_SIZE; STATE_VECTOR_SIZE 3, 6 or 9) or verbose (EPHEMERIS_DATA_LINES).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-fit",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "eop",
+          "displayName": "eop",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Optional $EOP rows (UT1-UTC, pole, celestial pole offsets), used only to rotate Earth-fixed ephemerides; without them UT1 = UTC and the pole is at its mean position.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP"
+                },
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "elements",
+          "displayName": "elements",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "One $OMM SGP4XP element set per block, in block order.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-fit",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "portId": "determination",
+          "displayName": "determination",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "One $OBD per block: the fit interval, WRMS (km, 3D, every state alike), the iterations, the counts, and the held-out error growth in km/day.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-obd-fit",
+              "allowedTypes": [
+                {
+                  "schemaName": "OBD.fbs",
+                  "fileIdentifier": "$OBD",
+                  "rootTypeName": "OBD"
+                },
+                {
+                  "schemaName": "OBD.fbs",
+                  "fileIdentifier": "$OBD",
+                  "rootTypeName": "OBD",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

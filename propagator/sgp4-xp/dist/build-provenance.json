@@ -1,0 +1,20 @@
+{
+  "spacedatastandards": "1.245.0",
+  "spaceDataModuleSdk": "0.8.27",
+  "threadModel": "wasi-sequential",
+  "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
+  "erfaSourceFiles": 248,
+  "foundationFrames": "foundation/frames/src/axis_engine.hpp",
+  "library": {
+    "file": "third_party/ussf-sgp4/Sgp4Prop.xp.wasm",
+    "sha256": "9f061110f12ac85a76ad80dc76cdb8a33ddad64e54d8dab3b6778602e16cbeb7",
+    "version": "Astro Standards v9.1, Sgp4Prop WebAssembly 9.1.1.0 (XP)"
+  },
+  "adapterSha256": "726253d25da68324bce6bdd5cec8241bfdfe2964a95f5d54e559eb713ba07c50",
+  "shimSha256": "ed91414994efe28cb262a9d8fe216f3f5e8df151b100d045281bf3b7b5756051",
+  "join": {
+    "wasmMerge": "wasm-merge version 125",
+    "wat2wasm": "1.0.39"
+  },
+  "moduleSha256": "bce1ad54466bcb8d2b4dfa022e7eaeb4ac2b2d62a55a620949b238ba9efe5488"
+}
