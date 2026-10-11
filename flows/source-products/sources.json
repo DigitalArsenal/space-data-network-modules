@@ -53,7 +53,9 @@
         }
       },
       "products": "The fitted set and the estimate's formal covariance times the realism factor measured for the source and fit class (rule 2).",
-      "sources": []
+      "sources": [
+        "ilrs-crd"
+      ]
     }
   },
   "sources": [
@@ -672,6 +674,54 @@
         "An SP3 file names a satellite by its vehicle id (G01), which is a PRN slot that is reassigned over time, not a catalog number. analysis/od gives an OEM that names no NORAD number the placeholder NORAD 99999 and designator 99999A on its $OMM: a host must read the OEM's name, and the integrator joins an id to a catalog object only through a link.",
         "A precise orbit is a derived product of its analysis centre with no covariance in the file: the pooled model answers (rule 4), uncalibrated for a lineage E14 did not measure."
       ]
+    },
+    {
+      "id": "ilrs-crd",
+      "registry": [],
+      "kind": "observation",
+      "originator": "ILRS",
+      "lineage": "ilrs-slr",
+      "licence": {
+        "class": "reproducible",
+        "id": "ilrs"
+      },
+      "ownModel": false,
+      "fitClass": "slr-hpop-fit",
+      "realism": [
+        {
+          "sources": [
+            "ilrs-crd"
+          ],
+          "class": "slr-hpop-fit",
+          "factor": 17.04,
+          "meanD2Over3": 17.04,
+          "coverage95": 0.17,
+          "samples": 206,
+          "objects": 5,
+          "evidence": "orbit-accuracy-experiments E6, test window, ILRS laser ranging (Starlette, Stella, LARETS, WESTPAC, LARES), primary variant S, fit cutoff 0 d: mean d2/3 17.04 [14.44, 19.79], 95 % coverage 0.17 (results/e6/test/REPORT.md); 16.02 to 21.15 over cutoffs 0 to 7 d",
+          "window": "2026-07-16..2026-08-29"
+        }
+      ],
+      "via": [
+        {
+          "module": "data-source/ilrs-crd-source",
+          "method": "read_crd",
+          "port": "observations",
+          "type": "$TDM",
+          "into": [
+            {
+              "estimator": "tracking_data"
+            }
+          ]
+        }
+      ],
+      "limits": [
+        "ILRS normal points in CRD version 2 (EDC's npt_crd_v2 daily files, CDDIS). The ILRS states its data are not copyrighted and asks for citation (audit id `ilrs`, reproduce: yes), so a real file is a fixture: data-source/ilrs-crd-source/tests/fixtures/lageos1_20261008.first-two-passes.np2 is the test's.",
+        "read_crd gives one $TDM per pass: LASER_RANGE in metres (one-way: c x two-way time of flight / 2, c exact), UTC epochs to the digit the station wrote, TIMETAG_REF from the CRD epoch event (ground transmit or receive), and the pass's meteorology as PRESSURE, TEMPERATURE and RHUMIDITY. A pass whose normal points are not laser ranges as the estimator reads them (full rate, one-way, a station time scale that is not UTC, system delay not applied, poor quality) is not read and is counted by reason.",
+        "An observation is not an orbit. The host runs analysis/estimation run_estimation on the $TDM (tracking_data) with the station's $CRD coordinates (laser_tracking) and the propagator's answers; its $OCM enters the flow on `fit` and the SGP4 set fitted to the estimated arc on `fit_omm`. A CRD file carries no station coordinates: the host takes the pad's SLRF/ITRF solution from the ILRS station coordinates.",
+        "Rule 2: the fit's formal covariance times the factor measured on held-out ILRS ranges (E6 test window, variant S: mean d2/3 17.04 at cutoff 0 d, 95 % coverage 0.17), labelled UNCALIBRATED because the scaled covariance has not itself been tested. The factor is the one measured for fits of this class; a fit of another kind has none and falls to rules 3 and 4.",
+        "analysis/estimation turns a TDM epoch into seconds from the request epoch in double precision (about 0.24 microseconds at present-day Unix time), and its sequential filter takes a precomputed propagator sample only within 1e-8 s of that epoch: a host that precomputes samples builds their epochs the same way (source-chain.test.mjs does), or runs the propagation round trip at the epochs the estimator asks for."
+      ]
     }
   ],
   "refused": [
@@ -802,16 +852,6 @@
       "module": null,
       "extends": "data-source/ephemeris-source",
       "task": "modules-operator-od-derived-only-20261010"
-    },
-    {
-      "name": "ILRS CRD normal points",
-      "registry": [],
-      "kind": "observation",
-      "licence": [
-        "ilrs"
-      ],
-      "module": "data-source/ilrs-crd-source",
-      "task": "modules-ilrs-crd-source-20261011"
     },
     {
       "name": "SatNOGS Doppler observations",

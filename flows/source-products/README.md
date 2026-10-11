@@ -85,14 +85,17 @@ of E14's horizons.
 
 | | Modules |
 | --- | --- |
-| Give products | `celestrak-reference` and `celestrak-parser` (CelesTrak GP); `spacetrack-source` (Space-Track's REST JSON: `gp`, `gp_history` as `$OMM`, `satcat` as `$CAT`), `gp-archive-records` (`$MPE`) and `retrieval` (`$OMM`) for the GP history archive; `spacex-starlink-source`; `iss-source` and `oem-source-iss`; `intelsat-source`; `spacemapper-aoe-source` (SpaceMapper's AOE element sets, channel KY); `vimpel-source` (JSC Vimpel's rectangular ephemerides, fitted by `analysis/od`; its osculating-element states and datefirst crosswalk are for the integrator); `sp3-precise-source` (IGS and BKG GPS, ESA GLONASS and ESA POD orbits as SP3, fitted by `analysis/od`); `glonass-source` (IAC); `cpf-source` (ILRS CPF from EDC; ESA's listing by configuration) |
+| Give products | `celestrak-reference` and `celestrak-parser` (CelesTrak GP); `spacetrack-source` (Space-Track's REST JSON: `gp`, `gp_history` as `$OMM`, `satcat` as `$CAT`), `gp-archive-records` (`$MPE`) and `retrieval` (`$OMM`) for the GP history archive; `spacex-starlink-source`; `iss-source` and `oem-source-iss`; `intelsat-source`; `spacemapper-aoe-source` (SpaceMapper's AOE element sets, channel KY); `vimpel-source` (JSC Vimpel's rectangular ephemerides, fitted by `analysis/od`; its osculating-element states and datefirst crosswalk are for the integrator); `sp3-precise-source` (IGS and BKG GPS, ESA GLONASS and ESA POD orbits as SP3, fitted by `analysis/od`); `glonass-source` (IAC); `cpf-source` (ILRS CPF from EDC; ESA's listing by configuration); `ilrs-crd-source` (ILRS normal points in CRD version 2 as `$TDM` laser ranges, the observation source: `analysis/estimation` takes them on `tracking_data`) |
 | Cannot yet | `celestrak-supgp` (pull-only), `gps-source` (almanac elements, not SGP4; GPS precise orbits are `sp3-precise-source`'s), `oneweb-source` (the LTEF is not decoded): the reason and the task are in the file |
 | Describe or identify | `celestrak-request`, `ephemeris-source`, `catalog-source`, `spk-source` |
 
 The sources the ephemeris-source inventory lists that no module gives yet, and
-the observation sources the paper names (ILRS CRD normal points, SatNOGS Doppler),
+the observation source the paper names that has no module yet (SatNOGS Doppler),
 are `missing` in the file, each with the graph task that builds it; a module that
-lands moves its entry to `sources`. `tests/sources.test.mjs` holds the file to
+lands moves its entry to `sources`. An observation source (kind `observation`) does
+not enter the flow itself: its `$TDM` goes to the lane's estimator, `analysis/estimation`
+`run_estimation`, and the estimate's `$OCM` enters on `fit`; its entry names the fit
+class and the realism factor measured for it (rule 2). `tests/sources.test.mjs` holds the file to
 the modules' manifests and to the flow:
 
 - every module under `data-source` that gives or describes orbit data is
@@ -102,7 +105,11 @@ the modules' manifests and to the flow:
 - every source of the inventory is wired, refused or missing, and a missing
   entry does not outlive its module;
 - the flow, run with each source's recipe on each module's lane, names the source,
-  its provider and its licence on the `$OCM`, the `$OMM` and the `$MNV`.
+  its provider and its licence on the `$OCM`, the `$OMM` and the `$MNV`; for an
+  observation source the `$OCM` is the fit's covariance times the measured factor
+  (rule 2, `UNCALIBRATED`);
+- `tests/source-chain.test.mjs` runs what a module gives, parsed from the provider's
+  format, through the flow or, for the observation source, through `analysis/estimation`.
 
 ## Build and test
 

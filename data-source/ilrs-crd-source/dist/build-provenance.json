@@ -1,0 +1,16 @@
+{
+  "spacedatastandards": "1.245.0",
+  "sdsFamilies": [
+    "RFM",
+    "TDM"
+  ],
+  "commonHeaders": [
+    "alpha5.hpp",
+    "civil_time.hpp"
+  ],
+  "sources": [
+    "src/ilrs_crd_source.cpp"
+  ],
+  "threadModel": "single-thread",
+  "wasmSha256": "30ac5ae5035d6af72949a1342e142e5006e84bd0baa5cb45799ac83a62b0bfe1"
+}
