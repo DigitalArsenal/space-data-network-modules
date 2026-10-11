@@ -30,7 +30,8 @@ namespace sdn::epm {
 
 // Empty on success, else the reason. `xpub` is the EPM's verified account xpub,
 // `account_key_path` its KEY_PATH, `proven_ed25519` the 32-byte key the requester
-// proved control of. Statements valid for longer than 31 days are refused.
+// proved control of. Statements valid for longer than the console's 24-hour
+// session (plus 5 minutes of clock skew) are refused.
 std::string VerifySessionKeyProof(const EpmFields& epm,
                                   const std::string& xpub,
                                   const std::string& account_key_path,

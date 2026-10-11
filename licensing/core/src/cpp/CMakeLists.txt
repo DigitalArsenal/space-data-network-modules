@@ -84,6 +84,7 @@ get_filename_component(SDM_HOST_CPP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../node_
 add_library(
     licensing_core STATIC
     src/key_server.cpp
+    src/grant_quota.cpp
     src/license_client.cpp
     "${DA_FLATBUFFERS_ROOT}/src/encryption.cpp"
     "${SDN_COMMON_DIR}/jcs/jcs.cpp"

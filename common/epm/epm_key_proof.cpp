@@ -8,7 +8,12 @@ namespace sdn::epm {
 namespace {
 
 constexpr const char* kStatementHeader = "sdn-module-delivery-key/1";
-constexpr int64_t kMaxValiditySeconds = 31LL * 24 * 3600;
+// The longest statement accepted: the console's session. SpaceAware signs the
+// statement for 24 hours at sign-in (SESSION_KEY_PROOF_SECONDS) and keeps the
+// session for 24 hours (KEPT_SESSION_MS); 5 minutes more allows for a browser
+// clock ahead of the provider's, the same 5 minutes the provider's
+// MAX_CLOCK_SKEW_MS budgets. A longer statement would outlive any session.
+constexpr int64_t kMaxValiditySeconds = 24LL * 3600 + 5LL * 60;
 // BIP-32 serialization: version 4, depth 1, fingerprint 4, child 4,
 // chain code 32, key 33, checksum 4.
 constexpr std::size_t kXpubBytes = 82;

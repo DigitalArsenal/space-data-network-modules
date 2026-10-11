@@ -16,6 +16,7 @@
 #include "REC_generated.h"
 
 #include "epm_authorize.h"  // shared isomorphic EPM verify + xpub gate (common/epm)
+#include "grant_quota.h"
 
 #include <flatbuffers/encryption.h>
 #include <flatbuffers/flatbuffers.h>
@@ -1646,6 +1647,65 @@ bool wrap_content_key_for_requester(
   }
 }
 
+// The $LGR grant for an authorised request: the content key wrapped to the
+// requester's session X25519 key, signed by the provider's host-held key.
+int32_t build_signed_grant(
+    const PendingGrantMessage& pending,
+    const ModulePublication& publication,
+    std::vector<uint8_t>* grant_out) {
+  WrappedGrantPayload wrapped{};
+  if (!wrap_content_key_for_requester(
+          pending.requester_ephemeral_pubkey.data(),
+          pending.requester_ephemeral_pubkey.size(),
+          publication.descriptor.KEY_ID,
+          pending.expires_at_ms,
+          publication.content_key_role,
+          publication.content_key_algorithm,
+          publication.content_key.data(),
+          publication.content_key.size(),
+          &wrapped)) {
+    return kServerCryptoError;
+  }
+  std::array<uint8_t, kProviderSignatureBytes> zero_provider_signature{};
+  std::vector<uint8_t> grant_response_bytes = build_lgr_granted_bytes(
+      pending.request_id,
+      pending.module_id,
+      pending.module_version,
+      pending.requester_peer_id,
+      pending.requester_xpub,
+      pending.requested_domain,
+      pending.requested_timeout_ms,
+      pending.expires_at_ms,
+      publication.descriptor.REQUIRED_SCOPE,
+      g_capability_token,
+      publication.descriptor,
+      wrapped,
+      g_provider_signing_public,
+      zero_provider_signature.data(),
+      zero_provider_signature.size());
+  // The provider's ed25519 seed never enters guest memory: the host signs
+  // the grant on the module's behalf (keyslot.sign) and returns only the
+  // resulting signature.
+  std::vector<uint8_t> provider_signature;
+  const bool signed_ok =
+      sdm_keyslot::keyslot_sign(
+          g_provider_signing_slot_id,
+          grant_response_bytes.data(),
+          grant_response_bytes.size(),
+          &provider_signature) &&
+      provider_signature.size() == kProviderSignatureBytes &&
+      replace_lgr_provider_signature(
+          &grant_response_bytes,
+          provider_signature.data(),
+          provider_signature.size());
+  secure_zero(provider_signature.data(), provider_signature.size());
+  if (!signed_ok) {
+    return kServerCryptoError;
+  }
+  *grant_out = std::move(grant_response_bytes);
+  return kServerOk;
+}
+
 bool parse_runtime_config(
     std::string_view json,
     CryptoPP::SecByteBlock* private_key_out,
@@ -2535,6 +2595,7 @@ int32_t key_server_handle_message(
   // session key, and the xpub must be listed. An allowlist of "*" waives only the
   // listing: any account that passes the rest is granted, still encrypted to its
   // own session key, and the bound xpub must still equal the claimed one.
+  std::string proven_xpub;
   if (!publication.descriptor.ALLOWED_XPUBS.empty()) {
     const sdn::epm::AuthorizeResult gate = authorize_requester_epm(
         pending.requester_epm.data(),
@@ -2548,63 +2609,36 @@ int32_t key_server_handle_message(
       secure_zero_publication(&publication);
       return kServerUnauthorized;
     }
+    proven_xpub = gate.xpub;
   }
 
-  WrappedGrantPayload wrapped{};
-  if (!wrap_content_key_for_requester(
-          pending.requester_ephemeral_pubkey.data(),
-          pending.requester_ephemeral_pubkey.size(),
-          publication.descriptor.KEY_ID,
-          pending.expires_at_ms,
-          publication.content_key_role,
-          publication.content_key_algorithm,
-          publication.content_key.data(),
-          publication.content_key.size(),
-          &wrapped)) {
+  // Per-account quota (grant_quota.h), on the account just proven, so nobody
+  // can spend another account's quota, and before the key wrap and the host's
+  // signature, which a refusal does not need. A module without an allowlist
+  // proves no account and leases nothing, so it has nothing to count.
+  const int64_t admitted_at_ms = now_ms();
+  if (!proven_xpub.empty() &&
+      !licensing::AdmitGrant(proven_xpub, pending.module_id, admitted_at_ms)) {
+    response_out = build_lgr_denied_bytes(
+        pending.request_id,
+        pending.module_id,
+        pending.module_version,
+        pending.requester_peer_id,
+        pending.requester_xpub,
+        pending.requested_domain,
+        pending.requested_timeout_ms,
+        0,
+        publication.descriptor.REQUIRED_SCOPE,
+        licensing::kGrantRateLimitedReason,
+        g_provider_signing_public);
     secure_zero_publication(&publication);
-    return kServerCryptoError;
+    return 0;
   }
-  std::array<uint8_t, kProviderSignatureBytes> zero_provider_signature{};
-  std::vector<uint8_t> grant_response_bytes = build_lgr_granted_bytes(
-      pending.request_id,
-      pending.module_id,
-      pending.module_version,
-      pending.requester_peer_id,
-      pending.requester_xpub,
-      pending.requested_domain,
-      pending.requested_timeout_ms,
-      pending.expires_at_ms,
-      publication.descriptor.REQUIRED_SCOPE,
-      g_capability_token,
-      publication.descriptor,
-      wrapped,
-      g_provider_signing_public,
-      zero_provider_signature.data(),
-      zero_provider_signature.size());
-  // The provider's ed25519 seed never enters guest memory: the host signs
-  // the grant on the module's behalf (keyslot.sign) and returns only the
-  // resulting signature.
-  std::vector<uint8_t> provider_signature;
-  if (!sdm_keyslot::keyslot_sign(
-          g_provider_signing_slot_id,
-          grant_response_bytes.data(),
-          grant_response_bytes.size(),
-          &provider_signature) ||
-      provider_signature.size() != kProviderSignatureBytes) {
-    secure_zero_publication(&publication);
-    secure_zero(provider_signature.data(), provider_signature.size());
-    return kServerCryptoError;
-  }
-  if (!replace_lgr_provider_signature(
-          &grant_response_bytes,
-          provider_signature.data(),
-          provider_signature.size())) {
-    secure_zero_publication(&publication);
-    secure_zero(provider_signature.data(), provider_signature.size());
-    return kServerCryptoError;
-  }
-  response_out.assign(grant_response_bytes.begin(), grant_response_bytes.end());
+
+  const int32_t status = build_signed_grant(pending, publication, &response_out);
   secure_zero_publication(&publication);
-  secure_zero(provider_signature.data(), provider_signature.size());
-  return 0;
+  if (status != kServerOk && !proven_xpub.empty()) {
+    licensing::RefundGrant(proven_xpub, pending.module_id, admitted_at_ms);
+  }
+  return status;
 }
