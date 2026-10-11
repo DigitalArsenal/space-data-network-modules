@@ -9,7 +9,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { FIXTURE as VALLADO, mpeStream } from '../../../analysis/epoch-state/tests/fixtures.mjs';
-import { encodeOmm, fitOcm, leoH, ommParam, param, records, unpackMnv, unpackOcm, unpackOmm } from '../../../analysis/gp-error-model/tests/products-fixtures.mjs';
+import { fitOcm, ommParam, param, records, unpackMnv, unpackOcm, unpackOmm } from '../../../analysis/gp-error-model/tests/products-fixtures.mjs';
 import { gpHistory } from '../../../analysis/maneuver-detection/tests/fixtures.mjs';
 import { ommRecord } from '../../../analysis/maneuver-detection/study/lib/host.mjs';
 import { recipeFor, registry } from '../recipe.mjs';
@@ -206,17 +206,20 @@ for (const source of registry.sources.filter((s) => s.kind !== 'observation')) {
   }
 }
 
-// An observation source enters the flow by the estimate it supports: the fit's $OCM on `fit`, the SGP4 set fitted to the
-// estimated arc on `fit_omm`. The covariance is rule 2, the formal covariance times the factor measured for the source and its fit class.
+// An observation source enters the flow by the estimates it supports: the newest fit's $OCM on `fit`, the SGP4 sets fitted to the
+// estimated arcs on `fit_omm` (the history of fits, screened for maneuvers like any other lane's). The covariance is rule 2, the
+// formal covariance times the factor measured for the source and its fit class.
 for (const source of registry.sources.filter((s) => s.kind === 'observation')) {
   for (const w of source.via) {
-    test(`${source.id} through ${w.module}: the fit's formal covariance times the factor measured for the source, uncalibrated, and the records name the source, its provider and its licence`, async () => {
+    test(`${source.id} through ${w.module}: the fit's formal covariance times the factor measured for the source, uncalibrated, the burn in the fits' history, and the records name the source, its provider and its licence`, async () => {
       const recipe = recipeFor(source.id, { created: '2026-10-11T00:00:00Z', via: w.module, ages: [0] });
       const [realism] = source.realism;
       const x = [4000.5, 5000.25, 3000.125, -3.5, 4.25, 4.75];
       const lower = Array.from({ length: 21 }, (_, i) => (i === 0 || i === 2 || i === 5 ? 1e-6 : i === 9 || i === 14 || i === 20 ? 1e-12 : 0));
-      const fit = fitOcm({ norad: leoH.norad, name: leoH.name, epoch: leoH.epoch, x, lower });
-      const { egress, result } = await runFlow([frame('fit_omm', 'omm', encodeOmm(leoH)), frame('fit', 'fit', fit), frame('fit_recipe', 'recipe', Buffer.from(JSON.stringify(recipe)))]);
+      // The designed history stands for the sets fitted to successive arcs; the newest fit is the one the estimator's $OCM belongs to.
+      const newest = history.rows.at(-1);
+      const fit = fitOcm({ norad: newest.NORAD_CAT_ID, name: 'FIT', epoch: newest.EPOCH, x, lower });
+      const { egress, result } = await runFlow([frame('fit_omm', 'omm', sets), frame('fit', 'fit', fit), frame('fit_recipe', 'recipe', Buffer.from(JSON.stringify(recipe)))]);
       assert.equal(result.handlersSkipped, 0);
 
       const [ocm] = records(egressBytes(egress, 'ocm')).map(unpackOcm);
@@ -245,6 +248,12 @@ for (const source of registry.sources.filter((s) => s.kind === 'observation')) {
       assert.equal(ommParam(omm, 'SOURCE_PROVIDER'), provider(w.module));
       assert.equal(ommParam(omm, 'LICENCE_CLASS'), source.licence.class);
       assert.equal(ommParam(omm, 'LICENCE_ID'), source.licence.id);
+      // The burn in the history of fits, on a $MNV that names the source.
+      const burns = records(egressBytes(egress, 'mnv')).map(unpackMnv).filter((m) => m.DELTA_VEL_V !== 0);
+      assert.equal(burns.length, 1);
+      const tags = [`source:${source.id}`, `originator:${source.originator}`, `provider:${provider(w.module)}`, `licence:${source.licence.class}`, `licence-id:${source.licence.id}`,
+        ...(source.lineage === source.id ? [] : [`lineage:${source.lineage}`])];
+      for (const tag of tags) assert.ok(burns[0].TAGS.includes(tag), tag);
     });
   }
 }
