@@ -6,7 +6,7 @@
  * headers are generated here with the pinned flatc-wasm.
  *
  * SCHEMA_FAMILIES is in dependency order: $MPE needs MET; $OEM needs RFM, TIM,
- * CAT (PLD -> IDM, LCC) and PPE. build.mjs concatenates the headers in this
+ * CAT (PLD -> IDM, LCC) and PPE; $OMM needs RFM, TIM and MET. build.mjs concatenates the headers in this
  * order into one translation unit.
  */
 
@@ -19,7 +19,7 @@ const packageRoot = path.dirname(fileURLToPath(import.meta.url));
 const standardsRoot = path.join(packageRoot, "node_modules", "spacedatastandards.org");
 const outDir = path.join(packageRoot, "src", "generated", "sds");
 
-export const SCHEMA_FAMILIES = ["MET", "MPE", "RFM", "TIM", "IDM", "PLD", "LCC", "CAT", "PPE", "OEM"];
+export const SCHEMA_FAMILIES = ["MET", "MPE", "RFM", "TIM", "IDM", "PLD", "LCC", "CAT", "PPE", "OEM", "OMM"];
 
 function schemaIncludeFamilies(schemaPath) {
   const includes = [];

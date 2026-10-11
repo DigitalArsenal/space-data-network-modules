@@ -48,7 +48,16 @@ const implementationSource = await fs.readFile(
   "utf8",
 );
 
+// nlohmann::json without exceptions for the options and request frames (the same header analysis/maneuver-detection
+// and analysis/gp-error-model compile).
+const jsonHeader = await fs.readFile(
+  path.join(packageRoot, "..", "..", "propagator", "sgp4", "src", "cpp", "include", "nlohmann", "json.hpp"),
+  "utf8",
+);
+
 const sourceCode = [
+  "#define JSON_NOEXCEPTION 1",
+  jsonHeader,
   ...sdsHeaders,
   erfa.source,
   bodyModels,
@@ -72,6 +81,27 @@ const compilation = await compileModuleFromSource({
 });
 
 await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));
+
+// The flow compiler links this module as a node from its prefixed guest-link
+// object (flows/source-products).
+const guestLinkDir = path.join(distRoot, "guest-link");
+await fs.mkdir(guestLinkDir, { recursive: true });
+await fs.writeFile(path.join(guestLinkDir, "module-link.o"), compilation.guestLink.objectBytes);
+await fs.writeFile(
+  path.join(guestLinkDir, "metadata.json"),
+  `${JSON.stringify(
+    {
+      version: 1,
+      format: compilation.guestLink.format,
+      language: compilation.guestLink.language,
+      threadModel: compilation.guestLink.threadModel,
+      symbolPrefix: compilation.guestLink.symbolPrefix,
+      methodSymbols: compilation.guestLink.methodSymbols,
+    },
+    null,
+    2,
+  )}\n`,
+);
 await fs.writeFile(
   path.join(distRoot, "build-provenance.json"),
   `${JSON.stringify(
