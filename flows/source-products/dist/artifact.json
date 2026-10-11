@@ -117,8 +117,8 @@
       "kind": "node",
       "dependencyId": "com.digitalarsenal.analysis.gp-error-model",
       "pluginId": "com.digitalarsenal.analysis.gp-error-model",
-      "version": "0.4.0",
-      "sha256": "c612c33e815bcef32e7485ec955443f3604e2729df5ae147b00cdec7ef412033",
+      "version": "0.5.0",
+      "sha256": "53182ac3ef5ac48f21deaa90ad9e5fa42c724a6f2ec0d0c52063d786392051c8",
       "dispatchModel": "linked-direct",
       "artifactPath": null,
       "publisher": null,
@@ -139,7 +139,9 @@
         "dcp_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_dcp_covariance",
         "noise_responses": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_noise_responses",
         "attach_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_attach_covariance",
-        "attribute_maneuvers": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_attribute_maneuvers"
+        "attribute_maneuvers": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_attribute_maneuvers",
+        "fit_elements": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_fit_elements",
+        "element_residuals": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_element_residuals"
       }
     },
     {
