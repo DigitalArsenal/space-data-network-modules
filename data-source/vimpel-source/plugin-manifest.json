@@ -1,0 +1,270 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.vimpel-source",
+  "name": "Vimpel Source",
+  "version": "0.1.0",
+  "description": "Read JSC Vimpel's public orbit data: osculating J2000 elements as attributed epoch states, rectangular ephemerides, and the datefirst crosswalk of Vimpel and NORAD numbers as candidate links. Retrieval, the login and storage belong to the SDN host flow.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "normalize_orbits",
+      "displayName": "Convert Vimpel osculating elements to epoch states",
+      "inputPorts": [
+        {
+          "portId": "source",
+          "acceptedTypeSets": [
+            {
+              "setId": "source",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "One JSC Vimpel orbit table of osculating elements as the public site serves it: comma-separated rows of 15 columns, up to 20,000 rows, bounded to 8 MiB.",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "text/csv",
+                "detail": "One JSC Vimpel orbit table of osculating elements as the public site serves it: comma-separated rows of 15 columns, up to 20,000 rows, bounded to 8 MiB."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One JSC Vimpel orbit table of osculating elements as the public site serves it: comma-separated rows of 15 columns, up to 20,000 rows, bounded to 8 MiB."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "states",
+          "acceptedTypeSets": [
+            {
+              "setId": "states",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ],
+              "description": "One canonical $OEM per object: a single J2000 state at the table's reference epoch (UTC), named vimpel:<id>, with Vimpel's catalog namespace and exact id."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 20000,
+          "required": true,
+          "description": "One canonical $OEM per object: a single J2000 state at the table's reference epoch (UTC), named vimpel:<id>, with Vimpel's catalog namespace and exact id."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "What was read: counts, the SHA-256 of the input and, per object, the provider's own columns as printed; module control metadata the host keeps beside the input, not an observation.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "What was read: counts, the SHA-256 of the input and, per object, the provider's own columns as printed; module control metadata the host keeps beside the input, not an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "What was read: counts, the SHA-256 of the input and, per object, the provider's own columns as printed; module control metadata the host keeps beside the input, not an observation."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "read_ephemeris",
+      "displayName": "Read one Vimpel rectangular ephemeris",
+      "inputPorts": [
+        {
+          "portId": "name",
+          "acceptedTypeSets": [
+            {
+              "setId": "name",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The ephemeris file's name, <native id>_<YYYYMMDD>_<HHMMSS>: the native object and the UTC epoch of the first row.",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "text/plain",
+                "detail": "The ephemeris file's name, <native id>_<YYYYMMDD>_<HHMMSS>: the native object and the UTC epoch of the first row."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The ephemeris file's name, <native id>_<YYYYMMDD>_<HHMMSS>: the native object and the UTC epoch of the first row."
+        },
+        {
+          "portId": "source",
+          "acceptedTypeSets": [
+            {
+              "setId": "source",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "One Vimpel rectangular ephemeris: rows of an index (0, 1, 2, ...), x, y, z in kilometres, J2000, a sample every 600 s, 5 to 4,096 rows, bounded to 4 MiB.",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "text/csv",
+                "detail": "One Vimpel rectangular ephemeris: rows of an index (0, 1, 2, ...), x, y, z in kilometres, J2000, a sample every 600 s, 5 to 4,096 rows, bounded to 4 MiB."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One Vimpel rectangular ephemeris: rows of an index (0, 1, 2, ...), x, y, z in kilometres, J2000, a sample every 600 s, 5 to 4,096 rows, bounded to 4 MiB."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "ephemeris",
+          "acceptedTypeSets": [
+            {
+              "setId": "ephemeris",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ],
+              "description": "One canonical $OEM: position-only J2000 samples 600 s apart from the epoch in the file name (UTC), STATE_VECTOR_SIZE 3."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One canonical $OEM: position-only J2000 samples 600 s apart from the epoch in the file name (UTC), STATE_VECTOR_SIZE 3."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "What was read: counts, the SHA-256 of the input and, per object, the provider's own columns as printed; module control metadata the host keeps beside the input, not an observation.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "What was read: counts, the SHA-256 of the input and, per object, the provider's own columns as printed; module control metadata the host keeps beside the input, not an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "What was read: counts, the SHA-256 of the input and, per object, the provider's own columns as printed; module control metadata the host keeps beside the input, not an observation."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "read_datefirst",
+      "displayName": "Read the Vimpel datefirst crosswalk as candidate links",
+      "inputPorts": [
+        {
+          "portId": "source",
+          "acceptedTypeSets": [
+            {
+              "setId": "source",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "The datefirst file: the header `Nvym t_det_v Nnor t_det_n`, then a Vimpel number, its first-detection date (YYYYMMDD), a NORAD number and its first-detection date per row.",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "text/plain",
+                "detail": "The datefirst file: the header `Nvym t_det_v Nnor t_det_n`, then a Vimpel number, its first-detection date (YYYYMMDD), a NORAD number and its first-detection date per row."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The datefirst file: the header `Nvym t_det_v Nnor t_det_n`, then a Vimpel number, its first-detection date (YYYYMMDD), a NORAD number and its first-detection date per row."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "crosswalk",
+          "acceptedTypeSets": [
+            {
+              "setId": "crosswalk",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Candidate links from Vimpel numbers to NORAD numbers, each with its evidence (the edition's SHA-256), the ambiguous ones marked and the conflicts listed; identity evidence for the $CAT integrator, never an assertion.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Candidate links from Vimpel numbers to NORAD numbers, each with its evidence (the edition's SHA-256), the ambiguous ones marked and the conflicts listed; identity evidence for the $CAT integrator, never an assertion."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Candidate links from Vimpel numbers to NORAD numbers, each with its evidence (the edition's SHA-256), the ambiguous ones marked and the conflicts listed; identity evidence for the $CAT integrator, never an assertion."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "vimpel-source-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each method reads one complete bounded provider file in input order and writes canonical records and one control frame; the host parallelizes independent files and this parser creates no threads."
+  }
+}

@@ -448,6 +448,54 @@
         "The module's default listing is EDC's. ESA's archive is reached by configuration (`listingUrl`) and is not exercised.",
         "Earth-fixed, position-only predictions: only the supplemental-omm OD node fits them."
       ]
+    },
+    {
+      "id": "vimpel",
+      "registry": [
+        "vimpel"
+      ],
+      "kind": "ephemeris",
+      "originator": "JSC Vimpel",
+      "lineage": "vimpel",
+      "licence": {
+        "class": "cite-only",
+        "id": "vimpel"
+      },
+      "ownModel": false,
+      "via": [
+        {
+          "module": "data-source/vimpel-source",
+          "method": "read_ephemeris",
+          "port": "ephemeris",
+          "type": "$OEM",
+          "into": [
+            {
+              "trigger": "ephemeris",
+              "port": "operator"
+            },
+            {
+              "trigger": "ephemeris_versions",
+              "port": "versions"
+            }
+          ]
+        }
+      ],
+      "fit": {
+        "module": "analysis/od",
+        "method": "fit",
+        "input": "oem",
+        "output": "omm",
+        "into": {
+          "trigger": "fit_omm",
+          "port": "omm"
+        }
+      },
+      "limits": [
+        "Vimpel's rectangular ephemeris (J2000 positions every 600 s, seven days) is position-only (STATE_VECTOR_SIZE 3) and is what analysis/od fits; the printed positions are rounded, so no velocity is made of them.",
+        "normalize_orbits gives the osculating elements as one J2000 state per object, named vimpel:<id>. They are not mean elements and are not offered to SGP4 or to this flow: they are the epoch products of the $CAT integrator's identity step. read_datefirst gives the NORAD to Vimpel crosswalk as candidate links, never as assertions.",
+        "Vimpel states no covariance (two 50 % scalars that give none): the pooled model answers (rule 4), uncalibrated for a lineage E14 did not measure.",
+        "analysis/od gives an element set fitted to an OEM that names no NORAD number the placeholder NORAD 99999 and designator 99999A. The object is Vimpel's vimpel:<id> (OBJECT_NAME); a host must not read 99999 as a catalog number, and the integrator joins only through a link."
+      ]
     }
   ],
   "refused": [
@@ -494,18 +542,6 @@
     }
   ],
   "missing": [
-    {
-      "name": "JSC Vimpel elements, ephemerides and datefirst crosswalk",
-      "registry": [
-        "vimpel"
-      ],
-      "kind": "element-set",
-      "licence": [
-        "vimpel"
-      ],
-      "module": "data-source/vimpel-source",
-      "task": "modules-vimpel-source-20261011"
-    },
     {
       "name": "Space Mapper AOE element sets",
       "registry": [],

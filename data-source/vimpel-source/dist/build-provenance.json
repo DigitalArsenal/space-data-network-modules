@@ -1,0 +1,21 @@
+{
+  "spacedatastandards": "1.245.0",
+  "sdsFamilies": [
+    "RFM",
+    "TIM",
+    "IDM",
+    "PLD",
+    "LCC",
+    "CAT",
+    "PPE",
+    "OEM"
+  ],
+  "commonHeaders": [
+    "civil_time.hpp"
+  ],
+  "sources": [
+    "src/vimpel_source.cpp"
+  ],
+  "threadModel": "single-thread",
+  "wasmSha256": "696353ad53fe74a15395e7feab000ec331562ed009baa830a8cd44e67f0a5225"
+}

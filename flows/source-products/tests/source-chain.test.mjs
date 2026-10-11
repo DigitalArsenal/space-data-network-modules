@@ -5,11 +5,15 @@
 // own format; expected values come from the designed history (a closed-form J2 secular drift with a 1 m/s in-track burn,
 // analysis/maneuver-detection tests/fixtures.mjs), not from the module.
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
 
 import { ommParam, param, records, unpackMnv, unpackOcm, unpackOmm } from '../../../analysis/gp-error-model/tests/products-fixtures.mjs';
 import { gpHistory } from '../../../analysis/maneuver-detection/tests/fixtures.mjs';
 import { gpRecord, synthetic } from '../../../data-source/spacetrack-source/tests/fixtures/spacetrack-format.mjs';
+import { ephemerisFile, keplerArc } from '../../../data-source/vimpel-source/tests/fixtures/vimpel-format.mjs';
 import { recipeFor } from '../recipe.mjs';
 import { bytesOf, egressBytes, moduleAt, runFlow } from './flow-harness.mjs';
 
@@ -57,4 +61,45 @@ test('space-track-gp through data-source/spacetrack-source: a gp_history as the 
   const parsed = await moduleAt('data-source/spacetrack-source')('parse_gp', [textPort('source', JSON.stringify(sets.map((s) => gpRecord(s))))]);
   assert.equal(JSON.parse(bytesOf(parsed, 'report')).rejected, 0);
   assertNamed(await throughFlow('space-track-gp', 'data-source/spacetrack-source', bytesOf(parsed, 'omm')), tb);
+});
+
+// analysis/od, as an ephemeris source's own flow runs it: the ephemeris in, the SGP4 element set it is fitted to out.
+async function odFit(oem) {
+  const dir = fileURLToPath(new URL('../../../analysis/od/', import.meta.url));
+  const h = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(`${dir}dist/isomorphic/module.wasm`), surface: 'direct' });
+  try {
+    const response = await h.invoke({ methodId: 'fit', inputs: [{ portId: 'oem', payload: oem,
+      typeRef: { schemaName: 'OEM.fbs', fileIdentifier: '$OEM', rootTypeName: 'OEM', wireFormat: 'flatbuffer', requiredAlignment: 8, byteLength: oem.length } }] });
+    assert.equal(response.statusCode, 0, `${response.errorCode}: ${response.errorMessage}`);
+    return Buffer.from(response.outputs.find((f) => f.portId === 'omm').payload);
+  } finally {
+    h.destroy();
+  }
+}
+
+test('vimpel through data-source/vimpel-source: a rectangular ephemeris, fitted by analysis/od, gets the pooled model\'s covariance, uncalibrated for a lineage it was not measured on', async () => {
+  // Seven days of a synthetic MEO object, every 600 s, as Vimpel prints the positions (one decimal).
+  const arc = keplerArc({ a: 26560, e: 0.02, inc: 55, raan: 100, w: 45, M0: 30 });
+  const read = await moduleAt('data-source/vimpel-source')('read_ephemeris', [textPort('name', '040004_20260921_000000'), textPort('source', ephemerisFile(arc))]);
+  const ephemeris = bytesOf(read, 'ephemeris');
+  const recipe = recipeFor('vimpel', { created: '2026-10-11T00:00:00Z', via: 'data-source/vimpel-source', ages: [0, 1] });
+  const { egress, result } = await runFlow([{ trigger: 'fit_omm', portId: 'omm', bytes: await odFit(ephemeris) }, { trigger: 'ephemeris', portId: 'operator', bytes: ephemeris },
+    { trigger: 'fit_recipe', portId: 'recipe', bytes: Buffer.from(JSON.stringify(recipe)) }]);
+  assert.equal(result.handlersSkipped, 0);
+  const [ocm] = records(egressBytes(egress, 'ocm')).map(unpackOcm);
+  const { source } = recipe;
+  assert.equal(param(ocm, 'SOURCE_ID'), 'vimpel');
+  assert.equal(param(ocm, 'SOURCE_KIND'), 'ephemeris');
+  assert.equal(param(ocm, 'SOURCE_PROVIDER'), 'com.digitalarsenal.data-source.vimpel-source');
+  assert.equal(param(ocm, 'LICENCE_CLASS'), 'cite-only');
+  const label = JSON.parse(param(ocm, 'COV_LABELS'))[0];
+  assert.equal(label.rule, 4, 'Vimpel states no covariance and no model of its own exists: the pooled model answers');
+  assert.equal(label.regime, 'MEO');
+  assert.equal(label.calibration, 'UNCALIBRATED');
+  assert.match(label.basis, /not measured on vimpel/);
+  const [omm] = records(egressBytes(egress, 'omm')).map(unpackOmm);
+  assert.equal(omm.ORIGINATOR, source.originator);
+  assert.equal(omm.OBJECT_NAME, 'vimpel:40004', 'the native identity survives the fit');
+  assert.equal(ommParam(omm, 'SOURCE_PROVIDER'), source.provider);
+  assert.ok(Math.abs(omm.MEAN_MOTION - 2.0056) < 0.001, `${omm.MEAN_MOTION} rev/day for a = 26560 km`);
 });
