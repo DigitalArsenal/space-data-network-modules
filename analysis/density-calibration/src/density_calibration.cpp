@@ -28,6 +28,16 @@
 // with UT1 = UTC and no polar motion. Its direction is within 0.01 deg of
 // DE440's, i.e. 2.4 s of local solar time.
 //
+// NRLMSISE-00 (0.4.0): `evaluate` (points form) and `drag_work` also take
+// atmosphere "NRLMSISE00" with nrlmsise00 {rows} (PRW SPW rows as JSON: DATE,
+// F107_OBS, F107_OBS_CENTER81, AP_AVG), the real model through the public-domain
+// Brodowski C port in third_party/nrlmsise00 (gtd7d: total mass density with
+// anomalous oxygen), driven as propagator/hpop drives it (src/cpp/src/
+// prw_execution.cpp SpaceWeatherTable): at a UTC instant on day d, F10.7 is the
+// observed flux of day d-1, F10.7a the 81-day centred mean of day d, Ap the daily
+// Ap of day d (all switches 1: the daily-Ap form), local solar time = UT +
+// longitude/15, the WGS84 geodetic point. No correction field applies to it.
+//
 // Methods (JSON in, JSON out):
 //   evaluate   density, its log-derivative in dT, dT and local solar time at
 //              each point.
@@ -128,6 +138,82 @@ class Jb2008Table {
   }
 };
 
+// ── NRLMSISE-00 drivers, read as propagator/hpop's SpaceWeatherTable reads PRW SPW rows ──
+class Nrlmsise00Table {
+ public:
+  struct Day { double f107Obs, f107ObsCentred81, apDaily; };
+  std::map<long, Day> days;  // by MJD (UTC)
+  std::string add(const json& rows) {
+    if (!rows.is_array() || rows.empty()) return "nrlmsise00.rows must be a non-empty array.";
+    long previous = 0;
+    bool first = true;
+    for (const json& row : rows) {
+      int y = 0, m = 0, d = 0;
+      double jd0 = 0, mjd = 0;
+      const std::string date = row.value("DATE", std::string());
+      if (std::sscanf(date.c_str(), "%d-%d-%d", &y, &m, &d) != 3 || eraCal2jd(y, m, d, &jd0, &mjd) != 0)
+        return "NRLMSISE-00 DATE must be an ISO 8601 calendar date.";
+      const long day = long(mjd);
+      if (!first && day <= previous) return "NRLMSISE-00 rows must have strictly increasing DATE.";
+      first = false;
+      previous = day;
+      const auto num = [&](const char* k) { return row.contains(k) && row[k].is_number() ? row[k].get<double>() : -1.0; };
+      const Day v{num("F107_OBS"), num("F107_OBS_CENTER81"), num("AP_AVG")};
+      if (!positive(v.f107Obs) || !positive(v.f107ObsCentred81) || !finite(v.apDaily) || v.apDaily < 0)
+        return "NRLMSISE-00 F10.7 must be positive and Ap nonnegative (" + date + ").";
+      days[day] = v;
+    }
+    return "";
+  }
+  // The model inputs at a UTC MJD on day d: F10.7 of day d-1, F10.7a and Ap of day d; false if a needed day is missing.
+  bool at(double mjd, double& f107, double& f107a, double& ap) const {
+    const long day = long(std::floor(mjd));
+    const auto today = days.find(day), yesterday = days.find(day - 1);
+    if (today == days.end() || yesterday == days.end()) return false;
+    f107 = yesterday->second.f107Obs;
+    f107a = today->second.f107ObsCentred81;
+    ap = today->second.apDaily;
+    return true;
+  }
+};
+
+// The mass density (kg/m^3) of NRLMSISE-00 at a geodetic point and a UTC MJD, with the inputs of Nrlmsise00Table::at and
+// hpop's switches (0 for the output units, 1 for every variation: the daily-Ap form).
+double msis_density(double mjd, double latRad, double lonRad, double altM, double f107, double f107a, double ap, double* lstHours = nullptr) {
+  int year = 0, month = 0, dayOfMonth = 0;
+  double fraction = 0;
+  eraJd2cal(2400000.5, mjd, &year, &month, &dayOfMonth, &fraction);
+  double jan1 = 0, mjdJan1 = 0;
+  eraCal2jd(year, 1, 1, &jan1, &mjdJan1);
+  const int doy = int(std::floor(mjd - mjdJan1)) + 1;
+  const double sec = (mjd - std::floor(mjd)) * 86400.0;
+  const double lonDeg = lonRad / kDeg;
+  double lst = std::fmod(sec / 3600.0 + lonDeg / 15.0, 24.0);
+  if (lst < 0.0) lst += 24.0;
+  if (lstHours) *lstHours = lst;
+  nrlmsise00::nrlmsise_input in;
+  nrlmsise00::nrlmsise_flags flags;
+  nrlmsise00::nrlmsise_output out;
+  std::memset(&in, 0, sizeof(in));
+  std::memset(&flags, 0, sizeof(flags));
+  std::memset(&out, 0, sizeof(out));
+  flags.switches[0] = 0;
+  for (int i = 1; i < 24; ++i) flags.switches[i] = 1;
+  in.year = year;  // ignored by the model
+  in.doy = doy;
+  in.sec = sec;
+  in.alt = altM / 1000.0;
+  in.g_lat = latRad / kDeg;
+  in.g_long = lonDeg;
+  in.lst = lst;
+  in.f107A = f107a;
+  in.f107 = f107;
+  in.ap = ap;
+  in.ap_a = nullptr;
+  nrlmsise00::gtd7d(&in, &flags, &out);
+  return out.d[5] * 1000.0;  // g/cm^3 -> kg/m^3 (total mass density with anomalous oxygen)
+}
+
 // ── The Sun in Earth-fixed axes ──
 class SunEarthFixed {
  public:
@@ -194,6 +280,8 @@ void basis(int degree, double lat, double h, double* y) {
 struct Point {
   double mjd = 0, sunLon = 0, sunLat = 0, lon = 0, lat = 0, altM = 0;
   Inputs in{};
+  double f107 = 0, f107a = 0, ap = 0;  // NRLMSISE-00 drivers (atmosphere NRLMSISE00)
+  bool msis = false;
   bool ok = false;
 };
 double rho_at(const Point& p, double dT) {
@@ -227,6 +315,9 @@ std::string load_points(const json& request, std::vector<Point>& points) {
     }
     return "";
   }
+  const std::string atmosphere = request.value("atmosphere", std::string("JB2008"));
+  if (atmosphere != "JB2008" && atmosphere != "NRLMSISE00") return "atmosphere must be JB2008 or NRLMSISE00.";
+  const bool msis = atmosphere == "NRLMSISE00";
   if (!request.contains("points") || !request["points"].is_object()) return "points {mjd, latDeg, lonDeg, altKm} is required.";
   const json& pts = request["points"];
   for (const char* k : {"mjd", "latDeg", "lonDeg", "altKm"})
@@ -235,8 +326,15 @@ std::string load_points(const json& request, std::vector<Point>& points) {
   for (const char* k : {"latDeg", "lonDeg", "altKm"})
     if (pts[k].size() != n) return std::string("points.") + k + " must have one value per point.";
   Jb2008Table table;
-  if (!request.contains("jb2008") || !request["jb2008"].is_object()) return "jb2008 {rows} is required.";
-  std::string e = table.add(request["jb2008"].value("rows", json::array()));
+  Nrlmsise00Table msisTable;
+  std::string e;
+  if (msis) {
+    if (!request.contains("nrlmsise00") || !request["nrlmsise00"].is_object()) return "nrlmsise00 {rows} is required.";
+    e = msisTable.add(request["nrlmsise00"].value("rows", json::array()));
+  } else {
+    if (!request.contains("jb2008") || !request["jb2008"].is_object()) return "jb2008 {rows} is required.";
+    e = table.add(request["jb2008"].value("rows", json::array()));
+  }
   if (!e.empty()) return e;
   SunEarthFixed sun;
   points.resize(n);
@@ -249,6 +347,14 @@ std::string load_points(const json& request, std::vector<Point>& points) {
     // JB2008 expects longitudes in [-pi, pi], as hpop's geodetic conversion gives them.
     p.lon = std::remainder(lo[i].get<double>() * kDeg, 2 * kPi);
     p.altM = al[i].get<double>() * 1000.0;
+    if (msis) {
+      // NRLMSISE-00 is defined to 1000 km; a point outside, or on a day the rows do not cover, is refused and never guessed.
+      if (!finite(p.mjd) || !finite(p.lat) || !finite(p.lon) || !(p.altM >= 90e3 && p.altM <= 1000e3)) continue;
+      if (!msisTable.at(p.mjd, p.f107, p.f107a, p.ap)) continue;
+      p.msis = true;
+      p.ok = true;
+      continue;
+    }
     if (!finite(p.mjd) || !finite(p.lat) || !finite(p.lon) || !(p.altM >= 90e3 && p.altM <= 2500e3)) continue;
     if (!table.at(p.mjd, p.in)) continue;
     sun.at(p.mjd, p.sunLon, p.sunLat);
@@ -699,6 +805,9 @@ extern "C" int evaluate() {
     if (!e.empty()) return fail("invalid-correction", e);
   }
   const bool derivative = request.value("derivative", false), diagnostics = request.value("diagnostics", false);
+  const bool msisModel = request.value("atmosphere", std::string("JB2008")) == "NRLMSISE00";
+  if (msisModel && (request.contains("correction") || derivative || diagnostics))
+    return fail("invalid-request", "atmosphere NRLMSISE00 has no temperature correction, derivative or Sun diagnostics.");
   json density = json::array(), deltaT = json::array(), dlog = json::array(), lst = json::array(), refused = json::array();
   json sunLon = json::array(), sunLat = json::array();
   for (size_t i = 0; i < points.size(); ++i) {
@@ -710,6 +819,13 @@ extern "C" int evaluate() {
       if (diagnostics) { sunLon.push_back(nullptr); sunLat.push_back(nullptr); }
       continue;
     }
+    if (p.msis) {
+      double lstHours = 0;
+      density.push_back(msis_density(p.mjd, p.lat, p.lon, p.altM, p.f107, p.f107a, p.ap, &lstHours));
+      deltaT.push_back(0.0);
+      lst.push_back(lstHours);
+      continue;
+    }
     const double dT = correction.at(p);
     const double rho = rho_at(p, dT);
     density.push_back(rho);
@@ -718,7 +834,7 @@ extern "C" int evaluate() {
     if (derivative) dlog.push_back((std::log(rho_at(p, dT + 1.0)) - std::log(rho_at(p, dT - 1.0))) / 2.0);
     if (diagnostics) { sunLon.push_back(p.sunLon / kDeg); sunLat.push_back(p.sunLat / kDeg); }
   }
-  json out = {{"kind", "jb2008-densities"}, {"version", 1}, {"density", density}, {"deltaT", deltaT}, {"lstHours", lst}, {"refused", refused}};
+  json out = {{"kind", msisModel ? "nrlmsise00-densities" : "jb2008-densities"}, {"version", 1}, {"density", density}, {"deltaT", deltaT}, {"lstHours", lst}, {"refused", refused}};
   if (derivative) out["dLnRhoDT"] = dlog;
   if (diagnostics) { out["sunLonDeg"] = sunLon; out["sunLatDeg"] = sunLat; }
   return emit("result", out);
@@ -731,6 +847,7 @@ extern "C" int evaluate() {
 extern "C" int calibrate() {
   const json request = json_input("request");
   if (request.is_discarded() || !request.is_object()) return fail("invalid-request", "request must be a JSON object.");
+  if (request.value("atmosphere", std::string("JB2008")) != "JB2008") return fail("invalid-request", "calibrate fits the JB2008 temperature correction only.");
   std::vector<Point> points;
   std::string e = load_points(request, points);
   if (!e.empty()) return fail("invalid-request", e);
@@ -1297,4 +1414,298 @@ extern "C" int calibrate_decay() {
                               {"skipped", skipped}, {"fit", fit},
                               {"settings", {{"stepSeconds", stepS}, {"maxGapDays", maxGap}, {"sigmaFloorM", floorM}, {"editSigma", edit}, {"reweightIterations", reweight},
                                             {"priors", {{"randomWalkKPerSqrtDay", rw}, {"meanLevelK", meanK}, {"altitudeDifferenceK", diffK}}}}}});
+}
+
+// ── Orbital energy and drag work ─────────────────────────────────────────────
+//
+// energy: the specific mechanical energy of a state in axes turning with the
+// Earth, the Jacobi integral of the geopotential,
+//   C = 1/2 |v|^2 + U(r_ef) - omega . (r x v),
+// with U the EGM2008 potential energy to a given degree and order (the
+// central term -GM/r with the caller's GM, as propagator/hpop takes
+// GRAVITATIONAL_PARAMETER, and the harmonics n >= 2 with EGM2008's own GM
+// and radius, as hpop reads its embedded field, lib/egm2008_data.h), r_ef the
+// position in IAU 2006/2000A Earth-fixed axes (ERFA: CIO-based, Earth
+// rotation angle from UT1 = UTC + dut1, polar motion when given) and omega
+// the Earth's rotation vector in GCRF. A static field in uniformly rotating
+// axes conserves C along any orbit that only the geopotential acts on, and
+//   dC/dt = a . v_r,   v_r = v - omega x r,
+// for every other acceleration a (drag, thrust, radiation pressure, the
+// third bodies and tides). The gradient is returned in GCRF:
+//   dC/dr = grad U + omega x v,   dC/dv = v_r
+// with grad U by central differences of U in Earth-fixed axes (0.5 m).
+//
+// drag_work: the drag power per unit Cd*A/m along the same states,
+//   p = -1/2 rho |v_r|^3,
+// with rho the JB2008 density (the correction, when given) at the state's
+// WGS84 geodetic point, and the work between consecutive states by the
+// trapezoid rule; the energy that a drag-only change of C would show.
+namespace {
+
+constexpr double kEgmRadius = 6378136.3;      // m, EGM2008
+constexpr double kEgmGm = 3.986004415e14;     // m^3/s^2, EGM2008 (TT-compatible)
+constexpr double kArcsec = kPi / 648000.0;
+constexpr int kMaxGeopotentialDegree = 70;
+double gEgmC[kMaxGeopotentialDegree + 1][kMaxGeopotentialDegree + 1];
+double gEgmS[kMaxGeopotentialDegree + 1][kMaxGeopotentialDegree + 1];
+double gLegendre[kMaxGeopotentialDegree + 1][kMaxGeopotentialDegree + 1];
+bool gEgmLoaded = false;
+void load_egm() {
+  if (gEgmLoaded) return;
+  for (const auto& c : astro::EGM2008Data::COEFFICIENTS) {
+    gEgmC[c.n][c.m] = c.Cnm;
+    gEgmS[c.n][c.m] = c.Snm;
+  }
+  gEgmLoaded = true;
+}
+
+// Potential energy (J/kg) at an Earth-fixed position (m), degree N, order M.
+double geopotential(const double x[3], int N, int M, double gm) {
+  load_egm();
+  const double rxy = std::hypot(x[0], x[1]), r = std::hypot(rxy, x[2]);
+  const double s = x[2] / r, c = rxy / r, lon = std::atan2(x[1], x[0]);
+  // Fully normalised associated Legendre functions of sin(latitude), forward column recursion.
+  gLegendre[0][0] = 1.0;
+  gLegendre[1][0] = std::sqrt(3.0) * s;
+  gLegendre[1][1] = std::sqrt(3.0) * c;
+  for (int n = 2; n <= N; ++n) gLegendre[n][n] = std::sqrt((2.0 * n + 1.0) / (2.0 * n)) * c * gLegendre[n - 1][n - 1];
+  for (int m = 0; m < N; ++m) {
+    if (m >= 1) gLegendre[m + 1][m] = std::sqrt(2.0 * m + 3.0) * s * gLegendre[m][m];
+    for (int n = m + 2; n <= N; ++n) {
+      const double d = double(n) * n - double(m) * m;
+      const double a = std::sqrt((4.0 * n * n - 1.0) / d);
+      const double b = std::sqrt((2.0 * n + 1.0) * (n + m - 1.0) * (n - m - 1.0) / ((2.0 * n - 3.0) * d));
+      gLegendre[n][m] = a * s * gLegendre[n - 1][m] - b * gLegendre[n - 2][m];
+    }
+  }
+  double cm[kMaxGeopotentialDegree + 2], sm[kMaxGeopotentialDegree + 2];
+  cm[0] = 1.0; sm[0] = 0.0; cm[1] = std::cos(lon); sm[1] = std::sin(lon);
+  for (int m = 2; m <= N; ++m) {
+    cm[m] = 2.0 * cm[1] * cm[m - 1] - cm[m - 2];
+    sm[m] = 2.0 * cm[1] * sm[m - 1] - sm[m - 2];
+  }
+  const double ratio = kEgmRadius / r;
+  double power = ratio, sum = 0.0;
+  for (int n = 2; n <= N; ++n) {
+    power *= ratio;
+    double inner = 0.0;
+    for (int m = 0; m <= std::min(n, M); ++m) inner += gLegendre[n][m] * (gEgmC[n][m] * cm[m] + gEgmS[n][m] * sm[m]);
+    sum += power * inner;
+  }
+  return -gm / r - kEgmGm / r * sum;
+}
+
+// GCRF -> Earth-fixed rotation (IAU 2006/2000A, CIO based) with the celestial-to-intermediate matrix held for an hour of TT.
+class EarthOrientation {
+ public:
+  void matrix(double mjdUtc, double dut1Seconds, double xpArcsec, double ypArcsec, double rc2t[3][3]) {
+    double tai1 = 0, tai2 = 0, tt1 = 0, tt2 = 0;
+    eraUtctai(2400000.5, mjdUtc, &tai1, &tai2);
+    eraTaitt(tai1, tai2, &tt1, &tt2);
+    const double ttHour = std::floor(((tt1 - 2400000.5) + tt2) * 24.0);
+    if (ttHour != cachedHour) {
+      eraC2i06a(2400000.5, ttHour / 24.0, rc2i);
+      cachedHour = ttHour;
+    }
+    const double era = eraEra00(2400000.5, mjdUtc + dut1Seconds / 86400.0);
+    double rpom[3][3];
+    eraPom00(xpArcsec * kArcsec, ypArcsec * kArcsec, eraSp00(tt1, tt2), rpom);
+    eraC2tcio(rc2i, era, rpom, rc2t);
+  }
+
+ private:
+  double cachedHour = std::numeric_limits<double>::quiet_NaN();
+  double rc2i[3][3] = {};
+};
+
+// One request state: UTC MJD, GCRF position (m) and velocity (m/s), optional dut1 (s) and polar motion (arcsec).
+struct OrbitalState {
+  double mjd = 0, r[3] = {}, v[3] = {}, dut1 = 0, xp = 0, yp = 0;
+};
+std::string load_states(const json& request, std::vector<OrbitalState>& out) {
+  if (!request.contains("states") || !request["states"].is_array() || request["states"].empty()) return "states must be a non-empty array of {mjd, r, v}.";
+  for (const json& s : request["states"]) {
+    OrbitalState o;
+    if (!s.is_object() || !s.contains("mjd") || !s["mjd"].is_number() || !s.contains("r") || !s["r"].is_array() || s["r"].size() != 3 ||
+        !s.contains("v") || !s["v"].is_array() || s["v"].size() != 3)
+      return "each state needs mjd (UTC), r [3] and v [3] (GCRF, m and m/s).";
+    o.mjd = s["mjd"].get<double>();
+    for (int k = 0; k < 3; ++k) {
+      if (!s["r"][k].is_number() || !s["v"][k].is_number()) return "state components must be numbers.";
+      o.r[k] = s["r"][k].get<double>();
+      o.v[k] = s["v"][k].get<double>();
+    }
+    o.dut1 = s.value("dut1", 0.0);
+    o.xp = s.value("xp", 0.0);
+    o.yp = s.value("yp", 0.0);
+    out.push_back(o);
+  }
+  return "";
+}
+void cross(const double a[3], const double b[3], double c[3]) {
+  c[0] = a[1] * b[2] - a[2] * b[1];
+  c[1] = a[2] * b[0] - a[0] * b[2];
+  c[2] = a[0] * b[1] - a[1] * b[0];
+}
+double dot(const double a[3], const double b[3]) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+
+// The Earth-fixed position, the rotation vector in GCRF and the relative velocity of one state.
+struct Frame {
+  double rc2t[3][3] = {}, xe[3] = {}, omega[3] = {}, vr[3] = {};
+  bool ok = false;
+};
+Frame frame_of(EarthOrientation& eo, const OrbitalState& s, double omegaEarth) {
+  Frame f;
+  const double r2 = dot(s.r, s.r);
+  if (!finite(s.mjd) || !finite(r2) || !(r2 > 6.0e6 * 6.0e6)) return f;
+  eo.matrix(s.mjd, s.dut1, s.xp, s.yp, f.rc2t);
+  for (int i = 0; i < 3; ++i) f.xe[i] = f.rc2t[i][0] * s.r[0] + f.rc2t[i][1] * s.r[1] + f.rc2t[i][2] * s.r[2];
+  for (int j = 0; j < 3; ++j) f.omega[j] = f.rc2t[2][j] * omegaEarth;  // R^T (0, 0, omega)
+  double wr[3];
+  cross(f.omega, s.r, wr);
+  for (int k = 0; k < 3; ++k) f.vr[k] = s.v[k] - wr[k];
+  f.ok = true;
+  return f;
+}
+
+}  // namespace
+
+// energy: {states: [{mjd (UTC), r [m], v [m/s] (GCRF), dut1?, xp?, yp?}], degree? (2-70, 36), order? (= degree), gm? (3.986004418e14),
+// omega? (7.292115e-5 rad/s), gradient?} -> {energy [J/kg], kinetic, potential, rotation, relativeSpeed [m/s],
+// geodetic {latDeg, lonDeg, altKm}, gradient [[dC/dr (3), dC/dv (3)]] (with gradient), refused [indices]}
+extern "C" int energy() {
+  const json request = json_input("request");
+  if (request.is_discarded() || !request.is_object()) return fail("invalid-request", "request must be a JSON object.");
+  std::vector<OrbitalState> states;
+  const std::string e = load_states(request, states);
+  if (!e.empty()) return fail("invalid-request", e);
+  const int degree = request.value("degree", 36);
+  const int order = request.value("order", degree);
+  if (degree < 2 || degree > kMaxGeopotentialDegree || order < 0 || order > degree) return fail("invalid-request", "degree must be 2-70 and order 0-degree.");
+  const double gm = request.value("gm", kMu), omegaEarth = request.value("omega", kOmegaEarth);
+  if (!positive(gm) || !positive(omegaEarth)) return fail("invalid-request", "gm and omega must be positive.");
+  const bool wantGradient = request.value("gradient", false);
+  EarthOrientation eo;
+  json energyJ = json::array(), kinetic = json::array(), potential = json::array(), rotation = json::array(), speed = json::array();
+  json lat = json::array(), lon = json::array(), alt = json::array(), gradient = json::array(), refused = json::array();
+  for (size_t i = 0; i < states.size(); ++i) {
+    const OrbitalState& s = states[i];
+    const Frame f = frame_of(eo, s, omegaEarth);
+    if (!f.ok) {
+      refused.push_back(i);
+      for (json* a : {&energyJ, &kinetic, &potential, &rotation, &speed, &lat, &lon, &alt}) a->push_back(nullptr);
+      if (wantGradient) gradient.push_back(nullptr);
+      continue;
+    }
+    const double U = geopotential(f.xe, degree, order, gm);
+    double rv[3];
+    cross(s.r, s.v, rv);
+    const double K = 0.5 * dot(s.v, s.v), rot = dot(f.omega, rv);
+    energyJ.push_back(K + U - rot);
+    kinetic.push_back(K);
+    potential.push_back(U);
+    rotation.push_back(rot);
+    speed.push_back(std::sqrt(dot(f.vr, f.vr)));
+    double elong = 0, phi = 0, height = 0;
+    double xe[3] = {f.xe[0], f.xe[1], f.xe[2]};
+    eraGc2gd(1, xe, &elong, &phi, &height);
+    lat.push_back(phi / kDeg);
+    lon.push_back(elong / kDeg);
+    alt.push_back(height / 1000.0);
+    if (wantGradient) {
+      constexpr double h = 0.5;
+      double g[3];
+      for (int k = 0; k < 3; ++k) {
+        double up[3] = {f.xe[0], f.xe[1], f.xe[2]}, dn[3] = {f.xe[0], f.xe[1], f.xe[2]};
+        up[k] += h;
+        dn[k] -= h;
+        g[k] = (geopotential(up, degree, order, gm) - geopotential(dn, degree, order, gm)) / (2.0 * h);
+      }
+      double gradU[3], wv[3];
+      for (int j = 0; j < 3; ++j) gradU[j] = f.rc2t[0][j] * g[0] + f.rc2t[1][j] * g[1] + f.rc2t[2][j] * g[2];  // R^T g
+      cross(f.omega, s.v, wv);
+      gradient.push_back({gradU[0] + wv[0], gradU[1] + wv[1], gradU[2] + wv[2], f.vr[0], f.vr[1], f.vr[2]});
+    }
+  }
+  json out = {{"kind", "orbital-energy"}, {"version", 1}, {"energy", energyJ}, {"kinetic", kinetic}, {"potential", potential}, {"rotation", rotation},
+              {"relativeSpeed", speed}, {"geodetic", {{"latDeg", lat}, {"lonDeg", lon}, {"altKm", alt}}}, {"refused", refused},
+              {"settings", {{"degree", degree}, {"order", order}, {"gm", gm}, {"omega", omegaEarth}, {"field", "EGM2008"}}}};
+  if (wantGradient) out["gradient"] = gradient;
+  return emit("result", out);
+}
+
+// drag_work: {states, jb2008: {rows} | atmosphere: "NRLMSISE00" with nrlmsise00: {rows}, correction? (JB2008 only), B? (Cd*A/m, 1)} -> {density, relativeSpeed, power [W/kg] (= -B rho |v_r|^3 / 2),
+// work [J/kg] between consecutive states (trapezoid), cumulativeWork, refused}
+extern "C" int drag_work() {
+  const json request = json_input("request");
+  if (request.is_discarded() || !request.is_object()) return fail("invalid-request", "request must be a JSON object.");
+  std::vector<OrbitalState> states;
+  std::string e = load_states(request, states);
+  if (!e.empty()) return fail("invalid-request", e);
+  const std::string atmosphere = request.value("atmosphere", std::string("JB2008"));
+  if (atmosphere != "JB2008" && atmosphere != "NRLMSISE00") return fail("invalid-request", "atmosphere must be JB2008 or NRLMSISE00.");
+  const bool msis = atmosphere == "NRLMSISE00";
+  Jb2008Table table;
+  Nrlmsise00Table msisTable;
+  if (msis) {
+    if (request.contains("correction")) return fail("invalid-correction", "atmosphere NRLMSISE00 has no temperature correction.");
+    if (!request.contains("nrlmsise00") || !request["nrlmsise00"].is_object()) return fail("invalid-request", "nrlmsise00 {rows} is required.");
+    e = msisTable.add(request["nrlmsise00"].value("rows", json::array()));
+  } else {
+    if (!request.contains("jb2008") || !request["jb2008"].is_object()) return fail("invalid-request", "jb2008 {rows} is required.");
+    e = table.add(request["jb2008"].value("rows", json::array()));
+  }
+  if (!e.empty()) return fail("invalid-request", e);
+  Correction correction;
+  if (request.contains("correction")) {
+    e = correction.load(request["correction"]);
+    if (!e.empty()) return fail("invalid-correction", e);
+  }
+  const double B = request.value("B", 1.0), omegaEarth = request.value("omega", kOmegaEarth);
+  if (!std::isfinite(B) || !positive(omegaEarth)) return fail("invalid-request", "B and omega must be finite and positive.");
+  EarthOrientation eo;
+  SunEarthFixed sun;
+  const size_t n = states.size();
+  std::vector<double> rho(n, std::numeric_limits<double>::quiet_NaN()), speed(rho), power(rho);
+  json refused = json::array();
+  for (size_t i = 0; i < n; ++i) {
+    const OrbitalState& s = states[i];
+    const Frame f = frame_of(eo, s, omegaEarth);
+    Point p;
+    if (f.ok) {
+      double xe[3] = {f.xe[0], f.xe[1], f.xe[2]}, elong = 0, phi = 0, height = 0;
+      eraGc2gd(1, xe, &elong, &phi, &height);
+      p.mjd = s.mjd;
+      p.lat = phi;
+      p.lon = std::remainder(elong, 2 * kPi);
+      p.altM = height;
+      if (msis) {
+        if (p.altM >= 90e3 && p.altM <= 1000e3 && msisTable.at(p.mjd, p.f107, p.f107a, p.ap)) p.ok = true;
+      } else if (p.altM >= 90e3 && p.altM <= 2500e3 && table.at(p.mjd, p.in)) {
+        sun.at(p.mjd, p.sunLon, p.sunLat);
+        p.ok = true;
+      }
+    }
+    if (!p.ok) { refused.push_back(i); continue; }
+    speed[i] = std::sqrt(dot(f.vr, f.vr));
+    rho[i] = msis ? msis_density(p.mjd, p.lat, p.lon, p.altM, p.f107, p.f107a, p.ap) : rho_at(p, correction.at(p));
+    power[i] = -0.5 * B * rho[i] * speed[i] * speed[i] * speed[i];
+  }
+  json work = json::array(), cumulative = json::array(), densityJ = json::array(), speedJ = json::array(), powerJ = json::array();
+  double total = 0.0;
+  cumulative.push_back(0.0);
+  for (size_t i = 0; i < n; ++i) {
+    densityJ.push_back(std::isfinite(rho[i]) ? json(rho[i]) : json(nullptr));
+    speedJ.push_back(std::isfinite(speed[i]) ? json(speed[i]) : json(nullptr));
+    powerJ.push_back(std::isfinite(power[i]) ? json(power[i]) : json(nullptr));
+    if (i + 1 < n) {
+      const double dt = (states[i + 1].mjd - states[i].mjd) * 86400.0;
+      const bool both = std::isfinite(power[i]) && std::isfinite(power[i + 1]);
+      work.push_back(both ? json(0.5 * (power[i] + power[i + 1]) * dt) : json(nullptr));
+      if (both) total += 0.5 * (power[i] + power[i + 1]) * dt;
+      cumulative.push_back(total);
+    }
+  }
+  return emit("result", {{"kind", "drag-work"}, {"version", 1}, {"density", densityJ}, {"relativeSpeed", speedJ}, {"power", powerJ}, {"work", work},
+                         {"cumulativeWork", cumulative}, {"refused", refused}, {"settings", {{"B", B}, {"omega", omegaEarth}, {"atmosphere", atmosphere}}}});
 }

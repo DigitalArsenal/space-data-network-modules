@@ -1,12 +1,13 @@
 {
   "name": "@digitalarsenal/sdn-module-analysis-density-calibration",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "test:parity": "node tests/parity.mjs"
   },
   "devDependencies": {
     "flatbuffers": "25.9.23",

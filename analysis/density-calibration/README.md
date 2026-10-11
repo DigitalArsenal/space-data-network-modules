@@ -16,6 +16,13 @@ JSON control frames in and out.
 
 ## Model
 
+- **NRLMSISE-00** (0.4.0; `evaluate` and `drag_work` with `atmosphere: "NRLMSISE00"`): the real model through the
+  public-domain Brodowski C port in `third_party/nrlmsise00` (`gtd7d`, total mass density with anomalous oxygen), driven as
+  `propagator/hpop` drives it: on the UTC day d of a point, F10.7 is the observed flux of day d-1, F10.7a the observed 81-day
+  centred mean of day d, Ap the daily Ap of day d (all switches 1, the daily-Ap form), local solar time = UT + longitude/15,
+  the WGS84 geodetic latitude, longitude and height. Rows are PRW SPW rows as JSON (`DATE`, `F107_OBS`, `F107_OBS_CENTER81`,
+  `AP_AVG`), strictly increasing; a point whose day or day before has no row, or above 1000 km, is refused. No temperature
+  correction applies to it, and `calibrate` stays JB2008.
 - **Density:** `propagator/hpop/lib/jb2008.h` unchanged (Orekit 13.1's
   JB2008, itself a port of Space Environment Technologies' Fortran).
 - **Drivers:** PRW `JB2008_INDICES` rows as JSON (SET `SOLFSMY.TXT` and
@@ -94,6 +101,23 @@ formal posterior standard deviations under the residual scales.
 beyond `editSigma` robust sigmas (1.4826 × MAD) of the median residual left
 out. `sigmas` are the formal posterior standard deviations.
 
+## Orbital energy and drag work
+
+- **`energy`** (`states [{mjd (UTC), r, v (GCRF, m and m/s), dut1?, xp?, yp?}]`, `degree` 2-70 (36), `order`,
+  `gm` (the central term, default 3.986004418e14), `omega` (7.292115e-5 rad/s), `gradient`): the Jacobi
+  integral of the geopotential, C = 1/2 |v|^2 + U(r_ef) - omega . (r x v) in J/kg, with U the EGM2008 potential
+  energy (the central term -GM/r and the harmonics n >= 2 with EGM2008's own GM and radius, from propagator/hpop's
+  `lib/egm2008_data.h`) at the position in IAU 2006/2000A Earth-fixed axes (ERFA, CIO based, Earth rotation angle
+  from UT1 = UTC + dut1, polar motion when given) and omega the Earth's rotation vector in GCRF. A static field in
+  uniformly turning axes conserves C along an orbit that only the geopotential acts on, and dC/dt = a . v_r,
+  v_r = v - omega x r, for every other acceleration a (drag, thrust, radiation pressure, third bodies, tides). It
+  returns C, its parts, |v_r| and the WGS84 geodetic point (the inputs of `evaluate`), and with `gradient` dC/dr =
+  grad U + omega x v and dC/dv = v_r in GCRF (grad U by central differences, 0.5 m, in Earth-fixed axes).
+- **`drag_work`** (`states`, `jb2008 {rows}` or `atmosphere: "NRLMSISE00"` with `nrlmsise00 {rows}`, `correction?` (JB2008 only), `B?` (Cd*A/m, 1), `omega?`): the drag power
+  -1/2 B rho |v_r|^3 (W/kg) with rho the JB2008 density, the correction included, or the NRLMSISE-00 density, at each state's geodetic point,
+  and the work between consecutive states by the trapezoid rule (J/kg): the energy a drag-only change of C shows. The ratio of the drag works of one
+  trajectory under two atmospheres is the factor by which the Cd*A/m that an arc's energy loss implies changes between them.
+
 ## Tests
 
 `npm test` (end to end, the built artifact through the SDK harness):
@@ -108,4 +132,8 @@ out. `sigmas` are the formal posterior standard deviations.
 | SGP4 trajectory and mean a | Vallado's verification set (SGP4-VER.TLE, tcppver.out t = 0 rows, near-Earth cases); Hoots and Roehrich (1980) Spacetrack Report No. 3 Brouwer semi-major axis with WGS-72 | 2e-8 km, 2e-9 km/s; 1e-6 km |
 | Drag decay | `propagator/hpop` integrating the equations of motion (RK78, zonal gravity to degree 4, JB2008 drag with Cd·A/m = B, DE440 Sun, zero EOP) from the set's GCRF epoch state (`analysis/epoch-state`): the change of the osculating semi-major axis averaged over whole nodal periods, one day, constant drivers; with DTC raised by 60 K and the same node correction | circular 400 km: rate within 0.4 %; e = 0.05, perigee 320 km: 1.6 % (SGP4's analytical trajectory, anomaly terms); the response to +60 K within 0.03 % |
 | Estimation | synthetic histories of six objects (360–730 km, a set every 8 h, 1 m noise) made by `decay` under a known correction (30 K, a one-day 90 K excursion, 10 K) and known B, and a seventh at 880 km whose sets rise 0.4 m a day (as radiation pressure can make them); one object anchored | converges; steady-state error under 8 K and within the formal sigmas; the six B within 1 %; without the anchor the level's sigma grows more than fourfold and its correlation with the precision-weighted mean ln B is below −0.9 (the degeneracy) |
+| Energy conservation | `propagator/hpop` integrating gravity alone (EGM2008 36x36, RK78 at 1e-12, UT1 = UTC, no polar motion) for 6 h from a 500 km sun-synchronous state; C from `energy` at the 1-min samples | constant to 0.06 J/kg (2e-9 of C; the Earth's axis precesses, ~0.01 J/kg an hour); the Kepler energy varies by tens of kJ/kg; degrees 35 and 37 against HPOP's 36 drift by more than 0.4 J/kg |
+| Energy gradient | central differences of `energy` itself (2 m, 0.01 m/s) | within 1e-6 and 1e-7 relative |
+| Drag work | HPOP with JB2008 drag (Cd*A/m 0.02, constant synthetic drivers) for 6 h at 30 s: the fall of C against the integral of `drag_work` | within 0.3 % |
+| NRLMSISE-00 drag work | `propagator/hpop` with NRLMSISE-00 drag (Cd*A/m 0.02, a `space_weather` table whose F10.7, 81-day mean and Ap change from day to day) for 6 h at 30 s across 00:00 UTC: the fall of C against the integral of `drag_work` with `atmosphere: "NRLMSISE00"`; the same integral with F10.7 read from the epoch's own day | 0.14 %; the wrong-day read differs by 6.3 % |
 | SDK compliance | `space-data-module-sdk` `validateArtifactWithStandards` | pass |
