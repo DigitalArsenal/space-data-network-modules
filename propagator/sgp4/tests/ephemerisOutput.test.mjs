@@ -165,7 +165,8 @@ test("analysis/maneuver-detection reads the $OEM as its ephemerides", async () =
     assert.equal(result.statusCode, 0, result.errorMessage);
     const report = JSON.parse(Buffer.from(result.outputs.find((o) => o.portId === "report").payload).toString("utf8"));
     assert.equal(report.objects_screened, 1);
-    assert.equal(report.objects[0].object, "1998-067A");
+    // maneuver-detection 0.3.0 keys an object by its NORAD number when the $OEM gives one.
+    assert.equal(report.objects[0].object, "NORAD:25544");
     assert.equal(report.objects[0].frame, "TEMEOFDATE");
     assert.equal(report.objects[0].element_sets, SETS.length);
     assert.equal(report.objects[0].pairs.length, SETS.length - 1);
