@@ -99,6 +99,8 @@ async function epochStates(epochStateDir, omms) {
  * @param {number} [o.screenStartJd]  UTC JD the screen starts (default: the first window's start).
  * @param {number} [o.loadCeiling]  Pause each worker's next chunk of objects while the host's
  *   1-minute load average exceeds it (none by default).
+ * @param {number[]} [o.handles]  Each object's source handle (default: its position + 1), so a
+ *   farm of some catalog objects (the ones whose element sets changed) keeps the catalog's handles.
  * @returns {Promise<{objects: object[], excluded: object[], reentries: object[], window: Function, close: Function}>}
  *
  * HPOP ends a trajectory at reentry (100 km geodetic altitude) with the error
@@ -117,7 +119,7 @@ export async function createHpopFarm(o) {
       [port, new Uint8Array(fs.readFileSync(path.join(o.environment, `${port}.prw`)))]));
   }
   const omms = o.catalog.map((bytes) => OMM.getRootAsOMM(new flatbuffers.ByteBuffer(bytes)).unpack());
-  const objects = omms.map((m, i) => ({ handle: i + 1, norad: m.NORAD_CAT_ID, objectId: m.OBJECT_ID || String(m.NORAD_CAT_ID), name: m.OBJECT_NAME,
+  const objects = omms.map((m, i) => ({ handle: o.handles?.[i] ?? i + 1, norad: m.NORAD_CAT_ID, objectId: m.OBJECT_ID || String(m.NORAD_CAT_ID), name: m.OBJECT_NAME,
     bstar: m.BSTAR }));
   const t0 = performance.now();
   const { states, report } = await epochStates(path.join(o.modulesRoot, 'analysis/epoch-state'), omms);
