@@ -72,6 +72,24 @@ struct WriteOptions {
         }                                                                                    \
     }
 
+/* The next few keywords of the same kind of refusal, so the caller can mend a message in one go:
+ * "; also A, B, C and 40 more". */
+inline std::string also(const Report& report, const Issue* first, size_t count) {
+    if (count <= 1) return std::string();
+    std::vector<std::string> listed;
+    for (const Issue& i : report.issues) {
+        if (listed.size() == 5) break;
+        if (&i == first || i.kind != first->kind || i.key == first->key) continue;
+        if (std::find(listed.begin(), listed.end(), i.key) != listed.end()) continue;
+        listed.push_back(i.key);
+    }
+    std::string text = "; also ";
+    for (size_t k = 0; k < listed.size(); ++k) text += (k ? ", " : "") + listed[k];
+    const size_t rest = count - 1 - listed.size();
+    if (rest > 0) text += (listed.empty() ? "" : " and ") + std::to_string(rest) + " more";
+    return text;
+}
+
 /* What a message must not be read with. The record has a field for everything the
  * Blue Book defines, so a keyword, element, marker or data line with no place in
  * the message is not the Blue Book's (or not this Spec's) to read; a keyword stated
@@ -130,7 +148,7 @@ inline std::string refusal(const Message& msg, const Report& report, std::string
                         : " (" + first->detail + ") and the message does not state it");
             break;
     }
-    if (count > 1) text += "; " + std::to_string(count - 1) + " more";
+    text += also(report, first, count);
     return text;
 }
 
@@ -282,9 +300,7 @@ inline bool write_message(const Message& msg, const uint8_t* record, size_t leng
             const Issue& first = missing.issues[0];
             *error = "the record does not state " + first.key + ", which " + msg.type +
                      " must (at " + first.where + ")" +
-                     (missing.issues.size() > 1
-                          ? "; " + std::to_string(missing.issues.size() - 1) + " more"
-                          : std::string());
+                     also(missing, &first, missing.issues.size());
             return false;
         }
     }

@@ -412,7 +412,7 @@ test("a keyword with no place, a keyword stated twice and a mandatory keyword le
   await refused(kvn.replace("ORIGINATOR = SDN-TEST", "ORIGINATOR ="), "missing-keyword", /ORIGINATOR/);
   // A whole mandatory block left out names what it would have held, and the first thing is enough.
   const noElements = kvn.split("\n").filter((l) => !/^(EPOCH|MEAN_MOTION|ECCENTRICITY|INCLINATION|RA_OF_ASC_NODE|ARG_OF_PERICENTER|MEAN_ANOMALY|GM)\b/.test(l)).join("\n");
-  await refused(noElements, "missing-keyword", /EPOCH is mandatory in OMM at omm\/body\/segment\/data\/meanElements and the message does not state it; \d+ more/);
+  await refused(noElements, "missing-keyword", /EPOCH is mandatory in OMM at omm\/body\/segment\/data\/meanElements and the message does not state it; also ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER, MEAN_ANOMALY and \d+ more/);
 
   // Optional keywords and blocks are optional: this message states only what it must.
   const bare = kvn.split("\n").filter((l) => !/^(COMMENT|CLASSIFICATION|MESSAGE_ID|GM|MASS|SOLAR_RAD|DRAG_|EPHEMERIS_TYPE|CLASSIFICATION_TYPE|NORAD_CAT_ID|ELEMENT_SET_NO|REV_AT_EPOCH|BSTAR|MEAN_MOTION_D|COV_REF_FRAME|C[XYZ]_|USER_DEFINED)/.test(l)).join("\n");
@@ -528,7 +528,7 @@ test("a record that lacks what the message must state is not written, and says w
   const cdm = await decode("CDM", out(ok(await h.invoke(read("CDM", Buffer.from(cdmKvn), undefined))), PORT.CDM));
   const noCovariance = await h.invoke(write("CDM", await build("CDM", { ...cdm, OBJECT1: { ...cdm.OBJECT1, COVARIANCE: [] } })));
   assert.notEqual(noCovariance.statusCode, 0);
-  assert.match(noCovariance.errorMessage, /does not state CR_R, which CDM must/);
+  assert.match(noCovariance.errorMessage, /does not state CR_R, which CDM must.*; also CT_R, CT_T, CN_R, CN_T, CN_N and \d+ more/);
   const cdmWithout = cdmKvn.split("\n").filter((l) => !/^C[RTN](DOT)?_[RTN](DOT)? = /.test(l)).join("\n");
   assert.notEqual(cdmWithout, cdmKvn);
   const refusedCdm = await h.invoke(read("CDM", Buffer.from(cdmWithout), undefined));

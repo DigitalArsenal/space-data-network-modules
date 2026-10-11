@@ -2,24 +2,24 @@
   "ok": true,
   "fixture": "files/ccsds-messages 0.2.0 methods",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "c57bf3d998df6d0d9a88c2f4f9885ae47b55bffd653fe4498e44541be44b395e",
-  "moduleSha256": "8e2d1ec5894b79c86b945134b97015fe928e42ac42f3b68589c3ba38aeaa95fe",
+  "artifactSha256": "de53d7ac4389317a02a5fe5220b6fa67da708a5371014be5ef8d5a0f0d62d9ee",
+  "moduleSha256": "2ff31460909c6c90113a42326150db65c186cc70e63e01b22da6351a6a32d65b",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 67,
-      "durationMs": 1185
+      "durationMs": 1150
     },
     {
       "lane": "wasmedge",
       "runs": 67,
-      "durationMs": 5752
+      "durationMs": 5228
     },
     {
       "lane": "docker-wasmedge",
       "runs": 67,
-      "durationMs": 42613
+      "durationMs": 45037
     }
   ],
   "cases": [
