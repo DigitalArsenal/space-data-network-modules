@@ -1,25 +1,25 @@
 {
   "ok": true,
-  "fixture": "maneuver-detection 0.3.0 methods",
+  "fixture": "maneuver-detection 0.4.0 methods",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "eee3dd9088f6291794196a7a21ce5b05e7d989bf1f11ffda4d58a126c52496d0",
-  "moduleSha256": "eee3dd9088f6291794196a7a21ce5b05e7d989bf1f11ffda4d58a126c52496d0",
+  "artifactSha256": "ea5f7397923f23d2fa1df4a9d9cbd862c484be1b0b309fba143715cf881cc60d",
+  "moduleSha256": "ea5f7397923f23d2fa1df4a9d9cbd862c484be1b0b309fba143715cf881cc60d",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 9,
-      "durationMs": 963
+      "durationMs": 1392
     },
     {
       "lane": "wasmedge",
       "runs": 9,
-      "durationMs": 11559
+      "durationMs": 15380
     },
     {
       "lane": "docker-wasmedge",
       "runs": 9,
-      "durationMs": 18386
+      "durationMs": 17419
     }
   ],
   "cases": [
@@ -43,8 +43,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "67c0fff0944cee404532c54d6139ed696cd5762494e2c9ce2d7eea48260558e4",
-      "stdoutLength": 20648
+      "stdoutSha256": "1f30493f9b0cfd798aba4bf38cacf8bdf7082e1a56c8eafb22846330a0da6404",
+      "stdoutLength": 20680
     },
     {
       "lane": "browser",
@@ -53,8 +53,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "59818923a9cfbfef91e83d97ed4080b31ed35aad286416aef9256b32ec08f126",
-      "stdoutLength": 16904
+      "stdoutSha256": "d9401fe9aa6920a9acd3cb50f60b820014bf95628860e02a209788cd8fcbc8bf",
+      "stdoutLength": 16968
     },
     {
       "lane": "browser",
@@ -63,8 +63,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "bdcc251bd909d4f12e88ef5cae397d8185e129e6619b2bb2c6925d90fbecbd97",
-      "stdoutLength": 14120
+      "stdoutSha256": "7b3b350e1f16b605e33038f60733f79827ff9401c3048200c807ea95b56a70f8",
+      "stdoutLength": 14152
     },
     {
       "lane": "browser",
@@ -83,8 +83,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "a801c80db198014d082a07420e2b83ce642965d56480da2a9fdd3e4d6899fc3b",
-      "stdoutLength": 34808
+      "stdoutSha256": "0e62595cfac883003ab097a74954d3e9e729335649ced7db7c0b75a0fa31c674",
+      "stdoutLength": 34968
     },
     {
       "lane": "browser",
@@ -93,8 +93,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "77dff3d2abb77b71119375bc243cd47dd85b6ec740754f2745fae42ecca692c1",
-      "stdoutLength": 34832
+      "stdoutSha256": "b6142a6bbc1b1222888013a0cff47a69d1294b20d4e6a5aaca54012f0dab1e5a",
+      "stdoutLength": 34992
     },
     {
       "lane": "browser",
@@ -103,7 +103,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "f58d3b65c2e6ad281d17b90e71a34e43eb18a77a856a47ee5cb373c11671a5c3",
+      "stdoutSha256": "cb1fced183e5a3bdba214a21eea6633490adc3572e6d16749e2dd777751565d0",
       "stdoutLength": 2744
     },
     {
@@ -133,8 +133,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "67c0fff0944cee404532c54d6139ed696cd5762494e2c9ce2d7eea48260558e4",
-      "stdoutLength": 20648
+      "stdoutSha256": "1f30493f9b0cfd798aba4bf38cacf8bdf7082e1a56c8eafb22846330a0da6404",
+      "stdoutLength": 20680
     },
     {
       "lane": "wasmedge",
@@ -143,8 +143,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "59818923a9cfbfef91e83d97ed4080b31ed35aad286416aef9256b32ec08f126",
-      "stdoutLength": 16904
+      "stdoutSha256": "d9401fe9aa6920a9acd3cb50f60b820014bf95628860e02a209788cd8fcbc8bf",
+      "stdoutLength": 16968
     },
     {
       "lane": "wasmedge",
@@ -153,8 +153,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "bdcc251bd909d4f12e88ef5cae397d8185e129e6619b2bb2c6925d90fbecbd97",
-      "stdoutLength": 14120
+      "stdoutSha256": "7b3b350e1f16b605e33038f60733f79827ff9401c3048200c807ea95b56a70f8",
+      "stdoutLength": 14152
     },
     {
       "lane": "wasmedge",
@@ -173,8 +173,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "a801c80db198014d082a07420e2b83ce642965d56480da2a9fdd3e4d6899fc3b",
-      "stdoutLength": 34808
+      "stdoutSha256": "0e62595cfac883003ab097a74954d3e9e729335649ced7db7c0b75a0fa31c674",
+      "stdoutLength": 34968
     },
     {
       "lane": "wasmedge",
@@ -183,8 +183,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "77dff3d2abb77b71119375bc243cd47dd85b6ec740754f2745fae42ecca692c1",
-      "stdoutLength": 34832
+      "stdoutSha256": "b6142a6bbc1b1222888013a0cff47a69d1294b20d4e6a5aaca54012f0dab1e5a",
+      "stdoutLength": 34992
     },
     {
       "lane": "wasmedge",
@@ -193,7 +193,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "f58d3b65c2e6ad281d17b90e71a34e43eb18a77a856a47ee5cb373c11671a5c3",
+      "stdoutSha256": "cb1fced183e5a3bdba214a21eea6633490adc3572e6d16749e2dd777751565d0",
       "stdoutLength": 2744
     },
     {
@@ -223,8 +223,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "67c0fff0944cee404532c54d6139ed696cd5762494e2c9ce2d7eea48260558e4",
-      "stdoutLength": 20648
+      "stdoutSha256": "1f30493f9b0cfd798aba4bf38cacf8bdf7082e1a56c8eafb22846330a0da6404",
+      "stdoutLength": 20680
     },
     {
       "lane": "docker-wasmedge",
@@ -233,8 +233,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "59818923a9cfbfef91e83d97ed4080b31ed35aad286416aef9256b32ec08f126",
-      "stdoutLength": 16904
+      "stdoutSha256": "d9401fe9aa6920a9acd3cb50f60b820014bf95628860e02a209788cd8fcbc8bf",
+      "stdoutLength": 16968
     },
     {
       "lane": "docker-wasmedge",
@@ -243,8 +243,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "bdcc251bd909d4f12e88ef5cae397d8185e129e6619b2bb2c6925d90fbecbd97",
-      "stdoutLength": 14120
+      "stdoutSha256": "7b3b350e1f16b605e33038f60733f79827ff9401c3048200c807ea95b56a70f8",
+      "stdoutLength": 14152
     },
     {
       "lane": "docker-wasmedge",
@@ -263,8 +263,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "a801c80db198014d082a07420e2b83ce642965d56480da2a9fdd3e4d6899fc3b",
-      "stdoutLength": 34808
+      "stdoutSha256": "0e62595cfac883003ab097a74954d3e9e729335649ced7db7c0b75a0fa31c674",
+      "stdoutLength": 34968
     },
     {
       "lane": "docker-wasmedge",
@@ -273,8 +273,8 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "77dff3d2abb77b71119375bc243cd47dd85b6ec740754f2745fae42ecca692c1",
-      "stdoutLength": 34832
+      "stdoutSha256": "b6142a6bbc1b1222888013a0cff47a69d1294b20d4e6a5aaca54012f0dab1e5a",
+      "stdoutLength": 34992
     },
     {
       "lane": "docker-wasmedge",
@@ -283,7 +283,7 @@
       "exitClass": "ok",
       "exitDetail": null,
       "spawnCount": null,
-      "stdoutSha256": "f58d3b65c2e6ad281d17b90e71a34e43eb18a77a856a47ee5cb373c11671a5c3",
+      "stdoutSha256": "cb1fced183e5a3bdba214a21eea6633490adc3572e6d16749e2dd777751565d0",
       "stdoutLength": 2744
     },
     {

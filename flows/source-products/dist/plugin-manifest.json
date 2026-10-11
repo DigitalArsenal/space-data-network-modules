@@ -18,8 +18,8 @@
     },
     {
       "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
-      "minVersion": "0.3.0",
-      "maxVersion": "0.3.0"
+      "minVersion": "0.4.0",
+      "maxVersion": "0.4.0"
     }
   ],
   "externalInterfaces": [],

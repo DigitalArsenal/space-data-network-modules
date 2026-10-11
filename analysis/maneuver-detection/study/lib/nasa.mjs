@@ -146,5 +146,5 @@ export function truthMnv(burns) {
   return Buffer.concat(burns.filter((b) => b.status === 'EXECUTED').map((b) => Buffer.from(mnvRecord({
     ID: b.id, SAT_NO: 25544, ORIG_OBJECT_ID: '1998-067A', STATUS: MNV.maneuverStatus.EXECUTED,
     EVENT_START_TIME: b.tig_iso, EVENT_END_TIME: b.tig_iso, DELTA_VEL: Math.abs(b.executed_in_track_mps) / 1000,
-    DELTA_VEL_U: b.executed_in_track_mps / 1000 }))));
+    DELTA_VEL_V: b.executed_in_track_mps / 1000 }))));
 }

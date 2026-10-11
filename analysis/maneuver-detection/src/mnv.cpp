@@ -57,14 +57,14 @@ std::vector<uint8_t> encodeEvent(const Event& e, const Provenance& pv, maneuverS
   const auto end = fb.CreateString(isoMs(e.endTime));
   const auto preState = stateTable(fb, e.r0, e.v0);
   const auto postState = stateTable(fb, e.r1, e.v1);
-  const auto algorithm = fb.CreateString("com.digitalarsenal.analysis.maneuver-detection 0.3.0 " + algorithmOf(e.detector) +
+  const auto algorithm = fb.CreateString("com.digitalarsenal.analysis.maneuver-detection 0.4.0 " + algorithmOf(e.detector) +
     (pv.propagatorPort.empty() ? "" : "; trajectories from propagator port " + pv.propagatorPort));
   std::string text = "Impulsive estimate from consecutive element-set trajectories (" + pv.frame +
-    "). DELTA_VEL_U in-track from the energy change, DELTA_VEL_V cross-track from the orbit-normal change, each 0 unless its test fired; "
-    "the radial component is not estimated (0). PRE_EVENT and POST_EVENT are osculating two-body states at the event time, km and km/s.";
+    "). Delta-V in UVW: DELTA_VEL_V in-track from the energy change, DELTA_VEL_W cross-track from the orbit-normal change, each 0 unless its "
+    "test fired; DELTA_VEL_U, the radial component, is not estimated (0). PRE_EVENT and POST_EVENT are osculating two-body states at the event time, km and km/s.";
   if (e.detector == "D3")
     text = "Change of the orbit-averaged energy rate (low thrust) at the event time (" + pv.frame +
-      "): MNVR_ACCELS holds the change of along-track acceleration (U, V, W; km/s^2). DELTA_VEL is not estimated (0).";
+      "): MNVR_ACCELS holds the change of in-track acceleration as U, V, W (radial, in-track, cross-track; km/s^2). DELTA_VEL is not estimated (0).";
   const auto description = fb.CreateString(text);
   std::vector<flatbuffers::Offset<flatbuffers::String>> sourced;
   if (!pv.comment0.empty()) sourced.push_back(fb.CreateString(pv.comment0));
@@ -76,7 +76,7 @@ std::vector<uint8_t> encodeEvent(const Event& e, const Provenance& pv, maneuverS
   if (e.detector == "D3") {
     std::vector<flatbuffers::Offset<flatbuffers::String>> times = {fb.CreateString(when)};
     accelTimes = fb.CreateVector(times);
-    accels = fb.CreateVector(std::vector<double>{e.accel / 1000.0, 0.0, 0.0});
+    accels = fb.CreateVector(std::vector<double>{0.0, e.accel / 1000.0, 0.0});
   }
   MNVBuilder b(fb);
   b.add_ID(id);
@@ -91,9 +91,9 @@ std::vector<uint8_t> encodeEvent(const Event& e, const Provenance& pv, maneuverS
   b.add_UCT(false);
   b.add_MANEUVER_UNC(e.separation);
   b.add_DELTA_VEL(std::hypot(e.inTrack, e.crossTrack) / 1000.0);
-  b.add_DELTA_VEL_U(e.inTrack / 1000.0);
-  b.add_DELTA_VEL_V(e.crossTrack / 1000.0);
-  b.add_DELTA_VEL_W(0.0);
+  b.add_DELTA_VEL_U(0.0);
+  b.add_DELTA_VEL_V(e.inTrack / 1000.0);
+  b.add_DELTA_VEL_W(e.crossTrack / 1000.0);
   b.add_PRE_EVENT(preState);
   b.add_POST_EVENT(postState);
   if (e.detector == "D3") {

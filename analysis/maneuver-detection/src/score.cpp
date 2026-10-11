@@ -64,8 +64,8 @@ bool scoredOf(const MNV* m, Scored& s, const char* what) {
   s.status = EnumNamemaneuverStatus(m->STATUS());
   if (!parseIso(m->EVENT_START_TIME(), s.start)) return failWith(std::string("A ") + what + " $MNV has no valid EVENT_START_TIME.");
   if (!parseIso(m->EVENT_END_TIME(), s.end) || s.end < s.start) s.end = s.start;
-  s.inTrack = m->DELTA_VEL_U() * 1000.0;
-  s.crossTrack = m->DELTA_VEL_V() * 1000.0;
+  s.inTrack = m->DELTA_VEL_V() * 1000.0;
+  s.crossTrack = m->DELTA_VEL_W() * 1000.0;
   s.dv = std::fabs(m->DELTA_VEL()) * 1000.0;
   const auto* times = m->MNVR_ACCEL_TIMES();
   const auto* accels = m->MNVR_ACCELS();
@@ -78,8 +78,8 @@ bool scoredOf(const MNV* m, Scored& s, const char* what) {
       if (i > 0) for (int c = 0; c < 3; ++c) dv[c] += accels->Get(3 * (i - 1) + c) * (t - prev);
       prev = t;
     }
-    s.inTrack = dv[0] * 1000.0;
-    s.crossTrack = dv[1] * 1000.0;
+    s.inTrack = dv[1] * 1000.0;
+    s.crossTrack = dv[2] * 1000.0;
     s.dv = norm(dv) * 1000.0;
   }
   return true;
