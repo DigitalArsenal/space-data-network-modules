@@ -69,6 +69,14 @@ constexpr size_t kRequestHeaderBytes =
 constexpr size_t kResponseHeaderBytes = 38;
 constexpr int64_t kDefaultMaxSkewMs = 5LL * 60LL * 1000LL;
 constexpr int64_t kDefaultChallengeTtlMs = 60LL * 1000LL;
+// Grant handshakes waiting for their proof ($LCH answered, $LPF not yet in).
+// Each lives at most CHALLENGE_TTL_MS (30 s on the node), and an honest console
+// has at most ~25 open at once, so 512 is some twenty consoles opening in the
+// same instant. An entry keeps the re-sent $EPM, which the node caps (with the
+// whole request) at 16 KiB, so a full table holds at most ~8.5 MiB of the
+// module's fixed 32 MiB.
+constexpr size_t kMaxPendingGrants = 512;
+constexpr const char* kProviderBusyReason = "provider_busy";
 constexpr size_t kEncNonceBytes = 12;
 constexpr size_t kRecipientKeyIdBytes = 8;
 constexpr size_t kProviderSignatureBytes = 64;
@@ -867,20 +875,34 @@ class HostRng : public CryptoPP::RandomNumberGenerator {
   void IncorporateEntropy(const CryptoPP::byte*, size_t) override {}
 };
 
+void secure_zero_pending_grant(PendingGrantMessage* pending) {
+  secure_zero(
+      pending->requester_signing_pubkey.data(),
+      pending->requester_signing_pubkey.size());
+  secure_zero(
+      pending->requester_ephemeral_pubkey.data(),
+      pending->requester_ephemeral_pubkey.size());
+  secure_zero(pending->challenge_nonce.data(), pending->challenge_nonce.size());
+}
+
 void clear_pending_grants() {
   std::lock_guard<std::mutex> lock(g_pending_grant_mutex);
   for (auto& entry : g_pending_grants) {
-    secure_zero(
-        entry.second.requester_signing_pubkey.data(),
-        entry.second.requester_signing_pubkey.size());
-    secure_zero(
-        entry.second.requester_ephemeral_pubkey.data(),
-        entry.second.requester_ephemeral_pubkey.size());
-    secure_zero(
-        entry.second.challenge_nonce.data(),
-        entry.second.challenge_nonce.size());
+    secure_zero_pending_grant(&entry.second);
   }
   g_pending_grants.clear();
+}
+
+// Drop handshakes whose challenge has expired: their proof is refused anyway.
+void cleanup_pending_grants_locked(int64_t now) {
+  for (auto it = g_pending_grants.begin(); it != g_pending_grants.end();) {
+    if (it->second.expires_at_ms <= static_cast<uint64_t>(now)) {
+      secure_zero_pending_grant(&it->second);
+      it = g_pending_grants.erase(it);
+    } else {
+      ++it;
+    }
+  }
 }
 
 bool ed25519_public_key_from_seed(
@@ -2509,9 +2531,43 @@ int32_t key_server_handle_message(
     pending.expires_at_ms = expires_at_ms;
     pending.challenge_bytes = response_out;
 
+    // Bounded: expired handshakes go first, and when the table is still full
+    // the NEW request is refused (provider_busy) rather than an older one
+    // evicted, so a flood of unanswered requests cannot strand a requester
+    // whose handshake is still live.
+    bool admitted = false;
     {
       std::lock_guard<std::mutex> lock(g_pending_grant_mutex);
-      g_pending_grants[request_id] = std::move(pending);
+      cleanup_pending_grants_locked(now);
+      if (g_pending_grants.size() < kMaxPendingGrants ||
+          g_pending_grants.count(request_id) > 0) {
+        g_pending_grants[request_id] = std::move(pending);
+        admitted = true;
+      }
+    }
+    if (!admitted) {
+      secure_zero_pending_grant(&pending);
+      response_out = build_lch_bytes(
+          licensingChallengeMessageType::Error,
+          licensingChallengeRole::Provider,
+          request_id,
+          module_id,
+          module_version,
+          requester_peer_id,
+          requester_xpub,
+          nullptr,
+          0,
+          nullptr,
+          0,
+          requested_domain,
+          requested_timeout_ms,
+          requested_at_ms,
+          nullptr,
+          0,
+          0,
+          g_provider_peer_id,
+          kProviderBusyReason,
+          "too many grant handshakes are open; retry shortly");
     }
     secure_zero_publication(&publication);
     return 0;
@@ -2531,14 +2587,21 @@ int32_t key_server_handle_message(
   }
 
   PendingGrantMessage pending{};
+  bool pending_found = false;
+  const int64_t proof_received_ms = now_ms();
   {
     std::lock_guard<std::mutex> lock(g_pending_grant_mutex);
     const auto it = g_pending_grants.find(proof->REQUEST_ID()->str());
-    if (it == g_pending_grants.end()) {
-      return kServerChallengeInvalid;
+    if (it != g_pending_grants.end()) {
+      pending = it->second;
+      secure_zero_pending_grant(&it->second);
+      g_pending_grants.erase(it);
+      pending_found = true;
     }
-    pending = it->second;
-    g_pending_grants.erase(it);
+    cleanup_pending_grants_locked(proof_received_ms);
+  }
+  if (!pending_found) {
+    return kServerChallengeInvalid;
   }
 
   if (proof->SIGNING_PUBKEY()->size() != 32 ||
@@ -2547,7 +2610,7 @@ int32_t key_server_handle_message(
       proof->SIGNATURE()->size() != 64) {
     return kServerMalformed;
   }
-  if (pending.expires_at_ms <= static_cast<uint64_t>(now_ms())) {
+  if (pending.expires_at_ms <= static_cast<uint64_t>(proof_received_ms)) {
     return kServerChallengeExpired;
   }
   if (proof->MODULE_ID()->str() != pending.module_id ||
