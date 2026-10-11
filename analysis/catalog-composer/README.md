@@ -147,6 +147,89 @@ adapter; see [the workflow and live evidence](docs/matching-workflow.md).
 See [Vimpel normalization and epoch audit](docs/vimpel-normalization.md) for the
 confirmed provider format, differentiation limits and crosswalk policy.
 
+## The `$CAT` integrator (0.2.0)
+
+`integrate_catalog` takes the composed catalog and every source's products and gives
+the catalog, the product chosen for each object, and the report that says how (catalog
+pipeline, `graph/programs/catalog-pipeline.md` section 3). Feed it `compose`'s output;
+composition of snapshots stays `compose`'s. Nothing is estimated and no record is edited
+except the catalog's `MANEUVERABLE` and a merged maneuver's status and tags.
+
+| Port | | Content |
+| --- | --- | --- |
+| `recipe` | in | JSON, version 1: `asOf` (Unix seconds), `identity`, `selection`, `maneuvers` (below) |
+| `catalog` | in | The composed `$CAT`: canonical size-prefixed records, each object once |
+| `ephemerides` | in | Up to 64 normalized `$OEM` trajectories, one per identity candidate in the recipe's order |
+| `omm_products`, `ocm_products`, `mnv_products` | in | Every source's `$OMM`, `$OCM` and `$MNV`, as `flows/source-products` writes them: an `$OMM` and an `$OCM` name their source in `USER_DEFINED_PARAMETERS` `SOURCE_ID`, a `$MNV` in a `source:<id>` tag. A record that names no source or no object is refused and counted |
+| `catalog` | out | The input objects in order, original bytes; `MANEUVERABLE` true where the history shows a maneuver |
+| `omm` | out | Per object and product kind (`sgp4`, `sgp4xp`) the element set of the selected source, byte for byte |
+| `ocm` | out | The selected set's state and covariance with the covariance label, byte for byte |
+| `mnv` | out | The maneuvers of every source, merged |
+| `report` | out | JSON: the policy, the counts, every identity link with its verdict, per object every candidate and why one was chosen or none, the label of the chosen covariance, the SHA-256 and CID (CIDv1, raw, sha2-256) of every record written, the records refused or unlinked |
+
+The steps, in order:
+
+1. **Identity.** A product names its object by NORAD number or international designator,
+   and both must agree with the catalog's; a conflict is reported, not resolved. A source
+   with neither names it natively (an `$OMM`'s `USER_DEFINED_OBJECT_DESIGNATOR`, an `$OCM`'s
+   `OBJECT_DESIGNATOR` under its own `CATALOG_NAME`, a `$MNV`'s `ON_ORBIT`), and that name joins
+   an object only through a link in the recipe's `identity` section: a `match_catalog` recipe
+   (candidates, the four thresholds) whose pairs `{native, reference, object, evidence}` also
+   name the catalog object (`{"norad": n}` or `{"cospar": "YYYY-NNNAAA"}`) the native candidate is
+   proposed to be. Each pair is tested on the two normalized trajectories (the match core
+   `match_catalog` runs) and recorded **compatible, rejected, ambiguous or insufficient**. Only a
+   compatible link binds, and not when its native name is proposed for two objects or two references of
+   one provider both pass. Names and orbits that merely resemble another never join; an `$OMM` whose
+   name is not bound is reported unlinked.
+2. **Maneuvers.** Each object's `$MNV` records are sorted by time. Reports within
+   `timeToleranceSeconds` of the first report of an event, whose delta-V (when both state one)
+   agrees within `deltaVToleranceKmS` or `deltaVRelativeTolerance`, are one event; a source never
+   merges with itself. The event is written from its member with the best status
+   (EXECUTED, CONFIRMED, DETECTED, PREDICTED, PLANNED, UNKNOWN, CANCELLED), keeps each source's
+   status in the tags `member:<source>=<STATUS>` and `merged:<n>`, and an event of one report is that
+   record unchanged. The catalog's `MANEUVERABLE` is true where an event began at or before `asOf`
+   with a status in `maneuverableStatuses` (default DETECTED, CONFIRMED, EXECUTED). The history sets
+   it true and never clears it.
+3. **Selection.** For each object and product kind, each source's newest set at or before `asOf` is its
+   candidate. A candidate whose epoch precedes the latest event with a status in `retiringStatuses`
+   (default DETECTED, CONFIRMED, EXECUTED) is **retired**, one older than `maxAgeDays` is too old.
+   The remaining candidates the **measured table** has a row for (source, product, regime, horizon) with
+   at least `minSamples` samples (default 30) are ordered by their median 3-D position error; the lowest
+   wins, a tie going to the source earlier in `sourceOrder` and then to the newer epoch. An unmeasured
+   candidate never beats a measured one. With none measured, `sourceOrder` decides and the report says
+   `unmeasured-fallback-order`. When every candidate is retired or too old the object is **stale** and has
+   no product. The regime is the one the product's covariance label names (`COV_LABEL` of the `$OMM`), so the
+   covariance model and the selection speak of the same strata; the horizon is the recipe's.
+4. **Covariance.** The selected set's own `$OCM` (the same source, first state at the set's epoch) goes out
+   with it, and the report carries its label: rule, method, regime, held-out verdict, calibration. A set
+   with no `$OCM` goes out alone and the report reads its label from the set.
+
+```json
+{
+  "version": 1, "asOf": 1791590400,
+  "identity": {"version": 1, "positionToleranceKm": 1, "velocityToleranceKmS": 0.01, "finiteDifferenceToleranceKmS": 1e-8, "minimumSpanSeconds": 3600,
+    "candidates": [{"id": "v", "provider": "vimpel", "nativeId": "V-100", "recordId": "edition-hash"}, {"id": "r", "provider": "space-track", "nativeId": "90001", "recordId": "set-hash"}],
+    "pairs": [{"native": "v", "reference": "r", "object": {"norad": 90001}, "evidence": {"source": "datefirst", "recordId": "crosswalk-edition"}}]},
+  "selection": {"horizonDays": 1, "minSamples": 30, "maxAgeDays": 3, "sourceOrder": ["space-track-gp", "celestrak-gp"],
+    "table": [{"source": "celestrak-gp", "product": "sgp4", "regime": "LEO-L", "horizonDays": 1, "median3dKm": 0.5, "samples": 100}]},
+  "maneuvers": {"timeToleranceSeconds": 3600, "deltaVToleranceKmS": 0.0005, "maneuverableStatuses": ["DETECTED", "CONFIRMED", "EXECUTED"], "retiringStatuses": ["DETECTED", "CONFIRMED", "EXECUTED"]}
+}
+```
+
+The measured table is an input the experiments refresh. Its regimes are the ones `analysis/gp-error-model`
+labels (E14's: LEO-L, LEO-M, LEO-H, MEO, GEO); E3's results are keyed by its own test strata, so a table for this recipe
+is keyed by the regimes above. An object whose products carry no regime (a regime without a model, such as HEO) is
+selected by `sourceOrder`. It selects and does not fuse: E3 found combining sources no more accurate than selecting one (H2 not
+supported in any regime). Limits: 250,000 records per port, 128 MiB of input, 64 trajectories, 4,096 identity links; the report is
+about 1.5 KB per object, so a flow shards a large catalog.
+
+`tests/integrator.test.mjs` fixes each outcome by construction: the lowest measured median, a row under
+`minSamples` measuring nothing, the newest set per source, `maxAgeDays`, SGP4 and SGP4-XP chosen separately, a burn retiring
+the better-measured source, stale, merged and unmerged reports, the covariance and label coming out byte for byte,
+links that bind and links that do not, refused records and recipes. `tests/integrator-chain.test.mjs` integrates what the
+compiled `flows/source-products` writes for two sources. `npm run test:parity` runs the method in Chromium, native WasmEdge and
+container WasmEdge: byte-identical.
+
 ## Epoch validation and refinement (0.1.8)
 
 `validate_epoch` checks propagated positions against a hash-verified native

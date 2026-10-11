@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.analysis.catalog-composer",
   "name": "Catalog Editor",
-  "version": "0.1.9",
-  "description": "Compose immutable CAT snapshots with explicit source precedence, identifier conflict review and per-object orbital-state source selection.",
+  "version": "0.2.0",
+  "description": "Compose immutable CAT snapshots with explicit source precedence, identifier conflict review and per-object orbital-state source selection; integrate the composed catalog with every source's products: identity links tested on trajectories, the product chosen by measured error, its covariance and label, merged maneuvers.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "invokeSurfaces": [
@@ -108,6 +108,242 @@
         }
       ],
       "maxBatch": 17,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "integrate_catalog",
+      "displayName": "Integrate the catalog",
+      "inputPorts": [
+        {
+          "portId": "recipe",
+          "acceptedTypeSets": [
+            {
+              "setId": "recipe-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Version 1 integration recipe: asOf, the identity links with their thresholds, the selection policy with its measured table, and the maneuver policy.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Version 1 integration recipe: asOf, the identity links with their thresholds, the selection policy with its measured table, and the maneuver policy. Module configuration/decision metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Version 1 integration recipe: asOf, the identity links with their thresholds, the selection policy with its measured table, and the maneuver policy."
+        },
+        {
+          "portId": "catalog",
+          "acceptedTypeSets": [
+            {
+              "setId": "catalog-v1",
+              "allowedTypes": [
+                {
+                  "schemaName": "CAT.fbs",
+                  "fileIdentifier": "$CAT",
+                  "rootTypeName": "CAT"
+                }
+              ],
+              "description": "The composed catalog: canonical size-prefixed CAT records, each object once (the output of compose, or one snapshot)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The composed catalog: canonical size-prefixed CAT records, each object once (the output of compose, or one snapshot)."
+        },
+        {
+          "portId": "ephemerides",
+          "acceptedTypeSets": [
+            {
+              "setId": "ephemerides-v1",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM"
+                }
+              ],
+              "description": "Normalized common-grid OEM trajectories of the identity candidates, one size-prefixed record per candidate in the recipe's order."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "Normalized common-grid OEM trajectories of the identity candidates, one size-prefixed record per candidate in the recipe's order."
+        },
+        {
+          "portId": "omm_products",
+          "acceptedTypeSets": [
+            {
+              "setId": "omm-products-v1",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ],
+              "description": "Every source's element sets, canonical size-prefixed OMM records, each naming its source in USER_DEFINED_PARAMETERS SOURCE_ID."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "Every source's element sets, canonical size-prefixed OMM records, each naming its source in USER_DEFINED_PARAMETERS SOURCE_ID."
+        },
+        {
+          "portId": "ocm_products",
+          "acceptedTypeSets": [
+            {
+              "setId": "ocm-products-v1",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
+                }
+              ],
+              "description": "Every source's states and covariance with the covariance label, canonical size-prefixed OCM records, each naming its source in USER_DEFINED_PARAMETERS SOURCE_ID."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "Every source's states and covariance with the covariance label, canonical size-prefixed OCM records, each naming its source in USER_DEFINED_PARAMETERS SOURCE_ID."
+        },
+        {
+          "portId": "mnv_products",
+          "acceptedTypeSets": [
+            {
+              "setId": "mnv-products-v1",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV"
+                }
+              ],
+              "description": "Every source's maneuvers, canonical size-prefixed MNV records, each tagged source:<id>."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "Every source's maneuvers, canonical size-prefixed MNV records, each tagged source:<id>."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "catalog",
+          "acceptedTypeSets": [
+            {
+              "setId": "catalog-out-v1",
+              "allowedTypes": [
+                {
+                  "schemaName": "CAT.fbs",
+                  "fileIdentifier": "$CAT",
+                  "rootTypeName": "CAT"
+                }
+              ],
+              "description": "The input objects in order, original bytes kept; MANEUVERABLE is set where the maneuver history shows a maneuver."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The input objects in order, original bytes kept; MANEUVERABLE is set where the maneuver history shows a maneuver."
+        },
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "omm-out-v1",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ],
+              "description": "Per object and product kind (SGP4, SGP4-XP) the element set of the selected source, byte for byte."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Per object and product kind (SGP4, SGP4-XP) the element set of the selected source, byte for byte."
+        },
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "ocm-out-v1",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
+                }
+              ],
+              "description": "The selected product's state and covariance with the covariance label, byte for byte."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The selected product's state and covariance with the covariance label, byte for byte."
+        },
+        {
+          "portId": "mnv",
+          "acceptedTypeSets": [
+            {
+              "setId": "mnv-out-v1",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV"
+                }
+              ],
+              "description": "The maneuvers of every source, merged within the policy's tolerances; a merged event keeps each source's confirmation in its tags."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The maneuvers of every source, merged within the policy's tolerances; a merged event keeps each source's confirmation in its tags."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Per object every candidate, why one was chosen or none, the covariance label and the CIDs of the records; the identity links with their verdicts; the policy.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per object every candidate, why one was chosen or none, the covariance label and the CIDs of the records; the identity links with their verdicts; the policy. Module configuration/decision metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Per object every candidate, why one was chosen or none, the covariance label and the CIDs of the records; the identity links with their verdicts; the policy."
+        }
+      ],
+      "maxBatch": 260,
       "drainPolicy": "single-shot"
     },
     {
