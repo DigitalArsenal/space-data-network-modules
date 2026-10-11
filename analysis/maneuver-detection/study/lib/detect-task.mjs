@@ -38,7 +38,7 @@ export async function run(item, context) {
     variants[v.name] = results[k].maneuvers.map(unpackMnv)
       .filter((m) => { const t = seconds(m.EVENT_START_TIME); return t >= from && t < to; })
       .map((m) => ({ ID: m.ID, SAT_NO: m.SAT_NO, ORIG_OBJECT_ID: m.ORIG_OBJECT_ID, EVENT_START_TIME: m.EVENT_START_TIME,
-        EVENT_END_TIME: m.EVENT_END_TIME, DELTA_VEL: m.DELTA_VEL, DELTA_VEL_U: m.DELTA_VEL_U, DELTA_VEL_V: m.DELTA_VEL_V,
+        EVENT_END_TIME: m.EVENT_END_TIME, DELTA_VEL: m.DELTA_VEL, DELTA_VEL_V: m.DELTA_VEL_V, DELTA_VEL_W: m.DELTA_VEL_W,
         CHARACTERIZATION: m.CHARACTERIZATION, ALGORITHM: m.ALGORITHM, MNVR_ACCELS: m.MNVR_ACCELS }));
   });
   return { item, sets: rows.length, queries, variants };

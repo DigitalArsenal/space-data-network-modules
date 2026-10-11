@@ -132,7 +132,7 @@ std::vector<uint8_t> encodeCheck(const Planned& p, maneuverStatus status, double
   const auto e = fb.CreateString(isoMs(end));
   const auto preState = stateTable(fb, r0, v0);
   const auto postState = stateTable(fb, r1, v1);
-  const auto algorithm = fb.CreateString("com.digitalarsenal.analysis.maneuver-detection 0.3.0 compare_ephemerides: orbit-averaged energy and orbit normal of successive ephemeris versions");
+  const auto algorithm = fb.CreateString("com.digitalarsenal.analysis.maneuver-detection 0.4.0 compare_ephemerides: orbit-averaged energy and orbit normal of successive ephemeris versions");
   const auto text = fb.CreateString(description);
   std::vector<flatbuffers::Offset<flatbuffers::String>> sourced;
   for (const std::string& x : sources) sourced.push_back(fb.CreateString(x));
@@ -158,9 +158,9 @@ std::vector<uint8_t> encodeCheck(const Planned& p, maneuverStatus status, double
   b.add_EVENT_END_TIME(e);
   b.add_UCT(false);
   b.add_DELTA_VEL(std::hypot(inTrack, crossTrack) / 1000.0);
-  b.add_DELTA_VEL_U(inTrack / 1000.0);
-  b.add_DELTA_VEL_V(crossTrack / 1000.0);
-  b.add_DELTA_VEL_W(0.0);
+  b.add_DELTA_VEL_U(0.0);
+  b.add_DELTA_VEL_V(inTrack / 1000.0);
+  b.add_DELTA_VEL_W(crossTrack / 1000.0);
   b.add_PRE_EVENT(preState);
   b.add_POST_EVENT(postState);
   b.add_DESCRIPTION(text);

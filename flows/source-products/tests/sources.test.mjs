@@ -176,7 +176,7 @@ for (const source of registry.sources) {
       }
       if (!mpe) {
         // The burn in the history, on a $MNV that names the source.
-        const burns = records(egressBytes(egress, 'mnv')).map(unpackMnv).filter((m) => m.DELTA_VEL_U !== 0);
+        const burns = records(egressBytes(egress, 'mnv')).map(unpackMnv).filter((m) => m.DELTA_VEL_V !== 0);
         assert.equal(burns.length, 1);
         // The lineage is a tag only where it says more than the source's id.
         const tags = [`source:${source.id}`, `originator:${source.originator}`, `provider:${provider(w.module)}`, `licence:${source.licence.class}`, `licence-id:${source.licence.id}`,

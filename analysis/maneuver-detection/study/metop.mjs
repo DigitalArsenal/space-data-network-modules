@@ -49,14 +49,14 @@ export function manoeuvres(text) {
   return { generated, groups };
 }
 
-// Truth $MNV: the acceleration profile verbatim (U along-track, V cross-track,
-// W radial; each value held until the next time, zero after a burn ends).
+// Truth $MNV: the acceleration profile verbatim, in UVW (U radial, V in-track,
+// W cross-track; each value held until the next time, zero after a burn ends).
 function truthRecord(group) {
   const times = [], accels = [];
   for (const b of group) {
     const [radial, along, cross] = b.accel;
     times.push(iso(b.start), iso(b.stop));
-    accels.push(along, cross, radial, 0, 0, 0);
+    accels.push(radial, along, cross, 0, 0, 0);
   }
   return mnvRecord({ ID: `METOP-SGA1:${iso(group[0].start)}`, SAT_NO: 65159, ORIG_OBJECT_ID: '2025-172A', STATUS: MNV.maneuverStatus.EXECUTED,
     EVENT_START_TIME: iso(group[0].start), EVENT_END_TIME: iso(group.at(-1).stop), NUM_ACCEL_POINTS: times.length,

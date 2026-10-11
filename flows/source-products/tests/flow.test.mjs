@@ -80,9 +80,9 @@ test('an element-set source: the newest set of an object gets states, a covarian
   assert.equal(egressJson(egress, 'covariance_report').counts.rule3, 1);
 
   // The 1 m/s burn between sets 15 and 16, found through the detector's two passes with SGP4 answering the port.
-  const burns = records(egressBytes(egress, 'mnv')).map(unpackMnv).filter((m) => m.DELTA_VEL_U !== 0);
+  const burns = records(egressBytes(egress, 'mnv')).map(unpackMnv).filter((m) => m.DELTA_VEL_V !== 0);
   assert.equal(burns.length, 1);
-  assert.ok(Math.abs(burns[0].DELTA_VEL_U * 1000 - 1) < 0.1, `${burns[0].DELTA_VEL_U * 1000} m/s`);
+  assert.ok(Math.abs(burns[0].DELTA_VEL_V * 1000 - 1) < 0.1, `${burns[0].DELTA_VEL_V * 1000} m/s`);
   assert.ok(Math.abs(Date.parse(burns[0].EVENT_START_TIME) / 1000 - tb) < 8 * 3600);
   for (const tag of ['originator:CelesTrak', 'source:celestrak-gp', 'provider:sdn:celestrak-gp', 'licence:redistributable', 'lineage:space-track-gp']) assert.ok(burns[0].TAGS.includes(tag), tag);
   assert.equal(egressJson(egress, 'propagation_report').refused, 0);
@@ -217,7 +217,7 @@ test('an ephemeris source with covariance: the operator\'s is rule 1; a planned 
   assert.deepEqual(ocm.COVARIANCE_DATA, lower, 'the operator\'s covariance, as supplied');
   const [executed] = records(egressBytes(egress, 'mnv')).map(unpackMnv);
   assert.equal(executed.STATUS, MD_MNV.maneuverStatus.EXECUTED);
-  assert.ok(executed.DELTA_VEL_U > 0);
+  assert.ok(executed.DELTA_VEL_V > 0);
   for (const tag of ['source:spacex-starlink', 'originator:spacex-starlink originator', 'licence:redistributable']) assert.ok(executed.TAGS.includes(tag), tag);
   assert.equal(egressJson(egress, 'compare_report').method, 'compare_ephemerides');
 });
@@ -231,9 +231,9 @@ test('an ephemeris source\'s history of fitted sets is screened in the same two 
   const attributed = await screenedForManeuvers(sets, recipe);
   assert.deepEqual(egressBytes(egress, 'mnv'), bytesOf(attributed, 'maneuvers'), 'the flow\'s $MNV is the chain\'s');
 
-  const burns = records(egressBytes(egress, 'mnv')).map(unpackMnv).filter((m) => m.DELTA_VEL_U !== 0);
+  const burns = records(egressBytes(egress, 'mnv')).map(unpackMnv).filter((m) => m.DELTA_VEL_V !== 0);
   assert.equal(burns.length, 1);
-  assert.ok(Math.abs(burns[0].DELTA_VEL_U * 1000 - 1) < 0.1, `${burns[0].DELTA_VEL_U * 1000} m/s`);
+  assert.ok(Math.abs(burns[0].DELTA_VEL_V * 1000 - 1) < 0.1, `${burns[0].DELTA_VEL_V * 1000} m/s`);
   assert.ok(Math.abs(Date.parse(burns[0].EVENT_START_TIME) / 1000 - tb) < 8 * 3600);
   for (const tag of ['source:spacex-starlink', 'originator:spacex-starlink originator', 'licence:reproducible', 'lineage:spacex-meme']) assert.ok(burns[0].TAGS.includes(tag), tag);
 

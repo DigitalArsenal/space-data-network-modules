@@ -64,10 +64,10 @@ test('a 1 m/s in-track burn on a grid node: exact time and vis-viva delta-V', as
   const a0 = sma(r, v), a1 = sma(r, add(v, mul(unit(v), 0.001)));
   const expected = norm(v) * (a1 - a0) / (2 * a0);
   // Tolerance 1e-9 km/s (1 um/s): the element round trip of the post orbit.
-  assert.ok(Math.abs(e.DELTA_VEL_U - expected) < 1e-9, `U ${e.DELTA_VEL_U} vs ${expected} km/s`);
+  assert.ok(Math.abs(e.DELTA_VEL_V - expected) < 1e-9, `U ${e.DELTA_VEL_V} vs ${expected} km/s`);
   assert.ok(Math.abs(expected - 0.001) < 0.001 * 3.5 / 7668, 'second-order term is 2.5 eps');
-  assert.ok(Math.abs(e.DELTA_VEL_V) < 1e-9, 'an in-plane burn leaves the orbit normal unchanged');
-  assert.equal(e.DELTA_VEL_W, 0);
+  assert.ok(Math.abs(e.DELTA_VEL_W) < 1e-9, 'an in-plane burn leaves the orbit normal unchanged');
+  assert.equal(e.DELTA_VEL_U, 0);
   assert.equal(e.STATUS, MNV.maneuverStatus.DETECTED);
   assert.equal(e.CHARACTERIZATION, MNV.maneuverCharacterization.ORBIT_RAISING);
   assert.equal(e.SAT_NO, 99001);
@@ -96,7 +96,7 @@ test('a 1 m/s in-track burn between grid nodes: time and delta-V within the inte
   // Both orbits are interpolated on one grid and differ by 1e-4 in speed, so
   // their interpolation errors cancel in the energy difference to ~1e-4 of
   // the Hermite velocity error (~2e-2 m/s): 1 mm/s bounds it.
-  assert.ok(Math.abs(e.DELTA_VEL_U - expected) < 1e-6, `U ${e.DELTA_VEL_U} vs ${expected} km/s`);
+  assert.ok(Math.abs(e.DELTA_VEL_V - expected) < 1e-6, `U ${e.DELTA_VEL_V} vs ${expected} km/s`);
 });
 
 test('a 2 m/s cross-track burn: out-of-plane, delta-V from the orbit-normal rotation', async (t) => {
@@ -113,11 +113,11 @@ test('a 2 m/s cross-track burn: out-of-plane, delta-V from the orbit-normal rota
   // positive for a burn along +N. Tolerance: element round trip, 1e-9 km/s.
   const [r, v] = pre(tb);
   const vs = norm(v);
-  assert.ok(Math.abs(e.DELTA_VEL_V - vs * 0.002 / Math.hypot(vs, 0.002)) < 1e-9, `V ${e.DELTA_VEL_V}`);
+  assert.ok(Math.abs(e.DELTA_VEL_W - vs * 0.002 / Math.hypot(vs, 0.002)) < 1e-9, `V ${e.DELTA_VEL_W}`);
   // Speed rises from v to sqrt(v^2 + dv^2), so the in-track jump is the
   // vis-viva term dv^2 / (2v) = 2.6e-4 m/s, under the 0.08 m/s floor: the
   // in-track step does not fire and the reported component is 0.
-  assert.equal(e.DELTA_VEL_U, 0);
+  assert.equal(e.DELTA_VEL_V, 0);
   const expectedU = norm(v) * (sma(r, add(v, mul(rtn(r, v).N, 0.002))) - sma(r, v)) / (2 * sma(r, v));
   const reported = report.objects[0].events[0];
   assert.ok(Math.abs(reported.raw_in_track_mps / 1000 - expectedU) < 1e-9);
@@ -169,7 +169,7 @@ test('an Earth-fixed history gives the inertial history\'s event', async (t) => 
   // One rotation per instant, shared by both trajectories: the crossing and
   // the energy jump are unchanged to rounding (1 ms, 1 um/s).
   assert.ok(Math.abs(seconds(fixed.events[0].EVENT_START_TIME) - seconds(inertial.events[0].EVENT_START_TIME)) <= 0.001);
-  assert.ok(Math.abs(fixed.events[0].DELTA_VEL_U - inertial.events[0].DELTA_VEL_U) < 1e-9);
+  assert.ok(Math.abs(fixed.events[0].DELTA_VEL_V - inertial.events[0].DELTA_VEL_V) < 1e-9);
 });
 
 test('D2: two burns with two sets between them are two events', async (t) => {
@@ -186,8 +186,8 @@ test('D2: two burns with two sets between them are two events', async (t) => {
   const second = kepler(r, add(v, mul(unit(v), 0.0005)), t1);
   assert.ok(Math.abs(seconds(events[0].EVENT_START_TIME) - t1) < 1, events[0].EVENT_START_TIME);
   assert.ok(Math.abs(seconds(events[1].EVENT_START_TIME) - t2) < 1, events[1].EVENT_START_TIME);
-  assert.ok(Math.abs(events[0].DELTA_VEL_U - visViva(pre, t1, 0.0005)) < 1e-8, `${events[0].DELTA_VEL_U}`);
-  assert.ok(Math.abs(events[1].DELTA_VEL_U - visViva(second, t2, 0.0007)) < 1e-8, `${events[1].DELTA_VEL_U}`);
+  assert.ok(Math.abs(events[0].DELTA_VEL_V - visViva(pre, t1, 0.0005)) < 1e-8, `${events[0].DELTA_VEL_V}`);
+  assert.ok(Math.abs(events[1].DELTA_VEL_V - visViva(second, t2, 0.0007)) < 1e-8, `${events[1].DELTA_VEL_V}`);
 });
 
 test('D2: two burns with one set between them are one event', async (t) => {
@@ -198,7 +198,7 @@ test('D2: two burns with one set between them are one event', async (t) => {
   assert.equal(error, undefined, error);
   assert.equal(events.length, 1);
   // The step spans both burns: 1.2 m/s to first order.
-  assert.ok(Math.abs(events[0].DELTA_VEL_U * 1000 - 1.2) < 0.01, `${events[0].DELTA_VEL_U * 1000} m/s`);
+  assert.ok(Math.abs(events[0].DELTA_VEL_V * 1000 - 1.2) < 0.01, `${events[0].DELTA_VEL_V * 1000} m/s`);
 });
 
 async function compare(t, versions, plan) {
@@ -229,10 +229,10 @@ test('compare_ephemerides: a planned burn executed and cancelled', async (t) => 
   assert.equal(done.checks[0].STATUS, MNV.maneuverStatus.EXECUTED);
   // The orbit-averaged a over whole revolutions of a two-body orbit is its a:
   // 1e-6 km/s (1 mm/s) bounds the Hermite interpolation of the averages.
-  assert.ok(Math.abs(done.checks[0].DELTA_VEL_U - expected) < 1e-6, `${done.checks[0].DELTA_VEL_U} vs ${expected}`);
+  assert.ok(Math.abs(done.checks[0].DELTA_VEL_V - expected) < 1e-6, `${done.checks[0].DELTA_VEL_V} vs ${expected}`);
   const skipped = await compare(t, [before, version(pre, tig + 6 * 3600, T0 + 3 * 86400, tig + 8 * 3600)], planned(tig, 0.001));
   assert.equal(skipped.checks[0].STATUS, MNV.maneuverStatus.CANCELLED);
-  assert.ok(Math.abs(skipped.checks[0].DELTA_VEL_U) < 1e-6);
+  assert.ok(Math.abs(skipped.checks[0].DELTA_VEL_V) < 1e-6);
 });
 
 test('the propagator query port: SGP4 and an ABI provider each answer, and each finds the burn', async () => {
@@ -254,15 +254,15 @@ test('the propagator query port: SGP4 and an ABI provider each answer, and each 
       // does not reproduce exactly, so their planes disagree by metres per
       // second and D2's plane test reports that; the in-track events are
       // asserted: exactly one, the burn.
-      const events = results[0].maneuvers.map(host.unpackMnv).filter((m) => m.DELTA_VEL_U !== 0);
+      const events = results[0].maneuvers.map(host.unpackMnv).filter((m) => m.DELTA_VEL_V !== 0);
       assert.equal(events.length, 1, `${provider.name}: ${JSON.stringify(results[0].report.objects[0].events)}`);
       const [m] = events;
-      assert.ok(m.DELTA_VEL_U > 0, provider.name);
+      assert.ok(m.DELTA_VEL_V > 0, provider.name);
       // Within the sets bracketing the burn (8 h apart).
       assert.ok(Math.abs(seconds(m.EVENT_START_TIME) - tb) < 8 * 3600, `${provider.name}: ${m.EVENT_START_TIME}`);
       // Mean-element changes map to the osculating jump only to first order in
       // J2 (SGP4); the keplerian reference reads mean motion as two-body.
-      assert.ok(Math.abs(m.DELTA_VEL_U * 1000 - 1) < 0.1, `${provider.name}: ${m.DELTA_VEL_U * 1000} m/s`);
+      assert.ok(Math.abs(m.DELTA_VEL_V * 1000 - 1) < 0.1, `${provider.name}: ${m.DELTA_VEL_V * 1000} m/s`);
     }
     // Answers out of order are refused, never matched to the wrong set.
     const { answer } = await host.sgp4Provider();
