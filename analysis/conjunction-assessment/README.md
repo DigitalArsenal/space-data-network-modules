@@ -5,7 +5,7 @@ using the canonical SDK invoke contract and published SDS **1.231.0** records.
 
 ## Public methods and records
 
-`plugin-manifest.json` advertises all 24 methods. Requests and results use
+`plugin-manifest.json` advertises all 25 methods. Requests and results use
 ordinary, verified FlatBuffers with explicit UTC times, Earth reference frames,
 source provenance, probability algorithms and units.
 
@@ -23,6 +23,7 @@ source provenance, probability algorithms and units.
 | `screen_window`, `screen_segment_window` | CQR window request | Chunked CQR catalog results, plus one OMM per excluded object |
 | `coarse_grid` | CQR window request on a resident index, and a block of coarse steps | Sampled states and motion bounds for the GPU pair search, plus a JSON report of exclusions |
 | `search_candidates` | CQR window request on a resident index, and a block of coarse steps | Candidate pair-steps found on the CPU (the frame `refine_candidates` takes), plus a JSON report of exclusions |
+| `search_grid` | CQR window request (its controls), a coarse grid block `coarse_grid` returned, optional roles (primary, secondary, skip per object) | Candidate pair-steps in grid rows, plus a JSON report of the roles |
 | `refine_candidates` | CQR window request on a resident index, optional candidate pairs and exclusions | Chunked CQR catalog results, plus one OMM per excluded object |
 | `destroy_screening_index` | CQR destroy request | Empty successful response |
 | `version` | CQR version query | CQR version result |
@@ -240,6 +241,41 @@ Windows that abut report each minimum exactly once; windows that overlap report
 a minimum inside the overlap in each of them, with the same TCA and miss
 distance, so a consumer that keeps overlapping windows removes the repeat by
 pair and TCA.
+
+## Continuous and distributed screening
+
+A window's coarse grid (`coarse_grid`, f32 rows) is the catalog's index for
+that window. When some objects get new orbit data, coarse_grid on an index of
+just those objects gives their rows, which replace theirs in the kept grid
+(`gpu/continuousScreen.mjs`, `spliceGridRows`). `search_grid` then searches
+the grid with those objects as primaries: a pair is searched when one member
+is a primary and neither is skipped. Each row's f32 rounding is bounded and
+added to its deviation bound, so the candidates contain every pair-step
+`search_candidates` finds on the same sources; with roles, a secondary whose
+radius band cannot come within the threshold of a primary's band over the
+block is not searched. `refine_candidates` re-tests the candidates in f64 on
+an index of only the objects they name, in grid order, so each pair is
+refined exactly as on the whole catalog's index.
+
+The events of every pair with an updated member equal a full re-screen's,
+and the previous screen with those pairs replaced equals the new full screen
+(`tests/continuousScreening.test.mjs`; on the real catalog,
+`scripts/incremental-screen.mjs`). The same roles cut a screen into work
+units: the primaries in blocks, a unit's block primary and earlier blocks
+skipped, so every pair is in exactly one unit (`unitRoles`).
+`gpu/workUnits.mjs` names a unit's inputs by SHA-256 (module, sources, grid
+blocks, roles, controls); its output does not depend on the runtime or the
+thread count, so replicas compare byte for byte. The local harness
+(`scripts/distributed-screen.mjs`, worker processes in
+`scripts/lib/screenWorker.mjs`) assigns units by declared memory and threads,
+replicates a keyed fraction, signs each answer with a PNM, and catches a
+worker that alters or drops units. `scripts/operator-first.mjs` screens an
+operator's fresh element sets against the index and publishes data and
+results together. Measurements and limits:
+[docs/continuous-distributed-screening-2026-10.md](docs/continuous-distributed-screening-2026-10.md).
+Runtime parity of the resident calls (Node V8, Chrome, WasmEdge, Docker
+WasmEdge, and WasmEdge ahead-of-time compiled with SDN's patches):
+`npm run test:continuous-parity`.
 
 ## Catalog size and partitioned runs
 

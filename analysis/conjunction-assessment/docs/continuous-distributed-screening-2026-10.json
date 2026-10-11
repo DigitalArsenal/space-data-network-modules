@@ -1,0 +1,1428 @@
+{
+ "note": "Aggregates of docs/continuous-distributed-screening-2026-10.md. No element set, event or per-object value; Space-Track and operator data stay local.",
+ "module": "analysis/conjunction-assessment 0.7.0, module SHA-256 ca5b9898007b5067c88e51bb54de82004a5e0a6e114bdba59843677cd2b6c106",
+ "updateCadence": {
+  "source": "Space-Track gp_history by CREATION_DATE (aggregates only)",
+  "from": "2026-09-01T00:00:00Z",
+  "to": "2026-10-11T00:00:00Z",
+  "files": 309,
+  "catalog": {
+   "atFrom": 32392,
+   "atTo": 32703,
+   "rule": "objects whose latest epoch is within 30 days"
+  },
+  "records": {
+   "records": 2976351,
+   "duplicates": 0,
+   "republished": 71418,
+   "changed": 2904933,
+   "newObjects": 686
+  },
+  "cycles": {
+   "15min": {
+    "cycles": 3840,
+    "emptyCycles": 1760,
+    "k": {
+     "mean": 754.3,
+     "median": 1,
+     "p90": 9,
+     "p99": 19626,
+     "max": 27620
+    },
+    "kOverN": {
+     "mean": 0.0231,
+     "median": 0,
+     "max": 0.8446
+    },
+    "histogram": [
+     {
+      "k": "0",
+      "cycles": 1760
+     },
+     {
+      "k": "1-9",
+      "cycles": 1699
+     },
+     {
+      "k": "10-99",
+      "cycles": 75
+     },
+     {
+      "k": "100-999",
+      "cycles": 51
+     },
+     {
+      "k": "1000-9999",
+      "cycles": 126
+     },
+     {
+      "k": "10000-",
+      "cycles": 129
+     }
+    ],
+    "pairWork": {
+     "incrementalPerDay": 3.37,
+     "fullPerDay": 52
+    },
+    "batches": {
+     "cycles": 215,
+     "perDay": 5.38,
+     "shareOfUpdates": 0.962,
+     "kOutside": {
+      "mean": 30.6,
+      "p90": 5,
+      "max": 3264
+     }
+    },
+    "largest": [
+     {
+      "start": "2026-09-30T02:00:00.000Z",
+      "k": 27620,
+      "records": 27654
+     },
+     {
+      "start": "2026-09-28T11:00:00.000Z",
+      "k": 26458,
+      "records": 26484
+     },
+     {
+      "start": "2026-10-01T21:30:00.000Z",
+      "k": 25964,
+      "records": 25980
+     },
+     {
+      "start": "2026-09-13T01:30:00.000Z",
+      "k": 25167,
+      "records": 25488
+     },
+     {
+      "start": "2026-09-30T10:30:00.000Z",
+      "k": 25101,
+      "records": 29208
+     }
+    ]
+   },
+   "1h": {
+    "cycles": 960,
+    "emptyCycles": 127,
+    "k": {
+     "mean": 2991.4,
+     "median": 6,
+     "p90": 16889,
+     "p99": 22837,
+     "max": 27620
+    },
+    "kOverN": {
+     "mean": 0.0915,
+     "median": 0.0002,
+     "max": 0.8446
+    },
+    "histogram": [
+     {
+      "k": "0",
+      "cycles": 127
+     },
+     {
+      "k": "1-9",
+      "cycles": 461
+     },
+     {
+      "k": "10-99",
+      "cycles": 172
+     },
+     {
+      "k": "100-999",
+      "cycles": 18
+     },
+     {
+      "k": "1000-9999",
+      "cycles": 31
+     },
+     {
+      "k": "10000-",
+      "cycles": 151
+     }
+    ],
+    "pairWork": {
+     "incrementalPerDay": 3.2,
+     "fullPerDay": 20.82
+    },
+    "batches": {
+     "cycles": 173,
+     "perDay": 4.33,
+     "shareOfUpdates": 0.989,
+     "kOutside": {
+      "mean": 39.1,
+      "p90": 21,
+      "max": 3267
+     }
+    },
+    "largest": [
+     {
+      "start": "2026-09-30T02:00:00.000Z",
+      "k": 27620,
+      "records": 27655
+     },
+     {
+      "start": "2026-09-28T11:00:00.000Z",
+      "k": 26458,
+      "records": 26487
+     },
+     {
+      "start": "2026-10-01T21:00:00.000Z",
+      "k": 25964,
+      "records": 25984
+     },
+     {
+      "start": "2026-09-13T01:00:00.000Z",
+      "k": 25167,
+      "records": 25500
+     },
+     {
+      "start": "2026-09-30T10:00:00.000Z",
+      "k": 25101,
+      "records": 29208
+     }
+    ]
+   },
+   "1d": {
+    "cycles": 40,
+    "emptyCycles": 0,
+    "k": {
+     "mean": 27497.5,
+     "median": 27877,
+     "p90": 29108,
+     "p99": 30073,
+     "max": 30073
+    },
+    "kOverN": {
+     "mean": 0.8408,
+     "median": 0.8524,
+     "max": 0.9196
+    },
+    "histogram": [
+     {
+      "k": "0",
+      "cycles": 0
+     },
+     {
+      "k": "1-9",
+      "cycles": 0
+     },
+     {
+      "k": "10-99",
+      "cycles": 0
+     },
+     {
+      "k": "100-999",
+      "cycles": 0
+     },
+     {
+      "k": "1000-9999",
+      "cycles": 0
+     },
+     {
+      "k": "10000-",
+      "cycles": 40
+     }
+    ],
+    "pairWork": {
+     "incrementalPerDay": 0.97,
+     "fullPerDay": 1
+    },
+    "batches": {
+     "cycles": 40,
+     "perDay": 1,
+     "shareOfUpdates": 1,
+     "kOutside": {
+      "mean": 0,
+      "p90": null,
+      "max": 0
+     }
+    },
+    "largest": [
+     {
+      "start": "2026-09-30T00:00:00.000Z",
+      "k": 30073,
+      "records": 85493
+     },
+     {
+      "start": "2026-09-13T00:00:00.000Z",
+      "k": 29266,
+      "records": 140029
+     },
+     {
+      "start": "2026-09-05T00:00:00.000Z",
+      "k": 29241,
+      "records": 114642
+     },
+     {
+      "start": "2026-09-03T00:00:00.000Z",
+      "k": 29124,
+      "records": 108946
+     },
+     {
+      "start": "2026-10-01T00:00:00.000Z",
+      "k": 29108,
+      "records": 58031
+     }
+    ]
+   }
+  },
+  "supgp": {
+   "ast": {
+    "snapshots": 7,
+    "objects": 13,
+    "intervalHours": {
+     "median": 3.07
+    },
+    "kPerInterval": {
+     "median": 4,
+     "max": 12
+    },
+    "kOverObjects": 0.308
+   },
+   "cpf": {
+    "snapshots": 8,
+    "objects": 97,
+    "intervalHours": {
+     "median": 3.05
+    },
+    "kPerInterval": {
+     "median": 4,
+     "max": 32
+    },
+    "kOverObjects": 0.041
+   },
+   "eumetsat": {
+    "snapshots": 3,
+    "objects": 10,
+    "intervalHours": {
+     "median": 19.47
+    },
+    "kPerInterval": {
+     "median": 7,
+     "max": 7
+    },
+    "kOverObjects": 0.7
+   },
+   "gps": {
+    "snapshots": 2,
+    "objects": 32,
+    "intervalHours": {
+     "median": 13.33
+    },
+    "kPerInterval": {
+     "median": 32,
+     "max": 32
+    },
+    "kOverObjects": 1
+   },
+   "intelsat": {
+    "snapshots": 2,
+    "objects": 44,
+    "intervalHours": {
+     "median": 10.28
+    },
+    "kPerInterval": {
+     "median": 1,
+     "max": 1
+    },
+    "kOverObjects": 0.023
+   },
+   "iridium": {
+    "snapshots": 7,
+    "objects": 80,
+    "intervalHours": {
+     "median": 3.05
+    },
+    "kPerInterval": {
+     "median": 80,
+     "max": 80
+    },
+    "kOverObjects": 1
+   },
+   "kuiper": {
+    "snapshots": 8,
+    "objects": 391,
+    "intervalHours": {
+     "median": 3.05
+    },
+    "kPerInterval": {
+     "median": 320,
+     "max": 338
+    },
+    "kOverObjects": 0.818
+   },
+   "oneweb": {
+    "snapshots": 8,
+    "objects": 651,
+    "intervalHours": {
+     "median": 3.05
+    },
+    "kPerInterval": {
+     "median": 213,
+     "max": 258
+    },
+    "kOverObjects": 0.327
+   },
+   "orbcomm": {
+    "snapshots": 2,
+    "objects": 6,
+    "intervalHours": {
+     "median": 3.01
+    },
+    "kPerInterval": {
+     "median": 6,
+     "max": 6
+    },
+    "kOverObjects": 1
+   },
+   "planet": {
+    "snapshots": 8,
+    "objects": 103,
+    "intervalHours": {
+     "median": 3.05
+    },
+    "kPerInterval": {
+     "median": 50,
+     "max": 78
+    },
+    "kOverObjects": 0.485
+   },
+   "ses": {
+    "snapshots": 2,
+    "objects": 68,
+    "intervalHours": {
+     "median": 16.4
+    },
+    "kPerInterval": {
+     "median": 68,
+     "max": 68
+    },
+    "kOverObjects": 1
+   },
+   "starlink": {
+    "snapshots": 8,
+    "objects": 11129,
+    "intervalHours": {
+     "median": 3.05
+    },
+    "kPerInterval": {
+     "median": 11125,
+     "max": 11128
+    },
+    "kOverObjects": 1
+   },
+   "telesat": {
+    "snapshots": 3,
+    "objects": 14,
+    "intervalHours": {
+     "median": 16.45
+    },
+    "kPerInterval": {
+     "median": 14,
+     "max": 14
+    },
+    "kOverObjects": 1
+   }
+  }
+ },
+ "incrementalBatches": {
+  "catalog": {
+   "snapshotCreatedTo": "2026-09-30T16:56:33.000Z",
+   "objects": 32514
+  },
+  "windows": 12,
+  "controls": {
+   "thresholdKm": 5,
+   "coarseStepSec": 60,
+   "workers": 6,
+   "algorithm": "ALFANO_MAXIMUM"
+  },
+  "host": {
+   "cpus": 28,
+   "model": "Apple M3 Ultra",
+   "node": "v25.4.0"
+  },
+  "batches": [
+   {
+    "batch": 0,
+    "objects": 32514,
+    "updated": 0,
+    "newObjects": 0,
+    "full": {
+     "events": 294544,
+     "candidates": 2675123,
+     "excluded": 25,
+     "wallS": 36.8,
+     "cpuS": 186.1,
+     "eventsSha256": "731a5a43603f1c527ce37c4320f299ae06e9a24292ea286b0128289a789bc5aa"
+    },
+    "load1": 13.9,
+    "indexBuild": {
+     "wallS": 15.1,
+     "cpuS": 99.9,
+     "gridMB": 4548
+    }
+   },
+   {
+    "batch": 1,
+    "from": "2026-09-30T16:56:34.000Z",
+    "to": "2026-09-30T18:15:00.000Z",
+    "objects": 32514,
+    "updated": 35,
+    "newObjects": 0,
+    "full": {
+     "events": 294541,
+     "candidates": 2675120,
+     "excluded": 25,
+     "wallS": 37.1,
+     "cpuS": 194.9,
+     "eventsSha256": "43f7e07a736b129dce2d044b4befd325db64835d4dfc3b250644f0e83d86db5f"
+    },
+    "load1": 13.2,
+    "incremental": {
+     "events": 132,
+     "candidates": 780,
+     "wallS": 3.8,
+     "cpuS": 22,
+     "stages": {
+      "refreshRows": {
+       "wallS": 0.14,
+       "cpuS": 0.44
+      },
+      "screen": {
+       "wallS": 3.7,
+       "cpuS": 21.59,
+       "searchS": 3.57,
+       "refineS": 0.03
+      }
+     },
+     "eventsSha256": "a097efbb964ff00f19e838b57c1e832dc50eb17eb81e8ef6a073c8ff3fd0a267"
+    },
+    "pairFraction": 0.0022,
+    "equal": {
+     "affectedPairs": true,
+     "affectedEventsInFull": 132,
+     "previousWithReplacedPairs": true
+    },
+    "speedup": {
+     "wall": 9.6,
+     "cpu": 8.8
+    }
+   },
+   {
+    "batch": 2,
+    "from": "2026-09-30T18:15:00.000Z",
+    "to": "2026-09-30T18:30:00.000Z",
+    "objects": 32518,
+    "updated": 23035,
+    "newObjects": 4,
+    "full": {
+     "events": 264388,
+     "candidates": 2577933,
+     "excluded": 25,
+     "wallS": 35.7,
+     "cpuS": 188,
+     "eventsSha256": "b806f6ed46e518baab09ea383b431ddb6b2e6b36ab1872cc5598b3f24d0dc7be"
+    },
+    "load1": 15.5,
+    "incremental": {
+     "events": 249679,
+     "candidates": 2435540,
+     "wallS": 67.7,
+     "cpuS": 361.9,
+     "stages": {
+      "refreshRows": {
+       "wallS": 16.5,
+       "cpuS": 99.63
+      },
+      "screen": {
+       "wallS": 50.81,
+       "cpuS": 260.48,
+       "searchS": 27.77,
+       "refineS": 11.81
+      }
+     },
+     "eventsSha256": "ba1b43cfcc0c61579d819de9388d054eebd5fd0e04e3c449efb0278808fbcbb5"
+    },
+    "pairFraction": 0.915,
+    "equal": {
+     "affectedPairs": true,
+     "affectedEventsInFull": 249679,
+     "previousWithReplacedPairs": true
+    },
+    "speedup": {
+     "wall": 0.5,
+     "cpu": 0.5
+    }
+   },
+   {
+    "batch": 3,
+    "from": "2026-09-30T18:30:00.000Z",
+    "to": "2026-10-01T00:00:00.000Z",
+    "objects": 32518,
+    "updated": 71,
+    "newObjects": 0,
+    "full": {
+     "events": 264509,
+     "candidates": 2579770,
+     "excluded": 25,
+     "wallS": 36.7,
+     "cpuS": 197.3,
+     "eventsSha256": "b03e8d55388e52cecab90cfe09b6980c3010340bed41fe4ecd781d240c99e013"
+    },
+    "load1": 16.1,
+    "incremental": {
+     "events": 544,
+     "candidates": 11832,
+     "wallS": 5.7,
+     "cpuS": 30.7,
+     "stages": {
+      "refreshRows": {
+       "wallS": 0.14,
+       "cpuS": 0.46
+      },
+      "screen": {
+       "wallS": 5.52,
+       "cpuS": 30.26,
+       "searchS": 5.1,
+       "refineS": 0.07
+      }
+     },
+     "eventsSha256": "3af7e9d50b0acd282c36e0d917daeadaec7b67e5e04436a3cf2e44b27b709323"
+    },
+    "pairFraction": 0.0044,
+    "equal": {
+     "affectedPairs": true,
+     "affectedEventsInFull": 544,
+     "previousWithReplacedPairs": true
+    },
+    "speedup": {
+     "wall": 6.5,
+     "cpu": 6.4
+    }
+   },
+   {
+    "batch": 4,
+    "from": "2026-10-01T00:00:00.000Z",
+    "to": "2026-10-01T03:30:00.000Z",
+    "objects": 32518,
+    "updated": 15,
+    "newObjects": 0,
+    "full": {
+     "events": 264499,
+     "candidates": 2579758,
+     "excluded": 25,
+     "wallS": 35.8,
+     "cpuS": 188.6,
+     "eventsSha256": "c37e7977b80493faffce4f8c3f0289c06c464cc262f6394b95e72e259476886e"
+    },
+    "load1": 19.2,
+    "incremental": {
+     "events": 9,
+     "candidates": 168,
+     "wallS": 3.7,
+     "cpuS": 19.3,
+     "stages": {
+      "refreshRows": {
+       "wallS": 0.15,
+       "cpuS": 0.64
+      },
+      "screen": {
+       "wallS": 3.58,
+       "cpuS": 18.71,
+       "searchS": 3.53,
+       "refineS": 0.02
+      }
+     },
+     "eventsSha256": "cd276792990f8e12cd3d7d0e8034ca4b49444f205b53e635d7e5344deb2e09c9"
+    },
+    "pairFraction": 0.0009,
+    "equal": {
+     "affectedPairs": true,
+     "affectedEventsInFull": 9,
+     "previousWithReplacedPairs": true
+    },
+    "speedup": {
+     "wall": 9.6,
+     "cpu": 9.7
+    }
+   },
+   {
+    "batch": 5,
+    "from": "2026-10-01T03:30:00.000Z",
+    "to": "2026-10-01T04:00:00.000Z",
+    "objects": 32550,
+    "updated": 19116,
+    "newObjects": 32,
+    "full": {
+     "events": 253363,
+     "candidates": 2543345,
+     "excluded": 25,
+     "wallS": 35.4,
+     "cpuS": 188.2,
+     "eventsSha256": "c5ffbbc0ac39767b87d3815aa347b44f1f615a6508b3c007f0d85deb18e34dd0"
+    },
+    "load1": 24.4,
+    "incremental": {
+     "events": 223359,
+     "candidates": 2270038,
+     "wallS": 64.3,
+     "cpuS": 328.9,
+     "stages": {
+      "refreshRows": {
+       "wallS": 18.17,
+       "cpuS": 101.68
+      },
+      "screen": {
+       "wallS": 45.99,
+       "cpuS": 227.11,
+       "searchS": 25.54,
+       "refineS": 10.13
+      }
+     },
+     "eventsSha256": "177f87a90cdda0b6f33ec4c40bdd8c9da4cf86bfa80028e76012ec3d73abfd31"
+    },
+    "pairFraction": 0.8297,
+    "equal": {
+     "affectedPairs": true,
+     "affectedEventsInFull": 223359,
+     "previousWithReplacedPairs": true
+    },
+    "speedup": {
+     "wall": 0.6,
+     "cpu": 0.6
+    }
+   }
+  ]
+ },
+ "incrementalSweep": {
+  "catalog": {
+   "snapshotCreatedTo": "2026-09-30T16:56:33.000Z",
+   "objects": 32514
+  },
+  "windows": 12,
+  "controls": {
+   "thresholdKm": 5,
+   "coarseStepSec": 60,
+   "workers": 6,
+   "algorithm": "ALFANO_MAXIMUM"
+  },
+  "host": {
+   "cpus": 28,
+   "model": "Apple M3 Ultra",
+   "node": "v25.4.0"
+  },
+  "batches": [
+   {
+    "batch": 0,
+    "objects": 32514,
+    "updated": 0,
+    "newObjects": 0,
+    "full": {
+     "events": 294544,
+     "candidates": 2675123,
+     "excluded": 25,
+     "wallS": 37.2,
+     "cpuS": 187.6,
+     "eventsSha256": "731a5a43603f1c527ce37c4320f299ae06e9a24292ea286b0128289a789bc5aa"
+    },
+    "load1": 27.7,
+    "indexBuild": {
+     "wallS": 14.6,
+     "cpuS": 97.2,
+     "gridMB": 4548
+    }
+   },
+   {
+    "batch": 1,
+    "subset": 100,
+    "from": "2026-09-30T16:56:34.000Z",
+    "to": "2026-09-30T18:30:00.000Z",
+    "objects": 32514,
+    "updated": 100,
+    "newObjects": 0,
+    "full": {
+     "events": 294483,
+     "candidates": 2674793,
+     "excluded": 25,
+     "wallS": 36.9,
+     "cpuS": 194.1,
+     "eventsSha256": "7011bb3ec5266d15e898330c1e0a1ba0d1a069734033c82625b8a0fddd6afe90"
+    },
+    "load1": 34.3,
+    "incremental": {
+     "events": 2171,
+     "candidates": 16293,
+     "wallS": 5.6,
+     "cpuS": 32.3,
+     "stages": {
+      "refreshRows": {
+       "wallS": 0.2,
+       "cpuS": 0.61
+      },
+      "screen": {
+       "wallS": 5.36,
+       "cpuS": 31.69,
+       "searchS": 3.78,
+       "refineS": 0.16
+      }
+     },
+     "eventsSha256": "ee790e6b169deb305c3a0c5430a55e9aade79cbdeef2d16cca75b141bd69d544"
+    },
+    "pairFraction": 0.0061,
+    "equal": {
+     "affectedPairs": true,
+     "affectedEventsInFull": 2171,
+     "previousWithReplacedPairs": true
+    },
+    "speedup": {
+     "wall": 6.6,
+     "cpu": 6
+    }
+   },
+   {
+    "batch": 2,
+    "subset": 300,
+    "from": "2026-09-30T16:56:34.000Z",
+    "to": "2026-09-30T18:30:00.000Z",
+    "objects": 32514,
+    "updated": 300,
+    "newObjects": 0,
+    "full": {
+     "events": 294188,
+     "candidates": 2674087,
+     "excluded": 25,
+     "wallS": 37.5,
+     "cpuS": 202.7,
+     "eventsSha256": "176aeeaca1211ba7e384b129442518c113bf74b72bc8605fca7251ff4b72528d"
+    },
+    "load1": 16.4,
+    "incremental": {
+     "events": 5868,
+     "candidates": 49945,
+     "wallS": 5.5,
+     "cpuS": 34.6,
+     "stages": {
+      "refreshRows": {
+       "wallS": 0.28,
+       "cpuS": 0.88
+      },
+      "screen": {
+       "wallS": 5.25,
+       "cpuS": 33.67,
+       "searchS": 3.71,
+       "refineS": 0.37
+      }
+     },
+     "eventsSha256": "d03b4139810de64066b38f2c2e2737829c06d1fb72ccbbf572db4fe2a4bb07be"
+    },
+    "pairFraction": 0.0184,
+    "equal": {
+     "affectedPairs": true,
+     "affectedEventsInFull": 5868,
+     "previousWithReplacedPairs": true
+    },
+    "speedup": {
+     "wall": 6.8,
+     "cpu": 5.9
+    }
+   },
+   {
+    "batch": 3,
+    "subset": 1000,
+    "from": "2026-09-30T16:56:34.000Z",
+    "to": "2026-09-30T18:30:00.000Z",
+    "objects": 32514,
+    "updated": 1000,
+    "newObjects": 0,
+    "full": {
+     "events": 294226,
+     "candidates": 2672420,
+     "excluded": 25,
+     "wallS": 37.1,
+     "cpuS": 201.4,
+     "eventsSha256": "903d25f633e2142029c3150371c3740486af5d2cc7ec23cd747944a4763925a5"
+    },
+    "load1": 15,
+    "incremental": {
+     "events": 19192,
+     "candidates": 211431,
+     "wallS": 8.6,
+     "cpuS": 49.6,
+     "stages": {
+      "refreshRows": {
+       "wallS": 1.04,
+       "cpuS": 5.15
+      },
+      "screen": {
+       "wallS": 7.56,
+       "cpuS": 44.41,
+       "searchS": 4.43,
+       "refineS": 1.14
+      }
+     },
+     "eventsSha256": "237610bbf531ccb774d83b1a9fcd74f78a5d897c5dd604dcfd87142092f33dd6"
+    },
+    "pairFraction": 0.0606,
+    "equal": {
+     "affectedPairs": true,
+     "affectedEventsInFull": 19192,
+     "previousWithReplacedPairs": true
+    },
+    "speedup": {
+     "wall": 4.3,
+     "cpu": 4.1
+    }
+   },
+   {
+    "batch": 4,
+    "subset": 3000,
+    "from": "2026-09-30T16:56:34.000Z",
+    "to": "2026-09-30T18:30:00.000Z",
+    "objects": 32514,
+    "updated": 3000,
+    "newObjects": 0,
+    "full": {
+     "events": 292039,
+     "candidates": 2664201,
+     "excluded": 25,
+     "wallS": 36.9,
+     "cpuS": 201.9,
+     "eventsSha256": "695444bf05462f60dcc5296b0171b48d28b7e9ce766eec4202e081f60316e2bc"
+    },
+    "load1": 15.4,
+    "incremental": {
+     "events": 54242,
+     "candidates": 513739,
+     "wallS": 18.5,
+     "cpuS": 97.7,
+     "stages": {
+      "refreshRows": {
+       "wallS": 2.26,
+       "cpuS": 13.69
+      },
+      "screen": {
+       "wallS": 16.2,
+       "cpuS": 83.98,
+       "searchS": 8.16,
+       "refineS": 2.66
+      }
+     },
+     "eventsSha256": "1c7869b85b292e8c42cdfd02a9d7c55a91ce8c8913e51ae4dc32e93c877e04d3"
+    },
+    "pairFraction": 0.176,
+    "equal": {
+     "affectedPairs": true,
+     "affectedEventsInFull": 54242,
+     "previousWithReplacedPairs": true
+    },
+    "speedup": {
+     "wall": 2,
+     "cpu": 2.1
+    }
+   },
+   {
+    "batch": 5,
+    "subset": 10000,
+    "from": "2026-09-30T16:56:34.000Z",
+    "to": "2026-09-30T18:30:00.000Z",
+    "objects": 32514,
+    "updated": 10000,
+    "newObjects": 0,
+    "full": {
+     "events": 283493,
+     "candidates": 2629801,
+     "excluded": 25,
+     "wallS": 35.6,
+     "cpuS": 189.6,
+     "eventsSha256": "616ba612199e52f98f689938223c63c275651a6e145bbe2f5b44468305f55583"
+    },
+    "load1": 14.8,
+    "incremental": {
+     "events": 155025,
+     "candidates": 1417332,
+     "wallS": 35.1,
+     "cpuS": 186.5,
+     "stages": {
+      "refreshRows": {
+       "wallS": 5.98,
+       "cpuS": 37.21
+      },
+      "screen": {
+       "wallS": 28.96,
+       "cpuS": 148.72,
+       "searchS": 14.89,
+       "refineS": 6.83
+      }
+     },
+     "eventsSha256": "023edf81466ea9d49f5bdf341c93b595e97177d3c4791db72b13cd5e3025d459"
+    },
+    "pairFraction": 0.5205,
+    "equal": {
+     "affectedPairs": true,
+     "affectedEventsInFull": 155025,
+     "previousWithReplacedPairs": true
+    },
+    "speedup": {
+     "wall": 1,
+     "cpu": 1
+    }
+   }
+  ]
+ },
+ "hpop": {
+  "trickle": {
+   "subset": 2112,
+   "windows": 6,
+   "hoursFrom": "2026-10-01T00:00:00.000Z",
+   "controls": {
+    "thresholdKm": 5,
+    "coarseStepSec": 60,
+    "workers": 6,
+    "algorithm": "ALFANO_MAXIMUM"
+   },
+   "host": {
+    "cpus": 28,
+    "model": "Apple M3 Ultra"
+   },
+   "farmWorkers": 5,
+   "batches": [
+    {
+     "batch": 1,
+     "from": "2026-09-30T18:30:00.000Z",
+     "to": "2026-10-01T00:00:00.000Z",
+     "updated": 71,
+     "propagationCpuS": {
+      "incremental": 23.8,
+      "full": 1621.9
+     },
+     "incremental": {
+      "events": 9,
+      "wallS": 5.9,
+      "processCpuS": 26.9
+     },
+     "full": {
+      "events": 171,
+      "screenWallS": 0.6
+     },
+     "equal": {
+      "affectedPairs": true,
+      "affectedEventsInFull": 9,
+      "previousWithReplacedPairs": true
+     }
+    },
+    {
+     "batch": 2,
+     "from": "2026-10-01T00:00:00.000Z",
+     "to": "2026-10-01T03:30:00.000Z",
+     "updated": 15,
+     "propagationCpuS": {
+      "incremental": 6.2,
+      "full": 1621.9
+     },
+     "incremental": {
+      "events": 0,
+      "wallS": 1.9,
+      "processCpuS": 8.9
+     },
+     "full": {
+      "events": 171,
+      "screenWallS": 0.7
+     },
+     "equal": {
+      "affectedPairs": true,
+      "affectedEventsInFull": 0,
+      "previousWithReplacedPairs": true
+     }
+    }
+   ],
+   "fullPropagation": {
+    "objects": 2112,
+    "cpuS": 1621.9,
+    "perObjectS": 0.768
+   },
+   "base": {
+    "events": 180,
+    "candidates": 2219,
+    "wallS": 0.7,
+    "cpuS": 2.1
+   },
+   "determinism": {
+    "objects": 50,
+    "recordsCompared": 300,
+    "identical": 300
+   }
+  },
+  "dense": {
+   "subset": 3146,
+   "windows": 6,
+   "hoursFrom": "2026-10-01T00:00:00.000Z",
+   "controls": {
+    "thresholdKm": 5,
+    "coarseStepSec": 60,
+    "workers": 6,
+    "algorithm": "ALFANO_MAXIMUM"
+   },
+   "host": {
+    "cpus": 28,
+    "model": "Apple M3 Ultra"
+   },
+   "farmWorkers": 5,
+   "batches": [
+    {
+     "batch": 1,
+     "from": "2026-09-30T18:15:00.000Z",
+     "to": "2026-09-30T18:30:00.000Z",
+     "updated": 164,
+     "propagationCpuS": {
+      "incremental": 92.4,
+      "full": 3293.8
+     },
+     "incremental": {
+      "events": 13,
+      "wallS": 20,
+      "processCpuS": 95.5
+     },
+     "full": {
+      "events": 718,
+      "screenWallS": 1
+     },
+     "equal": {
+      "affectedPairs": true,
+      "affectedEventsInFull": 13,
+      "previousWithReplacedPairs": true
+     }
+    }
+   ],
+   "fullPropagation": {
+    "objects": 3146,
+    "cpuS": 3293.8,
+    "perObjectS": 1.047
+   },
+   "base": {
+    "events": 713,
+    "candidates": 9924,
+    "wallS": 1.1,
+    "cpuS": 3
+   },
+   "determinism": {
+    "objects": 50,
+    "recordsCompared": 300,
+    "identical": 300
+   }
+  }
+ },
+ "distributed": {
+  "catalog": {
+   "objects": 32514,
+   "sourcesSha256": "0b224a3e9fe8f237c0fb1abf2af27e041c75f78223935684bb544effa0746517"
+  },
+  "module": "ca5b9898007b5067c88e51bb54de82004a5e0a6e114bdba59843677cd2b6c106",
+  "windows": 12,
+  "controls": {
+   "thresholdKm": 5,
+   "coarseStepSec": 60,
+   "algorithm": "ALFANO_MAXIMUM"
+  },
+  "host": {
+   "cpus": 28,
+   "model": "Apple M3 Ultra",
+   "load1AtEnd": 24
+  },
+  "plan": {
+   "rowBlocks": 4,
+   "objectBlocks": 4,
+   "gridUnits": 48,
+   "screenUnits": 48,
+   "replication": 0.3
+  },
+  "workers": [
+   {
+    "id": "w1",
+    "runtime": "node",
+    "threads": 2,
+    "memoryMiB": 4096,
+    "behaviour": "honest",
+    "units": {
+     "grid": 21,
+     "screen": 37
+    },
+    "cpuS": 222.9,
+    "wallS": 104.9,
+    "faulty": false,
+    "retired": false,
+    "unanswered": 0
+   },
+   {
+    "id": "w2",
+    "runtime": "node",
+    "threads": 1,
+    "memoryMiB": 768,
+    "behaviour": "honest",
+    "units": {
+     "grid": 13,
+     "screen": 0
+    },
+    "cpuS": 20.2,
+    "wallS": 18,
+    "faulty": false,
+    "retired": false,
+    "unanswered": 0
+   },
+   {
+    "id": "w3",
+    "runtime": "wasmedge-aot",
+    "threads": 1,
+    "memoryMiB": 4096,
+    "behaviour": "honest",
+    "units": {
+     "grid": 11,
+     "screen": 26
+    },
+    "cpuS": 77.6,
+    "wallS": 122.5,
+    "faulty": false,
+    "retired": false,
+    "unanswered": 0
+   },
+   {
+    "id": "w4",
+    "runtime": "node",
+    "threads": 1,
+    "memoryMiB": 4096,
+    "behaviour": "cheat=0.5",
+    "units": {
+     "grid": 13,
+     "screen": 18
+    },
+    "cpuS": 111.5,
+    "wallS": 85.1,
+    "faulty": true,
+    "retired": false,
+    "unanswered": 0
+   },
+   {
+    "id": "w5",
+    "runtime": "node",
+    "threads": 1,
+    "memoryMiB": 4096,
+    "behaviour": "drop=0.3",
+    "units": {
+     "grid": 1,
+     "screen": 3
+    },
+    "cpuS": 16.5,
+    "wallS": 12.2,
+    "faulty": false,
+    "retired": true,
+    "unanswered": 2
+   }
+  ],
+  "verification": {
+   "units": 96,
+   "replicated": 29,
+   "matches": 33,
+   "mismatches": 5,
+   "thirdRuns": 5,
+   "faulty": [
+    "w4"
+   ],
+   "reruns": 13,
+   "timeouts": 2,
+   "retired": [
+    "w5"
+   ],
+   "badSignatures": 0
+  },
+  "timings": {
+   "gridS": 90.3,
+   "screenS": 105.8,
+   "referenceS": 42.6
+  },
+  "events": {
+   "distributed": 294544,
+   "reference": 294544,
+   "sha256": "731a5a43603f1c527ce37c4320f299ae06e9a24292ea286b0128289a789bc5aa",
+   "referenceSha256": "731a5a43603f1c527ce37c4320f299ae06e9a24292ea286b0128289a789bc5aa",
+   "equal": true
+  },
+  "wrongOutputs": {
+   "w4": {
+    "outputs": 9,
+    "units": [
+     "5fff5a9b0fa9",
+     "94bdc971d654",
+     "a9766b21f517",
+     "7d03106d6208",
+     "b81b9fc34ee1",
+     "b2ed70e66fb5",
+     "c868d576e8b9",
+     "6bc964824f61",
+     "22f33fd29458"
+    ]
+   }
+  },
+  "replicas": {
+   "compared": 27,
+   "identical": 27,
+   "crossRuntime": 23
+  }
+ },
+ "operatorFirst": {
+  "satellites64": {
+   "source": "SpaceX Starlink MEME ephemerides, read in memory; fitted by analysis/od",
+   "catalog": {
+    "objects": 32611,
+    "elementSetsCreatedTo": "2026-10-11T10:26:19.000Z"
+   },
+   "screen": {
+    "startUtc": "2026-10-11T11:00:00.000Z",
+    "days": 3,
+    "windows": 12,
+    "thresholdKm": 5,
+    "coarseStepSec": 60,
+    "algorithm": "ALFANO_MAXIMUM"
+   },
+   "operatorData": {
+    "satellitesInManifest": 11130,
+    "fetched": 64,
+    "fetchMB": 6,
+    "fetchWallS": 16.3,
+    "elementSets": 64,
+    "fitRmsKm": {
+     "median": 0.113,
+     "max": 0.258
+    }
+   },
+   "networkIndex": {
+    "wallS": 14.38,
+    "cpuS": 63.5
+   },
+   "operatorLatency": {
+    "wallS": 9.13,
+    "cpuS": 23.1,
+    "threads": 6,
+    "stages": {
+     "fit": {
+      "wallS": 3.25,
+      "cpuS": 3.5
+     },
+     "rows": {
+      "wallS": 0.18,
+      "cpuS": 0.7
+     },
+     "units": {
+      "wallS": 5.19,
+      "cpuS": 17.2
+     },
+     "publish": {
+      "wallS": 0,
+      "cpuS": 0
+     }
+    }
+   },
+   "results": {
+    "conjunctions": 4277,
+    "minMissM": 112.82563573881748,
+    "under1kmM": 167
+   },
+   "publication": {
+    "pnmBytes": 444,
+    "units": 12,
+    "manifestCid": "bafkreihdvgzjcoodmx6fufhcsmvhkmnabtlcxupfdxyuh4i5d7hto7rzzy"
+   },
+   "verification": {
+    "runtime": "wasmedge-aot",
+    "gridsMatch": 12,
+    "outputsMatch": 12,
+    "units": 12,
+    "signedPnm": true,
+    "wallS": 71
+   },
+   "host": {
+    "cpus": 28,
+    "model": "Apple M3 Ultra",
+    "load1": 17.1
+   }
+  },
+  "constellation": {
+   "source": "CelesTrak SupGP (fits to SpaceX ephemerides), latest snapshot",
+   "catalog": {
+    "objects": 32611,
+    "elementSetsCreatedTo": "2026-10-11T10:26:19.000Z"
+   },
+   "screen": {
+    "startUtc": "2026-10-11T12:00:00.000Z",
+    "days": 3,
+    "windows": 12,
+    "thresholdKm": 5,
+    "coarseStepSec": 60,
+    "algorithm": "ALFANO_MAXIMUM"
+   },
+   "operatorData": {
+    "satellitesInManifest": null,
+    "fetched": 0,
+    "fetchMB": 0,
+    "fetchWallS": 0,
+    "elementSets": 11129,
+    "fitRmsKm": {
+     "median": 0.246,
+     "max": 19.052
+    }
+   },
+   "networkIndex": {
+    "wallS": 15.52,
+    "cpuS": 66.7
+   },
+   "operatorLatency": {
+    "wallS": 45.85,
+    "cpuS": 150.4,
+    "threads": 6,
+    "stages": {
+     "fit": {
+      "wallS": 0.02,
+      "cpuS": 0
+     },
+     "rows": {
+      "wallS": 5.92,
+      "cpuS": 22.3
+     },
+     "units": {
+      "wallS": 28.79,
+      "cpuS": 115.2
+     },
+     "publish": {
+      "wallS": 0.01,
+      "cpuS": 0
+     }
+    }
+   },
+   "results": {
+    "conjunctions": 328759,
+    "minMissM": 15.58647810452829,
+    "under1kmM": 14324
+   },
+   "publication": {
+    "pnmBytes": 444,
+    "units": 12,
+    "manifestCid": "bafkreiebatphqpqwsvxjmghrd6bw3wcheldxejleilcrftbfxmrfhsknkm"
+   },
+   "verification": {
+    "runtime": "wasmedge-aot",
+    "gridsMatch": 12,
+    "outputsMatch": 12,
+    "units": 12,
+    "signedPnm": true,
+    "wallS": 125.8
+   },
+   "host": {
+    "cpus": 28,
+    "model": "Apple M3 Ultra",
+    "load1": 20.2
+   }
+  }
+ }
+}
