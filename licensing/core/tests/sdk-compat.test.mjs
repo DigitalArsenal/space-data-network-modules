@@ -1139,9 +1139,10 @@ function handleServerMessage(serverHarness, fileIdentifier, payload) {
 // The requester's two round trips (challenge, then proof), as sdn-js runs them.
 // Returns { challengeError } when the challenge is refused, else
 // { statusCode, grantBytes } from the proof step.
-function requestLease(
+// The requester's first round trip: the challenge request. Returns
+// { challengeError } when it is refused, else what the proof step needs.
+function openLease(
   serverHarness,
-  wallet,
   {
     moduleId,
     moduleVersion,
@@ -1172,6 +1173,12 @@ function requestLease(
   if (challenge.messageType === "error") {
     return { challengeError: challenge.errorCode };
   }
+  return { reqId, moduleId, moduleVersion, requesterXpub, session, requesterPeerId, challenge };
+}
+
+// The second round trip: the session key's answer to the challenge.
+function proveLease(serverHarness, wallet, opened, nowMs = Date.now()) {
+  const { reqId, moduleId, moduleVersion, requesterXpub, session, requesterPeerId, challenge } = opened;
   const proof = encodeLicensingProof({
     reqId,
     moduleId,
@@ -1193,6 +1200,12 @@ function requestLease(
     statusCode: grantResponse.statusCode,
     grantBytes: grantResponse.statusCode === 0 ? grantResponse.outputs[0].payload : null,
   };
+}
+
+// Both round trips, as sdn-js runs them.
+function requestLease(serverHarness, wallet, request) {
+  const opened = openLease(serverHarness, request);
+  return opened.challengeError !== undefined ? opened : proveLease(serverHarness, wallet, opened, request.nowMs);
 }
 
 // A signed-in account: fresh wallet account, session, the account's proof for
@@ -1453,6 +1466,22 @@ function leaseAt(serverHarness, wallet, clock, user, module, { requesterPeerId }
   });
 }
 
+// The challenge half of leaseAt, for a handshake the test finishes later.
+function openLeaseAt(serverHarness, wallet, clock, user, module) {
+  const epm = buildRequesterEpm(wallet, {
+    signerSeed: user.session.seed,
+    proof: user.proof,
+    timestampSeconds: Math.floor(clock.ms / 1000),
+  });
+  return openLease(serverHarness, {
+    ...module,
+    requesterXpub: user.account.xpub,
+    session: user.session,
+    epm,
+    nowMs: clock.ms,
+  });
+}
+
 // "granted", the denial reason, or how the request failed before a grant.
 function outcome(result) {
   if (result.challengeError !== undefined) return `challenge:${result.challengeError}`;
@@ -1615,4 +1644,58 @@ test("an honest console session, 25 modules when it opens and again on each relo
       assert.equal(outcome(leaseAt(serverHarness, wallet, clock, user, module)), "granted", `${module.moduleId} load ${load}`);
     }
   }
+});
+
+// ---------------------------------------------------------------------------
+// Unanswered grant handshakes (key_server.cpp kMaxPendingGrants). Anyone can ask
+// for a challenge without proving anything, and the key server keeps each one,
+// with its re-sent $EPM, until the proof arrives. They expire with the
+// challenge, and past the cap a NEW request is refused, never a live handshake.
+// ---------------------------------------------------------------------------
+
+const MAX_PENDING_GRANTS = 512; // key_server.cpp kMaxPendingGrants
+const PROVIDER_BUSY = "provider_busy"; // kProviderBusyReason
+const CHALLENGE_TTL_MS = makeRuntimeConfig().challengeTtlMs;
+
+test("a flood of unanswered grant requests stays bounded, strands no live handshake, and a later grant succeeds", async (t) => {
+  const clock = hostClock(Date.UTC(2026, 9, 12, 9, 0, 0));
+  const { serverHarness, wallet } = await startLeaseServer(t, { clock });
+  const [module] = publishQuotaModules(serverHarness, 1, "orbpro.pending.flood");
+
+  // A requester whose challenge is out when the flood starts.
+  const honest = await signInAt(wallet, clock);
+  const inFlight = openLeaseAt(serverHarness, wallet, clock, honest, module);
+  assert.equal(inFlight.challengeError, undefined);
+
+  // Requests that never send a proof, each carrying a 12 KiB $EPM blob (the node
+  // admits requests up to 16 KiB). Kept without a bound, ten rounds of them
+  // (about 70 MiB) would exhaust the module's fixed 32 MiB.
+  const flooder = await createSession(wallet);
+  const blob = randomBytes(12 * 1024);
+  const floodRound = () => {
+    const outcomes = new Map();
+    for (let i = 0; i < MAX_PENDING_GRANTS + 64; i += 1) {
+      const opened = openLease(serverHarness, {
+        ...module,
+        requesterXpub: "xpub-flood",
+        session: flooder,
+        epm: blob,
+        nowMs: clock.ms,
+      });
+      const outcome = opened.challengeError ?? "challenge";
+      outcomes.set(outcome, (outcomes.get(outcome) ?? 0) + 1);
+    }
+    return Object.fromEntries(outcomes);
+  };
+  // The live handshake holds its place: the new requests past the cap are refused.
+  assert.deepEqual(floodRound(), { challenge: MAX_PENDING_GRANTS - 1, [PROVIDER_BUSY]: 65 });
+  assert.equal(outcome(proveLease(serverHarness, wallet, inFlight, clock.ms)), "granted");
+
+  // Unanswered handshakes expire with their challenge, so each round finds room.
+  for (let round = 0; round < 10; round += 1) {
+    clock.ms += CHALLENGE_TTL_MS;
+    assert.deepEqual(floodRound(), { challenge: MAX_PENDING_GRANTS, [PROVIDER_BUSY]: 64 }, `round ${round}`);
+  }
+  clock.ms += CHALLENGE_TTL_MS;
+  assert.equal(outcome(leaseAt(serverHarness, wallet, clock, await signInAt(wallet, clock), module)), "granted");
 });
