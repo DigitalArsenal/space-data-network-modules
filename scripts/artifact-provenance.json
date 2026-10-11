@@ -245,14 +245,17 @@
       "declaration": null
     },
     "analysis/catalog-composer/dist/isomorphic/module.wasm": {
-      "sha256": "871072ad6f97664906f8d71c4ca995516b4049d75c684dc13418de7fe0e91de2",
-      "bytes": 6383494,
+      "sha256": "75708a583ea32681b3fa559f8070ad3fe08d7a80a2746629006efb28209f8609",
+      "bytes": 6662098,
       "module": "analysis/catalog-composer",
-      "lastCommit": "eb9f174ab5df47aaae0d7608bc6c5f37b56f91d7",
-      "lastCommitDate": "2026-09-27T15:36:46-04:00",
+      "lastCommit": "300ddbbd8a7513478a7eec2b0de17cdaa18da334",
+      "lastCommitDate": "2026-10-11T16:33:09-04:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": null,
+      "sdkPinAtCommit": {
+        "superRepoCommit": "ba526492a868685217211196a45c90023bf0dd96",
+        "sdkCommit": "79eda3cec943a8b5b2a1f1ddaccd306f9c55003f"
+      },
       "declaration": {
         "declares": true,
         "threadModels": [
