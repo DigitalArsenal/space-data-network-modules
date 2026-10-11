@@ -1,0 +1,775 @@
+{
+  "ok": true,
+  "fixture": "analysis/density-calibration 0.4.0 methods",
+  "wasmPath": "dist/isomorphic/module.wasm",
+  "artifactSha256": "168ee975074c6cb76c53b0bd6cc1918a152c5b1c84b501752375b1dee4317953",
+  "moduleSha256": "168ee975074c6cb76c53b0bd6cc1918a152c5b1c84b501752375b1dee4317953",
+  "pin": "0.16.4",
+  "lanes": [
+    {
+      "lane": "browser",
+      "runs": 24,
+      "durationMs": 1211
+    },
+    {
+      "lane": "wasmedge",
+      "runs": 24,
+      "durationMs": 38393
+    },
+    {
+      "lane": "docker-wasmedge",
+      "runs": 24,
+      "durationMs": 50067
+    }
+  ],
+  "cases": [
+    "evaluate-jb2008",
+    "evaluate-jb2008-segment-correction",
+    "evaluate-jb2008-point-before-drivers",
+    "evaluate-jb2008-node-correction",
+    "evaluate-jb2008-derivative",
+    "evaluate-jb2008-sun-diagnostics",
+    "evaluate-jb2008-raw-drivers",
+    "evaluate-nrlmsise00",
+    "calibrate-raw-drivers",
+    "decay-vallado-samples-5",
+    "decay-vallado-samples-6251-28057",
+    "decay-circular",
+    "decay-eccentric-correction",
+    "calibrate-decay-anchored",
+    "energy-arc",
+    "energy-gradient",
+    "energy-inside-earth",
+    "drag-work-jb2008",
+    "drag-work-jb2008-correction",
+    "drag-work-nrlmsise00",
+    "refused-energy-degree",
+    "refused-drag-work-without-drivers",
+    "refused-evaluate-nrlmsise00-derivative",
+    "refused-calibrate-nrlmsise00"
+  ],
+  "comparisons": 120,
+  "failures": [],
+  "runs": [
+    {
+      "lane": "browser",
+      "caseId": "evaluate-jb2008",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ef9a8b46bf78ac27a963d73e34bcb100710b812643b4425f380fbf4170dbc424",
+      "stdoutLength": 2496
+    },
+    {
+      "lane": "browser",
+      "caseId": "evaluate-jb2008-segment-correction",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "c2dd2854b928b382222c65fd18ee13654a2d4ab069a1621ed0ad5257371df073",
+      "stdoutLength": 2544
+    },
+    {
+      "lane": "browser",
+      "caseId": "evaluate-jb2008-point-before-drivers",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "51efce3da53e21eac550591cf0dcf96131cfbaa46cc1258765ffc9a4e00b90df",
+      "stdoutLength": 264
+    },
+    {
+      "lane": "browser",
+      "caseId": "evaluate-jb2008-node-correction",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b653b44f156ba3d793b1dd875707600721a37998b89cfd8c791ac390d17cdee5",
+      "stdoutLength": 528
+    },
+    {
+      "lane": "browser",
+      "caseId": "evaluate-jb2008-derivative",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "3e5692126fc99a656316b7ca4a259385c61181f52fbe5bba24001d03788bbe03",
+      "stdoutLength": 664
+    },
+    {
+      "lane": "browser",
+      "caseId": "evaluate-jb2008-sun-diagnostics",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "20861d680f7ed3b75c140438cbbc9411fe5346c3aae273fabc5a3f3dcdd26b25",
+      "stdoutLength": 608
+    },
+    {
+      "lane": "browser",
+      "caseId": "evaluate-jb2008-raw-drivers",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "880354bf5b443338fa411784a1597a28322784ef569649c5584a394b9461e02c",
+      "stdoutLength": 6312
+    },
+    {
+      "lane": "browser",
+      "caseId": "evaluate-nrlmsise00",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7a55d33eb36648ecffeb1e508fe40d6e5750830c214822373402d742794c2b4b",
+      "stdoutLength": 408
+    },
+    {
+      "lane": "browser",
+      "caseId": "calibrate-raw-drivers",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9542d6b480b2df05d73db81e632f116bfa97a04ff0d7faffcccd0d3b89171f9d",
+      "stdoutLength": 864
+    },
+    {
+      "lane": "browser",
+      "caseId": "decay-vallado-samples-5",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f9941e45e615a8be4ddfdb5c39b61490917995de098a1d65a8341035ef168e55",
+      "stdoutLength": 5272
+    },
+    {
+      "lane": "browser",
+      "caseId": "decay-vallado-samples-6251-28057",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "3e9b294e5b7e2ce0c235b82dddc50353edbff1f5992d8fc07ee7a080c3cee0aa",
+      "stdoutLength": 10376
+    },
+    {
+      "lane": "browser",
+      "caseId": "decay-circular",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "35379bb52d03f358aa52839e76b6fde91e853f78ee2665cd05344bc5c33a4d9a",
+      "stdoutLength": 560
+    },
+    {
+      "lane": "browser",
+      "caseId": "decay-eccentric-correction",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ddc644fd7de6c613032da4b0af9d77833e450ab0252e16aa890bffbef00eb3da",
+      "stdoutLength": 560
+    },
+    {
+      "lane": "browser",
+      "caseId": "calibrate-decay-anchored",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "e730aafc9b5acb130da23249b9bcbf7f91e18546b45ffaff800120e429d8120e",
+      "stdoutLength": 3768
+    },
+    {
+      "lane": "browser",
+      "caseId": "energy-arc",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "eb9029a3ebc44369e7836c19766170b44665c78d3d0b8bb8c24cd577518d477f",
+      "stdoutLength": 54808
+    },
+    {
+      "lane": "browser",
+      "caseId": "energy-gradient",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "2657c1c4dbbbd939c9a0b0483a8ac6c5ce494fad2283691644eda70ec7064d67",
+      "stdoutLength": 704
+    },
+    {
+      "lane": "browser",
+      "caseId": "energy-inside-earth",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "36dbc892567d72e42007be23db0b733f697df23280cccbc8aba84103a76ff78e",
+      "stdoutLength": 464
+    },
+    {
+      "lane": "browser",
+      "caseId": "drag-work-jb2008",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b74eb9dc253eb5f72046d3351db7f0d49d075e7dcd3416e9aa76880f63c40146",
+      "stdoutLength": 37360
+    },
+    {
+      "lane": "browser",
+      "caseId": "drag-work-jb2008-correction",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d7d9b55aaa8a1d0e70e7e5a57824a6618c38c3c1417fafe8e226393bad65773e",
+      "stdoutLength": 37192
+    },
+    {
+      "lane": "browser",
+      "caseId": "drag-work-nrlmsise00",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "1b316939b50d3abdf879291644f49e270e4524a5e0de3eb788af1934f098a3db",
+      "stdoutLength": 37208
+    },
+    {
+      "lane": "browser",
+      "caseId": "refused-energy-degree",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fcfeef18a2fcc622026021a27f772ac22a92b31356d699ad851bff7dd5e0299a",
+      "stdoutLength": 144
+    },
+    {
+      "lane": "browser",
+      "caseId": "refused-drag-work-without-drivers",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "8e14d8ceec953d76515cc3b3f7b944efcea70505d19950b942ac42ea941f1719",
+      "stdoutLength": 132
+    },
+    {
+      "lane": "browser",
+      "caseId": "refused-evaluate-nrlmsise00-derivative",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "64f5cdaae3e333de048f8996758a90246d2760c71449a83ebaa6e76b9fd78de4",
+      "stdoutLength": 188
+    },
+    {
+      "lane": "browser",
+      "caseId": "refused-calibrate-nrlmsise00",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "5cbc48b0823f218b65cdfc687d4f06e5d3852f01cf909cb3c4311451c5c14222",
+      "stdoutLength": 160
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "evaluate-jb2008",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ef9a8b46bf78ac27a963d73e34bcb100710b812643b4425f380fbf4170dbc424",
+      "stdoutLength": 2496
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "evaluate-jb2008-segment-correction",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "c2dd2854b928b382222c65fd18ee13654a2d4ab069a1621ed0ad5257371df073",
+      "stdoutLength": 2544
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "evaluate-jb2008-point-before-drivers",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "51efce3da53e21eac550591cf0dcf96131cfbaa46cc1258765ffc9a4e00b90df",
+      "stdoutLength": 264
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "evaluate-jb2008-node-correction",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b653b44f156ba3d793b1dd875707600721a37998b89cfd8c791ac390d17cdee5",
+      "stdoutLength": 528
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "evaluate-jb2008-derivative",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "3e5692126fc99a656316b7ca4a259385c61181f52fbe5bba24001d03788bbe03",
+      "stdoutLength": 664
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "evaluate-jb2008-sun-diagnostics",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "20861d680f7ed3b75c140438cbbc9411fe5346c3aae273fabc5a3f3dcdd26b25",
+      "stdoutLength": 608
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "evaluate-jb2008-raw-drivers",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "880354bf5b443338fa411784a1597a28322784ef569649c5584a394b9461e02c",
+      "stdoutLength": 6312
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "evaluate-nrlmsise00",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7a55d33eb36648ecffeb1e508fe40d6e5750830c214822373402d742794c2b4b",
+      "stdoutLength": 408
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "calibrate-raw-drivers",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9542d6b480b2df05d73db81e632f116bfa97a04ff0d7faffcccd0d3b89171f9d",
+      "stdoutLength": 864
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "decay-vallado-samples-5",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f9941e45e615a8be4ddfdb5c39b61490917995de098a1d65a8341035ef168e55",
+      "stdoutLength": 5272
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "decay-vallado-samples-6251-28057",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "3e9b294e5b7e2ce0c235b82dddc50353edbff1f5992d8fc07ee7a080c3cee0aa",
+      "stdoutLength": 10376
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "decay-circular",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "35379bb52d03f358aa52839e76b6fde91e853f78ee2665cd05344bc5c33a4d9a",
+      "stdoutLength": 560
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "decay-eccentric-correction",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ddc644fd7de6c613032da4b0af9d77833e450ab0252e16aa890bffbef00eb3da",
+      "stdoutLength": 560
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "calibrate-decay-anchored",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "e730aafc9b5acb130da23249b9bcbf7f91e18546b45ffaff800120e429d8120e",
+      "stdoutLength": 3768
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "energy-arc",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "eb9029a3ebc44369e7836c19766170b44665c78d3d0b8bb8c24cd577518d477f",
+      "stdoutLength": 54808
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "energy-gradient",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "2657c1c4dbbbd939c9a0b0483a8ac6c5ce494fad2283691644eda70ec7064d67",
+      "stdoutLength": 704
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "energy-inside-earth",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "36dbc892567d72e42007be23db0b733f697df23280cccbc8aba84103a76ff78e",
+      "stdoutLength": 464
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "drag-work-jb2008",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b74eb9dc253eb5f72046d3351db7f0d49d075e7dcd3416e9aa76880f63c40146",
+      "stdoutLength": 37360
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "drag-work-jb2008-correction",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d7d9b55aaa8a1d0e70e7e5a57824a6618c38c3c1417fafe8e226393bad65773e",
+      "stdoutLength": 37192
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "drag-work-nrlmsise00",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "1b316939b50d3abdf879291644f49e270e4524a5e0de3eb788af1934f098a3db",
+      "stdoutLength": 37208
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "refused-energy-degree",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fcfeef18a2fcc622026021a27f772ac22a92b31356d699ad851bff7dd5e0299a",
+      "stdoutLength": 144
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "refused-drag-work-without-drivers",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "8e14d8ceec953d76515cc3b3f7b944efcea70505d19950b942ac42ea941f1719",
+      "stdoutLength": 132
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "refused-evaluate-nrlmsise00-derivative",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "64f5cdaae3e333de048f8996758a90246d2760c71449a83ebaa6e76b9fd78de4",
+      "stdoutLength": 188
+    },
+    {
+      "lane": "wasmedge",
+      "caseId": "refused-calibrate-nrlmsise00",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "5cbc48b0823f218b65cdfc687d4f06e5d3852f01cf909cb3c4311451c5c14222",
+      "stdoutLength": 160
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "evaluate-jb2008",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ef9a8b46bf78ac27a963d73e34bcb100710b812643b4425f380fbf4170dbc424",
+      "stdoutLength": 2496
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "evaluate-jb2008-segment-correction",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "c2dd2854b928b382222c65fd18ee13654a2d4ab069a1621ed0ad5257371df073",
+      "stdoutLength": 2544
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "evaluate-jb2008-point-before-drivers",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "51efce3da53e21eac550591cf0dcf96131cfbaa46cc1258765ffc9a4e00b90df",
+      "stdoutLength": 264
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "evaluate-jb2008-node-correction",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b653b44f156ba3d793b1dd875707600721a37998b89cfd8c791ac390d17cdee5",
+      "stdoutLength": 528
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "evaluate-jb2008-derivative",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "3e5692126fc99a656316b7ca4a259385c61181f52fbe5bba24001d03788bbe03",
+      "stdoutLength": 664
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "evaluate-jb2008-sun-diagnostics",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "20861d680f7ed3b75c140438cbbc9411fe5346c3aae273fabc5a3f3dcdd26b25",
+      "stdoutLength": 608
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "evaluate-jb2008-raw-drivers",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "880354bf5b443338fa411784a1597a28322784ef569649c5584a394b9461e02c",
+      "stdoutLength": 6312
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "evaluate-nrlmsise00",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "7a55d33eb36648ecffeb1e508fe40d6e5750830c214822373402d742794c2b4b",
+      "stdoutLength": 408
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "calibrate-raw-drivers",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "9542d6b480b2df05d73db81e632f116bfa97a04ff0d7faffcccd0d3b89171f9d",
+      "stdoutLength": 864
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "decay-vallado-samples-5",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "f9941e45e615a8be4ddfdb5c39b61490917995de098a1d65a8341035ef168e55",
+      "stdoutLength": 5272
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "decay-vallado-samples-6251-28057",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "3e9b294e5b7e2ce0c235b82dddc50353edbff1f5992d8fc07ee7a080c3cee0aa",
+      "stdoutLength": 10376
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "decay-circular",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "35379bb52d03f358aa52839e76b6fde91e853f78ee2665cd05344bc5c33a4d9a",
+      "stdoutLength": 560
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "decay-eccentric-correction",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "ddc644fd7de6c613032da4b0af9d77833e450ab0252e16aa890bffbef00eb3da",
+      "stdoutLength": 560
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "calibrate-decay-anchored",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "e730aafc9b5acb130da23249b9bcbf7f91e18546b45ffaff800120e429d8120e",
+      "stdoutLength": 3768
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "energy-arc",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "eb9029a3ebc44369e7836c19766170b44665c78d3d0b8bb8c24cd577518d477f",
+      "stdoutLength": 54808
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "energy-gradient",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "2657c1c4dbbbd939c9a0b0483a8ac6c5ce494fad2283691644eda70ec7064d67",
+      "stdoutLength": 704
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "energy-inside-earth",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "36dbc892567d72e42007be23db0b733f697df23280cccbc8aba84103a76ff78e",
+      "stdoutLength": 464
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "drag-work-jb2008",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "b74eb9dc253eb5f72046d3351db7f0d49d075e7dcd3416e9aa76880f63c40146",
+      "stdoutLength": 37360
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "drag-work-jb2008-correction",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "d7d9b55aaa8a1d0e70e7e5a57824a6618c38c3c1417fafe8e226393bad65773e",
+      "stdoutLength": 37192
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "drag-work-nrlmsise00",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "1b316939b50d3abdf879291644f49e270e4524a5e0de3eb788af1934f098a3db",
+      "stdoutLength": 37208
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "refused-energy-degree",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "fcfeef18a2fcc622026021a27f772ac22a92b31356d699ad851bff7dd5e0299a",
+      "stdoutLength": 144
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "refused-drag-work-without-drivers",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "8e14d8ceec953d76515cc3b3f7b944efcea70505d19950b942ac42ea941f1719",
+      "stdoutLength": 132
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "refused-evaluate-nrlmsise00-derivative",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "64f5cdaae3e333de048f8996758a90246d2760c71449a83ebaa6e76b9fd78de4",
+      "stdoutLength": 188
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "refused-calibrate-nrlmsise00",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "5cbc48b0823f218b65cdfc687d4f06e5d3852f01cf909cb3c4311451c5c14222",
+      "stdoutLength": 160
+    }
+  ]
+}
