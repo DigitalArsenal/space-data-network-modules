@@ -1,0 +1,162 @@
+{
+  "programId": "com.digitalarsenal.flows.source-products",
+  "name": "Source Products Flow",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (isomorphic, emception)",
+  "threadModel": "single-thread",
+  "nodes": 12,
+  "edges": 27,
+  "triggers": 9,
+  "capabilities": [],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "s_mpe",
+      "pluginId": "com.digitalarsenal.analysis.epoch-state",
+      "methodId": "omm_from_mpe",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "s_derive",
+      "pluginId": "com.digitalarsenal.analysis.epoch-state",
+      "methodId": "derive_omm",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "s_attach",
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "methodId": "attach_covariance",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "s_detect_a",
+      "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
+      "methodId": "detect_maneuvers",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "s_respond",
+      "pluginId": "com.digitalarsenal.analysis.epoch-state",
+      "methodId": "answer_propagation_requests",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "s_detect_b",
+      "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
+      "methodId": "detect_maneuvers",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "s_attribute",
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "methodId": "attribute_maneuvers",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "f_derive",
+      "pluginId": "com.digitalarsenal.analysis.epoch-state",
+      "methodId": "derive_omm",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "f_attach",
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "methodId": "attach_covariance",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "f_compare",
+      "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
+      "methodId": "compare_ephemerides",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "f_attribute",
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "methodId": "attribute_maneuvers",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.analysis.epoch-state",
+      "pluginId": "com.digitalarsenal.analysis.epoch-state",
+      "version": "0.2.0",
+      "sha256": "d793c5f165b13d152479a6af93e61c7fd0c38dea5a7e6101196236196cb9e421",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e65706f63682d7374617465_",
+      "methodSymbols": {
+        "derive": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e65706f63682d7374617465_derive",
+        "omm_from_mpe": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e65706f63682d7374617465_omm_from_mpe",
+        "derive_omm": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e65706f63682d7374617465_derive_omm",
+        "answer_propagation_requests": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e65706f63682d7374617465_answer_propagation_requests"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.analysis.gp-error-model",
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "version": "0.4.0",
+      "sha256": "c612c33e815bcef32e7485ec955443f3604e2729df5ae147b00cdec7ef412033",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_",
+      "methodSymbols": {
+        "accumulate": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_accumulate",
+        "finalize": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_finalize",
+        "scale_model": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_scale_model",
+        "screening_evaluation": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_screening_evaluation",
+        "hpop_arcs": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_hpop_arcs",
+        "hpop_coverage": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_hpop_coverage",
+        "common_epoch": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_common_epoch",
+        "map_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_map_covariance",
+        "screening_cases": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_screening_cases",
+        "pair_statistics": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_pair_statistics",
+        "fit_calibration": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_fit_calibration",
+        "calibrate_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_calibrate_covariance",
+        "dcp_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_dcp_covariance",
+        "noise_responses": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_noise_responses",
+        "attach_covariance": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_attach_covariance",
+        "attribute_maneuvers": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e67702d6572726f722d6d6f64656c_attribute_maneuvers"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.analysis.maneuver-detection",
+      "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
+      "version": "0.3.0",
+      "sha256": "eee3dd9088f6291794196a7a21ce5b05e7d989bf1f11ffda4d58a126c52496d0",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e6d616e65757665722d646574656374696f6e_",
+      "methodSymbols": {
+        "detect_maneuvers": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e6d616e65757665722d646574656374696f6e_detect_maneuvers",
+        "compare_ephemerides": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e6d616e65757665722d646574656374696f6e_compare_ephemerides",
+        "score_detections": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e6d616e65757665722d646574656374696f6e_score_detections"
+      }
+    }
+  ]
+}

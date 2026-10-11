@@ -25,6 +25,15 @@ const result = await compileModuleFromSource({
 });
 if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
 await fs.copyFile(path.join(root, 'plugin-manifest.json'), path.join(root, 'dist/plugin-manifest.json'));
+// The flow compiler links this module as a node from its prefixed guest-link
+// object (flows/source-products).
+const guestLinkDir = path.join(root, 'dist/guest-link');
+await fs.mkdir(guestLinkDir, { recursive: true });
+await fs.writeFile(path.join(guestLinkDir, 'module-link.o'), result.guestLink.objectBytes);
+await fs.writeFile(path.join(guestLinkDir, 'metadata.json'), `${JSON.stringify({
+  version: 1, format: result.guestLink.format, language: result.guestLink.language, threadModel: result.guestLink.threadModel,
+  symbolPrefix: result.guestLink.symbolPrefix, methodSymbols: result.guestLink.methodSymbols,
+}, null, 2)}\n`);
 await fs.writeFile(path.join(root, 'dist/build-provenance.json'), `${JSON.stringify({
   spacedatastandards: version, sdsFamilies: families, sources: files.map((f) => `src/${f}`), threadModel: 'single-thread',
 }, null, 2)}\n`);

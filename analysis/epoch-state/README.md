@@ -30,6 +30,60 @@ For each `$MPE` on the `elements` stream:
 - the maximum round-trip residuals;
 - each refused element set, with its input index, reason and SGP4 error code.
 
+## `derive_omm`
+
+The same derivation for `$OMM` element sets, which element-set sources publish
+(CelesTrak, Space-Track, SpaceMapper, Vimpel, and the `analysis/od` fit). The
+input is a size-prefixed `$OMM` stream on `omm`. The object is the set's
+`NORAD_CAT_ID` (`OBJECT_ID` of the `$OEM` is `NORAD:<n>`), else its
+`OBJECT_ID`, else its `OBJECT_NAME`; the `$OEM` `OBJECT` also carries the set's
+`OBJECT_NAME`. A set with none of the three, an invalid `EPOCH`, or a theory
+other than SGP4 is listed in the report and produces no `$OEM`.
+
+## `omm_from_mpe`
+
+The `$OMM` of each `$MPE` element set: what the GP history archive stores
+(`data-source/gp-archive-records`) as what element-set consumers read. The
+fields map one to one. `ENTITY_ID` `NORAD:<n>` is `NORAD_CAT_ID`; any other
+entity id is `OBJECT_ID`. `EPOCH` (Unix seconds) becomes ISO 8601 UTC, the mean
+elements, B* and the theory are kept. There is no `ORIGINATOR` or
+`CREATION_DATE`: the output depends only on the input, and the source's flow
+names the originator. A record with no entity id or epoch is listed in the
+report and not converted.
+
+## Ages
+
+`derive` and `derive_omm` take an optional `options` frame, `{"ages": [days]}`
+(up to 64 ages, 0 to 400 days). The `$OEM` then has one line per age: SGP4
+evaluated at the epoch plus the age (forward only), rotated to GCRF at that
+row's instant, each row with its own round-trip check. Without `options` the
+output is the epoch state alone, byte for byte as before. The covariance
+models of `analysis/gp-error-model` are indexed by this age.
+
+## `answer_propagation_requests`
+
+SGP4 as the plugged propagator of the query port of
+`analysis/maneuver-detection`. Its `detect_maneuvers` asks for each element
+set's trajectory on `propagation_requests` and is called again with the
+answers. This method is the answering step, so a flow can run both passes:
+
+| Port | Direction | Content |
+| --- | --- | --- |
+| `requests` | in | The detector's `propagation_requests` |
+| `element_sets` | in | The `$OMM` sets the queries name; `set` indexes them in input order over all frames |
+| `options` | in, out | The detector's options, forwarded unchanged |
+| `propagation` | out | One `$OEM` per query, in query order |
+| `element_sets` | out | The sets, forwarded unchanged |
+| `report` | out | Queries answered and refused, with reasons |
+
+Each answer is one block: the set's SGP4 trajectory in TEME (UTC, km, km/s)
+from the query's start to its stop in uniform steps no longer than `step_s`,
+with the first sample at the start and the last at the stop. A set SGP4 will not
+propagate (theory other than SGP4, invalid elements, an SGP4 error) is answered
+by an empty block whose `COMMENT` begins `REFUSED`, the detector's refusal
+convention. Forwarding the sets and options makes the second pass see exactly
+what the first saw.
+
 ## Build and test
 
 ```sh
@@ -42,3 +96,10 @@ The tests check the results against Vallado's verification set
 (`tests/vallado-verification.json`: `SGP4-VER.TLE` and the t=0 rows of
 `tcppver.out`). The GCRF expectations were computed with pyerfa. Astropy's TEME
 to GCRS agrees within 0.7 m for the 2000 and 2006 epochs and 2.5 m for 1980.
+
+The rows at later ages, and the TEME trajectory the query port answers, are
+checked against `tests/ages-reference.json`, written by
+`tests/ages-reference.py` from python-sgp4 2.27 and pyerfa 2.0.1.5 (positions
+within 1 mm, velocities within 1e-9 km/s). Tri-runtime parity (browser,
+WasmEdge, Docker WasmEdge) of the three methods: `PATH=$HOME/.wasmedge/bin:$PATH
+node tests/parity.mjs`.

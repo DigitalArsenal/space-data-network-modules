@@ -20,9 +20,16 @@ const { version: sdsVersion, headers } = await generateSdsHeaders();
 
 // One translation unit: the family headers go in dependency order, so their
 // cross-family includes are dropped rather than resolved.
-const sdsHeaders = SCHEMA_FAMILIES.map((family) =>
-  headers[family].replace(/^#include "[A-Z0-9_]+_generated\.h"\n/gm, ""),
-);
+// They have internal linkage: the flow compiler links the objects of several modules into one artifact, and the linker
+// keeps one copy of each equal external C++ symbol. Generated SDS code from different releases of a schema is equal in
+// name and different in layout, so the copy kept could be another module's. Each module keeps its own.
+const sdsHeaders = [
+  '#include "flatbuffers/flatbuffers.h"\nnamespace {',
+  ...SCHEMA_FAMILIES.map((family) =>
+    headers[family].replace(/^#include "[A-Z0-9_]+_generated\.h"\n/gm, "").replaceAll('#include "flatbuffers/flatbuffers.h"\n', ""),
+  ),
+  "}  // namespace",
+];
 
 // The same ERFA, body models and axis engine foundation/frames compiles: one
 // TEME/GCRF chain, not a second implementation.
@@ -48,13 +55,27 @@ const implementationSource = await fs.readFile(
   "utf8",
 );
 
+// nlohmann::json without exceptions for the options and request frames (the same header analysis/maneuver-detection
+// and analysis/gp-error-model compile).
+const jsonHeader = await fs.readFile(
+  path.join(packageRoot, "..", "..", "propagator", "sgp4", "src", "cpp", "include", "nlohmann", "json.hpp"),
+  "utf8",
+);
+
 const sourceCode = [
+  "#define JSON_NOEXCEPTION 1",
+  jsonHeader,
   ...sdsHeaders,
   erfa.source,
   bodyModels,
   axisEngine,
+  // The vendored SGP4 has internal linkage here: analysis/od, analysis/gp-error-model and this module each
+  // compile the same SGP4Funcs, and the flow compiler links their objects into one artifact, where equal
+  // external C++ symbols are duplicates. The standard headers SGP4.h includes come first, outside the namespace.
+  "#include <math.h>\n#include <stdio.h>\n#include <string.h>\n#include <iostream>\nnamespace {",
   sgp4Header,
   sgp4Source,
+  "}  // namespace",
   "#undef pi",
   implementationSource,
 ].join("\n\n");
@@ -72,6 +93,27 @@ const compilation = await compileModuleFromSource({
 });
 
 await fs.copyFile(manifestPath, path.join(distRoot, "plugin-manifest.json"));
+
+// The flow compiler links this module as a node from its prefixed guest-link
+// object (flows/source-products).
+const guestLinkDir = path.join(distRoot, "guest-link");
+await fs.mkdir(guestLinkDir, { recursive: true });
+await fs.writeFile(path.join(guestLinkDir, "module-link.o"), compilation.guestLink.objectBytes);
+await fs.writeFile(
+  path.join(guestLinkDir, "metadata.json"),
+  `${JSON.stringify(
+    {
+      version: 1,
+      format: compilation.guestLink.format,
+      language: compilation.guestLink.language,
+      threadModel: compilation.guestLink.threadModel,
+      symbolPrefix: compilation.guestLink.symbolPrefix,
+      methodSymbols: compilation.guestLink.methodSymbols,
+    },
+    null,
+    2,
+  )}\n`,
+);
 await fs.writeFile(
   path.join(distRoot, "build-provenance.json"),
   `${JSON.stringify(

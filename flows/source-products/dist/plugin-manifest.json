@@ -1,0 +1,3412 @@
+{
+  "pluginId": "com.digitalarsenal.flows.source-products",
+  "name": "Source Products Flow",
+  "version": "0.1.0",
+  "pluginFamily": "flow",
+  "description": "Catalog pipeline C2: the products of one source, generic over the source's type, as one pure-compute flow. An element-set source (ingress element_sets, or element_sets_mpe for the archive's $MPE records, and element_set_recipe) gets its newest sets' epoch states (epoch-state derive_omm), the covariance of each object by rule (gp-error-model attach_covariance) written into $OCM and $OMM with its label, and its history screened for maneuvers in the detector's two passes with SGP4 answering the propagator query port (epoch-state answer_propagation_requests), attributed to the source in the $MNV tags. An ephemeris source (fit_omm, ephemeris, ephemeris_versions, planned_maneuvers, fit_recipe) brings the SGP4 element sets analysis/od fitted to its ephemeris; the newest set gets the same states and covariance, the operator's covariance lines are rule 1, the versions are checked against the planned maneuvers (maneuver-detection compare_ephemerides), and the history of fitted sets is screened for maneuvers in the same two passes. An observation source (fit_omm, fit, fit_recipe) brings the element set fitted to its estimated arc and the estimate's state and formal covariance, scaled by the measured realism factor (rule 2). Every ingress frame is enqueued before the flow drains. A node whose inputs come from an upstream node declares them required, so it never runs on a part of its inputs.",
+  "capabilities": [],
+  "dependencies": [
+    {
+      "pluginId": "com.digitalarsenal.analysis.epoch-state",
+      "minVersion": "0.2.0",
+      "maxVersion": "0.2.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "minVersion": "0.4.0",
+      "maxVersion": "0.4.0"
+    },
+    {
+      "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
+      "minVersion": "0.3.0",
+      "maxVersion": "0.3.0"
+    }
+  ],
+  "externalInterfaces": [],
+  "methods": [
+    {
+      "methodId": "element_sets",
+      "displayName": "Flow trigger element_sets",
+      "description": "Compiled-flow ingress for trigger \"element_sets\" (manual).",
+      "inputPorts": [
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Size-prefixed $OMM element sets, concatenated; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is ISO 8601 UTC. The object is NORAD_CAT_ID, else OBJECT_ID, else OBJECT_NAME."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Size-prefixed $OMM element sets, concatenated; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is ISO 8601 UTC. The object is NORAD_CAT_ID, else OBJECT_ID, else OBJECT_NAME."
+        },
+        {
+          "portId": "elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-elements",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "The element sets of one source, SGP4 (an SGP4-XP set is passed through without a covariance until the XP propagator and error model land). Only the newest set of each object gives outputs unless the recipe says latestOnly false."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "The element sets of one source, SGP4 (an SGP4-XP set is passed through without a covariance until the XP propagator and error model land). Only the newest set of each object gives outputs unless the recipe says latestOnly false."
+        },
+        {
+          "portId": "element_sets",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Element sets ($OMM, plain or a stream of size-prefixed records): the module asks for their trajectories on propagation_requests and reads the answers on propagation. Grouped by NORAD_CAT_ID (else OBJECT_ID, else OBJECT_NAME); one set per EPOCH (a later record replaces an earlier one)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "mpe_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        },
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+        },
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+        },
+        {
+          "portId": "covariance_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
+        },
+        {
+          "portId": "derive_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        },
+        {
+          "portId": "mnv",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-maneuvers",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+        },
+        {
+          "portId": "attribute_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: the maneuvers attributed and the tags added.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: the maneuvers attributed and the tags added."
+        },
+        {
+          "portId": "detect_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v2",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-object pairs, levels and each detector's events with their evidence; the scientific result is the $MNV frames."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Per-object evidence of every detector as JSON."
+        },
+        {
+          "portId": "propagation_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider."
+        },
+        {
+          "portId": "compare_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "compare-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per object: version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver's pre and post versions, modelled and executed change."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The comparison as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "element_sets_mpe",
+      "displayName": "Flow trigger element_sets_mpe",
+      "description": "Compiled-flow ingress for trigger \"element_sets_mpe\" (manual).",
+      "inputPorts": [
+        {
+          "portId": "mpe",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-mpe-aligned-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "MPE.fbs",
+                  "fileIdentifier": "$MPE",
+                  "rootTypeName": "MPE"
+                },
+                {
+                  "schemaName": "MPE.fbs",
+                  "fileIdentifier": "$MPE",
+                  "rootTypeName": "MPE",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "ALIGNED size-prefixed $MPE stream: concatenated [u32le length][$MPE buffer] frames; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is Unix seconds (UTC)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Element sets to convert."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "mpe_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        },
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+        },
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+        },
+        {
+          "portId": "covariance_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
+        },
+        {
+          "portId": "derive_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        },
+        {
+          "portId": "mnv",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-maneuvers",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+        },
+        {
+          "portId": "attribute_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: the maneuvers attributed and the tags added.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: the maneuvers attributed and the tags added."
+        },
+        {
+          "portId": "detect_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v2",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-object pairs, levels and each detector's events with their evidence; the scientific result is the $MNV frames."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Per-object evidence of every detector as JSON."
+        },
+        {
+          "portId": "propagation_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider."
+        },
+        {
+          "portId": "compare_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "compare-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per object: version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver's pre and post versions, modelled and executed change."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The comparison as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "element_set_recipe",
+      "displayName": "Flow trigger element_set_recipe",
+      "description": "Compiled-flow ingress for trigger \"element_set_recipe\" (manual).",
+      "inputPorts": [
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON {\"ages\": [days, ...]}: one row per age, SGP4 evaluated at the element set's epoch plus the age (forward only, 0 to 400 days). Absent: the epoch state alone.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Rows to evaluate. Control metadata only; no observations encoded here."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "JSON {\"ages\": [days, ...]}: one row per age, SGP4 evaluated at the element set's epoch plus the age (forward only, 0 to 400 days). Absent: the epoch state alone."
+        },
+        {
+          "portId": "recipe",
+          "acceptedTypeSets": [
+            {
+              "setId": "recipe-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, operator {calibration, evidence}, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}].",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The source's attribution, the models with their held-out verdicts and the measured realism factors. Configuration, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, operator {calibration, evidence}, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}]."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "mpe_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        },
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+        },
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+        },
+        {
+          "portId": "covariance_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
+        },
+        {
+          "portId": "derive_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        },
+        {
+          "portId": "mnv",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-maneuvers",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+        },
+        {
+          "portId": "attribute_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: the maneuvers attributed and the tags added.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: the maneuvers attributed and the tags added."
+        },
+        {
+          "portId": "detect_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v2",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-object pairs, levels and each detector's events with their evidence; the scientific result is the $MNV frames."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Per-object evidence of every detector as JSON."
+        },
+        {
+          "portId": "propagation_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider."
+        },
+        {
+          "portId": "compare_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "compare-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per object: version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver's pre and post versions, modelled and executed change."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The comparison as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "fit_omm",
+      "displayName": "Flow trigger fit_omm",
+      "description": "Compiled-flow ingress for trigger \"fit_omm\" (manual).",
+      "inputPorts": [
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-stream",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "Size-prefixed $OMM element sets, concatenated; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is ISO 8601 UTC. The object is NORAD_CAT_ID, else OBJECT_ID, else OBJECT_NAME."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Size-prefixed $OMM element sets, concatenated; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is ISO 8601 UTC. The object is NORAD_CAT_ID, else OBJECT_ID, else OBJECT_NAME."
+        },
+        {
+          "portId": "elements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-elements",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "The element sets of one source, SGP4 (an SGP4-XP set is passed through without a covariance until the XP propagator and error model land). Only the newest set of each object gives outputs unless the recipe says latestOnly false."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "The element sets of one source, SGP4 (an SGP4-XP set is passed through without a covariance until the XP propagator and error model land). Only the newest set of each object gives outputs unless the recipe says latestOnly false."
+        },
+        {
+          "portId": "element_sets",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Element sets ($OMM, plain or a stream of size-prefixed records): the module asks for their trajectories on propagation_requests and reads the answers on propagation. Grouped by NORAD_CAT_ID (else OBJECT_ID, else OBJECT_NAME); one set per EPOCH (a later record replaces an earlier one)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "mpe_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        },
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+        },
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+        },
+        {
+          "portId": "covariance_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
+        },
+        {
+          "portId": "derive_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        },
+        {
+          "portId": "mnv",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-maneuvers",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+        },
+        {
+          "portId": "attribute_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: the maneuvers attributed and the tags added.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: the maneuvers attributed and the tags added."
+        },
+        {
+          "portId": "detect_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v2",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-object pairs, levels and each detector's events with their evidence; the scientific result is the $MNV frames."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Per-object evidence of every detector as JSON."
+        },
+        {
+          "portId": "propagation_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider."
+        },
+        {
+          "portId": "compare_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "compare-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per object: version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver's pre and post versions, modelled and executed change."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The comparison as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "ephemeris",
+      "displayName": "Flow trigger ephemeris",
+      "description": "Compiled-flow ingress for trigger \"ephemeris\" (manual).",
+      "inputPorts": [
+        {
+          "portId": "operator",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-operator",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "The operator's ephemeris with its covariance (COVARIANCE_MATRIX_LINES, with COV_REFERENCE_FRAME): rule 1, the covariance as supplied."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "The operator's ephemeris with its covariance (COVARIANCE_MATRIX_LINES, with COV_REFERENCE_FRAME): rule 1, the covariance as supplied."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "mpe_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        },
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+        },
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+        },
+        {
+          "portId": "covariance_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
+        },
+        {
+          "portId": "derive_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        },
+        {
+          "portId": "mnv",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-maneuvers",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+        },
+        {
+          "portId": "attribute_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: the maneuvers attributed and the tags added.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: the maneuvers attributed and the tags added."
+        },
+        {
+          "portId": "detect_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v2",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-object pairs, levels and each detector's events with their evidence; the scientific result is the $MNV frames."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Per-object evidence of every detector as JSON."
+        },
+        {
+          "portId": "propagation_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider."
+        },
+        {
+          "portId": "compare_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "compare-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per object: version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver's pre and post versions, modelled and executed change."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The comparison as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "ephemeris_versions",
+      "displayName": "Flow trigger ephemeris_versions",
+      "description": "Compiled-flow ingress for trigger \"ephemeris_versions\" (manual).",
+      "inputPorts": [
+        {
+          "portId": "versions",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem-versions",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "Ephemeris versions: one $OEM per version (CREATION_DATE is its issue time), one data block per object."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "mpe_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        },
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+        },
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+        },
+        {
+          "portId": "covariance_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
+        },
+        {
+          "portId": "derive_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        },
+        {
+          "portId": "mnv",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-maneuvers",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+        },
+        {
+          "portId": "attribute_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: the maneuvers attributed and the tags added.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: the maneuvers attributed and the tags added."
+        },
+        {
+          "portId": "detect_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v2",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-object pairs, levels and each detector's events with their evidence; the scientific result is the $MNV frames."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Per-object evidence of every detector as JSON."
+        },
+        {
+          "portId": "propagation_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider."
+        },
+        {
+          "portId": "compare_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "compare-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per object: version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver's pre and post versions, modelled and executed change."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The comparison as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "planned_maneuvers",
+      "displayName": "Flow trigger planned_maneuvers",
+      "description": "Compiled-flow ingress for trigger \"planned_maneuvers\" (manual).",
+      "inputPorts": [
+        {
+          "portId": "planned",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-mnv-planned",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Planned maneuvers ($MNV): EVENT_START_TIME the TIG, DELTA_VEL the planned size (km/s), SAT_NO or ORIG_OBJECT_ID the object."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "mpe_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        },
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+        },
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+        },
+        {
+          "portId": "covariance_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
+        },
+        {
+          "portId": "derive_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        },
+        {
+          "portId": "mnv",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-maneuvers",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+        },
+        {
+          "portId": "attribute_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: the maneuvers attributed and the tags added.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: the maneuvers attributed and the tags added."
+        },
+        {
+          "portId": "detect_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v2",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-object pairs, levels and each detector's events with their evidence; the scientific result is the $MNV frames."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Per-object evidence of every detector as JSON."
+        },
+        {
+          "portId": "propagation_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider."
+        },
+        {
+          "portId": "compare_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "compare-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per object: version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver's pre and post versions, modelled and executed change."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The comparison as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "fit",
+      "displayName": "Flow trigger fit",
+      "description": "Compiled-flow ingress for trigger \"fit\" (manual).",
+      "inputPorts": [
+        {
+          "portId": "fit",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-fit",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                },
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "aligned-binary",
+                  "requiredAlignment": 8
+                }
+              ],
+              "description": "A fit's state and formal covariance ($OCM COVARIANCE_DATA, 6x6 lower triangle at each state): rule 2, scaled by the realism factor measured for the source and fit class."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "A fit's state and formal covariance ($OCM COVARIANCE_DATA, 6x6 lower triangle at each state): rule 2, scaled by the realism factor measured for the source and fit class."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "mpe_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        },
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+        },
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+        },
+        {
+          "portId": "covariance_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
+        },
+        {
+          "portId": "derive_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        },
+        {
+          "portId": "mnv",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-maneuvers",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+        },
+        {
+          "portId": "attribute_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: the maneuvers attributed and the tags added.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: the maneuvers attributed and the tags added."
+        },
+        {
+          "portId": "detect_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v2",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-object pairs, levels and each detector's events with their evidence; the scientific result is the $MNV frames."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Per-object evidence of every detector as JSON."
+        },
+        {
+          "portId": "propagation_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider."
+        },
+        {
+          "portId": "compare_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "compare-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per object: version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver's pre and post versions, modelled and executed change."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The comparison as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "fit_recipe",
+      "displayName": "Flow trigger fit_recipe",
+      "description": "Compiled-flow ingress for trigger \"fit_recipe\" (manual).",
+      "inputPorts": [
+        {
+          "portId": "options",
+          "acceptedTypeSets": [
+            {
+              "setId": "options-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON {\"ages\": [days, ...]}: one row per age, SGP4 evaluated at the element set's epoch plus the age (forward only, 0 to 400 days). Absent: the epoch state alone.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Rows to evaluate. Control metadata only; no observations encoded here."
+              }
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "JSON {\"ages\": [days, ...]}: one row per age, SGP4 evaluated at the element set's epoch plus the age (forward only, 0 to 400 days). Absent: the epoch state alone."
+        },
+        {
+          "portId": "recipe",
+          "acceptedTypeSets": [
+            {
+              "setId": "recipe-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, operator {calibration, evidence}, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}].",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "The source's attribution, the models with their held-out verdicts and the measured realism factors. Configuration, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON, version 1: source {id, kind, lineage, originator, provider, licence {class, id}, fitClass}, producer, created, latestOnly, maxOperatorRows, operator {calibration, evidence}, realism [{sources, class, factor, meanD2Over3, coverage95, samples, objects, evidence, window}], models [{id, sources, pooled, measuredOn {lineages, window, evidence}, regimes, ageBinsDays, strata, cells}]."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "mpe_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: records, converted and failed counts, and the refused records by index with the reason.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        },
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One $OCM per object: the product's states (GCRF, km, km/s) and the covariance of each (21-element lower triangle, km**2 family, RTN axes for a modeled covariance, as supplied for an operator's) with COV_CALIBRATION, its reference text, and the label of every row in the COV_LABELS user-defined parameter."
+        },
+        {
+          "portId": "omm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The element sets as published, ORIGINATOR the source's originator, COVARIANCE (RTN lower triangle) of the row nearest the epoch with COV_REFERENCE_FRAME RSW, and the label, source, provider and licence class appended to COMMENT."
+        },
+        {
+          "portId": "covariance_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Provenance of the covariance of every object. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: per object the rule that applied, why the earlier rules did not, every row's cell, verdict, mean d2/3 and coverage, the record hashes and the licence; counts by rule; states and operator blocks that matched no set."
+        },
+        {
+          "portId": "derive_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "epoch-state-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: record, derived and failed counts, epochs outside the leap-second table, maximum round-trip residuals, and the refused element sets by input index with the reason and SGP4 error code.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting for the derivation. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Derivation report."
+        },
+        {
+          "portId": "mnv",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-maneuvers",
+              "allowedTypes": [
+                {
+                  "schemaName": "MNV.fbs",
+                  "fileIdentifier": "$MNV",
+                  "rootTypeName": "MNV",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The same maneuvers with the source named in TAGS (originator, source, provider, licence class and id, lineage, producer); the schema has no ORIGINATOR."
+        },
+        {
+          "portId": "attribute_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: the maneuvers attributed and the tags added.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: the maneuvers attributed and the tags added."
+        },
+        {
+          "portId": "detect_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v2",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per-object pairs, levels and each detector's events with their evidence; the scientific result is the $MNV frames."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Per-object evidence of every detector as JSON."
+        },
+        {
+          "portId": "propagation_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Run accounting. Diagnostic metadata, never persisted as an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "JSON: queries, answered and refused counts, the refusals by sequence and reason, the provider."
+        },
+        {
+          "portId": "compare_report",
+          "acceptedTypeSets": [
+            {
+              "setId": "compare-report-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per object: version changes (mode, window, delta SMA, in-track and cross-track delta-V) and each planned maneuver's pre and post versions, modelled and executed change."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The comparison as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "OMM.fbs",
+      "fileIdentifier": "$OMM",
+      "rootTypeName": "OMM"
+    },
+    {
+      "schemaName": "MPE.fbs",
+      "fileIdentifier": "$MPE",
+      "rootTypeName": "MPE"
+    },
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM"
+    },
+    {
+      "schemaName": "OCM.fbs",
+      "fileIdentifier": "$OCM",
+      "rootTypeName": "OCM"
+    },
+    {
+      "schemaName": "MNV.fbs",
+      "fileIdentifier": "$MNV",
+      "rootTypeName": "MNV"
+    }
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "com_digitalarsenal_flows_source_products-flow-runtime",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "flowNodes": [
+    {
+      "nodeId": "s_mpe",
+      "pluginId": "com.digitalarsenal.analysis.epoch-state",
+      "methodId": "omm_from_mpe",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "s_derive",
+      "pluginId": "com.digitalarsenal.analysis.epoch-state",
+      "methodId": "derive_omm",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "s_attach",
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "methodId": "attach_covariance",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "s_detect_a",
+      "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
+      "methodId": "detect_maneuvers",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "s_respond",
+      "pluginId": "com.digitalarsenal.analysis.epoch-state",
+      "methodId": "answer_propagation_requests",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "s_detect_b",
+      "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
+      "methodId": "detect_maneuvers",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "s_attribute",
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "methodId": "attribute_maneuvers",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "f_derive",
+      "pluginId": "com.digitalarsenal.analysis.epoch-state",
+      "methodId": "derive_omm",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "f_attach",
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "methodId": "attach_covariance",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "f_compare",
+      "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
+      "methodId": "compare_ephemerides",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "f_attribute",
+      "pluginId": "com.digitalarsenal.analysis.gp-error-model",
+      "methodId": "attribute_maneuvers",
+      "kind": "transform",
+      "dispatchModel": null,
+      "uiX": 0,
+      "uiY": 0
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "dispatchModel": "host-capability",
+      "uiX": 0,
+      "uiY": 0
+    }
+  ],
+  "flowEdges": [
+    {
+      "edgeId": "s-mpe-derive",
+      "fromNodeId": "s_mpe",
+      "fromPortId": "omm",
+      "toNodeId": "s_derive",
+      "toPortId": "omm",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OMM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "s-mpe-attach",
+      "fromNodeId": "s_mpe",
+      "fromPortId": "omm",
+      "toNodeId": "s_attach",
+      "toPortId": "elements",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OMM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "s-mpe-detect",
+      "fromNodeId": "s_mpe",
+      "fromPortId": "omm",
+      "toNodeId": "s_detect_a",
+      "toPortId": "element_sets",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OMM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "s-mpe-respond",
+      "fromNodeId": "s_mpe",
+      "fromPortId": "omm",
+      "toNodeId": "s_respond",
+      "toPortId": "element_sets",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OMM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "s-mpe-report",
+      "fromNodeId": "s_mpe",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "mpe_report",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "s-states",
+      "fromNodeId": "s_derive",
+      "fromPortId": "states",
+      "toNodeId": "s_attach",
+      "toPortId": "states",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OEM.fbs",
+          "fileIdentifier": "$OEM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OEM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": {
+          "schemaName": "OEM.fbs",
+          "fileIdentifier": "$OEM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "aligned-binary",
+          "rootTypeName": "OEM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 8
+        },
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": true,
+        "opaque": false,
+        "routePolicy": "aligned-shared-arena-or-canonical"
+      }
+    },
+    {
+      "edgeId": "s-detect-requests",
+      "fromNodeId": "s_detect_a",
+      "fromPortId": "propagation_requests",
+      "toNodeId": "s_respond",
+      "toPortId": "requests",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "s-respond-propagation",
+      "fromNodeId": "s_respond",
+      "fromPortId": "propagation",
+      "toNodeId": "s_detect_b",
+      "toPortId": "propagation",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OEM.fbs",
+          "fileIdentifier": "$OEM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OEM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "s-respond-element-sets",
+      "fromNodeId": "s_respond",
+      "fromPortId": "element_sets",
+      "toNodeId": "s_detect_b",
+      "toPortId": "element_sets",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OMM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "s-detect-maneuvers",
+      "fromNodeId": "s_detect_b",
+      "fromPortId": "maneuvers",
+      "toNodeId": "s_attribute",
+      "toPortId": "maneuvers",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "MNV.fbs",
+          "fileIdentifier": "$MNV",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "MNV",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "s-ocm",
+      "fromNodeId": "s_attach",
+      "fromPortId": "ocm",
+      "toNodeId": "egress",
+      "toPortId": "ocm",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OCM.fbs",
+          "fileIdentifier": "$OCM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OCM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "s-omm",
+      "fromNodeId": "s_attach",
+      "fromPortId": "omm",
+      "toNodeId": "egress",
+      "toPortId": "omm",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OMM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "s-attach-report",
+      "fromNodeId": "s_attach",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "covariance_report",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "s-derive-report",
+      "fromNodeId": "s_derive",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "derive_report",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "s-mnv",
+      "fromNodeId": "s_attribute",
+      "fromPortId": "maneuvers",
+      "toNodeId": "egress",
+      "toPortId": "mnv",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "MNV.fbs",
+          "fileIdentifier": "$MNV",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "MNV",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "s-attribute-report",
+      "fromNodeId": "s_attribute",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "attribute_report",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "s-detect-report",
+      "fromNodeId": "s_detect_b",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "detect_report",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "s-respond-report",
+      "fromNodeId": "s_respond",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "propagation_report",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "f-states",
+      "fromNodeId": "f_derive",
+      "fromPortId": "states",
+      "toNodeId": "f_attach",
+      "toPortId": "states",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OEM.fbs",
+          "fileIdentifier": "$OEM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OEM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": {
+          "schemaName": "OEM.fbs",
+          "fileIdentifier": "$OEM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "aligned-binary",
+          "rootTypeName": "OEM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 8
+        },
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": true,
+        "opaque": false,
+        "routePolicy": "aligned-shared-arena-or-canonical"
+      }
+    },
+    {
+      "edgeId": "f-ocm",
+      "fromNodeId": "f_attach",
+      "fromPortId": "ocm",
+      "toNodeId": "egress",
+      "toPortId": "ocm",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OCM.fbs",
+          "fileIdentifier": "$OCM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OCM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "f-omm",
+      "fromNodeId": "f_attach",
+      "fromPortId": "omm",
+      "toNodeId": "egress",
+      "toPortId": "omm",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "OMM.fbs",
+          "fileIdentifier": "$OMM",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "OMM",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "f-attach-report",
+      "fromNodeId": "f_attach",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "covariance_report",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "f-derive-report",
+      "fromNodeId": "f_derive",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "derive_report",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "f-compare-maneuvers",
+      "fromNodeId": "f_compare",
+      "fromPortId": "maneuvers",
+      "toNodeId": "f_attribute",
+      "toPortId": "maneuvers",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "MNV.fbs",
+          "fileIdentifier": "$MNV",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "MNV",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "f-mnv",
+      "fromNodeId": "f_attribute",
+      "fromPortId": "maneuvers",
+      "toNodeId": "egress",
+      "toPortId": "mnv",
+      "contract": {
+        "canonicalType": {
+          "schemaName": "MNV.fbs",
+          "fileIdentifier": "$MNV",
+          "schemaVersion": null,
+          "schemaHash": [],
+          "acceptsAnyFlatbuffer": false,
+          "wireFormat": "flatbuffer",
+          "rootTypeName": "MNV",
+          "fixedStringLength": 0,
+          "byteLength": 0,
+          "requiredAlignment": 0
+        },
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": false,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "f-attribute-report",
+      "fromNodeId": "f_attribute",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "attribute_report",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    },
+    {
+      "edgeId": "f-compare-report",
+      "fromNodeId": "f_compare",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "compare_report",
+      "contract": {
+        "canonicalType": null,
+        "alignedType": null,
+        "canonicalFallbackAvailable": true,
+        "alignedEligible": false,
+        "opaque": true,
+        "routePolicy": "canonical-only"
+      }
+    }
+  ],
+  "flowTriggers": [
+    {
+      "triggerId": "element_sets",
+      "kind": "manual",
+      "source": "host",
+      "defaultIntervalMs": 0,
+      "httpPath": null
+    },
+    {
+      "triggerId": "element_sets_mpe",
+      "kind": "manual",
+      "source": "host",
+      "defaultIntervalMs": 0,
+      "httpPath": null
+    },
+    {
+      "triggerId": "element_set_recipe",
+      "kind": "manual",
+      "source": "host",
+      "defaultIntervalMs": 0,
+      "httpPath": null
+    },
+    {
+      "triggerId": "fit_omm",
+      "kind": "manual",
+      "source": "host",
+      "defaultIntervalMs": 0,
+      "httpPath": null
+    },
+    {
+      "triggerId": "ephemeris",
+      "kind": "manual",
+      "source": "host",
+      "defaultIntervalMs": 0,
+      "httpPath": null
+    },
+    {
+      "triggerId": "ephemeris_versions",
+      "kind": "manual",
+      "source": "host",
+      "defaultIntervalMs": 0,
+      "httpPath": null
+    },
+    {
+      "triggerId": "planned_maneuvers",
+      "kind": "manual",
+      "source": "host",
+      "defaultIntervalMs": 0,
+      "httpPath": null
+    },
+    {
+      "triggerId": "fit",
+      "kind": "manual",
+      "source": "host",
+      "defaultIntervalMs": 0,
+      "httpPath": null
+    },
+    {
+      "triggerId": "fit_recipe",
+      "kind": "manual",
+      "source": "host",
+      "defaultIntervalMs": 0,
+      "httpPath": null
+    }
+  ],
+  "flowTriggerBindings": [
+    {
+      "triggerId": "element_sets",
+      "targetNodeId": "s_derive",
+      "targetPortId": "omm"
+    },
+    {
+      "triggerId": "element_sets",
+      "targetNodeId": "s_attach",
+      "targetPortId": "elements"
+    },
+    {
+      "triggerId": "element_sets",
+      "targetNodeId": "s_detect_a",
+      "targetPortId": "element_sets"
+    },
+    {
+      "triggerId": "element_sets",
+      "targetNodeId": "s_respond",
+      "targetPortId": "element_sets"
+    },
+    {
+      "triggerId": "element_sets_mpe",
+      "targetNodeId": "s_mpe",
+      "targetPortId": "mpe"
+    },
+    {
+      "triggerId": "element_set_recipe",
+      "targetNodeId": "s_derive",
+      "targetPortId": "options"
+    },
+    {
+      "triggerId": "element_set_recipe",
+      "targetNodeId": "s_attach",
+      "targetPortId": "recipe"
+    },
+    {
+      "triggerId": "element_set_recipe",
+      "targetNodeId": "s_attribute",
+      "targetPortId": "recipe"
+    },
+    {
+      "triggerId": "ephemeris",
+      "targetNodeId": "f_attach",
+      "targetPortId": "operator"
+    },
+    {
+      "triggerId": "ephemeris_versions",
+      "targetNodeId": "f_compare",
+      "targetPortId": "versions"
+    },
+    {
+      "triggerId": "planned_maneuvers",
+      "targetNodeId": "f_compare",
+      "targetPortId": "planned"
+    },
+    {
+      "triggerId": "fit",
+      "targetNodeId": "f_attach",
+      "targetPortId": "fit"
+    },
+    {
+      "triggerId": "fit_recipe",
+      "targetNodeId": "f_derive",
+      "targetPortId": "options"
+    },
+    {
+      "triggerId": "fit_recipe",
+      "targetNodeId": "f_attach",
+      "targetPortId": "recipe"
+    },
+    {
+      "triggerId": "fit_recipe",
+      "targetNodeId": "f_attribute",
+      "targetPortId": "recipe"
+    },
+    {
+      "triggerId": "fit_recipe",
+      "targetNodeId": "s_attribute",
+      "targetPortId": "recipe"
+    },
+    {
+      "triggerId": "fit_omm",
+      "targetNodeId": "f_derive",
+      "targetPortId": "omm"
+    },
+    {
+      "triggerId": "fit_omm",
+      "targetNodeId": "f_attach",
+      "targetPortId": "elements"
+    },
+    {
+      "triggerId": "fit_omm",
+      "targetNodeId": "s_detect_a",
+      "targetPortId": "element_sets"
+    },
+    {
+      "triggerId": "fit_omm",
+      "targetNodeId": "s_respond",
+      "targetPortId": "element_sets"
+    }
+  ],
+  "abiVersion": 1
+}

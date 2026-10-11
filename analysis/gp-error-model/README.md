@@ -244,6 +244,110 @@ inertial rotation and the midpoint of two bins; Hejduk's weights and
 σ_eff = √(wᵀCw); the start-relative sensitivity for designed matrices; a free
 particle's noise responses equal q[[t³/3, t²/2], [t²/2, t]] exactly.
 
+## Covariance for every object: `attach_covariance`
+
+The catalog pipeline gives every object's product a covariance by the first of
+four rules that applies, writes it into SDS records and labels it. The method
+is the same whatever the source.
+
+| Rule | Covariance | Applies when |
+| --- | --- | --- |
+| 1 | The operator's, as supplied | The operator's `$OEM` carries covariance lines (`COVARIANCE_MATRIX_LINES`) in RTN-family axes (RTN, RSW, RIC, UVW) or in the state's own axes |
+| 2 | A fit's formal covariance times the realism factor measured for the source and fit class | A fit's `$OCM` carries covariance and the recipe has a measured `realism` entry for the source and `fitClass`. Formal covariances of laser-range fits measured 16 to 21 times too small (E6), so the factor is that measured mean d²/3 |
+| 3 | The source's own model of its element sets' error, by regime and age | The element set is SGP4, in a regime the model covers, and a model lists the source in `sources` |
+| 4 | The model pooled over all sources | As rule 3, for a source no model lists, and a model has `pooled: true` |
+
+Rules 3 and 4 cover every object that has an SGP4 element set in a regime the
+model covers. A set outside every regime (beyond 40,000 km with e < 0.25),
+in a regime without strata (HEO today), or SGP4-XP is published with no
+covariance and the reason. SGP4-XP sets pass through until the XP propagator
+and an XP error model land.
+
+**Models.** E14's S3-KC (`data/e14-s3-kc.json`, written by
+`scripts/export-recipe-model.mjs` from `orbit-accuracy-experiments`
+`results/e14`): per regime (LEO-L, LEO-M, LEO-H, MEO, GEO) and age bin
+([0, 0.25), [0.25, 0.75), [0.75, 1.5), [1.5, 2.5), [2.5, 4), [4, 6) and [6, 8)
+days, which hold the horizons 0, 0.5, 1, 2, 3, 5 and 7), the 6×6 RTN second
+moment of SGP4 errors against precise orbits, clipped at 5 robust σ and scaled so the
+development fit's 95 % coverage is 0.95. The covariance at an age is linear
+in age between bin centres and held at the first and last. Each cell also
+carries its held-out verdict on E14's test window (2026-05-01 to 2026-09-30):
+mean d²/3, 95 % coverage, samples, objects, and REALISTIC or not.
+
+**Labels.** A row is `CALIBRATED` only where the model's cell was REALISTIC on
+the held-out window (mean d²/3 in [0.8, 1.25] and 95 % coverage in
+[0.93, 0.97], at least 30 samples from 3 objects) **and** the model was
+measured on the lineage the source belongs to (`source.lineage` is in the
+model's `measuredOn.lineages`). Otherwise it is `UNCALIBRATED`, with the cell's
+numbers and the reason: the cell failed, or the model was never measured on
+this source's lineage (the pooled model of a new source). E14 found two of
+the 35 cells realistic: LEO-H at 0 and 0.5 days. Operator covariance is
+`UNCALIBRATED` until the recipe's `operator.calibration` says otherwise
+(E14 S1 has not reported). A rule 2 covariance is `UNCALIBRATED` until the
+recipe's realism entry has `scaledDecision: "REALISTIC"`: the scaled
+covariance has not itself been tested.
+
+**Records.** Per object, one `$OCM` and one `$OMM`:
+
+| Field | `$OCM` | `$OMM` |
+| --- | --- | --- |
+| State | `STATE_DATA`, `STATE_EPOCHS`: the rows of `states`, the operator's, or the fit's | the element set unchanged |
+| Covariance | `COVARIANCE_DATA`, 21 values per row (lower triangle, km², km²/s, km²/s²), `COV_REF_FRAME` RSW for a modeled covariance, as supplied for an operator's | `COVARIANCE` of the row nearest the epoch in RTN, `COV_REFERENCE_FRAME` RSW |
+| Calibration | `COV_CALIBRATION`: Calibrated only if every row is; `COV_CALIBRATION_REFERENCE`: the first row's evidence in one line | `COV_CALIBRATION` of the row the covariance is of (`CALIBRATED` or `UNCALIBRATED`) |
+| Label of every row | `USER_DEFINED_PARAMETERS` `COV_LABELS`: JSON, one object per row (rule, method, model, regime, cell, verdict, calibration, mean d²/3, coverage, samples, objects, scale factor, basis) | `USER_DEFINED_PARAMETERS` `COV_LABEL`: the same object, of the row the covariance is of; `COV_RULE` and `COV_METHOD`; for a set without a covariance `COV_UNAVAILABLE` and the reason |
+| Source | `HEADER.ORIGINATOR` the source's originator; `SOURCE_ID`, `SOURCE_KIND`, `SOURCE_ORIGINATOR`, `SOURCE_PROVIDER`, `SOURCE_LINEAGE`, `LICENCE_CLASS`, `LICENCE_ID`, `PRODUCER`, `PRODUCT`, `COV_RULE`, `COV_METHOD`, `COV_FRAME` | `ORIGINATOR` the source's originator; `USER_DEFINED_PARAMETERS` `SOURCE_ID`, `SOURCE_KIND`, `SOURCE_ORIGINATOR`, `SOURCE_PROVIDER`, `SOURCE_LINEAGE`, `LICENCE_CLASS`, `LICENCE_ID`, `PRODUCER` |
+
+**SDS carriers (release 1.245.0).** The `$OMM` takes the source and the label as the
+CCSDS `USER_DEFINED_x` keywords (`OMM.USER_DEFINED_PARAMETERS`) and reads them aloud in
+`COMMENT`. The `$OCM` takes the source and the label in its `USER_DEFINED_PARAMETERS`; its
+`COV_CALIBRATION` is one value per message though its rows lie in different cells, so the
+per-row verdict, the measured mean d²/3, the coverage, the samples and the objects are
+`COV_LABELS`. The release's `OCMCovarianceBlock` (`COV_BASIS`, `COV_BASIS_ID`,
+`COV_CONFIDENCE`) states a covariance time history as the message's text lines, a second
+copy of `COVARIANCE_DATA`; the records do not use it. The `$MNV` has no `ORIGINATOR`,
+provider or licence field: its source is in `TAGS`.
+
+The report lists, per object, the rule that applied, why each earlier rule did
+not, every row's cell and verdict, the SHA-256 of each record, and the
+licence. The module only labels: a record whose source has no reproduction
+terms is computed on and cited, never republished, and the publishing node
+reads `licence` from the report.
+
+Inputs: `elements` (`$OMM`), `states` (`$OEM`, from
+`analysis/epoch-state` `derive_omm` with `options.ages`), `operator` (`$OEM`
+with covariance), `fit` (`$OCM`), `recipe` (JSON). `recipe` is version 1:
+
+```json
+{
+  "version": 1,
+  "source": {"id": "celestrak-gp", "kind": "element-set", "lineage": "space-track-gp",
+             "originator": "CelesTrak", "provider": "com.digitalarsenal.data-source.celestrak-reference",
+             "licence": {"class": "cite-only", "id": "celestrak"}, "fitClass": ""},
+  "producer": "SDN catalog pipeline", "created": "2026-10-11T00:00:00Z",
+  "latestOnly": true, "maxOperatorRows": 8,
+  "operator": {"calibration": "UNCALIBRATED", "evidence": "..."},
+  "realism": [{"sources": ["ilrs-crd"], "class": "slr-hpop-fit", "factor": 17.04, "meanD2Over3": 17.04,
+               "coverage95": 0.17, "samples": 1000, "objects": 5, "evidence": "...", "window": "..."}],
+  "models": [{"...": "data/e14-s3-kc.json", "sources": ["celestrak-gp"], "pooled": true}]
+}
+```
+
+`provider` is the plugin id of the module that gave the records, `licence.class`
+the `reproduce` field of the audited licence register (`reproducible`, `cite-only`,
+`share-alike`, `non-commercial`) and `licence.id` its source id; the module copies them
+onto the records and does not interpret them. `flows/source-products/recipe.mjs`
+makes the recipe of each registered source.
+
+Only the newest element set of each object gives outputs unless `latestOnly`
+is false. A recipe that does not name the source (id, kind, originator,
+provider, licence class) is refused: no record travels without its source.
+
+## `attribute_maneuvers`
+
+`$MNV` has no `ORIGINATOR`, so the source goes into `TAGS` (originator,
+source, provider, licence class and id, lineage, producer) on every maneuver
+of `analysis/maneuver-detection`, keeping the tags a record had.
+
 ## Model and validation
 
 `scripts/build-model.mjs` builds the model and its validation from the GP
@@ -349,6 +453,12 @@ Each test has an expected value that does not come from this module:
 - `screening_cases`: Foster Pc in closed form at zero miss, and a fine polar
   grid for an offset anisotropic pair.
 
-Tri-runtime parity of these methods (and E14's four): `PATH=$HOME/.wasmedge/bin:$PATH node
-tests/parity.mjs` (browser, WasmEdge, Docker WasmEdge; report in
-`conformance/parity.json`).
+Tri-runtime parity of these methods (and E14's four and `attach_covariance` and
+`attribute_maneuvers`): `PATH=$HOME/.wasmedge/bin:$PATH node tests/parity.mjs`
+(browser, WasmEdge, Docker WasmEdge; report in `conformance/parity.json`).
+
+`tests/source_products.test.mjs` checks `attach_covariance` against numbers
+that do not come from the module: the model file's strata and the held-out
+verdict of each cell, interpolation in age between bin centres, supplied
+covariances returned exactly, their rotation to RTN done independently, and
+the formal covariance times the recipe's factor.

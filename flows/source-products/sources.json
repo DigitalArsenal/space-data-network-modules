@@ -1,0 +1,638 @@
+{
+  "version": 1,
+  "flow": "com.digitalarsenal.flows.source-products",
+  "about": "Every orbit data-source module of this repository and where it enters the flow. `sources` lists the ones that give products, with the recipe facts of each source; `refused` the ones that cannot, with the reason; `support` the ones that describe sources or identify objects; `missing` the sources that have no module yet, with the graph task that builds it. tests/sources.test.mjs holds the file to the modules' manifests and to the flow.",
+  "licence": {
+    "audit": "orbit-accuracy-experiments data/licenses.json, checked 2026-10-10; `id` is the audit's source id, `class` its `reproduce` field",
+    "classes": {
+      "reproducible": "reproduce: yes. The records may be republished with the credit the terms ask.",
+      "cite-only": "reproduce: no. The records are computed on and cited, never republished.",
+      "share-alike": "reproduce: share-alike.",
+      "non-commercial": "reproduce: non-commercial."
+    }
+  },
+  "model": {
+    "file": "../../analysis/gp-error-model/data/e14-s3-kc.json",
+    "about": "The model of rule 3 for the sources marked `ownModel` (E14 measured it on their element sets); every other source gets it pooled (rule 4). Rows are labelled CALIBRATED only where the model's cell was REALISTIC on the held-out window and the source's lineage is one the model was measured on."
+  },
+  "lanes": {
+    "element-set": {
+      "ingress": [
+        "element_sets or element_sets_mpe",
+        "element_set_recipe"
+      ],
+      "products": "The newest set of each object: its epoch states and a covariance by rule (3, else 4). The history: maneuvers by the detector's two passes with SGP4 answering the propagator query port."
+    },
+    "ephemeris": {
+      "ingress": [
+        "fit_omm",
+        "ephemeris",
+        "ephemeris_versions",
+        "planned_maneuvers",
+        "fit_recipe"
+      ],
+      "products": "The newest fitted set and its states with a covariance by rule (1 when the operator's ephemeris carries covariance lines, else 3 or 4). Maneuvers from the history of fitted sets, and from the versions against the planned maneuvers."
+    },
+    "observation": {
+      "ingress": [
+        "fit_omm",
+        "fit",
+        "fit_recipe"
+      ],
+      "estimator": {
+        "module": "analysis/estimation",
+        "method": "run_estimation",
+        "inputs": [
+          "laser_tracking",
+          "tracking_data"
+        ],
+        "output": "ocm",
+        "into": {
+          "trigger": "fit",
+          "port": "fit"
+        }
+      },
+      "products": "The fitted set and the estimate's formal covariance times the realism factor measured for the source and fit class (rule 2).",
+      "sources": []
+    }
+  },
+  "sources": [
+    {
+      "id": "celestrak-gp",
+      "registry": [],
+      "kind": "element-set",
+      "originator": "CelesTrak",
+      "lineage": "space-track-gp",
+      "licence": {
+        "class": "cite-only",
+        "id": "celestrak"
+      },
+      "ownModel": true,
+      "via": [
+        {
+          "module": "data-source/celestrak-reference",
+          "method": "parse_gp_groups",
+          "port": "omm_records",
+          "type": "$OMM",
+          "into": [
+            {
+              "trigger": "element_sets",
+              "port": "omm"
+            }
+          ]
+        },
+        {
+          "module": "data-source/celestrak-parser",
+          "method": "parse_gp",
+          "port": "omm_records",
+          "wildcard": true,
+          "type": "$OMM",
+          "into": [
+            {
+              "trigger": "element_sets",
+              "port": "omm"
+            }
+          ]
+        }
+      ],
+      "limits": [
+        "celestrak-parser types its record ports with a wildcard; the records on omm_records are $OMM."
+      ]
+    },
+    {
+      "id": "space-track-gp",
+      "registry": [
+        "space-track"
+      ],
+      "kind": "element-set",
+      "originator": "Space-Track.org",
+      "lineage": "space-track-gp",
+      "licence": {
+        "class": "cite-only",
+        "id": "space-track"
+      },
+      "ownModel": true,
+      "via": [
+        {
+          "module": "data-source/gp-archive-records",
+          "method": "build_mpe",
+          "port": "records",
+          "type": "$MPE",
+          "into": [
+            {
+              "trigger": "element_sets_mpe",
+              "port": "mpe"
+            }
+          ]
+        },
+        {
+          "module": "data-source/retrieval",
+          "method": "omm_bulk",
+          "port": "stream",
+          "type": "$OMM",
+          "into": [
+            {
+              "trigger": "element_sets",
+              "port": "omm"
+            }
+          ]
+        }
+      ],
+      "limits": [
+        "The GP history archive is filled by the node's importer, not by a module (modules-spacetrack-source-20261011).",
+        "retrieval returns what the node's store holds: the request names the dataset, and the recipe must name the source that dataset came from.",
+        "A stream whose records are separated by zero-length padding prefixes is read by epoch-state and gp-error-model but refused by detect_maneuvers; pass the stream without padding."
+      ]
+    },
+    {
+      "id": "spacex-starlink",
+      "registry": [
+        "spacex-starlink"
+      ],
+      "kind": "ephemeris",
+      "originator": "SpaceX",
+      "lineage": "spacex-starlink-meme",
+      "licence": {
+        "class": "reproducible",
+        "id": "spacex-starlink"
+      },
+      "ownModel": false,
+      "via": [
+        {
+          "module": "data-source/spacex-starlink-source",
+          "method": "emit",
+          "port": "oem",
+          "type": "$OEM",
+          "into": [
+            {
+              "trigger": "ephemeris",
+              "port": "operator"
+            },
+            {
+              "trigger": "ephemeris_versions",
+              "port": "versions"
+            }
+          ]
+        }
+      ],
+      "fit": {
+        "module": "flows/supplemental-omm/nodes/od",
+        "method": "fit",
+        "input": "starlink",
+        "output": "omm",
+        "unwrap": "$FSB",
+        "into": {
+          "trigger": "fit_omm",
+          "port": "omm"
+        }
+      },
+      "limits": [
+        "SpaceX publishes a 21-element UVW covariance with every state. The source parses it past and does not carry it into the OEM, so rule 1 does not apply to Starlink until it does (modules-starlink-meme-covariance-20261011)."
+      ]
+    },
+    {
+      "id": "nasa-iss",
+      "registry": [
+        "iss"
+      ],
+      "kind": "ephemeris",
+      "originator": "NASA",
+      "lineage": "nasa-iss-oem",
+      "licence": {
+        "class": "reproducible",
+        "id": "nasa-iss-oem"
+      },
+      "ownModel": false,
+      "via": [
+        {
+          "module": "data-source/iss-source",
+          "method": "emit",
+          "port": "oem",
+          "type": "$OEM",
+          "into": [
+            {
+              "trigger": "ephemeris",
+              "port": "operator"
+            },
+            {
+              "trigger": "ephemeris_versions",
+              "port": "versions"
+            }
+          ]
+        },
+        {
+          "module": "data-source/oem-source-iss",
+          "method": "emit",
+          "port": "oem",
+          "type": "$OEM",
+          "into": [
+            {
+              "trigger": "ephemeris",
+              "port": "operator"
+            },
+            {
+              "trigger": "ephemeris_versions",
+              "port": "versions"
+            }
+          ]
+        }
+      ],
+      "fit": {
+        "module": "flows/supplemental-omm/nodes/od",
+        "method": "fit",
+        "input": "iss",
+        "output": "omm",
+        "unwrap": "$FSB",
+        "into": {
+          "trigger": "fit_omm",
+          "port": "omm"
+        }
+      },
+      "limits": [
+        "NASA's OEM carries no covariance: the pooled model answers (rule 4), uncalibrated for a lineage E14 did not measure."
+      ]
+    },
+    {
+      "id": "intelsat",
+      "registry": [
+        "intelsat"
+      ],
+      "kind": "ephemeris",
+      "originator": "Intelsat",
+      "lineage": "intelsat-ecf",
+      "licence": {
+        "class": "cite-only",
+        "id": "intelsat"
+      },
+      "ownModel": false,
+      "via": [
+        {
+          "module": "data-source/intelsat-source",
+          "method": "emit",
+          "port": "oem",
+          "type": "$OEM",
+          "into": [
+            {
+              "trigger": "ephemeris",
+              "port": "operator"
+            },
+            {
+              "trigger": "ephemeris_versions",
+              "port": "versions"
+            }
+          ]
+        }
+      ],
+      "fit": {
+        "module": "flows/supplemental-omm/nodes/od",
+        "method": "fit",
+        "input": "intelsat",
+        "output": "omm",
+        "unwrap": "$FSB",
+        "into": {
+          "trigger": "fit_omm",
+          "port": "omm"
+        }
+      },
+      "limits": [
+        "Earth-fixed, position-only states: only the supplemental-omm OD node fits them.",
+        "The file carries no NORAD number or designator, so the object is named, not identified, until the integrator's identity link rules."
+      ]
+    },
+    {
+      "id": "iac-glonass",
+      "registry": [],
+      "kind": "ephemeris",
+      "originator": "IAC (Roscosmos)",
+      "lineage": "iac-glonass-sp3",
+      "licence": {
+        "class": "cite-only",
+        "id": "iac-glonass"
+      },
+      "ownModel": false,
+      "via": [
+        {
+          "module": "data-source/glonass-source",
+          "method": "emit",
+          "port": "oem",
+          "type": "$OEM",
+          "into": [
+            {
+              "trigger": "ephemeris",
+              "port": "operator"
+            },
+            {
+              "trigger": "ephemeris_versions",
+              "port": "versions"
+            }
+          ]
+        }
+      ],
+      "fit": {
+        "module": "flows/supplemental-omm/nodes/od",
+        "method": "fit",
+        "input": "glonass",
+        "output": "omm",
+        "unwrap": "$FSB",
+        "into": {
+          "trigger": "fit_omm",
+          "port": "omm"
+        }
+      },
+      "limits": [
+        "Earth-fixed, position-only SP3 states: only the supplemental-omm OD node fits them."
+      ]
+    },
+    {
+      "id": "ilrs-cpf",
+      "registry": [
+        "cpf-edc"
+      ],
+      "kind": "ephemeris",
+      "originator": "ILRS (EDC)",
+      "lineage": "ilrs-cpf",
+      "licence": {
+        "class": "reproducible",
+        "id": "ilrs"
+      },
+      "ownModel": false,
+      "via": [
+        {
+          "module": "data-source/cpf-source",
+          "method": "emit",
+          "port": "oem",
+          "type": "$OEM",
+          "into": [
+            {
+              "trigger": "ephemeris",
+              "port": "operator"
+            },
+            {
+              "trigger": "ephemeris_versions",
+              "port": "versions"
+            }
+          ]
+        }
+      ],
+      "fit": {
+        "module": "flows/supplemental-omm/nodes/od",
+        "method": "fit",
+        "input": "cpf",
+        "output": "omm",
+        "unwrap": "$FSB",
+        "into": {
+          "trigger": "fit_omm",
+          "port": "omm"
+        }
+      },
+      "limits": [
+        "Earth-fixed, position-only predictions: only the supplemental-omm OD node fits them.",
+        "A prediction is not an observation: it is a derived product of the ILRS analysis centres."
+      ]
+    },
+    {
+      "id": "esa-cpf",
+      "registry": [
+        "cpf"
+      ],
+      "kind": "ephemeris",
+      "originator": "ESA/ESOC Navigation Support Office",
+      "lineage": "esa-cpf",
+      "licence": {
+        "class": "cite-only",
+        "id": "esa-navigation-office"
+      },
+      "ownModel": false,
+      "via": [
+        {
+          "module": "data-source/cpf-source",
+          "method": "emit",
+          "port": "oem",
+          "type": "$OEM",
+          "into": [
+            {
+              "trigger": "ephemeris",
+              "port": "operator"
+            },
+            {
+              "trigger": "ephemeris_versions",
+              "port": "versions"
+            }
+          ]
+        }
+      ],
+      "fit": {
+        "module": "flows/supplemental-omm/nodes/od",
+        "method": "fit",
+        "input": "cpf",
+        "output": "omm",
+        "unwrap": "$FSB",
+        "into": {
+          "trigger": "fit_omm",
+          "port": "omm"
+        }
+      },
+      "limits": [
+        "The module's default listing is EDC's. ESA's archive is reached by configuration (`listingUrl`) and is not exercised.",
+        "Earth-fixed, position-only predictions: only the supplemental-omm OD node fits them."
+      ]
+    }
+  ],
+  "refused": [
+    {
+      "module": "data-source/celestrak-supgp",
+      "registry": [],
+      "check": "no-orbit-output",
+      "reason": "Pull-only: it parses CelesTrak's supplemental GP of SES, Planet, Iridium, Telesat, Kuiper, AST and the China Space Station inside `pull` and stores each object. No method gives the $OMM records to a flow.",
+      "task": "modules-celestrak-supgp-emit-20261011"
+    },
+    {
+      "module": "data-source/gps-source",
+      "registry": [],
+      "check": "no-orbit-output",
+      "reason": "Pull-only, and its $OMM sets are GPS almanac elements (theory GPS-LNAV-ALMANAC), not SGP4: epoch-state and the SGP4 error model refuse them. GPS precise orbits are the ephemeris source.",
+      "task": "modules-sp3-precise-source-20261011"
+    },
+    {
+      "module": "data-source/oneweb-source",
+      "registry": [
+        "eutelsat-oneweb"
+      ],
+      "check": "no-orbit-output",
+      "reason": "Pull-only, and the LTEF encoding is undocumented and not decoded: the module stores OEM metadata shells with no states.",
+      "task": "modules-operator-od-derived-only-20261010"
+    }
+  ],
+  "support": [
+    {
+      "module": "data-source/celestrak-request",
+      "role": "Builds the CelesTrak requests and parser jobs that feed celestrak-parser; it gives no records."
+    },
+    {
+      "module": "data-source/ephemeris-source",
+      "role": "Discovery and description of the operator ephemeris sources; its sources.json is the inventory `missing` is checked against."
+    },
+    {
+      "module": "data-source/catalog-source",
+      "role": "GCAT and McCants catalog editions as $CAT: the identity links of the $CAT integrator, not orbit products."
+    },
+    {
+      "module": "data-source/spk-source",
+      "role": "Reads ephemeris containers (SPK, Code-500, STK, OEM) for display of an ephemeris product; it is a propagator, not a source."
+    }
+  ],
+  "missing": [
+    {
+      "name": "Space-Track GP history",
+      "registry": [
+        "space-track"
+      ],
+      "kind": "element-set",
+      "licence": [
+        "space-track"
+      ],
+      "module": "data-source/spacetrack-source",
+      "task": "modules-spacetrack-source-20261011"
+    },
+    {
+      "name": "JSC Vimpel elements, ephemerides and datefirst crosswalk",
+      "registry": [
+        "vimpel"
+      ],
+      "kind": "element-set",
+      "licence": [
+        "vimpel"
+      ],
+      "module": "data-source/vimpel-source",
+      "task": "modules-vimpel-source-20261011"
+    },
+    {
+      "name": "Space Mapper AOE element sets",
+      "registry": [],
+      "kind": "element-set",
+      "licence": [],
+      "module": "data-source/spacemapper-aoe-source",
+      "task": "modules-spacemapper-aoe-source-20261011"
+    },
+    {
+      "name": "IGS / BKG GPS precise, ESA GLONASS precise and ESA precise orbit determination (SP3)",
+      "registry": [
+        "gps-precise",
+        "glonass-precise",
+        "esa-pod"
+      ],
+      "kind": "ephemeris",
+      "licence": [
+        "igs",
+        "esa-navigation-office",
+        "esa-navigation-office-pod"
+      ],
+      "module": "data-source/sp3-precise-source",
+      "task": "modules-sp3-precise-source-20261011"
+    },
+    {
+      "name": "Telesat",
+      "registry": [
+        "telesat"
+      ],
+      "kind": "ephemeris",
+      "licence": [],
+      "module": "data-source/telesat-source",
+      "task": "modules-telesat-source-20261011"
+    },
+    {
+      "name": "EUMETSAT",
+      "registry": [
+        "eumetsat"
+      ],
+      "kind": "element-set",
+      "licence": [
+        "eumetsat-tle"
+      ],
+      "module": "data-source/eumetsat-source",
+      "task": "modules-eumetsat-source-20261011"
+    },
+    {
+      "name": "Spire Global",
+      "registry": [
+        "spire"
+      ],
+      "kind": "ephemeris",
+      "licence": [],
+      "module": "data-source/spire-source",
+      "task": "modules-spire-source-20261011"
+    },
+    {
+      "name": "Planet Labs",
+      "registry": [
+        "planet"
+      ],
+      "kind": "ephemeris",
+      "licence": [
+        "planet"
+      ],
+      "module": null,
+      "extends": "data-source/ephemeris-source",
+      "task": "modules-operator-od-derived-only-20261010"
+    },
+    {
+      "name": "SES",
+      "registry": [
+        "ses"
+      ],
+      "kind": "ephemeris",
+      "licence": [
+        "ses"
+      ],
+      "module": null,
+      "extends": "data-source/ephemeris-source",
+      "task": "modules-operator-od-derived-only-20261010"
+    },
+    {
+      "name": "China Space Station (CMSE)",
+      "registry": [
+        "css-tiangong"
+      ],
+      "kind": "ephemeris",
+      "licence": [
+        "cmsa-tiangong"
+      ],
+      "module": null,
+      "extends": "data-source/ephemeris-source",
+      "task": "modules-operator-od-derived-only-20261010"
+    },
+    {
+      "name": "Eutelsat OneWeb",
+      "registry": [
+        "eutelsat-oneweb"
+      ],
+      "kind": "ephemeris",
+      "licence": [
+        "oneweb"
+      ],
+      "module": null,
+      "extends": "data-source/ephemeris-source",
+      "task": "modules-operator-od-derived-only-20261010"
+    },
+    {
+      "name": "ILRS CRD normal points",
+      "registry": [],
+      "kind": "observation",
+      "licence": [
+        "ilrs"
+      ],
+      "module": "data-source/ilrs-crd-source",
+      "task": "modules-ilrs-crd-source-20261011"
+    },
+    {
+      "name": "SatNOGS Doppler observations",
+      "registry": [],
+      "kind": "observation",
+      "licence": [
+        "satnogs"
+      ],
+      "module": "data-source/satnogs-observations-source",
+      "task": "modules-satnogs-observations-source-20261011"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "format": "wasm-object",
+  "language": "c++",
+  "threadModel": "single-thread",
+  "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e65706f63682d7374617465_",
+  "methodSymbols": {
+    "derive": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e65706f63682d7374617465_derive",
+    "omm_from_mpe": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e65706f63682d7374617465_omm_from_mpe",
+    "derive_omm": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e65706f63682d7374617465_derive_omm",
+    "answer_propagation_requests": "sdm_guest_636f6d2e6469676974616c617273656e616c2e616e616c797369732e65706f63682d7374617465_answer_propagation_requests"
+  }
+}

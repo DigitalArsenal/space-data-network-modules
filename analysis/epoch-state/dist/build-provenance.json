@@ -10,7 +10,8 @@
     "LCC",
     "CAT",
     "PPE",
-    "OEM"
+    "OEM",
+    "OMM"
   ],
   "erfaSourceFiles": 248,
   "axisEngine": "foundation/frames/src/axis_engine.hpp",

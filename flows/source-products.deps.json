@@ -1,0 +1,5 @@
+{
+  "com.digitalarsenal.analysis.epoch-state": "../analysis/epoch-state",
+  "com.digitalarsenal.analysis.gp-error-model": "../analysis/gp-error-model",
+  "com.digitalarsenal.analysis.maneuver-detection": "../analysis/maneuver-detection"
+}

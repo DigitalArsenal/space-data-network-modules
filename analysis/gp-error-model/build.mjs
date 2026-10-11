@@ -7,13 +7,13 @@ import { composeErfaTranslationUnit } from '../../foundation/frames/erfa-amalgam
 
 // One translation unit: SDS headers, ERFA and the foundation/frames axis
 // engine (TEME -> GCRF), the Vallado SGP4 that propagator/sgp4 compiles,
-// Izzo's Lambert kernel (analysis/lambert-izzo), and nlohmann::json for the
-// control frames.
+// Izzo's Lambert kernel (analysis/lambert-izzo), the SHA-256 that orbit-products
+// uses for record hashes, and nlohmann::json for the control frames.
 const root = fileURLToPath(new URL('.', import.meta.url));
 const framesSrc = path.resolve(root, '../../foundation/frames/src');
 const sgp4Src = path.resolve(root, '../../propagator/sgp4/src/cpp/src');
 const jsonHeader = path.resolve(root, '../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp');
-const { header, version, families } = await generateSdsHeaders(['OMM', 'OEM'], import.meta.url);
+const { header, version, families } = await generateSdsHeaders(['OMM', 'OEM', 'OCM', 'MNV'], import.meta.url);
 const erfa = await composeErfaTranslationUnit();
 const bodyModels = await fs.readFile(path.join(framesSrc, 'iau_body_models.hpp'), 'utf8');
 const axisEngine = (await fs.readFile(path.join(framesSrc, 'axis_engine.hpp'), 'utf8'))
@@ -23,9 +23,10 @@ const axisEngine = (await fs.readFile(path.join(framesSrc, 'axis_engine.hpp'), '
 const sgp4Header = await fs.readFile(path.join(sgp4Src, 'SGP4.h'), 'latin1');
 const sgp4Source = (await fs.readFile(path.join(sgp4Src, 'SGP4.cpp'), 'latin1')).replace('#include "SGP4.h"', '');
 const json = await fs.readFile(jsonHeader, 'utf8');
+const sha256 = await fs.readFile(path.resolve(root, '../../files/orbit-products/src/sha256.hpp'), 'utf8');
 // The module's sources in dependency order (one translation unit), and the
 // Lambert kernel analysis/lambert-izzo and analysis/maneuver compile.
-const sources = await Promise.all(['gp_error_model.cpp', 'common_epoch.cpp', 'state_transition.cpp', 'covariance_realism.cpp']
+const sources = await Promise.all(['gp_error_model.cpp', 'common_epoch.cpp', 'state_transition.cpp', 'covariance_realism.cpp', 'source_products.cpp']
   .map((f) => fs.readFile(path.join(root, 'src', f), 'utf8')));
 const lambert = await fs.readFile(path.resolve(root, '../lambert-izzo/include/lambert_izzo/solver.hpp'), 'utf8');
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));
@@ -34,13 +35,25 @@ await fs.mkdir(path.dirname(outputPath), { recursive: true });
 const result = await compileModuleFromSource({
   manifest,
   sourceCode: ['#include "space_data_module_invoke.h"', '#define JSON_NOEXCEPTION 1', json, header, erfa.source, bodyModels, axisEngine,
-    sgp4Header, sgp4Source, '#undef pi', lambert, ...sources].join('\n\n'),
+    // The vendored SGP4 has internal linkage: analysis/od, analysis/epoch-state and this module each compile the same
+    // SGP4Funcs, and the flow compiler links their objects into one artifact, where equal external C++ symbols are
+    // duplicates. The standard headers SGP4.h includes come first, outside the namespace.
+    '#include <math.h>\n#include <stdio.h>\n#include <string.h>\n#include <iostream>\nnamespace {', sgp4Header, sgp4Source, '}  // namespace',
+    '#undef pi', lambert, sha256, ...sources].join('\n\n'),
   language: 'c++',
   outputPath,
   threadModel: 'single-thread',
 });
 if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
 await fs.copyFile(path.join(root, 'plugin-manifest.json'), path.join(root, 'dist/plugin-manifest.json'));
+// The flow compiler links this module as a node from its prefixed guest-link object (flows/source-products).
+const guestLinkDir = path.join(root, 'dist/guest-link');
+await fs.mkdir(guestLinkDir, { recursive: true });
+await fs.writeFile(path.join(guestLinkDir, 'module-link.o'), result.guestLink.objectBytes);
+await fs.writeFile(path.join(guestLinkDir, 'metadata.json'), `${JSON.stringify({
+  version: 1, format: result.guestLink.format, language: result.guestLink.language, threadModel: result.guestLink.threadModel,
+  symbolPrefix: result.guestLink.symbolPrefix, methodSymbols: result.guestLink.methodSymbols,
+}, null, 2)}\n`);
 await fs.writeFile(path.join(root, 'dist/build-provenance.json'), `${JSON.stringify({
   spacedatastandards: version, sdsFamilies: families, erfaSourceFiles: erfa.fileCount,
   axisEngine: 'foundation/frames/src/axis_engine.hpp', sgp4: 'propagator/sgp4/src/cpp/src/SGP4.cpp',
