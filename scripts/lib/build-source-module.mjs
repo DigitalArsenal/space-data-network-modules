@@ -14,7 +14,8 @@ const repo = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../.
 // root: the module directory. importMeta: the module's own import.meta.url (where its packages are found).
 // families: the SDS families the source reads or writes. common: headers of common/ in the order they are
 // included. sources: the module's own files, relative to root, in the order they are included.
-export async function buildSourceModule({ root, importMeta, compileModuleFromSource, createFlatc, families, common = [], sources, threadModel = "single-thread", extraHeaders = [] }) {
+export async function buildSourceModule({ root, importMeta, compileModuleFromSource, createFlatc, families, common = [], sources, threadModel, extraHeaders = [] }) {
+  if (!threadModel) throw new Error("threadModel is declared by the module's build.mjs, never inferred (scripts/lib/thread-model.mjs)");
   const manifest = JSON.parse(await fs.readFile(path.join(root, "plugin-manifest.json"), "utf8"));
   const { header, version, families: ordered } = await generateSdsHeaders(families, importMeta, createFlatc);
   const json = await fs.readFile(path.join(repo, "propagator/sgp4/src/cpp/include/nlohmann/json.hpp"), "utf8");

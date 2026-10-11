@@ -11,4 +11,6 @@ await buildSourceModule({
   families: ["OMM", "CAT"],
   common: ["alpha5.hpp", "civil_time.hpp", "flat_json_records.hpp"],
   sources: ["src/spacetrack_source.cpp"],
+  // THREAD MODEL: declared, never inferred (scripts/lib/thread-model.mjs). The parser spawns nothing and shares nothing.
+  threadModel: "single-thread",
 });
