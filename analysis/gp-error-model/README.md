@@ -108,7 +108,9 @@ miss.
 
 They calibrate HPOP's covariance P(t) = Φ P₀ Φᵀ + Q for the CA HPOP screen's
 product, analysis/epoch-state's GCRF state at an element set's epoch
-propagated by propagator/hpop's resident force model. The host runs HPOP.
+propagated by propagator/hpop at full force (`propagator/hpop/catalog.mjs`,
+the screen's configuration, with the space weather released on the element
+set's day). The host runs HPOP (`scripts/hpop-calibration.mjs`).
 
 - **`hpop_arcs`** takes `elements`, `reference`, an optional `model` and
   `options`, and outputs a `plan`. For each element set it gives:

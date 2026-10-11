@@ -4,6 +4,12 @@
 // those states on worker threads, at most 1,024 objects per resident
 // instance, and exports conjunction-screening trajectories one time window at
 // a time. All physics is in those modules; this file moves records.
+//
+// Profiles: 'full-force' (the default) configures every instance with the
+// full force model of propagator/hpop/catalog.mjs and the environment frames
+// in `environment` (kernel.prw, earth_orientation.prw and space_weather.prw,
+// PRW records), each object carrying its Cd*A/m (from its B*) and Cr*A/m;
+// 'gravity-only' names the point mass and degree/order 20 field.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -90,11 +96,29 @@ async function epochStates(epochStateDir, omms) {
  * @param {Uint8Array[]} o.catalog  One $OMM per object.
  * @param {string} o.modulesRoot  The space-data-network-modules checkout.
  * @param {number} [o.workers]
- * @returns {Promise<{objects: object[], excluded: object[], window: Function, close: Function}>}
+ * @param {number} [o.screenStartJd]  UTC JD the screen starts (default: the first window's start).
+ * @param {number} [o.loadCeiling]  Pause each worker's next chunk of objects while the host's
+ *   1-minute load average exceeds it (none by default).
+ * @returns {Promise<{objects: object[], excluded: object[], reentries: object[], window: Function, close: Function}>}
+ *
+ * HPOP ends a trajectory at reentry (100 km geodetic altitude) with the error
+ * `reentry` and its UTC epoch. An object that reenters before the screen
+ * starts is dropped, as SGP4 excludes a decayed element set. One that
+ * reenters during the screen keeps the windows before the one holding its
+ * reentry and is absent from that window on; `reentries` lists both kinds.
  */
 export async function createHpopFarm(o) {
+  const profile = o.profile ?? 'full-force';
+  if (!['full-force', 'gravity-only'].includes(profile)) throw new Error(`Unknown HPOP profile ${profile}: full-force or gravity-only.`);
+  let environment = null;
+  if (profile === 'full-force') {
+    if (!o.environment) throw new Error('The full-force HPOP farm needs its environment frames (kernel.prw, earth_orientation.prw, space_weather.prw).');
+    environment = Object.fromEntries(['kernel', 'earth_orientation', 'space_weather'].map((port) =>
+      [port, new Uint8Array(fs.readFileSync(path.join(o.environment, `${port}.prw`)))]));
+  }
   const omms = o.catalog.map((bytes) => OMM.getRootAsOMM(new flatbuffers.ByteBuffer(bytes)).unpack());
-  const objects = omms.map((m, i) => ({ handle: i + 1, norad: m.NORAD_CAT_ID, objectId: m.OBJECT_ID || String(m.NORAD_CAT_ID), name: m.OBJECT_NAME }));
+  const objects = omms.map((m, i) => ({ handle: i + 1, norad: m.NORAD_CAT_ID, objectId: m.OBJECT_ID || String(m.NORAD_CAT_ID), name: m.OBJECT_NAME,
+    bstar: m.BSTAR }));
   const t0 = performance.now();
   const { states, report } = await epochStates(path.join(o.modulesRoot, 'analysis/epoch-state'), omms);
   const deriveMs = performance.now() - t0;
@@ -123,19 +147,37 @@ export async function createHpopFarm(o) {
   const adds = [];
   for (let b = 0; b < instanceCount; b++) {
     adds.push(send(workers[b % count], 'add', { wasmPath: path.join(hpop, 'dist/isomorphic/module.wasm'),
-      manifestPath: path.join(hpop, 'plugin-manifest.json'), id: `farm-${b}`, states: ready.filter((_, i) => i % instanceCount === b) }));
+      manifestPath: path.join(hpop, 'plugin-manifest.json'), catalogPath: path.join(hpop, 'catalog.mjs'), profile, environment,
+      id: `farm-${b}`, states: ready.filter((_, i) => i % instanceCount === b) }));
   }
-  await Promise.all(adds);
+  const ingestCpuMs = (await Promise.all(adds)).reduce((sum, r) => sum + (r?.cpuMs ?? 0), 0);
   const ingestMs = performance.now() - t1;
+  // CPU time of the workers (user and system, per thread): ingest and each window.
+  const cpu = { ingestS: ingestCpuMs / 1000, windows: [] };
   const byHandle = new Map(objects.map((x) => [x.handle, x]));
+  const reentries = [];
+  let screenStartJd = o.screenStartJd;
+  // The UTC Julian date of the epoch in a reentry error ("... at <ISO> UTC").
+  const reentryJd = (reason) => {
+    const m = /^reentry: .* at (\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?) UTC/.exec(reason);
+    return m ? unixSeconds(m[1]) / 86400 + 2440587.5 : null;
+  };
 
   return {
-    objects, excluded, deriveMs, ingestMs, workers: count, instances: instanceCount, epochStateReport: report,
+    objects, excluded, reentries, cpu, deriveMs, ingestMs, workers: count, instances: instanceCount, epochStateReport: report, profile,
     /** Trajectories of every object over [startJd, startJd + days], UTC. */
     async window(startJd, days) {
-      const parts = await Promise.all(workers.map((w) => send(w, 'window', { startJd, seconds: days * 86400 })));
+      screenStartJd ??= startJd;
+      const parts = await Promise.all(workers.map((w) => send(w, 'window', { startJd, seconds: days * 86400, loadCeiling: o.loadCeiling })));
+      cpu.windows.push({ startJd, cpuS: parts.reduce((sum, p) => sum + p.cpuMs, 0) / 1000,
+        maxWorkerCpuS: Math.max(...parts.map((p) => p.cpuMs)) / 1000, maxWorkerPausedS: Math.max(...parts.map((p) => p.pausedMs)) / 1000 });
       const frames = parts.flatMap((p) => p.frames);
-      const dropped = parts.flatMap((p) => p.dropped).map((d) => ({ ...byHandle.get(d.handle), reason: d.reason, jd: startJd }));
+      const dropped = [];
+      for (const d of parts.flatMap((p) => p.dropped)) {
+        const object = byHandle.get(d.handle), jd = reentryJd(d.reason);
+        if (jd !== null) reentries.push({ ...object, jd, phase: jd < screenStartJd ? 'catch-up' : 'screen', reason: d.reason });
+        if (jd === null || jd < screenStartJd) dropped.push({ ...object, reason: d.reason, jd: startJd });
+      }
       return { frames, dropped };
     },
     async close() { await Promise.all(workers.map((w) => w.terminate())); },

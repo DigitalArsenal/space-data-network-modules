@@ -40,7 +40,7 @@ async function residentCovariance(h, target, noise) {
   const state = Object.assign(residentState({ epochJD: epoch, position: r0, velocity: v0 }), {
     INSTANCE: instance(g), ENTITY_HANDLE: 7, CATALOG_NUMBER: 1, OBJECT_ID: 'covariance', COVARIANCE: matrix(P0, 6),
     PROCESS_NOISE: processNoise(noise) });
-  await run(h, { methodId: 'ingest_state', inputs: [{ portId: 'state', typeRef: TYPE, payload: encodePrw('RESIDENT_STATE', state) }] });
+  await run(h, { methodId: 'ingest_state_gravity_only', inputs: [{ portId: 'state', typeRef: TYPE, payload: encodePrw('RESIDENT_STATE', state) }] });
   const request = makeTable('PRWResidentRequest', { INSTANCE: instance(g), TARGET_EPOCH: instant(target), ENTITY_HANDLES: [],
     TARGET_COORDINATE_SYSTEM: coordinateSystem() });
   const response = await run(h, { methodId: 'propagate_state', outputStreamCap: 1,
@@ -65,7 +65,7 @@ test('resident covariance is the linear propagation of P0 through the resident t
   }
   const states = seeds.map((s, k) => Object.assign(residentState({ epochJD: epoch, position: s.r, velocity: s.v }), {
     INSTANCE: instance(g), ENTITY_HANDLE: k + 1, CATALOG_NUMBER: k + 1, OBJECT_ID: `fd-${k}`, ...(k === 0 ? { COVARIANCE: matrix(P0, 6) } : {}) }));
-  await run(h, { methodId: 'ingest_state', inputs: states.map((x) => ({ portId: 'state', typeRef: TYPE, payload: encodePrw('RESIDENT_STATE', x) })) });
+  await run(h, { methodId: 'ingest_state_gravity_only', inputs: states.map((x) => ({ portId: 'state', typeRef: TYPE, payload: encodePrw('RESIDENT_STATE', x) })) });
   const request = makeTable('PRWResidentRequest', { INSTANCE: instance(g), TARGET_EPOCH: instant(target), ENTITY_HANDLES: [],
     TARGET_COORDINATE_SYSTEM: coordinateSystem() });
   const out = new Map();
@@ -155,6 +155,6 @@ test('process noise needs a covariance and a complete declaration', async (t) =>
     covariance: P0, processNoise: { axes: 'INERTIAL', q: [1e-6, 1e-6], intervalSeconds: 60 } }), 'invalid-process-noise');
   const state = Object.assign(residentState({ epochJD: epoch, position: r0, velocity: v0 }), {
     INSTANCE: instance(++generation), ENTITY_HANDLE: 7, PROCESS_NOISE: processNoise({ axes: 'INERTIAL', q: [1e-6, 1e-6, 1e-6], intervalSeconds: 60 }) });
-  await refused({ methodId: 'ingest_state', inputs: [{ portId: 'state', typeRef: TYPE, payload: encodePrw('RESIDENT_STATE', state) }] },
+  await refused({ methodId: 'ingest_state_gravity_only', inputs: [{ portId: 'state', typeRef: TYPE, payload: encodePrw('RESIDENT_STATE', state) }] },
     'invalid-process-noise');
 });

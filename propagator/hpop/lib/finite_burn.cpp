@@ -1,5 +1,6 @@
 #include "finite_burn.h"
 #include "rk_augmented.h"
+#include "reentry.h"
 #include "../../events/src/event_locator.hpp"
 #include <algorithm>
 #include <cmath>
@@ -76,6 +77,7 @@ void derivative(double t,const double* y,double* f,void* opaque) {
     c.forces.drag.mass=mass;c.forces.srp.mass=mass;
     if((c.error=ForceModel::ValidateAccelerationPartials(r,c.forces)))return;
     const double jd=c.epoch+t/86400.0;
+    if(stopAt(y,jd))return;   // reentry.h (f is zero)
     auto a=ForceModel::ComputeAccelerationPartials(r,v,jd,c.forces,c.density);
     double A[7][7]{};
     for(int i=0;i<3;++i) {
@@ -214,6 +216,7 @@ FiniteBurnResult PropagateFiniteBurns(const StateVector& initial,double mass,dou
     }
     auto kicks=impulses;std::stable_sort(kicks.begin(),kicks.end(),[](const auto&a,const auto&b){return a.epoch<b.epoch;});
     for(const auto& b:kicks)if(!std::isfinite(b.epoch)||!finite(b.deltaV))return fail("Invalid impulsive maneuver.");
+    clearPropagationStop();   // reentry.h: this integration starts without a stop
     Context c{forces,burns,density,initial.epoch,std::vector<int>(burns.size()),std::vector<double>(burns.size(),1)};
     if(c.forces.explicitEpochContract)c.forces.integrationEpochTDB=initial.epoch;
     else c.forces.weather.epoch=initial.epoch;
@@ -262,6 +265,7 @@ FiniteBurnResult PropagateFiniteBurns(const StateVector& initial,double mass,dou
             h=std::max(cfg.minStep,h*.5);continue;
         }
         if(c.error)return fail(c.error);
+        if(propagationStop().active){out.success=false;out.errorMessage=propagationStopMessage();return out;}
         double n=norm(next,error);const bool fixed=cfg.method==IntegrationMethod::RK4;
         const int order=(cfg.method==IntegrationMethod::RKF45||cfg.method==IntegrationMethod::Cowell)?5:8;
         if(!std::isfinite(n))return fail("Non-finite finite-burn state or derivative.");

@@ -1,6 +1,7 @@
 #include "variational.h"
 #include "rk_augmented.h"
 #include "shadow_events.h"
+#include "reentry.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -21,6 +22,7 @@ void derivative(double t, const double* y, double* f, void* opaque) {
     if(!c.error)c.error=ForceModel::ValidateAccelerationPartials(Vec3(y[0],y[1],y[2]),*c.forces);
     if(c.error) {std::fill(f,f+c.size,0.0);return;}
     const double jd=c.epoch+t/86400.0;
+    if(stopAt(y,jd)){std::fill(f,f+c.size,0.0);return;}   // reentry.h
     const auto a = ForceModel::ComputeAccelerationPartials(
         Vec3(y[0],y[1],y[2]), Vec3(y[3],y[4],y[5]), jd,
         *c.forces, c.density);
@@ -193,6 +195,7 @@ VariationalResult integrateVariational(const StateVector& initial,double dt,
             return fail(out,"ANALYTIC STM supports RK4, RKF45, RKF78, RK78 and COWELL; FINITE_DIFFERENCE additionally supports RKDP87 and BS.");
         double y[N]{},next[N],error[N];
         for(int i=0;i<6;++i){y[i]=component(initial,i);y[6+i*6+i]=1;}
+        clearPropagationStop();   // reentry.h: this integration starts without a stop
         Context context{&forces,initial.epoch,density};
         context.parameters=&parameters;context.size=N;
         // Dimensionless STM scaling: D^-1 Phi D, D=(r,r,r,v,v,v).
@@ -215,6 +218,7 @@ VariationalResult integrateVariational(const StateVector& initial,double dt,
             else if(ck)rk_detail::cashKarpStep<N>(t,h,y,next,error,derivative,&context);
             else rk_detail::rkf78Step<N>(t,h,y,next,error,derivative,&context);
             if(context.error)return fail(out,context.error);
+            if(propagationStop().active)return fail(out,propagationStopMessage());
             double norm=0;
             for(int i=0;i<N;++i)if(!std::isfinite(next[i])||!std::isfinite(error[i]))return fail(out,"Non-finite variational state or force partial.");
             for(int i=0;i<42;++i) {
