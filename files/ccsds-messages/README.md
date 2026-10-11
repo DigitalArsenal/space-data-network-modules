@@ -18,6 +18,10 @@ browser harness does not provide.
 | ACM Attitude Comprehensive | 504.0-B-2 | `$ACM` | `attitude_data` | `read_acm`, `write_acm` |
 | TDM Tracking Data | 503.0-B-2 Cor.1 | `$TDM` | `tracking` | `read_tdm`, `write_tdm` |
 
+Built against spacedatastandards.org **1.245.0**: `$OMM` 2.0.4, `$OEM` 1.1.5, `$OPM` 0.0.3,
+`$OCM` 2.1.7, `$CDM` 2.0.3, `$APM` 0.0.3, `$ACM` 0.0.4, `$RDM` 0.0.4, `$AEM` 2.0.2, `$TDM` 2.0.4,
+`$NCD` 0.0.2.
+
 ## The contract
 
 **The frame.** `$NCD` describes a file and does not carry it, and the SDK refuses a port
