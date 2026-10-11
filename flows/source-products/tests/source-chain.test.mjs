@@ -45,9 +45,9 @@ function assertNamed({ egress, recipe }, tb) {
   assert.equal(omm.ORIGINATOR, originator);
   assert.equal(omm.NORAD_CAT_ID, 99999);
   assert.equal(ommParam(omm, 'SOURCE_PROVIDER'), provider);
-  const burns = records(egressBytes(egress, 'mnv')).map(unpackMnv).filter((m) => m.DELTA_VEL_U !== 0);
+  const burns = records(egressBytes(egress, 'mnv')).map(unpackMnv).filter((m) => m.DELTA_VEL_V !== 0);
   assert.equal(burns.length, 1);
-  assert.ok(Math.abs(burns[0].DELTA_VEL_U * 1000 - 1) < 0.2, `${burns[0].DELTA_VEL_U * 1000} m/s`);
+  assert.ok(Math.abs(burns[0].DELTA_VEL_V * 1000 - 1) < 0.2, `${burns[0].DELTA_VEL_V * 1000} m/s`);
   assert.ok(Math.abs(Date.parse(burns[0].EVENT_START_TIME) / 1000 - tb) < 8 * 3600);
   for (const tag of [`source:${id}`, `originator:${originator}`, `provider:${provider}`, `licence:${licence.class}`, ...(lineage === id ? [] : [`lineage:${lineage}`])]) assert.ok(burns[0].TAGS.includes(tag), tag);
 }
