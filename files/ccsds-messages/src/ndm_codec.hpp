@@ -109,6 +109,7 @@ inline bool read_message(const Message& msg, const uint8_t* data, size_t length,
         out->error = fr.error + (fr.line ? " (line " + std::to_string(fr.line) + ")" : "");
         return false;
     }
+    if (msg.after_read) msg.after_read(&record);
     out->record = Codec::pack(record);
     out->ok = true;
     return true;
@@ -123,6 +124,7 @@ inline bool write_message(const Message& msg, const uint8_t* record, size_t leng
         *error = "the record is not a verifiable size-prefixed $" + msg.type + " buffer";
         return false;
     }
+    if (msg.before_write) msg.before_write(&native);
     if (msg.check_record) {
         const std::string reason = msg.check_record(&native);
         if (!reason.empty()) {

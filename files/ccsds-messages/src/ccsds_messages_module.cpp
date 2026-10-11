@@ -475,6 +475,10 @@ NDM_METHODS(OMM, omm, "elements", ncdContainerFormat::CCSDS_OMM_KVN, ncdContaine
 NDM_METHODS(OEM, oem, "ephemeris", ncdContainerFormat::CCSDS_OEM_KVN, ncdContainerFormat::CCSDS_OEM_XML)
 NDM_METHODS(OPM, opm, "state", ncdContainerFormat::CCSDS_OPM_KVN, ncdContainerFormat::CCSDS_OPM_XML)
 NDM_METHODS(CDM, cdm, "conjunction", ncdContainerFormat::CCSDS_CDM_KVN, ncdContainerFormat::CCSDS_CDM_XML)
+NDM_METHODS(APM, apm, "attitude_state", ncdContainerFormat::CCSDS_APM_KVN, ncdContainerFormat::CCSDS_APM_XML)
+NDM_METHODS(ACM, acm, "attitude_data", ncdContainerFormat::CCSDS_ACM_KVN, ncdContainerFormat::CCSDS_ACM_XML)
+NDM_METHODS(RDM, rdm, "reentry", ncdContainerFormat::CCSDS_RDM_KVN, ncdContainerFormat::CCSDS_RDM_XML)
+NDM_METHODS(OCM, ocm, "orbit", ncdContainerFormat::CCSDS_OCM_KVN, ncdContainerFormat::CCSDS_OCM_XML)
 
 int read_aem(void) {
     MessageFrame frame;

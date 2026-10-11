@@ -497,6 +497,36 @@ struct Conv<std::vector<std::string>> {
     }
 };
 
+/* A vector of reals as one leaf: the CCSDS "vecDouble", numbers separated by
+ * spaces (CP, TARGET_MOMENTUM). */
+template <>
+struct Conv<std::vector<double>> {
+    static bool take(std::vector<double>& m, const std::string& t, std::string* err) {
+        std::vector<double> v;
+        for (const std::string& token : tokens(t)) {
+            double d = 0;
+            if (!parse_double(token, &d)) {
+                *err = "not a list of decimal numbers";
+                return false;
+            }
+            v.push_back(d);
+        }
+        m = v;
+        return true;
+    }
+    static bool same(const std::vector<double>& a, const std::vector<double>& b) { return a == b; }
+    static void give(const std::vector<double>& m, const std::vector<double>&, bool required,
+                     std::vector<std::string>* out) {
+        if (m.empty() && !required) return;
+        std::string s;
+        for (size_t i = 0; i < m.size(); ++i) {
+            if (i) s += ' ';
+            s += format_double(m[i]);
+        }
+        out->push_back(s);
+    }
+};
+
 /* An enumeration, by the identifier the SDS schema gives its members. The
  * generated header has EnumNameX / EnumValuesX for each one; the macro
  * NDM_ENUM(X) in the message headers instantiates the traits. */
@@ -647,6 +677,11 @@ struct Message {
     std::shared_ptr<Section> top; /* name == root; items: header, body */
     /* A record the message cannot state at all: the reason, or empty when it can. */
     std::function<std::string(const Obj*)> check_record;
+    /* Records that state the same fact in two shapes (OCM's single trajectory and
+     * its list of blocks): after a read, make both say it; before a write, make the
+     * one the message is written from say it. */
+    std::function<void(Obj*)> after_read;
+    std::function<void(Obj*)> before_write;
 };
 
 /* ------------------------------------------------------------------------ */

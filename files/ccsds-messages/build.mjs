@@ -129,12 +129,12 @@ function stripLocalIncludes(source) {
 const pugixmlRoot = path.join(packageRoot, "third_party", "pugixml");
 const ndmOrder = [
   "ndm_core", "ndm_xml", "ndm_kvn", "ndm_frames", "ndm_enums", "ndm_common",
-  "ndm_omm", "ndm_oem", "ndm_opm", "ndm_cdm",
+  "ndm_omm", "ndm_oem", "ndm_opm", "ndm_cdm", "ndm_apm", "ndm_acm", "ndm_rdm", "ndm_ocm",
   "ndm_codec", "ndm_registry",
 ];
 
 const pieces = [
-  "#define PUGIXML_NO_EXCEPTIONS\n#define PUGIXML_NO_XPATH\n#define PUGIXML_NO_STL\n",
+  "#define PUGIXML_NO_EXCEPTIONS\n#define PUGIXML_NO_XPATH\n#define PUGIXML_NO_STL\n#define FLATBUFFERS_NAN_DEFAULTS\n",
   stripLocalIncludes(await read(path.join(pugixmlRoot, "pugiconfig.hpp"))),
   stripLocalIncludes(await read(path.join(pugixmlRoot, "pugixml.hpp"))),
   stripLocalIncludes(await read(path.join(pugixmlRoot, "pugixml.cpp"))),

@@ -9,15 +9,23 @@
 #define CCSDS_MESSAGES_NDM_REGISTRY_HPP
 
 #include "ndm_codec.hpp"
+#include "ndm_acm.hpp"
+#include "ndm_apm.hpp"
 #include "ndm_cdm.hpp"
+#include "ndm_ocm.hpp"
 #include "ndm_oem.hpp"
 #include "ndm_omm.hpp"
 #include "ndm_opm.hpp"
+#include "ndm_rdm.hpp"
 
 NDM_CODEC(OMM);
 NDM_CODEC(OEM);
 NDM_CODEC(OPM);
 NDM_CODEC(CDM);
+NDM_CODEC(APM);
+NDM_CODEC(ACM);
+NDM_CODEC(RDM);
+NDM_CODEC(OCM);
 
 namespace ndm {
 namespace registry {
@@ -46,6 +54,10 @@ inline const Entry* find(const std::string& type) {
         {"OEM", &oem::message, &Bind<OEMCodec, &oem::message>::read, &Bind<OEMCodec, &oem::message>::write},
         {"OPM", &opm::message, &Bind<OPMCodec, &opm::message>::read, &Bind<OPMCodec, &opm::message>::write},
         {"CDM", &cdm::message, &Bind<CDMCodec, &cdm::message>::read, &Bind<CDMCodec, &cdm::message>::write},
+        {"APM", &apm::message, &Bind<APMCodec, &apm::message>::read, &Bind<APMCodec, &apm::message>::write},
+        {"ACM", &acm::message, &Bind<ACMCodec, &acm::message>::read, &Bind<ACMCodec, &acm::message>::write},
+        {"RDM", &rdm::message, &Bind<RDMCodec, &rdm::message>::read, &Bind<RDMCodec, &rdm::message>::write},
+        {"OCM", &ocm::message, &Bind<OCMCodec, &ocm::message>::read, &Bind<OCMCodec, &ocm::message>::write},
     };
     for (const Entry& e : entries) {
         if (type == e.type) return &e;

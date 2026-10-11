@@ -1,3 +1,4 @@
+#define FLATBUFFERS_NAN_DEFAULTS
 // The generated SDS object-API headers the NDM engine binds, in dependency order,
 // included by the native harness the way build.mjs concatenates them for the module.
 #include <cmath>
@@ -18,3 +19,7 @@
 #include "OEM_generated.h"
 #include "OPM_generated.h"
 #include "CDM_generated.h"
+#include "APM_generated.h"
+#include "ACM_generated.h"
+#include "RDM_generated.h"
+#include "OCM_generated.h"
