@@ -96,11 +96,11 @@ No uncertainty is invented. A TLE or SGP4 element set carries no covariance:
   - **Fast paths:** with the frame, the element-set screens (fast catalog
     path, resident index, refinement) accept a covariance method.
   - **Cost:** the 3-day full-catalog CPU screen (32,514 objects, Node, 27
-    threads) found the same 292,516 conjunctions.
+    threads) found the same 294,544 conjunctions.
     - Refinement took 7.8 s instead of 7.0 s; the run took 19.6 s end to end
       instead of 18.5 s.
-    - With the 2026-08 model, 288,105 events got a covariance probability and
-      13,088 are calibrated: both objects in LEO 600–800 km at a passing age.
+    - With the 2026-08 model, 289,455 events got a covariance probability and
+      13,734 are calibrated: both objects in LEO 600–800 km at a passing age.
     - `scripts/run-all-vs-all-cpu.mjs --algorithm FOSTER --uncertainty-model <frame>`.
 
 Each event reports both objects' hard-body radii and where each came from
