@@ -32,12 +32,14 @@
 //   + drag, at 1e-13 ....................... 10 cm   measured <= 21.7 mm (LEO400)
 // At these settings most of the difference is HPOP's own integration error:
 // the sampled path controls its steps on the six-state error, which at 1e-13
-// leaves 17.7 mm over the day in LEO400 and 16.1 mm in SSO700 (28.5 mm for
+// leaves 17.8 mm over the day in LEO400 and 16.0 mm in SSO700 (26.2 mm for
 // JB2008 drag, 1.3 mm MOLNIYA, 0.03 mm GPS). `npm run orekit:summary`
-// (tests/orekit-summary.mjs) prints the whole table, and the same cases with
-// steps of at most 30 s, and writes tests/evidence/orekit/summary.json. With
-// steps of 30 s the largest difference over the 72 cases is 9.87 mm (MOLNIYA);
-// the rest are within 4.2 mm. What remains there is Earth orientation: the
+// (tests/orekit-summary.mjs) prints the whole table, the same cases with steps
+// of at most 30 s, and at tolerance 1e-15 with steps of at most 10 s, and writes
+// tests/evidence/orekit/summary.json. With steps of 30 s the largest difference
+// over the 72 cases is 9.87 mm (MOLNIYA); the rest are within 4.2 mm, and the
+// finest setting moves no row by more than 0.2 mm. What remains is Earth
+// orientation: the
 // reference frame is ITRF with IERS 2010's tidal and libration corrections to
 // polar motion and UT1 (getITRF(IERS_2010, false)), and HPOP reads the daily
 // rows. Orekit generated without the corrections (-Dorekit.simpleEOP=true,

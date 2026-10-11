@@ -225,9 +225,9 @@ was also run with Jacchia-Roberts.
   - Nyx: at most 9.3 cm, consistent with the Earth-orientation difference above.
     With drag on LEO400, 12.1 m, which is Nyx's own gap from all the others.
   HPOP's own integration error at 1e-13 and steps of at most 300 s is 1.8 cm
-  per day in LEO 400 km and 1.6 cm at 700 km; with steps of 30 s it is below
-  0.3 mm, and HPOP is within 4.2 mm of Orekit outside Molniya (README.md,
-  Agreement with Orekit 13.1).
+  per day in LEO 400 km and 1.6 cm at 700 km; with steps of 30 s HPOP is
+  within 4.2 mm of Orekit outside Molniya, and a tolerance of 1e-15 with steps
+  of 10 s moves that by under 0.2 mm (README.md, Agreement with Orekit 13.1).
 - **Spread among the tools:**
   - **Orekit and Tudat** agree best: at most 1.7 mm with gravity, Sun and
     Moon; 1.0 mm with radiation pressure; 5.4 cm with NRLMSISE-00 drag.

@@ -683,7 +683,7 @@ vectors came from a port in this organization rather than a public authority.
 ### Agreement with Orekit 13.1
 
 `npm run orekit:summary` (`tests/orekit-summary.mjs`) scores the shipped
-module against the 72 cases at two integrator settings and writes
+module against the 72 cases at three integrator settings and writes
 `tests/evidence/orekit/summary.json`. HPOP integrates with RK78 at a relative
 tolerance of 1e-13 (the point-mass cases at 1e-15) and the steps the table
 names; Orekit with Dormand-Prince 8(5,3) at a relative tolerance of 1e-14 and
@@ -692,18 +692,18 @@ For propagator/hpop 1.3.0, module SHA-256
 `9c24bf0ed74f59893282514f08891c414da6db071d4997357a8ebd6c2a8a99e3`, the largest
 3D difference over 24 h, hourly samples, all five orbits:
 
-| Force set | Steps of at most 300 s (the suite's request) | Steps of at most 30 s |
-| --- | ---: | ---: |
-| Point mass | 0.58 mm | 0.59 mm |
-| Field, third bodies, radiation pressure, tides, relativity, thrust | 1.9 cm | 9.87 mm |
-| With drag | 2.5 cm | 4.18 mm |
-| All 72 cases | 2.5 cm | 9.87 mm |
+| Force set | Steps of at most 300 s (the suite's request) | Steps of at most 30 s | Tolerance 1e-15, steps of at most 10 s |
+| --- | ---: | ---: | ---: |
+| Point mass | 0.58 mm | 0.59 mm | 0.57 mm |
+| Field, third bodies, radiation pressure, tides, relativity, thrust | 1.9 cm | 9.87 mm | 9.84 mm |
+| With drag | 2.5 cm | 4.18 mm | 4.05 mm |
+| All 72 cases | 2.5 cm | 9.87 mm | 9.84 mm |
 
 By orbit:
 
 | Orbit | Steps of at most 300 s | Steps of at most 30 s | 30 s, Orekit without its sub-daily corrections | HPOP's own integration error at 300 s |
 | --- | ---: | ---: | ---: | ---: |
-| LEO 400 km | 2.5 cm | 4.18 mm | 3.88 mm | 2.9 cm |
+| LEO 400 km | 2.5 cm | 4.18 mm | 3.88 mm | 2.6 cm |
 | SSO 700 km | 1.7 cm | 1.67 mm | 0.78 mm | 1.6 cm |
 | GPS | 0.20 mm | 0.22 mm | 0.16 mm | 0.03 mm |
 | GEO | 0.07 mm | 0.07 mm | 0.06 mm | 0.00 mm |
@@ -712,10 +712,12 @@ By orbit:
 - **Integration.** At the suite's request HPOP's own integration error is
   most of the difference in LEO. The sampled path controls its steps on the
   six-state error, and at 1e-13 that leaves 1.8 cm over the day in LEO 400 km
-  (2.9 cm in the JB2008 drag case) and 1.6 cm at 700 km. The last column is
-  HPOP's trajectory at the suite's request against its own with steps of 30 s.
-  Steps of 30 s, a tolerance of 1e-15, or a tolerance of 1e-13 with steps of
-  10 s each leave 1.1 mm for J2 alone in LEO 400 km.
+  (2.6 cm in the JB2008 drag case) and 1.6 cm at 700 km. The last column is
+  HPOP's trajectory at the suite's request against its own at tolerance 1e-15
+  with steps of at most 10 s. Steps of 30 s, a tolerance of 1e-15, or a
+  tolerance of 1e-13 with steps of 10 s each leave 1.1 mm for J2 alone in LEO
+  400 km, and the finest setting moves no row of the second column by more
+  than 0.2 mm.
 - **Earth orientation.** The reference frame is ITRF with IERS 2010's tidal
   and libration corrections to polar motion and UT1
   (`getITRF(IERS_2010, false)`); HPOP interpolates the daily IERS rows

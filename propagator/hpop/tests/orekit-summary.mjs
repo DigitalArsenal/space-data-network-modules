@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 // The Orekit agreement table: for every case of fixtures/orekit/orekit-reference.json,
 // the largest 3D position difference over 24 h between HPOP (the shipped WASM
-// through the SDK's browser harness) and Orekit 13.1, at two integrator settings:
+// through the SDK's browser harness) and Orekit 13.1, at three integrator settings:
 //
-//   suite      the suite's request (tests/orekit_reference.test.mjs): RK78 at a
-//              relative tolerance of 1e-13 (the point-mass cases at 1e-15) and steps
-//              of at most 300 s. HPOP's own integration error is part of the
-//              difference.
-//   converged  the same tolerances and steps of at most 30 s. The integration error
-//              is below 0.3 mm; what remains is the models.
+//   suite    the suite's request (tests/orekit_reference.test.mjs): RK78 at a
+//            relative tolerance of 1e-13 (the point-mass cases at 1e-15) and steps
+//            of at most 300 s. HPOP's own integration error is part of the
+//            difference.
+//   steps30  the same tolerances and steps of at most 30 s.
+//   finest   a tolerance of 1e-15 and steps of at most 10 s. It shows how far the
+//            integrator settings still move the rows of steps30, and is the
+//            reference of HPOP's own integration error at the suite's request.
 //
 //   node tests/orekit-summary.mjs [out.json] [--reference <orekit-reference.json>]
 //
@@ -35,7 +37,8 @@ const WASM = new URL('../dist/isomorphic/module.wasm', import.meta.url);
 const MANIFEST = new URL('../plugin-manifest.json', import.meta.url);
 const wasm = fs.readFileSync(WASM), manifest = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
 
-const SETTINGS = [{ id: 'suite', maxStep: 300 }, { id: 'converged', maxStep: 30 }];
+const SETTINGS = [{ id: 'suite', maxStep: 300, label: 'steps <= 300 s' }, { id: 'steps30', maxStep: 30, label: 'steps <= 30 s' },
+  { id: 'finest', maxStep: 10, tolerance: 1e-15, label: 'steps <= 10 s, 1e-15' }];
 const ORBITS = ['LEO400', 'SSO700', 'GPS', 'GEO', 'MOLNIYA'];
 // The paper's three rows, and the force families of its equivalence column.
 const ROWS = [
@@ -57,7 +60,7 @@ for (const setting of SETTINGS) {
   for (const c of reference.cases) {
     const harness = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
     try {
-      const response = await harness.invoke({ methodId: 'invoke', inputs: requestInputs(c, { maxStep: setting.maxStep }) });
+      const response = await harness.invoke({ methodId: 'invoke', inputs: requestInputs(c, { maxStep: setting.maxStep, ...(setting.tolerance ? { tolerance: setting.tolerance } : {}) }) });
       if (response.statusCode !== 0) throw new Error(`${c.orbit} ${c.forces}: ${response.errorCode}: ${response.errorMessage}`);
       const result = decodeResult(response);
       const positions = result.samples.map((s) => s.position.map((v) => v * 1000));
@@ -83,9 +86,9 @@ const differential = (setting, orbit, base, added) => {
 const DIFFERENTIALS = [['A1', 'F5', 'LEO400'], ['A1', 'F5', 'GPS'], ['O1', 'F4', 'LEO400'], ['O1', 'F4', 'GPS']].map(([added, base, orbit]) => ({
   added, base, orbit, ...Object.fromEntries(SETTINGS.map((s) => [`${s.id}M`, differential(s.id, orbit, base, added)])) }));
 
-// HPOP's own integration error at the suite's request: its trajectory there against its own with steps of 30 s.
+// HPOP's own integration error at the suite's request: its trajectory there against its own at the finest setting.
 const integrationError = (c) => {
-  const a = results.suite.find((r) => r.orbit === c.orbit && r.forces === c.forces), b = results.converged.find((r) => r.orbit === c.orbit && r.forces === c.forces);
+  const a = results.suite.find((r) => r.orbit === c.orbit && r.forces === c.forces), b = results.finest.find((r) => r.orbit === c.orbit && r.forces === c.forces);
   return Math.max(...a.positions.map((p, i) => norm3(p, b.positions[i])));
 };
 const mm = (m) => (m * 1000 < 10 ? (m * 1000).toFixed(2) : (m * 1000).toFixed(1));
@@ -94,7 +97,7 @@ const fmt = (m) => (m < 0.01 ? `${mm(m)} mm` : cm(m));
 const maxOf = (rows) => rows.length ? Math.max(...rows.map((r) => r.worstM)) : undefined;
 const find = (id, pred) => results[id].filter((r) => pred(reference.cases.find((c) => c.orbit === r.orbit && c.forces === r.forces)));
 
-console.log(`| Force set | ${SETTINGS.map((s) => `${s.id} (steps <= ${s.maxStep} s)`).join(' | ')} |`);
+console.log(`| Force set | ${SETTINGS.map((s) => `${s.id} (${s.label})`).join(' | ')} |`);
 console.log(`|---|${SETTINGS.map(() => '---:').join('|')}|`);
 for (const [name, pred] of ROWS) console.log(`| ${name} | ${SETTINGS.map((s) => fmt(maxOf(find(s.id, pred)))).join(' | ')} |`);
 console.log(`| All ${reference.cases.length} cases | ${SETTINGS.map((s) => fmt(maxOf(results[s.id]))).join(' | ')} |`);
@@ -117,9 +120,9 @@ const jacobians = results.suite.filter((r) => r.jacobians);
 console.log(`State-transition matrix, largest relative column difference (suite request): ${Math.max(...jacobians.map((r) => r.jacobians.stm)).toExponential(2)}`);
 console.log(`Parameter columns, largest relative difference (suite request): ${Math.max(...jacobians.flatMap((r) => Object.values(r.jacobians.parameters))).toExponential(2)}`);
 console.log();
-console.log('| Force added to a base set | Orbit | suite | converged |');
-console.log('|---|---|---:|---:|');
-for (const d of DIFFERENTIALS) console.log(`| ${d.added} on ${d.base} | ${d.orbit} | ${(d.suiteM * 1000).toFixed(3)} mm | ${(d.convergedM * 1000).toFixed(3)} mm |`);
+console.log(`| Force added to a base set | Orbit | ${SETTINGS.map((s) => s.id).join(' | ')} |`);
+console.log(`|---|---|${SETTINGS.map(() => '---:').join('|')}|`);
+for (const d of DIFFERENTIALS) console.log(`| ${d.added} on ${d.base} | ${d.orbit} | ${SETTINGS.map((s) => `${(d[`${s.id}M`] * 1000).toFixed(3)} mm`).join(' | ')} |`);
 console.log();
 console.log('| Orbit | HPOP\'s own integration error at the suite\'s request |');
 console.log('|---|---:|');
@@ -127,7 +130,7 @@ for (const orbit of ORBITS) console.log(`| ${orbit} | ${fmt(Math.max(...referenc
 
 fs.mkdirSync(path.dirname(out), { recursive: true });
 fs.writeFileSync(out, `${JSON.stringify({
-  note: 'HPOP against Orekit 13.1 (tests/orekit-summary.mjs): the largest 3D position difference over 24 h, by case, at the suite\'s integrator settings and with steps of at most 30 s.',
+  note: 'HPOP against Orekit 13.1 (tests/orekit-summary.mjs): the largest 3D position difference over 24 h, by case, at the suite\'s integrator settings, with steps of at most 30 s, and at tolerance 1e-15 with steps of at most 10 s.',
   module: { version: JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version, sha256: createHash('sha256').update(wasm).digest('hex') },
   reference: o.reference ? path.basename(o.reference) : 'tests/fixtures/orekit/orekit-reference.json',
   node: process.version, host: `${os.cpus()[0].model}, ${os.availableParallelism()} cores`,

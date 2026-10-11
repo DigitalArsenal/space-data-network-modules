@@ -1,5 +1,5 @@
 {
- "note": "HPOP against Orekit 13.1 (tests/orekit-summary.mjs): the largest 3D position difference over 24 h, by case, at the suite's integrator settings and with steps of at most 30 s.",
+ "note": "HPOP against Orekit 13.1 (tests/orekit-summary.mjs): the largest 3D position difference over 24 h, by case, at the suite's integrator settings, with steps of at most 30 s, and at tolerance 1e-15 with steps of at most 10 s.",
  "module": {
   "version": "1.3.0",
   "sha256": "9c24bf0ed74f59893282514f08891c414da6db071d4997357a8ebd6c2a8a99e3"
@@ -10,11 +10,19 @@
  "settings": [
   {
    "id": "suite",
-   "maxStep": 300
+   "maxStep": 300,
+   "label": "steps <= 300 s"
   },
   {
-   "id": "converged",
-   "maxStep": 30
+   "id": "steps30",
+   "maxStep": 30,
+   "label": "steps <= 30 s"
+  },
+  {
+   "id": "finest",
+   "maxStep": 10,
+   "tolerance": 1e-15,
+   "label": "steps <= 10 s, 1e-15"
   }
  ],
  "cases": [
@@ -26,12 +34,17 @@
     "atHour": 24,
     "steps": 2346
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00022939777505017812,
     "atHour": 24,
     "steps": 2903
    },
-   "integrationErrorM": 0.00024946990717726185
+   "finest": {
+    "worstM": 0.0001519068572062071,
+    "atHour": 24,
+    "steps": 8608
+   },
+   "integrationErrorM": 0.0003269618453151544
   },
   {
    "orbit": "LEO400",
@@ -41,12 +54,17 @@
     "atHour": 24,
     "steps": 1342
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.001052862946942195,
     "atHour": 7,
     "steps": 2880
    },
-   "integrationErrorM": 0.017547260186396848
+   "finest": {
+    "worstM": 0.0010486405406559735,
+    "atHour": 7,
+    "steps": 8612
+   },
+   "integrationErrorM": 0.017609031884811426
   },
   {
    "orbit": "LEO400",
@@ -56,12 +74,17 @@
     "atHour": 24,
     "steps": 1344
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0010528904126856581,
     "atHour": 7,
     "steps": 2880
    },
-   "integrationErrorM": 0.017544496734662664
+   "finest": {
+    "worstM": 0.001045895772702269,
+    "atHour": 7,
+    "steps": 8611
+   },
+   "integrationErrorM": 0.01761711617200543
   },
   {
    "orbit": "LEO400",
@@ -71,12 +94,17 @@
     "atHour": 24,
     "steps": 1343
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0010520477276934625,
     "atHour": 7,
     "steps": 2880
    },
-   "integrationErrorM": 0.017645135881952465
+   "finest": {
+    "worstM": 0.0010457917586457475,
+    "atHour": 7,
+    "steps": 8606
+   },
+   "integrationErrorM": 0.017711093941752288
   },
   {
    "orbit": "LEO400",
@@ -86,12 +114,17 @@
     "atHour": 24,
     "steps": 1415
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0014088649934218807,
     "atHour": 24,
     "steps": 2961
    },
-   "integrationErrorM": 0.01740273323684041
+   "finest": {
+    "worstM": 0.0013175945971917401,
+    "atHour": 24,
+    "steps": 8641
+   },
+   "integrationErrorM": 0.017494047130151576
   },
   {
    "orbit": "LEO400",
@@ -101,12 +134,17 @@
     "atHour": 24,
     "steps": 1415
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.004066320200733292,
     "atHour": 24,
     "steps": 2958
    },
-   "integrationErrorM": 0.017481526906485648
+   "finest": {
+    "worstM": 0.00398981714375153,
+    "atHour": 24,
+    "steps": 8635
+   },
+   "integrationErrorM": 0.017558029517884304
   },
   {
    "orbit": "LEO400",
@@ -116,12 +154,17 @@
     "atHour": 24,
     "steps": 1343
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0010711598493167416,
     "atHour": 7,
     "steps": 2880
    },
-   "integrationErrorM": 0.017528590608496583
+   "finest": {
+    "worstM": 0.0010657091676758296,
+    "atHour": 7,
+    "steps": 8609
+   },
+   "integrationErrorM": 0.017614800110852348
   },
   {
    "orbit": "LEO400",
@@ -131,12 +174,17 @@
     "atHour": 24,
     "steps": 1344
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0010692145806355108,
     "atHour": 7,
     "steps": 2880
    },
-   "integrationErrorM": 0.01759705382213136
+   "finest": {
+    "worstM": 0.0010633372947514627,
+    "atHour": 7,
+    "steps": 8611
+   },
+   "integrationErrorM": 0.01767905699136888
   },
   {
    "orbit": "LEO400",
@@ -146,12 +194,17 @@
     "atHour": 24,
     "steps": 1415
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.001329091161571652,
     "atHour": 24,
     "steps": 2958
    },
-   "integrationErrorM": 0.017362572554596986
+   "finest": {
+    "worstM": 0.0012061566363591237,
+    "atHour": 24,
+    "steps": 8640
+   },
+   "integrationErrorM": 0.017485584379239374
   },
   {
    "orbit": "LEO400",
@@ -161,12 +214,17 @@
     "atHour": 24,
     "steps": 1412
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.004175332950209653,
     "atHour": 24,
     "steps": 2959
    },
-   "integrationErrorM": 0.01755133199419933
+   "finest": {
+    "worstM": 0.004053644618324131,
+    "atHour": 24,
+    "steps": 8636
+   },
+   "integrationErrorM": 0.017673022439216212
   },
   {
    "orbit": "LEO400",
@@ -176,12 +234,17 @@
     "atHour": 24,
     "steps": 1344
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0010701996940489995,
     "atHour": 7,
     "steps": 2880
    },
-   "integrationErrorM": 0.017561103287019448
+   "finest": {
+    "worstM": 0.00106443822769053,
+    "atHour": 7,
+    "steps": 8610
+   },
+   "integrationErrorM": 0.01763663436170615
   },
   {
    "orbit": "LEO400",
@@ -191,12 +254,17 @@
     "atHour": 24,
     "steps": 1341
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0010703532603521153,
     "atHour": 7,
     "steps": 2880
    },
-   "integrationErrorM": 0.017693754562544368
+   "finest": {
+    "worstM": 0.0010632852156282518,
+    "atHour": 7,
+    "steps": 8607
+   },
+   "integrationErrorM": 0.01778038626875514
   },
   {
    "orbit": "LEO400",
@@ -206,12 +274,17 @@
     "atHour": 24,
     "steps": 1343
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0010698757355122473,
     "atHour": 7,
     "steps": 2880
    },
-   "integrationErrorM": 0.01758069216135088
+   "finest": {
+    "worstM": 0.0010631930825617628,
+    "atHour": 7,
+    "steps": 8609
+   },
+   "integrationErrorM": 0.017657951581012802
   },
   {
    "orbit": "LEO400",
@@ -221,12 +294,17 @@
     "atHour": 24,
     "steps": 1343
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.001067241155092481,
     "atHour": 7,
     "steps": 2880
    },
-   "integrationErrorM": 0.01760725745672638
+   "finest": {
+    "worstM": 0.0010621366878879133,
+    "atHour": 7,
+    "steps": 8609
+   },
+   "integrationErrorM": 0.017674183132702935
   },
   {
    "orbit": "LEO400",
@@ -236,12 +314,17 @@
     "atHour": 24,
     "steps": 1415
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0037067070466056127,
     "atHour": 24,
     "steps": 2959
    },
-   "integrationErrorM": 0.01742613486916217
+   "finest": {
+    "worstM": 0.003604054129084444,
+    "atHour": 24,
+    "steps": 8636
+   },
+   "integrationErrorM": 0.017528787559964926
   },
   {
    "orbit": "LEO400",
@@ -251,12 +334,17 @@
     "atHour": 24,
     "steps": 1416
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0039767775683247535,
     "atHour": 24,
     "steps": 2959
    },
-   "integrationErrorM": 0.01752633722929095
+   "finest": {
+    "worstM": 0.003876000152340995,
+    "atHour": 24,
+    "steps": 8637
+   },
+   "integrationErrorM": 0.01762711555201285
   },
   {
    "orbit": "LEO400",
@@ -266,12 +354,17 @@
     "atHour": 24,
     "steps": 1343
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0010689274713898548,
     "atHour": 7,
     "steps": 2880
    },
-   "integrationErrorM": 0.01752635338891551
+   "finest": {
+    "worstM": 0.001063038863573092,
+    "atHour": 7,
+    "steps": 8608
+   },
+   "integrationErrorM": 0.017616019217074935
   },
   {
    "orbit": "LEO400",
@@ -281,12 +374,17 @@
     "atHour": 24,
     "steps": 1343
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0010647634051002954,
     "atHour": 7,
     "steps": 2880
    },
-   "integrationErrorM": 0.016666915379393778
+   "finest": {
+    "worstM": 0.0010617772864790211,
+    "atHour": 7,
+    "steps": 8609
+   },
+   "integrationErrorM": 0.016720442022320512
   },
   {
    "orbit": "LEO400",
@@ -296,12 +394,17 @@
     "atHour": 24,
     "steps": 1342
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0010703509954663327,
     "atHour": 7,
     "steps": 2880
    },
-   "integrationErrorM": 0.01762006056476319
+   "finest": {
+    "worstM": 0.0010647069819474757,
+    "atHour": 7,
+    "steps": 8607
+   },
+   "integrationErrorM": 0.017689501551327178
   },
   {
    "orbit": "LEO400",
@@ -320,12 +423,17 @@
      }
     }
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0037858347651423224,
     "atHour": 24,
     "steps": 2970
    },
-   "integrationErrorM": 0.002162897580071486
+   "finest": {
+    "worstM": 0.003959678833248212,
+    "atHour": 24,
+    "steps": 8731
+   },
+   "integrationErrorM": 0.001989051607753079
   },
   {
    "orbit": "LEO400",
@@ -335,12 +443,17 @@
     "atHour": 24,
     "steps": 1409
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0034839849402420048,
     "atHour": 24,
     "steps": 2957
    },
-   "integrationErrorM": 0.02850562427267222
+   "finest": {
+    "worstM": 0.001237102075599719,
+    "atHour": 15,
+    "steps": 8638
+   },
+   "integrationErrorM": 0.02620832875390811
   },
   {
    "orbit": "SSO700",
@@ -350,12 +463,17 @@
     "atHour": 24,
     "steps": 2196
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00022549305433896042,
     "atHour": 24,
     "steps": 2902
    },
-   "integrationErrorM": 0.00025585897554993036
+   "finest": {
+    "worstM": 0.00017842100191026045,
+    "atHour": 24,
+    "steps": 8609
+   },
+   "integrationErrorM": 0.0003029313406464445
   },
   {
    "orbit": "SSO700",
@@ -365,12 +483,17 @@
     "atHour": 24,
     "steps": 1258
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0012337270360294021,
     "atHour": 24,
     "steps": 2880
    },
-   "integrationErrorM": 0.01573287753839512
+   "finest": {
+    "worstM": 0.0012664672271045217,
+    "atHour": 24,
+    "steps": 8609
+   },
+   "integrationErrorM": 0.015765623686440234
   },
   {
    "orbit": "SSO700",
@@ -380,12 +503,17 @@
     "atHour": 24,
     "steps": 1256
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0012179650194237234,
     "atHour": 24,
     "steps": 2880
    },
-   "integrationErrorM": 0.01576617996992726
+   "finest": {
+    "worstM": 0.0012624362822791285,
+    "atHour": 24,
+    "steps": 8609
+   },
+   "integrationErrorM": 0.015810659361431605
   },
   {
    "orbit": "SSO700",
@@ -395,12 +523,17 @@
     "atHour": 24,
     "steps": 1257
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.001242061648072065,
     "atHour": 24,
     "steps": 2880
    },
-   "integrationErrorM": 0.015708150392944598
+   "finest": {
+    "worstM": 0.0012691486039329107,
+    "atHour": 24,
+    "steps": 8606
+   },
+   "integrationErrorM": 0.015735242616883947
   },
   {
    "orbit": "SSO700",
@@ -410,12 +543,17 @@
     "atHour": 24,
     "steps": 1345
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0016707675284160488,
     "atHour": 24,
     "steps": 2957
    },
-   "integrationErrorM": 0.015471409496044116
+   "finest": {
+    "worstM": 0.0013513134256392192,
+    "atHour": 24,
+    "steps": 8676
+   },
+   "integrationErrorM": 0.015151909970403674
   },
   {
    "orbit": "SSO700",
@@ -425,12 +563,17 @@
     "atHour": 24,
     "steps": 1342
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0013469797806088925,
     "atHour": 24,
     "steps": 2957
    },
-   "integrationErrorM": 0.015481105846984368
+   "finest": {
+    "worstM": 0.0010300489316214909,
+    "atHour": 24,
+    "steps": 8676
+   },
+   "integrationErrorM": 0.01516410106732457
   },
   {
    "orbit": "SSO700",
@@ -440,12 +583,17 @@
     "atHour": 24,
     "steps": 1257
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0012860116929642347,
     "atHour": 24,
     "steps": 2880
    },
-   "integrationErrorM": 0.01576607236955734
+   "finest": {
+    "worstM": 0.001328560434873705,
+    "atHour": 24,
+    "steps": 8609
+   },
+   "integrationErrorM": 0.015808633495811197
   },
   {
    "orbit": "SSO700",
@@ -455,12 +603,17 @@
     "atHour": 24,
     "steps": 1257
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.001298667914294819,
     "atHour": 24,
     "steps": 2880
    },
-   "integrationErrorM": 0.01593168924345021
+   "finest": {
+    "worstM": 0.0013384035789464925,
+    "atHour": 24,
+    "steps": 8607
+   },
+   "integrationErrorM": 0.015971436414384435
   },
   {
    "orbit": "SSO700",
@@ -470,12 +623,17 @@
     "atHour": 24,
     "steps": 1345
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0014239879535624003,
     "atHour": 24,
     "steps": 2957
    },
-   "integrationErrorM": 0.015440796417821954
+   "finest": {
+    "worstM": 0.0011214536292794219,
+    "atHour": 24,
+    "steps": 8677
+   },
+   "integrationErrorM": 0.015138161903136932
   },
   {
    "orbit": "SSO700",
@@ -485,12 +643,17 @@
     "atHour": 24,
     "steps": 1343
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0012407552213739102,
     "atHour": 24,
     "steps": 2957
    },
-   "integrationErrorM": 0.01546541305516212
+   "finest": {
+    "worstM": 0.0009263142512884916,
+    "atHour": 24,
+    "steps": 8673
+   },
+   "integrationErrorM": 0.015150819163975425
   },
   {
    "orbit": "SSO700",
@@ -500,12 +663,17 @@
     "atHour": 24,
     "steps": 1345
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0010670319717317927,
     "atHour": 24,
     "steps": 2957
    },
-   "integrationErrorM": 0.01548225279124839
+   "finest": {
+    "worstM": 0.0007626359352043804,
+    "atHour": 24,
+    "steps": 8678
+   },
+   "integrationErrorM": 0.015177658994471236
   },
   {
    "orbit": "SSO700",
@@ -515,12 +683,17 @@
     "atHour": 24,
     "steps": 1325
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0011524731902717768,
     "atHour": 24,
     "steps": 2954
    },
-   "integrationErrorM": 0.01577707053505846
+   "finest": {
+    "worstM": 0.0010964284715388286,
+    "atHour": 24,
+    "steps": 8629
+   },
+   "integrationErrorM": 0.01583312597694924
   },
   {
    "orbit": "GPS",
@@ -530,12 +703,17 @@
     "atHour": 22,
     "steps": 342
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00016055143277065751,
     "atHour": 22,
     "steps": 2883
    },
-   "integrationErrorM": 0.00002124443734311761
+   "finest": {
+    "worstM": 0.0001586082055957436,
+    "atHour": 22,
+    "steps": 8594
+   },
+   "integrationErrorM": 0.000019254004556944505
   },
   {
    "orbit": "GPS",
@@ -545,12 +723,17 @@
     "atHour": 22,
     "steps": 336
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00021574216160499848,
     "atHour": 22,
     "steps": 2880
    },
-   "integrationErrorM": 0.000023448964238177103
+   "finest": {
+    "worstM": 0.00021735756979345694,
+    "atHour": 22,
+    "steps": 8594
+   },
+   "integrationErrorM": 0.000025098068346268792
   },
   {
    "orbit": "GPS",
@@ -560,12 +743,17 @@
     "atHour": 22,
     "steps": 336
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00021803989708798577,
     "atHour": 22,
     "steps": 2880
    },
-   "integrationErrorM": 0.00002522113541500874
+   "finest": {
+    "worstM": 0.00021949861571527766,
+    "atHour": 22,
+    "steps": 8594
+   },
+   "integrationErrorM": 0.000026977512136323502
   },
   {
    "orbit": "GPS",
@@ -575,12 +763,17 @@
     "atHour": 22,
     "steps": 336
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0001715596086706829,
     "atHour": 22,
     "steps": 2880
    },
-   "integrationErrorM": 0.000023804116663856
+   "finest": {
+    "worstM": 0.0001730296131575721,
+    "atHour": 22,
+    "steps": 8594
+   },
+   "integrationErrorM": 0.000025692427432059816
   },
   {
    "orbit": "GPS",
@@ -590,12 +783,17 @@
     "atHour": 22,
     "steps": 336
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00017353332545407324,
     "atHour": 22,
     "steps": 2880
    },
-   "integrationErrorM": 0.000024569205303566856
+   "finest": {
+    "worstM": 0.00017161923046598508,
+    "atHour": 22,
+    "steps": 8597
+   },
+   "integrationErrorM": 0.000022429408453129577
   },
   {
    "orbit": "GPS",
@@ -605,12 +803,17 @@
     "atHour": 22,
     "steps": 336
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00021456834773473862,
     "atHour": 22,
     "steps": 2880
    },
-   "integrationErrorM": 0.00002460516376927623
+   "finest": {
+    "worstM": 0.00021675248181129845,
+    "atHour": 22,
+    "steps": 8595
+   },
+   "integrationErrorM": 0.000027792572060997477
   },
   {
    "orbit": "GPS",
@@ -620,12 +823,17 @@
     "atHour": 22,
     "steps": 336
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00017294777138841675,
     "atHour": 22,
     "steps": 2880
    },
-   "integrationErrorM": 0.000025239094881776257
+   "finest": {
+    "worstM": 0.00017415748361271433,
+    "atHour": 22,
+    "steps": 8596
+   },
+   "integrationErrorM": 0.0000264317407463464
   },
   {
    "orbit": "GPS",
@@ -635,12 +843,17 @@
     "atHour": 22,
     "steps": 337
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0001730423877930056,
     "atHour": 22,
     "steps": 2880
    },
-   "integrationErrorM": 0.000023383998931974024
+   "finest": {
+    "worstM": 0.0001712784410293474,
+    "atHour": 22,
+    "steps": 8596
+   },
+   "integrationErrorM": 0.000021720963095528748
   },
   {
    "orbit": "GPS",
@@ -650,12 +863,17 @@
     "atHour": 22,
     "steps": 336
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00017346170607244232,
     "atHour": 22,
     "steps": 2880
    },
-   "integrationErrorM": 0.000024866474980025874
+   "finest": {
+    "worstM": 0.00017307708425756539,
+    "atHour": 22,
+    "steps": 8595
+   },
+   "integrationErrorM": 0.000023928804419576667
   },
   {
    "orbit": "GPS",
@@ -665,12 +883,17 @@
     "atHour": 22,
     "steps": 336
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00017987843227749357,
     "atHour": 22,
     "steps": 2880
    },
-   "integrationErrorM": 0.000025827199100553012
+   "finest": {
+    "worstM": 0.00018121628363739801,
+    "atHour": 22,
+    "steps": 8596
+   },
+   "integrationErrorM": 0.000027511411108412424
   },
   {
    "orbit": "GPS",
@@ -680,12 +903,17 @@
     "atHour": 22,
     "steps": 336
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00017124605712961276,
     "atHour": 22,
     "steps": 2880
    },
-   "integrationErrorM": 0.000024713953165341125
+   "finest": {
+    "worstM": 0.00017231852446530067,
+    "atHour": 22,
+    "steps": 8596
+   },
+   "integrationErrorM": 0.00002584499175823742
   },
   {
    "orbit": "GPS",
@@ -695,12 +923,17 @@
     "atHour": 22,
     "steps": 336
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00017321271504795063,
     "atHour": 22,
     "steps": 2880
    },
-   "integrationErrorM": 0.000026483878320100373
+   "finest": {
+    "worstM": 0.00017378479677540945,
+    "atHour": 22,
+    "steps": 8594
+   },
+   "integrationErrorM": 0.000026973508483545225
   },
   {
    "orbit": "GPS",
@@ -710,12 +943,17 @@
     "atHour": 22,
     "steps": 337
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.000176195750091628,
     "atHour": 22,
     "steps": 2880
    },
-   "integrationErrorM": 0.000028320097063892334
+   "finest": {
+    "worstM": 0.00017396588146973343,
+    "atHour": 22,
+    "steps": 8596
+   },
+   "integrationErrorM": 0.000025409250865142658
   },
   {
    "orbit": "GPS",
@@ -732,12 +970,17 @@
      }
     }
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00017337534701892062,
     "atHour": 22,
     "steps": 2880
    },
-   "integrationErrorM": 0.000023166548349425953
+   "finest": {
+    "worstM": 0.0001712175933363855,
+    "atHour": 22,
+    "steps": 8641
+   },
+   "integrationErrorM": 0.000020907361427443273
   },
   {
    "orbit": "GEO",
@@ -747,12 +990,17 @@
     "atHour": 17,
     "steps": 337
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00003385764525412299,
     "atHour": 16,
     "steps": 2882
    },
-   "integrationErrorM": 0.0000018690202710864492
+   "finest": {
+    "worstM": 0.000036862749035983704,
+    "atHour": 17,
+    "steps": 8594
+   },
+   "integrationErrorM": 0.0000020108978764012916
   },
   {
    "orbit": "GEO",
@@ -762,12 +1010,17 @@
     "atHour": 16,
     "steps": 336
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.000035720525685080525,
     "atHour": 16,
     "steps": 2880
    },
-   "integrationErrorM": 8.146728771201304e-7
+   "finest": {
+    "worstM": 0.00003516323961879182,
+    "atHour": 16,
+    "steps": 8592
+   },
+   "integrationErrorM": 0.0000011617416841231421
   },
   {
    "orbit": "GEO",
@@ -777,12 +1030,17 @@
     "atHour": 15,
     "steps": 336
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00003337915421189216,
     "atHour": 17,
     "steps": 2880
    },
-   "integrationErrorM": 7.315717387192063e-7
+   "finest": {
+    "worstM": 0.00003301739880576895,
+    "atHour": 15,
+    "steps": 8593
+   },
+   "integrationErrorM": 6.603438579595328e-7
   },
   {
    "orbit": "GEO",
@@ -792,12 +1050,17 @@
     "atHour": 21,
     "steps": 336
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00006261332065794584,
     "atHour": 21,
     "steps": 2880
    },
-   "integrationErrorM": 0.000001038230280662237
+   "finest": {
+    "worstM": 0.00006383329125553686,
+    "atHour": 22,
+    "steps": 8592
+   },
+   "integrationErrorM": 0.0000018113947581378457
   },
   {
    "orbit": "GEO",
@@ -807,12 +1070,17 @@
     "atHour": 22,
     "steps": 336
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00005871525430478714,
     "atHour": 21,
     "steps": 2880
    },
-   "integrationErrorM": 0.0000018378053931204148
+   "finest": {
+    "worstM": 0.00005757775052389545,
+    "atHour": 21,
+    "steps": 8593
+   },
+   "integrationErrorM": 0.0000030044655581469767
   },
   {
    "orbit": "GEO",
@@ -822,12 +1090,17 @@
     "atHour": 16,
     "steps": 336
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00003947465744547321,
     "atHour": 16,
     "steps": 2880
    },
-   "integrationErrorM": 6.638966367408805e-7
+   "finest": {
+    "worstM": 0.00004049454891486319,
+    "atHour": 17,
+    "steps": 8592
+   },
+   "integrationErrorM": 0.000003327274984956703
   },
   {
    "orbit": "GEO",
@@ -837,12 +1110,17 @@
     "atHour": 21,
     "steps": 336
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00006580469526076494,
     "atHour": 21,
     "steps": 2880
    },
-   "integrationErrorM": 3.78006247755338e-7
+   "finest": {
+    "worstM": 0.00006465255432343151,
+    "atHour": 21,
+    "steps": 8592
+   },
+   "integrationErrorM": 0.0000012170991138048954
   },
   {
    "orbit": "GEO",
@@ -852,12 +1130,17 @@
     "atHour": 21,
     "steps": 337
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.000056632787488340036,
     "atHour": 21,
     "steps": 2880
    },
-   "integrationErrorM": 0.000003723313657438849
+   "finest": {
+    "worstM": 0.00005964075751986003,
+    "atHour": 21,
+    "steps": 8592
+   },
+   "integrationErrorM": 2.536770852883539e-7
   },
   {
    "orbit": "MOLNIYA",
@@ -867,12 +1150,17 @@
     "atHour": 24,
     "steps": 553
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0005934374271969561,
     "atHour": 24,
     "steps": 2886
    },
-   "integrationErrorM": 0.00001469618988782237
+   "finest": {
+    "worstM": 0.0005715696677065258,
+    "atHour": 24,
+    "steps": 8594
+   },
+   "integrationErrorM": 0.000007217651446458825
   },
   {
    "orbit": "MOLNIYA",
@@ -882,12 +1170,17 @@
     "atHour": 24,
     "steps": 417
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.009859088450003672,
     "atHour": 24,
     "steps": 2880
    },
-   "integrationErrorM": 0.0011555201664099357
+   "finest": {
+    "worstM": 0.009839490706380918,
+    "atHour": 24,
+    "steps": 8595
+   },
+   "integrationErrorM": 0.0011751167148429161
   },
   {
    "orbit": "MOLNIYA",
@@ -897,12 +1190,17 @@
     "atHour": 24,
     "steps": 416
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.009869122474050654,
     "atHour": 24,
     "steps": 2880
    },
-   "integrationErrorM": 0.0010920516212964452
+   "finest": {
+    "worstM": 0.009822393823283176,
+    "atHour": 24,
+    "steps": 8598
+   },
+   "integrationErrorM": 0.0011387745708223917
   },
   {
    "orbit": "MOLNIYA",
@@ -912,12 +1210,17 @@
     "atHour": 24,
     "steps": 417
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.009749682675580185,
     "atHour": 24,
     "steps": 2880
    },
-   "integrationErrorM": 0.00111351338767742
+   "finest": {
+    "worstM": 0.009707556659893776,
+    "atHour": 24,
+    "steps": 8596
+   },
+   "integrationErrorM": 0.0011556321826139706
   },
   {
    "orbit": "MOLNIYA",
@@ -927,12 +1230,17 @@
     "atHour": 24,
     "steps": 430
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00899151349844304,
     "atHour": 24,
     "steps": 2896
    },
-   "integrationErrorM": 0.0009084969934656796
+   "finest": {
+    "worstM": 0.008895862809269229,
+    "atHour": 24,
+    "steps": 8605
+   },
+   "integrationErrorM": 0.0010041267426034704
   },
   {
    "orbit": "MOLNIYA",
@@ -942,12 +1250,17 @@
     "atHour": 24,
     "steps": 416
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00986131648145551,
     "atHour": 24,
     "steps": 2880
    },
-   "integrationErrorM": 0.0010999078089465645
+   "finest": {
+    "worstM": 0.009837950160640777,
+    "atHour": 24,
+    "steps": 8595
+   },
+   "integrationErrorM": 0.0011232707354547596
   },
   {
    "orbit": "MOLNIYA",
@@ -957,12 +1270,17 @@
     "atHour": 24,
     "steps": 416
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.009723624256785414,
     "atHour": 24,
     "steps": 2880
    },
-   "integrationErrorM": 0.0013108843646836036
+   "finest": {
+    "worstM": 0.009705493174847705,
+    "atHour": 24,
+    "steps": 8596
+   },
+   "integrationErrorM": 0.0013290141260619312
   },
   {
    "orbit": "MOLNIYA",
@@ -972,12 +1290,17 @@
     "atHour": 24,
     "steps": 429
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.009310006921318021,
     "atHour": 24,
     "steps": 2896
    },
-   "integrationErrorM": 0.0012171127079472844
+   "finest": {
+    "worstM": 0.009239108075356802,
+    "atHour": 24,
+    "steps": 8602
+   },
+   "integrationErrorM": 0.0012880044588181618
   },
   {
    "orbit": "LEO400",
@@ -987,12 +1310,17 @@
     "atHour": 24,
     "steps": 1412
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0012881268606180654,
     "atHour": 24,
     "steps": 2958
    },
-   "integrationErrorM": 0.017609739369366426
+   "finest": {
+    "worstM": 0.001152868852063491,
+    "atHour": 24,
+    "steps": 8638
+   },
+   "integrationErrorM": 0.017745238919561156
   },
   {
    "orbit": "SSO700",
@@ -1002,12 +1330,17 @@
     "atHour": 24,
     "steps": 1342
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0012800149330265723,
     "atHour": 24,
     "steps": 2957
    },
-   "integrationErrorM": 0.016096250588111545
+   "finest": {
+    "worstM": 0.0009473879688935097,
+    "atHour": 24,
+    "steps": 8676
+   },
+   "integrationErrorM": 0.015763450843805062
   },
   {
    "orbit": "GPS",
@@ -1017,12 +1350,17 @@
     "atHour": 22,
     "steps": 336
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00017330277507115183,
     "atHour": 22,
     "steps": 2880
    },
-   "integrationErrorM": 0.0000250924547389599
+   "finest": {
+    "worstM": 0.00017274938481016803,
+    "atHour": 22,
+    "steps": 8597
+   },
+   "integrationErrorM": 0.000024424220287894556
   },
   {
    "orbit": "LEO400",
@@ -1032,12 +1370,17 @@
     "atHour": 24,
     "steps": 1344
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0010719105620525407,
     "atHour": 7,
     "steps": 2880
    },
-   "integrationErrorM": 0.017516301619918788
+   "finest": {
+    "worstM": 0.0010654149458321556,
+    "atHour": 7,
+    "steps": 8605
+   },
+   "integrationErrorM": 0.01759771246575403
   },
   {
    "orbit": "SSO700",
@@ -1047,12 +1390,17 @@
     "atHour": 24,
     "steps": 1257
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0012752613280758766,
     "atHour": 24,
     "steps": 2880
    },
-   "integrationErrorM": 0.015853579286406357
+   "finest": {
+    "worstM": 0.0013156370706762027,
+    "atHour": 24,
+    "steps": 8612
+   },
+   "integrationErrorM": 0.015893966770457003
   },
   {
    "orbit": "GPS",
@@ -1062,12 +1410,17 @@
     "atHour": 22,
     "steps": 336
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00017248222573994348,
     "atHour": 22,
     "steps": 2880
    },
-   "integrationErrorM": 0.000024311609412316666
+   "finest": {
+    "worstM": 0.0001716196375314818,
+    "atHour": 22,
+    "steps": 8595
+   },
+   "integrationErrorM": 0.000023547810207945636
   },
   {
    "orbit": "LEO400",
@@ -1077,12 +1430,17 @@
     "atHour": 24,
     "steps": 1344
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.001068674525228706,
     "atHour": 7,
     "steps": 2880
    },
-   "integrationErrorM": 0.017582851666851983
+   "finest": {
+    "worstM": 0.001065299959985141,
+    "atHour": 7,
+    "steps": 8605
+   },
+   "integrationErrorM": 0.017659072281385982
   },
   {
    "orbit": "LEO400",
@@ -1100,12 +1458,17 @@
      }
     }
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.0036467769538167057,
     "atHour": 24,
     "steps": 2969
    },
-   "integrationErrorM": 0.0022003545729595442
+   "finest": {
+    "worstM": 0.003898544551941807,
+    "atHour": 24,
+    "steps": 8723
+   },
+   "integrationErrorM": 0.0019485206266754219
   },
   {
    "orbit": "GPS",
@@ -1121,12 +1484,17 @@
      }
     }
    },
-   "converged": {
+   "steps30": {
     "worstM": 0.00017234512801453847,
     "atHour": 22,
     "steps": 2880
    },
-   "integrationErrorM": 0.00002213620153460409
+   "finest": {
+    "worstM": 0.00017153339545831903,
+    "atHour": 22,
+    "steps": 8643
+   },
+   "integrationErrorM": 0.000021074871257722613
   }
  ],
  "differentials": [
@@ -1135,28 +1503,32 @@
    "base": "F5",
    "orbit": "LEO400",
    "suiteM": 0.000219327094066517,
-   "convergedM": 0.00004189792869424801
+   "steps30M": 0.00004189792869424801,
+   "finestM": 0.000053474128478451344
   },
   {
    "added": "A1",
    "base": "F5",
    "orbit": "GPS",
    "suiteM": 0.000002835850422476414,
-   "convergedM": 0.000002026610137386431
+   "steps30M": 0.000002026610137386431,
+   "finestM": 0.0000030500329458317686
   },
   {
    "added": "O1",
    "base": "F4",
    "orbit": "LEO400",
    "suiteM": 0.00007852858758690013,
-   "convergedM": 0.000003949580691584501
+   "steps30M": 0.000003949580691584501,
+   "finestM": 0.000003534468044777559
   },
   {
    "added": "O1",
    "base": "F4",
    "orbit": "GPS",
    "suiteM": 0.000001352089546373982,
-   "convergedM": 0.0000015018725824826585
+   "steps30M": 0.0000015018725824826585,
+   "finestM": 0.000003598802305527175
   }
  ]
 }
