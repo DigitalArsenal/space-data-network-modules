@@ -1,6 +1,6 @@
 // analysis/vcm-adapter: one translation unit (generated SDS headers, the
-// vendored ERFA and foundation/frames' axis engine, the module), compiled
-// by the SDK on its sequential WASI lane.
+// vendored ERFA and foundation/frames' axis engine, the shared $OCM builder,
+// the module), compiled by the SDK on its sequential WASI lane.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -21,9 +21,11 @@ const bodyModels = await fs.readFile(path.join(framesSrc, 'iau_body_models.hpp')
 const axisEngine = (await fs.readFile(path.join(framesSrc, 'axis_engine.hpp'), 'utf8'))
   .replace('#include "iau_body_models.hpp"', '')
   .replace(/extern "C" \{\n#include "erfa\.h"\n#include "erfam\.h"\n\}\n/, '// ERFA declarations are amalgamated ahead of this header by build.mjs.\n');
+// common/ocm_fb_builder.hpp: the generated $OCM types are in scope above it, as it requires.
+const ocmBuilder = (await fs.readFile(path.join(packageRoot, '..', '..', 'common', 'ocm_fb_builder.hpp'), 'utf8')).replace('#pragma once\n', '');
 const sourceCode = [
   ...families.map((f) => headers[f]),
-  erfa.source, bodyModels, axisEngine,
+  erfa.source, bodyModels, axisEngine, ocmBuilder,
   await fs.readFile(path.join(packageRoot, 'src', 'vcm_adapter_module.cpp'), 'utf8'),
 ].join('\n\n');
 await fs.rm(distRoot, { recursive: true, force: true });
