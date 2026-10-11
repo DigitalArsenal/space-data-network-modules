@@ -1240,6 +1240,60 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "noise_responses",
+      "displayName": "White-acceleration noise responses from an STM",
+      "inputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "noise-responses-request-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "start (ISO UTC), discretizationSeconds, samples [{epoch, state[6] SI, stm (row-major 36 or (6+p)^2 from start)}] at every step end of every target, targets [epoch]."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The propagation's STM samples and the targets as JSON."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "responses",
+          "acceptedTypeSets": [
+            {
+              "setId": "noise-responses-result-v1",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Per target: steps, stepSeconds and u [3][36], the row-major 6x6 response to unit spectral density on R, T and N."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The unit noise responses as JSON."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
     }
   ]
 }

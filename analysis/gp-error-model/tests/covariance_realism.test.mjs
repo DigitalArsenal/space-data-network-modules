@@ -198,3 +198,28 @@ test('dcp_covariance: Hejduk\'s 5/9, 3/9, 1/9 at three days; sigma_eff from the 
   await refused(t, 'dcp_covariance', [json('request', { leadCovariance: [[1, -2], [-2, 1]], start: day(0), segments: segments.slice(0, 2),
     epochs: [{ epoch: day(2), sensitivity: g }] })], /not positive semidefinite/);
 });
+
+test('noise_responses: unit white-acceleration responses from an STM; a free particle gives q [[t^3/3, t^2/2], [t^2/2, t]] exactly', async (t) => {
+  // Free particle: Phi(t, t0) = [[I, t I], [0, I]]; the states fix R, T, N to x, y, z. Each sub-step's closed form
+  // propagated by Phi sums to the continuous integral exactly, so the expected responses are closed forms.
+  const t0 = Date.UTC(2026, 0, 1);
+  const iso = (sec) => new Date(t0 + sec * 1000).toISOString().replace('Z', '');
+  const phi = (s) => Array.from({ length: 36 }, (_, k) => { const r = Math.floor(k / 6), c = k % 6; return r === c ? 1 : c === r + 3 ? s : 0; });
+  const epochs = new Set();
+  for (const T of [9000, 7000]) { const n = Math.ceil(T / 600 - 1e-9), h = T / n; for (let j = 1; j <= n; ++j) epochs.add(Math.round(j * h * 1000) / 1000); }
+  const samples = [...epochs].sort((a, b) => a - b).map((s) => ({ epoch: iso(s), state: [7000e3, 0, 0, 0, 7500, 0], stm: phi(s) }));
+  const out = await call(t, 'noise_responses', [json('request', { start: iso(0), discretizationSeconds: 600, samples, targets: [iso(9000), iso(7000)] })]);
+  // 7000 s is 12 steps of 583.33 s: epochs on whole milliseconds put the STMs within 1e-6 of the exact step ends.
+  for (const [i, T, tol] of [[0, 9000, 1e-12], [1, 7000, 1e-6]]) {
+    const r = out.targets[i];
+    assert.equal(r.steps, Math.ceil(T / 600 - 1e-9));
+    for (const k of [0, 1, 2]) {
+      const u = r.u[k];
+      close(u[6 * k + k], T ** 3 / 3, tol, `pp axis ${k} at ${T}`);
+      close(u[6 * k + 3 + k], T ** 2 / 2, tol, `pv axis ${k} at ${T}`);
+      close(u[6 * (3 + k) + 3 + k], T, tol, `vv axis ${k} at ${T}`);
+      assert.equal(u[6 * ((k + 1) % 3) + ((k + 1) % 3)], 0, 'other axes untouched');
+    }
+  }
+  await refused(t, 'noise_responses', [json('request', { start: iso(0), discretizationSeconds: 600, samples: samples.filter((x) => x.epoch !== iso(600)), targets: [iso(9000)] })], /no sample at a step end/);
+});

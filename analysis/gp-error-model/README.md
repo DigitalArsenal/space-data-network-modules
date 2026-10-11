@@ -227,11 +227,20 @@ TR, TT, NR, NT, NN (and dR R, … for 6 × 6).
   B (S(t) − Φ(t) Φ(s₀)⁻¹ S(s₀)) from HPOP's STM and B columns (`startSample`).
   With a `base` covariance the total is returned too.
 
+- **`noise_responses`** (`request` → `responses`). HPOP's white-acceleration
+  process noise (each target's arc cut into n equal steps no longer than
+  the discretization; each step adds q[[h³/3, h²/2], [h²/2, h]] on one RTN
+  axis at its end; later STMs carry it) for unit density on R, T and N, from
+  one propagation's own STM sampled at every step end:
+  U_k(t) = Σ_j Φ(t, t_j) G_jk G_jkᵀ Φ(t, t_j)ᵀ, Φ(t, t_j) = Φ(t) Φ(t_j)⁻¹. One
+  run with a dense STM replaces three runs with unit noise.
+
 Tests (`tests/covariance_realism.test.mjs`) use designed inputs with
 closed-form answers: d² of diagonal cases and its invariance under a rotation
 of the whole case; a quintic reproduced exactly by degree-5 interpolation; factors of designed samples; diagonal scalings, the RTN to
 inertial rotation and the midpoint of two bins; Hejduk's weights and
-σ_eff = √(wᵀCw); the start-relative sensitivity for designed matrices.
+σ_eff = √(wᵀCw); the start-relative sensitivity for designed matrices; a free
+particle's noise responses equal q[[t³/3, t²/2], [t²/2, t]] exactly.
 
 ## Model and validation
 

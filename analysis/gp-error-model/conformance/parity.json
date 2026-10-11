@@ -2,24 +2,24 @@
   "ok": true,
   "fixture": "gp-error-model e2b and e14 methods",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "06311077b296db8167d8186434090f82390e414e6974368a24aee1bf669a6a3c",
-  "moduleSha256": "06311077b296db8167d8186434090f82390e414e6974368a24aee1bf669a6a3c",
+  "artifactSha256": "c697061b0ab6b44bdb2395a62fe6759e9c29ed9820562049a27edae7fc420722",
+  "moduleSha256": "c697061b0ab6b44bdb2395a62fe6759e9c29ed9820562049a27edae7fc420722",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
-      "runs": 12,
-      "durationMs": 1049
+      "runs": 13,
+      "durationMs": 698
     },
     {
       "lane": "wasmedge",
-      "runs": 12,
-      "durationMs": 592
+      "runs": 13,
+      "durationMs": 515
     },
     {
       "lane": "docker-wasmedge",
-      "runs": 12,
-      "durationMs": 8174
+      "runs": 13,
+      "durationMs": 3771
     }
   ],
   "cases": [
@@ -32,11 +32,12 @@
     "accumulate-reference",
     "pair-statistics",
     "pair-statistics-samples",
+    "noise-responses",
     "fit-calibration",
     "calibrate-covariance-sets",
     "dcp-covariance"
   ],
-  "comparisons": 60,
+  "comparisons": 65,
   "failures": [],
   "runs": [
     {
@@ -131,6 +132,16 @@
     },
     {
       "lane": "browser",
+      "caseId": "noise-responses",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "c8b1c1dbb758e5ba1c8d139339e357b73a694b8a196599b62bc73cb71e4483eb",
+      "stdoutLength": 2648
+    },
+    {
+      "lane": "browser",
       "caseId": "fit-calibration",
       "threadCount": 1,
       "exitClass": "ok",
@@ -251,6 +262,16 @@
     },
     {
       "lane": "wasmedge",
+      "caseId": "noise-responses",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "c8b1c1dbb758e5ba1c8d139339e357b73a694b8a196599b62bc73cb71e4483eb",
+      "stdoutLength": 2648
+    },
+    {
+      "lane": "wasmedge",
       "caseId": "fit-calibration",
       "threadCount": 1,
       "exitClass": "ok",
@@ -368,6 +389,16 @@
       "spawnCount": null,
       "stdoutSha256": "a431ecdaf978d7b972bed6c2973d9415b869f9c2e970d0e55ec7bee460459a0b",
       "stdoutLength": 808
+    },
+    {
+      "lane": "docker-wasmedge",
+      "caseId": "noise-responses",
+      "threadCount": 1,
+      "exitClass": "ok",
+      "exitDetail": null,
+      "spawnCount": null,
+      "stdoutSha256": "c8b1c1dbb758e5ba1c8d139339e357b73a694b8a196599b62bc73cb71e4483eb",
+      "stdoutLength": 2648
     },
     {
       "lane": "docker-wasmedge",

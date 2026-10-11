@@ -69,6 +69,10 @@ const cases = [
       epoch: new Date(Date.UTC(2026, 9, 10, 12, i)).toISOString().replace('Z', ''), position: [7e6 - 50 * i * i, 7.5e3 * 60 * i, 1e3 * i], velocity: [-100 * i / 60, 7.5e3, 1e3 / 60],
       covariance: [100 + i, 0, 400 + 2 * i, 0, 0, 25] })) },
     truth: { position: [7e6 - 50 * 4.5 * 4.5, 7.5e3 * 270, 4.5e3], velocity: [-7.5, 7.5e3, 1e3 / 60] } }] })] } },
+  { id: 'noise-responses', request: { methodId: 'noise_responses', inputs: [json('request', { start: '2026-01-01T00:00:00.000', discretizationSeconds: 600,
+    samples: [600, 1200, 1800].map((s) => ({ epoch: new Date(Date.UTC(2026, 0, 1) + s * 1000).toISOString().replace('Z', ''), state: [7000e3, 10, 0, 1, 7500, 2],
+      stm: Array.from({ length: 36 }, (_, k) => (Math.floor(k / 6) === k % 6 ? 1 : k % 6 === Math.floor(k / 6) + 3 ? s : 0) + 1e-7 * k) })),
+    targets: ['2026-01-01T00:30:00.000'] })] } },
   { id: 'fit-calibration', request: { methodId: 'fit_calibration', inputs: [json('samples', { samples: [[1, 1, 1], [2, 1, 1], [3, 0, 0], [0, 0, 0], [2, 2, 2]]
     .map((e, i) => ({ stratum: 's', object: i % 3, error: e, covariance: [1, 0, 1, 0, 0, 1] })) }), json('options', { method: 'axes-mle' })] } },
   { id: 'calibrate-covariance-sets', request: { methodId: 'calibrate_covariance', inputs: [

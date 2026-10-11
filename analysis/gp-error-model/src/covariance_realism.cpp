@@ -739,3 +739,82 @@ extern "C" int dcp_covariance() {
                       {"rule", "w_l = sum over lead-l segments of ((t-a)^2 - (t-b)^2)/(t-s0)^2 on [s0, t]; sigma_eff^2 = w' C w; P = sigma_eff^2 g g'"},
                       {"epochs", rows}});
 }
+
+// ── noise_responses ──
+// The white-acceleration process noise HPOP adds (propagator/hpop README: the arc from the initial epoch to each
+// target is cut into n equal steps h no longer than DISCRETIZATION_SECONDS; each step adds q [[h^3/3, h^2/2],
+// [h^2/2, h]] on one RTN axis of the state at its end; every later step's STM carries it), for unit density on each
+// axis, from that propagation's own STM at the step ends: U_k(t) = sum_j Phi(t, t_j) G_jk G_jk' Phi(t, t_j)' with
+// Phi(t, t_j) = Phi(t, t0) Phi(t_j, t0)^-1. One HPOP run with its STM sampled at the step ends gives the three unit
+// responses that HPOP would give in three more runs.
+extern "C" int noise_responses() {
+  using namespace covreal;
+  const nlohmann::json in = json_input("request");
+  if (!in.is_object() || !in.contains("samples") || !in["samples"].is_array() || !in.contains("targets") || !in["targets"].is_array())
+    return fail("invalid-request", "request needs start, samples [{epoch, state[6], stm}], targets [epoch] and discretizationSeconds.");
+  const double interval = json_number(in, "discretizationSeconds", 600);
+  if (!(interval > 0)) return fail("invalid-request", "discretizationSeconds is positive.");
+  Instant t0;
+  if (!parse_instant(json_string(in, "start"), &t0)) return fail("invalid-request", "start is the propagation's initial epoch (ISO 8601 UTC).");
+  struct S { double t; double state[6]; stm::Mat6 phi; };
+  std::vector<S> samples;
+  for (const auto& s : in["samples"]) {
+    Instant t;
+    S x{};
+    double raw[36 * 36];
+    if (!s.is_object() || !parse_instant(json_string(s, "epoch"), &t) || !vec(s["state"], 6, x.state)) return fail("invalid-request", "each sample needs epoch and state [6].");
+    const nlohmann::json& m = s["stm"];
+    if (!m.is_array()) return fail("invalid-request", "each sample needs its STM (row-major, 36 or (6 + p)^2 from the initial epoch).");
+    const size_t n2 = m.size();
+    const size_t n = static_cast<size_t>(std::llround(std::sqrt(static_cast<double>(n2))));
+    if (n < 6 || n * n != n2 || n > 36 || !vec(m, n2, raw)) return fail("invalid-request", "an STM is square, at least 6 x 6.");
+    for (int r = 0; r < 6; ++r)
+      for (int c = 0; c < 6; ++c) x.phi[6 * r + c] = raw[n * r + c];
+    x.t = seconds_between(t0, t);
+    samples.push_back(x);
+  }
+  std::sort(samples.begin(), samples.end(), [](const S& a, const S& b) { return a.t < b.t; });
+  auto find = [&](double t) -> const S* {
+    auto it = std::lower_bound(samples.begin(), samples.end(), t - 1e-3, [](const S& a, double v) { return a.t < v; });
+    return it != samples.end() && std::fabs(it->t - t) <= 1e-3 ? &*it : nullptr;
+  };
+  nlohmann::json rows = nlohmann::json::array();
+  for (const auto& te : in["targets"]) {
+    Instant t;
+    if (!te.is_string() || !parse_instant(te.get<std::string>(), &t)) return fail("invalid-request", "targets are ISO 8601 UTC epochs.");
+    const double tt = seconds_between(t0, t);
+    nlohmann::json row{{"epoch", te}};
+    if (!(tt > 0)) { row["steps"] = 0; row["u"] = {std::vector<double>(36, 0.0), std::vector<double>(36, 0.0), std::vector<double>(36, 0.0)}; rows.push_back(row); continue; }
+    const int n = static_cast<int>(std::ceil(tt / interval - 1e-9));
+    const double h = tt / n;
+    const S* end = find(tt);
+    if (!end) return fail("missing-sample", "no sample at a target epoch: " + te.get<std::string>());
+    double u[3][36] = {};
+    for (int j = 1; j <= n; ++j) {
+      const S* sj = find(j * h);
+      if (!sj) return fail("missing-sample", "no sample at a step end of target " + te.get<std::string>() + "; sample every step end (n equal steps no longer than the discretization).");
+      stm::Mat6 inv{};
+      if (!stm::invert(sj->phi, &inv)) return fail("singular-stm", "a step end's STM is singular.");
+      const stm::Mat6 rel = stm::multiply(end->phi, inv);  // Phi(t, t_j)
+      double ax[3][3];
+      axes_of(sj->state, sj->state + 3, ax);
+      for (int k = 0; k < 3; ++k) {
+        // Phi(t, t_j) applied to the unit noise of axis k: columns a (position) and a (velocity) of G.
+        double cp[6], cv[6];
+        for (int r = 0; r < 6; ++r) {
+          cp[r] = rel[6 * r + 0] * ax[k][0] + rel[6 * r + 1] * ax[k][1] + rel[6 * r + 2] * ax[k][2];
+          cv[r] = rel[6 * r + 3] * ax[k][0] + rel[6 * r + 4] * ax[k][1] + rel[6 * r + 5] * ax[k][2];
+        }
+        const double h3 = h * h * h / 3, h2 = h * h / 2;
+        for (int r = 0; r < 6; ++r)
+          for (int c = 0; c < 6; ++c) u[k][6 * r + c] += h3 * cp[r] * cp[c] + h2 * (cp[r] * cv[c] + cv[r] * cp[c]) + h * cv[r] * cv[c];
+      }
+    }
+    row["steps"] = n;
+    row["stepSeconds"] = h;
+    row["u"] = {std::vector<double>(u[0], u[0] + 36), std::vector<double>(u[1], u[1] + 36), std::vector<double>(u[2], u[2] + 36)};
+    rows.push_back(row);
+  }
+  return emit("responses", {{"kind", "e14-noise-responses"}, {"version", 1}, {"discretizationSeconds", interval}, {"start", json_string(in, "start")},
+                            {"units", "row-major 6x6 per unit spectral density (m^2/s^3) on R, T, N; SI, the STM's frame"}, {"targets", rows}});
+}
