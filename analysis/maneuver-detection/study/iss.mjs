@@ -9,22 +9,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadModule, json, TYPES, iso, seconds, outputsOf, jsonOf, unpackMnv, mnvRecord, MNV } from './lib/host.mjs';
-import { listFiles, readFiles, versionOem, plannedBurns, plannedMnv, listedEvents, coverage } from './lib/nasa.mjs';
-import { runPool, waitForLoad } from './lib/pool.mjs';
+import { listFiles, readFiles, versionOem, plannedBurns, plannedMnv, listedEvents, coverage, truthMnv } from './lib/nasa.mjs';
+import { detectHistories, scoreVariants, printScores, writeJson, log } from './lib/run.mjs';
 
 const [command, work, ...rest] = process.argv.slice(2);
 const flag = (name, fallback) => { const i = rest.indexOf(`--${name}`); return i >= 0 ? rest[i + 1] : fallback; };
 fs.mkdirSync(work, { recursive: true });
-const log = (...a) => process.stderr.write(`${a.join(' ')}\n`);
-
-export function months(from, to) {
-  const out = [], start = new Date(`${from}T00:00:00Z`), end = new Date(`${to}T00:00:00Z`);
-  for (let m = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1)); m < end; m = new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 1))) {
-    const next = new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 1));
-    out.push({ from: (m < start ? start : m).toISOString(), to: (next > end ? end : next).toISOString() });
-  }
-  return out;
-}
 
 async function truth() {
   const from = seconds(`${flag('from')}T00:00:00`), to = seconds(`${flag('to')}T00:00:00`);
@@ -78,31 +68,16 @@ async function truth() {
 
 async function detect() {
   const variants = JSON.parse(fs.readFileSync(flag('variants'), 'utf8'));
-  const items = months(flag('from'), flag('to')).map((m) => ({ ...m, history: path.resolve(flag('history')) }));
-  await waitForLoad(45, log);
-  const started = Date.now();
-  const results = await runPool(new URL('./lib/detect-task.mjs', import.meta.url), items,
-    { variants, marginDays: 5, provider: flag('provider', 'sgp4') }, { workers: Number(flag('workers', 6)),
-      onDone: (n, of, item) => log(`${n}/${of} ${item.from.slice(0, 7)} ${Math.round((Date.now() - started) / 1000)} s`) });
-  const events = Object.fromEntries(variants.map((v) => [v.name, results.flatMap((r) => r.variants[v.name])]));
-  const file = path.join(work, `events-${flag('label', 'iss')}-${flag('from')}-${flag('to')}.json`);
-  fs.writeFileSync(file, JSON.stringify({ window: [flag('from'), flag('to')], provider: flag('provider', 'sgp4'), variants, sets: results.reduce((a, r) => a + r.sets, 0), events }));
-  log(`-> ${file}`);
+  const { sets, events } = await detectHistories([{ history: flag('history'), from: flag('from'), to: flag('to') }], variants,
+    { provider: flag('provider', 'sgp4'), workers: Number(flag('workers', 6)) });
+  log(`-> ${writeJson(work, `events-${flag('label', 'iss')}-${flag('from')}-${flag('to')}.json`,
+    { window: [flag('from'), flag('to')], provider: flag('provider', 'sgp4'), variants, sets, events })}`);
 }
-
-export function truthMnv(burns) {
-  return Buffer.concat(burns.filter((b) => b.status === 'EXECUTED').map((b) => Buffer.from(mnvRecord({
-    ID: b.id, SAT_NO: 25544, ORIG_OBJECT_ID: '1998-067A', STATUS: MNV.maneuverStatus.EXECUTED,
-    EVENT_START_TIME: b.tig_iso, EVENT_END_TIME: b.tig_iso, DELTA_VEL: b.executed_mps / 1000,
-    DELTA_VEL_U: b.executed_in_track_mps / 1000, DELTA_VEL_V: b.executed_cross_track_mps / 1000 }))));
-}
-export const eventsMnv = (events) => Buffer.concat(events.map((e) => Buffer.from(mnvRecord({ ...e, STATUS: MNV.maneuverStatus.DETECTED, MNVR_ACCELS: e.MNVR_ACCELS ?? [] }))));
 
 async function score() {
   const truthFile = JSON.parse(fs.readFileSync(flag('truth'), 'utf8'));
   const eventsFile = JSON.parse(fs.readFileSync(flag('events'), 'utf8'));
   const [from, to] = eventsFile.window;
-  const scorer = await loadModule('analysis/maneuver-detection');
   const key = 'NORAD:25544';
   const options = {
     before_s: Number(flag('before-h', 6)) * 3600, after_s: Number(flag('after-h', 36)) * 3600,
@@ -111,23 +86,9 @@ async function score() {
     spans: [{ object: key, from: `${from}T00:00:00Z`, to: `${to}T00:00:00Z` }],
   };
   const burns = truthFile.burns.filter((b) => b.tig_iso >= `${from}T00:00:00` && b.tig_iso < `${to}T00:00:00`);
-  const out = {};
-  for (const [name, events] of Object.entries(eventsFile.events)) {
-    const r = await scorer.invoke('score_detections', [
-      { portId: 'detected', payload: eventsMnv(events), typeRef: TYPES.MNV },
-      { portId: 'truth', payload: truthMnv(burns), typeRef: TYPES.MNV },
-      json('options', options),
-    ]);
-    out[name] = jsonOf(r, 'report');
-  }
-  await scorer.destroy();
-  const file = flag('out', flag('events').replace(/events-/, 'score-'));
-  fs.writeFileSync(file, JSON.stringify(out, null, 1));
-  for (const [name, r] of Object.entries(out)) {
-    const s = r.summary;
-    log(`${name.padEnd(28)} recall ${s.detected}/${s.truth} events ${s.events} unexplained ${s.false_alarms} (${(s.false_alarms_per_object_year ?? 0).toFixed(2)}/y) ` +
-        `|dt| ${s.time_error_abs_s ? (s.time_error_abs_s.median / 60).toFixed(0) + ' min' : '-'} dv ${s.dv_ratio ? s.dv_ratio.median.toFixed(2) : '-'}`);
-  }
+  const out = await scoreVariants(eventsFile.events, truthMnv(burns), options);
+  fs.writeFileSync(flag('out', flag('events').replace(/events-/, 'score-')), JSON.stringify(out, null, 1));
+  printScores(out);
 }
 
 if (command === 'truth') await truth();

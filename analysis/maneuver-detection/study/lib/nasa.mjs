@@ -2,7 +2,7 @@
 // iss-coords/<date>/): CCSDS OEM in EME2000, each with a trajectory event
 // summary (name, TIG, delta-V, resulting apogee and perigee) in its header.
 // Files are read in memory and dropped; only derived records are kept.
-import { OEM, MNV, flatbuffers, iso, seconds, oemFrame } from './host.mjs';
+import { OEM, MNV, flatbuffers, iso, seconds, oemFrame, mnvRecord } from './host.mjs';
 
 const BUCKET = 'https://nasa-public-data.s3.amazonaws.com';
 
@@ -137,3 +137,14 @@ export function listedEvents(files) {
   return [...all.values()].sort((a, b) => a.tig - b.tig);
 }
 export const coverage = (files) => files.map((f) => [f.created, f.created + 86400]);
+
+// Executed burns of a truth file as truth $MNV (size-prefixed stream). NASA's
+// plans are in-plane, and compare_ephemerides judges them by the in-track
+// change; its cross-track estimate across a TIG carries the nodal-regression
+// correction's error, so the truth is the in-track change alone.
+export function truthMnv(burns) {
+  return Buffer.concat(burns.filter((b) => b.status === 'EXECUTED').map((b) => Buffer.from(mnvRecord({
+    ID: b.id, SAT_NO: 25544, ORIG_OBJECT_ID: '1998-067A', STATUS: MNV.maneuverStatus.EXECUTED,
+    EVENT_START_TIME: b.tig_iso, EVENT_END_TIME: b.tig_iso, DELTA_VEL: Math.abs(b.executed_in_track_mps) / 1000,
+    DELTA_VEL_U: b.executed_in_track_mps / 1000 }))));
+}

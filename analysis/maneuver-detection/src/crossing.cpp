@@ -37,7 +37,7 @@ struct Options {
   double ltSpanDays = 5.0;
   int ltSets = 20;
   // output
-  bool d1 = true, d2 = false, d3 = false;   // the default stays D1 until the held-out test decides (PLAN-2026-10 R1)
+  bool d1 = true, d2 = true, d3 = false;    // C (D1 + D2): PLAN-2026-10 R1 passed on the held-out ISS window
   double mergeHours = 12.0;
   bool reportPairs = true, reportLevels = false;
   std::string reportTime;

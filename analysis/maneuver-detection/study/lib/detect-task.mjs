@@ -14,9 +14,22 @@ function history(path) {
 
 export async function run(item, context) {
   detector ??= await loadModule('analysis/maneuver-detection', context.modulesRoot ?? undefined);
-  provider ??= context.provider === 'keplerian-reference' ? await keplerianProvider() : await sgp4Provider();
+  if (!provider) {
+    if (context.provider === 'keplerian-reference') provider = await keplerianProvider();
+    else if (context.provider === 'hpop') provider = await (await import('./hpop-provider.mjs')).hpopProvider({ environment: context.environment });
+    else provider = await sgp4Provider();
+  }
+  // Sets within marginDays of the month, and at least marginSets before and
+  // after the month's own sets whatever their age, so a burn in a gap between
+  // sets is bracketed. marginSets 0 is the days-only window.
   const lo = seconds(item.from) - context.marginDays * 86400, hi = seconds(item.to) + context.marginDays * 86400;
-  const rows = history(item.history).filter((r) => { const t = seconds(r.EPOCH); return t >= lo && t < hi; });
+  const all = history(item.history);
+  const firstAt = (t) => { const i = all.findIndex((r) => seconds(r.EPOCH) >= t); return i < 0 ? all.length : i; };
+  const lastBefore = (t) => all.findLastIndex((r) => seconds(r.EPOCH) < t);
+  const margin = context.marginSets ?? 0;
+  const a = Math.min(firstAt(lo), Math.max(0, firstAt(seconds(item.from)) - margin));
+  const b = Math.max(lastBefore(hi), Math.min(all.length - 1, lastBefore(seconds(item.to)) + margin));
+  const rows = all.slice(a, b + 1);
   if (rows.length < 8) return { item, sets: rows.length, variants: Object.fromEntries(context.variants.map((v) => [v.name, []])) };
   const { queries, results } = await detectWith(detector, provider, rows, context.variants.map((v) => v.options));
   const from = seconds(item.from), to = seconds(item.to);

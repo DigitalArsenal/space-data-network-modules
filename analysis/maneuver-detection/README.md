@@ -1,163 +1,218 @@
 # Maneuver detection
 
-Detects maneuvers in an element-set history and emits `$MNV` records with
-`STATUS: DETECTED`. The caller propagates each element set with the provider
-of its choice (SGP4 for GP data, HPOP, an operator ephemeris) and passes the
-trajectories as `$OEM`, or passes SGP4 element sets on `elements` and the
-module propagates them itself with Vallado's SGP4.
+Maneuver detection over any pluggable propagator. The module holds no
+propagator: it asks for each element set's trajectory on a query port, the
+host routes the query to whatever propagator is plugged in (SGP4, full-force
+HPOP, any provider of the propagator ABI), and the module compares the
+trajectories it gets back. It also checks planned maneuvers against operator
+ephemerides and scores detections against truth. Every output is
+byte-identical in the browser, WasmEdge and Docker WasmEdge.
 
-Method `detect_maneuvers`:
+| Method | In | Out |
+| --- | --- | --- |
+| `detect_maneuvers` | element sets (`$OMM`) and their trajectories, or per-set trajectories (`$OEM`) | `$MNV` DETECTED |
+| `compare_ephemerides` | ephemeris versions (`$OEM`), planned maneuvers (`$MNV`) | `$MNV` EXECUTED / CANCELLED / UNKNOWN, version changes |
+| `score_detections` | detected and truth `$MNV` | recall, time error, delta-V ratio, false alarms (JSON) |
+
+## `detect_maneuvers`
 
 | Port | Direction | Type | Content |
 | --- | --- | --- | --- |
-| `ephemerides` | in | `$OEM` (one or more frames) | One data block per element set, Earth-centred inertial frame, UTC |
-| `elements` | in, optional | JSON | `{objects: [{id?, norad?, name?, sets: [{mjd (UTC), MEAN_MOTION, ECCENTRICITY, INCLINATION, RA_OF_ASC_NODE, ARG_OF_PERICENTER, MEAN_ANOMALY, BSTAR, comment?}]}]}`: GP element sets, instead of (or beside) `ephemerides` |
-| `options` | in, optional | JSON | Thresholds (below) |
-| `maneuvers` | out | `$MNV` | One frame per detected maneuver |
-| `report` | out | JSON | Per-pair crossing times, jumps, steps and thresholds; each event's evidence |
+| `element_sets` | in | `$OMM` | Element sets, plain or a stream of size-prefixed records. Grouped by `NORAD_CAT_ID` (else `OBJECT_ID`, else `OBJECT_NAME`); one set per `EPOCH`, a later record replacing an earlier one |
+| `propagation` | in | `$OEM` | Answers to `propagation_requests`: one data block per query, in query order |
+| `ephemerides` | in | `$OEM` | Per-set trajectories supplied by the caller instead: one block per element set spanning its neighbouring sets' epochs, grouped by object and ordered by the middle of their span |
+| `options` | in | JSON | Below; every field optional |
+| `propagation_requests` | out | JSON | The trajectories the detector needs |
+| `maneuvers` | out | `$MNV` | One record per detected maneuver |
+| `report` | out | JSON | Per object: the pairs, the levels (with `report_levels`), each detector's events and their evidence |
 
-## Input contract
+### The propagator query port
 
-- Each block is one element set's trajectory, sampled densely enough for cubic
-  Hermite interpolation (60 s in LEO interpolates position to about 0.4 m).
-- Each block spans at least its neighbouring element sets' epochs. Two
-  neighbours on each side is recommended: a GP element set issued just after
-  a burn is often still fit to pre-burn data, and the wider span lets the
-  crossing search reach back past it.
-- Blocks are grouped by `OBJECT` (`OBJECT_ID`, else `NORAD_CAT_ID`) and
-  ordered by the midpoint of their span.
-- Frames: GCRF, ICRF, J2000, EME2000, TEME, CIRS, MOD, TOD, TOE or B1950
-  (Earth-centred). One frame per object. Earth-fixed frames are refused.
-- A block's `COMMENT` (for example the element set's GP_ID and epoch) is copied
-  into `SOURCED_DATA` of every event it bounds.
-- **Element sets** (`elements`): each set is propagated by Vallado's SGP4
-  (`propagator/sgp4`'s sources; WGS-72, opsmode `i`), in TEME, on the
-  `grid_step_s` grid (aligned to whole multiples of it in UTC seconds) from
-  the epoch of the set two before it to the epoch of the set two after it:
-  the contract above, as the ISS study's trajectories were made. A set SGP4
-  refuses has no block and is listed under `refused_sets` in the report.
+The pattern is `analysis/estimation`'s inverted port: the request is
+stateless and replayed.
 
-## Method
+1. Call with `element_sets` (and `options`, which may name the
+   `propagator_port_id` the host routes to). The module answers on
+   `propagation_requests`, `{status: "needs-propagation", propagator_port_id,
+   neighbour_sets, queries: [...]}`. There is one query per element set:
+   `{sequence, object, norad, object_id, set, epoch, start, stop, step_s}`.
+   `set` indexes the `$OMM` record in input order. The span runs from the
+   epoch `neighbour_sets` sets earlier to the epoch `neighbour_sets` sets
+   later, clamped at the ends.
+2. The host routes every query to the plugged propagator. Each answer is one
+   `$OEM` data block with these properties:
+   - it is the trajectory of that set alone;
+   - it covers `start` to `stop`;
+   - samples are no more than `step_s` apart;
+   - UTC, km, km/s;
+   - Earth-centred axes, inertial (GCRF, ICRF, J2000, EME2000, TEME, CIRS,
+     MOD, TOD, TOE, B1950) or Earth-fixed (ITRF, ECEF, EFG, WGS84, GTOD).
 
-For each pair of consecutive blocks:
+   A set the propagator refuses is answered by an empty block whose `COMMENT`
+   begins `REFUSED`.
+3. Call again with the same `element_sets` and `options`, plus the answers on
+   `propagation`. The module rebuilds the queries from the element sets and
+   checks each answer against its query: same object, span covered, step
+   respected. An answer out of order, or short of its span, is refused, so it
+   can never be paired with the wrong set.
 
-1. **Crossing.** The time t* at which the two trajectories are closest over
-   their common span (60 s grid, then golden-section refinement). An impulsive
-   burn keeps position continuous, so t* estimates the burn time.
-2. **Jumps at t*.** Both states are at one instant and one position, so the
-   propagator's periodic terms cancel:
-   - in-track, from the energy change (vis-viva): dv_T = v da / (2a);
-   - cross-track, from the orbit-normal change: an out-of-plane burn turns the
-     normal about r, dh_hat = -(dv_N / v) T_hat, so dv_N = -v dh_hat . T_hat.
-     The step test uses v (h_hat1 - h_hat0) in inertial components, which
-     has no singularity at zero inclination.
-3. **Step test.** Each quantity is summed into a per-element-set level. A
-   pair's step is the median of the next `median_sets` levels minus the median
-   of the previous ones, so one bad element set, or a settling tail after a
-   burn, does not register. A pair is a candidate when either step exceeds
-   `k` times the robust scale (1.4826 MAD over +-`scale_window_pairs`) and its
-   absolute floor.
-4. **Events.** Each run of candidates is one event, placed at the pair with
-   the largest jump relative to its thresholds. A component is reported only
-   if its step test fired; otherwise it is 0.
+The spans are those of `propagator/sgp4`'s `propagate_ephemeris` with
+`element_set_blocks` and the same `neighbour_sets`, so an SGP4 host answers a
+whole object in one call. Earth-fixed answers (what the propagator ABI's
+providers write) are turned to TEME by GMST (IAU 1982, UT1 = UTC) with
+velocity v + ω × r: the inverse of the providers' own TEME → Earth-fixed
+rotation. Every comparison is between two states at one instant, so one
+shared rotation leaves delta-V unchanged.
 
-## Output
+Host adapters used in the study (`study/lib/`), as examples:
 
-| `$MNV` field | Value |
+| Provider | Route |
 | --- | --- |
-| `EVENT_START_TIME`, `EVENT_END_TIME` | t*, the impulsive estimate (equal) |
-| `DELTA_VEL_U` | In-track delta-V, km/s (0 unless its test fired) |
-| `DELTA_VEL_V` | Cross-track delta-V, km/s, positive along the orbit normal (0 unless its test fired) |
-| `DELTA_VEL_W` | Radial: not estimated, 0 |
-| `DELTA_VEL` | Magnitude of U and V |
-| `MANEUVER_UNC` | Separation of the trajectories at t*, km |
-| `PRE_EVENT`, `POST_EVENT` | Osculating two-body states and elements at t* (mu = 398600.4418 km^3/s^2; apogee and perigee as altitudes over 6378.137 km) |
-| `CHARACTERIZATION` | Rules below |
-| `CHARACTERIZATION_UNC` | Smaller raw component over the larger (0 = one pure axis) |
-| `REPORT_TIME` | `options.report_time`, else the first `$OEM` `CREATION_DATE` |
-| `SAT_NO`, `ORIG_OBJECT_ID`, `SOURCED_DATA` | From the blocks |
+| `propagator/sgp4` | `propagate_ephemeris`, TEME, one call per object |
+| `propagator/keplerian-reference` | the propagator ABI (`plugin_init_omm`, `plugin_propagate`), Earth-fixed metres written as km |
+| `propagator/hpop` 1.3.0 | `analysis/epoch-state` GCRF state at each set's epoch, then a full-force execution request forwards to the span's end and backwards to its start, sampled at the query's times |
 
-U, V and W follow the component comments in the SDS `MNV` schema (U
-along-track, V cross-track, W radial).
+### Detectors
 
-Characterization, in order:
+Defaults are frozen from the ISS tuning window
+([PLAN-2026-10](docs/studies/PLAN-2026-10.md), amendment A6).
 
-1. `DEORBIT` when the post-event perigee altitude is under 120 km.
-2. GEO (period 1300-1600 min, e < 0.05): `STATION_KEEPING` when |da| < 5 km,
-   otherwise `PHASING`.
-3. Both components fired: `COMBINED`. Cross-track only: `OUT_OF_PLANE`.
-   In-track only: `ORBIT_RAISING` or `ORBIT_LOWERING` by sign.
+| | Quantity | Test | Event time |
+| --- | --- | --- | --- |
+| D1 | At the crossing t* of consecutive trajectories: in-track delta-V from the energy change, v Δa / 2a; cross-track from the orbit-normal change, −v Δĥ · T̂ | Median-of-`median_sets` step in each set's cumulative level, against `k` × 1.4826 MAD over ±`scale_window_pairs` and a floor | t* of the event's largest jump |
+| D2 | In-track: each set's orbit-averaged semi-major axis over one revolution about its own epoch. Cross-track: a chain of each set's mean orbit normal against the previous set's, both over that revolution | For each gap: robust (Huber, 1.345σ) regression over ±`glr_span_days` and up to `glr_sets` sets per side, of a level, a drag trend and a step. Λ = (δ / s_δ)², the generalised likelihood ratio for a jump (Willsky and Jones 1976), against `glr_h`² and a floor. Steps are accepted strongest first, each then a known regressor. A second step in one window needs two agreeing sets between them | The crossing of the last set on the old level and the first on the new |
+| D3 | D2's in-track levels | Hinge regression y = a + b(t − τ) + g(t − τ)₊ over ±`lt_span_days`, Λ_g against `lt_h`² and `lt_floor_mps_per_day`; the hinge must fit better than a step | The gap's middle |
+| C | D1 and D2 events of one object within `merge_hours` are one event | | D2's time and delta-V when they come from a crossing, else D1's |
 
-## Options
+D2's level of a set is taken where that set's fit is centred. A set fitted
+across a burn can absorb the burn in its drag term; D1's crossing chain then
+loses part of it, and D2's level does not. The revolution starts at the
+ascending node (or the +x axis within 1° of the equator) fixed at the set's
+epoch, so what remains of the short-period terms is the same constant for
+every set. Each revolution is averaged over 64 samples.
 
-| Key | Default | Meaning |
+| Option | Default | Meaning |
 | --- | --- | --- |
-| `k` | 8 | Robust-scale multiple |
-| `floor_in_track_mps` | 0.08 | Absolute floor on the in-track step, m/s |
-| `floor_cross_track_mps` | 1.0 | Absolute floor on the cross-track step, m/s |
-| `median_sets` | 3 | Element sets on each side of a step |
-| `scale_window_pairs` | 100 | Pairs on each side for the robust scale |
-| `grid_step_s` | 60 | Crossing-search grid, s |
+| `detectors` | `["D1", "D2"]` (C) | Any of D1, D2, D3 |
+| `propagator_port_id` | none | Echoed in the queries and in `$MNV` `ALGORITHM` |
+| `neighbour_sets` | 2 | Sets on each side of a query's span |
+| `grid_step_s` | 60 | Answer sample step and crossing-search grid, s |
+| `k`, `floor_in_track_mps`, `floor_cross_track_mps`, `median_sets`, `scale_window_pairs` | 8, 0.08, 1.0, 3, 100 | D1 |
+| `glr_sets`, `glr_span_days`, `glr_h`, `glr_floor_in_track_mps`, `glr_floor_plane_rad` | 8, 3, 10, 0.04, 4e-4 | D2 (the plane floor is an angle: v × angle in m/s, 3.1 m/s at the ISS) |
+| `lt_h`, `lt_floor_mps_per_day`, `lt_span_days`, `lt_sets` | 6, 0.05, 5, 20 | D3 |
+| `merge_hours` | 12 | C |
 | `report_time` | first `CREATION_DATE` | `REPORT_TIME` of every event |
+| `report_pairs`, `report_levels` | true, false | Report detail |
 
-The defaults come from the ISS study (LEO GP data). The in-track floor is
-0.08 m/s, which is about 0.14 km in semi-major axis at the ISS. A GEO
-east-west trim of 0.05 m/s changes the semi-major axis by 1.4 km and needs a
-lower floor; no GEO study has set one yet.
+### `$MNV` fields
+
+U, V and W follow the SDS MNV schema's component comments: U along-track, V
+cross-track, W radial. This is not the usual RTN order; it is the schema's.
+
+| Field | Value |
+| --- | --- |
+| `EVENT_START_TIME`, `EVENT_END_TIME` | The event time (impulsive: equal) |
+| `DELTA_VEL_U`, `DELTA_VEL_V` | In-track and cross-track delta-V, km/s, 0 unless that component's test fired; positive V is along the orbit normal |
+| `DELTA_VEL_W` | Radial: not estimated, 0 |
+| `MANEUVER_UNC` | Separation of the two trajectories at the event time, km |
+| `PRE_EVENT`, `POST_EVENT` | Osculating two-body states and elements at the event time (μ = 398600.4418 km³/s²) |
+| `CHARACTERIZATION` | DEORBIT (post perigee under 120 km); GEO (period 1300–1600 min, e < 0.05): STATION_KEEPING when \|Δa\| < 5 km, else PHASING; then COMBINED, OUT_OF_PLANE, ORBIT_RAISING or ORBIT_LOWERING |
+| `MNVR_ACCEL_TIMES`, `MNVR_ACCELS` | D3: the change of along-track acceleration (U, V, W; km/s²) |
+| `ALGORITHM` | Detector and propagator port |
+| `SOURCED_DATA` | The two bracketing sets (`EPOCH`, and the `$OMM` `COMMENT`, e.g. its GP_ID) |
+
+## `compare_ephemerides`
+
+The method checks operator files against each other. Its inputs:
+- `versions`: one `$OEM` per version, `CREATION_DATE` its issue time, one
+  block per object;
+- `planned`: `$MNV` records, with `EVENT_START_TIME` the TIG and `DELTA_VEL`
+  the planned size;
+- `options`: `margin_s` (600), `post_start_after_s` (3600),
+  `executed_fraction` (0.5), `cancelled_fraction` (0.25),
+  `unplanned_threshold_km` (off), `within_version` (false).
+
+Comparisons use orbit-averaged semi-major axis and mean orbit normal over
+whole revolutions.
+- **Consecutive versions:** the newer version's first revolution is compared
+  with the older version over the same revolution (the new orbit
+  determination against the old forecast: executed minus planned). When the
+  older version does not reach it, the comparison is with its last
+  revolution (adjacent arcs, e.g. precise daily orbits).
+- **A planned burn:**
+  - the pre-burn version is the latest issued before the TIG, and models the
+    burn as a step across it;
+  - the post-burn version is the first that starts at least
+    `post_start_after_s` after the TIG. All of its trajectory then comes from
+    tracking after the burn; a file issued just after a TIG can be a re-issue
+    still carrying the plan;
+  - executed = modelled step + (post − pre) over the post version's first
+    revolution;
+  - burns with no clean post-burn version between them are checked as a
+    group, the executed change shared in proportion to the plan.
+- **Status:** EXECUTED when the executed size reaches `executed_fraction` of
+  the plan, CANCELLED below `cancelled_fraction`, else UNKNOWN.
+- **In-plane plans** (no `DELTA_VEL_V`) are judged by the in-track change.
+  Across a TIG the normals of different revolutions are compared after a
+  nodal-regression correction, which leaves a few tenths of a m/s of
+  cross-track error in LEO.
+
+## `score_detections`
+
+The inputs are `detected` and `truth` (`$MNV`) and `options`:
+- `before_s`, `after_s`: the match window [truth start − before, truth end +
+  after];
+- `bins_mps`;
+- `explained`, `assessed` and `spans`: lists of `{object, from, to}`.
+
+Matching:
+- pairs are one-to-one, nearest first;
+- truth delta-V is `DELTA_VEL`, or the integral of `MNVR_ACCEL_TIMES` /
+  `MNVR_ACCELS` (each value held until the next time).
+
+The report gives:
+- recall with its Wilson 95 % interval, overall and by delta-V bin;
+- burn-time error and delta-V ratio distributions;
+- false alarms: unmatched events that are assessed and not explained, per
+  object-year over `spans`;
+- every match, miss and unmatched event.
 
 ## Validation
 
-`npm test`: the SDK contract, plus closed-form two-body cases (Kepler by
-universal variables in the test, independent of the module):
+[PLAN-2026-10](docs/studies/PLAN-2026-10.md) was committed before any
+held-out result (694bffdc); the thresholds were frozen at 5ca7e366. Every
+held-out window was read once. Input everywhere: Space-Track GP history,
+propagated by `propagator/sgp4` through the query port. Results and method:
+[`docs/studies/maneuver-detection.md`](../../docs/studies/maneuver-detection.md).
 
-- no burn: no event;
-- 1 m/s in-track burn on a sample node: exact time, delta-V equal to the
-  vis-viva value to 1 um/s;
-- the same between nodes: time within 0.5 s and delta-V within 1 mm/s, the
-  Hermite bound;
-- 2 m/s cross-track burn: `OUT_OF_PLANE`, V = v sin(atan(dv / v)) to
-  1 um/s, and U = 0 because its jump (dv^2 / 2v) is under the floor;
-- one outlying element set (0.5 km higher, alone): no event;
-- GEO 0.05 m/s trim with a 0.02 m/s floor: `STATION_KEEPING`, da = 2 a dv / v;
-- an Earth-fixed ephemeris: refused.
-- element sets propagated by the module (a set every 8 h of one 400-km
-  object, its mean anomaly, argument of perigee and node advancing at SGP4's
-  first-order J2 secular rates, Hoots and Roehrich 1980): no event without a
-  burn; with a 1 m/s in-track burn (every later set's mean motion lowered by
-  3/2 n da/a, da = 2 a² v dv/μ) one `ORBIT_RAISING` event within 8 h of the
-  burn and an in-track delta-V within 0.1 m/s (measured 1.0002 m/s, 57 min
-  before the burn with sets 8 h apart).
-
-ISS reboosts, 2021-03 to 2026-09 (study below). The truth is 72 burns from
-NASA's public ISS trajectory archive, with execution confirmed by NASA's own
-ephemerides, against Space-Track GP history propagated with SGP4:
-
-| In-track floor | Detected | Median / 90 % burn-time error | GP da / NASA da (median) | Unexplained events |
-| --- | --- | --- | --- | --- |
-| 0.08 m/s (default) | 69 / 72 | 22 min / 2.9 h | 1.00 | 7 |
-| 0.12 m/s | 68 / 72 | 22 min / 2.9 h | 1.02 | 4 |
-
-"Unexplained" counts events for which NASA had issued a plan within the
-previous day that lists no event within 1.5 days. Method, misses and
-reproduction: [`docs/studies/maneuver-detection.md`](../../docs/studies/maneuver-detection.md).
+| Class (held-out unless noted) | Truth | D1 | C (default) |
+| --- | --- | --- | --- |
+| ISS, 2025-01 to 2026-09 | 25 burns confirmed by NASA's later trajectories (4 are 0.1 m/s settling burns minutes before a reboost) | 21/25, 0 false | 22/25, 0.57 false per year |
+| ISS, tuning 2020-09 to 2024-12 | 53 | 51/53, 0.46 per year | 53/53, 1.15 per year |
+| Metop-SG A1, 2025-08 to 2026-09 | 24 manoeuvres (EUMETSAT AUX_MHF) | 12/24, 0 false | 14/24, 0 false |
+| GNSS (4 GPS), 2025-01 to 2026-09 | 6 manoeuvres in precise orbits | 4/6, 0.16 per year | 6/6, 3.8 per year |
+| GEO (Intelsat), 2025-01 to 2026-09 | 11 post-manoeuvre files | 2/11 | 4/11 |
 
 ## Limits
 
-- Detection works on element-set history, so it waits for the next element
-  set: hours for a well-tracked LEO object. Measurement-level detection, with
-  a filter's innovations as the burns happen, is the next tier.
-- GP element sets issued right after a burn lag it. The burn time has a
-  median error of 22 min, with a tail of several hours when fits lag.
+- Detection works on element-set history. It waits for the next element
+  sets: hours for the ISS, a day or more for GNSS and GEO, and up to two weeks
+  after some Metop-SG and Galileo burns, when Space-Track issued no sets.
+- Thresholds are the ISS tuning window's. For GNSS, D2's in-track floor
+  (0.04 m/s) flags 3.7 GP level steps a year that precise orbits do not
+  show. For GEO, both floors are above east-west trims.
+- Burns minutes apart are one event.
 - The radial component is not estimated.
-- A drag step (for example the 2024-05-10/11 geomagnetic storm) can register
-  as a small negative in-track event.
-- Probability of a maneuver is not stated. The report gives each step against
-  its threshold.
+- D3 is off by default: it fires 2.3 times a year on the ISS, above the
+  plan's limit of 2.
+- Measurement-level detection (the estimation module's innovations) is not
+  built here.
 
-## Build
+## Build, test, parity
 
 ```sh
-npm install
+npm ci
 npm run build
-npm test
+npm test                                          # E2E: 13 cases through the built module
+PATH=$HOME/.wasmedge/bin:$PATH npm run test:parity   # browser, WasmEdge, Docker WasmEdge
 ```
