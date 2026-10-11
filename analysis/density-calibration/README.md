@@ -16,6 +16,13 @@ JSON control frames in and out.
 
 ## Model
 
+- **NRLMSISE-00** (0.4.0; `evaluate` and `drag_work` with `atmosphere: "NRLMSISE00"`): the real model through the
+  public-domain Brodowski C port in `third_party/nrlmsise00` (`gtd7d`, total mass density with anomalous oxygen), driven as
+  `propagator/hpop` drives it: on the UTC day d of a point, F10.7 is the observed flux of day d-1, F10.7a the observed 81-day
+  centred mean of day d, Ap the daily Ap of day d (all switches 1, the daily-Ap form), local solar time = UT + longitude/15,
+  the WGS84 geodetic latitude, longitude and height. Rows are PRW SPW rows as JSON (`DATE`, `F107_OBS`, `F107_OBS_CENTER81`,
+  `AP_AVG`), strictly increasing; a point whose day or day before has no row, or above 1000 km, is refused. No temperature
+  correction applies to it, and `calibrate` stays JB2008.
 - **Density:** `propagator/hpop/lib/jb2008.h` unchanged (Orekit 13.1's
   JB2008, itself a port of Space Environment Technologies' Fortran).
 - **Drivers:** PRW `JB2008_INDICES` rows as JSON (SET `SOLFSMY.TXT` and
@@ -106,9 +113,10 @@ out. `sigmas` are the formal posterior standard deviations.
   v_r = v - omega x r, for every other acceleration a (drag, thrust, radiation pressure, third bodies, tides). It
   returns C, its parts, |v_r| and the WGS84 geodetic point (the inputs of `evaluate`), and with `gradient` dC/dr =
   grad U + omega x v and dC/dv = v_r in GCRF (grad U by central differences, 0.5 m, in Earth-fixed axes).
-- **`drag_work`** (`states`, `jb2008 {rows}`, `correction?`, `B?` (Cd*A/m, 1), `omega?`): the drag power
-  -1/2 B rho |v_r|^3 (W/kg) with rho the JB2008 density, the correction included, at each state's geodetic point,
-  and the work between consecutive states by the trapezoid rule (J/kg): the energy a drag-only change of C shows.
+- **`drag_work`** (`states`, `jb2008 {rows}` or `atmosphere: "NRLMSISE00"` with `nrlmsise00 {rows}`, `correction?` (JB2008 only), `B?` (Cd*A/m, 1), `omega?`): the drag power
+  -1/2 B rho |v_r|^3 (W/kg) with rho the JB2008 density, the correction included, or the NRLMSISE-00 density, at each state's geodetic point,
+  and the work between consecutive states by the trapezoid rule (J/kg): the energy a drag-only change of C shows. The ratio of the drag works of one
+  trajectory under two atmospheres is the factor by which the Cd*A/m that an arc's energy loss implies changes between them.
 
 ## Tests
 
@@ -127,4 +135,5 @@ out. `sigmas` are the formal posterior standard deviations.
 | Energy conservation | `propagator/hpop` integrating gravity alone (EGM2008 36x36, RK78 at 1e-12, UT1 = UTC, no polar motion) for 6 h from a 500 km sun-synchronous state; C from `energy` at the 1-min samples | constant to 0.06 J/kg (2e-9 of C; the Earth's axis precesses, ~0.01 J/kg an hour); the Kepler energy varies by tens of kJ/kg; degrees 35 and 37 against HPOP's 36 drift by more than 0.4 J/kg |
 | Energy gradient | central differences of `energy` itself (2 m, 0.01 m/s) | within 1e-6 and 1e-7 relative |
 | Drag work | HPOP with JB2008 drag (Cd*A/m 0.02, constant synthetic drivers) for 6 h at 30 s: the fall of C against the integral of `drag_work` | within 0.3 % |
+| NRLMSISE-00 drag work | `propagator/hpop` with NRLMSISE-00 drag (Cd*A/m 0.02, a `space_weather` table whose F10.7, 81-day mean and Ap change from day to day) for 6 h at 30 s across 00:00 UTC: the fall of C against the integral of `drag_work` with `atmosphere: "NRLMSISE00"`; the same integral with F10.7 read from the epoch's own day | 0.14 %; the wrong-day read differs by 6.3 % |
 | SDK compliance | `space-data-module-sdk` `validateArtifactWithStandards` | pass |
