@@ -149,7 +149,8 @@ async function withWindows(histories) {
   const states = await epochStates(seeds);
   const iso = (t) => new Date(Math.round(t * 1000)).toISOString();
   const arcs = plans.filter((p) => states.has(p.key)).map((p) => ({ arc: p.key, norad: p.key, seed: states.get(p.key), targets: p.times.map(iso) }));
-  const { results, seconds } = await propagateArcs(arcs, { variants: ['state'], workers: Number(args.workers) });
+  // The decoy study's published runs used the gravity-only profile.
+  const { results, seconds } = await propagateArcs(arcs, { variants: ['state'], workers: Number(args.workers), profile: 'gravity-only' });
   const byKey = new Map(results.map((r) => [r.arc, r.samples]));
   const round = (x) => Math.round(x * 1e4) / 1e4;
   const windows = histories.map(() => []);

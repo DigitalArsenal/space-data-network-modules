@@ -41,6 +41,12 @@ A propagator module's output goes in unchanged.
 handle. Records may be size-prefixed, as a module's `FinishSizePrefixed`
 builds them (see the SDK README, "Size-prefixed records"), or plain.
 
+A failed propagation never reaches the grid: `prepare_screening_index`
+refuses a PPE whose coefficients are not finite (`invalid-polynomial`) or
+whose positions, at each record's ends and middle, leave 6,356.752 km (the
+polar radius) to 1e6 km from the Earth's centre (`invalid-trajectory`), naming
+the object (`tests/windowedScreenParity.test.mjs`).
+
 ## The candidate test
 
 Over a coarse interval [t_k - h, t_k + h], where h is half the coarse step,
@@ -184,9 +190,11 @@ A long screen runs as consecutive windows (`screenWindowsOnGpu` in
 
 - **SGP4:** the catalog is loaded once, and every window screens that index.
 - **HPOP and other trajectory propagators:** each window loads only that
-  window's trajectories and releases them after. A day of HPOP's 10-minute
-  intervals is about 90 KB per object; a 2-hour window of the full catalog is
-  about 400 MB.
+  window's trajectories and releases them after. A day of HPOP's 300 s
+  segments is about 240 KB per object. A 1-hour window of the full catalog is
+  about 390 MB, which `prepare_screening_index` holds in 1.05 GiB of the
+  module's 2 GiB; a 2-hour window (700 MB) needs 1.85 GiB before the screen
+  itself, so HPOP screens default to 1-hour windows.
 
 The merged result is a single screen of the whole span:
 
@@ -205,15 +213,27 @@ for both propagators.
 
 1. `analysis/epoch-state` turns each element set into a GCRF state at its
    epoch: SGP4 at zero elapsed time, then TEME to GCRF through ERFA.
-2. `propagator/hpop` integrates those states. A resident instance holds at
-   most 1,024 objects; objects are dealt round-robin into about two instances
-   per worker.
+2. `propagator/hpop` integrates those states at full force:
+   `propagator/hpop/catalog.mjs` writes the configuration, Cd·A/m comes from
+   each element set's B* (converted by the module; 0.01 m²/kg where B* ≤ 0)
+   and Cr·A/m is 0.02 m²/kg. `--hpop-environment` supplies the kernel, Earth
+   orientation and space weather (`docs/benchmark.md`). A resident instance
+   holds at most 1,024 objects; objects are dealt round-robin into about two
+   instances per worker.
 3. Each window, every instance prepares the window and describes its sources.
    The `$PRW` records go to the page unchanged, and the next window is
    prepared while the page screens the current one.
 
-An object HPOP cannot cover is found by preparing objects one at a time. It
-leaves its instance and is excluded from the whole span.
+An object HPOP cannot cover is found by preparing objects one at a time and
+leaves its instance. HPOP ends a trajectory at reentry, 100 km geodetic
+altitude (propagator/hpop README, "The end of a trajectory: reentry"):
+- an object that reenters before the screen starts is excluded from the whole
+  span, as SGP4 excludes a decayed element set;
+- one that reenters during the screen keeps the windows before the one that
+  holds its reentry, and is absent from that window on;
+- any other failure excludes the object from the whole span.
+
+The CPU runner's summary lists them (`hpop.reentries`, `hpop.dropped`).
 
 HPOP integrates every object from its element epoch, so the first window
 carries that catch-up. HPOP prunes cache intervals that end before the
@@ -224,10 +244,11 @@ requested window, so an instance holds about one window per object.
 ```
 node build.mjs
 node scripts/run-all-vs-all-gpu.mjs --catalog <omm.uint32be.bin> --propagator sgp4|hpop \
-  --start 2461314.5 --days 3 [--window-hours 6|2] --threshold-km 5 --step-s 60 [--cpu] --out summary.json
+  --start 2461314.5 --days 3 [--window-hours 6|1] --threshold-km 5 --step-s 60 [--cpu] \
+  [--hpop-environment <env dir>] --out summary.json
 # no browser, no GPU (Node, or WasmEdge as on an SDN node):
 node scripts/run-all-vs-all-cpu.mjs --catalog <omm.uint32be.bin> --runtime wasmedge --aot \
-  --propagator sgp4|hpop --days 3 --out summary.json
+  --propagator sgp4|hpop [--hpop-environment <env dir>] [--farm-workers N] --days 3 --out summary.json
 ```
 
 The catalog file holds `$OMM` records, each prefixed by its u32 big-endian
@@ -264,22 +285,29 @@ so times are upper bounds.
 | SGP4, 12 × 6 h | module, Node | 19.1 s | 9.7 s | 6.6 s | 292,516 (25 objects excluded) |
 | SGP4 | module, WasmEdge 0.16.4 AOT, SDN patches | 22.9 s | 11.9 s | 8.7 s | 292,516 |
 | SGP4 | GPU | 21.3 s | 6.1 + 2.3 s | 7.2 s | 292,516 |
-| HPOP, 36 × 2 h | GPU | 482.5 s | 4.4 + 1.7 s | 7.5 s | 285,060 |
-| HPOP | module, Node | 493.4 s | 16.8 s | 9.9 s | 285,060 |
+| HPOP, 72 × 1 h | module, Node | 6,964 s on 16 cores (9,294 s measured) | 33.8 s | 14.8 s | 288,524 (21 objects excluded) |
 
 - Each propagator's runs report identical conjunctions (same TCA and miss
   distance) whichever host searched.
 - On the GPU path the module samples (6.1 s) and the GPU searches (2.3 s;
   8.5 s with the all-pairs kernel the grid replaced).
-- HPOP's time is propagation: about 454 s of waiting on the farm,
-  including the catch-up from element epochs in the first window.
-- The HPOP rows are from modules 82a566fd (2026-10-02). That build evaluates
-  the Earth's field in Earth-fixed axes and fills the built-in field with
-  EGM2008 to degree and order 20.
-- Before it, HPOP used a partial field in inertial axes and these runs
-  reported 301,396 conjunctions in 382–438 s. Those trajectories drifted
-  kilometres a day from independent reference orbits. See propagator/hpop
-  README, "Gravity field frame".
+- HPOP's time is propagation: 110,642 CPU-seconds on 16 farm workers
+  (user and system time of each worker thread), 0.72 s per object-day; the
+  first window, the catch-up from element epochs, took 36 % of it. Its
+  end-to-end time is that CPU time on 16 dedicated cores plus search and
+  refinement. Measured on the shared host (1-minute load average median 40,
+  maximum 62; the farm held its next chunk while the load exceeded 45), the
+  screen took 9,294 s, 9,231 s of it waiting on the farm, with 8 module
+  threads.
+- The HPOP row is HPOP 1.3.0 at full force with the conjunction module of
+  e1e9b6b8, the one the SGP4 rows used, and the environment released at the
+  screen's start. 21 objects reentered (100 km) before the screen and are
+  excluded; 6 reentered during it and are screened through the last full
+  window before their reentry
+  ([hpop-full-force-screen-2026-10.md](hpop-full-force-screen-2026-10.md)).
+- Against the SGP4 screen (`scripts/compare-screens.mjs`), 39,486 of HPOP's
+  288,524 conjunctions are the same pair with TCAs within 10 minutes; on
+  those, TCAs differ by a median of 1.2 s and miss distances by 670 m.
 - AOT compilation (about 10 s, once per install) is not counted.
 
 ### Step size
@@ -324,8 +352,8 @@ Every row reports the same 292,516 conjunctions.
 
 `screen_catalog` traps out of memory above about 7,000 objects per call.
 
-HPOP's own cost was about 41 ms per object-day for one resident instance
-before the full degree/order 20 field (above), which raised the 3-day farm wait to 454 s
-(200 LEO objects, one day, `conjunction-screening` profile). A day of its
-10-minute intervals is about 90 KB per object, so a full catalog of PPE does
-not fit in one module instance; screen it in time windows.
+HPOP's own cost at full force is about 0.65 s per object-day on one thread
+(0.69 s with perigee below 2,000 km, 0.19 s above; propagator/hpop README,
+"Catalog cost"). A day of its 300 s segments is about 240 KB per object, so a
+full catalog of PPE does not fit in one module instance; screen it in 1-hour
+windows.

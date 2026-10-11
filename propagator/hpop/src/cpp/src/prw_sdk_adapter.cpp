@@ -28,9 +28,9 @@ int emit(const char* port, const std::vector<uint8_t>& bytes, uint64_t sequence,
   return 0;
 }
 int resident(const char* method, const char* port) {
-  std::vector<std::pair<const uint8_t*,size_t>> input;
+  std::vector<hpop::ResidentInput> input;
   uint64_t sequence=0;
-  for(uint32_t i=0;i<plugin_get_input_count();++i){const auto* frame=plugin_get_input_frame(i);input.emplace_back(frame->payload,frame->payload_length);sequence=frame->sequence;}
+  for(uint32_t i=0;i<plugin_get_input_count();++i){const auto* frame=plugin_get_input_frame(i);input.push_back({frame->port_id?frame->port_id:"",frame->payload,frame->payload_length});sequence=frame->sequence;}
   std::vector<std::vector<uint8_t>> output;uint64_t backlog=0;bool yielded=false;std::string error;
   try {
     // SDK 0.8.18 does not expose OUTPUT_STREAM_CAP to methods. One output per
@@ -65,6 +65,7 @@ extern "C" int invoke(void) {
   }catch(const std::exception& e){return fail(std::string("unsupported-configuration: ")+e.what());}
 }
 extern "C" int ingest_state(void){return resident("ingest_state","state");}
+extern "C" int ingest_state_gravity_only(void){return resident("ingest_state_gravity_only","state");}
 extern "C" int propagate_state(void){return resident("propagate_state","state");}
 extern "C" int prepare_trajectory_segments(void){return resident("prepare_trajectory_segments","result");}
 extern "C" int describe_trajectory_segments(void){return resident("describe_trajectory_segments","result");}

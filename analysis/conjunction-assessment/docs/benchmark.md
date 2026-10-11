@@ -50,10 +50,22 @@ node scripts/run-all-vs-all-cpu.mjs --runtime node --catalog catalog.OMM.uint32b
 node scripts/run-all-vs-all-gpu.mjs --catalog catalog.OMM.uint32be.bin \
   --start 2461314.5 --days 3 --out gpu-sgp4.json
 
-# HPOP, CPU (slow: propagation dominates, about 8 minutes on 28 cores)
+# HPOP at full force, CPU, 1-hour windows (propagation dominates; see Reference)
 node scripts/run-all-vs-all-cpu.mjs --runtime node --propagator hpop \
-  --catalog catalog.OMM.uint32be.bin --start 2461314.5 --days 3 --out cpu-hpop.json
+  --hpop-environment <env dir> --catalog catalog.OMM.uint32be.bin --start 2461314.5 --days 3 \
+  [--farm-workers N] [--load-ceiling L] --out cpu-hpop.json
 ```
+
+The HPOP farm needs `npm ci` in `propagator/hpop` as well. `<env dir>` holds
+the environment as PRW records: `kernel.prw` (a NATIVE_INPUT with JPL's
+DE440s), `earth_orientation.prw` (IERS finals2000A rows) and
+`space_weather.prw` (daily rows from GFZ's Kp, ap and F10.7 and SWPC's
+reports), covering the oldest element epoch to the end of the screen, as
+released at the screen's start. `--hpop-profile gravity-only` runs the point
+mass and degree/order 20 field instead. On a shared host, report the HPOP
+farm's CPU time from the summary (`hpop.cpu`, each worker thread's user and
+system time) beside the wall clock; `--load-ceiling L` holds the farm's next
+chunk of objects while the 1-minute load average exceeds L.
 
 Each prints one summary line: candidates, conjunctions, excluded objects, end
 to end time, and the time per stage. `--workers N` sets module threads (default:
@@ -88,6 +100,6 @@ Mac Studio, 28 cores, Space-Track GP catalog of 2026-09-30 (32,514 objects),
 | --- | ---: | ---: |
 | SGP4, CPU, Node | 19.1 s | 292,516 (25 objects excluded) |
 | SGP4, GPU (Metal) | 21.3 s | 292,516 |
-| HPOP, CPU, Node | 493.4 s | 285,060 |
+| HPOP at full force, CPU, Node, 72 × 1 h | 110,642 CPU-s on 16 workers: 6,964 s on 16 dedicated cores (9,294 s measured, load median 40) | 288,524 (21 objects excluded) |
 
 The numbers of conjunctions match only for the same catalog snapshot.

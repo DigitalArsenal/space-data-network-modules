@@ -1,5 +1,6 @@
 // Tri-runtime parity (browser, WasmEdge, Docker WasmEdge) of the methods E2b
-// added, on the inputs of tests/covariance_mapping.test.mjs, plus accumulate:
+// added, on the inputs of tests/covariance_mapping.test.mjs, plus accumulate and
+// E14's pair_statistics, fit_calibration, calibrate_covariance and dcp_covariance:
 // identical request bytes must give byte-identical outputs in every lane.
 //   PATH=$HOME/.wasmedge/bin:$PATH node tests/parity.mjs
 import assert from 'node:assert/strict';
@@ -59,8 +60,32 @@ const cases = [
     json('options', { hardBodyRadiusM: 20, missDistancesM: [0, 30, 500], directions: 4 })] } },
   { id: 'accumulate-reference', request: { methodId: 'accumulate', inputs: [elements('leo', 'leo-b', 'leo-c'), truth,
     json('options', { referenceStepSeconds: 0 })] } },
+  // E14's methods (tests/covariance_realism.test.mjs inputs).
+  { id: 'pair-statistics', request: { methodId: 'pair_statistics', inputs: [json('pairs', { pairs: [
+    { id: 'a', predicted: { position: [7000e3, 0, 0], velocity: [0, 7500, 0], covariance: [100, 0, 10000, 0, 0, 25], covarianceAxes: 'RTN' },
+      truth: { position: [7000e3 - 10, 200, -5], velocity: [0, 7500, 0], covariance: [1, 0, 1, 0, 0, 1], covarianceAxes: 'RTN' } }] })] } },
+  { id: 'pair-statistics-samples', request: { methodId: 'pair_statistics', inputs: [json('pairs', { pairs: [{ id: 's',
+    predicted: { epoch: '2026-10-10T12:04:30.000', interpolationDegree: 5, covarianceAxes: 'RTN', samples: Array.from({ length: 8 }, (_, i) => ({
+      epoch: new Date(Date.UTC(2026, 9, 10, 12, i)).toISOString().replace('Z', ''), position: [7e6 - 50 * i * i, 7.5e3 * 60 * i, 1e3 * i], velocity: [-100 * i / 60, 7.5e3, 1e3 / 60],
+      covariance: [100 + i, 0, 400 + 2 * i, 0, 0, 25] })) },
+    truth: { position: [7e6 - 50 * 4.5 * 4.5, 7.5e3 * 270, 4.5e3], velocity: [-7.5, 7.5e3, 1e3 / 60] } }] })] } },
+  { id: 'noise-responses', request: { methodId: 'noise_responses', inputs: [json('request', { start: '2026-01-01T00:00:00.000', discretizationSeconds: 600,
+    samples: [600, 1200, 1800].map((s) => ({ epoch: new Date(Date.UTC(2026, 0, 1) + s * 1000).toISOString().replace('Z', ''), state: [7000e3, 10, 0, 1, 7500, 2],
+      stm: Array.from({ length: 36 }, (_, k) => (Math.floor(k / 6) === k % 6 ? 1 : k % 6 === Math.floor(k / 6) + 3 ? s : 0) + 1e-7 * k) })),
+    targets: ['2026-01-01T00:30:00.000'] })] } },
+  { id: 'fit-calibration', request: { methodId: 'fit_calibration', inputs: [json('samples', { samples: [[1, 1, 1], [2, 1, 1], [3, 0, 0], [0, 0, 0], [2, 2, 2]]
+    .map((e, i) => ({ stratum: 's', object: i % 3, error: e, covariance: [1, 0, 1, 0, 0, 1] })) }), json('options', { method: 'axes-mle' })] } },
+  { id: 'calibrate-covariance-sets', request: { methodId: 'calibrate_covariance', inputs: [
+    json('model', { kind: 'e14-element-set-model', version: 'parity', regimes: [{ id: 'LEO', altitudeKm: [0, 2000], eccentricity: [0, 0.25] }], ageBinsDays: [[0, 1], [1, 3]],
+      strata: [{ regimeIndex: 0, ageIndex: 0, n: 40, covariance: [1, 0, 4, 0, 0, 9, ...Array(15).fill(0)] }, { regimeIndex: 0, ageIndex: 1, n: 40, covariance: [3, 0, 8, 0, 0, 11, ...Array(15).fill(0)] }],
+      factors: [{ regimeIndex: 0, ageIndex: 0, factor: 2 }, { regimeIndex: 0, ageIndex: 1, factor: 4 }] }),
+    json('objects', { objects: [{ id: 'leo', set: { norad: ref.sets.leo.norad, epoch: ref.sets.leo.EPOCH }, ageDays: 1.25,
+      state: { position: [6978137, 1000, -2000], velocity: [10, 7546, 120] } }] }), elements('leo')] } },
+  { id: 'dcp-covariance', request: { methodId: 'dcp_covariance', inputs: [json('request', { leadCovariance: [[0.04, 0.01, 0], [0.01, 0.09, 0.02], [0, 0.02, 0.16]],
+    start: '2026-01-10T00:00:00.000', segments: [1, 2, 3].map((k) => ({ from: `2026-01-${String(9 + k).padStart(2, '0')}T00:00:00.000`, to: `2026-01-${String(10 + k).padStart(2, '0')}T00:00:00.000`, lead: k })),
+    epochs: [{ epoch: '2026-01-13T00:00:00.000', sensitivity: [1, -2000, 3, 0.1, 0.2, -0.3] }, { epoch: '2026-01-11T12:00:00.000', sensitivity: [1, -2000, 3, 0.1, 0.2, -0.3] }] })] } },
 ];
-const plan = await normalizeParityFixture({ name: 'gp-error-model e2b methods', cases: cases.map((c) => ({ ...c, request: { ...c.request,
+const plan = await normalizeParityFixture({ name: 'gp-error-model e2b and e14 methods', cases: cases.map((c) => ({ ...c, request: { ...c.request,
   inputs: c.request.inputs.map(({ payload, ...p }) => ({ ...p, payloadHex: Buffer.from(payload).toString('hex') })) } })) });
 const report = await runParityHarness({ wasmPath: fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url)), plan, timeoutMs: 120000, log: console.log });
 console.log(formatParityReport(report));

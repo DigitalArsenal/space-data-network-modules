@@ -6,127 +6,18 @@ import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
 import { validateArtifactWithStandards } from 'space-data-module-sdk/compliance';
+import {
+  EPOCHS, LEO, MNV, MU, OEM, OMEGA, T0, add, block, burns, circular, cross, dot, eme2000, flatbuffers, gmst, gpHistory, history, iso, kepler, manifest, mul, norm, oem, planned, require, root, rtn, seconds, sma, stumpff, toFixed, unit, version, visViva, wasm, wasmPath,
+} from './fixtures.mjs';
 
-// Closed-form two-body cases. Each element set is a Keplerian orbit (mu =
-// 398600.4418 km^3/s^2, the module's constant), propagated here by solving
-// the universal Kepler equation; a burn is an instantaneous velocity change at t_b, so
-// every set with an epoch after t_b describes the post-burn orbit. Expected
-// values come from vis-viva and the rotation of the orbit normal, derived in
-// the comment beside each assertion. Frame: EME2000. Units: km, km/s, UTC.
-const root = process.env.SPACE_DATA_STANDARDS_ROOT ?? path.dirname(createRequire(import.meta.url).resolve('spacedatastandards.org/package.json'));
-const require = createRequire(path.join(root, 'package.json'));
-const flatbuffers = require('flatbuffers');
-const OEM = await import(pathToFileURL(path.join(root, 'lib/js/OEM/main.js')));
-const MNV = await import(pathToFileURL(path.join(root, 'lib/js/MNV/main.js')));
-const wasmPath = fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url));
-const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json', import.meta.url)));
-const wasm = fs.readFileSync(wasmPath);
-
-const MU = 398600.4418;
-const T0 = Date.UTC(2026, 8, 1, 0, 0, 0) / 1000;           // 2026-09-01T00:00:00Z
-const iso = (s) => new Date(Math.round(s * 1000)).toISOString();
-const seconds = (text) => Date.parse(text) / 1000;
-
-const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-const norm = (a) => Math.sqrt(dot(a, a));
-const add = (a, b) => a.map((x, i) => x + b[i]);
-const mul = (a, s) => a.map((x) => x * s);
-const unit = (a) => mul(a, 1 / norm(a));
-const sma = (r, v) => 1 / (2 / norm(r) - dot(v, v) / MU);
-
-// Two-body propagation from (r0, v0) at t0: Lagrange f and g with the
-// universal anomaly chi (Vallado, Fundamentals of Astrodynamics, 4th ed.,
-// algorithm 8), Newton iteration on the universal Kepler equation. Exact at
-// t = t0 (f = 1, g = 0) for every eccentricity.
-function stumpff(z) {
-  if (z > 1e-8) { const s = Math.sqrt(z); return [(1 - Math.cos(s)) / z, (s - Math.sin(s)) / (s * z)]; }
-  if (z < -1e-8) { const s = Math.sqrt(-z); return [(1 - Math.cosh(s)) / z, (Math.sinh(s) - s) / (s * -z)]; }
-  return [1 / 2 - z / 24, 1 / 6 - z / 120];
-}
-function kepler(r0, v0, t0) {
-  const R0 = norm(r0), rv = dot(r0, v0), alpha = 2 / R0 - dot(v0, v0) / MU, sq = Math.sqrt(MU);
-  return (t) => {
-    const dt = t - t0;
-    let chi = sq * alpha * dt;
-    for (let k = 0; k < 100; k++) {
-      const z = alpha * chi * chi, [C, S] = stumpff(z);
-      const F = rv / sq * chi * chi * C + (1 - alpha * R0) * chi ** 3 * S + R0 * chi - sq * dt;
-      const dF = rv / sq * chi * (1 - z * S) + (1 - alpha * R0) * chi * chi * C + R0;
-      const step = F / dF;
-      chi -= step;
-      if (Math.abs(step) < 1e-13 * Math.max(1, Math.abs(chi))) break;
-    }
-    const z = alpha * chi * chi, [C, S] = stumpff(z);
-    const f = 1 - chi * chi / R0 * C, g = dt - chi ** 3 * S / sq;
-    const r = add(mul(r0, f), mul(v0, g)), R = norm(r);
-    const fd = sq / (R * R0) * chi * (z * S - 1), gd = 1 - chi * chi / R * C;
-    return [r, add(mul(r0, fd), mul(v0, gd))];
-  };
-}
-
-// Circular orbit of radius a, inclination i, node raan (deg), argument of
-// latitude 0 at T0.
-function circular(a, inc, raan) {
-  const I = inc * Math.PI / 180, O = raan * Math.PI / 180;
-  const node = [Math.cos(O), Math.sin(O), 0];
-  const normal = [Math.sin(O) * Math.sin(I), -Math.cos(O) * Math.sin(I), Math.cos(I)];
-  const along = cross(normal, node);
-  return kepler(mul(node, a), mul(along, Math.sqrt(MU / a)), T0);
-}
-
-// Element-set epochs every 4 h with a deterministic +-37 min jitter, on whole minutes.
-const EPOCHS = Array.from({ length: 31 }, (_, j) => T0 + j * 14400 + (j % 2 ? 2220 : -2220) + (j === 0 ? 2220 : 0));
-
-function eme2000() {
-  const w = new OEM.CelestialFrameWrapperT();
-  w.frame = OEM.CelestialFrame.EME2000;
-  const f = new OEM.RFMT();
-  f.REFERENCE_FRAME_type = OEM.RFMUnion.CelestialFrameWrapper;
-  f.REFERENCE_FRAME = w;
-  return f;
-}
-// One block per element set j: its orbit sampled every 60 s from epoch j-2 to j+2.
-function block(j, orbit, { frame = eme2000(), norad = 99001, id = '2026-900A' } = {}) {
-  const b = new OEM.ephemerisDataBlockT();
-  const object = new OEM.CATT();
-  object.NORAD_CAT_ID = norad;
-  object.OBJECT_ID = id;
-  b.OBJECT = object;
-  b.COMMENT = `ELSET ${j}`;
-  b.CENTER_NAME = 'EARTH';
-  b.REFERENCE_FRAME = frame;
-  b.TIME_SYSTEM = OEM.timingStandard.UTC;
-  const start = EPOCHS[Math.max(0, j - 2)], stop = EPOCHS[Math.min(EPOCHS.length - 1, j + 2)];
-  b.START_TIME = iso(start);
-  b.STOP_TIME = iso(stop);
-  b.STEP_SIZE = 60;
-  const data = [];
-  for (let t = start; t <= stop + 1e-9; t += 60) { const [r, v] = orbit(t); data.push(...r, ...v); }
-  b.EPHEMERIS_DATA = data;
-  return b;
-}
-function oem(blocks) {
-  const m = new OEM.OEMT();
-  m.CREATION_DATE = '2026-09-29T00:00:00.000Z';
-  m.EPHEMERIS_DATA_BLOCK = blocks;
-  const builder = new flatbuffers.Builder(1 << 20);
-  OEM.OEM.finishOEMBuffer(builder, m.pack(builder));
-  return builder.asUint8Array();
-}
-// Sets before the burn fly `pre`; sets at or after it fly the post-burn orbit.
-function history(pre, tb, dv) {
-  const [r, v] = pre(tb);
-  const post = kepler(r, add(v, dv(r, v)), tb);
-  return { post, blocks: EPOCHS.map((e, j) => block(j, e < tb ? pre : post)) };
-}
-const rtn = (r, v) => { const R = unit(r), N = unit(cross(r, v)); return { R, T: cross(N, R), N }; };
-
-async function detect(t, bytes, options) {
+// D1's closed-form cases run D1 alone (the module's default is C, D1 + D2);
+// a test that names its detectors runs those.
+async function detect(t, bytes, given) {
+  const options = { detectors: ['D1'], ...given };
   const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
   t.after(() => h.destroy());
   const inputs = [{ portId: 'ephemerides', payload: Buffer.from(bytes), typeRef: { schemaName: 'OEM.fbs', fileIdentifier: '$OEM', rootTypeName: 'OEM', wireFormat: 'flatbuffer' } }];
-  if (options) inputs.push({ portId: 'options', payload: Buffer.from(JSON.stringify(options)), typeRef: { schemaName: 'application/json' } });
+  inputs.push({ portId: 'options', payload: Buffer.from(JSON.stringify(options)), typeRef: { schemaName: 'application/json' } });
   const result = await h.invoke({ methodId: 'detect_maneuvers', inputs });
   if (result.statusCode !== 0) return { error: result.errorMessage };
   const events = result.outputs.filter((f) => f.portId === 'maneuvers')
@@ -135,7 +26,6 @@ async function detect(t, bytes, options) {
   return { events, report };
 }
 
-const LEO = () => circular(6778.137, 51.6, 30);      // 400 km circular, v = 7.6686 km/s
 
 test('the artifact satisfies the SDK contract', async () => {
   const report = await validateArtifactWithStandards({ wasmPath, manifest, standardsRoot: root });
@@ -268,83 +158,149 @@ test('a GEO in-plane trim is station keeping', async (t) => {
   assert.equal(e.CHARACTERIZATION, MNV.maneuverCharacterization.STATION_KEEPING);
 });
 
-test('Earth-fixed ephemerides are refused', async (t) => {
-  const w = new OEM.CelestialFrameWrapperT();
-  w.frame = OEM.CelestialFrame.ITRF2000;
-  const f = new OEM.RFMT();
-  f.REFERENCE_FRAME_type = OEM.RFMUnion.CelestialFrameWrapper;
-  f.REFERENCE_FRAME = w;
-  const { error } = await detect(t, oem([block(0, LEO(), { frame: f }), block(1, LEO(), { frame: f })]));
-  assert.match(error, /inertial/);
+test('an Earth-fixed history gives the inertial history\'s event', async (t) => {
+  const pre = LEO();
+  const tb = EPOCHS[15] + 3600;
+  const inertial = await detect(t, oem(history(pre, tb, (r, v) => mul(unit(v), 0.001)).blocks));
+  const fixed = await detect(t, oem(history(pre, tb, (r, v) => mul(unit(v), 0.001)).blocks.map(toFixed)));
+  assert.equal(fixed.error, undefined, fixed.error);
+  assert.equal(fixed.events.length, 1);
+  assert.equal(fixed.report.objects[0].frame, 'TEMEOFDATE');
+  // One rotation per instant, shared by both trajectories: the crossing and
+  // the energy jump are unchanged to rounding (1 ms, 1 um/s).
+  assert.ok(Math.abs(seconds(fixed.events[0].EVENT_START_TIME) - seconds(inertial.events[0].EVENT_START_TIME)) <= 0.001);
+  assert.ok(Math.abs(fixed.events[0].DELTA_VEL_U - inertial.events[0].DELTA_VEL_U) < 1e-9);
 });
 
-// Element sets on the elements port: the module propagates each with
-// Vallado's SGP4 itself. A synthetic history of one LEO object, a set every
-// 8 h, whose mean anomaly, argument of perigee and node advance at SGP4's
-// first-order J2 secular rates (Hoots and Roehrich 1980, Spacetrack Report
-// No. 3, WGS-72), so consecutive sets describe one orbit. A burn changes the
-// mean motion of every later set: dv = 1 m/s in-track raises a by
-// 2 a^2 v dv / mu, i.e. n by -3/2 n da / a, with the mean anomaly continuous
-// at the burn.
-async function detectElements(t, objects, options) {
+test('D2: two burns with two sets between them are two events', async (t) => {
+  const pre = LEO();
+  const t1 = EPOCHS[14] + 1800, t2 = t1 + 9 * 3600;
+  assert.equal(EPOCHS.filter((e) => e > t1 && e < t2).length, 2);
+  const { events, report, error } = await detect(t, oem(burns(pre, [{ tb: t1, dv: 0.0005 }, { tb: t2, dv: 0.0007 }])), { detectors: ['D2'] });
+  assert.equal(error, undefined, error);
+  assert.equal(events.length, 2, JSON.stringify(report.objects[0].D2));
+  // Each level is the orbit-averaged semi-major axis, exact for two-body
+  // orbits, so each step is the burn's own da; its time is the crossing of
+  // the sets on either side (exact at a sample, within 0.5 s off one).
+  const [r, v] = pre(t1);
+  const second = kepler(r, add(v, mul(unit(v), 0.0005)), t1);
+  assert.ok(Math.abs(seconds(events[0].EVENT_START_TIME) - t1) < 1, events[0].EVENT_START_TIME);
+  assert.ok(Math.abs(seconds(events[1].EVENT_START_TIME) - t2) < 1, events[1].EVENT_START_TIME);
+  assert.ok(Math.abs(events[0].DELTA_VEL_U - visViva(pre, t1, 0.0005)) < 1e-8, `${events[0].DELTA_VEL_U}`);
+  assert.ok(Math.abs(events[1].DELTA_VEL_U - visViva(second, t2, 0.0007)) < 1e-8, `${events[1].DELTA_VEL_U}`);
+});
+
+test('D2: two burns with one set between them are one event', async (t) => {
+  const pre = LEO();
+  const t1 = EPOCHS[14] + 1800, t2 = EPOCHS[15] + 1800;
+  assert.equal(EPOCHS.filter((e) => e > t1 && e < t2).length, 1);
+  const { events, error } = await detect(t, oem(burns(pre, [{ tb: t1, dv: 0.0005 }, { tb: t2, dv: 0.0007 }])), { detectors: ['D2'] });
+  assert.equal(error, undefined, error);
+  assert.equal(events.length, 1);
+  // The step spans both burns: 1.2 m/s to first order.
+  assert.ok(Math.abs(events[0].DELTA_VEL_U * 1000 - 1.2) < 0.01, `${events[0].DELTA_VEL_U * 1000} m/s`);
+});
+
+async function compare(t, versions, plan) {
   const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
   t.after(() => h.destroy());
-  const inputs = [{ portId: 'elements', payload: Buffer.from(JSON.stringify({ objects })), typeRef: { schemaName: 'application/json' } }];
-  if (options) inputs.push({ portId: 'options', payload: Buffer.from(JSON.stringify(options)), typeRef: { schemaName: 'application/json' } });
-  const result = await h.invoke({ methodId: 'detect_maneuvers', inputs });
+  const typeRef = { schemaName: 'OEM.fbs', fileIdentifier: '$OEM', rootTypeName: 'OEM', wireFormat: 'flatbuffer' };
+  const result = await h.invoke({ methodId: 'compare_ephemerides', inputs: [
+    ...versions.map((v) => ({ portId: 'versions', payload: Buffer.from(v), typeRef })),
+    { portId: 'planned', payload: Buffer.from(plan), typeRef: { schemaName: 'MNV.fbs', fileIdentifier: '$MNV', rootTypeName: 'MNV', wireFormat: 'flatbuffer' } }] });
   if (result.statusCode !== 0) return { error: result.errorMessage };
-  const events = result.outputs.filter((f) => f.portId === 'maneuvers')
-    .map((f) => MNV.MNV.getRootAsMNV(new flatbuffers.ByteBuffer(new Uint8Array(f.payload))).unpack());
-  return { events, report: JSON.parse(Buffer.from(result.outputs.find((f) => f.portId === 'report').payload).toString()) };
-}
-function gpHistory(burnDv) {
-  const XKE = 60 / Math.sqrt(6378.135 ** 3 / 398600.8), K2 = 0.5 * 0.001082616, RE = 6378.135, deg = Math.PI / 180;
-  const inc = 51.6, e = 0.0008, ci = Math.cos(inc * deg), b = Math.sqrt(1 - e * e);
-  // Brouwer mean motion (rad/min) of a Kozai mean motion n (rev/day), and J2 secular rates (deg/day).
-  const brouwer = (nRevDay) => {
-    const n0 = nRevDay * 2 * Math.PI / 1440, a1 = (XKE / n0) ** (2 / 3), d1 = 1.5 * K2 / a1 ** 2 * (3 * ci * ci - 1) / b ** 3;
-    const a0 = a1 * (1 - d1 / 3 - d1 * d1 - 134 / 81 * d1 ** 3), d0 = 1.5 * K2 / a0 ** 2 * (3 * ci * ci - 1) / b ** 3;
-    return { n: n0 / (1 + d0), a: a0 / (1 - d0) };
-  };
-  const rates = (nRevDay) => {
-    const { n, a } = brouwer(nRevDay), p2 = (a * b * b) ** 2, perDay = 1440 / deg;
-    return { M: n * (1 + 1.5 * K2 * b * (3 * ci * ci - 1) / p2) * perDay, w: 0.75 * K2 * n * (5 * ci * ci - 1) / p2 * perDay, O: -1.5 * K2 * n * ci / p2 * perDay, aKm: a * RE };
-  };
-  const t0 = 61285, n0 = 15.5, tb = t0 + 5 + 1 / 6;  // 2026-09-01, the burn at 04:00 on day 5
-  const pre = rates(n0);
-  const v = Math.sqrt(398600.4418 / pre.aKm);
-  const da = 2 * pre.aKm ** 2 * v * burnDv / 398600.4418 / 1000;  // km, burnDv in m/s
-  const n1 = n0 * (1 - 1.5 * da / pre.aKm), post = rates(n1);
-  const sets = [];
-  for (let k = 0; k < 31; ++k) {
-    const t = t0 + k / 3, after = burnDv && t > tb;
-    const r = after ? post : pre, n = after ? n1 : n0;
-    const dt = t - t0, M = after ? pre.M * (tb - t0) + post.M * (t - tb) : pre.M * dt;
-    sets.push({ mjd: t, MEAN_MOTION: n, ECCENTRICITY: e, INCLINATION: inc, RA_OF_ASC_NODE: (30 + r.O * dt) % 360, ARG_OF_PERICENTER: (90 + r.w * dt + 360) % 360,
-      MEAN_ANOMALY: (M % 360 + 360) % 360, BSTAR: 0 });
-  }
-  return { tb, sets };
+  return { checks: result.outputs.filter((f) => f.portId === 'maneuvers').map((f) => MNV.MNV.getRootAsMNV(new flatbuffers.ByteBuffer(new Uint8Array(f.payload))).unpack()),
+    report: JSON.parse(Buffer.from(result.outputs.find((f) => f.portId === 'report').payload).toString()) };
 }
 
-test('element sets propagated by the module: an unburned GP history yields no event', async (t) => {
-  const { sets } = gpHistory(0);
-  const { events, report, error } = await detectElements(t, [{ norad: 99999, sets }]);
-  assert.equal(error, undefined, error);
-  assert.equal(events.length, 0, JSON.stringify(report.objects[0].events));
-  assert.equal(report.objects[0].element_sets, 31);
-  assert.equal(report.objects[0].frame, 'TEME');
+test('compare_ephemerides: a planned burn executed and cancelled', async (t) => {
+  const pre = LEO();
+  const tig = T0 + 86400;
+  const [r, v] = pre(tig);
+  const post = kepler(r, add(v, mul(unit(v), 0.001)), tig);
+  const plan = (s) => (s < tig ? pre : post)(s);
+  const before = version(plan, T0, T0 + 3 * 86400, tig - 7200);
+  // The executed burn: the planned 1 m/s in-track change, as vis-viva gives it
+  // at the burn (the pre-burn version's own model; two-body, so exact).
+  const expected = norm(v) * (sma(r, add(v, mul(unit(v), 0.001))) - sma(r, v)) / (2 * sma(r, v));
+  const done = await compare(t, [before, version(post, tig + 6 * 3600, T0 + 3 * 86400, tig + 8 * 3600)], planned(tig, 0.001));
+  assert.equal(done.error, undefined, done.error);
+  assert.equal(done.checks.length, 1);
+  assert.equal(done.checks[0].STATUS, MNV.maneuverStatus.EXECUTED);
+  // The orbit-averaged a over whole revolutions of a two-body orbit is its a:
+  // 1e-6 km/s (1 mm/s) bounds the Hermite interpolation of the averages.
+  assert.ok(Math.abs(done.checks[0].DELTA_VEL_U - expected) < 1e-6, `${done.checks[0].DELTA_VEL_U} vs ${expected}`);
+  const skipped = await compare(t, [before, version(pre, tig + 6 * 3600, T0 + 3 * 86400, tig + 8 * 3600)], planned(tig, 0.001));
+  assert.equal(skipped.checks[0].STATUS, MNV.maneuverStatus.CANCELLED);
+  assert.ok(Math.abs(skipped.checks[0].DELTA_VEL_U) < 1e-6);
 });
 
-test('element sets propagated by the module: a 1 m/s in-track burn between two sets is found', async (t) => {
-  const { tb, sets } = gpHistory(1);
-  const { events, report, error } = await detectElements(t, [{ norad: 99999, sets }]);
-  assert.equal(error, undefined, error);
-  assert.equal(events.length, 1, JSON.stringify(report.objects[0].events));
-  const [m] = events;
-  assert.equal(MNV.maneuverCharacterization[m.CHARACTERIZATION], 'ORBIT_RAISING');
-  // The impulse sits between the two sets that bracket the burn.
-  const tStar = Date.parse(m.EVENT_START_TIME) / 86400000 + 40587;
-  assert.ok(tStar > tb - 1 / 3 && tStar < tb + 1 / 3, `event at ${m.EVENT_START_TIME}`);
-  // Mean-element changes map to the osculating jump only to first order in J2.
-  assert.ok(Math.abs(m.DELTA_VEL_U * 1000 - 1) < 0.1, `in-track delta-V ${m.DELTA_VEL_U * 1000} m/s`);
+test('the propagator query port: SGP4 and an ABI provider each answer, and each finds the burn', async () => {
+  const host = await import('../study/lib/host.mjs');
+  const detector = await host.loadModule('analysis/maneuver-detection');
+  try {
+    const { tb, rows } = gpHistory(1);
+    const options = { propagator_port_id: 'test', detectors: ['D1', 'D2'] };
+    const first = await detector.invoke('detect_maneuvers', [{ portId: 'element_sets', payload: host.ommStream(rows), typeRef: host.TYPES.OMM }, host.json('options', options)]);
+    const requests = host.jsonOf(first, 'propagation_requests');
+    assert.equal(requests.queries.length, 31);
+    assert.equal(requests.propagator_port_id, 'test');
+    // Set 5's span: from set 3's epoch to set 7's.
+    assert.equal(requests.queries[5].start, `${rows[3].EPOCH}Z`);
+    assert.equal(requests.queries[5].stop, `${rows[7].EPOCH}Z`);
+    for (const provider of [await host.sgp4Provider(), await host.keplerianProvider()]) {
+      const { results } = await host.detectWith(detector, provider, rows, [options]);
+      // The synthetic sets' nodes advance at first-order J2 rates, which SGP4
+      // does not reproduce exactly, so their planes disagree by metres per
+      // second and D2's plane test reports that; the in-track events are
+      // asserted: exactly one, the burn.
+      const events = results[0].maneuvers.map(host.unpackMnv).filter((m) => m.DELTA_VEL_U !== 0);
+      assert.equal(events.length, 1, `${provider.name}: ${JSON.stringify(results[0].report.objects[0].events)}`);
+      const [m] = events;
+      assert.ok(m.DELTA_VEL_U > 0, provider.name);
+      // Within the sets bracketing the burn (8 h apart).
+      assert.ok(Math.abs(seconds(m.EVENT_START_TIME) - tb) < 8 * 3600, `${provider.name}: ${m.EVENT_START_TIME}`);
+      // Mean-element changes map to the osculating jump only to first order in
+      // J2 (SGP4); the keplerian reference reads mean motion as two-body.
+      assert.ok(Math.abs(m.DELTA_VEL_U * 1000 - 1) < 0.1, `${provider.name}: ${m.DELTA_VEL_U * 1000} m/s`);
+    }
+    // Answers out of order are refused, never matched to the wrong set.
+    const { answer } = await host.sgp4Provider();
+    const answers = await answer(requests, rows);
+    const swapped = host.OEM.OEM.getRootAsOEM(new host.flatbuffers.ByteBuffer(answers[0])).unpack();
+    swapped.EPHEMERIS_DATA_BLOCK.reverse();
+    await assert.rejects(detector.invoke('detect_maneuvers', [{ portId: 'element_sets', payload: host.ommStream(rows), typeRef: host.TYPES.OMM },
+      host.json('options', options), { portId: 'propagation', payload: host.oemFrame(swapped.EPHEMERIS_DATA_BLOCK), typeRef: host.TYPES.OEM }]), /does not cover|span/);
+  } finally {
+    await detector.destroy();
+  }
+});
+
+// score_detections: two truth burns and three events; the third event is in
+// no truth window. Recall 2/2 with its Wilson interval, one false alarm in
+// half a year.
+test('score_detections: matches, recall and false alarms per object-year', async (t) => {
+  const mnv = (fields) => {
+    const m = Object.assign(new MNV.MNVT(), { SAT_NO: 99001, ...fields });
+    const b = new flatbuffers.Builder(512);
+    MNV.MNV.finishSizePrefixedMNVBuffer(b, m.pack(b));
+    return Buffer.from(b.asUint8Array());
+  };
+  const h = await createBrowserModuleHarness({ wasmSource: wasm, manifest, surface: 'direct' });
+  t.after(() => h.destroy());
+  const typeRef = { schemaName: 'MNV.fbs', fileIdentifier: '$MNV', rootTypeName: 'MNV', wireFormat: 'flatbuffer' };
+  const result = await h.invoke({ methodId: 'score_detections', inputs: [
+    { portId: 'truth', payload: Buffer.concat([mnv({ ID: 'a', EVENT_START_TIME: iso(T0), DELTA_VEL: 0.001 }), mnv({ ID: 'b', EVENT_START_TIME: iso(T0 + 10 * 86400), DELTA_VEL: 0.002 })]), typeRef },
+    { portId: 'detected', payload: Buffer.concat([mnv({ ID: 'x', EVENT_START_TIME: iso(T0 + 1800), DELTA_VEL: 0.0009 }),
+      mnv({ ID: 'y', EVENT_START_TIME: iso(T0 + 10 * 86400 + 7200), DELTA_VEL: 0.0021 }), mnv({ ID: 'z', EVENT_START_TIME: iso(T0 + 5 * 86400), DELTA_VEL: 0.0001 })]), typeRef },
+    { portId: 'options', payload: Buffer.from(JSON.stringify({ spans: [{ object: 'NORAD:99001', from: iso(T0), to: iso(T0 + 365.25 * 43200) }] })), typeRef: { schemaName: 'application/json' } }] });
+  assert.equal(result.statusCode, 0, result.errorMessage);
+  const { summary, matches } = JSON.parse(Buffer.from(result.outputs.find((f) => f.portId === 'report').payload).toString());
+  assert.equal(summary.detected, 2);
+  // Wilson 95 % for 2/2: [n / (n + z^2), 1] = [0.3424, 1] with z = 1.95996.
+  assert.ok(Math.abs(summary.wilson95[0] - 2 / (2 + 1.959963984540054 ** 2)) < 1e-12);
+  assert.equal(summary.false_alarms, 1);
+  assert.ok(Math.abs(summary.false_alarms_per_object_year - 2) < 1e-12);
+  assert.deepEqual(matches.map((m) => m.time_error_s), [1800, 7200]);
+  assert.ok(Math.abs(matches[0].dv_ratio - 0.9) < 1e-12);
 });

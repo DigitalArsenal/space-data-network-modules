@@ -4,6 +4,7 @@
 // usage: node scripts/run-all-vs-all-gpu.mjs --catalog <omm.uint32be.bin>
 //          [--propagator sgp4|hpop] [--start <jd>] [--days 3] [--window-hours 6]
 //          [--threshold-km 5] [--step-s 60] [--farm-workers N] [--cpu]
+//          [--hpop-environment <dir>] [--hpop-profile full-force|gravity-only]
 //          [--out summary.json] [--serve] [--port 0] [--timeout-s 7200]
 // The catalog is $OMM records, each prefixed by its u32 big-endian length.
 // One propagator per run. With --propagator hpop the runner hosts the HPOP
@@ -32,6 +33,7 @@ const { values: o } = parseArgs({ options: {
   catalog: { type: 'string' }, propagator: { type: 'string', default: 'sgp4' }, start: { type: 'string', default: '2461314.5' },
   days: { type: 'string', default: '3' }, 'window-hours': { type: 'string' }, 'threshold-km': { type: 'string', default: '5' },
   'step-s': { type: 'string', default: '60' }, 'farm-workers': { type: 'string' }, cpu: { type: 'boolean', default: false },
+  'hpop-environment': { type: 'string' }, 'hpop-profile': { type: 'string', default: 'full-force' },
   out: { type: 'string' }, serve: { type: 'boolean', default: false }, port: { type: 'string', default: '0' },
   'timeout-s': { type: 'string', default: '7200' },
 } });
@@ -40,7 +42,9 @@ if (!['sgp4', 'hpop'].includes(o.propagator)) throw new Error('--propagator is s
 const t0 = performance.now();
 const catalogBytes = fs.readFileSync(o.catalog);
 // HPOP windows hold every object's trajectory (~12 KB per object per 2 h).
-const windowHours = Number(o['window-hours'] ?? (o.propagator === 'hpop' ? 2 : 6));
+// HPOP's 300 s segments: a 1-hour window of the full catalog is about 390 MB of
+// trajectories, which the module indexes in about 1.05 of its 2 GiB.
+const windowHours = Number(o['window-hours'] ?? (o.propagator === 'hpop' ? 1 : 6));
 const windows = Array.from({ length: Math.ceil((Number(o.days) * 24) / windowHours - 1e-9) }, (_, k) => ({
   startJd: Number(o.start) + (k * windowHours) / 24, durationDays: Math.min(windowHours, Number(o.days) * 24 - k * windowHours) / 24 }));
 
@@ -59,9 +63,10 @@ if (o.propagator === 'hpop') {
     at += 4 + n;
   }
   farm = await createHpopFarm({ catalog, modulesRoot: path.resolve(root, '../..'),
-    workers: o['farm-workers'] ? Number(o['farm-workers']) : undefined });
+    workers: o['farm-workers'] ? Number(o['farm-workers']) : undefined,
+    profile: o['hpop-profile'], environment: o['hpop-environment'], screenStartJd: Number(o.start) });
   farmInfo = { workers: farm.workers, instances: farm.instances, deriveMs: farm.deriveMs, ingestMs: farm.ingestMs,
-    epochStateExcluded: farm.excluded.length, windowExportMs: [] };
+    epochStateExcluded: farm.excluded.length, windowExportMs: [], reentries: farm.reentries };
   process.stderr.write(`farm: ${farm.objects.length} objects, ${farm.workers} workers, ${farm.instances} HPOP instances\n`);
 }
 const pad = (n) => n + ((8 - (n % 8)) % 8);

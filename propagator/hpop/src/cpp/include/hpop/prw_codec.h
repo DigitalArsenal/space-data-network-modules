@@ -8,6 +8,7 @@
 #include "astrodynamics_types.h"
 #include "coords.h"
 #include "time_convert.h"
+#include "reentry.h"
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -51,6 +52,17 @@ inline std::string formatEpoch(double jd) {
     timesys::Epoch(jd,timesys::TimeScale::TDB).toComponents(y,m,d,h,mi,s);
     char result[48]; std::snprintf(result,sizeof(result),"%04d-%02d-%02dT%02d:%02d:%012.9f",y,m,d,h,mi,s);
     return result;
+}
+// A propagation's stop (lib/reentry.h) as a PRW error: its code, the object
+// when there is one, and the UTC epoch.
+inline std::string stopError(const astro::PropagationStop& stop, const std::string& object = std::string()) {
+    const std::string when = formatEpoch(timesys::taiToUtc(timesys::ttToTai(timesys::tdbToTt(stop.jd)))) + " UTC";
+    std::string text = std::string(stop.code) + ": " + (object.empty() ? std::string() : object + ": ");
+    if (std::string(stop.code) != "reentry") return text + "the integration produced a non-finite state at " + when + ".";
+    char height[120];
+    std::snprintf(height, sizeof height, "the trajectory descends below %.0f km geodetic altitude (%.1f km) at ",
+                  astro::REENTRY_ALTITUDE_KM, stop.heightKm);
+    return text + height + when + "; HPOP ends it there.";
 }
 inline bool convertEpoch(double jd, timingStandard scale, double& tdb, double& utc, std::string& error) {
     if(!std::isfinite(jd) || jd<2305447.5 || jd>5373484.5)
@@ -183,9 +195,9 @@ inline bool decodeEpochTT(const TIMInstant* instant, TTEpoch& out, std::string& 
     if (instant->SUBSECOND_NANOS()) fraction += instant->SUBSECOND_NANOS() * 1e-9;
     return toTT(whole, fraction, jd, instant->TIME_SYSTEM(), out, error);
 }
-// TT epoch -> ISO8601 text on TDB with nine decimals (the PRW output scale).
-inline std::string formatTdb(const TTEpoch& tt) {
-    TTEpoch tdb = normalizeTT(tt.whole, tt.fraction + tdbMinusTtSeconds(tt.jdTt()));
+// Seconds since J2000.0 of a time scale (two parts, as TTEpoch holds TT) ->
+// ISO8601 text with nine decimals on the same scale.
+inline std::string formatIsoSeconds(const TTEpoch& tdb) {
     double seconds = tdb.whole + 43200.0;                 // since 2000-01-01T00:00
     const double days = std::floor(seconds / 86400.0);
     double sod = seconds - days * 86400.0;
@@ -198,6 +210,18 @@ inline std::string formatTdb(const TTEpoch& tt) {
     char out[48];
     std::snprintf(out, sizeof(out), "%04d-%02d-%02dT%02d:%02d:%02d.%09lld", y, m, d, isod / 3600, (isod / 60) % 60, isod % 60, ns);
     return out;
+}
+// TT epoch <-> TDB seconds since J2000.0 TDB; the periodic TDB - TT is
+// evaluated at the TT date (it differs from the TDB argument by milliseconds).
+inline TTEpoch tdbSecondsOf(const TTEpoch& tt) {
+    return normalizeTT(tt.whole, tt.fraction + tdbMinusTtSeconds(tt.jdTt()));
+}
+inline TTEpoch ttOfTdbSeconds(const TTEpoch& tdb) {
+    return normalizeTT(tdb.whole, tdb.fraction - tdbMinusTtSeconds(2451545.0 + (tdb.whole + tdb.fraction) / 86400.0));
+}
+// TT epoch -> ISO8601 text on TDB with nine decimals (the PRW output scale).
+inline std::string formatTdb(const TTEpoch& tt) {
+    return formatIsoSeconds(tdbSecondsOf(tt));
 }
 inline bool decodeEpoch(const TIMInstant* instant, double& tdb, double& utc, std::string& error) {
     if(!instant) return prwError(error,"invalid-epoch: Missing TIMInstant.");

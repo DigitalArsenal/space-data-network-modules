@@ -25,7 +25,7 @@ const sgp4Source = (await fs.readFile(path.join(sgp4Src, 'SGP4.cpp'), 'latin1'))
 const json = await fs.readFile(jsonHeader, 'utf8');
 // The module's sources in dependency order (one translation unit), and the
 // Lambert kernel analysis/lambert-izzo and analysis/maneuver compile.
-const sources = await Promise.all(['gp_error_model.cpp', 'common_epoch.cpp', 'state_transition.cpp']
+const sources = await Promise.all(['gp_error_model.cpp', 'common_epoch.cpp', 'state_transition.cpp', 'covariance_realism.cpp']
   .map((f) => fs.readFile(path.join(root, 'src', f), 'utf8')));
 const lambert = await fs.readFile(path.resolve(root, '../lambert-izzo/include/lambert_izzo/solver.hpp'), 'utf8');
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));

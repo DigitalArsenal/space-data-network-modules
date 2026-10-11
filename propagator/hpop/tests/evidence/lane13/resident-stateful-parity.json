@@ -1,11 +1,11 @@
 {
-  "wasmSha256": "7305c5ef6db04cfb5babc4f2c5f87b17b1e5901e4c14bd25cf9ca7b14b7b48b1",
-  "wasmBytes": 1014366,
+  "wasmSha256": "9c24bf0ed74f59893282514f08891c414da6db071d4997357a8ebd6c2a8a99e3",
+  "wasmBytes": 2042860,
   "wasmedgeVersion": "0.16.4",
   "dockerImage": "space-data-module-sdk/parity-wasmedge:0.16.4",
   "runtimeInstances": "One persistent direct instance per group",
-  "groups": 2,
-  "requests": 20,
+  "groups": 4,
+  "requests": 33,
   "runtimes": [
     "real Chrome/V8",
     "native WasmEdge",
@@ -51,8 +51,8 @@
     {
       "group": "resident-continuation-and-generation",
       "label": "ppe-chunk-0",
-      "responseSha256": "0967b1d6950689c4b23f1c77c2b9765b1d69cd4355970567bbc3a2f5d135b8fa",
-      "bytes": 2448,
+      "responseSha256": "bae2d8829c7fd124223e75f6c86e07ecaeb6688756f5ee0c909cb54a53fbd436",
+      "bytes": 2456,
       "errorCode": null,
       "yielded": true,
       "backlogRemaining": "1"
@@ -60,8 +60,8 @@
     {
       "group": "resident-continuation-and-generation",
       "label": "ppe-chunk-1",
-      "responseSha256": "65e89b08dfb310fbcc9290b09503ffb39629196e2f93cc87841682da0fe36912",
-      "bytes": 2440,
+      "responseSha256": "8c96f6cc245a2931c70ec96af1511d01c7ea1ec584604b23677fdec5851e4595",
+      "bytes": 2448,
       "errorCode": null,
       "yielded": false,
       "backlogRemaining": "0"
@@ -140,9 +140,9 @@
     },
     {
       "group": "resident-atomic-rejection",
-      "label": "unsupported-covariance",
-      "responseSha256": "349950caf86a52dd4a0fd93c41465edba127dafea263b8e05a2ea9e377c27ecc",
-      "bytes": 256,
+      "label": "unsupported-coefficients",
+      "responseSha256": "0f39fc79d9f0d5cda8e75bd2b3d580258d5804221cf722d18d9e094a4ea9d9fe",
+      "bytes": 252,
       "errorCode": "unsupported-configuration",
       "yielded": false,
       "backlogRemaining": "0"
@@ -159,8 +159,8 @@
     {
       "group": "resident-atomic-rejection",
       "label": "unsupported-mass",
-      "responseSha256": "349950caf86a52dd4a0fd93c41465edba127dafea263b8e05a2ea9e377c27ecc",
-      "bytes": 256,
+      "responseSha256": "0f39fc79d9f0d5cda8e75bd2b3d580258d5804221cf722d18d9e094a4ea9d9fe",
+      "bytes": 252,
       "errorCode": "unsupported-configuration",
       "yielded": false,
       "backlogRemaining": "0"
@@ -189,6 +189,123 @@
       "responseSha256": "bcff6cb812a9366a60948b0b7deaf99e7b0752a16eec2345e219f6f18cf2e4b9",
       "bytes": 160,
       "errorCode": "invalid-state",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-full-force",
+      "label": "configured-ingest",
+      "responseSha256": "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "bytes": 60,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-full-force",
+      "label": "configured-state-chunk-0",
+      "responseSha256": "b0b1f23bf4ec0a77f6b27864186e080accb37d8d2a9f302430f03024171e6834",
+      "bytes": 624,
+      "errorCode": null,
+      "yielded": true,
+      "backlogRemaining": "1"
+    },
+    {
+      "group": "configured-full-force",
+      "label": "configured-state-chunk-1",
+      "responseSha256": "c66ad5b792e22cdd83d57425cce5ff68afaf5d269aa95784d3b6a1490b7f95c1",
+      "bytes": 616,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-full-force",
+      "label": "configured-backward",
+      "responseSha256": "85241c086c93e49f21ddcab74d2f72328dc1eb492a3b3e0385816a66b3f3a6d8",
+      "bytes": 616,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-full-force",
+      "label": "configured-prepare",
+      "responseSha256": "8df084d6c5c299c0367cae75901c35bb59f5edafb8f6d14f820808290b67fbb6",
+      "bytes": 680,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-full-force",
+      "label": "configured-ppe-chunk-0",
+      "responseSha256": "735927e7bb6950403ac1253ee47cd2b19cce783ca815b3e79971d33f766c86ef",
+      "bytes": 10520,
+      "errorCode": null,
+      "yielded": true,
+      "backlogRemaining": "1"
+    },
+    {
+      "group": "configured-full-force",
+      "label": "configured-ppe-chunk-1",
+      "responseSha256": "488bc678e204ea6144ec5e0f68dfa22cb53c26175ae30e06630073cf1924a347",
+      "bytes": 10520,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-full-force",
+      "label": "configured-no-configuration",
+      "responseSha256": "247c572368eb448714823f648655db1a9b0764859e267ddd058c740542af2ccf",
+      "bytes": 156,
+      "errorCode": "missing-required-input",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-reentry",
+      "label": "reentry-ingest",
+      "responseSha256": "10d1856733dd631924e73dc63a3290cd9822b684e0538ebf755fe37e76df0d12",
+      "bytes": 60,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-reentry",
+      "label": "reentry-prepare-before",
+      "responseSha256": "0a4574acffdc60d707ff54e7660081e396a2e253fa9081adc6805ca8e1ad9795",
+      "bytes": 672,
+      "errorCode": null,
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-reentry",
+      "label": "reentry-prepare-across",
+      "responseSha256": "2203be4abb7f5ca6b9bf9a3a7590af0993bd2d0b3ae5256fb63dd68874c8d6f3",
+      "bytes": 260,
+      "errorCode": "reentry",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-reentry",
+      "label": "reentry-state-after",
+      "responseSha256": "2203be4abb7f5ca6b9bf9a3a7590af0993bd2d0b3ae5256fb63dd68874c8d6f3",
+      "bytes": 260,
+      "errorCode": "reentry",
+      "yielded": false,
+      "backlogRemaining": "0"
+    },
+    {
+      "group": "configured-reentry",
+      "label": "reentry-execution",
+      "responseSha256": "b4c4f31beea2203f76429a541cc224f254b84ab00291621a93a7e5d35bdd3d70",
+      "bytes": 228,
+      "errorCode": "reentry",
       "yielded": false,
       "backlogRemaining": "0"
     }

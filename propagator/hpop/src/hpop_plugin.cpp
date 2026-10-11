@@ -14,6 +14,8 @@
 #include "cpp/include/hpop/prw_resident.h"
 #include "cpp/include/hpop/prw_codec.h"
 #include "cpp/include/hpop/prw_covariance.h"
+#include "cpp/include/hpop/chebyshev.h"
+#include "cpp/include/hpop/resident_dynamics.h"
 
 #include "../lib/astrodynamics_types.h"
 #include "../lib/astrodynamics.h"
@@ -42,6 +44,14 @@
 #include <vector>
 
 using namespace astro;
+using hpop::CHEBY_N;
+using hpop::CHEBY_NPTS;
+using hpop::CHEBY_SEG_SEC;
+using hpop::CHEBY_SEG_DAYS;
+using hpop::CHEBY_MAX_SEGMENTS;
+using hpop::ChebyshevSegment;
+using hpop::chebyshevFit;
+using hpop::chebyshevEval;
 
 // =============================================================================
 // Module-Level Config State (shared across all entities)
@@ -95,23 +105,6 @@ static uint64_t g_catalogRevision = 0;
 // Building a segment requires N+1 high-fidelity propagations to Chebyshev
 // nodes (one-time cost). All subsequent queries are O(N) polynomial evals.
 
-static constexpr int    CHEBY_N    = 12;           // Polynomial degree
-static constexpr int    CHEBY_NPTS = CHEBY_N + 1;  // 13 sample points per segment
-static constexpr double CHEBY_SEG_SEC  = 600.0;    // 10-minute segments
-static constexpr double CHEBY_SEG_DAYS = CHEBY_SEG_SEC / 86400.0;
-// Keep a bounded moving window so long-running sessions can propagate indefinitely
-// without unbounded ephemeris growth.
-static constexpr int    CHEBY_MAX_SEGMENTS = 2048;
-
-struct ChebyshevSegment {
-    double startJD, endJD;
-    double midJD, halfSpanDays;
-    double startPos[3], startVel[3];
-    double endPos[3], endVel[3];
-    double cx[CHEBY_NPTS], cy[CHEBY_NPTS], cz[CHEBY_NPTS];    // position (km)
-    double cvx[CHEBY_NPTS], cvy[CHEBY_NPTS], cvz[CHEBY_NPTS]; // velocity (km/s)
-};
-
 /// Forward declarations used by cache pruning and arc helpers.
 static StateVector propagateInternal(const StateVector& initial, double targetJD);
 static StateVector propagateEntity(int entityIndex, double targetJD);
@@ -131,31 +124,6 @@ static inline void readSegmentState(const double posIn[3], const double velIn[3]
     sOut.position.x = posIn[0]; sOut.position.y = posIn[1]; sOut.position.z = posIn[2];
     sOut.velocity.x = velIn[0]; sOut.velocity.y = velIn[1]; sOut.velocity.z = velIn[2];
     sOut.epoch = epochJD;
-}
-
-/// Compute Chebyshev coefficients from values at Gauss-Lobatto nodes via DCT-I.
-static void chebyshevFit(const double* values, double* coeffs) {
-    for (int j = 0; j <= CHEBY_N; j++) {
-        double sum = 0.0;
-        for (int k = 0; k <= CHEBY_N; k++) {
-            double w = (k == 0 || k == CHEBY_N) ? 0.5 : 1.0;
-            sum += w * values[k] * std::cos(j * k * M_PI / CHEBY_N);
-        }
-        coeffs[j] = 2.0 * sum / CHEBY_N;
-    }
-    coeffs[0]       *= 0.5;
-    coeffs[CHEBY_N] *= 0.5;
-}
-
-/// Evaluate a Chebyshev polynomial at τ ∈ [-1, 1] using Clenshaw's algorithm.
-static inline double chebyshevEval(const double* c, double tau) {
-    double b1 = 0.0, b2 = 0.0;
-    for (int j = CHEBY_N; j >= 1; j--) {
-        double b0 = 2.0 * tau * b1 - b2 + c[j];
-        b2 = b1;
-        b1 = b0;
-    }
-    return tau * b1 - b2 + c[0];
 }
 
 /// Evaluate all 6 state components from a Chebyshev segment.
@@ -3027,6 +2995,16 @@ uint8_t* plugin_stream_invoke(
 // Cleanup
 // -----------------------------------------------------------------------------
 
+/// Cd*A/m (m^2/kg) of an SGP4 element set's drag term B* (1/earth radii):
+/// B = 2 B* / rho0, with rho0 = 2.461e-5 XKMPER kg/m^2/ER, the reference
+/// density of Hoots and Roehrich, Spacetrack Report No. 3 (1980), sections 8
+/// and 9 (its Fortran RHO = 0.15696615). A B* of zero or below (or not
+/// finite) carries no drag information; the caller's `nonPositive` is returned.
+double plugin_drag_area_over_mass_from_bstar(double bstar, double nonPositive) {
+    constexpr double rho0 = 0.15696615;  // kg/m^2/ER
+    return std::isfinite(bstar) && bstar > 0.0 ? 2.0 * bstar / rho0 : nonPositive;
+}
+
 void plugin_destroy() {
     ++g_catalogRevision;
     // Free ephemeris/burn/arc memory and clear entities
@@ -3093,6 +3071,7 @@ struct PortableSegmentSet {
     double startTdbJD;
     double endTdbJD;
     std::vector<uint32_t> handles;
+    TTEpoch startTT, endTT;   // the configured profile's exact window
 };
 struct ResidentContinuation {
     std::string method;
@@ -3104,10 +3083,30 @@ static std::vector<ResidentIdentity> prwIdentities;
 static std::unordered_map<uint32_t, size_t> prwSlots;
 static std::unordered_map<std::string, uint64_t> prwSeenGenerations;
 static std::unordered_map<uint32_t, PortableSegmentSet> prwSegmentSets;
+std::string residentObject(size_t slot);
+// A resident object's failed query: when its trajectory ended (lib/reentry.h)
+// the error names the stop and the object.
+bool stopped(size_t slot, std::string& error) {
+    if (astro::callStop().active) error = stopError(astro::callStop(), residentObject(slot));
+    return false;
+}
+// A resident object's identity for a named error: its handle, object ID and
+// catalog number.
+std::string residentObject(size_t slot) {
+    const auto& identity = prwIdentities[slot];
+    std::string text = "handle " + std::to_string(identity.handle);
+    if (!identity.objectId.empty()) text += " (" + identity.objectId;
+    if (identity.catalogNumber) text += (identity.objectId.empty() ? " (catalog " : ", catalog ") + std::to_string(identity.catalogNumber);
+    if (!identity.objectId.empty() || identity.catalogNumber) text += ")";
+    return text;
+}
 static uint32_t prwNextSegmentSet = 1;
 static uint32_t prwConfigVersion = 0;
 static uint64_t prwCatalogRevision = 0;
 static ResidentContinuation prwContinuation;
+// The configured profile (ingest_state): the execution request's dynamics for
+// every resident object. Null for the gravity-only profile.
+static std::unique_ptr<ResidentDynamics> prwDynamics;
 
 bool residentFailure(std::string& error, const char* classification, const char* detail) {
     error = std::string(classification) + ": " + detail;
@@ -3155,7 +3154,7 @@ bool selectResidentHandles(const flatbuffers::Vector<uint32_t>* handles,
         const auto slot = prwSlots.find(handle);
         if (slot == prwSlots.end()) return residentFailure(error, "unknown-entity", "Unknown resident entity handle.");
         if (!seen.insert(handle).second) return residentFailure(error, "invalid-request", "Duplicate resident entity handle.");
-        if (!prwIdentities[slot->second].valid || !g_entities[slot->second].valid)
+        if (!prwIdentities[slot->second].valid || (!prwDynamics && !g_entities[slot->second].valid))
             return residentFailure(error, "invalid-state", "Selected resident state has VALID=false.");
     }
     return true;
@@ -3176,17 +3175,47 @@ void setContinuation(size_t next, size_t total, uint64_t& backlog, bool& yielded
     else prwContinuation = {};
 }
 
-bool ingestPortable(const std::vector<std::pair<const uint8_t*, size_t>>& inputs,
-                    std::string& error) {
-    if (inputs.empty() || inputs.size() > 1024)
+// ingest_state (configured: the dynamics of the EXECUTION_REQUEST on the
+// configuration port, with the kernel and environment inputs beside it) or
+// ingest_state_gravity_only (the point mass and degree/order 20 field).
+bool ingestPortable(const std::vector<ResidentInput>& inputs, bool configured, std::string& error) {
+    std::vector<std::pair<const uint8_t*, size_t>> frames;
+    ResidentDynamics::Inputs dynamicsInputs;
+    const auto once = [&](const ResidentInput& in, const uint8_t*& data, size_t& size) {
+        if (size) return residentFailure(error, "invalid-request", ("Supply at most one " + in.port + " record.").c_str());
+        data = in.data; size = in.size; return true;
+    };
+    for (const auto& in : inputs) {
+        bool ok = true;
+        if (in.port == "state") frames.emplace_back(in.data, in.size);
+        else if (!configured) return residentFailure(error, "invalid-request", "ingest_state_gravity_only takes state records only.");
+        else if (in.port == "configuration") ok = once(in, dynamicsInputs.configuration, dynamicsInputs.configurationSize);
+        else if (in.port == "kernel") ok = once(in, dynamicsInputs.kernel, dynamicsInputs.kernelSize);
+        else if (in.port == "earth_orientation") ok = once(in, dynamicsInputs.environment.earthOrientation, dynamicsInputs.environment.earthOrientationSize);
+        else if (in.port == "space_weather") ok = once(in, dynamicsInputs.environment.spaceWeather, dynamicsInputs.environment.spaceWeatherSize);
+        else if (in.port == "jb2008_indices") ok = once(in, dynamicsInputs.environment.jb2008Indices, dynamicsInputs.environment.jb2008IndicesSize);
+        else return residentFailure(error, "invalid-request", "Unknown ingest_state input port.");
+        if (!ok) return false;
+    }
+    if (frames.empty() || frames.size() > 1024)
         return residentFailure(error, "invalid-request", "ingest_state requires 1..1024 state frames.");
+    std::unique_ptr<ResidentDynamics> dynamics;
+    if (configured) {
+        if (!dynamicsInputs.configurationSize)
+            return residentFailure(error, "configuration-required", "ingest_state propagates with the dynamics of the PRW EXECUTION_REQUEST on its configuration port; the point mass and degree/order 20 field alone is ingest_state_gravity_only.");
+        dynamics = ResidentDynamics::configure(dynamicsInputs, instanceKernels(), error);
+        if (!dynamics) return false;
+    } else {
+        std::string ignored;
+        KernelStore::activate(nullptr, ignored);
+    }
     std::unique_ptr<PRWInstanceT> incomingInstance;
     std::vector<ResidentIdentity> identities;
     std::unordered_map<uint32_t, size_t> slots;
     std::vector<double> states;
-    states.reserve(inputs.size() * 7);
+    states.reserve(frames.size() * 7);
     // Validate the entire replacement before touching the resident catalog.
-    for (const auto& input : inputs) {
+    for (const auto& input : frames) {
         const PRW* root = nullptr;
         if (!verifyPrw(input.first, input.second, root, error)) return false;
         const auto* record = root->RESIDENT_STATE();
@@ -3200,12 +3229,12 @@ bool ingestPortable(const std::vector<std::pair<const uint8_t*, size_t>>& inputs
             incomingInstance->INSTANCE_ID != instance->INSTANCE_ID()->str() ||
             incomingInstance->GENERATION != instance->GENERATION())
             return residentFailure(error, "invalid-instance", "Ingest frames must share one instance and generation.");
-        if (record->HAS_MASS_KG() || record->MASS_KG() != 0 ||
+        if (!configured && (record->HAS_MASS_KG() || record->MASS_KG() != 0 ||
             record->DRAG_AREA_OVER_MASS_M2_KG() != 0 || record->SRP_AREA_OVER_MASS_M2_KG() != 0 ||
             record->HAS_DRAG_AREA_OVER_MASS_M2_KG() || record->HAS_SRP_AREA_OVER_MASS_M2_KG() ||
             record->HAS_DRAG_AREA_OVER_MASS_RATE_M2_KG_S() || record->HAS_IN_TRACK_ACCELERATION_M_S2() ||
-            record->DRAG_AREA_OVER_MASS_RATE_M2_KG_S() != 0 || record->IN_TRACK_ACCELERATION_M_S2() != 0)
-            return residentFailure(error, "unsupported-configuration", "Resident catalog does not propagate mass or per-object force coefficients; use EXECUTION_REQUEST.");
+            record->DRAG_AREA_OVER_MASS_RATE_M2_KG_S() != 0 || record->IN_TRACK_ACCELERATION_M_S2() != 0))
+            return residentFailure(error, "unsupported-configuration", "The gravity-only profile propagates no mass or force coefficients; ingest_state with a configuration does.");
         ResidentIdentity identity{record->ENTITY_HANDLE(), record->CATALOG_NUMBER(),
             record->OBJECT_ID() ? record->OBJECT_ID()->str() : std::string(), record->VALID()};
         if (record->COVARIANCE()) {
@@ -3219,11 +3248,12 @@ bool ingestPortable(const std::vector<std::pair<const uint8_t*, size_t>>& inputs
             return residentFailure(error, "invalid-request", "Ingest entity handles must be unique.");
         astro::StateVector state;
         if (!decodeResidentState(record, state, error)) return false;
-        if (record->STATE()->GRAVITATIONAL_PARAMETER() != 0)
+        if (!configured && record->STATE()->GRAVITATIONAL_PARAMETER() != 0)
             return residentFailure(error, "unsupported-configuration", "Resident ingest cannot select a per-object gravitational parameter.");
         const double radius = vecNorm(state.position);
         if (record->VALID() && (!(radius > 0) || !std::isfinite(radius)))
             return residentFailure(error, "invalid-state", "A valid resident state requires finite nonzero position magnitude.");
+        if (dynamics && !dynamics->add(record, error)) return false;
         states.insert(states.end(), {state.epoch, state.position.x, state.position.y,
             state.position.z, state.velocity.x, state.velocity.y, state.velocity.z});
         identities.push_back(std::move(identity));
@@ -3234,9 +3264,12 @@ bool ingestPortable(const std::vector<std::pair<const uint8_t*, size_t>>& inputs
         return residentFailure(error, "stale-instance", "Reingest requires a strictly greater host generation.");
     if (!g_initialized && plugin_init() != 0)
         return residentFailure(error, "initialization-failed", "HPOP initialization failed.");
-    if (plugin_init_states(states.data(), static_cast<int>(identities.size())) != static_cast<int>(identities.size()))
+    // A configured catalog lives in its dynamics; the diagnostic entities
+    // are emptied, so the C surface sees no stale gravity-only catalog.
+    const int entities = configured ? 0 : static_cast<int>(identities.size());
+    if (plugin_init_states(states.data(), entities) != entities)
         return residentFailure(error, "initialization-failed", "HPOP resident initialization failed.");
-    for (size_t i = 0; i < identities.size(); ++i) {
+    for (int i = 0; i < entities; ++i) {
         g_entities[i].valid = identities[i].valid;
         g_entityCatalogNumbers[i] = identities[i].catalogNumber;
     }
@@ -3244,6 +3277,7 @@ bool ingestPortable(const std::vector<std::pair<const uint8_t*, size_t>>& inputs
     prwInstance = std::move(incomingInstance);
     prwIdentities = std::move(identities);
     prwSlots = std::move(slots);
+    prwDynamics = std::move(dynamics);
     prwConfigVersion = g_configVersion;
     prwCatalogRevision = g_catalogRevision;
     prwSegmentSets.clear();
@@ -3255,9 +3289,11 @@ bool propagatePortable(const PRWResidentRequest* request, const uint8_t* data, s
                        uint32_t outputCap, std::vector<std::vector<uint8_t>>& outputs,
                        uint64_t& backlog, bool& yielded, std::string& error) {
     if (!sameInstance(request->INSTANCE(), error)) return false;
-    double targetTdb, targetUtc;
+    // The configured profile reads its epochs exactly (UTC, TAI, TT or TDB);
+    // the gravity-only profile keeps its Julian-date clock (UTC or TDB).
+    double targetTdb = 0, targetUtc = 0;
     coords::Frame targetFrame;
-    if (!decodeEpoch(request->TARGET_EPOCH(), targetTdb, targetUtc, error) ||
+    if ((!prwDynamics && !decodeEpoch(request->TARGET_EPOCH(), targetTdb, targetUtc, error)) ||
         !decodeFrame(request->TARGET_COORDINATE_SYSTEM(), targetFrame, error)) return false;
     if (targetFrame != coords::Frame::GCRF)
         return residentFailure(error, "unsupported-configuration", "Resident output requires an Earth-centered GCRF coordinate system.");
@@ -3266,6 +3302,47 @@ bool propagatePortable(const PRWResidentRequest* request, const uint8_t* data, s
     if (request->MAXIMUM_COUNT() && selected.size() > request->MAXIMUM_COUNT()) selected.resize(request->MAXIMUM_COUNT());
     const size_t offset = continuationOffset("propagate_state", data, size);
     const size_t stop = std::min(selected.size(), offset + static_cast<size_t>(outputCap ? outputCap : 1));
+    if (prwDynamics) {
+        TTEpoch target;
+        if (!decodeEpochTT(request->TARGET_EPOCH(), target, error)) return false;
+        for (size_t i = offset; i < stop; ++i) {
+            const auto slot = prwSlots.at(selected[i]);
+            const auto& identity = prwIdentities[slot];
+            astro::StateVector state;
+            Mat6 p{};
+            astro::clearCallStop();
+            if (identity.hasCovariance ? !prwDynamics->covariance(slot, target, identity.covariance, identity.noise, state, p, error)
+                                       : !prwDynamics->state(slot, target, state, error))
+                return stopped(slot, error);
+            if (!std::isfinite(state.position.x) || !std::isfinite(state.position.y) || !std::isfinite(state.position.z) ||
+                !std::isfinite(state.velocity.x) || !std::isfinite(state.velocity.y) || !std::isfinite(state.velocity.z))
+                return residentFailure(error, "propagation-failed", "Resident propagation produced a non-finite state.");
+            auto frame = makeFrame("GCRF", rfmAxisType::ICRF, 399);
+            PRWT result;
+            result.RESIDENT_STATE = makeState(state, *frame);
+            result.RESIDENT_STATE->STATE->EPOCH = formatTdb(target);
+            result.RESIDENT_STATE->STATE->EPOCH_TIME_SYSTEM = "TDB";
+            result.RESIDENT_STATE->INSTANCE = std::make_unique<PRWInstanceT>(*prwInstance);
+            result.RESIDENT_STATE->ENTITY_HANDLE = identity.handle;
+            result.RESIDENT_STATE->CATALOG_NUMBER = identity.catalogNumber;
+            result.RESIDENT_STATE->OBJECT_ID = identity.objectId;
+            result.RESIDENT_STATE->VALID = true;
+            if (identity.hasCovariance) {
+                auto matrix = std::make_unique<PRWStateMatrixT>();
+                matrix->DIMENSION = 6;
+                matrix->VALUES.resize(36);
+                for (int r = 0; r < 6; ++r)
+                    for (int c = 0; c < 6; ++c) matrix->VALUES[r * 6 + c] = p.m[r][c] * 1e6;  // km -> m
+                for (double v : matrix->VALUES)
+                    if (!std::isfinite(v)) return residentFailure(error, "propagation-failed", "Resident covariance propagation is not finite.");
+                result.RESIDENT_STATE->COVARIANCE = std::move(matrix);
+                result.RESIDENT_STATE->PROCESS_NOISE = hpop::prwProcessNoiseRecord(identity.noise);
+            }
+            outputs.push_back(residentBytes(result));
+        }
+        setContinuation(stop, selected.size(), backlog, yielded);
+        return true;
+    }
     for (size_t i = offset; i < stop; ++i) {
         const auto slot = prwSlots.at(selected[i]);
         // Preserve the supplied state exactly at its seed epoch; do not replace
@@ -3324,13 +3401,41 @@ bool preparePortable(const PRWPrepareRequest* request, std::vector<std::vector<u
     const auto profile = request->PROFILE() ? request->PROFILE()->str() : std::string();
     if (!profile.empty() && profile != "conjunction-screening" && profile != "default")
         return residentFailure(error, "unsupported-configuration", "Unknown trajectory profile.");
-    double startTdb, startUtc;
-    if (!decodeEpoch(request->START_EPOCH(), startTdb, startUtc, error)) return false;
+    double startTdb = 0, startUtc = 0;
+    if (!prwDynamics && !decodeEpoch(request->START_EPOCH(), startTdb, startUtc, error)) return false;
     const double duration = request->DURATION_SECONDS();
     if (!std::isfinite(duration) || duration < 0 || duration > (CHEBY_MAX_SEGMENTS - 2) * CHEBY_SEG_SEC)
         return residentFailure(error, "invalid-window", "Trajectory duration exceeds finite non-negative resident cache coverage.");
     std::vector<uint32_t> selected;
     if (!selectResidentHandles(request->SOURCE_HANDLES(), selected, error)) return false;
+    if (prwDynamics) {
+        TTEpoch start;
+        if (!decodeEpochTT(request->START_EPOCH(), start, error)) return false;
+        const TTEpoch end = normalizeTT(start.whole, start.fraction + duration);
+        double positionM = 0, velocityMS = 0;
+        for (const auto handle : selected) {
+            const auto slot = prwSlots.at(handle);
+            astro::clearCallStop();
+            if (!prwDynamics->prepare(slot, start, end, error) || !prwDynamics->residuals(slot, start, end, positionM, velocityMS, error))
+                return stopped(slot, error);
+        }
+        if (prwNextSegmentSet == 0)
+            return residentFailure(error, "handle-exhausted", "Resident segment handle space exhausted; create a new module instance.");
+        const uint32_t handle = prwNextSegmentSet++;
+        PortableSegmentSet set{prwInstance->GENERATION, g_configVersion, startTdb, startTdb + duration / DAY_SEC, selected};
+        set.startTT = start;
+        set.endTT = end;
+        prwSegmentSets.emplace(handle, std::move(set));
+        prwContinuation = {};
+        PRWT result;
+        result.PREPARE_RESULT = std::make_unique<PRWPrepareResultT>();
+        result.PREPARE_RESULT->INSTANCE = std::make_unique<PRWInstanceT>(*prwInstance);
+        result.PREPARE_RESULT->SEGMENT_SET_HANDLE = handle;
+        result.PREPARE_RESULT->COVERAGE_COMPLETE = true;
+        result.PREPARE_RESULT->QUALITY = ResidentDynamics::quality(positionM, velocityMS);
+        outputs.push_back(residentBytes(result));
+        return true;
+    }
     const double endTdb = startTdb + duration / DAY_SEC;
     for (const auto handle : selected) {
         auto& entity = g_entities[prwSlots.at(handle)];
@@ -3387,6 +3492,36 @@ bool describePortable(const PRWDescribeRequest* request, const uint8_t* data, si
     } else selected = prepared.handles;
     const size_t offset = continuationOffset("describe_trajectory_segments", data, size);
     const size_t stop = std::min(selected.size(), offset + static_cast<size_t>(outputCap ? outputCap : 1));
+    if (prwDynamics) {
+        for (size_t i = offset; i < stop; ++i) {
+            const auto slot = prwSlots.at(selected[i]);
+            auto source = std::make_unique<PRWTrajectorySourceT>();
+            source->SOURCE_HANDLE = selected[i];
+            source->OBJECT_ID = prwIdentities[slot].objectId;
+            source->EPHEMERIS = std::make_unique<PPET>();
+            auto& ephemeris = *source->EPHEMERIS;
+            ephemeris.CENTER_NAME = "EARTH";
+            ephemeris.TIME_SYSTEM = timingStandard::TDB;
+            ephemeris.REFERENCE_FRAME = std::make_unique<RFMT>();
+            ephemeris.REFERENCE_FRAME->NAME = "GCRF";
+            RFMCoordinateSystemWrapperT frameWrapper;
+            frameWrapper.COORDINATE_SYSTEM = makeFrame("GCRF", rfmAxisType::ICRF, 399);
+            ephemeris.REFERENCE_FRAME->REFERENCE_FRAME.Set(std::move(frameWrapper));
+            astro::clearCallStop();
+            if (!prwDynamics->describe(slot, prepared.startTT, prepared.endTT, ephemeris, source->SEGMENT_QUALITY, error))
+                return stopped(slot, error);
+            PRWT result;
+            result.DESCRIBE_RESULT = std::make_unique<PRWDescribeResultT>();
+            result.DESCRIBE_RESULT->INSTANCE = std::make_unique<PRWInstanceT>(*prwInstance);
+            result.DESCRIBE_RESULT->SEGMENT_SET_HANDLE = request->SEGMENT_SET_HANDLE();
+            result.DESCRIBE_RESULT->SOURCE_OFFSET = i;
+            result.DESCRIBE_RESULT->FINAL_CHUNK = i + 1 == selected.size();
+            result.DESCRIBE_RESULT->SOURCES.push_back(std::move(source));
+            outputs.push_back(residentBytes(result));
+        }
+        setContinuation(stop, selected.size(), backlog, yielded);
+        return true;
+    }
     for (size_t i = offset; i < stop; ++i) {
         const auto slot = prwSlots.at(selected[i]);
         auto& entity = g_entities[slot];
@@ -3410,7 +3545,7 @@ bool describePortable(const PRWDescribeRequest* request, const uint8_t* data, si
         RFMCoordinateSystemWrapperT frameWrapper;
         frameWrapper.COORDINATE_SYSTEM = makeFrame("GCRF", rfmAxisType::ICRF, 399);
         ephemeris.REFERENCE_FRAME->REFERENCE_FRAME.Set(std::move(frameWrapper));
-        ephemeris.EPHEMERIS_SOURCE = "com.orbpro.hpop@1.0.0";
+        ephemeris.EPHEMERIS_SOURCE = ResidentDynamics::sourceName() + " gravity-only";
         ephemeris.NOMINAL_SEGMENT_SPAN = CHEBY_SEG_SEC;
         ephemeris.NOMINAL_NUM_COEFFICIENTS = CHEBY_NPTS;
         ephemeris.COMMENT.push_back("Fit quality is UNMEASURED. PRW.SEGMENT_QUALITY availability flags are authoritative; omitted PPE residual scalars do not assert zero error.");
@@ -3448,25 +3583,51 @@ bool describePortable(const PRWDescribeRequest* request, const uint8_t* data, si
 }
 } // namespace
 
-bool processPrwResident(const std::string& methodId,
-    const std::vector<std::pair<const uint8_t*, size_t>>& inputs, uint32_t outputCap,
+bool processPrwResidentMethod(const std::string& methodId, const std::vector<ResidentInput>& inputs, uint32_t outputCap,
+    std::vector<std::vector<uint8_t>>& outputs, uint64_t& backlog, bool& yielded, std::string& error);
+
+// The resident methods. A trajectory that ended (lib/reentry.h) without an
+// object-level report (the gravity-only profile) fails the call with the
+// stop's code and epoch.
+bool processPrwResident(const std::string& methodId, const std::vector<ResidentInput>& inputs, uint32_t outputCap,
+    std::vector<std::vector<uint8_t>>& outputs, uint64_t& backlog, bool& yielded,
+    std::string& error) {
+    astro::clearCallStop();
+    const bool ok = processPrwResidentMethod(methodId, inputs, outputCap, outputs, backlog, yielded, error);
+    const auto& stop = astro::callStop();
+    if (!stop.active || (!ok && error.rfind(std::string(stop.code) + ":", 0) == 0)) return ok;
+    outputs.clear();
+    error = stopError(stop);
+    return false;
+}
+
+bool processPrwResidentMethod(const std::string& methodId, const std::vector<ResidentInput>& inputs, uint32_t outputCap,
     std::vector<std::vector<uint8_t>>& outputs, uint64_t& backlog, bool& yielded,
     std::string& error) {
     outputs.clear();
     backlog = 0;
     yielded = false;
-    if (methodId == "ingest_state") return ingestPortable(inputs, error);
+    if (methodId == "ingest_state") return ingestPortable(inputs, true, error);
+    if (methodId == "ingest_state_gravity_only") return ingestPortable(inputs, false, error);
     if (inputs.size() != 1)
         return residentFailure(error, "invalid-request", "Resident query requires exactly one PRW frame.");
+    // Each call reads the instance's own kernel (an invoke between calls
+    // clears the ephemeris).
+    if (prwDynamics) {
+        if (!prwDynamics->activate(error)) return false;
+    } else {
+        std::string ignored;
+        KernelStore::activate(nullptr, ignored);
+    }
     const PRW* root = nullptr;
-    if (!verifyPrw(inputs[0].first, inputs[0].second, root, error)) return false;
+    if (!verifyPrw(inputs[0].data, inputs[0].size, root, error)) return false;
     if (methodId == "propagate_state" && root->RESIDENT_REQUEST())
-        return propagatePortable(root->RESIDENT_REQUEST(), inputs[0].first, inputs[0].second,
+        return propagatePortable(root->RESIDENT_REQUEST(), inputs[0].data, inputs[0].size,
             outputCap, outputs, backlog, yielded, error);
     if (methodId == "prepare_trajectory_segments" && root->PREPARE_REQUEST())
         return preparePortable(root->PREPARE_REQUEST(), outputs, error);
     if (methodId == "describe_trajectory_segments" && root->DESCRIBE_REQUEST())
-        return describePortable(root->DESCRIBE_REQUEST(), inputs[0].first, inputs[0].second,
+        return describePortable(root->DESCRIBE_REQUEST(), inputs[0].data, inputs[0].size,
             outputCap, outputs, backlog, yielded, error);
     return residentFailure(error, "method-arm-mismatch", "Method does not match the sole PRW payload arm.");
 }

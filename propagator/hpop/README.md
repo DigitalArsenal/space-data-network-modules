@@ -30,8 +30,14 @@ R is the GCRF to Earth-fixed rotation:
   vendored ERFA (`eraXy06` and `eraS06` with the rows' dX and dY,
   `eraC2ixys`, the Earth rotation angle from UT1, `eraPom00` polar motion).
   The rows are read and interpolated by `foundation/frames/src/eop_series.hpp`,
-  the code foundation/frames uses, and must cover the arc. Precession-nutation
-  is held for an hour of TT; the rotation angle is evaluated at every call.
+  the code foundation/frames uses, and must cover the arc. The CIP coordinates
+  X, Y and the CIO locator s of the series are evaluated on whole hours of TT
+  and interpolated linearly between them (within 0.02 mas of the series); the
+  EOP's dX and dY, polar motion and the Earth rotation angle are evaluated at
+  every call. The rotation is a function of time alone: a trajectory does not
+  depend on what the same tables served before it (until 1.3.0 the matrix was
+  held for an hour from whichever epoch refreshed it, which moved results by
+  millimetres with the order of the calls).
 - **Without it:** precession IAU 1976, nutation IAU 1980, GAST from UTC, no
   polar motion; within 0.2 arcsec of ERFA `c2t06a`
   (`tests/environment_conformance.cpp` section 10).
@@ -291,6 +297,10 @@ Artifacts:
 - `dist/browser/module.js`
 - `dist/browser/module.wasm`
 
+### Runtime notes
+
+- WasmEdge 0.16 (interpreter): a C++ exception thrown and caught inside the module leaves the module's `free` looping afterwards (V8 is unaffected), so module errors are returned or flagged, never thrown across a call.
+
 ## Portable PRW contract (SDS 1.240.0)
 
 Every advertised method consumes size-prefixed `$PRW` records through the SDK
@@ -302,7 +312,8 @@ artifact uses shared memory; browser hosts need cross-origin isolation.
 | Method | Request arm | Response arm |
 | --- | --- | --- |
 | `invoke` | `EXECUTION_REQUEST`, `EPHEMERIS_REQUEST`, `ATMOSPHERE_REQUEST`, or `VERSION_QUERY` | Matching result arm |
-| `ingest_state` | `RESIDENT_STATE` (1–1024 input records) | No scientific output |
+| `ingest_state` | `RESIDENT_STATE` (1–1024 input records), `EXECUTION_REQUEST` on `configuration`, and the kernel and environment records | No scientific output |
+| `ingest_state_gravity_only` | `RESIDENT_STATE` (1–1024 input records) | No scientific output |
 | `propagate_state` | `RESIDENT_REQUEST` | `RESIDENT_STATE` |
 | `prepare_trajectory_segments` | `PREPARE_REQUEST` | `PREPARE_RESULT` |
 | `describe_trajectory_segments` | `DESCRIBE_REQUEST` | `DESCRIBE_RESULT` containing PPE |
@@ -316,6 +327,37 @@ ordered daily rows covering the arc; see
 `space_weather` the `SPACE_WEATHER` arm (daily `$SPW` rows) and
 `jb2008_indices` the `JB2008_INDICES` arm. Public ports do not accept the
 historical JSON or private pointer envelopes.
+
+### The end of a trajectory: reentry
+
+A propagation ends where the trajectory descends below 100 km geodetic
+altitude (the Karman line, `lib/reentry.h`). Below it the object is
+reentering: a cannonball with a fixed drag coefficient no longer describes
+its flight, and integrated further the trajectory reaches the Earth's
+interior, where the gravity field diverges. A non-finite state ends it too.
+
+- **Every path.** The state, the transition matrix and finite burns test each
+  state their integrator evaluates; the first one below the line ends the
+  integration there (the derivative is zero from then on and the RKF78 run
+  takes no further step), so the execution path and a resident object stop
+  at the same epoch.
+- **The error.** `reentry` (or `invalid-state`) with the UTC epoch and the
+  height, and on the resident path the object (its handle, OBJECT_ID and
+  catalog number), as in the test: `reentry: handle 1 (object-1, catalog 1):
+  the trajectory descends below 100 km geodetic altitude (99.5 km) at
+  2026-08-02T01:23:07.517546117 UTC; HPOP ends it there.` A resident object
+  stays queryable before that epoch.
+- **The height** is taken about the GCRF pole, within about 0.2 km of the
+  Earth-fixed geodetic height (the CIP's offset from the GCRF pole), so the
+  test needs no Earth orientation.
+- **A flag, not an exception** (see [Runtime notes](#runtime-notes)): the
+  integrators and the PRW methods check the recorded stop.
+
+Tests: `tests/reentry.test.mjs` (a 140 km orbit with Cd*A/m 0.02 m²/kg reenters
+about 1.4 h after its epoch; both paths report the same epoch; another object
+and the decaying one before its reentry stay preparable) and the
+`configured-reentry` group of `tests/prw-resident-parity.mjs` (byte-identical
+stops in Chrome, WasmEdge and Docker WasmEdge).
 
 ### VCM parity (SDS 1.240.0)
 
@@ -376,31 +418,85 @@ Use the SDK **direct** invoke surface with a persistent instance for resident
 methods. The SDK command test harness creates an instance per invocation and
 therefore does not retain a catalog between calls.
 
-`ingest_state` atomically replaces the catalog. Every record supplies the same
-`PRWInstance`: `MODULE_ID="com.orbpro.hpop"`, a nonempty host-assigned unique
-`INSTANCE_ID`, and `GENERATION`. Reingest of a previously seen instance identity
-requires a strictly larger generation. `ENTITY_HANDLE` values are supplied by
-the caller and must be unique; output preserves handles, object IDs, and catalog
-numbers. Handles are instance-scoped and must not be persisted as object identity.
-The host must choose a new instance ID after replacing the actual WASM instance.
-Configuration changes, diagnostic catalog replacement, and burn/cache-grid
-mutations invalidate portable queries until a new generation is ingested.
+`ingest_state` and `ingest_state_gravity_only` atomically replace the catalog.
+Every record supplies the same `PRWInstance`: `MODULE_ID="com.orbpro.hpop"`, a
+nonempty host-assigned unique `INSTANCE_ID`, and `GENERATION`. Reingest of a
+previously seen instance identity requires a strictly larger generation.
+`ENTITY_HANDLE` values are supplied by the caller and must be unique; output
+preserves handles, object IDs, and catalog numbers. Handles are instance-scoped
+and must not be persisted as object identity. The host must choose a new
+instance ID after replacing the actual WASM instance. Configuration changes,
+diagnostic catalog replacement, and burn/cache-grid mutations invalidate
+portable queries until a new generation is ingested.
 
 PRW state position and velocity use SI metres and metres/second. Input must be
-Cartesian FRM state with explicit ISO epoch, `UTC` or `TDB`, and a resolving RFM
-coordinate-system name. Integration and cached polynomials use TDB; C++ converts
-UTC internally. This profile accepts Earth-centered (NAIF 399) ICRF axes and
-reports them as **GCRF**. Other origins and axes fail. Earth-fixed/TEME requests
-fail with `eop-data-required` because the PRW invocation does not supply the
-required authoritative Earth-orientation data. There is no silent frame fallback.
-
-Resident dynamical mass, gravity overrides, and drag/SRP area-over-mass controls
-fail with `unsupported-configuration`; use the execution request for supported
-rich dynamics. Per-object covariance and process noise are accepted (see
-[Covariance and process noise](#covariance-and-process-noise)). `VALID=false` is retained on ingest and
-fails with `invalid-state` when selected for propagation or trajectory export.
-Empty selection means all rows; duplicate and unknown handles fail explicitly.
+Cartesian FRM state with explicit ISO epoch, `UTC`, `TT` or `TDB`, and a
+resolving RFM coordinate-system name. This profile accepts Earth-centered (NAIF
+399) ICRF axes and reports them as **GCRF**. Other origins and axes fail.
+Earth-fixed/TEME requests fail with `eop-data-required`. There is no silent
+frame fallback. `VALID=false` is retained on ingest and fails with
+`invalid-state` when selected for propagation or trajectory export. Empty
+selection means all rows; duplicate and unknown handles fail explicitly.
 `MAXIMUM_COUNT` limits the requested prefix while preserving its order.
+
+#### Configured profile (`ingest_state`)
+
+The `configuration` port carries one PRW `EXECUTION_REQUEST`: the dynamics of
+every resident object. It is validated as an execution request, with the
+`kernel`, `earth_orientation`, `space_weather` and `jb2008_indices` records on
+the same call, which the instance verifies once (the kernel by SHA-256) and keeps
+until the next ingest. Its `INITIAL` and `TARGET_EPOCH` are placeholders: each
+resident object is that request with its own state, and each query supplies
+the epoch. Each object may carry `MASS_KG` (the dynamical mass, as
+`INITIAL.MASS_KG` of an execution request), `DRAG_AREA_OVER_MASS_M2_KG`
+(Cd*A/m, which needs drag in the configuration) and `SRP_AREA_OVER_MASS_M2_KG`
+(Cr*A/m, which needs cannonball radiation pressure); they replace the
+configuration's spacecraft for that object. `catalog.mjs` writes the full force
+configuration (the orbit-determination fits' force set) and these records.
+Element sets: the module converts B* (1/earth radii) to Cd*A/m with
+`plugin_drag_area_over_mass_from_bstar(bstar, nonPositive)`, B = 2 B* / rho0
+with rho0 = 2.461e-5 XKMPER kg/m^2/ER (Hoots and Roehrich, Spacetrack Report
+No. 3, 1980, sections 8 and 9; the report's RHO = 0.15696615), and returns
+`nonPositive` for a B* of zero or below (`tests/ballistic_coefficient.test.mjs`).
+`catalog.mjs` states the two assumptions it passes: 0.01 m^2/kg for those
+objects and Cr*A/m 0.02 m^2/kg for every object, the fits' a priori values.
+
+Each object is integrated from its epoch, forward and backward as queries need,
+with exactly the steps an execution request for that object takes: the same
+RK78 run, restarted only where the execution path restarts it (the space
+weather's daily and three-hourly changes), never at query or export epochs.
+Between accepted steps the state comes from a dense output: Hermite
+interpolation of position, velocity and the acceleration the integrator
+evaluated at four accepted steps (the nearest at least half a step away on
+each side, inside one span and one stretch between shadow boundaries).
+
+Refused with a named error (`configuration-required` when the port is
+missing, `unsupported-configuration`, `unsupported-integrator`):
+- a configuration with STM, covariance, samples, impulses, finite burns, mass
+  dynamics, dynamic parameters or process noise (those are per-request);
+- an integrator other than RK78 or RKF78;
+- Cd*A/m without drag, Cr*A/m without cannonball radiation pressure, and a
+  per-object Cd*A/m rate or in-track acceleration;
+- epochs outside the environment records or the kernel (`space-weather-out-of-range`,
+  `invalid-earth-orientation`, `ephemeris-failed`), when the integration
+  reaches them.
+
+Tests (`tests/prw_resident_configured.test.mjs`), with the full force model
+and the catalog integrator (RK78, 1e-12, 300 s): one resident instance holding
+LEO 400 km, GPS, GEO and Molniya orbits against the execution path, request by
+request, at eleven epochs from one day before to three days after the epoch,
+on and between restarts: largest difference 0.052 mm (LEO), 8.9 µm
+(Molniya), 9 nm (GPS, GEO).
+
+#### Gravity-only profile (`ingest_state_gravity_only`)
+
+The point mass and the built-in degree/order 20 field (built-in Earth
+orientation; no Sun, Moon, drag, radiation pressure or tides), RK78
+60/0.01/600 s at 1e-12, with Chebyshev segments fitted at their nodes from
+restarted integrations. It is not full force and is never selected by
+default. Mass, coefficients and per-object gravitational parameters fail with
+`unsupported-configuration`. Its trajectories are named
+`com.orbpro.hpop@1.3.0 gravity-only`.
 
 ### Covariance and process noise
 
@@ -412,11 +508,13 @@ A propagated covariance is `P(t) = Phi P0 Phi^T + Q`, and the record states the
   object. Noise without a covariance fails with `invalid-process-noise`.
 - **Resident output.** `propagate_state` returns each such object's
   `COVARIANCE` at the target epoch and echoes the `PROCESS_NOISE` it includes.
-  It uses the resident force model (point mass and the degree/order 20 field,
-  in Earth-fixed axes; no Sun, Moon, drag or radiation pressure)
-  and integrator (RK78, 60/0.01/600 s, 1e-12), with the analytic STM. Objects
-  with scheduled burns refuse covariance (`unsupported-configuration`); use
-  the execution request.
+  The configured profile integrates the state and its transition matrix from
+  the object's epoch with the configuration's dynamics, STM technique and
+  density treatment, as an execution request with this `INITIAL_COVARIANCE`
+  and `PROCESS_NOISE` does (the state returned with it is that integration's).
+  The gravity-only profile uses its own force model and integrator with the
+  analytic STM. Objects with scheduled burns refuse covariance
+  (`unsupported-configuration`); use the execution request.
 - **Execution requests.** `INITIAL_COVARIANCE` with `PROCESS_NOISE` returns
   `FINAL_SAMPLE` and `SAMPLES` covariance including `Q`, and the same
   `PROCESS_NOISE`. Noise needs a six-state covariance without mass dynamics.
@@ -441,25 +539,62 @@ Tests (`tests/prw_covariance.test.mjs`):
 
 The supported profiles are empty/default and `conjunction-screening`.
 `CATALOG_HANDLE=0` selects the current resident catalog; other values fail.
-The finite nonnegative preparation duration is limited to 2046 ten-minute cache
-segments (1,227,600 seconds). Preparation reports complete interval coverage
-separately from fit quality. Segment handles never wrap or reset on reingest.
+The finite nonnegative preparation duration is limited to 1,227,600 seconds.
+Segment handles never wrap or reset on reingest.
 
-PPE contains the original 13 coefficients per axis, explicit velocity arrays,
-Chebyshev basis, midpoint and half-span, Earth GCRF, TDB epochs, and the existing
-PPE km/km/s units. `PRWFitQuality.EVIDENCE_KIND=UNMEASURED`, with both bound
-availability flags false. No zero-error certification is claimed. Published PPE
-residual scalars have no availability flag: they are omitted and accompanied by
-a comment directing consumers to PRW quality; their decoded default zero must
-not be interpreted as a measurement.
+PPE contains 13 Chebyshev coefficients per axis (degree 12), explicit velocity
+coefficients, the midpoint and half-span of each segment, Earth GCRF, and km
+and km/s.
 
-Each resident batch chunk returns one state; each describe chunk returns one
-whole source (never part of a coefficient vector), with `SOURCE_OFFSET` and
+- **Configured profile.** Segments of 300 s of TT from each object's epoch,
+  labelled on TT (exact; a TDB label would carry the TDB - TT model). They are
+  fitted at their Gauss-Lobatto nodes from the dense output. A degree-12
+  series resolves about four cycles over its span, so 300 s keeps the terms of
+  a 70x70 field in LEO (periods down to about 80 s); 600 s leaves the terms
+  above degree 35 to the fit's error, centimetres. Each segment's
+  `PRWFitQuality` is `SAMPLED_RESIDUAL`: its largest difference from the
+  integrator's accepted states inside it; the prepare result carries the
+  largest over the set. The method is stated once per source (the PPE
+  comment) and in the prepare result's quality, not in each segment's
+  record: a segment is about 0.8 KB, a day about 236 KB per object.
+  `EPHEMERIS_SOURCE` is `com.orbpro.hpop@1.3.0`.
+  Measured (`tests/prw_resident_configured.test.mjs`, four days, PPE
+  evaluated every 61 s): within 0.31 mm of the dense output in LEO and 0.18 mm
+  for Molniya (GPS and GEO under 0.1 µm); within 0.08 mm of the execution path;
+  reported residuals 0.32 mm (LEO) and 0.17 mm (Molniya).
+- **Gravity-only profile.** Segments of 600 s on TDB, fitted from restarted
+  integrations, with `PRWFitQuality.EVIDENCE_KIND=UNMEASURED` and both bound
+  availability flags false. No zero-error certification is claimed. Published
+  PPE residual scalars have no availability flag: they are omitted and
+  accompanied by a comment directing consumers to PRW quality; their decoded
+  default zero must not be interpreted as a measurement.
+
+Exports move forward window by window: segments that end before a prepared
+window are dropped, and an earlier window is fitted again from the object's
+epoch. Each resident batch chunk returns one state; each describe chunk returns
+one whole source (never part of a coefficient vector), with `SOURCE_OFFSET` and
 `FINAL_CHUNK`. A response with `YIELDED=true` and positive `BACKLOG_REMAINING`
 requires resubmitting the same PRW request bytes to obtain the next chunk.
 One ordered continuation is active per module instance; a different request
-restarts selection. This conservative chunk size respects positive output caps
-although SDK 0.8.18 does not expose a guest output-cap accessor.
+restarts selection.
+
+#### Catalog cost
+
+One worker thread (Node.js, Mac Studio M3 Ultra shared with other work, load
+12-15 on 28 cores), stride samples of the 2026-09-30 public catalog from each
+element set's epoch through 6 h of 2 h windows, in milliseconds per object-day
+(catch-up included):
+
+| Profile | All | Perigee below 2,000 km | Perigee above 2,000 km |
+| --- | ---: | ---: | ---: |
+| Configured, full force, RK78 1e-12, 300 s | 645 | 692 | 190 |
+| Gravity-only | 49 | 49 | 48 |
+
+The tolerance: at 1e-12 the integration's own error after three days is
+0.1 m (LEO 400 km) to 1.2 m (SSO 700 km) and 0.18 m (Molniya), measured
+against 1e-14; it is 6-9 m in LEO at 1e-11 and 46-157 m at 1e-10. A
+conjunction screen needs metre-level positions; 1e-12 keeps the integration
+there and costs a fifth to a quarter more than 1e-11 in LEO.
 
 ## Usage
 
@@ -502,7 +637,11 @@ That covers:
 
 - SDK artifact compliance and harness loading in `tests/sdk_compat.test.mjs`
 - PRW resident SI/UTC, handle invalidation, bounded chunks, and PPE quality in
-  `tests/prw_resident.test.mjs`
+  `tests/prw_resident.test.mjs` (gravity-only profile)
+- The configured profile against the execution path, its PPE interpolation
+  and its refusals in `tests/prw_resident_configured.test.mjs`;
+  `tests/prw-resident-parity.mjs` is its tri-runtime receipt (Chrome, native
+  WasmEdge, container WasmEdge, byte for byte)
 - HPOP against Orekit 13.1 in `tests/orekit_reference.test.mjs`: five
   orbits (LEO 400 km, SSO 700 km, GPS, GEO, Molniya) by ten force sets
   (point mass; J2; zonal 20; 20x20; with Sun and Moon, radiation pressure and
@@ -550,8 +689,11 @@ format: `[u32le descriptor_length][$NCD FlatBuffer][SPK bytes]`. Set the
 size-prefixed descriptor's `FORMAT` to `SPK_DAF` and `SOURCE_BYTE_LENGTH` to the
 kernel byte count; an optional `SOURCE_SHA256` is verified. No kernel is embedded
 in the module or opened through a guest filesystem. The module reads Chebyshev
-coefficients directly from immutable input bytes, retaining the view only for
-that invocation.
+coefficients directly from input bytes. The instance keeps the last verified
+kernel: the same kernel again (same SHA-256 and length, identical bytes) is
+compared byte for byte instead of hashed (125 ms per call for DE440s, 32.7 MB,
+before; 17 ms with the comparison). A resident instance keeps the kernel of its
+`ingest_state` until the next ingest.
 
 For body states, send this JSON on the existing `request` port:
 
@@ -578,9 +720,8 @@ Without a kernel, propagation explicitly reports `ephemerisSource:
 "Analytical"`. The caller can also request `params.ephemerisSource:
 "Analytical"` with a kernel present. An invalid kernel, missing body, unsupported
 selected segment, or uncovered epoch returns a named failure. It never silently
-substitutes analytic data. The existing resident catalogue/trajectory methods
-retain their current input contracts; the optional kernel port is scoped to
-`invoke`, avoiding reuse of cached trajectories across ephemeris providers.
+substitutes analytic data. A configured resident catalog reads the kernel of
+its own `ingest_state`; a new kernel needs a new generation.
 
 For native library callers, `Ephemeris::loadEphemerisBuffer(bytes, size, source)`
 attaches a borrowed view until `clearEphemerisBuffer()`. An optional DE430/440/441

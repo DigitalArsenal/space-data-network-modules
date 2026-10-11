@@ -5,7 +5,13 @@
 //
 //   node scripts/hpop-calibration.mjs --reference <reference-states>/reference \
 //     --fit-from 2026-08-02 --fit-to 2026-08-08 --test-from 2026-08-09 --test-to 2026-08-15 \
+//     --hpop-environment <dir> [--hpop-profile full-force|gravity-only] \
 //     [--archive DIR] [--out DIR] [--workers N] [--interval 600] [--max-arcs N]
+//
+// full-force (the default): the catalog screen's force model and, per arc,
+// the environment released on its element set's day (<dir>/kernel.prw and
+// <dir>/<YYYY-MM-DD>/{earth_orientation,space_weather}.prw); gravity-only
+// names the resident point mass and degree/order 20 field.
 //
 // --max-arcs keeps every Nth arc of each plan, about N in all (smoke runs).
 //
@@ -31,6 +37,7 @@ const { values: args } = parseArgs({ options: {
   workers: { type: 'string', default: String(Math.max(1, Math.min(12, os.availableParallelism() - 2))) },
   interval: { type: 'string', default: '600' },
   'max-arcs': { type: 'string' },
+  'hpop-environment': { type: 'string' }, 'hpop-profile': { type: 'string', default: 'full-force' },
 } });
 for (const k of ['reference', 'fit-from', 'fit-to', 'test-from', 'test-to']) if (!args[k]) throw new Error(`--${k} is required`);
 if (Date.parse(args['fit-to']) >= Date.parse(args['test-from'])) throw new Error('the fit window must end before the test window starts');
@@ -63,9 +70,13 @@ const thin = (plan) => {
 // HPOP at every arc's targets, spread over worker threads.
 async function propagate(plan, variants) {
   const states = await seeds(plan.arcs);
-  const arcs = plan.arcs.filter((a) => states.has(a.arc)).map((a) => ({ arc: a.arc, norad: a.norad, seed: states.get(a.arc),
-    covariance: a.covariance, targets: a.targets.map((t) => t.epoch) }));
-  const { results, seconds } = await propagateArcs(arcs, { variants, interval, workers: Number(args.workers) });
+  const arcs = plan.arcs.filter((a) => states.has(a.arc)).map((a) => {
+    const i = index.get(`${a.norad}|${a.epoch}`);
+    return { arc: a.arc, norad: a.norad, seed: states.get(a.arc), covariance: a.covariance, targets: a.targets.map((t) => t.epoch),
+      bstar: sets.values[6][i], day: new Date(unixSeconds(sets.epoch[i]) * 1000).toISOString().slice(0, 10) };
+  });
+  const { results, seconds } = await propagateArcs(arcs, { variants, interval, workers: Number(args.workers),
+    profile: args['hpop-profile'], environment: args['hpop-environment'] });
   const errors = results.flatMap((r) => r.samples.filter((s) => s.error).map((s) => s.error));
   console.log(`HPOP ${variants.join('+')}: ${results.length} arcs, ${results.reduce((n, r) => n + r.samples.length, 0)} targets, ` +
     `${errors.length} failed, ${seconds.toFixed(0)} s`);
@@ -85,8 +96,13 @@ const predicted = await propagate(plan, ['a', 'u0', 'u1', 'u2']);
 const model = await h.call('hpop_coverage', [json('plan', plan), json('predictions', predicted), json('model', model0),
   json('options', { mode: 'fit', window: fitWindow, discretizationSeconds: interval })]);
 model.fitWindow = fitWindow;
-model.product = 'analysis/epoch-state GCRF state at the element-set epoch, propagated by propagator/hpop resident ' +
-  '(point mass and degree/order 20 field, RK78 60/0.01/600 s, 1e-12, analytic STM)';
+model.product = args['hpop-profile'] === 'gravity-only'
+  ? 'analysis/epoch-state GCRF state at the element-set epoch, propagated by propagator/hpop gravity-only ' +
+    '(point mass and degree/order 20 field, RK78 60/0.01/600 s, 1e-12, analytic STM)'
+  : 'analysis/epoch-state GCRF state at the element-set epoch, propagated by propagator/hpop full force ' +
+    '(catalog.mjs: EGM2008 70x70, Sun, Moon, Venus, Mars, Jupiter, cannonball SRP, Knocke, NRLMSISE-00 on released ' +
+    'space weather, IERS 2010 solid tides, FES2004 30x30, IERS 2010 relativity; Cd*A/m from B*, Cr*A/m 0.02 m^2/kg; ' +
+    'RK78 1e-12, 300 s; analytic STM with the density gradient)';
 write('hpop-covariance-model.json', model);
 
 // ── 3. held-out coverage, and in-sample for comparison ──
