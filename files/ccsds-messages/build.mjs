@@ -130,7 +130,7 @@ const pugixmlRoot = path.join(packageRoot, "third_party", "pugixml");
 const ndmOrder = [
   "ndm_core", "ndm_xml", "ndm_kvn", "ndm_frames", "ndm_enums", "ndm_common",
   "ndm_omm", "ndm_oem", "ndm_opm", "ndm_cdm", "ndm_apm", "ndm_acm", "ndm_rdm", "ndm_ocm",
-  "ndm_codec", "ndm_registry",
+  "ndm_codec", "ndm_registry", "ndm_adm_xml",
 ];
 
 const pieces = [

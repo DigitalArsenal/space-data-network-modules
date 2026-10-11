@@ -38,6 +38,39 @@ inline std::string element_text(const pugi::xml_node& el) {
     return trim(out);
 }
 
+/* An element's text as a KVN value can state it: a value is one line there, so a
+ * value that an XML pretty-printer (or a PDF) wrapped is joined with single spaces.
+ * The record, and so what is written back as KVN or XML, holds the same text
+ * whichever syntax it was read from. */
+inline std::string normalise_text(const std::string& text) {
+    if (text.find('\n') == std::string::npos && text.find('\r') == std::string::npos) return text;
+    std::string out;
+    size_t i = 0;
+    while (i < text.size()) {
+        if (is_space(text[i])) {
+            size_t j = i;
+            bool newline = false;
+            while (j < text.size() && is_space(text[j])) {
+                newline = newline || text[j] == '\n' || text[j] == '\r';
+                ++j;
+            }
+            if (newline) out += ' ';
+            else out.append(text, i, j - i);
+            i = j;
+        } else {
+            out += text[i++];
+        }
+    }
+    return out;
+}
+
+inline bool has_element_child(const pugi::xml_node& el) {
+    for (pugi::xml_node c = el.first_child(); c; c = c.next_sibling()) {
+        if (c.type() == pugi::node_element) return true;
+    }
+    return false;
+}
+
 inline void to_node(const pugi::xml_node& el, Node* out) {
     out->name = local_name(el.name());
     out->units = el.attribute("units").value();
@@ -45,10 +78,18 @@ inline void to_node(const pugi::xml_node& el, Node* out) {
     for (pugi::xml_node c = el.first_child(); c; c = c.next_sibling()) {
         if (c.type() != pugi::node_element) continue;
         out->group = true;
+        if (local_name(c.name()) == "COMMENT" && !has_element_child(c)) {
+            /* KVN states a comment a line at a time, and so does the record: a comment
+             * the XML wrapped is the lines it wrapped, each without the indentation. */
+            for (const std::string& line : split_lines(element_text(c))) {
+                out->kids.push_back(Node::leaf("COMMENT", trim(line)));
+            }
+            continue;
+        }
         out->kids.emplace_back();
         to_node(c, &out->kids.back());
     }
-    if (!out->group) out->text = element_text(el);
+    if (!out->group) out->text = normalise_text(element_text(el));
 }
 
 /* The message element: the document element, or the one inside <ndm>. */
@@ -59,13 +100,21 @@ inline pugi::xml_node find_message(const pugi::xml_document& doc, const std::str
     std::string name = local_name(top.name());
     *found = name;
     if (name == "ndm") {
+        pugi::xml_node match;
+        size_t matches = 0;
         for (pugi::xml_node c = top.first_child(); c; c = c.next_sibling()) {
             if (c.type() != pugi::node_element) continue;
             const std::string child = local_name(c.name());
             *found = child;
-            if (child == root) return c;
+            if (child == root) {
+                if (!match) match = c;
+                ++matches;
+            }
         }
-        return pugi::xml_node();
+        if (matches > 1) {
+            *found = root + "*" + std::to_string(matches);  /* read() names the refusal */
+        }
+        return match;
     }
     return name == root ? top : pugi::xml_node();
 }
@@ -82,6 +131,11 @@ inline bool read(const char* data, size_t length, const std::string& root, Node*
         return false;
     }
     pugi::xml_node message = find_message(doc, root, found);
+    if (message && found->find('*') != std::string::npos) {
+        *error = "the NDM holds " + found->substr(found->find('*') + 1) + " <" + root +
+                 "> messages; this reads one message per file (multiple-messages)";
+        return false;
+    }
     if (!message) {
         *error = found->empty() ? std::string("the document has no root element")
                                 : "the document holds <" + *found + ">, not <" + root + ">";

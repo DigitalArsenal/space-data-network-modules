@@ -138,6 +138,7 @@ inline bool claims_key(const Section& c, const std::string& key) {
 
 inline bool claims_marker(const Section& c, const std::string& marker) {
     if (c.kvn_start) return marker == c.kvn_start;
+    if (c.kvn_accept_start && marker == c.kvn_accept_start) return true;
     for (const Item& it : c.items) {
         if (it.is_section && claims_marker(*it.sec, marker)) return true;
     }
@@ -153,7 +154,14 @@ inline bool claims_row(const Section& c) {
     return false;
 }
 
-inline const Section* child_claiming(const Section& s, const Line& l) {
+/* `prefer` is the repeated child this section opened last: a keyword it claims
+ * begins its next instance, even if an earlier child has the keyword too (an OEM's
+ * state vectors and covariance matrices both begin at an EPOCH). */
+inline const Section* child_claiming(const Section& s, const Line& l,
+                                     const Section* prefer = nullptr) {
+    if (prefer && prefer->repeat && l.type == LineType::Key && claims_key(*prefer, l.key)) {
+        return prefer;
+    }
     for (const Item& it : s.items) {
         if (!it.is_section) continue;
         const Section& c = *it.sec;
@@ -195,7 +203,11 @@ inline const Leaf* leaf_at(const Section& s, size_t index) {
     return nullptr;
 }
 
-inline void parse_section(Reader& R, const Section& s, Node& n, const std::string& path);
+/* `marked`: the section is inside a tolerated marker pair (it was opened by the start
+ * marker, or follows an instance that was), so the stop marker is its to take; without
+ * a start, a stop marker is out of place. */
+inline void parse_section(Reader& R, const Section& s, Node& n, const std::string& path,
+                          bool marked = false);
 
 /* A row section instance: one line, its tokens the section's leaves in order. */
 inline void read_row_instance(Reader& R, const Section& c, Node& parent) {
@@ -219,7 +231,7 @@ inline void read_row_instance(Reader& R, const Section& c, Node& parent) {
 }
 
 inline Node* open_child(Reader& R, const Section& s, Node& n, const Section& c,
-                        const std::string& path) {
+                        const std::string& path, bool continuing = false) {
     Node* target = nullptr;
     if (!c.repeat) {
         for (Node& k : n.kids) {
@@ -231,11 +243,14 @@ inline Node* open_child(Reader& R, const Section& s, Node& n, const Section& c,
         target = &n.kids.back();
         target->line = R.lines[R.pos].no;
     }
-    if (c.kvn_start && R.lines[R.pos].type == LineType::Marker &&
-        R.lines[R.pos].key == c.kvn_start) {
+    bool marked = continuing;
+    if (R.lines[R.pos].type == LineType::Marker &&
+        ((c.kvn_start && R.lines[R.pos].key == c.kvn_start) ||
+         (c.kvn_accept_start && R.lines[R.pos].key == c.kvn_accept_start))) {
+        marked = marked || (c.kvn_accept_start && R.lines[R.pos].key == c.kvn_accept_start);
         ++R.pos;  /* the start marker belongs to the section it opens */
     }
-    parse_section(R, c, *target, path + "/" + c.name);
+    parse_section(R, c, *target, path + "/" + c.name, marked);
     (void)s;
     return target;
 }
@@ -262,8 +277,43 @@ inline bool holds(const Node& n, const std::string& key) {
     return false;
 }
 
-inline void parse_section(Reader& R, const Section& s, Node& n, const std::string& path) {
+inline void parse_section(Reader& R, const Section& s, Node& n, const std::string& path,
+                          bool marked) {
     const bool explicit_block = s.kvn_start != nullptr;
+    /* A child opened by a tolerated start marker is closed by its stop marker or, the
+     * markers being optional, by the first keyword that is not its own; but a start whose
+     * stop never comes is a message that lost a line, and is said so. A run of repeated
+     * children (an OEM's covariance matrices) is one pair of markers around all of them,
+     * so the pair is open from the first instance to the one that takes the stop. */
+    const Section* open_pair = nullptr;
+    int open_pair_line = 0;
+    struct PairCheck {
+        Reader& R; const std::string& path; const Section*& open; int& line;
+        ~PairCheck() {
+            if (open && R.error.empty()) {
+                R.report->add(IssueKind::UnknownStructure, path, open->kvn_accept_start,
+                              std::string("not closed by ") + open->kvn_accept_stop, line);
+            }
+        }
+    } pair_check{R, path, open_pair, open_pair_line};
+    auto descend = [&](const Section* c) {
+        const Line& at = R.lines[R.pos];
+        const bool by_marker = at.type == LineType::Marker && c->kvn_accept_start &&
+                               at.key == c->kvn_accept_start;
+        const bool continuing = !by_marker && open_pair == c;
+        const int line = at.no;
+        open_child(R, s, n, *c, path, continuing);
+        if (by_marker) {
+            open_pair = c;
+            open_pair_line = line;
+        }
+        if (open_pair == c && c->kvn_accept_stop && R.pos > 0 &&
+            R.lines[R.pos - 1].type == LineType::Marker &&
+            R.lines[R.pos - 1].key == c->kvn_accept_stop) {
+            open_pair = nullptr;
+        }
+    };
+    const Section* last_child = nullptr;
     size_t matrix_index = 0;
     std::vector<const Leaf*> matrix_leaves;
     for (const Item& it : s.items) {
@@ -279,13 +329,15 @@ inline void parse_section(Reader& R, const Section& s, Node& n, const std::strin
         const size_t before = R.pos;
 
         if (l.type == LineType::Marker) {
-            if (s.kvn_stop && l.key == s.kvn_stop) {
+            if ((s.kvn_stop && l.key == s.kvn_stop) ||
+                (marked && s.kvn_accept_stop && l.key == s.kvn_accept_stop)) {
                 ++R.pos;
                 return;
             }
-            if (const Section* c = child_claiming(s, l)) {
+            if (const Section* c = child_claiming(s, l, last_child)) {
                 if (!explicit_block && s.repeat && !c->repeat && child_started(n, *c)) return;
-                open_child(R, s, n, *c, path);
+                last_child = c;
+                descend(c);
                 if (R.pos == before) ++R.pos;
                 continue;
             }
@@ -312,9 +364,10 @@ inline void parse_section(Reader& R, const Section& s, Node& n, const std::strin
                     return;  /* the next instance of this section begins with them */
                 }
                 if (!own_leaf(s, next.key)) {
-                    if (const Section* c = child_claiming(s, next)) {
+                    if (const Section* c = child_claiming(s, next, last_child)) {
                         if (comment_fits(*c, next)) {
-                            open_child(R, s, n, *c, path);
+                            last_child = c;
+                            descend(c);
                             if (R.pos == before) ++R.pos;
                             continue;
                         }
@@ -343,8 +396,9 @@ inline void parse_section(Reader& R, const Section& s, Node& n, const std::strin
                 ++R.pos;
                 continue;
             }
-            if (const Section* c = child_claiming(s, l)) {
-                open_child(R, s, n, *c, path);
+            if (const Section* c = child_claiming(s, l, last_child)) {
+                last_child = c;
+                descend(c);
                 if (R.pos == before) ++R.pos;
                 continue;
             }
@@ -385,7 +439,7 @@ inline void parse_section(Reader& R, const Section& s, Node& n, const std::strin
             if (c->rows == 1) {
                 read_row_instance(R, *c, n);
             } else {
-                open_child(R, s, n, *c, path);
+                descend(c);
                 if (R.pos == before) ++R.pos;
             }
             continue;
@@ -428,6 +482,15 @@ inline bool read(const char* data, size_t length, const Message& msg, Node* root
     const size_t version_at = R.pos;
     ++R.pos;
     Node& top = *root;
+    for (size_t i = R.pos; i < R.lines.size(); ++i) {
+        const Line& l = R.lines[i];
+        if (l.type == LineType::Key && starts_with(l.key, "CCSDS_") && l.key.size() > 11 &&
+            l.key.compare(l.key.size() - 5, 5, "_VERS") == 0) {
+            *error = "the document holds more than one message (" + l.key + " again at line " +
+                     std::to_string(l.no) + "); this reads one message per file (multiple-messages)";
+            return false;
+        }
+    }
     while (R.pos < R.lines.size() && R.error.empty()) {
         const size_t before = R.pos;
         parse_section(R, *msg.top, top, std::string(msg.root));
@@ -504,7 +567,7 @@ inline void flush_matrix(const std::vector<const Node*>& cells, std::string* out
 }
 
 inline void write_group(const Node& g, bool units, std::string* out) {
-    if (g.name == "segment" || g.name == "relativeMetadataData") blank_line(out);
+    if (g.name == "segment" || g.name == "relativeMetadataData" || g.name == "data") blank_line(out);
     if (g.kvn_start) {
         blank_line(out);
         *out += g.kvn_start;
@@ -523,7 +586,8 @@ inline void write_group(const Node& g, bool units, std::string* out) {
         for (const Node& k : g.kids) {
             if (k.head && !k.group) write_leaf(k, units, out);  /* CDM: OBJECT opens a segment */
         }
-        for (const Node& k : g.kids) {
+        for (size_t i = 0; i < g.kids.size(); ++i) {
+            const Node& k = g.kids[i];
             if (k.head && !k.group) continue;
             if (k.matrix) {
                 matrix.push_back(&k);
@@ -532,7 +596,22 @@ inline void write_group(const Node& g, bool units, std::string* out) {
             flush_matrix(matrix, out);
             matrix.clear();
             if (k.group) {
+                /* A run of repeated groups between one pair of markers. */
+                const bool first = i == 0 || g.kids[i - 1].name != k.name;
+                const bool last = i + 1 == g.kids.size() || g.kids[i + 1].name != k.name;
+                if (k.kvn_run_start) {
+                    blank_line(out);
+                    if (first) {
+                        *out += k.kvn_run_start;
+                        *out += '\n';
+                    }
+                }
                 write_group(k, units, out);
+                if (k.kvn_run_stop && last) {
+                    *out += k.kvn_run_stop;
+                    *out += '\n';
+                    blank_line(out);
+                }
             } else {
                 write_leaf(k, units, out);
             }

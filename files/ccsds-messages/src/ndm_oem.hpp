@@ -9,9 +9,10 @@
  * refuses its own compact form: spelling its epochs is time arithmetic, and the
  * leap-second table that arithmetic needs belongs to foundation/time.
  *
- * KVN has no DATA_START: the state vectors follow META_STOP, one per line, and
- * each covariance matrix is a COVARIANCE_START block whose cells are the rows of
- * the lower triangle.
+ * KVN has no DATA_START: the state vectors follow META_STOP, one per line. One
+ * COVARIANCE_START ... COVARIANCE_STOP holds every covariance matrix of the
+ * segment (5.2.5.6), each beginning at its EPOCH, its cells the rows of the lower
+ * triangle.
  */
 
 #ifndef CCSDS_MESSAGES_NDM_OEM_HPP
@@ -148,8 +149,8 @@ inline std::shared_ptr<Message> build() {
         NDM_COV21(NDM_CELL)
 #undef NDM_CELL
     }
-    SectionOptions cov_options = block("COVARIANCE_START", "COVARIANCE_STOP");
-    cov_options.repeat = true;
+    /* One COVARIANCE_START ... COVARIANCE_STOP holds every matrix of the segment. */
+    SectionOptions cov_options = run("COVARIANCE_START", "COVARIANCE_STOP");
     cov_options.optional = true;
     auto covariance = section("covarianceMatrix", NDM_NAV_MANY(B, COVARIANCE_MATRIX_LINES),
                               cov_items, cov_options);

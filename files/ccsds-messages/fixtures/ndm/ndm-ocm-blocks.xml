@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ocm xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://sanaregistry.org/r/ndmxml_unqualified/ndmxml-4.0.0-master-4.0.xsd" id="CCSDS_OCM_VERS" version="3.0">
+  <header>
+    <COMMENT>Synthetic OCM in the layout of CCSDS 502.0-B-3 figure G-20.</COMMENT>
+    <COMMENT>User defined</COMMENT>
+    <CLASSIFICATION>UNCLASSIFIED</CLASSIFICATION>
+    <CREATION_DATE>2026-10-11T14:07:31</CREATION_DATE>
+    <ORIGINATOR>SDN-TEST</ORIGINATOR>
+    <MESSAGE_ID>OCM-0001</MESSAGE_ID>
+  </header>
+  <body>
+    <segment>
+      <metadata>
+        <COMMENT>Metadata for the example</COMMENT>
+        <OBJECT_NAME>EXAMPLESAT 1</OBJECT_NAME>
+        <INTERNATIONAL_DESIGNATOR>2000-028A</INTERNATIONAL_DESIGNATOR>
+        <CATALOG_NAME>SATCAT</CATALOG_NAME>
+        <OBJECT_DESIGNATOR>26824</OBJECT_DESIGNATOR>
+        <ALTERNATE_NAMES>EXAMPLE ONE, EX-1</ALTERNATE_NAMES>
+        <ORIGINATOR_POC>Ms. Rodgers</ORIGINATOR_POC>
+        <ORIGINATOR_EMAIL>rodgers@example.org</ORIGINATOR_EMAIL>
+        <OPERATOR>EXAMPLE OPS</OPERATOR>
+        <OBJECT_TYPE>PAYLOAD</OBJECT_TYPE>
+        <TIME_SYSTEM>UTC</TIME_SYSTEM>
+        <EPOCH_TZERO>2026-10-11T14:28:25.1172</EPOCH_TZERO>
+        <OCM_DATA_ELEMENTS>TRAJ, PHYS, COV, MAN, PERT, OD, USER</OCM_DATA_ELEMENTS>
+        <START_TIME>2026-10-11T14:28:25.1172</START_TIME>
+        <STOP_TIME>2026-10-11T14:48:25.1172</STOP_TIME>
+        <TAIMUTC_AT_TZERO units="s">37.0</TAIMUTC_AT_TZERO>
+      </metadata>
+      <data>
+        <traj>
+          <COMMENT>Trajectory for the example</COMMENT>
+          <TRAJ_ID>TRAJ-1</TRAJ_ID>
+          <TRAJ_BASIS>PREDICTED</TRAJ_BASIS>
+          <CENTER_NAME>EARTH</CENTER_NAME>
+          <TRAJ_REF_FRAME>EME2000</TRAJ_REF_FRAME>
+          <TRAJ_TYPE>CARTPV</TRAJ_TYPE>
+          <trajLine>2026-10-11T14:28:25.1172 2854.5 -2916.2 -5360.7 5.90 4.86 0.52</trajLine>
+          <trajLine>2026-10-11T14:38:25.1172 2860.1 -2900.0 -5300.1 5.88 4.80 0.55</trajLine>
+        </traj>
+        <traj>
+          <TRAJ_ID>TRAJ-2</TRAJ_ID>
+          <TRAJ_PREV_ID>TRAJ-1</TRAJ_PREV_ID>
+          <CENTER_NAME>EARTH</CENTER_NAME>
+          <TRAJ_REF_FRAME>EFG</TRAJ_REF_FRAME>
+          <TRAJ_TYPE>CARTPVA</TRAJ_TYPE>
+          <trajLine>0.0 2854.5 -2916.2 -5360.7 5.90 4.86 0.52 0.0037 -0.0038 -0.0070</trajLine>
+        </traj>
+        <phys>
+          <COMMENT>Spacecraft Physical Characteristics</COMMENT>
+          <WET_MASS units="kg">100.0</WET_MASS>
+          <OEB_Q1>0.03123</OEB_Q1>
+          <OEB_Q2>0.78543</OEB_Q2>
+          <OEB_Q3>0.39158</OEB_Q3>
+          <OEB_QC>0.47832</OEB_QC>
+          <OEB_MAX units="m">2.0</OEB_MAX>
+          <OEB_INT units="m">1.0</OEB_INT>
+          <OEB_MIN units="m">0.5</OEB_MIN>
+          <AREA_ALONG_OEB_MAX units="m**2">0.5</AREA_ALONG_OEB_MAX>
+          <AREA_ALONG_OEB_INT units="m**2">1.0</AREA_ALONG_OEB_INT>
+          <AREA_ALONG_OEB_MIN units="m**2">2.0</AREA_ALONG_OEB_MIN>
+          <RCS units="m**2">0.0</RCS>
+          <VM_ABSOLUTE>3.5</VM_ABSOLUTE>
+        </phys>
+        <cov>
+          <COV_ID>COV-1</COV_ID>
+          <COV_REF_FRAME>RTN</COV_REF_FRAME>
+          <COV_TYPE>CARTPV</COV_TYPE>
+          <COV_ORDERING>LTM</COV_ORDERING>
+          <covLine>0.0 1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0 9.0 10.0 11.0 12.0 13.0 14.0 15.0 16.0 17.0 18.0 19.0 20.0 21.0</covLine>
+        </cov>
+        <man>
+          <COMMENT>A planned maneuver</COMMENT>
+          <MAN_ID>MAN-1</MAN_ID>
+          <MAN_DEVICE_ID>THR-1</MAN_DEVICE_ID>
+          <MAN_PURPOSE>ORBIT_RAISE</MAN_PURPOSE>
+          <MAN_REF_FRAME>RTN</MAN_REF_FRAME>
+          <DC_TYPE>CONTINUOUS</DC_TYPE>
+          <DC_MIN_CYCLES>0</DC_MIN_CYCLES>
+          <MAN_COMPOSITION>TIME_RELATIVE, DV_X, DV_Y, DV_Z</MAN_COMPOSITION>
+          <MAN_UNITS>s, km/s, km/s, km/s</MAN_UNITS>
+          <manLine>0.0 0.001 0.0 0.0</manLine>
+          <manLine>60.0 0.001 0.0 0.0</manLine>
+        </man>
+        <pert>
+          <COMMENT>Perturbations Specification</COMMENT>
+          <ATMOSPHERIC_MODEL>NRLMSIS00</ATMOSPHERIC_MODEL>
+          <GRAVITY_MODEL>EGM-96: 36D 36O</GRAVITY_MODEL>
+          <GM units="km**3/s**2">398600.4415</GM>
+          <N_BODY_PERTURBATIONS>MOON, SUN</N_BODY_PERTURBATIONS>
+          <FIXED_GEOMAG_KP units="nT">12.0</FIXED_GEOMAG_KP>
+          <FIXED_F10P7 units="SFU">105.0</FIXED_F10P7>
+          <FIXED_F10P7_MEAN units="SFU">120.0</FIXED_F10P7_MEAN>
+        </pert>
+        <od>
+          <COMMENT>Orbit determination</COMMENT>
+          <OD_ID>OD-1</OD_ID>
+          <OD_METHOD>BLS</OD_METHOD>
+          <OD_EPOCH>2026-10-11T14:00:00</OD_EPOCH>
+          <RECOMMENDED_OD_SPAN units="d">7.0</RECOMMENDED_OD_SPAN>
+          <OBS_USED>579</OBS_USED>
+          <TRACKS_USED>12</TRACKS_USED>
+          <WEIGHTED_RMS>0.9</WEIGHTED_RMS>
+          <DATA_TYPES>RANGE, DOPPLER</DATA_TYPES>
+        </od>
+        <user>
+          <USER_DEFINED parameter="CONSOLE_POC">MAXWELL RAFERTY</USER_DEFINED>
+          <USER_DEFINED parameter="EARTH_MODEL">WGS-84</USER_DEFINED>
+        </user>
+      </data>
+    </segment>
+  </body>
+</ocm>

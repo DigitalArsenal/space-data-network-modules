@@ -52,7 +52,7 @@ inline std::shared_ptr<Message> build() {
         NDM_LEAF(M, REF_FRAME, nullptr, true),
         NDM_LEAF(M, REF_FRAME_EPOCH, nullptr, false),
         NDM_LEAF(M, TIME_SYSTEM, nullptr, true),
-    }, block("META_START", "META_STOP"));
+    }, tolerate("META_START", "META_STOP"));
 
     auto state_vector = section("stateVector", nav_same(), {
         read_only(NDM_COMMENT(M, COMMENT, false)),

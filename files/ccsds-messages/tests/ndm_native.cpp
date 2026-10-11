@@ -49,7 +49,13 @@ int main(int argc, char** argv) {
     ndm::ReadOutcome a;
     const bool read_ok = entry->read(input.data(), input.size(), &a);
     check("read.ok", read_ok ? "ok" : a.code + ": " + a.error, "ok");
-    if (!read_ok) return 1;
+    if (!read_ok) {
+        if (std::getenv("NDM_VERBOSE")) {
+            for (const ndm::Issue& i : a.report.issues)
+                std::printf("ISSUE %s %s %s %s line %d\n", ndm::issue_name(i.kind), i.where.c_str(), i.key.c_str(), i.detail.c_str(), i.line);
+        }
+        return 1;
+    }
     check("read.syntax", ndm::syntax_name(a.syntax), ndm::syntax_name(ndm::detect_syntax(input.data(), input.size())));
     std::printf("INFO version=%s record=%zu bytes\n", a.version.c_str(), a.record.size());
     for (int k = 0; k < 6; ++k) {

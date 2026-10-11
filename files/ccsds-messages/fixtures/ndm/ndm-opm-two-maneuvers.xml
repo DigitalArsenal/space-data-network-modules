@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opm xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://sanaregistry.org/r/ndmxml_unqualified/ndmxml-4.0.0-master-4.0.xsd" id="CCSDS_OPM_VERS" version="3.0">
+  <header>
+    <COMMENT>Synthetic OPM in the layout of CCSDS 502.0-B-3.</COMMENT>
+    <COMMENT>State Vector</COMMENT>
+    <COMMENT>Keplerian elements</COMMENT>
+    <COMMENT>Spacecraft parameters</COMMENT>
+    <COMMENT>Covariance</COMMENT>
+    <CREATION_DATE>2026-10-11T14:07:31</CREATION_DATE>
+    <ORIGINATOR>SDN-TEST</ORIGINATOR>
+    <MESSAGE_ID>OPM-0001</MESSAGE_ID>
+  </header>
+  <body>
+    <segment>
+      <metadata>
+        <OBJECT_NAME>EXAMPLESAT 1</OBJECT_NAME>
+        <OBJECT_ID>2000-028A</OBJECT_ID>
+        <CENTER_NAME>EARTH</CENTER_NAME>
+        <REF_FRAME>EME2000</REF_FRAME>
+        <TIME_SYSTEM>UTC</TIME_SYSTEM>
+      </metadata>
+      <data>
+        <stateVector>
+          <EPOCH>2026-10-11T12:00:00.000000</EPOCH>
+          <X units="km">6503.514</X>
+          <Y units="km">1239.647</Y>
+          <Z units="km">-717.49</Z>
+          <X_DOT units="km/s">-0.87316</X_DOT>
+          <Y_DOT units="km/s">8.74042</Y_DOT>
+          <Z_DOT units="km/s">-4.191076</Z_DOT>
+        </stateVector>
+        <keplerianElements>
+          <SEMI_MAJOR_AXIS units="km">41399.5123</SEMI_MAJOR_AXIS>
+          <ECCENTRICITY>0.020842611</ECCENTRICITY>
+          <INCLINATION units="deg">12.008</INCLINATION>
+          <RA_OF_ASC_NODE units="deg">215.3</RA_OF_ASC_NODE>
+          <ARG_OF_PERICENTER units="deg">312.4</ARG_OF_PERICENTER>
+          <TRUE_ANOMALY units="deg">41.2</TRUE_ANOMALY>
+          <GM units="km**3/s**2">398600.4415</GM>
+        </keplerianElements>
+        <spacecraftParameters>
+          <MASS units="kg">3000.0</MASS>
+          <SOLAR_RAD_AREA units="m**2">18.77</SOLAR_RAD_AREA>
+          <SOLAR_RAD_COEFF>1.0</SOLAR_RAD_COEFF>
+          <DRAG_AREA units="m**2">18.77</DRAG_AREA>
+          <DRAG_COEFF>2.5</DRAG_COEFF>
+        </spacecraftParameters>
+        <covarianceMatrix>
+          <COV_REF_FRAME>RTN</COV_REF_FRAME>
+          <CX_X units="km**2">0.0003331349476038534</CX_X>
+          <CY_X units="km**2">0.0004618927349220216</CY_X>
+          <CY_Y units="km**2">0.0006782421679971363</CY_Y>
+          <CZ_X units="km**2">-0.0003070007847730449</CZ_X>
+          <CZ_Y units="km**2">-0.0004221234189514228</CZ_Y>
+          <CZ_Z units="km**2">0.0003231931992380369</CZ_Z>
+          <CX_DOT_X units="km**2/s">-3.34936503392263e-07</CX_DOT_X>
+          <CX_DOT_Y units="km**2/s">-2.211832501084875e-07</CX_DOT_Y>
+          <CX_DOT_Z units="km**2/s">-5.978510709310466e-08</CX_DOT_Z>
+          <CX_DOT_X_DOT units="km**2/s**2">2.607014375594646e-10</CX_DOT_X_DOT>
+          <CY_DOT_X units="km**2/s">-2.463052160790187e-07</CY_DOT_X>
+          <CY_DOT_Y units="km**2/s">-3.130621369470387e-07</CY_DOT_Y>
+          <CY_DOT_Z units="km**2/s">2.34146712387001e-08</CY_DOT_Z>
+          <CY_DOT_X_DOT units="km**2/s**2">1.75987576401221e-10</CY_DOT_X_DOT>
+          <CY_DOT_Y_DOT units="km**2/s**2">1.992545563898283e-10</CY_DOT_Y_DOT>
+          <CZ_DOT_X units="km**2/s">3.41012039071025e-07</CZ_DOT_X>
+          <CZ_DOT_Y units="km**2/s">4.126316811283108e-07</CZ_DOT_Y>
+          <CZ_DOT_Z units="km**2/s">5.130892031082307e-09</CZ_DOT_Z>
+          <CZ_DOT_X_DOT units="km**2/s**2">-1.85937901834015e-10</CZ_DOT_X_DOT>
+          <CZ_DOT_Y_DOT units="km**2/s**2">-2.134890381201384e-10</CZ_DOT_Y_DOT>
+          <CZ_DOT_Z_DOT units="km**2/s**2">1.563219823411253e-10</CZ_DOT_Z_DOT>
+        </covarianceMatrix>
+        <maneuverParameters>
+          <COMMENT>First maneuver</COMMENT>
+          <MAN_EPOCH_IGNITION>2026-10-11T12:30:00.000000</MAN_EPOCH_IGNITION>
+          <MAN_DURATION units="s">132.6</MAN_DURATION>
+          <MAN_DELTA_MASS units="kg">-18.418</MAN_DELTA_MASS>
+          <MAN_REF_FRAME>EME2000</MAN_REF_FRAME>
+          <MAN_DV_1 units="km/s">-0.0233</MAN_DV_1>
+          <MAN_DV_2 units="km/s">0.0021</MAN_DV_2>
+          <MAN_DV_3 units="km/s">0.0004</MAN_DV_3>
+        </maneuverParameters>
+        <maneuverParameters>
+          <COMMENT>Second maneuver</COMMENT>
+          <MAN_EPOCH_IGNITION>2026-10-11T13:30:00.000000</MAN_EPOCH_IGNITION>
+          <MAN_DURATION units="s">0.0</MAN_DURATION>
+          <MAN_DELTA_MASS units="kg">0.0</MAN_DELTA_MASS>
+          <MAN_REF_FRAME>RTN</MAN_REF_FRAME>
+          <MAN_DV_1 units="km/s">0.001</MAN_DV_1>
+          <MAN_DV_2 units="km/s">0.0</MAN_DV_2>
+          <MAN_DV_3 units="km/s">-0.002</MAN_DV_3>
+        </maneuverParameters>
+        <userDefinedParameters>
+          <USER_DEFINED parameter="EARTH_MODEL">WGS-84</USER_DEFINED>
+        </userDefinedParameters>
+      </data>
+    </segment>
+  </body>
+</opm>

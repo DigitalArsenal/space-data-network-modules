@@ -171,7 +171,7 @@ inline std::shared_ptr<Message> build() {
         NDM_LEAF_AS(M, "REF_FRAME_EPOCH", REFERENCE_FRAME_EPOCH, nullptr, false),
         NDM_LEAF(M, TIME_SYSTEM, nullptr, true),
         custom_leaf<M>("MEAN_ELEMENT_THEORY", nullptr, true, theory_take, theory_give),
-    }, block("META_START", "META_STOP"));
+    }, tolerate("META_START", "META_STOP"));
 
     auto mean_elements = section("meanElements", nav_same(), {
         read_only(NDM_COMMENT(M, COMMENT, false)),

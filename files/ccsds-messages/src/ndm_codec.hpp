@@ -72,6 +72,60 @@ struct WriteOptions {
         }                                                                                    \
     }
 
+/* What a message must not be read with. The record has a field for everything the
+ * Blue Book defines, so a keyword, element, marker or data line with no place in
+ * the message is not the Blue Book's (or not this Spec's) to read; a keyword stated
+ * twice would lose one of its values; a mandatory keyword that is missing would
+ * leave the record holding a default the message never said. Each is refused with
+ * the first instance named, so the caller is told instead of handed a record that
+ * is quietly different from the message. Returns the refusal, or empty. */
+inline std::string refusal(const Message& msg, const Report& report, std::string* code) {
+    const Issue* first = nullptr;
+    size_t count = 0;
+    for (const Issue& i : report.issues) {
+        if (i.kind != IssueKind::UnknownKeyword && i.kind != IssueKind::UnknownStructure &&
+            i.kind != IssueKind::Duplicate && i.kind != IssueKind::MissingRequired) {
+            continue;
+        }
+        if (!first) first = &i;
+        ++count;
+    }
+    if (!first) return std::string();
+    const std::string type = msg.type.empty() ? msg.root : msg.type;
+    std::string text;
+    switch (first->kind) {
+        case IssueKind::UnknownKeyword:
+            *code = "unknown-keyword";
+            text = first->key;
+            if (!first->detail.empty() && first->detail != "group") text += " = " + first->detail;
+            text += first->line ? " (line " + std::to_string(first->line) + ")" : std::string();
+            text += " has no place in " + type + " at " + first->where;
+            break;
+        case IssueKind::UnknownStructure:
+            *code = "unknown-structure";
+            text = first->key;
+            text += first->line ? " (line " + std::to_string(first->line) + ")" : std::string();
+            text += " has no place in " + type + " at " + first->where;
+            if (!first->detail.empty()) {
+                text += " (" + (first->detail.size() > 60 ? first->detail.substr(0, 57) + "..." : first->detail) + ")";
+            }
+            break;
+        case IssueKind::Duplicate:
+            *code = "duplicate-keyword";
+            text = first->key;
+            text += first->line ? " (line " + std::to_string(first->line) + ")" : std::string();
+            text += " is stated twice at " + first->where;
+            break;
+        default:
+            *code = "missing-keyword";
+            text = first->key + " is mandatory in " + type + " at " + first->where +
+                   " and the message does not state it";
+            break;
+    }
+    if (count > 1) text += "; " + std::to_string(count - 1) + " more";
+    return text;
+}
+
 template <class Codec>
 inline bool read_message(const Message& msg, const uint8_t* data, size_t length,
                          ReadOutcome* out) {
@@ -81,15 +135,17 @@ inline bool read_message(const Message& msg, const uint8_t* data, size_t length,
         std::string found;
         if (!xml::read(reinterpret_cast<const char*>(data), length, msg.root, &out->tree, &error,
                        &found)) {
-            out->code = found.empty() || found == msg.root ? "bad-xml" : "wrong-message-type";
+            out->code = error.find("(multiple-messages)") != std::string::npos ? "multiple-messages"
+                        : (found.empty() || found == msg.root) ? "bad-xml" : "wrong-message-type";
             out->error = error;
             return false;
         }
     } else {
         if (!kvn::read(reinterpret_cast<const char*>(data), length, msg, &out->tree, &out->report,
                        &error)) {
-            out->code = starts_with(error, "the message opens with") ? "wrong-message-type"
-                                                                     : "bad-kvn";
+            out->code = error.find("(multiple-messages)") != std::string::npos ? "multiple-messages"
+                        : starts_with(error, "the message opens with") ? "wrong-message-type"
+                                                                       : "bad-kvn";
             out->error = error;
             return false;
         }
@@ -104,6 +160,14 @@ inline bool read_message(const Message& msg, const uint8_t* data, size_t length,
     }
     FillResult fr;
     fill_section(*msg.top, out->tree, &record, msg.root, &out->report, &fr);
+    require_section(*msg.top, &out->tree, msg.root, &out->report);
+    {
+        const std::string why = refusal(msg, out->report, &out->code);
+        if (!why.empty()) {
+            out->error = why;
+            return false;
+        }
+    }
     if (!fr.ok) {
         out->code = "bad-value";
         out->error = fr.error + (fr.line ? " (line " + std::to_string(fr.line) + ")" : "");
@@ -134,6 +198,21 @@ inline bool write_message(const Message& msg, const uint8_t* record, size_t leng
     }
     std::vector<Node> top;
     emit_section(*msg.top, &native, &top);
+    if (!top.empty()) {
+        /* A message cannot be written without what the standard says it must state:
+         * the record that does not hold it is refused, not completed with a guess. */
+        Report missing;
+        require_section(*msg.top, &top[0], msg.root, &missing);
+        if (!missing.issues.empty()) {
+            const Issue& first = missing.issues[0];
+            *error = "the record does not state " + first.key + ", which " + msg.type +
+                     " must (at " + first.where + ")" +
+                     (missing.issues.size() > 1
+                          ? "; " + std::to_string(missing.issues.size() - 1) + " more"
+                          : std::string());
+            return false;
+        }
+    }
     Node tree = Node::container(msg.root);
     if (!top.empty()) tree.kids = std::move(top[0].kids);
     tree.text = msg.version;

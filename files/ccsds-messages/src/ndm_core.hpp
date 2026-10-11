@@ -279,6 +279,8 @@ struct Node {
      * no Spec of its own. */
     const char* kvn_start = nullptr;
     const char* kvn_stop = nullptr;
+    const char* kvn_run_start = nullptr;  /* before the first of a run of these    */
+    const char* kvn_run_stop = nullptr;   /* after the last of a run of these      */
     int rows = 0;       /* 1: this group is one KVN line of its leaves' texts    */
     bool matrix = false; /* leaf is a member of a lower-triangle matrix block     */
     bool bare = false;   /* leaf is a bare KVN text line (no KEYWORD =)           */
@@ -594,6 +596,7 @@ struct Leaf {
     GiveParamFn give_param;
     bool matrix = false;        /* a member of the section's lower-triangle matrix */
     bool bare = false;          /* a bare KVN text line (OCM/ACM data lines) */
+    bool repeatable = false;    /* may be stated again in the same section (COMMENT, lists of strings) */
     bool relocated = false;     /* read here but written elsewhere: declare it */
     /* Units a message may annotate this keyword with besides `units`, and how many
      * places the decimal point moves to reach `units` (km for m: +3). */
@@ -620,6 +623,16 @@ struct Section {
     std::string name;            /* XML element name */
     const char* kvn_start = nullptr;
     const char* kvn_stop = nullptr;
+    /* Markers a producer may state around a section the Blue Book does not delimit
+     * (META_START ... META_STOP in an OMM or an OPM, as some catalogues write them):
+     * read when they are there, never required, never written. */
+    const char* kvn_accept_start = nullptr;
+    const char* kvn_accept_stop = nullptr;
+    /* Markers written once around a whole run of this repeated section (an OEM's
+     * COVARIANCE_START ... COVARIANCE_STOP holds every covariance matrix of the
+     * segment, each one beginning at its EPOCH). */
+    const char* kvn_run_start = nullptr;
+    const char* kvn_run_stop = nullptr;
     bool repeat = false;         /* may occur many times */
     bool optional = false;       /* dropped from the output when it holds nothing */
     int rows = 0;                /* 1: each instance is one KVN data line */
@@ -705,6 +718,7 @@ inline Leaf make_leaf(const char* name, const char* units, bool required) {
         static const C defaults{};
         return Conv<M>::same(static_cast<const C*>(o)->*P, defaults.*P);
     };
+    l.repeatable = std::is_same_v<M, std::vector<std::string>>;
     return l;
 }
 
@@ -785,6 +799,7 @@ template <class C, std::string C::*P>
 inline Leaf comment_leaf(bool carried) {
     Leaf l;
     l.name = "COMMENT";
+    l.repeatable = true;
     l.take = [](Obj* o, const std::string& t, std::string*) {
         std::string& m = static_cast<C*>(o)->*P;
         if (!m.empty()) m += '\n';
@@ -810,6 +825,7 @@ template <class C, std::vector<std::string> C::*P>
 inline Leaf comment_list_leaf(bool carried) {
     Leaf l;
     l.name = "COMMENT";
+    l.repeatable = true;
     l.take = [](Obj* o, const std::string& t, std::string*) {
         (static_cast<C*>(o)->*P).push_back(t);
         return true;
@@ -868,6 +884,10 @@ inline Nav nav_many() {
 struct SectionOptions {
     const char* kvn_start = nullptr;
     const char* kvn_stop = nullptr;
+    const char* kvn_accept_start = nullptr;
+    const char* kvn_accept_stop = nullptr;
+    const char* kvn_run_start = nullptr;
+    const char* kvn_run_stop = nullptr;
     bool repeat = false;
     bool optional = false;
     int rows = 0;
@@ -883,6 +903,27 @@ inline SectionOptions block(const char* start, const char* stop) {
     return o;
 }
 
+/* A repeated section whose whole run sits between one pair of markers: written
+ * once around the run, read the same way (and, as ever, read without them). */
+inline SectionOptions run(const char* start, const char* stop) {
+    SectionOptions o;
+    o.kvn_accept_start = start;
+    o.kvn_accept_stop = stop;
+    o.kvn_run_start = start;
+    o.kvn_run_stop = stop;
+    o.repeat = true;
+    return o;
+}
+
+/* A section the Blue Book leaves undelimited in KVN, that some producers delimit
+ * anyway: it reads with or without the markers and is written without them. */
+inline SectionOptions tolerate(const char* start, const char* stop) {
+    SectionOptions o;
+    o.kvn_accept_start = start;
+    o.kvn_accept_stop = stop;
+    return o;
+}
+
 inline std::shared_ptr<Section> section(const char* name, Nav nav, std::vector<Item> items,
                                         SectionOptions o = SectionOptions()) {
     auto s = std::make_shared<Section>();
@@ -891,6 +932,10 @@ inline std::shared_ptr<Section> section(const char* name, Nav nav, std::vector<I
     s->items = std::move(items);
     s->kvn_start = o.kvn_start;
     s->kvn_stop = o.kvn_stop;
+    s->kvn_accept_start = o.kvn_accept_start;
+    s->kvn_accept_stop = o.kvn_accept_stop;
+    s->kvn_run_start = o.kvn_run_start;
+    s->kvn_run_stop = o.kvn_run_stop;
     s->repeat = o.repeat;
     s->optional = o.optional;
     s->rows = o.rows;
@@ -955,6 +1000,7 @@ inline void fill_leaf(const Section& s, const Leaf& leaf, const Node& kid, Obj* 
 inline void fill_section(const Section& s, const Node& n, Obj* parent, const std::string& path,
                          Report* rep, FillResult* res) {
     Obj* self = s.select ? s.select(parent, n) : (s.nav.make ? s.nav.make(parent) : parent);
+    std::vector<const Leaf*> seen;
     for (const Node& kid : n.kids) {
         const Leaf* leaf = nullptr;
         if (kid.name == "USER_DEFINED") {
@@ -963,6 +1009,14 @@ inline void fill_section(const Section& s, const Node& n, Obj* parent, const std
             leaf = s.leaf_named(kid.name);
         }
         if (leaf) {
+            /* A keyword the record holds once, stated twice: one of the two is lost. */
+            if (!leaf->repeatable && !leaf->bare && !leaf->user_defined && !leaf->matrix) {
+                if (std::find(seen.begin(), seen.end(), leaf) != seen.end()) {
+                    rep->add(IssueKind::Duplicate, path, kid.name, kid.text, kid.line);
+                    continue;
+                }
+                seen.push_back(leaf);
+            }
             fill_leaf(s, *leaf, kid, self, path, rep, res);
             continue;
         }
@@ -973,6 +1027,41 @@ inline void fill_section(const Section& s, const Node& n, Obj* parent, const std
         }
         rep->add(IssueKind::UnknownKeyword, path, kid.name, kid.group ? "group" : kid.text,
                  kid.line);
+    }
+}
+
+/* The mandatory keywords of the message that the tree does not state (or states
+ * with nothing after the equals sign). Reports; it builds nothing. `n` is null for
+ * a section the tree does not have at all, which matters only when the message must
+ * have it. Used on a tree read from a message, and on the tree a record writes. */
+inline void require_section(const Section& s, const Node* n, const std::string& path, Report* rep) {
+    for (const Item& it : s.items) {
+        if (it.is_section) {
+            const Section& c = *it.sec;
+            bool any = false;
+            if (n) {
+                for (const Node& k : n->kids) {
+                    if (k.group && k.name == c.name) {
+                        any = true;
+                        require_section(c, &k, path + "/" + c.name, rep);
+                    }
+                }
+            }
+            if (!any && !c.optional && !c.present) require_section(c, nullptr, path + "/" + c.name, rep);
+            continue;
+        }
+        const Leaf& leaf = it.leaf;
+        if (!leaf.required || !leaf.take || leaf.relocated) continue;
+        bool stated = false;
+        if (n) {
+            for (const Node& k : n->kids) {
+                if (!k.group && k.name == leaf.name && !k.text.empty()) {
+                    stated = true;
+                    break;
+                }
+            }
+        }
+        if (!stated) rep->add(IssueKind::MissingRequired, path, leaf.name, "", n ? n->line : 0);
     }
 }
 
@@ -988,6 +1077,8 @@ inline void emit_section(const Section& s, const Obj* parent, std::vector<Node>*
         Node n = Node::container(s.name);
         n.kvn_start = s.kvn_start;
         n.kvn_stop = s.kvn_stop;
+        n.kvn_run_start = s.kvn_run_start;
+        n.kvn_run_stop = s.kvn_run_stop;
         n.rows = s.rows;
         for (const Item& it : s.items) {
             if (it.is_section) {

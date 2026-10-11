@@ -79,6 +79,7 @@
 #include "aem_projection.hpp"
 #include "tdm_projection.hpp"
 #include "ndm_registry.hpp"
+#include "ndm_adm_xml.hpp"
 
 namespace {
 
@@ -288,7 +289,29 @@ int32_t push_message_frame(const NCDT& descriptor, const std::string& text) {
 /* Parsing the frame's text                                                  */
 /* ------------------------------------------------------------------------ */
 
-int32_t parse_body(const MessageFrame& frame, const char* expected_type, kvn::Document* doc) {
+/* The frame's message as a keyword-value Document: the KVN parsed, or the NDM/XML
+ * turned into the Document the same message would have parsed to. *xml says which. */
+int32_t parse_body(const MessageFrame& frame, const char* expected_type, kvn::Document* doc,
+                   bool* xml = nullptr) {
+    if (xml) *xml = false;
+    if (ndm::detect_syntax(frame.body, frame.body_length) == ndm::Syntax::Xml) {
+        if (xml) *xml = true;
+        ndm::Node root;
+        std::string error, found;
+        const std::string element = ndm::upper(expected_type) == "AEM" ? "aem" : "tdm";
+        if (!ndm::xml::read(reinterpret_cast<const char*>(frame.body), frame.body_length, element,
+                            &root, &error, &found)) {
+            plugin_set_error(found.empty() || found == element ? "bad-xml" : "wrong-message-type",
+                             error.c_str());
+            return 422;
+        }
+        const std::string version_key = std::string("CCSDS_") + expected_type + "_VERS";
+        if (!ndm::admxml::document_from_xml(root, expected_type, version_key.c_str(), doc, &error)) {
+            plugin_set_error("bad-xml", error.c_str());
+            return 422;
+        }
+        return 0;
+    }
     const kvn::Status ks = kvn::parse(reinterpret_cast<const char*>(frame.body),
                                       frame.body_length, doc);
     if (ks != kvn::Status::Ok) {
@@ -306,6 +329,19 @@ int32_t parse_body(const MessageFrame& frame, const char* expected_type, kvn::Do
                       doc->message_type.empty() ? "?" : doc->message_type.c_str(), expected_type);
         plugin_set_error("wrong-message-type", message);
         return 422;
+    }
+    return 0;
+}
+
+/* The descriptor's declared FORMAT, when it names a format, must be the syntax the bytes are in. */
+int32_t check_declared(const char* method, const MessageFrame& frame, ncdContainerFormat found) {
+    const ncdContainerFormat declared = frame.descriptor->FORMAT();
+    if (declared != ncdContainerFormat::UNSPECIFIED && declared != found) {
+        char message[256];
+        std::snprintf(message, sizeof(message), "%s found %s, but the descriptor declares FORMAT %s.",
+                      method, EnumNamencdContainerFormat(found), EnumNamencdContainerFormat(declared));
+        plugin_set_error("format-mismatch", message);
+        return 400;
     }
     return 0;
 }
@@ -375,6 +411,39 @@ void fill_ndm_descriptor(const ndm::Node& tree, const std::string& version, cons
     out->SOURCE_SHA256 = ephem::sha256_hex(body, body_length);
 }
 
+/* The syntax a write method produces: XML when the optional "descriptor" input
+ * names the XML format, KVN when it names KVN or nothing, refused when it names
+ * another message. */
+int32_t choose_format(const char* method, ncdContainerFormat kvn_format,
+                      ncdContainerFormat xml_format, ndm::Syntax* syntax,
+                      ncdContainerFormat* format) {
+    *syntax = ndm::Syntax::Kvn;
+    *format = kvn_format;
+    const int32_t index = plugin_find_input_index("descriptor", 0);
+    const plugin_input_frame_t* df =
+        index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(index)) : nullptr;
+    if (!df || !df->payload || df->payload_length == 0) return 0;
+    ::flatbuffers::Verifier verifier(df->payload, df->payload_length);
+    if (!::flatbuffers::BufferHasIdentifier(df->payload, NCDIdentifier(), true) ||
+        !VerifySizePrefixedNCDBuffer(verifier)) {
+        plugin_set_error("bad-ncd", "The descriptor is not a verifiable size-prefixed $NCD.");
+        return 400;
+    }
+    const ncdContainerFormat asked = GetSizePrefixedNCD(df->payload)->FORMAT();
+    if (asked == xml_format) {
+        *syntax = ndm::Syntax::Xml;
+        *format = xml_format;
+    } else if (asked != ncdContainerFormat::UNSPECIFIED && asked != kvn_format) {
+        char message[256];
+        std::snprintf(message, sizeof(message), "%s writes %s or %s, but the descriptor asks for %s.",
+                      method, EnumNamencdContainerFormat(kvn_format),
+                      EnumNamencdContainerFormat(xml_format), EnumNamencdContainerFormat(asked));
+        plugin_set_error("format-mismatch", message);
+        return 400;
+    }
+    return 0;
+}
+
 int32_t ndm_read(const char* method, const char* type, const char* port,
                  ncdContainerFormat kvn_format, ncdContainerFormat xml_format) {
     const ndm::registry::Entry* entry = ndm::registry::find(type);
@@ -427,29 +496,7 @@ int32_t ndm_write(const char* method, const char* type, const char* port,
     /* The syntax is the one the caller's descriptor names; none names KVN. */
     ndm::WriteOptions options;
     ncdContainerFormat format = kvn_format;
-    const int32_t index = plugin_find_input_index("descriptor", 0);
-    const plugin_input_frame_t* df =
-        index >= 0 ? plugin_get_input_frame(static_cast<uint32_t>(index)) : nullptr;
-    if (df && df->payload && df->payload_length > 0) {
-        ::flatbuffers::Verifier verifier(df->payload, df->payload_length);
-        if (!::flatbuffers::BufferHasIdentifier(df->payload, NCDIdentifier(), true) ||
-            !VerifySizePrefixedNCDBuffer(verifier)) {
-            plugin_set_error("bad-ncd", "The descriptor is not a verifiable size-prefixed $NCD.");
-            return 400;
-        }
-        const ncdContainerFormat asked = GetSizePrefixedNCD(df->payload)->FORMAT();
-        if (asked == xml_format) {
-            options.syntax = ndm::Syntax::Xml;
-            format = xml_format;
-        } else if (asked != ncdContainerFormat::UNSPECIFIED && asked != kvn_format) {
-            char message[256];
-            std::snprintf(message, sizeof(message), "%s writes %s or %s, but the descriptor asks for %s.",
-                          method, EnumNamencdContainerFormat(kvn_format),
-                          EnumNamencdContainerFormat(xml_format), EnumNamencdContainerFormat(asked));
-            plugin_set_error("format-mismatch", message);
-            return 400;
-        }
-    }
+    if (const int32_t rc = choose_format(method, kvn_format, xml_format, &options.syntax, &format)) return rc;
 
     std::string text, error;
     ndm::Node tree;
@@ -482,13 +529,17 @@ NDM_METHODS(OCM, ocm, "orbit", ncdContainerFormat::CCSDS_OCM_KVN, ncdContainerFo
 
 int read_aem(void) {
     MessageFrame frame;
-    const int32_t rc =
-        decode_message_frame("read_aem", ncdContainerFormat::CCSDS_AEM_KVN, &frame);
+    const int32_t rc = decode_message_frame("read_aem", ncdContainerFormat::CCSDS_AEM_KVN, &frame,
+                                            ncdContainerFormat::CCSDS_AEM_XML);
     if (rc != 0) return rc;
 
     kvn::Document doc;
-    const int32_t parsed = parse_body(frame, "AEM", &doc);
+    bool xml = false;
+    const int32_t parsed = parse_body(frame, "AEM", &doc, &xml);
     if (parsed != 0) return parsed;
+    const ncdContainerFormat aem_format =
+        xml ? ncdContainerFormat::CCSDS_AEM_XML : ncdContainerFormat::CCSDS_AEM_KVN;
+    if (const int32_t mismatch = check_declared("read_aem", frame, aem_format)) return mismatch;
 
     ccsds::aem::Message view;
     ccsds::aem::Fault fault;
@@ -525,19 +576,23 @@ int read_aem(void) {
 
     NCDT descriptor;
     fill_common_descriptor(doc, view.header, frame.body, frame.body_length, frame.descriptor,
-                           ncdContainerFormat::CCSDS_AEM_KVN, "CCSDS_AEM_VERS", &descriptor);
+                           aem_format, "CCSDS_AEM_VERS", &descriptor);
     return push_descriptor(descriptor);
 }
 
 int read_tdm(void) {
     MessageFrame frame;
-    const int32_t rc =
-        decode_message_frame("read_tdm", ncdContainerFormat::CCSDS_TDM_KVN, &frame);
+    const int32_t rc = decode_message_frame("read_tdm", ncdContainerFormat::CCSDS_TDM_KVN, &frame,
+                                            ncdContainerFormat::CCSDS_TDM_XML);
     if (rc != 0) return rc;
 
     kvn::Document doc;
-    const int32_t parsed = parse_body(frame, "TDM", &doc);
+    bool xml = false;
+    const int32_t parsed = parse_body(frame, "TDM", &doc, &xml);
     if (parsed != 0) return parsed;
+    const ncdContainerFormat tdm_format =
+        xml ? ncdContainerFormat::CCSDS_TDM_XML : ncdContainerFormat::CCSDS_TDM_KVN;
+    if (const int32_t mismatch = check_declared("read_tdm", frame, tdm_format)) return mismatch;
 
     ccsds::tdm::Message view;
     ccsds::tdm::Fault fault;
@@ -573,7 +628,7 @@ int read_tdm(void) {
 
     NCDT descriptor;
     fill_common_descriptor(doc, view.header, frame.body, frame.body_length, frame.descriptor,
-                           ncdContainerFormat::CCSDS_TDM_KVN, "CCSDS_TDM_VERS", &descriptor);
+                           tdm_format, "CCSDS_TDM_VERS", &descriptor);
     if (!doc.segments.empty()) {
         const kvn::Entry* reference_frame =
             kvn::find(doc.segments[0].metadata, "REFERENCE_FRAME");
@@ -612,16 +667,30 @@ int write_aem(void) {
         plugin_set_error("not-aem", "The record did not rebuild an AEM document.");
         return 422;
     }
+    ndm::Syntax syntax = ndm::Syntax::Kvn;
+    ncdContainerFormat out_format = ncdContainerFormat::CCSDS_AEM_KVN;
+    if (const int32_t chosen = choose_format("write_aem", ncdContainerFormat::CCSDS_AEM_KVN,
+                                             ncdContainerFormat::CCSDS_AEM_XML, &syntax,
+                                             &out_format)) {
+        return chosen;
+    }
     std::string text;
-    if (kvn::serialize(doc, &text) != kvn::Status::Ok) {
+    if (syntax == ndm::Syntax::Xml) {
+        ndm::Node tree;
+        std::string xml_error;
+        if (!ndm::admxml::document_to_xml(doc, "AEM", true, &tree, &xml_error)) {
+            plugin_set_error("not-expressible-as-xml", xml_error.c_str());
+            return 422;
+        }
+        ndm::xml::write("aem", "CCSDS_AEM_VERS", tree.text, tree, true, &text);
+    } else if (kvn::serialize(doc, &text) != kvn::Status::Ok) {
         plugin_set_error("malformed", "The AEM document could not be serialized.");
         return 500;
     }
 
     NCDT descriptor;
     fill_common_descriptor(doc, doc.header, reinterpret_cast<const uint8_t*>(text.data()),
-                           text.size(), nullptr, ncdContainerFormat::CCSDS_AEM_KVN,
-                           "CCSDS_AEM_VERS", &descriptor);
+                           text.size(), nullptr, out_format, "CCSDS_AEM_VERS", &descriptor);
     return push_message_frame(descriptor, text);
 }
 
@@ -655,16 +724,30 @@ int write_tdm(void) {
         plugin_set_error("not-tdm", "The record did not rebuild a TDM document.");
         return 422;
     }
+    ndm::Syntax syntax = ndm::Syntax::Kvn;
+    ncdContainerFormat out_format = ncdContainerFormat::CCSDS_TDM_KVN;
+    if (const int32_t chosen = choose_format("write_tdm", ncdContainerFormat::CCSDS_TDM_KVN,
+                                             ncdContainerFormat::CCSDS_TDM_XML, &syntax,
+                                             &out_format)) {
+        return chosen;
+    }
     std::string text;
-    if (kvn::serialize(doc, &text) != kvn::Status::Ok) {
+    if (syntax == ndm::Syntax::Xml) {
+        ndm::Node tree;
+        std::string xml_error;
+        if (!ndm::admxml::document_to_xml(doc, "TDM", true, &tree, &xml_error)) {
+            plugin_set_error("not-expressible-as-xml", xml_error.c_str());
+            return 422;
+        }
+        ndm::xml::write("tdm", "CCSDS_TDM_VERS", tree.text, tree, true, &text);
+    } else if (kvn::serialize(doc, &text) != kvn::Status::Ok) {
         plugin_set_error("malformed", "The TDM document could not be serialized.");
         return 500;
     }
 
     NCDT descriptor;
     fill_common_descriptor(doc, doc.header, reinterpret_cast<const uint8_t*>(text.data()),
-                           text.size(), nullptr, ncdContainerFormat::CCSDS_TDM_KVN,
-                           "CCSDS_TDM_VERS", &descriptor);
+                           text.size(), nullptr, out_format, "CCSDS_TDM_VERS", &descriptor);
     return push_message_frame(descriptor, text);
 }
 

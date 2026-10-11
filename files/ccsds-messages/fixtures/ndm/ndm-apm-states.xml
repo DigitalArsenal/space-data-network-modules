@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<apm xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://sanaregistry.org/r/ndmxml_unqualified/ndmxml-4.0.0-master-4.0.xsd" id="CCSDS_APM_VERS" version="2.0">
+  <header>
+    <COMMENT>Synthetic APM in the layout of CCSDS 504.0-B-2 figure G-3.</COMMENT>
+    <COMMENT>Current attitude for orbit 20 and attitude maneuver planning data.</COMMENT>
+    <CLASSIFICATION>UNCLASSIFIED</CLASSIFICATION>
+    <CREATION_DATE>2026-02-14T19:23:57</CREATION_DATE>
+    <ORIGINATOR>EXAMPLE-AGENCY</ORIGINATOR>
+    <MESSAGE_ID>900018</MESSAGE_ID>
+  </header>
+  <body>
+    <segment>
+      <metadata>
+        <OBJECT_NAME>EXAMPLE RELAY</OBJECT_NAME>
+        <OBJECT_ID>2024-003A</OBJECT_ID>
+        <CENTER_NAME>EARTH</CENTER_NAME>
+        <TIME_SYSTEM>UTC</TIME_SYSTEM>
+      </metadata>
+      <data>
+        <EPOCH>2026-02-14T14:28:15.1172</EPOCH>
+        <quaternionState>
+          <COMMENT>Attitude state quaternion (ref frame = ITRF1997)</COMMENT>
+          <REF_FRAME_A>ITRF1997</REF_FRAME_A>
+          <REF_FRAME_B>INSTRUMENT_A</REF_FRAME_B>
+          <quaternion>
+            <Q1>0.03123</Q1>
+            <Q2>0.78543</Q2>
+            <Q3>0.39158</Q3>
+            <QC>0.47832</QC>
+          </quaternion>
+          <quaternionDot>
+            <Q1_DOT units="1/s">0.0</Q1_DOT>
+            <Q2_DOT units="1/s">0.00001</Q2_DOT>
+            <Q3_DOT units="1/s">-0.00002</Q3_DOT>
+            <QC_DOT units="1/s">0.0</QC_DOT>
+          </quaternionDot>
+        </quaternionState>
+        <quaternionState>
+          <REF_FRAME_A>ICRF</REF_FRAME_A>
+          <REF_FRAME_B>INSTRUMENT_A</REF_FRAME_B>
+          <quaternion>
+            <Q1>0.02478</Q1>
+            <Q2>0.78576</Q2>
+            <Q3>0.39552</Q3>
+            <QC>0.47491</QC>
+          </quaternion>
+        </quaternionState>
+        <eulerAngleState>
+          <COMMENT>Euler angles</COMMENT>
+          <REF_FRAME_A>BODY_FRAME_A</REF_FRAME_A>
+          <REF_FRAME_B>ITRF1997</REF_FRAME_B>
+          <EULER_ROT_SEQ>YXY</EULER_ROT_SEQ>
+          <ANGLE_1 units="deg">-26.78</ANGLE_1>
+          <ANGLE_2 units="deg">46.26</ANGLE_2>
+          <ANGLE_3 units="deg">144.1</ANGLE_3>
+          <ANGLE_1_DOT units="deg/s">0.1</ANGLE_1_DOT>
+          <ANGLE_2_DOT units="deg/s">0.0</ANGLE_2_DOT>
+          <ANGLE_3_DOT units="deg/s">-0.2</ANGLE_3_DOT>
+        </eulerAngleState>
+        <angularVelocity>
+          <REF_FRAME_A>SC_BODY_1</REF_FRAME_A>
+          <REF_FRAME_B>ICRF</REF_FRAME_B>
+          <ANGVEL_FRAME>SC_BODY_1</ANGVEL_FRAME>
+          <ANGVEL_X units="deg/s">0.001</ANGVEL_X>
+          <ANGVEL_Y units="deg/s">-0.002</ANGVEL_Y>
+          <ANGVEL_Z units="deg/s">0.5</ANGVEL_Z>
+        </angularVelocity>
+        <spin>
+          <REF_FRAME_A>SC_BODY_1</REF_FRAME_A>
+          <REF_FRAME_B>ICRF</REF_FRAME_B>
+          <SPIN_ALPHA units="deg">26.0</SPIN_ALPHA>
+          <SPIN_DELTA units="deg">46.0</SPIN_DELTA>
+          <SPIN_ANGLE units="deg">144.0</SPIN_ANGLE>
+          <SPIN_ANGLE_VEL units="deg/s">5.0</SPIN_ANGLE_VEL>
+          <NUTATION units="deg">0.1</NUTATION>
+          <NUTATION_PER units="s">60.0</NUTATION_PER>
+          <NUTATION_PHASE units="deg">12.5</NUTATION_PHASE>
+        </spin>
+        <inertia>
+          <COMMENT>Spacecraft Inertia Parameters</COMMENT>
+          <INERTIA_REF_FRAME>SC_BODY_1</INERTIA_REF_FRAME>
+          <IXX units="kg*m**2">6080.0</IXX>
+          <IYY units="kg*m**2">5245.5</IYY>
+          <IZZ units="kg*m**2">8067.3</IZZ>
+          <IXY units="kg*m**2">-135.9</IXY>
+          <IXZ units="kg*m**2">89.3</IXZ>
+          <IYZ units="kg*m**2">-90.7</IYZ>
+        </inertia>
+        <maneuverParameters>
+          <COMMENT>Data follows for 1 planned maneuver.</COMMENT>
+          <MAN_EPOCH_START>2026-02-14T14:29:00.5098</MAN_EPOCH_START>
+          <MAN_DURATION units="s">3.0</MAN_DURATION>
+          <MAN_REF_FRAME>ICRF</MAN_REF_FRAME>
+          <MAN_TOR_X units="N*m">-1.25</MAN_TOR_X>
+          <MAN_TOR_Y units="N*m">-0.5</MAN_TOR_Y>
+          <MAN_TOR_Z units="N*m">0.5</MAN_TOR_Z>
+          <MAN_DELTA_MASS units="kg">-0.01</MAN_DELTA_MASS>
+        </maneuverParameters>
+      </data>
+    </segment>
+  </body>
+</apm>

@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<oem xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://sanaregistry.org/r/ndmxml_unqualified/ndmxml-4.0.0-master-4.0.xsd" id="CCSDS_OEM_VERS" version="3.0">
+  <header>
+    <COMMENT>Synthetic OEM in the layout of CCSDS 502.0-B-3.</COMMENT>
+    <CREATION_DATE>2026-10-11T14:07:31</CREATION_DATE>
+    <ORIGINATOR>SDN-TEST</ORIGINATOR>
+    <MESSAGE_ID>OEM-0001</MESSAGE_ID>
+  </header>
+  <body>
+    <segment>
+      <metadata>
+        <COMMENT>first segment</COMMENT>
+        <COMMENT>state vectors</COMMENT>
+        <OBJECT_NAME>EXAMPLESAT 1</OBJECT_NAME>
+        <OBJECT_ID>2000-028A</OBJECT_ID>
+        <CENTER_NAME>EARTH</CENTER_NAME>
+        <REF_FRAME>EME2000</REF_FRAME>
+        <TIME_SYSTEM>UTC</TIME_SYSTEM>
+        <START_TIME>2026-10-11T12:00:00.000000</START_TIME>
+        <USEABLE_START_TIME>2026-10-11T12:01:00.000000</USEABLE_START_TIME>
+        <USEABLE_STOP_TIME>2026-10-11T12:08:00.000000</USEABLE_STOP_TIME>
+        <STOP_TIME>2026-10-11T12:09:00.000000</STOP_TIME>
+        <INTERPOLATION>LAGRANGE</INTERPOLATION>
+        <INTERPOLATION_DEGREE>7</INTERPOLATION_DEGREE>
+      </metadata>
+      <data>
+        <stateVector>
+          <EPOCH>2026-10-11T12:00:00.000000</EPOCH>
+          <X units="km">2789.619</X>
+          <Y units="km">-280.045</Y>
+          <Z units="km">-1746.755</Z>
+          <X_DOT units="km/s">4.73372</X_DOT>
+          <Y_DOT units="km/s">-2.49586</Y_DOT>
+          <Z_DOT units="km/s">-1.04195</Z_DOT>
+        </stateVector>
+        <stateVector>
+          <EPOCH>2026-10-11T12:03:00.000000</EPOCH>
+          <X units="km">-22.402</X>
+          <Y units="km">1.68216</Y>
+          <Z units="km">-3.8213</Z>
+          <X_DOT units="km/s">5.1</X_DOT>
+          <Y_DOT units="km/s">-0.5</Y_DOT>
+          <Z_DOT units="km/s">0.25</Z_DOT>
+        </stateVector>
+        <stateVector>
+          <EPOCH>2026-10-11T12:06:00.000000</EPOCH>
+          <X units="km">-0.0027</X>
+          <Y units="km">12.5</Y>
+          <Z units="km">7000.0</Z>
+          <X_DOT units="km/s">-0.0004</X_DOT>
+          <Y_DOT units="km/s">5.5</Y_DOT>
+          <Z_DOT units="km/s">-3.3</Z_DOT>
+          <X_DDOT units="km/s**2">0.001</X_DDOT>
+          <Y_DDOT units="km/s**2">-0.002</Y_DDOT>
+          <Z_DDOT units="km/s**2">0.003</Z_DDOT>
+        </stateVector>
+        <stateVector>
+          <EPOCH>2026-10-11T12:09:00.000000</EPOCH>
+          <X units="km">1.5</X>
+          <Y units="km">2.5</Y>
+          <Z units="km">3.5</Z>
+          <X_DOT units="km/s">4.5</X_DOT>
+          <Y_DOT units="km/s">5.5</Y_DOT>
+          <Z_DOT units="km/s">6.5</Z_DOT>
+        </stateVector>
+        <covarianceMatrix>
+          <EPOCH>2026-10-11T12:00:00.000000</EPOCH>
+          <COV_REF_FRAME>RTN</COV_REF_FRAME>
+          <CX_X units="km**2">0.0003331349476038534</CX_X>
+          <CY_X units="km**2">0.0004618927349220216</CY_X>
+          <CY_Y units="km**2">0.0006782421679971363</CY_Y>
+          <CZ_X units="km**2">-0.0003070007847730449</CZ_X>
+          <CZ_Y units="km**2">-0.0004221234189514228</CZ_Y>
+          <CZ_Z units="km**2">0.0003231931992380369</CZ_Z>
+          <CX_DOT_X units="km**2/s">-3.34936503392263e-07</CX_DOT_X>
+          <CX_DOT_Y units="km**2/s">-2.211832501084875e-07</CX_DOT_Y>
+          <CX_DOT_Z units="km**2/s">-5.978510709310466e-08</CX_DOT_Z>
+          <CX_DOT_X_DOT units="km**2/s**2">2.607014375594646e-10</CX_DOT_X_DOT>
+          <CY_DOT_X units="km**2/s">-2.463052160790187e-07</CY_DOT_X>
+          <CY_DOT_Y units="km**2/s">-3.130621369470387e-07</CY_DOT_Y>
+          <CY_DOT_Z units="km**2/s">2.34146712387001e-08</CY_DOT_Z>
+          <CY_DOT_X_DOT units="km**2/s**2">1.75987576401221e-10</CY_DOT_X_DOT>
+          <CY_DOT_Y_DOT units="km**2/s**2">1.992545563898283e-10</CY_DOT_Y_DOT>
+          <CZ_DOT_X units="km**2/s">3.41012039071025e-07</CZ_DOT_X>
+          <CZ_DOT_Y units="km**2/s">4.126316811283108e-07</CZ_DOT_Y>
+          <CZ_DOT_Z units="km**2/s">5.130892031082307e-09</CZ_DOT_Z>
+          <CZ_DOT_X_DOT units="km**2/s**2">-1.85937901834015e-10</CZ_DOT_X_DOT>
+          <CZ_DOT_Y_DOT units="km**2/s**2">-2.134890381201384e-10</CZ_DOT_Y_DOT>
+          <CZ_DOT_Z_DOT units="km**2/s**2">1.563219823411253e-10</CZ_DOT_Z_DOT>
+        </covarianceMatrix>
+        <covarianceMatrix>
+          <COMMENT>the second matrix of the same segment, in the segment's own frame</COMMENT>
+          <EPOCH>2026-10-11T12:06:00.000000</EPOCH>
+          <CX_X units="km**2">0.00034424505</CX_X>
+          <CY_X units="km**2">0.00045078162</CY_X>
+          <CY_Y units="km**2">0.00068935327</CY_Y>
+          <CZ_X units="km**2">-0.00030600067</CZ_X>
+          <CZ_Y units="km**2">-0.0004110123</CZ_Y>
+          <CZ_Z units="km**2">0.0003342042</CZ_Z>
+          <CX_DOT_X units="km**2/s">-3.2382549e-07</CX_DOT_X>
+          <CX_DOT_Y units="km**2/s">-4.5750731e-07</CX_DOT_Y>
+          <CX_DOT_Z units="km**2/s">2.3738384e-07</CX_DOT_Z>
+          <CX_DOT_X_DOT units="km**2/s**2">4.3071339e-10</CX_DOT_X_DOT>
+          <CY_DOT_X units="km**2/s">-2.1007214e-07</CY_DOT_X>
+          <CY_DOT_Y units="km**2/s">-2.7530757e-07</CY_DOT_Y>
+          <CY_DOT_Z units="km**2/s">1.6870875e-07</CY_DOT_Z>
+          <CY_DOT_X_DOT units="km**2/s**2">2.5077881e-10</CY_DOT_X_DOT>
+          <CY_DOT_Y_DOT units="km**2/s**2">1.8786258e-10</CY_DOT_Y_DOT>
+          <CZ_DOT_X units="km**2/s">-3.030235e-07</CZ_DOT_X>
+          <CZ_DOT_Y units="km**2/s">-4.8783858e-07</CZ_DOT_Y>
+          <CZ_DOT_Z units="km**2/s">3.4302008e-07</CZ_DOT_Z>
+          <CZ_DOT_X_DOT units="km**2/s**2">1.758152e-10</CZ_DOT_X_DOT>
+          <CZ_DOT_Y_DOT units="km**2/s**2">1.0077514e-10</CZ_DOT_Y_DOT>
+          <CZ_DOT_Z_DOT units="km**2/s**2">6.2244443e-10</CZ_DOT_Z_DOT>
+        </covarianceMatrix>
+      </data>
+    </segment>
+    <segment>
+      <metadata>
+        <OBJECT_NAME>EXAMPLESAT 1</OBJECT_NAME>
+        <OBJECT_ID>2000-028A</OBJECT_ID>
+        <CENTER_NAME>EARTH</CENTER_NAME>
+        <REF_FRAME>EME2000</REF_FRAME>
+        <TIME_SYSTEM>UTC</TIME_SYSTEM>
+        <START_TIME>2026-10-11T13:00:00.000000</START_TIME>
+        <STOP_TIME>2026-10-11T13:03:00.000000</STOP_TIME>
+      </metadata>
+      <data>
+        <stateVector>
+          <EPOCH>2026-10-11T13:00:00.000000</EPOCH>
+          <X units="km">1.0</X>
+          <Y units="km">2.0</Y>
+          <Z units="km">3.0</Z>
+          <X_DOT units="km/s">0.1</X_DOT>
+          <Y_DOT units="km/s">0.2</Y_DOT>
+          <Z_DOT units="km/s">0.3</Z_DOT>
+        </stateVector>
+        <stateVector>
+          <EPOCH>2026-10-11T13:03:00.000000</EPOCH>
+          <X units="km">1.1</X>
+          <Y units="km">2.1</Y>
+          <Z units="km">3.1</Z>
+          <X_DOT units="km/s">0.11</X_DOT>
+          <Y_DOT units="km/s">0.21</Y_DOT>
+          <Z_DOT units="km/s">0.31</Z_DOT>
+        </stateVector>
+      </data>
+    </segment>
+  </body>
+</oem>
