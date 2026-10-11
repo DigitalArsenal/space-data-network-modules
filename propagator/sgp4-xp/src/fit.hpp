@@ -36,8 +36,25 @@
 #ifndef SGP4XP_PRIOR_SIGMA_AGOM
 #define SGP4XP_PRIOR_SIGMA_AGOM 0.1            // m^2/kg
 #endif
+// The bounds of BTERM and AGOM, m^2/kg. A negative BTERM (a thrusting satellite's along-track force) fits the arc better
+// and predicts the next day worse (measured on Starlink: tests/measure/README.md); a decaying satellite needs more than 0.5.
+#ifndef SGP4XP_BTERM_MIN
+#define SGP4XP_BTERM_MIN 0.0
+#endif
+#ifndef SGP4XP_BTERM_MAX
+#define SGP4XP_BTERM_MAX 5.0
+#endif
+#ifndef SGP4XP_AGOM_MIN
+#define SGP4XP_AGOM_MIN 0.0
+#endif
+#ifndef SGP4XP_AGOM_MAX
+#define SGP4XP_AGOM_MAX 5.0
+#endif
+#ifndef SGP4XP_LATTICE_BUDGET
+#define SGP4XP_LATTICE_BUDGET 100               // evaluations the search on the text's lattice may spend
+#endif
 #ifndef SGP4XP_MAX_FIT_STATES
-#define SGP4XP_MAX_FIT_STATES 480              // the optimisation uses at most this many states, evenly spaced
+#define SGP4XP_MAX_FIT_STATES 240              // the optimisation uses at most this many states, evenly spaced
 #endif
 
 namespace sgp4xp {
@@ -369,8 +386,8 @@ class Fitter {
     if (e > 0.9) { (*u)[1] *= 0.9 / e; (*u)[2] *= 0.9 / e; }
     const double t = std::sqrt((*u)[3] * (*u)[3] + (*u)[4] * (*u)[4]);
     if (t > 50.0) { (*u)[3] *= 50.0 / t; (*u)[4] *= 50.0 / t; }
-    (*u)[6] = std::max(0.0, std::min(0.5, (*u)[6]));
-    (*u)[7] = std::max(0.0, std::min(0.5, (*u)[7]));
+    (*u)[6] = std::max(SGP4XP_BTERM_MIN, std::min(SGP4XP_BTERM_MAX, (*u)[6]));
+    (*u)[7] = std::max(SGP4XP_AGOM_MIN, std::min(SGP4XP_AGOM_MAX, (*u)[7]));
   }
 
   // ---- the objective -----------------------------------------------------------------------------------------
@@ -448,7 +465,8 @@ class Fitter {
         const size_t j = active[c];
         detail::Vector q = *p;
         q[j] = (*p)[j] + stepOf(j, (*p)[j]);
-        if (j == 6 || j == 7) q[j] = std::min(q[j], 0.5);
+        if (j == 6) q[j] = std::min(q[j], SGP4XP_BTERM_MAX);
+        if (j == 7) q[j] = std::min(q[j], SGP4XP_AGOM_MAX);
         const double denom = q[j] - (*p)[j];
         if (!(std::fabs(denom) > 0) || !residuals(q, &r1)) {
           usable[c] = false;
@@ -505,7 +523,7 @@ class Fitter {
     std::vector<double> r;
     if (!residualsE(best, &r)) return best;
     double cost = sumSquares(r);
-    int budget = 400;
+    int budget = SGP4XP_LATTICE_BUDGET;
     const double steps[] = {1, 2, 3, 5, 8, 13, 21, 34, 55};
     auto tryMove = [&](Elements candidate) {
       if (budget-- <= 0) return false;

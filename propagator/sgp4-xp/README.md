@@ -50,7 +50,7 @@ Refusals are named, never thrown: `missing-ephemeris`, `invalid-oem`, `unsupport
 **Propagator ABI.** `plugin_init_omm`, `plugin_propagate`, `plugin_propagate_batch`, `plugin_destroy` and the
 rest of the exports of [`propagator/keplerian-reference`](../keplerian-reference/README.md), Earth-fixed metres, so
 OrbPro's pluggable propagation and the maneuver detector's propagator query port route to this module.
-`space-data-module conformance propagator` passes; its Tier B anchors and invariants are gaps for want of a corpus.
+`space-data-module conformance propagator` passes (no failing or required-but-missing check); its Tier B anchors and the vis-viva and period invariants, which are two-body statements, are gaps for want of a corpus.
 
 ## The digits of two-line text
 
@@ -58,7 +58,8 @@ The library reads two-line element text and nothing else. An element set is ther
 1e-4 degree (12 m at low orbit), mean motion to 1e-8 rev/day, eccentricity to 1e-7, BTERM and AGOM to five
 digits, the epoch to 1e-8 day (0.86 ms). `fit` searches the lattice (every evaluation propagates the rounded set), so
 the published set is the one scored, not a continuous optimum that rounds worse. The least the lattice leaves is a
-few metres.
+few metres. The search spends at most 100 evaluations: against 400 it changes the GNSS fit RMS by 0.1 m and saves a
+quarter of the time; with none the fit RMS is 8% larger.
 
 ## How the fit works
 
@@ -67,7 +68,8 @@ e sin(w+O), tan(i/2) sin O, tan(i/2) cos O, M+w+O), with forward-difference Jaco
 AGOM about zero. The arc grows from two revolutions to the whole interval, each stage starting from the last (the
 along-track error of an osculating start is many radians over days). BTERM and AGOM join in the last stage and only
 on an arc of about a day or more: a shorter arc cannot see them and keeps them at zero. Positions alone start from
-Gibbs' method. At most 480 states, evenly spaced, enter the optimisation; the statistics use all of them.
+Gibbs' method. At most 240 states, evenly spaced, enter the optimisation; the statistics use all of them (the Starlink
+windows of `tests/measure` score the same at 240 as at 480 and cost a quarter less).
 
 ## One artifact for three runtimes
 
@@ -82,7 +84,8 @@ JavaScript, so `build.mjs` joins the library to the SDN code in WebAssembly:
    the shim. The result has the SDN code's memory as memory 0 (the one hosts see) and the library's as memory 1, and
    imports only WASI. `join-ussf.mjs` is the join; the OD node of `flows/supplemental-omm` uses the same one.
 
-`wasm-merge` re-encodes the library's functions; their behaviour is the library's.
+`wasm-merge` re-encodes the library's functions; their behaviour is the library's. The artifact has two memories and uses
+bulk memory, so a runtime needs WebAssembly multi-memory (V8 and WasmEdge 0.16.4 run it; the parity gate runs both).
 `tests/ussf_parity.test.mjs` runs 640 element sets (SGP4 and SGP4-XP, from low orbit to highly eccentric) through
 this module and through the library with its own JavaScript runtime, and requires every position and velocity to be
 the same double. `tests/parity.mjs` runs 24 requests through the SDK's parity gate in the browser, native WasmEdge and
@@ -92,14 +95,16 @@ The library keeps about 29 KB of every SGP4-XP satellite it has propagated, howe
 each with the library's own runtime; none for SGP4 sets). A fit propagates thousands, so when no satellite is live
 the module restores the library's memory to its state at start every 256 of them (`Library::recycle`,
 `src/ussf.hpp`): the library keeps everything in that memory, its one global is the stack pointer. The parity test
-covers it (it also passes with a restoration before every satellite).
+covers it (it also passes with a restoration before every satellite). A set that stays in the propagator ABI's element
+table keeps its memory until `plugin_destroy`, and the library's memory is limited to 2 GiB: 40,000 SGP4-XP sets ingest
+(about 15 KB each), 100,000 are refused with `element-set-refused`.
 
 ## Licence of the Space Force library
 
 "Use" is defined by the Agreement (section 1.L) as the application of the software for any purpose. Its introduction
 describes the propagator's intended purpose as propagating 18th Space Defense Squadron two-line sets; this module
-also fits sets to other ephemerides and propagates sets that are not 18 SDS's. The module is distributed under the
-Agreement as it stands: the copyright notice, the Agreement and its disclaimer travel with the library
+also fits sets to other ephemerides and propagates sets that are not 18 SDS's; SDN relies on the Agreement's definition
+of Use (1.L) and its grant (2.A). The module is distributed under the Agreement as it stands: the copyright notice, the Agreement and its disclaimer travel with the library
 (`third_party/ussf-sgp4/`), with this README and inside `module.wasm` as the custom section `ussf-sgp4-notice`; the US
 Space Force and its contributors do not endorse this module or anything derived from it; the module was not written,
 reviewed or approved by the US Space Force or by 18 SDS; and export of goods or technical data from the United States
@@ -119,7 +124,7 @@ this repository carries the row.
 | `build.mjs`, `engine-source.mjs`, `join-ussf.mjs` | the build, the engine as one translation unit, the join |
 | `third_party/ussf-sgp4/` | the library as released, its JavaScript runtime (a test oracle only), Agreement, release notes, notice |
 | `tests/` | `ussf_parity` (exact against the library), `fit` (known answer, real NASA ISS, refusals), `artifact` (imports, notice, manifest), `parity.mjs` (three runtimes) |
-| `tests/measure/` | the measurement of SGP4-XP against SDN's SGP4 on ISS, Starlink, GNSS and laser-ranged satellites: [README](tests/measure/README.md) |
+| `tests/measure/` | the measurement of SGP4-XP against SDN's SGP4 on ISS, Starlink, GNSS and laser-ranged satellites: [README](tests/measure/README.md), `run.mjs`, `tables.mjs`, `resummarize.mjs`, `results/` |
 
 ## Commands
 

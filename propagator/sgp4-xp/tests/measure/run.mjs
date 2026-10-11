@@ -1,4 +1,4 @@
-// node tests/measure/run.mjs --source iss|starlink|gnss|slr [--fit-hours 24] [--stride-hours 24] [--leads 1,3,7] [--limit N] [--out results/<source>.json]
+// node tests/measure/run.mjs --source iss|starlink|gnss|slr|slr-leo [--fit-hours 24] [--stride-hours 24] [--leads 1,3,7] [--limit N] [--out results/<source>.json]
 // Fits SGP4-XP (propagator/sgp4-xp) and SGP4 (analysis/gp-error-model fit_elements) to the same ephemeris windows and
 // scores both on the days after the fit. SDN_GP_ERROR_MODEL names the gp-error-model 0.2.0 checkout.
 import fs from 'node:fs';
@@ -20,6 +20,7 @@ const objects = source === 'iss' ? await sources.iss()
   : source === 'starlink' ? await sources.starlink({ limit: limit ?? 20 })
   : source === 'gnss' ? sources.gnss({ norads: args.norads?.split(',').map(Number), perConstellation: Number(args.per ?? 2), days: Number(args.days ?? 20) })
   : source === 'slr' ? (args.targets ?? 'lageos1,lageos2,etalon1,etalon2').split(',').flatMap((target) => sources.slr({ target, weeks: Number(args.weeks ?? 3) }))
+  : source === 'slr-leo' ? (args.targets ?? 'ajisai,starlette,stella,larets,westpac,lares,lares2').split(',').flatMap((target) => sources.slrLeo({ target, arcs: Number(args.arcs ?? 8) }))
   : (() => { throw new Error(`unknown source ${source}`); })();
 console.error(`${source}: ${objects.length} objects, fit ${fitHours} h, stride ${strideHours} h, leads ${leads}`);
 

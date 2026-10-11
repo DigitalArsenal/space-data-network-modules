@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { loadModule } from './lib/module.mjs';
-import { OMM, blockLines, frame, iso, oemBytes, ommBytes, readObd, readOem, readOmm } from './lib/sds.mjs';
+import { OMM, blockLines, eopBytes, frame, iso, oemBytes, ommBytes, readObd, readOem, readOmm } from './lib/sds.mjs';
 import { parseOemKvn, sdsFrame } from './lib/oemkvn.mjs';
 
 const TRUTH = { epoch: '2024-04-09T12:00:00.000000', meanMotion: 15.5, eccentricity: 0.0006317, inclination: 51.64, raan: 208.9163, argPerigee: 69.9862, meanAnomaly: 25.2906, bterm: 0.005, agom: 0.01, norad: 25544, name: 'ISS', id: '1998-067A', originator: 'SYNTHETIC' };
@@ -106,6 +106,55 @@ test('the real NASA ISS ephemeris: a 6-hour fit leaves what an SGP4-family model
     assert.ok(omm.MEAN_MOTION > 15.4 && omm.MEAN_MOTION < 15.6);
     sameStatistic(obd.WRMS, p.FIT_RMS_KM, 'OBD WRMS');
     assert.ok(obd.ERROR_GROWTH_RATE > 0);
+  } finally {
+    await module.destroy();
+  }
+});
+
+test('an Earth-fixed ephemeris of positions alone: the ILRS prediction of LAGEOS-1 fits to LAGEOS-1\'s orbit', async () => {
+  // data-source/cpf-source/test/fixtures: the first 4 hours (241 positions, 60 s, ITRF, metres, UTC) of the ILRS CPF
+  // prediction lageos1_cpf_260713_19402. 2.5 hours are fitted and 1.5 hours after them score the fit.
+  const text = fs.readFileSync(fileURLToPath(new URL('../../../data-source/cpf-source/test/fixtures/lageos1_cpf_260713_19402.4h.dgf', import.meta.url)), 'utf8');
+  const lines = text.split('\n').map((l) => l.trim().split(/\s+/)).filter((t) => t[0] === '10' && t.length >= 8)
+    .map((t) => ({ epoch: iso((Number(t[2]) - 40587) * 86400000 + Number(t[3]) * 1000), r: [Number(t[5]) / 1000, Number(t[6]) / 1000, Number(t[7]) / 1000] }));
+  assert.equal(lines.length, 241);
+  const module = await loadModule();
+  try {
+    const out = await module.invoke('fit', [frame('ephemeris', 'OEM', oemBytes({ originator: 'ILRS', blocks: [{ frame: 'ITRF2000', object: { name: 'LAGEOS1', id: '7603901', norad: 8820 }, lines, start: lines[0].epoch, stop: lines.at(-1).epoch, useableStart: lines[0].epoch, useableStop: lines[150].epoch }] }))]);
+    const omm = readOmm(out.elements[0]);
+    const p = parameters(omm);
+    // Measured 2026-10-11: n 6.38755648 rev/day, e 0.0039621, i 109.7965 deg; 10 m over the fit, 40 m over the next 90 minutes.
+    // A wrong rotation of the Earth-fixed axes puts the orbit off by whole degrees or kilometres.
+    assert.ok(Math.abs(omm.MEAN_MOTION - 6.3875) < 2e-3, `mean motion ${omm.MEAN_MOTION}`);
+    assert.ok(Math.abs(omm.ECCENTRICITY - 0.004) < 1e-3, `eccentricity ${omm.ECCENTRICITY}`);
+    assert.ok(Math.abs(omm.INCLINATION - 109.80) < 0.02, `inclination ${omm.INCLINATION}`);
+    assert.equal(Number(p.FIT_STATES), 151);
+    assert.ok(Number(p.FIT_RMS_KM) < 0.05, `fit RMS ${p.FIT_RMS_KM} km`);
+    assert.equal(Number(p.HELD_OUT_STATES), 90);
+    assert.ok(Number(p.HELD_OUT_RMS_KM) < 0.1, `held-out RMS ${p.HELD_OUT_RMS_KM} km`);
+  } finally {
+    await module.destroy();
+  }
+});
+
+test('Earth orientation moves an Earth-fixed ephemeris by the Earth\'s rotation: UT1-UTC of half a second turns the node by 0.0021 degrees', async () => {
+  // The same Earth-fixed positions (the LAGEOS-1 prediction above), fitted without Earth orientation and with UT1 - UTC = +0.5 s.
+  // With UT1 ahead, the Earth has turned 0.5 s * 7.2921151e-5 rad/s = 2.0889e-3 degrees further at the same UTC, so the same
+  // Earth-fixed vectors lie that much further east in the inertial frame: the right ascension of the node grows by it and
+  // nothing else changes. Tolerance 3e-4 degrees: the text's resolution is 1e-4 degree in each of two sets.
+  const text = fs.readFileSync(fileURLToPath(new URL('../../../data-source/cpf-source/test/fixtures/lageos1_cpf_260713_19402.4h.dgf', import.meta.url)), 'utf8');
+  const lines = text.split('\n').map((l) => l.trim().split(/\s+/)).filter((t) => t[0] === '10' && t.length >= 8)
+    .map((t) => ({ epoch: iso((Number(t[2]) - 40587) * 86400000 + Number(t[3]) * 1000), r: [Number(t[5]) / 1000, Number(t[6]) / 1000, Number(t[7]) / 1000] }));
+  const module = await loadModule();
+  try {
+    const request = (extra = []) => [frame('ephemeris', 'OEM', oemBytes({ originator: 'ILRS', blocks: [{ frame: 'ITRF2000', object: { name: 'LAGEOS1', id: '7603901', norad: 8820 }, lines, start: lines[0].epoch, stop: lines.at(-1).epoch, useableStart: lines[0].epoch, useableStop: lines[150].epoch }] })), ...extra];
+    const without = readOmm((await module.invoke('fit', request())).elements[0]);
+    const rows = Buffer.concat([61233, 61235].map((mjd) => Buffer.from(eopBytes({ mjd, dut1: 0.5 }))));
+    const withEop = readOmm((await module.invoke('fit', request([frame('eop', 'EOP', rows)]))).elements[0]);
+    const shift = withEop.RA_OF_ASC_NODE - without.RA_OF_ASC_NODE;
+    assert.ok(Math.abs(shift - 0.5 * 7.2921151e-5 * 180 / Math.PI) < 3e-4, `node moved by ${shift} degrees`);
+    assert.ok(Math.abs(withEop.INCLINATION - without.INCLINATION) < 3e-4, 'inclination unchanged');
+    assert.ok(Math.abs(withEop.MEAN_MOTION - without.MEAN_MOTION) < 1e-6, 'mean motion unchanged');
   } finally {
     await module.destroy();
   }

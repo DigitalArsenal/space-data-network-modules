@@ -77,9 +77,9 @@ try {
     sourceCode,
     language: "c++",
     outputPath: adapterPath,
-    // Passed on purpose: the compiler reads the option, not manifest.threadModel, and otherwise infers the model
-    // from runtimeTargets.
-    threadModel: manifest.threadModel,
+    // Passed on purpose, as a literal (scripts/check-artifact-reproducibility.mjs reads it from here): the compiler
+    // reads the option, not manifest.threadModel, and otherwise infers the model from runtimeTargets.
+    threadModel: "wasi-sequential",
     // The imports of the modules "ussf" and "a" are resolved by the merge below.
     allowUndefinedImports: true,
   });

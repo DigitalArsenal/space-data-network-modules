@@ -1492,8 +1492,8 @@ void publish_pending_fit_state() {
 // Every ephemeris is also fitted with SGP4-XP, the US Space Force's perturbation
 // model with a fitted ballistic term (BTERM) and solar-radiation term (AGOM):
 // a day to fit (two thirds of an ephemeris shorter than a day and a half) and
-// up to a day to score it, window after window while the ephemeris lasts
-// (propagator/sgp4-xp, engine.hpp). Each fitted window is one $OMM
+// up to a day to score it, window after window while the ephemeris lasts, at
+// most 16 (propagator/sgp4-xp, engine.hpp). Each fitted window is one $OMM
 // (MEAN_ELEMENT_THEORY SGP4XP, BTERM in BSTAR, AGOM in MEAN_MOTION_DDOT) and one
 // $OBD in the same record streams as the OD core's records, and names its
 // source: the OMM's ORIGINATOR is the organisation that produced the ephemeris
@@ -1501,8 +1501,8 @@ void publish_pending_fit_state() {
 // to hold a fit and three hours to score it gets no XP set; the OD core's sets
 // are unaffected either way.
 // ---------------------------------------------------------------------------
-constexpr sgp4xp::WindowPolicy kXpWindowPolicy{86400.0, 86400.0, 10800.0, 64,
-                                               240};
+constexpr sgp4xp::WindowPolicy kXpWindowPolicy{86400.0, 86400.0, 10800.0, 16,
+                                               0};
 constexpr const char* kXpProduct =
     "SDN supplemental-omm OD node over propagator/sgp4-xp 0.1.0 and the US "
     "Space Force Sgp4Prop 9.1.1.0 (XP build)";

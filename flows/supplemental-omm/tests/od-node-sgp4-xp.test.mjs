@@ -19,7 +19,8 @@
 // The node under test is nodes/od/dist/isomorphic/module.wasm when that artifact carries the Space Force notice
 // (it was built with SGP4-XP); otherwise it is a verification build of this tree's source with a development signing
 // key (SUPPLEMENTAL_OD_VERIFY_OUT; nothing in the tree changes), which needs what nodes/od/build.mjs needs: a native flatc
-// at repos/main-packages/flatbuffers/build/flatc (or SUPPLEMENTAL_OD_FLATC) and the SDS checkout next to this one.
+// at repos/main-packages/flatbuffers/build/flatc (or SUPPLEMENTAL_OD_FLATC) and the SDS checkout next to this one. The
+// comparison with propagator/sgp4-xp uses that module's test helpers and artifact: run `npm ci && npm run build` there first.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";

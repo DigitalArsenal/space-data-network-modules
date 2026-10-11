@@ -27,7 +27,8 @@ of the exported functions and an HTML example. They are not redistributed here.
 - **Binary redistribution (2.C.1).** The copyright notice above, the Agreement
   (`AGREEMENT.txt`, which carries the conditions and the disclaimer) travel with the
   wasm in this directory, with the module's README, and inside
-  `dist/isomorphic/module.wasm` as the custom section `ussf-sgp4-notice`.
+  `dist/isomorphic/module.wasm` and the OD node of `flows/supplemental-omm` (`nodes/od`)
+  as the custom section `ussf-sgp4-notice`.
 - **No endorsement (2.C.2, 3.D).** Neither the name of the US Space Force nor the names
   of its contributors endorse or promote this module or anything derived from it. The
   module is SDN's; it was not written, reviewed or approved by the US Space Force or by

@@ -134,3 +134,14 @@ export function slr({ target = 'lageos1', weeks = 3, first = 0 } = {}) {
   const series = chain(files);
   return [finish({ source: 'slr', id: `${series.name || target} (${series.norad})`, norad: series.norad, name: series.name || target, objectId: series.objectId, originator: 'ILRS combination (ilrsa)', creation: '', frame: 'GCRF', timeSystem: 'UTC', lines: series.lines })];
 }
+
+/** ILRS analysis-centre 4-day fitted arcs (NSGF) of the low laser-ranged satellites; each arc is its own object, so no window crosses two arcs. */
+export function slrLeo({ target = 'starlette', arcs = 8, first = 0 } = {}) {
+  const prefix = `nsgf.orb.${target}.`;
+  const directories = fs.readdirSync(path.join(ARCHIVE, 'reference-states/reference')).filter((d) => d.startsWith(prefix)).sort().slice(first, first + arcs);
+  return directories.map((d) => {
+    const file = fs.readdirSync(referenceDir(d)).filter((f) => f.endsWith('.oem'))[0];
+    const ref = readReference(path.join(referenceDir(d), file));
+    return finish({ source: 'slr-leo', id: `${ref.name || target} arc ${d.split('.')[3]} (${ref.norad})`, norad: ref.norad, name: ref.name || target, objectId: ref.objectId, originator: 'ILRS NSGF analysis-centre arc', creation: '', frame: 'GCRF', timeSystem: 'UTC', lines: ref.lines });
+  });
+}

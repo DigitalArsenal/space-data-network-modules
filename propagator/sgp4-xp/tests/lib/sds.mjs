@@ -41,6 +41,16 @@ export const readOmm = readSizePrefixed(OMM.OMM, 'getSizePrefixedRootAsOMM');
 export const readOem = readSizePrefixed(OEM.OEM, 'getSizePrefixedRootAsOEM');
 export const readObd = readSizePrefixed(OBD.OBD, 'getSizePrefixedRootAsOBD');
 
+// ---- $EOP ------------------------------------------------------------------------------------------------------
+/** A size-prefixed $EOP row: UT1-UTC in seconds, pole and celestial pole offsets in radians. */
+export function eopBytes({ mjd, dut1 = 0, x = 0, y = 0, dx = 0, dy = 0 }) {
+  const t = new EOP.EOPT();
+  Object.assign(t, { MJD: mjd, UT1_MINUS_UTC_SECONDS: dut1, X_POLE_WANDER_RADIANS: x, Y_POLE_WANDER_RADIANS: y, X_CELESTIAL_POLE_OFFSET_RADIANS: dx, Y_CELESTIAL_POLE_OFFSET_RADIANS: dy, TAI_MINUS_UTC_SECONDS: 37 });
+  const b = new flatbuffers.Builder(256);
+  EOP.EOP.finishSizePrefixedEOPBuffer(b, t.pack(b));
+  return b.asUint8Array();
+}
+
 // ---- $OEM ------------------------------------------------------------------------------------------------------
 const rfm = (name) => {
   if (name === 'ECEF') return new RFM.RFMT(RFM.RFMUnion.CustomFrameWrapper, new RFM.CustomFrameWrapperT(RFM.CustomFrame.ECEF));

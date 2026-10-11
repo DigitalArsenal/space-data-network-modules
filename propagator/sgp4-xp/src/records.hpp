@@ -96,7 +96,7 @@ inline std::unique_ptr<OMMT> ommOf(const IntervalFit& f, const Provenance& who, 
                         ". BTERM is BSTAR and AGOM is MEAN_MOTION_DDOT, in m**2/kg.\n";
   if (!who.source.empty()) comment += "SOURCE " + who.source + "\n";
   comment += "FIT_INTERVAL " + formatInstant(f.fitStart, 3) + " " + formatInstant(f.fitStop, 3) + "\n";
-  comment += statLine("FIT", fit.fit);
+  comment += statLine("FIT", fit.fit) + " ITERATIONS=" + std::to_string(fit.iterations) + " CONVERGED=" + (fit.converged ? "true" : "false");
   if (f.haveHeld && fit.heldOut.count > 0) comment += "\n" + statLine("HELD_OUT", fit.heldOut);
   omm->COMMENT = comment;
   addParameter(omm.get(), "FIT_START", formatInstant(f.fitStart, 3), 0);
