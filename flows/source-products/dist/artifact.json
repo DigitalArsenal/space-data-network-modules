@@ -4,12 +4,19 @@
   "version": "0.1.0",
   "compiler": "space-data-module flow compile (isomorphic, emception)",
   "threadModel": "single-thread",
-  "nodes": 11,
-  "edges": 22,
-  "triggers": 8,
+  "nodes": 12,
+  "edges": 27,
+  "triggers": 9,
   "capabilities": [],
   "engineLinkage": "bridge",
   "dispatch": [
+    {
+      "nodeId": "s_mpe",
+      "pluginId": "com.digitalarsenal.analysis.epoch-state",
+      "methodId": "omm_from_mpe",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
     {
       "nodeId": "s_derive",
       "pluginId": "com.digitalarsenal.analysis.epoch-state",

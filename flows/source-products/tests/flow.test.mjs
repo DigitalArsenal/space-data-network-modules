@@ -14,6 +14,7 @@ import {
 } from '../../../analysis/gp-error-model/tests/products-fixtures.mjs';
 import { gpHistory, LEO, T0, add, kepler, mul, unit, version as ephemerisVersion, planned as plannedBurn, MNV as MD_MNV } from '../../../analysis/maneuver-detection/tests/fixtures.mjs';
 import { ommRecord } from '../../../analysis/maneuver-detection/study/lib/host.mjs';
+import { FIXTURE as VALLADO, mpeStream, mpeType } from '../../../analysis/epoch-state/tests/fixtures.mjs';
 import { bytesOf, egressBytes, egressJson, flowDocument, flowManifest, framesOf, moduleAt, runFlow } from './flow-harness.mjs';
 
 const epoch = moduleAt('analysis/epoch-state');
@@ -27,10 +28,19 @@ const jsonPort = (portId, bytes) => ({ portId, payload: bytes, typeRef: { schema
 const omm = (portId, payload) => ommFrame(portId, payload);
 const mnvIn = (portId, payload) => ({ portId, payload, typeRef: { schemaName: 'MNV.fbs', fileIdentifier: '$MNV', rootTypeName: 'MNV', wireFormat: 'flatbuffer' } });
 
+// The detector's two passes with SGP4 answering the propagator query port, then the source named on each maneuver: the chain of modules the flow composes.
+async function screenedForManeuvers(sets, recipe) {
+  const first = await detector('detect_maneuvers', [omm('element_sets', sets)]);
+  const answered = await epoch('answer_propagation_requests', [jsonPort('requests', bytesOf(first, 'propagation_requests')), omm('element_sets', sets)]);
+  const second = await detector('detect_maneuvers', [omm('element_sets', bytesOf(answered, 'element_sets')), { portId: 'propagation', payload: bytesOf(answered, 'propagation'),
+    typeRef: { schemaName: 'OEM.fbs', fileIdentifier: '$OEM', rootTypeName: 'OEM', wireFormat: 'flatbuffer' } }]);
+  return gem('attribute_maneuvers', [...framesOf(second, 'maneuvers').map((m) => mnvIn('maneuvers', m)), jsonPort('recipe', recipeBytes(recipe))]);
+}
+
 test('the compiled flow takes one ingress per kind of frame and gives the products on one egress', () => {
-  assert.deepEqual(flowDocument.triggers.map((t) => t.triggerId), ['element_sets', 'element_set_recipe', 'fit_omm', 'ephemeris', 'ephemeris_versions', 'planned_maneuvers', 'fit', 'fit_recipe']);
-  assert.deepEqual(flowManifest.methods.find((m) => m.methodId === 'element_sets').outputPorts.map((p) => p.portId),
-    ['ocm', 'omm', 'covariance_report', 'derive_report', 'mnv', 'attribute_report', 'detect_report', 'propagation_report', 'compare_report']);
+  assert.deepEqual(flowDocument.triggers.map((t) => t.triggerId), ['element_sets', 'element_sets_mpe', 'element_set_recipe', 'fit_omm', 'ephemeris', 'ephemeris_versions', 'planned_maneuvers', 'fit', 'fit_recipe']);
+  assert.deepEqual(flowManifest.methods.find((m) => m.methodId === 'element_sets').outputPorts.map((p) => p.portId).sort(),
+    ['attribute_report', 'compare_report', 'covariance_report', 'derive_report', 'detect_report', 'mnv', 'mpe_report', 'ocm', 'omm', 'propagation_report'].sort());
   assert.deepEqual(flowManifest.runtimeTargets, ['browser', 'wasmedge']);
   assert.deepEqual(flowManifest.capabilities, [], 'pure compute: the flow asks its host for nothing');
 });
@@ -45,11 +55,7 @@ test('an element-set source: the newest set of an object gets states, a covarian
   // The chain of modules the flow composes, called one by one.
   const states = bytesOf(await epoch('derive_omm', [omm('omm', sets), jsonPort('options', recipeBytes(recipe))]), 'states');
   const attach = await gem('attach_covariance', [omm('elements', sets), alignedState('states', states), jsonPort('recipe', recipeBytes(recipe))]);
-  const first = await detector('detect_maneuvers', [omm('element_sets', sets)]);
-  const answered = await epoch('answer_propagation_requests', [jsonPort('requests', bytesOf(first, 'propagation_requests')), omm('element_sets', sets)]);
-  const second = await detector('detect_maneuvers', [omm('element_sets', bytesOf(answered, 'element_sets')), { portId: 'propagation', payload: bytesOf(answered, 'propagation'),
-    typeRef: { schemaName: 'OEM.fbs', fileIdentifier: '$OEM', rootTypeName: 'OEM', wireFormat: 'flatbuffer' } }]);
-  const attributed = await gem('attribute_maneuvers', [...framesOf(second, 'maneuvers').map((m) => mnvIn('maneuvers', m)), jsonPort('recipe', recipeBytes(recipe))]);
+  const attributed = await screenedForManeuvers(sets, recipe);
 
   assert.deepEqual(egressBytes(egress, 'ocm'), bytesOf(attach, 'ocm'), 'the flow\'s $OCM is the chain\'s');
   assert.deepEqual(egressBytes(egress, 'omm'), bytesOf(attach, 'omm'), 'the flow\'s $OMM is the chain\'s');
@@ -76,6 +82,39 @@ test('an element-set source: the newest set of an object gets states, a covarian
   assert.ok(Math.abs(Date.parse(burns[0].EVENT_START_TIME) / 1000 - tb) < 8 * 3600);
   for (const tag of ['originator:CelesTrak', 'source:celestrak-gp', 'provider:sdn:celestrak-gp', 'licence:redistributable', 'lineage:space-track-gp']) assert.ok(burns[0].TAGS.includes(tag), tag);
   assert.equal(egressJson(egress, 'propagation_report').refused, 0);
+});
+
+// ── an element-set source that stores $MPE ──
+test('the GP history archive\'s $MPE records: omm_from_mpe leads, and the products are the chain\'s; eccentric sets get no covariance and say why', async () => {
+  const mpe = Buffer.from(mpeStream(VALLADO.cases));
+  const recipe = { ...recipeFor({ id: 'space-track-gp' }), ages: [0, 0.5] };
+  const { egress, result } = await runFlow([frame('element_sets_mpe', 'mpe', mpe), frame('element_set_recipe', 'recipe', recipeBytes(recipe))]);
+  assert.equal(result.handlersSkipped, 0);
+
+  const converted = await epoch('omm_from_mpe', [{ portId: 'mpe', payload: mpe, typeRef: mpeType(mpe.length) }]);
+  const sets = bytesOf(converted, 'omm');
+  const states = bytesOf(await epoch('derive_omm', [omm('omm', sets), jsonPort('options', recipeBytes(recipe))]), 'states');
+  const attach = await gem('attach_covariance', [omm('elements', sets), alignedState('states', states), jsonPort('recipe', recipeBytes(recipe))]);
+  assert.deepEqual(egressBytes(egress, 'ocm'), bytesOf(attach, 'ocm'), 'the flow\'s $OCM is the chain\'s');
+  assert.deepEqual(egressBytes(egress, 'omm'), bytesOf(attach, 'omm'), 'the flow\'s $OMM is the chain\'s');
+  assert.deepEqual(egressJson(egress, 'mpe_report'), JSON.parse(bytesOf(converted, 'report').toString()));
+  assert.equal(egressJson(egress, 'mpe_report').converted, VALLADO.cases.length);
+
+  // E14's regimes stop at e < 0.25: of Vallado's sets the eccentric ones (e >= 0.25) have no stratum, the others a modeled covariance.
+  const covered = VALLADO.cases.filter((c) => c.ECCENTRICITY < 0.25).map((c) => c.entityId);
+  const eccentric = VALLADO.cases.filter((c) => c.ECCENTRICITY >= 0.25).map((c) => c.entityId);
+  assert.ok(covered.length > 0 && eccentric.length > 0);
+  assert.deepEqual(records(egressBytes(egress, 'ocm')).map(unpackOcm).map((o) => o.METADATA.OBJECT_DESIGNATOR).sort(), covered.map((e) => e.replace('NORAD:', '')).sort());
+  const report = egressJson(egress, 'covariance_report');
+  assert.equal(report.counts.rule3, covered.length);
+  assert.equal(report.counts.withoutCovariance, eccentric.length);
+  for (const o of report.objects.filter((x) => eccentric.includes(x.id))) assert.ok(o.notes.every((n) => n.reason === 'no-model-for-regime'), o.id);
+
+  // Every set is published and names its source, however the archive identified it.
+  const published = records(egressBytes(egress, 'omm')).map(unpackOmm);
+  assert.equal(published.length, VALLADO.cases.length);
+  for (const o of published) assert.equal(o.ORIGINATOR, 'space-track-gp originator');
+  assert.equal(published.find((o) => o.NORAD_CAT_ID === 11801)?.OBJECT_ID ?? null, null, 'NORAD:11801 is the NORAD number, not a designator');
 });
 
 // ── an ephemeris source ──
@@ -177,6 +216,27 @@ test('an ephemeris source with covariance: the operator\'s is rule 1; a planned 
   assert.ok(executed.DELTA_VEL_U > 0);
   for (const tag of ['source:spacex-starlink', 'originator:spacex-starlink originator', 'licence:redistributable']) assert.ok(executed.TAGS.includes(tag), tag);
   assert.equal(egressJson(egress, 'compare_report').method, 'compare_ephemerides');
+});
+
+test('an ephemeris source\'s history of fitted sets is screened in the same two passes, and the burn carries the ephemeris source', async () => {
+  const { tb, rows } = gpHistory(1);
+  const sets = ommBytes(rows);
+  const recipe = recipeFor({ id: 'spacex-starlink', kind: 'ephemeris', lineage: 'spacex-meme', own: false, licence: 'reproducible' });
+  const { egress, result } = await runFlow([frame('fit_omm', 'omm', sets), frame('fit_recipe', 'recipe', recipeBytes(recipe))]);
+  assert.equal(result.handlersSkipped, 0);
+  const attributed = await screenedForManeuvers(sets, recipe);
+  assert.deepEqual(egressBytes(egress, 'mnv'), bytesOf(attributed, 'maneuvers'), 'the flow\'s $MNV is the chain\'s');
+
+  const burns = records(egressBytes(egress, 'mnv')).map(unpackMnv).filter((m) => m.DELTA_VEL_U !== 0);
+  assert.equal(burns.length, 1);
+  assert.ok(Math.abs(burns[0].DELTA_VEL_U * 1000 - 1) < 0.1, `${burns[0].DELTA_VEL_U * 1000} m/s`);
+  assert.ok(Math.abs(Date.parse(burns[0].EVENT_START_TIME) / 1000 - tb) < 8 * 3600);
+  for (const tag of ['source:spacex-starlink', 'originator:spacex-starlink originator', 'licence:reproducible', 'lineage:spacex-meme']) assert.ok(burns[0].TAGS.includes(tag), tag);
+
+  // The newest fitted set alone is the product's element set: one $OCM, the pooled model's covariance.
+  const ocms = records(egressBytes(egress, 'ocm')).map(unpackOcm);
+  assert.equal(ocms.length, 1);
+  assert.equal(JSON.parse(param(ocms[0], 'COV_LABELS'))[0].rule, 4);
 });
 
 // ── an observation source ──

@@ -3,8 +3,15 @@
   "name": "Source Products Flow",
   "version": "0.1.0",
   "engineLinkage": "bridge",
-  "description": "Catalog pipeline C2: the products of one source, generic over the source's type, as one pure-compute flow. An element-set source (ingress element_sets, element_set_recipe) gets its newest sets' epoch states (epoch-state derive_omm), the covariance of each object by rule (gp-error-model attach_covariance) written into $OCM and $OMM with its label, and its history screened for maneuvers in the detector's two passes with SGP4 answering the propagator query port (epoch-state answer_propagation_requests), attributed to the source in the $MNV tags. An ephemeris source (fit_omm, ephemeris, ephemeris_versions, planned_maneuvers, fit_recipe) brings the SGP4 element set analysis/od fitted to its ephemeris; that set gets the same states and covariance, the operator's covariance lines are rule 1, and the versions are checked against the planned maneuvers (maneuver-detection compare_ephemerides). An observation source (fit_omm, fit, fit_recipe) brings the element set fitted to its estimated arc and the estimate's state and formal covariance, scaled by the measured realism factor (rule 2). Every ingress frame is enqueued before the flow drains. A node whose inputs come from an upstream node declares them required, so it never runs on a part of its inputs.",
+  "description": "Catalog pipeline C2: the products of one source, generic over the source's type, as one pure-compute flow. An element-set source (ingress element_sets, or element_sets_mpe for the archive's $MPE records, and element_set_recipe) gets its newest sets' epoch states (epoch-state derive_omm), the covariance of each object by rule (gp-error-model attach_covariance) written into $OCM and $OMM with its label, and its history screened for maneuvers in the detector's two passes with SGP4 answering the propagator query port (epoch-state answer_propagation_requests), attributed to the source in the $MNV tags. An ephemeris source (fit_omm, ephemeris, ephemeris_versions, planned_maneuvers, fit_recipe) brings the SGP4 element sets analysis/od fitted to its ephemeris; the newest set gets the same states and covariance, the operator's covariance lines are rule 1, the versions are checked against the planned maneuvers (maneuver-detection compare_ephemerides), and the history of fitted sets is screened for maneuvers in the same two passes. An observation source (fit_omm, fit, fit_recipe) brings the element set fitted to its estimated arc and the estimate's state and formal covariance, scaled by the measured realism factor (rule 2). Every ingress frame is enqueued before the flow drains. A node whose inputs come from an upstream node declares them required, so it never runs on a part of its inputs.",
   "nodes": [
+    {
+      "nodeId": "s_mpe",
+      "pluginId": "com.digitalarsenal.analysis.epoch-state",
+      "methodId": "omm_from_mpe",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
     {
       "nodeId": "s_derive",
       "pluginId": "com.digitalarsenal.analysis.epoch-state",
@@ -84,6 +91,51 @@
     }
   ],
   "edges": [
+    {
+      "edgeId": "s-mpe-derive",
+      "fromNodeId": "s_mpe",
+      "fromPortId": "omm",
+      "toNodeId": "s_derive",
+      "toPortId": "omm",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "s-mpe-attach",
+      "fromNodeId": "s_mpe",
+      "fromPortId": "omm",
+      "toNodeId": "s_attach",
+      "toPortId": "elements",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "s-mpe-detect",
+      "fromNodeId": "s_mpe",
+      "fromPortId": "omm",
+      "toNodeId": "s_detect_a",
+      "toPortId": "element_sets",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "s-mpe-respond",
+      "fromNodeId": "s_mpe",
+      "fromPortId": "omm",
+      "toNodeId": "s_respond",
+      "toPortId": "element_sets",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
+    {
+      "edgeId": "s-mpe-report",
+      "fromNodeId": "s_mpe",
+      "fromPortId": "report",
+      "toNodeId": "egress",
+      "toPortId": "mpe_report",
+      "backpressurePolicy": "queue",
+      "queueDepth": 16
+    },
     {
       "edgeId": "s-states",
       "fromNodeId": "s_derive",
@@ -291,6 +343,12 @@
       "description": "A source's element-set history ($OMM, newest and older sets of each object) in one frame."
     },
     {
+      "triggerId": "element_sets_mpe",
+      "kind": "manual",
+      "source": "host",
+      "description": "An element-set history as the GP history archive stores it ($MPE, one frame): the same lane as element_sets after epoch-state omm_from_mpe."
+    },
+    {
       "triggerId": "element_set_recipe",
       "kind": "manual",
       "source": "host",
@@ -359,6 +417,13 @@
       "triggerId": "element_sets",
       "targetNodeId": "s_respond",
       "targetPortId": "element_sets",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "triggerId": "element_sets_mpe",
+      "targetNodeId": "s_mpe",
+      "targetPortId": "mpe",
       "backpressurePolicy": "queue",
       "queueDepth": 4
     },
@@ -433,6 +498,13 @@
       "queueDepth": 4
     },
     {
+      "triggerId": "fit_recipe",
+      "targetNodeId": "s_attribute",
+      "targetPortId": "recipe",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
       "triggerId": "fit_omm",
       "targetNodeId": "f_derive",
       "targetPortId": "omm",
@@ -443,6 +515,20 @@
       "triggerId": "fit_omm",
       "targetNodeId": "f_attach",
       "targetPortId": "elements",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "triggerId": "fit_omm",
+      "targetNodeId": "s_detect_a",
+      "targetPortId": "element_sets",
+      "backpressurePolicy": "queue",
+      "queueDepth": 4
+    },
+    {
+      "triggerId": "fit_omm",
+      "targetNodeId": "s_respond",
+      "targetPortId": "element_sets",
       "backpressurePolicy": "queue",
       "queueDepth": 4
     }

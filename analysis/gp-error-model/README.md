@@ -311,8 +311,8 @@ with covariance), `fit` (`$OCM`), `recipe` (JSON). `recipe` is version 1:
 {
   "version": 1,
   "source": {"id": "celestrak-gp", "kind": "element-set", "lineage": "space-track-gp",
-             "originator": "CelesTrak", "provider": "sdn:celestrak-reference",
-             "licence": {"class": "redistributable", "id": "celestrak-terms"}, "fitClass": ""},
+             "originator": "CelesTrak", "provider": "com.digitalarsenal.data-source.celestrak-reference",
+             "licence": {"class": "cite-only", "id": "celestrak"}, "fitClass": ""},
   "producer": "SDN catalog pipeline", "created": "2026-10-11T00:00:00Z",
   "latestOnly": true, "maxOperatorRows": 8,
   "operator": {"calibration": "UNCALIBRATED", "evidence": "..."},
@@ -321,6 +321,12 @@ with covariance), `fit` (`$OCM`), `recipe` (JSON). `recipe` is version 1:
   "models": [{"...": "data/e14-s3-kc.json", "sources": ["celestrak-gp"], "pooled": true}]
 }
 ```
+
+`provider` is the plugin id of the module that gave the records, `licence.class`
+the `reproduce` field of the audited licence register (`reproducible`, `cite-only`,
+`share-alike`, `non-commercial`) and `licence.id` its source id; the module copies them
+onto the records and does not interpret them. `flows/source-products/recipe.mjs`
+makes the recipe of each registered source.
 
 Only the newest element set of each object gives outputs unless `latestOnly`
 is false. A recipe that does not name the source (id, kind, originator,
