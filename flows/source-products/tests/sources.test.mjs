@@ -9,7 +9,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { FIXTURE as VALLADO, mpeStream } from '../../../analysis/epoch-state/tests/fixtures.mjs';
-import { ommParam, param, records, unpackMnv, unpackOcm, unpackOmm } from '../../../analysis/gp-error-model/tests/products-fixtures.mjs';
+import { encodeOmm, fitOcm, leoH, ommParam, param, records, unpackMnv, unpackOcm, unpackOmm } from '../../../analysis/gp-error-model/tests/products-fixtures.mjs';
 import { gpHistory } from '../../../analysis/maneuver-detection/tests/fixtures.mjs';
 import { ommRecord } from '../../../analysis/maneuver-detection/study/lib/host.mjs';
 import { recipeFor, registry } from '../recipe.mjs';
@@ -27,6 +27,7 @@ const port = (manifest, methodId, direction, portId) => method(manifest, methodI
 const typesOf = (p) => p.acceptedTypeSets.flatMap((set) => set.allowedTypes.map((t) => t.fileIdentifier).filter(Boolean));
 const acceptsAnyFlatbuffer = (p) => p.acceptedTypeSets.some((set) => set.allowedTypes.some((t) => t.acceptsAnyFlatbuffer));
 const ORBIT_TYPES = new Set(['$OMM', '$OEM', '$MPE', '$OCM', '$OPM']);
+const OBSERVATION_TYPES = new Set(['$TDM']);
 
 // The flow's own port that takes a trigger's frames: its node's module, method and port manifest.
 function flowPort({ trigger, port: portId }) {
@@ -47,12 +48,24 @@ test('the registry is well formed: unique ids, the audit\'s licence classes, a l
   const ids = registry.sources.map((s) => s.id);
   assert.equal(new Set(ids).size, ids.length);
   for (const s of registry.sources) {
-    assert.ok(['element-set', 'ephemeris'].includes(s.kind), `${s.id}: ${s.kind}`);
+    assert.ok(['element-set', 'ephemeris', 'observation'].includes(s.kind), `${s.id}: ${s.kind}`);
     assert.ok(registry.lanes[s.kind], `${s.id}: no lane ${s.kind}`);
     assert.ok(s.originator && s.lineage && s.licence.id, `${s.id} names its originator, lineage and licence`);
     assert.ok(Object.hasOwn(registry.licence.classes, s.licence.class), `${s.id}: ${s.licence.class}`);
     assert.equal(typeof s.ownModel, 'boolean');
     assert.ok(s.via.length > 0, `${s.id} is given by a module`);
+  }
+  // A lane that lists its sources lists the registry's sources of its kind.
+  for (const [kind, lane] of Object.entries(registry.lanes)) {
+    if (lane.sources) assert.deepEqual(lane.sources, registry.sources.filter((s) => s.kind === kind).map((s) => s.id), `the ${kind} lane's sources`);
+  }
+  // An observation source names the fit class its realism factor was measured for, and a factor for it.
+  for (const s of registry.sources.filter((x) => x.kind === 'observation')) {
+    assert.ok(s.fitClass, `${s.id}: an observation source names its fit class`);
+    const measured = (s.realism ?? []).filter((r) => r.sources.includes(s.id) && r.class === s.fitClass);
+    assert.equal(measured.length, 1, `${s.id}: one measured realism factor for the class ${s.fitClass}`);
+    assert.ok(measured[0].factor > 0 && measured[0].samples > 0 && measured[0].objects > 0 && measured[0].evidence && measured[0].window, `${s.id}: the factor is measured, with its evidence`);
+    assert.equal(measured[0].factor, measured[0].meanD2Over3, 'the factor is the measured mean d2/3');
   }
   // Every trigger of the flow serves a lane, and every lane names triggers the flow has.
   const named = Object.values(registry.lanes).flatMap((lane) => lane.ingress.flatMap((entry) => entry.split(' or ')));
@@ -69,6 +82,14 @@ test('every module a source is given by has the method and the output port, type
       else assert.ok(typesOf(out).includes(w.type), `${w.module} ${w.method} ${w.port} gives ${typesOf(out)}, not ${w.type}`);
       assert.ok(w.into.length > 0);
       for (const into of w.into) {
+        if (s.kind === 'observation') {
+          // An observation enters the lane's estimator, whose $OCM enters the flow (checked below).
+          const { estimator } = registry.lanes.observation;
+          assert.ok(estimator.inputs.includes(into.estimator), `${into.estimator} is not an input of ${estimator.module}`);
+          const accepted = port(manifestOf(estimator.module), estimator.method, 'inputPorts', into.estimator);
+          assert.ok(accepted && typesOf(accepted).includes(w.type), `${estimator.module} ${into.estimator} takes ${accepted && typesOf(accepted)}, not ${w.type}`);
+          continue;
+        }
         const taken = flowPort(into);
         assert.ok(typesOf(taken).includes(w.type), `the flow's ${into.trigger} (${into.port}) takes ${typesOf(taken)}, not ${w.type}`);
         assert.equal(registry.lanes[s.kind].ingress.some((entry) => entry.split(' or ').includes(into.trigger)), true, `${into.trigger} is not an ingress of the ${s.kind} lane`);
@@ -94,7 +115,7 @@ test('every module a source is given by has the method and the output port, type
 test('every orbit data-source module of the repository is classified, and none is classified twice', () => {
   const orbitRelated = fs.readdirSync(`${root}data-source`).filter((dir) => fs.existsSync(`${root}data-source/${dir}/plugin-manifest.json`)).filter((dir) => {
     const manifest = manifestOf(`data-source/${dir}`);
-    const gives = manifest.methods.some((m) => m.outputPorts.some((p) => typesOf(p).some((t) => ORBIT_TYPES.has(t) || t === '$CAT')));
+    const gives = manifest.methods.some((m) => m.outputPorts.some((p) => typesOf(p).some((t) => ORBIT_TYPES.has(t) || OBSERVATION_TYPES.has(t) || t === '$CAT')));
     return gives || /ephemeri|element set|\bOMM\b|\bOEM\b|almanac|\bGP\b/i.test(manifest.description ?? '');
   }).map((dir) => `data-source/${dir}`);
   assert.ok(orbitRelated.length >= 17, `${orbitRelated.length} orbit-related modules found`);
@@ -136,7 +157,7 @@ const history = gpHistory(1);
 const sets = Buffer.concat(history.rows.map((row) => Buffer.from(ommRecord(row))));
 const provider = (module) => manifestOf(module).pluginId;
 
-for (const source of registry.sources) {
+for (const source of registry.sources.filter((s) => s.kind !== 'observation')) {
   for (const w of source.via) {
     test(`${source.id} through ${w.module}: the records name the source, its provider and its licence`, async () => {
       const recipeBytes = Buffer.from(JSON.stringify(recipeFor(source.id, { created: '2026-10-11T00:00:00Z', via: w.module })));
@@ -181,6 +202,49 @@ for (const source of registry.sources) {
           ...(source.lineage === source.id ? [] : [`lineage:${source.lineage}`])];
         for (const tag of tags) assert.ok(burns[0].TAGS.includes(tag), tag);
       }
+    });
+  }
+}
+
+// An observation source enters the flow by the estimate it supports: the fit's $OCM on `fit`, the SGP4 set fitted to the
+// estimated arc on `fit_omm`. The covariance is rule 2, the formal covariance times the factor measured for the source and its fit class.
+for (const source of registry.sources.filter((s) => s.kind === 'observation')) {
+  for (const w of source.via) {
+    test(`${source.id} through ${w.module}: the fit's formal covariance times the factor measured for the source, uncalibrated, and the records name the source, its provider and its licence`, async () => {
+      const recipe = recipeFor(source.id, { created: '2026-10-11T00:00:00Z', via: w.module, ages: [0] });
+      const [realism] = source.realism;
+      const x = [4000.5, 5000.25, 3000.125, -3.5, 4.25, 4.75];
+      const lower = Array.from({ length: 21 }, (_, i) => (i === 0 || i === 2 || i === 5 ? 1e-6 : i === 9 || i === 14 || i === 20 ? 1e-12 : 0));
+      const fit = fitOcm({ norad: leoH.norad, name: leoH.name, epoch: leoH.epoch, x, lower });
+      const { egress, result } = await runFlow([frame('fit_omm', 'omm', encodeOmm(leoH)), frame('fit', 'fit', fit), frame('fit_recipe', 'recipe', Buffer.from(JSON.stringify(recipe)))]);
+      assert.equal(result.handlersSkipped, 0);
+
+      const [ocm] = records(egressBytes(egress, 'ocm')).map(unpackOcm);
+      assert.ok(ocm, 'an $OCM');
+      assert.equal(param(ocm, 'SOURCE_ID'), source.id);
+      assert.equal(param(ocm, 'SOURCE_KIND'), 'observation');
+      assert.equal(param(ocm, 'SOURCE_ORIGINATOR'), source.originator);
+      assert.equal(param(ocm, 'SOURCE_PROVIDER'), provider(w.module));
+      assert.equal(param(ocm, 'SOURCE_LINEAGE'), source.lineage);
+      assert.equal(param(ocm, 'LICENCE_CLASS'), source.licence.class);
+      assert.equal(param(ocm, 'LICENCE_ID'), source.licence.id);
+      // Rule 2: the formal covariance times the measured factor, and not calibrated, because the scaled covariance has not itself been tested.
+      const labels = JSON.parse(param(ocm, 'COV_LABELS'));
+      assert.deepEqual([...new Set(labels.map((l) => l.rule))], [2]);
+      for (const label of labels) {
+        assert.equal(label.method, 'fit-formal-scaled');
+        assert.equal(label.scaleFactor, realism.factor);
+        assert.equal(label.meanD2Over3, realism.meanD2Over3);
+        assert.equal(label.calibration, 'UNCALIBRATED');
+      }
+      assert.ok(Math.abs(ocm.COVARIANCE_DATA[0] - lower[0] * realism.factor) < 1e-15, `${ocm.COVARIANCE_DATA[0]} against ${lower[0] * realism.factor}`);
+      const [omm] = records(egressBytes(egress, 'omm')).map(unpackOmm);
+      assert.equal(omm.ORIGINATOR, source.originator);
+      for (const text of [source.id, provider(w.module), source.licence.class]) assert.ok(omm.COMMENT.includes(text), `the $OMM names ${text}`);
+      assert.equal(ommParam(omm, 'SOURCE_ID'), source.id);
+      assert.equal(ommParam(omm, 'SOURCE_PROVIDER'), provider(w.module));
+      assert.equal(ommParam(omm, 'LICENCE_CLASS'), source.licence.class);
+      assert.equal(ommParam(omm, 'LICENCE_ID'), source.licence.id);
     });
   }
 }

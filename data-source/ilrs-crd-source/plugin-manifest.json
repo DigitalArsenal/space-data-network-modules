@@ -1,0 +1,115 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.ilrs-crd-source",
+  "name": "ILRS CRD Source",
+  "version": "0.1.0",
+  "description": "Read ILRS Consolidated Laser Ranging Data (CRD version 2) normal points into canonical SDS tracking data messages: LASER_RANGE observations per pass for analysis/estimation, with the epoch event as the time-tag reference and the pass's meteorology. Download and station coordinates belong to the SDN host flow.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "read_crd",
+      "displayName": "Read CRD normal points as tracking data",
+      "inputPorts": [
+        {
+          "portId": "source",
+          "acceptedTypeSets": [
+            {
+              "setId": "source",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "One ILRS Consolidated Laser Ranging Data file, version 2 (normal point files such as EDC's npt_crd_v2 daily files), as text, bounded to 64 MiB.",
+              "wildcardJustification": {
+                "kind": "foreign-wire-format",
+                "mediaType": "text/plain",
+                "detail": "One ILRS Consolidated Laser Ranging Data file, version 2 (normal point files such as EDC's npt_crd_v2 daily files), as text, bounded to 64 MiB."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One ILRS Consolidated Laser Ranging Data file, version 2 (normal point files such as EDC's npt_crd_v2 daily files), as text, bounded to 64 MiB."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "observations",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-tdm",
+              "allowedTypes": [
+                {
+                  "schemaName": "TDM.fbs",
+                  "fileIdentifier": "$TDM",
+                  "rootTypeName": "TDM"
+                }
+              ],
+              "description": "One canonical $TDM per pass: a segment per system configuration with LASER_RANGE observations (one-way range in metres, UTC epochs), and the pass's meteorological records as PRESSURE, TEMPERATURE and RHUMIDITY. analysis/estimation takes it on tracking_data."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "One canonical $TDM per pass: a segment per system configuration with LASER_RANGE observations (one-way range in metres, UTC epochs), and the pass's meteorological records as PRESSURE, TEMPERATURE and RHUMIDITY. analysis/estimation takes it on tracking_data."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report",
+              "allowedTypes": [
+                {
+                  "acceptsAnyFlatbuffer": true
+                }
+              ],
+              "description": "Counts of the sessions read and skipped (and why), the passes with their station, target and normal point counts, and per normal point its epoch, time of flight as printed, raw ranges, bin RMS and window; module control metadata the host keeps beside the file, not an observation.",
+              "wildcardJustification": {
+                "kind": "intra-flow-control-frame",
+                "mediaType": "application/json",
+                "detail": "Counts of the sessions read and skipped (and why), the passes with their station, target and normal point counts, and per normal point its epoch, time of flight as printed, raw ranges, bin RMS and window; module control metadata the host keeps beside the file, not an observation."
+              }
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Counts of the sessions read and skipped (and why), the passes with their station, target and normal point counts, and per normal point its epoch, time of flight as printed, raw ranges, bin RMS and window; module control metadata the host keeps beside the file, not an observation."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "TDM.fbs",
+      "fileIdentifier": "$TDM",
+      "rootTypeName": "TDM"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "ilrs-crd-source-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "One complete bounded data file is read in order into one record per pass and one control frame; the host parallelizes independent files and this parser creates no threads."
+  }
+}
